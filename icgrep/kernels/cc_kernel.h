@@ -26,7 +26,7 @@ public:
     , mCodeUnitSize(codeUnitSize) {
     }
     
-    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
+    void generateDoBlockMethod(llvm::Value * blockNo) override;
 
 private:
     std::vector<re::CC *> mCharClasses;

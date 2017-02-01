@@ -115,12 +115,12 @@ protected:
     // finalizing the KernelStateType.
     void prepareKernel()  override final;
 
-    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override final;
+    void generateDoBlockMethod(llvm::Value * blockNo) override final;
 
     // The default method for Pablo final block processing sets the
     // EOFmark bit and then calls the standard DoBlock function.
     // This may be overridden for specialized processing.
-    virtual void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const override final;
+    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes, llvm::Value * blockNo) override final;
 
     inline String * makeName(const llvm::StringRef & prefix) const {
         return mSymbolTable->makeString(prefix, iBuilder);

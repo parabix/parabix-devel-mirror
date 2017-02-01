@@ -21,7 +21,7 @@ static const auto ACCUMULATOR_INFIX = "_get_";
 
 using namespace llvm;
 
-void KernelInterface::addKernelDeclarations(Module * client) const {
+void KernelInterface::addKernelDeclarations(Module * client) {
     Module * saveModule = iBuilder->getModule();
     auto savePoint = iBuilder->saveIP();
     iBuilder->setModule(client);
@@ -30,65 +30,55 @@ void KernelInterface::addKernelDeclarations(Module * client) const {
     }
     PointerType * selfType = PointerType::getUnqual(mKernelStateType);
 
-    // Create the accumulator get function prototypes
-    for (auto binding : mScalarOutputs) {
-        FunctionType * accumFnType = FunctionType::get(binding.type, {selfType}, false);
-        std::string fnName = mKernelName + ACCUMULATOR_INFIX + binding.name;
-        Function * accumFn = Function::Create(accumFnType, GlobalValue::ExternalLinkage, fnName, client);
-        accumFn->setCallingConv(CallingConv::C);
-        accumFn->setDoesNotThrow();
-        Value * self = &*(accumFn->arg_begin());
-        self->setName("self");        
-    }
-
     // Create the initialization function prototype
     std::vector<Type *> initParameters = {selfType};
     for (auto binding : mScalarInputs) {
         initParameters.push_back(binding.type);
     }
-    FunctionType * initFunctionType = FunctionType::get(iBuilder->getVoidTy(), initParameters, false);
-    std::string initFnName = mKernelName + INIT_SUFFIX;
-    Function * initFn = Function::Create(initFunctionType, GlobalValue::ExternalLinkage, initFnName, client);
-    initFn->setCallingConv(CallingConv::C);
-    initFn->setDoesNotThrow();
-    Function::arg_iterator initArgs = initFn->arg_begin();
-    Value * initArg = &*(initArgs++);
-    initArg->setName("self");
+    FunctionType * initType = FunctionType::get(iBuilder->getVoidTy(), initParameters, false);
+    Function * init = Function::Create(initType, GlobalValue::ExternalLinkage, mKernelName + INIT_SUFFIX, client);
+    init->setCallingConv(CallingConv::C);
+    init->setDoesNotThrow();
+    auto args = init->arg_begin();
+    args++->setName("self");
     for (auto binding : mScalarInputs) {
-        initArg = &*(initArgs++);
-        initArg->setName(binding.name);
+        args++->setName(binding.name);
     }
+    assert (args == init->arg_end());
 
     // Create the doSegment function prototype.
     std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getInt1Ty()};
-    for (auto ss : mStreamSetInputs) {
+    for (unsigned i = 0; i < mStreamSetInputs.size(); ++i) {
         doSegmentParameters.push_back(iBuilder->getSizeTy());
     }
-    FunctionType * doSegmentFunctionType = FunctionType::get(iBuilder->getVoidTy(), doSegmentParameters, false);
-    std::string doSegmentName = mKernelName + DO_SEGMENT_SUFFIX;
-    Function * doSegmentFn = Function::Create(doSegmentFunctionType, GlobalValue::ExternalLinkage, doSegmentName, client);
-    doSegmentFn->setCallingConv(CallingConv::C);
-    doSegmentFn->setDoesNotThrow();
-    Function::arg_iterator args = doSegmentFn->arg_begin();
-    Value * arg = &*(args++);
-    arg->setName("self");
-    arg = &*(args++);
-    arg->setName("doFinal");
+    FunctionType * doSegmentType = FunctionType::get(iBuilder->getVoidTy(), doSegmentParameters, false);
+    Function * doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, mKernelName + DO_SEGMENT_SUFFIX, client);
+    doSegment->setCallingConv(CallingConv::C);
+    doSegment->setDoesNotThrow();
+    doSegment->setDoesNotCapture(1); // for self parameter only.
+    args = doSegment->arg_begin();
+    args++->setName("self");
+    args++->setName("doFinal");
     for (auto ss : mStreamSetInputs) {
-        arg = &*(args++);
-        arg->setName(ss.name + "_availableItems");
+        args++->setName(ss.name + "_availableItems");
     }
-    doSegmentFn->setDoesNotCapture(1); // for self parameter only.
+    assert (args == doSegment->arg_end());
 
     // Add any additional kernel declarations
     addAdditionalKernelDeclarations(client, selfType);
 
+    // Create the accumulator get function prototypes
+    for (const auto & binding : mScalarOutputs) {
+        FunctionType * accumFnType = FunctionType::get(binding.type, {selfType}, false);
+        Function * accumFn = Function::Create(accumFnType, GlobalValue::ExternalLinkage, mKernelName + ACCUMULATOR_INFIX + binding.name, client);
+        accumFn->setCallingConv(CallingConv::C);
+        accumFn->setDoesNotThrow();
+        auto self = accumFn->arg_begin();
+        self->setName("self");
+    }
+
     iBuilder->setModule(saveModule);
     iBuilder->restoreIP(savePoint);
-}
-
-void KernelInterface::addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType) const {
-
 }
 
 void KernelInterface::setInitialArguments(std::vector<Value *> args) {

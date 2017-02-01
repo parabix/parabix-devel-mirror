@@ -54,26 +54,23 @@ void CarryManager::initializeCarryData(PabloKernel * const kernel) {
 
     mCurrentScope = kernel->getEntryBlock();
 
-    mCarryMetadata.resize(enumerate(mCurrentScope));
+    mCarryMetadata.resize(enumerate(kernel->getEntryBlock()));
 
-    mKernel->addScalar(analyse(mCurrentScope), "carries");
+    mKernel->addScalar(analyse(kernel->getEntryBlock()), "carries");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeCodeGen
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::initializeCodeGen(Value * self, Function * function) {
+void CarryManager::initializeCodeGen() {
     // TODO: need to look into abstracting the Initialize creation function in KernelBuilder::generateKernel
     // so that we can allocate the variable length buffers if needed.
 
-    mSelf = self;
-    mFunction = function;
-
-    assert(mCarryMetadata.size() > 0);
+    assert(!mCarryMetadata.empty());
     mCarryInfo = &mCarryMetadata[0];
     assert (!mCarryInfo->hasSummary());
 
-    mCurrentFrame = iBuilder->CreateGEP(mSelf, {iBuilder->getInt32(0), mKernel->getScalarIndex("carries")}, "carries");
+    mCurrentFrame = mKernel->getScalarFieldPtr("carries");
     mCurrentFrameIndex = 0;
 
     assert (mCarryFrame.empty());
@@ -83,10 +80,10 @@ void CarryManager::initializeCodeGen(Value * self, Function * function) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief enterLoopScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::enterLoopScope(PabloBlock * const scope) {
+void CarryManager::enterLoopScope(const PabloBlock * const scope) {
     assert (scope);
     if (mLoopDepth++ == 0) {
-        Value * const blockNo = mKernel->getBlockNo(mSelf);
+        Value * const blockNo = mKernel->getBlockNo();
         mLoopSelector = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), 1));
     }
     enterScope(scope);
@@ -99,7 +96,7 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
 
     if (mCarryInfo->hasSummary()) {
         PHINode * carrySummary = iBuilder->CreatePHI(mCarryPackType, 2, "summary");
-        assert (mCarrySummary.size() > 0);
+        assert (!mCarrySummary.empty());
         carrySummary->addIncoming(mCarrySummary.back(), entryBlock);
         // Replace the incoming carry summary with the phi node and add the phi node to the stack
         // so that we can properly OR it into the outgoing summary value.
@@ -117,12 +114,10 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
         Value * arrayPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
         Value * array = iBuilder->CreateLoad(arrayPtr, false, "array");
 
-        LLVMContext & C = iBuilder->getContext();
-
-        BasicBlock * resizeBlock = BasicBlock::Create(C, "", mFunction);
-        BasicBlock * cleanUpBlock = BasicBlock::Create(C, "", mFunction);
-        BasicBlock * zeroBlock = BasicBlock::Create(C, "", mFunction);
-        BasicBlock * codeBlock = BasicBlock::Create(C, "", mFunction);
+        BasicBlock * resizeBlock = mKernel->CreateBasicBlock("");
+        BasicBlock * cleanUpBlock = mKernel->CreateBasicBlock("");
+        BasicBlock * zeroBlock = mKernel->CreateBasicBlock("");
+        BasicBlock * codeBlock = mKernel->CreateBasicBlock("");
 
         Value * cond = iBuilder->CreateICmpULT(index, capacity);
         iBuilder->CreateCondBr(cond, codeBlock, resizeBlock);
@@ -170,7 +165,7 @@ void CarryManager::leaveLoopBody(BasicBlock * const exitBlock) {
         mCarrySummary.pop_back();
     }
     if (LLVM_UNLIKELY(mCarryInfo->variableLength)) {
-        assert (mLoopIndicies.size() > 0);
+        assert (!mLoopIndicies.empty());
         PHINode * index = mLoopIndicies.back();
         index->addIncoming(iBuilder->CreateAdd(index, iBuilder->getSize(1)), exitBlock);
         mLoopIndicies.pop_back();
@@ -191,7 +186,7 @@ void CarryManager::leaveLoopScope(BasicBlock * const entryBlock, BasicBlock * co
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief enterIfScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::enterIfScope(PabloBlock * const scope) {
+void CarryManager::enterIfScope(const PabloBlock * const scope) {
     ++mIfDepth;
     enterScope(scope);
     mCarrySummary.push_back(Constant::getNullValue(mCarryPackType));
@@ -241,7 +236,7 @@ void CarryManager::enterIfBody(BasicBlock * const entryBlock) { assert (entryBlo
 void CarryManager::leaveIfBody(BasicBlock * const exitBlock) { assert (exitBlock);
     const auto n = mCarrySummary.size();
     if (LLVM_LIKELY(mCarryInfo->hasExplicitSummary())) {
-        assert (mCarrySummary.size() > 0);
+        assert (!mCarrySummary.empty());
         Value * ptr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
         Value * const value = iBuilder->CreateBitCast(mCarrySummary.back(), mBitBlockType);
         iBuilder->CreateBlockAlignedStore(value, ptr);
@@ -280,7 +275,7 @@ void CarryManager::leaveIfScope(BasicBlock * const entryBlock, BasicBlock * cons
 /** ------------------------------------------------------------------------------------------------------------ *
  * @brief enterScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::enterScope(PabloBlock * const scope) {
+void CarryManager::enterScope(const PabloBlock * const scope) {
     assert (scope);
     // Store the state of the current frame and update the scope state
     mCarryFrame.emplace_back(mCurrentFrame, mCurrentFrameIndex + 1);
@@ -304,7 +299,7 @@ void CarryManager::leaveScope() {
     // Did we use all of the packs in this carry struct?
     assert (mCurrentFrameIndex == mCurrentFrame->getType()->getPointerElementType()->getStructNumElements());
     // Sanity test: are there remaining carry frames?
-    assert (mCarryFrame.size() > 0);
+    assert (!mCarryFrame.empty());
 
     std::tie(mCurrentFrame, mCurrentFrameIndex) = mCarryFrame.back();
 
@@ -392,7 +387,7 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned shiftAmount, Val
 
     // Create a mask to implement circular buffer indexing
     Value * indexMask = iBuilder->getSize(nearest_pow2(entries) - 1);
-    Value * blockIndex = mKernel->getBlockNo(mSelf);
+    Value * blockIndex = mKernel->getBlockNo();
     Value * carryIndex0 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(entries));
     Value * loadIndex0 = iBuilder->CreateAnd(carryIndex0, indexMask);
     Value * storeIndex = iBuilder->CreateAnd(blockIndex, indexMask);
@@ -457,7 +452,7 @@ void CarryManager::setNextCarryOut(Value * carryOut) {
  * @brief addToSummary
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::addToSummary(Value * value) { assert (value);
-    assert (mIfDepth > 0 && mCarrySummary.size() > 0);
+    assert (mIfDepth > 0 && !mCarrySummary.empty());
     Value * const summary = mCarrySummary.back(); assert (summary);
     if (LLVM_UNLIKELY(summary == value)) {
         return;  //Nothing to add.
@@ -608,8 +603,6 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
 CarryManager::CarryManager(IDISA::IDISA_Builder * idb) noexcept
 : iBuilder(idb)
 , mKernel(nullptr)
-, mSelf(nullptr)
-, mFunction(nullptr)
 , mBitBlockType(idb->getBitBlockType())
 , mBitBlockWidth(idb->getBitBlockWidth())
 , mCurrentFrameIndex(0)

@@ -19,13 +19,6 @@ namespace llvm { class Type; }
 namespace llvm { class Value; }
 namespace parabix { class StreamSetBuffer; }
 
-const std::string logicalSegmentNoScalar = "logicalSegNo";
-const std::string processedItemCountSuffix = "_processedItemCount";
-const std::string producedItemCountSuffix = "_producedItemCount";
-const std::string terminationSignal = "terminationSignal";
-const std::string bufferPtrSuffix = "_bufferPtr";
-const std::string blkMaskSuffix = "_blkMask";
-
 namespace kernel {
     
 class KernelBuilder : public KernelInterface {
@@ -42,16 +35,54 @@ public:
     
     void createInstance() override;
 
-    llvm::Value * getBlockNo(llvm::Value * self) const;
+    virtual llvm::Value * getProcessedItemCount(llvm::Value * instance, const std::string & name) const override;
 
-    virtual llvm::Value * getProcessedItemCount(llvm::Value * self, const std::string & ssName) const override;
+    virtual void setProcessedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const;
 
-    virtual llvm::Value * getProducedItemCount(llvm::Value * self, const std::string & ssName) const override;
-    
+    virtual llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name) const override;
+
+    virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const;
+
     bool hasNoTerminateAttribute() { return mNoTerminateAttribute;}
     
-    llvm::Value * getTerminationSignal(llvm::Value * self) const override;
+    llvm::Value * getTerminationSignal(llvm::Value * instance) const override final;
+
+    void setTerminationSignal(llvm::Value * instance) const override final;
+
+    llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & name) const;
+
+    llvm::Value * getScalarFieldPtr(llvm::Value *instance, llvm::Value * index) const;
+
+    llvm::Value * getStreamSetBufferPtr(llvm::Value * instance, const std::string & name) const;
+
+    llvm::Value * getStreamSetBufferPtr(llvm::Value * instance, llvm::Value * index) const;
     
+    // Get the value of a scalar field for a given instance.
+    llvm::Value * getScalarField(llvm::Value * instance, const std::string & fieldName) const;
+
+    llvm::Value * getScalarField(llvm::Value * instance, llvm::Value * index) const;
+
+    // Set the value of a scalar field for a given instance.
+    void setScalarField(llvm::Value *instance, const std::string & fieldName, llvm::Value * value) const;
+
+    void setScalarField(llvm::Value * instance, llvm::Value * index, llvm::Value * value) const;
+
+    // Synchronization actions for executing a kernel for a particular logical segment.
+    //
+    // Before the segment is processed, acquireLogicalSegmentNo must be used to load
+    // the segment number of the kernel state to ensure that the previous segment is
+    // complete (by checking that the acquired segment number is equal to the desired segment
+    // number).
+    // After all segment processing actions for the kernel are complete, and any necessary
+    // data has been extracted from the kernel for further pipeline processing, the
+    // segment number must be incremented and stored using releaseLogicalSegmentNo.
+    llvm::LoadInst * acquireLogicalSegmentNo(llvm::Value * instance) const;
+
+    void releaseLogicalSegmentNo(llvm::Value * instance, llvm::Value * newFieldVal) const;
+
+    // Get a parameter by name.
+    llvm::Argument * getParameter(llvm::Function * f, const std::string & name) const;
+
     inline llvm::IntegerType * getSizeTy() const {
         return getBuilder()->getSizeTy();
     }
@@ -64,26 +95,11 @@ public:
         return getBuilder()->getStreamSetTy(NumElements, FieldWidth);
     }
     
-    // Synchronization actions for executing a kernel for a particular logical segment.
-    // 
-    // Before the segment is processed, acquireLogicalSegmentNo must be used to load
-    // the segment number of the kernel state to ensure that the previous segment is
-    // complete (by checking that the acquired segment number is equal to the desired segment
-    // number).
-    // After all segment processing actions for the kernel are complete, and any necessary 
-    // data has been extracted from the kernel for further pipeline processing, the 
-    // segment number must be incremented and stored using releaseLogicalSegmentNo.
-    llvm::LoadInst * acquireLogicalSegmentNo(llvm::Value * self) const;
-
-    void releaseLogicalSegmentNo(llvm::Value * self, llvm::Value * newFieldVal) const;
-
     virtual ~KernelBuilder() = 0;
     
     const std::vector<const parabix::StreamSetBuffer *> & getStreamSetInputBuffers() const { return mStreamSetInputBuffers; }
 
     const std::vector<const parabix::StreamSetBuffer *> & getStreamSetOutputBuffers() const { return mStreamSetOutputBuffers; }
-
-    void setTerminationSignal(llvm::Value * self) const;
 
     llvm::Value * createDoSegmentCall(const std::vector<llvm::Value *> & args) const;
 
@@ -121,10 +137,12 @@ protected:
     
     virtual void prepareKernel();
        
-    virtual void generateInitMethod(llvm::Function * initFunction, llvm::Value * self) const;
+    virtual void generateInitMethod() { }
     
-    virtual void generateDoSegmentMethod(llvm::Function * function, llvm::Value * self, llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) const = 0;
-    
+    virtual void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) = 0;
+
+    virtual void generateInternalMethods() { }
+
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
     unsigned addScalar(llvm::Type * type, const std::string & name);
@@ -138,56 +156,101 @@ protected:
     
     // Get the index of a named scalar field within the kernel state struct.
     llvm::ConstantInt * getScalarIndex(const std::string & name) const;
+
+    llvm::Value * getBlockNo() const;
+
+    void setBlockNo(llvm::Value * value) const;
     
     // Get the value of a scalar field for a given instance.
-    llvm::Value * getScalarField(llvm::Value * self, const std::string & fieldName) const;
+    llvm::Value * getScalarField(const std::string & fieldName) const {
+        return getScalarField(getSelf(), fieldName);
+    }
 
-    llvm::Value * getScalarField(llvm::Value * self, llvm::Value * index) const;
+    llvm::Value * getScalarField(llvm::Value * index) const {
+        return getScalarField(getSelf(), index);
+    }
 
     // Set the value of a scalar field for a given instance.
-    void setScalarField(llvm::Value * self, const std::string & fieldName, llvm::Value * value) const;
+    void setScalarField(const std::string & fieldName, llvm::Value * value) const {
+        return setScalarField(getSelf(), fieldName, value);
+    }
 
-    void setScalarField(llvm::Value * self, llvm::Value * index, llvm::Value * value) const;
+    void setScalarField(llvm::Value * index, llvm::Value * value) const {
+        return setScalarField(getSelf(), index, value);
+    }
 
-    // Get a parameter by name.
-    llvm::Argument * getParameter(llvm::Function * f, const std::string & name) const;
+    llvm::Value * getStream(const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
 
-    llvm::Value * getStream(llvm::Value * self, const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
+    llvm::Value * getStream(const std::string & name, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const;
 
-    llvm::Value * getStream(llvm::Value * self, const std::string & name, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const;
+    llvm::Value * getStreamView(const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
 
-    llvm::Value * getStreamView(llvm::Value * self, const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
-
-    llvm::Value * getStreamView(llvm::Type * type, llvm::Value * self, const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
+    llvm::Value * getStreamView(llvm::Type * type, const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
 
     // Stream set helpers.
-    unsigned getStreamSetIndex(const std::string & name) const;
-    
-    llvm::Value * getScalarFieldPtr(llvm::Value * self, const std::string & name) const;
+    llvm::Value * getScalarFieldPtr(const std::string & name) const {
+        return getScalarFieldPtr(getSelf(), name);
+    }
 
-    llvm::Value * getScalarFieldPtr(llvm::Value * self, llvm::Value * index) const;
+    llvm::Value * getScalarFieldPtr(llvm::Value * index) const {
+        return getScalarFieldPtr(getSelf(), index);
+    }
 
-    llvm::Value * getStreamSetBufferPtr(llvm::Value * self, const std::string & name) const;
+    llvm::Value * getStreamSetBufferPtr(const std::string & name) const {
+        return getStreamSetBufferPtr(getSelf(), name);
+    }
 
-    llvm::Value * getStreamSetBufferPtr(llvm::Value * self, llvm::Value * index) const;
+    llvm::Value * getStreamSetBufferPtr(llvm::Value * index) const {
+        return getStreamSetBufferPtr(getSelf(), index);
+    }
 
-    llvm::Value * getStreamSetPtr(llvm::Value * self, const std::string & name, llvm::Value * blockNo) const;
-    
-    void setBlockNo(llvm::Value * self, llvm::Value * value) const;
+    llvm::Value * getStreamSetPtr(const std::string & name, llvm::Value * blockNo) const;
 
-    virtual void setProcessedItemCount(llvm::Value * self, const std::string & name, llvm::Value * value) const;
+    inline llvm::Value * getProcessedItemCount(const std::string & name) const {
+        return getProcessedItemCount(getSelf(), name);
+    }
 
-    virtual void setProducedItemCount(llvm::Value * self, const std::string & name, llvm::Value * value) const;
+    inline void setProcessedItemCount(const std::string & name, llvm::Value * value) const {
+        setProcessedItemCount(getSelf(), name, value);
+    }
 
-    const parabix::StreamSetBuffer * getStreamSetBuffer(const std::string & name) const;
+    inline llvm::Value * getProducedItemCount(const std::string & name) const {
+        return getProducedItemCount(getSelf(), name);
+    }
+
+    inline void setProducedItemCount(const std::string & name, llvm::Value * value) const {
+        setProducedItemCount(getSelf(), name, value);
+    }
+
+    llvm::Value * getTerminationSignal() const {
+        return getTerminationSignal(getSelf());
+    }
+
+    void setTerminationSignal() const {
+        return setTerminationSignal(getSelf());
+    }
+
+
+    llvm::Value * getSelf() const {
+        return mSelf;
+    }
+
+    llvm::BasicBlock * CreateBasicBlock(std::string && name) const;
 
 private:
 
-    void callGenerateInitMethod() const;
+    unsigned getStreamSetIndex(const std::string & name) const;
 
-    void callGenerateDoSegmentMethod() const;
+    const parabix::StreamSetBuffer * getStreamSetBuffer(const std::string & name) const;
+
+    void callGenerateInitMethod();
+
+    void callGenerateDoSegmentMethod();
 
 protected:
+
+    llvm::Value *                                   mSelf;
+    llvm::Function *                                mCurrentFunction;
 
     std::vector<llvm::Type *>                       mKernelFields;
     NameMap                                         mKernelMap;
@@ -215,13 +278,19 @@ protected:
 };
 
 class BlockOrientedKernel : public KernelBuilder {
+public:
+
+    llvm::CallInst * CreateDoBlockMethodCall() const;
+
+    llvm::CallInst * CreateDoFinalBlockMethodCall(llvm::Value * remainingItems) const;
+
 protected:
+
+    virtual void addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType);
 
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
-    virtual void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const = 0;
-
-    virtual void addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType) const;
+    virtual void generateDoBlockMethod(llvm::Value * blockNo) = 0;
 
     // Each kernel builder subtypre must also specify the logic for processing the
     // final block of stream data, if there is any special processing required
@@ -230,9 +299,11 @@ protected:
     // without additional preparation, the default generateFinalBlockMethod need
     // not be overridden.
 
-    virtual void generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * remainingBytes, llvm::Value * blockNo) const;
+    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes, llvm::Value * blockNo);
 
-    virtual void generateDoSegmentMethod(llvm::Function * function, llvm::Value * self, llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) const final;
+    virtual void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) final;
+
+    void generateInternalMethods() override final;
 
     BlockOrientedKernel(IDISA::IDISA_Builder * builder,
                         std::string && kernelName,
@@ -249,9 +320,11 @@ protected:
     llvm::Function * getDoFinalBlockFunction() const;
 
 private:
-    void callGenerateDoBlockMethod() const;
 
-    void callGenerateDoFinalBlockMethod() const;
+    void callGenerateDoBlockMethod();
+
+    void callGenerateDoFinalBlockMethod();
+
 };
 
 

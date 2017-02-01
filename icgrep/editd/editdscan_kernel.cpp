@@ -17,7 +17,7 @@ Value * generateCountForwardZeroes(IDISA::IDISA_Builder * iBuilder, Value * bits
     return iBuilder->CreateCall(cttzFunc, std::vector<Value *>({bits, ConstantInt::get(iBuilder->getInt1Ty(), 0)}));
 }
 
-void editdScanKernel::generateDoBlockMethod(Function * function, Value * self, Value * blockNo) const {
+void editdScanKernel::generateDoBlockMethod(Value * blockNo) {
     auto savePoint = iBuilder->saveIP();
     Function * scanWordFunction = generateScanWordRoutine(iBuilder->getModule());
     iBuilder->restoreIP(savePoint);
@@ -29,7 +29,7 @@ void editdScanKernel::generateDoBlockMethod(Function * function, Value * self, V
     
     std::vector<Value * > matchWordVectors;
     for(unsigned d = 0; d <= mEditDistance; d++) {
-        Value * ptr = getStream(self, "matchResults", blockNo, iBuilder->getInt32(d));
+        Value * ptr = getStream("matchResults", blockNo, iBuilder->getInt32(d));
         Value * matches = iBuilder->CreateBlockAlignedLoad(ptr);
         matchWordVectors.push_back(iBuilder->CreateBitCast(matches, scanwordVectorType));
     }

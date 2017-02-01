@@ -15,12 +15,12 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 
-void DirectCharacterClassKernelBuilder::generateDoBlockMethod(Function * function, Value *self, Value *blockNo) const {
+void DirectCharacterClassKernelBuilder::generateDoBlockMethod(Value *blockNo) {
     unsigned packCount = 8 * mCodeUnitSize;  
     unsigned codeUnitWidth = 8 * mCodeUnitSize;
     Value * codeUnitPack[packCount];
     for (unsigned i = 0; i < packCount; i++) {
-        Value * ptr = getStream(self, "codeUnitStream", blockNo, iBuilder->getInt32(0), iBuilder->getInt32(i));
+        Value * ptr = getStream("codeUnitStream", blockNo, iBuilder->getInt32(0), iBuilder->getInt32(i));
         codeUnitPack[i] = iBuilder->CreateBlockAlignedLoad(ptr);
     }
     for (unsigned j = 0; j < mCharClasses.size();  j++) {
@@ -55,7 +55,7 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod(Function * functio
 
             theCCstream = iBuilder->simd_or(theCCstream, pack);
         }
-        Value * ptr = getStream(self, "ccStream", blockNo, iBuilder->getInt32(j));
+        Value * ptr = getStream("ccStream", blockNo, iBuilder->getInt32(j));
         iBuilder->CreateBlockAlignedStore(theCCstream, ptr);
     }
 }

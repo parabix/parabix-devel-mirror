@@ -52,24 +52,24 @@ Value * IDISA_NVPTX20_Builder::bitblock_set_bit(Value * pos){
     
 std::pair<Value *, Value *> IDISA_NVPTX20_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
     Value * id = CreateCall(tidFunc);
-    Value * retVal = CreateCall(mLongAdvanceFunc, std::vector<Value *>({id, a, CreateBitCast(getInt64(shift), mBitBlockType), shiftin}));
-    Value * shifted = CreateExtractValue(retVal, std::vector<unsigned>({0}));
-    Value * shiftOut = CreateExtractValue(retVal, std::vector<unsigned>({1}));
+    Value * retVal = CreateCall(mLongAdvanceFunc, {id, a, CreateBitCast(getInt64(shift), mBitBlockType), shiftin});
+    Value * shifted = CreateExtractValue(retVal, {0});
+    Value * shiftOut = CreateExtractValue(retVal, {1});
     return std::pair<Value *, Value *>(shiftOut, shifted);
 }
 
 std::pair<Value *, Value *> IDISA_NVPTX20_Builder::bitblock_add_with_carry(Value * a, Value * b, Value * carryIn) {
     Value * id = CreateCall(tidFunc);
-    Value * retVal = CreateCall(mLongAddFunc, std::vector<Value *>({id, a, b, carryIn}));
-    Value * sum = CreateExtractValue(retVal, std::vector<unsigned>({0}));
-    Value * carry_out_strm = CreateExtractValue(retVal, std::vector<unsigned>({1}));
+    Value * retVal = CreateCall(mLongAddFunc, {id, a, b, carryIn});
+    Value * sum = CreateExtractValue(retVal, {0});
+    Value * carry_out_strm = CreateExtractValue(retVal, {1});
     return std::pair<Value *, Value *>(carry_out_strm, sum);
 }
 
 void IDISA_NVPTX20_Builder::CreateGlobals(){
 
     Type * const carryTy = ArrayType::get(mBitBlockType, groupThreads+1);
-    carry = new GlobalVariable(/*Module=*/*mMod, 
+    carry = new GlobalVariable(*mMod,
         /*Type=*/carryTy,
         /*isConstant=*/false,
         /*Linkage=*/llvm::GlobalValue::InternalLinkage,
@@ -82,7 +82,7 @@ void IDISA_NVPTX20_Builder::CreateGlobals(){
 
     Type * const bubbleTy = ArrayType::get(mBitBlockType, groupThreads);
 
-    bubble = new GlobalVariable(/*Module=*/*mMod, 
+    bubble = new GlobalVariable(*mMod,
         /*Type=*/bubbleTy,
         /*isConstant=*/false,
         /*Linkage=*/llvm::GlobalValue::InternalLinkage,
@@ -110,7 +110,7 @@ void IDISA_NVPTX20_Builder::CreateBuiltinFunctions(){
 
 void IDISA_NVPTX20_Builder::CreateLongAdvanceFunc(){
   Type * const int32ty = getInt32Ty();
-  Type * returnType = StructType::get(mMod->getContext(), std::vector<Type *>({mBitBlockType, mBitBlockType}));
+  Type * returnType = StructType::get(mMod->getContext(), {mBitBlockType, mBitBlockType});
 
   mLongAdvanceFunc = cast<Function>(mMod->getOrInsertFunction("LongAdvance", returnType, int32ty, mBitBlockType, mBitBlockType, mBitBlockType, nullptr));
   mLongAdvanceFunc->setCallingConv(CallingConv::C);
@@ -158,7 +158,7 @@ void IDISA_NVPTX20_Builder::CreateLongAdvanceFunc(){
 void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
   Type * const int64ty = getInt64Ty();
   Type * const int32ty = getInt32Ty();
-  Type * returnType = StructType::get(mMod->getContext(), std::vector<Type *>({mBitBlockType, mBitBlockType}));
+  Type * returnType = StructType::get(mMod->getContext(), {mBitBlockType, mBitBlockType});
 
   mLongAddFunc = cast<Function>(mMod->getOrInsertFunction("LongAdd", returnType, int32ty, mBitBlockType, mBitBlockType, mBitBlockType, nullptr));
   mLongAddFunc->setCallingConv(CallingConv::C);

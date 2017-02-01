@@ -17,7 +17,7 @@ class ScanMatchKernel : public BlockOrientedKernel {
 public:
     ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType);
 protected:
-    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
+    void generateDoBlockMethod(llvm::Value * blockNo) override;
 private:
     llvm::Function * generateScanWordRoutine(llvm::Module * m) const;
 private:

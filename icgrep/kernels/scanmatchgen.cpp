@@ -37,7 +37,7 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
     return iBuilder->CreateAnd(bits_minus1, bits);
 }
         
-void ScanMatchKernel::generateDoBlockMethod(Function * function, Value * self, Value * blockNo) const {
+void ScanMatchKernel::generateDoBlockMethod(Value * blockNo) {
 
     auto savePoint = iBuilder->saveIP();
     Function * scanWordFunction = generateScanWordRoutine(iBuilder->getModule());
@@ -47,22 +47,22 @@ void ScanMatchKernel::generateDoBlockMethod(Function * function, Value * self, V
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / T->getBitWidth();
     Type * scanwordVectorType =  VectorType::get(T, fieldCount);
     Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));   
-    Value * recordStart = getScalarField(self, "LineStart");
-    Value * recordNum = getScalarField(self, "LineNum");
-    Value * matches = iBuilder->CreateBlockAlignedLoad(getStream(self, "matchResults", blockNo, iBuilder->getInt32(0)));
-    Value * linebreaks = iBuilder->CreateBlockAlignedLoad(getStream(self, "matchResults", blockNo, iBuilder->getInt32(1)));
+    Value * recordStart = getScalarField("LineStart");
+    Value * recordNum = getScalarField("LineNum");
+    Value * matches = iBuilder->CreateBlockAlignedLoad(getStream("matchResults", blockNo, iBuilder->getInt32(0)));
+    Value * linebreaks = iBuilder->CreateBlockAlignedLoad(getStream("matchResults", blockNo, iBuilder->getInt32(1)));
     Value * matchWordVector = iBuilder->CreateBitCast(matches, scanwordVectorType);
     Value * breakWordVector = iBuilder->CreateBitCast(linebreaks, scanwordVectorType);
     for(unsigned i = 0; i < fieldCount; ++i){
         Value * matchWord = iBuilder->CreateExtractElement(matchWordVector, ConstantInt::get(T, i));
         Value * recordBreaksWord = iBuilder->CreateExtractElement(breakWordVector, ConstantInt::get(T, i));
-        Value * wordResult = iBuilder->CreateCall(scanWordFunction, {self, matchWord, recordBreaksWord, scanwordPos, recordStart, recordNum});
+        Value * wordResult = iBuilder->CreateCall(scanWordFunction, {getSelf(), matchWord, recordBreaksWord, scanwordPos, recordStart, recordNum});
         scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, T->getBitWidth()));
         recordStart = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({0}));
         recordNum = iBuilder->CreateExtractValue(wordResult, std::vector<unsigned>({1}));
     }
-    setScalarField(self, "LineStart", recordStart);
-    setScalarField(self, "LineNum", recordNum);
+    setScalarField("LineStart", recordStart);
+    setScalarField("LineNum", recordNum);
 }
 
     

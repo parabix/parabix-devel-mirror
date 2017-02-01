@@ -121,15 +121,15 @@ void wc_gen(PabloKernel * kernel) {
     }
 }
 
-Function * pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
+Function * pipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     Constant * record_counts_routine;
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
-    record_counts_routine = mMod->getOrInsertFunction("record_counts", voidTy, size_ty, size_ty, size_ty, size_ty, size_ty, nullptr);
+    record_counts_routine = m->getOrInsertFunction("record_counts", voidTy, size_ty, size_ty, size_ty, size_ty, size_ty, nullptr);
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, size_ty, size_ty, nullptr));
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, size_ty, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
@@ -157,11 +157,11 @@ Function * pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     
     std::unique_ptr<Module> wcM = wck.createKernelModule({&BasisBits}, {});
     
-    mmapK.addKernelDeclarations(mMod);
-    s2pk.addKernelDeclarations(mMod);
-    wck.addKernelDeclarations(mMod);
+    mmapK.addKernelDeclarations(m);
+    s2pk.addKernelDeclarations(m);
+    wck.addKernelDeclarations(m);
     
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
+    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
@@ -176,7 +176,7 @@ Function * pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     
     iBuilder->CreateRetVoid();
     
-    Linker L(*mMod);
+    Linker L(*m);
     L.linkInModule(std::move(mmapM));
     L.linkInModule(std::move(s2pM));
     L.linkInModule(std::move(wcM));

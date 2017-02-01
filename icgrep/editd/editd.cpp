@@ -205,13 +205,13 @@ void buildPatternKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder, c
 }
 
 
-Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, const std::vector<std::string> & patterns) {
+Function * editdPipeline(Module * m, IDISA::IDISA_Builder * iBuilder, const std::vector<std::string> & patterns) {
     
-    Type * const size_ty = iBuilder->getSizeTy();
+    Type * const sizeTy = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), 8), 1), 0);
     
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, size_ty, nullptr));
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, sizeTy, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
@@ -236,11 +236,11 @@ Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, const s
     std::unique_ptr<Module> editdM = editdk.createKernelModule({&ChStream}, {&MatchResults});
     std::unique_ptr<Module> scanM = editdScanK.createKernelModule({&MatchResults}, {});                
     
-    mmapK.addKernelDeclarations(mMod);
-    editdk.addKernelDeclarations(mMod);
-    editdScanK.addKernelDeclarations(mMod);
+    mmapK.addKernelDeclarations(m);
+    editdk.addKernelDeclarations(m);
+    editdScanK.addKernelDeclarations(m);
 
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
+    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     ChStream.setStreamSetBuffer(inputStream, fileSize);
     MatchResults.allocateBuffer();
@@ -249,7 +249,7 @@ Function * editdPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder, const s
         
     iBuilder->CreateRetVoid();
     
-    Linker L(*mMod);
+    Linker L(*m);
     L.linkInModule(std::move(mmapM));
     L.linkInModule(std::move(editdM));
     L.linkInModule(std::move(scanM));
@@ -276,7 +276,7 @@ void buildPreprocessKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder
     pablo_function_passes(&kernel);
 }
 
-Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
+Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     Type * mBitBlockType = iBuilder->getBitBlockType();
     
     Type * const size_ty = iBuilder->getSizeTy();
@@ -284,7 +284,7 @@ Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     Type * const outputType = PointerType::get(ArrayType::get(mBitBlockType, 4), 0);
     
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, size_ty, outputType, nullptr));
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, size_ty, outputType, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
@@ -312,11 +312,11 @@ Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     
     std::unique_ptr<Module> cccM = ccck.createKernelModule({&BasisBits}, {&CCResults});
     
-    mmapK.addKernelDeclarations(mMod);
-    s2pk.addKernelDeclarations(mMod);
-    ccck.addKernelDeclarations(mMod);
+    mmapK.addKernelDeclarations(m);
+    s2pk.addKernelDeclarations(m);
+    ccck.addKernelDeclarations(m);
     
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
+    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
@@ -326,7 +326,7 @@ Function * preprocessPipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
         
     iBuilder->CreateRetVoid();
     
-    Linker L(*mMod);
+    Linker L(*m);
     L.linkInModule(std::move(mmapM));
     L.linkInModule(std::move(s2pM));
     L.linkInModule(std::move(cccM));

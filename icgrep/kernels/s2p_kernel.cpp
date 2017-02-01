@@ -120,39 +120,39 @@ void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuild
 }    
 #endif
     
-void S2PKernel::generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const {
+void S2PKernel::generateDoBlockMethod(llvm::Value * blockNo) {
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        Value * byteStream = getStream(self, "byteStream", blockNo, iBuilder->getInt32(0), iBuilder->getInt32(i));
+        Value * byteStream = getStream("byteStream", blockNo, iBuilder->getInt32(0), iBuilder->getInt32(i));
         bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStream);
     }
     Value * basisbits[8];
     s2p(iBuilder, bytepack, basisbits);
     for (unsigned i = 0; i < 8; ++i) {
-        Value * basisBits = getStream(self, "basisBits", blockNo, iBuilder->getInt32(i));
+        Value * basisBits = getStream("basisBits", blockNo, iBuilder->getInt32(i));
         iBuilder->CreateBlockAlignedStore(basisbits[i], basisBits);
     }
 }
 
-void S2PKernel::generateFinalBlockMethod(llvm::Function * function, llvm::Value * self, Value * remainingBytes, llvm::Value * blockNo) const {
+void S2PKernel::generateFinalBlockMethod(Value * remainingBytes, llvm::Value * blockNo) {
     /* Prepare the s2p final block function:
      assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
      if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
      */
     
-    BasicBlock * finalPartialBlock = BasicBlock::Create(iBuilder->getContext(), "partial", function, 0);
-    BasicBlock * finalEmptyBlock = BasicBlock::Create(iBuilder->getContext(), "empty", function, 0);
-    BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), "exit", function, 0);
+    BasicBlock * finalPartialBlock = CreateBasicBlock("partial");
+    BasicBlock * finalEmptyBlock = CreateBasicBlock("empty");
+    BasicBlock * exitBlock = CreateBasicBlock("exit");
     
     Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, iBuilder->getSize(0));
     iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
     iBuilder->SetInsertPoint(finalPartialBlock);
-    iBuilder->CreateCall(getDoBlockFunction(), {self});
+    CreateDoBlockMethodCall();
     
     iBuilder->CreateBr(exitBlock);
     
     iBuilder->SetInsertPoint(finalEmptyBlock);
-    Value * basisBitsPtr = getStreamView(self, "basisBits", blockNo, iBuilder->getInt64(0));
+    Value * basisBitsPtr = getStreamView("basisBits", blockNo, iBuilder->getInt64(0));
     iBuilder->CreateStore(Constant::getNullValue(basisBitsPtr->getType()->getPointerElementType()), basisBitsPtr);
     iBuilder->CreateBr(exitBlock);
     

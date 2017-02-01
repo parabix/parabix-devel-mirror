@@ -9,10 +9,9 @@
 #include <pablo/pe_var.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Verifier.h>
-#include <IR_Gen/idisa_builder.h>
-#include <llvm/Support/raw_os_ostream.h>
+//#include <llvm/IR/Module.h>
+//#include <llvm/IR/Verifier.h>
+//#include <IR_Gen/idisa_builder.h>
 
 using namespace pablo;
 using namespace kernel;
@@ -87,16 +86,16 @@ void PabloKernel::prepareKernel() {
     BlockOrientedKernel::prepareKernel();
 }
 
-void PabloKernel::generateDoBlockMethod(Function * function, Value  *self, Value * blockNo) const {
-    mPabloCompiler->compile(function, self, blockNo);
+void PabloKernel::generateDoBlockMethod(Value * blockNo) {
+    mPabloCompiler->compile(blockNo);
 }
 
-void PabloKernel::generateFinalBlockMethod(Function * function, Value *self, Value *remainingBytes, Value *blockNo) const {
+void PabloKernel::generateFinalBlockMethod(Value *remainingBytes, Value * blockNo) {
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
-    setScalarField(self, "EOFbit", iBuilder->bitblock_set_bit(remainingBytes));
-    setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remainingBytes));
-    iBuilder->CreateCall(getDoBlockFunction(), { self });
+    setScalarField("EOFbit", iBuilder->bitblock_set_bit(remainingBytes));
+    setScalarField("EOFmask", iBuilder->bitblock_mask_from(remainingBytes));
+    CreateDoBlockMethodCall();
 }
 
 PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName)

@@ -13,15 +13,10 @@ namespace kernel {
 
 class EvenOddKernel : public BlockOrientedKernel {
 public:
-    
     EvenOddKernel(IDISA::IDISA_Builder * builder);
-
     virtual ~EvenOddKernel() {}
-        
 private:
-    void generateDoBlockLogic(llvm::Value * self, llvm::Value * blockNo) const override;    
-    void generateDoBlockMethod(llvm::Function * function, llvm::Value * self, llvm::Value * blockNo) const override;
-    void generateFinalBlockMethod() const override;
+    void generateDoBlockMethod(llvm::Value * blockNo) override;
 
 };
 

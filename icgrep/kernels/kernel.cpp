@@ -26,6 +26,18 @@ static const auto DO_BLOCK_SUFFIX = "_DoBlock";
 
 static const auto FINAL_BLOCK_SUFFIX = "_FinalBlock";
 
+static const auto LOGICAL_SEGMENT_NO_SCALAR = "logicalSegNo";
+
+static const auto PROCESSED_ITEM_COUNT_SUFFIX = "_processedItemCount";
+
+static const auto PRODUCED_ITEM_COUNT_SUFFIX = "_producedItemCount";
+
+static const auto TERMINATION_SIGNAL = "terminationSignal";
+
+static const auto BUFFER_PTR_SUFFIX = "_bufferPtr";
+
+static const auto BLOCK_MASK_SUFFIX = "_blkMask";
+
 using namespace llvm;
 using namespace kernel;
 using namespace parabix;
@@ -76,15 +88,15 @@ void KernelBuilder::prepareKernel() {
         if ((mStreamSetInputBuffers[i]->getBufferSize() > 0) && (mStreamSetInputBuffers[i]->getBufferSize() < codegen::SegmentSize + (blockSize + mLookAheadPositions - 1)/blockSize)) {
              llvm::report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
         }
-        mScalarInputs.push_back(Binding{mStreamSetInputBuffers[i]->getStreamBufferPointerType(), mStreamSetInputs[i].name + bufferPtrSuffix});
+        mScalarInputs.push_back(Binding{mStreamSetInputBuffers[i]->getStreamBufferPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX});
         mStreamSetNameMap.emplace(mStreamSetInputs[i].name, streamSetNo);
-        addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + processedItemCountSuffix);
+        addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
         streamSetNo++;
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        mScalarInputs.push_back(Binding{mStreamSetOutputBuffers[i]->getStreamBufferPointerType(), mStreamSetOutputs[i].name + bufferPtrSuffix});
+        mScalarInputs.push_back(Binding{mStreamSetOutputBuffers[i]->getStreamBufferPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX});
         mStreamSetNameMap.emplace(mStreamSetOutputs[i].name, streamSetNo);
-        addScalar(iBuilder->getSizeTy(), mStreamSetOutputs[i].name + producedItemCountSuffix);
+        addScalar(iBuilder->getSizeTy(), mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
         streamSetNo++;
     }
     for (auto binding : mScalarInputs) {
@@ -97,8 +109,8 @@ void KernelBuilder::prepareKernel() {
         addScalar(binding.type, binding.name);
     }
     addScalar(iBuilder->getSizeTy(), BLOCK_NO_SCALAR);
-    addScalar(iBuilder->getSizeTy(), logicalSegmentNoScalar);
-    addScalar(iBuilder->getInt1Ty(), terminationSignal);
+    addScalar(iBuilder->getSizeTy(), LOGICAL_SEGMENT_NO_SCALAR);
+    addScalar(iBuilder->getInt1Ty(), TERMINATION_SIGNAL);
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, mKernelName);
 }
 
@@ -121,6 +133,7 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
     prepareKernel(); // possibly overridden by the KernelBuilder subtype
     addKernelDeclarations(m);
     callGenerateInitMethod();
+    generateInternalMethods();
     callGenerateDoSegmentMethod();
     // Implement the accumulator get functions
     for (auto binding : mScalarOutputs) {
@@ -134,39 +147,35 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
     iBuilder->restoreIP(savePoint);
 }
 
-void KernelBuilder::callGenerateDoSegmentMethod() const {
-    Function * doSegmentFunction = getDoSegmentFunction();
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), mKernelName + "_entry", doSegmentFunction, 0));
-    auto args = doSegmentFunction->arg_begin();
-    Value * self = &*(args++);
+void KernelBuilder::callGenerateDoSegmentMethod() {
+    mCurrentFunction = getDoSegmentFunction();
+    iBuilder->SetInsertPoint(CreateBasicBlock(mKernelName + "_entry"));
+    auto args = mCurrentFunction->arg_begin();
+    mSelf = &*(args++);
     Value * doFinal = &*(args++);
     std::vector<Value *> producerPos;
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         producerPos.push_back(&*(args++));
     }
-    assert (args == doSegmentFunction->arg_end());
-    generateDoSegmentMethod(doSegmentFunction, self, doFinal, producerPos); // must be overridden by the KernelBuilder subtype
+    assert (args == mCurrentFunction->arg_end());
+    generateDoSegmentMethod(doFinal, producerPos); // must be overridden by the KernelBuilder subtype
     iBuilder->CreateRetVoid();
 }
 
-void KernelBuilder::callGenerateInitMethod() const {
-    Function * initFunction = getInitFunction();
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "Init_entry", initFunction, 0));
-    Function::arg_iterator args = initFunction->arg_begin();
-    Value * self = &*(args++);
-    iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), self);
+void KernelBuilder::callGenerateInitMethod() {
+    mCurrentFunction = getInitFunction();
+    iBuilder->SetInsertPoint(CreateBasicBlock("Init_entry"));
+    Function::arg_iterator args = mCurrentFunction->arg_begin();
+    mSelf = &*(args++);
+    iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), mSelf);
     for (auto binding : mScalarInputs) {
         Value * param = &*(args++);
-        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
+        Value * ptr = iBuilder->CreateGEP(mSelf, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
         iBuilder->CreateStore(param, ptr);
     }
-    generateInitMethod(initFunction, self);
+    generateInitMethod();
     iBuilder->CreateRetVoid();
 }
-
-// Default init method, possibly overridden if special init actions required.
-void KernelBuilder::generateInitMethod(Function * /* initFunction */, Value * /* self */) const { }
-
 
 ConstantInt * KernelBuilder::getScalarIndex(const std::string & name) const {
     const auto f = mKernelMap.find(name);
@@ -180,75 +189,95 @@ unsigned KernelBuilder::getScalarCount() const {
     return mKernelFields.size();
 }
 
-Value * KernelBuilder::getScalarFieldPtr(Value * self, const std::string & fieldName) const {
-    return getScalarFieldPtr(self, getScalarIndex(fieldName));
+Value * KernelBuilder::getScalarFieldPtr(llvm::Value * instance, Value * index) const {
+    return iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), index});
 }
 
-Value * KernelBuilder::getScalarFieldPtr(Value * self, Value * index) const {
-    return iBuilder->CreateGEP(self, {iBuilder->getInt32(0), index});
+Value * KernelBuilder::getScalarFieldPtr(llvm::Value * instance, const std::string & fieldName) const {
+    return getScalarFieldPtr(instance, getScalarIndex(fieldName));
 }
 
-Value * KernelBuilder::getScalarField(Value * self, const std::string & fieldName) const {
-    return iBuilder->CreateLoad(getScalarFieldPtr(self, fieldName));
+Value * KernelBuilder::getScalarField(Value * instance, const std::string & fieldName) const {
+    return iBuilder->CreateLoad(getScalarFieldPtr(instance, fieldName));
 }
 
-Value * KernelBuilder::getScalarField(Value * self, Value * index) const {
-    return iBuilder->CreateLoad(getScalarFieldPtr(self, index));
+Value * KernelBuilder::getScalarField(Value * instance, Value * index) const {
+    return iBuilder->CreateLoad(getScalarFieldPtr(instance, index));
 }
 
-void KernelBuilder::setScalarField(Value * self, const std::string & fieldName, Value * value) const {
-    iBuilder->CreateStore(value, getScalarFieldPtr(self, fieldName));
+void KernelBuilder::setScalarField(Value * instance, const std::string & fieldName, Value * value) const {
+    iBuilder->CreateStore(value, getScalarFieldPtr(instance, fieldName));
 }
 
-void KernelBuilder::setScalarField(Value * self, Value * index, Value * value) const {
-    iBuilder->CreateStore(value, getScalarFieldPtr(self, index));
+void KernelBuilder::setScalarField(Value * instance, Value * index, Value * value) const {
+    iBuilder->CreateStore(value, getScalarFieldPtr(instance, index));
 }
 
-LoadInst * KernelBuilder::acquireLogicalSegmentNo(Value * self) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(logicalSegmentNoScalar)});
-    return iBuilder->CreateAtomicLoadAcquire(ptr);
+Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string & name) const {
+    return getScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX);
 }
 
-Value * KernelBuilder::getProcessedItemCount(Value * self, const std::string & ssName) const {
-    return getScalarField(self, ssName + processedItemCountSuffix);
+Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name) const {
+    return getScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX);
 }
 
-Value * KernelBuilder::getProducedItemCount(Value * self, const std::string & ssName) const {
-    return getScalarField(self, ssName + producedItemCountSuffix);
+void KernelBuilder::setProcessedItemCount(Value * instance, const std::string & name, Value * value) const {
+    setScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX, value);
 }
 
-Value * KernelBuilder::getTerminationSignal(Value * self) const {
-    return getScalarField(self, terminationSignal);
+void KernelBuilder::setProducedItemCount(Value * instance, const std::string & name, Value * value) const {
+    setScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX, value);
 }
 
-void KernelBuilder::releaseLogicalSegmentNo(Value * self, Value * newCount) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(logicalSegmentNoScalar)});
-    iBuilder->CreateAtomicStoreRelease(newCount, ptr);
+Value * KernelBuilder::getTerminationSignal(Value * instance) const {
+    return getScalarField(instance, TERMINATION_SIGNAL);
 }
 
-void KernelBuilder::setProcessedItemCount(Value * self, const std::string & name, Value * value) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(name + processedItemCountSuffix)});
-    iBuilder->CreateStore(value, ptr);
+void KernelBuilder::setTerminationSignal(Value * instance) const {
+    setScalarField(instance, TERMINATION_SIGNAL, iBuilder->getInt1(true));
 }
 
-void KernelBuilder::setProducedItemCount(Value * self, const std::string & name, Value * value) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(name + producedItemCountSuffix)});
-    iBuilder->CreateStore(value, ptr);
+LoadInst * KernelBuilder::acquireLogicalSegmentNo(llvm::Value * instance) const {
+    return iBuilder->CreateAtomicLoadAcquire(getScalarFieldPtr(instance, LOGICAL_SEGMENT_NO_SCALAR));
 }
 
-void KernelBuilder::setTerminationSignal(Value * self) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(terminationSignal)});
-    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt1Ty(), 1), ptr);
+void KernelBuilder::releaseLogicalSegmentNo(Value * instance, Value * newCount) const {
+    iBuilder->CreateAtomicStoreRelease(newCount, getScalarFieldPtr(instance, LOGICAL_SEGMENT_NO_SCALAR));
 }
 
-Value * KernelBuilder::getBlockNo(Value * self) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(BLOCK_NO_SCALAR)});
+Value * KernelBuilder::getBlockNo() const {
+    Value * ptr = iBuilder->CreateGEP(mSelf, {iBuilder->getInt32(0), getScalarIndex(BLOCK_NO_SCALAR)});
     return iBuilder->CreateLoad(ptr);
 }
 
-void KernelBuilder::setBlockNo(Value * self, Value * value) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(BLOCK_NO_SCALAR)});
+void KernelBuilder::setBlockNo(Value * value) const {
+    Value * ptr = iBuilder->CreateGEP(mSelf, {iBuilder->getInt32(0), getScalarIndex(BLOCK_NO_SCALAR)});
     iBuilder->CreateStore(value, ptr);
+}
+
+inline unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
+    const auto f = mStreamSetNameMap.find(name);
+    if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
+        llvm::report_fatal_error("Kernel " + getName() + " does not contain stream set: " + name);
+    }
+    return f->second;
+}
+
+inline const StreamSetBuffer * KernelBuilder::getStreamSetBuffer(const std::string & name) const {
+    const unsigned structIdx = getStreamSetIndex(name);
+    if (structIdx < mStreamSetInputs.size()) {
+        return mStreamSetInputBuffers[structIdx];
+    } else {
+        return mStreamSetOutputBuffers[structIdx - mStreamSetInputs.size()];
+    }
+}
+
+inline Value * KernelBuilder::getStreamSetBufferPtr(llvm::Value * instance, const std::string & name) const {
+    return getScalarField(instance, name + BUFFER_PTR_SUFFIX);
+}
+
+inline Value * KernelBuilder::getStreamSetBufferPtr(llvm::Value * instance, llvm::Value * index) const {
+    return getScalarField(instance, index);
 }
 
 Argument * KernelBuilder::getParameter(Function * const f, const std::string & name) const {
@@ -268,47 +297,29 @@ Value * KernelBuilder::createGetAccumulatorCall(Value * self, const std::string 
     return iBuilder->CreateCall(getAccumulatorFunction(accumName), {self});
 }
 
-
-unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
-    const auto f = mStreamSetNameMap.find(name);
-    if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
-        llvm::report_fatal_error("Kernel " + getName() + " does not contain stream set: " + name);
-    }
-    return f->second;
+Value * KernelBuilder::getStreamSetPtr(const std::string & name, Value * blockNo) const {
+    return getStreamSetBuffer(name)->getStreamSetPtr(getStreamSetBufferPtr(name), blockNo);
 }
 
-Value * KernelBuilder::getStreamSetBufferPtr(Value * self, const std::string & name) const {
-    return getScalarField(self, name + bufferPtrSuffix);
+Value * KernelBuilder::getStream(const std::string & name, Value * blockNo, Value * index) const {
+    return getStreamSetBuffer(name)->getStream(getStreamSetBufferPtr(name), blockNo, index);
 }
 
-inline const StreamSetBuffer * KernelBuilder::getStreamSetBuffer(const std::string & name) const {
-    const unsigned structIdx = getStreamSetIndex(name);
-    if (structIdx < mStreamSetInputs.size()) {
-        return mStreamSetInputBuffers[structIdx];
-    } else {
-        return mStreamSetOutputBuffers[structIdx - mStreamSetInputs.size()];
-    }
-}
-
-Value * KernelBuilder::getStreamSetPtr(Value * self, const std::string & name, Value * blockNo) const {
-    return getStreamSetBuffer(name)->getStreamSetPtr(getStreamSetBufferPtr(self, name), blockNo);
-}
-
-Value * KernelBuilder::getStream(Value * self, const std::string & name, Value * blockNo, Value * index) const {
-    return getStreamSetBuffer(name)->getStream(getStreamSetBufferPtr(self, name), blockNo, index);
-}
-
-Value * KernelBuilder::getStream(Value * self, const std::string & name, Value * blockNo, Value * index1, Value * index2) const {
+Value * KernelBuilder::getStream(const std::string & name, Value * blockNo, Value * index1, Value * index2) const {
     assert (index1->getType() == index2->getType());
-    return getStreamSetBuffer(name)->getStream(getStreamSetBufferPtr(self, name), blockNo, index1, index2);
+    return getStreamSetBuffer(name)->getStream(getStreamSetBufferPtr(name), blockNo, index1, index2);
 }
 
-Value * KernelBuilder::getStreamView(Value * self, const std::string & name, Value * blockNo, Value * index) const {
-    return getStreamSetBuffer(name)->getStreamView(getStreamSetBufferPtr(self, name), blockNo, index);
+Value * KernelBuilder::getStreamView(const std::string & name, Value * blockNo, Value * index) const {
+    return getStreamSetBuffer(name)->getStreamView(getStreamSetBufferPtr(name), blockNo, index);
 }
 
-Value * KernelBuilder::getStreamView(llvm::Type * type, Value * self, const std::string & name, Value * blockNo, Value * index) const {
-    return getStreamSetBuffer(name)->getStreamView(type, getStreamSetBufferPtr(self, name), blockNo, index);
+Value * KernelBuilder::getStreamView(llvm::Type * type, const std::string & name, Value * blockNo, Value * index) const {
+    return getStreamSetBuffer(name)->getStreamView(type, getStreamSetBufferPtr(name), blockNo, index);
+}
+
+BasicBlock * KernelBuilder::CreateBasicBlock(std::string && name) const {
+    return BasicBlock::Create(iBuilder->getContext(), name, mCurrentFunction);
 }
 
 void KernelBuilder::createInstance() {
@@ -331,30 +342,24 @@ void KernelBuilder::createInstance() {
 }
 
 //  The default finalBlock method simply dispatches to the doBlock routine.
-void BlockOrientedKernel::generateFinalBlockMethod(Function * function, Value * self, Value * /* remainingBytes */, Value * /* blockNo */) const {
+void BlockOrientedKernel::generateFinalBlockMethod(Value * remainingBytes, Value * blockNo) {
 //    std::vector<Value *> args = {self};
 //    for (Argument & arg : function->getArgumentList()){
 //        args.push_back(&arg);
 //    }
-    iBuilder->CreateCall(getDoBlockFunction(), { self });
+    CreateDoBlockMethodCall();
 }
 
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.
-void BlockOrientedKernel::generateDoSegmentMethod(Function * doSegmentFunction, Value * self, Value * doFinal, const std::vector<Value *> &producerPos) const {
+void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::vector<Value *> &producerPos) {
 
-    auto savePoint = iBuilder->saveIP();
-    callGenerateDoBlockMethod();
-    callGenerateDoFinalBlockMethod();
-    iBuilder->restoreIP(savePoint);
-
-    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
-    BasicBlock * strideLoopCond = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_strideLoopCond", doSegmentFunction, 0);
-    BasicBlock * strideLoopBody = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_strideLoopBody", doSegmentFunction, 0);
-    BasicBlock * stridesDone = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_stridesDone", doSegmentFunction, 0);
-    BasicBlock * doFinalBlock = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_doFinalBlock", doSegmentFunction, 0);
-    BasicBlock * segmentDone = BasicBlock::Create(iBuilder->getContext(), mKernelName + "_segmentDone", doSegmentFunction, 0);
-    Type * const size_ty = iBuilder->getSizeTy();
+    BasicBlock * const entryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * const strideLoopCond = CreateBasicBlock(mKernelName + "_strideLoopCond");
+    BasicBlock * const strideLoopBody = CreateBasicBlock(mKernelName + "_strideLoopBody");
+    BasicBlock * const stridesDone = CreateBasicBlock(mKernelName + "_stridesDone");
+    BasicBlock * const doFinalBlock = CreateBasicBlock(mKernelName + "_doFinalBlock");
+    BasicBlock * const segmentDone = CreateBasicBlock(mKernelName + "_segmentDone");
 
     ConstantInt * stride = iBuilder->getSize(iBuilder->getStride());
     ConstantInt * strideBlocks = iBuilder->getSize(iBuilder->getStride() / iBuilder->getBitBlockWidth());
@@ -364,23 +369,23 @@ void BlockOrientedKernel::generateDoSegmentMethod(Function * doSegmentFunction, 
         Value * p = producerPos[i];
         availablePos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(availablePos, p), availablePos, p);
     }
-    Value * processed = getProcessedItemCount(self, mStreamSetInputs[0].name);
+    Value * processed = getProcessedItemCount(mStreamSetInputs[0].name);
     Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
     Value * stridesToDo = iBuilder->CreateUDiv(itemsAvail, stride);
     iBuilder->CreateBr(strideLoopCond);
 
     iBuilder->SetInsertPoint(strideLoopCond);
-    PHINode * stridesRemaining = iBuilder->CreatePHI(size_ty, 2, "stridesRemaining");
+    PHINode * stridesRemaining = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "stridesRemaining");
     stridesRemaining->addIncoming(stridesToDo, entryBlock);
     Value * notDone = iBuilder->CreateICmpUGT(stridesRemaining, iBuilder->getSize(0));
     iBuilder->CreateCondBr(notDone, strideLoopBody, stridesDone);
 
     iBuilder->SetInsertPoint(strideLoopBody);
-    Value * blockNo = getBlockNo(self);
+    Value * blockNo = getBlockNo();
 
-    iBuilder->CreateCall(getDoBlockFunction(), self);
+    CreateDoBlockMethodCall();
 
-    setBlockNo(self, iBuilder->CreateAdd(blockNo, strideBlocks));
+    setBlockNo(iBuilder->CreateAdd(blockNo, strideBlocks));
     stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, iBuilder->getSize(1)), strideLoopBody);
     iBuilder->CreateBr(strideLoopCond);
 
@@ -388,13 +393,13 @@ void BlockOrientedKernel::generateDoSegmentMethod(Function * doSegmentFunction, 
     // Update counts for the full strides processed.
     Value * segmentItemsProcessed = iBuilder->CreateMul(stridesToDo, stride);
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * preProcessed = getProcessedItemCount(self, mStreamSetInputs[i].name);
-        setProcessedItemCount(self, mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, segmentItemsProcessed));
+        Value * preProcessed = getProcessedItemCount(mStreamSetInputs[i].name);
+        setProcessedItemCount(mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, segmentItemsProcessed));
     }
     if (!mDoBlockUpdatesProducedItemCountsAttribute) {
         for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-            Value * preProduced = getProducedItemCount(self, mStreamSetOutputs[i].name);
-            setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, segmentItemsProcessed));
+            Value * preProduced = getProducedItemCount(mStreamSetOutputs[i].name);
+            setProducedItemCount(mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, segmentItemsProcessed));
         }
     }
 
@@ -402,77 +407,98 @@ void BlockOrientedKernel::generateDoSegmentMethod(Function * doSegmentFunction, 
     iBuilder->CreateCondBr(doFinal, doFinalBlock, segmentDone);
     iBuilder->SetInsertPoint(doFinalBlock);
 
-    Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(self, mStreamSetInputs[0].name));
+    Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(mStreamSetInputs[0].name));
 
-    iBuilder->CreateCall(getDoFinalBlockFunction(), {self, remainingItems});
+    CreateDoFinalBlockMethodCall(remainingItems);
 
-    // createFinalBlockCall(self, remainingItems);
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * preProcessed = getProcessedItemCount(self, mStreamSetInputs[i].name);
-        setProcessedItemCount(self, mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, remainingItems));
+        Value * preProcessed = getProcessedItemCount(mStreamSetInputs[i].name);
+        setProcessedItemCount(mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, remainingItems));
     }
     if (!mDoBlockUpdatesProducedItemCountsAttribute) {
         for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-            Value * preProduced = getProducedItemCount(self, mStreamSetOutputs[i].name);
-            setProducedItemCount(self, mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, remainingItems));
+            Value * preProduced = getProducedItemCount(mStreamSetOutputs[i].name);
+            setProducedItemCount(mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, remainingItems));
         }
     }
-    setTerminationSignal(self);
+    setTerminationSignal();
     iBuilder->CreateBr(segmentDone);
 
     iBuilder->SetInsertPoint(segmentDone);
 
 }
 
-void BlockOrientedKernel::callGenerateDoBlockMethod() const {
-    Function * f = getDoBlockFunction();
-    auto args = f->arg_begin();
-    Value * const self = &(*args);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", f));
-    generateDoBlockMethod(f, self, getBlockNo(self)); // must be implemented by the KernelBuilder subtype
+void BlockOrientedKernel::generateInternalMethods() {
+
+    callGenerateDoBlockMethod();
+
+    callGenerateDoFinalBlockMethod();
+}
+
+void BlockOrientedKernel::callGenerateDoBlockMethod() {
+    mCurrentFunction = getDoBlockFunction();
+    auto args = mCurrentFunction->arg_begin();
+    mSelf = &(*args);
+    iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
+    generateDoBlockMethod(getBlockNo()); // must be implemented by the KernelBuilder subtype
     iBuilder->CreateRetVoid();
 }
 
-void BlockOrientedKernel::callGenerateDoFinalBlockMethod() const {
-    Function * f = getDoFinalBlockFunction();
-    auto args = f->arg_begin();
-    Value * const self = &(*args++);
+
+void BlockOrientedKernel::callGenerateDoFinalBlockMethod() {
+    mCurrentFunction = getDoFinalBlockFunction();
+    auto args = mCurrentFunction->arg_begin();
+    mSelf = &(*args++);
     Value * const remainingBytes = &(*args);
-    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "entry", f));
-    generateFinalBlockMethod(f, self, remainingBytes, getBlockNo(self)); // possibly overridden by the KernelBuilder subtype
+    iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
+    generateFinalBlockMethod(remainingBytes, getBlockNo()); // possibly overridden by the KernelBuilder subtype
     iBuilder->CreateRetVoid();
 }
 
 Function * BlockOrientedKernel::getDoBlockFunction() const {
-    return iBuilder->getModule()->getFunction(mKernelName + DO_BLOCK_SUFFIX);
+    const auto name = mKernelName + DO_BLOCK_SUFFIX;
+    Function * const f = iBuilder->getModule()->getFunction(name);
+    if (LLVM_UNLIKELY(f == nullptr)) {
+        llvm::report_fatal_error("Cannot find " + name);
+    }
+    return f;
+}
+
+CallInst * BlockOrientedKernel::CreateDoBlockMethodCall() const {
+    return iBuilder->CreateCall(getDoBlockFunction(), mSelf);
 }
 
 Function * BlockOrientedKernel::getDoFinalBlockFunction() const {
-    return iBuilder->getModule()->getFunction(mKernelName + FINAL_BLOCK_SUFFIX);
+    const auto name = mKernelName + FINAL_BLOCK_SUFFIX;
+    Function * const f = iBuilder->getModule()->getFunction(name);
+    if (LLVM_UNLIKELY(f == nullptr)) {
+        llvm::report_fatal_error("Cannot find " + name);
+    }
+    return f;
 }
 
-void BlockOrientedKernel::addAdditionalKernelDeclarations(Module * m, PointerType * selfType) const {
+CallInst * BlockOrientedKernel::CreateDoFinalBlockMethodCall(Value * remainingItems) const {
+    return iBuilder->CreateCall(getDoFinalBlockFunction(), {mSelf, remainingItems});
+}
+
+void BlockOrientedKernel::addAdditionalKernelDeclarations(Module * m, PointerType * selfType) {
     // Create the doBlock and finalBlock function prototypes
-    FunctionType * doBlockFunctionType = FunctionType::get(iBuilder->getVoidTy(), {selfType}, false);
-    Function * doBlockFn = Function::Create(doBlockFunctionType, GlobalValue::ExternalLinkage, mKernelName + DO_BLOCK_SUFFIX, m);
-    doBlockFn->setCallingConv(CallingConv::C);
-    doBlockFn->setDoesNotThrow();
-    doBlockFn->setDoesNotCapture(1);
-    auto doBlockArgs = doBlockFn->arg_begin();
-    Value * doBlockArg = &*(doBlockArgs++);
-    doBlockArg->setName("self");
+    FunctionType * const doBlockType = FunctionType::get(iBuilder->getVoidTy(), {selfType}, false);
+    Function * const doBlock = Function::Create(doBlockType, GlobalValue::ExternalLinkage, mKernelName + DO_BLOCK_SUFFIX, m);
+    doBlock->setCallingConv(CallingConv::C);
+    doBlock->setDoesNotThrow();
+    doBlock->setDoesNotCapture(1);
+    auto args = doBlock->arg_begin();
+    args->setName("self");
 
-    FunctionType * finalBlockType = FunctionType::get(iBuilder->getVoidTy(), {selfType, iBuilder->getSizeTy()}, false);
-    Function * finalBlockFn = Function::Create(finalBlockType, GlobalValue::ExternalLinkage, mKernelName + FINAL_BLOCK_SUFFIX, m);
-    finalBlockFn->setCallingConv(CallingConv::C);
-    finalBlockFn->setDoesNotThrow();
-    finalBlockFn->setDoesNotCapture(1);
-    auto finalBlockArgs = finalBlockFn->arg_begin();
-    Value * finalBlockArg = &*(finalBlockArgs++);
-    finalBlockArg->setName("self");
-    finalBlockArg = &*(finalBlockArgs++);
-    finalBlockArg->setName("remainingBytes");
-
+    FunctionType * const finalBlockType = FunctionType::get(iBuilder->getVoidTy(), {selfType, iBuilder->getSizeTy()}, false);
+    Function * const finalBlock = Function::Create(finalBlockType, GlobalValue::ExternalLinkage, mKernelName + FINAL_BLOCK_SUFFIX, m);
+    finalBlock->setCallingConv(CallingConv::C);
+    finalBlock->setDoesNotThrow();
+    finalBlock->setDoesNotCapture(1);
+    args = finalBlock->arg_begin();
+    args++->setName("self");
+    args->setName("remainingBytes");
 }
 
 // CONSTRUCTOR

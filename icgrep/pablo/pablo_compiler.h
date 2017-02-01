@@ -33,7 +33,7 @@ public:
     PabloCompiler(PabloKernel * kernel);
     ~PabloCompiler();
     void initializeKernelData();
-    void compile(llvm::Function * function, llvm::Value * const self, llvm::Value * const blockNo);
+    void compile(llvm::Value * const blockNo);
 
 private:
 
@@ -56,8 +56,6 @@ private:
     IDISA::IDISA_Builder * const    iBuilder;
     PabloKernel * const             mKernel;
     CarryManager * const            mCarryManager;
-    llvm::Value *                   mSelf;
-    llvm::Function *                mFunction;
     TranslationMap                  mMarker;
     TranslationMap                  mAccumulator;
     IntSet                          mInputStreamOffset;

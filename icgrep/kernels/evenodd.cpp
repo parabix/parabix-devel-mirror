@@ -5,28 +5,17 @@
 
 #include "evenodd.h"
 #include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
-#include <llvm/IR/Constant.h>      // for Constant
-#include <llvm/IR/Module.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Module.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include "llvm/Linker/Linker.h"
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/raw_ostream.h>
-namespace llvm { class BasicBlock; }
-namespace llvm { class Function; }
-namespace llvm { class Value; }
 
 using namespace llvm;
 
 namespace kernel {
 
-void EvenOddKernel::generateDoBlockMethod(Function * function, Value * self, Value * blockNo) const {
+void EvenOddKernel::generateDoBlockMethod(Value * blockNo) {
     Value * even = iBuilder->simd_fill(64, iBuilder->getInt64(0x5555555555555555));
     Value * odd = iBuilder->bitCast(iBuilder->simd_fill(8, iBuilder->getInt8(0xAA)));
-    Value * evenBitsPtr = getStream(self, "even_odd", blockNo, iBuilder->getInt32(0));
+    Value * evenBitsPtr = getStream("even_odd", blockNo, iBuilder->getInt32(0));
     iBuilder->CreateBlockAlignedStore(even, evenBitsPtr);
-    Value * oddBitsPtr = getStream(self, "even_odd", blockNo, iBuilder->getInt32(1));
+    Value * oddBitsPtr = getStream("even_odd", blockNo, iBuilder->getInt32(1));
     iBuilder->CreateBlockAlignedStore(odd, oddBitsPtr);
 }
 

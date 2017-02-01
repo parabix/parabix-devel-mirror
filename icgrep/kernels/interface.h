@@ -44,10 +44,9 @@ public:
     const std::vector<Binding> & getScalarInputs() const { return mScalarInputs;}
 
     const std::vector<Binding> & getScalarOutputs() const { return mScalarOutputs;}
-    
-    
+        
     // Add ExternalLinkage method declarations for the kernel to a given client module.
-    void addKernelDeclarations(llvm::Module * client) const;
+    void addKernelDeclarations(llvm::Module * client);
 
     virtual void createInstance() = 0;
 
@@ -63,11 +62,17 @@ public:
         return iBuilder;
     }
 
-    virtual llvm::Value * getProcessedItemCount(llvm::Value * self, const std::string & ssName) const = 0;
+    virtual llvm::Value * getProcessedItemCount(llvm::Value * instance, const std::string & name) const = 0;
 
-    virtual llvm::Value * getProducedItemCount(llvm::Value * self, const std::string & ssName) const = 0;
+    virtual void setProcessedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
 
-    virtual llvm::Value * getTerminationSignal(llvm::Value * self) const = 0;
+    virtual llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name) const = 0;
+
+    virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
+
+    virtual llvm::Value * getTerminationSignal(llvm::Value * instance) const = 0;
+
+    virtual void setTerminationSignal(llvm::Value * instance) const = 0;
     
     void setLookAhead(unsigned lookAheadPositions) {
         mLookAheadPositions = lookAheadPositions;
@@ -101,7 +106,7 @@ protected:
 
     }
     
-    virtual void addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType) const;
+    virtual void addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType) {}
 
 protected:
     

@@ -21,14 +21,14 @@ void bitblock_advance_ci_co(IDISA::IDISA_Builder * iBuilder, Value * val, unsign
     }
 }
 
-void editdGPUKernel::generateDoBlockMethod(Function * function, Value * self, Value * blockNo) const {
+void editdGPUKernel::generateDoBlockMethod(Value * blockNo) {
 
     IntegerType * const int32ty = iBuilder->getInt32Ty();
     IntegerType * const int8ty = iBuilder->getInt8Ty();
     Value * pattLen = iBuilder->getInt32(mPatternLen + 1);
     Value * pattPos = iBuilder->getInt32(0);
-    Value * pattBuf = getScalarField(self, "pattStream");
-    Value * stideCarryArr = getScalarField(self, "srideCarry");
+    Value * pattBuf = getScalarField("pattStream");
+    Value * stideCarryArr = getScalarField("srideCarry");
    
     unsigned carryIdx = 0;
 
@@ -43,7 +43,7 @@ void editdGPUKernel::generateDoBlockMethod(Function * function, Value * self, Va
     Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
     Value * pattCh = iBuilder->CreateLoad(pattPtr);
     Value * pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-    Value * pattStreamPtr = getStream(self, "CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
+    Value * pattStreamPtr = getStream("CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
     Value * pattStream = iBuilder->CreateLoad(pattStreamPtr);
     pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
 
@@ -55,7 +55,7 @@ void editdGPUKernel::generateDoBlockMethod(Function * function, Value * self, Va
         pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
         pattCh = iBuilder->CreateLoad(pattPtr);
         pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-        pattStreamPtr = getStream(self, "CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
+        pattStreamPtr = getStream("CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
         pattStream = iBuilder->CreateLoad(pattStreamPtr);
         bitblock_advance_ci_co(iBuilder, e[i-1][0], 1, stideCarryArr, carryIdx++, adv, calculated, i-1, 0);
         e[i][0] = iBuilder->CreateAnd(adv[i-1][0], pattStream); 
@@ -70,17 +70,17 @@ void editdGPUKernel::generateDoBlockMethod(Function * function, Value * self, Va
         }
         pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
     }
-    Value * ptr = getStream(self, "ResultStream", blockNo, iBuilder->getInt32(0));
+    Value * ptr = getStream("ResultStream", blockNo, iBuilder->getInt32(0));
     iBuilder->CreateStore(e[mPatternLen-1][0], ptr);
     for(unsigned j = 1; j<= mEditDistance; j++){
-        ptr = getStream(self, "ResultStream", blockNo, iBuilder->getInt32(j));
+        ptr = getStream("ResultStream", blockNo, iBuilder->getInt32(j));
         iBuilder->CreateStore(iBuilder->CreateAnd(e[mPatternLen - 1][j], iBuilder->CreateNot(e[mPatternLen - 1][j - 1])), ptr);
     }
 }
 
-void editdGPUKernel::generateFinalBlockMethod(Function * function, Value * self, Value * remainingBytes, Value * blockNo) const {
-    setScalarField(self, "EOFmask", iBuilder->bitblock_mask_from(remainingBytes));
-    iBuilder->CreateCall(getDoBlockFunction(), { self });
+void editdGPUKernel::generateFinalBlockMethod(Value * remainingBytes, Value * blockNo) {
+    setScalarField("EOFmask", iBuilder->bitblock_mask_from(remainingBytes));
+    CreateDoBlockMethodCall();
 }
 
 editdGPUKernel::editdGPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen) :

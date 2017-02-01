@@ -16,24 +16,24 @@ namespace kernel {
             
 // Rather than using doBlock logic to write one block at a time, this custom
 // doSegment method, writes the entire segment with a single write call.
-void StdOutKernel::generateDoSegmentMethod(Function *doSegmentFunction, Value *self, Value *doFinal, const std::vector<Value *> &producerPos) const {
+void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
 
     PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
 
     Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
     
-    Value * processed = getProcessedItemCount(self, "codeUnitBuffer");
+    Value * processed = getProcessedItemCount("codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
     
-    Value * blockNo = getBlockNo(self);
+    Value * blockNo = getBlockNo();
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-    Value * bytePtr = getStreamView(i8PtrTy, self, "codeUnitBuffer", blockNo, byteOffset);
+    Value * bytePtr = getStreamView(i8PtrTy, "codeUnitBuffer", blockNo, byteOffset);
     iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
 
     processed = iBuilder->CreateAdd(processed, itemsToDo);
-    setProcessedItemCount(self, "codeUnitBuffer", processed);
-    setBlockNo(self, iBuilder->CreateUDiv(processed, blockItems));
+    setProcessedItemCount("codeUnitBuffer", processed);
+    setBlockNo(iBuilder->CreateUDiv(processed, blockItems));
 
 }
 
@@ -43,39 +43,39 @@ StdOutKernel::StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWid
     setNoTerminateAttribute(true);
 }
 
-void FileSink::generateInitMethod(Function *initFunction, Value *self) const {
-    BasicBlock * setTerminationOnFailure = BasicBlock::Create(iBuilder->getContext(), "setTerminationOnFailure", initFunction, 0);
-    BasicBlock * fileSinkInitExit = BasicBlock::Create(iBuilder->getContext(), "fileSinkInitExit", initFunction, 0);
-    Value * handle = iBuilder->CreateFOpenCall(getScalarField(self, "fileName"), iBuilder->CreateGlobalStringPtr("w"));
-    setScalarField(self, "IOstreamPtr", handle);
+void FileSink::generateInitMethod() {
+    BasicBlock * setTerminationOnFailure = CreateBasicBlock("setTerminationOnFailure");
+    BasicBlock * fileSinkInitExit = CreateBasicBlock("fileSinkInitExit");
+    Value * handle = iBuilder->CreateFOpenCall(getScalarField("fileName"), iBuilder->CreateGlobalStringPtr("w"));
+    setScalarField("IOstreamPtr", handle);
     Value * failure = iBuilder->CreateICmpEQ(iBuilder->CreatePtrToInt(handle, iBuilder->getSizeTy()), iBuilder->getSize(0));
     iBuilder->CreateCondBr(failure, setTerminationOnFailure, fileSinkInitExit);
     iBuilder->SetInsertPoint(setTerminationOnFailure);
-    setTerminationSignal(self);
+    setTerminationSignal();
     iBuilder->CreateBr(fileSinkInitExit);
     iBuilder->SetInsertPoint(fileSinkInitExit);
 }
 
-void FileSink::generateDoSegmentMethod(Function *doSegmentFunction, Value *self, Value *doFinal, const std::vector<Value *> &producerPos) const {
+void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
     PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
     
-    BasicBlock * closeFile = BasicBlock::Create(iBuilder->getContext(), "closeFile", doSegmentFunction, 0);
-    BasicBlock * fileOutExit = BasicBlock::Create(iBuilder->getContext(), "fileOutExit", doSegmentFunction, 0);
+    BasicBlock * closeFile = CreateBasicBlock("closeFile");
+    BasicBlock * fileOutExit = CreateBasicBlock("fileOutExit");
     Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
     
-    Value * processed = getProcessedItemCount(self, "codeUnitBuffer");
+    Value * processed = getProcessedItemCount("codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
-    Value * IOstreamPtr = getScalarField(self, "IOstreamPtr");
+    Value * IOstreamPtr = getScalarField("IOstreamPtr");
     
-    Value * blockNo = getBlockNo(self);
+    Value * blockNo = getBlockNo();
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-    Value * bytePtr = getStreamView(i8PtrTy, self, "codeUnitBuffer", blockNo, byteOffset);
+    Value * bytePtr = getStreamView(i8PtrTy, "codeUnitBuffer", blockNo, byteOffset);
     iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);
     
     processed = iBuilder->CreateAdd(processed, itemsToDo);
-    setProcessedItemCount(self, "codeUnitBuffer", processed);
-    setBlockNo(self, iBuilder->CreateUDiv(processed, blockItems));
+    setProcessedItemCount("codeUnitBuffer", processed);
+    setBlockNo(iBuilder->CreateUDiv(processed, blockItems));
     iBuilder->CreateCondBr(doFinal, closeFile, fileOutExit);
     
     iBuilder->SetInsertPoint(closeFile);

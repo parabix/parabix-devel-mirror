@@ -45,11 +45,11 @@ public:
 
     void initializeCarryData(PabloKernel * const kernel);
 
-    void initializeCodeGen(llvm::Value * const self, llvm::Function *function);
+    void initializeCodeGen();
 
     /* Entering and leaving loops. */
 
-    void enterLoopScope(PabloBlock * const scope);
+    void enterLoopScope(const PabloBlock * const scope);
 
     void enterLoopBody(llvm::BasicBlock * const entryBlock);
 
@@ -59,7 +59,7 @@ public:
 
     /* Entering and leaving ifs. */
 
-    void enterIfScope(PabloBlock * const scope);
+    void enterIfScope(const PabloBlock * const scope);
 
     void enterIfBody(llvm::BasicBlock * const entryBlock);
 
@@ -84,7 +84,7 @@ protected:
     llvm::StructType * analyse(PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0);
 
     /* Entering and leaving scopes. */
-    void enterScope(PabloBlock * const scope);
+    void enterScope(const PabloBlock * const scope);
     void leaveScope();
 
     /* Methods for processing individual carry-generating operations. */
@@ -102,14 +102,13 @@ private:
     IDISA::IDISA_Builder * const                    iBuilder;
     PabloKernel *                                   mKernel;
     llvm::Value *                                   mSelf;
-    llvm::Function *                                mFunction;
     llvm::Type * const                              mBitBlockType;
     const unsigned                                  mBitBlockWidth;
 
     llvm::Value *                                   mCurrentFrame;
     unsigned                                        mCurrentFrameIndex;
 
-    PabloBlock *                                    mCurrentScope;
+    const PabloBlock *                              mCurrentScope;
     CarryData *                                     mCarryInfo;
 
     llvm::Type *                                    mCarryPackType;
