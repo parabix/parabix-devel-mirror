@@ -100,6 +100,13 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
   // std::cout << "kernel success.\n";
   // Retrieve device data
 
+  CUevent start;
+  CUevent stop;
+  float elapsedTime;
+
+  cuEventCreate(&start, CU_EVENT_BLOCKING_SYNC);
+  cuEventRecord(start,0);
+
   ulong * matchRslt;
   int ret = posix_memalign((void**)&matchRslt, 32, outputSize);
   if (ret) {
@@ -114,6 +121,13 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
     }
     std::cout << count << "\n";
   }
+
+  cuEventCreate(&stop, CU_EVENT_BLOCKING_SYNC);
+  cuEventRecord(stop,0);
+  cuEventSynchronize(stop);
+
+  cuEventElapsedTime(&elapsedTime, start, stop);
+  printf("GPU Kernel time : %f ms\n" ,elapsedTime);
 
 
   // Clean-up

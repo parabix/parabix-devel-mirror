@@ -181,15 +181,21 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
 
+    const unsigned segmentSize = codegen::SegmentSize;
+
     ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy( 2, 1));
     MatchResults.setStreamSetBuffer(rsltStream, fileSize);
+
+    kernel::MMapSourceKernel mmapK(iBuilder, segmentSize); 
+    mmapK.generateKernel({}, {&MatchResults});
+    mmapK.setInitialArguments({fileSize});
 
     kernel::ScanMatchKernel scanMatchK(iBuilder, grepType);
     scanMatchK.generateKernel({&MatchResults}, {});
             
     scanMatchK.setInitialArguments({inputStream, fileSize, fileIdx});
     
-    generatePipelineLoop(iBuilder, {&scanMatchK});
+    generatePipelineLoop(iBuilder, {&mmapK, &scanMatchK});
     iBuilder->CreateRetVoid();
 
     return mainCPUFn;
