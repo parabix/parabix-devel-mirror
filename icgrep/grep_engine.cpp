@@ -326,7 +326,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     } else {
 #ifdef CUDA_ENABLED 
         if (codegen::NVPTX){
-            ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(2, i1), addrSpace);
+            ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(2, 1), addrSpace);
             MatchResults.setStreamSetBuffer(outputStream, fileSize);
 
             icgrepK.generateKernel({&BasisBits},  {&MatchResults});

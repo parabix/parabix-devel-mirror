@@ -6,7 +6,7 @@
 
 #ifndef TOOLCHAIN_H
 #define TOOLCHAIN_H
-
+#include <string>
 namespace llvm { class ExecutionEngine; }
 namespace llvm { class Module; }
 namespace llvm { namespace cl { class OptionCategory; } }
