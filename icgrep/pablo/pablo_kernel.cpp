@@ -86,11 +86,11 @@ void PabloKernel::prepareKernel() {
     BlockOrientedKernel::prepareKernel();
 }
 
-void PabloKernel::generateDoBlockMethod(Value * blockNo) {
-    mPabloCompiler->compile(blockNo);
+void PabloKernel::generateDoBlockMethod() {
+    mPabloCompiler->compile();
 }
 
-void PabloKernel::generateFinalBlockMethod(Value *remainingBytes, Value * blockNo) {
+void PabloKernel::generateFinalBlockMethod(Value * remainingBytes) {
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
     setScalarField("EOFbit", iBuilder->bitblock_set_bit(remainingBytes));

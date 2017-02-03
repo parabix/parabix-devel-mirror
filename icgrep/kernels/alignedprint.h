@@ -16,7 +16,7 @@ public:
     PrintableBits(IDISA::IDISA_Builder * builder);
     virtual ~PrintableBits() {}
 private:
-    void generateDoBlockMethod(llvm::Value * blockNo) override;
+    void generateDoBlockMethod() override;
 };
 
 class SelectStream : public BlockOrientedKernel {
@@ -24,7 +24,7 @@ public:
     SelectStream(IDISA::IDISA_Builder * builder, unsigned sizeInputStreamSet, unsigned streamIndex);
     virtual ~SelectStream() {}
 private:
-    void generateDoBlockMethod(llvm::Value * blockNo) override;
+    void generateDoBlockMethod() override;
     unsigned mSizeInputStreamSet;
     unsigned mStreamIndex;
 };

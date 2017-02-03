@@ -17,7 +17,7 @@ public:
     editdScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist);
         
 private:
-    void generateDoBlockMethod(llvm::Value * blockNo) override;
+    void generateDoBlockMethod() override;
     llvm::Function * generateScanWordRoutine(llvm::Module * m) const;
         
     unsigned mEditDistance;

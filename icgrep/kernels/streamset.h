@@ -21,21 +21,29 @@ public:
 
     enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, LinearCopybackBuffer, ExpandableBuffer};
 
-    inline BufferKind getBufferKind() const {
+    BufferKind getBufferKind() const {
         return mBufferKind;
     }
 
-    inline llvm::Type * getBufferStreamSetType() const {
+    llvm::Type * getType() const {
         return mStreamSetType;
     }
 
-    llvm::PointerType * getStreamBufferPointerType() const {
-        return mStreamSetType->getPointerTo(mAddrSpace);
+    llvm::Type * getBaseType() const {
+        return mBaseStreamSetType;
     }
 
-    size_t getBufferSize() const { return mBufferBlocks; }
+    llvm::PointerType * getPointerType() const {
+        return getType()->getPointerTo(mAddressSpace);
+    }
 
-    llvm::Value * getStreamSetBasePtr() const { return mStreamSetBufferPtr; }
+    size_t getBufferSize() const {
+        return mBufferSize;
+    }
+
+    llvm::Value * getStreamSetBasePtr() const {
+        return mStreamSetBufferPtr;
+    }
 
     virtual void allocateBuffer();
 
@@ -43,12 +51,8 @@ public:
 
     virtual llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const;
     
-    virtual llvm::Value * getStreamView(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const;
-
     virtual llvm::Value * getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const;
 
-    llvm::Type * resolveStreamTypes(llvm::Type * type);
-    
 protected:
 
     StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * type, unsigned blocks, unsigned AddressSpace);
@@ -56,13 +60,16 @@ protected:
     // Get the buffer pointer for a given block of the stream.
     virtual llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const = 0;
 
+    llvm::Type * resolveStreamSetBufferType(llvm::Type * type) const;
+
 protected:
     const BufferKind                mBufferKind;
     IDISA::IDISA_Builder * const    iBuilder;
     llvm::Type * const              mStreamSetType;
-    const size_t                    mBufferBlocks;
-    const int                       mAddrSpace;
+    const size_t                    mBufferSize;
+    const unsigned                  mAddressSpace;
     llvm::Value *                   mStreamSetBufferPtr;
+    llvm::Type * const              mBaseStreamSetType;
 };   
 
 class SingleBlockBuffer : public StreamSetBuffer {
@@ -137,8 +144,6 @@ public:
     llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const override;
 
     llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const override;
-
-    llvm::Value * getStreamView(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const override;
 
     llvm::Value * getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const override;
 

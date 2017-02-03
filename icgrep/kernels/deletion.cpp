@@ -7,6 +7,7 @@
 #include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Value.h>
 #include <llvm/IR/Module.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
@@ -52,19 +53,19 @@ inline Value * partial_sum_popcount(IDISA::IDISA_Builder * iBuilder, const unsig
 // Kernel inputs: stream_count data streams plus one del_mask stream
 // Outputs: the deleted streams, plus a partial sum popcount
 
-void DeletionKernel::generateDoBlockMethod(Value * blockNo) {
-    Value * delMaskPtr = getStream("delMaskSet", blockNo, iBuilder->getInt32(0));
+void DeletionKernel::generateDoBlockMethod() {
+    Value * delMaskPtr = getInputStream("delMaskSet", iBuilder->getInt32(0));
     Value * delMask = iBuilder->CreateBlockAlignedLoad(delMaskPtr);
-    std::vector<Value *> move_masks = parallel_prefix_deletion_masks(iBuilder, mDeletionFieldWidth, delMask);
+    const auto move_masks = parallel_prefix_deletion_masks(iBuilder, mDeletionFieldWidth, delMask);
     for (unsigned j = 0; j < mStreamCount; ++j) {
-        Value * inputStreamPtr = getStream("inputStreamSet", blockNo, iBuilder->getInt32(j));
+        Value * inputStreamPtr = getInputStream("inputStreamSet", iBuilder->getInt32(j));
         Value * input = iBuilder->CreateBlockAlignedLoad(inputStreamPtr);
         Value * output = apply_parallel_prefix_deletion(iBuilder, mDeletionFieldWidth, delMask, move_masks, input);
-        Value * outputStreamPtr = getStream("outputStreamSet", blockNo, iBuilder->getInt32(j));
+        Value * outputStreamPtr = getOutputStream("outputStreamSet", iBuilder->getInt32(j));
         iBuilder->CreateBlockAlignedStore(output, outputStreamPtr);
     }
     Value * delCount = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(delMask));
-    Value * delCountPtr = getStream("deletionCounts", blockNo, iBuilder->getInt32(0));
+    Value * delCountPtr = getOutputStream("deletionCounts", iBuilder->getInt32(0));
     iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(delCount), delCountPtr);
     // Stream deletion has only been applied within fields; the actual number of data items has not yet changed.
     Value * produced = getProducedItemCount("outputStreamSet");
@@ -73,11 +74,11 @@ void DeletionKernel::generateDoBlockMethod(Value * blockNo) {
     setProducedItemCount("deletionCounts", produced);
 }
 
-void DeletionKernel::generateFinalBlockMethod(Value * remainingBytes, Value * blockNo) {
+void DeletionKernel::generateFinalBlockMethod(Value * remainingBytes) {
     IntegerType * vecTy = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
     Value * remaining = iBuilder->CreateZExt(remainingBytes, vecTy);
     Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
-    Value * const delmaskPtr = getStream("delMaskSet", blockNo, iBuilder->getInt32(0));
+    Value * const delmaskPtr = getInputStream("delMaskSet", iBuilder->getInt32(0));
     Value * const delmaskVal = iBuilder->CreateBlockAlignedLoad(delmaskPtr);
     iBuilder->CreateBlockAlignedStore(iBuilder->CreateOr(EOF_del, delmaskVal), delmaskPtr);
     CreateDoBlockMethodCall();

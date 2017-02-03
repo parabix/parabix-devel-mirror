@@ -10,12 +10,12 @@ using namespace llvm;
 
 namespace kernel {
 
-void EvenOddKernel::generateDoBlockMethod(Value * blockNo) {
+void EvenOddKernel::generateDoBlockMethod() {
     Value * even = iBuilder->simd_fill(64, iBuilder->getInt64(0x5555555555555555));
     Value * odd = iBuilder->bitCast(iBuilder->simd_fill(8, iBuilder->getInt8(0xAA)));
-    Value * evenBitsPtr = getStream("even_odd", blockNo, iBuilder->getInt32(0));
+    Value * evenBitsPtr = getOutputStream("even_odd", iBuilder->getInt32(0));
     iBuilder->CreateBlockAlignedStore(even, evenBitsPtr);
-    Value * oddBitsPtr = getStream("even_odd", blockNo, iBuilder->getInt32(1));
+    Value * oddBitsPtr = getOutputStream("even_odd", iBuilder->getInt32(1));
     iBuilder->CreateBlockAlignedStore(odd, oddBitsPtr);
 }
 

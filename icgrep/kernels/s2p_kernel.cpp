@@ -7,6 +7,7 @@
 #include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
 #include <llvm/IR/Constant.h>      // for Constant
 #include <llvm/IR/Module.h>
+#include <llvm/Support/raw_ostream.h>
 namespace llvm { class BasicBlock; }
 namespace llvm { class Function; }
 namespace llvm { class Value; }
@@ -120,21 +121,21 @@ void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuild
 }    
 #endif
     
-void S2PKernel::generateDoBlockMethod(llvm::Value * blockNo) {
+void S2PKernel::generateDoBlockMethod() {
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        Value * byteStream = getStream("byteStream", blockNo, iBuilder->getInt32(0), iBuilder->getInt32(i));
+        Value * byteStream = getInputStream("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
         bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStream);
     }
     Value * basisbits[8];
     s2p(iBuilder, bytepack, basisbits);
     for (unsigned i = 0; i < 8; ++i) {
-        Value * basisBits = getStream("basisBits", blockNo, iBuilder->getInt32(i));
+        Value * basisBits = getOutputStream("basisBits", iBuilder->getInt32(i));
         iBuilder->CreateBlockAlignedStore(basisbits[i], basisBits);
     }
 }
 
-void S2PKernel::generateFinalBlockMethod(Value * remainingBytes, llvm::Value * blockNo) {
+void S2PKernel::generateFinalBlockMethod(Value * remainingBytes) {
     /* Prepare the s2p final block function:
      assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
      if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
@@ -152,8 +153,12 @@ void S2PKernel::generateFinalBlockMethod(Value * remainingBytes, llvm::Value * b
     iBuilder->CreateBr(exitBlock);
     
     iBuilder->SetInsertPoint(finalEmptyBlock);
-    Value * basisBitsPtr = getStreamView("basisBits", blockNo, iBuilder->getInt64(0));
-    iBuilder->CreateStore(Constant::getNullValue(basisBitsPtr->getType()->getPointerElementType()), basisBitsPtr);
+
+    for (unsigned i = 0; i < 8; ++i) {
+        Value * basisBitsPtr = getOutputStream("basisBits", iBuilder->getInt64(i));
+        iBuilder->CreateBlockAlignedStore(Constant::getNullValue(iBuilder->getBitBlockType()), basisBitsPtr);
+    }
+
     iBuilder->CreateBr(exitBlock);
     
     iBuilder->SetInsertPoint(exitBlock);

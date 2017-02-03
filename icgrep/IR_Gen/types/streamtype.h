@@ -20,7 +20,7 @@ public:
         return mFieldWidth;
     }
 
-    llvm::Type * resolveType(IDISA_Builder * const iBuilder);
+    llvm::Type * resolveType(IDISA_Builder * const iBuilder) const;
 
     /// Methods for support type inquiry through isa, cast, and dyn_cast.
     static inline bool classof(const llvm::Type * type) {

@@ -26,7 +26,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     auto savePoint = iBuilder->saveIP();
     iBuilder->setModule(client);
     if (mKernelStateType == nullptr) {
-        throw std::runtime_error("Kernel interface " + mKernelName + " not yet finalized.");
+        throw std::runtime_error("Kernel interface " + getName() + " not yet finalized.");
     }
     PointerType * selfType = PointerType::getUnqual(mKernelStateType);
 
@@ -36,15 +36,15 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         initParameters.push_back(binding.type);
     }
     FunctionType * initType = FunctionType::get(iBuilder->getVoidTy(), initParameters, false);
-    Function * init = Function::Create(initType, GlobalValue::ExternalLinkage, mKernelName + INIT_SUFFIX, client);
+    Function * init = Function::Create(initType, GlobalValue::ExternalLinkage, getName() + INIT_SUFFIX, client);
     init->setCallingConv(CallingConv::C);
     init->setDoesNotThrow();
     auto args = init->arg_begin();
-    args++->setName("self");
+    args->setName("self");
     for (auto binding : mScalarInputs) {
-        args++->setName(binding.name);
+        (++args)->setName(binding.name);
     }
-    assert (args == init->arg_end());
+    assert ((++args) == init->arg_end());
 
     // Create the doSegment function prototype.
     std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getInt1Ty()};
@@ -52,17 +52,17 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         doSegmentParameters.push_back(iBuilder->getSizeTy());
     }
     FunctionType * doSegmentType = FunctionType::get(iBuilder->getVoidTy(), doSegmentParameters, false);
-    Function * doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, mKernelName + DO_SEGMENT_SUFFIX, client);
+    Function * doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, client);
     doSegment->setCallingConv(CallingConv::C);
     doSegment->setDoesNotThrow();
     doSegment->setDoesNotCapture(1); // for self parameter only.
     args = doSegment->arg_begin();
-    args++->setName("self");
-    args++->setName("doFinal");
+    args->setName("self");
+    (++args)->setName("doFinal");
     for (auto ss : mStreamSetInputs) {
-        args++->setName(ss.name + "_availableItems");
+        (++args)->setName(ss.name + "_availableItems");
     }
-    assert (args == doSegment->arg_end());
+    assert ((++args) == doSegment->arg_end());
 
     // Add any additional kernel declarations
     addAdditionalKernelDeclarations(client, selfType);
@@ -70,11 +70,13 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     // Create the accumulator get function prototypes
     for (const auto & binding : mScalarOutputs) {
         FunctionType * accumFnType = FunctionType::get(binding.type, {selfType}, false);
-        Function * accumFn = Function::Create(accumFnType, GlobalValue::ExternalLinkage, mKernelName + ACCUMULATOR_INFIX + binding.name, client);
+        Function * accumFn = Function::Create(accumFnType, GlobalValue::ExternalLinkage, getName() + ACCUMULATOR_INFIX + binding.name, client);
         accumFn->setCallingConv(CallingConv::C);
         accumFn->setDoesNotThrow();
-        auto self = accumFn->arg_begin();
-        self->setName("self");
+        accumFn->setDoesNotCapture(1);
+        auto args = accumFn->arg_begin();
+        args->setName("self");
+        assert ((++args) == accumFn->arg_end());
     }
 
     iBuilder->setModule(saveModule);
@@ -86,7 +88,7 @@ void KernelInterface::setInitialArguments(std::vector<Value *> args) {
 }
 
 llvm::Function * KernelInterface::getAccumulatorFunction(const std::string & accumName) const {
-    const auto name = mKernelName + ACCUMULATOR_INFIX + accumName;
+    const auto name = getName() + ACCUMULATOR_INFIX + accumName;
     Function * f = iBuilder->getModule()->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
         llvm::report_fatal_error("Cannot find " + name);
@@ -95,7 +97,7 @@ llvm::Function * KernelInterface::getAccumulatorFunction(const std::string & acc
 }
 
 Function * KernelInterface::getInitFunction() const {
-    const auto name = mKernelName + INIT_SUFFIX;
+    const auto name = getName() + INIT_SUFFIX;
     Function * f = iBuilder->getModule()->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
         llvm::report_fatal_error("Cannot find " + name);
@@ -104,7 +106,7 @@ Function * KernelInterface::getInitFunction() const {
 }
 
 Function * KernelInterface::getDoSegmentFunction() const {
-    const auto name = mKernelName + DO_SEGMENT_SUFFIX;
+    const auto name = getName() + DO_SEGMENT_SUFFIX;
     Function * f = iBuilder->getModule()->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
         llvm::report_fatal_error("Cannot find " + name);

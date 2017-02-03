@@ -16,8 +16,8 @@ public:
     S2PKernel(IDISA::IDISA_Builder * builder);
     virtual ~S2PKernel() {}
 private:
-    void generateDoBlockMethod(llvm::Value * blockNo) override;
-    void generateFinalBlockMethod(llvm::Value * remainingBytes, llvm::Value * blockNo) override;
+    void generateDoBlockMethod() override;
+    void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
 };
 
 }

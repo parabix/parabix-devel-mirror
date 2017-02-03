@@ -49,14 +49,6 @@ public:
 
     void setTerminationSignal(llvm::Value * instance) const override final;
 
-    llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & name) const;
-
-    llvm::Value * getScalarFieldPtr(llvm::Value *instance, llvm::Value * index) const;
-
-    llvm::Value * getStreamSetBufferPtr(llvm::Value * instance, const std::string & name) const;
-
-    llvm::Value * getStreamSetBufferPtr(llvm::Value * instance, llvm::Value * index) const;
-    
     // Get the value of a scalar field for a given instance.
     llvm::Value * getScalarField(llvm::Value * instance, const std::string & fieldName) const;
 
@@ -179,29 +171,23 @@ protected:
         return setScalarField(getSelf(), index, value);
     }
 
-    llvm::Value * getStream(const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
+    llvm::Value * getInputStream(const std::string & name, llvm::Value * index) const;
 
-    llvm::Value * getStream(const std::string & name, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const;
+    llvm::Value * getInputStream(const std::string & name, llvm::Value * index1, llvm::Value * index2) const;
 
-    llvm::Value * getStreamView(const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
+    llvm::Value * getOutputStream(const std::string & name, llvm::Value * index) const;
+
+    llvm::Value * getOutputStream(const std::string & name, llvm::Value * index1, llvm::Value * index2) const;
 
     llvm::Value * getStreamView(llvm::Type * type, const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
 
-    // Stream set helpers.
+
     llvm::Value * getScalarFieldPtr(const std::string & name) const {
         return getScalarFieldPtr(getSelf(), name);
     }
 
     llvm::Value * getScalarFieldPtr(llvm::Value * index) const {
         return getScalarFieldPtr(getSelf(), index);
-    }
-
-    llvm::Value * getStreamSetBufferPtr(const std::string & name) const {
-        return getStreamSetBufferPtr(getSelf(), name);
-    }
-
-    llvm::Value * getStreamSetBufferPtr(llvm::Value * index) const {
-        return getStreamSetBufferPtr(getSelf(), index);
     }
 
     llvm::Value * getStreamSetPtr(const std::string & name, llvm::Value * blockNo) const;
@@ -238,6 +224,19 @@ protected:
     llvm::BasicBlock * CreateBasicBlock(std::string && name) const;
 
 private:
+
+    // Stream set helpers.
+//    llvm::Value * getStream(const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
+
+//    llvm::Value * getStream(const std::string & name, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const;
+
+    llvm::Value * getStreamSetBufferPtr(const std::string & name) const;
+
+    llvm::Value * getStreamSetBufferPtr(llvm::Value * index) const;
+
+    llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & name) const;
+
+    llvm::Value * getScalarFieldPtr(llvm::Value * instance, llvm::Value * index) const;
 
     unsigned getStreamSetIndex(const std::string & name) const;
 
@@ -290,7 +289,7 @@ protected:
 
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
-    virtual void generateDoBlockMethod(llvm::Value * blockNo) = 0;
+    virtual void generateDoBlockMethod() = 0;
 
     // Each kernel builder subtypre must also specify the logic for processing the
     // final block of stream data, if there is any special processing required
@@ -299,7 +298,7 @@ protected:
     // without additional preparation, the default generateFinalBlockMethod need
     // not be overridden.
 
-    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes, llvm::Value * blockNo);
+    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes);
 
     virtual void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) final;
 

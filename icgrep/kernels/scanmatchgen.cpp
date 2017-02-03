@@ -37,7 +37,7 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
     return iBuilder->CreateAnd(bits_minus1, bits);
 }
         
-void ScanMatchKernel::generateDoBlockMethod(Value * blockNo) {
+void ScanMatchKernel::generateDoBlockMethod() {
 
     auto savePoint = iBuilder->saveIP();
     Function * scanWordFunction = generateScanWordRoutine(iBuilder->getModule());
@@ -46,11 +46,12 @@ void ScanMatchKernel::generateDoBlockMethod(Value * blockNo) {
     IntegerType * T = iBuilder->getSizeTy();
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / T->getBitWidth();
     Type * scanwordVectorType =  VectorType::get(T, fieldCount);
+    Value * blockNo = getBlockNo();
     Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));   
     Value * recordStart = getScalarField("LineStart");
     Value * recordNum = getScalarField("LineNum");
-    Value * matches = iBuilder->CreateBlockAlignedLoad(getStream("matchResults", blockNo, iBuilder->getInt32(0)));
-    Value * linebreaks = iBuilder->CreateBlockAlignedLoad(getStream("matchResults", blockNo, iBuilder->getInt32(1)));
+    Value * matches = iBuilder->CreateBlockAlignedLoad(getInputStream("matchResults", iBuilder->getInt32(0)));
+    Value * linebreaks = iBuilder->CreateBlockAlignedLoad(getInputStream("matchResults", iBuilder->getInt32(1)));
     Value * matchWordVector = iBuilder->CreateBitCast(matches, scanwordVectorType);
     Value * breakWordVector = iBuilder->CreateBitCast(linebreaks, scanwordVectorType);
     for(unsigned i = 0; i < fieldCount; ++i){

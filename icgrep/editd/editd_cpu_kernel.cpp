@@ -22,7 +22,7 @@ void editdCPUKernel::bitblock_advance_ci_co(Value * val, unsigned shift, Value *
     }
 }
 
-void editdCPUKernel::generateDoBlockMethod(Value * blockNo) {
+void editdCPUKernel::generateDoBlockMethod() {
     auto savePoint = iBuilder->saveIP();
 
     Type * const int32ty = iBuilder->getInt32Ty();
@@ -40,7 +40,7 @@ void editdCPUKernel::generateDoBlockMethod(Value * blockNo) {
     Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
     Value * pattCh = iBuilder->CreateLoad(pattPtr);
     Value * pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-    Value * pattStreamPtr = getStream("CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
+    Value * pattStreamPtr = getInputStream("CCStream", iBuilder->CreateZExt(pattIdx, int32ty));
     Value * pattStream = iBuilder->CreateLoad(pattStreamPtr);
     pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
 
@@ -53,7 +53,7 @@ void editdCPUKernel::generateDoBlockMethod(Value * blockNo) {
         pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
         pattCh = iBuilder->CreateLoad(pattPtr);
         pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-        pattStreamPtr = getStream("CCStream", blockNo, iBuilder->CreateZExt(pattIdx, int32ty));
+        pattStreamPtr = getInputStream("CCStream", iBuilder->CreateZExt(pattIdx, int32ty));
         pattStream = iBuilder->CreateLoad(pattStreamPtr);
 
         bitblock_advance_ci_co(e[i-1][0], 1, stideCarryArr, carryIdx++, adv, calculated, i-1, 0);
@@ -71,10 +71,10 @@ void editdCPUKernel::generateDoBlockMethod(Value * blockNo) {
         pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
     }
     
-    Value * ptr = getStream("ResultStream", blockNo, iBuilder->getInt32(0));
+    Value * ptr = getOutputStream("ResultStream", iBuilder->getInt32(0));
     iBuilder->CreateStore(e[mPatternLen - 1][0], ptr);
     for(unsigned j = 1; j<= mEditDistance; j++){
-        ptr = getStream("ResultStream", blockNo, iBuilder->getInt32(j));
+        ptr = getOutputStream("ResultStream", iBuilder->getInt32(j));
         iBuilder->CreateStore(iBuilder->CreateAnd(e[mPatternLen-1][j], iBuilder->CreateNot(e[mPatternLen-1][j-1])), ptr);
     }
        
@@ -82,7 +82,7 @@ void editdCPUKernel::generateDoBlockMethod(Value * blockNo) {
     iBuilder->restoreIP(savePoint);
 }
 
-void editdCPUKernel::generateFinalBlockMethod(Value * remainingBytes, Value * blockNo) {
+void editdCPUKernel::generateFinalBlockMethod(Value * remainingBytes) {
     setScalarField("EOFmask", iBuilder->bitblock_mask_from(remainingBytes));
     CreateDoBlockMethodCall();
 }

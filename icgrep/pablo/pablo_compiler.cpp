@@ -47,13 +47,15 @@ void PabloCompiler::initializeKernelData() {
     mCarryManager->initializeCarryData(mKernel);
 }
     
-void PabloCompiler::compile(Value * const blockNo) {
+void PabloCompiler::compile() {
 
     mCarryManager->initializeCodeGen();
       
     PabloBlock * const entryBlock = mKernel->getEntryBlock(); assert (entryBlock);
     mMarker.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
     mMarker.emplace(entryBlock->createOnes(), iBuilder->allOnes());
+
+    Value * const blockNo =  mKernel->getBlockNo();
 
     for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
         Var * var = mKernel->getInput(i);

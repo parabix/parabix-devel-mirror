@@ -22,7 +22,7 @@ using namespace parabix;
 using namespace llvm;
 using namespace IDISA;
 
-Type * StreamSetBuffer::resolveStreamTypes(Type * type) {
+Type * StreamSetBuffer::resolveStreamSetBufferType(Type * type) const {
     if (auto ty = dyn_cast<ArrayType>(type)) {
         unsigned numElems = ty->getNumElements();
         auto elemTy = ty->getElementType();
@@ -37,7 +37,7 @@ Type * StreamSetBuffer::resolveStreamTypes(Type * type) {
 }
 
 void StreamSetBuffer::allocateBuffer() {
-    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(mStreamSetType, iBuilder->getSize(mBufferBlocks));
+    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferSize));
 }
 
 Value * StreamSetBuffer::getStream(Value * self, Value * blockNo, Value * index) const {
@@ -46,10 +46,6 @@ Value * StreamSetBuffer::getStream(Value * self, Value * blockNo, Value * index)
 
 Value * StreamSetBuffer::getStream(Value * self, Value * blockNo, Value * index1, Value * index2) const {
     return iBuilder->CreateGEP(getStreamSetPtr(self, blockNo), {iBuilder->getInt32(0), index1, index2});
-}
-
-Value * StreamSetBuffer::getStreamView(llvm::Value * self, Value * blockNo, llvm::Value * index) const {
-    return iBuilder->CreateGEP(getStreamSetPtr(self, blockNo), index, "view");
 }
 
 Value * StreamSetBuffer::getStreamView(llvm::Type * type, llvm::Value * self, Value * blockNo, llvm::Value * index) const {
@@ -64,16 +60,12 @@ Value * SingleBlockBuffer::getStreamSetPtr(Value * self, Value *) const {
 }
 
 // External File Buffer
-void ExternalFileBuffer::setStreamSetBuffer(Value * ptr, Value * fileSize) {
-    
-    PointerType * t = getStreamBufferPointerType();    
-    mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, t);
+void ExternalFileBuffer::setStreamSetBuffer(Value * ptr, Value * /* fileSize */) {
+    mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, getPointerType());
 }
 
-void ExternalFileBuffer::setEmptyBuffer(Value * ptr) {
-    
-    PointerType * t = getStreamBufferPointerType();    
-    mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, t);
+void ExternalFileBuffer::setEmptyBuffer(Value * ptr) {    
+    mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, getPointerType());
 }
 
 void ExternalFileBuffer::allocateBuffer() {
@@ -90,12 +82,12 @@ Value * CircularBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
     assert (blockNo->getType()->isIntegerTy());
 
     Value * offset = nullptr;
-    if (mBufferBlocks == 1) {
+    if (mBufferSize == 1) {
         offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
-    } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
-        offset = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks - 1));
+    } else if ((mBufferSize & (mBufferSize - 1)) == 0) { // is power of 2
+        offset = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), mBufferSize - 1));
     } else {
-        offset = iBuilder->CreateURem(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks));
+        offset = iBuilder->CreateURem(blockNo, ConstantInt::get(blockNo->getType(), mBufferSize));
     }
     return iBuilder->CreateGEP(self, offset);
 }
@@ -104,12 +96,12 @@ Value * CircularBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
 
 Value * LinearCopybackBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
     Value * offset = nullptr;
-    if (mBufferBlocks == 1) {
+    if (mBufferSize == 1) {
         offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
-    } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
-        offset = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks - 1));
+    } else if ((mBufferSize & (mBufferSize - 1)) == 0) { // is power of 2
+        offset = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), mBufferSize - 1));
     } else {
-        offset = iBuilder->CreateURem(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks));
+        offset = iBuilder->CreateURem(blockNo, ConstantInt::get(blockNo->getType(), mBufferSize));
     }
     return iBuilder->CreateGEP(self, offset);
 }
@@ -129,14 +121,9 @@ llvm::Value * ExpandableBuffer::getStream(llvm::Value * self, llvm::Value * bloc
     return nullptr;
 }
 
-llvm::Value * ExpandableBuffer::getStreamView(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const {
-    return nullptr;
-}
-
 llvm::Value * ExpandableBuffer::getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const {
     return nullptr;
 }
-
 
 // Constructors
 
@@ -168,9 +155,10 @@ ExpandableBuffer::ExpandableBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, 
 StreamSetBuffer::StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, Type * type, unsigned blocks, unsigned AddressSpace)
 : mBufferKind(k)
 , iBuilder(b)
-, mStreamSetType(resolveStreamTypes(type))
-, mBufferBlocks(blocks)
-, mAddrSpace(AddressSpace)
-, mStreamSetBufferPtr(nullptr) {
+, mStreamSetType(resolveStreamSetBufferType(type))
+, mBufferSize(blocks)
+, mAddressSpace(AddressSpace)
+, mStreamSetBufferPtr(nullptr)
+, mBaseStreamSetType(type) {
 
 }

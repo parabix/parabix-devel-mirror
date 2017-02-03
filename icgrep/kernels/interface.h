@@ -35,15 +35,15 @@ public:
      
      */
     
-    const std::string & getName() const { return mKernelName;}
+    const std::string & getName() const { return mKernelName; }
        
-    const std::vector<Binding> & getStreamInputs() const {return mStreamSetInputs;}
+    const std::vector<Binding> & getStreamInputs() const { return mStreamSetInputs; }
 
-    const std::vector<Binding> & getStreamOutputs() const {return mStreamSetOutputs;}
+    const std::vector<Binding> & getStreamOutputs() const { return mStreamSetOutputs; }
 
-    const std::vector<Binding> & getScalarInputs() const { return mScalarInputs;}
+    const std::vector<Binding> & getScalarInputs() const { return mScalarInputs; }
 
-    const std::vector<Binding> & getScalarOutputs() const { return mScalarOutputs;}
+    const std::vector<Binding> & getScalarOutputs() const { return mScalarOutputs; }
         
     // Add ExternalLinkage method declarations for the kernel to a given client module.
     void addKernelDeclarations(llvm::Module * client);

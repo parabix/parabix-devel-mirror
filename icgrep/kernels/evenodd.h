@@ -16,7 +16,7 @@ public:
     EvenOddKernel(IDISA::IDISA_Builder * builder);
     virtual ~EvenOddKernel() {}
 private:
-    void generateDoBlockMethod(llvm::Value * blockNo) override;
+    void generateDoBlockMethod() override;
 
 };
 

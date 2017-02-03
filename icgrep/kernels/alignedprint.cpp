@@ -37,8 +37,8 @@ inline void p2s(IDISA::IDISA_Builder * iBuilder, Value * p[], Value * s[]) {
     }
 }
 
-void PrintableBits::generateDoBlockMethod(Value * blockNo) {    
-    Value * strmPtr = getStream("bitStream", blockNo, iBuilder->getInt32(0));
+void PrintableBits::generateDoBlockMethod() {
+    Value * strmPtr = getStream("bitStream", iBuilder->getInt32(0));
     
     Value * bitStrmVal = iBuilder->CreateBlockAlignedLoad(strmPtr);
     Value * bits[8];
@@ -56,7 +56,7 @@ void PrintableBits::generateDoBlockMethod(Value * blockNo) {
     p2s(iBuilder, bits, printableBytes);
     
     for (unsigned j = 0; j < 8; ++j) {
-        Value * ptr = getStream("byteStream", blockNo, iBuilder->getInt32(0), iBuilder->getInt32(j));
+        Value * ptr = getStream("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(j));
         iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(printableBytes[j]), ptr);
     }
 }
@@ -77,14 +77,14 @@ SelectStream::SelectStream(IDISA::IDISA_Builder * builder, unsigned sizeInputStr
 
 }
 
-void SelectStream::generateDoBlockMethod(Value * blockNo) {    
+void SelectStream::generateDoBlockMethod() {
     if (mStreamIndex >= mSizeInputStreamSet)
         llvm::report_fatal_error("Stream index out of bounds.\n");
     
-    Value * strmPtr = getStream("bitStreams", blockNo, iBuilder->getInt32(mStreamIndex));
+    Value * strmPtr = getStream("bitStreams", iBuilder->getInt32(mStreamIndex));
     Value * bitStrmVal = iBuilder->CreateBlockAlignedLoad(strmPtr);
 
-    Value * ptr = getStream("bitStream", blockNo, iBuilder->getInt32(0));
+    Value * ptr = getStream("bitStream", iBuilder->getInt32(0));
     iBuilder->CreateBlockAlignedStore(bitStrmVal, ptr);
 }
 }

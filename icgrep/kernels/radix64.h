@@ -29,8 +29,8 @@ class radix64Kernel : public BlockOrientedKernel {
 public:
     radix64Kernel(IDISA::IDISA_Builder * iBuilder);
 private:
-    virtual void generateDoBlockMethod(llvm::Value * blockNo) override final;
-    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes, llvm::Value * blockNo) override final;
+    virtual void generateDoBlockMethod() override final;
+    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override final;
     llvm::Value* processPackData(llvm::Value* packData) const;
 };
 
@@ -38,8 +38,8 @@ class base64Kernel : public BlockOrientedKernel {
 public:
     base64Kernel(IDISA::IDISA_Builder * iBuilder);
 private:
-    virtual void generateDoBlockMethod(llvm::Value * blockNo) override final;
-    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes, llvm::Value * blockNo) override final;
+    virtual void generateDoBlockMethod() override final;
+    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override final;
     llvm::Value* processPackData(llvm::Value* packData) const;
 };
 
