@@ -64,24 +64,6 @@ ProducerTable createProducerTable(const std::vector<KernelBuilder *> & kernels) 
     return producerTable;
 }
 
-std::vector<Value *> getCopyBackPositions(const KernelBuilder * kernel, Value * instance) {
-    std::vector<Value *> positions;
-    auto outputSets = kernel->getStreamSetOutputBuffers();
-    for (unsigned i = 0; i < outputSets.size(); i++) {
-        if (isa<LinearCopybackBuffer>(outputSets[i])) {
-            positions.push_back(kernel->getProducedItemCount(instance, kernel->getStreamOutputs()[i].name));
-        }
-    }
-    return positions;
-}
-
-void createCopyBackCode(const StreamSetBuffer *, Value * startPosition, Value * finalPosition) {
-    //BasicBlock * doCopyBack = BasicBlock::Create(iBuilder->getContext(), kernels[k]->getName() + "copyBack" +std::to_string(j), threadFunc, 0);
-    
-    
-}
-
-
 Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels, Type * sharedStructType, ProducerTable & producerTable, int id) {
     
     // ProducerPos[k][i] will hold the producedItemCount of the i^th output stream
@@ -136,11 +118,15 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
     segNo->addIncoming(iBuilder->getSize(id), entryBlock);
     const unsigned last_kernel = kernels.size() - 1;
     Value * doFinal = ConstantInt::getNullValue(iBuilder->getInt1Ty());
-    
+    Value * nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
     iBuilder->CreateBr(segmentWait[0]);
     for (unsigned k = 0; k < kernels.size(); k++) {
         iBuilder->SetInsertPoint(segmentWait[k]);
-        Value * processedSegmentCount = kernels[k]->acquireLogicalSegmentNo(instancePtrs[k]);
+        unsigned waitForKernel = k;
+        if (codegen::DebugOptionIsSet(codegen::SerializeThreads)) {
+            waitForKernel = last_kernel;
+        }
+        Value * processedSegmentCount = kernels[waitForKernel]->acquireLogicalSegmentNo(instancePtrs[waitForKernel]);
         Value * cond = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
 
         if (kernels[k]->hasNoTerminateAttribute()) {
@@ -159,16 +145,10 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
             std::tie(producerKernel, outputIndex) = producerTable[k][j];
             doSegmentArgs.push_back(ProducerPos[producerKernel][outputIndex]);
         }
-        std::vector<Value *> copyBackStartPosition = getCopyBackPositions(kernels[k], instancePtrs[k]);
         kernels[k]->createDoSegmentCall(doSegmentArgs);
         std::vector<Value *> produced;
-        unsigned copyBackIndex = 0;
         for (unsigned i = 0; i < kernels[k]->getStreamOutputs().size(); i++) {
             produced.push_back(kernels[k]->getProducedItemCount(instancePtrs[k], kernels[k]->getStreamOutputs()[i].name));
-            if (isa<LinearCopybackBuffer>(kernels[k]->getStreamSetOutputBuffers()[i])) {
-                createCopyBackCode(kernels[k]->getStreamSetOutputBuffers()[i], copyBackStartPosition[copyBackIndex], produced[i]);
-                copyBackIndex++;
-            }
         }
         ProducerPos.push_back(produced);
         if (! (kernels[k]->hasNoTerminateAttribute())) {
@@ -176,7 +156,6 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
             doFinal = iBuilder->CreateOr(doFinal, terminated);
         }
 
-        Value * nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
         kernels[k]->releaseLogicalSegmentNo(instancePtrs[k], nextSegNo);
         if (k == last_kernel) {
             segNo->addIncoming(iBuilder->CreateAdd(segNo, iBuilder->getSize(codegen::ThreadNum)), segmentLoopBody[last_kernel]);

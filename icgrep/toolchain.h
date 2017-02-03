@@ -15,6 +15,17 @@ namespace codegen {
 const llvm::cl::OptionCategory * codegen_flags();
 
 // Command Parameters
+enum DebugFlags {
+    ShowIR,
+#if LLVM_VERSION_MINOR > 6
+    ShowASM,
+#endif
+    SerializeThreads
+};
+
+bool DebugOptionIsSet(DebugFlags flag);
+
+
 extern char OptLevel;  // set from command line
 extern int BlockSize;  // set from command line
 extern int SegmentSize;  // set from command line

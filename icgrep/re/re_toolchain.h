@@ -14,7 +14,7 @@ namespace re { class RE; }
 namespace re {
 
 enum RE_PrintFlags {
-    PrintAllREs, PrintParsedREs, PrintStrippedREs, PrintSimplifiedREs
+    ShowREs, ShowAllREs, ShowStrippedREs, ShowSimplifiedREs
 };
     
 enum RE_AlgorithmFlags {
