@@ -12,8 +12,6 @@ editd/editdscan_kernel.cpp
 editd/editdscan_kernel.h
 editd/pattern_compiler.cpp
 editd/pattern_compiler.h
-IR_Gen/types/streamtype.cpp
-IR_Gen/types/streamtype.h
 IR_Gen/CBuilder.cpp
 IR_Gen/CBuilder.h
 IR_Gen/CudaDriver.h

@@ -8,19 +8,14 @@
  */
 #include "CBuilder.h"
 #include <llvm/IR/DerivedTypes.h>
-#include <IR_Gen/types/streamtype.h>
-#include <boost/container/flat_map.hpp>
 namespace llvm { class Constant; }
 namespace llvm { class LoadInst; }
 namespace llvm { class Module; }
-namespace llvm { class Type; }
 namespace llvm { class Value; }
 
 namespace IDISA {
 
 class IDISA_Builder : public CBuilder {
-
-    using StreamTypes = boost::container::flat_map<unsigned, StreamType *>;
 
 public:
 
@@ -127,7 +122,9 @@ public:
         return llvm::ArrayType::get(getStreamTy(FieldWidth), NumElements);
     }
     
-    StreamType * getStreamTy(const unsigned FieldWidth = 1);
+    llvm::VectorType * getStreamTy(const unsigned FieldWidth = 1) {
+        return llvm::VectorType::get(llvm::IntegerType::getIntNTy(getContext(), FieldWidth), 0);
+    }
 
     void CallPrintRegister(const std::string & regName, llvm::Value * const value);
     
@@ -135,11 +132,9 @@ protected:
     unsigned            mBitBlockWidth;
     unsigned            mStride;
     llvm::VectorType *  mBitBlockType;
-
     llvm::Constant *    mZeroInitializer;
     llvm::Constant *    mOneInitializer;
     llvm::Constant *    mPrintRegisterFunction;
-    StreamTypes         mStreamTypes;
 };
 
 inline llvm::LoadInst * IDISA_Builder::CreateBlockAlignedLoad(llvm::Value * const ptr) {

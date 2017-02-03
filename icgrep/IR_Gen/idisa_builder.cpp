@@ -379,17 +379,6 @@ Value * IDISA_Builder::simd_not(Value * a) {
     return simd_xor(a, Constant::getAllOnesValue(a->getType()));
 }
 
-StreamType * IDISA_Builder::getStreamTy(const unsigned FieldWidth) {
-    const auto f = mStreamTypes.find(FieldWidth);
-    if (LLVM_LIKELY(f != mStreamTypes.end())) {
-        return f->second;
-    } else {
-        StreamType * const T = new StreamType(getContext(), FieldWidth);
-        mStreamTypes.emplace(FieldWidth, T);
-        return T;
-    }
-}
-
 IDISA_Builder::IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, unsigned CacheAlignment)
 : CBuilder(m, archBitWidth, CacheAlignment)
 , mBitBlockWidth(bitBlockWidth)
@@ -402,10 +391,7 @@ IDISA_Builder::IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBloc
 }
 
 IDISA_Builder::~IDISA_Builder() {
-    for (const auto t : mStreamTypes) {
-        delete std::get<1>(t);
-    }
-    mStreamTypes.clear();
+
 }
 
 }

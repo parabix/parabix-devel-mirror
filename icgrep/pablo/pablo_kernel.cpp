@@ -19,12 +19,22 @@ using namespace parabix;
 using namespace IDISA;
 using namespace llvm;
 
+inline bool isStreamType(const Type * ty) {
+    if (ty->isArrayTy()) {
+        ty = ty->getArrayElementType();
+    }
+    if (ty->isVectorTy()) {
+        return (ty->getVectorNumElements() == 0);
+    }
+    return false;
+}
+
 Var * PabloKernel::addInput(const std::string & name, Type * const type) {
     Var * param = new (mAllocator) Var(mSymbolTable->makeString(name, iBuilder), type, mAllocator, Var::ReadOnly);
     param->addUser(this);
     mInputs.push_back(param);
     mVariables.push_back(param);
-    if (isa<ArrayType>(type) || isa<StreamType>(type)) {
+    if (isStreamType(type)) {
         mStreamSetInputs.emplace_back(type, name);
     } else {
         mScalarInputs.emplace_back(type, name);
@@ -38,7 +48,7 @@ Var * PabloKernel::addOutput(const std::string & name, Type * const type) {
     result->addUser(this);
     mOutputs.push_back(result);
     mVariables.push_back(result);
-    if (isa<ArrayType>(type) || isa<StreamType>(type)) {
+    if (isStreamType(type)) {
         mStreamSetOutputs.emplace_back(type, name);
     } else {
         mScalarOutputs.emplace_back(type, name);

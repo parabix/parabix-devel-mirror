@@ -5,7 +5,6 @@
 
 #include "streamset.h"
 #include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
-#include <IR_Gen/types/streamtype.h>
 #include <assert.h>                // for assert
 #include <llvm/IR/Type.h>          // for Type
 #include <stdexcept>               // for runtime_error
@@ -22,16 +21,25 @@ using namespace parabix;
 using namespace llvm;
 using namespace IDISA;
 
-Type * StreamSetBuffer::resolveStreamSetBufferType(Type * type) const {
-    if (auto ty = dyn_cast<ArrayType>(type)) {
-        unsigned numElems = ty->getNumElements();
-        auto elemTy = ty->getElementType();
-        if (isa<StreamType>(elemTy)) {
-            return ArrayType::get(cast<StreamType>(elemTy)->resolveType(iBuilder), numElems);
+Type * resolveVectorTy(IDISA_Builder * const b, Type * type) {
+    if (LLVM_LIKELY(type->isVectorTy() && type->getVectorNumElements() == 0)) {
+        type = type->getVectorElementType();
+        if (LLVM_LIKELY(type->isIntegerTy())) {
+            const auto fieldWidth = cast<IntegerType>(type)->getBitWidth();
+            type = b->getBitBlockType();
+            if (fieldWidth != 1) {
+                type = llvm::ArrayType::get(type, fieldWidth);
+            }
         }
     }
-    else if (auto ty = dyn_cast<StreamType>(type)) {
-        return ty->resolveType(iBuilder);
+    return type;
+}
+
+Type * StreamSetBuffer::resolveStreamSetBufferType(Type * const type) const {
+    if (type->isArrayTy()) {
+        return ArrayType::get(resolveVectorTy(iBuilder, type->getArrayElementType()), type->getArrayNumElements());
+    } else if (type->isVectorTy()) {
+        return resolveVectorTy(iBuilder, type);
     }
     return type;
 }

@@ -6,7 +6,6 @@
 #include "kernel.h"
 #include <toolchain.h>
 #include <kernels/streamset.h>
-#include <IR_Gen/types/streamtype.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
@@ -34,8 +33,6 @@ static const auto BLOCK_MASK_SUFFIX = "_blkMask";
 using namespace llvm;
 using namespace kernel;
 using namespace parabix;
-
-using StreamType = IDISA::StreamType;
 
 unsigned KernelBuilder::addScalar(Type * const type, const std::string & name) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {

@@ -28,24 +28,7 @@
     assert ("DIFFERING CONTEXTS" && (&((A)->getType()->getContext()) == &((B)->getType()->getContext()))); \
     assert ("DIFFERING TYPES" && ((A)->getType() == (B)->getType()))
 
-using StreamType = IDISA::StreamType;
 using namespace llvm;
-
-inline void printType(const Type * type, raw_string_ostream & out) {
-    if (auto st = dyn_cast<StreamType>(type)) {
-        out << "s" << st->getFieldWidth();
-        return;
-    }
-    if (auto ty = dyn_cast<ArrayType>(type)) {
-        unsigned numElems = ty->getNumElements();
-        auto elemTy = ty->getElementType();
-        if (auto st = dyn_cast<StreamType>(elemTy)) {
-            out << "<" << numElems << " x s" << st->getFieldWidth() << ">";
-            return;
-        }
-    }
-    type->print(out);
-}
 
 namespace pablo {
 
@@ -215,9 +198,9 @@ static void reportAssignError(PabloAST * const var, PabloAST * const value, cons
     switch (type) {
         case AssignErrorType::TypeMismatch:
             out << "type mismatch ";
-            printType(value->getType(), out);
+            value->getType()->print(out);
             out << " vs. ";
-            printType(var->getType(), out);
+            var->getType()->print(out);
             break;
         case AssignErrorType::ReadOnlyVar:
             var->print(out);
