@@ -11,6 +11,7 @@
 #include <pablo/symbol_generator.h>
 #include <util/slab_allocator.h>
 #include <llvm/ADT/StringRef.h>
+#include <boost/container/flat_map.hpp>      // for mScalarOutputNameMap
 
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Type; }
@@ -84,6 +85,8 @@ public:
     }
     
     Var * getOutputSet(std::string inputSetName);
+    
+    Var * getScalarOutput(std::string outputName);
 
     Var * getOutput(const unsigned index) {
         return mOutputs[index];
@@ -150,7 +153,7 @@ private:
     std::vector<Var *>              mOutputs;
     std::vector<PabloAST *>         mConstants;
     std::vector<Var *>              mVariables;
-
+    boost::container::flat_map<std::string, Var *> mScalarOutputNameMap;
 };
 
 }

@@ -41,6 +41,16 @@ Var * PabloKernel::getOutputSet(std::string outputSetName) {
 }
 
 
+Var * PabloKernel::getScalarOutput(std::string outputName) {
+    const auto f = mScalarOutputNameMap.find(outputName);
+    if (LLVM_UNLIKELY(f == mScalarOutputNameMap.end())) {
+        llvm::report_fatal_error("Kernel does not contain scalar: " + outputName);
+    }
+    return f->second;
+}
+
+
+
 Var * PabloKernel::addInput(const std::string & name, Type * const type) {
     Var * param = new (mAllocator) Var(mSymbolTable->makeString(name, iBuilder), type, mAllocator, Var::ReadOnly);
     param->addUser(this);
@@ -64,6 +74,7 @@ Var * PabloKernel::addOutput(const std::string & name, Type * const type) {
         mStreamSetOutputs.emplace_back(type, name);
     } else {
         mScalarOutputs.emplace_back(type, name);
+        mScalarOutputNameMap.emplace(name, result);
     }
     assert (mStreamSetOutputs.size() + mScalarOutputs.size() == mOutputs.size());
     return result;
@@ -160,6 +171,7 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName,
         result->addUser(this);
         mOutputs.push_back(result);
         mVariables.push_back(result);
+        mScalarOutputNameMap.emplace(ss.name, result);
     }
 }
 

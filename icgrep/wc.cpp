@@ -89,15 +89,16 @@ extern "C" {
 
 void wc_gen(PabloKernel * kernel) {
     //  input: 8 basis bit streams
+    const auto u8bitSet = kernel->getInputSet("u8bit");
     //  output: 3 counters
     
-    cc::CC_Compiler ccc(kernel);
+    cc::CC_Compiler ccc(kernel, u8bitSet);
     
     PabloBuilder & pb = ccc.getBuilder();
 
-    Var * lc = kernel->addOutput("lineCount", kernel->getSizeTy());
-    Var * wc = kernel->addOutput("wordCount", kernel->getSizeTy());
-    Var * cc = kernel->addOutput("charCount", kernel->getSizeTy());
+    Var * lc = kernel->getScalarOutput("lineCount");
+    Var * wc = kernel->getScalarOutput("wordCount");
+    Var * cc = kernel->getScalarOutput("charCount");
 
     if (CountLines) {
         PabloAST * LF = ccc.compileCC(re::makeCC(0x0A));
@@ -150,8 +151,10 @@ Function * pipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     
     S2PKernel  s2pk(iBuilder);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
+    
+    PabloKernel wck(iBuilder, "wc", {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}}, {}, 
+                      {Binding{iBuilder->getSizeTy(), "lineCount"}, Binding{iBuilder->getSizeTy(), "wordCount"}, Binding{iBuilder->getSizeTy(), "charCount"}});
 
-    PabloKernel wck(iBuilder, "wc");
     wc_gen(&wck);
     pablo_function_passes(&wck);
     
