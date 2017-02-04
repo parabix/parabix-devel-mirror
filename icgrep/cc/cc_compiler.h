@@ -10,6 +10,7 @@
 
 #include <re/re_cc.h>
 #include <pablo/builder.hpp>
+#include <kernels/interface.h>
 #include <string>
 
 namespace cc {
@@ -23,7 +24,9 @@ public:
     using Vars = std::vector<pablo::Var *>;
 
     CC_Compiler(pablo::PabloKernel * kernel, const unsigned encodingBits = 8, const std::string prefix = "basis");
-
+    
+    CC_Compiler(pablo::PabloKernel * kernel, pablo::Var * basisBitSet);
+    
     pablo::PabloAST * compileCC(const re::CC *cc);
 
     pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBlock & block);
@@ -62,8 +65,8 @@ private:
     pablo::PabloAST * charset_expr(const re::CC *cc, PabloBlockOrBuilder & pb);
 private:    
     pablo::PabloBuilder             mBuilder;
-    std::vector<pablo::PabloAST *>  mBasisBit;
     const unsigned                  mEncodingBits;
+    std::vector<pablo::PabloAST *>  mBasisBit;
     unsigned                        mEncodingMask;
 };
 

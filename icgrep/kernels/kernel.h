@@ -11,6 +11,7 @@
 #include "interface.h"      // for KernelInterface
 #include <boost/container/flat_map.hpp>
 #include <IR_Gen/idisa_builder.h>
+#include "llvm/Support/Debug.h"
 namespace llvm { class ConstantInt; }
 namespace llvm { class Function; }
 namespace llvm { class IntegerType; }
@@ -127,8 +128,10 @@ protected:
         mDoBlockUpdatesProducedItemCountsAttribute = doesUpdate;
     }
     
+    void prepareKernelSignature();
+
     virtual void prepareKernel();
-       
+
     virtual void generateInitMethod() { }
     
     virtual void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) = 0;
@@ -222,8 +225,6 @@ protected:
     }
 
     llvm::BasicBlock * CreateBasicBlock(std::string && name) const;
-
-private:
 
     // Stream set helpers.
 //    llvm::Value * getStream(const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;

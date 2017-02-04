@@ -46,6 +46,11 @@ public:
 
     PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName);
     
+    PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName,                      
+                    std::vector<Binding> && stream_inputs,
+                    std::vector<Binding> && stream_outputs,
+                    std::vector<Binding> && scalar_outputs);
+
     virtual ~PabloKernel();
 
     PabloBlock * getEntryBlock() {
@@ -61,6 +66,8 @@ public:
         std::swap(mEntryBlock, entryBlock);
         return entryBlock;
     }
+    
+    Var * getInputSet(std::string inputSetName);
 
     Var * getInput(const unsigned index) {
         return mInputs[index];
@@ -75,6 +82,8 @@ public:
     unsigned getNumOfInputs() const {
         return mInputs.size();
     }
+    
+    Var * getOutputSet(std::string inputSetName);
 
     Var * getOutput(const unsigned index) {
         return mOutputs[index];

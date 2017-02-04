@@ -50,13 +50,16 @@ static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable po
 
 void u8u16_pablo(PabloKernel * kernel) {
     //  input: 8 basis bit streams
+    
+    const auto u8bitSet = kernel->getInputSet("u8bit");
+    
     //  output: 16 u8-indexed streams, + delmask stream + error stream
-
-    cc::CC_Compiler ccc(kernel);
+    
+    cc::CC_Compiler ccc(kernel, u8bitSet);
     
     PabloBuilder & main = ccc.getBuilder();
     const auto u8_bits = ccc.getBasisBits();
-
+    
     Zeroes * zeroes = main.createZeroes();
 
     // Outputs
@@ -232,9 +235,10 @@ void u8u16_pablo(PabloKernel * kernel) {
     main.createAssign(u16_lo[6], main.createOr(main.createAnd(last_byte, u8_bits[6]), s43_lo6));
     main.createAssign(u16_lo[7], main.createOr(main.createAnd(last_byte, u8_bits[7]), s43_lo7));
     
-    Var * output = kernel->addOutput("output", kernel->getStreamSetTy(16));
-    Var * delmask_out = kernel->addOutput("delmask_out", kernel->getStreamSetTy());
-    Var * error_mask_out = kernel->addOutput("error_mask_out", kernel->getStreamSetTy());
+    Var * output = kernel->getOutputSet("u16bit");
+    Var * delmask_out = kernel->getOutputSet("delMask");
+    Var * error_mask_out = kernel->getOutputSet("errMask");
+    
     for (unsigned i = 0; i < 8; i++) {
         main.createAssign(main.createExtract(output, i), u16_hi[i]);
     }
@@ -295,7 +299,11 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
 
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
-    PabloKernel u8u16k(iBuilder, "u8u16");
+    PabloKernel u8u16k(iBuilder, "u8u16",
+                       {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
+                       {Binding{iBuilder->getStreamSetTy(16, 1), "u16bit"},
+                        Binding{iBuilder->getStreamSetTy(1, 1), "delMask"},
+                        Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {});
 
     u8u16_pablo(&u8u16k);
 

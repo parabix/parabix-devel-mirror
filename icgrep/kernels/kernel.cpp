@@ -56,36 +56,44 @@ unsigned KernelBuilder::addUnnamedScalar(Type * const type) {
     return index;
 }
 
+void KernelBuilder::prepareKernelSignature() {
+    unsigned blockSize = iBuilder->getBitBlockWidth();
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        mStreamSetNameMap.emplace(mStreamSetInputs[i].name, i);
+    }
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        mStreamSetNameMap.emplace(mStreamSetOutputs[i].name, mStreamSetInputs.size() + i);
+    }
+}
+    
 void KernelBuilder::prepareKernel() {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
         llvm::report_fatal_error("Cannot prepare kernel after kernel state finalized");
     }
-    unsigned blockSize = iBuilder->getBitBlockWidth();
     if (mStreamSetInputs.size() != mStreamSetInputBuffers.size()) {
         std::string tmp;
         raw_string_ostream out(tmp);
         out << "kernel contains " << mStreamSetInputBuffers.size() << " input buffers for "
-            << mStreamSetInputs.size() << " input stream sets.";
+        << mStreamSetInputs.size() << " input stream sets.";
         throw std::runtime_error(out.str());
     }
     if (mStreamSetOutputs.size() != mStreamSetOutputBuffers.size()) {
         std::string tmp;
         raw_string_ostream out(tmp);
         out << "kernel contains " << mStreamSetOutputBuffers.size() << " output buffers for "
-            << mStreamSetOutputs.size() << " output stream sets.";
+        << mStreamSetOutputs.size() << " output stream sets.";
         throw std::runtime_error(out.str());
     }
+    unsigned blockSize = iBuilder->getBitBlockWidth();
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         if ((mStreamSetInputBuffers[i]->getBufferSize() > 0) && (mStreamSetInputBuffers[i]->getBufferSize() < codegen::SegmentSize + (blockSize + mLookAheadPositions - 1)/blockSize)) {
-             llvm::report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
+            llvm::report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
         }
         mScalarInputs.push_back(Binding{mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX});
-        mStreamSetNameMap.emplace(mStreamSetInputs[i].name, i);
         addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         mScalarInputs.push_back(Binding{mStreamSetOutputBuffers[i]->getPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX});
-        mStreamSetNameMap.emplace(mStreamSetOutputs[i].name, mStreamSetInputs.size() + i);
         addScalar(iBuilder->getSizeTy(), mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
     }
     for (auto binding : mScalarInputs) {
@@ -94,6 +102,7 @@ void KernelBuilder::prepareKernel() {
     for (auto binding : mScalarOutputs) {
         addScalar(binding.type, binding.name);
     }
+    if (mStreamSetNameMap.empty()) prepareKernelSignature();
     for (auto binding : mInternalScalars) {
         addScalar(binding.type, binding.name);
     }
@@ -274,7 +283,7 @@ Value * KernelBuilder::getStreamView(llvm::Type * type, const std::string & name
     return getStreamSetBuffer(name)->getStreamView(type, getStreamSetBufferPtr(name), blockNo, index);
 }
 
-inline unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
+unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
     const auto f = mStreamSetNameMap.find(name);
     if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
         llvm::report_fatal_error("Kernel " + getName() + " does not contain stream set: " + name);

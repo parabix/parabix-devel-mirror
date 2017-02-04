@@ -12,6 +12,7 @@
 //#include <llvm/IR/Module.h>
 //#include <llvm/IR/Verifier.h>
 //#include <IR_Gen/idisa_builder.h>
+#include "llvm/Support/Debug.h"
 
 using namespace pablo;
 using namespace kernel;
@@ -28,6 +29,17 @@ inline bool isStreamType(const Type * ty) {
     }
     return false;
 }
+
+Var * PabloKernel::getInputSet(std::string inputSetName) {
+    unsigned ssIndex = getStreamSetIndex(inputSetName);
+    return mInputs[ssIndex];
+}
+
+Var * PabloKernel::getOutputSet(std::string outputSetName) {
+    unsigned ssIndex = getStreamSetIndex(outputSetName);
+    return mOutputs[ssIndex - mInputs.size()];
+}
+
 
 Var * PabloKernel::addInput(const std::string & name, Type * const type) {
     Var * param = new (mAllocator) Var(mSymbolTable->makeString(name, iBuilder), type, mAllocator, Var::ReadOnly);
@@ -115,6 +127,40 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName)
 , mSymbolTable(new SymbolGenerator(mAllocator))
 , mEntryBlock(PabloBlock::Create(this)) {
     setDoBlockUpdatesProducedItemCountsAttribute(false);
+}
+
+PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName, 
+                         std::vector<Binding> && stream_inputs,
+                         std::vector<Binding> && stream_outputs,
+                         std::vector<Binding> && scalar_outputs)
+: BlockOrientedKernel(builder, std::move(kernelName), 
+                      std::move(stream_inputs), std::move(stream_outputs), 
+                      {}, std::move(scalar_outputs), 
+                      {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
+, PabloAST(PabloAST::ClassTypeId::Kernel, nullptr, mAllocator)
+, mPabloCompiler(new PabloCompiler(this))
+, mSymbolTable(new SymbolGenerator(mAllocator))
+, mEntryBlock(PabloBlock::Create(this)) {
+    setDoBlockUpdatesProducedItemCountsAttribute(false);
+    prepareKernelSignature();
+    for (auto ss : mStreamSetInputs) {
+        Var * param = new (mAllocator) Var(mSymbolTable->makeString(ss.name, iBuilder), ss.type, mAllocator, Var::ReadOnly);
+        param->addUser(this);
+        mInputs.push_back(param);
+        mVariables.push_back(param);
+    }
+    for (auto ss : mStreamSetOutputs) {
+        Var * result = new (mAllocator) Var(mSymbolTable->makeString(ss.name, iBuilder), ss.type, mAllocator, Var::ReadNone);
+        result->addUser(this);
+        mOutputs.push_back(result);
+        mVariables.push_back(result);
+    }
+    for (auto ss : mScalarOutputs) {
+        Var * result = new (mAllocator) Var(mSymbolTable->makeString(ss.name, iBuilder), ss.type, mAllocator, Var::ReadNone);
+        result->addUser(this);
+        mOutputs.push_back(result);
+        mVariables.push_back(result);
+    }
 }
 
 PabloKernel::~PabloKernel() {
