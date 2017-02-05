@@ -57,7 +57,6 @@ unsigned KernelBuilder::addUnnamedScalar(Type * const type) {
 }
 
 void KernelBuilder::prepareKernelSignature() {
-    unsigned blockSize = iBuilder->getBitBlockWidth();
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         mStreamSetNameMap.emplace(mStreamSetInputs[i].name, i);
     }
@@ -291,7 +290,7 @@ unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
     return f->second;
 }
 
-inline const StreamSetBuffer * KernelBuilder::getStreamSetBuffer(const std::string & name) const {
+const StreamSetBuffer * KernelBuilder::getStreamSetBuffer(const std::string & name) const {
     const unsigned structIdx = getStreamSetIndex(name);
     if (structIdx < mStreamSetInputs.size()) {
         return mStreamSetInputBuffers[structIdx];
@@ -300,7 +299,7 @@ inline const StreamSetBuffer * KernelBuilder::getStreamSetBuffer(const std::stri
     }
 }
 
-inline Value * KernelBuilder::getStreamSetBufferPtr(const std::string & name) const {
+Value * KernelBuilder::getStreamSetBufferPtr(const std::string & name) const {
     return getScalarField(getSelf(), name + BUFFER_PTR_SUFFIX);
 }
 

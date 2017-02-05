@@ -137,7 +137,7 @@ public:
     void allocateBuffer() override;
     
     // Generate copyback code for the given number of overflowItems.
-    void createCopyBack(llvm::Value * self, llvm::Value * overflowItems);
+    void createCopyBack(llvm::Value * self, llvm::Value * overflowItems) const;
     
     
 protected:

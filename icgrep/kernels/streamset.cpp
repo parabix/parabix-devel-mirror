@@ -123,18 +123,38 @@ void CircularCopybackBuffer::allocateBuffer() {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks + mOverflowBlocks));
 }
 
-void CircularCopybackBuffer::createCopyBack(Value * self, Value * overFlowItems) {
-    // Must copy back one full block for each of the streams in the stream set.
+void CircularCopybackBuffer::createCopyBack(Value * self, Value * overFlowItems) const {
+    Function * f = iBuilder->GetInsertBlock()->getParent();
+    BasicBlock * wholeBlockCopy = BasicBlock::Create(iBuilder->getContext(), "wholeBlockCopy", f, 0);
+    BasicBlock * partialBlockCopy = BasicBlock::Create(iBuilder->getContext(), "partialBlockCopy", f, 0);
+    BasicBlock * copyBackDone = BasicBlock::Create(iBuilder->getContext(), "copyBackDone", f, 0);
+    Type * i8ptr = iBuilder->getInt8PtrTy();
+    unsigned numStreams = getType()->getArrayNumElements();
+    auto elemTy = getType()->getArrayElementType();
+    unsigned fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
     Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
-    Constant * blockSizeLess1 = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
-    Value * overFlowBlocks = iBuilder->CreateUDiv(iBuilder->CreateAdd(overFlowItems, blockSizeLess1), blockSize);
-    Value * overFlowAreaPtr = iBuilder->CreateGEP(mStreamSetBufferPtr, iBuilder->getSize(mBufferBlocks));
-    DataLayout dl(iBuilder->getModule());
-    Constant * blockBytes = ConstantInt::get(iBuilder->getSizeTy(), dl.getTypeAllocSize(mStreamSetType) * iBuilder->getBitBlockWidth());
-    Value * copyLength = iBuilder->CreateMul(overFlowBlocks, blockBytes);
-    Type * i8ptr = iBuilder->getInt8Ty()->getPointerTo();
+    Value * overFlowAreaPtr = iBuilder->CreateGEP(self, iBuilder->getSize(mBufferBlocks));
+    Value * overFlowBlocks = iBuilder->CreateUDiv(overFlowItems, blockSize);
+    Value * partialItems = iBuilder->CreateURem(overFlowItems, blockSize);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(overFlowBlocks, iBuilder->getSize(0)), wholeBlockCopy, partialBlockCopy);
+    iBuilder->SetInsertPoint(wholeBlockCopy);
     unsigned alignment = iBuilder->getBitBlockWidth() / 8;
-    iBuilder->CreateMemMove(iBuilder->CreateBitCast(mStreamSetBufferPtr, i8ptr), iBuilder->CreateBitCast(overFlowAreaPtr, i8ptr), copyLength, alignment);
+    Constant * blockBytes = iBuilder->getSize(fieldWidth * iBuilder->getBitBlockWidth()/8);
+    Value * copyLength = iBuilder->CreateMul(overFlowBlocks, blockBytes);
+    iBuilder->CreateMemMove(iBuilder->CreateBitCast(self, i8ptr), iBuilder->CreateBitCast(overFlowAreaPtr, i8ptr), copyLength, alignment);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(partialItems, iBuilder->getSize(0)), partialBlockCopy, copyBackDone);
+    iBuilder->SetInsertPoint(partialBlockCopy);
+    Value * partialBlockTargetPtr = iBuilder->CreateGEP(self, overFlowBlocks);
+    Value * partialBlockSourcePtr = iBuilder->CreateGEP(overFlowAreaPtr, overFlowBlocks);
+    Value * copyBits = iBuilder->CreateMul(overFlowItems, iBuilder->getSize(fieldWidth));
+    Value * copyBytes = iBuilder->CreateUDiv(iBuilder->CreateAdd(copyBits, iBuilder->getSize(7)), iBuilder->getSize(8));
+    for (unsigned strm = 0; strm < numStreams; strm++) {
+        Value * strmTargetPtr = iBuilder->CreateGEP(partialBlockTargetPtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
+        Value * strmSourcePtr = iBuilder->CreateGEP(partialBlockSourcePtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
+        iBuilder->CreateMemMove(iBuilder->CreateBitCast(strmTargetPtr, i8ptr), iBuilder->CreateBitCast(strmSourcePtr, i8ptr), copyBytes, alignment);
+    }
+    iBuilder->CreateBr(copyBackDone);
+    iBuilder->SetInsertPoint(copyBackDone);
 }
 
 Value * CircularCopybackBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {

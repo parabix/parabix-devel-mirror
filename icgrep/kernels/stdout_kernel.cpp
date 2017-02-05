@@ -11,13 +11,15 @@
 namespace llvm { class Type; }
 
 using namespace llvm;
+using namespace parabix;
 
 namespace kernel {
             
 // Rather than using doBlock logic to write one block at a time, this custom
-// doSegment method, writes the entire segment with a single write call.
+// doSegment method attempts to write the entire segment with a single write call.
+// However, if the segment spans two memory areas (e.g., because of wraparound),
+// then two write calls are made.
 void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
-
     PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
 
     Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
@@ -25,16 +27,42 @@ void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Val
     
     Value * processed = getProcessedItemCount("codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
+    // There may be two memory areas if we are at the physical end of a circular buffer.
+    auto const &b  = getStreamSetBuffer("codeUnitBuffer");
+    Value * wraparound = nullptr;
+    if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
+        Value * accessible = b->getLinearlyAccessibleItems(processed);
+        wraparound = iBuilder->CreateICmpULT(accessible, itemsToDo);
+        itemsToDo = iBuilder->CreateSelect(wraparound, accessible, itemsToDo);
+    }
     
-    Value * blockNo = getBlockNo();
+    //Value * blockNo = getBlockNo();
+    Value * blockNo = iBuilder->CreateUDiv(processed, blockItems);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
     Value * bytePtr = getStreamView(i8PtrTy, "codeUnitBuffer", blockNo, byteOffset);
     iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
-
     processed = iBuilder->CreateAdd(processed, itemsToDo);
     setProcessedItemCount("codeUnitBuffer", processed);
-    setBlockNo(iBuilder->CreateUDiv(processed, blockItems));
-
+    //setBlockNo(iBuilder->CreateUDiv(processed, blockItems));
+    
+    // Now we may process the second area (if required).
+    if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
+        BasicBlock * wrapAroundWrite = CreateBasicBlock("wrapAroundWrite");
+        BasicBlock * stdoutExit = CreateBasicBlock("stdoutExit");
+        iBuilder->CreateCondBr(wraparound, wrapAroundWrite, stdoutExit);
+        iBuilder->SetInsertPoint(wrapAroundWrite);
+        
+        // Calculate from the updated value of processed;
+        blockNo = iBuilder->CreateUDiv(processed, blockItems);
+        byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
+        bytePtr = getStreamView(i8PtrTy, "codeUnitBuffer", blockNo, byteOffset);
+        itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
+        iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
+        processed = iBuilder->CreateAdd(processed, itemsToDo);
+        setProcessedItemCount("codeUnitBuffer", producerPos[0]);
+        iBuilder->CreateBr(stdoutExit);
+        iBuilder->SetInsertPoint(stdoutExit);
+    }
 }
 
 StdOutKernel::StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth)
@@ -64,18 +92,46 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
     Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
     
+    Value * IOstreamPtr = getScalarField("IOstreamPtr");
     Value * processed = getProcessedItemCount("codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
-    Value * IOstreamPtr = getScalarField("IOstreamPtr");
+    // There may be two memory areas if we are at the physical end of a circular buffer.
+    auto const &b  = getStreamSetBuffer("codeUnitBuffer");
+    Value * wraparound = nullptr;
+    if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
+        Value * accessible = b->getLinearlyAccessibleItems(processed);
+        wraparound = iBuilder->CreateICmpULT(accessible, itemsToDo);
+        itemsToDo = iBuilder->CreateSelect(wraparound, accessible, itemsToDo);
+    }
     
-    Value * blockNo = getBlockNo();
+    Value * blockNo = iBuilder->CreateUDiv(processed, blockItems);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
     Value * bytePtr = getStreamView(i8PtrTy, "codeUnitBuffer", blockNo, byteOffset);
     iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);
     
+    
     processed = iBuilder->CreateAdd(processed, itemsToDo);
     setProcessedItemCount("codeUnitBuffer", processed);
-    setBlockNo(iBuilder->CreateUDiv(processed, blockItems));
+    //setBlockNo(iBuilder->CreateUDiv(processed, blockItems));
+    
+    // Now we may process the second area (if required).
+    if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
+        BasicBlock * wrapAroundWrite = CreateBasicBlock("wrapAroundWrite");
+        BasicBlock * checkFinal = CreateBasicBlock("checkFinal");
+        iBuilder->CreateCondBr(wraparound, wrapAroundWrite, checkFinal);
+        iBuilder->SetInsertPoint(wrapAroundWrite);
+        
+        // Calculate from the updated value of processed;
+        blockNo = iBuilder->CreateUDiv(processed, blockItems);
+        byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
+        bytePtr = getStreamView(i8PtrTy, "codeUnitBuffer", blockNo, byteOffset);
+        itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
+        iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);
+        processed = iBuilder->CreateAdd(processed, itemsToDo);
+        setProcessedItemCount("codeUnitBuffer", producerPos[0]);
+        iBuilder->CreateBr(checkFinal);
+        iBuilder->SetInsertPoint(checkFinal);
+    }
     iBuilder->CreateCondBr(doFinal, closeFile, fileOutExit);
     
     iBuilder->SetInsertPoint(closeFile);
