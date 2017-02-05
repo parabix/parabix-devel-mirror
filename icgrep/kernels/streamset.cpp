@@ -45,7 +45,7 @@ Type * StreamSetBuffer::resolveStreamSetBufferType(Type * const type) const {
 }
 
 void StreamSetBuffer::allocateBuffer() {
-    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferSize));
+    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks));
 }
 
 Value * StreamSetBuffer::getStream(Value * self, Value * blockNo, Value * index) const {
@@ -59,6 +59,18 @@ Value * StreamSetBuffer::getStream(Value * self, Value * blockNo, Value * index1
 Value * StreamSetBuffer::getStreamView(llvm::Type * type, llvm::Value * self, Value * blockNo, llvm::Value * index) const {
     return iBuilder->CreateGEP(iBuilder->CreatePointerCast(getStreamSetPtr(self, blockNo), type), index, "view");
 }
+
+Value * StreamSetBuffer::getLinearlyAccessibleItems(llvm::Value * fromPosition) const {
+    if (isa<ArrayType>(mStreamSetType) && dyn_cast<ArrayType>(mStreamSetType)->getNumElements() > 1) {
+        Constant * stride = iBuilder->getSize(iBuilder->getStride());
+        return iBuilder->CreateSub(stride, iBuilder->CreateURem(fromPosition, stride));
+    }
+    else {
+        Constant * bufSize = iBuilder->getSize(mBufferBlocks * iBuilder->getStride());
+        return iBuilder->CreateSub(bufSize, iBuilder->CreateURem(fromPosition, bufSize));
+    }
+}
+
 
 // Single Block Buffer
 
@@ -84,35 +96,61 @@ Value * ExternalFileBuffer::getStreamSetPtr(Value * self, Value * blockNo) const
     return iBuilder->CreateGEP(self, blockNo);
 }
 
+Value * ExternalFileBuffer::getLinearlyAccessibleItems(llvm::Value * fromPosition) const {
+    throw std::runtime_error("External buffers: getLinearlyAccessibleItems not supported.");
+}
+
 // Circular Buffer
 
 Value * CircularBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
     assert (blockNo->getType()->isIntegerTy());
 
     Value * offset = nullptr;
-    if (mBufferSize == 1) {
+    if (mBufferBlocks == 1) {
         offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
-    } else if ((mBufferSize & (mBufferSize - 1)) == 0) { // is power of 2
-        offset = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), mBufferSize - 1));
+    } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
+        offset = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks - 1));
     } else {
-        offset = iBuilder->CreateURem(blockNo, ConstantInt::get(blockNo->getType(), mBufferSize));
+        offset = iBuilder->CreateURem(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks));
     }
     return iBuilder->CreateGEP(self, offset);
 }
 
-// Linear Copyback Buffer
 
-Value * LinearCopybackBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
+// CircularCopybackBuffer Buffer
+
+void CircularCopybackBuffer::allocateBuffer() {
+    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks + mOverflowBlocks));
+}
+
+void CircularCopybackBuffer::createCopyBack(Value * self, Value * overFlowItems) {
+    // Must copy back one full block for each of the streams in the stream set.
+    Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
+    Constant * blockSizeLess1 = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
+    Value * overFlowBlocks = iBuilder->CreateUDiv(iBuilder->CreateAdd(overFlowItems, blockSizeLess1), blockSize);
+    Value * overFlowAreaPtr = iBuilder->CreateGEP(mStreamSetBufferPtr, iBuilder->getSize(mBufferBlocks));
+    DataLayout dl(iBuilder->getModule());
+    Constant * blockBytes = ConstantInt::get(iBuilder->getSizeTy(), dl.getTypeAllocSize(mStreamSetType) * iBuilder->getBitBlockWidth());
+    Value * copyLength = iBuilder->CreateMul(overFlowBlocks, blockBytes);
+    Type * i8ptr = iBuilder->getInt8Ty()->getPointerTo();
+    unsigned alignment = iBuilder->getBitBlockWidth() / 8;
+    iBuilder->CreateMemMove(iBuilder->CreateBitCast(mStreamSetBufferPtr, i8ptr), iBuilder->CreateBitCast(overFlowAreaPtr, i8ptr), copyLength, alignment);
+}
+
+Value * CircularCopybackBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
+    assert (blockNo->getType()->isIntegerTy());
+    
     Value * offset = nullptr;
-    if (mBufferSize == 1) {
+    if (mBufferBlocks == 1) {
         offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
-    } else if ((mBufferSize & (mBufferSize - 1)) == 0) { // is power of 2
-        offset = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), mBufferSize - 1));
+    } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
+        offset = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks - 1));
     } else {
-        offset = iBuilder->CreateURem(blockNo, ConstantInt::get(blockNo->getType(), mBufferSize));
+        offset = iBuilder->CreateURem(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks));
     }
     return iBuilder->CreateGEP(self, offset);
 }
+
 
 
 // Expandable Buffer
@@ -150,21 +188,27 @@ CircularBuffer::CircularBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size
 
 }
 
-LinearCopybackBuffer::LinearCopybackBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::LinearCopybackBuffer, b, type, bufferBlocks, AddressSpace) {
+CircularCopybackBuffer::CircularCopybackBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace)
+: StreamSetBuffer(BufferKind::CircularCopybackBuffer, b, type, bufferBlocks, AddressSpace), mOverflowBlocks(overflowBlocks) {
 
 }
+
 
 ExpandableBuffer::ExpandableBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::ExpandableBuffer, b, type, bufferBlocks, AddressSpace) {
 
 }
 
+Value * ExpandableBuffer::getLinearlyAccessibleItems(llvm::Value * fromPosition) const {
+    throw std::runtime_error("Expandable buffers: getLinearlyAccessibleItems not supported.");
+}
+
+
 StreamSetBuffer::StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, Type * type, unsigned blocks, unsigned AddressSpace)
 : mBufferKind(k)
 , iBuilder(b)
 , mStreamSetType(resolveStreamSetBufferType(type))
-, mBufferSize(blocks)
+, mBufferBlocks(blocks)
 , mAddressSpace(AddressSpace)
 , mStreamSetBufferPtr(nullptr)
 , mBaseStreamSetType(type) {

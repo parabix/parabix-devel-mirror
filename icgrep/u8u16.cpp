@@ -254,7 +254,7 @@ void u8u16_pablo(PabloKernel * kernel) {
 Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
 
     const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned bufferSegments = codegen::ThreadNum;
+    const unsigned bufferSegments = codegen::ThreadNum+1;
     
     assert (iBuilder);
 
@@ -289,7 +289,7 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
 
     // Different choices for the output buffer depending on chosen option.
     ExternalFileBuffer U16external(iBuilder, iBuilder->getStreamSetTy(1, 16));
-    LinearCopybackBuffer U16out(iBuilder, iBuilder->getStreamSetTy(1, 16), (segmentSize + 1) * bufferSegments);
+    CircularCopybackBuffer U16out(iBuilder, iBuilder->getStreamSetTy(1, 16), segmentSize * bufferSegments, 1 /*overflow block*/);
 
     MMapSourceKernel mmapK(iBuilder, segmentSize); 
     mmapK.generateKernel({}, {&ByteStream});

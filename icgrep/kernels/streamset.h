@@ -19,7 +19,7 @@ class StreamSetBuffer {
 
 public:
 
-    enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, LinearCopybackBuffer, ExpandableBuffer};
+    enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, CircularCopybackBuffer, ExpandableBuffer};
 
     BufferKind getBufferKind() const {
         return mBufferKind;
@@ -37,8 +37,8 @@ public:
         return getType()->getPointerTo(mAddressSpace);
     }
 
-    size_t getBufferSize() const {
-        return mBufferSize;
+    size_t getBufferBlocks() const {
+        return mBufferBlocks;
     }
 
     llvm::Value * getStreamSetBasePtr() const {
@@ -53,6 +53,9 @@ public:
     
     virtual llvm::Value * getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const;
 
+    // The number of items that cam be linearly accessed from a given logical stream position.
+    virtual llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const;
+    
 protected:
 
     StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * type, unsigned blocks, unsigned AddressSpace);
@@ -66,7 +69,7 @@ protected:
     const BufferKind                mBufferKind;
     IDISA::IDISA_Builder * const    iBuilder;
     llvm::Type * const              mStreamSetType;
-    const size_t                    mBufferSize;
+    const size_t                    mBufferBlocks;
     const unsigned                  mAddressSpace;
     llvm::Value *                   mStreamSetBufferPtr;
     llvm::Type * const              mBaseStreamSetType;
@@ -99,6 +102,8 @@ public:
     // Can't allocate - raise an error. */
     void allocateBuffer() override;
 
+    llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const override;
+    
 protected:
     llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;
 };
@@ -108,28 +113,38 @@ public:
     static inline bool classof(const StreamSetBuffer * b) {
         return b->getBufferKind() == BufferKind::CircularBuffer;
     }
-  
+    
     CircularBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
 
 protected:
     llvm::Value * getStreamSetPtr(llvm::Value * bufferBasePtr, llvm::Value * blockNo) const override;
 };
     
-// Linear buffers extending from the current ConsumerPos forward.   Within the buffer, the
-// offset of the block containing the current consumer position is always zero.
+
 //
-class LinearCopybackBuffer : public StreamSetBuffer {
+//  A CircularCopybackBuffer operates as a circular buffer buffer with an overflow area
+//  for temporary use by the kernel that writes to it.   If the kernel uses the overflow
+//  area, it must perform the doCopyBack action before releasing the buffer for use by
+//  subsequent kernels.
+//  Kernels that read from a CircularCopybackBuffer must not access the overflow area.
+//
+class CircularCopybackBuffer : public StreamSetBuffer {
 public:
-    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::LinearCopybackBuffer;}
+    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::CircularCopybackBuffer;}
     
-    LinearCopybackBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
+    CircularCopybackBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace = 0);
 
-    // Reset the buffer to contain data starting at the base block of new_consumer_pos,
-    // copying back any data beyond that position. 
-    //void setConsumerPos(llvm::Value * self, llvm::Value * newConsumerPos) const override;
-
+    void allocateBuffer() override;
+    
+    // Generate copyback code for the given number of overflowItems.
+    void createCopyBack(llvm::Value * self, llvm::Value * overflowItems);
+    
+    
 protected:
-    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;
+    llvm::Value * getStreamSetPtr(llvm::Value * bufferBasePtr, llvm::Value * blockNo) const override;
+private:
+    size_t mOverflowBlocks;
+
 };
 
 // ExpandableBuffers do not allow access to the base stream set but will automatically increase the number of streams
@@ -147,6 +162,8 @@ public:
 
     llvm::Value * getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const override;
 
+    llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const override;
+    
 protected:
 
     llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;
