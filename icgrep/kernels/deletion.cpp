@@ -67,11 +67,6 @@ void DeletionKernel::generateDoBlockMethod() {
     Value * delCount = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(delMask));
     Value * delCountPtr = getOutputStream("deletionCounts", iBuilder->getInt32(0));
     iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(delCount), delCountPtr);
-    // Stream deletion has only been applied within fields; the actual number of data items has not yet changed.
-    Value * produced = getProducedItemCount("outputStreamSet");
-    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount("outputStreamSet", produced);
-    setProducedItemCount("deletionCounts", produced);
 }
 
 void DeletionKernel::generateFinalBlockMethod(Value * remainingBytes) {
@@ -79,15 +74,18 @@ void DeletionKernel::generateFinalBlockMethod(Value * remainingBytes) {
     Value * remaining = iBuilder->CreateZExt(remainingBytes, vecTy);
     Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
     Value * const delmaskPtr = getInputStream("delMaskSet", iBuilder->getInt32(0));
-    Value * const delmaskVal = iBuilder->CreateBlockAlignedLoad(delmaskPtr);
-    iBuilder->CreateBlockAlignedStore(iBuilder->CreateOr(EOF_del, delmaskVal), delmaskPtr);
-    CreateDoBlockMethodCall();
-    // Adjust the produced item count
-    Value * produced = getProducedItemCount("outputStreamSet");
-    produced = iBuilder->CreateSub(produced, iBuilder->getSize(iBuilder->getStride()));
-    produced =  iBuilder->CreateAdd(produced, remainingBytes);
-    setProducedItemCount("outputStreamSet", produced);
-    setProducedItemCount("deletionCounts", produced);
+    Value * delMask = iBuilder->CreateOr(EOF_del, iBuilder->CreateBlockAlignedLoad(delmaskPtr));
+    const auto move_masks = parallel_prefix_deletion_masks(iBuilder, mDeletionFieldWidth, delMask);
+    for (unsigned j = 0; j < mStreamCount; ++j) {
+        Value * inputStreamPtr = getInputStream("inputStreamSet", iBuilder->getInt32(j));
+        Value * input = iBuilder->CreateBlockAlignedLoad(inputStreamPtr);
+        Value * output = apply_parallel_prefix_deletion(iBuilder, mDeletionFieldWidth, delMask, move_masks, input);
+        Value * outputStreamPtr = getOutputStream("outputStreamSet", iBuilder->getInt32(j));
+        iBuilder->CreateBlockAlignedStore(output, outputStreamPtr);
+    }
+    Value * delCount = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(delMask));
+    Value * delCountPtr = getOutputStream("deletionCounts", iBuilder->getInt32(0));
+    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(delCount), delCountPtr);
 }
 
 DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount)
@@ -99,7 +97,7 @@ DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, uns
               {}, {}, {})
 , mDeletionFieldWidth(fw)
 , mStreamCount(streamCount) {
-    mDoBlockUpdatesProducedItemCountsAttribute = true;
+    mDoBlockUpdatesProducedItemCountsAttribute = false;
 }
 
 }
