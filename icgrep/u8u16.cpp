@@ -42,7 +42,8 @@ using namespace parabix;
 using namespace llvm;
 
 static cl::OptionCategory u8u16Options("u8u16 Options", "Transcoding control options.");
-static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(u8u16Options));
+static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(u8u16Options));
+static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"),  cl::Required, cl::cat(u8u16Options));
 static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(u8u16Options));
 static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
 static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
@@ -314,17 +315,14 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
 
     P2S16KernelWithCompressedOutput p2sk(iBuilder);
 
-    StdOutKernel stdoutK(iBuilder, 16);
-
+    FileSink outK(iBuilder, 16);
     if (mMapBuffering || memAlignBuffering) {
         p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16external});
-        stdoutK.generateKernel({&U16external}, {});
+        outK.generateKernel({&U16external}, {});
     } else {
         p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16out});
-        stdoutK.generateKernel({&U16out}, {});
+        outK.generateKernel({&U16out}, {});
     }
-
-
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
@@ -339,11 +337,13 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     } else {
         U16out.allocateBuffer();
     }
+    Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
+    outK.setInitialArguments({fName});
 
     if (segmentPipelineParallel){
-        generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &stdoutK});
+        generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &outK});
     } else {
-        generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &stdoutK});
+        generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &outK});
     }
 
     iBuilder->CreateRetVoid();
@@ -433,9 +433,7 @@ int main(int argc, char *argv[]) {
 
     u8u16FunctionType fn_ptr = u8u16CodeGen();
 
-    for (unsigned i = 0; i != inputFiles.size(); ++i) {
-        u8u16(fn_ptr, inputFiles[i]);
-    }
+    u8u16(fn_ptr, inputFile);
 
     return 0;
 }

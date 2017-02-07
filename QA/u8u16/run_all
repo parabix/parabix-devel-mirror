@@ -22,7 +22,7 @@ mkdir $output_directory/Messages
 for f in $input_directory/*
 do
    fbase=`echo $f | sed "s/$input_directory\///"`
-   $test_program $input_directory/$fbase >$output_directory/Files/$fbase 2>$output_directory/Messages/$fbase
+   $test_program $input_directory/$fbase $output_directory/Files/$fbase 2>$output_directory/Messages/$fbase
 done
 
 if diff -q --exclude='.svn' ExpectedOutput/Files TestOutput/Files
