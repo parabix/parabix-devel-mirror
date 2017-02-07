@@ -127,16 +127,21 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
             waitForKernel = last_kernel;
         }
         Value * processedSegmentCount = kernels[waitForKernel]->acquireLogicalSegmentNo(instancePtrs[waitForKernel]);
-        Value * cond = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
+        Value * ready = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
 
         if (kernels[k]->hasNoTerminateAttribute()) {
-            iBuilder->CreateCondBr(cond, segmentLoopBody[k], segmentWait[k]);
+            iBuilder->CreateCondBr(ready, segmentLoopBody[k], segmentWait[k]);
         } else { // If the kernel was terminated in a previous segment then the pipeline is done.
             BasicBlock * completionTest = BasicBlock::Create(iBuilder->getContext(), kernels[k]->getName() + "Completed", threadFunc, 0);
-            iBuilder->CreateCondBr(cond, completionTest, segmentWait[k]);
+            BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), kernels[k]->getName() + "Exit", threadFunc, 0);
+            iBuilder->CreateCondBr(ready, completionTest, segmentWait[k]);
             iBuilder->SetInsertPoint(completionTest);
             Value * alreadyDone = kernels[k]->getTerminationSignal(instancePtrs[k]);
-            iBuilder->CreateCondBr(alreadyDone, exitThreadBlock, segmentLoopBody[k]);
+            iBuilder->CreateCondBr(alreadyDone, exitBlock, segmentLoopBody[k]);
+            iBuilder->SetInsertPoint(exitBlock);
+            // Ensure that the next thread will also exit.
+            kernels[k]->releaseLogicalSegmentNo(instancePtrs[k], nextSegNo);
+            iBuilder->CreateBr(exitThreadBlock);
         }
         iBuilder->SetInsertPoint(segmentLoopBody[k]);
         std::vector<Value *> doSegmentArgs = {instancePtrs[k], doFinal};
