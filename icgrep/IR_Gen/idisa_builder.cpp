@@ -362,7 +362,6 @@ Value * IDISA_Builder::bitblock_set_bit(Value * pos) {
     return bitCast(CreateShl(ConstantInt::get(bitBlockInt, 1), CreateZExt(pos, bitBlockInt)));
 }
 
-
 Value * IDISA_Builder::simd_and(Value * a, Value * b) {
     return a->getType() == b->getType() ? CreateAnd(a, b) : CreateAnd(bitCast(a), bitCast(b));
 }

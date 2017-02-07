@@ -49,8 +49,6 @@ Var * PabloKernel::getScalarOutput(std::string outputName) {
     return f->second;
 }
 
-
-
 Var * PabloKernel::addInput(const std::string & name, Type * const type) {
     Var * param = new (mAllocator) Var(mSymbolTable->makeString(name, iBuilder), type, mAllocator, Var::ReadOnly);
     param->addUser(this);

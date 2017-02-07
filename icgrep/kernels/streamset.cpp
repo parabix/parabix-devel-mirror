@@ -5,15 +5,14 @@
 
 #include "streamset.h"
 #include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
-#include <assert.h>                // for assert
-#include <llvm/IR/Type.h>          // for Type
-#include <stdexcept>               // for runtime_error
 #include <llvm/IR/BasicBlock.h>    // for BasicBlock
 #include <llvm/IR/Constants.h>     // for ConstantInt
 #include <llvm/IR/DataLayout.h>    // for DataLayout
 #include <llvm/IR/DerivedTypes.h>  // for IntegerType (ptr only), PointerType
 #include <llvm/IR/Module.h>        // for Module
 #include <llvm/IR/Value.h>         // for Value
+#include <llvm/Support/raw_ostream.h>
+
 namespace llvm { class Constant; }
 namespace llvm { class Function; }
 
@@ -21,47 +20,46 @@ using namespace parabix;
 using namespace llvm;
 using namespace IDISA;
 
-Type * resolveVectorTy(IDISA_Builder * const b, Type * type) {
-    if (LLVM_LIKELY(type->isVectorTy() && type->getVectorNumElements() == 0)) {
-        type = type->getVectorElementType();
-        if (LLVM_LIKELY(type->isIntegerTy())) {
-            const auto fieldWidth = cast<IntegerType>(type)->getBitWidth();
-            type = b->getBitBlockType();
-            if (fieldWidth != 1) {
-                type = llvm::ArrayType::get(type, fieldWidth);
-            }
-        }
-    }
-    return type;
-}
-
-Type * StreamSetBuffer::resolveStreamSetBufferType(Type * const type) const {
-    if (type->isArrayTy()) {
-        return ArrayType::get(resolveVectorTy(iBuilder, type->getArrayElementType()), type->getArrayNumElements());
-    } else if (type->isVectorTy()) {
-        return resolveVectorTy(iBuilder, type);
-    }
-    return type;
-}
-
 void StreamSetBuffer::allocateBuffer() {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks));
 }
 
-Value * StreamSetBuffer::getStream(Value * self, Value * blockNo, Value * index) const {
-    return iBuilder->CreateGEP(getStreamSetPtr(self, blockNo), {iBuilder->getInt32(0), index});
+Value * StreamSetBuffer::getStream(Value * self, Value * streamIndex, Value * blockIndex) const {
+    return iBuilder->CreateGEP(getStreamSetPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex});
 }
 
-Value * StreamSetBuffer::getStream(Value * self, Value * blockNo, Value * index1, Value * index2) const {
-    return iBuilder->CreateGEP(getStreamSetPtr(self, blockNo), {iBuilder->getInt32(0), index1, index2});
+Value * StreamSetBuffer::getStream(Value * self, Value * streamIndex, Value * blockIndex, Value * packIndex) const {
+    return iBuilder->CreateGEP(getStreamSetPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex, packIndex});
 }
 
-Value * StreamSetBuffer::getStreamView(llvm::Type * type, llvm::Value * self, Value * blockNo, llvm::Value * index) const {
-    return iBuilder->CreateGEP(iBuilder->CreatePointerCast(getStreamSetPtr(self, blockNo), type), index, "view");
+/**
+ * @brief getRawItemPointer
+ *
+ * get a raw pointer the iN field at position absoluteItemPosition of the stream number streamIndex of the stream set.
+ * In the case of a stream whose fields are less than one byte (8 bits) in size, the pointer is to the containing byte.
+ * The type of the pointer is i8* for fields of 8 bits or less, otherwise iN* for N-bit fields.
+ */
+Value * StreamSetBuffer::getRawItemPointer(Value * self, Value * streamIndex, Value * absolutePosition) const {
+    Value * ptr = self;
+    if (isa<ConstantInt>(streamIndex) && cast<ConstantInt>(streamIndex)->isZero()) {
+        ptr = iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), streamIndex});
+    }
+    IntegerType * const ty = cast<IntegerType>(mBaseType->getArrayElementType()->getVectorElementType());
+    ptr = iBuilder->CreatePointerCast(ptr, ty->getPointerTo());
+    if (LLVM_UNLIKELY(ty->getBitWidth() < 8)) {
+        const auto bw = ty->getBitWidth();
+        if (LLVM_LIKELY((bw & (bw - 1)) == 0)) { // is power of 2
+            absolutePosition = iBuilder->CreateUDiv(absolutePosition, ConstantInt::get(absolutePosition->getType(), 8 / bw));
+        } else {
+            absolutePosition = iBuilder->CreateMul(absolutePosition, ConstantInt::get(absolutePosition->getType(), bw));
+            absolutePosition = iBuilder->CreateUDiv(absolutePosition, ConstantInt::get(absolutePosition->getType(), 8));
+        }
+    }
+    return iBuilder->CreateGEP(ptr, absolutePosition);
 }
 
 Value * StreamSetBuffer::getLinearlyAccessibleItems(llvm::Value * fromPosition) const {
-    if (isa<ArrayType>(mStreamSetType) && dyn_cast<ArrayType>(mStreamSetType)->getNumElements() > 1) {
+    if (isa<ArrayType>(mType) && dyn_cast<ArrayType>(mType)->getNumElements() > 1) {
         Constant * stride = iBuilder->getSize(iBuilder->getStride());
         return iBuilder->CreateSub(stride, iBuilder->CreateURem(fromPosition, stride));
     }
@@ -89,7 +87,7 @@ void ExternalFileBuffer::setEmptyBuffer(Value * ptr) {
 }
 
 void ExternalFileBuffer::allocateBuffer() {
-    throw std::runtime_error("External buffers cannot be allocated.");
+    report_fatal_error("External buffers cannot be allocated.");
 }
 
 Value * ExternalFileBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
@@ -104,7 +102,6 @@ Value * ExternalFileBuffer::getLinearlyAccessibleItems(llvm::Value * fromPositio
 
 Value * CircularBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
     assert (blockNo->getType()->isIntegerTy());
-
     Value * offset = nullptr;
     if (mBufferBlocks == 1) {
         offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
@@ -187,10 +184,6 @@ llvm::Value * ExpandableBuffer::getStream(llvm::Value * self, llvm::Value * bloc
     return nullptr;
 }
 
-llvm::Value * ExpandableBuffer::getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const {
-    return nullptr;
-}
-
 // Constructors
 
 SingleBlockBuffer::SingleBlockBuffer(IDISA::IDISA_Builder * b, llvm::Type * type)
@@ -213,7 +206,6 @@ CircularCopybackBuffer::CircularCopybackBuffer(IDISA::IDISA_Builder * b, llvm::T
 
 }
 
-
 ExpandableBuffer::ExpandableBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::ExpandableBuffer, b, type, bufferBlocks, AddressSpace) {
 
@@ -223,14 +215,35 @@ Value * ExpandableBuffer::getLinearlyAccessibleItems(llvm::Value * fromPosition)
     throw std::runtime_error("Expandable buffers: getLinearlyAccessibleItems not supported.");
 }
 
+inline Type * resolveStreamSetType(IDISA_Builder * const b, Type * const type) {
+    if (type->isArrayTy()) {
+        Type * ty = type->getArrayElementType();
+        if (LLVM_LIKELY(ty->isVectorTy() && ty->getVectorNumElements() == 0)) {
+            ty = ty->getVectorElementType();
+            if (LLVM_LIKELY(ty->isIntegerTy())) {
+                const auto fieldWidth = cast<IntegerType>(ty)->getBitWidth();
+                ty = b->getBitBlockType();
+                if (fieldWidth != 1) {
+                    ty = llvm::ArrayType::get(ty, fieldWidth);
+                }
+                return ArrayType::get(ty, type->getArrayNumElements());
+            }
+        }
+    }
+    std::string tmp;
+    raw_string_ostream out(tmp);
+    type->print(out);
+    out << " is an unvalid stream set buffer type.";
+    report_fatal_error(out.str());
+}
 
 StreamSetBuffer::StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, Type * type, unsigned blocks, unsigned AddressSpace)
 : mBufferKind(k)
 , iBuilder(b)
-, mStreamSetType(resolveStreamSetBufferType(type))
+, mType(resolveStreamSetType(b, type))
 , mBufferBlocks(blocks)
 , mAddressSpace(AddressSpace)
 , mStreamSetBufferPtr(nullptr)
-, mBaseStreamSetType(type) {
+, mBaseType(type) {
 
 }

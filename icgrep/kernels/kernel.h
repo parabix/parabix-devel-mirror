@@ -174,16 +174,15 @@ protected:
         return setScalarField(getSelf(), index, value);
     }
 
-    llvm::Value * getInputStream(const std::string & name, llvm::Value * index) const;
+    llvm::Value * getInputStream(const std::string & name, llvm::Value * streamIndex) const;
 
-    llvm::Value * getInputStream(const std::string & name, llvm::Value * index1, llvm::Value * index2) const;
+    llvm::Value * getInputStream(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
 
-    llvm::Value * getOutputStream(const std::string & name, llvm::Value * index) const;
+    llvm::Value * getOutputStream(const std::string & name, llvm::Value * streamIndex) const;
 
-    llvm::Value * getOutputStream(const std::string & name, llvm::Value * index1, llvm::Value * index2) const;
+    llvm::Value * getOutputStream(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
 
-    llvm::Value * getStreamView(llvm::Type * type, const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
-
+    llvm::Value * getRawItemPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
     llvm::Value * getScalarFieldPtr(const std::string & name) const {
         return getScalarFieldPtr(getSelf(), name);
@@ -233,7 +232,7 @@ protected:
 
     llvm::Value * getStreamSetBufferPtr(const std::string & name) const;
 
-    llvm::Value * getStreamSetBufferPtr(llvm::Value * index) const;
+//    llvm::Value * getStreamSetBufferPtr(llvm::Value * index) const;
 
     llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & name) const;
 
@@ -246,6 +245,10 @@ protected:
     void callGenerateInitMethod();
 
     void callGenerateDoSegmentMethod();
+
+private:
+
+    llvm::Value * computeBlockIndex(const std::vector<Binding> & binding, const std::string & name, llvm::Value * itemCount) const;
 
 protected:
 
@@ -314,6 +317,10 @@ protected:
                         std::vector<Binding> && internal_scalars);
 
     virtual ~BlockOrientedKernel() { }
+
+    llvm::Value * loadBlock(const std::string & inputName, llvm::Value * const streamIndex) const;
+
+    llvm::Value * loadPack(const std::string & inputName, llvm::Value * const streamIndex, llvm::Value * const packIndex) const;
 
     llvm::Function * getDoBlockFunction() const;
 

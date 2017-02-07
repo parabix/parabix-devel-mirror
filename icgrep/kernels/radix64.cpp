@@ -19,7 +19,7 @@ namespace kernel {
 // produced from 24 bytes of input data.
 //
 // Using aligned SIMD loads, an inner loop processes three registers full of input
-// data (i.e., three BytePacks) to produce four registers full of output.   This is 
+// data (i.e., three BytePacks) to produce four registers full of output.   This is
 // a 3 step process.
 // Step 1:  Load input_pack0, apply the shuffle operation to produce output_pack0.
 //          At this point 3/4 of the data in input_pack0 has been processed.
@@ -37,7 +37,7 @@ namespace kernel {
 // segment.  Both input and output buffers are hence maintained at block boundaries,
 // with the input data completely processed for each tripleBlock.
 //
-// The pipeline must guarantee that the doSegment method is called with the 
+// The pipeline must guarantee that the doSegment method is called with the
 // a continous buffer for the full segment (number of blocks).
 
 void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
@@ -375,6 +375,63 @@ void base64Kernel::generateDoBlockMethod() {
     setProducedItemCount("base64stream", produced);
 }
 
+//// Special processing for the base 64 format.   The output must always contain a multiple
+//// of 4 bytes.   When the number of radix 64 values is not a multiple of 4
+//// number of radix 64 values
+//void base64Kernel::generateFinalBlockMethod(Value * remainingBytes) {
+
+//    BasicBlock * entry = iBuilder->GetInsertBlock();
+//    BasicBlock * base64_loop = CreateBasicBlock("base64_loop");
+//    BasicBlock * loopExit = CreateBasicBlock("loopExit");
+//    BasicBlock * doPadding = CreateBasicBlock("doPadding");
+//    BasicBlock * doPadding2 = CreateBasicBlock("doPadding2");
+//    BasicBlock * fbExit = CreateBasicBlock("fbExit");
+
+//    Value * remainMod4 = iBuilder->CreateAnd(remainingBytes, iBuilder->getSize(3));
+//    Value * padBytes = iBuilder->CreateSub(iBuilder->getSize(4), remainMod4);
+//    padBytes = iBuilder->CreateAnd(padBytes, iBuilder->getSize(3));
+
+//    Constant * packSize = iBuilder->getSize(iBuilder->getStride() / 8);
+
+//    // Enter the loop only if there is at least one byte remaining to process.
+//    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainingBytes, iBuilder->getSize(0)), fbExit, base64_loop);
+
+//    iBuilder->SetInsertPoint(base64_loop);
+//    PHINode * idx = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2);
+//    PHINode * loopRemain = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
+//    idx->addIncoming(ConstantInt::getNullValue(iBuilder->getInt32Ty()), entry);
+//    loopRemain->addIncoming(remainingBytes, entry);
+//    Value * radix64streamPtr = getInputStream("radix64stream", iBuilder->getInt32(0), idx);
+//    Value * bytepack = iBuilder->CreateBlockAlignedLoad(radix64streamPtr);
+//    Value * base64pack = processPackData(bytepack);
+//    Value * base64streamPtr = getOutputStream("base64stream", iBuilder->getInt32(0), idx);
+
+//    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(base64pack), base64streamPtr);
+//    idx->addIncoming(iBuilder->CreateAdd(idx, ConstantInt::get(iBuilder->getInt32Ty(), 1)), base64_loop);
+//    Value* remainAfterLoop = iBuilder->CreateSub(loopRemain, packSize);
+//    loopRemain->addIncoming(remainAfterLoop, base64_loop);
+
+//    Value* continueLoop = iBuilder->CreateICmpSGT(remainAfterLoop, iBuilder->getSize(0));
+//    iBuilder->CreateCondBr(continueLoop, base64_loop, loopExit);
+
+//    iBuilder->SetInsertPoint(loopExit);
+//    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(padBytes, iBuilder->getSize(0)), fbExit, doPadding);
+
+//    iBuilder->SetInsertPoint(doPadding);
+
+//    base64streamPtr = getOutputStream("base64stream", iBuilder->getInt32(0), idx);
+//    Value * i8streamPtr = iBuilder->CreatePointerCast(base64streamPtr, iBuilder->getInt8PtrTy());
+//    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8streamPtr, remainingBytes));
+//    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(3)), fbExit, doPadding2);
+//    iBuilder->SetInsertPoint(doPadding2);
+//    Value * finalPadPos = iBuilder->CreateAdd(remainingBytes, iBuilder->getSize(1));
+//    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8streamPtr, finalPadPos));
+//    iBuilder->CreateBr(fbExit);
+//    iBuilder->SetInsertPoint(fbExit);
+//    Value * produced = iBuilder->CreateAdd(getProducedItemCount("base64stream"), iBuilder->CreateAdd(remainingBytes, padBytes));
+//    setProducedItemCount("base64stream", produced);
+//}
+
 // Special processing for the base 64 format.   The output must always contain a multiple
 // of 4 bytes.   When the number of radix 64 values is not a multiple of 4
 // number of radix 64 values
@@ -417,7 +474,8 @@ void base64Kernel::generateFinalBlockMethod(Value * remainingBytes) {
     iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(padBytes, iBuilder->getSize(0)), fbExit, doPadding);
 
     iBuilder->SetInsertPoint(doPadding);
-    Value * i8output_ptr = getStreamView(iBuilder->getInt8PtrTy(), "base64stream", getBlockNo(), iBuilder->getInt32(0));
+    Value * i8output_ptr = getOutputStream("base64stream", iBuilder->getInt32(0));
+    i8output_ptr = iBuilder->CreatePointerCast(i8output_ptr, iBuilder->getInt8PtrTy());
     iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, remainingBytes));
     iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(3)), fbExit, doPadding2);
     iBuilder->SetInsertPoint(doPadding2);

@@ -55,8 +55,6 @@ void PabloCompiler::compile() {
     mMarker.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
     mMarker.emplace(entryBlock->createOnes(), iBuilder->allOnes());
 
-    Value * const blockNo =  mKernel->getBlockNo();
-
     for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
         Var * var = mKernel->getInput(i);
         std::string name = var->getName().str();
@@ -64,7 +62,7 @@ void PabloCompiler::compile() {
         if (var->getType()->isSingleValueType()) {
             input = mKernel->getScalarFieldPtr(name);
         } else {
-            input = mKernel->getStreamSetPtr(name, blockNo);
+            input = mKernel->getInputStream(name, iBuilder->getInt32(0));
         }
         mMarker.emplace(var, input);
     }
@@ -76,12 +74,14 @@ void PabloCompiler::compile() {
         if (var->getType()->isSingleValueType()) {
             output = mKernel->getScalarFieldPtr(name);
         } else {
-            output = mKernel->getStreamSetPtr(name, blockNo);
+            output = mKernel->getOutputStream(name, iBuilder->getInt32(0));
         }
         mMarker.emplace(var, output);
     }
 
     compileBlock(entryBlock);
+
+    mCarryManager->finalizeCodeGen();
 
 }
 
@@ -387,7 +387,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         } else if (const Extract * extract = dyn_cast<Extract>(stmt)) {
             Value * array = compileExpression(extract->getArray(), false);
             Value * index = compileExpression(extract->getIndex());
-            value = iBuilder->CreateGEP(array, {ConstantInt::getNullValue(index->getType()), index}, stmt->getName());
+            value = iBuilder->CreateGEP(array, index, stmt->getName());
         } else if (isa<And>(stmt)) {
             value = compileExpression(stmt->getOperand(0));
             for (unsigned i = 1; i < stmt->getNumOperands(); ++i) {

@@ -15,7 +15,7 @@
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_var.h>
-
+#include <llvm/Support/raw_ostream.h>
 using namespace llvm;
 
 namespace pablo {
@@ -57,6 +57,10 @@ void CarryManager::initializeCarryData(PabloKernel * const kernel) {
     mCarryMetadata.resize(enumerate(kernel->getEntryBlock()));
 
     mKernel->addScalar(analyse(kernel->getEntryBlock()), "carries");
+
+    if (mHasLoop) {
+        mKernel->addScalar(iBuilder->getInt32Ty(), "loopSelector");
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -75,6 +79,19 @@ void CarryManager::initializeCodeGen() {
 
     assert (mCarryFrame.empty());
     assert (mCarrySummary.empty());
+
+    if (mHasLoop) {
+        mLoopSelector = mKernel->getScalarField("loopSelector");
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief finalizeCodeGen
+ ** ------------------------------------------------------------------------------------------------------------- */
+void CarryManager::finalizeCodeGen() {
+    if (mHasLoop) {
+        mKernel->setScalarField("loopSelector", iBuilder->CreateXor(mLoopSelector, iBuilder->getInt32(1)));
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -82,10 +99,7 @@ void CarryManager::initializeCodeGen() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::enterLoopScope(const PabloBlock * const scope) {
     assert (scope);
-    if (mLoopDepth++ == 0) {
-        Value * const blockNo = mKernel->getBlockNo();
-        mLoopSelector = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), 1));
-    }
+    ++mLoopDepth;
     enterScope(scope);
 }
 
@@ -177,9 +191,7 @@ void CarryManager::leaveLoopBody(BasicBlock * const exitBlock) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::leaveLoopScope(BasicBlock * const entryBlock, BasicBlock * const exitBlock) {
     assert (mLoopDepth > 0);
-    if (--mLoopDepth == 0) {
-        mLoopSelector = nullptr;
-    }
+    --mLoopDepth;
     leaveScope();
 }
 
@@ -417,7 +429,7 @@ Value * CarryManager::getNextCarryIn() {
     Value * carryInPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex++)});
     mCarryPackPtr = carryInPtr;
     if (mLoopDepth > 0) {
-        carryInPtr = iBuilder->CreateGEP(carryInPtr, {iBuilder->getInt32(0), mLoopSelector});
+        carryInPtr = iBuilder->CreateGEP(carryInPtr, {iBuilder->getInt32(0), mLoopSelector});        
     }
     assert (carryInPtr->getType()->getPointerElementType() == mCarryPackType);
     Value * const carryIn = iBuilder->CreateBlockAlignedLoad(carryInPtr);
@@ -557,6 +569,7 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
         } else if (LLVM_UNLIKELY(isa<If>(stmt))) {
             state.push_back(analyse(cast<If>(stmt)->getBody(), ifDepth + 1, loopDepth));
         } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
+            mHasLoop = true;
             state.push_back(analyse(cast<While>(stmt)->getBody(), ifDepth, loopDepth + 1));
         }
     }
@@ -603,18 +616,21 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
 CarryManager::CarryManager(IDISA::IDISA_Builder * idb) noexcept
 : iBuilder(idb)
 , mKernel(nullptr)
+, mSelf(nullptr)
 , mBitBlockType(idb->getBitBlockType())
 , mBitBlockWidth(idb->getBitBlockWidth())
+, mCurrentFrame(nullptr)
 , mCurrentFrameIndex(0)
 , mCurrentScope(nullptr)
 , mCarryInfo(nullptr)
 , mCarryPackType(mBitBlockType)
 , mCarryPackPtr(nullptr)
 , mIfDepth(0)
-, mLoopDepth(0) {
+, mHasLoop(false)
+, mLoopDepth(0)
+, mLoopSelector(nullptr) {
 
 }
-
 
 }
 

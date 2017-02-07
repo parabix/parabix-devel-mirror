@@ -36,10 +36,10 @@ using namespace parabix;
 
 unsigned KernelBuilder::addScalar(Type * const type, const std::string & name) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        llvm::report_fatal_error("Cannot add kernel field " + name + " after kernel state finalized");
+        report_fatal_error("Cannot add kernel field " + name + " after kernel state finalized");
     }
     if (LLVM_UNLIKELY(mKernelMap.count(name))) {
-        llvm::report_fatal_error("Kernel already contains field " + name);
+        report_fatal_error("Kernel already contains field " + name);
     }
     const auto index = mKernelFields.size();
     mKernelMap.emplace(name, index);
@@ -49,7 +49,7 @@ unsigned KernelBuilder::addScalar(Type * const type, const std::string & name) {
 
 unsigned KernelBuilder::addUnnamedScalar(Type * const type) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        llvm::report_fatal_error("Cannot add unnamed kernel field after kernel state finalized");
+        report_fatal_error("Cannot add unnamed kernel field after kernel state finalized");
     }
     const auto index = mKernelFields.size();
     mKernelFields.push_back(type);
@@ -67,41 +67,43 @@ void KernelBuilder::prepareKernelSignature() {
     
 void KernelBuilder::prepareKernel() {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        llvm::report_fatal_error("Cannot prepare kernel after kernel state finalized");
+        report_fatal_error("Cannot prepare kernel after kernel state finalized");
     }
     if (mStreamSetInputs.size() != mStreamSetInputBuffers.size()) {
         std::string tmp;
         raw_string_ostream out(tmp);
         out << "kernel contains " << mStreamSetInputBuffers.size() << " input buffers for "
         << mStreamSetInputs.size() << " input stream sets.";
-        throw std::runtime_error(out.str());
+        report_fatal_error(out.str());
     }
     if (mStreamSetOutputs.size() != mStreamSetOutputBuffers.size()) {
         std::string tmp;
         raw_string_ostream out(tmp);
         out << "kernel contains " << mStreamSetOutputBuffers.size() << " output buffers for "
         << mStreamSetOutputs.size() << " output stream sets.";
-        throw std::runtime_error(out.str());
+        report_fatal_error(out.str());
     }
-    unsigned blockSize = iBuilder->getBitBlockWidth();
+    const auto blockSize = iBuilder->getBitBlockWidth();
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         if ((mStreamSetInputBuffers[i]->getBufferBlocks() > 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < codegen::SegmentSize + (blockSize + mLookAheadPositions - 1)/blockSize)) {
-            llvm::report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
+            report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
         }
-        mScalarInputs.push_back(Binding{mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX});
+        mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
         addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        mScalarInputs.push_back(Binding{mStreamSetOutputBuffers[i]->getPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX});
+        mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
         addScalar(iBuilder->getSizeTy(), mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
     }
-    for (auto binding : mScalarInputs) {
+    for (const auto binding : mScalarInputs) {
         addScalar(binding.type, binding.name);
     }
-    for (auto binding : mScalarOutputs) {
+    for (const auto binding : mScalarOutputs) {
         addScalar(binding.type, binding.name);
     }
-    if (mStreamSetNameMap.empty()) prepareKernelSignature();
+    if (mStreamSetNameMap.empty()) {
+        prepareKernelSignature();
+    }
     for (auto binding : mInternalScalars) {
         addScalar(binding.type, binding.name);
     }
@@ -177,7 +179,7 @@ void KernelBuilder::callGenerateInitMethod() {
 ConstantInt * KernelBuilder::getScalarIndex(const std::string & name) const {
     const auto f = mKernelMap.find(name);
     if (LLVM_UNLIKELY(f == mKernelMap.end())) {
-        llvm::report_fatal_error("Kernel does not contain scalar: " + name);
+        report_fatal_error("Kernel does not contain scalar: " + name);
     }
     return iBuilder->getInt32(f->second);
 }
@@ -186,11 +188,11 @@ unsigned KernelBuilder::getScalarCount() const {
     return mKernelFields.size();
 }
 
-Value * KernelBuilder::getScalarFieldPtr(llvm::Value * instance, Value * index) const {
+Value * KernelBuilder::getScalarFieldPtr(Value * instance, Value * index) const {
     return iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), index});
 }
 
-Value * KernelBuilder::getScalarFieldPtr(llvm::Value * instance, const std::string & fieldName) const {
+Value * KernelBuilder::getScalarFieldPtr(Value * instance, const std::string & fieldName) const {
     return getScalarFieldPtr(instance, getScalarIndex(fieldName));
 }
 
@@ -234,7 +236,7 @@ void KernelBuilder::setTerminationSignal(Value * instance) const {
     setScalarField(instance, TERMINATION_SIGNAL, iBuilder->getInt1(true));
 }
 
-LoadInst * KernelBuilder::acquireLogicalSegmentNo(llvm::Value * instance) const {
+LoadInst * KernelBuilder::acquireLogicalSegmentNo(Value * instance) const {
     return iBuilder->CreateAtomicLoadAcquire(getScalarFieldPtr(instance, LOGICAL_SEGMENT_NO_SCALAR));
 }
 
@@ -250,42 +252,60 @@ void KernelBuilder::setBlockNo(Value * value) const {
     setScalarField(mSelf, BLOCK_NO_SCALAR, value);
 }
 
-llvm::Value * KernelBuilder::getInputStream(const std::string & name, llvm::Value * index) const {
-    Value * ic = getProcessedItemCount(name);
-    const StreamSetBuffer * buf = getStreamSetBuffer(name);
-    ic = iBuilder->CreateUDiv(ic, iBuilder->getSize(iBuilder->getBitBlockWidth()));
-    return buf->getStream(getStreamSetBufferPtr(name), ic, index);
+inline static uint64_t log2(const uint64_t x) {
+    return (64 - __builtin_clzll(x)) - 1;
 }
 
-llvm::Value * KernelBuilder::getInputStream(const std::string & name, llvm::Value * index1, llvm::Value * index2) const {
-    Value * ic = getProcessedItemCount(name);
-    const StreamSetBuffer * buf = getStreamSetBuffer(name);
-    ic = iBuilder->CreateUDiv(ic, iBuilder->getSize(iBuilder->getBitBlockWidth()));
-    return buf->getStream(getStreamSetBufferPtr(name), ic, index1, index2);
+inline static uint32_t log2(const uint32_t x) {
+    return (32 - __builtin_clz(x)) - 1;
 }
 
-llvm::Value * KernelBuilder::getOutputStream(const std::string & name, llvm::Value * index) const {
-    Value * ic = getProducedItemCount(name);
-    const StreamSetBuffer * buf = getStreamSetBuffer(name);
-    ic = iBuilder->CreateUDiv(ic, iBuilder->getSize(iBuilder->getBitBlockWidth()));
-    return buf->getStream(getStreamSetBufferPtr(name), ic, index);
+inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bindings, const std::string & name, Value * itemCount) const {
+    for (const Binding & b : bindings) {
+        if (b.name == name) {
+            const auto divisor = (b.step == 0) ? iBuilder->getBitBlockWidth() : b.step;
+            if (LLVM_LIKELY((divisor & (divisor - 1)) == 0)) {
+                return iBuilder->CreateLShr(itemCount, log2(divisor));
+            } else {
+                return iBuilder->CreateUDiv(itemCount, iBuilder->getSize(divisor));
+            }
+        }
+    }
+    report_fatal_error("Error: no binding in " + getName() + " for " + name);
 }
 
-llvm::Value * KernelBuilder::getOutputStream(const std::string & name, llvm::Value * index1, llvm::Value * index2) const {
-    Value * ic = getProducedItemCount(name);
-    const StreamSetBuffer * buf = getStreamSetBuffer(name);
-    ic = iBuilder->CreateUDiv(ic, iBuilder->getSize(iBuilder->getBitBlockWidth()));
-    return buf->getStream(getStreamSetBufferPtr(name), ic, index1, index2);
+Value * KernelBuilder::getInputStream(const std::string & name, Value * streamIndex) const {
+    Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
+    const StreamSetBuffer * const buf = getStreamSetBuffer(name);
+    return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex);
 }
 
-Value * KernelBuilder::getStreamView(llvm::Type * type, const std::string & name, Value * blockNo, Value * index) const {
-    return getStreamSetBuffer(name)->getStreamView(type, getStreamSetBufferPtr(name), blockNo, index);
+Value * KernelBuilder::getInputStream(const std::string & name, Value * streamIndex, Value * packIndex) const {
+    Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
+    const StreamSetBuffer * const buf = getStreamSetBuffer(name);
+    return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
+}
+
+Value * KernelBuilder::getOutputStream(const std::string & name, Value * streamIndex) const {
+    Value * const blockIndex = computeBlockIndex(mStreamSetOutputs, name, getProducedItemCount(name));
+    const StreamSetBuffer * const buf = getStreamSetBuffer(name);
+    return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex);
+}
+
+Value * KernelBuilder::getOutputStream(const std::string & name, Value * streamIndex, Value * packIndex) const {
+    Value * const blockIndex = computeBlockIndex(mStreamSetOutputs, name, getProducedItemCount(name));
+    const StreamSetBuffer * const buf = getStreamSetBuffer(name);
+    return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
+}
+
+Value * KernelBuilder::getRawItemPointer(const std::string & name, Value * streamIndex, Value * absolutePosition) const {
+    return getStreamSetBuffer(name)->getRawItemPointer(getStreamSetBufferPtr(name), streamIndex, absolutePosition);
 }
 
 unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
     const auto f = mStreamSetNameMap.find(name);
     if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
-        llvm::report_fatal_error("Kernel " + getName() + " does not contain stream set: " + name);
+        report_fatal_error("Kernel " + getName() + " does not contain stream set: " + name);
     }
     return f->second;
 }
@@ -303,20 +323,16 @@ Value * KernelBuilder::getStreamSetBufferPtr(const std::string & name) const {
     return getScalarField(getSelf(), name + BUFFER_PTR_SUFFIX);
 }
 
-inline Value * KernelBuilder::getStreamSetBufferPtr(llvm::Value * index) const {
-    return getScalarField(getSelf(), index);
-}
-
 Argument * KernelBuilder::getParameter(Function * const f, const std::string & name) const {
     for (auto & arg : f->getArgumentList()) {
         if (arg.getName().equals(name)) {
             return &arg;
         }
     }
-    llvm::report_fatal_error(f->getName() + " does not have parameter " + name);
+    report_fatal_error(f->getName() + " does not have parameter " + name);
 }
 
-Value * KernelBuilder::createDoSegmentCall(const std::vector<llvm::Value *> & args) const {
+Value * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) const {
     return iBuilder->CreateCall(getDoSegmentFunction(), args);
 }
 
@@ -334,7 +350,7 @@ BasicBlock * KernelBuilder::CreateBasicBlock(std::string && name) const {
 
 void KernelBuilder::createInstance() {
     if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
-        llvm::report_fatal_error("Cannot create kernel instance before calling prepareKernel()");
+        report_fatal_error("Cannot create kernel instance before calling prepareKernel()");
     }
     mKernelInstance = iBuilder->CreateCacheAlignedAlloca(mKernelStateType);
     std::vector<Value *> init_args = {mKernelInstance};
@@ -359,6 +375,15 @@ void BlockOrientedKernel::generateFinalBlockMethod(Value * remainingBytes) {
 //    }
     CreateDoBlockMethodCall();
 }
+
+//Value * BlockOrientedKernel::loadBlock(const std::string & inputName, Value * const streamIndex) const {
+
+//}
+
+//Value * BlockOrientedKernel::loadPack(const std::string & inputName, Value * const streamIndex, Value * const packIndex) const {
+
+//}
+
 
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.
@@ -475,7 +500,7 @@ Function * BlockOrientedKernel::getDoBlockFunction() const {
     const auto name = getName() + DO_BLOCK_SUFFIX;
     Function * const f = iBuilder->getModule()->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
-        llvm::report_fatal_error("Cannot find " + name);
+        report_fatal_error("Cannot find " + name);
     }
     return f;
 }
@@ -488,7 +513,7 @@ Function * BlockOrientedKernel::getDoFinalBlockFunction() const {
     const auto name = getName() + FINAL_BLOCK_SUFFIX;
     Function * const f = iBuilder->getModule()->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
-        llvm::report_fatal_error("Cannot find " + name);
+        report_fatal_error("Cannot find " + name);
     }
     return f;
 }

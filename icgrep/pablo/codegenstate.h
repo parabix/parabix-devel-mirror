@@ -241,9 +241,9 @@ public:
 
     While * createWhile(PabloAST * condition, PabloBlock * body);
 
-    llvm::Type * getStreamTy(const unsigned FieldWidth = 1) {
-        return mParent->getStreamTy(FieldWidth);
-    }
+//    llvm::Type * getStreamTy(const unsigned FieldWidth = 1) {
+//        return mParent->getStreamTy(FieldWidth);
+//    }
     
     llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return mParent->getStreamSetTy(NumElements, FieldWidth);

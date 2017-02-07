@@ -9,6 +9,7 @@
 #include <string>  // for string
 #include <vector>  // for vector
 namespace IDISA { class IDISA_Builder; }
+namespace llvm { class ConstantInt; }
 namespace llvm { class Function; }
 namespace llvm { class Module; }
 namespace llvm { class PointerType; }
@@ -16,11 +17,16 @@ namespace llvm { class StructType; }
 namespace llvm { class Type; }
 namespace llvm { class Value; }
 
+
 struct Binding {
-    llvm::Type * type;
-    std::string name;
-    Binding(llvm::Type * type, const std::string & name) : type(type), name(name) {}
-    Binding(llvm::Type * type, std::string && name) : type(type), name(name) {}
+    Binding(llvm::Type * type, const std::string & name, const unsigned step = 0)
+    : type(type), name(name), step(step) {
+
+    }
+
+    llvm::Type *        type;
+    std::string         name;
+    const unsigned      step;
 };
 
 class KernelInterface {

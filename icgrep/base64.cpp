@@ -83,21 +83,17 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     
     StdOutKernel stdoutK(iBuilder, 8);
     stdoutK.generateKernel({&Base64out}, {});
-
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
-//    Radix64out.setEmptyBuffer(iBuilder->CreatePointerCast(outputStream, outputType));
     Expanded3_4Out.allocateBuffer();
     Radix64out.allocateBuffer();
     Base64out.allocateBuffer();
 
-
-    if (segmentPipelineParallel){
+    if (segmentPipelineParallel) {
         generateSegmentParallelPipeline(iBuilder, {&mmapK, &expandK, &radix64K, &base64K, &stdoutK});
-    }
-    else{
+    } else {
         generatePipelineLoop(iBuilder, {&mmapK, &expandK, &radix64K, &base64K, &stdoutK});
     }
 

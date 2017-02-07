@@ -40,7 +40,10 @@ void MMapSourceKernel::generateDoSegmentMethod(Value *doFinal, const std::vector
 
 
 MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "mmap_source", {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}, {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})
+: SegmentOrientedKernel(iBuilder, "mmap_source",
+    {},
+    {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer", iBuilder->getBitBlockWidth()}},
+    {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})
 , mSegmentBlocks(blocksPerSegment)
 , mCodeUnitWidth(codeUnitWidth) {
 

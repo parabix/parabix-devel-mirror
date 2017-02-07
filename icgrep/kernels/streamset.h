@@ -8,7 +8,6 @@
 
 #include <llvm/IR/Type.h>  // for Type
 namespace IDISA { class IDISA_Builder; }
-namespace llvm { class PointerType; }
 namespace llvm { class Value; }
 namespace kernel { class KernelBuilder; }
 
@@ -26,11 +25,11 @@ public:
     }
 
     llvm::Type * getType() const {
-        return mStreamSetType;
+        return mType;
     }
 
     llvm::Type * getBaseType() const {
-        return mBaseStreamSetType;
+        return mBaseType;
     }
 
     llvm::PointerType * getPointerType() const {
@@ -47,11 +46,11 @@ public:
 
     virtual void allocateBuffer();
 
-    virtual llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const;
+    virtual llvm::Value * getStream(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const;
 
-    virtual llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const;
+    virtual llvm::Value * getStream(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const;
     
-    virtual llvm::Value * getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const;
+    llvm::Value * getRawItemPointer(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
     // The number of items that cam be linearly accessed from a given logical stream position.
     virtual llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const;
@@ -63,16 +62,14 @@ protected:
     // Get the buffer pointer for a given block of the stream.
     virtual llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const = 0;
 
-    llvm::Type * resolveStreamSetBufferType(llvm::Type * type) const;
-
 protected:
     const BufferKind                mBufferKind;
     IDISA::IDISA_Builder * const    iBuilder;
-    llvm::Type * const              mStreamSetType;
+    llvm::Type * const              mType;
     const size_t                    mBufferBlocks;
     const unsigned                  mAddressSpace;
     llvm::Value *                   mStreamSetBufferPtr;
-    llvm::Type * const              mBaseStreamSetType;
+    llvm::Type * const              mBaseType;
 };   
 
 class SingleBlockBuffer : public StreamSetBuffer {
@@ -159,8 +156,6 @@ public:
     llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const override;
 
     llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const override;
-
-    llvm::Value * getStreamView(llvm::Type * type, llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const override;
 
     llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const override;
     

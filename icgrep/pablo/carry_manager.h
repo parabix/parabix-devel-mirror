@@ -47,6 +47,8 @@ public:
 
     void initializeCodeGen();
 
+    void finalizeCodeGen();
+
     /* Entering and leaving loops. */
 
     void enterLoopScope(const PabloBlock * const scope);
@@ -116,6 +118,7 @@ private:
 
     unsigned                                        mIfDepth;
 
+    bool                                            mHasLoop;
     unsigned                                        mLoopDepth;
     llvm::Value *                                   mLoopSelector;
     std::vector<llvm::PHINode *>                    mLoopIndicies;

@@ -6,15 +6,13 @@
 #include <llvm/IR/Module.h>
 #include <IR_Gen/idisa_builder.h>
 #include <kernels/streamset.h>
-#include <stdio.h>
-// #include <llvm/IR/Type.h>
 namespace llvm { class Type; }
 
 using namespace llvm;
 using namespace parabix;
 
 namespace kernel {
-            
+
 // Rather than using doBlock logic to write one block at a time, this custom
 // doSegment method attempts to write the entire segment with a single write call.
 // However, if the segment spans two memory areas (e.g., because of wraparound),
@@ -22,13 +20,12 @@ namespace kernel {
 void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
     PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
 
-    Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
-    Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
-    
+    Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
+    Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth / 8);
     Value * processed = getProcessedItemCount("codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
     // There may be two memory areas if we are at the physical end of a circular buffer.
-    auto const &b  = getStreamSetBuffer("codeUnitBuffer");
+    const auto b  = getStreamSetBuffer("codeUnitBuffer");
     Value * wraparound = nullptr;
     if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
         Value * accessible = b->getLinearlyAccessibleItems(processed);
@@ -36,14 +33,14 @@ void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Val
         itemsToDo = iBuilder->CreateSelect(wraparound, accessible, itemsToDo);
     }
     
-    //Value * blockNo = getBlockNo();
-    Value * blockNo = iBuilder->CreateUDiv(processed, blockItems);
-    Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-    Value * bytePtr = getStreamView(i8PtrTy, "codeUnitBuffer", blockNo, byteOffset);
+    Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateAnd(processed, blockItems), itemBytes);
+    Value * bytePtr = iBuilder->CreatePointerCast(getInputStream("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
+    bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
+
     iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
+
     processed = iBuilder->CreateAdd(processed, itemsToDo);
     setProcessedItemCount("codeUnitBuffer", processed);
-    //setBlockNo(iBuilder->CreateUDiv(processed, blockItems));
     
     // Now we may process the second area (if required).
     if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
@@ -53,9 +50,10 @@ void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Val
         iBuilder->SetInsertPoint(wrapAroundWrite);
         
         // Calculate from the updated value of processed;
-        blockNo = iBuilder->CreateUDiv(processed, blockItems);
-        byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-        bytePtr = getStreamView(i8PtrTy, "codeUnitBuffer", blockNo, byteOffset);
+        byteOffset = iBuilder->CreateMul(iBuilder->CreateAnd(processed, blockItems), itemBytes);
+        Value * bytePtr = iBuilder->CreatePointerCast(getInputStream("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
+        bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
+
         itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
         iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
         processed = iBuilder->CreateAdd(processed, itemsToDo);
@@ -85,13 +83,14 @@ void FileSink::generateInitMethod() {
 }
 
 void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
+
     PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
-    
+
     BasicBlock * closeFile = CreateBasicBlock("closeFile");
     BasicBlock * fileOutExit = CreateBasicBlock("fileOutExit");
     Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
-    
+
     Value * IOstreamPtr = getScalarField("IOstreamPtr");
     Value * processed = getProcessedItemCount("codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
@@ -104,15 +103,15 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
         itemsToDo = iBuilder->CreateSelect(wraparound, accessible, itemsToDo);
     }
     
-    Value * blockNo = iBuilder->CreateUDiv(processed, blockItems);
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-    Value * bytePtr = getStreamView(i8PtrTy, "codeUnitBuffer", blockNo, byteOffset);
+    Value * bytePtr = iBuilder->CreatePointerCast(getInputStream("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
+    bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
+
     iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);
-    
+
     
     processed = iBuilder->CreateAdd(processed, itemsToDo);
     setProcessedItemCount("codeUnitBuffer", processed);
-    //setBlockNo(iBuilder->CreateUDiv(processed, blockItems));
     
     // Now we may process the second area (if required).
     if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
@@ -122,9 +121,9 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
         iBuilder->SetInsertPoint(wrapAroundWrite);
         
         // Calculate from the updated value of processed;
-        blockNo = iBuilder->CreateUDiv(processed, blockItems);
         byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-        bytePtr = getStreamView(i8PtrTy, "codeUnitBuffer", blockNo, byteOffset);
+        Value * bytePtr = iBuilder->CreatePointerCast(getInputStream("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
+        bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
         itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
         iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);
         processed = iBuilder->CreateAdd(processed, itemsToDo);
@@ -133,11 +132,11 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
         iBuilder->SetInsertPoint(checkFinal);
     }
     iBuilder->CreateCondBr(doFinal, closeFile, fileOutExit);
-    
+
     iBuilder->SetInsertPoint(closeFile);
     iBuilder->CreateFCloseCall(IOstreamPtr);
     iBuilder->CreateBr(fileOutExit);
-    
+
     iBuilder->SetInsertPoint(fileOutExit);
 }
 
@@ -148,6 +147,7 @@ FileSink::FileSink(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth)
 }
 
 }
+
 
 
 
