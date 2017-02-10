@@ -42,10 +42,9 @@ namespace re {
 
 void RE_Compiler::initializeRequiredStreams(const unsigned encodingBits) {
     if (encodingBits == 8) {
-      RE_Compiler::initializeRequiredStreams_utf8();
-    }
-    else if (encodingBits == 16) {
-      RE_Compiler::initializeRequiredStreams_utf16();
+        RE_Compiler::initializeRequiredStreams_utf8();
+    } else if (encodingBits == 16) {
+        RE_Compiler::initializeRequiredStreams_utf16();
     }
 }
 

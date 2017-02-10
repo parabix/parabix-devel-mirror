@@ -25,6 +25,7 @@
 #include <pablo/ps_assign.h>
 #include <pablo/carry_manager.h>
 #include <IR_Gen/idisa_builder.h>
+#include <kernels/streamset.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 
@@ -57,26 +58,16 @@ void PabloCompiler::compile() {
 
     for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
         Var * var = mKernel->getInput(i);
-        std::string name = var->getName().str();
-        Value * input = nullptr;
-        if (var->getType()->isSingleValueType()) {
-            input = mKernel->getScalarFieldPtr(name);
-        } else {
-            input = mKernel->getInputStream(name, iBuilder->getInt32(0));
+        if (LLVM_UNLIKELY(var->isScalar())) {
+            mMarker.emplace(var, mKernel->getScalarFieldPtr(var->getName()));
         }
-        mMarker.emplace(var, input);
     }
 
     for (unsigned i = 0; i < mKernel->getNumOfOutputs(); ++i) {
         Var * var = mKernel->getOutput(i);
-        std::string name = var->getName().str();
-        Value * output = nullptr;
-        if (var->getType()->isSingleValueType()) {
-            output = mKernel->getScalarFieldPtr(name);
-        } else {
-            output = mKernel->getOutputStream(name, iBuilder->getInt32(0));
+        if (LLVM_UNLIKELY(var->isScalar())) {
+            mMarker.emplace(var, mKernel->getScalarFieldPtr(var->getName()));
         }
-        mMarker.emplace(var, output);
     }
 
     compileBlock(entryBlock);
@@ -144,7 +135,7 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
             var->print(out);
             out << " is uninitialized prior to entering ";
             ifStatement->print(out);
-            llvm::report_fatal_error(out.str());
+            report_fatal_error(out.str());
         }
         incoming.emplace_back(var, f->second);
     }
@@ -188,7 +179,7 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
             out << "PHINode creation error: ";
             var->print(out);
             out << " was not assigned an outgoing value.";
-            llvm::report_fatal_error(out.str());
+            report_fatal_error(out.str());
         }
 
         Value * const outgoing = f->second;
@@ -207,7 +198,7 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
             outgoing->getType()->print(out);
             out << ") within ";
             ifStatement->print(out);
-            llvm::report_fatal_error(out.str());
+            report_fatal_error(out.str());
         }
 
         PHINode * phi = iBuilder->CreatePHI(incoming->getType(), 2, var->getName());
@@ -261,7 +252,7 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
             var->print(out);
             out << " is uninitialized prior to entering ";
             whileStatement->print(out);
-            llvm::report_fatal_error(out.str());
+            report_fatal_error(out.str());
         }
         Value * entryValue = f->second;
         PHINode * phi = iBuilder->CreatePHI(entryValue->getType(), 2, var->getName());
@@ -313,7 +304,7 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
             out << "PHINode creation error: ";
             var->print(out);
             out << " is no longer assigned a value.";
-            llvm::report_fatal_error(out.str());
+            report_fatal_error(out.str());
         }
 
         Value * const outgoingValue = f->second;
@@ -329,7 +320,7 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
             outgoingValue->getType()->print(out);
             out << ") within ";
             whileStatement->print(out);
-            llvm::report_fatal_error(out.str());
+            report_fatal_error(out.str());
         }
 
         incomingPhi->addIncoming(outgoingValue, whileExitBlock);
@@ -344,7 +335,7 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
 
 }
 
-void PabloCompiler::compileStatement(const Statement * stmt) {
+void PabloCompiler::compileStatement(const Statement * const stmt) {
 
     if (LLVM_UNLIKELY(isa<If>(stmt))) {
         compileIf(cast<If>(stmt));
@@ -355,29 +346,39 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
         Value * value = nullptr;
         if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
 
-            expr = cast<Assign>(stmt)->getVariable();
             value = compileExpression(cast<Assign>(stmt)->getValue());
 
-            bool storeInstRequired = false;
+            expr = cast<Assign>(stmt)->getVariable();
+
+            bool storeRequired = false;
+
             if (LLVM_LIKELY(isa<Var>(expr))) {
-                for (unsigned i = 0; i < mKernel->getNumOfOutputs(); ++i) {
-                    if (expr == mKernel->getOutput(i)) {
-                        storeInstRequired = true;
-                        break;
-                    }
+                const Var * var = cast<Var>(expr);
+                if (LLVM_UNLIKELY(var->isReadOnly())) {
+                    std::string tmp;
+                    raw_string_ostream out(tmp);
+                    out << "cannot assign value to ";
+                    var->print(out);
+                    out << ": ";
+                    var->print(out);
+                    out << " is read only";
+                    report_fatal_error(out.str());
                 }
+                storeRequired = var->isKernelParameter();
             }
 
-            if (LLVM_UNLIKELY(storeInstRequired || isa<Extract>(expr))) {
+            if (storeRequired || isa<Extract>(expr)) {
                 const auto f = mMarker.find(expr);
                 if (LLVM_UNLIKELY(f == mMarker.end())) {
                     std::string tmp;
                     raw_string_ostream out(tmp);
-                    out << "PabloCompiler: use-before-definition error: ";
+                    out << "cannot assign value to ";
+                    expr->print(out);
+                    out << ": ";
                     expr->print(out);
                     out << " does not dominate ";
                     stmt->print(out);
-                    llvm::report_fatal_error(out.str());
+                    report_fatal_error(out.str());
                 }
                 Value * const ptr = f->second;
                 iBuilder->CreateAlignedStore(value, ptr, getAlignment(value));
@@ -385,9 +386,25 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
             }
 
         } else if (const Extract * extract = dyn_cast<Extract>(stmt)) {
-            Value * array = compileExpression(extract->getArray(), false);
             Value * index = compileExpression(extract->getIndex());
-            value = iBuilder->CreateGEP(array, index, stmt->getName());
+            Var * const array = dyn_cast<Var>(extract->getArray());
+            if (LLVM_LIKELY(array && array->isKernelParameter())) {
+                if (array->isReadOnly()) {
+                    value = mKernel->getInputStream(array->getName(), index);
+                } else if (array->isReadNone()) {
+                    value = mKernel->getOutputStream(array->getName(), index);
+                } else {
+                    std::string tmp;
+                    raw_string_ostream out(tmp);
+                    out << "stream ";
+                    expr->print(out);
+                    out << " cannot be read or written to";
+                    report_fatal_error(out.str());
+                }
+            } else {
+                Value * ptr = compileExpression(extract->getArray(), false);
+                value = iBuilder->CreateGEP(ptr, {ConstantInt::getNullValue(index->getType()), index}, "extract");
+            }
         } else if (isa<And>(stmt)) {
             value = compileExpression(stmt->getOperand(0));
             for (unsigned i = 1; i < stmt->getNumOperands(); ++i) {
@@ -437,7 +454,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
             const unsigned counterSize = iBuilder->getSizeTy()->getBitWidth();
             const auto f = mAccumulator.find(c);
             if (LLVM_UNLIKELY(f == mAccumulator.end())) {
-                llvm::report_fatal_error("Unknown accumulator: " + c->getName().str());
+                report_fatal_error("Unknown accumulator: " + c->getName().str());
             }
             Value * ptr = mKernel->getScalarFieldPtr(f->second);
             Value * count = iBuilder->CreateAlignedLoad(ptr, getPointerElementAlignment(ptr));
@@ -473,13 +490,13 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
             const unsigned block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
             std::string inputName = cast<Var>(var)->getName().str();
             Value * blockNo = mKernel->getBlockNo();
-            Value * lookAhead_blockPtr  = mKernel->getStreamSetPtr(inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift)));
+            Value * lookAhead_blockPtr  = mKernel->getInputStreamSetPtr(inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift)));
             Value * lookAhead_inputPtr = iBuilder->CreateGEP(lookAhead_blockPtr, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
             Value * lookAhead = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr);
             if (bit_shift == 0) {  // Simple case with no intra-block shifting.
                 value = lookAhead;
             } else { // Need to form shift result from two adjacent blocks.
-                Value * lookAhead_blockPtr1  = mKernel->getStreamSetPtr(inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift + 1)));
+                Value * lookAhead_blockPtr1  = mKernel->getInputStreamSetPtr(inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift + 1)));
                 Value * lookAhead_inputPtr1 = iBuilder->CreateGEP(lookAhead_blockPtr1, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
                 Value * lookAhead1 = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr1);
                 if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
@@ -495,7 +512,7 @@ void PabloCompiler::compileStatement(const Statement * stmt) {
 
         } else {
             std::string tmp;
-            llvm::raw_string_ostream out(tmp);
+            raw_string_ostream out(tmp);
             out << "Internal error: ";
             stmt->print(out);
             out << " is not a recognized statement in the Pablo compiler.";
@@ -520,7 +537,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
     } else if (LLVM_UNLIKELY(isa<Zeroes>(expr))) {
         return iBuilder->allZeroes();
     } else if (LLVM_UNLIKELY(isa<Integer>(expr))) {
-        return iBuilder->getInt64(cast<Integer>(expr)->value());
+        return ConstantInt::get(cast<Integer>(expr)->getType(), cast<Integer>(expr)->value());
     } else if (LLVM_UNLIKELY(isa<Operator>(expr))) {
         const Operator * op = cast<Operator>(expr);
         Value * lh = compileExpression(op->getLH());
@@ -535,7 +552,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
             out << ") differs from right hand type (";
             rh->getType()->print(out);
             out << ")";
-            llvm::report_fatal_error(out.str());
+            report_fatal_error(out.str());
         }
         switch (op->getClassTypeId()) {
             case TypeId::Add:
@@ -560,16 +577,16 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
         raw_string_ostream out(tmp);
         expr->print(out);
         out << " is not a valid Operator";
-        llvm::report_fatal_error(out.str());
+        report_fatal_error(out.str());
     }
     const auto f = mMarker.find(expr);
     if (LLVM_UNLIKELY(f == mMarker.end())) {
         std::string tmp;
-        llvm::raw_string_ostream out(tmp);
+        raw_string_ostream out(tmp);
         out << "Compilation error: ";
         expr->print(out);
         out << " was used before definition!";
-        llvm::report_fatal_error(out.str());
+        report_fatal_error(out.str());
     }
     Value * value = f->second;
     if (LLVM_UNLIKELY(isa<GetElementPtrInst>(value) && ensureLoaded)) {

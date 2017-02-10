@@ -52,7 +52,7 @@ static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable po
 void u8u16_pablo(PabloKernel * kernel) {
     //  input: 8 basis bit streams
     
-    const auto u8bitSet = kernel->getInputSet("u8bit");
+    const auto u8bitSet = kernel->getInputStreamVar("u8bit");
     
     //  output: 16 u8-indexed streams, + delmask stream + error stream
     
@@ -236,9 +236,9 @@ void u8u16_pablo(PabloKernel * kernel) {
     main.createAssign(u16_lo[6], main.createOr(main.createAnd(last_byte, u8_bits[6]), s43_lo6));
     main.createAssign(u16_lo[7], main.createOr(main.createAnd(last_byte, u8_bits[7]), s43_lo7));
     
-    Var * output = kernel->getOutputSet("u16bit");
-    Var * delmask_out = kernel->getOutputSet("delMask");
-    Var * error_mask_out = kernel->getOutputSet("errMask");
+    Var * output = kernel->getOutputStreamVar("u16bit");
+    Var * delmask_out = kernel->getOutputStreamVar("delMask");
+    Var * error_mask_out = kernel->getOutputStreamVar("errMask");
     
     for (unsigned i = 0; i < 8; i++) {
         main.createAssign(main.createExtract(output, i), u16_hi[i]);

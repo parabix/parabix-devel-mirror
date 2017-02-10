@@ -45,12 +45,11 @@ public:
         return false;
     }
 
-    PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName);
-    
     PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName,                      
-                    std::vector<Binding> && stream_inputs,
-                    std::vector<Binding> && stream_outputs,
-                    std::vector<Binding> && scalar_outputs);
+                std::vector<Binding> stream_inputs = {},
+                std::vector<Binding> stream_outputs = {},
+                std::vector<Binding> scalar_parameters = {},
+                std::vector<Binding> scalar_outputs = {});
 
     virtual ~PabloKernel();
 
@@ -68,7 +67,7 @@ public:
         return entryBlock;
     }
     
-    Var * getInputSet(std::string inputSetName);
+    Var * getInputStreamVar(const std::string & inputSetName);
 
     Var * getInput(const unsigned index) {
         return mInputs[index];
@@ -84,9 +83,9 @@ public:
         return mInputs.size();
     }
     
-    Var * getOutputSet(std::string inputSetName);
+    Var * getOutputStreamVar(const std::string & inputSetName);
     
-    Var * getScalarOutput(std::string outputName);
+    Var * getOutputScalarVar(const std::string & outputName);
 
     Var * getOutput(const unsigned index) {
         return mOutputs[index];
@@ -118,6 +117,10 @@ public:
 
     inline SymbolGenerator * getSymbolTable() const {
         return mSymbolTable;
+    }
+
+    void * operator new (std::size_t size) noexcept {
+        return std::malloc(size);
     }
 
 protected:

@@ -182,7 +182,9 @@ protected:
 
     llvm::Value * getOutputStream(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
 
-    llvm::Value * getRawItemPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
+    llvm::Value * getRawInputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
+
+    llvm::Value * getRawOutputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
     llvm::Value * getScalarFieldPtr(const std::string & name) const {
         return getScalarFieldPtr(getSelf(), name);
@@ -192,7 +194,7 @@ protected:
         return getScalarFieldPtr(getSelf(), index);
     }
 
-    llvm::Value * getStreamSetPtr(const std::string & name, llvm::Value * blockNo) const;
+    llvm::Value * getInputStreamSetPtr(const std::string & name, llvm::Value * blockNo) const;
 
     inline llvm::Value * getProcessedItemCount(const std::string & name) const {
         return getProcessedItemCount(getSelf(), name);
@@ -240,7 +242,13 @@ protected:
 
     unsigned getStreamSetIndex(const std::string & name) const;
 
-    const parabix::StreamSetBuffer * getStreamSetBuffer(const std::string & name) const;
+    const parabix::StreamSetBuffer * getInputStreamSetBuffer(const std::string & name) const {
+        return mStreamSetInputBuffers[getStreamSetIndex(name)];
+    }
+
+    const parabix::StreamSetBuffer * getOutputStreamSetBuffer(const std::string & name) const {
+        return mStreamSetOutputBuffers[getStreamSetIndex(name)];
+    }
 
     void callGenerateInitMethod();
 

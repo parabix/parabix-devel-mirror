@@ -40,12 +40,12 @@ using namespace llvm;
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore);
 
-void generate(PabloKernel * kernel, const unsigned size) {
+void generate(PabloKernel * kernel) {
 
     PabloBuilder pb(kernel->getEntryBlock());
 
-    Var * input = kernel->addInput("input", kernel->getStreamSetTy(8));
-    Var * matches = kernel->addOutput("matches", kernel->getStreamSetTy(size));
+    Var * input = kernel->getInputStreamVar("input");
+    Var * matches = kernel->getOutputStreamVar("matches");
 
     PabloAST * basis[8];
     for (int i = 0; i < 8; ++i) {
@@ -124,8 +124,11 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
     S2PKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
-    PabloKernel bm(iBuilder, "MatchParens");
-    generate(&bm, count);
+    PabloKernel bm(iBuilder, "MatchParens",
+        {Binding{iBuilder->getStreamSetTy(8), "input"}},
+        {Binding{iBuilder->getStreamSetTy(count), "matches"}});
+
+    generate(&bm);
 
     bm.generateKernel({&BasisBits}, {&matches});
 

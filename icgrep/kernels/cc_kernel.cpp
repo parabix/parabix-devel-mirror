@@ -65,9 +65,8 @@ IDISA::IDISA_Builder * iBuilder
 , std::string ccSetName
 , const std::vector<CC *> & charClasses
 , unsigned basisBitsCount)
-: PabloKernel(iBuilder, ccSetName +"_kernel") {
-
-    CC_Compiler ccc(this, basisBitsCount);
+: PabloKernel(iBuilder, ccSetName +"_kernel", {Binding{iBuilder->getStreamSetTy(basisBitsCount), "basis"}}) {
+    CC_Compiler ccc(this, getInput(0));
     auto & builder = ccc.getBuilder();
     for (CC * cc : charClasses) {
         Var * const r = addOutput(cc->canonicalName(re::ByteClass), getStreamSetTy());

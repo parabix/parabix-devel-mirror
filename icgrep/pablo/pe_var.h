@@ -20,9 +20,14 @@ class Var : public PabloAST {
 public:
 
     enum Attribute {
-        None = 0
-        , ReadOnly = 1
-        , ReadNone = 2
+        None = 0x00
+        , ReadOnly = 0x01
+        , ReadNone = 0x02
+        , Scalar = 0x04
+        , KernelParameter = 0x80
+        // Composite attributes
+        , KernelInputParameter = ReadOnly | KernelParameter
+        , KernelOutputParameter = ReadNone | KernelParameter
     };
 
     static inline bool classof(const PabloAST * e) {
@@ -32,7 +37,7 @@ public:
         return false;
     }
     bool isReadOnly() const {
-        return mAttribute & Attribute::ReadOnly;
+        return (mAttribute & Attribute::ReadOnly) != 0;
     }
     void setReadOnly(const bool value = true) {
         if (value) {
@@ -42,7 +47,7 @@ public:
         }
     }
     bool isReadNone() const {
-        return mAttribute & Attribute::ReadNone;
+        return (mAttribute & Attribute::ReadNone) != 0;
     }
     void setReadNone(const bool value = true) {
         if (value) {
@@ -51,7 +56,26 @@ public:
             mAttribute &= ~(Attribute::ReadNone);
         }
     }
-
+    bool isKernelParameter() const {
+        return (mAttribute & Attribute::KernelParameter) != 0;
+    }
+    void setKernelParameter(const bool value = true) {
+        if (value) {
+            mAttribute |= Attribute::KernelParameter;
+        } else {
+            mAttribute &= ~(Attribute::KernelParameter);
+        }
+    }
+    bool isScalar() const {
+        return (mAttribute & Attribute::Scalar) != 0;
+    }
+    void setScalar(const bool value = true) {
+        if (value) {
+            mAttribute |= Attribute::Scalar;
+        } else {
+            mAttribute &= ~(Attribute::Scalar);
+        }
+    }
     const String & getName() const noexcept {
         return *mName;
     }

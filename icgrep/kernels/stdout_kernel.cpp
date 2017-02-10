@@ -25,7 +25,7 @@ void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Val
     Value * processed = getProcessedItemCount("codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
     // There may be two memory areas if we are at the physical end of a circular buffer.
-    const auto b  = getStreamSetBuffer("codeUnitBuffer");
+    const auto b  = getInputStreamSetBuffer("codeUnitBuffer");
     Value * wraparound = nullptr;
     if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
         Value * accessible = b->getLinearlyAccessibleItems(processed);
@@ -95,7 +95,7 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
     Value * processed = getProcessedItemCount("codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
     // There may be two memory areas if we are at the physical end of a circular buffer.
-    auto const &b  = getStreamSetBuffer("codeUnitBuffer");
+    const auto b  = getInputStreamSetBuffer("codeUnitBuffer");
     Value * wraparound = nullptr;
     if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
         Value * accessible = b->getLinearlyAccessibleItems(processed);

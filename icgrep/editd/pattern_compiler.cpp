@@ -106,7 +106,7 @@ void Pattern_Compiler::compile(const std::vector<std::string> & patts, PabloBuil
     }
 
 
-    Var * output = mKernel.addOutput("E", mKernel.getBuilder()->getStreamSetTy(dist + 1));
+    Var * output = mKernel.getOutputStreamVar("E");
     for (int d = 0; d <= dist; d++) {
         pb.createAssign(pb.createExtract(output, d), E[d]);
     }

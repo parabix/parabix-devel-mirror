@@ -181,7 +181,7 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod() {
     }    
     Value * i16UnitsFinal = iBuilder->CreateAdd(i16UnitsGenerated, iBuilder->CreateZExt(offset, iBuilder->getSizeTy()));
     setProducedItemCount("i16Stream", i16UnitsFinal);
-    const auto b  = getStreamSetBuffer("i16Stream");
+    const auto b  = getOutputStreamSetBuffer("i16Stream");
 
     if (auto cb = dyn_cast<CircularCopybackBuffer>(b)) {
         BasicBlock * copyBack = CreateBasicBlock("copyBack");

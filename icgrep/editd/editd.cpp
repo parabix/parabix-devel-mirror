@@ -189,7 +189,7 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
 void buildPatternKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder, const std::vector<std::string> & patterns) {
     PabloBuilder entry(kernel.getEntryBlock());
 
-    Var * pat = kernel.addInput("pat", iBuilder->getStreamSetTy(4));
+    Var * pat = kernel.getInputStreamVar("pat");
 
     PabloAST * basisBits[4];
 
@@ -227,7 +227,9 @@ Function * editdPipeline(Module * m, IDISA::IDISA_Builder * iBuilder, const std:
     std::unique_ptr<Module> mmapM = mmapK.createKernelModule({}, {&ChStream});
     mmapK.setInitialArguments({fileSize});
     
-    PabloKernel editdk(iBuilder, "editd");
+    PabloKernel editdk(iBuilder, "editd",
+                        {Binding{iBuilder->getStreamSetTy(4), "pat"}},
+                        {Binding{iBuilder->getStreamSetTy(editDistance + 1), "E"}});
 
     buildPatternKernel(editdk, iBuilder, patterns);
 
@@ -258,7 +260,8 @@ Function * editdPipeline(Module * m, IDISA::IDISA_Builder * iBuilder, const std:
 }
 
 void buildPreprocessKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder) {
-    cc::CC_Compiler ccc(&kernel);
+    cc::CC_Compiler ccc(&kernel, kernel.getInputStreamVar("basis"));
+
     PabloBuilder & pb = ccc.getBuilder();
 
     PabloAST * A = ccc.compileCC(re::makeCC(re::makeCC(0x41), re::makeCC(0x61)), pb);
@@ -266,7 +269,7 @@ void buildPreprocessKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder
     PabloAST * T = ccc.compileCC(re::makeCC(re::makeCC(0x54), re::makeCC(0x74)), pb);
     PabloAST * G = ccc.compileCC(re::makeCC(re::makeCC(0x47), re::makeCC(0x67)), pb);
 
-    Var * const pat = kernel.addOutput("pat", iBuilder->getStreamSetTy(4));
+    Var * const pat = kernel.getOutputStreamVar("pat");
 
     pb.createAssign(pb.createExtract(pat, 0), A);
     pb.createAssign(pb.createExtract(pat, 1), C);
@@ -306,7 +309,9 @@ Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     S2PKernel  s2pk(iBuilder);
     std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
 
-    PabloKernel  ccck(iBuilder, "ccc");
+    PabloKernel ccck(iBuilder, "ccc",
+                {{iBuilder->getStreamSetTy(8), "basis"}},
+                {{iBuilder->getStreamSetTy(4), "pat"}});
 
     buildPreprocessKernel(ccck, iBuilder);
     

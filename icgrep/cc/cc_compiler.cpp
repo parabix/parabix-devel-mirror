@@ -18,23 +18,23 @@ using namespace llvm;
 
 namespace cc {
 
-    CC_Compiler::CC_Compiler(PabloKernel * kernel, const unsigned encodingBits, const std::string prefix)
-    : mBuilder(kernel->getEntryBlock())
-    , mEncodingBits(encodingBits)
-    , mBasisBit(encodingBits) {
+//    CC_Compiler::CC_Compiler(PabloKernel * kernel, const unsigned encodingBits, const std::string prefix)
+//    : mBuilder(kernel->getEntryBlock())
+//    , mEncodingBits(encodingBits)
+//    , mBasisBit(encodingBits) {
         
-        // TODO: basisBits should be defined prior and only retrieved here.
-        Var * const basisBits = kernel->addInput(prefix, kernel->getStreamSetTy(encodingBits));
-        for (unsigned i = 0; i != mEncodingBits; i++) {
-            mBasisBit[i] = mBuilder.createExtract(basisBits, mBuilder.getInteger(i)); assert (mBasisBit[i]);
-        }
-        mEncodingMask = (static_cast<unsigned>(1) << encodingBits) - static_cast<unsigned>(1);
-    }
+//        // TODO: basisBits should be defined prior and only retrieved here.
+//        Var * const basisBits = kernel->addInput(prefix, kernel->getStreamSetTy(encodingBits));
+//        for (unsigned i = 0; i != mEncodingBits; i++) {
+//            mBasisBit[i] = mBuilder.createExtract(basisBits, mBuilder.getInteger(i)); assert (mBasisBit[i]);
+//        }
+//        mEncodingMask = (static_cast<unsigned>(1) << encodingBits) - static_cast<unsigned>(1);
+//    }
     
     
     CC_Compiler::CC_Compiler(pablo::PabloKernel * kernel, pablo::Var * basisBits)
     : mBuilder(kernel->getEntryBlock())
-    , mEncodingBits(dyn_cast<ArrayType>(basisBits->getType())->getNumElements())
+    , mEncodingBits(basisBits->getType()->getArrayNumElements())
     , mBasisBit(mEncodingBits) {
         for (unsigned i = 0; i != mEncodingBits; i++) {
             mBasisBit[i] = mBuilder.createExtract(basisBits, mBuilder.getInteger(i)); assert (mBasisBit[i]);

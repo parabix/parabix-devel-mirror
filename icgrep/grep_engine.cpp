@@ -223,7 +223,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     }
 #endif
 
-    Module * cpuM = new Module(moduleName+":cpu", getGlobalContext());
+    Module * cpuM = new Module(moduleName + ":cpu", getGlobalContext());
     IDISA::IDISA_Builder * CPUBuilder = IDISA::GetIDISA_Builder(cpuM);
 
     if (CPU_Only) {
@@ -233,11 +233,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     // segment size made availabe for each call to the mmap source kernel
     const unsigned segmentSize = codegen::SegmentSize;
-    unsigned bufferSegments = codegen::BufferSegments;
-    if (segmentPipelineParallel) 
-        {
-            bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
-        }
+    const unsigned bufferSegments = segmentPipelineParallel ? (codegen::BufferSegments * codegen::ThreadNum) : codegen::BufferSegments;
     const unsigned encodingBits = UTF_16 ? 16 : 8;
 
     mGrepType = grepType;
@@ -301,22 +297,20 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
     
-    CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
+    CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
 
     kernel::S2PKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
-    
-    pablo::PabloKernel icgrepK(iBuilder, "icgrep");
-
-    re_ast = re::regular_expression_passes(re_ast);
-    re::re2pablo_compiler(&icgrepK, encodingBits, re_ast, CountOnly);
+        
+    pablo::PabloKernel icgrepK(iBuilder, "icgrep", {Binding{iBuilder->getStreamSetTy(8), "basis"}});
+    re::re2pablo_compiler(&icgrepK, re::regular_expression_passes(re_ast), CountOnly);
     pablo_function_passes(&icgrepK);
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
 
     if (CountOnly) {
-        icgrepK.generateKernel({&BasisBits}, {});       
+        icgrepK.generateKernel({&BasisBits}, {});
         if (pipelineParallel){
             generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &icgrepK});
         } else if (segmentPipelineParallel){
@@ -324,11 +318,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         } else {
             generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK});
         }
-
-        Value * matchCount = icgrepK.createGetAccumulatorCall(icgrepK.getInstance(), "matchedLineCount");
-
-        iBuilder->CreateRet(matchCount);
-
+        iBuilder->CreateRet(icgrepK.createGetAccumulatorCall(icgrepK.getInstance(), "matchedLineCount"));
     } else {
 #ifdef CUDA_ENABLED 
         if (codegen::NVPTX){
@@ -341,7 +331,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         }
 #endif
         if (CPU_Only) {
-            CircularBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy( 2, 1), segmentSize * bufferSegments);
+            CircularBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(2, 1), segmentSize * bufferSegments);
             MatchResults.allocateBuffer();
 
             icgrepK.generateKernel({&BasisBits}, {&MatchResults});
@@ -377,8 +367,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         if (CountOnly) return;
     }
 #endif
-    
-     
+
+
     mEngine = JIT_to_ExecutionEngine(cpuM);
     ApplyObjectCache(mEngine);
     icgrep_Linking(cpuM, mEngine);

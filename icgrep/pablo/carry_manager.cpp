@@ -59,7 +59,7 @@ void CarryManager::initializeCarryData(PabloKernel * const kernel) {
     mKernel->addScalar(analyse(kernel->getEntryBlock()), "carries");
 
     if (mHasLoop) {
-        mKernel->addScalar(iBuilder->getInt32Ty(), "loopSelector");
+        mKernel->addScalar(iBuilder->getInt32Ty(), "selector");
     }
 }
 
@@ -81,7 +81,7 @@ void CarryManager::initializeCodeGen() {
     assert (mCarrySummary.empty());
 
     if (mHasLoop) {
-        mLoopSelector = mKernel->getScalarField("loopSelector");
+        mLoopSelector = mKernel->getScalarField("selector");
     }
 }
 
@@ -90,7 +90,7 @@ void CarryManager::initializeCodeGen() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::finalizeCodeGen() {
     if (mHasLoop) {
-        mKernel->setScalarField("loopSelector", iBuilder->CreateXor(mLoopSelector, iBuilder->getInt32(1)));
+        mKernel->setScalarField("selector", iBuilder->CreateXor(mLoopSelector, iBuilder->getInt32(1)));
     }
 }
 

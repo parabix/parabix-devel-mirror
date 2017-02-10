@@ -61,7 +61,7 @@ void KernelBuilder::prepareKernelSignature() {
         mStreamSetNameMap.emplace(mStreamSetInputs[i].name, i);
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        mStreamSetNameMap.emplace(mStreamSetOutputs[i].name, mStreamSetInputs.size() + i);
+        mStreamSetNameMap.emplace(mStreamSetOutputs[i].name, i);
     }
 }
     
@@ -252,20 +252,12 @@ void KernelBuilder::setBlockNo(Value * value) const {
     setScalarField(mSelf, BLOCK_NO_SCALAR, value);
 }
 
-inline static uint64_t log2(const uint64_t x) {
-    return (64 - __builtin_clzll(x)) - 1;
-}
-
-inline static uint32_t log2(const uint32_t x) {
-    return (32 - __builtin_clz(x)) - 1;
-}
-
 inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bindings, const std::string & name, Value * itemCount) const {
     for (const Binding & b : bindings) {
         if (b.name == name) {
             const auto divisor = (b.step == 0) ? iBuilder->getBitBlockWidth() : b.step;
             if (LLVM_LIKELY((divisor & (divisor - 1)) == 0)) {
-                return iBuilder->CreateLShr(itemCount, log2(divisor));
+                return iBuilder->CreateLShr(itemCount, std::log2(divisor));
             } else {
                 return iBuilder->CreateUDiv(itemCount, iBuilder->getSize(divisor));
             }
@@ -276,47 +268,42 @@ inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bin
 
 Value * KernelBuilder::getInputStream(const std::string & name, Value * streamIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
-    const StreamSetBuffer * const buf = getStreamSetBuffer(name);
+    const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
     return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex);
 }
 
 Value * KernelBuilder::getInputStream(const std::string & name, Value * streamIndex, Value * packIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
-    const StreamSetBuffer * const buf = getStreamSetBuffer(name);
+    const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
     return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
 }
 
 Value * KernelBuilder::getOutputStream(const std::string & name, Value * streamIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetOutputs, name, getProducedItemCount(name));
-    const StreamSetBuffer * const buf = getStreamSetBuffer(name);
+    const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
     return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex);
 }
 
 Value * KernelBuilder::getOutputStream(const std::string & name, Value * streamIndex, Value * packIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetOutputs, name, getProducedItemCount(name));
-    const StreamSetBuffer * const buf = getStreamSetBuffer(name);
+    const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
     return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
 }
 
-Value * KernelBuilder::getRawItemPointer(const std::string & name, Value * streamIndex, Value * absolutePosition) const {
-    return getStreamSetBuffer(name)->getRawItemPointer(getStreamSetBufferPtr(name), streamIndex, absolutePosition);
+Value * KernelBuilder::getRawInputPointer(const std::string & name, Value * streamIndex, Value * absolutePosition) const {
+    return getInputStreamSetBuffer(name)->getRawItemPointer(getStreamSetBufferPtr(name), streamIndex, absolutePosition);
+}
+
+Value * KernelBuilder::getRawOutputPointer(const std::string & name, Value * streamIndex, Value * absolutePosition) const {
+    return getOutputStreamSetBuffer(name)->getRawItemPointer(getStreamSetBufferPtr(name), streamIndex, absolutePosition);
 }
 
 unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
     const auto f = mStreamSetNameMap.find(name);
     if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
-        report_fatal_error("Kernel " + getName() + " does not contain stream set: " + name);
+        throw std::runtime_error("Kernel " + getName() + " does not contain stream set: " + name);
     }
     return f->second;
-}
-
-const StreamSetBuffer * KernelBuilder::getStreamSetBuffer(const std::string & name) const {
-    const unsigned structIdx = getStreamSetIndex(name);
-    if (structIdx < mStreamSetInputs.size()) {
-        return mStreamSetInputBuffers[structIdx];
-    } else {
-        return mStreamSetOutputBuffers[structIdx - mStreamSetInputs.size()];
-    }
 }
 
 Value * KernelBuilder::getStreamSetBufferPtr(const std::string & name) const {
@@ -340,8 +327,8 @@ Value * KernelBuilder::createGetAccumulatorCall(Value * self, const std::string 
     return iBuilder->CreateCall(getAccumulatorFunction(accumName), {self});
 }
 
-Value * KernelBuilder::getStreamSetPtr(const std::string & name, Value * blockNo) const {
-    return getStreamSetBuffer(name)->getStreamSetPtr(getStreamSetBufferPtr(name), blockNo);
+Value * KernelBuilder::getInputStreamSetPtr(const std::string & name, Value * blockNo) const {
+    return getInputStreamSetBuffer(name)->getStreamSetPtr(getStreamSetBufferPtr(name), blockNo);
 }
 
 BasicBlock * KernelBuilder::CreateBasicBlock(std::string && name) const {

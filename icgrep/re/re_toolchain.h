@@ -30,7 +30,7 @@ const llvm::cl::OptionCategory * re_toolchain_flags();
 
 RE * regular_expression_passes(RE * re_ast);
 
-void re2pablo_compiler(pablo::PabloKernel * kernel, const unsigned encodingBits, RE * re_ast, const bool CountOnly = false);
+void re2pablo_compiler(pablo::PabloKernel * kernel, RE * re_ast, const bool CountOnly = false);
     
 }
 #endif

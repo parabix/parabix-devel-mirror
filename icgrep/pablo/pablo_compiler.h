@@ -8,7 +8,6 @@
 #define PABLO_COMPILER_H
 
 #include <unordered_map>
-#include <boost/container/flat_set.hpp>
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Function; }
 namespace llvm { class Value; }
@@ -23,9 +22,7 @@ namespace pablo { class While; }
 namespace pablo {
 
 class PabloCompiler {
-    friend class CarryManager;
-
-    using IntSet = boost::container::flat_set<unsigned>;
+//    friend class CarryManager;
 
     using TranslationMap = std::unordered_map<const PabloAST *, llvm::Value *>;
 
@@ -58,7 +55,6 @@ private:
     CarryManager * const            mCarryManager;
     TranslationMap                  mMarker;
     TranslationMap                  mAccumulator;
-    IntSet                          mInputStreamOffset;
 
 };
 

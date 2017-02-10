@@ -89,16 +89,16 @@ extern "C" {
 
 void wc_gen(PabloKernel * kernel) {
     //  input: 8 basis bit streams
-    const auto u8bitSet = kernel->getInputSet("u8bit");
+    const auto u8bitSet = kernel->getInputStreamVar("u8bit");
     //  output: 3 counters
     
     cc::CC_Compiler ccc(kernel, u8bitSet);
     
     PabloBuilder & pb = ccc.getBuilder();
 
-    Var * lc = kernel->getScalarOutput("lineCount");
-    Var * wc = kernel->getScalarOutput("wordCount");
-    Var * cc = kernel->getScalarOutput("charCount");
+    Var * lc = kernel->getOutputScalarVar("lineCount");
+    Var * wc = kernel->getOutputScalarVar("wordCount");
+    Var * cc = kernel->getOutputScalarVar("charCount");
 
     if (CountLines) {
         PabloAST * LF = ccc.compileCC(re::makeCC(0x0A));

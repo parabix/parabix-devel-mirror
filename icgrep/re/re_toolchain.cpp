@@ -84,10 +84,11 @@ RE * regular_expression_passes(RE * re_ast)  {
     return re_ast;
 }
     
-void re2pablo_compiler(PabloKernel * kernel, const unsigned encodingBits, RE * re_ast, const bool CountOnly) {
-    cc::CC_Compiler cc_compiler(kernel, encodingBits);
+void re2pablo_compiler(PabloKernel * kernel, RE * re_ast, const bool CountOnly) {
+    Var * const basis = kernel->getInputStreamVar("basis");
+    cc::CC_Compiler cc_compiler(kernel, basis);
     re::RE_Compiler re_compiler(kernel, cc_compiler, CountOnly);
-    re_compiler.initializeRequiredStreams(encodingBits);
+    re_compiler.initializeRequiredStreams(basis->getType()->getArrayNumElements());
     re_compiler.compileUnicodeNames(re_ast);
     re_compiler.finalizeMatchResult(re_compiler.compile(re_ast), AlgorithmOptions.isSet(InvertMatches));
 }
