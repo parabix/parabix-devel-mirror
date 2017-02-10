@@ -19,7 +19,7 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    enum class Kind {Lookbehind, Lookahead};
+    enum class Kind {Lookbehind, Lookahead, Boundary};
     enum class Sense {Positive, Negative};
 
     RE * getAsserted() const {return mAsserted;}
@@ -59,6 +59,14 @@ inline RE * makeNegativeLookBehindAssertion(RE * r) {
     return makeAssertion(r, Assertion::Kind::Lookbehind, Assertion::Sense::Negative);
 }
 
+inline RE * makeBoundaryAssertion(RE * r) {
+    return makeAssertion(r, Assertion::Kind::Boundary, Assertion::Sense::Positive);
+}
+
+inline RE * makeNegativeBoundaryAssertion(RE * r) {
+    return makeAssertion(r, Assertion::Kind::Boundary, Assertion::Sense::Negative);
+}
+    
 }
 
 #endif // RE_ASSERTION_H

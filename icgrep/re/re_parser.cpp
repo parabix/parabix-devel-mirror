@@ -1080,12 +1080,10 @@ RE * RE_Parser::makeWordNonBoundary() {
 }
 
 inline RE * RE_Parser::makeReBoundary(RE * re) {
-    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(re), makeLookAheadAssertion(re)}),
-                    makeSeq({makeLookBehindAssertion(re), makeNegativeLookAheadAssertion(re)})});
+    return makeBoundaryAssertion(re);
 }
 inline RE * RE_Parser::makeReNonBoundary(RE * re) {
-    return makeAlt({makeSeq({makeNegativeLookBehindAssertion(re), makeNegativeLookAheadAssertion(re)}),
-                    makeSeq({makeLookBehindAssertion(re), makeLookAheadAssertion(re)})});
+    return makeNegativeBoundaryAssertion(re);
 }
 
 RE * RE_Parser::makeWordBegin() {

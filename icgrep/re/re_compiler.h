@@ -66,6 +66,8 @@ public:
         return compile(re, mPB);
     }
 
+    static LLVM_ATTRIBUTE_NORETURN void UnsupportedRE(std::string errmsg);
+    
 private:
 
     struct NameMap {

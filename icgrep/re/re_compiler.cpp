@@ -265,7 +265,7 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
     } else if (isa<End>(re)) {
         return compileEnd(marker, pb);
     }
-    throw std::runtime_error("RE Compiler failed to process " + Printer_RE::PrintRE(re));
+    UnsupportedRE("RE Compiler failed to process " + Printer_RE::PrintRE(re));
 }
 
 inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb) {
@@ -312,7 +312,7 @@ inline MarkerType RE_Compiler::compileName(Name * name, PabloBuilder & pb) {
         mCompiledName->add(name, m);
         return m;
     }
-    throw std::runtime_error("Unresolved name " + name->getName());
+    UnsupportedRE("Unresolved name " + name->getName());
 }
 
 MarkerType RE_Compiler::compileSeq(Seq * seq, MarkerType marker, PabloBuilder & pb) {
@@ -376,6 +376,18 @@ MarkerType RE_Compiler::compileAssertion(Assertion * a, MarkerType marker, Pablo
             lb = pb.createNot(lb);
         }
         return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), lb, "lookback"));
+    } else if (a->getKind() == Assertion::Kind::Boundary) {
+        MarkerType cond = compile(asserted, pb);
+        if (LLVM_LIKELY(markerPos(cond) == MarkerPosition::FinalMatchUnit)) {
+            MarkerType postCond = AdvanceMarker(cond, MarkerPosition::FinalPostPositionUnit, pb);
+            PabloAST * boundaryCond = pb.createAnd(mAny, pb.createXor(markerVar(cond), markerVar(postCond)));
+            if (a->getSense() == Assertion::Sense::Negative) {
+                boundaryCond = pb.createNot(boundaryCond);
+            }
+            MarkerType fbyte = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
+            return makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(markerVar(fbyte), boundaryCond, "boundary"));
+        }
+        else UnsupportedRE("Unsupported boundary assertion");
     } else if (isUnicodeUnitLength(asserted)) {
         MarkerType lookahead = compile(asserted, pb);
         if (LLVM_LIKELY(markerPos(lookahead) == MarkerPosition::FinalMatchUnit)) {
@@ -387,7 +399,7 @@ MarkerType RE_Compiler::compileAssertion(Assertion * a, MarkerType marker, Pablo
             return makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(markerVar(fbyte), la, "lookahead"));
         }
     }
-    throw std::runtime_error("Unsupported lookahead assertion.");
+    UnsupportedRE("Unsupported lookahead assertion.");
 }
 
 inline bool alignedUnicodeLength(const RE * lh, const RE * rh) {
@@ -405,7 +417,7 @@ MarkerType RE_Compiler::compileDiff(Diff * diff, MarkerType marker, PabloBuilder
         AlignMarkers(t1, t2, pb);
         return makeMarker(markerPos(t1), pb.createAnd(markerVar(t1), pb.createNot(markerVar(t2)), "diff"));
     }
-    throw std::runtime_error("Unsupported Diff operands: " + Printer_RE::PrintRE(diff));
+    UnsupportedRE("Unsupported Diff operands: " + Printer_RE::PrintRE(diff));
 }
 
 MarkerType RE_Compiler::compileIntersect(Intersect * x, MarkerType marker, PabloBuilder & pb) {
@@ -417,7 +429,7 @@ MarkerType RE_Compiler::compileIntersect(Intersect * x, MarkerType marker, Pablo
         AlignMarkers(t1, t2, pb);
         return makeMarker(markerPos(t1), pb.createAnd(markerVar(t1), markerVar(t2), "intersect"));
     }
-    throw std::runtime_error("Unsupported Intersect operands: " + Printer_RE::PrintRE(x));
+    UnsupportedRE("Unsupported Intersect operands: " + Printer_RE::PrintRE(x));
 }
 
 MarkerType RE_Compiler::compileRep(Rep * rep, MarkerType marker, PabloBuilder & pb) {
@@ -624,6 +636,12 @@ inline void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBui
         m2 = AdvanceMarker(m2, m1.pos, pb);
     }
 }
+    
+LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
+    llvm::report_fatal_error(errmsg);
+}
+    
+    
 
 RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler, bool CountOnly)
 : mKernel(kernel)

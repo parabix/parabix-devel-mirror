@@ -71,10 +71,10 @@ RE * regular_expression_passes(RE * re_ast)  {
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
         std::cerr << "RemoveNullableAssertion:" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
     }
-    re_ast = re::RE_Nullable::removeNullableAfterAssertion(re_ast);
-    if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
-        std::cerr << "RemoveNullableAfterAssertion" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
-    }
+    //re_ast = re::RE_Nullable::removeNullableAfterAssertion(re_ast);
+    //if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
+    //    std::cerr << "RemoveNullableAfterAssertion" << std::endl << Printer_RE::PrintRE(re_ast) << std::endl;
+    //}
     
     re_ast = re::RE_Simplifier::simplify(re_ast);
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowSimplifiedREs)) {

@@ -10,8 +10,22 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/TypeBuilder.h>
+#include <fcntl.h>  // for 
 
 using namespace llvm;
+
+llvm::Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) {
+    Function * openFn = mMod->getFunction("open");
+    if (openFn == nullptr) {
+        IntegerType * int32Ty = getInt32Ty();
+        PointerType * int8PtrTy = getInt8PtrTy();
+        openFn = cast<Function>(mMod->getOrInsertFunction("open",
+                                                         int32Ty, int8PtrTy, int32Ty, int32Ty, nullptr));
+    }
+    return CreateCall(openFn, {filename, oflag, mode});
+}
+
+
 
 // ssize_t write(int fildes, const void *buf, size_t nbyte);
 Value * CBuilder::CreateWriteCall(Value * fildes, Value * buf, Value * nbyte) {
@@ -39,6 +53,18 @@ Value * CBuilder::CreateReadCall(Value * fildes, Value * buf, Value * nbyte) {
     }
     return CreateCall(readFn, {fildes, buf, nbyte});
 }
+
+llvm::Value * CBuilder::CreateCloseCall(Value * fildes) {
+    Function * closeFn = mMod->getFunction("close");
+    if (closeFn == nullptr) {
+        IntegerType * int32Ty = getInt32Ty();
+        closeFn = cast<Function>(mMod->getOrInsertFunction("close",
+                                                           int32Ty, int32Ty, nullptr));
+    }
+    return CreateCall(closeFn, {fildes});
+}
+
+
 
 Function * CBuilder::GetPrintf() {
     Function * printf = mMod->getFunction("printf");

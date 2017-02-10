@@ -51,7 +51,7 @@ public:
     
     // stdio.h functions
     //
-    //  Create a call to:  FILE *fopen(const char *filename, const char *mode);
+    //  Create a call to:  FILE * fopen(const char *filename, const char *mode);
     llvm::Value * CreateFOpenCall(llvm::Value * filename, llvm::Value * mode);
     //  Create a call to:  size_t fread(void *ptr, size_t size, size_t nitems, FILE *stream);
     llvm::Value * CreateFReadCall(llvm::Value * ptr, llvm::Value * size, llvm::Value * nitems, llvm::Value * stream);
@@ -64,12 +64,15 @@ public:
 
     //  Create calls to unistd.h functions.
     //
+    //  Create a call to:  int open(const char *filename, int oflag, ...);
+    llvm::Value * CreateOpenCall(llvm::Value * filename, llvm::Value * oflag, llvm::Value * mode);
     //  Create a call to:  ssize_t write(int fildes, const void *buf, size_t nbyte);
     llvm::Value * CreateWriteCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
     //  Create a call to:  ssize_t read(int fildes, void *buf, size_t nbyte);
     llvm::Value * CreateReadCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
+    //  Create a call to:  int close(int filedes);
+    llvm::Value * CreateCloseCall(llvm::Value * fildes);
 
-    
     //  Posix thread (pthread.h) functions.
     //
     //  Create a call to:  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
