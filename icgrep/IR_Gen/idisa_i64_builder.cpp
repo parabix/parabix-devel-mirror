@@ -5,11 +5,6 @@
  */
 
 #include "idisa_i64_builder.h"
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/Intrinsics.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Module.h>
 
 namespace IDISA {
 
@@ -22,10 +17,8 @@ Value * IDISA_I64_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
         b_ = simd_or(simd_and(b_, himask_odd), simd_slli(mBitBlockWidth, simd_and(b_, himask_even), w/2));
         a_ = simd_or(simd_and(a_, himask_odd), simd_slli(mBitBlockWidth, simd_and(a_, himask_even), w/2));
     }
-    Value * pk = simd_or(b_, simd_srli(mBitBlockWidth, a_, mBitBlockWidth/2));
-    return pk;
+    return simd_or(b_, simd_srli(mBitBlockWidth, a_, mBitBlockWidth/2));
 }
-
 
 Value * IDISA_I64_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
     Value * a_ = a;
@@ -36,8 +29,7 @@ Value * IDISA_I64_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
         b_ = simd_or(simd_and(b_, lomask_even), simd_srli(mBitBlockWidth, simd_and(b_, lomask_odd), w/2));
         a_ = simd_or(simd_and(a_, lomask_even), simd_srli(mBitBlockWidth, simd_and(a_, lomask_odd), w/2));
     }
-    Value * pk = simd_or(simd_slli(mBitBlockWidth, b_, mBitBlockWidth/2), a_);
-    return pk;
+    return simd_or(simd_slli(mBitBlockWidth, b_, mBitBlockWidth/2), a_);
 }
 
 }

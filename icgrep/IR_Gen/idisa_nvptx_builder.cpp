@@ -5,10 +5,6 @@
  */
 
 #include "idisa_nvptx_builder.h"
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/Intrinsics.h>
-#include <llvm/IR/Function.h>
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Module.h>
 
@@ -21,10 +17,10 @@ int IDISA_NVPTX20_Builder::getGroupThreads(){
 Value * IDISA_NVPTX20_Builder::bitblock_any(Value * val) {
     Type * const int32ty = getInt32Ty();
     Function * barrierOrFunc = cast<Function>(mMod->getOrInsertFunction("llvm.nvvm.barrier0.or", int32ty, int32ty, nullptr));
-    Value * nonZero_i1 = CreateICmpUGT(val, ConstantInt::get(mBitBlockType, 0));
+    Value * nonZero_i1 = CreateICmpUGT(val, ConstantInt::getNullValue(mBitBlockType));
     Value * nonZero_i32 = CreateZExt(CreateBitCast(nonZero_i1, getInt1Ty()), int32ty);
     Value * anyNonZero = CreateCall(barrierOrFunc, nonZero_i32);
-    return CreateICmpNE(anyNonZero,  ConstantInt::get(int32ty, 0));
+    return CreateICmpNE(anyNonZero,  ConstantInt::getNullValue(int32ty));
 }
 
 Value * IDISA_NVPTX20_Builder::bitblock_mask_from(Value * pos){
@@ -100,7 +96,7 @@ void IDISA_NVPTX20_Builder::CreateGlobals(){
 
 }
 
-void IDISA_NVPTX20_Builder::CreateBuiltinFunctions(){    
+void IDISA_NVPTX20_Builder::CreateBuiltinFunctions(){
     Type * const voidTy = getVoidTy();
     Type * const int32ty = getInt32Ty();
     barrierFunc = cast<Function>(mMod->getOrInsertFunction("llvm.nvvm.barrier0", voidTy, nullptr));

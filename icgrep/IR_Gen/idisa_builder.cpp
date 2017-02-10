@@ -74,7 +74,6 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
     }
 }
 
-
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
     return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw/2)));
 }
@@ -160,14 +159,12 @@ Value * IDISA_Builder::simd_srai(unsigned fw, Value * a, unsigned shift) {
 
 Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
     Value * cttzFunc = Intrinsic::getDeclaration(mMod, Intrinsic::cttz, fwVectorType(fw));
-    Value * rslt = CreateCall(cttzFunc, std::vector<Value *>({fwCast(fw, a), ConstantInt::get(getInt1Ty(), 0)}));
-    return rslt;
+    return CreateCall(cttzFunc, {fwCast(fw, a), ConstantInt::get(getInt1Ty(), 0)});
 }
 
 Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
     Value * ctpopFunc = Intrinsic::getDeclaration(mMod, Intrinsic::ctpop, fwVectorType(fw));
-    Value * rslt = CreateCall(ctpopFunc, std::vector<Value *>({fwCast(fw, a)}));
-    return rslt;
+    return CreateCall(ctpopFunc, fwCast(fw, a));
 }
 
 Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) {
@@ -176,125 +173,108 @@ Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) 
         Value * b1 = bitCast(b);
         Value * c = bitCast(cond);
         return CreateOr(CreateAnd(a1, c), CreateAnd(CreateXor(c, b1), b1));
-    }
-    else {
+    } else {
         Value * aVec = fwCast(fw, a);
         Value * bVec = fwCast(fw, b);
         return CreateSelect(CreateICmpSLT(cond, mZeroInitializer), aVec, bVec);
     }
 }
     
-Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
-    unsigned field_count = mBitBlockWidth/fw;
-    Value * aVec = fwCast(fw, a);
-    Value * bVec = fwCast(fw, b);
-    std::vector<Constant*> Idxs;
-    for (unsigned i = field_count/2; i < field_count; i++) {
-        Idxs.push_back(getInt32(i));    // selects elements from first reg.
-        Idxs.push_back(getInt32(i + field_count)); // selects elements from second reg.
+Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {    
+    const auto field_count = mBitBlockWidth / fw;
+    Constant * Idxs[field_count];
+    for (unsigned i = 0; i < field_count / 2; i++) {
+        Idxs[2 * i] = getInt32(i + field_count / 2); // selects elements from first reg.
+        Idxs[2 * i + 1] = getInt32(i + field_count / 2 + field_count); // selects elements from second reg.
     }
-    return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return CreateShuffleVector(fwCast(fw, a), fwCast(fw, b), ConstantVector::get({Idxs, field_count}));
 }
 
-Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
-    unsigned field_count = mBitBlockWidth/fw;
-    Value * aVec = fwCast(fw, a);
-    Value * bVec = fwCast(fw, b);
-    std::vector<Constant*> Idxs;
-    for (unsigned i = 0; i < field_count/2; i++) {
-        Idxs.push_back(getInt32(i));    // selects elements from first reg.
-        Idxs.push_back(getInt32(i + field_count)); // selects elements from second reg.
+Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {    
+    const auto field_count = mBitBlockWidth / fw;
+    Constant * Idxs[field_count];
+    for (unsigned i = 0; i < field_count / 2; i++) {
+        Idxs[2 * i] = getInt32(i); // selects elements from first reg.
+        Idxs[2 * i + 1] = getInt32(i + field_count); // selects elements from second reg.
     }
-    return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return CreateShuffleVector(fwCast(fw, a), fwCast(fw, b), ConstantVector::get({Idxs, field_count}));
 }
 
 Value * IDISA_Builder::esimd_bitspread(unsigned fw, Value * bitmask) {
-    unsigned field_count = mBitBlockWidth/fw;
+    const auto field_count = mBitBlockWidth / fw;
     Type * field_type = getIntNTy(fw);
-    if (bitmask->getType()->getIntegerBitWidth() < fw) {
-        bitmask = CreateZExt(bitmask, field_type);
-    }
-    else if (bitmask->getType()->getIntegerBitWidth() > fw) {
-        bitmask = CreateTrunc(bitmask, field_type);
-    }
-    Value * spread_field = CreateBitCast(bitmask, VectorType::get(getIntNTy(fw), 1));
+    Value * spread_field = CreateBitCast(CreateZExtOrTrunc(bitmask, field_type), VectorType::get(getIntNTy(fw), 1));
     Value * undefVec = UndefValue::get(VectorType::get(getIntNTy(fw), 1));
     Value * broadcast = CreateShuffleVector(spread_field, undefVec, Constant::getNullValue(VectorType::get(getInt32Ty(), field_count)));
-    std::vector<Constant*> bitSel;
-    std::vector<Constant*> bitShift;
+    Constant * bitSel[field_count];
+    Constant * bitShift[field_count];
     for (unsigned i = 0; i < field_count; i++) {
-        bitSel.push_back(ConstantInt::get(field_type, 1 << i));
-        bitShift.push_back(ConstantInt::get(field_type, i));
+        bitSel[i] = ConstantInt::get(field_type, 1 << i);
+        bitShift[i] = ConstantInt::get(field_type, i);
     }
-    Value * bitSelVec = ConstantVector::get(bitSel);
-    Value * bitShiftVec = ConstantVector::get(bitShift);
+    Value * bitSelVec = ConstantVector::get({bitSel, field_count});
+    Value * bitShiftVec = ConstantVector::get({bitShift, field_count});
     return CreateLShr(CreateAnd(bitSelVec, broadcast), bitShiftVec);
 }
 
 Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
-    unsigned field_count = 2 * mBitBlockWidth/fw;
     Value * aVec = fwCast(fw/2, a);
     Value * bVec = fwCast(fw/2, b);
-    std::vector<Constant*> Idxs;
+    const auto field_count = 2 * mBitBlockWidth / fw;
+    Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count; i++) {
-        Idxs.push_back(getInt32(2*i+1));
+        Idxs[i] = getInt32(2 * i + 1);
     }
-    return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return CreateShuffleVector(aVec, bVec, ConstantVector::get({Idxs, field_count}));
 }
 
 Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
-    unsigned field_count = 2 * mBitBlockWidth/fw;
     Value * aVec = fwCast(fw/2, a);
     Value * bVec = fwCast(fw/2, b);
-    std::vector<Constant*> Idxs;
+    const auto field_count = 2 * mBitBlockWidth / fw;
+    Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count; i++) {
-        Idxs.push_back(getInt32(2*i));
+        Idxs[i] = getInt32(2 * i);
     }
-    return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+    return CreateShuffleVector(aVec, bVec, ConstantVector::get({Idxs, field_count}));
 }
 
-    
 Value * IDISA_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
-    unsigned fw_out = fw/2;
-    unsigned fields_per_lane = mBitBlockWidth/(fw_out * lanes);
-    unsigned field_offset_for_b = mBitBlockWidth/fw_out;
-    Value * aVec = fwCast(fw_out, a);
-    Value * bVec = fwCast(fw_out, b);
-    std::vector<Constant*> Idxs;
-    for (unsigned lane = 0; lane < lanes; lane++) {
-        unsigned first_field_in_lane = lane * fields_per_lane; // every second field
-        for (unsigned i = 0; i < fields_per_lane/2; i++) {
-            Idxs.push_back(getInt32(first_field_in_lane + 2*i + 1));
+    const unsigned fw_out = fw / 2;
+    const unsigned fields_per_lane = mBitBlockWidth / (fw_out * lanes);
+    const unsigned field_offset_for_b = mBitBlockWidth / fw_out;
+    const unsigned field_count = mBitBlockWidth / fw_out;
+    Constant * Idxs[field_count];
+    for (unsigned lane = 0, j = 0; lane < lanes; lane++) {
+        const unsigned first_field_in_lane = lane * fields_per_lane; // every second field
+        for (unsigned i = 0; i < fields_per_lane / 2; i++) {
+            Idxs[j++] = getInt32(first_field_in_lane + (2 * i) + 1);
         }
-        for (unsigned i = 0; i < fields_per_lane/2; i++) {
-            Idxs.push_back(getInt32(field_offset_for_b + first_field_in_lane + 2*i + 1));
+        for (unsigned i = 0; i < fields_per_lane / 2; i++) {
+            Idxs[j++] = getInt32(field_offset_for_b + first_field_in_lane + (2 * i) + 1);
         }
     }
-    Value * pack = CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
-    return pack;
+    return CreateShuffleVector(fwCast(fw_out, a), fwCast(fw_out, b), ConstantVector::get({Idxs, field_count}));
 }
 
 Value * IDISA_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
-    unsigned fw_out = fw/2;
-    unsigned fields_per_lane = mBitBlockWidth/(fw_out * lanes);
-    unsigned field_offset_for_b = mBitBlockWidth/fw_out;
-    Value * aVec = fwCast(fw_out, a);
-    Value * bVec = fwCast(fw_out, b);
-    std::vector<Constant*> Idxs;
-    for (unsigned lane = 0; lane < lanes; lane++) {
-        unsigned first_field_in_lane = lane * fields_per_lane; // every second field
-        for (unsigned i = 0; i < fields_per_lane/2; i++) {
-            Idxs.push_back(getInt32(first_field_in_lane + 2*i));
+    const unsigned fw_out = fw / 2;
+    const unsigned fields_per_lane = mBitBlockWidth / (fw_out * lanes);
+    const unsigned field_offset_for_b = mBitBlockWidth / fw_out;
+    const unsigned field_count = mBitBlockWidth / fw_out;
+    Constant * Idxs[field_count];
+    for (unsigned lane = 0, j = 0; lane < lanes; lane++) {
+        const unsigned first_field_in_lane = lane * fields_per_lane; // every second field
+        for (unsigned i = 0; i < fields_per_lane / 2; i++) {
+            Idxs[j++] = getInt32(first_field_in_lane + (2 * i));
         }
-        for (unsigned i = 0; i < fields_per_lane/2; i++) {
-            Idxs.push_back(getInt32(field_offset_for_b + first_field_in_lane + 2*i));
+        for (unsigned i = 0; i < fields_per_lane / 2; i++) {
+            Idxs[j++] = getInt32(field_offset_for_b + first_field_in_lane + (2 * i));
         }
     }
-    Value * pack = CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
-    return pack;
+    return CreateShuffleVector(fwCast(fw_out, a), fwCast(fw_out, b), ConstantVector::get({Idxs, field_count}));
 }
 
-    
 Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
     Value * mask = CreateICmpSLT(fwCast(fw, a), ConstantAggregateZero::get(fwVectorType(fw)));
     return CreateZExt(CreateBitCast(mask, getIntNTy(mBitBlockWidth/fw)), getInt32Ty());
@@ -305,12 +285,11 @@ Value * IDISA_Builder::mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex)
 }
 
 Value * IDISA_Builder::mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex) {
-    Value * vec = fwCast(fw, blk);
-    return CreateInsertElement(vec, elt, getInt32(fieldIndex));
+    return CreateInsertElement(fwCast(fw, blk), elt, getInt32(fieldIndex));
 }
 
 Value * IDISA_Builder::mvmd_slli(unsigned fw, Value * a, unsigned shift) {
-    unsigned field_count = mBitBlockWidth/fw;
+    const auto field_count = mBitBlockWidth / fw;
     return mvmd_dslli(fw, a, Constant::getNullValue(fwVectorType(fw)), field_count - shift);
 }
 
@@ -319,19 +298,17 @@ Value * IDISA_Builder::mvmd_srli(unsigned fw, Value * a, unsigned shift) {
 }
 
 Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift) {
-    unsigned field_count = mBitBlockWidth/fw;
-    Value * aVec = fwCast(fw, a);
-    Value * bVec = fwCast(fw, b);
-    std::vector<Constant*> Idxs;
+    const auto field_count = mBitBlockWidth/fw;
+    Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count; i++) {
-        Idxs.push_back(getInt32(i + shift));
+        Idxs[i] = getInt32(i + shift);
     }
-    return CreateShuffleVector(bVec, aVec, ConstantVector::get(Idxs));
+    return CreateShuffleVector(fwCast(fw, b), fwCast(fw, a), ConstantVector::get({Idxs, field_count}));
 }
 
 Value * IDISA_Builder::bitblock_any(Value * a) {
     Type * iBitBlock = getIntNTy(mBitBlockWidth);
-    return CreateICmpNE(CreateBitCast(a, iBitBlock),  ConstantInt::get(iBitBlock, 0));
+    return CreateICmpNE(CreateBitCast(a, iBitBlock),  ConstantInt::getNullValue(iBitBlock));
 }
 
 // full add producing {carryout, sum}
