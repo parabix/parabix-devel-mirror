@@ -61,6 +61,9 @@ void CarryManager::initializeCarryData(PabloKernel * const kernel) {
     if (mHasLoop) {
         mKernel->addScalar(iBuilder->getInt32Ty(), "selector");
     }
+    if (mHasLongAdvance) {
+        mKernel->addScalar(iBuilder->getInt64Ty(), "CarryBlockIndex");
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -92,6 +95,11 @@ void CarryManager::finalizeCodeGen() {
     if (mHasLoop) {
         mKernel->setScalarField("selector", iBuilder->CreateXor(mLoopSelector, iBuilder->getInt32(1)));
     }
+    if (mHasLongAdvance) {
+        Value * idx = mKernel->getScalarField("CarryBlockIndex");
+        idx = iBuilder->CreateAdd(idx, iBuilder->getInt64(1));
+        mKernel->setScalarField("CarryBlockIndex", idx);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -107,6 +115,8 @@ void CarryManager::enterLoopScope(const PabloBlock * const scope) {
  * @brief enterLoopBody
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
+
+    assert (mHasLoop);
 
     if (mCarryInfo->hasSummary()) {
         PHINode * carrySummary = iBuilder->CreatePHI(mCarryPackType, 2, "summary");
@@ -365,6 +375,7 @@ Value * CarryManager::advanceCarryInCarryOut(const Advance * advance, Value * co
 Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned shiftAmount, Value * value) {
 
     assert (shiftAmount > mBitBlockWidth);
+    assert (mHasLongAdvance);
 
     Type * const streamVectorTy = iBuilder->getIntNTy(mBitBlockWidth);
     value = iBuilder->CreateBitCast(value, mBitBlockType);
@@ -398,8 +409,8 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned shiftAmount, Val
     assert (buffer->getType()->getPointerElementType() == mBitBlockType);
 
     // Create a mask to implement circular buffer indexing
-    Value * indexMask = iBuilder->getSize(nearest_pow2(entries) - 1);
-    Value * blockIndex = mKernel->getBlockNo();
+    Value * indexMask = iBuilder->getSize(nearest_pow2(entries) - 1);    
+    Value * blockIndex = mKernel->getScalarField("CarryBlockIndex");
     Value * carryIndex0 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(entries));
     Value * loadIndex0 = iBuilder->CreateAnd(carryIndex0, indexMask);
     Value * storeIndex = iBuilder->CreateAnd(blockIndex, indexMask);
@@ -560,8 +571,9 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
                 if (LLVM_UNLIKELY(ifDepth > 0)) {
                     Type * carryType = ArrayType::get(mBitBlockType, ceil_udiv(amount, std::pow(mBitBlockWidth, 2)));
                     type = StructType::get(carryType, type, nullptr);
-                    hasLongAdvances = true;
+                    hasLongAdvances = true;                    
                 }
+                mHasLongAdvance = true;
                 state.push_back(type);
             }
         } else if (LLVM_UNLIKELY(isa<ScanThru>(stmt) || isa<MatchStar>(stmt))) {
@@ -626,6 +638,7 @@ CarryManager::CarryManager(IDISA::IDISA_Builder * idb) noexcept
 , mCarryPackType(mBitBlockType)
 , mCarryPackPtr(nullptr)
 , mIfDepth(0)
+, mHasLongAdvance(false)
 , mHasLoop(false)
 , mLoopDepth(0)
 , mLoopSelector(nullptr) {

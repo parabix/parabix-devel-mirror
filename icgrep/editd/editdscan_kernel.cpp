@@ -25,7 +25,7 @@ void editdScanKernel::generateDoBlockMethod() {
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / mScanwordBitWidth;
     Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
     VectorType * scanwordVectorType =  VectorType::get(T, fieldCount);
-    Value * blockNo = getBlockNo();
+    Value * blockNo = getScalarField("BlockNo");
     Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));
     
     std::vector<Value * > matchWordVectors;
@@ -42,6 +42,8 @@ void editdScanKernel::generateDoBlockMethod() {
         }
         scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
     }
+
+    setScalarField("BlockNo", iBuilder->CreateAdd(blockNo, iBuilder->getSize(1)));
 }
 
 Function * editdScanKernel::generateScanWordRoutine(Module * m) const {
@@ -93,7 +95,7 @@ Function * editdScanKernel::generateScanWordRoutine(Module * m) const {
 editdScanKernel::editdScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist) :
 BlockOrientedKernel(iBuilder, "scanMatch",
               {Binding{iBuilder->getStreamSetTy(dist + 1), "matchResults"}},
-              {}, {}, {}, {}),
+              {}, {}, {}, {Binding{iBuilder->getSizeTy(), "BlockNo"}}),
 mEditDistance(dist),
 mScanwordBitWidth(iBuilder->getSizeTy()->getBitWidth()) {
 

@@ -152,10 +152,6 @@ protected:
     // Get the index of a named scalar field within the kernel state struct.
     llvm::ConstantInt * getScalarIndex(const std::string & name) const;
 
-    llvm::Value * getBlockNo() const;
-
-    void setBlockNo(llvm::Value * value) const;
-    
     // Get the value of a scalar field for a given instance.
     llvm::Value * getScalarField(const std::string & fieldName) const {
         return getScalarField(getSelf(), fieldName);
@@ -182,6 +178,8 @@ protected:
 
     llvm::Value * getOutputStream(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
 
+    llvm::Value * getInputStream(llvm::Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex) const;
+
     llvm::Value * getRawInputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
     llvm::Value * getRawOutputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
@@ -193,8 +191,6 @@ protected:
     llvm::Value * getScalarFieldPtr(llvm::Value * index) const {
         return getScalarFieldPtr(getSelf(), index);
     }
-
-    llvm::Value * getInputStreamSetPtr(const std::string & name, llvm::Value * blockNo) const;
 
     inline llvm::Value * getProcessedItemCount(const std::string & name) const {
         return getProcessedItemCount(getSelf(), name);
@@ -228,13 +224,8 @@ protected:
     llvm::BasicBlock * CreateBasicBlock(std::string && name) const;
 
     // Stream set helpers.
-//    llvm::Value * getStream(const std::string & name, llvm::Value * blockNo, llvm::Value * index) const;
-
-//    llvm::Value * getStream(const std::string & name, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const;
 
     llvm::Value * getStreamSetBufferPtr(const std::string & name) const;
-
-//    llvm::Value * getStreamSetBufferPtr(llvm::Value * index) const;
 
     llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & name) const;
 

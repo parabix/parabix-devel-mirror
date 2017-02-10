@@ -94,21 +94,21 @@ Value * ExternalFileBuffer::getStreamSetPtr(Value * self, Value * blockNo) const
     return iBuilder->CreateGEP(self, blockNo);
 }
 
-Value * ExternalFileBuffer::getLinearlyAccessibleItems(llvm::Value * fromPosition) const {
-    throw std::runtime_error("External buffers: getLinearlyAccessibleItems not supported.");
+Value * ExternalFileBuffer::getLinearlyAccessibleItems(llvm::Value *) const {
+    report_fatal_error("External buffers: getLinearlyAccessibleItems not supported.");
 }
 
 // Circular Buffer
 
-Value * CircularBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
-    assert (blockNo->getType()->isIntegerTy());
+Value * CircularBuffer::getStreamSetPtr(Value * self, Value * blockIndex) const {
+    assert (blockIndex->getType()->isIntegerTy());
     Value * offset = nullptr;
     if (mBufferBlocks == 1) {
         offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
     } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
-        offset = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks - 1));
+        offset = iBuilder->CreateAnd(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks - 1));
     } else {
-        offset = iBuilder->CreateURem(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks));
+        offset = iBuilder->CreateURem(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks));
     }
     return iBuilder->CreateGEP(self, offset);
 }
@@ -154,16 +154,16 @@ void CircularCopybackBuffer::createCopyBack(Value * self, Value * overFlowItems)
     iBuilder->SetInsertPoint(copyBackDone);
 }
 
-Value * CircularCopybackBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
-    assert (blockNo->getType()->isIntegerTy());
+Value * CircularCopybackBuffer::getStreamSetPtr(Value * self, Value * blockIndex) const {
+    assert (blockIndex->getType()->isIntegerTy());
     
     Value * offset = nullptr;
     if (mBufferBlocks == 1) {
         offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
     } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
-        offset = iBuilder->CreateAnd(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks - 1));
+        offset = iBuilder->CreateAnd(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks - 1));
     } else {
-        offset = iBuilder->CreateURem(blockNo, ConstantInt::get(blockNo->getType(), mBufferBlocks));
+        offset = iBuilder->CreateURem(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks));
     }
     return iBuilder->CreateGEP(self, offset);
 }
@@ -172,16 +172,31 @@ Value * CircularCopybackBuffer::getStreamSetPtr(Value * self, Value * blockNo) c
 
 // Expandable Buffer
 
-Value * ExpandableBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
+void ExpandableBuffer::ensureStreamCapacity(llvm::Value * self, llvm::Value * streamIndex) const {
+
+}
+
+llvm::Value * ExpandableBuffer::getStream(llvm::Value * self, Value * streamIndex, Value * blockIndex) const {
+    ensureStreamCapacity(self, streamIndex);
+
+
+
     return nullptr;
 }
 
-llvm::Value * ExpandableBuffer::getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const {
+llvm::Value * ExpandableBuffer::getStream(llvm::Value * self, llvm::Value * streamIndex, Value *blockIndex, Value *packIndex) const {
+    ensureStreamCapacity(self, streamIndex);
+
+
     return nullptr;
 }
 
-llvm::Value * ExpandableBuffer::getStream(llvm::Value * self, llvm::Value * blockNo, Value *index1, Value *index2) const {
-    return nullptr;
+Value * ExpandableBuffer::getStreamSetPtr(Value *, Value *) const {
+    report_fatal_error("Expandable buffers: getStreamSetPtr not supported.");
+}
+
+Value * ExpandableBuffer::getLinearlyAccessibleItems(llvm::Value *) const {
+    report_fatal_error("Expandable buffers: getLinearlyAccessibleItems not supported.");
 }
 
 // Constructors
@@ -209,10 +224,6 @@ CircularCopybackBuffer::CircularCopybackBuffer(IDISA::IDISA_Builder * b, llvm::T
 ExpandableBuffer::ExpandableBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::ExpandableBuffer, b, type, bufferBlocks, AddressSpace) {
 
-}
-
-Value * ExpandableBuffer::getLinearlyAccessibleItems(llvm::Value * fromPosition) const {
-    throw std::runtime_error("Expandable buffers: getLinearlyAccessibleItems not supported.");
 }
 
 inline Type * resolveStreamSetType(IDISA_Builder * const b, Type * const type) {

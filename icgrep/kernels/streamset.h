@@ -114,7 +114,7 @@ public:
     CircularBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
 
 protected:
-    llvm::Value * getStreamSetPtr(llvm::Value * bufferBasePtr, llvm::Value * blockNo) const override;
+    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
 };
     
 
@@ -138,7 +138,7 @@ public:
     
     
 protected:
-    llvm::Value * getStreamSetPtr(llvm::Value * bufferBasePtr, llvm::Value * blockNo) const override;
+    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
 private:
     size_t mOverflowBlocks;
 
@@ -153,15 +153,17 @@ public:
 
     ExpandableBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
 
-    llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index) const override;
+    llvm::Value * getStream(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
 
-    llvm::Value * getStream(llvm::Value * self, llvm::Value * blockNo, llvm::Value * index1, llvm::Value * index2) const override;
+    llvm::Value * getStream(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
 
     llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const override;
     
 protected:
 
-    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;
+    void ensureStreamCapacity(llvm::Value * self, llvm::Value * streamIndex) const;
+
+    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
 };
 
 }

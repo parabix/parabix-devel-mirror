@@ -12,8 +12,6 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 
-static const auto BLOCK_NO_SCALAR = "blockNo";
-
 static const auto DO_BLOCK_SUFFIX = "_DoBlock";
 
 static const auto FINAL_BLOCK_SUFFIX = "_FinalBlock";
@@ -107,7 +105,6 @@ void KernelBuilder::prepareKernel() {
     for (auto binding : mInternalScalars) {
         addScalar(binding.type, binding.name);
     }
-    addScalar(iBuilder->getSizeTy(), BLOCK_NO_SCALAR);
     addScalar(iBuilder->getSizeTy(), LOGICAL_SEGMENT_NO_SCALAR);
     addScalar(iBuilder->getInt1Ty(), TERMINATION_SIGNAL);
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, getName());
@@ -244,14 +241,6 @@ void KernelBuilder::releaseLogicalSegmentNo(Value * instance, Value * newCount) 
     iBuilder->CreateAtomicStoreRelease(newCount, getScalarFieldPtr(instance, LOGICAL_SEGMENT_NO_SCALAR));
 }
 
-Value * KernelBuilder::getBlockNo() const {
-    return getScalarField(mSelf, BLOCK_NO_SCALAR);
-}
-
-void KernelBuilder::setBlockNo(Value * value) const {
-    setScalarField(mSelf, BLOCK_NO_SCALAR, value);
-}
-
 inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bindings, const std::string & name, Value * itemCount) const {
     for (const Binding & b : bindings) {
         if (b.name == name) {
@@ -276,6 +265,13 @@ Value * KernelBuilder::getInputStream(const std::string & name, Value * streamIn
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
     return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
+}
+
+llvm::Value * KernelBuilder::getInputStream(Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex) const {
+    Value * blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
+    blockIndex = iBuilder->CreateAdd(blockIndex, blockAdjustment);
+    const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
+    return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex);
 }
 
 Value * KernelBuilder::getOutputStream(const std::string & name, Value * streamIndex) const {
@@ -325,10 +321,6 @@ Value * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) co
 
 Value * KernelBuilder::createGetAccumulatorCall(Value * self, const std::string & accumName) const {
     return iBuilder->CreateCall(getAccumulatorFunction(accumName), {self});
-}
-
-Value * KernelBuilder::getInputStreamSetPtr(const std::string & name, Value * blockNo) const {
-    return getInputStreamSetBuffer(name)->getStreamSetPtr(getStreamSetBufferPtr(name), blockNo);
 }
 
 BasicBlock * KernelBuilder::CreateBasicBlock(std::string && name) const {
@@ -384,7 +376,6 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
     BasicBlock * const segmentDone = CreateBasicBlock(getName() + "_segmentDone");
 
     ConstantInt * stride = iBuilder->getSize(iBuilder->getStride());
-    ConstantInt * strideBlocks = iBuilder->getSize(iBuilder->getStride() / iBuilder->getBitBlockWidth());
 
     Value * availablePos = producerPos[0];
     for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
@@ -404,14 +395,10 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
     iBuilder->CreateCondBr(notDone, strideLoopBody, stridesDone);
 
     iBuilder->SetInsertPoint(strideLoopBody);
-    Value * blockNo = getBlockNo();
 
     CreateDoBlockMethodCall();
 
-    setBlockNo(iBuilder->CreateAdd(blockNo, strideBlocks));
-
     // Update counts
-
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         Value * processed = getProcessedItemCount(mStreamSetInputs[i].name);
         processed = iBuilder->CreateAdd(processed, stride);

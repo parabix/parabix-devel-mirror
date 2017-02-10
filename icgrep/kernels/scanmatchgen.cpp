@@ -46,7 +46,7 @@ void ScanMatchKernel::generateDoBlockMethod() {
     IntegerType * T = iBuilder->getSizeTy();
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / T->getBitWidth();
     Type * scanwordVectorType =  VectorType::get(T, fieldCount);
-    Value * blockNo = getBlockNo();
+    Value * blockNo = getScalarField("BlockNo");
     Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));   
     Value * recordStart = getScalarField("LineStart");
     Value * recordNum = getScalarField("LineNum");
@@ -64,6 +64,7 @@ void ScanMatchKernel::generateDoBlockMethod() {
     }
     setScalarField("LineStart", recordStart);
     setScalarField("LineNum", recordNum);
+    setScalarField("BlockNo", iBuilder->CreateAdd(blockNo, iBuilder->getSize(1)));
 }
 
     

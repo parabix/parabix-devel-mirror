@@ -473,32 +473,38 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
             iBuilder->CreateStore(value, ptr);
 
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
-            PabloAST * const var = l->getExpr();
-            if (LLVM_UNLIKELY(!isa<Var>(var))) {
-                throw std::runtime_error("Lookahead operations may only be applied to input streams");
+            Var * var = nullptr;
+            PabloAST * stream = l->getExpr();
+            Value * index = iBuilder->getInt32(0);
+
+            if (LLVM_UNLIKELY(isa<Extract>(stream))) {
+                stream = cast<Extract>(stream)->getArray();
+                index = compileExpression(cast<Extract>(stream)->getIndex());
             }
-            unsigned index = 0;
-            for (; index < mKernel->getNumOfInputs(); ++index) {
-                if (mKernel->getInput(index) == var) {
-                    break;
+            if (LLVM_LIKELY(isa<Var>(stream))) {
+                var = cast<Var>(stream);
+                if (!var->isKernelParameter() || var->isReadNone()) {
+                    std::string tmp;
+                    raw_string_ostream out(tmp);
+                    out << "Lookahead operation cannot be applied to ";
+                    stmt->print(out);
+                    out << ": ";
+                    var->print(out);
+                    out << " is not an input stream";
+                    report_fatal_error(out.str());
                 }
             }
-            if (LLVM_UNLIKELY(index >= mKernel->getNumOfInputs())) {
-                throw std::runtime_error("Lookahead has an illegal Var operand");
-            }
-            const unsigned bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
-            const unsigned block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
-            std::string inputName = cast<Var>(var)->getName().str();
-            Value * blockNo = mKernel->getBlockNo();
-            Value * lookAhead_blockPtr  = mKernel->getInputStreamSetPtr(inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift)));
-            Value * lookAhead_inputPtr = iBuilder->CreateGEP(lookAhead_blockPtr, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
-            Value * lookAhead = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr);
+
+            const auto bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
+            const auto block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
+
+            Value * ptr = mKernel->getInputStream(iBuilder->getSize(block_shift), var->getName(), index);
+            Value * lookAhead = iBuilder->CreateBlockAlignedLoad(ptr);
             if (bit_shift == 0) {  // Simple case with no intra-block shifting.
                 value = lookAhead;
             } else { // Need to form shift result from two adjacent blocks.
-                Value * lookAhead_blockPtr1  = mKernel->getInputStreamSetPtr(inputName, iBuilder->CreateAdd(blockNo, iBuilder->getSize(block_shift + 1)));
-                Value * lookAhead_inputPtr1 = iBuilder->CreateGEP(lookAhead_blockPtr1, {iBuilder->getInt32(0), iBuilder->getInt32(index)});
-                Value * lookAhead1 = iBuilder->CreateBlockAlignedLoad(lookAhead_inputPtr1);
+                Value * ptr = mKernel->getInputStream(iBuilder->getSize(block_shift + 1), var->getName(), index);
+                Value * lookAhead1 = iBuilder->CreateBlockAlignedLoad(ptr);
                 if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
                     value = iBuilder->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));
                 } else {

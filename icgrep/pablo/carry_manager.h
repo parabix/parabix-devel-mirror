@@ -118,6 +118,8 @@ private:
 
     unsigned                                        mIfDepth;
 
+    bool                                            mHasLongAdvance;
+
     bool                                            mHasLoop;
     unsigned                                        mLoopDepth;
     llvm::Value *                                   mLoopSelector;

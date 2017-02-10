@@ -80,7 +80,6 @@ void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<
     Constant * Const3 = iBuilder->getSize(3);
     Constant * Const4 = iBuilder->getSize(4);
     Constant * tripleBlockSize = iBuilder->getSize(3 * iBuilder->getStride());
-    Constant * stride = iBuilder->getSize(iBuilder->getStride());
     Constant * packSize = iBuilder->getSize(PACK_SIZE);
     Constant * triplePackSize = iBuilder->getSize(3 * PACK_SIZE); // 3 packs per loop.
     UndefValue * undefPack = UndefValue::get(iBuilder->fwVectorType(8));
@@ -160,7 +159,6 @@ void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<
     processed = iBuilder->CreateAdd(processed, loopItemsToDo);
     setProcessedItemCount("sourceStream", processed);
     
-    setBlockNo(iBuilder->CreateUDiv(processed, stride));
     // We have produced 4 output bytes for every 3 input bytes.
     Value * totalProduced = iBuilder->CreateMul(iBuilder->CreateUDiv(processed, Const3), Const4);
     setProducedItemCount("expandedStream", totalProduced);
@@ -234,7 +232,6 @@ void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<
     processed = iBuilder->CreateAdd(processed, excessItems);
     setProcessedItemCount("sourceStream", processed);
 
-    setBlockNo(iBuilder->CreateUDiv(processed, stride));
     // We have produced 4 output bytes for every 3 input bytes.  If the number of input
     // bytes is not a multiple of 3, then we have one more output byte for each excess
     // input byte.
