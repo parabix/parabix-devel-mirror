@@ -62,7 +62,7 @@ void CarryManager::initializeCarryData(PabloKernel * const kernel) {
         mKernel->addScalar(iBuilder->getInt32Ty(), "selector");
     }
     if (mHasLongAdvance) {
-        mKernel->addScalar(iBuilder->getInt64Ty(), "CarryBlockIndex");
+        mKernel->addScalar(iBuilder->getSizeTy(), "CarryBlockIndex");
     }
 }
 
@@ -97,7 +97,7 @@ void CarryManager::finalizeCodeGen() {
     }
     if (mHasLongAdvance) {
         Value * idx = mKernel->getScalarField("CarryBlockIndex");
-        idx = iBuilder->CreateAdd(idx, iBuilder->getInt64(1));
+        idx = iBuilder->CreateAdd(idx, iBuilder->getSize(1));
         mKernel->setScalarField("CarryBlockIndex", idx);
     }
 }
