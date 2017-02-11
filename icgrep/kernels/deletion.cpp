@@ -100,4 +100,81 @@ DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, uns
     mDoBlockUpdatesProducedItemCountsAttribute = false;
 }
 
+    
+const unsigned PEXT_width = 64;
+
+inline std::vector<Value *> get_PEXT_masks(IDISA::IDISA_Builder * iBuilder, Value * del_mask) {
+    Value * m = iBuilder->fwCast(PEXT_width, iBuilder->simd_not(del_mask));
+    std::vector<Value *> masks;
+    for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/PEXT_width; i++) {
+        masks.push_back(iBuilder->CreateExtractElement(m, i));
+    }
+    return masks;
+}
+
+inline Value * apply_PEXT_deletion(IDISA::IDISA_Builder * iBuilder, const std::vector<Value *> & masks, Value * strm) {
+    Value * PEXT_func = nullptr;
+    if (PEXT_width == 64) PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_64);
+    else if (PEXT_width == 32) PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_32);
+    Value * v = iBuilder->fwCast(PEXT_width, strm);
+    Value * output = Constant::getNullValue(v->getType());
+    for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/PEXT_width; i++) {
+        Value * field = iBuilder->CreateExtractElement(v, i);
+        Value * compressed = iBuilder->CreateCall(PEXT_func, {field, masks[i]});
+        output = iBuilder->CreateInsertElement(output, compressed, i);
+    }
+    return output;
+}
+
+// Apply deletion to a set of stream_count input streams to produce a set of output streams.
+// Kernel inputs: stream_count data streams plus one del_mask stream
+// Outputs: the deleted streams, plus a partial sum popcount
+
+void DeleteByPEXTkernel::generateDoBlockMethod() {
+    Value * delMaskPtr = getInputStream("delMaskSet", iBuilder->getInt32(0));
+    Value * delMask = iBuilder->CreateBlockAlignedLoad(delMaskPtr);
+    const auto masks = get_PEXT_masks(iBuilder, delMask);
+    for (unsigned j = 0; j < mStreamCount; ++j) {
+        Value * inputStreamPtr = getInputStream("inputStreamSet", iBuilder->getInt32(j));
+        Value * input = iBuilder->CreateBlockAlignedLoad(inputStreamPtr);
+        Value * output = apply_PEXT_deletion(iBuilder, masks, input);
+        Value * outputStreamPtr = getOutputStream("outputStreamSet", iBuilder->getInt32(j));
+        iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(output), outputStreamPtr);
+    }
+    Value * delCount = partial_sum_popcount(iBuilder, mDelCountFieldWidth, apply_PEXT_deletion(iBuilder, masks, iBuilder->simd_not(delMask)));
+    Value * delCountPtr = getOutputStream("deletionCounts", iBuilder->getInt32(0));
+    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(delCount), delCountPtr);
+}
+
+void DeleteByPEXTkernel::generateFinalBlockMethod(Value * remainingBytes) {
+    IntegerType * vecTy = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
+    Value * remaining = iBuilder->CreateZExt(remainingBytes, vecTy);
+    Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
+    Value * const delmaskPtr = getInputStream("delMaskSet", iBuilder->getInt32(0));
+    Value * delMask = iBuilder->CreateOr(EOF_del, iBuilder->CreateBlockAlignedLoad(delmaskPtr));
+    const auto masks = get_PEXT_masks(iBuilder, delMask);
+    for (unsigned j = 0; j < mStreamCount; ++j) {
+        Value * inputStreamPtr = getInputStream("inputStreamSet", iBuilder->getInt32(j));
+        Value * input = iBuilder->CreateBlockAlignedLoad(inputStreamPtr);
+        Value * output = apply_PEXT_deletion(iBuilder, masks, input);
+        Value * outputStreamPtr = getOutputStream("outputStreamSet", iBuilder->getInt32(j));
+        iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(output), outputStreamPtr);
+    }
+    Value * delCount = partial_sum_popcount(iBuilder, mDelCountFieldWidth, apply_PEXT_deletion(iBuilder, masks, iBuilder->simd_not(delMask)));
+    Value * delCountPtr = getOutputStream("deletionCounts", iBuilder->getInt32(0));
+    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(delCount), delCountPtr);
+}
+
+DeleteByPEXTkernel::DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount)
+: BlockOrientedKernel(iBuilder, "PEXTdel",
+                      {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
+                          Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
+                      {Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet"},
+                          Binding{iBuilder->getStreamSetTy(), "deletionCounts"}},
+                      {}, {}, {})
+, mDelCountFieldWidth(fw)
+, mStreamCount(streamCount) {
+    mDoBlockUpdatesProducedItemCountsAttribute = false;
+}
+
 }

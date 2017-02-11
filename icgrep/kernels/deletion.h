@@ -37,6 +37,21 @@ private:
     const unsigned mStreamCount;
 };
 
+class DeleteByPEXTkernel : public BlockOrientedKernel {
+public:
+    
+    DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount);
+    
+protected:
+    
+    void generateDoBlockMethod() override;
+    
+    void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
+    
+private:
+    const unsigned mDelCountFieldWidth;
+    const unsigned mStreamCount;
+};
 }
     
 #endif
