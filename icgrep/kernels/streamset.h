@@ -57,7 +57,7 @@ public:
     
 protected:
 
-    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * type, unsigned blocks, unsigned AddressSpace);
+    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * baseType, llvm::Type * resolvedType, unsigned blocks, unsigned AddressSpace);
 
     // Get the buffer pointer for a given block of the stream.
     virtual llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const = 0;
@@ -159,11 +159,20 @@ public:
 
     llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const override;
     
+    void allocateBuffer() override;
+
 protected:
 
-    void ensureStreamCapacity(llvm::Value * self, llvm::Value * streamIndex) const;
-
     llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
+
+private:
+
+    std::pair<llvm::Value *, llvm::Value *> getExpandedStreamOffset(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const;
+
+private:
+
+    const uint64_t  mInitialCapacity;
+
 };
 
 }

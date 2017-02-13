@@ -528,9 +528,17 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
         mMarker[expr] = value;
         if (DebugOptionIsSet(DumpTrace)) {
             const String & name = isa<Var>(expr) ? cast<Var>(expr)->getName() : cast<Statement>(expr)->getName();
-            if (value->getType()->isVectorTy()) {
+            Type * type = value->getType();
+            if (type->isPointerTy()) {
+                type = type->getPointerElementType();
+                if (!type->isIntegerTy() && !type->isVectorTy()) {
+                    return;
+                }
+                value = iBuilder->CreateLoad(value);
+            }
+            if (type->isVectorTy()) {
                 iBuilder->CallPrintRegister(name.str(), value);
-            } else if (value->getType()->isIntegerTy()) {
+            } else if (type->isIntegerTy()) {
                 iBuilder->CallPrintInt(name.str(), value);
             }
         }

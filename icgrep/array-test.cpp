@@ -115,7 +115,7 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
     
     ExternalFileBuffer ByteStream(iBuilder, byteStreamTy);
     SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
-    SingleBlockBuffer matches(iBuilder, iBuilder->getStreamSetTy(count, 1));
+    ExpandableBuffer matches(iBuilder, iBuilder->getStreamSetTy(count, 1), 2);
 
     MMapSourceKernel mmapK(iBuilder); 
     mmapK.generateKernel({}, {&ByteStream});
@@ -151,7 +151,7 @@ MatchParens generateAlgorithm() {
     Module * M = new Module("mp", ctx);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    llvm::Function * f = pipeline(idb, 10);
+    llvm::Function * f = pipeline(idb, 2);
 
     verifyModule(*M, &dbgs());
 
