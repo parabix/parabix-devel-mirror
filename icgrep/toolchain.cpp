@@ -72,7 +72,9 @@ bool DebugOptionIsSet(DebugFlags flag) {return DebugOptions.isSet(flag);}
     
 #ifdef CUDA_ENABLED
 bool NVPTX;
+int GroupNum;
 static cl::opt<bool> USENVPTX("NVPTX", cl::desc("Run on GPU only."), cl::init(false));
+static cl::opt<int, true> GroupNumOption("group-num", cl::location(GroupNum), cl::desc("NUmber of groups declared on GPU"), cl::value_desc("positive integer"), cl::init(256));
 #endif
 
 }

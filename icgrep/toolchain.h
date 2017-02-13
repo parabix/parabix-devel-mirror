@@ -33,6 +33,7 @@ extern int BufferSegments;
 extern int ThreadNum;
 #ifdef CUDA_ENABLED
 extern bool NVPTX;
+extern int GroupNum;
 #endif
 }
 
