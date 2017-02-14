@@ -34,7 +34,7 @@ void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Val
     }
     
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateAnd(processed, blockItems), itemBytes);
-    Value * bytePtr = iBuilder->CreatePointerCast(getInputStream("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
+    Value * bytePtr = iBuilder->CreatePointerCast(getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
     bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
 
     iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
@@ -51,7 +51,7 @@ void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Val
         
         // Calculate from the updated value of processed;
         byteOffset = iBuilder->CreateMul(iBuilder->CreateAnd(processed, blockItems), itemBytes);
-        Value * bytePtr = iBuilder->CreatePointerCast(getInputStream("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
+        Value * bytePtr = iBuilder->CreatePointerCast(getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
         bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
 
         itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
@@ -104,7 +104,7 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
     }
     
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-    Value * bytePtr = iBuilder->CreatePointerCast(getInputStream("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
+    Value * bytePtr = iBuilder->CreatePointerCast(getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
     bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
 
     iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);
@@ -122,7 +122,7 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
         
         // Calculate from the updated value of processed;
         byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-        Value * bytePtr = iBuilder->CreatePointerCast(getInputStream("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
+        Value * bytePtr = iBuilder->CreatePointerCast(getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
         bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
         itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
         iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);

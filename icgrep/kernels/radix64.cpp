@@ -99,8 +99,8 @@ void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<
     Value * loopItemsToDo = iBuilder->CreateSub(itemsAvail, excessItems);
 
     // A block is made up of 8 packs.  Get the pointer to the first pack (changes the type of the pointer only).
-    Value * sourcePackPtr = getInputStream("sourceStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
-    Value * outputPackPtr = getOutputStream("expandedStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
+    Value * sourcePackPtr = getInputStreamPackPtr("sourceStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
+    Value * outputPackPtr = getOutputStreamPackPtr("expandedStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
 
     Value * hasFullLoop = iBuilder->CreateICmpUGE(loopItemsToDo, triplePackSize);
 
@@ -283,11 +283,9 @@ inline Value * radix64Kernel::processPackData(llvm::Value * bytepack) const {
 
 void radix64Kernel::generateDoBlockMethod() {
     for (unsigned i = 0; i < 8; i++) {
-        Value * expandedStream = getInputStream("expandedStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
-        Value * bytepack = iBuilder->CreateBlockAlignedLoad(expandedStream);
+        Value * bytepack = loadInputStreamPack("expandedStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
         Value * radix64pack = processPackData(bytepack);
-        Value * radix64stream = getOutputStream("radix64stream",iBuilder->getInt32(0), iBuilder->getInt32(i));
-        iBuilder->CreateBlockAlignedStore(radix64pack, radix64stream);
+        storeOutputStreamPack("radix64stream",iBuilder->getInt32(0), iBuilder->getInt32(i), radix64pack);
     }
     Value * produced = getProducedItemCount("radix64stream");
     produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
@@ -315,12 +313,9 @@ void radix64Kernel::generateFinalBlockMethod(Value * remainingBytes) {
     idx->addIncoming(ConstantInt::getNullValue(iBuilder->getInt32Ty()), entry);
     loopRemain->addIncoming(remainingBytes, entry);
 
-    Value * expandedStreamLoopPtr = getInputStream("expandedStream", iBuilder->getInt32(0), idx);
-    Value * bytepack = iBuilder->CreateBlockAlignedLoad(expandedStreamLoopPtr);
+    Value * bytepack = loadInputStreamPack("expandedStream", iBuilder->getInt32(0), idx);
     Value * radix64pack = processPackData(bytepack);
-
-    Value * radix64streamPtr = getOutputStream("radix64stream", iBuilder->getInt32(0), idx);
-    iBuilder->CreateBlockAlignedStore(radix64pack, radix64streamPtr);
+    storeOutputStreamPack("radix64stream", iBuilder->getInt32(0), idx, radix64pack);
 
     Value* nextIdx = iBuilder->CreateAdd(idx, ConstantInt::get(iBuilder->getInt32Ty(), 1));
     idx->addIncoming(nextIdx, radix64_loop);
@@ -356,16 +351,14 @@ inline llvm::Value* base64Kernel::processPackData(llvm::Value* bytepack) const {
     Value * t0_51 = iBuilder->simd_add(8, t0_25, iBuilder->simd_and(mask_gt_25, iBuilder->simd_fill(8, iBuilder->getInt8(6))));
     Value * t0_61 = iBuilder->simd_sub(8, t0_51, iBuilder->simd_and(mask_gt_51, iBuilder->simd_fill(8, iBuilder->getInt8(75))));
     Value * t0_62 = iBuilder->simd_sub(8, t0_61, iBuilder->simd_and(mask_eq_62, iBuilder->simd_fill(8, iBuilder->getInt8(15))));
-    return iBuilder->simd_sub(8, t0_62, iBuilder->simd_and(mask_eq_63, iBuilder->simd_fill(8, iBuilder->getInt8(12))));
+    return iBuilder->bitCast(iBuilder->simd_sub(8, t0_62, iBuilder->simd_and(mask_eq_63, iBuilder->simd_fill(8, iBuilder->getInt8(12)))));
 }
 
 void base64Kernel::generateDoBlockMethod() {
     for (unsigned i = 0; i < 8; i++) {
-        Value * radix64stream_ptr = getInputStream("radix64stream", iBuilder->getInt32(0), iBuilder->getInt32(i));
-        Value * bytepack = iBuilder->CreateBlockAlignedLoad(radix64stream_ptr);
-        Value* base64pack = processPackData(bytepack);
-        Value * base64stream_ptr = getOutputStream("base64stream", iBuilder->getInt32(0), iBuilder->getInt32(i));
-        iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(base64pack), base64stream_ptr);
+        Value * bytepack = loadInputStreamPack("radix64stream", iBuilder->getInt32(0), iBuilder->getInt32(i));
+        Value * base64pack = processPackData(bytepack);
+        storeOutputStreamPack("base64stream", iBuilder->getInt32(0), iBuilder->getInt32(i), base64pack);
     }
     Value * produced = getProducedItemCount("base64stream");
     produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
@@ -455,11 +448,9 @@ void base64Kernel::generateFinalBlockMethod(Value * remainingBytes) {
     PHINode * loopRemain = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
     idx->addIncoming(ConstantInt::getNullValue(iBuilder->getInt32Ty()), entry);
     loopRemain->addIncoming(remainingBytes, entry);
-    Value * radix64streamPtr = getInputStream("radix64stream", iBuilder->getInt32(0), idx);
-    Value * bytepack = iBuilder->CreateBlockAlignedLoad(radix64streamPtr);
+    Value * bytepack = loadInputStreamPack("radix64stream", iBuilder->getInt32(0), idx);
     Value * base64pack = processPackData(bytepack);
-    Value * base64streamPtr = getOutputStream("base64stream", iBuilder->getInt32(0), idx);
-    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(base64pack), base64streamPtr);
+    storeOutputStreamPack("base64stream", iBuilder->getInt32(0), idx, base64pack);
     idx->addIncoming(iBuilder->CreateAdd(idx, ConstantInt::get(iBuilder->getInt32Ty(), 1)), base64_loop);
     Value* remainAfterLoop = iBuilder->CreateSub(loopRemain, packSize);
     loopRemain->addIncoming(remainAfterLoop, base64_loop);
@@ -471,7 +462,7 @@ void base64Kernel::generateFinalBlockMethod(Value * remainingBytes) {
     iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(padBytes, iBuilder->getSize(0)), fbExit, doPadding);
 
     iBuilder->SetInsertPoint(doPadding);
-    Value * i8output_ptr = getOutputStream("base64stream", iBuilder->getInt32(0));
+    Value * i8output_ptr = getOutputStreamBlockPtr("base64stream", iBuilder->getInt32(0));
     i8output_ptr = iBuilder->CreatePointerCast(i8output_ptr, iBuilder->getInt8PtrTy());
     iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, remainingBytes));
     iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(3)), fbExit, doPadding2);

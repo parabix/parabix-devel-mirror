@@ -50,8 +50,8 @@ void ScanMatchKernel::generateDoBlockMethod() {
     Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));   
     Value * recordStart = getScalarField("LineStart");
     Value * recordNum = getScalarField("LineNum");
-    Value * matches = iBuilder->CreateBlockAlignedLoad(getInputStream("matchResults", iBuilder->getInt32(0)));
-    Value * linebreaks = iBuilder->CreateBlockAlignedLoad(getInputStream("matchResults", iBuilder->getInt32(1)));
+    Value * matches = loadInputStreamBlock("matchResults", iBuilder->getInt32(0));
+    Value * linebreaks = loadInputStreamBlock("matchResults", iBuilder->getInt32(1));
     Value * matchWordVector = iBuilder->CreateBitCast(matches, scanwordVectorType);
     Value * breakWordVector = iBuilder->CreateBitCast(linebreaks, scanwordVectorType);
     for(unsigned i = 0; i < fieldCount; ++i){

@@ -28,7 +28,7 @@ void editdGPUKernel::generateDoBlockMethod() {
     Value * pattLen = iBuilder->getInt32(mPatternLen + 1);
     Value * pattPos = iBuilder->getInt32(0);
     Value * pattBuf = getScalarField("pattStream");
-    Value * stideCarryArr = getScalarField("srideCarry");
+    Value * strideCarryArr = getScalarField("strideCarry");
    
     unsigned carryIdx = 0;
 
@@ -43,8 +43,7 @@ void editdGPUKernel::generateDoBlockMethod() {
     Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
     Value * pattCh = iBuilder->CreateLoad(pattPtr);
     Value * pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-    Value * pattStreamPtr = getInputStream("CCStream", iBuilder->CreateZExt(pattIdx, int32ty));
-    Value * pattStream = iBuilder->CreateLoad(pattStreamPtr);
+    Value * pattStream = loadInputStreamBlock("CCStream", iBuilder->CreateZExt(pattIdx, int32ty));
     pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
 
     e[0][0] = pattStream;
@@ -55,14 +54,13 @@ void editdGPUKernel::generateDoBlockMethod() {
         pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
         pattCh = iBuilder->CreateLoad(pattPtr);
         pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-        pattStreamPtr = getInputStream("CCStream", iBuilder->CreateZExt(pattIdx, int32ty));
-        pattStream = iBuilder->CreateLoad(pattStreamPtr);
-        bitblock_advance_ci_co(iBuilder, e[i-1][0], 1, stideCarryArr, carryIdx++, adv, calculated, i-1, 0);
+        pattStream = loadInputStreamBlock("CCStream", iBuilder->CreateZExt(pattIdx, int32ty));
+        bitblock_advance_ci_co(iBuilder, e[i-1][0], 1, strideCarryArr, carryIdx++, adv, calculated, i-1, 0);
         e[i][0] = iBuilder->CreateAnd(adv[i-1][0], pattStream); 
         for(unsigned j = 1; j<= mEditDistance; j++){
-            bitblock_advance_ci_co(iBuilder, e[i-1][j], 1, stideCarryArr, carryIdx++, adv, calculated, i-1, j);
-            bitblock_advance_ci_co(iBuilder, e[i-1][j-1], 1, stideCarryArr, carryIdx++, adv, calculated, i-1, j-1);
-            bitblock_advance_ci_co(iBuilder, e[i][j-1], 1, stideCarryArr, carryIdx++, adv, calculated, i, j-1);
+            bitblock_advance_ci_co(iBuilder, e[i-1][j], 1, strideCarryArr, carryIdx++, adv, calculated, i-1, j);
+            bitblock_advance_ci_co(iBuilder, e[i-1][j-1], 1, strideCarryArr, carryIdx++, adv, calculated, i-1, j-1);
+            bitblock_advance_ci_co(iBuilder, e[i][j-1], 1, strideCarryArr, carryIdx++, adv, calculated, i, j-1);
             Value * tmp1 = iBuilder->CreateAnd(adv[i-1][j], pattStream);
             Value * tmp2 = iBuilder->CreateAnd(adv[i-1][j-1], iBuilder->CreateNot(pattStream));
             Value * tmp3 = iBuilder->CreateOr(adv[i][j-1], e[i-1][j-1]);
@@ -70,11 +68,9 @@ void editdGPUKernel::generateDoBlockMethod() {
         }
         pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
     }
-    Value * ptr = getOutputStream("ResultStream", iBuilder->getInt32(0));
-    iBuilder->CreateStore(e[mPatternLen-1][0], ptr);
+    storeOutputStreamBlock("ResultStream", iBuilder->getInt32(0), e[mPatternLen-1][0]);
     for(unsigned j = 1; j<= mEditDistance; j++){
-        ptr = getOutputStream("ResultStream", iBuilder->getInt32(j));
-        iBuilder->CreateStore(iBuilder->CreateAnd(e[mPatternLen - 1][j], iBuilder->CreateNot(e[mPatternLen - 1][j - 1])), ptr);
+        storeOutputStreamBlock("ResultStream", iBuilder->getInt32(j), iBuilder->CreateAnd(e[mPatternLen - 1][j], iBuilder->CreateNot(e[mPatternLen - 1][j - 1])));
     }
 }
 
@@ -88,7 +84,7 @@ BlockOrientedKernel(b, "editd_gpu",
               {Binding{b->getStreamSetTy(4), "CCStream"}},
               {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
               {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},
-              Binding{PointerType::get(ArrayType::get(b->getBitBlockType(), pattLen * (dist + 1) * 4), 0), "srideCarry"}},
+              Binding{PointerType::get(ArrayType::get(b->getBitBlockType(), pattLen * (dist + 1) * 4), 0), "strideCarry"}},
               {},
               {Binding{b->getBitBlockType(), "EOFmask"}})
 , mEditDistance(dist)

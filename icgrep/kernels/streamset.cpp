@@ -20,20 +20,16 @@ using namespace parabix;
 using namespace llvm;
 using namespace IDISA;
 
-ArrayType * resolveStreamSetType(IDISA_Builder * const b, Type * const type);
-
-StructType * resolveExpandableStreamSetType(IDISA_Builder * const b, Type * const type);
-
 void StreamSetBuffer::allocateBuffer() {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks));
 }
 
-Value * StreamSetBuffer::getStream(Value * self, Value * streamIndex, Value * blockIndex) const {
-    return iBuilder->CreateGEP(getStreamSetPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex});
+Value * StreamSetBuffer::getStreamBlockPtr(Value * self, Value * streamIndex, Value * blockIndex) const {
+    return iBuilder->CreateGEP(getStreamSetBlockPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex});
 }
 
-Value * StreamSetBuffer::getStream(Value * self, Value * streamIndex, Value * blockIndex, Value * packIndex) const {
-    return iBuilder->CreateGEP(getStreamSetPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex, packIndex});
+Value * StreamSetBuffer::getStreamPackPtr(Value * self, Value * streamIndex, Value * blockIndex, Value * packIndex) const {
+    return iBuilder->CreateGEP(getStreamSetBlockPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex, packIndex});
 }
 
 /**
@@ -45,8 +41,8 @@ Value * StreamSetBuffer::getStream(Value * self, Value * streamIndex, Value * bl
  */
 Value * StreamSetBuffer::getRawItemPointer(Value * self, Value * streamIndex, Value * absolutePosition) const {
     Value * ptr = self;
-    if (!isa<ConstantInt>(streamIndex) || !cast<ConstantInt>(streamIndex)->isZero()) {
-        ptr = iBuilder->CreateGEP(ptr, {ConstantInt::getNullValue(streamIndex->getType()), streamIndex});
+    if (isa<ConstantInt>(streamIndex) && cast<ConstantInt>(streamIndex)->isZero()) {
+        ptr = iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), streamIndex});
     }
     IntegerType * const ty = cast<IntegerType>(mBaseType->getArrayElementType()->getVectorElementType());
     ptr = iBuilder->CreatePointerCast(ptr, ty->getPointerTo());
@@ -77,7 +73,7 @@ Value * StreamSetBuffer::getLinearlyAccessibleItems(llvm::Value * fromPosition) 
 // Single Block Buffer
 
 // For a single block buffer, the block pointer is always the buffer base pointer.
-Value * SingleBlockBuffer::getStreamSetPtr(Value * self, Value *) const {
+Value * SingleBlockBuffer::getStreamSetBlockPtr(Value * self, Value *) const {
     return self;
 }
 
@@ -94,7 +90,7 @@ void ExternalFileBuffer::allocateBuffer() {
     report_fatal_error("External buffers cannot be allocated.");
 }
 
-Value * ExternalFileBuffer::getStreamSetPtr(Value * self, Value * blockNo) const {
+Value * ExternalFileBuffer::getStreamSetBlockPtr(Value * self, Value * blockNo) const {
     return iBuilder->CreateGEP(self, blockNo);
 }
 
@@ -104,12 +100,12 @@ Value * ExternalFileBuffer::getLinearlyAccessibleItems(llvm::Value *) const {
 
 // Circular Buffer
 
-Value * CircularBuffer::getStreamSetPtr(Value * self, Value * blockIndex) const {
+Value * CircularBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
     assert (blockIndex->getType()->isIntegerTy());
     Value * offset = nullptr;
     if (mBufferBlocks == 1) {
         offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
-    } else if (LLVM_LIKELY((mBufferBlocks & (mBufferBlocks - 1)) == 0)) { // is power of 2
+    } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
         offset = iBuilder->CreateAnd(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks - 1));
     } else {
         offset = iBuilder->CreateURem(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks));
@@ -148,7 +144,7 @@ void CircularCopybackBuffer::createCopyBack(Value * self, Value * overFlowItems)
     Value * partialBlockTargetPtr = iBuilder->CreateGEP(self, overFlowBlocks);
     Value * partialBlockSourcePtr = iBuilder->CreateGEP(overFlowAreaPtr, overFlowBlocks);
     Value * copyBits = iBuilder->CreateMul(overFlowItems, iBuilder->getSize(fieldWidth));
-    Value * copyBytes = iBuilder->CreateUDiv(iBuilder->CreateAdd(copyBits, iBuilder->getSize(7)), iBuilder->getSize(8));
+    Value * copyBytes = iBuilder->CreateLShr(iBuilder->CreateAdd(copyBits, iBuilder->getSize(7)), iBuilder->getSize(3));
     for (unsigned strm = 0; strm < numStreams; strm++) {
         Value * strmTargetPtr = iBuilder->CreateGEP(partialBlockTargetPtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
         Value * strmSourcePtr = iBuilder->CreateGEP(partialBlockSourcePtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
@@ -158,13 +154,13 @@ void CircularCopybackBuffer::createCopyBack(Value * self, Value * overFlowItems)
     iBuilder->SetInsertPoint(copyBackDone);
 }
 
-Value * CircularCopybackBuffer::getStreamSetPtr(Value * self, Value * blockIndex) const {
+Value * CircularCopybackBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
     assert (blockIndex->getType()->isIntegerTy());
     
     Value * offset = nullptr;
     if (mBufferBlocks == 1) {
         offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
-    } else if (LLVM_LIKELY((mBufferBlocks & (mBufferBlocks - 1)) == 0)) { // is power of 2
+    } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
         offset = iBuilder->CreateAnd(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks - 1));
     } else {
         offset = iBuilder->CreateURem(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks));
@@ -176,98 +172,27 @@ Value * CircularCopybackBuffer::getStreamSetPtr(Value * self, Value * blockIndex
 
 // Expandable Buffer
 
-void ExpandableBuffer::allocateBuffer() {
-    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType());
-    Value * const capacityPtr = iBuilder->CreateGEP(mStreamSetBufferPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    iBuilder->CreateStore(iBuilder->getSize(mInitialCapacity), capacityPtr);
-    Type * const bufferType = getType()->getStructElementType(1)->getPointerElementType();
-    ConstantInt * const size = iBuilder->getSize(mBufferBlocks * mInitialCapacity);
-    Value * const ptr = iBuilder->CreateAlignedMalloc(bufferType, size, iBuilder->getCacheAlignment());
-    const auto alignment = bufferType->getPrimitiveSizeInBits() / 8;
-    iBuilder->CreateMemZero(ptr, size, alignment);
-    Value * const streamSetPtr = iBuilder->CreateGEP(mStreamSetBufferPtr, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
-    iBuilder->CreateStore(ptr, streamSetPtr);
+void ExpandableBuffer::ensureStreamCapacity(llvm::Value * self, llvm::Value * streamIndex) const {
+
 }
 
-std::pair<Value *, Value *> ExpandableBuffer::getExpandedStreamOffset(llvm::Value * self, llvm::Value * streamIndex, Value * blockIndex) const {
+llvm::Value * ExpandableBuffer::getStreamBlockPtr(llvm::Value * self, Value * streamIndex, Value * blockIndex) const {
+    ensureStreamCapacity(self, streamIndex);
 
-    // MDNode *Weights = MDBuilder(Ctx).createBranchWeights(42, 13);
 
-    // ENTRY
-    Value * const capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    Value * const capacity = iBuilder->CreateLoad(capacityPtr);
-    Value * const streamSetPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
-    Value * const streamSet = iBuilder->CreateLoad(streamSetPtr);
 
-    // Are we guaranteed that we can access this stream?
-    if (LLVM_UNLIKELY(isa<ConstantInt>(streamIndex))) {
-        if (LLVM_LIKELY(cast<ConstantInt>(streamIndex)->getLimitedValue() < mInitialCapacity)) {
-            return {streamSet, capacity};
-        }
-    }
-
-    BasicBlock * const entry = iBuilder->GetInsertBlock();
-    BasicBlock * const expand = BasicBlock::Create(iBuilder->getContext(), "expand", entry->getParent());
-    BasicBlock * const resume = BasicBlock::Create(iBuilder->getContext(), "resume", entry->getParent());
-
-    assert (streamIndex->getType() == capacity->getType());
-    Value * cond = iBuilder->CreateICmpULT(streamIndex, capacity);
-    iBuilder->CreateCondBr(cond, resume, expand);
-    // EXPAND
-    iBuilder->SetInsertPoint(expand);
-    /// TODO: this should call a function rather than be inlined into the block. REVISIT once tested.
-    Value * newCapacity = iBuilder->CreateMul(streamIndex, iBuilder->getSize(2));
-    iBuilder->CreateStore(newCapacity, capacityPtr);
-    Type * bufferType = getType()->getStructElementType(1)->getPointerElementType();
-    Value * size = iBuilder->CreateMul(newCapacity, iBuilder->getSize(mBufferBlocks));
-    Value * newStreamSet = iBuilder->CreateAlignedMalloc(bufferType, size, iBuilder->getCacheAlignment());
-    iBuilder->CreateStore(newStreamSet, streamSetPtr);
-    Value * const diffCapacity = iBuilder->CreateSub(newCapacity, capacity);
-    const auto alignment = bufferType->getPrimitiveSizeInBits() / 8;
-    for (unsigned i = 0; i < mBufferBlocks; ++i) {
-        ConstantInt * const offset = iBuilder->getSize(i);
-        Value * srcOffset = iBuilder->CreateMul(capacity, offset);
-        Value * srcPtr = iBuilder->CreateGEP(streamSet, srcOffset);
-        Value * destOffset = iBuilder->CreateMul(newCapacity, offset);
-        Value * destPtr = iBuilder->CreateGEP(newStreamSet, destOffset);
-        iBuilder->CreateMemCpy(destPtr, srcPtr, capacity, alignment);
-        Value * destZeroOffset = iBuilder->CreateAdd(destOffset, capacity);
-        Value * destZeroPtr = iBuilder->CreateGEP(newStreamSet, destZeroOffset);
-        iBuilder->CreateMemZero(destZeroPtr, diffCapacity, alignment);
-    }
-
-    iBuilder->CreateAlignedFree(streamSet);
-    iBuilder->CreateBr(resume);
-    // RESUME
-    iBuilder->SetInsertPoint(resume);
-
-    PHINode * phiStreamSet = iBuilder->CreatePHI(streamSet->getType(), 2);
-    phiStreamSet->addIncoming(streamSet, entry);
-    phiStreamSet->addIncoming(newStreamSet, expand);
-
-    PHINode * phiCapacity = iBuilder->CreatePHI(capacity->getType(), 2);
-    phiCapacity->addIncoming(capacity, entry);
-    phiCapacity->addIncoming(newCapacity, expand);
-
-    Value * offset = iBuilder->CreateAdd(iBuilder->CreateMul(blockIndex, phiCapacity), streamIndex);
-
-    return {phiStreamSet, offset};
+    return nullptr;
 }
 
-llvm::Value * ExpandableBuffer::getStream(llvm::Value * self, Value * streamIndex, Value * blockIndex) const {
-    Value * ptr, * offset;
-    std::tie(ptr, offset) = getExpandedStreamOffset(self, streamIndex, blockIndex);
-    return iBuilder->CreateGEP(ptr, offset);
+llvm::Value * ExpandableBuffer::getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, Value *blockIndex, Value *packIndex) const {
+    ensureStreamCapacity(self, streamIndex);
+
+
+    return nullptr;
 }
 
-llvm::Value * ExpandableBuffer::getStream(llvm::Value * self, llvm::Value * streamIndex, Value * blockIndex, Value * packIndex) const {
-    Value * ptr, * offset;
-    std::tie(ptr, offset) = getExpandedStreamOffset(self, streamIndex, blockIndex);
-    return iBuilder->CreateGEP(ptr, {offset, packIndex});
-}
-
-Value * ExpandableBuffer::getStreamSetPtr(Value *, Value *) const {
-    report_fatal_error("Expandable buffers: getStreamSetPtr not supported.");
+Value * ExpandableBuffer::getStreamSetBlockPtr(Value *, Value *) const {
+    report_fatal_error("Expandable buffers: getStreamSetBlockPtr not supported.");
 }
 
 Value * ExpandableBuffer::getLinearlyAccessibleItems(llvm::Value *) const {
@@ -275,45 +200,33 @@ Value * ExpandableBuffer::getLinearlyAccessibleItems(llvm::Value *) const {
 }
 
 // Constructors
+
 SingleBlockBuffer::SingleBlockBuffer(IDISA::IDISA_Builder * b, llvm::Type * type)
-: StreamSetBuffer(BufferKind::BlockBuffer, b, type, resolveStreamSetType(b, type), 1, 0) {
+: StreamSetBuffer(BufferKind::BlockBuffer, b, type, 1, 0) {
 
 }
 
 ExternalFileBuffer::ExternalFileBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::ExternalFileBuffer, b, type, resolveStreamSetType(b, type), 0, AddressSpace) {
+: StreamSetBuffer(BufferKind::ExternalFileBuffer, b, type, 0, AddressSpace) {
 
 }
 
 CircularBuffer::CircularBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::CircularBuffer, b, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace) {
+: StreamSetBuffer(BufferKind::CircularBuffer, b, type, bufferBlocks, AddressSpace) {
 
 }
 
 CircularCopybackBuffer::CircularCopybackBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::CircularCopybackBuffer, b, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace), mOverflowBlocks(overflowBlocks) {
+: StreamSetBuffer(BufferKind::CircularCopybackBuffer, b, type, bufferBlocks, AddressSpace), mOverflowBlocks(overflowBlocks) {
 
 }
 
 ExpandableBuffer::ExpandableBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::ExpandableBuffer, b, type, resolveExpandableStreamSetType(b, type), bufferBlocks, AddressSpace)
-, mInitialCapacity(type->getArrayNumElements()) {
+: StreamSetBuffer(BufferKind::ExpandableBuffer, b, type, bufferBlocks, AddressSpace) {
 
 }
 
-inline StreamSetBuffer::StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, Type * baseType, Type * resolvedType, unsigned blocks, unsigned AddressSpace)
-: mBufferKind(k)
-, iBuilder(b)
-, mType(resolvedType)
-, mBufferBlocks(blocks)
-, mAddressSpace(AddressSpace)
-, mStreamSetBufferPtr(nullptr)
-, mBaseType(baseType) {
-
-}
-
-// Helper routines
-ArrayType * resolveStreamSetType(IDISA_Builder * const b, Type * const type) {
+inline Type * resolveStreamSetType(IDISA_Builder * const b, Type * const type) {
     if (type->isArrayTy()) {
         Type * ty = type->getArrayElementType();
         if (LLVM_LIKELY(ty->isVectorTy() && ty->getVectorNumElements() == 0)) {
@@ -322,7 +235,7 @@ ArrayType * resolveStreamSetType(IDISA_Builder * const b, Type * const type) {
                 const auto fieldWidth = cast<IntegerType>(ty)->getBitWidth();
                 ty = b->getBitBlockType();
                 if (fieldWidth != 1) {
-                    ty = ArrayType::get(ty, fieldWidth);
+                    ty = llvm::ArrayType::get(ty, fieldWidth);
                 }
                 return ArrayType::get(ty, type->getArrayNumElements());
             }
@@ -335,24 +248,13 @@ ArrayType * resolveStreamSetType(IDISA_Builder * const b, Type * const type) {
     report_fatal_error(out.str());
 }
 
-StructType * resolveExpandableStreamSetType(IDISA_Builder * const b, Type * const type) {
-    if (type->isArrayTy()) {
-        Type * ty = type->getArrayElementType();
-        if (LLVM_LIKELY(ty->isVectorTy() && ty->getVectorNumElements() == 0)) {
-            ty = ty->getVectorElementType();
-            if (LLVM_LIKELY(ty->isIntegerTy())) {
-                const auto fieldWidth = cast<IntegerType>(ty)->getBitWidth();
-                ty = b->getBitBlockType();
-                if (fieldWidth != 1) {
-                    ty = ArrayType::get(ty, fieldWidth);
-                }
-                return StructType::get(b->getSizeTy(), ty->getPointerTo(), nullptr);
-            }
-        }
-    }
-    std::string tmp;
-    raw_string_ostream out(tmp);
-    type->print(out);
-    out << " is an unvalid stream set buffer type.";
-    report_fatal_error(out.str());
+StreamSetBuffer::StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, Type * type, unsigned blocks, unsigned AddressSpace)
+: mBufferKind(k)
+, iBuilder(b)
+, mType(resolveStreamSetType(b, type))
+, mBufferBlocks(blocks)
+, mAddressSpace(AddressSpace)
+, mStreamSetBufferPtr(nullptr)
+, mBaseType(type) {
+
 }

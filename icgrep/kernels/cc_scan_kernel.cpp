@@ -25,8 +25,7 @@ void CCScanKernel::generateDoBlockMethod() {
     
     std::vector<Value * > matchWordVectors;
     for(unsigned d = 0; d < mStreamNum; d++) {
-        Value * ptr = getInputStream("matchResults", iBuilder->getInt32(d));
-        Value * matches = iBuilder->CreateBlockAlignedLoad(ptr);
+        Value * matches = loadInputStreamBlock("matchResults", iBuilder->getInt32(d));
         matchWordVectors.push_back(iBuilder->CreateBitCast(matches, scanwordVectorType));
     }
     

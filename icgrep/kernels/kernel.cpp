@@ -255,35 +255,51 @@ inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bin
     report_fatal_error("Error: no binding in " + getName() + " for " + name);
 }
 
-Value * KernelBuilder::getInputStream(const std::string & name, Value * streamIndex) const {
+Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * streamIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
-    return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex);
+    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex);
 }
 
-Value * KernelBuilder::getInputStream(const std::string & name, Value * streamIndex, Value * packIndex) const {
+Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * streamIndex) const {
+    return iBuilder->CreateBlockAlignedLoad(getInputStreamBlockPtr(name, streamIndex));
+}
+
+Value * KernelBuilder::getInputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
-    return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
+    return buf->getStreamPackPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
 }
 
-llvm::Value * KernelBuilder::getInputStream(Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex) const {
+Value * KernelBuilder::loadInputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex) const {
+    return iBuilder->CreateBlockAlignedLoad(getInputStreamPackPtr(name, streamIndex, packIndex));
+}
+
+llvm::Value * KernelBuilder::getAdjustedInputStreamBlockPtr(Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex) const {
     Value * blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     blockIndex = iBuilder->CreateAdd(blockIndex, blockAdjustment);
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
-    return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex);
+    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex);
 }
 
-Value * KernelBuilder::getOutputStream(const std::string & name, Value * streamIndex) const {
+Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value * streamIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetOutputs, name, getProducedItemCount(name));
     const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
-    return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex);
+    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex);
 }
 
-Value * KernelBuilder::getOutputStream(const std::string & name, Value * streamIndex, Value * packIndex) const {
+void KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, Value * toStore) const {
+    return iBuilder->CreateBlockAlignedStore(toStore, getOutputStreamBlockPtr(name, streamIndex));
+}
+
+Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetOutputs, name, getProducedItemCount(name));
     const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
-    return buf->getStream(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
+    return buf->getStreamPackPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
+}
+
+void KernelBuilder::storeOutputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex, Value * toStore) const {
+    return iBuilder->CreateBlockAlignedStore(toStore, getOutputStreamPackPtr(name, streamIndex, packIndex));
 }
 
 Value * KernelBuilder::getRawInputPointer(const std::string & name, Value * streamIndex, Value * absolutePosition) const {

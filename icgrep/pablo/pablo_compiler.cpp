@@ -390,9 +390,9 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
             Var * const array = dyn_cast<Var>(extract->getArray());
             if (LLVM_LIKELY(array && array->isKernelParameter())) {
                 if (array->isReadOnly()) {
-                    value = mKernel->getInputStream(array->getName(), index);
+                    value = mKernel->getInputStreamBlockPtr(array->getName(), index);
                 } else if (array->isReadNone()) {
-                    value = mKernel->getOutputStream(array->getName(), index);
+                    value = mKernel->getOutputStreamBlockPtr(array->getName(), index);
                 } else {
                     std::string tmp;
                     raw_string_ostream out(tmp);
@@ -498,12 +498,12 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
             const auto bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
             const auto block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
 
-            Value * ptr = mKernel->getInputStream(iBuilder->getSize(block_shift), var->getName(), index);
+            Value * ptr = mKernel->getAdjustedInputStreamBlockPtr(iBuilder->getSize(block_shift), var->getName(), index);
             Value * lookAhead = iBuilder->CreateBlockAlignedLoad(ptr);
             if (bit_shift == 0) {  // Simple case with no intra-block shifting.
                 value = lookAhead;
             } else { // Need to form shift result from two adjacent blocks.
-                Value * ptr = mKernel->getInputStream(iBuilder->getSize(block_shift + 1), var->getName(), index);
+                Value * ptr = mKernel->getAdjustedInputStreamBlockPtr(iBuilder->getSize(block_shift + 1), var->getName(), index);
                 Value * lookAhead1 = iBuilder->CreateBlockAlignedLoad(ptr);
                 if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
                     value = iBuilder->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));
@@ -528,17 +528,9 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
         mMarker[expr] = value;
         if (DebugOptionIsSet(DumpTrace)) {
             const String & name = isa<Var>(expr) ? cast<Var>(expr)->getName() : cast<Statement>(expr)->getName();
-            Type * type = value->getType();
-            if (type->isPointerTy()) {
-                type = type->getPointerElementType();
-                if (!type->isIntegerTy() && !type->isVectorTy()) {
-                    return;
-                }
-                value = iBuilder->CreateLoad(value);
-            }
-            if (type->isVectorTy()) {
+            if (value->getType()->isVectorTy()) {
                 iBuilder->CallPrintRegister(name.str(), value);
-            } else if (type->isIntegerTy()) {
+            } else if (value->getType()->isIntegerTy()) {
                 iBuilder->CallPrintInt(name.str(), value);
             }
         }

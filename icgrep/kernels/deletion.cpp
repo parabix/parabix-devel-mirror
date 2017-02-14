@@ -54,38 +54,30 @@ inline Value * partial_sum_popcount(IDISA::IDISA_Builder * iBuilder, const unsig
 // Outputs: the deleted streams, plus a partial sum popcount
 
 void DeletionKernel::generateDoBlockMethod() {
-    Value * delMaskPtr = getInputStream("delMaskSet", iBuilder->getInt32(0));
-    Value * delMask = iBuilder->CreateBlockAlignedLoad(delMaskPtr);
+    Value * delMask = loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0));
     const auto move_masks = parallel_prefix_deletion_masks(iBuilder, mDeletionFieldWidth, delMask);
     for (unsigned j = 0; j < mStreamCount; ++j) {
-        Value * inputStreamPtr = getInputStream("inputStreamSet", iBuilder->getInt32(j));
-        Value * input = iBuilder->CreateBlockAlignedLoad(inputStreamPtr);
+        Value * input = loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(j));
         Value * output = apply_parallel_prefix_deletion(iBuilder, mDeletionFieldWidth, delMask, move_masks, input);
-        Value * outputStreamPtr = getOutputStream("outputStreamSet", iBuilder->getInt32(j));
-        iBuilder->CreateBlockAlignedStore(output, outputStreamPtr);
+        storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
     }
     Value * delCount = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(delMask));
-    Value * delCountPtr = getOutputStream("deletionCounts", iBuilder->getInt32(0));
-    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(delCount), delCountPtr);
+    storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
 }
 
 void DeletionKernel::generateFinalBlockMethod(Value * remainingBytes) {
     IntegerType * vecTy = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
     Value * remaining = iBuilder->CreateZExt(remainingBytes, vecTy);
     Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
-    Value * const delmaskPtr = getInputStream("delMaskSet", iBuilder->getInt32(0));
-    Value * delMask = iBuilder->CreateOr(EOF_del, iBuilder->CreateBlockAlignedLoad(delmaskPtr));
+    Value * delMask = iBuilder->CreateOr(EOF_del, loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0)));
     const auto move_masks = parallel_prefix_deletion_masks(iBuilder, mDeletionFieldWidth, delMask);
     for (unsigned j = 0; j < mStreamCount; ++j) {
-        Value * inputStreamPtr = getInputStream("inputStreamSet", iBuilder->getInt32(j));
-        Value * input = iBuilder->CreateBlockAlignedLoad(inputStreamPtr);
+        Value * input = loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(j));
         Value * output = apply_parallel_prefix_deletion(iBuilder, mDeletionFieldWidth, delMask, move_masks, input);
-        Value * outputStreamPtr = getOutputStream("outputStreamSet", iBuilder->getInt32(j));
-        iBuilder->CreateBlockAlignedStore(output, outputStreamPtr);
+        storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
     }
     Value * delCount = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(delMask));
-    Value * delCountPtr = getOutputStream("deletionCounts", iBuilder->getInt32(0));
-    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(delCount), delCountPtr);
+    storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
 }
 
 DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount)
@@ -131,38 +123,30 @@ inline Value * apply_PEXT_deletion(IDISA::IDISA_Builder * iBuilder, const std::v
 // Outputs: the deleted streams, plus a partial sum popcount
 
 void DeleteByPEXTkernel::generateDoBlockMethod() {
-    Value * delMaskPtr = getInputStream("delMaskSet", iBuilder->getInt32(0));
-    Value * delMask = iBuilder->CreateBlockAlignedLoad(delMaskPtr);
+    Value * delMask = loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0));
     const auto masks = get_PEXT_masks(iBuilder, delMask);
     for (unsigned j = 0; j < mStreamCount; ++j) {
-        Value * inputStreamPtr = getInputStream("inputStreamSet", iBuilder->getInt32(j));
-        Value * input = iBuilder->CreateBlockAlignedLoad(inputStreamPtr);
+        Value * input = loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(j));
         Value * output = apply_PEXT_deletion(iBuilder, masks, input);
-        Value * outputStreamPtr = getOutputStream("outputStreamSet", iBuilder->getInt32(j));
-        iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(output), outputStreamPtr);
+        storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
     }
     Value * delCount = partial_sum_popcount(iBuilder, mDelCountFieldWidth, apply_PEXT_deletion(iBuilder, masks, iBuilder->simd_not(delMask)));
-    Value * delCountPtr = getOutputStream("deletionCounts", iBuilder->getInt32(0));
-    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(delCount), delCountPtr);
+    storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
 }
 
 void DeleteByPEXTkernel::generateFinalBlockMethod(Value * remainingBytes) {
     IntegerType * vecTy = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
     Value * remaining = iBuilder->CreateZExt(remainingBytes, vecTy);
     Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
-    Value * const delmaskPtr = getInputStream("delMaskSet", iBuilder->getInt32(0));
-    Value * delMask = iBuilder->CreateOr(EOF_del, iBuilder->CreateBlockAlignedLoad(delmaskPtr));
+    Value * delMask = iBuilder->CreateOr(EOF_del, loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0)));
     const auto masks = get_PEXT_masks(iBuilder, delMask);
     for (unsigned j = 0; j < mStreamCount; ++j) {
-        Value * inputStreamPtr = getInputStream("inputStreamSet", iBuilder->getInt32(j));
-        Value * input = iBuilder->CreateBlockAlignedLoad(inputStreamPtr);
+        Value * input = loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(j));
         Value * output = apply_PEXT_deletion(iBuilder, masks, input);
-        Value * outputStreamPtr = getOutputStream("outputStreamSet", iBuilder->getInt32(j));
-        iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(output), outputStreamPtr);
+        storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
     }
     Value * delCount = partial_sum_popcount(iBuilder, mDelCountFieldWidth, apply_PEXT_deletion(iBuilder, masks, iBuilder->simd_not(delMask)));
-    Value * delCountPtr = getOutputStream("deletionCounts", iBuilder->getInt32(0));
-    iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(delCount), delCountPtr);
+    storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
 }
 
 DeleteByPEXTkernel::DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount)

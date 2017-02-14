@@ -43,12 +43,12 @@ public:
     llvm::Value * getStreamSetBasePtr() const {
         return mStreamSetBufferPtr;
     }
-
+    
     virtual void allocateBuffer();
 
-    virtual llvm::Value * getStream(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const;
+    virtual llvm::Value * getStreamBlockPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const;
 
-    virtual llvm::Value * getStream(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const;
+    virtual llvm::Value * getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const;
     
     llvm::Value * getRawItemPointer(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
@@ -57,10 +57,10 @@ public:
     
 protected:
 
-    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * baseType, llvm::Type * resolvedType, unsigned blocks, unsigned AddressSpace);
+    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * type, unsigned blocks, unsigned AddressSpace);
 
     // Get the buffer pointer for a given block of the stream.
-    virtual llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const = 0;
+    virtual llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const = 0;
 
 protected:
     const BufferKind                mBufferKind;
@@ -81,7 +81,7 @@ public:
     SingleBlockBuffer(IDISA::IDISA_Builder * b, llvm::Type * type);
 
 protected:
-    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;
+    llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const override;
 };
 
 class ExternalFileBuffer : public StreamSetBuffer {
@@ -102,7 +102,7 @@ public:
     llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const override;
     
 protected:
-    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockNo) const override;
+    llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const override;
 };
     
 class CircularBuffer : public StreamSetBuffer {
@@ -114,7 +114,7 @@ public:
     CircularBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
 
 protected:
-    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
+    llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
 };
     
 
@@ -138,7 +138,7 @@ public:
     
     
 protected:
-    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
+    llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
 private:
     size_t mOverflowBlocks;
 
@@ -153,26 +153,17 @@ public:
 
     ExpandableBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
 
-    llvm::Value * getStream(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
+    llvm::Value * getStreamBlockPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
 
-    llvm::Value * getStream(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
+    llvm::Value * getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
 
     llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const override;
     
-    void allocateBuffer() override;
-
 protected:
 
-    llvm::Value * getStreamSetPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
+    void ensureStreamCapacity(llvm::Value * self, llvm::Value * streamIndex) const;
 
-private:
-
-    std::pair<llvm::Value *, llvm::Value *> getExpandedStreamOffset(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const;
-
-private:
-
-    const uint64_t  mInitialCapacity;
-
+    llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
 };
 
 }

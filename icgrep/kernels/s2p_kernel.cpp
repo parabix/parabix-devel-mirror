@@ -124,14 +124,12 @@ void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuild
 void S2PKernel::generateDoBlockMethod() {
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        Value * byteStream = getInputStream("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
-        bytepack[i] = iBuilder->CreateBlockAlignedLoad(byteStream);
+        bytepack[i] = loadInputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
     }
     Value * basisbits[8];
     s2p(iBuilder, bytepack, basisbits);
     for (unsigned i = 0; i < 8; ++i) {
-        Value * basisBits = getOutputStream("basisBits", iBuilder->getInt32(i));
-        iBuilder->CreateBlockAlignedStore(basisbits[i], basisBits);
+        storeOutputStreamBlock("basisBits", iBuilder->getInt32(i), basisbits[i]);
     }
 }
 
@@ -155,8 +153,7 @@ void S2PKernel::generateFinalBlockMethod(Value * remainingBytes) {
     iBuilder->SetInsertPoint(finalEmptyBlock);
 
     for (unsigned i = 0; i < 8; ++i) {
-        Value * basisBitsPtr = getOutputStream("basisBits", iBuilder->getInt64(i));
-        iBuilder->CreateBlockAlignedStore(Constant::getNullValue(iBuilder->getBitBlockType()), basisBitsPtr);
+        storeOutputStreamBlock("basisBits", iBuilder->getInt32(i), Constant::getNullValue(iBuilder->getBitBlockType()));
     }
 
     iBuilder->CreateBr(exitBlock);

@@ -170,15 +170,23 @@ protected:
         return setScalarField(getSelf(), index, value);
     }
 
-    llvm::Value * getInputStream(const std::string & name, llvm::Value * streamIndex) const;
-
-    llvm::Value * getInputStream(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
-
-    llvm::Value * getOutputStream(const std::string & name, llvm::Value * streamIndex) const;
-
-    llvm::Value * getOutputStream(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
-
-    llvm::Value * getInputStream(llvm::Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex) const;
+    llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex) const;
+    
+    llvm::Value * loadInputStreamBlock(const std::string & name, llvm::Value * streamIndex) const;
+    
+    llvm::Value * getInputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
+    
+    llvm::Value * loadInputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
+    
+    llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex) const;
+    
+    void storeOutputStreamBlock(const std::string & name, llvm::Value * streamIndex, llvm::Value * toStore) const;
+    
+    llvm::Value * getOutputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
+    
+    void storeOutputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * toStore) const;
+    
+    llvm::Value * getAdjustedInputStreamBlockPtr(llvm::Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex) const;
 
     llvm::Value * getRawInputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
