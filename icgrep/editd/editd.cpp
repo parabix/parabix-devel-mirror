@@ -478,8 +478,11 @@ void editdGPUCodeGen(unsigned patternLen){
     Type * const outputTy = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 1);
     Type * const stridesTy = PointerType::get(int32ty, 1);
 
-    ExternalFileBuffer CCStream(iBuilder, iBuilder->getStreamSetTy( 4, 1), addrSpace);
+    ExternalFileBuffer CCStream(iBuilder, iBuilder->getStreamSetTy(4), addrSpace);
     ExternalFileBuffer ResultStream(iBuilder, iBuilder->getStreamSetTy( editDistance+1, 1), addrSpace);
+
+    MMapSourceKernel mmapK(iBuilder);
+    mmapK.generateKernel({}, {&CCStream});
 
     kernel::editdGPUKernel editdk(iBuilder, editDistance, patternLen); 
     editdk.generateKernel({&CCStream}, {&ResultStream});
@@ -514,6 +517,7 @@ void editdGPUCodeGen(unsigned patternLen){
     Value * inputSize = iBuilder->CreateLoad(inputSizePtr);
     CCStream.setStreamSetBuffer(inputThreadPtr, inputSize);
     ResultStream.setEmptyBuffer(resultStreamPtr);
+    mmapK.setInitialArguments({inputSize});
 
     const unsigned numOfCarries = patternLen * (editDistance + 1) * 4;
     Type * strideCarryTy = ArrayType::get(mBitBlockType, numOfCarries);
@@ -522,7 +526,7 @@ void editdGPUCodeGen(unsigned patternLen){
 
     editdk.setInitialArguments({pattStream, strideCarry});
    
-    generatePipelineLoop(iBuilder, {&editdk});
+    generatePipelineLoop(iBuilder, {&mmapK, &editdk});
         
     iBuilder->CreateRetVoid();
     
@@ -621,6 +625,10 @@ editdFunctionType editdScanCPUCodeGen() {
     Type * const inputType = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 0);
 
     ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy( editDistance+1, 1));
+
+    MMapSourceKernel mmapK(iBuilder);
+    mmapK.generateKernel({}, {&MatchResults});
+
     kernel::editdScanKernel editdScanK(iBuilder, editDistance);
     editdScanK.generateKernel({&MatchResults}, {});                
    
@@ -636,8 +644,9 @@ editdFunctionType editdScanCPUCodeGen() {
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main,0));
 
     MatchResults.setStreamSetBuffer(inputStream, fileSize);
+    mmapK.setInitialArguments({fileSize});
    
-    generatePipelineLoop(iBuilder, {&editdScanK});
+    generatePipelineLoop(iBuilder, {&mmapK, &editdScanK});
         
     iBuilder->CreateRetVoid();
 
