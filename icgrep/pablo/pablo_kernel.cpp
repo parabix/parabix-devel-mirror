@@ -160,6 +160,7 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName,
         mOutputs.push_back(result);
         mVariables.push_back(result);
         mScalarOutputNameMap.emplace(ss.name, result);
+        result->setScalar();
     }
 }
 

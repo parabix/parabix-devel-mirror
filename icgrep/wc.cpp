@@ -155,6 +155,7 @@ Function * pipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     PabloKernel wck(iBuilder, "wc",
         {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
         {},
+        {},
         {Binding{iBuilder->getSizeTy(), "lineCount"}, Binding{iBuilder->getSizeTy(), "wordCount"}, Binding{iBuilder->getSizeTy(), "charCount"}});
 
     wc_gen(&wck);
