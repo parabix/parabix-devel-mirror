@@ -44,7 +44,6 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     for (auto binding : mScalarInputs) {
         (++args)->setName(binding.name);
     }
-    assert ((++args) == init->arg_end());
 
     // Create the doSegment function prototype.
     std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getInt1Ty()};
@@ -62,7 +61,6 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     for (auto ss : mStreamSetInputs) {
         (++args)->setName(ss.name + "_availableItems");
     }
-    assert ((++args) == doSegment->arg_end());
 
     // Add any additional kernel declarations
     addAdditionalKernelDeclarations(client, selfType);

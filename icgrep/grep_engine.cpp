@@ -222,6 +222,8 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
     mmapK.generateKernel({}, {&MatchResults});
     mmapK.setInitialArguments({fileSize});
 
+
+
     kernel::ScanMatchKernel scanMatchK(iBuilder, grepType);
     scanMatchK.generateKernel({&MatchResults}, {});
             
@@ -329,6 +331,12 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
     
+
+    // ParabixCharacterClassKernelBuilder(IDISA::IDISA_Builder * iBuilder, std::string ccSetName, const std::vector<re::CC *> & charClasses, unsigned basisBitsCount);
+
+    std::vector<re::CC *> Y;
+    Y.push_back(re::makeCC(1, 9));
+
     CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
 
     kernel::S2PKernel  s2pk(iBuilder);

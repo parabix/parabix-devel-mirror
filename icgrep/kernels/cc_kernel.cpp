@@ -67,7 +67,7 @@ IDISA::IDISA_Builder * iBuilder
     CC_Compiler ccc(this, getInput(0));
     auto & builder = ccc.getBuilder();
     for (CC * cc : charClasses) {
-        Var * const r = addOutput(cc->canonicalName(re::ByteClass), getStreamSetTy());
+        Var * const r = addOutput(cc->canonicalName(re::ByteClass), getStreamTy());
         builder.createAssign(r, ccc.compileCC("cc", cc, builder));
     }
 

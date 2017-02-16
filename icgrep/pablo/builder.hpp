@@ -65,11 +65,11 @@ public:
         return mPb->createOnes(type);
     }
 
-    inline Var * createVar(const llvm::StringRef & name, llvm::Type * const type = nullptr) {
+    inline Var * createVar(const llvm::StringRef name, llvm::Type * const type = nullptr) {
         return createVar(makeName(name), type);
     }
 
-    inline Var * createVar(const llvm::StringRef & name, PabloAST * value) {
+    inline Var * createVar(const llvm::StringRef name, PabloAST * value) {
         Var * var = createVar(name, value->getType());
         createAssign(var, value);
         return var;

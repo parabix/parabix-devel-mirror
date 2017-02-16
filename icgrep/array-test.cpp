@@ -17,6 +17,7 @@
 #include <llvm/Support/CommandLine.h>              // for ParseCommandLineOp...
 #include <llvm/Support/raw_ostream.h>              // for errs
 #include <pablo/pablo_kernel.h>                    // for PabloKernel
+#include <pablo/pe_zeroes.h>
 #include <toolchain.h>                             // for JIT_to_ExecutionEn...
 #include <pablo/builder.hpp>                       // for PabloBuilder
 #include <boost/filesystem.hpp>
@@ -30,7 +31,6 @@
 #include <iostream>
 namespace llvm { class Type; }
 namespace pablo { class Integer; }
-namespace pablo { class PabloAST; }
 namespace pablo { class Var; }
 
 using namespace pablo;
@@ -63,22 +63,19 @@ void generate(PabloKernel * kernel) {
     PabloAST * temp8 = pb.createAnd(temp4, temp7);
     PabloAST * rparen = pb.createAnd(temp3, temp8, "rparens");
     PabloAST * parens = pb.createOr(lparen, rparen);
-
     PabloAST * pscan = pb.createScanTo(pb.createAdvance(lparen, 1), parens, "pscan");
-
     PabloAST * closed = pb.createAnd(pscan, rparen, "closed");
 
     pb.createAssign(pb.createExtract(matches, 0), closed);
 
-    Var * all_closed = pb.createVar("all_closed", closed);
-    Var * pending_lparen = pb.createVar("pending_lparen", pb.createAnd(pscan, lparen));
-    Var * unmatched_rparen = pb.createVar("unmatched_rparen", pb.createAnd(rparen, pb.createNot(closed)));
-    Var * in_play = pb.createVar("in_play", pb.createOr(pending_lparen, unmatched_rparen));
+    Var * const all_closed = pb.createVar("all_closed", closed);
+    Var * const pending_lparen = pb.createVar("pending_lparen", pb.createAnd(pscan, lparen));
+    PabloAST * unmatched_rparen = pb.createAnd(rparen, pb.createNot(closed));
+    Var * const in_play = pb.createVar("in_play", pb.createOr(pending_lparen, unmatched_rparen));
+    Var * const errors = pb.createVar("errors", pb.createZeroes());
 
-
-    Integer * one = pb.getInteger(1);
-
-    Var * index = pb.createVar("i", one);
+    Integer * const one = pb.getInteger(1);
+    Var * const index = pb.createVar("i", one);
 
     PabloBuilder body = PabloBuilder::Create(pb);
 
@@ -87,16 +84,47 @@ void generate(PabloKernel * kernel) {
         pscan = body.createScanTo(body.createAdvance(pending_lparen, 1), in_play);
         closed = body.createAnd(pscan, rparen);
         body.createAssign(body.createExtract(matches, index), closed);
-        body.createAssign(pending_lparen, body.createAnd(pscan, lparen));
         body.createAssign(all_closed, body.createOr(all_closed, closed));
-        body.createAssign(unmatched_rparen, body.createAnd(rparen, body.createNot(all_closed)));
+        body.createAssign(errors, body.createOr(errors, body.createAtEOF(pscan)));
+
+        body.createAssign(pending_lparen, body.createAnd(pscan, lparen));
+
+        unmatched_rparen = body.createAnd(rparen, body.createNot(all_closed));
         body.createAssign(in_play, body.createOr(pending_lparen, unmatched_rparen));
         body.createAssign(index, body.createAdd(index, one));
 
 
+    pb.createAssign(errors, pb.createOr(errors, pb.createAnd(rparen, pb.createNot(all_closed))));
+    pb.createAssign(kernel->getOutputStreamVar("errors"), errors);
+
     pb.print(errs());
 
 }
+
+//42	def Match_Parens(lex, matches):
+//43	        parens = lex.LParen | lex.RParen
+//44	        i = 0
+//45	        pscan = pablo.AdvanceThenScanTo(lex.LParen, parens)
+//46	        matches.closed[0] = pscan & lex.RParen
+//47	        all_closed = matches.closed[0]
+//48	        matches.error = pablo.atEOF(pscan)
+//49	        # Not matched, still pending.
+//50	        pending_LParen = pscan & lex.LParen
+//51	        RParen_unmatched = lex.RParen &~ matches.closed[0]
+//52	        inPlay = pending_LParen | RParen_unmatched
+//53	        while pending_LParen:
+//54	                i += 1
+//55	                pscan = pablo.AdvanceThenScanTo(pending_LParen, inPlay)
+//56	                matches.closed[i] = pscan & lex.RParen
+//57	                all_closed |= matches.closed[i]
+//58	                matches.error |= pablo.atEOF(pscan)
+//59	                pending_LParen = pscan & lex.LParen
+//60	                RParen_unmatched = lex.RParen &~ all_closed
+//61	                inPlay = pending_LParen | RParen_unmatched
+//62	        #
+//63	        # Any closing paren that was not actually used to close
+//64	        # an opener is in error.
+//65	        matches.error |= lex.RParen &~ all_closed
 
 Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
 
@@ -116,27 +144,29 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
     ExternalFileBuffer ByteStream(iBuilder, byteStreamTy);
     SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
     ExpandableBuffer matches(iBuilder, iBuilder->getStreamSetTy(count, 1), 2);
+    SingleBlockBuffer errors(iBuilder, iBuilder->getStreamTy());
 
     MMapSourceKernel mmapK(iBuilder); 
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
     
-    S2PKernel  s2pk(iBuilder);
+    S2PKernel s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
     PabloKernel bm(iBuilder, "MatchParens",
         {Binding{iBuilder->getStreamSetTy(8), "input"}},
-        {Binding{iBuilder->getStreamSetTy(count), "matches"}});
+        {Binding{iBuilder->getStreamSetTy(count), "matches"}, Binding{iBuilder->getStreamTy(), "errors"}});
 
     generate(&bm);
 
-    bm.generateKernel({&BasisBits}, {&matches});
+    bm.generateKernel({&BasisBits}, {&matches, &errors});
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main, 0));
 
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     matches.allocateBuffer();
+    errors.allocateBuffer();
 
     generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &bm});
     iBuilder->CreateRetVoid();

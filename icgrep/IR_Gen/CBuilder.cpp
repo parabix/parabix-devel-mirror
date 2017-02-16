@@ -111,14 +111,17 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
 
 Value * CBuilder::CreateMalloc(Type * type, Value * size) {
     DataLayout DL(getModule());
-    Type * const intTy = getIntPtrTy(DL);
-    Constant * const width = ConstantExpr::getSizeOf(type);
+    IntegerType * const intTy = getIntPtrTy(DL);
     if (size->getType() != intTy) {
         if (isa<Constant>(size)) {
             size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
         } else {
-            size = CreateTruncOrBitCast(size, intTy);
+            size = CreateZExtOrTrunc(size, intTy);
         }
+    }    
+    Constant * width = ConstantExpr::getSizeOf(type);
+    if (LLVM_UNLIKELY(width->getType() != intTy)) {
+        width = ConstantExpr::getIntegerCast(width, intTy, false);
     }
     if (!width->isOneValue()) {
         if (isa<Constant>(size)) {
@@ -135,6 +138,7 @@ Value * CBuilder::CreateMalloc(Type * type, Value * size) {
         malloc->setCallingConv(CallingConv::C);
         malloc->setDoesNotAlias(0);
     }
+    assert (size->getType() == intTy);
     CallInst * ci = CreateCall(malloc, size);
     ci->setTailCall();
     ci->setCallingConv(malloc->getCallingConv());
@@ -145,9 +149,19 @@ Value * CBuilder::CreateAlignedMalloc(Type * type, Value * size, const unsigned 
     assert ((alignment & (alignment - 1)) == 0); // is power of 2
     DataLayout DL(getModule());
     IntegerType * const intTy = getIntPtrTy(DL);
+    if (size->getType() != intTy) {
+        if (isa<Constant>(size)) {
+            size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
+        } else {
+            size = CreateZExtOrTrunc(size, intTy);
+        }
+    }
     const auto byteWidth = (intTy->getBitWidth() / 8);
     Constant * const offset = ConstantInt::get(intTy, alignment + byteWidth - 1);
-    Constant * const width = ConstantExpr::getSizeOf(type);
+    Constant * width = ConstantExpr::getSizeOf(type);
+    if (LLVM_UNLIKELY(width->getType() != intTy)) {
+        width = ConstantExpr::getIntegerCast(width, intTy, false);
+    }
     if (!width->isOneValue()) {
         if (isa<Constant>(size)) {
             size = ConstantExpr::getMul(cast<Constant>(size), width);
@@ -155,18 +169,12 @@ Value * CBuilder::CreateAlignedMalloc(Type * type, Value * size, const unsigned 
             size = CreateMul(size, width);
         }
     }
-    if (size->getType() != intTy) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
-        } else {
-            size = CreateTruncOrBitCast(size, intTy);
-        }
-    }
     if (isa<Constant>(size)) {
         size = ConstantExpr::getAdd(cast<Constant>(size), offset);
     } else {
         size = CreateAdd(size, offset);
     }
+    assert (size->getType() == intTy);
     Value * unaligned = CreatePtrToInt(CreateMalloc(getInt8Ty(), size), intTy);
     Value * aligned = CreateAnd(CreateAdd(unaligned, offset), ConstantExpr::getNot(ConstantInt::get(intTy, alignment - 1)));
     Value * prefix = CreateIntToPtr(CreateSub(aligned, ConstantInt::get(intTy, byteWidth)), intTy->getPointerTo());
@@ -219,14 +227,17 @@ void CBuilder::CreateAlignedFree(Value * const ptr, const bool testForNullAddres
 
 Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
     DataLayout DL(getModule());
-    Type * const intTy = getIntPtrTy(DL);
+    IntegerType * const intTy = getIntPtrTy(DL);
     PointerType * type = cast<PointerType>(ptr->getType());
-    Constant * const width = ConstantExpr::getSizeOf(type->getPointerElementType());
+    Constant * width = ConstantExpr::getSizeOf(type->getPointerElementType());
+    if (LLVM_UNLIKELY(width->getType() != intTy)) {
+        width = ConstantExpr::getIntegerCast(width, intTy, false);
+    }
     if (size->getType() != intTy) {
         if (isa<Constant>(size)) {
             size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
         } else {
-            size = CreateTruncOrBitCast(size, intTy);
+            size = CreateZExtOrTrunc(size, intTy);
         }
     }
     if (!width->isOneValue()) {
@@ -244,6 +255,7 @@ Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
         realloc->setCallingConv(CallingConv::C);
         realloc->setDoesNotAlias(1);
     }
+    assert (size->getType() == intTy);
     CallInst * ci = CreateCall(realloc, {ptr, size});
     ci->setTailCall();
     ci->setCallingConv(realloc->getCallingConv());
@@ -251,14 +263,25 @@ Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
 }
 
 void CBuilder::CreateMemZero(Value * ptr, Value * size, const unsigned alignment) {
-    assert (ptr->getType()->isPointerTy() && size->getType()->isIntegerTy());
-    Type * const type = ptr->getType();
-    Constant * const width = ConstantExpr::getSizeOf(type->getPointerElementType());
+    DataLayout DL(getModule());
+    IntegerType * const intTy = getIntPtrTy(DL);
+    Constant * width = ConstantExpr::getSizeOf(ptr->getType()->getPointerElementType());
+    if (LLVM_UNLIKELY(width->getType() != intTy)) {
+        width = ConstantExpr::getIntegerCast(width, intTy, false);
+    }
+    if (size->getType() != intTy) {
+        if (isa<Constant>(size)) {
+            size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
+        } else {
+            size = CreateZExtOrTrunc(size, intTy);
+        }
+    }
     if (isa<Constant>(size)) {
         size = ConstantExpr::getMul(cast<Constant>(size), width);
     } else {
         size = CreateMul(size, width);
     }
+    assert (size->getType() == intTy);
     CreateMemSet(CreatePointerCast(ptr, getInt8PtrTy()), getInt8(0), size, alignment);
 }
 
@@ -267,14 +290,14 @@ PointerType * CBuilder::getVoidPtrTy() const {
 }
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
-    unsigned alignment = cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits() / 8;
+    const auto alignment = ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
     LoadInst * inst = CreateAlignedLoad(ptr, alignment);
     inst->setOrdering(AtomicOrdering::Acquire);
     return inst;
     
 }
 StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
-    unsigned alignment = cast<PointerType>(ptr->getType())->getElementType()->getPrimitiveSizeInBits() / 8;
+    const auto alignment = ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
     StoreInst * inst = CreateAlignedStore(val, ptr, alignment);
     inst->setOrdering(AtomicOrdering::Release);
     return inst;

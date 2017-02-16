@@ -91,9 +91,10 @@ static std::vector<std::string> allFiles;
 // Handler for errors reported through llvm::report_fatal_error.  Report
 // and signal error code 2 (grep convention).
 // 
-static void icgrep_error_handler(void *UserData, const std::string &Message,
-                             bool GenCrashDiag) {
-
+static void icgrep_error_handler(void *UserData, const std::string &Message, bool GenCrashDiag) {
+    #ifndef NDEBUG
+    throw std::runtime_error(Message);
+    #else
     // Modified from LLVM's internal report_fatal_error logic.
     SmallVector<char, 64> Buffer;
     raw_svector_ostream OS(Buffer);
@@ -101,11 +102,11 @@ static void icgrep_error_handler(void *UserData, const std::string &Message,
     StringRef MessageStr = OS.str();
     ssize_t written = ::write(2, MessageStr.data(), MessageStr.size());
     (void)written; // If something went wrong, we deliberately just give up.
-
     // Run the interrupt handlers to make sure any special cleanups get done, in
     // particular that we remove files registered with RemoveFileOnSignal.
     llvm::sys::RunInterruptHandlers();
     exit(2);
+    #endif
 }
 
 static std::string allREs;

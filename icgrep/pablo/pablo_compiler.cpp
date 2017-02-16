@@ -56,20 +56,6 @@ void PabloCompiler::compile() {
     mMarker.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
     mMarker.emplace(entryBlock->createOnes(), iBuilder->allOnes());
 
-    for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
-        Var * var = mKernel->getInput(i);
-        if (LLVM_UNLIKELY(var->isScalar())) {
-            mMarker.emplace(var, mKernel->getScalarFieldPtr(var->getName()));
-        }
-    }
-
-    for (unsigned i = 0; i < mKernel->getNumOfOutputs(); ++i) {
-        Var * var = mKernel->getOutput(i);
-        if (LLVM_UNLIKELY(var->isScalar())) {
-            mMarker.emplace(var, mKernel->getScalarFieldPtr(var->getName()));
-        }
-    }
-
     compileBlock(entryBlock);
 
     mCarryManager->finalizeCodeGen();
@@ -128,16 +114,28 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
     std::vector<std::pair<const Var *, Value *>> incoming;
 
     for (const Var * var : ifStatement->getEscaped()) {
-        auto f = mMarker.find(var);
-        if (LLVM_UNLIKELY(f == mMarker.end())) {
-            std::string tmp;
-            raw_string_ostream out(tmp);
-            var->print(out);
-            out << " is uninitialized prior to entering ";
-            ifStatement->print(out);
-            report_fatal_error(out.str());
+        if (LLVM_UNLIKELY(var->isKernelParameter())) {
+            Value * marker = nullptr;
+            if (var->isScalar()) {
+                marker = mKernel->getScalarFieldPtr(var->getName());
+            } else if (var->isReadOnly()) {
+                marker = mKernel->getInputStreamBlockPtr(var->getName(), iBuilder->getInt32(0));
+            } else if (var->isReadNone()) {
+                marker = mKernel->getOutputStreamBlockPtr(var->getName(), iBuilder->getInt32(0));
+            }
+            mMarker[var] = marker;
+        } else {
+            auto f = mMarker.find(var);
+            if (LLVM_UNLIKELY(f == mMarker.end())) {
+                std::string tmp;
+                raw_string_ostream out(tmp);
+                var->print(out);
+                out << " is uninitialized prior to entering ";
+                ifStatement->print(out);
+                report_fatal_error(out.str());
+            }
+            incoming.emplace_back(var, f->second);
         }
-        incoming.emplace_back(var, f->second);
     }
 
     const PabloBlock * ifBody = ifStatement->getBody();
@@ -222,8 +220,22 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     PHINode * bound_phi = nullptr;  // Needed for bounded while loops.
 #endif
     // On entry to the while structure, proceed to execute the first iteration
-    // of the loop body unconditionally.   The while condition is tested at the end of
+    // of the loop body unconditionally. The while condition is tested at the end of
     // the loop.
+
+    for (const Var * var : escaped) {
+        if (LLVM_UNLIKELY(var->isKernelParameter())) {
+            Value * marker = nullptr;
+            if (var->isScalar()) {
+                marker = mKernel->getScalarFieldPtr(var->getName());
+            } else if (var->isReadOnly()) {
+                marker = mKernel->getInputStreamBlockPtr(var->getName(), iBuilder->getInt32(0));
+            } else if (var->isReadNone()) {
+                marker = mKernel->getOutputStreamBlockPtr(var->getName(), iBuilder->getInt32(0));
+            }
+            mMarker[var] = marker;
+        }
+    }
 
     mCarryManager->enterLoopScope(whileBody);
 
@@ -345,34 +357,36 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
         const PabloAST * expr = stmt;
         Value * value = nullptr;
         if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
-
             value = compileExpression(cast<Assign>(stmt)->getValue());
-
             expr = cast<Assign>(stmt)->getVariable();
-
-            bool storeRequired = false;
-
+            Value * ptr = nullptr;
             if (LLVM_LIKELY(isa<Var>(expr))) {
                 const Var * var = cast<Var>(expr);
                 if (LLVM_UNLIKELY(var->isReadOnly())) {
                     std::string tmp;
                     raw_string_ostream out(tmp);
-                    out << "cannot assign value to ";
+                    out << mKernel->getName();
+                    out << " cannot assign value to ";
                     var->print(out);
                     out << ": ";
                     var->print(out);
                     out << " is read only";
                     report_fatal_error(out.str());
                 }
-                storeRequired = var->isKernelParameter();
-            }
-
-            if (storeRequired || isa<Extract>(expr)) {
+                if (var->isKernelParameter()) {
+                    if (var->isScalar()) {
+                        ptr = mKernel->getScalarFieldPtr(var->getName());
+                    } else {
+                        ptr = mKernel->getOutputStreamBlockPtr(var->getName(), iBuilder->getInt32(0));
+                    }
+                }
+            } else if (isa<Extract>(expr)) {
                 const auto f = mMarker.find(expr);
                 if (LLVM_UNLIKELY(f == mMarker.end())) {
                     std::string tmp;
                     raw_string_ostream out(tmp);
-                    out << "cannot assign value to ";
+                    out << mKernel->getName();
+                    out << " cannot assign value to ";
                     expr->print(out);
                     out << ": ";
                     expr->print(out);
@@ -380,11 +394,13 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
                     stmt->print(out);
                     report_fatal_error(out.str());
                 }
-                Value * const ptr = f->second;
+                ptr = f->second;
+                assert (ptr);
+            }
+            if (ptr) {
                 iBuilder->CreateAlignedStore(value, ptr, getAlignment(value));
                 value = ptr;
             }
-
         } else if (const Extract * extract = dyn_cast<Extract>(stmt)) {
             Value * index = compileExpression(extract->getIndex());
             Var * const array = dyn_cast<Var>(extract->getArray());
@@ -396,7 +412,8 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
                 } else {
                     std::string tmp;
                     raw_string_ostream out(tmp);
-                    out << "stream ";
+                    out << mKernel->getName();
+                    out << " stream ";
                     expr->print(out);
                     out << " cannot be read or written to";
                     report_fatal_error(out.str());
@@ -457,7 +474,8 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
                 report_fatal_error("Unknown accumulator: " + c->getName().str());
             }
             Value * ptr = mKernel->getScalarFieldPtr(f->second);
-            Value * count = iBuilder->CreateAlignedLoad(ptr, getPointerElementAlignment(ptr));
+            const auto alignment = getPointerElementAlignment(ptr);
+            Value * count = iBuilder->CreateAlignedLoad(ptr, alignment, c->getName() + "_accumulator");
             Value * const partial = iBuilder->simd_popcount(counterSize, to_count);
             if (LLVM_UNLIKELY(counterSize <= 1)) {
                 value = partial;
@@ -470,8 +488,7 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
                 }
             }
             value = iBuilder->CreateAdd(value, count);
-            iBuilder->CreateStore(value, ptr);
-
+            iBuilder->CreateAlignedStore(value, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             Var * var = nullptr;
             PabloAST * stream = l->getExpr();
@@ -519,10 +536,10 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
         } else {
             std::string tmp;
             raw_string_ostream out(tmp);
-            out << "Internal error: ";
+            out << "PabloCompiler: statement ";
             stmt->print(out);
-            out << " is not a recognized statement in the Pablo compiler.";
-            throw std::runtime_error(out.str());
+            out << " was not recognized by the compiler";
+            report_fatal_error(out.str());
         }
 
         mMarker[expr] = value;

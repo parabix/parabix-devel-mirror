@@ -252,8 +252,9 @@ void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, const std::vector
 
 
 void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
-    for (auto k : kernels) k->createInstance();
-    
+    for (auto k : kernels) {
+        k->createInstance();
+    }
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     Function * main = entryBlock->getParent();
 

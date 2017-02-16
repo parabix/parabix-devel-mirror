@@ -11,6 +11,8 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Transforms/Scalar.h>
 
 static const auto DO_BLOCK_SUFFIX = "_DoBlock";
 
@@ -31,13 +33,14 @@ static const auto BLOCK_MASK_SUFFIX = "_blkMask";
 using namespace llvm;
 using namespace kernel;
 using namespace parabix;
+using namespace llvm::legacy;
 
 unsigned KernelBuilder::addScalar(Type * const type, const std::string & name) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        report_fatal_error("Cannot add kernel field " + name + " after kernel state finalized");
+        report_fatal_error("Cannot add field " + name + " to " + getName() + " after kernel state finalized");
     }
     if (LLVM_UNLIKELY(mKernelMap.count(name))) {
-        report_fatal_error("Kernel already contains field " + name);
+        report_fatal_error(getName() + " already contains scalar field " + name);
     }
     const auto index = mKernelFields.size();
     mKernelMap.emplace(name, index);
@@ -71,14 +74,14 @@ void KernelBuilder::prepareKernel() {
         std::string tmp;
         raw_string_ostream out(tmp);
         out << "kernel contains " << mStreamSetInputBuffers.size() << " input buffers for "
-        << mStreamSetInputs.size() << " input stream sets.";
+            << mStreamSetInputs.size() << " input stream sets.";
         report_fatal_error(out.str());
     }
     if (mStreamSetOutputs.size() != mStreamSetOutputBuffers.size()) {
         std::string tmp;
         raw_string_ostream out(tmp);
         out << "kernel contains " << mStreamSetOutputBuffers.size() << " output buffers for "
-        << mStreamSetOutputs.size() << " output stream sets.";
+            << mStreamSetOutputs.size() << " output stream sets.";
         report_fatal_error(out.str());
     }
     const auto blockSize = iBuilder->getBitBlockWidth();
@@ -122,12 +125,37 @@ std::unique_ptr<Module> KernelBuilder::createKernelModule(const std::vector<Stre
 }
 
 void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
-    auto savePoint = iBuilder->saveIP();
-    Module * const m = iBuilder->getModule();
+
     mStreamSetInputBuffers.assign(inputs.begin(), inputs.end());
+    for (unsigned i = 0; i < mStreamSetInputBuffers.size(); ++i) {
+        if (LLVM_UNLIKELY(mStreamSetInputBuffers[i] == nullptr)) {
+            report_fatal_error(getName() + ": input stream set " + std::to_string(i)
+                               + " cannot be null when calling generateKernel()");
+        }
+    }
+    if (LLVM_UNLIKELY(mStreamSetInputs.size() != mStreamSetInputBuffers.size())) {
+        report_fatal_error(getName() + ": expected " + std::to_string(mStreamSetInputs.size()) +
+                           " input stream sets but generateKernel() was given "
+                           + std::to_string(mStreamSetInputBuffers.size()));
+    }
+
     mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
+    for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
+        if (LLVM_UNLIKELY(mStreamSetOutputBuffers[i] == nullptr)) {
+            report_fatal_error(getName() + ": output stream set " + std::to_string(i)
+                               + " cannot be null when calling generateKernel()");
+        }
+    }
+    if (LLVM_UNLIKELY(mStreamSetOutputs.size() != mStreamSetOutputBuffers.size())) {
+        report_fatal_error(getName() + ": expected " + std::to_string(mStreamSetOutputs.size())
+                           + " output stream sets but generateKernel() was given "
+                           + std::to_string(mStreamSetOutputBuffers.size()));
+    }
+
+
+    auto savePoint = iBuilder->saveIP();
     prepareKernel(); // possibly overridden by the KernelBuilder subtype
-    addKernelDeclarations(m);
+    addKernelDeclarations(iBuilder->getModule());
     callGenerateInitMethod();
     generateInternalMethods();
     callGenerateDoSegmentMethod();
@@ -153,7 +181,6 @@ void KernelBuilder::callGenerateDoSegmentMethod() {
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         producerPos.push_back(&*(args++));
     }
-    assert (args == mCurrentFunction->arg_end());
     generateDoSegmentMethod(doFinal, producerPos); // must be overridden by the KernelBuilder subtype
     iBuilder->CreateRetVoid();
 }
@@ -176,7 +203,7 @@ void KernelBuilder::callGenerateInitMethod() {
 ConstantInt * KernelBuilder::getScalarIndex(const std::string & name) const {
     const auto f = mKernelMap.find(name);
     if (LLVM_UNLIKELY(f == mKernelMap.end())) {
-        report_fatal_error("Kernel does not contain scalar: " + name);
+        report_fatal_error(getName() + " does not contain scalar: " + name);
     }
     return iBuilder->getInt32(f->second);
 }
@@ -313,7 +340,7 @@ Value * KernelBuilder::getRawOutputPointer(const std::string & name, Value * str
 unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
     const auto f = mStreamSetNameMap.find(name);
     if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
-        throw std::runtime_error("Kernel " + getName() + " does not contain stream set: " + name);
+        throw std::runtime_error(getName() + " does not contain stream set: " + name);
     }
     return f->second;
 }
@@ -328,7 +355,7 @@ Argument * KernelBuilder::getParameter(Function * const f, const std::string & n
             return &arg;
         }
     }
-    report_fatal_error(f->getName() + " does not have parameter " + name);
+    report_fatal_error(getName() + " does not have parameter " + name);
 }
 
 Value * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) const {
@@ -345,21 +372,42 @@ BasicBlock * KernelBuilder::CreateBasicBlock(std::string && name) const {
 
 void KernelBuilder::createInstance() {
     if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
-        report_fatal_error("Cannot create kernel instance before calling prepareKernel()");
+        report_fatal_error("Cannot instantiate " + getName() + " before calling prepareKernel()");
     }
     mKernelInstance = iBuilder->CreateCacheAlignedAlloca(mKernelStateType);
-    std::vector<Value *> init_args = {mKernelInstance};
-    for (auto a : mInitialArguments) {
-        init_args.push_back(a);
+
+    std::vector<Value *> args;
+    args.reserve(mInitialArguments.size() + mStreamSetInputBuffers.size() + mStreamSetOutputBuffers.size() + 1);
+    args.push_back(mKernelInstance);
+    for (unsigned i = 0; i < mInitialArguments.size(); ++i) {
+        Value * arg = mInitialArguments[i];
+        if (LLVM_UNLIKELY(arg == nullptr)) {
+            report_fatal_error(getName() + ": initial argument " + std::to_string(i)
+                               + " cannot be null when calling createInstance()");
+        }
+        args.push_back(arg);
     }
-    for (auto b : mStreamSetInputBuffers) {
-        init_args.push_back(b->getStreamSetBasePtr());
+    for (unsigned i = 0; i < mStreamSetInputBuffers.size(); ++i) {
+        assert (mStreamSetInputBuffers[i]);
+        Value * arg = mStreamSetInputBuffers[i]->getStreamSetBasePtr();
+        if (LLVM_UNLIKELY(arg == nullptr)) {
+            report_fatal_error(getName() + ": input stream set " + std::to_string(i)
+                               + " was not allocated prior to calling createInstance()");
+        }
+        args.push_back(arg);
     }
-    for (auto b : mStreamSetOutputBuffers) {
-        init_args.push_back(b->getStreamSetBasePtr());
+    assert (mStreamSetInputs.size() == mStreamSetInputBuffers.size());
+    for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
+        assert (mStreamSetOutputBuffers[i]);
+        Value * arg = mStreamSetOutputBuffers[i]->getStreamSetBasePtr();
+        if (LLVM_UNLIKELY(arg == nullptr)) {
+            report_fatal_error(getName() + ": output stream set " + std::to_string(i)
+                               + " was not allocated prior to calling createInstance()");
+        }
+        args.push_back(arg);
     }
-    Function * initMethod = getInitFunction();
-    iBuilder->CreateCall(initMethod, init_args);
+    assert (mStreamSetOutputs.size() == mStreamSetOutputBuffers.size());
+    iBuilder->CreateCall(getInitFunction(), args);
 }
 
 //  The default finalBlock method simply dispatches to the doBlock routine.
@@ -473,6 +521,14 @@ void BlockOrientedKernel::callGenerateDoBlockMethod() {
     iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     generateDoBlockMethod(); // must be implemented by the KernelBuilder subtype
     iBuilder->CreateRetVoid();
+
+    // Use the pass manager to optimize the function.
+    FunctionPassManager fpm(iBuilder->getModule());
+    fpm.add(createReassociatePass());             //Reassociate expressions.
+    fpm.add(createGVNPass());                     //Eliminate common subexpressions.
+    fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
+    fpm.doInitialization();
+    fpm.run(*mCurrentFunction);
 }
 
 
@@ -521,7 +577,6 @@ void BlockOrientedKernel::addAdditionalKernelDeclarations(Module * m, PointerTyp
     doBlock->setDoesNotCapture(1);
     auto args = doBlock->arg_begin();
     args->setName("self");
-    assert ((++args) == doBlock->arg_end());
 
     FunctionType * const finalBlockType = FunctionType::get(iBuilder->getVoidTy(), {selfType, iBuilder->getSizeTy()}, false);
     Function * const finalBlock = Function::Create(finalBlockType, GlobalValue::ExternalLinkage, getName() + FINAL_BLOCK_SUFFIX, m);
@@ -531,7 +586,6 @@ void BlockOrientedKernel::addAdditionalKernelDeclarations(Module * m, PointerTyp
     args = finalBlock->arg_begin();
     args->setName("self");
     (++args)->setName("remainingBytes");
-    assert ((++args) == finalBlock->arg_end());
 }
 
 // CONSTRUCTOR

@@ -57,7 +57,7 @@ public:
     
 protected:
 
-    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * type, unsigned blocks, unsigned AddressSpace);
+    StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * baseType, llvm::Type * resolvedType, unsigned blocks, unsigned AddressSpace);
 
     // Get the buffer pointer for a given block of the stream.
     virtual llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const = 0;
@@ -147,6 +147,9 @@ private:
 // ExpandableBuffers do not allow access to the base stream set but will automatically increase the number of streams
 // within their set whenever the index exceeds its capacity
 //
+// ExpandableBuffers do not allow access to the base stream set but will automatically increase the number of streams
+// within their set whenever the index exceeds its capacity
+//
 class ExpandableBuffer : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::ExpandableBuffer;}
@@ -158,12 +161,21 @@ public:
     llvm::Value * getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
 
     llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const override;
-    
+
+    void allocateBuffer() override;
+
 protected:
 
-    void ensureStreamCapacity(llvm::Value * self, llvm::Value * streamIndex) const;
-
     llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
+
+private:
+
+    std::pair<llvm::Value *, llvm::Value *> getExpandedStreamOffset(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const;
+
+private:
+
+    const uint64_t  mInitialCapacity;
+
 };
 
 }
