@@ -10,9 +10,7 @@
 #include <IR_Gen/idisa_i64_builder.h>
 #include <IR_Gen/idisa_nvptx_builder.h>
 #include <llvm/IR/Module.h>
-#ifndef NDEBUG
 #include <llvm/ADT/Triple.h>
-#endif
 
 namespace IDISA {
     
@@ -23,16 +21,16 @@ IDISA_Builder * GetIDISA_Builder(llvm::Module * mod) {
     if (LLVM_LIKELY(mod->getTargetTriple().empty())) {
         mod->setTargetTriple(llvm::sys::getProcessTriple());
     }
-    const bool hasAVX2 = AVX2_available();
-    DataLayout DL(mod);    
-    Type * const intTy = DL.getIntPtrType(mod->getContext());
-    const auto registerWidth = intTy->getIntegerBitWidth();
-    #ifndef NDEBUG
     Triple T(mod->getTargetTriple());
-    if (LLVM_UNLIKELY((T.isArch16Bit() && registerWidth != 16) || (T.isArch32Bit() && registerWidth != 32) || (T.isArch64Bit() && registerWidth != 64))) {
-        report_fatal_error("GetIDISA_Builder: target triple '" + mod->getTargetTriple() + "' register width does not match data layout (" + std::to_string(registerWidth) + ")");
+    unsigned registerWidth = 0;
+    if (T.isArch64Bit()) {
+        registerWidth = 64;
+    } else if (T.isArch32Bit()) {
+        registerWidth = 32;
+    } else if (T.isArch16Bit()) {
+        registerWidth = 16;
     }
-    #endif
+    const bool hasAVX2 = AVX2_available();
     if (LLVM_LIKELY(codegen::BlockSize == 0)) {  // No BlockSize override: use processor SIMD width
         codegen::BlockSize = hasAVX2 ? 256 : 128;
     }
