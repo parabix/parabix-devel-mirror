@@ -38,10 +38,33 @@ inline void p2s(IDISA::IDISA_Builder * iBuilder, Value * p[], Value * s[]) {
 }
 
 void PrintableBits::generateDoBlockMethod() {
-    Value * strmPtr = getStream("bitStream", iBuilder->getInt32(0));
-    
-    Value * bitStrmVal = iBuilder->CreateBlockAlignedLoad(strmPtr);
+    // Load current block
+    Value * bitStrmVal = loadInputStreamBlock("bitStream", iBuilder->getInt32(0));
+
     Value * bits[8];
+
+    /*
+    00110001 is the Unicode codepoint for '1' and 00101110 is the codepoint for '.'.
+    We want to output a byte stream that is aligned with the input bitstream such that it contains 00110001 in each 1 position and 00101110 in each 0 position.
+    
+    For example, consider input bitstream 101. Our desired output is:
+    00110001 00101110 00110001
+
+    We can do the bitstream to bytestream conversion in parallel by viewing the output stream in terms of parallel bit streams.
+
+    0   0   0 -> First bit position of every byte is all zeros
+    0   0   0 -> Same for second bit
+    1   1   1 -> Third bit is all ones
+    1   0   1 -> 4th bit is 1 for a '1' byte and '0' for a zero byte. Matches input bit stream
+    0   1   0 -> opposite
+    0   1   0 -> opposite
+    0   1   0 -> opposite
+    1   0   1 -> same as 4th bit position. 
+    
+    Armed with the above we can do the bit->byte conversion all at once
+    rather than byte at a time! That's what we do below.
+    */
+
     bits[0] = ConstantInt::getNullValue(iBuilder->getBitBlockType());
     bits[1] = ConstantInt::getNullValue(iBuilder->getBitBlockType());
     bits[2] = ConstantInt::getAllOnesValue(iBuilder->getBitBlockType());
@@ -52,12 +75,12 @@ void PrintableBits::generateDoBlockMethod() {
     bits[6] = negBitStrmVal;
     bits[7] = bitStrmVal;
     
+    // Reassemble the paralell bit streams into a byte stream
     Value * printableBytes[8];
     p2s(iBuilder, bits, printableBytes);
     
     for (unsigned j = 0; j < 8; ++j) {
-        Value * ptr = getStream("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(j));
-        iBuilder->CreateBlockAlignedStore(iBuilder->bitCast(printableBytes[j]), ptr);
+        storeOutputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(j), iBuilder->bitCast(printableBytes[j]));
     }
 }
 
@@ -81,10 +104,8 @@ void SelectStream::generateDoBlockMethod() {
     if (mStreamIndex >= mSizeInputStreamSet)
         llvm::report_fatal_error("Stream index out of bounds.\n");
     
-    Value * strmPtr = getStream("bitStreams", iBuilder->getInt32(mStreamIndex));
-    Value * bitStrmVal = iBuilder->CreateBlockAlignedLoad(strmPtr);
+    Value * bitStrmVal = loadInputStreamBlock("bitStreams", iBuilder->getInt32(mStreamIndex));
 
-    Value * ptr = getStream("bitStream", iBuilder->getInt32(0));
-    iBuilder->CreateBlockAlignedStore(bitStrmVal, ptr);
+    storeOutputStreamBlock("bitStream", iBuilder->getInt32(0), bitStrmVal);
 }
 }
