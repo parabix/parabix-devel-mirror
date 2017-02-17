@@ -77,10 +77,6 @@ void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<
         }
         expand_3_4_shuffle[j] = ConstantVector::get(Idxs);
     }
-    Constant * Const3 = iBuilder->getSize(3);
-    Constant * Const4 = iBuilder->getSize(4);
-    Constant * Const6 = iBuilder->getSize(6);
-    Constant * Const5 = iBuilder->getSize(5);
 
     Constant * tripleBlockSize = iBuilder->getSize(3 * iBuilder->getStride());
     Constant * packSize = iBuilder->getSize(PACK_SIZE);
@@ -158,13 +154,10 @@ void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<
     loopExitInput_ptr->addIncoming(loopNextInputPack, expand_3_4_loop);
     loopExitOutput_ptr->addIncoming(loopNextOutputPack, expand_3_4_loop);
 
-    // Update the produced and processed items count based on the loopItemsToDo value.
+    // Update the processed items count based on the loopItemsToDo value.
     processed = iBuilder->CreateAdd(processed, loopItemsToDo);
     setProcessedItemCount("sourceStream", processed);
 
-    // We have produced 4 output bytes for every 3 input bytes.
-    Value * totalProduced = iBuilder->CreateMul(iBuilder->CreateUDiv(processed, Const3), Const4);
-    setProducedItemCount("expandedStream", totalProduced);
 
     // Except for final segment processing, we are done.
     iBuilder->CreateCondBr(doFinal, expand3_4_final, expand3_4_exit);
@@ -235,14 +228,6 @@ void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<
     processed = iBuilder->CreateAdd(processed, excessItems);
     setProcessedItemCount("sourceStream", processed);
 
-    // We have produced 4 output bytes for every 3 input bytes.  For radix64 applications,
-    // each output byte will have six significant bits.   If the number of bytes is not
-    // a multiple of 3, then there will be 8 or 16 additional bits to encode.  This will
-    // require 2 or 3 additional output bytes given that each output byte only encodes 6 bits.
-    
-    Value * totalBits = iBuilder->CreateShl(processed, Const3);
-    totalProduced = iBuilder->CreateUDiv(iBuilder->CreateAdd(totalBits, Const5), Const6);
-    setProducedItemCount("expandedStream", totalProduced);
     
     iBuilder->CreateBr(expand3_4_exit);
     iBuilder->SetInsertPoint(expand3_4_exit);
@@ -485,7 +470,7 @@ radix64Kernel::radix64Kernel(IDISA::IDISA_Builder * iBuilder)
 base64Kernel::base64Kernel(IDISA::IDISA_Builder * iBuilder)
 : BlockOrientedKernel(iBuilder, "base64",
             {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
-            {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream"}},
+            {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream", new ProcessingRate()}},
             {}, {}, {}) {
     setDoBlockUpdatesProducedItemCountsAttribute(true);
 }

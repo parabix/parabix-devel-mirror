@@ -90,12 +90,16 @@ void KernelBuilder::prepareKernel() {
             report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
         }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
-        addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
+        if ((i == 0) || !isa<FixedRatio>(mStreamSetInputs[i].rate)) {
+            addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
+        }
         
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
-        addScalar(iBuilder->getSizeTy(), mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
+        if ((mStreamSetInputs.empty() && (i == 0)) || !isa<FixedRatio>(mStreamSetOutputs[i].rate)) {
+            addScalar(iBuilder->getSizeTy(), mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
+        }
     }
     for (const auto binding : mScalarInputs) {
         addScalar(binding.type, binding.name);
@@ -238,10 +242,35 @@ void KernelBuilder::setScalarField(Value * instance, Value * index, Value * valu
 }
 
 Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string & name) const {
+    unsigned ssIdx = getStreamSetIndex(name);
+    if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetInputs[ssIdx].rate)) {
+        Value * principalItemsProcessed = getScalarField(instance, mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX);
+        Value * items = principalItemsProcessed;
+        if (ratio->thisStreamItems != 1) {
+            items = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), items);
+        }
+        if (ratio->principalInputItems == 1) return items;
+        Constant * divisor = iBuilder->getSize(ratio->principalInputItems);
+        Constant * divisorLess1 = iBuilder->getSize(ratio->principalInputItems - 1);
+        return iBuilder->CreateUDiv(iBuilder->CreateAdd(items, divisorLess1), divisor);
+    }
     return getScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX);
 }
 
 Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name) const {
+    unsigned ssIdx = getStreamSetIndex(name);
+    if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetOutputs[ssIdx].rate)) {
+        std::string principalField = mStreamSetInputs.empty() ? mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX : mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
+        Value * principalItemsProcessed = getScalarField(instance, principalField);
+        Value * items = principalItemsProcessed;
+        if (ratio->thisStreamItems != 1) {
+            items = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), items);
+        }
+        if (ratio->principalInputItems == 1) return items;
+        Constant * divisor = iBuilder->getSize(ratio->principalInputItems);
+        Constant * divisorLess1 = iBuilder->getSize(ratio->principalInputItems - 1);
+        return iBuilder->CreateUDiv(iBuilder->CreateAdd(items, divisorLess1), divisor);
+    }
     return getScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX);
 }
 
@@ -284,6 +313,8 @@ inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bin
     }
     report_fatal_error("Error: no binding in " + getName() + " for " + name);
 }
+
+
 
 Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * streamIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
@@ -467,36 +498,7 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
 
     processed = getProcessedItemCount(mStreamSetInputs[0].name);
     Value * itemsDone = iBuilder->CreateAdd(processed, stride);
-    
-    // Update counts for stream sets with FixedRatio processing rates.
-    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetInputs[i].rate)) {
-            Value * items = itemsDone;
-            if (ratio->thisStreamItems != 1) {
-                items = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), itemsDone);
-            }
-            if (ratio->principalInputItems != 1) {
-                Value * divisor = iBuilder->getSize(ratio->principalInputItems);
-                items = iBuilder->CreateAdd(iBuilder->CreateUDiv(items, divisor), iBuilder->CreateURem(items, divisor));
-            }
-            setProcessedItemCount(mStreamSetInputs[i].name, items);
-        }
-    }
-    if (!mDoBlockUpdatesProducedItemCountsAttribute) {
-        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-            if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetOutputs[i].rate)) {
-                Value * produced = itemsDone;
-                if (ratio->thisStreamItems != 1) {
-                    produced = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), itemsDone);
-                }
-                if (ratio->principalInputItems != 1) {
-                    Value * divisor = iBuilder->getSize(ratio->principalInputItems);
-                    produced = iBuilder->CreateAdd(iBuilder->CreateUDiv(produced, divisor), iBuilder->CreateURem(produced, divisor));
-                }
-                setProducedItemCount(mStreamSetOutputs[i].name, produced);
-            }
-        }
-    }
+    setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);
     
     stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, iBuilder->getSize(1)), strideLoopBody);
     iBuilder->CreateBr(strideLoopCond);
@@ -512,35 +514,7 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
     CreateDoFinalBlockMethodCall(remainingItems);
     
     itemsDone = producerPos[0];
-        
-    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetInputs[i].rate)) {
-            Value * items = itemsDone;
-            if (ratio->thisStreamItems != 1) {
-                items = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), itemsDone);
-            }
-            if (ratio->principalInputItems != 1) {
-                Value * divisor = iBuilder->getSize(ratio->principalInputItems);
-                items = iBuilder->CreateAdd(iBuilder->CreateUDiv(items, divisor), iBuilder->CreateURem(items, divisor));
-            }
-            setProcessedItemCount(mStreamSetInputs[i].name, items);
-        }
-    }
-    if (!mDoBlockUpdatesProducedItemCountsAttribute) {
-        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-            if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetOutputs[i].rate)) {
-                Value * produced = itemsDone;
-                if (ratio->thisStreamItems != 1) {
-                    produced = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), itemsDone);
-                }
-                if (ratio->principalInputItems != 1) {
-                    Value * divisor = iBuilder->getSize(ratio->principalInputItems);
-                    produced = iBuilder->CreateAdd(iBuilder->CreateUDiv(produced, divisor), iBuilder->CreateURem(produced, divisor));
-                }
-                setProducedItemCount(mStreamSetOutputs[i].name, produced);
-            }
-        }
-    }
+    setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);    
     
     setTerminationSignal();
     iBuilder->CreateBr(segmentDone);

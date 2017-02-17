@@ -39,8 +39,10 @@ struct ProcessingRate {
     const ClassTypeId       mClassTypeId;
 };
 
+//
 // FixedRatio(m, n) means that the number of items processed or produced for a principal
-// stream set of length L are  m * L/n + L mod n
+// stream set of length L are ceiling(L*m/n)
+//
 struct FixedRatio : ProcessingRate {
     FixedRatio(unsigned strmItems = 1, unsigned perPrincipalInputItems = 1)
     : ProcessingRate(ClassTypeId::FixedRatio), thisStreamItems(strmItems), principalInputItems(perPrincipalInputItems) {
