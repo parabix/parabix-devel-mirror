@@ -18,15 +18,64 @@ namespace llvm { class Type; }
 namespace llvm { class Value; }
 
 
-struct Binding {
-    Binding(llvm::Type * type, const std::string & name, const unsigned step = 0)
-    : type(type), name(name), step(step) {
+// Processing rate attributes are required for all stream set bindings for a kernel.
+// These attributes describe the number of items that are processed or produced as
+// a ratio in comparison to the principal input stream set (or the principal output
+// stream set if there is no input.
+//
+// The default ratio is FixedRatio(1) which means that there is one item processed or
+// produced for every item of the principal input or output item.
+// 
+// Kernels which produce a variable number of items use MaxRatio(n), for a maximum
+// of n items produced or consumed per principal input or output item.
+struct ProcessingRate {
+    enum class ClassTypeId : unsigned {FixedRatio, MaxRatio, Unknown};
+    inline ClassTypeId getClassTypeId() const noexcept {
+        return mClassTypeId;
+    }
+    
+    ProcessingRate(ClassTypeId t = ClassTypeId::Unknown) : mClassTypeId(t) {}
 
+    const ClassTypeId       mClassTypeId;
+};
+
+// FixedRatio(m, n) means that the number of items processed or produced for a principal
+// stream set of length L are  m * L/n + L mod n
+struct FixedRatio : ProcessingRate {
+    FixedRatio(unsigned strmItems = 1, unsigned perPrincipalInputItems = 1)
+    : ProcessingRate(ClassTypeId::FixedRatio), thisStreamItems(strmItems), principalInputItems(perPrincipalInputItems) {
+    }
+    static inline bool classof(const ProcessingRate * e) {
+        return e->getClassTypeId() == ClassTypeId::FixedRatio;
+    }
+    
+    unsigned thisStreamItems;
+    unsigned principalInputItems;
+};
+
+struct MaxRatio : ProcessingRate {
+    MaxRatio(unsigned strmItems, unsigned perPrincipalInputItems = 1) 
+    : ProcessingRate(ClassTypeId::MaxRatio), thisStreamItems(strmItems), principalInputItems(perPrincipalInputItems) {
+    }
+    static inline bool classof(const ProcessingRate * e) {
+        return e->getClassTypeId() == ClassTypeId::MaxRatio;
+    }
+    
+    unsigned thisStreamItems;
+    unsigned principalInputItems;
+};
+
+       
+
+struct Binding {
+    Binding(llvm::Type * type, const std::string & name, ProcessingRate * r = nullptr)
+    : type(type), name(name) {
+        rate = (r == nullptr) ? new FixedRatio(1, 1) : r;
     }
 
     llvm::Type *        type;
     std::string         name;
-    const unsigned      step;
+    ProcessingRate *    rate;
 };
 
 class KernelInterface {

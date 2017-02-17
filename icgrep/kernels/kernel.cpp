@@ -91,6 +91,7 @@ void KernelBuilder::prepareKernel() {
         }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
         addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
+        
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
@@ -245,10 +246,12 @@ Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string 
 }
 
 void KernelBuilder::setProcessedItemCount(Value * instance, const std::string & name, Value * value) const {
+    //iBuilder->CallPrintInt(getName() + " " + name + " processed", value);
     setScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX, value);
 }
 
 void KernelBuilder::setProducedItemCount(Value * instance, const std::string & name, Value * value) const {
+    //iBuilder->CallPrintInt(getName() + " " + name +  " produced", value);
     setScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX, value);
 }
 
@@ -271,7 +274,7 @@ void KernelBuilder::releaseLogicalSegmentNo(Value * instance, Value * newCount) 
 inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bindings, const std::string & name, Value * itemCount) const {
     for (const Binding & b : bindings) {
         if (b.name == name) {
-            const auto divisor = (b.step == 0) ? iBuilder->getBitBlockWidth() : b.step;
+            const auto divisor = iBuilder->getBitBlockWidth();
             if (LLVM_LIKELY((divisor & (divisor - 1)) == 0)) {
                 return iBuilder->CreateLShr(itemCount, std::log2(divisor));
             } else {
@@ -462,21 +465,39 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
 
     CreateDoBlockMethodCall();
 
-    // Update counts
+    processed = getProcessedItemCount(mStreamSetInputs[0].name);
+    Value * itemsDone = iBuilder->CreateAdd(processed, stride);
+    
+    // Update counts for stream sets with FixedRatio processing rates.
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * processed = getProcessedItemCount(mStreamSetInputs[i].name);
-        processed = iBuilder->CreateAdd(processed, stride);
-        setProcessedItemCount(mStreamSetInputs[i].name, processed);
-    }
-
-    if (!mDoBlockUpdatesProducedItemCountsAttribute) {
-        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-            Value * produced = getProducedItemCount(mStreamSetOutputs[i].name);
-            produced = iBuilder->CreateAdd(produced, stride);
-            setProducedItemCount(mStreamSetOutputs[i].name, produced);
+        if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetInputs[i].rate)) {
+            Value * items = itemsDone;
+            if (ratio->thisStreamItems != 1) {
+                items = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), itemsDone);
+            }
+            if (ratio->principalInputItems != 1) {
+                Value * divisor = iBuilder->getSize(ratio->principalInputItems);
+                items = iBuilder->CreateAdd(iBuilder->CreateUDiv(items, divisor), iBuilder->CreateURem(items, divisor));
+            }
+            setProcessedItemCount(mStreamSetInputs[i].name, items);
         }
     }
-
+    if (!mDoBlockUpdatesProducedItemCountsAttribute) {
+        for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+            if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetOutputs[i].rate)) {
+                Value * produced = itemsDone;
+                if (ratio->thisStreamItems != 1) {
+                    produced = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), itemsDone);
+                }
+                if (ratio->principalInputItems != 1) {
+                    Value * divisor = iBuilder->getSize(ratio->principalInputItems);
+                    produced = iBuilder->CreateAdd(iBuilder->CreateUDiv(produced, divisor), iBuilder->CreateURem(produced, divisor));
+                }
+                setProducedItemCount(mStreamSetOutputs[i].name, produced);
+            }
+        }
+    }
+    
     stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, iBuilder->getSize(1)), strideLoopBody);
     iBuilder->CreateBr(strideLoopCond);
 
@@ -489,17 +510,38 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
     Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(mStreamSetInputs[0].name));
 
     CreateDoFinalBlockMethodCall(remainingItems);
-
+    
+    itemsDone = producerPos[0];
+        
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * preProcessed = getProcessedItemCount(mStreamSetInputs[i].name);
-        setProcessedItemCount(mStreamSetInputs[i].name, iBuilder->CreateAdd(preProcessed, remainingItems));
+        if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetInputs[i].rate)) {
+            Value * items = itemsDone;
+            if (ratio->thisStreamItems != 1) {
+                items = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), itemsDone);
+            }
+            if (ratio->principalInputItems != 1) {
+                Value * divisor = iBuilder->getSize(ratio->principalInputItems);
+                items = iBuilder->CreateAdd(iBuilder->CreateUDiv(items, divisor), iBuilder->CreateURem(items, divisor));
+            }
+            setProcessedItemCount(mStreamSetInputs[i].name, items);
+        }
     }
     if (!mDoBlockUpdatesProducedItemCountsAttribute) {
         for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-            Value * preProduced = getProducedItemCount(mStreamSetOutputs[i].name);
-            setProducedItemCount(mStreamSetOutputs[i].name, iBuilder->CreateAdd(preProduced, remainingItems));
+            if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetOutputs[i].rate)) {
+                Value * produced = itemsDone;
+                if (ratio->thisStreamItems != 1) {
+                    produced = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), itemsDone);
+                }
+                if (ratio->principalInputItems != 1) {
+                    Value * divisor = iBuilder->getSize(ratio->principalInputItems);
+                    produced = iBuilder->CreateAdd(iBuilder->CreateUDiv(produced, divisor), iBuilder->CreateURem(produced, divisor));
+                }
+                setProducedItemCount(mStreamSetOutputs[i].name, produced);
+            }
         }
     }
+    
     setTerminationSignal();
     iBuilder->CreateBr(segmentDone);
 
