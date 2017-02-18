@@ -338,9 +338,6 @@ void base64Kernel::generateDoBlockMethod() {
         Value * base64pack = processPackData(bytepack);
         storeOutputStreamPack("base64stream", iBuilder->getInt32(0), iBuilder->getInt32(i), base64pack);
     }
-    Value * produced = getProducedItemCount("base64stream");
-    produced = iBuilder->CreateAdd(produced, iBuilder->getSize(iBuilder->getStride()));
-    setProducedItemCount("base64stream", produced);
 }
 
 //// Special processing for the base 64 format.   The output must always contain a multiple
@@ -449,14 +446,12 @@ void base64Kernel::generateFinalBlockMethod(Value * remainingBytes) {
     iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, finalPadPos));
     iBuilder->CreateBr(fbExit);
     iBuilder->SetInsertPoint(fbExit);
-    Value * produced = iBuilder->CreateAdd(getProducedItemCount("base64stream"), iBuilder->CreateAdd(remainingBytes, padBytes));
-    setProducedItemCount("base64stream", produced);
 }
 
 expand3_4Kernel::expand3_4Kernel(IDISA::IDISA_Builder * iBuilder)
 : SegmentOrientedKernel(iBuilder, "expand3_4",
             {Binding{iBuilder->getStreamSetTy(1, 8), "sourceStream"}},
-            {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream", new FixedRatio(4,3)}},
+            {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream", FixedRatio(4,3)}},
             {}, {}, {}) {
 }
 
@@ -470,7 +465,7 @@ radix64Kernel::radix64Kernel(IDISA::IDISA_Builder * iBuilder)
 base64Kernel::base64Kernel(IDISA::IDISA_Builder * iBuilder)
 : BlockOrientedKernel(iBuilder, "base64",
             {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
-            {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream", new ProcessingRate()}},
+            {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream", RoundUpToMultiple(4)}},
             {}, {}, {}) {
     setDoBlockUpdatesProducedItemCountsAttribute(true);
 }

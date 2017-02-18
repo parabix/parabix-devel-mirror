@@ -21,6 +21,38 @@ static const auto ACCUMULATOR_INFIX = "_get_";
 
 using namespace llvm;
 
+ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Fixed, strmItemsPer, perPrincipalInputItems);
+}
+
+ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Max, strmItemsPer, perPrincipalInputItems);
+}
+
+ProcessingRate RoundUpToMultiple(unsigned itemMultiple) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::RoundUp, itemMultiple, itemMultiple);
+}
+
+ProcessingRate UnknownRate() {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Unknown, 0, 0);
+}
+
+Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value * principalInputItems) const {
+    Type * T = principalInputItems->getType();
+    if (mKind == ProcessingRate::ProcessingRateKind::Fixed || mKind == ProcessingRate::ProcessingRateKind::Max) {
+        Value * strmItems = (ratio_numerator == 1) ? principalInputItems : b->CreateMul(principalInputItems, ConstantInt::get(T, ratio_numerator)); 
+        if (ratio_denominator == 1) return strmItems;
+        return b->CreateUDiv(b->CreateAdd(ConstantInt::get(T, ratio_denominator - 1), strmItems), ConstantInt::get(T, ratio_denominator)); 
+    }
+    if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
+        Constant * multiple = ConstantInt::get(T, ratio_denominator);
+        Constant * multipleLess1 = ConstantInt::get(T, ratio_denominator - 1);
+        return b->CreateMul(b->CreateUDiv(b->CreateAdd(principalInputItems, multipleLess1), multiple), multiple);
+    }
+    return nullptr;
+}
+
+
 void KernelInterface::addKernelDeclarations(Module * client) {
     Module * saveModule = iBuilder->getModule();
     auto savePoint = iBuilder->saveIP();

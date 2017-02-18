@@ -24,60 +24,49 @@ namespace llvm { class Value; }
 // stream set if there is no input.
 //
 // The default ratio is FixedRatio(1) which means that there is one item processed or
-// produced for every item of the principal input or output item.
+// produced for every item of the principal input or output stream.
+// FixedRatio(m, n) means that for every group of n items of the principal stream,
+// there are m items in the output stream (rounding up).
 // 
 // Kernels which produce a variable number of items use MaxRatio(n), for a maximum
-// of n items produced or consumed per principal input or output item.
-struct ProcessingRate {
-    enum class ClassTypeId : unsigned {FixedRatio, MaxRatio, Unknown};
-    inline ClassTypeId getClassTypeId() const noexcept {
-        return mClassTypeId;
-    }
-    
-    ProcessingRate(ClassTypeId t = ClassTypeId::Unknown) : mClassTypeId(t) {}
-
-    const ClassTypeId       mClassTypeId;
-};
-
+// of n items produced or consumed per principal input or output item.  MaxRatio(m, n)
+// means there are at most m items for every n items of the principal stream.
 //
-// FixedRatio(m, n) means that the number of items processed or produced for a principal
-// stream set of length L are ceiling(L*m/n)
-//
-struct FixedRatio : ProcessingRate {
-    FixedRatio(unsigned strmItems = 1, unsigned perPrincipalInputItems = 1)
-    : ProcessingRate(ClassTypeId::FixedRatio), thisStreamItems(strmItems), principalInputItems(perPrincipalInputItems) {
-    }
-    static inline bool classof(const ProcessingRate * e) {
-        return e->getClassTypeId() == ClassTypeId::FixedRatio;
-    }
-    
-    unsigned thisStreamItems;
-    unsigned principalInputItems;
-};
+// RoundUpToMultiple(n) means that number of items produced is the same as the
+// number of input items, rounded up to an exact multiple of n.
+// 
 
-struct MaxRatio : ProcessingRate {
-    MaxRatio(unsigned strmItems, unsigned perPrincipalInputItems = 1) 
-    : ProcessingRate(ClassTypeId::MaxRatio), thisStreamItems(strmItems), principalInputItems(perPrincipalInputItems) {
-    }
-    static inline bool classof(const ProcessingRate * e) {
-        return e->getClassTypeId() == ClassTypeId::MaxRatio;
-    }
+struct ProcessingRate  {
+    enum ProcessingRateKind : uint8_t {Fixed, RoundUp, Max, Unknown};
+    ProcessingRate() {}
+    ProcessingRateKind getKind() const {return mKind;}
+    bool isExact() const {return (mKind == Fixed)||(mKind == RoundUp) ;}
+    llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems) const;
+    friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1);
+    friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1);
+    friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple);
+    friend ProcessingRate UnknownRate();
     
-    unsigned thisStreamItems;
-    unsigned principalInputItems;
-};
+protected:
+    ProcessingRate(ProcessingRateKind k, unsigned numerator, unsigned denominator) 
+    : mKind(k), ratio_numerator(numerator), ratio_denominator(denominator) {}
+    ProcessingRateKind mKind;
+    uint16_t ratio_numerator;
+    uint16_t ratio_denominator;
+    bool isVariableRate();
+}; 
 
-       
+ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems);
+ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems);
+ProcessingRate RoundUpToMultiple(unsigned itemMultiple);
+ProcessingRate UnknownRate();
 
 struct Binding {
-    Binding(llvm::Type * type, const std::string & name, ProcessingRate * r = nullptr)
-    : type(type), name(name) {
-        rate = (r == nullptr) ? new FixedRatio(1, 1) : r;
-    }
-
+    Binding(llvm::Type * type, const std::string & name, ProcessingRate r = FixedRatio(1))
+    : type(type), name(name), rate(r) { }
     llvm::Type *        type;
     std::string         name;
-    ProcessingRate *    rate;
+    ProcessingRate      rate;
 };
 
 class KernelInterface {

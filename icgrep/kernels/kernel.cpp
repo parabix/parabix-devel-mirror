@@ -90,14 +90,14 @@ void KernelBuilder::prepareKernel() {
             report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
         }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
-        if ((i == 0) || !isa<FixedRatio>(mStreamSetInputs[i].rate)) {
+        if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
             addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
         }
         
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
-        if ((mStreamSetInputs.empty() && (i == 0)) || !isa<FixedRatio>(mStreamSetOutputs[i].rate)) {
+        if ((mStreamSetInputs.empty() && (i == 0)) || !mStreamSetOutputs[i].rate.isExact()) {
             addScalar(iBuilder->getSizeTy(), mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
         }
     }
@@ -243,33 +243,19 @@ void KernelBuilder::setScalarField(Value * instance, Value * index, Value * valu
 
 Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string & name) const {
     unsigned ssIdx = getStreamSetIndex(name);
-    if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetInputs[ssIdx].rate)) {
+    if (mStreamSetInputs[ssIdx].rate.isExact()) {
         Value * principalItemsProcessed = getScalarField(instance, mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX);
-        Value * items = principalItemsProcessed;
-        if (ratio->thisStreamItems != 1) {
-            items = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), items);
-        }
-        if (ratio->principalInputItems == 1) return items;
-        Constant * divisor = iBuilder->getSize(ratio->principalInputItems);
-        Constant * divisorLess1 = iBuilder->getSize(ratio->principalInputItems - 1);
-        return iBuilder->CreateUDiv(iBuilder->CreateAdd(items, divisorLess1), divisor);
+        return mStreamSetInputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed);
     }
     return getScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX);
 }
 
 Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name) const {
     unsigned ssIdx = getStreamSetIndex(name);
-    if (auto * ratio = dyn_cast<FixedRatio>(mStreamSetOutputs[ssIdx].rate)) {
+    if (mStreamSetOutputs[ssIdx].rate.isExact()) {
         std::string principalField = mStreamSetInputs.empty() ? mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX : mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
         Value * principalItemsProcessed = getScalarField(instance, principalField);
-        Value * items = principalItemsProcessed;
-        if (ratio->thisStreamItems != 1) {
-            items = iBuilder->CreateMul(iBuilder->getSize(ratio->thisStreamItems), items);
-        }
-        if (ratio->principalInputItems == 1) return items;
-        Constant * divisor = iBuilder->getSize(ratio->principalInputItems);
-        Constant * divisorLess1 = iBuilder->getSize(ratio->principalInputItems - 1);
-        return iBuilder->CreateUDiv(iBuilder->CreateAdd(items, divisorLess1), divisor);
+        return mStreamSetOutputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed);
     }
     return getScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX);
 }

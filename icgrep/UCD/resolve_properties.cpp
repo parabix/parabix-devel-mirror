@@ -105,39 +105,12 @@ bool resolvePropertyDefinition(Name * const property) {
             return true;
         }
         // Now compatibility properties of UTR #18 Annex C
-        else if (value == "xdigit") {
-            Name * digit = makeName("nd", Name::Type::UnicodeProperty);
-            Name * hexdigit = makeName("hexdigit", Name::Type::UnicodeProperty);
-            property->setDefinition(makeAlt({digit, hexdigit}));
-            return true;
-        } else if (value == "alnum") {
-            Name * digit = makeName("nd", Name::Type::UnicodeProperty);
-            Name * alpha = makeName("alphabetic", Name::Type::UnicodeProperty);
-            property->setDefinition(makeAlt({digit, alpha}));
-            return true;
-        } else if (value == "blank") {
-            Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
-            CC * tab = makeCC(0x09);
-            property->setDefinition(makeAlt({space_sep, tab}));
-            return true;
-        } else if (value == "graph") {
+        else if (value == "graph") {
             Name * space = makeName("space", Name::Type::UnicodeProperty);
             Name * ctrl = makeName("control", Name::Type::UnicodeProperty);
             Name * surr = makeName("surrogate", Name::Type::UnicodeProperty);
             Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
             property->setDefinition(makeDiff(makeAny(), makeAlt({space, ctrl, surr, unassigned})));
-            return true;
-        } else if (value == "print") {
-            Name * graph = makeName("graph", Name::Type::UnicodeProperty);
-            Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
-            property->setDefinition(makeAlt({graph, space_sep}));
-            return true;
-        } else if (value == "word") {
-            Name * alnum = makeName("alnum", Name::Type::UnicodeProperty);
-            Name * mark = makeName("mark", Name::Type::UnicodeProperty);
-            Name * conn = makeName("connectorpunctuation", Name::Type::UnicodeProperty);
-            Name * join = makeName("joincontrol", Name::Type::UnicodeProperty);
-            property->setDefinition(makeAlt({alnum, mark, conn, join}));
             return true;
         } else if (value == "GCB" || value == "NonGCB"){
             generateGraphemeClusterBoundaryRule(property);
@@ -273,6 +246,32 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                     throw UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
                 }
             }
+            // Try special cases of Unicode TR #18
+            // Now compatibility properties of UTR #18 Annex C
+                    
+            else if (value == "alnum") {
+                Name * digit = makeName("nd", Name::Type::UnicodeProperty);
+                Name * alpha = makeName("alphabetic", Name::Type::UnicodeProperty);
+                return resolveUnicodeSet(digit) + resolveUnicodeSet(alpha);
+            } else if (value == "xdigit") {
+                Name * digit = makeName("nd", Name::Type::UnicodeProperty);
+                Name * hexdigit = makeName("hexdigit", Name::Type::UnicodeProperty);
+                return resolveUnicodeSet(digit) + resolveUnicodeSet(hexdigit);
+            } else if (value == "blank") {
+                Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
+                return resolveUnicodeSet(space_sep) + UnicodeSet(0x09) /* tab */;
+            } else if (value == "print") {
+                Name * graph = makeName("graph", Name::Type::UnicodeProperty);
+                Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
+                return resolveUnicodeSet(graph) + resolveUnicodeSet(space_sep);
+            } else if (value == "word") {
+                Name * alnum = makeName("alnum", Name::Type::UnicodeProperty);
+                Name * mark = makeName("mark", Name::Type::UnicodeProperty);
+                Name * conn = makeName("connectorpunctuation", Name::Type::UnicodeProperty);
+                Name * join = makeName("joincontrol", Name::Type::UnicodeProperty);
+                return resolveUnicodeSet(alnum) + resolveUnicodeSet(mark) + resolveUnicodeSet(conn) + resolveUnicodeSet(join);
+            }
+
         }
     }
     throw UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
