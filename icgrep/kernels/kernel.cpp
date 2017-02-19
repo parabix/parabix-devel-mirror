@@ -532,7 +532,30 @@ void BlockOrientedKernel::callGenerateDoBlockMethod() {
     auto args = mCurrentFunction->arg_begin();
     mSelf = &(*args);
     iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
+    std::vector<Value *> priorProduced;
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        if (isa<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
+            priorProduced.push_back(getProducedItemCount(mStreamSetOutputs[i].name));
+        }
+    }
     generateDoBlockMethod(); // must be implemented by the KernelBuilder subtype
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        unsigned priorIdx = 0;
+        if (auto cb = dyn_cast<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
+            BasicBlock * copyBack = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
+            BasicBlock * done = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
+            Value * newlyProduced = iBuilder->CreateSub(getProducedItemCount(mStreamSetOutputs[i].name), priorProduced[priorIdx]);
+            Value * accessible = cb->getLinearlyAccessibleItems(priorProduced[priorIdx]);
+            Value * wraparound = iBuilder->CreateICmpULT(accessible, newlyProduced);
+            iBuilder->CreateCondBr(wraparound, copyBack, done);
+            iBuilder->SetInsertPoint(copyBack);
+            Value * copyItems = iBuilder->CreateSub(newlyProduced, accessible);
+            cb->createCopyBack(getStreamSetBufferPtr(mStreamSetOutputs[i].name), copyItems);
+            iBuilder->CreateBr(done);
+            iBuilder->SetInsertPoint(done);
+            priorIdx++;
+        }
+    }    
     iBuilder->CreateRetVoid();
     #ifndef NDEBUG
     std::string tmp;

@@ -172,24 +172,6 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod() {
     }    
     Value * i16UnitsFinal = iBuilder->CreateAdd(i16UnitsGenerated, iBuilder->CreateZExt(offset, iBuilder->getSizeTy()));
     setProducedItemCount("i16Stream", i16UnitsFinal);
-    const auto b  = getOutputStreamSetBuffer("i16Stream");
-
-    if (auto cb = dyn_cast<CircularCopybackBuffer>(b)) {
-        BasicBlock * copyBack = CreateBasicBlock("copyBack");
-        BasicBlock * p2sCompressDone = CreateBasicBlock("p2sCompressDone");
-        
-        // Check for overflow into the buffer overflow area and copy data back if so.
-        Value * accessible = cb->getLinearlyAccessibleItems(i16UnitsGenerated);
-        offset = iBuilder->CreateZExt(offset, iBuilder->getSizeTy());
-        Value * wraparound = iBuilder->CreateICmpULT(accessible, offset);
-        iBuilder->CreateCondBr(wraparound, copyBack, p2sCompressDone);
-        
-        iBuilder->SetInsertPoint(copyBack);
-        Value * copyItems = iBuilder->CreateSub(offset, accessible);
-        cb->createCopyBack(getStreamSetBufferPtr("i16Stream"), copyItems);
-        iBuilder->CreateBr(p2sCompressDone);
-        iBuilder->SetInsertPoint(p2sCompressDone);
-    }
 }
     
 P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(IDISA::IDISA_Builder * b)
