@@ -42,8 +42,8 @@ struct ProcessingRate  {
     ProcessingRateKind getKind() const {return mKind;}
     bool isExact() const {return (mKind == Fixed)||(mKind == RoundUp) ;}
     llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems) const;
-    friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1);
-    friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1);
+    friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems);
+    friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems);
     friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple);
     friend ProcessingRate UnknownRate();
     
@@ -56,8 +56,8 @@ protected:
     bool isVariableRate();
 }; 
 
-ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems);
-ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems);
+ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1);
+ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1);
 ProcessingRate RoundUpToMultiple(unsigned itemMultiple);
 ProcessingRate UnknownRate();
 
