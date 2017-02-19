@@ -50,6 +50,8 @@ public:
 
     virtual llvm::Value * getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const;
     
+    virtual llvm::Value * getStreamSetCount(llvm::Value * self) const;
+
     llvm::Value * getRawItemPointer(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
     // The number of items that cam be linearly accessed from a given logical stream position.
@@ -163,6 +165,8 @@ public:
     llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const override;
 
     void allocateBuffer() override;
+
+    llvm::Value * getStreamSetCount(llvm::Value * self) const override;
 
 protected:
 

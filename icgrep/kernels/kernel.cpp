@@ -13,6 +13,9 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/Scalar.h>
+#ifndef NDEBUG
+#include <llvm/IR/Verifier.h>
+#endif
 
 static const auto DO_BLOCK_SUFFIX = "_DoBlock";
 
@@ -322,6 +325,10 @@ Value * KernelBuilder::loadInputStreamPack(const std::string & name, Value * str
     return iBuilder->CreateBlockAlignedLoad(getInputStreamPackPtr(name, streamIndex, packIndex));
 }
 
+llvm::Value * KernelBuilder::getInputStreamSetCount(const std::string & name) const {
+    return getInputStreamSetBuffer(name)->getStreamSetCount(getStreamSetBufferPtr(name));
+}
+
 llvm::Value * KernelBuilder::getAdjustedInputStreamBlockPtr(Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex) const {
     Value * blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     blockIndex = iBuilder->CreateAdd(blockIndex, blockAdjustment);
@@ -349,6 +356,10 @@ void KernelBuilder::storeOutputStreamPack(const std::string & name, Value * stre
     return iBuilder->CreateBlockAlignedStore(toStore, getOutputStreamPackPtr(name, streamIndex, packIndex));
 }
 
+llvm::Value * KernelBuilder::getOutputStreamSetCount(const std::string & name) const {
+    return getOutputStreamSetBuffer(name)->getStreamSetCount(getStreamSetBufferPtr(name));
+}
+
 Value * KernelBuilder::getRawInputPointer(const std::string & name, Value * streamIndex, Value * absolutePosition) const {
     return getInputStreamSetBuffer(name)->getRawItemPointer(getStreamSetBufferPtr(name), streamIndex, absolutePosition);
 }
@@ -360,7 +371,7 @@ Value * KernelBuilder::getRawOutputPointer(const std::string & name, Value * str
 unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
     const auto f = mStreamSetNameMap.find(name);
     if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
-        throw std::runtime_error(getName() + " does not contain stream set: " + name);
+        report_fatal_error(getName() + " does not contain stream set: " + name);
     }
     return f->second;
 }
@@ -523,7 +534,14 @@ void BlockOrientedKernel::callGenerateDoBlockMethod() {
     iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     generateDoBlockMethod(); // must be implemented by the KernelBuilder subtype
     iBuilder->CreateRetVoid();
-
+    #ifndef NDEBUG
+    std::string tmp;
+    raw_string_ostream out(tmp);
+    if (verifyFunction(*mCurrentFunction, &out)) {
+        mCurrentFunction->dump();
+        report_fatal_error(getName() + ": " + out.str());
+    }
+    #endif
     // Use the pass manager to optimize the function.
     FunctionPassManager fpm(iBuilder->getModule());
     fpm.add(createReassociatePass());             //Reassociate expressions.

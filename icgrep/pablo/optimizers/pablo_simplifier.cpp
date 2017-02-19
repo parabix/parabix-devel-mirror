@@ -15,6 +15,8 @@
 #ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
+#include <llvm/Support/raw_ostream.h>
+
 
 using namespace boost;
 using namespace boost::container;
@@ -613,6 +615,7 @@ void Simplifier::deadCodeElimination(PabloKernel * kernel) {
  * Find and replace any Pablo operations with a less expensive equivalent operation whenever possible.
  ** ------------------------------------------------------------------------------------------------------------- */
 void Simplifier::strengthReduction(PabloBlock * const block) {
+
     Statement * stmt = block->front();
     while (stmt) {
         if (isa<Branch>(stmt)) {
@@ -635,11 +638,14 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
                 // Replace a ScanThru(Advance(x,n),y) with an ScanThru(Advance(x, n - 1), Advance(x, n - 1) | y), where Advance(x, 0) = x
                 Advance * adv = cast<Advance>(scanThru->getScanFrom());
                 if (LLVM_UNLIKELY(adv->getNumUses() == 1)) {
-                    block->setInsertPoint(scanThru->getPrevNode());
-                    PabloAST * expr = block->createAdvance(adv->getOperand(0), block->getInteger(adv->getAmount() - 1));
-                    scanThru->setOperand(0, expr);
-                    scanThru->setOperand(1, block->createOr(scanThru->getOperand(1), expr));
+                    PabloAST * stream = adv->getExpression();
+                    block->setInsertPoint(stmt);
+                    if (LLVM_UNLIKELY(adv->getAmount() != 1)) {
+                        stream = block->createAdvance(stream, block->getInteger(adv->getAmount() - 1));
+                    }
+                    stmt = scanThru->replaceWith(block->createAdvanceThenScanThru(stream, scanThru->getScanThru()));
                     adv->eraseFromParent(false);
+                    continue;
                 }
             } else if (LLVM_UNLIKELY(isa<And>(scanThru->getScanFrom()))) {
                 // Suppose B is an arbitrary bitstream and A = Advance(B, 1). ScanThru(B ∧ ¬A, B) will leave a marker on the position
@@ -650,6 +656,22 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
 
 
 
+            }
+        } else if (LLVM_UNLIKELY(isa<ScanTo>(stmt))) {
+            ScanTo * scanTo = cast<ScanTo>(stmt);
+            if (LLVM_UNLIKELY(isa<Advance>(scanTo->getScanFrom()))) {
+                // Replace a ScanTo(Advance(x,n),y) with an ScanTo(Advance(x, n - 1), Advance(x, n - 1) | y), where Advance(x, 0) = x
+                Advance * adv = cast<Advance>(scanTo->getScanFrom());
+                if (LLVM_UNLIKELY(adv->getNumUses() == 1)) {
+                    PabloAST * stream = adv->getExpression();
+                    block->setInsertPoint(stmt);
+                    if (LLVM_UNLIKELY(adv->getAmount() != 1)) {
+                        stream = block->createAdvance(stream, block->getInteger(adv->getAmount() - 1));
+                    }
+                    stmt = scanTo->replaceWith(block->createAdvanceThenScanTo(stream, scanTo->getScanTo()));
+                    adv->eraseFromParent(false);
+                    continue;
+                }
             }
         }
         stmt = stmt->getNextNode();

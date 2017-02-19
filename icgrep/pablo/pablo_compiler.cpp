@@ -336,7 +336,6 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
         }
 
         incomingPhi->addIncoming(outgoingValue, whileExitBlock);
-        f->second = incomingPhi;
     }
 
     iBuilder->CreateCondBr(condition, whileBodyBlock, whileEndBlock);
@@ -456,10 +455,25 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
             Value * const sum = mCarryManager->addCarryInCarryOut(mstar, marker_and_cc, cc);
             value = iBuilder->simd_or(iBuilder->simd_xor(sum, cc), marker);
         } else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt)) {
+            Value * const from = compileExpression(sthru->getScanFrom());
+            Value * const thru = compileExpression(sthru->getScanThru());
+            Value * const sum = mCarryManager->addCarryInCarryOut(sthru, from, thru);
+            value = iBuilder->simd_and(sum, iBuilder->simd_not(thru));
+        } else if (const ScanTo * sthru = dyn_cast<ScanTo>(stmt)) {
             Value * const marker_expr = compileExpression(sthru->getScanFrom());
-            Value * const cc_expr = compileExpression(sthru->getScanThru());
-            Value * const sum = mCarryManager->addCarryInCarryOut(sthru, marker_expr, cc_expr);
-            value = iBuilder->simd_and(sum, iBuilder->simd_not(cc_expr));
+            Value * const to = iBuilder->simd_xor(compileExpression(sthru->getScanTo()), mKernel->getScalarField("EOFmask"));
+            Value * const sum = mCarryManager->addCarryInCarryOut(sthru, marker_expr, iBuilder->simd_not(to));
+            value = iBuilder->simd_and(sum, to);
+        } else if (const AdvanceThenScanThru * sthru = dyn_cast<AdvanceThenScanThru>(stmt)) {
+            Value * const from = compileExpression(sthru->getScanFrom());
+            Value * const thru = compileExpression(sthru->getScanThru());
+            Value * const sum = mCarryManager->addCarryInCarryOut(sthru, from, iBuilder->simd_or(from, thru));
+            value = iBuilder->simd_and(sum, iBuilder->simd_not(thru));
+        } else if (const AdvanceThenScanTo * sthru = dyn_cast<AdvanceThenScanTo>(stmt)) {
+            Value * const from = compileExpression(sthru->getScanFrom());
+            Value * const to = iBuilder->simd_xor(compileExpression(sthru->getScanTo()), mKernel->getScalarField("EOFmask"));
+            Value * const sum = mCarryManager->addCarryInCarryOut(sthru, from, iBuilder->simd_or(from, iBuilder->simd_not(to)));
+            value = iBuilder->simd_and(sum, to);
         } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
             Value * EOFmask = mKernel->getScalarField("EOFmask");
             value = iBuilder->simd_xor(compileExpression(e->getExpr()), EOFmask);
@@ -545,6 +559,9 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
         mMarker[expr] = value;
         if (DebugOptionIsSet(DumpTrace)) {
             const String & name = isa<Var>(expr) ? cast<Var>(expr)->getName() : cast<Statement>(expr)->getName();
+            if (value->getType()->isPointerTy()) {
+                value = iBuilder->CreateLoad(value);
+            }
             if (value->getType()->isVectorTy()) {
                 iBuilder->CallPrintRegister(name.str(), value);
             } else if (value->getType()->isIntegerTy()) {

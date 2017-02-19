@@ -65,11 +65,11 @@ public:
         return mPb->createOnes(type);
     }
 
-    inline Var * createVar(const llvm::StringRef name, llvm::Type * const type = nullptr) {
+    inline Var * createVar(const llvm::StringRef & name, llvm::Type * const type = nullptr) {
         return createVar(makeName(name), type);
     }
 
-    inline Var * createVar(const llvm::StringRef name, PabloAST * value) {
+    inline Var * createVar(const llvm::StringRef & name, PabloAST * value) {
         Var * var = createVar(name, value->getType());
         createAssign(var, value);
         return var;
@@ -147,13 +147,17 @@ public:
 
     PabloAST * createScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix);
 
-    PabloAST * createScanTo(PabloAST * from, PabloAST * to) {
-        return createScanThru(from, createNot(to));
-    }
+    PabloAST * createScanTo(PabloAST * from, PabloAST * to);
 
-    PabloAST * createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
-        return createScanThru(from, createNot(to), prefix);
-    }
+    PabloAST * createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix);
+
+    PabloAST * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru);
+
+    PabloAST * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix);
+
+    PabloAST * createAdvanceThenScanTo(PabloAST * from, PabloAST * to);
+
+    PabloAST * createAdvanceThenScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix);
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 

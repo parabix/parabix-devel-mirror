@@ -29,5 +29,13 @@ private:
     unsigned mStreamIndex;
 };
 
+class PrintableStreamSet : public BlockOrientedKernel {
+public:
+    PrintableStreamSet(IDISA::IDISA_Builder * builder);
+    virtual ~PrintableStreamSet() {}
+private:
+    void generateDoBlockMethod() override;
+};
+
 }
 #endif

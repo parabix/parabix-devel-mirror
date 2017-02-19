@@ -254,6 +254,30 @@ ScanThru * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru, String *
     return insertAtInsertionPoint(new (mAllocator) ScanThru(from, thru, name, mAllocator));
 }
 
+ScanTo * PabloBlock::createScanTo(PabloAST * from, PabloAST * to, String * name) {
+    CHECK_SAME_TYPE(from, to);
+    if (name == nullptr) {
+        name = makeName("scanto");
+    }
+    return insertAtInsertionPoint(new (mAllocator) ScanTo(from, to, name, mAllocator));
+}
+
+AdvanceThenScanThru * PabloBlock::createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, String * name) {
+    CHECK_SAME_TYPE(from, thru);
+    if (name == nullptr) {
+        name = makeName("advscanthru");
+    }
+    return insertAtInsertionPoint(new (mAllocator) AdvanceThenScanThru(from, thru, name, mAllocator));
+}
+
+AdvanceThenScanTo * PabloBlock::createAdvanceThenScanTo(PabloAST * from, PabloAST * to, String * name) {
+    CHECK_SAME_TYPE(from, to);
+    if (name == nullptr) {
+        name = makeName("advscanto");
+    }
+    return insertAtInsertionPoint(new (mAllocator) AdvanceThenScanTo(from, to, name, mAllocator));
+}
+
 If * PabloBlock::createIf(PabloAST * condition, PabloBlock * body) {
     assert (condition);
     If * const node = insertAtInsertionPoint(new (mAllocator) If(condition, body, mAllocator));

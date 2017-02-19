@@ -76,6 +76,9 @@ public:
         // Stream operations
         , Advance
         , ScanThru
+        , AdvanceThenScanThru
+        , ScanTo
+        , AdvanceThenScanTo
         , Lookahead
         , MatchStar
         , InFile

@@ -22,7 +22,7 @@ IDISA_Builder * GetIDISA_Builder(llvm::Module * mod) {
         mod->setTargetTriple(llvm::sys::getProcessTriple());
     }
     Triple T(mod->getTargetTriple());
-    unsigned registerWidth = 0;
+    unsigned registerWidth = 32;
     if (T.isArch64Bit()) {
         registerWidth = 64;
     } else if (T.isArch32Bit()) {

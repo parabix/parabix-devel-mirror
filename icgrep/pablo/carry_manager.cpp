@@ -29,6 +29,21 @@ inline static unsigned ceil_udiv(const unsigned x, const unsigned y) {
     return (((x - 1) | (y - 1)) + 1) / y;
 }
 
+using TypeId = PabloAST::ClassTypeId;
+
+inline static bool isNonAdvanceCarryGeneratingStatement(const Statement * const stmt) {
+    switch (stmt->getClassTypeId()) {
+        case TypeId::ScanThru:
+        case TypeId::AdvanceThenScanThru:
+        case TypeId::ScanTo:
+        case TypeId::AdvanceThenScanTo:
+        case TypeId::MatchStar:
+            return true;
+        default:
+            return false;
+    }
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeCarryData
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -337,8 +352,8 @@ void CarryManager::leaveScope() {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * CarryManager::addCarryInCarryOut(const Statement * operation, Value * const e1, Value * const e2) {
-    assert (dyn_cast_or_null<ScanThru>(operation) || dyn_cast_or_null<MatchStar>(operation));
+Value * CarryManager::addCarryInCarryOut(const Statement * const operation, Value * const e1, Value * const e2) {
+    assert (operation && (isNonAdvanceCarryGeneratingStatement(operation)));
     Value * const carryIn = getNextCarryIn();
     Value * carryOut, * result;
     std::tie(carryOut, result) = iBuilder->bitblock_add_with_carry(e1, e2, carryIn);
@@ -350,7 +365,7 @@ Value * CarryManager::addCarryInCarryOut(const Statement * operation, Value * co
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief advanceCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * CarryManager::advanceCarryInCarryOut(const Advance * advance, Value * const value) {
+Value * CarryManager::advanceCarryInCarryOut(const Advance * const advance, Value * const value) {
     const auto shiftAmount = advance->getAmount();
     if (LLVM_LIKELY(shiftAmount <= mBitBlockWidth)) {
         Value * const carryIn = getNextCarryIn();
@@ -576,7 +591,7 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
                 mHasLongAdvance = true;
                 state.push_back(type);
             }
-        } else if (LLVM_UNLIKELY(isa<ScanThru>(stmt) || isa<MatchStar>(stmt))) {
+        } else if (LLVM_UNLIKELY(isNonAdvanceCarryGeneratingStatement(stmt))) {
             state.push_back(carryPackType);
         } else if (LLVM_UNLIKELY(isa<If>(stmt))) {
             state.push_back(analyse(cast<If>(stmt)->getBody(), ifDepth + 1, loopDepth));

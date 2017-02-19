@@ -79,7 +79,7 @@ add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/dele
 add_executable(base64 base64.cpp kernels/radix64.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/deletion.cpp kernels/stdout_kernel.cpp)
 add_executable(wc wc.cpp toolchain.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp toolchain.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp)
-add_executable(array-test array-test.cpp toolchain.cpp)
+add_executable(array-test array-test.cpp toolchain.cpp kernels/alignedprint.cpp)
 
 ## IWYU detects superfluous includes and when the include can be replaced with a forward declaration.
 ## It can be obtained using "apt-get install iwyu" or from "github.com/include-what-you-use".

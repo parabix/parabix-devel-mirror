@@ -36,6 +36,14 @@ Value * StreamSetBuffer::getStreamPackPtr(Value * self, Value * streamIndex, Val
     return iBuilder->CreateGEP(getStreamSetBlockPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex, packIndex});
 }
 
+llvm::Value * StreamSetBuffer::getStreamSetCount(Value *) const {
+    uint64_t count = 1;
+    if (isa<ArrayType>(mBaseType)) {
+        count = mBaseType->getArrayNumElements();
+    }
+    return iBuilder->getInt32(count);
+}
+
 /**
  * @brief getRawItemPointer
  *
@@ -99,7 +107,7 @@ Value * ExternalFileBuffer::getStreamSetBlockPtr(Value * self, Value * blockNo) 
 }
 
 Value * ExternalFileBuffer::getLinearlyAccessibleItems(llvm::Value *) const {
-    report_fatal_error("External buffers: getLinearlyAccessibleItems not supported.");
+    report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
 }
 
 // Circular Buffer
@@ -173,8 +181,6 @@ Value * CircularCopybackBuffer::getStreamSetBlockPtr(Value * self, Value * block
 }
 
 
-
-// Expandable Buffer
 
 // Expandable Buffer
 
@@ -268,8 +274,12 @@ llvm::Value * ExpandableBuffer::getStreamPackPtr(llvm::Value * self, llvm::Value
     return iBuilder->CreateGEP(ptr, {offset, packIndex});
 }
 
+llvm::Value * ExpandableBuffer::getStreamSetCount(llvm::Value * self) const {
+    return iBuilder->CreateLoad(iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
+}
+
 Value * ExpandableBuffer::getStreamSetBlockPtr(Value *, Value *) const {
-    report_fatal_error("Expandable buffers: getStreamSetPtr is not supported.");
+    report_fatal_error("Expandable buffers: getStreamSetBlockPtr is not supported.");
 }
 
 Value * ExpandableBuffer::getLinearlyAccessibleItems(llvm::Value *) const {

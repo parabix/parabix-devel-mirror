@@ -195,7 +195,7 @@ typedef void (*wcFunctionType)(char * byte_data, size_t filesize, size_t fileIdx
 
 static ExecutionEngine * wcEngine = nullptr;
 
-wcFunctionType wcCodeGen(void) { 
+wcFunctionType wcCodeGen(void) {
     Module * M = new Module("wc", getGlobalContext());
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 

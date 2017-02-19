@@ -473,7 +473,7 @@ void initResult(std::vector<std::string> filenames){
 
 extern "C" {
     void wrapped_report_match(size_t lineNum, size_t line_start, size_t line_end, const char * buffer, size_t filesize, int fileIdx) {
-
+        assert (buffer);
 #ifdef CUDA_ENABLED 
     if (codegen::NVPTX){
         while(line_start>startPoints[blockNo]) blockNo++;
@@ -562,6 +562,7 @@ void PrintResult(bool CountOnly, std::vector<size_t> & total_CountOnly){
 
 extern "C" {
     void insert_codepoints(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
+        assert (buffer);
         re::codepoint_t c = 0;
         ssize_t line_pos = line_start;
         while (isxdigit(buffer[line_pos])) {

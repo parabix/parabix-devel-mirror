@@ -171,13 +171,15 @@ protected:
     }
 
     llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex) const;
-    
+
     llvm::Value * loadInputStreamBlock(const std::string & name, llvm::Value * streamIndex) const;
     
     llvm::Value * getInputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
     
     llvm::Value * loadInputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
     
+    llvm::Value * getInputStreamSetCount(const std::string & name) const;
+
     llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex) const;
     
     void storeOutputStreamBlock(const std::string & name, llvm::Value * streamIndex, llvm::Value * toStore) const;
@@ -185,7 +187,9 @@ protected:
     llvm::Value * getOutputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) const;
     
     void storeOutputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * toStore) const;
-    
+
+    llvm::Value * getOutputStreamSetCount(const std::string & name) const;
+
     llvm::Value * getAdjustedInputStreamBlockPtr(llvm::Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex) const;
 
     llvm::Value * getRawInputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;

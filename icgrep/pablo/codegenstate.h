@@ -14,6 +14,8 @@ namespace llvm { class Type; }
 namespace llvm { class raw_ostream; }
 namespace pablo { class Add; }
 namespace pablo { class Advance; }
+namespace pablo { class AdvanceThenScanThru; }
+namespace pablo { class AdvanceThenScanTo; }
 namespace pablo { class And; }
 namespace pablo { class Assign; }
 namespace pablo { class AtEOF; }
@@ -31,6 +33,7 @@ namespace pablo { class Ones; }
 namespace pablo { class Or; }
 namespace pablo { class PabloKernel; }
 namespace pablo { class ScanThru; }
+namespace pablo { class ScanTo; }
 namespace pablo { class Sel; }
 namespace pablo { class String; }
 namespace pablo { class Subtract; }
@@ -237,14 +240,40 @@ public:
 
     ScanThru * createScanThru(PabloAST * from, PabloAST * thru, String * name);
 
+    ScanTo * createScanTo(PabloAST * from, PabloAST * to) {
+        return createScanTo(from, to, nullptr);
+    }
+
+    ScanTo * createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
+        return createScanTo(from, to, makeName(prefix));
+    }
+
+    ScanTo * createScanTo(PabloAST * from, PabloAST * to, String * name);
+
+    AdvanceThenScanThru * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru) {
+        return createAdvanceThenScanThru(from, thru, nullptr);
+    }
+
+    AdvanceThenScanThru * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix) {
+        return createAdvanceThenScanThru(from, thru, makeName(prefix));
+    }
+
+    AdvanceThenScanThru * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, String * name);
+
+    AdvanceThenScanTo * createAdvanceThenScanTo(PabloAST * from, PabloAST * to) {
+        return createAdvanceThenScanTo(from, to, nullptr);
+    }
+
+    AdvanceThenScanTo * createAdvanceThenScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
+        return createAdvanceThenScanTo(from, to, makeName(prefix));
+    }
+
+    AdvanceThenScanTo * createAdvanceThenScanTo(PabloAST * from, PabloAST * to, String * name);
+
     If * createIf(PabloAST * condition, PabloBlock * body);
 
     While * createWhile(PabloAST * condition, PabloBlock * body);
 
-//    llvm::Type * getStreamTy(const unsigned FieldWidth = 1) {
-//        return mParent->getStreamTy(FieldWidth);
-//    }
-    
     llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return mParent->getStreamSetTy(NumElements, FieldWidth);
     }

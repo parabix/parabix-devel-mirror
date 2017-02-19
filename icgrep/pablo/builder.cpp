@@ -494,6 +494,53 @@ PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru, const 
     return result;
 }
 
+PabloAST * PabloBuilder::createScanTo(PabloAST * from, PabloAST * to) {
+    if (isa<Zeroes>(from)) {
+        return from;
+    }
+    MAKE_BINARY(createScanTo, TypeId::ScanTo, from, to);
+    return result;
+}
+
+PabloAST * PabloBuilder::createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
+    if (isa<Zeroes>(from)) {
+        return from;
+    }
+    MAKE_NAMED_BINARY(createScanTo, TypeId::ScanTo, prefix, from, to);
+    return result;
+}
+
+PabloAST * PabloBuilder::createAdvanceThenScanThru(PabloAST * from, PabloAST * thru) {
+    if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
+        return from;
+    }
+    MAKE_BINARY(createAdvanceThenScanThru, TypeId::AdvanceThenScanThru, from, thru);
+    return result;
+}
+
+PabloAST * PabloBuilder::createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix) {
+    if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
+        return from;
+    }
+    MAKE_NAMED_BINARY(createAdvanceThenScanThru, TypeId::AdvanceThenScanThru, prefix, from, thru);
+    return result;
+}
+
+PabloAST * PabloBuilder::createAdvanceThenScanTo(PabloAST * from, PabloAST * to) {
+    if (isa<Zeroes>(from)) {
+        return from;
+    }
+    MAKE_BINARY(createAdvanceThenScanTo, TypeId::ScanTo, from, to);
+    return result;
+}
+
+PabloAST * PabloBuilder::createAdvanceThenScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
+    if (isa<Zeroes>(from)) {
+        return from;
+    }
+    MAKE_NAMED_BINARY(createAdvanceThenScanTo, TypeId::ScanTo, prefix, from, to);
+    return result;
+}
 
 PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
     if (isa<Ones>(condition)) {

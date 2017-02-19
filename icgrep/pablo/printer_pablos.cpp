@@ -114,6 +114,24 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             out << ", ";
             print(sthru->getScanThru(), out);
             out << ")";
+        } else if (const ScanTo * sto = dyn_cast<ScanTo>(stmt)) {
+            out << " = pablo.ScanTo(";
+            print(sto->getScanFrom(), out);
+            out << ", ";
+            print(sto->getScanTo(), out);
+            out << ")";
+        } else if (const AdvanceThenScanThru * sthru = dyn_cast<AdvanceThenScanThru>(stmt)) {
+            out << " = pablo.AdvanceThenScanThru(";
+            print(sthru->getScanFrom(), out);
+            out << ", ";
+            print(sthru->getScanThru(), out);
+            out << ")";
+        } else if (const AdvanceThenScanTo * sto = dyn_cast<AdvanceThenScanTo>(stmt)) {
+            out << " = pablo.AdvanceThenScanTo(";
+            print(sto->getScanFrom(), out);
+            out << ", ";
+            print(sto->getScanTo(), out);
+            out << ")";
         } else if (const Count * count = dyn_cast<Count>(stmt)) {
             out << " = pablo.Count(";
             print(count->getExpr(), out);
