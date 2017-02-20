@@ -16,6 +16,7 @@
 #include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
 #include <kernels/cc_kernel.h>
+#include <kernels/unicode_linebreak_kernel.h>
 #include <kernels/pipeline.h>
 #include <kernels/mmap_kernel.h>
 #include <kernels/s2p_kernel.h>
@@ -35,6 +36,7 @@
 #endif
 #include <util/aligned_allocator.h>
 
+#define UNICODE_LINE_BREAK (!re::AlgorithmOptionIsSet(re::DisableUnicodeLineBreak))
 
 using namespace parabix;
 using namespace llvm;
@@ -340,11 +342,13 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     std::vector<re::CC *> LF;
     LF.push_back(re::makeCC(0x0A));
     
-    kernel::ParabixCharacterClassKernelBuilder linebreakK(iBuilder, "linebreak", LF, encodingBits);
+    kernel::UnicodeLineBreakKernelBuilder unicodelbK(iBuilder, "unicodelinebreak", encodingBits);
+    kernel::ParabixCharacterClassKernelBuilder linefeedK(iBuilder, "linefeed", LF, encodingBits);
+
+    pablo::PabloKernel *linebreakK = UNICODE_LINE_BREAK ? &cast<pablo::PabloKernel>(unicodelbK) :  &cast<pablo::PabloKernel>(linefeedK);
     CircularBuffer LineBreakStream(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
     LineBreakStream.allocateBuffer();
-    linebreakK.generateKernel({&BasisBits}, {&LineBreakStream});
-
+    linebreakK->generateKernel({&BasisBits}, {&LineBreakStream});
 
     pablo::PabloKernel icgrepK(iBuilder, "icgrep", {Binding{iBuilder->getStreamSetTy(8), "basis"}});
     re::re2pablo_compiler(&icgrepK, re::regular_expression_passes(re_ast), CountOnly);
@@ -383,14 +387,14 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType);
             scanMatchK.generateKernel({&MatchResults, &LineBreakStream}, {});                
             scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
-
-            if (pipelineParallel){
-                generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &icgrepK, &linebreakK, &scanMatchK});
-            } else if (segmentPipelineParallel){
-                generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &icgrepK, &linebreakK, &scanMatchK});
-            }  else{
-                generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK, &linebreakK, &scanMatchK});
-            }
+	    
+	    if (pipelineParallel){
+		generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &icgrepK, linebreakK, &scanMatchK});
+	    } else if (segmentPipelineParallel){
+		generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &icgrepK, linebreakK, &scanMatchK});
+	    }  else{
+		generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK, linebreakK, &scanMatchK});
+	    }
         }
         iBuilder->CreateRetVoid();
     }
