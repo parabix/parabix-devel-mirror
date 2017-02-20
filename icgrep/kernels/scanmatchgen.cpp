@@ -50,8 +50,8 @@ void ScanMatchKernel::generateDoBlockMethod() {
     Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));   
     Value * recordStart = getScalarField("LineStart");
     Value * recordNum = getScalarField("LineNum");
-    Value * matches = loadInputStreamBlock("matchResults", iBuilder->getInt32(0));
-    Value * linebreaks = loadInputStreamBlock("matchResults", iBuilder->getInt32(1));
+    Value * matches = loadInputStreamBlock("matchResult", iBuilder->getInt32(0));
+    Value * linebreaks = loadInputStreamBlock("lineBreak", iBuilder->getInt32(0));
     Value * matchWordVector = iBuilder->CreateBitCast(matches, scanwordVectorType);
     Value * breakWordVector = iBuilder->CreateBitCast(linebreaks, scanwordVectorType);
     for(unsigned i = 0; i < fieldCount; ++i){
@@ -247,7 +247,7 @@ Function * ScanMatchKernel::generateScanWordRoutine(Module * m) const {
 
 ScanMatchKernel::ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType)
 : BlockOrientedKernel(iBuilder, "scanMatch",
-    {Binding{iBuilder->getStreamSetTy(2, 1), "matchResults"}},
+    {Binding{iBuilder->getStreamSetTy(1, 1), "matchResult"}, Binding{iBuilder->getStreamSetTy(1, 1), "lineBreak"}},
     {},
     {Binding{iBuilder->getInt8PtrTy(), "FileBuf"}, Binding{iBuilder->getSizeTy(), "FileSize"}, Binding{iBuilder->getSizeTy(), "FileIdx"}},
     {},

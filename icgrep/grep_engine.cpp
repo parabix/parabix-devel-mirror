@@ -35,6 +35,7 @@
 #endif
 #include <util/aligned_allocator.h>
 
+
 using namespace parabix;
 using namespace llvm;
 
@@ -335,7 +336,16 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     kernel::S2PKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
-        
+    
+    std::vector<re::CC *> LF;
+    LF.push_back(re::makeCC(0x0A));
+    
+    kernel::ParabixCharacterClassKernelBuilder linebreakK(iBuilder, "linebreak", LF, encodingBits);
+    CircularBuffer LineBreakStream(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+    LineBreakStream.allocateBuffer();
+    linebreakK.generateKernel({&BasisBits}, {&LineBreakStream});
+
+
     pablo::PabloKernel icgrepK(iBuilder, "icgrep", {Binding{iBuilder->getStreamSetTy(8), "basis"}});
     re::re2pablo_compiler(&icgrepK, re::regular_expression_passes(re_ast), CountOnly);
     pablo_function_passes(&icgrepK);
@@ -365,21 +375,21 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         }
 #endif
         if (CPU_Only) {
-            CircularBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(2, 1), segmentSize * bufferSegments);
+            CircularBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
             MatchResults.allocateBuffer();
 
             icgrepK.generateKernel({&BasisBits}, {&MatchResults});
 
             kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType);
-            scanMatchK.generateKernel({&MatchResults}, {});                
+            scanMatchK.generateKernel({&MatchResults, &LineBreakStream}, {});                
             scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
 
             if (pipelineParallel){
-                generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &icgrepK, &scanMatchK});
+                generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &icgrepK, &linebreakK, &scanMatchK});
             } else if (segmentPipelineParallel){
-                generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &icgrepK, &scanMatchK});
+                generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &icgrepK, &linebreakK, &scanMatchK});
             }  else{
-                generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK, &scanMatchK});
+                generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK, &linebreakK, &scanMatchK});
             }
         }
         iBuilder->CreateRetVoid();

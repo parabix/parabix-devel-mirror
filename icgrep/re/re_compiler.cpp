@@ -232,9 +232,9 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatche
         mPB.createIf(matches, nestedCount);
         nestedCount.createAssign(output, nestedCount.createCount(matches));
     } else {
-        Var * const output = mKernel->addOutput("output", mKernel->getStreamSetTy(2));
+        Var * const output = mKernel->addOutput("output", mKernel->getStreamSetTy(1));
         mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), matches);
-        mPB.createAssign(mPB.createExtract(output, mPB.getInteger(1)), mLineBreak);
+        //mPB.createAssign(mPB.createExtract(output, mPB.getInteger(1)), mLineBreak);
     }
 }
 
