@@ -18,14 +18,14 @@ SwizzleGenerator::SwizzleGenerator(IDISA::IDISA_Builder * iBuilder, unsigned bit
     , mSwizzleFactor(iBuilder->getBitBlockWidth() / fieldWidth)
     , mInputSets(inputSets)
     , mOutputSets(outputSets) {
-        assert((fieldWidth > 0) && (fieldWidth & (fieldWidth - 1) == 0) && "fieldWidth must be a power of 2");
+        assert((fieldWidth > 0) && ((fieldWidth & (fieldWidth - 1)) == 0) && "fieldWidth must be a power of 2");
         assert(fieldWidth < iBuilder->getBitBlockWidth() && "fieldWidth must be less than the block width");
         assert(mSwizzleFactor > 1 && "fieldWidth must be less than the block width");
         unsigned inputStreamsPerSet = (bitStreamCount + inputSets - 1)/inputSets;
         unsigned outputStreamsPerSet = (bitStreamCount + outputSets - 1)/outputSets;
         // Maybe the following is unnecessary.
         //assert(inputStreamsPerSet % swizzleFactor == 0 && "input sets must be an exact multiple of the swizzle factor");
-        assert(outputStreamsPerSet % swizzleFactor == 0 && "output sets must be an exact multiple of the swizzle factor");
+        assert(outputStreamsPerSet % mSwizzleFactor == 0 && "output sets must be an exact multiple of the swizzle factor");
         for (unsigned i = 0; i < mInputSets; i++) {
             mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(inputStreamsPerSet, 1), "inputGroup" + std::to_string(i)});
         }
