@@ -47,7 +47,8 @@ message(STATUS "Found Boost_LIBRARY_DIR: ${Boost_LIBRARY_DIR}")
 include_directories("${Boost_INCLUDE_DIRS}")
 link_directories(${Boost_LIBRARY_DIR})
 
-SET(KERNEL_SRC kernels/kernel.cpp kernels/pipeline.cpp kernels/s2p_kernel.cpp kernels/streamset.cpp kernels/interface.cpp kernels/mmap_kernel.cpp)
+SET(KERNEL_SRC kernels/kernel.cpp kernels/pipeline.cpp kernels/streamset.cpp kernels/interface.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/s2p_kernel.cpp kernels/mmap_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp)
 
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp IR_Gen/idisa_nvptx_builder.cpp IR_Gen/idisa_target.cpp)
 
@@ -75,8 +76,8 @@ target_link_libraries (RegExpADT PabloADT CCADT UCDlib)
 target_link_libraries (RegExpCompiler RegExpADT)
 
 add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp)
-add_executable(u8u16 u8u16.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/deletion.cpp kernels/stdout_kernel.cpp)
-add_executable(base64 base64.cpp kernels/radix64.cpp toolchain.cpp kernels/p2s_kernel.cpp kernels/deletion.cpp kernels/stdout_kernel.cpp)
+add_executable(u8u16 u8u16.cpp toolchain.cpp)
+add_executable(base64 base64.cpp kernels/radix64.cpp toolchain.cpp)
 add_executable(wc wc.cpp toolchain.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp toolchain.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp)
 add_executable(array-test array-test.cpp toolchain.cpp kernels/alignedprint.cpp)
