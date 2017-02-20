@@ -72,7 +72,7 @@ void SwizzleGenerator::generateDoBlockMethod() {
             unsigned streamNo = grp * mSwizzleFactor + i;
             unsigned outputSetNo = streamNo / outputStreamsPerSet;
             unsigned j = streamNo % outputStreamsPerSet;
-            storeOutputStreamBlock("outputGroup" + std::to_string(outputSetNo), iBuilder->getInt32(j), sourceBlocks[i]);
+            storeOutputStreamBlock("outputGroup" + std::to_string(outputSetNo), iBuilder->getInt32(j), iBuilder->bitCast(sourceBlocks[i]));
         }
     }
 }
