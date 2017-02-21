@@ -163,6 +163,9 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
         iBuilder->SetInsertPoint(resizeBlock);
 
         Type * const carryStateType = array->getType()->getPointerElementType();
+
+        Constant * carryStateWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(carryStateType), capacity->getType(), false);
+
         Value * newCapacity = iBuilder->CreateMul(iBuilder->CreateAdd(index, iBuilder->getSize(1)), iBuilder->getSize(2));
         Value * newArray = iBuilder->CreateAlignedMalloc(carryStateType, newCapacity, iBuilder->getCacheAlignment());
 
@@ -174,13 +177,13 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
         iBuilder->CreateCondBr(isNullCarryState, zeroBlock, cleanUpBlock);
         iBuilder->SetInsertPoint(cleanUpBlock);
 
-        iBuilder->CreateMemCpy(newArray, array, capacity, iBuilder->getCacheAlignment());
+        iBuilder->CreateMemCpy(newArray, array, iBuilder->CreateMul(capacity, carryStateWidth), iBuilder->getCacheAlignment());
         iBuilder->CreateAlignedFree(array);
         iBuilder->CreateBr(zeroBlock);
 
         iBuilder->SetInsertPoint(zeroBlock);
 
-        iBuilder->CreateMemZero(iBuilder->CreateGEP(newArray, capacity), iBuilder->CreateSub(newCapacity, capacity), iBuilder->getCacheAlignment());
+        iBuilder->CreateMemZero(iBuilder->CreateGEP(newArray, capacity), iBuilder->CreateMul(iBuilder->CreateSub(newCapacity, capacity), carryStateWidth), iBuilder->getCacheAlignment());
         iBuilder->CreateStore(newCapacity, capacityPtr);
         iBuilder->CreateStore(newArray, arrayPtr);
 

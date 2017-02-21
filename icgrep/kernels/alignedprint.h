@@ -29,12 +29,15 @@ private:
     unsigned mStreamIndex;
 };
 
-class PrintableStreamSet : public BlockOrientedKernel {
+class PrintStreamSet : public BlockOrientedKernel {
 public:
-    PrintableStreamSet(IDISA::IDISA_Builder * builder);
-    virtual ~PrintableStreamSet() {}
+    PrintStreamSet(IDISA::IDISA_Builder * builder, std::vector<std::string> && names, const unsigned minWidth = 16);
+    virtual ~PrintStreamSet() {}
 private:
     void generateDoBlockMethod() override;
+private:
+    const std::vector<std::string> mNames;
+    unsigned mNameWidth;
 };
 
 }

@@ -195,7 +195,7 @@ void KernelBuilder::callGenerateDoSegmentMethod() {
 
 void KernelBuilder::callGenerateInitMethod() {
     mCurrentFunction = getInitFunction();
-    iBuilder->SetInsertPoint(CreateBasicBlock("Init_entry"));
+    iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     Function::arg_iterator args = mCurrentFunction->arg_begin();
     mSelf = &*(args++);
     iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), mSelf);
@@ -302,8 +302,6 @@ inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bin
     }
     report_fatal_error("Error: no binding in " + getName() + " for " + name);
 }
-
-
 
 Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * streamIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));

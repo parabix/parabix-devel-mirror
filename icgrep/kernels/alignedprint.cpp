@@ -5,6 +5,7 @@
 
 #include "alignedprint.h"
 #include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
+#include <llvm/IR/Module.h>
 
 using namespace llvm;
 
@@ -93,7 +94,7 @@ void SelectStream::generateDoBlockMethod() {
     storeOutputStreamBlock("bitStream", iBuilder->getInt32(0), bitStrmVal);
 }
 
-void PrintableStreamSet::generateDoBlockMethod() {
+void PrintStreamSet::generateDoBlockMethod() {
 
     /*
     00110001 is the Unicode codepoint for '1' and 00101110 is the codepoint for '.'.
@@ -117,68 +118,162 @@ void PrintableStreamSet::generateDoBlockMethod() {
     rather than byte at a time! That's what we do below.
     */
 
-    BasicBlock * entry = iBuilder->GetInsertBlock();
-    BasicBlock * cond = CreateBasicBlock("cond");
-    BasicBlock * body = CreateBasicBlock("body");
-    BasicBlock * exit = CreateBasicBlock("exit");
+    for (const std::string & name : mNames) {
 
-    Value * count = getInputStreamSetCount("bitStream");
-    iBuilder->CreateBr(cond);
-    iBuilder->SetInsertPoint(cond);
-    PHINode * i = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "i");
-    i->addIncoming(iBuilder->getSize(0), entry);
+        BasicBlock * entry = iBuilder->GetInsertBlock();
 
-    iBuilder->CreateCondBr(iBuilder->CreateICmpNE(i, count), body, exit);
-    iBuilder->SetInsertPoint(body);
-    // Load current block
-    Value * bitStrmVal = loadInputStreamBlock("bitStream", i);
+        Value * count = getInputStreamSetCount(name);
+        ConstantInt * const streamLength = iBuilder->getSize(iBuilder->getBitBlockWidth() + mNameWidth + 1);
+        Value * output = iBuilder->CreateAlloca(iBuilder->getInt8Ty(), streamLength);
 
-    Value * bits[8];
+        Value * outputName = iBuilder->CreateGlobalStringPtr(name.c_str());
+        ConstantInt * const length = iBuilder->getInt32(name.length());
+        iBuilder->CreateMemCpy(output, outputName, length, 1);
+        iBuilder->CreateMemSet(iBuilder->CreateGEP(output, iBuilder->getInt32(name.length())), iBuilder->getInt8(' '), iBuilder->getInt32(mNameWidth - name.length()), 1);
+        iBuilder->CreateStore(iBuilder->getInt8(10), iBuilder->CreateGEP(output, iBuilder->getInt32(iBuilder->getBitBlockWidth() + mNameWidth)));
 
-    bits[0] = ConstantInt::getNullValue(iBuilder->getBitBlockType());
-    bits[1] = ConstantInt::getNullValue(iBuilder->getBitBlockType());
-    bits[2] = ConstantInt::getAllOnesValue(iBuilder->getBitBlockType());
-    bits[3] = bitStrmVal;
-    Value * negBitStrmVal = iBuilder->simd_not(bitStrmVal);
-    bits[4] = negBitStrmVal;
-    bits[5] = negBitStrmVal;
-    bits[6] = negBitStrmVal;
-    bits[7] = bitStrmVal;
+        if (isa<ConstantInt>(count) && cast<ConstantInt>(count)->isOne()) {
 
-    // Reassemble the paralell bit streams into a byte stream
-    Value * printableBytes[8];
-    p2s(iBuilder, bits, printableBytes);
-    for (unsigned j = 0; j < 8; ++j) {
-        storeOutputStreamPack("byteStream", i, iBuilder->getInt32(j), iBuilder->bitCast(printableBytes[j]));
+            // Load current block
+            Value * const input = loadInputStreamBlock(name, iBuilder->getInt32(0));
+
+            Value * bits[8];
+            bits[0] = ConstantInt::getNullValue(iBuilder->getBitBlockType());
+            bits[1] = ConstantInt::getNullValue(iBuilder->getBitBlockType());
+            bits[2] = ConstantInt::getAllOnesValue(iBuilder->getBitBlockType());
+            bits[3] = input;
+            Value * const negated = iBuilder->simd_not(input);
+            bits[4] = negated;
+            bits[5] = negated;
+            bits[6] = negated;
+            bits[7] = input;
+
+            // Reassemble the paralell bit streams into a byte stream
+            Value * printableBytes[8];
+            p2s(iBuilder, bits, printableBytes);
+            for (unsigned k = 0; k < 8; ++k) {
+                const auto offset = mNameWidth + (k * (iBuilder->getBitBlockWidth() / 8));
+                for (unsigned t = 0; t < (iBuilder->getBitBlockWidth() / 8); ++t) {
+                    iBuilder->CreateStore(iBuilder->CreateExtractElement(printableBytes[k], iBuilder->getInt32(t)), iBuilder->CreateGEP(output, iBuilder->getInt32(offset + t)));
+                }
+            }
+
+            iBuilder->CreateWriteCall(iBuilder->getInt32(1), output, streamLength);
+
+        } else {
+
+            iBuilder->CreateStore(iBuilder->getInt8('['), iBuilder->CreateGEP(output, length));
+
+            BasicBlock * cond = CreateBasicBlock("cond");
+
+            BasicBlock * getIntLength = CreateBasicBlock("getIntLength");
+
+            BasicBlock * writeInt = CreateBasicBlock("writeInt");
+            BasicBlock * writeVector = CreateBasicBlock("writeVector");
+
+            BasicBlock * exit = CreateBasicBlock("exit");
+
+            ConstantInt * TEN = iBuilder->getSize(10);
+            ConstantInt * ONE = iBuilder->getSize(1);
+
+            iBuilder->CreateBr(cond);
+            iBuilder->SetInsertPoint(cond);
+            PHINode * i = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "i");
+            i->addIncoming(iBuilder->getSize(0), entry);
+
+            iBuilder->CreateCondBr(iBuilder->CreateICmpNE(i, count), getIntLength, exit);
+            // -------------------------------------------------------------------------
+            iBuilder->SetInsertPoint(getIntLength);
+
+            PHINode * l = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "l");
+            l->addIncoming(iBuilder->getSize(name.length() + 1), cond);
+            PHINode * temp = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "temp");
+            temp->addIncoming(i, cond);
+
+            l->addIncoming(iBuilder->CreateAdd(l, ONE), getIntLength);
+
+            temp->addIncoming(iBuilder->CreateUDiv(temp, TEN), getIntLength);
+
+            iBuilder->CreateCondBr(iBuilder->CreateICmpUGE(temp, TEN), getIntLength, writeInt);
+            // -------------------------------------------------------------------------
+            iBuilder->SetInsertPoint(writeInt);
+            PHINode * value = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
+            value->addIncoming(i, getIntLength);
+
+            PHINode * j = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "j");
+            j->addIncoming(l, getIntLength);
+            Value * ch = iBuilder->CreateURem(value, TEN);
+            ch = iBuilder->CreateTrunc(ch, iBuilder->getInt8Ty());
+            ch = iBuilder->CreateAdd(ch, iBuilder->getInt8('0'));
+
+            value->addIncoming(iBuilder->CreateUDiv(value, TEN), writeInt);
+            iBuilder->CreateStore(ch, iBuilder->CreateGEP(output, j));
+            j->addIncoming(iBuilder->CreateSub(j, ONE), writeInt);
+
+            iBuilder->CreateCondBr(iBuilder->CreateICmpUGE(value, TEN), writeInt, writeVector);
+            // -------------------------------------------------------------------------
+            iBuilder->SetInsertPoint(writeVector);
+
+            iBuilder->CreateStore(iBuilder->getInt8(']'), iBuilder->CreateGEP(output, iBuilder->CreateAdd(l, iBuilder->getSize(1))));
+
+            // Load current block
+            Value * const input = loadInputStreamBlock(name, i);
+
+            Value * bits[8];
+            bits[0] = ConstantInt::getNullValue(iBuilder->getBitBlockType());
+            bits[1] = ConstantInt::getNullValue(iBuilder->getBitBlockType());
+            bits[2] = ConstantInt::getAllOnesValue(iBuilder->getBitBlockType());
+            bits[3] = input;
+            Value * const negated = iBuilder->simd_not(input);
+            bits[4] = negated;
+            bits[5] = negated;
+            bits[6] = negated;
+            bits[7] = input;
+
+            // Reassemble the paralell bit streams into a byte stream
+            Value * printableBytes[8];
+            p2s(iBuilder, bits, printableBytes);
+            for (unsigned k = 0; k < 8; ++k) {
+                const auto offset = mNameWidth + (k * (iBuilder->getBitBlockWidth() / 8));
+                for (unsigned t = 0; t < (iBuilder->getBitBlockWidth() / 8); ++t) {
+                    iBuilder->CreateStore(iBuilder->CreateExtractElement(printableBytes[k], iBuilder->getInt32(t)), iBuilder->CreateGEP(output, iBuilder->getInt32(offset + t)));
+                }
+            }
+
+            iBuilder->CreateWriteCall(iBuilder->getInt32(1), output, streamLength);
+
+            i->addIncoming(iBuilder->CreateAdd(i, ONE), iBuilder->GetInsertBlock());
+            iBuilder->CreateBr(cond);
+            // -------------------------------------------------------------------------
+            iBuilder->SetInsertPoint(exit);
+
+        }
     }
-
-    i->addIncoming(iBuilder->CreateAdd(i, iBuilder->getSize(1)), iBuilder->GetInsertBlock());
-    iBuilder->CreateBr(cond);
-
-    iBuilder->SetInsertPoint(exit);
 }
 
 PrintableBits::PrintableBits(IDISA::IDISA_Builder * builder)
-: BlockOrientedKernel(builder, "PrintableBits", {Binding{builder->getStreamSetTy(1), "bitStream"}}, {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {}, {}, {})
-{
+: BlockOrientedKernel(builder, "PrintableBits", {Binding{builder->getStreamSetTy(1), "bitStream"}}, {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {}, {}, {}) {
     setNoTerminateAttribute(true);
     setDoBlockUpdatesProducedItemCountsAttribute(false);
 }
 
 SelectStream::SelectStream(IDISA::IDISA_Builder * builder, unsigned sizeInputStreamSet, unsigned streamIndex)
-: BlockOrientedKernel(builder, "SelectStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(1, 1), "bitStream"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mStreamIndex(streamIndex)
-{
+: BlockOrientedKernel(builder, "SelectStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(1, 1), "bitStream"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mStreamIndex(streamIndex) {
     setNoTerminateAttribute(true);
     setDoBlockUpdatesProducedItemCountsAttribute(false);
 
 }
 
-PrintableStreamSet::PrintableStreamSet(IDISA::IDISA_Builder * builder)
-: BlockOrientedKernel(builder, "PrintableStreamSet", {Binding{builder->getStreamSetTy(0), "bitStream"}}, {Binding{builder->getStreamSetTy(0, 8), "byteStream"}}, {}, {}, {}) {
-    setNoTerminateAttribute(true);
-    setDoBlockUpdatesProducedItemCountsAttribute(false);
+PrintStreamSet::PrintStreamSet(IDISA::IDISA_Builder * builder, std::vector<std::string> && names, const unsigned minWidth)
+: BlockOrientedKernel(builder, "PrintableStreamSet", {}, {}, {}, {}, {})
+, mNames(names)
+, mNameWidth() {
+    auto width = minWidth;
+    for (const std::string & name : mNames) {
+        mStreamSetInputs.emplace_back(builder->getStreamSetTy(0), name);
+        width = std::max<unsigned>(name.length() + 5, width);
+    }
+    mNameWidth = width;
 }
-
-
 
 }

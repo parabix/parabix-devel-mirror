@@ -222,3 +222,5 @@ wc.cpp
 CMakeLists.txt
 kernels/alignedprint.h
 kernels/alignedprint.cpp
+kernels/swizzle.cpp
+kernels/swizzle.h

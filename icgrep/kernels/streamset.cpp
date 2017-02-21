@@ -41,7 +41,7 @@ llvm::Value * StreamSetBuffer::getStreamSetCount(Value *) const {
     if (isa<ArrayType>(mBaseType)) {
         count = mBaseType->getArrayNumElements();
     }
-    return iBuilder->getInt32(count);
+    return iBuilder->getSize(count);
 }
 
 /**
@@ -192,7 +192,8 @@ void ExpandableBuffer::allocateBuffer() {
     ConstantInt * const size = iBuilder->getSize(mBufferBlocks * mInitialCapacity);
     Value * const ptr = iBuilder->CreateAlignedMalloc(bufferType, size, iBuilder->getCacheAlignment());
     const auto alignment = bufferType->getPrimitiveSizeInBits() / 8;
-    iBuilder->CreateMemZero(ptr, size, alignment);
+    Constant * bufferWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(bufferType), size->getType(), false);
+    iBuilder->CreateMemZero(ptr, iBuilder->CreateMul(size, bufferWidth), alignment);
     Value * const streamSetPtr = iBuilder->CreateGEP(mStreamSetBufferPtr, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     iBuilder->CreateStore(ptr, streamSetPtr);
 }
@@ -200,6 +201,8 @@ void ExpandableBuffer::allocateBuffer() {
 std::pair<Value *, Value *> ExpandableBuffer::getExpandedStreamOffset(llvm::Value * self, llvm::Value * streamIndex, Value * blockIndex) const {
 
     // MDNode *Weights = MDBuilder(Ctx).createBranchWeights(42, 13);
+
+    /// TODO: Check whether a dominating test with the same streamIndex exists or whether streamIndex is guaranteed to be < capacity
 
     // ENTRY
     Value * const capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
@@ -224,13 +227,14 @@ std::pair<Value *, Value *> ExpandableBuffer::getExpandedStreamOffset(llvm::Valu
     // EXPAND
     iBuilder->SetInsertPoint(expand);
     /// TODO: this should call a function rather than be inlined into the block. REVISIT once tested.
+    Constant * vectorWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(streamSet->getType()->getPointerElementType()), capacity->getType(), false);
     Value * newCapacity = iBuilder->CreateMul(streamIndex, iBuilder->getSize(2));
     iBuilder->CreateStore(newCapacity, capacityPtr);
     Type * bufferType = getType()->getStructElementType(1)->getPointerElementType();
     Value * size = iBuilder->CreateMul(newCapacity, iBuilder->getSize(mBufferBlocks));
     Value * newStreamSet = iBuilder->CreateAlignedMalloc(bufferType, size, iBuilder->getCacheAlignment());
     iBuilder->CreateStore(newStreamSet, streamSetPtr);
-    Value * const diffCapacity = iBuilder->CreateSub(newCapacity, capacity);
+    Value * const diffCapacity = iBuilder->CreateMul(iBuilder->CreateSub(newCapacity, capacity), vectorWidth);
     const auto alignment = bufferType->getPrimitiveSizeInBits() / 8;
     for (unsigned i = 0; i < mBufferBlocks; ++i) {
         ConstantInt * const offset = iBuilder->getSize(i);
@@ -238,7 +242,7 @@ std::pair<Value *, Value *> ExpandableBuffer::getExpandedStreamOffset(llvm::Valu
         Value * srcPtr = iBuilder->CreateGEP(streamSet, srcOffset);
         Value * destOffset = iBuilder->CreateMul(newCapacity, offset);
         Value * destPtr = iBuilder->CreateGEP(newStreamSet, destOffset);
-        iBuilder->CreateMemCpy(destPtr, srcPtr, capacity, alignment);
+        iBuilder->CreateMemCpy(destPtr, srcPtr, iBuilder->CreateMul(capacity, vectorWidth), alignment);
         Value * destZeroOffset = iBuilder->CreateAdd(destOffset, capacity);
         Value * destZeroPtr = iBuilder->CreateGEP(newStreamSet, destZeroOffset);
         iBuilder->CreateMemZero(destZeroPtr, diffCapacity, alignment);

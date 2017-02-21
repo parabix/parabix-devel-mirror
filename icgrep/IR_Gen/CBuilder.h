@@ -40,10 +40,12 @@ public:
     void CreateAlignedFree(llvm::Value * const ptr, const bool testForNullAddress = false);
     
     llvm::Value * CreateRealloc(llvm::Value * ptr, llvm::Value * size);
-    
-    void CreateMemZero(llvm::Value * ptr, llvm::Value * size, const unsigned alignment = 1);
 
-    inline llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
+    llvm::CallInst * CreateMemZero(llvm::Value * ptr, llvm::Value * size, const unsigned alignment = 1) {
+        return CreateMemSet(CreatePointerCast(ptr, getInt8PtrTy()), getInt8(0), size, alignment);
+    }
+
+    llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
         llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
         instr->setAlignment(getCacheAlignment());
         return instr;

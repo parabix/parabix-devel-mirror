@@ -262,29 +262,6 @@ Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
     return CreateBitOrPointerCast(ci, type);
 }
 
-void CBuilder::CreateMemZero(Value * ptr, Value * size, const unsigned alignment) {
-    DataLayout DL(getModule());
-    IntegerType * const intTy = getIntPtrTy(DL);
-    Constant * width = ConstantExpr::getSizeOf(ptr->getType()->getPointerElementType());
-    if (LLVM_UNLIKELY(width->getType() != intTy)) {
-        width = ConstantExpr::getIntegerCast(width, intTy, false);
-    }
-    if (size->getType() != intTy) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
-        } else {
-            size = CreateZExtOrTrunc(size, intTy);
-        }
-    }
-    if (isa<Constant>(size)) {
-        size = ConstantExpr::getMul(cast<Constant>(size), width);
-    } else {
-        size = CreateMul(size, width);
-    }
-    assert (size->getType() == intTy);
-    CreateMemSet(CreatePointerCast(ptr, getInt8PtrTy()), getInt8(0), size, alignment);
-}
-
 PointerType * CBuilder::getVoidPtrTy() const {
     return TypeBuilder<void *, false>::get(getContext());
 }
