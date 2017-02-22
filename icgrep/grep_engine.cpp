@@ -304,7 +304,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
         MatchResultsBufs.push_back(MatchResults);
     }   
 
-    std::vector<KernelBuilder *> KernelList;
+    std::vector<kernel::KernelBuilder *> KernelList;
     KernelList.push_back(&mmapK);
     KernelList.push_back(&s2pk);   
     KernelList.push_back(linebreakK);
