@@ -85,6 +85,7 @@ static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(
 static cl::opt<bool> GrepSupport("gs", cl::desc("Grep support. Pipe the output of icgrep into grep. \
          Gives you colored output + back-referencing capability."), cl::cat(EnhancedGrepOptions));
 
+static cl::opt<bool> MultiGrepKernels("enable-multiGrep-kernels", cl::desc("Construct separated kernels for each regular expression"), cl::cat(EnhancedGrepOptions));
 
 static std::vector<std::string> allFiles;
 //
@@ -111,6 +112,7 @@ static void icgrep_error_handler(void *UserData, const std::string &Message, boo
 
 static std::string allREs;
 static re::ModeFlagSet globalFlags = 0;
+std::vector<re::RE *> REs;
 
 re::RE * get_icgrep_RE() {
   
@@ -135,8 +137,7 @@ re::RE * get_icgrep_RE() {
     }
     if (CaseInsensitive) globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
 
-  
-    std::vector<re::RE *> REs;
+
     re::RE * re_ast = nullptr;
     for (unsigned i = 0; i < regexVector.size(); i++) {
 #ifdef FUTURE
@@ -370,7 +371,12 @@ int main(int argc, char *argv[]) {
     }
     
     GrepEngine grepEngine;
-    grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16);
+    if(MultiGrepKernels){
+        grepEngine.multiGrepCodeGen(module_name, REs, CountOnly, UTF_16);
+    }
+    else{
+        grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16);
+    }
 
     allFiles = getFullFileList(inputFiles);
     

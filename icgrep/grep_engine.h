@@ -23,7 +23,8 @@ public:
     ~GrepEngine();
   
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal);
-    
+    void multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal);
+     
     void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly, bool UTF_16);
     
     re::CC *  grepCodepoints();
