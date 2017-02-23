@@ -16,7 +16,7 @@ namespace re { class RE; }
 class GrepEngine {
     typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const int fileIdx);
     typedef uint64_t (*GrepFunctionType_CountOnly)(char * byte_data, size_t filesize, const int fileIdx);
-    typedef void (*GrepFunctionType_CPU)(char * rslt, char * byte_data, size_t filesize, const int fileIdx);
+    typedef void (*GrepFunctionType_CPU)(char * rslt, char * LineBreak, char * byte_data, size_t filesize, const int fileIdx);
 public:
 
     GrepEngine();

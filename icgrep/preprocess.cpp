@@ -28,6 +28,7 @@ using namespace llvm;
 using namespace kernel;
 using namespace parabix;
 
+
 std::vector<size_t> LFPositions;
 extern "C" {
 void wrapped_report_pos(size_t match_pos, int dist) {
@@ -52,23 +53,24 @@ Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder){
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const inputType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 1), 0);
 
-    Function * const mainFn = cast<Function>(m->getOrInsertFunction("LF", iBuilder->getVoidTy(), inputType, size_ty, nullptr));
+    Function * const mainFn = cast<Function>(m->getOrInsertFunction("LF", iBuilder->getVoidTy(), inputType, size_ty, inputType, nullptr));
     mainFn->setCallingConv(CallingConv::C);
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", mainFn, 0));
     Function::arg_iterator args = mainFn->arg_begin();
-    
     Value * const inputStream = &*(args++);
     inputStream->setName("input");
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
+    Value * const lineBreak = &*(args++);
+    lineBreak->setName("lineBreak");
 
     const unsigned segmentSize = codegen::SegmentSize;
     unsigned bufferSegments = codegen::BufferSegments;
 
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
-    CircularBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
-    MatchResults.allocateBuffer();
+    ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+    MatchResults.setStreamSetBuffer(lineBreak, fileSize);
 
     kernel::MMapSourceKernel mmapK(iBuilder, segmentSize); 
     mmapK.generateKernel({}, {&ByteStream});
@@ -76,20 +78,20 @@ Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder){
 
     std::vector<re::CC *> charClasses;
     charClasses.push_back(re::makeCC(0x0A));
-    kernel::DirectCharacterClassKernelBuilder ccK(iBuilder, "LF", charClasses, 1);
-    ccK.generateKernel({&ByteStream}, {&MatchResults});
-
+    kernel::DirectCharacterClassKernelBuilder linefeedK(iBuilder, "linefeed", charClasses, 1);
+    linefeedK.generateKernel({&ByteStream}, {&MatchResults});
+    
     kernel::CCScanKernel scanMatchK(iBuilder, 1);
     scanMatchK.generateKernel({&MatchResults}, {}); 
     
-    generatePipelineLoop(iBuilder, {&mmapK, &ccK, &scanMatchK});
+    generatePipelineLoop(iBuilder, {&mmapK, &linefeedK, &scanMatchK});
     iBuilder->CreateRetVoid();
 
     return mainFn;
 
 }
 
-typedef void (*preprocessFunctionType)(char * byte_data, size_t filesize);
+typedef void (*preprocessFunctionType)(char * byte_data, size_t filesize, char * lb);
 
 preprocessFunctionType preprocessCodeGen() {
                             
@@ -110,8 +112,8 @@ preprocessFunctionType preprocessCodeGen() {
     return reinterpret_cast<preprocessFunctionType>(preprocessEngine->getPointerToFunction(main_IR));
 }
 
-std::vector<size_t> preprocess(char * fileBuffer, size_t fileSize) {
+std::vector<size_t> preprocess(char * fileBuffer, size_t fileSize, char * LineBreak) {
     preprocessFunctionType preprocess_ptr = preprocessCodeGen();
-    preprocess_ptr(fileBuffer, fileSize);
+    preprocess_ptr(fileBuffer, fileSize, LineBreak);
     return LFPositions;
 }

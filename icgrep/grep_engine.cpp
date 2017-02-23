@@ -95,7 +95,12 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
 #ifdef CUDA_ENABLED  
             if(codegen::NVPTX){
                 codegen::BlockSize = 128;
-                std::vector<size_t> LFPositions = preprocess(fileBuffer, fileSize);
+		char * LineBreak;
+                if (posix_memalign((void**)&LineBreak, 32, fileSize)) {
+                    std::cerr << "Cannot allocate memory for linebreak.\n";
+                    exit(-1);
+                }
+                std::vector<size_t> LFPositions = preprocess(fileBuffer, fileSize, LineBreak);
 
                 const unsigned numOfGroups = codegen::GroupNum;
                 if (posix_memalign((void**)&startPoints, 8, (numOfGroups+1)*sizeof(size_t)) ||
@@ -110,7 +115,7 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
                 }
                 else{
                     size_t intputSize = startPoints[numOfGroups]-accumBytes[numOfGroups]+accumBytes[numOfGroups-1];
-                    mGrepFunction_CPU((char *)rslt, fileBuffer, intputSize, fileIdx);
+                    mGrepFunction_CPU((char *)rslt, LineBreak, fileBuffer, intputSize, fileIdx);
                     return;
                 }
                 
@@ -202,14 +207,16 @@ Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool C
 Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepType grepType){
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const rsltType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 2), 0);
-    Function * const mainCPUFn = cast<Function>(m->getOrInsertFunction("CPU_Main", iBuilder->getVoidTy(), rsltType, int8PtrTy, size_ty, size_ty, nullptr));
+    Type * const rsltType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 1), 0);
+    Function * const mainCPUFn = cast<Function>(m->getOrInsertFunction("CPU_Main", iBuilder->getVoidTy(), rsltType, rsltType, int8PtrTy, size_ty, size_ty, nullptr));
     mainCPUFn->setCallingConv(CallingConv::C);
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", mainCPUFn, 0));
     Function::arg_iterator args = mainCPUFn->arg_begin();
     
     Value * const rsltStream = &*(args++);
     rsltStream->setName("rslt");
+    Value * const lbStream = &*(args++);
+    lbStream->setName("lb");
     Value * const inputStream = &*(args++);
     inputStream->setName("input");
     Value * const fileSize = &*(args++);
@@ -219,21 +226,27 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
 
     const unsigned segmentSize = codegen::SegmentSize;
 
-    ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(2, 1));
+    ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1));
     MatchResults.setStreamSetBuffer(rsltStream, fileSize);
 
-    kernel::MMapSourceKernel mmapK(iBuilder, segmentSize); 
-    mmapK.generateKernel({}, {&MatchResults});
-    mmapK.setInitialArguments({fileSize});
+    kernel::MMapSourceKernel mmapK1(iBuilder, segmentSize); 
+    mmapK1.generateKernel({}, {&MatchResults});
+    mmapK1.setInitialArguments({fileSize});
 
 
+    ExternalFileBuffer LineBreak(iBuilder, iBuilder->getStreamSetTy(1, 1));
+    LineBreak.setStreamSetBuffer(lbStream, fileSize);
+    
+    kernel::MMapSourceKernel mmapK2(iBuilder, segmentSize); 
+    mmapK2.generateKernel({}, {&LineBreak});
+    mmapK2.setInitialArguments({fileSize});
 
     kernel::ScanMatchKernel scanMatchK(iBuilder, grepType);
-    scanMatchK.generateKernel({&MatchResults}, {});
+    scanMatchK.generateKernel({&MatchResults, &LineBreak}, {});
             
     scanMatchK.setInitialArguments({inputStream, fileSize, fileIdx});
     
-    generatePipelineLoop(iBuilder, {&mmapK, &scanMatchK});
+    generatePipelineLoop(iBuilder, {&mmapK1, &mmapK2, &scanMatchK});
     iBuilder->CreateRetVoid();
 
     return mainCPUFn;
