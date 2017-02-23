@@ -43,11 +43,6 @@ inline static unsigned getPointerElementAlignment(const Value * const ptr) {
     return ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
 }
 
-void PabloCompiler::initializeKernelData() {
-    Examine();
-    mCarryManager->initializeCarryData(mKernel);
-}
-    
 void PabloCompiler::compile() {
 
     mCarryManager->initializeCodeGen();
@@ -62,11 +57,16 @@ void PabloCompiler::compile() {
 
 }
 
-inline void PabloCompiler::Examine() {
-    Examine(mKernel->getEntryBlock());
+void PabloCompiler::initializeKernelData() {
+    examineBlock(mKernel->getEntryBlock());
+    mCarryManager->initializeCarryData(mKernel);
 }
 
-void PabloCompiler::Examine(const PabloBlock * const block) {
+void PabloCompiler::allocateKernelData() {
+    mCarryManager->allocateCarryData(mKernel);
+}
+
+void PabloCompiler::examineBlock(const PabloBlock * const block) {
     for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
@@ -75,7 +75,7 @@ void PabloCompiler::Examine(const PabloBlock * const block) {
                 mKernel->setLookAhead(la->getAmount());
             }
         } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
-            Examine(cast<Branch>(stmt)->getBody());
+            examineBlock(cast<Branch>(stmt)->getBody());
         } else if (LLVM_UNLIKELY(isa<Count>(stmt))) {
             mAccumulator.insert(std::make_pair(stmt, iBuilder->getInt32(mKernel->addUnnamedScalar(stmt->getType()))));
         }

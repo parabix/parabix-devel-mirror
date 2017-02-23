@@ -46,9 +46,9 @@ public:
     
     virtual void allocateBuffer();
 
-    virtual llvm::Value * getStreamBlockPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const;
+    virtual llvm::Value * getStreamBlockPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, const bool readOnly) const;
 
-    virtual llvm::Value * getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const;
+    virtual llvm::Value * getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex, const bool readOnly) const;
     
     virtual llvm::Value * getStreamSetCount(llvm::Value * self) const;
 
@@ -158,9 +158,9 @@ public:
 
     ExpandableBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
 
-    llvm::Value * getStreamBlockPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
+    llvm::Value * getStreamBlockPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, const bool readOnly) const override;
 
-    llvm::Value * getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
+    llvm::Value * getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex, const bool readOnly) const override;
 
     llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const override;
 
@@ -174,7 +174,9 @@ protected:
 
 private:
 
-    std::pair<llvm::Value *, llvm::Value *> getExpandedStreamOffset(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex) const;
+    bool isGuaranteedCapacity(const llvm::Value * const index) const;
+
+    std::pair<llvm::Value *, llvm::Value *> getInternalStreamBuffer(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, const bool readOnly) const;
 
 private:
 

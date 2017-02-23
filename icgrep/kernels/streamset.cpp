@@ -12,6 +12,7 @@
 #include <llvm/IR/Module.h>        // for Module
 #include <llvm/IR/Value.h>         // for Value
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/IR/CFG.h>
 
 namespace llvm { class Constant; }
 namespace llvm { class Function; }
@@ -28,11 +29,11 @@ void StreamSetBuffer::allocateBuffer() {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks));
 }
 
-Value * StreamSetBuffer::getStreamBlockPtr(Value * self, Value * streamIndex, Value * blockIndex) const {
+Value * StreamSetBuffer::getStreamBlockPtr(Value * self, Value * streamIndex, Value * blockIndex, const bool /* readOnly */) const {
     return iBuilder->CreateGEP(getStreamSetBlockPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex});
 }
 
-Value * StreamSetBuffer::getStreamPackPtr(Value * self, Value * streamIndex, Value * blockIndex, Value * packIndex) const {
+Value * StreamSetBuffer::getStreamPackPtr(Value * self, Value * streamIndex, Value * blockIndex, Value * packIndex, const bool /* readOnly */) const {
     return iBuilder->CreateGEP(getStreamSetBlockPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex, packIndex});
 }
 
@@ -198,11 +199,41 @@ void ExpandableBuffer::allocateBuffer() {
     iBuilder->CreateStore(ptr, streamSetPtr);
 }
 
-std::pair<Value *, Value *> ExpandableBuffer::getExpandedStreamOffset(llvm::Value * self, llvm::Value * streamIndex, Value * blockIndex) const {
+bool dominates(const Instruction * const x, const Instruction * const y) {
+    // Are they in the same basic block?
+    if (x->getParent() == y->getParent()) {
+        if (y->getNextNode() == nullptr) {
+            return true;
+        }
+        for (const Instruction * z = x; z; z = z->getNextNode()) {
+            if (z == y) {
+                return true;
+            }
+        }
+        return false;
+    } else {
+        const BasicBlock * yp = y->getParent();
+        for (auto pi = pred_begin(yp), pi_end = pred_end(yp); pi != pi_end; ++pi) {
+            if (!dominates(x, (*pi)->getTerminator())) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+inline bool ExpandableBuffer::isGuaranteedCapacity(const llvm::Value * const index) const {
+    if (LLVM_UNLIKELY(isa<ConstantInt>(index))) {
+        if (LLVM_LIKELY(cast<ConstantInt>(index)->getLimitedValue() < mInitialCapacity)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::pair<Value *, Value *> ExpandableBuffer::getInternalStreamBuffer(llvm::Value * self, llvm::Value * streamIndex, Value * blockIndex, const bool readOnly) const {
 
     // MDNode *Weights = MDBuilder(Ctx).createBranchWeights(42, 13);
-
-    /// TODO: Check whether a dominating test with the same streamIndex exists or whether streamIndex is guaranteed to be < capacity
 
     // ENTRY
     Value * const capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
@@ -211,10 +242,11 @@ std::pair<Value *, Value *> ExpandableBuffer::getExpandedStreamOffset(llvm::Valu
     Value * const streamSet = iBuilder->CreateLoad(streamSetPtr);
 
     // Are we guaranteed that we can access this stream?
-    if (LLVM_UNLIKELY(isa<ConstantInt>(streamIndex))) {
-        if (LLVM_LIKELY(cast<ConstantInt>(streamIndex)->getLimitedValue() < mInitialCapacity)) {
-            return {streamSet, capacity};
-        }
+    if (isGuaranteedCapacity(streamIndex)) {
+        return {streamSet, capacity};
+    } else if (readOnly) {
+        iBuilder->CreateAssert(iBuilder->CreateICmpULT(streamIndex, capacity), "ExpandableBuffer: out-of-bounds readonly stream access!");
+        return {streamSet, capacity};
     }
 
     BasicBlock * const entry = iBuilder->GetInsertBlock();
@@ -266,15 +298,15 @@ std::pair<Value *, Value *> ExpandableBuffer::getExpandedStreamOffset(llvm::Valu
     return {phiStreamSet, offset};
 }
 
-llvm::Value * ExpandableBuffer::getStreamBlockPtr(llvm::Value * self, Value * streamIndex, Value * blockIndex) const {
+llvm::Value * ExpandableBuffer::getStreamBlockPtr(llvm::Value * self, Value * streamIndex, Value * blockIndex, const bool readOnly) const {
     Value * ptr, * offset;
-    std::tie(ptr, offset) = getExpandedStreamOffset(self, streamIndex, blockIndex);
+    std::tie(ptr, offset) = getInternalStreamBuffer(self, streamIndex, blockIndex, readOnly);
     return iBuilder->CreateGEP(ptr, offset);
 }
 
-llvm::Value * ExpandableBuffer::getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, Value * blockIndex, Value * packIndex) const {
+llvm::Value * ExpandableBuffer::getStreamPackPtr(llvm::Value * self, llvm::Value * streamIndex, Value * blockIndex, Value * packIndex, const bool readOnly) const {
     Value * ptr, * offset;
-    std::tie(ptr, offset) = getExpandedStreamOffset(self, streamIndex, blockIndex);
+    std::tie(ptr, offset) = getInternalStreamBuffer(self, streamIndex, blockIndex, readOnly);
     return iBuilder->CreateGEP(ptr, {offset, packIndex});
 }
 

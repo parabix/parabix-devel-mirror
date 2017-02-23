@@ -22,21 +22,28 @@ namespace pablo { class While; }
 namespace pablo {
 
 class PabloCompiler {
-//    friend class CarryManager;
+
+    friend class PabloKernel;
 
     using TranslationMap = std::unordered_map<const PabloAST *, llvm::Value *>;
 
 public:
+
     PabloCompiler(PabloKernel * kernel);
+
     ~PabloCompiler();
+
+protected:
+
     void initializeKernelData();
+
+    void allocateKernelData();
+
     void compile();
 
 private:
 
-    void Examine();
-
-    void Examine(const PabloBlock * const block);
+    void examineBlock(const PabloBlock * const block);
 
     void compileBlock(const PabloBlock * const block);
 

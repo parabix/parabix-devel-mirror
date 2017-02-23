@@ -130,6 +130,8 @@ protected:
     // finalizing the KernelStateType.
     void prepareKernel()  override final;
 
+    void generateInitMethod() override final;
+
     void generateDoBlockMethod() override final;
 
     // The default method for Pablo final block processing sets the

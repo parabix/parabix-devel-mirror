@@ -41,9 +41,11 @@ class CarryManager {
 
 public:
   
-    explicit CarryManager(IDISA::IDISA_Builder * idb) noexcept;
+    CarryManager(IDISA::IDISA_Builder * idb) noexcept;
 
     void initializeCarryData(PabloKernel * const kernel);
+
+    void allocateCarryData(PabloKernel * const kernels);
 
     void initializeCodeGen();
 
@@ -81,7 +83,7 @@ public:
     
 protected:
 
-    static unsigned enumerate(PabloBlock * const scope, unsigned index = 0);
+    static unsigned getScopeCount(PabloBlock * const scope, unsigned index = 0);
     static bool requiresVariableLengthMode(const PabloBlock * const scope);
     llvm::StructType * analyse(PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0);
 
@@ -126,7 +128,11 @@ private:
     std::vector<llvm::PHINode *>                    mLoopIndicies;
 
     std::vector<CarryData>                          mCarryMetadata;
+
     std::vector<std::pair<llvm::Value *, unsigned>> mCarryFrame;
+
+    unsigned                                        mCarryScopes;
+    std::vector<unsigned>                           mCarryScopeIndex;
 
     std::vector<llvm::Value *>                      mCarrySummary;
 };

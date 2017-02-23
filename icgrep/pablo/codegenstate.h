@@ -286,14 +286,6 @@ public:
 
     void insert(Statement * const statement);
 
-    inline void setScopeIndex(const unsigned index) {
-        mScopeIndex = index;
-    }
-
-    inline unsigned getScopeIndex() const {
-        return mScopeIndex;
-    }
-    
     void eraseFromParent(const bool recursively = false);
 
     inline Branch * getBranch() const {
@@ -318,11 +310,10 @@ public:
 
 protected:
 
-    explicit PabloBlock(PabloKernel * const parent, Allocator & allocator) noexcept
+    PabloBlock(PabloKernel * const parent, Allocator & allocator) noexcept
     : PabloAST(PabloAST::ClassTypeId::Block, nullptr, allocator)
     , mParent(parent)
     , mBranch(nullptr)
-    , mScopeIndex(0)
     , mAllocator(allocator) {
 
     }
@@ -340,7 +331,6 @@ protected:
 private:        
     PabloKernel * const         mParent;
     Branch *                    mBranch;
-    unsigned                    mScopeIndex;
     Allocator &                 mAllocator;
 };
 

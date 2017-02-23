@@ -306,7 +306,7 @@ inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bin
 Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * streamIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
-    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex);
+    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, true);
 }
 
 Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * streamIndex) const {
@@ -316,7 +316,7 @@ Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * st
 Value * KernelBuilder::getInputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
-    return buf->getStreamPackPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
+    return buf->getStreamPackPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex, true);
 }
 
 Value * KernelBuilder::loadInputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex) const {
@@ -331,13 +331,13 @@ llvm::Value * KernelBuilder::getAdjustedInputStreamBlockPtr(Value * blockAdjustm
     Value * blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     blockIndex = iBuilder->CreateAdd(blockIndex, blockAdjustment);
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
-    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex);
+    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, true);
 }
 
 Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value * streamIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetOutputs, name, getProducedItemCount(name));
     const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
-    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex);
+    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, false);
 }
 
 void KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, Value * toStore) const {
@@ -347,7 +347,7 @@ void KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * str
 Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetOutputs, name, getProducedItemCount(name));
     const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
-    return buf->getStreamPackPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex);
+    return buf->getStreamPackPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex, false);
 }
 
 void KernelBuilder::storeOutputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex, Value * toStore) const {
@@ -447,15 +447,6 @@ void BlockOrientedKernel::generateFinalBlockMethod(Value * remainingBytes) {
 //    }
     CreateDoBlockMethodCall();
 }
-
-//Value * BlockOrientedKernel::loadBlock(const std::string & inputName, Value * const streamIndex) const {
-
-//}
-
-//Value * BlockOrientedKernel::loadPack(const std::string & inputName, Value * const streamIndex, Value * const packIndex) const {
-
-//}
-
 
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.

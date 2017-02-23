@@ -32,7 +32,7 @@ public:
     }
     
     llvm::Value * CreateMalloc(llvm::Type * type, llvm::Value * size);
-    
+
     llvm::Value * CreateAlignedMalloc(llvm::Type * type, llvm::Value * size, const unsigned alignment);
     
     void CreateFree(llvm::Value * const ptr);
@@ -108,6 +108,9 @@ public:
 
     virtual llvm::StoreInst *  CreateAtomicStoreRelease(llvm::Value * val, llvm::Value * ptr);
     
+    // Warning! this class must be compiled in debug mode or the check will be ignored.
+    void CreateAssert(llvm::Value * toCheck, llvm::StringRef failureMessage);
+
 protected:
     llvm::Module *      mMod;
     unsigned            mCacheLineAlignment;

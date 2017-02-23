@@ -267,7 +267,7 @@ SelectStream::SelectStream(IDISA::IDISA_Builder * builder, unsigned sizeInputStr
 PrintStreamSet::PrintStreamSet(IDISA::IDISA_Builder * builder, std::vector<std::string> && names, const unsigned minWidth)
 : BlockOrientedKernel(builder, "PrintableStreamSet", {}, {}, {}, {}, {})
 , mNames(names)
-, mNameWidth() {
+, mNameWidth(0) {
     auto width = minWidth;
     for (const std::string & name : mNames) {
         mStreamSetInputs.emplace_back(builder->getStreamSetTy(0), name);

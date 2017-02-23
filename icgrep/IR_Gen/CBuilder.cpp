@@ -8,9 +8,8 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
-//#include <llvm/IR/Function.h>
 #include <llvm/IR/TypeBuilder.h>
-#include <fcntl.h>  // for 
+#include <fcntl.h>
 
 using namespace llvm;
 
@@ -361,6 +360,43 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
                                                                        getVoidPtrTy()->getPointerTo(), nullptr));
     pthreadJoinFunc->setCallingConv(llvm::CallingConv::C);
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
+}
+
+void CBuilder::CreateAssert(llvm::Value * const toCheck, llvm::StringRef failureMessage) {
+    #ifndef NDEBUG
+    Module * m = getModule();
+    Function * assertion = m->getFunction("__assert");
+    if (LLVM_UNLIKELY(assertion == nullptr)) {
+        auto ip = saveIP();
+        assertion = cast<Function>(m->getOrInsertFunction("__assert", getVoidTy(), getInt1Ty(), getInt8PtrTy(), getSizeTy(), nullptr));
+        BasicBlock * entry = BasicBlock::Create(getContext(), "", assertion);
+        BasicBlock * failure = BasicBlock::Create(getContext(), "", assertion);
+        BasicBlock * success = BasicBlock::Create(getContext(), "", assertion);
+        auto arg = assertion->arg_begin();
+        arg->setName("e");
+        Value * e = &*arg++;
+        arg->setName("msg");
+        Value * msg = &*arg++;
+        arg->setName("sz");
+        Value * sz = &*arg;
+        SetInsertPoint(entry);
+        CreateCondBr(e, failure, success);
+        SetInsertPoint(failure);
+        CreateWriteCall(getInt32(2), msg, sz);
+        Function * exit = m->getFunction("exit");
+        if (LLVM_UNLIKELY(exit == nullptr)) {
+            exit = cast<Function>(m->getOrInsertFunction("exit", getVoidTy(), getInt32Ty(), nullptr));
+            exit->setDoesNotReturn();
+            exit->setDoesNotThrow();
+        }
+        CreateCall(exit, getInt32(-1));
+        CreateBr(success); // we're forced to have this to satisfy the LLVM verifier. this is not actually executed.
+        SetInsertPoint(success);
+        CreateRetVoid();
+        restoreIP(ip);
+    }
+    CreateCall(assertion, {CreateICmpEQ(toCheck, Constant::getNullValue(toCheck->getType())), CreateGlobalStringPtr(failureMessage), getSize(failureMessage.size())});
+    #endif
 }
 
 CBuilder::CBuilder(llvm::Module * m, unsigned GeneralRegisterWidthInBits, unsigned CacheLineAlignmentInBytes)
