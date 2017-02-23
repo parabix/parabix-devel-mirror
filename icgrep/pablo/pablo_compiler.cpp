@@ -476,7 +476,7 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
             value = iBuilder->simd_and(sum, to);
         } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
             Value * EOFmask = mKernel->getScalarField("EOFmask");
-            value = iBuilder->simd_xor(compileExpression(e->getExpr()), EOFmask);
+            value = iBuilder->simd_and(compileExpression(e->getExpr()), iBuilder->simd_not(EOFmask));
         } else if (const AtEOF * e = dyn_cast<AtEOF>(stmt)) {
             Value * EOFbit = mKernel->getScalarField("EOFbit");
             value = iBuilder->simd_and(compileExpression(e->getExpr()), EOFbit);
