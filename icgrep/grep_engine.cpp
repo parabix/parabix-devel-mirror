@@ -18,6 +18,7 @@
 #include <kernels/cc_kernel.h>
 #include <kernels/unicode_linebreak_kernel.h>
 #include <kernels/streams_merge.h>
+#include <kernels/match_count.h>
 #include <kernels/pipeline.h>
 #include <kernels/mmap_kernel.h>
 #include <kernels/s2p_kernel.h>
@@ -299,17 +300,12 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
     kernel::UnicodeLineBreakKernelBuilder unicodelbK(iBuilder, "unicodelinebreak", encodingBits);
     kernel::ParabixCharacterClassKernelBuilder linefeedK(iBuilder, "linefeed", LF, encodingBits);
 
-    pablo::PabloKernel *linebreakK = UNICODE_LINE_BREAK ? &cast<pablo::PabloKernel>(unicodelbK) :  &cast<pablo::PabloKernel>(linefeedK);
-    CircularBuffer LineBreakStream(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
-    LineBreakStream.allocateBuffer();
-    linebreakK->generateKernel({&BasisBits}, {&LineBreakStream});
-
     std::vector<pablo::PabloKernel *> icgrepKs;
     std::vector<StreamSetBuffer *> MatchResultsBufs;
 
     for(unsigned i=0; i<REs.size(); i++){   
         pablo::PabloKernel * icgrepK = new pablo::PabloKernel(iBuilder, "icgrep"+std::to_string(i), {Binding{iBuilder->getStreamSetTy(8), "basis"}});
-        re::re2pablo_compiler(icgrepK, re::regular_expression_passes(REs[i]), CountOnly);
+        re::re2pablo_compiler(icgrepK, re::regular_expression_passes(REs[i]), false);
         pablo_function_passes(icgrepK);
         icgrepKs.push_back(icgrepK);
         CircularBuffer * MatchResults = new CircularBuffer(iBuilder, iBuilder->getStreamSetTy(2, 1), segmentSize * bufferSegments);       
@@ -319,8 +315,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
 
     std::vector<kernel::KernelBuilder *> KernelList;
     KernelList.push_back(&mmapK);
-    KernelList.push_back(&s2pk);   
-    KernelList.push_back(linebreakK);
+    KernelList.push_back(&s2pk);
 
     CircularBuffer mergedResults(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
     mergedResults.allocateBuffer();
@@ -328,26 +323,51 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
     kernel::StreamsMerge streamsMergeK(iBuilder, 1, REs.size());
     streamsMergeK.generateKernel(MatchResultsBufs, {&mergedResults});
 
-    kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType);
-    scanMatchK.generateKernel({&mergedResults, &LineBreakStream}, {});                
-    scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
-
     for(unsigned i=0; i<REs.size(); i++){
         icgrepKs[i]->generateKernel({&BasisBits}, {MatchResultsBufs[i]});
         KernelList.push_back(icgrepKs[i]);
     }
     KernelList.push_back(&streamsMergeK);
-    KernelList.push_back(&scanMatchK);
-    
-    if (pipelineParallel){
-        generatePipelineParallel(iBuilder, KernelList);
-    } else if (segmentPipelineParallel){
-        generateSegmentParallelPipeline(iBuilder, KernelList);
-    }  else{
-        generatePipelineLoop(iBuilder, KernelList);
+
+    if (CountOnly) {
+        kernel::MatchCount matchCountK(iBuilder);
+        matchCountK.generateKernel({&mergedResults}, {});  
+
+        KernelList.push_back(&matchCountK);  
+
+        if (pipelineParallel){
+            generatePipelineParallel(iBuilder, KernelList);
+        } else if (segmentPipelineParallel){
+            generateSegmentParallelPipeline(iBuilder, KernelList);
+        }  else{
+            generatePipelineLoop(iBuilder, KernelList);
+        }
+        iBuilder->CreateRet(matchCountK.getScalarField(matchCountK.getInstance(), "matchedLineCount"));
+
     }
-    
-    iBuilder->CreateRetVoid();
+    else{
+        pablo::PabloKernel *linebreakK = UNICODE_LINE_BREAK ? &cast<pablo::PabloKernel>(unicodelbK) :  &cast<pablo::PabloKernel>(linefeedK);
+        CircularBuffer LineBreakStream(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+        LineBreakStream.allocateBuffer();
+        linebreakK->generateKernel({&BasisBits}, {&LineBreakStream});
+
+        kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType);
+        scanMatchK.generateKernel({&mergedResults, &LineBreakStream}, {});                
+        scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
+
+        KernelList.push_back(linebreakK);
+        KernelList.push_back(&scanMatchK);
+
+        if (pipelineParallel){
+            generatePipelineParallel(iBuilder, KernelList);
+        } else if (segmentPipelineParallel){
+            generateSegmentParallelPipeline(iBuilder, KernelList);
+        }  else{
+            generatePipelineLoop(iBuilder, KernelList);
+        }
+        
+        iBuilder->CreateRetVoid();
+    }
     
     mEngine = JIT_to_ExecutionEngine(M);
     ApplyObjectCache(mEngine);
@@ -360,7 +380,11 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
     mEngine->finalizeObject();
     delete iBuilder;
     
-    mGrepFunction = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(mainFn));
+    if (CountOnly) {
+        mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(mEngine->getPointerToFunction(mainFn));
+    } else {
+        mGrepFunction = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(mainFn));
+    }
 
 }
 
