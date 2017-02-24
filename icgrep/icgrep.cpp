@@ -85,8 +85,8 @@ static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(
 static cl::opt<bool> GrepSupport("gs", cl::desc("Grep support. Pipe the output of icgrep into grep. \
          Gives you colored output + back-referencing capability."), cl::cat(EnhancedGrepOptions));
 
-static cl::opt<bool> MultiGrepKernels("enable-multiGrep-kernels", cl::desc("Construct separated kernels for each regular expression"), cl::cat(EnhancedGrepOptions));
-
+static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"), cl::cat(EnhancedGrepOptions));
+static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expressions processed by each kernel."), cl::init(1));
 static std::vector<std::string> allFiles;
 //
 // Handler for errors reported through llvm::report_fatal_error.  Report
@@ -112,7 +112,7 @@ static void icgrep_error_handler(void *UserData, const std::string &Message, boo
 
 static std::string allREs;
 static re::ModeFlagSet globalFlags = 0;
-std::vector<re::RE *> REs;
+std::vector<re::RE *> RELists;
 
 re::RE * get_icgrep_RE() {
   
@@ -137,7 +137,7 @@ re::RE * get_icgrep_RE() {
     }
     if (CaseInsensitive) globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
 
-
+    std::vector<re::RE *> REs;
     re::RE * re_ast = nullptr;
     for (unsigned i = 0; i < regexVector.size(); i++) {
 #ifdef FUTURE
@@ -148,6 +148,19 @@ re::RE * get_icgrep_RE() {
         REs.push_back(re_ast);
         allREs += regexVector[i] + "\n";
     }
+
+    std::vector<re::RE *>::iterator start = REs.begin();
+    std::vector<re::RE *>::iterator end = start + REsPerGroup;
+    while(end < REs.end()) {
+        RELists.push_back(re::makeAlt(start, end));
+        start = end;
+        end += REsPerGroup;
+    }
+    if(REs.end()-start>1)
+        RELists.push_back(re::makeAlt(start, REs.end()));
+    else
+        RELists.push_back(*start);
+
     if (REs.size() > 1) {
         re_ast = re::makeAlt(REs.begin(), REs.end());
     }
@@ -372,7 +385,7 @@ int main(int argc, char *argv[]) {
     
     GrepEngine grepEngine;
     if(MultiGrepKernels){
-        grepEngine.multiGrepCodeGen(module_name, REs, CountOnly, UTF_16);
+        grepEngine.multiGrepCodeGen(module_name, RELists, CountOnly, UTF_16);
     }
     else{
         grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16);
