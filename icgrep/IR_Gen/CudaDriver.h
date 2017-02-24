@@ -98,7 +98,6 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
   startPoints[i] = startPoints[i-1] + ((bufferSizes[i-1]-1)/groupSize+1)*groupSize;
    
   checkCudaErrors(cuMemAlloc(&devBufferInput, startPoints[numOfGroups]));
-  checkCudaErrors(cuMemsetD8(devBufferInput,0,startPoints[numOfGroups]));
   checkCudaErrors(cuMemAlloc(&devStartPoints, sizeof(ulong) * (numOfGroups + 1)));
   checkCudaErrors(cuMemAlloc(&devBufferSizes, sizeof(ulong) * numOfGroups));
 
