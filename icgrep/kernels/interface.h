@@ -82,6 +82,8 @@ public:
      */
     
     const std::string & getName() const { return mKernelName; }
+
+    void setName(std::string newName) { mKernelName = newName; }
        
     const std::vector<Binding> & getStreamInputs() const { return mStreamSetInputs; }
 
@@ -157,7 +159,7 @@ protected:
 protected:
     
     IDISA::IDISA_Builder * const iBuilder;
-    const std::string mKernelName;
+    std::string mKernelName;
     std::vector<llvm::Value *> mInitialArguments;
     std::vector<Binding> mStreamSetInputs;
     std::vector<Binding> mStreamSetOutputs;
