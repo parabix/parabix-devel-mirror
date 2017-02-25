@@ -10,6 +10,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/TypeBuilder.h>
 #include <fcntl.h>
+#include <toolchain.h>
 
 using namespace llvm;
 
@@ -23,8 +24,6 @@ llvm::Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * 
     }
     return CreateCall(openFn, {filename, oflag, mode});
 }
-
-
 
 // ssize_t write(int fildes, const void *buf, size_t nbyte);
 Value * CBuilder::CreateWriteCall(Value * fildes, Value * buf, Value * nbyte) {
@@ -141,7 +140,9 @@ Value * CBuilder::CreateMalloc(Type * type, Value * size) {
     CallInst * ci = CreateCall(malloc, size);
     ci->setTailCall();
     ci->setCallingConv(malloc->getCallingConv());
-    return CreateBitOrPointerCast(ci, type->getPointerTo());
+    Value * ptr = CreateBitOrPointerCast(ci, type->getPointerTo());
+    CreateAssert(ptr, "FATAL ERROR: out of memory");
+    return ptr;
 }
 
 Value * CBuilder::CreateAlignedMalloc(Type * type, Value * size, const unsigned alignment) {
@@ -362,41 +363,54 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
 
-void CBuilder::CreateAssert(llvm::Value * const toCheck, llvm::StringRef failureMessage) {
-    #ifndef NDEBUG
-    Module * m = getModule();
-    Function * assertion = m->getFunction("__assert");
-    if (LLVM_UNLIKELY(assertion == nullptr)) {
-        auto ip = saveIP();
-        assertion = cast<Function>(m->getOrInsertFunction("__assert", getVoidTy(), getInt1Ty(), getInt8PtrTy(), getSizeTy(), nullptr));
-        BasicBlock * entry = BasicBlock::Create(getContext(), "", assertion);
-        BasicBlock * failure = BasicBlock::Create(getContext(), "", assertion);
-        BasicBlock * success = BasicBlock::Create(getContext(), "", assertion);
-        auto arg = assertion->arg_begin();
-        arg->setName("e");
-        Value * e = &*arg++;
-        arg->setName("msg");
-        Value * msg = &*arg++;
-        arg->setName("sz");
-        Value * sz = &*arg;
-        SetInsertPoint(entry);
-        CreateCondBr(e, failure, success);
-        SetInsertPoint(failure);
-        CreateWriteCall(getInt32(2), msg, sz);
-        Function * exit = m->getFunction("exit");
-        if (LLVM_UNLIKELY(exit == nullptr)) {
-            exit = cast<Function>(m->getOrInsertFunction("exit", getVoidTy(), getInt32Ty(), nullptr));
-            exit->setDoesNotReturn();
-            exit->setDoesNotThrow();
+void CBuilder::CreateAssert(llvm::Value * const assertion, llvm::StringRef failureMessage) {
+    if (codegen::EnableAsserts) {
+        Module * const m = getModule();
+        Function * function = m->getFunction("__assert");
+        if (LLVM_UNLIKELY(function == nullptr)) {
+            auto ip = saveIP();
+            function = cast<Function>(m->getOrInsertFunction("__assert", getVoidTy(), getInt1Ty(), getInt8PtrTy(), getSizeTy(), nullptr));
+            function->setDoesNotThrow();
+            function->setDoesNotAlias(2);
+            BasicBlock * const entry = BasicBlock::Create(getContext(), "", function);
+            BasicBlock * const failure = BasicBlock::Create(getContext(), "", function);
+            BasicBlock * const success = BasicBlock::Create(getContext(), "", function);
+            auto arg = function->arg_begin();
+            arg->setName("assertion");
+            Value * e = &*arg++;
+            arg->setName("msg");
+            Value * msg = &*arg++;
+            arg->setName("sz");
+            Value * sz = &*arg;
+            SetInsertPoint(entry);
+            CreateCondBr(e, failure, success);
+            SetInsertPoint(failure);
+            Value * len = CreateAdd(sz, getSize(21));
+            ConstantInt * _11 = getSize(11);
+            Value * bytes = CreateMalloc(getInt8Ty(), len);
+            CreateMemCpy(bytes, CreateGlobalStringPtr("Assertion `"), _11, 1);
+            CreateMemCpy(CreateGEP(bytes, _11), msg, sz, 1);
+            CreateMemCpy(CreateGEP(bytes, CreateAdd(sz, _11)), CreateGlobalStringPtr("' failed.\n"), getSize(10), 1);
+            CreateWriteCall(getInt32(2), bytes, len);
+            CreateExit(-1);
+            CreateBr(success); // necessary to satisfy the LLVM verifier. this is not actually executed.
+            SetInsertPoint(success);
+            CreateRetVoid();
+            restoreIP(ip);
         }
-        CreateCall(exit, getInt32(-1));
-        CreateBr(success); // we're forced to have this to satisfy the LLVM verifier. this is not actually executed.
-        SetInsertPoint(success);
-        CreateRetVoid();
-        restoreIP(ip);
+        CreateCall(function, {CreateICmpEQ(assertion, Constant::getNullValue(assertion->getType())), CreateGlobalStringPtr(failureMessage), getSize(failureMessage.size())});
     }
-    CreateCall(assertion, {CreateICmpEQ(toCheck, Constant::getNullValue(toCheck->getType())), CreateGlobalStringPtr(failureMessage), getSize(failureMessage.size())});
-    #endif
+}
+
+void CBuilder::CreateExit(const int exitCode) {
+    Module * const m = getModule();
+    Function * exit = m->getFunction("exit");
+    if (LLVM_UNLIKELY(exit == nullptr)) {
+        exit = cast<Function>(m->getOrInsertFunction("exit", getVoidTy(), getInt32Ty(), nullptr));
+        exit->setDoesNotReturn();
+        exit->setDoesNotThrow();
+    }
+    CreateCall(exit, getInt32(exitCode));
 }
 
 CBuilder::CBuilder(llvm::Module * m, unsigned GeneralRegisterWidthInBits, unsigned CacheLineAlignmentInBytes)

@@ -52,15 +52,6 @@ void P2SKernel::generateDoBlockMethod() {
     }
 }
 
-P2SKernel::P2SKernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "p2s",
-              {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}},
-              {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
-              {}, {}, {}) {
-
-}
-
-
 void P2SKernelWithCompressedOutput::generateDoBlockMethod() {
     IntegerType * i32 = iBuilder->getInt32Ty();
     PointerType * bitBlockPtrTy = PointerType::get(iBuilder->getBitBlockType(), 0);
@@ -88,16 +79,6 @@ void P2SKernelWithCompressedOutput::generateDoBlockMethod() {
     unitsGenerated = iBuilder->CreateAdd(unitsGenerated, iBuilder->CreateZExt(offset, iBuilder->getSizeTy()));
     setProducedItemCount("byteStream", unitsGenerated);
 }
-    
-P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "p2s_compress",
-              {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
-                      {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream", MaxRatio(1)}},
-              {}, {}, {}) {
-    setDoBlockUpdatesProducedItemCountsAttribute(true);
-}
-    
-    
 
 void P2S16Kernel::generateDoBlockMethod() {
     Value * hi_input[8];
@@ -119,17 +100,7 @@ void P2S16Kernel::generateDoBlockMethod() {
         storeOutputStreamPack("i16Stream", iBuilder->getInt32(0), iBuilder->getInt32(2 * j + 1), merge1);
     }
 }
-    
-
-P2S16Kernel::P2S16Kernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "p2s_16",
-              {Binding{iBuilder->getStreamSetTy(16, 1), "basisBits"}},
-              {Binding{iBuilder->getStreamSetTy(1, 16), "i16Stream"}},
-              {}, {}, {}) {
-
-}
-
-    
+        
 void P2S16KernelWithCompressedOutput::generateDoBlockMethod() {
     IntegerType * i32Ty = iBuilder->getInt32Ty();
     PointerType * int16PtrTy = iBuilder->getInt16Ty()->getPointerTo();
@@ -173,7 +144,30 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod() {
     Value * i16UnitsFinal = iBuilder->CreateAdd(i16UnitsGenerated, iBuilder->CreateZExt(offset, iBuilder->getSizeTy()));
     setProducedItemCount("i16Stream", i16UnitsFinal);
 }
-    
+
+P2SKernel::P2SKernel(IDISA::IDISA_Builder * iBuilder)
+: BlockOrientedKernel(iBuilder, "p2s",
+              {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}},
+              {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
+              {}, {}, {}) {
+}
+
+P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder)
+: BlockOrientedKernel(iBuilder, "p2s_compress",
+              {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
+                      {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream", MaxRatio(1)}},
+              {}, {}, {}) {
+    setDoBlockUpdatesProducedItemCountsAttribute(true);
+}
+
+P2S16Kernel::P2S16Kernel(IDISA::IDISA_Builder * iBuilder)
+: BlockOrientedKernel(iBuilder, "p2s_16",
+              {Binding{iBuilder->getStreamSetTy(16, 1), "basisBits"}},
+              {Binding{iBuilder->getStreamSetTy(1, 16), "i16Stream"}},
+              {}, {}, {}) {
+}
+
+
 P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(IDISA::IDISA_Builder * b)
 : BlockOrientedKernel(b, "p2s_16_compress",
               {Binding{b->getStreamSetTy(16, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "deletionCounts"}},
@@ -182,6 +176,7 @@ P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(IDISA::IDISA_Bu
               {},
               {}) {
     setDoBlockUpdatesProducedItemCountsAttribute(true);
+
 }
     
     

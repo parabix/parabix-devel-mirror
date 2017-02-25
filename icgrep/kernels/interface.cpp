@@ -94,8 +94,8 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         (++args)->setName(ss.name + "_availableItems");
     }
 
-    // Add any additional kernel declarations
-    addAdditionalKernelDeclarations(client, selfType);
+//    // Add any additional kernel declarations
+//    addAdditionalKernelDeclarations(client, selfType);
 
     // Create the accumulator get function prototypes
     for (const auto & binding : mScalarOutputs) {
@@ -106,7 +106,6 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         accumFn->setDoesNotCapture(1);
         auto args = accumFn->arg_begin();
         args->setName("self");
-        assert ((++args) == accumFn->arg_end());
     }
 
     iBuilder->setModule(saveModule);

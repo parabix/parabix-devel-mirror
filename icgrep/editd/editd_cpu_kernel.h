@@ -18,7 +18,7 @@ public:
 
     editdCPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen);
     
-    
+
 private:
     void generateDoBlockMethod() override;
     void generateFinalBlockMethod(llvm::Value * remainingBytes) override;

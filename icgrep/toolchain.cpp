@@ -29,6 +29,7 @@ using namespace llvm;
 namespace codegen {
 
 static cl::OptionCategory CodeGenOptions("Code Generation Options", "These options control code generation.");
+
 static cl::bits<DebugFlags>
 DebugOptions(cl::values(clEnumVal(ShowIR, "Print generated LLVM IR."),
 #if LLVM_VERSION_MINOR > 6
@@ -59,11 +60,20 @@ int BlockSize;
 int SegmentSize;
 int BufferSegments;
 int ThreadNum;
+bool EnableAsserts;
 
 static cl::opt<int, true> BlockSizeOption("BlockSize", cl::location(BlockSize), cl::init(0), cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 static cl::opt<int, true> SegmentSizeOption("segment-size", cl::location(SegmentSize), cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
 static cl::opt<int, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::desc("Buffer Segments"), cl::value_desc("positive integer"), cl::init(1));
 static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"), cl::init(2));
+
+static cl::opt<bool, true> EnableAssertsOption("ea", cl::location(EnableAsserts), cl::desc("Enable Asserts"), cl::init(
+#ifndef NDEBUG
+true
+#else
+false
+#endif
+));
 
 const cl::OptionCategory * codegen_flags() {return &CodeGenOptions;}
 

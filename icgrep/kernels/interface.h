@@ -154,7 +154,7 @@ protected:
 
     }
     
-    virtual void addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType) {}
+//    virtual void addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType) {}
 
 protected:
     

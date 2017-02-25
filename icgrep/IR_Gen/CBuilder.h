@@ -108,8 +108,9 @@ public:
 
     virtual llvm::StoreInst *  CreateAtomicStoreRelease(llvm::Value * val, llvm::Value * ptr);
     
-    // Warning! this class must be compiled in debug mode or the check will be ignored.
-    void CreateAssert(llvm::Value * toCheck, llvm::StringRef failureMessage);
+    void CreateAssert(llvm::Value * assertion, llvm::StringRef failureMessage);
+
+    void CreateExit(const int exitCode);
 
 protected:
     llvm::Module *      mMod;

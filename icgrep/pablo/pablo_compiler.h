@@ -37,8 +37,6 @@ protected:
 
     void initializeKernelData();
 
-    void allocateKernelData();
-
     void compile();
 
 private:

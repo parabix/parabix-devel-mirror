@@ -23,6 +23,7 @@ IDISA::IDISA_Builder * iBuilder
 , std::string unicodelinebreak
 , unsigned basisBitsCount)
 : PabloKernel(iBuilder, unicodelinebreak +"_kernel", {Binding{iBuilder->getStreamSetTy(basisBitsCount), "basis"}}) {
+
     CC_Compiler ccc(this, getInput(0));
     auto & builder = ccc.getBuilder();
     
@@ -68,4 +69,5 @@ IDISA::IDISA_Builder * iBuilder
     Var * const r = addOutput("unicodeLineBreak", getStreamTy());
     builder.createAssign(r, UnicodeLineBreak);
 
+    setInlined(true);
 }

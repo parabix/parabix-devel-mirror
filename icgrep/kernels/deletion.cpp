@@ -104,10 +104,13 @@ inline std::vector<Value *> get_PEXT_masks(IDISA::IDISA_Builder * iBuilder, Valu
     return masks;
 }
 
-inline Value * apply_PEXT_deletion(IDISA::IDISA_Builder * iBuilder, const std::vector<Value *> & masks, Value * strm) {
+inline Value * apply_PEXT_deletion(IDISA::IDISA_Builder * iBuilder, const std::vector<Value *> & masks, Value * strm) {    
     Value * PEXT_func = nullptr;
-    if (PEXT_width == 64) PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_64);
-    else if (PEXT_width == 32) PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_32);
+    if (PEXT_width == 64) {
+        PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_64);
+    } else if (PEXT_width == 32) {
+        PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_32);
+    }
     Value * v = iBuilder->fwCast(PEXT_width, strm);
     Value * output = Constant::getNullValue(v->getType());
     for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/PEXT_width; i++) {

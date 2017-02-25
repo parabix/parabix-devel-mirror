@@ -62,10 +62,6 @@ void PabloCompiler::initializeKernelData() {
     mCarryManager->initializeCarryData(mKernel);
 }
 
-void PabloCompiler::allocateKernelData() {
-    mCarryManager->allocateCarryData(mKernel);
-}
-
 void PabloCompiler::examineBlock(const PabloBlock * const block) {
     for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {

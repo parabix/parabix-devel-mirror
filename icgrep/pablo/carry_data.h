@@ -54,11 +54,15 @@ public:
         return (summaryType == ExplicitSummary);
     }
 
+    bool hasVariableLength() const {
+        return variableLength;
+    }
+
     
 protected:
 
-    SummaryType     summaryType;
-    bool            variableLength;
+    SummaryType             summaryType;
+    bool                    variableLength;
 
 };
 

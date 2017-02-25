@@ -84,64 +84,6 @@ void CarryManager::initializeCarryData(PabloKernel * const kernel) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief allocateCarryData
- ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::allocateCarryData(PabloKernel * const kernel) {
-//    mKernel = kernel;
-//    mCarryScopes = 0;
-//    mCarryScopeIndex.push_back(0);
-//    mCurrentFrame = kernel->getScalarFieldPtr("carries");
-//    allocateCarryData (mCurrentFrame->getType());
-}
-
-///** ------------------------------------------------------------------------------------------------------------- *
-// * @brief allocateCarryData
-// ** ------------------------------------------------------------------------------------------------------------- */
-//void CarryManager::allocateCarryData(Type * const type) {
-//    assert (type->isStructTy());
-
-//    const auto scopeIndex = mCarryScopes++;
-
-//    const unsigned vl = mCarryMetadata[scopeIndex].variableLength ? 4 : 0;
-
-//    if (LLVM_UNLIKELY(vl != 0)) {
-
-
-//        ConstantInt * const capacity = iBuilder->getSize(vl);
-//        Value * capacityPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-//        iBuilder->CreateStore(capacity, capacityPtr, false);
-//        Value * arrayPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
-//        Value * carryStateType = arrayPtr->getType()->getPointerElementType();
-//        Value * array = iBuilder->CreateAlignedMalloc(carryStateType, capacity, iBuilder->getCacheAlignment());
-//        Constant * typeWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(carryStateType), iBuilder->getSizeTy(), false);
-//        iBuilder->CreateMemZero(array, iBuilder->CreateMul(capacity, typeWidth), iBuilder->getCacheAlignment());
-//        iBuilder->CreateStore(array, arrayPtr, false);
-
-
-
-
-//    } else {
-
-
-//        for (unsigned i = 0; i < type->getStructNumElements(); ++i) {
-
-
-
-//        }
-
-
-
-//    }
-
-
-
-
-
-
-//}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeCodeGen
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::initializeCodeGen() {
@@ -206,7 +148,7 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
         mCarrySummary.push_back(carrySummary);
     }
 
-    if (LLVM_UNLIKELY(mCarryInfo->variableLength)) {
+    if (LLVM_UNLIKELY(mCarryInfo->hasVariableLength())) {
         // Check whether we need to resize the carry state
         PHINode * index = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
         mLoopIndicies.push_back(index);
@@ -229,8 +171,7 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
         Type * const carryStateType = array->getType()->getPointerElementType();
 
         Constant * carryStateWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(carryStateType), capacity->getType(), false);
-
-        Value * newCapacity = iBuilder->CreateMul(iBuilder->CreateAdd(index, iBuilder->getSize(1)), iBuilder->getSize(2));
+        Value * newCapacity = iBuilder->CreateSelect(iBuilder->CreateICmpNE(index, ConstantInt::getNullValue(index->getType())), iBuilder->CreateMul(index, iBuilder->getSize(2)), iBuilder->getSize(4));
         Value * newArray = iBuilder->CreateAlignedMalloc(carryStateType, newCapacity, iBuilder->getCacheAlignment());
 
         assert (newCapacity->getType() == capacity->getType());
@@ -240,6 +181,8 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
 
         iBuilder->CreateCondBr(isNullCarryState, zeroBlock, cleanUpBlock);
         iBuilder->SetInsertPoint(cleanUpBlock);
+
+
 
         iBuilder->CreateMemCpy(newArray, array, iBuilder->CreateMul(capacity, carryStateWidth), iBuilder->getCacheAlignment());
         iBuilder->CreateAlignedFree(array);
@@ -274,7 +217,7 @@ void CarryManager::leaveLoopBody(BasicBlock * const exitBlock) {
         cast<PHINode>(mCarrySummary[n - 2])->addIncoming(mCarrySummary[n - 1], exitBlock);
         mCarrySummary.pop_back();
     }
-    if (LLVM_UNLIKELY(mCarryInfo->variableLength)) {
+    if (LLVM_UNLIKELY(mCarryInfo->hasVariableLength())) {
         assert (!mLoopIndicies.empty());
         PHINode * index = mLoopIndicies.back();
         index->addIncoming(iBuilder->CreateAdd(index, iBuilder->getSize(1)), exitBlock);
@@ -591,7 +534,7 @@ void CarryManager::addToSummary(Value * value) { assert (value);
  * @brief collapsingCarryMode
  ** ------------------------------------------------------------------------------------------------------------- */
 bool CarryManager::inCollapsingCarryMode() const {
-    return (mCurrentScope->getBranch() && isa<While>(mCurrentScope->getBranch()) && !mCarryInfo->variableLength);
+    return (mCurrentScope->getBranch() && isa<While>(mCurrentScope->getBranch()) && !mCarryInfo->hasVariableLength());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -640,15 +583,15 @@ bool CarryManager::requiresVariableLengthMode(const PabloBlock * const scope) {
  ** ------------------------------------------------------------------------------------------------------------- */
 StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDepth, const unsigned loopDepth) {
 
-    std::vector<Type *> state;
-
+    assert (scope != mKernel->getEntryBlock() || mCarryScopes == 0);
+    assert (mCarryScopes < mCarryMetadata.size());
     assert (mCarryPackType);
 
+    CarryData & cd = mCarryMetadata[mCarryScopes++];
+
+    std::vector<Type *> state;
+
     Type * const carryPackType = (loopDepth == 0) ? mCarryPackType : ArrayType::get(mCarryPackType, 2);
-
-    const auto scopeIndex = mCarryScopes++;
-
-    assert (scopeIndex < mCarryMetadata.size());
 
     bool hasLongAdvances = false;
     for (Statement * stmt : *scope) {
@@ -677,8 +620,6 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
         }
     }
 
-    CarryData & cd = mCarryMetadata[scopeIndex];
-
     StructType * carryState = nullptr;
 
     // Add the summary pack if needed.
@@ -704,7 +645,8 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
         }
         carryState = StructType::get(iBuilder->getContext(), state);
         // If we in a loop and cannot use collapsing carry mode, convert the struct into a capacity and pointer pair.
-        if (LLVM_UNLIKELY(cd.variableLength)) {
+        if (LLVM_UNLIKELY(cd.hasVariableLength())) {
+            mHasVariableLengthCarryData = true;
             carryState = StructType::get(iBuilder->getSizeTy(), carryState->getPointerTo(), nullptr);
         }
     }
@@ -729,6 +671,7 @@ CarryManager::CarryManager(IDISA::IDISA_Builder * idb) noexcept
 , mCarryPackPtr(nullptr)
 , mIfDepth(0)
 , mHasLongAdvance(false)
+, mHasVariableLengthCarryData(false)
 , mHasLoop(false)
 , mLoopDepth(0)
 , mLoopSelector(nullptr)

@@ -45,8 +45,6 @@ public:
 
     void initializeCarryData(PabloKernel * const kernel);
 
-    void allocateCarryData(PabloKernel * const kernels);
-
     void initializeCodeGen();
 
     void finalizeCodeGen();
@@ -84,7 +82,9 @@ public:
 protected:
 
     static unsigned getScopeCount(PabloBlock * const scope, unsigned index = 0);
+
     static bool requiresVariableLengthMode(const PabloBlock * const scope);
+
     llvm::StructType * analyse(PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0);
 
     /* Entering and leaving scopes. */
@@ -121,6 +121,8 @@ private:
     unsigned                                        mIfDepth;
 
     bool                                            mHasLongAdvance;
+
+    bool                                            mHasVariableLengthCarryData;
 
     bool                                            mHasLoop;
     unsigned                                        mLoopDepth;

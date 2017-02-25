@@ -115,10 +115,6 @@ void PabloKernel::prepareKernel() {
     BlockOrientedKernel::prepareKernel();
 }
 
-void PabloKernel::generateInitMethod() {
-    mPabloCompiler->allocateKernelData();
-}
-
 void PabloKernel::generateDoBlockMethod() {
     mPabloCompiler->compile();
 }

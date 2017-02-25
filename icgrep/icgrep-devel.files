@@ -29,8 +29,12 @@ IR_Gen/idisa_target.cpp
 IR_Gen/idisa_target.h
 IR_Gen/llvm2ptx.h
 IR_Gen/tracegen.h
+kernels/alignedprint.cpp
+kernels/alignedprint.h
 kernels/cc_kernel.cpp
 kernels/cc_kernel.h
+kernels/cc_scan_kernel.cpp
+kernels/cc_scan_kernel.h
 kernels/deletion.cpp
 kernels/deletion.h
 kernels/evenodd.cpp
@@ -39,6 +43,8 @@ kernels/interface.cpp
 kernels/interface.h
 kernels/kernel.cpp
 kernels/kernel.h
+kernels/match_count.cpp
+kernels/match_count.h
 kernels/mmap_kernel.cpp
 kernels/mmap_kernel.h
 kernels/p2s_kernel.cpp
@@ -55,8 +61,14 @@ kernels/stdin_kernel.cpp
 kernels/stdin_kernel.h
 kernels/stdout_kernel.cpp
 kernels/stdout_kernel.h
+kernels/streams_merge.cpp
+kernels/streams_merge.h
 kernels/streamset.cpp
 kernels/streamset.h
+kernels/swizzle.cpp
+kernels/swizzle.h
+kernels/unicode_linebreak_kernel.cpp
+kernels/unicode_linebreak_kernel.h
 pablo/analysis/pabloverifier.cpp
 pablo/analysis/pabloverifier.hpp
 pablo/optimizers/booleanreassociationpass.cpp
@@ -211,6 +223,7 @@ hrtime.h
 icgrep.cpp
 object_cache.cpp
 object_cache.h
+preprocess.cpp
 toolchain.cpp
 toolchain.h
 u8u16.cpp
@@ -220,7 +233,3 @@ utf8_encoder.cpp
 utf8_encoder.h
 wc.cpp
 CMakeLists.txt
-kernels/alignedprint.h
-kernels/alignedprint.cpp
-kernels/swizzle.cpp
-kernels/swizzle.h

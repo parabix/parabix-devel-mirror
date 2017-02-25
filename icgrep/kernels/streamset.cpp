@@ -199,29 +199,6 @@ void ExpandableBuffer::allocateBuffer() {
     iBuilder->CreateStore(ptr, streamSetPtr);
 }
 
-bool dominates(const Instruction * const x, const Instruction * const y) {
-    // Are they in the same basic block?
-    if (x->getParent() == y->getParent()) {
-        if (y->getNextNode() == nullptr) {
-            return true;
-        }
-        for (const Instruction * z = x; z; z = z->getNextNode()) {
-            if (z == y) {
-                return true;
-            }
-        }
-        return false;
-    } else {
-        const BasicBlock * yp = y->getParent();
-        for (auto pi = pred_begin(yp), pi_end = pred_end(yp); pi != pi_end; ++pi) {
-            if (!dominates(x, (*pi)->getTerminator())) {
-                return false;
-            }
-        }
-        return true;
-    }
-}
-
 inline bool ExpandableBuffer::isGuaranteedCapacity(const llvm::Value * const index) const {
     if (LLVM_UNLIKELY(isa<ConstantInt>(index))) {
         if (LLVM_LIKELY(cast<ConstantInt>(index)->getLimitedValue() < mInitialCapacity)) {

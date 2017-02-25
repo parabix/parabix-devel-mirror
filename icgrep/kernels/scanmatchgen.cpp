@@ -253,7 +253,7 @@ ScanMatchKernel::ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepT
     {},
     {Binding{iBuilder->getSizeTy(), "BlockNo"}, Binding{iBuilder->getSizeTy(), "LineStart"}, Binding{iBuilder->getSizeTy(), "LineNum"}})
 , mGrepType(grepType) {
-
+    setInlined(true);
 }
 
 }

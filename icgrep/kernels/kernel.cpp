@@ -13,9 +13,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/Scalar.h>
-#ifndef NDEBUG
 #include <llvm/IR/Verifier.h>
-#endif
 
 static const auto DO_BLOCK_SUFFIX = "_DoBlock";
 
@@ -165,7 +163,6 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
     prepareKernel(); // possibly overridden by the KernelBuilder subtype
     addKernelDeclarations(iBuilder->getModule());
     callGenerateInitMethod();
-    generateInternalMethods();
     callGenerateDoSegmentMethod();
     // Implement the accumulator get functions
     for (auto binding : mScalarOutputs) {
@@ -180,9 +177,9 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
 }
 
 void KernelBuilder::callGenerateDoSegmentMethod() {
-    mCurrentFunction = getDoSegmentFunction();
+    mCurrentMethod = getDoSegmentFunction();
     iBuilder->SetInsertPoint(CreateBasicBlock(getName() + "_entry"));
-    auto args = mCurrentFunction->arg_begin();
+    auto args = mCurrentMethod->arg_begin();
     mSelf = &*(args++);
     Value * doFinal = &*(args++);
     std::vector<Value *> producerPos;
@@ -194,9 +191,9 @@ void KernelBuilder::callGenerateDoSegmentMethod() {
 }
 
 void KernelBuilder::callGenerateInitMethod() {
-    mCurrentFunction = getInitFunction();
+    mCurrentMethod = getInitFunction();
     iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
-    Function::arg_iterator args = mCurrentFunction->arg_begin();
+    Function::arg_iterator args = mCurrentMethod->arg_begin();
     mSelf = &*(args++);
     iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), mSelf);
     for (auto binding : mScalarInputs) {
@@ -264,12 +261,10 @@ Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string 
 }
 
 void KernelBuilder::setProcessedItemCount(Value * instance, const std::string & name, Value * value) const {
-    //iBuilder->CallPrintInt(getName() + " " + name + " processed", value);
     setScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX, value);
 }
 
 void KernelBuilder::setProducedItemCount(Value * instance, const std::string & name, Value * value) const {
-    //iBuilder->CallPrintInt(getName() + " " + name +  " produced", value);
     setScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX, value);
 }
 
@@ -396,7 +391,7 @@ Value * KernelBuilder::createGetAccumulatorCall(Value * self, const std::string 
 }
 
 BasicBlock * KernelBuilder::CreateBasicBlock(std::string && name) const {
-    return BasicBlock::Create(iBuilder->getContext(), name, mCurrentFunction);
+    return BasicBlock::Create(iBuilder->getContext(), name, mCurrentMethod);
 }
 
 void KernelBuilder::createInstance() {
@@ -439,25 +434,25 @@ void KernelBuilder::createInstance() {
     iBuilder->CreateCall(getInitFunction(), args);
 }
 
-//  The default finalBlock method simply dispatches to the doBlock routine.
-void BlockOrientedKernel::generateFinalBlockMethod(Value * remainingBytes) {
-//    std::vector<Value *> args = {self};
-//    for (Argument & arg : function->getArgumentList()){
-//        args.push_back(&arg);
-//    }
-    CreateDoBlockMethodCall();
-}
-
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.
+
 void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::vector<Value *> & producerPos) {
+
+    // Use the pass manager to optimize the function.
+    FunctionPassManager fpm(iBuilder->getModule());
+    #ifndef NDEBUG
+    fpm.add(createVerifierPass());
+    #endif
+    fpm.add(createReassociatePass());             //Reassociate expressions.
+    fpm.add(createGVNPass());                     //Eliminate common subexpressions.
+    fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
+    fpm.doInitialization();
 
     BasicBlock * const entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * const strideLoopCond = CreateBasicBlock(getName() + "_strideLoopCond");
     BasicBlock * const strideLoopBody = CreateBasicBlock(getName() + "_strideLoopBody");
     BasicBlock * const stridesDone = CreateBasicBlock(getName() + "_stridesDone");
-    BasicBlock * const doFinalBlock = CreateBasicBlock(getName() + "_doFinalBlock");
-    BasicBlock * const segmentDone = CreateBasicBlock(getName() + "_segmentDone");
 
     ConstantInt * stride = iBuilder->getSize(iBuilder->getStride());
 
@@ -480,54 +475,86 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
 
     iBuilder->SetInsertPoint(strideLoopBody);
 
-    CreateDoBlockMethodCall();
+    /// GENERATE DO BLOCK METHOD
+
+    generateDoBlockMethod(fpm);
+
+    /// UPDATE PROCESSED COUNTS
 
     processed = getProcessedItemCount(mStreamSetInputs[0].name);
     Value * itemsDone = iBuilder->CreateAdd(processed, stride);
     setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);
-    
-    stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, iBuilder->getSize(1)), strideLoopBody);
+
+    stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, iBuilder->getSize(1)), iBuilder->GetInsertBlock());
     iBuilder->CreateBr(strideLoopCond);
 
     iBuilder->SetInsertPoint(stridesDone);
 
     // Now conditionally perform the final block processing depending on the doFinal parameter.
+    BasicBlock * const doFinalBlock = CreateBasicBlock(getName() + "_doFinalBlock");
+    BasicBlock * const segmentDone = CreateBasicBlock(getName() + "_segmentDone");
     iBuilder->CreateCondBr(doFinal, doFinalBlock, segmentDone);
     iBuilder->SetInsertPoint(doFinalBlock);
 
     Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(mStreamSetInputs[0].name));
+    generateFinalBlockMethod(remainingItems, fpm);
 
-    CreateDoFinalBlockMethodCall(remainingItems);
-    
     itemsDone = producerPos[0];
-    setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);    
-    
+    setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);
     setTerminationSignal();
     iBuilder->CreateBr(segmentDone);
 
     iBuilder->SetInsertPoint(segmentDone);
+}
+
+void BlockOrientedKernel::generateDoBlockMethod(FunctionPassManager & fpm) {
+
+    Value * const self = mSelf;
+    Function * const cp = mCurrentMethod;
+    auto ip = iBuilder->saveIP();
+
+    /// Check if the do block method is called and create the function if necessary    
+    if (isCalled()) {
+        FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), {mSelf->getType()}, false);
+        mCurrentMethod = Function::Create(type, GlobalValue::ExternalLinkage, getName() + DO_BLOCK_SUFFIX, iBuilder->getModule());
+        mCurrentMethod->setCallingConv(CallingConv::C);
+        mCurrentMethod->setDoesNotThrow();
+        mCurrentMethod->setDoesNotCapture(1);
+        auto args = mCurrentMethod->arg_begin();
+        mCurrentMethod = mCurrentMethod;
+        mSelf = &*args;
+        mSelf->setName("self");
+        iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
+    }
+
+    writeDoBlockMethod();
+
+    /// Call the do block method if necessary then restore the current function state to the do segement method
+
+    if (isCalled()) {
+        iBuilder->CreateRetVoid();
+        mDoBlockMethod = mCurrentMethod;
+        fpm.run(*mCurrentMethod);
+        iBuilder->restoreIP(ip);
+        iBuilder->CreateCall(mCurrentMethod, self);
+
+        mSelf = self;
+        mCurrentMethod = cp;
+    }
 
 }
 
-void BlockOrientedKernel::generateInternalMethods() {
+void BlockOrientedKernel::writeDoBlockMethod() {
 
-    callGenerateDoBlockMethod();
-
-    callGenerateDoFinalBlockMethod();
-}
-
-void BlockOrientedKernel::callGenerateDoBlockMethod() {
-    mCurrentFunction = getDoBlockFunction();
-    auto args = mCurrentFunction->arg_begin();
-    mSelf = &(*args);
-    iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     std::vector<Value *> priorProduced;
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         if (isa<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
             priorProduced.push_back(getProducedItemCount(mStreamSetOutputs[i].name));
         }
     }
-    generateDoBlockMethod(); // must be implemented by the KernelBuilder subtype
+
+    generateDoBlockMethod(); // must be implemented by the BlockOrientedKernelBuilder subtype
+
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         unsigned priorIdx = 0;
         if (auto cb = dyn_cast<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
@@ -544,81 +571,73 @@ void BlockOrientedKernel::callGenerateDoBlockMethod() {
             iBuilder->SetInsertPoint(done);
             priorIdx++;
         }
-    }    
-    iBuilder->CreateRetVoid();
-    #ifndef NDEBUG
-    std::string tmp;
-    raw_string_ostream out(tmp);
-    if (verifyFunction(*mCurrentFunction, &out)) {
-        mCurrentFunction->dump();
-        report_fatal_error(getName() + ": " + out.str());
     }
-    #endif
-    // Use the pass manager to optimize the function.
-    FunctionPassManager fpm(iBuilder->getModule());
-    fpm.add(createReassociatePass());             //Reassociate expressions.
-    fpm.add(createGVNPass());                     //Eliminate common subexpressions.
-    fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-    fpm.doInitialization();
-    fpm.run(*mCurrentFunction);
+
 }
 
+void BlockOrientedKernel::generateFinalBlockMethod(Value * remainingItems, FunctionPassManager & fpm) {
 
-void BlockOrientedKernel::callGenerateDoFinalBlockMethod() {
-    mCurrentFunction = getDoFinalBlockFunction();
-    auto args = mCurrentFunction->arg_begin();
-    mSelf = &(*args++);
-    Value * const remainingBytes = &(*args);
-    iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
-    generateFinalBlockMethod(remainingBytes); // possibly overridden by the KernelBuilder subtype
-    iBuilder->CreateRetVoid();
-}
+    Value * const self = mSelf;
+    Function * const cp = mCurrentMethod;
+    Value * const remainingItemCount = remainingItems;
+    auto ip = iBuilder->saveIP();
 
-Function * BlockOrientedKernel::getDoBlockFunction() const {
-    const auto name = getName() + DO_BLOCK_SUFFIX;
-    Function * const f = iBuilder->getModule()->getFunction(name);
-    if (LLVM_UNLIKELY(f == nullptr)) {
-        report_fatal_error("Cannot find " + name);
+    if (isCalled()) {
+        FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), {mSelf->getType(), iBuilder->getSizeTy()}, false);
+        mCurrentMethod = Function::Create(type, GlobalValue::ExternalLinkage, getName() + FINAL_BLOCK_SUFFIX, iBuilder->getModule());
+        mCurrentMethod->setCallingConv(CallingConv::C);
+        mCurrentMethod->setDoesNotThrow();
+        mCurrentMethod->setDoesNotCapture(1);
+        auto args = mCurrentMethod->arg_begin();
+        mSelf = &*args;
+        mSelf->setName("self");
+        remainingItems = &*(++args);
+        remainingItems->setName("remainingItems");
+        iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     }
-    return f;
-}
 
-CallInst * BlockOrientedKernel::CreateDoBlockMethodCall() const {
-    return iBuilder->CreateCall(getDoBlockFunction(), mSelf);
-}
+    generateFinalBlockMethod(remainingItems); // may be implemented by the BlockOrientedKernelBuilder subtype
 
-Function * BlockOrientedKernel::getDoFinalBlockFunction() const {
-    const auto name = getName() + FINAL_BLOCK_SUFFIX;
-    Function * const f = iBuilder->getModule()->getFunction(name);
-    if (LLVM_UNLIKELY(f == nullptr)) {
-        report_fatal_error("Cannot find " + name);
+    if (isCalled()) {
+        iBuilder->CreateRetVoid();        
+        fpm.run(*mCurrentMethod);
+        iBuilder->restoreIP(ip);
+        iBuilder->CreateCall(mCurrentMethod, {self, remainingItemCount});
+        mCurrentMethod = cp;
+        mSelf = self;
     }
-    return f;
+
 }
 
-CallInst * BlockOrientedKernel::CreateDoFinalBlockMethodCall(Value * remainingItems) const {
-    return iBuilder->CreateCall(getDoFinalBlockFunction(), {mSelf, remainingItems});
+//  The default finalBlock method simply dispatches to the doBlock routine.
+void BlockOrientedKernel::generateFinalBlockMethod(Value * remainingItems) {
+    CreateDoBlockMethodCall();
 }
 
-void BlockOrientedKernel::addAdditionalKernelDeclarations(Module * m, PointerType * selfType) {
-    // Create the doBlock and finalBlock function prototypes
-    FunctionType * const doBlockType = FunctionType::get(iBuilder->getVoidTy(), {selfType}, false);
-    Function * const doBlock = Function::Create(doBlockType, GlobalValue::ExternalLinkage, getName() + DO_BLOCK_SUFFIX, m);
-    doBlock->setCallingConv(CallingConv::C);
-    doBlock->setDoesNotThrow();
-    doBlock->setDoesNotCapture(1);
-    auto args = doBlock->arg_begin();
-    args->setName("self");
-
-    FunctionType * const finalBlockType = FunctionType::get(iBuilder->getVoidTy(), {selfType, iBuilder->getSizeTy()}, false);
-    Function * const finalBlock = Function::Create(finalBlockType, GlobalValue::ExternalLinkage, getName() + FINAL_BLOCK_SUFFIX, m);
-    finalBlock->setCallingConv(CallingConv::C);
-    finalBlock->setDoesNotThrow();
-    finalBlock->setDoesNotCapture(1);
-    args = finalBlock->arg_begin();
-    args->setName("self");
-    (++args)->setName("remainingBytes");
+void BlockOrientedKernel::CreateDoBlockMethodCall() {
+    if (isCalled()) {
+        iBuilder->CreateCall(mDoBlockMethod, mSelf);
+    } else {
+        // TODO: can we clone the DoBlock method instead of regenerating it?
+        writeDoBlockMethod();
+    }
 }
+
+// CONSTRUCTOR
+
+BlockOrientedKernel::BlockOrientedKernel(IDISA::IDISA_Builder * builder,
+                                                           std::string && kernelName,
+                                                           std::vector<Binding> && stream_inputs,
+                                                           std::vector<Binding> && stream_outputs,
+                                                           std::vector<Binding> && scalar_parameters,
+                                                           std::vector<Binding> && scalar_outputs,
+                                                           std::vector<Binding> && internal_scalars)
+: KernelBuilder(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
+, mDoBlockMethod(nullptr)
+, mInlined(false) {
+
+}
+
 
 // CONSTRUCTOR
 KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
@@ -635,21 +654,6 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
 }
 
 KernelBuilder::~KernelBuilder() { }
-
-// CONSTRUCTOR
-BlockOrientedKernel::BlockOrientedKernel(IDISA::IDISA_Builder * builder,
-                                         std::string && kernelName,
-                                         std::vector<Binding> && stream_inputs,
-                                         std::vector<Binding> && stream_outputs,
-                                         std::vector<Binding> && scalar_parameters,
-                                         std::vector<Binding> && scalar_outputs,
-                                         std::vector<Binding> && internal_scalars)
-: KernelBuilder(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
-
-}
-
-
-
 
 // CONSTRUCTOR
 SegmentOrientedKernel::SegmentOrientedKernel(IDISA::IDISA_Builder * builder,

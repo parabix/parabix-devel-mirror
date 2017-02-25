@@ -14,6 +14,7 @@
 #include "llvm/Support/Debug.h"
 namespace llvm { class ConstantInt; }
 namespace llvm { class Function; }
+namespace llvm { namespace legacy { class FunctionPassManager; } }
 namespace llvm { class IntegerType; }
 namespace llvm { class LoadInst; }
 namespace llvm { class Type; }
@@ -136,7 +137,7 @@ protected:
     
     virtual void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) = 0;
 
-    virtual void generateInternalMethods() { }
+//    virtual void generateInternalMethods() { }
 
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
@@ -264,7 +265,7 @@ private:
 protected:
 
     llvm::Value *                                   mSelf;
-    llvm::Function *                                mCurrentFunction;
+    llvm::Function *                                mCurrentMethod;
 
     std::vector<llvm::Type *>                       mKernelFields;
     NameMap                                         mKernelMap;
@@ -292,15 +293,9 @@ protected:
 };
 
 class BlockOrientedKernel : public KernelBuilder {
-public:
-
-    llvm::CallInst * CreateDoBlockMethodCall() const;
-
-    llvm::CallInst * CreateDoFinalBlockMethodCall(llvm::Value * remainingItems) const;
-
 protected:
 
-    virtual void addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType);
+    void CreateDoBlockMethodCall();
 
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
@@ -313,11 +308,9 @@ protected:
     // without additional preparation, the default generateFinalBlockMethod need
     // not be overridden.
 
-    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes);
+    virtual void generateFinalBlockMethod(llvm::Value * remainingItems);
 
-    virtual void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) final;
-
-    void generateInternalMethods() override final;
+    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override final;
 
     BlockOrientedKernel(IDISA::IDISA_Builder * builder,
                         std::string && kernelName,
@@ -329,20 +322,30 @@ protected:
 
     virtual ~BlockOrientedKernel() { }
 
-    llvm::Value * loadBlock(const std::string & inputName, llvm::Value * const streamIndex) const;
+    bool isCalled() const {
+        return !mInlined;
+    }
 
-    llvm::Value * loadPack(const std::string & inputName, llvm::Value * const streamIndex, llvm::Value * const packIndex) const;
+    bool isInlined() const {
+        return mInlined;
+    }
 
-    llvm::Function * getDoBlockFunction() const;
-
-    llvm::Function * getDoFinalBlockFunction() const;
+    void setInlined(const bool value = true) {
+        mInlined = value;
+    }
 
 private:
 
-    void callGenerateDoBlockMethod();
+    void generateDoBlockMethod(llvm::legacy::FunctionPassManager & fpm);
 
-    void callGenerateDoFinalBlockMethod();
+    void writeDoBlockMethod();
 
+    void generateFinalBlockMethod(llvm::Value *remainingItems, llvm::legacy::FunctionPassManager & fpm);
+
+private:
+
+    llvm::Function * mDoBlockMethod;
+    bool             mInlined;
 };
 
 
