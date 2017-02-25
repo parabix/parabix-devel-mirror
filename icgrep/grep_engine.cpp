@@ -24,6 +24,7 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/scanmatchgen.h>
 #include <kernels/streamset.h>
+#include <kernels/interface.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
@@ -195,7 +196,7 @@ Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool C
         iBuilder->CreateStore(result, outputThreadPtr);
     }
     else {
-        Type * const outputStremType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 2), 1);
+        Type * const outputStremType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 1), 1);
         Value * outputStreamPtr = iBuilder->CreateGEP(iBuilder->CreateBitCast(outputPtr, outputStremType), startBlock);
         Value * outputStream = iBuilder->CreateGEP(outputStreamPtr, tid);
         iBuilder->CreateCall(mainFunc, {inputStream, bufferSize, outputStream});
@@ -226,26 +227,26 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
     fileIdx->setName("fileIdx");
 
     const unsigned segmentSize = codegen::SegmentSize;
-
+    
     ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1));
     MatchResults.setStreamSetBuffer(rsltStream, fileSize);
 
     kernel::MMapSourceKernel mmapK1(iBuilder, segmentSize); 
+    mmapK1.setName("mmap1");
     mmapK1.generateKernel({}, {&MatchResults});
     mmapK1.setInitialArguments({fileSize});
-
 
     ExternalFileBuffer LineBreak(iBuilder, iBuilder->getStreamSetTy(1, 1));
     LineBreak.setStreamSetBuffer(lbStream, fileSize);
     
     kernel::MMapSourceKernel mmapK2(iBuilder, segmentSize); 
+    mmapK2.setName("mmap2");
     mmapK2.generateKernel({}, {&LineBreak});
     mmapK2.setInitialArguments({fileSize});
 
     kernel::ScanMatchKernel scanMatchK(iBuilder, grepType);
     scanMatchK.generateKernel({&MatchResults, &LineBreak}, {});
-            
-    scanMatchK.setInitialArguments({inputStream, fileSize, fileIdx});
+    scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
     
     generatePipelineLoop(iBuilder, {&mmapK1, &mmapK2, &scanMatchK});
     iBuilder->CreateRetVoid();
@@ -437,7 +438,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
 #ifdef CUDA_ENABLED   
     Value * outputStream = nullptr;
-    Type * const outputType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 2), addrSpace);
+    Type * const outputType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 1), addrSpace);
     if (codegen::NVPTX){
         if (CountOnly){
             mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, size_ty, nullptr));
@@ -520,7 +521,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     } else {
 #ifdef CUDA_ENABLED 
         if (codegen::NVPTX){
-            ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(2, 1), addrSpace);
+            ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1), addrSpace);
             MatchResults.setStreamSetBuffer(outputStream, fileSize);
 
             icgrepK.generateKernel({&BasisBits},  {&MatchResults});
