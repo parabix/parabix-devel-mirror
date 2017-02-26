@@ -43,7 +43,8 @@ namespace IDISA { class IDISA_Builder; }
 // Swizzle 3:  jk000000 z1000000 JK000000 Z1000000
 // Swizzle 4:  lmnop000 23456000 LMNOP000 23456000
 //
-// Now it might be convenient to all fields of swizzle 1 by 2, all fields of swizzle 2 by 5 and so on.
+// Now it might be convenient to compress all fields of swizzle 1 by 2, all fields of swizzle 2 by 5
+// and so on.
 //
 namespace kernel {
 
