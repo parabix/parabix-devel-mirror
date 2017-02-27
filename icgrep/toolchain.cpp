@@ -12,6 +12,7 @@
 #include <llvm/Support/raw_ostream.h>              // for errs, raw_ostream
 #include <llvm/ADT/SmallString.h>                  // for SmallString
 #include <llvm/IR/LegacyPassManager.h>             // for PassManager
+#include <llvm/IR/Verifier.h>
 #include <llvm/InitializePasses.h>                 // for initializeCodeGen
 #include <llvm/PassRegistry.h>                     // for PassRegistry
 #include <llvm/Support/CodeGen.h>                  // for Level, Level::None
@@ -20,11 +21,7 @@
 #include <llvm/Target/TargetOptions.h>             // for TargetOptions
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
-#ifndef NDEBUG
-#include <llvm/IR/Verifier.h>
-#endif
 #include <object_cache.h>
-namespace llvm { class Module; }
 #ifdef CUDA_ENABLED
 #include <IR_Gen/llvm2ptx.h>
 #endif
@@ -66,6 +63,8 @@ int SegmentSize;
 int BufferSegments;
 int ThreadNum;
 bool EnableAsserts;
+
+
 
 static cl::opt<int, true> BlockSizeOption("BlockSize", cl::location(BlockSize), cl::init(0), cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 static cl::opt<int, true> SegmentSizeOption("segment-size", cl::location(SegmentSize), cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));

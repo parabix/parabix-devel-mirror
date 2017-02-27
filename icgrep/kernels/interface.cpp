@@ -52,7 +52,6 @@ Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value *
     return nullptr;
 }
 
-
 void KernelInterface::addKernelDeclarations(Module * client) {
     Module * saveModule = iBuilder->getModule();
     auto savePoint = iBuilder->saveIP();
@@ -93,9 +92,6 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     for (auto ss : mStreamSetInputs) {
         (++args)->setName(ss.name + "_availableItems");
     }
-
-//    // Add any additional kernel declarations
-//    addAdditionalKernelDeclarations(client, selfType);
 
     // Create the accumulator get function prototypes
     for (const auto & binding : mScalarOutputs) {

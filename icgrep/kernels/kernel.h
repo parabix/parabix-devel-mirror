@@ -334,7 +334,7 @@ private:
     llvm::Function *        mDoBlockMethod;
     llvm::BasicBlock *      mStrideLoopBody;
     llvm::IndirectBrInst *  mStrideLoopBranch;
-    llvm::PHINode *         mStrideLoopBranchAddress;
+    llvm::PHINode *         mStrideLoopTarget;
 };
 
 

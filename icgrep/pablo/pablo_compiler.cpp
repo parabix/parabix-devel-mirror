@@ -157,6 +157,9 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
     mCarryManager->leaveIfBody(ifExitBlock);
 
     iBuilder->CreateBr(ifEndBlock);
+
+    ifEndBlock->moveAfter(ifExitBlock);
+
     //End Block
     iBuilder->SetInsertPoint(ifEndBlock);
 
@@ -284,7 +287,7 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     compileBlock(whileBody);
 
     // After the whileBody has been compiled, we may be in a different basic block.
-    BasicBlock * whileExitBlock = iBuilder->GetInsertBlock();
+    BasicBlock * const whileExitBlock = iBuilder->GetInsertBlock();
 
     mCarryManager->leaveLoopBody(whileExitBlock);
 
@@ -335,6 +338,8 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     }
 
     iBuilder->CreateCondBr(condition, whileBodyBlock, whileEndBlock);
+
+    whileEndBlock->moveAfter(whileExitBlock);
 
     iBuilder->SetInsertPoint(whileEndBlock);
 

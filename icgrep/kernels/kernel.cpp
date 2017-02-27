@@ -11,7 +11,6 @@
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IR/Verifier.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/Utils/Local.h>
 
@@ -442,6 +441,13 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
     BasicBlock * const strideLoopCond = CreateBasicBlock(getName() + "_strideLoopCond");
     mStrideLoopBody = CreateBasicBlock(getName() + "_strideLoopBody");
     BasicBlock * const stridesDone = CreateBasicBlock(getName() + "_stridesDone");
+    BasicBlock * const doFinalBlock = CreateBasicBlock(getName() + "_doFinalBlock");
+    BasicBlock * const segmentDone = CreateBasicBlock(getName() + "_segmentDone");
+
+    Value * baseTarget = nullptr;
+    if (useIndirectBr()) {
+        baseTarget = iBuilder->CreateSelect(doFinal, BlockAddress::get(doFinalBlock), BlockAddress::get(segmentDone));
+    }
 
     ConstantInt * stride = iBuilder->getSize(iBuilder->getStride());
     Value * availablePos = producerPos[0];
@@ -457,16 +463,23 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
     iBuilder->CreateBr(strideLoopCond);
 
     iBuilder->SetInsertPoint(strideLoopCond);
+
+    PHINode * branchTarget = nullptr;
+    if (useIndirectBr()) {
+        branchTarget = iBuilder->CreatePHI(baseTarget->getType(), 2, "branchTarget");
+        branchTarget->addIncoming(baseTarget, entryBlock);
+    }
+
     PHINode * stridesRemaining = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "stridesRemaining");
     stridesRemaining->addIncoming(stridesToDo, entryBlock);
-    Value * notDone = iBuilder->CreateICmpNE(stridesRemaining, iBuilder->getSize(0));
-    iBuilder->CreateCondBr(notDone, mStrideLoopBody, stridesDone);
+    Value * notDone = iBuilder->CreateICmpSGT(stridesRemaining, iBuilder->getSize(0));
+    iBuilder->CreateLikelyCondBr(notDone, mStrideLoopBody, stridesDone);
 
     iBuilder->SetInsertPoint(mStrideLoopBody);
 
     if (useIndirectBr()) {
-        mStrideLoopBranchAddress = iBuilder->CreatePHI(iBuilder->getInt8PtrTy(), 2);
-        mStrideLoopBranchAddress->addIncoming(BlockAddress::get(strideLoopCond), strideLoopCond);        
+        mStrideLoopTarget = iBuilder->CreatePHI(baseTarget->getType(), 2, "strideTarget");
+        mStrideLoopTarget->addIncoming(branchTarget, strideLoopCond);
     }
 
     /// GENERATE DO BLOCK METHOD
@@ -481,53 +494,52 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
 
     stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, iBuilder->getSize(1)), iBuilder->GetInsertBlock());
 
+    BasicBlock * bodyEnd = iBuilder->GetInsertBlock();
     if (useIndirectBr()) {
-        mStrideLoopBranch = iBuilder->CreateIndirectBr(mStrideLoopBranchAddress, 2);
-        mStrideLoopBranch->addDestination(strideLoopCond);
-    } else {
-        iBuilder->CreateBr(strideLoopCond);
+        branchTarget->addIncoming(mStrideLoopTarget, bodyEnd);
     }
+    iBuilder->CreateBr(strideLoopCond);
+
+    stridesDone->moveAfter(bodyEnd);
 
     iBuilder->SetInsertPoint(stridesDone);
 
     // Now conditionally perform the final block processing depending on the doFinal parameter.
-    BasicBlock * const doFinalBlock = CreateBasicBlock(getName() + "_doFinalBlock");
-    BasicBlock * const segmentDone = CreateBasicBlock(getName() + "_segmentDone");
-    iBuilder->CreateCondBr(doFinal, doFinalBlock, segmentDone);
+    if (useIndirectBr()) {
+        mStrideLoopBranch = iBuilder->CreateIndirectBr(branchTarget, 3);
+        mStrideLoopBranch->addDestination(doFinalBlock);
+        mStrideLoopBranch->addDestination(segmentDone);
+    } else {
+        iBuilder->CreateUnlikelyCondBr(doFinal, doFinalBlock, segmentDone);
+    }
+
+    doFinalBlock->moveAfter(stridesDone);
+
     iBuilder->SetInsertPoint(doFinalBlock);
 
     Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(mStreamSetInputs[0].name));
     writeFinalBlockMethod(remainingItems);
-    // if remainingItems was not used, this will eliminate it.
-    RecursivelyDeleteTriviallyDeadInstructions(remainingItems);
 
     itemsDone = producerPos[0];
     setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);
     setTerminationSignal();
     iBuilder->CreateBr(segmentDone);
 
-    if (useIndirectBr()) {
-        const auto destinations = mStrideLoopBranch->getNumDestinations();
-        assert (mStrideLoopBranchAddress->getNumIncomingValues() == destinations);
-        if (destinations == 1) {
-            // Final block does not call DoBlock. Replace the indirect branch with a direct one.
-            iBuilder->SetInsertPoint(mStrideLoopBranch);
-            iBuilder->CreateBr(strideLoopCond);
-            mStrideLoopBranch->eraseFromParent();
-            mStrideLoopBranch = nullptr;
-            mStrideLoopBranchAddress->eraseFromParent();
-            mStrideLoopBranchAddress = nullptr;
-        } else {
-            MDBuilder mdb(iBuilder->getContext());
-            uint32_t weights[destinations] = { 100, 0 };
-            ArrayRef<uint32_t> bw(weights, destinations);
-            mStrideLoopBranch->setMetadata(LLVMContext::MD_prof, mdb.createBranchWeights(bw));
-        }
-    }
-
     segmentDone->moveAfter(iBuilder->GetInsertBlock());
 
     iBuilder->SetInsertPoint(segmentDone);
+
+    // Update the branch prediction metadata to indicate that the likely target will be segmentDone
+    if (useIndirectBr()) {
+        MDBuilder mdb(iBuilder->getContext());
+        const auto destinations = mStrideLoopBranch->getNumDestinations();
+        uint32_t weights[destinations];
+        for (unsigned i = 0; i < destinations; ++i) {
+            weights[i] = (mStrideLoopBranch->getDestination(i) == segmentDone) ? 100 : 1;
+        }
+        ArrayRef<uint32_t> bw(weights, destinations);
+        mStrideLoopBranch->setMetadata(LLVMContext::MD_prof, mdb.createBranchWeights(bw));
+    }
 
 }
 
@@ -579,7 +591,6 @@ void BlockOrientedKernel::writeDoBlockMethod() {
     }
 
     /// Call the do block method if necessary then restore the current function state to the do segement method
-
     if (!useIndirectBr()) {
         iBuilder->CreateRetVoid();
         mDoBlockMethod = mCurrentMethod;
@@ -612,7 +623,9 @@ void BlockOrientedKernel::writeFinalBlockMethod(Value * remainingItems) {
         iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     }
 
-    generateFinalBlockMethod(remainingItems); // may be implemented by the BlockOrientedKernelBuilder subtype
+    generateFinalBlockMethod(remainingItems); // may be implemented by the BlockOrientedKernel subtype
+
+    RecursivelyDeleteTriviallyDeadInstructions(remainingItems); // if remainingItems was not used, this will eliminate it.
 
     if (!useIndirectBr()) {
         iBuilder->CreateRetVoid();        
@@ -633,8 +646,9 @@ void BlockOrientedKernel::CreateDoBlockMethodCall() {
     if (useIndirectBr()) {
         BasicBlock * bb = CreateBasicBlock("resume");
         mStrideLoopBranch->addDestination(bb);
-        mStrideLoopBranchAddress->addIncoming(BlockAddress::get(bb), iBuilder->GetInsertBlock());
+        mStrideLoopTarget->addIncoming(BlockAddress::get(bb), iBuilder->GetInsertBlock());
         iBuilder->CreateBr(mStrideLoopBody);
+        bb->moveAfter(iBuilder->GetInsertBlock());
         iBuilder->SetInsertPoint(bb);
     } else {
         iBuilder->CreateCall(mDoBlockMethod, mSelf);
@@ -654,7 +668,7 @@ BlockOrientedKernel::BlockOrientedKernel(IDISA::IDISA_Builder * builder,
 , mDoBlockMethod(nullptr)
 , mStrideLoopBody(nullptr)
 , mStrideLoopBranch(nullptr)
-, mStrideLoopBranchAddress(nullptr) {
+, mStrideLoopTarget(nullptr) {
 
 }
 
