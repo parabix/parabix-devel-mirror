@@ -18,6 +18,11 @@
 #include <llvm/Support/Compiler.h>                 // for LLVM_UNLIKELY
 #include <llvm/Target/TargetMachine.h>             // for TargetMachine, Tar...
 #include <llvm/Target/TargetOptions.h>             // for TargetOptions
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Utils/Local.h>
+#ifndef NDEBUG
+#include <llvm/IR/Verifier.h>
+#endif
 #include <object_cache.h>
 namespace llvm { class Module; }
 #ifdef CUDA_ENABLED
@@ -109,7 +114,7 @@ void Compile2PTX (Module * m, std::string IRFilename, std::string PTXFilename) {
     initializeUnreachableBlockElimPass(*Registry);
 
     std::error_code error;
-    llvm::raw_fd_ostream out(IRFilename, error, sys::fs::OpenFlags::F_None);
+    raw_fd_ostream out(IRFilename, error, sys::fs::OpenFlags::F_None);
     m->print(out, nullptr);
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR)))
@@ -121,8 +126,8 @@ void Compile2PTX (Module * m, std::string IRFilename, std::string PTXFilename) {
 
 
 void setAllFeatures(EngineBuilder &builder) {
-    llvm::StringMap<bool> HostCPUFeatures;
-    if (llvm::sys::getHostCPUFeatures(HostCPUFeatures)) {
+    StringMap<bool> HostCPUFeatures;
+    if (sys::getHostCPUFeatures(HostCPUFeatures)) {
         std::vector<std::string> attrs;
         for (auto &flag : HostCPUFeatures) {
             auto enabled = flag.second ? "+" : "-";
@@ -133,8 +138,8 @@ void setAllFeatures(EngineBuilder &builder) {
 }
 
 bool AVX2_available() {
-    llvm::StringMap<bool> HostCPUFeatures;
-    if (llvm::sys::getHostCPUFeatures(HostCPUFeatures)) {
+    StringMap<bool> HostCPUFeatures;
+    if (sys::getHostCPUFeatures(HostCPUFeatures)) {
         auto f = HostCPUFeatures.find("avx2");
         return ((f != HostCPUFeatures.end()) && f->second);
     }
@@ -142,13 +147,13 @@ bool AVX2_available() {
 }
 
 #ifndef USE_LLVM_3_6
-void WriteAssembly (llvm::TargetMachine *TM, Module * m) {
-    llvm::legacy::PassManager PM;
+void WriteAssembly (TargetMachine *TM, Module * m) {
+    legacy::PassManager PM;
 
-    llvm::SmallString<128> Str;
-    llvm::raw_svector_ostream dest(Str);
+    SmallString<128> Str;
+    raw_svector_ostream dest(Str);
 
-    if (TM->addPassesToEmitFile(PM, dest, llvm::TargetMachine::CGFT_AssemblyFile ) ) {
+    if (TM->addPassesToEmitFile(PM, dest, TargetMachine::CGFT_AssemblyFile ) ) {
         throw std::runtime_error("LLVM error: addPassesToEmitFile failed.");
     }
     PM.run(*m);
@@ -157,13 +162,24 @@ void WriteAssembly (llvm::TargetMachine *TM, Module * m) {
         errs() << Str;
     } else {
         std::error_code error;
-        llvm::raw_fd_ostream out(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None);
+        raw_fd_ostream out(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None);
         out << Str;
     }
 }
 #endif
 
 ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
+
+    // Use the pass manager to optimize the function.
+    legacy::PassManager PM;
+    #ifndef NDEBUG
+    PM.add(createVerifierPass());
+    #endif
+    PM.add(createReassociatePass());             //Reassociate expressions.
+    PM.add(createGVNPass());                     //Eliminate common subexpressions.
+    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
+    PM.add(createCFGSimplificationPass());
+    PM.run(*m);
 
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
@@ -199,7 +215,7 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
             m->dump();
         } else {
             std::error_code error;
-            llvm::raw_fd_ostream out(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
+            raw_fd_ostream out(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
             m->print(out, nullptr);
         }
     }

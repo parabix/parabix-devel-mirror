@@ -11,10 +11,9 @@
 #include "interface.h"      // for KernelInterface
 #include <boost/container/flat_map.hpp>
 #include <IR_Gen/idisa_builder.h>
-#include "llvm/Support/Debug.h"
+
 namespace llvm { class ConstantInt; }
 namespace llvm { class Function; }
-namespace llvm { namespace legacy { class FunctionPassManager; } }
 namespace llvm { class IntegerType; }
 namespace llvm { class LoadInst; }
 namespace llvm { class Type; }
@@ -136,8 +135,6 @@ protected:
     virtual void generateInitMethod() { }
     
     virtual void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) = 0;
-
-//    virtual void generateInternalMethods() { }
 
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
@@ -322,30 +319,22 @@ protected:
 
     virtual ~BlockOrientedKernel() { }
 
-    bool isCalled() const {
-        return !mInlined;
-    }
-
-    bool isInlined() const {
-        return mInlined;
-    }
-
-    void setInlined(const bool value = true) {
-        mInlined = value;
-    }
-
 private:
 
-    void generateDoBlockMethod(llvm::legacy::FunctionPassManager & fpm);
+    bool useIndirectBr() const {
+        return iBuilder->supportsIndirectBr();
+    }
 
     void writeDoBlockMethod();
 
-    void generateFinalBlockMethod(llvm::Value *remainingItems, llvm::legacy::FunctionPassManager & fpm);
+    void writeFinalBlockMethod(llvm::Value * remainingItems);
 
 private:
 
-    llvm::Function * mDoBlockMethod;
-    bool             mInlined;
+    llvm::Function *        mDoBlockMethod;
+    llvm::BasicBlock *      mStrideLoopBody;
+    llvm::IndirectBrInst *  mStrideLoopBranch;
+    llvm::PHINode *         mStrideLoopBranchAddress;
 };
 
 

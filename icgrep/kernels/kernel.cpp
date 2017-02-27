@@ -9,11 +9,11 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>
+#include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>
-#include <llvm/Support/raw_ostream.h>
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/Transforms/Scalar.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Transforms/Utils/Local.h>
 
 static const auto DO_BLOCK_SUFFIX = "_DoBlock";
 
@@ -34,7 +34,6 @@ static const auto BLOCK_MASK_SUFFIX = "_blkMask";
 using namespace llvm;
 using namespace kernel;
 using namespace parabix;
-using namespace llvm::legacy;
 
 unsigned KernelBuilder::addScalar(Type * const type, const std::string & name) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
@@ -439,23 +438,12 @@ void KernelBuilder::createInstance() {
 
 void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::vector<Value *> & producerPos) {
 
-    // Use the pass manager to optimize the function.
-    FunctionPassManager fpm(iBuilder->getModule());
-    #ifndef NDEBUG
-    fpm.add(createVerifierPass());
-    #endif
-    fpm.add(createReassociatePass());             //Reassociate expressions.
-    fpm.add(createGVNPass());                     //Eliminate common subexpressions.
-    fpm.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-    fpm.doInitialization();
-
     BasicBlock * const entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * const strideLoopCond = CreateBasicBlock(getName() + "_strideLoopCond");
-    BasicBlock * const strideLoopBody = CreateBasicBlock(getName() + "_strideLoopBody");
+    mStrideLoopBody = CreateBasicBlock(getName() + "_strideLoopBody");
     BasicBlock * const stridesDone = CreateBasicBlock(getName() + "_stridesDone");
 
     ConstantInt * stride = iBuilder->getSize(iBuilder->getStride());
-
     Value * availablePos = producerPos[0];
     for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
         Value * p = producerPos[i];
@@ -465,19 +453,25 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
     Value * processed = getProcessedItemCount(mStreamSetInputs[0].name);
     Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
     Value * stridesToDo = iBuilder->CreateUDiv(itemsAvail, stride);
+
     iBuilder->CreateBr(strideLoopCond);
 
     iBuilder->SetInsertPoint(strideLoopCond);
     PHINode * stridesRemaining = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "stridesRemaining");
     stridesRemaining->addIncoming(stridesToDo, entryBlock);
     Value * notDone = iBuilder->CreateICmpNE(stridesRemaining, iBuilder->getSize(0));
-    iBuilder->CreateCondBr(notDone, strideLoopBody, stridesDone);
+    iBuilder->CreateCondBr(notDone, mStrideLoopBody, stridesDone);
 
-    iBuilder->SetInsertPoint(strideLoopBody);
+    iBuilder->SetInsertPoint(mStrideLoopBody);
+
+    if (useIndirectBr()) {
+        mStrideLoopBranchAddress = iBuilder->CreatePHI(iBuilder->getInt8PtrTy(), 2);
+        mStrideLoopBranchAddress->addIncoming(BlockAddress::get(strideLoopCond), strideLoopCond);        
+    }
 
     /// GENERATE DO BLOCK METHOD
 
-    generateDoBlockMethod(fpm);
+    writeDoBlockMethod();
 
     /// UPDATE PROCESSED COUNTS
 
@@ -486,7 +480,13 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
     setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);
 
     stridesRemaining->addIncoming(iBuilder->CreateSub(stridesRemaining, iBuilder->getSize(1)), iBuilder->GetInsertBlock());
-    iBuilder->CreateBr(strideLoopCond);
+
+    if (useIndirectBr()) {
+        mStrideLoopBranch = iBuilder->CreateIndirectBr(mStrideLoopBranchAddress, 2);
+        mStrideLoopBranch->addDestination(strideLoopCond);
+    } else {
+        iBuilder->CreateBr(strideLoopCond);
+    }
 
     iBuilder->SetInsertPoint(stridesDone);
 
@@ -497,24 +497,48 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
     iBuilder->SetInsertPoint(doFinalBlock);
 
     Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(mStreamSetInputs[0].name));
-    generateFinalBlockMethod(remainingItems, fpm);
+    writeFinalBlockMethod(remainingItems);
+    // if remainingItems was not used, this will eliminate it.
+    RecursivelyDeleteTriviallyDeadInstructions(remainingItems);
 
     itemsDone = producerPos[0];
     setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);
     setTerminationSignal();
     iBuilder->CreateBr(segmentDone);
 
+    if (useIndirectBr()) {
+        const auto destinations = mStrideLoopBranch->getNumDestinations();
+        assert (mStrideLoopBranchAddress->getNumIncomingValues() == destinations);
+        if (destinations == 1) {
+            // Final block does not call DoBlock. Replace the indirect branch with a direct one.
+            iBuilder->SetInsertPoint(mStrideLoopBranch);
+            iBuilder->CreateBr(strideLoopCond);
+            mStrideLoopBranch->eraseFromParent();
+            mStrideLoopBranch = nullptr;
+            mStrideLoopBranchAddress->eraseFromParent();
+            mStrideLoopBranchAddress = nullptr;
+        } else {
+            MDBuilder mdb(iBuilder->getContext());
+            uint32_t weights[destinations] = { 100, 0 };
+            ArrayRef<uint32_t> bw(weights, destinations);
+            mStrideLoopBranch->setMetadata(LLVMContext::MD_prof, mdb.createBranchWeights(bw));
+        }
+    }
+
+    segmentDone->moveAfter(iBuilder->GetInsertBlock());
+
     iBuilder->SetInsertPoint(segmentDone);
+
 }
 
-void BlockOrientedKernel::generateDoBlockMethod(FunctionPassManager & fpm) {
+void BlockOrientedKernel::writeDoBlockMethod() {
 
     Value * const self = mSelf;
     Function * const cp = mCurrentMethod;
     auto ip = iBuilder->saveIP();
 
     /// Check if the do block method is called and create the function if necessary    
-    if (isCalled()) {
+    if (!useIndirectBr()) {
         FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), {mSelf->getType()}, false);
         mCurrentMethod = Function::Create(type, GlobalValue::ExternalLinkage, getName() + DO_BLOCK_SUFFIX, iBuilder->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
@@ -526,25 +550,6 @@ void BlockOrientedKernel::generateDoBlockMethod(FunctionPassManager & fpm) {
         mSelf->setName("self");
         iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     }
-
-    writeDoBlockMethod();
-
-    /// Call the do block method if necessary then restore the current function state to the do segement method
-
-    if (isCalled()) {
-        iBuilder->CreateRetVoid();
-        mDoBlockMethod = mCurrentMethod;
-        fpm.run(*mCurrentMethod);
-        iBuilder->restoreIP(ip);
-        iBuilder->CreateCall(mCurrentMethod, self);
-
-        mSelf = self;
-        mCurrentMethod = cp;
-    }
-
-}
-
-void BlockOrientedKernel::writeDoBlockMethod() {
 
     std::vector<Value *> priorProduced;
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
@@ -573,16 +578,27 @@ void BlockOrientedKernel::writeDoBlockMethod() {
         }
     }
 
+    /// Call the do block method if necessary then restore the current function state to the do segement method
+
+    if (!useIndirectBr()) {
+        iBuilder->CreateRetVoid();
+        mDoBlockMethod = mCurrentMethod;
+        iBuilder->restoreIP(ip);
+        iBuilder->CreateCall(mCurrentMethod, self);
+        mSelf = self;
+        mCurrentMethod = cp;
+    }
+
 }
 
-void BlockOrientedKernel::generateFinalBlockMethod(Value * remainingItems, FunctionPassManager & fpm) {
+void BlockOrientedKernel::writeFinalBlockMethod(Value * remainingItems) {
 
     Value * const self = mSelf;
     Function * const cp = mCurrentMethod;
     Value * const remainingItemCount = remainingItems;
     auto ip = iBuilder->saveIP();
 
-    if (isCalled()) {
+    if (!useIndirectBr()) {
         FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), {mSelf->getType(), iBuilder->getSizeTy()}, false);
         mCurrentMethod = Function::Create(type, GlobalValue::ExternalLinkage, getName() + FINAL_BLOCK_SUFFIX, iBuilder->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
@@ -598,9 +614,8 @@ void BlockOrientedKernel::generateFinalBlockMethod(Value * remainingItems, Funct
 
     generateFinalBlockMethod(remainingItems); // may be implemented by the BlockOrientedKernelBuilder subtype
 
-    if (isCalled()) {
+    if (!useIndirectBr()) {
         iBuilder->CreateRetVoid();        
-        fpm.run(*mCurrentMethod);
         iBuilder->restoreIP(ip);
         iBuilder->CreateCall(mCurrentMethod, {self, remainingItemCount});
         mCurrentMethod = cp;
@@ -615,11 +630,14 @@ void BlockOrientedKernel::generateFinalBlockMethod(Value * remainingItems) {
 }
 
 void BlockOrientedKernel::CreateDoBlockMethodCall() {
-    if (isCalled()) {
-        iBuilder->CreateCall(mDoBlockMethod, mSelf);
+    if (useIndirectBr()) {
+        BasicBlock * bb = CreateBasicBlock("resume");
+        mStrideLoopBranch->addDestination(bb);
+        mStrideLoopBranchAddress->addIncoming(BlockAddress::get(bb), iBuilder->GetInsertBlock());
+        iBuilder->CreateBr(mStrideLoopBody);
+        iBuilder->SetInsertPoint(bb);
     } else {
-        // TODO: can we clone the DoBlock method instead of regenerating it?
-        writeDoBlockMethod();
+        iBuilder->CreateCall(mDoBlockMethod, mSelf);
     }
 }
 
@@ -634,7 +652,9 @@ BlockOrientedKernel::BlockOrientedKernel(IDISA::IDISA_Builder * builder,
                                                            std::vector<Binding> && internal_scalars)
 : KernelBuilder(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
 , mDoBlockMethod(nullptr)
-, mInlined(false) {
+, mStrideLoopBody(nullptr)
+, mStrideLoopBranch(nullptr)
+, mStrideLoopBranchAddress(nullptr) {
 
 }
 
@@ -648,6 +668,8 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
                              std::vector<Binding> && scalar_outputs,
                              std::vector<Binding> && internal_scalars)
 : KernelInterface(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
+, mSelf(nullptr)
+, mCurrentMethod(nullptr)
 , mNoTerminateAttribute(false)
 , mDoBlockUpdatesProducedItemCountsAttribute(false) {
 

@@ -355,8 +355,8 @@ Value * IDISA_Builder::simd_not(Value * a) {
     return simd_xor(a, Constant::getAllOnesValue(a->getType()));
 }
 
-IDISA_Builder::IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, unsigned CacheAlignment)
-: CBuilder(m, archBitWidth, CacheAlignment)
+IDISA_Builder::IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, const bool SupportsIndirectBr, unsigned CacheAlignment)
+: CBuilder(m, archBitWidth, SupportsIndirectBr, CacheAlignment)
 , mBitBlockWidth(bitBlockWidth)
 , mStride(stride)
 , mBitBlockType(VectorType::get(IntegerType::get(getContext(), 64), bitBlockWidth / 64))

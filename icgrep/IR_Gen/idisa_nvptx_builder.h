@@ -16,7 +16,7 @@ class IDISA_NVPTX20_Builder : public IDISA_I64_Builder {
 public:
     
     IDISA_NVPTX20_Builder(Module * m, unsigned groupSize)
-    : IDISA_I64_Builder(m, 64, 64, 64 * groupSize)
+    : IDISA_I64_Builder(m, 64, 64, 64 * groupSize, false)
     , groupThreads(groupSize) {
         CreateGlobals();
         CreateBuiltinFunctions();

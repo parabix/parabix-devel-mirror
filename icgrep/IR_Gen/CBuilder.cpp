@@ -9,12 +9,13 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/TypeBuilder.h>
+#include <llvm/IR/MDBuilder.h>
 #include <fcntl.h>
 #include <toolchain.h>
 
 using namespace llvm;
 
-llvm::Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) {
+Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) {
     Function * openFn = mMod->getFunction("open");
     if (openFn == nullptr) {
         IntegerType * int32Ty = getInt32Ty();
@@ -52,7 +53,7 @@ Value * CBuilder::CreateReadCall(Value * fildes, Value * buf, Value * nbyte) {
     return CreateCall(readFn, {fildes, buf, nbyte});
 }
 
-llvm::Value * CBuilder::CreateCloseCall(Value * fildes) {
+Value * CBuilder::CreateCloseCall(Value * fildes) {
     Function * closeFn = mMod->getFunction("close");
     if (closeFn == nullptr) {
         IntegerType * int32Ty = getInt32Ty();
@@ -292,7 +293,7 @@ Value * CBuilder::CreateFOpenCall(Value * filename, Value * mode) {
     Function * fOpenFunc = mMod->getFunction("fopen");
     if (fOpenFunc == nullptr) {
         fOpenFunc = cast<Function>(mMod->getOrInsertFunction("fopen", getFILEptrTy(), getInt8Ty()->getPointerTo(), getInt8Ty()->getPointerTo(), nullptr));
-        fOpenFunc->setCallingConv(llvm::CallingConv::C);
+        fOpenFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fOpenFunc, {filename, mode});
 }
@@ -301,7 +302,7 @@ Value * CBuilder::CreateFReadCall(Value * ptr, Value * size, Value * nitems, Val
     Function * fReadFunc = mMod->getFunction("fread");
     if (fReadFunc == nullptr) {
         fReadFunc = cast<Function>(mMod->getOrInsertFunction("fread", getSizeTy(), getVoidPtrTy(), getSizeTy(), getSizeTy(), getFILEptrTy(), nullptr));
-        fReadFunc->setCallingConv(llvm::CallingConv::C);
+        fReadFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fReadFunc, {ptr, size, nitems, stream});
 }
@@ -310,7 +311,7 @@ Value * CBuilder::CreateFWriteCall(Value * ptr, Value * size, Value * nitems, Va
     Function * fWriteFunc = mMod->getFunction("fwrite");
     if (fWriteFunc == nullptr) {
         fWriteFunc = cast<Function>(mMod->getOrInsertFunction("fwrite", getSizeTy(), getVoidPtrTy(), getSizeTy(), getSizeTy(), getFILEptrTy(), nullptr));
-        fWriteFunc->setCallingConv(llvm::CallingConv::C);
+        fWriteFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fWriteFunc, {ptr, size, nitems, stream});
 }
@@ -319,7 +320,7 @@ Value * CBuilder::CreateFCloseCall(Value * stream) {
     Function * fCloseFunc = mMod->getFunction("fclose");
     if (fCloseFunc == nullptr) {
         fCloseFunc = cast<Function>(mMod->getOrInsertFunction("fclose", getInt32Ty(), getFILEptrTy(), nullptr));
-        fCloseFunc->setCallingConv(llvm::CallingConv::C);
+        fCloseFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fCloseFunc, {stream});
 }
@@ -336,7 +337,7 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
                                                                      getVoidPtrTy(),
                                                                      static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
                                                                      getVoidPtrTy(), nullptr));
-        pthreadCreateFunc->setCallingConv(llvm::CallingConv::C);
+        pthreadCreateFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, arg});
 }
@@ -345,8 +346,8 @@ Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
     Function * pthreadExitFunc = mMod->getFunction("pthread_exit");
     if (pthreadExitFunc == nullptr) {
         pthreadExitFunc = cast<Function>(mMod->getOrInsertFunction("pthread_exit", getVoidTy(), getVoidPtrTy(), nullptr));
-        pthreadExitFunc->addFnAttr(llvm::Attribute::NoReturn);
-        pthreadExitFunc->setCallingConv(llvm::CallingConv::C);
+        pthreadExitFunc->addFnAttr(Attribute::NoReturn);
+        pthreadExitFunc->setCallingConv(CallingConv::C);
     }
     CallInst * exitThread = CreateCall(pthreadExitFunc, {value_ptr});
     exitThread->setDoesNotReturn();
@@ -359,11 +360,11 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
                                                                        getInt32Ty(),
                                                                        pthreadTy,
                                                                        getVoidPtrTy()->getPointerTo(), nullptr));
-    pthreadJoinFunc->setCallingConv(llvm::CallingConv::C);
+    pthreadJoinFunc->setCallingConv(CallingConv::C);
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
 
-void CBuilder::CreateAssert(llvm::Value * const assertion, llvm::StringRef failureMessage) {
+void CBuilder::CreateAssert(Value * const assertion, StringRef failureMessage) {
     if (codegen::EnableAsserts) {
         Module * const m = getModule();
         Function * function = m->getFunction("__assert");
@@ -413,10 +414,19 @@ void CBuilder::CreateExit(const int exitCode) {
     CreateCall(exit, getInt32(exitCode));
 }
 
-CBuilder::CBuilder(llvm::Module * m, unsigned GeneralRegisterWidthInBits, unsigned CacheLineAlignmentInBytes)
+BranchInst * CBuilder::CreateLikelyCondBr(Value * Cond, BasicBlock * True, BasicBlock * False, const int probability) {
+    MDBuilder mdb(getContext());
+    if (probability < 0 || probability > 100) {
+        report_fatal_error("branch weight probability must be in [0,100]");
+    }
+    return CreateCondBr(Cond, True, False, mdb.createBranchWeights(probability, 100 - probability));
+}
+
+CBuilder::CBuilder(Module * const m, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes)
 : IRBuilder<>(m->getContext())
 , mMod(m)
 , mCacheLineAlignment(CacheLineAlignmentInBytes)
 , mSizeType(getIntNTy(GeneralRegisterWidthInBits))
-, mFILEtype(nullptr) {
+, mFILEtype(nullptr)
+, mSupportsIndirectBr(SupportsIndirectBr) {
 }

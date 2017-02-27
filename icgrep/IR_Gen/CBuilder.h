@@ -19,7 +19,7 @@ class CBuilder : public llvm::IRBuilder<> {
     
 public:
     
-    CBuilder(llvm::Module * m, unsigned GeneralRegisterWidthInBits, unsigned CacheLineAlignmentInBytes = 64);
+    CBuilder(llvm::Module * m, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes = 64);
     
     virtual ~CBuilder() {}
 
@@ -112,11 +112,22 @@ public:
 
     void CreateExit(const int exitCode);
 
+    llvm::BranchInst * CreateLikelyCondBr(llvm::Value * Cond, llvm::BasicBlock * True, llvm::BasicBlock * False, const int probability = 90);
+
+    llvm::BranchInst * CreateUnlikelyCondBr(llvm::Value * Cond, llvm::BasicBlock * True, llvm::BasicBlock * False, const int probability = 90) {
+        return CreateLikelyCondBr(Cond, True, False, 100 - probability);
+    }
+
+    bool supportsIndirectBr() const {
+        return mSupportsIndirectBr;
+    }
+
 protected:
     llvm::Module *      mMod;
     unsigned            mCacheLineAlignment;
     llvm::IntegerType * mSizeType;
     llvm::StructType *  mFILEtype;
+    const bool          mSupportsIndirectBr;
 };
 
 #endif

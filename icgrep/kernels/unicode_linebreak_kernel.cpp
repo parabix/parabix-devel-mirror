@@ -68,6 +68,4 @@ IDISA::IDISA_Builder * iBuilder
     PabloAST * UnicodeLineBreak = builder.createAnd(LB_chars, builder.createNot(crlf));  // count the CR, but not CRLF
     Var * const r = addOutput("unicodeLineBreak", getStreamTy());
     builder.createAssign(r, UnicodeLineBreak);
-
-    setInlined(true);
 }
