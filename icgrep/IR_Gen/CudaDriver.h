@@ -67,7 +67,9 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
   const unsigned numOfGroups = codegen::GroupNum;
 
   if(LFPositions.size() < numOfGroups){
-    std::cerr << "Line Breaks less than " << numOfGroups << std::endl;
+    std::cerr << "Number of line Breaks:" << LFPositions.size() << std::endl;
+    std::cerr << "Number of GPU groups:" << numOfGroups << std::endl;
+    std::cerr << "Line breaks must be more than GPU groups. Use -group-num option to change the group size." << std::endl;
     exit(-1);
   }
 
@@ -98,6 +100,7 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
   startPoints[i] = startPoints[i-1] + ((bufferSizes[i-1]-1)/groupSize+1)*groupSize;
    
   checkCudaErrors(cuMemAlloc(&devBufferInput, startPoints[numOfGroups]));
+  // checkCudaErrors(cuMemsetD8(devBufferInput,0,startPoints[numOfGroups]));
   checkCudaErrors(cuMemAlloc(&devStartPoints, sizeof(ulong) * (numOfGroups + 1)));
   checkCudaErrors(cuMemAlloc(&devBufferSizes, sizeof(ulong) * numOfGroups));
 
