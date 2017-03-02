@@ -64,6 +64,10 @@ protected:
     // Get the buffer pointer for a given block of the stream.
     virtual llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const = 0;
 
+    bool isCapacityGuaranteed(const llvm::Value * const index, const size_t capacity) const;
+
+    llvm::Value * modByBufferBlocks(llvm::Value * const offset) const;
+
 protected:
     const BufferKind                mBufferKind;
     IDISA::IDISA_Builder * const    iBuilder;
@@ -173,8 +177,6 @@ protected:
     llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
 
 private:
-
-    bool isGuaranteedCapacity(const llvm::Value * const index) const;
 
     std::pair<llvm::Value *, llvm::Value *> getInternalStreamBuffer(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, const bool readOnly) const;
 

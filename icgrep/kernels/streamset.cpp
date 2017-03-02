@@ -26,15 +26,30 @@ ArrayType * resolveStreamSetType(IDISA_Builder * const b, Type * type);
 StructType * resolveExpandableStreamSetType(IDISA_Builder * const b, Type * type);
 
 void StreamSetBuffer::allocateBuffer() {
-    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks));
+    Type * const ty = getType();
+    ConstantInt * blocks = iBuilder->getSize(mBufferBlocks);
+    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(ty, iBuilder->getSize(mBufferBlocks));
+    Constant * width = ConstantExpr::getMul(ConstantExpr::getSizeOf(ty), blocks);
+    iBuilder->CreateMemZero(mStreamSetBufferPtr, width, iBuilder->getCacheAlignment());
 }
 
 Value * StreamSetBuffer::getStreamBlockPtr(Value * self, Value * streamIndex, Value * blockIndex, const bool /* readOnly */) const {
+    iBuilder->CreateAssert(iBuilder->CreateICmpULT(streamIndex, getStreamSetCount(self)), "StreamSetBuffer: out-of-bounds stream access");
     return iBuilder->CreateGEP(getStreamSetBlockPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex});
 }
 
 Value * StreamSetBuffer::getStreamPackPtr(Value * self, Value * streamIndex, Value * blockIndex, Value * packIndex, const bool /* readOnly */) const {
+    iBuilder->CreateAssert(iBuilder->CreateICmpULT(streamIndex, getStreamSetCount(self)), "StreamSetBuffer: out-of-bounds stream access");
     return iBuilder->CreateGEP(getStreamSetBlockPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex, packIndex});
+}
+
+inline bool StreamSetBuffer::isCapacityGuaranteed(const llvm::Value * const index, const size_t capacity) const {
+    if (LLVM_UNLIKELY(isa<ConstantInt>(index))) {
+        if (LLVM_LIKELY(cast<ConstantInt>(index)->getLimitedValue() < capacity)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 llvm::Value * StreamSetBuffer::getStreamSetCount(Value *) const {
@@ -43,6 +58,19 @@ llvm::Value * StreamSetBuffer::getStreamSetCount(Value *) const {
         count = mBaseType->getArrayNumElements();
     }
     return iBuilder->getSize(count);
+}
+
+inline llvm::Value * StreamSetBuffer::modByBufferBlocks(llvm::Value * const offset) const {
+    assert (offset->getType()->isIntegerTy());
+    if (isCapacityGuaranteed(offset, mBufferBlocks)) {
+        return offset;
+    } else if (mBufferBlocks == 1) {
+        return ConstantInt::getNullValue(iBuilder->getSizeTy());
+    } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
+        return iBuilder->CreateAnd(offset, ConstantInt::get(offset->getType(), mBufferBlocks - 1));
+    } else {
+        return iBuilder->CreateURem(offset, ConstantInt::get(offset->getType(), mBufferBlocks));
+    }
 }
 
 /**
@@ -114,18 +142,8 @@ Value * ExternalFileBuffer::getLinearlyAccessibleItems(llvm::Value *) const {
 // Circular Buffer
 
 Value * CircularBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
-    assert (blockIndex->getType()->isIntegerTy());
-    Value * offset = nullptr;
-    if (mBufferBlocks == 1) {
-        offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
-    } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
-        offset = iBuilder->CreateAnd(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks - 1));
-    } else {
-        offset = iBuilder->CreateURem(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks));
-    }
-    return iBuilder->CreateGEP(self, offset);
+    return iBuilder->CreateGEP(self, modByBufferBlocks(blockIndex));
 }
-
 
 // CircularCopybackBuffer Buffer
 
@@ -168,20 +186,8 @@ void CircularCopybackBuffer::createCopyBack(Value * self, Value * overFlowItems)
 }
 
 Value * CircularCopybackBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
-    assert (blockIndex->getType()->isIntegerTy());
-    
-    Value * offset = nullptr;
-    if (mBufferBlocks == 1) {
-        offset = ConstantInt::getNullValue(iBuilder->getSizeTy());
-    } else if ((mBufferBlocks & (mBufferBlocks - 1)) == 0) { // is power of 2
-        offset = iBuilder->CreateAnd(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks - 1));
-    } else {
-        offset = iBuilder->CreateURem(blockIndex, ConstantInt::get(blockIndex->getType(), mBufferBlocks));
-    }
-    return iBuilder->CreateGEP(self, offset);
+    return iBuilder->CreateGEP(self, modByBufferBlocks(blockIndex));
 }
-
-
 
 // Expandable Buffer
 
@@ -199,66 +205,92 @@ void ExpandableBuffer::allocateBuffer() {
     iBuilder->CreateStore(ptr, streamSetPtr);
 }
 
-inline bool ExpandableBuffer::isGuaranteedCapacity(const llvm::Value * const index) const {
-    if (LLVM_UNLIKELY(isa<ConstantInt>(index))) {
-        if (LLVM_LIKELY(cast<ConstantInt>(index)->getLimitedValue() < mInitialCapacity)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 std::pair<Value *, Value *> ExpandableBuffer::getInternalStreamBuffer(llvm::Value * self, llvm::Value * streamIndex, Value * blockIndex, const bool readOnly) const {
-
-    // MDNode *Weights = MDBuilder(Ctx).createBranchWeights(42, 13);
 
     // ENTRY
     Value * const capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     Value * const capacity = iBuilder->CreateLoad(capacityPtr);
     Value * const streamSetPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     Value * const streamSet = iBuilder->CreateLoad(streamSetPtr);
+    blockIndex = modByBufferBlocks(blockIndex);
+
+    assert (streamIndex->getType() == capacity->getType());
+    Value * const cond = iBuilder->CreateICmpULT(streamIndex, capacity);
 
     // Are we guaranteed that we can access this stream?
-    if (isGuaranteedCapacity(streamIndex)) {
-        return {streamSet, capacity};
-    } else if (readOnly) {
-        iBuilder->CreateAssert(iBuilder->CreateICmpULT(streamIndex, capacity), "ExpandableBuffer: out-of-bounds readonly stream access!");
-        return {streamSet, capacity};
+    if (readOnly || isCapacityGuaranteed(streamIndex, mInitialCapacity)) {
+        iBuilder->CreateAssert(cond, "ExpandableBuffer: out-of-bounds stream access");
+        Value * offset = iBuilder->CreateAdd(iBuilder->CreateMul(blockIndex, capacity), streamIndex);
+        return {streamSet, offset};
     }
 
     BasicBlock * const entry = iBuilder->GetInsertBlock();
     BasicBlock * const expand = BasicBlock::Create(iBuilder->getContext(), "expand", entry->getParent());
     BasicBlock * const resume = BasicBlock::Create(iBuilder->getContext(), "resume", entry->getParent());
 
-    assert (streamIndex->getType() == capacity->getType());
-    Value * cond = iBuilder->CreateICmpULT(streamIndex, capacity);
-    iBuilder->CreateCondBr(cond, resume, expand);
+    iBuilder->CreateLikelyCondBr(cond, resume, expand);
+
     // EXPAND
     iBuilder->SetInsertPoint(expand);
-    /// TODO: this should call a function rather than be inlined into the block. REVISIT once tested.
-    Constant * vectorWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(streamSet->getType()->getPointerElementType()), capacity->getType(), false);
-    Value * newCapacity = iBuilder->CreateMul(streamIndex, iBuilder->getSize(2));
-    iBuilder->CreateStore(newCapacity, capacityPtr);
-    Type * bufferType = getType()->getStructElementType(1)->getPointerElementType();
-    Value * size = iBuilder->CreateMul(newCapacity, iBuilder->getSize(mBufferBlocks));
-    Value * newStreamSet = iBuilder->CreateAlignedMalloc(bufferType, size, iBuilder->getCacheAlignment());
-    iBuilder->CreateStore(newStreamSet, streamSetPtr);
-    Value * const diffCapacity = iBuilder->CreateMul(iBuilder->CreateSub(newCapacity, capacity), vectorWidth);
-    const auto alignment = bufferType->getPrimitiveSizeInBits() / 8;
-    for (unsigned i = 0; i < mBufferBlocks; ++i) {
-        ConstantInt * const offset = iBuilder->getSize(i);
-        Value * srcOffset = iBuilder->CreateMul(capacity, offset);
-        Value * srcPtr = iBuilder->CreateGEP(streamSet, srcOffset);
-        Value * destOffset = iBuilder->CreateMul(newCapacity, offset);
-        Value * destPtr = iBuilder->CreateGEP(newStreamSet, destOffset);
-        iBuilder->CreateMemCpy(destPtr, srcPtr, iBuilder->CreateMul(capacity, vectorWidth), alignment);
-        Value * destZeroOffset = iBuilder->CreateAdd(destOffset, capacity);
-        Value * destZeroPtr = iBuilder->CreateGEP(newStreamSet, destZeroOffset);
-        iBuilder->CreateMemZero(destZeroPtr, diffCapacity, alignment);
+
+    Type * elementType = getType()->getStructElementType(1)->getPointerElementType();
+    Constant * const vectorWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(elementType), capacity->getType(), false);
+    Value * newCapacity = iBuilder->CreateMul(iBuilder->CreateAdd(streamIndex, iBuilder->getSize(1)), iBuilder->getSize(2), "newCapacity");
+
+    std::string tmp;
+    raw_string_ostream out(tmp);
+    out << "__expand";
+    elementType->print(out);
+    std::string name = out.str();
+
+    Module * const m = iBuilder->getModule();
+    Function * expandFunction = m->getFunction(name);
+
+    if (expandFunction == nullptr) {
+
+        const auto ip = iBuilder->saveIP();
+
+        FunctionType * fty = FunctionType::get(elementType->getPointerTo(), {elementType->getPointerTo(), iBuilder->getSizeTy(), iBuilder->getSizeTy()}, false);
+        expandFunction = Function::Create(fty, GlobalValue::PrivateLinkage, name, m);
+
+        auto args = expandFunction->arg_begin();
+        Value * streamSet = &*args++;
+        Value * capacity = &*args++;
+        Value * newCapacity = &*args;
+
+        BasicBlock * entry = BasicBlock::Create(iBuilder->getContext(), "entry", expandFunction);
+        iBuilder->SetInsertPoint(entry);
+
+        Value * size = iBuilder->CreateMul(newCapacity, iBuilder->getSize(mBufferBlocks));
+        Value * newStreamSet = iBuilder->CreateAlignedMalloc(elementType, size, iBuilder->getCacheAlignment());
+        Value * const diffCapacity = iBuilder->CreateMul(iBuilder->CreateSub(newCapacity, capacity), vectorWidth);
+
+        const auto alignment = elementType->getPrimitiveSizeInBits() / 8;
+        for (unsigned i = 0; i < mBufferBlocks; ++i) {
+            ConstantInt * const offset = iBuilder->getSize(i);
+            Value * srcOffset = iBuilder->CreateMul(capacity, offset);
+            Value * srcPtr = iBuilder->CreateGEP(streamSet, srcOffset);
+            Value * destOffset = iBuilder->CreateMul(newCapacity, offset);
+            Value * destPtr = iBuilder->CreateGEP(newStreamSet, destOffset);
+            iBuilder->CreateMemCpy(destPtr, srcPtr, iBuilder->CreateMul(capacity, vectorWidth), alignment);
+            Value * destZeroOffset = iBuilder->CreateAdd(destOffset, capacity);
+            Value * destZeroPtr = iBuilder->CreateGEP(newStreamSet, destZeroOffset);
+            iBuilder->CreateMemZero(destZeroPtr, diffCapacity, alignment);
+        }
+
+        iBuilder->CreateAlignedFree(streamSet);
+
+        iBuilder->CreateRet(newStreamSet);
+
+        iBuilder->restoreIP(ip);
     }
 
-    iBuilder->CreateAlignedFree(streamSet);
+    Value * newStreamSet = iBuilder->CreateCall(expandFunction, {streamSet, capacity, newCapacity});
+    iBuilder->CreateStore(newStreamSet, streamSetPtr);
+    iBuilder->CreateStore(newCapacity, capacityPtr);
+
     iBuilder->CreateBr(resume);
+
     // RESUME
     iBuilder->SetInsertPoint(resume);
 

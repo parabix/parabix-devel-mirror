@@ -148,7 +148,7 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
         mCarrySummary.push_back(carrySummary);
     }
 
-    if (LLVM_UNLIKELY(mCarryInfo->hasVariableLength())) {
+    if (LLVM_UNLIKELY(mCarryInfo->nonCarryCollapsingMode())) {
         // Check whether we need to resize the carry state
         PHINode * index = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
         mLoopIndicies.push_back(index);
@@ -181,8 +181,6 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
 
         iBuilder->CreateCondBr(isNullCarryState, zeroBlock, cleanUpBlock);
         iBuilder->SetInsertPoint(cleanUpBlock);
-
-
 
         iBuilder->CreateMemCpy(newArray, array, iBuilder->CreateMul(capacity, carryStateWidth), iBuilder->getCacheAlignment());
         iBuilder->CreateAlignedFree(array);
@@ -217,7 +215,7 @@ void CarryManager::leaveLoopBody(BasicBlock * const exitBlock) {
         cast<PHINode>(mCarrySummary[n - 2])->addIncoming(mCarrySummary[n - 1], exitBlock);
         mCarrySummary.pop_back();
     }
-    if (LLVM_UNLIKELY(mCarryInfo->hasVariableLength())) {
+    if (LLVM_UNLIKELY(mCarryInfo->nonCarryCollapsingMode())) {
         assert (!mLoopIndicies.empty());
         PHINode * index = mLoopIndicies.back();
         index->addIncoming(iBuilder->CreateAdd(index, iBuilder->getSize(1)), exitBlock);
@@ -248,8 +246,6 @@ void CarryManager::enterIfScope(const PabloBlock * const scope) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::generateSummaryTest(Value * condition) {
     if (LLVM_LIKELY(mCarryInfo->hasSummary())) {
-        ConstantInt * zero = iBuilder->getInt32(0);
-        std::vector<Value *> indicies;
         // enter the (potentially nested) struct and extract the summary element (always element 0)
         unsigned count = 2;
         if (LLVM_UNLIKELY(mCarryInfo->hasBorrowedSummary())) {
@@ -260,12 +256,15 @@ Value * CarryManager::generateSummaryTest(Value * condition) {
                 frameTy = frameTy->getStructElementType(0);
             }
         }
-        indicies.assign(count, zero);
-        if (LLVM_UNLIKELY(mCarryInfo->hasImplicitSummary() && mLoopDepth > 0)) {
-            indicies.push_back(zero);
-            indicies.push_back(mLoopSelector);
+        const bool useLoopSelector = mCarryInfo->hasImplicitSummary() && mLoopDepth > 0;
+        const auto length = count + (useLoopSelector ? 2 : 0);
+        Value * indicies[length];
+        std::fill(indicies, indicies + (count + (useLoopSelector ? 1 : 0)), iBuilder->getInt32(0));
+        if (LLVM_UNLIKELY(useLoopSelector)) {
+            indicies[count + 1] = mLoopSelector;
         }
-        Value * ptr = iBuilder->CreateGEP(mCurrentFrame, indicies);
+        ArrayRef<Value *> ar(indicies, length);
+        Value * ptr = iBuilder->CreateGEP(mCurrentFrame, ar);
         // Sanity check: make sure we're accessing a summary value
         assert (ptr->getType()->getPointerElementType()->canLosslesslyBitCastTo(condition->getType()));
         Value * summary = iBuilder->CreateBlockAlignedLoad(ptr);
@@ -333,7 +332,7 @@ void CarryManager::enterScope(const PabloBlock * const scope) {
     mCurrentScope = scope;
     mCarryScopeIndex.push_back(++mCarryScopes);
     mCarryInfo = &mCarryMetadata[mCarryScopes];
-    // Check whether we're still within our struct bounds; if this fails, either the Pablo program changed within
+    // Check whether we're still within our struct bounds; if this fails, either the Pablo program changed during
     // compilation or a memory corruption has occured.
     assert (mCurrentFrameIndex < mCurrentFrame->getType()->getPointerElementType()->getStructNumElements());
     mCurrentFrame = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex)});
@@ -534,7 +533,7 @@ void CarryManager::addToSummary(Value * value) { assert (value);
  * @brief collapsingCarryMode
  ** ------------------------------------------------------------------------------------------------------------- */
 bool CarryManager::inCollapsingCarryMode() const {
-    return (mCurrentScope->getBranch() && isa<While>(mCurrentScope->getBranch()) && !mCarryInfo->hasVariableLength());
+    return (mCurrentScope->getBranch() && isa<While>(mCurrentScope->getBranch()) && !mCarryInfo->nonCarryCollapsingMode());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -550,9 +549,9 @@ unsigned CarryManager::getScopeCount(PabloBlock * const scope, unsigned index) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief requiresVariableLengthMode
+ * @brief hasIterationSpecificAssignment
  ** ------------------------------------------------------------------------------------------------------------- */
-bool CarryManager::requiresVariableLengthMode(const PabloBlock * const scope) {
+bool CarryManager::hasIterationSpecificAssignment(const PabloBlock * const scope) {
     if (const Branch * const br = scope->getBranch()) {
         for (const Var * var : br->getEscaped()) {
             for (const PabloAST * user : var->users()) {
@@ -627,7 +626,7 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
     if (LLVM_UNLIKELY(state.empty())) {
         carryState = StructType::get(iBuilder->getContext());
     } else {
-        cd.variableLength = loopDepth > 0 && requiresVariableLengthMode(scope);
+        cd.setNonCarryCollapsingMode(loopDepth > 0 && hasIterationSpecificAssignment(scope));
         if (ifDepth > 0) {
             // A non-collapsing loop requires a unique summary for each iteration. Thus whenever
             // we have a non-collapsing While within an If scope with an implicit summary, the If
@@ -645,7 +644,7 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
         }
         carryState = StructType::get(iBuilder->getContext(), state);
         // If we in a loop and cannot use collapsing carry mode, convert the struct into a capacity and pointer pair.
-        if (LLVM_UNLIKELY(cd.hasVariableLength())) {
+        if (LLVM_UNLIKELY(cd.nonCarryCollapsingMode())) {
             mHasVariableLengthCarryData = true;
             carryState = StructType::get(iBuilder->getSizeTy(), carryState->getPointerTo(), nullptr);
         }

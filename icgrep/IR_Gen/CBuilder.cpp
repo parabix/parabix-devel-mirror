@@ -57,21 +57,18 @@ Value * CBuilder::CreateCloseCall(Value * fildes) {
     Function * closeFn = mMod->getFunction("close");
     if (closeFn == nullptr) {
         IntegerType * int32Ty = getInt32Ty();
-        closeFn = cast<Function>(mMod->getOrInsertFunction("close",
-                                                           int32Ty, int32Ty, nullptr));
+        FunctionType * fty = FunctionType::get(int32Ty, {int32Ty}, true);
+        closeFn = Function::Create(fty, Function::ExternalLinkage, "close", mMod);
     }
     return CreateCall(closeFn, {fildes});
 }
 
-
-
 Function * CBuilder::GetPrintf() {
     Function * printf = mMod->getFunction("printf");
     if (printf == nullptr) {
-        printf = cast<Function>(mMod->getOrInsertFunction("printf"
-                                , FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, true)
-                                , AttributeSet().addAttribute(getContext(), 1U, Attribute::NoAlias)));
-
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, true);
+        printf = Function::Create(fty, Function::ExternalLinkage, "printf", mMod);
+        printf->addAttribute(1, Attribute::NoAlias);
     }
     return printf;
 }
@@ -133,7 +130,8 @@ Value * CBuilder::CreateMalloc(Type * type, Value * size) {
     Function * malloc = m->getFunction("malloc");
     if (malloc == nullptr) {
         PointerType * const voidPtrTy = getVoidPtrTy();
-        malloc = cast<Function>(m->getOrInsertFunction("malloc", voidPtrTy, intTy, nullptr));
+        FunctionType * fty = FunctionType::get(voidPtrTy, {intTy}, false);
+        malloc = Function::Create(fty, Function::ExternalLinkage, "malloc", mMod);
         malloc->setCallingConv(CallingConv::C);
         malloc->setDoesNotAlias(0);
     }
@@ -190,7 +188,8 @@ void CBuilder::CreateFree(Value * const ptr) {
     PointerType * const voidPtrTy = getVoidPtrTy();
     Function * free = m->getFunction("free");
     if (free == nullptr) {
-        free = cast<Function>(getModule()->getOrInsertFunction("free", getVoidTy(), voidPtrTy, nullptr));
+        FunctionType * fty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
+        free = Function::Create(fty, Function::ExternalLinkage, "free", mMod);
         free->setCallingConv(CallingConv::C);
     }
     CallInst * const ci = CreateCall(free, CreatePointerCast(ptr, voidPtrTy));
@@ -252,7 +251,8 @@ Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
     Function * realloc = m->getFunction("realloc");
     if (realloc == nullptr) {
         PointerType * const voidPtrTy = getVoidPtrTy();
-        realloc = cast<Function>(m->getOrInsertFunction("realloc", voidPtrTy, voidPtrTy, intTy, nullptr));
+        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, intTy}, false);
+        realloc = Function::Create(fty, Function::ExternalLinkage, "realloc", mMod);
         realloc->setCallingConv(CallingConv::C);
         realloc->setDoesNotAlias(1);
     }
@@ -292,7 +292,8 @@ PointerType * CBuilder::getFILEptrTy() {
 Value * CBuilder::CreateFOpenCall(Value * filename, Value * mode) {
     Function * fOpenFunc = mMod->getFunction("fopen");
     if (fOpenFunc == nullptr) {
-        fOpenFunc = cast<Function>(mMod->getOrInsertFunction("fopen", getFILEptrTy(), getInt8Ty()->getPointerTo(), getInt8Ty()->getPointerTo(), nullptr));
+        FunctionType * fty = FunctionType::get(getFILEptrTy(), {getInt8Ty()->getPointerTo(), getInt8Ty()->getPointerTo()}, false);
+        fOpenFunc = Function::Create(fty, Function::ExternalLinkage, "fopen", mMod);
         fOpenFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fOpenFunc, {filename, mode});
@@ -301,7 +302,8 @@ Value * CBuilder::CreateFOpenCall(Value * filename, Value * mode) {
 Value * CBuilder::CreateFReadCall(Value * ptr, Value * size, Value * nitems, Value * stream) {
     Function * fReadFunc = mMod->getFunction("fread");
     if (fReadFunc == nullptr) {
-        fReadFunc = cast<Function>(mMod->getOrInsertFunction("fread", getSizeTy(), getVoidPtrTy(), getSizeTy(), getSizeTy(), getFILEptrTy(), nullptr));
+        FunctionType * fty = FunctionType::get(getSizeTy(), {getVoidPtrTy(), getSizeTy(), getSizeTy(), getFILEptrTy()}, false);
+        fReadFunc = Function::Create(fty, Function::ExternalLinkage, "fread", mMod);
         fReadFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fReadFunc, {ptr, size, nitems, stream});
@@ -310,7 +312,8 @@ Value * CBuilder::CreateFReadCall(Value * ptr, Value * size, Value * nitems, Val
 Value * CBuilder::CreateFWriteCall(Value * ptr, Value * size, Value * nitems, Value * stream) {
     Function * fWriteFunc = mMod->getFunction("fwrite");
     if (fWriteFunc == nullptr) {
-        fWriteFunc = cast<Function>(mMod->getOrInsertFunction("fwrite", getSizeTy(), getVoidPtrTy(), getSizeTy(), getSizeTy(), getFILEptrTy(), nullptr));
+        FunctionType * fty = FunctionType::get(getSizeTy(), {getVoidPtrTy(), getSizeTy(), getSizeTy(), getFILEptrTy()}, false);
+        fWriteFunc = Function::Create(fty, Function::ExternalLinkage, "fwrite", mMod);
         fWriteFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fWriteFunc, {ptr, size, nitems, stream});
@@ -319,7 +322,8 @@ Value * CBuilder::CreateFWriteCall(Value * ptr, Value * size, Value * nitems, Va
 Value * CBuilder::CreateFCloseCall(Value * stream) {
     Function * fCloseFunc = mMod->getFunction("fclose");
     if (fCloseFunc == nullptr) {
-        fCloseFunc = cast<Function>(mMod->getOrInsertFunction("fclose", getInt32Ty(), getFILEptrTy(), nullptr));
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {getFILEptrTy()}, false);
+        fCloseFunc = Function::Create(fty, Function::ExternalLinkage, "fclose", mMod);
         fCloseFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fCloseFunc, {stream});
@@ -329,14 +333,9 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
     Function * pthreadCreateFunc = mMod->getFunction("pthread_create");
     if (pthreadCreateFunc == nullptr) {
         Type * pthreadTy = getSizeTy();
-        FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), getVoidPtrTy(), false);
-
-        pthreadCreateFunc = cast<Function>(mMod->getOrInsertFunction("pthread_create",
-                                                                     getInt32Ty(),
-                                                                     pthreadTy->getPointerTo(),
-                                                                     getVoidPtrTy(),
-                                                                     static_cast<Type *>(funVoidPtrVoidTy)->getPointerTo(),
-                                                                     getVoidPtrTy(), nullptr));
+        FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), {getVoidPtrTy()}, false);
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy->getPointerTo(), getVoidPtrTy(), funVoidPtrVoidTy->getPointerTo(), getVoidPtrTy()}, false);
+        pthreadCreateFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_create", mMod);
         pthreadCreateFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, arg});
@@ -345,7 +344,8 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
 Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
     Function * pthreadExitFunc = mMod->getFunction("pthread_exit");
     if (pthreadExitFunc == nullptr) {
-        pthreadExitFunc = cast<Function>(mMod->getOrInsertFunction("pthread_exit", getVoidTy(), getVoidPtrTy(), nullptr));
+        FunctionType * fty = FunctionType::get(getVoidTy(), {getVoidPtrTy()}, false);
+        pthreadExitFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_exit", mMod);
         pthreadExitFunc->addFnAttr(Attribute::NoReturn);
         pthreadExitFunc->setCallingConv(CallingConv::C);
     }
@@ -355,22 +355,23 @@ Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
 }
 
 Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
-    Type * pthreadTy = getSizeTy();
-    Function * pthreadJoinFunc = cast<Function>(mMod->getOrInsertFunction("pthread_join",
-                                                                       getInt32Ty(),
-                                                                       pthreadTy,
-                                                                       getVoidPtrTy()->getPointerTo(), nullptr));
-    pthreadJoinFunc->setCallingConv(CallingConv::C);
+    Function * pthreadJoinFunc = mMod->getFunction("pthread_join");
+    if (pthreadJoinFunc == nullptr) {
+        Type * pthreadTy = getSizeTy();
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy, getVoidPtrTy()->getPointerTo()}, false);
+        pthreadJoinFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_join", mMod);
+        pthreadJoinFunc->setCallingConv(CallingConv::C);
+    }
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
 
 void CBuilder::CreateAssert(Value * const assertion, StringRef failureMessage) {
     if (codegen::EnableAsserts) {
-        Module * const m = getModule();
-        Function * function = m->getFunction("__assert");
+        Function * function = mMod->getFunction("__assert");
         if (LLVM_UNLIKELY(function == nullptr)) {
             auto ip = saveIP();
-            function = cast<Function>(m->getOrInsertFunction("__assert", getVoidTy(), getInt1Ty(), getInt8PtrTy(), getSizeTy(), nullptr));
+            FunctionType * fty = FunctionType::get(getVoidTy(), { getInt1Ty(), getInt8PtrTy(), getSizeTy() }, false);
+            function = Function::Create(fty, Function::PrivateLinkage, "__assert", mMod);
             function->setDoesNotThrow();
             function->setDoesNotAlias(2);
             BasicBlock * const entry = BasicBlock::Create(getContext(), "", function);
@@ -404,10 +405,10 @@ void CBuilder::CreateAssert(Value * const assertion, StringRef failureMessage) {
 }
 
 void CBuilder::CreateExit(const int exitCode) {
-    Module * const m = getModule();
-    Function * exit = m->getFunction("exit");
+    Function * exit = mMod->getFunction("exit");
     if (LLVM_UNLIKELY(exit == nullptr)) {
-        exit = cast<Function>(m->getOrInsertFunction("exit", getVoidTy(), getInt32Ty(), nullptr));
+        FunctionType * fty = FunctionType::get(getVoidTy(), {getInt32Ty()}, false);
+        exit = Function::Create(fty, Function::ExternalLinkage, "exit", mMod);
         exit->setDoesNotReturn();
         exit->setDoesNotThrow();
     }

@@ -465,7 +465,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         }
     } 
 #endif
-    if (CPU_Only){
+    if (CPU_Only) {
         mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, size_ty, size_ty, nullptr));
         mainFn->setCallingConv(CallingConv::C);
         iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
@@ -510,9 +510,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     if (CountOnly) {
         icgrepK.generateKernel({&BasisBits}, {});
-        if (pipelineParallel){
+        if (pipelineParallel) {
             generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &icgrepK});
-        } else if (segmentPipelineParallel){
+        } else if (segmentPipelineParallel) {
             generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &icgrepK});
         } else {
             generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK});
@@ -539,13 +539,13 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             scanMatchK.generateKernel({&MatchResults, &LineBreakStream}, {});                
             scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
 	    
-	    if (pipelineParallel){
-		generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &icgrepK, linebreakK, &scanMatchK});
-	    } else if (segmentPipelineParallel){
-		generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &icgrepK, linebreakK, &scanMatchK});
-	    }  else{
-		generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK, linebreakK, &scanMatchK});
-	    }
+            if (pipelineParallel) {
+                generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &icgrepK, linebreakK, &scanMatchK});
+            } else if (segmentPipelineParallel) {
+                generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &icgrepK, linebreakK, &scanMatchK});
+            } else {
+                generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &icgrepK, linebreakK, &scanMatchK});
+            }
         }
         iBuilder->CreateRetVoid();
     }

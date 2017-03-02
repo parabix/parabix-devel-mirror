@@ -42,7 +42,7 @@ public:
     llvm::Value * CreateRealloc(llvm::Value * ptr, llvm::Value * size);
 
     llvm::CallInst * CreateMemZero(llvm::Value * ptr, llvm::Value * size, const unsigned alignment = 1) {
-        return CreateMemSet(CreatePointerCast(ptr, getInt8PtrTy()), getInt8(0), size, alignment);
+        return CreateMemSet(ptr, getInt8(0), size, alignment);
     }
 
     llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {

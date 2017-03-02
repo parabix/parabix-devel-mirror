@@ -244,11 +244,15 @@ void PrintStreamSet::generateDoBlockMethod() {
 
             i->addIncoming(iBuilder->CreateAdd(i, ONE), iBuilder->GetInsertBlock());
             iBuilder->CreateBr(cond);
+
             // -------------------------------------------------------------------------
             iBuilder->SetInsertPoint(exit);
 
         }
     }
+
+
+
 }
 
 PrintableBits::PrintableBits(IDISA::IDISA_Builder * builder)

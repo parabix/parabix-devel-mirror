@@ -33,8 +33,7 @@ public:
 
     CarryData()
     : summaryType(NoSummary)    
-    , variableLength(false)
-    {
+    , carryCollapsingMode(false) {
 
     }
              
@@ -54,15 +53,18 @@ public:
         return (summaryType == ExplicitSummary);
     }
 
-    bool hasVariableLength() const {
-        return variableLength;
+    bool nonCarryCollapsingMode() const {
+        return carryCollapsingMode;
     }
 
+    void setNonCarryCollapsingMode(const bool value = true) {
+        carryCollapsingMode = value;
+    }
     
 protected:
 
     SummaryType             summaryType;
-    bool                    variableLength;
+    bool                    carryCollapsingMode;
 
 };
 

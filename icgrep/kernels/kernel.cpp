@@ -472,6 +472,8 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
 
     PHINode * stridesRemaining = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "stridesRemaining");
     stridesRemaining->addIncoming(stridesToDo, entryBlock);
+    // NOTE: stridesRemaining may go to a negative number in the final block if the generateFinalBlockMethod(...)
+    // calls CreateDoBlockMethodCall(). Do *not* replace the comparator with an unsigned one!
     Value * notDone = iBuilder->CreateICmpSGT(stridesRemaining, iBuilder->getSize(0));
     iBuilder->CreateLikelyCondBr(notDone, mStrideLoopBody, stridesDone);
 
@@ -543,7 +545,7 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
 
 }
 
-void BlockOrientedKernel::writeDoBlockMethod() {
+inline void BlockOrientedKernel::writeDoBlockMethod() {
 
     Value * const self = mSelf;
     Function * const cp = mCurrentMethod;
@@ -602,7 +604,7 @@ void BlockOrientedKernel::writeDoBlockMethod() {
 
 }
 
-void BlockOrientedKernel::writeFinalBlockMethod(Value * remainingItems) {
+inline void BlockOrientedKernel::writeFinalBlockMethod(Value * remainingItems) {
 
     Value * const self = mSelf;
     Function * const cp = mCurrentMethod;
@@ -638,7 +640,7 @@ void BlockOrientedKernel::writeFinalBlockMethod(Value * remainingItems) {
 }
 
 //  The default finalBlock method simply dispatches to the doBlock routine.
-void BlockOrientedKernel::generateFinalBlockMethod(Value * remainingItems) {
+void BlockOrientedKernel::generateFinalBlockMethod(Value * /* remainingItems */) {
     CreateDoBlockMethodCall();
 }
 

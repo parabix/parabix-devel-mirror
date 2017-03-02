@@ -210,8 +210,6 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     const PabloBlock * const whileBody = whileStatement->getBody();
 
     BasicBlock * whileEntryBlock = iBuilder->GetInsertBlock();
-    BasicBlock * whileBodyBlock = mKernel->CreateBasicBlock("while.body");
-    BasicBlock * whileEndBlock = mKernel->CreateBasicBlock("while.end");
 
     const auto escaped = whileStatement->getEscaped();
 
@@ -237,6 +235,8 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     }
 
     mCarryManager->enterLoopScope(whileBody);
+
+    BasicBlock * whileBodyBlock = mKernel->CreateBasicBlock("while.body");
 
     iBuilder->CreateBr(whileBodyBlock);
 
@@ -289,13 +289,15 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     // After the whileBody has been compiled, we may be in a different basic block.
     BasicBlock * const whileExitBlock = iBuilder->GetInsertBlock();
 
-    mCarryManager->leaveLoopBody(whileExitBlock);
-
     // Terminate the while loop body with a conditional branch back.
     Value * condition = compileExpression(whileStatement->getCondition());
     if (condition->getType() == iBuilder->getBitBlockType()) {
-        condition = iBuilder->bitblock_any(condition);
+        condition = iBuilder->bitblock_any(mCarryManager->generateSummaryTest(condition));
     }
+
+    mCarryManager->leaveLoopBody(whileExitBlock);
+
+
 #ifdef ENABLE_BOUNDED_WHILE
     if (whileStatement->getBound()) {
         Value * new_bound = iBuilder->CreateSub(bound_phi, iBuilder->getSize(1));
@@ -337,9 +339,9 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
         incomingPhi->addIncoming(outgoingValue, whileExitBlock);
     }
 
-    iBuilder->CreateCondBr(condition, whileBodyBlock, whileEndBlock);
+    BasicBlock * whileEndBlock = mKernel->CreateBasicBlock("while.end");
 
-    whileEndBlock->moveAfter(whileExitBlock);
+    iBuilder->CreateCondBr(condition, whileBodyBlock, whileEndBlock);
 
     iBuilder->SetInsertPoint(whileEndBlock);
 

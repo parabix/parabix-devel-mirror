@@ -83,7 +83,7 @@ protected:
 
     static unsigned getScopeCount(PabloBlock * const scope, unsigned index = 0);
 
-    static bool requiresVariableLengthMode(const PabloBlock * const scope);
+    static bool hasIterationSpecificAssignment(const PabloBlock * const scope);
 
     llvm::StructType * analyse(PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0);
 

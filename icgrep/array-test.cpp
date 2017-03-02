@@ -87,7 +87,8 @@ void generate(PabloKernel * kernel) {
 
         body.createAssign(pending_lparen, body.createAnd(pscan, lparen));
         // Mark any opening paren without a matching closer as an error.
-        body.createAssign(accumulated_errors, body.createOr(accumulated_errors, body.createAtEOF(pscan)));
+        PabloAST * unmatched_lparen = body.createAtEOF(pscan, "unmatched_lparen");
+        body.createAssign(accumulated_errors, body.createOr(accumulated_errors, unmatched_lparen));
 
         body.createAssign(body.createExtract(matches, index), closed);
 
@@ -101,13 +102,12 @@ void generate(PabloKernel * kernel) {
 
 }
 
-
 Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
 
-    Type * byteStreamTy = iBuilder->getStreamSetTy(1, 2);
+    Type * byteStreamTy = iBuilder->getStreamSetTy(1, 8);
 
     Module * const mod = iBuilder->getModule();
-    
+
     Function * const main = cast<Function>(mod->getOrInsertFunction("Main", iBuilder->getVoidTy(), byteStreamTy->getPointerTo(), iBuilder->getSizeTy(), nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
@@ -116,17 +116,19 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
     inputStream->setName("input");
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
-    
-    ExternalFileBuffer ByteStream(iBuilder, byteStreamTy);
-    SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
-    ExpandableBuffer matches(iBuilder, iBuilder->getStreamSetTy(count, 1), 2);
-    SingleBlockBuffer errors(iBuilder, iBuilder->getStreamTy());
 
-    MMapSourceKernel mmapK(iBuilder); 
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::BufferSegments;
+    
+    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+
+    kernel::MMapSourceKernel mmapK(iBuilder, segmentSize);
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
-    
-    S2PKernel s2pk(iBuilder);
+
+    CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
+
+    kernel::S2PKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
     PabloKernel bm(iBuilder, "MatchParens",
@@ -135,6 +137,9 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
 
     generate(&bm);
     pablo_function_passes(&bm);
+
+    ExpandableBuffer matches(iBuilder, iBuilder->getStreamSetTy(count), segmentSize * bufferSegments);
+    SingleBlockBuffer errors(iBuilder, iBuilder->getStreamTy());
 
     bm.generateKernel({&BasisBits}, {&matches, &errors});
 
@@ -161,7 +166,7 @@ MatchParens generateAlgorithm() {
     Module * M = new Module("mp", ctx);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    llvm::Function * f = pipeline(idb, 4);
+    llvm::Function * f = pipeline(idb, 3);
 
     verifyModule(*M, &dbgs());
 
@@ -174,7 +179,46 @@ MatchParens generateAlgorithm() {
     return reinterpret_cast<MatchParens>(wcEngine->getPointerToFunction(f));
 }
 
-void run(MatchParens f, const std::string & fileName) {
+template <typename T>
+std::ostream & operator<< (std::ostream& out, const std::vector<T>& v) {
+  if ( !v.empty() ) {
+    out << '[';
+    std::copy (v.begin(), v.end(), std::ostream_iterator<T>(out, ", "));
+    out << "\b\b]";
+  }
+  return out;
+}
+
+void check(const char * byteStream, const size_t fileSize) {
+
+    std::vector<size_t> unmatched_left;
+    std::vector<size_t> unmatched_right;
+    size_t maxDepth = 0;
+    for (size_t i = 0; i < fileSize; ++i) {
+        switch (byteStream[i]) {
+            case '(':
+                unmatched_left.push_back(i);
+                maxDepth = std::max<size_t>(maxDepth, unmatched_left.size());
+                break;
+            case ')':
+                if (unmatched_left.empty()) {
+                    unmatched_right.push_back(i);
+                } else {
+                    unmatched_left.pop_back();
+                }
+            default:
+                break;
+        }
+    }
+
+    std::cerr << "maximum depth:        " << maxDepth << "\n"
+                 "invalid left parens:  " << unmatched_left << "\n"
+                 "invalid right parens: " << unmatched_right <<
+                 std::endl;
+}
+
+
+void run(MatchParens match, const std::string & fileName) {
     const boost::filesystem::path file(fileName);
     if (exists(file)) {
         if (is_directory(file)) {
@@ -185,7 +229,8 @@ void run(MatchParens f, const std::string & fileName) {
         if (fileSize > 0) {
             mappedFile.open(fileName);
             char * fileBuffer = const_cast<char *>(mappedFile.data());
-            f(fileBuffer, fileSize);
+            check(fileBuffer, fileSize);
+            match(fileBuffer, fileSize);
             mappedFile.close();
         }
     } else {
