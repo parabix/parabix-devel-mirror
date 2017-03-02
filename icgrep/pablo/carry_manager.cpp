@@ -257,11 +257,11 @@ Value * CarryManager::generateSummaryTest(Value * condition) {
             }
         }
         const bool useLoopSelector = mCarryInfo->hasImplicitSummary() && mLoopDepth > 0;
-        const auto length = count + (useLoopSelector ? 2 : 0);
+        const auto length = count + (useLoopSelector ? 1 : 0);
         Value * indicies[length];
-        std::fill(indicies, indicies + (count + (useLoopSelector ? 1 : 0)), iBuilder->getInt32(0));
+        std::fill(indicies, indicies + count, iBuilder->getInt32(0));
         if (LLVM_UNLIKELY(useLoopSelector)) {
-            indicies[count + 1] = mLoopSelector;
+            indicies[count] = mLoopSelector;
         }
         ArrayRef<Value *> ar(indicies, length);
         Value * ptr = iBuilder->CreateGEP(mCurrentFrame, ar);
@@ -622,7 +622,7 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
     StructType * carryState = nullptr;
 
     // Add the summary pack if needed.
-    cd.summaryType = CarryData::NoSummary;
+    CarryData::SummaryType summaryType = CarryData::NoSummary;
     if (LLVM_UNLIKELY(state.empty())) {
         carryState = StructType::get(iBuilder->getContext());
     } else {
@@ -631,14 +631,15 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
             // A non-collapsing loop requires a unique summary for each iteration. Thus whenever
             // we have a non-collapsing While within an If scope with an implicit summary, the If
             // scope requires an explicit summary.
-
-            if (LLVM_LIKELY(state.size() > 1 || hasLongAdvances)) {
-                cd.summaryType = CarryData::ExplicitSummary;
-                state.insert(state.begin(), mCarryPackType);
-            } else {
-                cd.summaryType = CarryData::ImplicitSummary;
-                if (state[0]->isStructTy()) {
-                    cd.summaryType = CarryData::BorrowedSummary;
+            if (cd.nonCarryCollapsingMode() || isa<If>(scope->getBranch())) {
+                if (LLVM_LIKELY(state.size() > 1 || hasLongAdvances)) {
+                    summaryType = CarryData::ExplicitSummary;
+                    state.insert(state.begin(), mCarryPackType);
+                } else {
+                    summaryType = CarryData::ImplicitSummary;
+                    if (state[0]->isStructTy()) {
+                        summaryType = CarryData::BorrowedSummary;
+                    }
                 }
             }
         }
@@ -649,6 +650,7 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
             carryState = StructType::get(iBuilder->getSizeTy(), carryState->getPointerTo(), nullptr);
         }
     }
+    cd.setSummaryType(summaryType);
 
     return carryState;
 }

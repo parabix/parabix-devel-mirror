@@ -32,39 +32,43 @@ public:
     };
 
     CarryData()
-    : summaryType(NoSummary)    
-    , carryCollapsingMode(false) {
+    : mSummaryType(NoSummary)
+    , mNonCarryCollapsingMode(false) {
 
     }
              
     bool hasSummary() const {
-        return (summaryType != NoSummary);
+        return (mSummaryType != NoSummary);
     }
     
     bool hasImplicitSummary() const {
-        return (summaryType == ImplicitSummary);
+        return (mSummaryType == ImplicitSummary);
     }
 
     bool hasBorrowedSummary() const {
-        return (summaryType == BorrowedSummary);
+        return (mSummaryType == BorrowedSummary);
     }
 
     bool hasExplicitSummary() const {
-        return (summaryType == ExplicitSummary);
+        return (mSummaryType == ExplicitSummary);
+    }
+
+    void setSummaryType(const SummaryType value) {
+        mSummaryType = value;
     }
 
     bool nonCarryCollapsingMode() const {
-        return carryCollapsingMode;
+        return mNonCarryCollapsingMode;
     }
 
     void setNonCarryCollapsingMode(const bool value = true) {
-        carryCollapsingMode = value;
+        mNonCarryCollapsingMode = value;
     }
     
-protected:
+private:
 
-    SummaryType             summaryType;
-    bool                    carryCollapsingMode;
+    SummaryType             mSummaryType;
+    bool                    mNonCarryCollapsingMode;
 
 };
 
