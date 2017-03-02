@@ -18,7 +18,7 @@ class StreamSetBuffer {
 
 public:
 
-    enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, CircularCopybackBuffer, ExpandableBuffer};
+    enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, CircularCopybackBuffer, SwizzledCopybackBuffer, ExpandableBuffer};
 
     BufferKind getBufferKind() const {
         return mBufferKind;
@@ -56,7 +56,7 @@ public:
 
     // The number of items that cam be linearly accessed from a given logical stream position.
     virtual llvm::Value * getLinearlyAccessibleItems(llvm::Value * fromPosition) const;
-    
+    virtual llvm::Value * getLinearlyAccessibleBlocks(llvm::Value * fromBlock) const;
 protected:
 
     StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * baseType, llvm::Type * resolvedType, unsigned blocks, unsigned AddressSpace);
@@ -142,12 +142,32 @@ public:
     // Generate copyback code for the given number of overflowItems.
     void createCopyBack(llvm::Value * self, llvm::Value * overflowItems) const;
     
-    
+
+        
+        
 protected:
     llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
 private:
     size_t mOverflowBlocks;
 
+};
+    
+class SwizzledCopybackBuffer : public StreamSetBuffer {
+public:
+    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::SwizzledCopybackBuffer;}
+    
+    SwizzledCopybackBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned fieldwidth = 64, unsigned AddressSpace = 0);
+    
+    void allocateBuffer() override;
+    
+    // Generate copyback code for the given number of overflowItems.
+    void createCopyBack(llvm::Value * self, llvm::Value * overflowItems) const;
+protected:
+    llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockIndex) const override;
+private:
+    size_t mOverflowBlocks;
+    unsigned mFieldWidth;
+    
 };
 
 // ExpandableBuffers do not allow access to the base stream set but will automatically increase the number of streams

@@ -61,7 +61,7 @@ static cl::OptionCategory EnhancedGrepOptions("B. Enhanced Grep Options",
 static cl::opt<bool> FileNamesOnly("l", cl::desc("Display only the names of matching files."), cl::cat(LegacyGrepOptions), cl::Grouping);
 static cl::alias FileNamesAlias("files-with-matches", cl::desc("Alias for -l"), cl::aliasopt(FileNamesOnly));
 
-static cl::opt<bool> NonMatchingFileNamesOnly("L", cl::desc("Display only the names of matching files."), cl::cat(LegacyGrepOptions), cl::Grouping);
+static cl::opt<bool> NonMatchingFileNamesOnly("L", cl::desc("Display only the names of nonmatching files."), cl::cat(LegacyGrepOptions), cl::Grouping);
 static cl::alias NonMatchingFileNamesAlias("files-without-match", cl::desc("Alias for -L"), cl::aliasopt(NonMatchingFileNamesOnly));
 
 

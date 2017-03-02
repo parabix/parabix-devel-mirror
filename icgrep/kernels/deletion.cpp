@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
@@ -92,7 +92,8 @@ DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, uns
     mDoBlockUpdatesProducedItemCountsAttribute = false;
 }
 
-    
+
+
 const unsigned PEXT_width = 64;
 
 inline std::vector<Value *> get_PEXT_masks(IDISA::IDISA_Builder * iBuilder, Value * del_mask) {
@@ -133,7 +134,8 @@ void DeleteByPEXTkernel::generateDoBlockMethod() {
         Value * output = apply_PEXT_deletion(iBuilder, masks, input);
         storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
     }
-    Value * delCount = partial_sum_popcount(iBuilder, mDelCountFieldWidth, apply_PEXT_deletion(iBuilder, masks, iBuilder->simd_not(delMask)));
+    //Value * delCount = partial_sum_popcount(iBuilder, mDelCountFieldWidth, apply_PEXT_deletion(iBuilder, masks, iBuilder->simd_not(delMask)));
+    Value * delCount = iBuilder->simd_popcount(mDelCountFieldWidth, iBuilder->simd_not(delMask));
     storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
 }
 
@@ -148,7 +150,8 @@ void DeleteByPEXTkernel::generateFinalBlockMethod(Value * remainingBytes) {
         Value * output = apply_PEXT_deletion(iBuilder, masks, input);
         storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
     }
-    Value * delCount = partial_sum_popcount(iBuilder, mDelCountFieldWidth, apply_PEXT_deletion(iBuilder, masks, iBuilder->simd_not(delMask)));
+    //Value * delCount = partial_sum_popcount(iBuilder, mDelCountFieldWidth, apply_PEXT_deletion(iBuilder, masks, iBuilder->simd_not(delMask)));
+    Value * delCount = iBuilder->simd_popcount(mDelCountFieldWidth, iBuilder->simd_not(delMask));
     storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
 }
 
@@ -164,4 +167,106 @@ DeleteByPEXTkernel::DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned
     mDoBlockUpdatesProducedItemCountsAttribute = false;
 }
 
+    
+//
+// This kernel performs final stream compression for a set of N bitstreams, given
+// (a) a set of bitstreams partially compressed within K-bit fields and stored
+//     in K-bit swizzled form, and
+// (b) a stream of deletion/extraction counts per K-bit stride.
+//
+// Restrictions:  At present, only K=64 is supported.
+//                At present, N must be an exact multiple of BLOCK_SIZE/K.
+//
+// The kernel always consumes full blocks of input and emits data into the output
+// buffer in swizzles of K items at a time.   Upon completion of a segment,
+// up to K-1 pending output items per stream may be stored in the kernel state.
+//
+// Note: that both input streams and output streams are stored in swizzled form.
+//
+
+    
+
+SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(IDISA::IDISA_Builder * iBuilder, unsigned bitStreamCount, unsigned fieldWidth)
+    : BlockOrientedKernel(iBuilder, "swizzled_compress", {Binding{iBuilder->getStreamSetTy(), "countsPerStride"}}, {}, {}, {}, {})
+, mBitStreamCount(bitStreamCount)
+    , mFieldWidth(fieldWidth)
+    , mSwizzleFactor(iBuilder->getBitBlockWidth() / fieldWidth)
+    , mSwizzleSetCount((mBitStreamCount + mSwizzleFactor - 1)/mSwizzleFactor) {
+        assert((fieldWidth > 0) && ((fieldWidth & (fieldWidth - 1)) == 0) && "fieldWidth must be a power of 2");
+        assert(mSwizzleFactor > 1 && "fieldWidth must be less than the block width");
+        for (unsigned i = 0; i < mSwizzleSetCount; i++) {
+            mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle" + std::to_string(i)});
+            mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle" + std::to_string(i), MaxRatio(1)});
+            addScalar(iBuilder->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
+        }
+        addScalar(iBuilder->getSizeTy(), "pendingOffset");
+}
+
+    
+void SwizzledBitstreamCompressByCount::generateDoBlockMethod() {
+        
+    Value * countStreamPtr = iBuilder->CreateBitCast(getInputStreamBlockPtr("countsPerStride", iBuilder->getInt32(0)), iBuilder->getIntNTy(mFieldWidth)->getPointerTo());
+    
+    // Output is written and committed to the output buffer one swizzle at a time.
+    //
+    Constant * blockOffsetMask = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
+    Constant * outputIndexShift = iBuilder->getSize(std::log2(mFieldWidth));
+    
+    Value * outputProduced = getProducedItemCount("outputSwizzle0"); // All output groups have the same count.
+    Value * producedOffset = iBuilder->CreateAnd(outputProduced, blockOffsetMask);
+    Value * outputIndex = iBuilder->CreateLShr(producedOffset, outputIndexShift);
+
+    // There may be pending data in the kernel state, for up to mFieldWidth-1 bits per stream.
+    Value * pendingOffset = getScalarField("pendingOffset");
+    // There is a separate vector of pending data for each swizzle group.
+    std::vector<Value *> pendingData;
+    std::vector<Value *> outputStreamPtr;
+    for (unsigned i = 0; i < mSwizzleSetCount; i++) {
+        pendingData.push_back(getScalarField("pendingSwizzleData" + std::to_string(i)));
+        outputStreamPtr.push_back(getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), iBuilder->getInt32(0)));
+    }
+    
+    // Generate code for each of the mSwizzleFactor fields making up a block.
+    // We load the count for the field and process all swizzle groups accordingly.
+    for (unsigned i = 0; i < mSwizzleFactor; i++) {
+        Value * newItemCount = iBuilder->CreateLoad(iBuilder->CreateGEP(countStreamPtr, iBuilder->getInt32(i)));
+        Value * pendingSpace = iBuilder->CreateSub(iBuilder->getSize(mFieldWidth), pendingOffset);
+        Value * pendingSpaceFilled = iBuilder->CreateICmpUGE(newItemCount, pendingSpace);
+        
+        // Data from the ith swizzle pack of each group is processed
+        // according to the same newItemCount, pendingSpace, ...
+        for (unsigned j = 0; j < mSwizzleSetCount; j++) {
+            Value * newItems = loadInputStreamBlock("inputSwizzle" + std::to_string(j), iBuilder->getInt32(i));
+            // Combine as many of the new items as possible into the pending group.
+            Value * combinedGroup = iBuilder->CreateOr(pendingData[j], iBuilder->CreateShl(newItems, iBuilder->simd_fill(mFieldWidth, pendingOffset)));
+            // To avoid an unpredictable branch, always store the combined group, whether full or not.
+                
+            iBuilder->CreateBlockAlignedStore(combinedGroup, iBuilder->CreateGEP(outputStreamPtr[j], outputIndex));
+            // Any items in excess of the space available in the current pending group overflow for the next group.
+            Value * overFlowGroup = iBuilder->CreateLShr(newItems, iBuilder->simd_fill(mFieldWidth, pendingSpace));
+            // If we filled the space, then the overflow group becomes the new pending group and the index is updated.
+            pendingData[j] = iBuilder->CreateSelect(pendingSpaceFilled, overFlowGroup, combinedGroup);
+        }
+        outputIndex = iBuilder->CreateSelect(pendingSpaceFilled, iBuilder->CreateAdd(outputIndex, iBuilder->getSize(1)), outputIndex);
+        pendingOffset = iBuilder->CreateAnd(iBuilder->CreateAdd(newItemCount, pendingOffset), iBuilder->getSize(mFieldWidth-1));
+    }
+    setScalarField("pendingOffset", pendingOffset);
+    
+    Value * newlyProduced = iBuilder->CreateSub(iBuilder->CreateShl(outputIndex, outputIndexShift), producedOffset);
+    Value * produced = iBuilder->CreateAdd(outputProduced, newlyProduced);
+    for (unsigned j = 0; j < mSwizzleSetCount; j++) {
+        setScalarField("pendingSwizzleData" + std::to_string(j), pendingData[j]);
+        setProducedItemCount("outputSwizzle" + std::to_string(j), produced);
+    }
+}
+
+void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(Value * remainingBytes) {
+    CreateDoBlockMethodCall();
+    // All the data has been written.  Update the count to include pending data.
+    Value * pendingOffset = getScalarField("pendingOffset");
+    Value * produced = iBuilder->CreateAdd(pendingOffset, getProducedItemCount("outputSwizzle0"));
+    for (unsigned j = 0; j < mSwizzleSetCount; j++) {
+        setProducedItemCount("outputSwizzle" + std::to_string(j), produced);
+    }
+}
 }

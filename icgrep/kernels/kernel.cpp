@@ -263,6 +263,7 @@ void KernelBuilder::setProcessedItemCount(Value * instance, const std::string & 
 }
 
 void KernelBuilder::setProducedItemCount(Value * instance, const std::string & name, Value * value) const {
+    //iBuilder->CallPrintInt(mKernelName + "_" + name + "_produced_count", value);
     setScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX, value);
 }
 
@@ -567,7 +568,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
 
     std::vector<Value *> priorProduced;
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        if (isa<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
+        if (isa<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]) || isa<SwizzledCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
             priorProduced.push_back(getProducedItemCount(mStreamSetOutputs[i].name));
         }
     }
@@ -576,6 +577,24 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
 
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         unsigned priorIdx = 0;
+        Value * log2BlockSize = iBuilder->getSize(std::log2(iBuilder->getBitBlockWidth()));
+        if (auto cb = dyn_cast<SwizzledCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
+            BasicBlock * copyBack = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
+            BasicBlock * done = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
+            Value * newlyProduced = iBuilder->CreateSub(getProducedItemCount(mStreamSetOutputs[i].name), priorProduced[priorIdx]);
+            Value * priorBlock = iBuilder->CreateLShr(priorProduced[priorIdx], log2BlockSize);
+            Value * priorOffset = iBuilder->CreateAnd(priorProduced[priorIdx], iBuilder->getSize(iBuilder->getBitBlockWidth() - 1));
+            Value * accessibleBlocks = cb->getLinearlyAccessibleBlocks(priorBlock);
+            Value * accessible = iBuilder->CreateSub(iBuilder->CreateShl(accessibleBlocks, log2BlockSize), priorOffset);
+            Value * wraparound = iBuilder->CreateICmpULT(accessible, newlyProduced);
+            iBuilder->CreateCondBr(wraparound, copyBack, done);
+            iBuilder->SetInsertPoint(copyBack);
+            Value * copyItems = iBuilder->CreateSub(newlyProduced, accessible);
+            cb->createCopyBack(getStreamSetBufferPtr(mStreamSetOutputs[i].name), copyItems);
+            iBuilder->CreateBr(done);
+            iBuilder->SetInsertPoint(done);
+            priorIdx++;
+        }
         if (auto cb = dyn_cast<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
             BasicBlock * copyBack = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
             BasicBlock * done = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");

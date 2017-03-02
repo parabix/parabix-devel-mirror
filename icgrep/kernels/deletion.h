@@ -52,6 +52,25 @@ private:
     const unsigned mDelCountFieldWidth;
     const unsigned mStreamCount;
 };
+    
+class SwizzledBitstreamCompressByCount : public BlockOrientedKernel {
+public:
+    
+    SwizzledBitstreamCompressByCount(IDISA::IDISA_Builder * iBuilder, unsigned bitStreamCount, unsigned fieldWidth = 64);
+    
+protected:
+    
+    void generateDoBlockMethod() override;
+    void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
+   
+private:
+    const unsigned mBitStreamCount;
+    const unsigned mFieldWidth;
+    const unsigned mSwizzleFactor;
+    const unsigned mSwizzleSetCount;
+};
+
+    
 }
     
 #endif

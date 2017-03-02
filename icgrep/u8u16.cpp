@@ -8,6 +8,7 @@
 #include <IR_Gen/idisa_target.h>                   // for GetIDISA_Builder
 #include <cc/cc_compiler.h>                        // for CC_Compiler
 #include <kernels/deletion.h>                      // for DeletionKernel
+#include <kernels/swizzle.h>                      // for DeletionKernel
 #include <kernels/mmap_kernel.h>                   // for MMapSourceKernel
 #include <kernels/p2s_kernel.h>                    // for P2S16KernelWithCom...
 #include <kernels/s2p_kernel.h>                    // for S2PKernel
@@ -45,6 +46,7 @@ static cl::OptionCategory u8u16Options("u8u16 Options", "Transcoding control opt
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(u8u16Options));
 static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"),  cl::Required, cl::cat(u8u16Options));
 static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(u8u16Options));
+static cl::opt<bool> enableAVXdel("enable-AVX-deletion", cl::desc("Enable AVX2 deletion algorithms."), cl::cat(u8u16Options));
 static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
 static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
 
@@ -252,7 +254,7 @@ void u8u16_pablo(PabloKernel * kernel) {
     pablo_function_passes(kernel);
 }
 
-Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
+Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
 
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::ThreadNum+1;
@@ -276,45 +278,184 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
 
+    // File data from mmap
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
-
-    CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
-
-    CircularBuffer U8u16Bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
-    CircularBuffer DelMask(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
-    CircularBuffer ErrorMask(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
-
-    CircularBuffer U16Bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
-    
-    CircularBuffer DeletionCounts(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
-
-    // Different choices for the output buffer depending on chosen option.
-    ExternalFileBuffer U16external(iBuilder, iBuilder->getStreamSetTy(1, 16));
-    CircularCopybackBuffer U16out(iBuilder, iBuilder->getStreamSetTy(1, 16), segmentSize * bufferSegments, 1 /*overflow block*/);
 
     MMapSourceKernel mmapK(iBuilder, segmentSize); 
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
     
-    S2PKernel s2pk(iBuilder);
+    // Transposed bits from s2p
+    CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
 
+    S2PKernel s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
+    
+    // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
+    CircularBuffer U8u16Bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
+    CircularBuffer DelMask(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
+    CircularBuffer ErrorMask(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
 
     PabloKernel u8u16k(iBuilder, "u8u16",
                        {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
                        {Binding{iBuilder->getStreamSetTy(16, 1), "u16bit"},
-                        Binding{iBuilder->getStreamSetTy(1, 1), "delMask"},
-                        Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {});
-
+                           Binding{iBuilder->getStreamSetTy(1, 1), "delMask"},
+                           Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {});
+    
     u8u16_pablo(&u8u16k);
-
     u8u16k.generateKernel({&BasisBits}, {&U8u16Bits, &DelMask, &ErrorMask});
+    
+    
+    // Apply a deletion algorithm to discard all but the final position of the UTF-8
+    // sequences for each UTF-16 code unit.
+    CircularBuffer u16CompressedInFields(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
+    CircularBuffer DeletionCounts(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
 
+    DeleteByPEXTkernel delK(iBuilder, 64, 16);
+    delK.generateKernel({&U8u16Bits, &DelMask}, {&u16CompressedInFields, &DeletionCounts});
+    
+    // Swizzle for sequential compression within SIMD lanes.
+    CircularBuffer SwizzleFields0(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments);
+    CircularBuffer SwizzleFields1(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments);
+    CircularBuffer SwizzleFields2(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments);
+    CircularBuffer SwizzleFields3(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments);
+    SwizzleGenerator swizzleK(iBuilder, 16, 4, 1);
+    swizzleK.generateKernel({&u16CompressedInFields}, {&SwizzleFields0, &SwizzleFields1, &SwizzleFields2, &SwizzleFields3});
+    
+    //  Produce fully compressed swizzled UTF-16 bit streams
+    SwizzledCopybackBuffer u16Swizzle0(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
+    SwizzledCopybackBuffer u16Swizzle1(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
+    SwizzledCopybackBuffer u16Swizzle2(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
+    SwizzledCopybackBuffer u16Swizzle3(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
+    //
+    SwizzledBitstreamCompressByCount compressK(iBuilder, 16);
+    compressK.generateKernel({&DeletionCounts, &SwizzleFields0, &SwizzleFields1, &SwizzleFields2, &SwizzleFields3},
+                             {&u16Swizzle0, &u16Swizzle1, &u16Swizzle2, &u16Swizzle3});
+    
+    // Produce unswizzled UTF-16 bit streams
+    //
+    CircularBuffer u16bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
+    SwizzleGenerator unSwizzleK(iBuilder, 16, 1, 4);
+    unSwizzleK.setName("unswizzle");
+    unSwizzleK.generateKernel({&u16Swizzle0, &u16Swizzle1, &u16Swizzle2, &u16Swizzle3}, {&u16bits});
+    
+    // Different choices for the output buffer depending on chosen option.
+    ExternalFileBuffer U16external(iBuilder, iBuilder->getStreamSetTy(1, 16));
+    CircularBuffer U16out(iBuilder, iBuilder->getStreamSetTy(1, 16), segmentSize * bufferSegments);
+
+    P2S16Kernel p2sk(iBuilder);
+
+    //P2S16KernelWithCompressedOutput p2sk(iBuilder);
+
+    FileSink outK(iBuilder, 16);
+    if (mMapBuffering || memAlignBuffering) {
+        p2sk.generateKernel({&u16bits}, {&U16external});
+        outK.generateKernel({&U16external}, {});
+    } else {
+        p2sk.generateKernel({&u16bits}, {&U16out});
+        outK.generateKernel({&U16out}, {});
+    }
+    
+    iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
+
+    ByteStream.setStreamSetBuffer(inputStream, fileSize);
+    BasisBits.allocateBuffer();
+    U8u16Bits.allocateBuffer();
+    DelMask.allocateBuffer();
+    ErrorMask.allocateBuffer();
+    u16CompressedInFields.allocateBuffer();
+    DeletionCounts.allocateBuffer();
+    SwizzleFields0.allocateBuffer();
+    SwizzleFields1.allocateBuffer();
+    SwizzleFields2.allocateBuffer();
+    SwizzleFields3.allocateBuffer();
+    u16Swizzle0.allocateBuffer();
+    u16Swizzle1.allocateBuffer();
+    u16Swizzle2.allocateBuffer();
+    u16Swizzle3.allocateBuffer();
+    u16bits.allocateBuffer();
+    if (mMapBuffering || memAlignBuffering) {
+        U16external.setEmptyBuffer(outputStream);
+    } else {
+        U16out.allocateBuffer();
+    }
+    Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
+    outK.setInitialArguments({fName});
+
+    if (segmentPipelineParallel){
+        generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &swizzleK, &compressK, &unSwizzleK, &p2sk, &outK});
+    } else {
+        generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &swizzleK, &compressK, &unSwizzleK, &p2sk, &outK});
+    }
+
+    iBuilder->CreateRetVoid();
+    return main;
+}
+
+
+Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
+    
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::ThreadNum+1;
+    
+    assert (iBuilder);
+    
+    Type * const size_ty = iBuilder->getSizeTy();
+    Type * const voidTy = iBuilder->getVoidTy();
+    Type * const bitBlockType = iBuilder->getBitBlockType();
+    Type * const inputType = ArrayType::get(ArrayType::get(bitBlockType, 8), 1)->getPointerTo();
+    Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
+    
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
+    main->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = main->arg_begin();
+    
+    Value * const inputStream = &*(args++);
+    inputStream->setName("inputStream");
+    Value * const outputStream = &*(args++);
+    outputStream->setName("outputStream");
+    Value * const fileSize = &*(args++);
+    fileSize->setName("fileSize");
+    
+    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    
+    CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
+    
+    CircularBuffer U8u16Bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
+    CircularBuffer DelMask(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
+    CircularBuffer ErrorMask(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
+    
+    CircularBuffer U16Bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
+    
+    CircularBuffer DeletionCounts(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
+    
+    // Different choices for the output buffer depending on chosen option.
+    ExternalFileBuffer U16external(iBuilder, iBuilder->getStreamSetTy(1, 16));
+    CircularCopybackBuffer U16out(iBuilder, iBuilder->getStreamSetTy(1, 16), segmentSize * bufferSegments, 1 /*overflow block*/);
+    
+    MMapSourceKernel mmapK(iBuilder, segmentSize); 
+    mmapK.generateKernel({}, {&ByteStream});
+    mmapK.setInitialArguments({fileSize});
+    
+    S2PKernel s2pk(iBuilder);
+    
+    s2pk.generateKernel({&ByteStream}, {&BasisBits});
+    
+    PabloKernel u8u16k(iBuilder, "u8u16",
+                       {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
+                       {Binding{iBuilder->getStreamSetTy(16, 1), "u16bit"},
+                           Binding{iBuilder->getStreamSetTy(1, 1), "delMask"},
+                           Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {});
+    
+    u8u16_pablo(&u8u16k);
+    
+    u8u16k.generateKernel({&BasisBits}, {&U8u16Bits, &DelMask, &ErrorMask});
+    
     DeletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
     delK.generateKernel({&U8u16Bits, &DelMask}, {&U16Bits, &DeletionCounts});
-
+    
     P2S16KernelWithCompressedOutput p2sk(iBuilder);
-
+    
     FileSink outK(iBuilder, 16);
     if (mMapBuffering || memAlignBuffering) {
         p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16external});
@@ -324,7 +465,7 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
         outK.generateKernel({&U16out}, {});
     }
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
-
+    
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     U8u16Bits.allocateBuffer();
@@ -339,18 +480,16 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     }
     Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
     outK.setInitialArguments({fName});
-
+    
     if (segmentPipelineParallel){
         generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &outK});
     } else {
         generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &outK});
     }
-
+    
     iBuilder->CreateRetVoid();
     return main;
 }
-
-
 
 
 
@@ -363,8 +502,8 @@ u8u16FunctionType u8u16CodeGen(void) {
     Module * M = new Module("u8u16", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
 
-    llvm::Function * main_IR = u8u16Pipeline(M, idb);
-    
+    llvm::Function * main_IR = (enableAVXdel && AVX2_available() && codegen::BlockSize==256) ? u8u16PipelineAVX2(M, idb) : u8u16Pipeline(M, idb);
+
     verifyModule(*M, &dbgs());
     u8u16Engine = JIT_to_ExecutionEngine(M);   
     u8u16Engine->finalizeObject();
