@@ -93,7 +93,6 @@ BlockOrientedKernel(b, "editd_cpu",
              {Binding{b->getBitBlockType(), "EOFmask"}}),
 mEditDistance(dist),
 mPatternLen(pattLen){
-setDoBlockUpdatesProducedItemCountsAttribute(false);
 }
 
 }

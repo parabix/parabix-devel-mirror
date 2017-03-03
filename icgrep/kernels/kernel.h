@@ -124,10 +124,6 @@ protected:
         mNoTerminateAttribute = noTerminate;
     }
 
-    void setDoBlockUpdatesProducedItemCountsAttribute(const bool doesUpdate = true) {
-        mDoBlockUpdatesProducedItemCountsAttribute = doesUpdate;
-    }
-    
     void prepareKernelSignature();
 
     virtual void prepareKernel();
@@ -270,7 +266,6 @@ protected:
     std::vector<const parabix::StreamSetBuffer *>   mStreamSetInputBuffers;
     std::vector<const parabix::StreamSetBuffer *>   mStreamSetOutputBuffers;
     bool                                            mNoTerminateAttribute;
-    bool                                            mDoBlockUpdatesProducedItemCountsAttribute;
 
 };
 

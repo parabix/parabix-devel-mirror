@@ -20,7 +20,6 @@ void EvenOddKernel::generateDoBlockMethod() {
 EvenOddKernel::EvenOddKernel(IDISA::IDISA_Builder * builder)
 : BlockOrientedKernel(builder, "EvenOdd", {Binding{builder->getStreamSetTy(8, 1), "BasisBits"}}, {Binding{builder->getStreamSetTy(2, 1), "even_odd"}}, {}, {}, {}) {
     setNoTerminateAttribute(true);
-    setDoBlockUpdatesProducedItemCountsAttribute(false);
 
 }
 

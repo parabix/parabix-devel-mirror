@@ -140,7 +140,6 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName,
 , mPabloCompiler(new PabloCompiler(this))
 , mSymbolTable(new SymbolGenerator(mAllocator))
 , mEntryBlock(PabloBlock::Create(this)) {
-    setDoBlockUpdatesProducedItemCountsAttribute(false);
     prepareKernelSignature();
     for (const Binding & ss : mStreamSetInputs) {
         Var * param = new (mAllocator) Var(mSymbolTable->makeString(ss.name, iBuilder), ss.type, mAllocator, Var::KernelInputParameter);

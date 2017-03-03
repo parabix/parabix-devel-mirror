@@ -258,13 +258,11 @@ void PrintStreamSet::generateDoBlockMethod() {
 PrintableBits::PrintableBits(IDISA::IDISA_Builder * builder)
 : BlockOrientedKernel(builder, "PrintableBits", {Binding{builder->getStreamSetTy(1), "bitStream"}}, {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {}, {}, {}) {
     setNoTerminateAttribute(true);
-    setDoBlockUpdatesProducedItemCountsAttribute(false);
 }
 
 SelectStream::SelectStream(IDISA::IDISA_Builder * builder, unsigned sizeInputStreamSet, unsigned streamIndex)
 : BlockOrientedKernel(builder, "SelectStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(1, 1), "bitStream"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mStreamIndex(streamIndex) {
     setNoTerminateAttribute(true);
-    setDoBlockUpdatesProducedItemCountsAttribute(false);
 
 }
 

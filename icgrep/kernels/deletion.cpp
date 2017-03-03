@@ -89,7 +89,6 @@ DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, uns
               {}, {}, {})
 , mDeletionFieldWidth(fw)
 , mStreamCount(streamCount) {
-    mDoBlockUpdatesProducedItemCountsAttribute = false;
 }
 
 
@@ -164,7 +163,6 @@ DeleteByPEXTkernel::DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned
                       {}, {}, {})
 , mDelCountFieldWidth(fw)
 , mStreamCount(streamCount) {
-    mDoBlockUpdatesProducedItemCountsAttribute = false;
 }
 
     

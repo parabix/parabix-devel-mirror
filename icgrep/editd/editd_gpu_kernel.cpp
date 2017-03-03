@@ -89,7 +89,6 @@ BlockOrientedKernel(b, "editd_gpu",
               {Binding{b->getBitBlockType(), "EOFmask"}})
 , mEditDistance(dist)
 , mPatternLen(pattLen) {
-    setDoBlockUpdatesProducedItemCountsAttribute(false);
 }
 
 }

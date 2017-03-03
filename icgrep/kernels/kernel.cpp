@@ -705,8 +705,7 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
 : KernelInterface(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
 , mSelf(nullptr)
 , mCurrentMethod(nullptr)
-, mNoTerminateAttribute(false)
-, mDoBlockUpdatesProducedItemCountsAttribute(false) {
+, mNoTerminateAttribute(false) {
 
 }
 

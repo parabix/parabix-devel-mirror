@@ -467,7 +467,6 @@ base64Kernel::base64Kernel(IDISA::IDISA_Builder * iBuilder)
             {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
             {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream", RoundUpToMultiple(4)}},
             {}, {}, {}) {
-    setDoBlockUpdatesProducedItemCountsAttribute(true);
 }
 
 }

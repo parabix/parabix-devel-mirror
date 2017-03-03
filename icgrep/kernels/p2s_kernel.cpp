@@ -157,7 +157,6 @@ P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(IDISA::IDISA_Builde
               {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
                       {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream", MaxRatio(1)}},
               {}, {}, {}) {
-    setDoBlockUpdatesProducedItemCountsAttribute(true);
 }
 
 P2S16Kernel::P2S16Kernel(IDISA::IDISA_Builder * iBuilder)
@@ -175,7 +174,6 @@ P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(IDISA::IDISA_Bu
               {},
               {},
               {}) {
-    setDoBlockUpdatesProducedItemCountsAttribute(true);
 
 }
     
