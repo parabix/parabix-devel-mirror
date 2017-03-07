@@ -15,6 +15,7 @@
 #include <cc/cc_compiler.h>
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
+#include <kernels/linebreak_kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/mmap_kernel.h>
 #include <kernels/cc_kernel.h>
@@ -76,15 +77,13 @@ Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder){
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
 
-    std::vector<re::CC *> charClasses;
-    charClasses.push_back(re::makeCC(0x0A));
-    kernel::DirectCharacterClassKernelBuilder linefeedK(iBuilder, "linefeed", charClasses, 1);
-    linefeedK.generateKernel({&ByteStream}, {&MatchResults});
+    kernel::LineBreakKernelBuilder linebreakK(iBuilder, "lb", encodingBits);
+    linebreakK.generateKernel({&ByteStream}, {&MatchResults});
     
     kernel::CCScanKernel scanMatchK(iBuilder, 1);
     scanMatchK.generateKernel({&MatchResults}, {}); 
     
-    generatePipelineLoop(iBuilder, {&mmapK, &linefeedK, &scanMatchK});
+    generatePipelineLoop(iBuilder, {&mmapK, &linebreakK, &scanMatchK});
     iBuilder->CreateRetVoid();
 
     return mainFn;

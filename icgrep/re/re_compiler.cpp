@@ -40,22 +40,17 @@ using namespace llvm;
 
 namespace re {
 
-void RE_Compiler::initializeRequiredStreams(const unsigned encodingBits) {
+void RE_Compiler::initializeRequiredStreams(const unsigned encodingBits, Var * linebreak) {
     if (encodingBits == 8) {
-        RE_Compiler::initializeRequiredStreams_utf8();
+        RE_Compiler::initializeRequiredStreams_utf8(linebreak);
     } else if (encodingBits == 16) {
-        RE_Compiler::initializeRequiredStreams_utf16();
+        RE_Compiler::initializeRequiredStreams_utf16(linebreak);
     }
 }
 
-void RE_Compiler::initializeRequiredStreams_utf16() {
+void RE_Compiler::initializeRequiredStreams_utf16(Var * linebreak) {
     PabloAST * LF = mCCCompiler.compileCC("LF", makeCC(0x000A), mPB);
     PabloAST * CR = mCCCompiler.compileCC("CR", makeCC(0x000D), mPB);
-    PabloAST * LF_VT_FF_CR = mCCCompiler.compileCC(makeCC(0x000A, 0x000D));
-    PabloAST * NEL = mCCCompiler.compileCC("NEL", makeCC(0x0085), mPB);
-    PabloAST * LS_PS = mCCCompiler.compileCC("LS_PS", makeCC(0x2028, 0x2029), mPB);
-    PabloAST * NEL_LS_PS = mPB.createOr(NEL, LS_PS, "NEL_LS_PS");
-
     PabloAST * cr1 = mPB.createAdvance(CR, 1, "cr1");
     mCRLF = mPB.createAnd(cr1, LF, "crlf");
 
@@ -76,17 +71,13 @@ void RE_Compiler::initializeRequiredStreams_utf16() {
     mFinal = mPB.createNot(mPB.createOr(mNonFinal, u16invalid), "final");
     mInitial = mPB.createOr(u16single, hi_surrogate, "initial");
     
-    PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, NEL_LS_PS);
-    PabloAST * UnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
-    PabloAST * lb = UNICODE_LINE_BREAK ? UnicodeLineBreak : LF;
-    PabloAST * unterminatedLineAtEOF = mPB.createAtEOF(mPB.createAdvance(mPB.createNot(LB_chars), 1));
-    mLineBreak = mPB.createOr(lb, unterminatedLineAtEOF);
-    mAny = mPB.createNot(lb, "any");
+    mLineBreak = mPB.createExtract(linebreak, mPB.getInteger(0));
+    mAny = mPB.createNot(mLineBreak, "any");
 }
-void RE_Compiler::initializeRequiredStreams_utf8() {
+
+void RE_Compiler::initializeRequiredStreams_utf8(Var * linebreak) {
     PabloAST * LF = mCCCompiler.compileCC("LF", makeCC(0x0A), mPB);
     PabloAST * CR = mCCCompiler.compileCC(makeCC(0x0D));
-    PabloAST * LF_VT_FF_CR = mCCCompiler.compileCC(makeCC(0x0A, 0x0D));
 
     Zeroes * const zero = mPB.createZeroes();
     Var * crlf = mPB.createVar("crlf", zero);
@@ -100,7 +91,6 @@ void RE_Compiler::initializeRequiredStreams_utf8() {
     Var * u8invalid = mPB.createVar("u8invalid", zero);
     Var * valid_pfx = mPB.createVar("valid_pfx", zero);
     Var * nonFinal = mPB.createVar("nonfinal", zero);
-    Var * NEL_LS_PS = mPB.createVar("NEL_LS_PS", zero);
 
     PabloAST * u8pfx = mCCCompiler.compileCC(makeCC(0xC0, 0xFF));
     PabloBuilder it = PabloBuilder::Create(mPB);
@@ -116,32 +106,23 @@ void RE_Compiler::initializeRequiredStreams_utf8() {
     //
     // Two-byte sequences
     Var * u8scope22 = it.createVar("u8scope22", zero);
-    Var * NEL = it.createVar("NEL", zero);
     PabloBuilder it2 = PabloBuilder::Create(it);
     it2.createAssign(u8scope22, it2.createAdvance(u8pfx2, 1));
-    it2.createAssign(NEL, it2.createAnd(it2.createAdvance(mCCCompiler.compileCC(makeCC(0xC2), it2), 1), mCCCompiler.compileCC(makeCC(0x85), it2)));
     it.createIf(u8pfx2, it2);
 
     //
     // Three-byte sequences
     Var * u8scope32 = it.createVar("u8scope32", zero);
     Var * u8scope3X = it.createVar("u8scope3X", zero);
-    Var * LS_PS = it.createVar("LS_PS", zero);
     Var * EX_invalid = it.createVar("EX_invalid", zero);
-
     PabloBuilder it3 = PabloBuilder::Create(it);
     it.createIf(u8pfx3, it3);
-
     it3.createAssign(u8scope32, it3.createAdvance(u8pfx3, 1));
     PabloAST * u8scope33 = it3.createAdvance(u8pfx3, 2);
     it3.createAssign(u8scope3X, it3.createOr(u8scope32, u8scope33));
-    PabloAST * E2_80 = it3.createAnd(it3.createAdvance(mCCCompiler.compileCC(makeCC(0xE2), it3), 1), mCCCompiler.compileCC(makeCC(0x80), it3));
-    it3.createAssign(LS_PS, it3.createAnd(it3.createAdvance(E2_80, 1), mCCCompiler.compileCC(makeCC(0xA8,0xA9), it3)));
     PabloAST * E0_invalid = it3.createAnd(it3.createAdvance(mCCCompiler.compileCC(makeCC(0xE0), it3), 1), mCCCompiler.compileCC(makeCC(0x80, 0x9F), it3));
     PabloAST * ED_invalid = it3.createAnd(it3.createAdvance(mCCCompiler.compileCC(makeCC(0xED), it3), 1), mCCCompiler.compileCC(makeCC(0xA0, 0xBF), it3));
     it3.createAssign(EX_invalid, it3.createOr(E0_invalid, ED_invalid));
-
-    it.createAssign(NEL_LS_PS, it.createOr(NEL, LS_PS));
 
     //
     // Four-byte sequences
@@ -178,15 +159,11 @@ void RE_Compiler::initializeRequiredStreams_utf8() {
     it.createAssign(mNonFinal, it.createAnd(it.createOr(it.createOr(u8pfx, u8scope32), u8scope4nonfinal), u8valid));
 
 
-    PabloAST * LB_chars = mPB.createOr(LF_VT_FF_CR, NEL_LS_PS);
     PabloAST * u8single = mPB.createAnd(mCCCompiler.compileCC(makeCC(0x00, 0x7F)), mPB.createNot(u8invalid));
     mInitial = mPB.createOr(u8single, valid_pfx, "initial");
     mFinal = mPB.createNot(mPB.createOr(mNonFinal, u8invalid), "final");
-    PabloAST * UnicodeLineBreak = mPB.createAnd(LB_chars, mPB.createNot(mCRLF));  // count the CR, but not CRLF
-    PabloAST * lb = UNICODE_LINE_BREAK ? UnicodeLineBreak : LF;
-    PabloAST * unterminatedLineAtEOF = mPB.createAtEOF(mPB.createAdvance(mPB.createNot(LB_chars), 1));
-    mLineBreak = mPB.createOr(lb, unterminatedLineAtEOF);
-    mAny = mPB.createNot(lb, "any");
+    mLineBreak = mPB.createExtract(linebreak, mPB.getInteger(0));
+    mAny = mPB.createNot(mLineBreak, "any");
 }
 
 

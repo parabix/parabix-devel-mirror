@@ -9,6 +9,7 @@
 
 #include <re/re_seq.h>  // for Seq
 #include <boost/container/flat_map.hpp>
+#include <pablo/builder.hpp>
 #include <vector>       // for vector<>::iterator
 namespace cc { class CC_Compiler; }
 namespace pablo { class PabloAST; }
@@ -59,7 +60,7 @@ class RE_Compiler {
 public:
 
     RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler, bool CountOnly = false);
-    void initializeRequiredStreams(const unsigned encodingBits);
+    void initializeRequiredStreams(const unsigned encodingBits, pablo::Var * linebreak);
     void compileUnicodeNames(RE *& re);
     void finalizeMatchResult(MarkerType match_result, bool InvertMatches = false);
     MarkerType compile(RE * re) {
@@ -90,8 +91,8 @@ private:
         boost::container::flat_map<const Name *, MarkerType> mMap;
     };
 
-    void initializeRequiredStreams_utf8();
-    void initializeRequiredStreams_utf16();
+    void initializeRequiredStreams_utf8(pablo::Var * linebreak);
+    void initializeRequiredStreams_utf16(pablo::Var * linebreak);
     MarkerType compile(RE * re, pablo::PabloBuilder & cg);
 
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);
