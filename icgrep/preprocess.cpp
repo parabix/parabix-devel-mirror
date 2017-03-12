@@ -15,7 +15,6 @@
 #include <cc/cc_compiler.h>
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
-#include <kernels/linebreak_kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/mmap_kernel.h>
 #include <kernels/cc_kernel.h>
@@ -34,7 +33,6 @@ std::vector<size_t> LFPositions;
 extern "C" {
 void wrapped_report_pos(size_t match_pos, int dist) {
         LFPositions.push_back(match_pos);
-        // std::cout << "pos: " << match_pos << "\n";
     }
 
 }
@@ -77,13 +75,13 @@ Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder){
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
 
-    kernel::LineBreakKernelBuilder linebreakK(iBuilder, "lb", encodingBits);
-    linebreakK.generateKernel({&ByteStream}, {&MatchResults});
+    kernel::DirectCharacterClassKernelBuilder linefeedK(iBuilder, "linefeed", {re::makeCC(0x0A)}, 1);
+    linefeedK.generateKernel({&ByteStream}, {&MatchResults});
     
     kernel::CCScanKernel scanMatchK(iBuilder, 1);
     scanMatchK.generateKernel({&MatchResults}, {}); 
     
-    generatePipelineLoop(iBuilder, {&mmapK, &linebreakK, &scanMatchK});
+    generatePipelineLoop(iBuilder, {&mmapK, &linefeedK, &scanMatchK});
     iBuilder->CreateRetVoid();
 
     return mainFn;
