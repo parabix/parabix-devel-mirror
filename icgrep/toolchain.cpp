@@ -173,7 +173,7 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     PM.add(createReassociatePass());             //Reassociate expressions.
     PM.add(createGVNPass());                     //Eliminate common subexpressions.
     PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-    PM.add(createCFGSimplificationPass());
+    PM.add(createCFGSimplificationPass());    
     PM.run(*m);
 
     InitializeNativeTarget();
@@ -216,13 +216,13 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     }
 #if LLVM_VERSION_MINOR > 6
     if (codegen::DebugOptionIsSet(codegen::ShowASM)) {
-      WriteAssembly(builder.selectTarget(), m);
+        WriteAssembly(builder.selectTarget(), m);
     }
 #endif
     ExecutionEngine * engine = builder.create();
     if (engine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
-    }    
+    }
     return engine;
 }
 
@@ -235,7 +235,7 @@ void ApplyObjectCache(ExecutionEngine * e) {
         else
             cache = new ICGrepObjectCache(codegen::ObjectCacheDir);
         e->setObjectCache(cache);
-    }    
+    }
 }
 
 

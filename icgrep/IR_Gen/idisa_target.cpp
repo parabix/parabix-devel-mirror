@@ -14,15 +14,15 @@
 
 namespace IDISA {
     
-IDISA_Builder * GetIDISA_Builder(llvm::Module * mod) {
+IDISA_Builder * GetIDISA_Builder(llvm::Module * const mod) {
     if (LLVM_UNLIKELY(mod == nullptr)) {
         report_fatal_error("GetIDISA_Builder: module cannot be null");
     }
     if (LLVM_LIKELY(mod->getTargetTriple().empty())) {
         mod->setTargetTriple(llvm::sys::getProcessTriple());
     }
+    unsigned registerWidth = 0;
     Triple T(mod->getTargetTriple());
-    unsigned registerWidth = 32;
     if (T.isArch64Bit()) {
         registerWidth = 64;
     } else if (T.isArch32Bit()) {
@@ -44,7 +44,7 @@ IDISA_Builder * GetIDISA_Builder(llvm::Module * mod) {
     return new IDISA_SSE2_Builder(mod, registerWidth, codegen::BlockSize);
 }
 
-IDISA_Builder * GetIDISA_GPU_Builder(llvm::Module * mod) {
+IDISA_Builder * GetIDISA_GPU_Builder(llvm::Module * const mod) {
     return new IDISA_NVPTX20_Builder(mod, 64);
 }
 

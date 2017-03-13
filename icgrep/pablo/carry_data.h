@@ -29,11 +29,11 @@ public:
         , ImplicitSummary
         , BorrowedSummary
         , ExplicitSummary
+        , CountingSummary
     };
 
     CarryData()
-    : mSummaryType(NoSummary)
-    , mNonCarryCollapsingMode(false) {
+    : mSummaryType(NoSummary) {
 
     }
              
@@ -53,22 +53,17 @@ public:
         return (mSummaryType == ExplicitSummary);
     }
 
+    bool hasCountingSummary() const {
+        return (mSummaryType == CountingSummary);
+    }
+
     void setSummaryType(const SummaryType value) {
         mSummaryType = value;
-    }
-
-    bool nonCarryCollapsingMode() const {
-        return mNonCarryCollapsingMode;
-    }
-
-    void setNonCarryCollapsingMode(const bool value = true) {
-        mNonCarryCollapsingMode = value;
     }
     
 private:
 
     SummaryType             mSummaryType;
-    bool                    mNonCarryCollapsingMode;
 
 };
 

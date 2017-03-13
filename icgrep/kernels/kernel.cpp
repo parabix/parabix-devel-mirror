@@ -263,7 +263,6 @@ void KernelBuilder::setProcessedItemCount(Value * instance, const std::string & 
 }
 
 void KernelBuilder::setProducedItemCount(Value * instance, const std::string & name, Value * value) const {
-    //iBuilder->CallPrintInt(mKernelName + "_" + name + "_produced_count", value);
     setScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX, value);
 }
 
@@ -575,8 +574,8 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
 
     generateDoBlockMethod(); // must be implemented by the BlockOrientedKernelBuilder subtype
 
+    unsigned priorIdx = 0;
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        unsigned priorIdx = 0;
         Value * log2BlockSize = iBuilder->getSize(std::log2(iBuilder->getBitBlockWidth()));
         if (auto cb = dyn_cast<SwizzledCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
             BasicBlock * copyBack = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");

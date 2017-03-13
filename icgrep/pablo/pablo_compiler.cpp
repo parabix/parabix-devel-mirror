@@ -152,9 +152,9 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
 
     compileBlock(ifBody);
 
-    BasicBlock * ifExitBlock = iBuilder->GetInsertBlock();    
+    mCarryManager->leaveIfBody(iBuilder->GetInsertBlock());
 
-    mCarryManager->leaveIfBody(ifExitBlock);
+    BasicBlock * ifExitBlock = iBuilder->GetInsertBlock();
 
     iBuilder->CreateBr(ifEndBlock);
 
@@ -281,21 +281,11 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
 
     mCarryManager->enterLoopBody(whileEntryBlock);
 
-    //
-    // Now compile the loop body proper.  Carry-out accumulated values
-    // and iterated values of Next nodes will be computed.
     compileBlock(whileBody);
 
     // After the whileBody has been compiled, we may be in a different basic block.
-    BasicBlock * const whileExitBlock = iBuilder->GetInsertBlock();
 
-    // Terminate the while loop body with a conditional branch back.
-    Value * condition = compileExpression(whileStatement->getCondition());
-    if (condition->getType() == iBuilder->getBitBlockType()) {
-        condition = iBuilder->bitblock_any(mCarryManager->generateSummaryTest(condition));
-    }
-
-    mCarryManager->leaveLoopBody(whileExitBlock);
+    mCarryManager->leaveLoopBody(iBuilder->GetInsertBlock());
 
 
 #ifdef ENABLE_BOUNDED_WHILE
@@ -305,6 +295,8 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
         condition = iBuilder->CreateAnd(condition, iBuilder->CreateICmpUGT(new_bound, ConstantInt::getNullValue(iBuilder->getSizeTy())));
     }
 #endif
+
+    BasicBlock * const whileExitBlock = iBuilder->GetInsertBlock();
 
     // and for any variant nodes in the loop body
     for (const auto variant : variants) {
@@ -340,6 +332,12 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     }
 
     BasicBlock * whileEndBlock = mKernel->CreateBasicBlock("while.end");
+
+    // Terminate the while loop body with a conditional branch back.
+    Value * condition = compileExpression(whileStatement->getCondition());
+    if (condition->getType() == iBuilder->getBitBlockType()) {
+        condition = iBuilder->bitblock_any(mCarryManager->generateSummaryTest(condition));
+    }
 
     iBuilder->CreateCondBr(condition, whileBodyBlock, whileEndBlock);
 

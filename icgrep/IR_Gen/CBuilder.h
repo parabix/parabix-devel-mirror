@@ -30,10 +30,10 @@ public:
     void setModule(llvm::Module * m)  {
         mMod = m;
     }
-    
-    llvm::Value * CreateMalloc(llvm::Type * type, llvm::Value * size);
 
-    llvm::Value * CreateAlignedMalloc(llvm::Type * type, llvm::Value * size, const unsigned alignment);
+    llvm::Value * CreateMalloc(llvm::Value * size);
+
+    llvm::Value * CreateAlignedMalloc(llvm::Value * size, const unsigned alignment);
     
     void CreateFree(llvm::Value * const ptr);
     
@@ -122,8 +122,10 @@ public:
         return mSupportsIndirectBr;
     }
 
+    llvm::Value * CreateCeilLog2(llvm::Value * value);
+
 protected:
-    llvm::Module *      mMod;
+    llvm::Module *      mMod;    
     unsigned            mCacheLineAlignment;
     llvm::IntegerType * mSizeType;
     llvm::StructType *  mFILEtype;

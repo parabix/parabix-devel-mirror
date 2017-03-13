@@ -82,7 +82,7 @@ void generate(PabloKernel * kernel) {
 
         PabloAST * pscan = body.createAdvanceThenScanTo(pending_lparen, in_play, "pscan");
 
-        PabloAST * closed = body.createAnd(pscan, rparen, "closed");
+        PabloAST * closed = body.createAnd(pscan, rparen, "closed_rparen");
         body.createAssign(all_closed, body.createOr(all_closed, closed));
 
         body.createAssign(pending_lparen, body.createAnd(pscan, lparen));
@@ -92,7 +92,7 @@ void generate(PabloKernel * kernel) {
 
         body.createAssign(body.createExtract(matches, index), closed);
 
-        PabloAST * pending_rparen = body.createAnd(rparen, body.createNot(all_closed), "pending_rparen");
+        PabloAST * pending_rparen = body.createAnd(rparen, body.createNot(all_closed, "open_rparen"), "pending_rparen");
         body.createAssign(in_play, body.createOr(pending_lparen, pending_rparen));
         body.createAssign(index, body.createAdd(index, body.getInteger(1)));
 
@@ -122,13 +122,13 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
     
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
-    kernel::MMapSourceKernel mmapK(iBuilder, segmentSize);
+    MMapSourceKernel mmapK(iBuilder, segmentSize);
     mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
 
     CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
 
-    kernel::S2PKernel  s2pk(iBuilder);
+    S2PKernel  s2pk(iBuilder);
     s2pk.generateKernel({&ByteStream}, {&BasisBits});
 
     PabloKernel bm(iBuilder, "MatchParens",
@@ -216,7 +216,6 @@ void check(const char * byteStream, const size_t fileSize) {
                  "invalid right parens: " << unmatched_right <<
                  std::endl;
 }
-
 
 void run(MatchParens match, const std::string & fileName) {
     const boost::filesystem::path file(fileName);

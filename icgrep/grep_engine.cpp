@@ -188,13 +188,12 @@ Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool C
     Value * inputStream = iBuilder->CreateGEP(inputStreamPtr, tid);
     Value * bufferSize = iBuilder->CreateLoad(iBuilder->CreateGEP(bufferSizesPtr, bid));
 
-    if (CountOnly){
+    if (CountOnly) {
         Value * strideBlocks = ConstantInt::get(int32ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
         Value * outputThreadPtr = iBuilder->CreateGEP(outputPtr, iBuilder->CreateAdd(iBuilder->CreateMul(bid, strideBlocks), tid));
         Value * result = iBuilder->CreateCall(mainFunc, {inputStream, bufferSize});
         iBuilder->CreateStore(result, outputThreadPtr);
-    }
-    else {
+    } else {
         Type * const outputStremType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 1), 1);
         Value * outputStreamPtr = iBuilder->CreateGEP(iBuilder->CreateBitCast(outputPtr, outputStremType), startBlock);
         Value * outputStream = iBuilder->CreateGEP(outputStreamPtr, tid);
@@ -344,19 +343,18 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
         }
         iBuilder->CreateRet(matchCountK.getScalarField(matchCountK.getInstance(), "matchedLineCount"));
 
-    }
-    else{
+    } else {
         kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType);
         scanMatchK.generateKernel({&mergedResults, &LineBreakStream}, {});                
         scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
 
         KernelList.push_back(&scanMatchK);
 
-        if (pipelineParallel){
+        if (pipelineParallel) {
             generatePipelineParallel(iBuilder, KernelList);
-        } else if (segmentPipelineParallel){
+        } else if (segmentPipelineParallel) {
             generateSegmentParallelPipeline(iBuilder, KernelList);
-        }  else{
+        } else {
             generatePipelineLoop(iBuilder, KernelList);
         }
         

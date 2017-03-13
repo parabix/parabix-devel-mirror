@@ -263,13 +263,12 @@ void ExpandableBuffer::allocateBuffer() {
     Value * const capacityPtr = iBuilder->CreateGEP(mStreamSetBufferPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     iBuilder->CreateStore(iBuilder->getSize(mInitialCapacity), capacityPtr);
     Type * const bufferType = getType()->getStructElementType(1)->getPointerElementType();
-    ConstantInt * const size = iBuilder->getSize(mBufferBlocks * mInitialCapacity);
-    Value * const ptr = iBuilder->CreateAlignedMalloc(bufferType, size, iBuilder->getCacheAlignment());
-    const auto alignment = bufferType->getPrimitiveSizeInBits() / 8;
-    Constant * bufferWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(bufferType), size->getType(), false);
-    iBuilder->CreateMemZero(ptr, iBuilder->CreateMul(size, bufferWidth), alignment);
+    Constant * const bufferWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(bufferType), iBuilder->getSizeTy(), false);
+    Constant * const size = ConstantExpr::getMul(iBuilder->getSize(mBufferBlocks * mInitialCapacity), bufferWidth);
+    Value * const ptr = iBuilder->CreateAlignedMalloc(size, iBuilder->getCacheAlignment());
+    iBuilder->CreateMemZero(ptr, size, bufferType->getPrimitiveSizeInBits() / 8);
     Value * const streamSetPtr = iBuilder->CreateGEP(mStreamSetBufferPtr, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
-    iBuilder->CreateStore(ptr, streamSetPtr);
+    iBuilder->CreateStore(iBuilder->CreatePointerCast(ptr, bufferType->getPointerTo()), streamSetPtr);
 }
 
 std::pair<Value *, Value *> ExpandableBuffer::getInternalStreamBuffer(llvm::Value * self, llvm::Value * streamIndex, Value * blockIndex, const bool readOnly) const {
@@ -302,7 +301,10 @@ std::pair<Value *, Value *> ExpandableBuffer::getInternalStreamBuffer(llvm::Valu
 
     Type * elementType = getType()->getStructElementType(1)->getPointerElementType();
     Constant * const vectorWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(elementType), capacity->getType(), false);
-    Value * newCapacity = iBuilder->CreateMul(iBuilder->CreateAdd(streamIndex, iBuilder->getSize(1)), iBuilder->getSize(2), "newCapacity");
+
+    Value * newCapacity = iBuilder->CreateAdd(streamIndex, iBuilder->getSize(1));
+    newCapacity = iBuilder->CreateCeilLog2(newCapacity);
+    newCapacity = iBuilder->CreateShl(iBuilder->getSize(1), newCapacity, "newCapacity");
 
     std::string tmp;
     raw_string_ostream out(tmp);
@@ -329,7 +331,7 @@ std::pair<Value *, Value *> ExpandableBuffer::getInternalStreamBuffer(llvm::Valu
         iBuilder->SetInsertPoint(entry);
 
         Value * size = iBuilder->CreateMul(newCapacity, iBuilder->getSize(mBufferBlocks));
-        Value * newStreamSet = iBuilder->CreateAlignedMalloc(elementType, size, iBuilder->getCacheAlignment());
+        Value * newStreamSet = iBuilder->CreatePointerCast(iBuilder->CreateAlignedMalloc(iBuilder->CreateMul(size, vectorWidth), iBuilder->getCacheAlignment()), elementType->getPointerTo());
         Value * const diffCapacity = iBuilder->CreateMul(iBuilder->CreateSub(newCapacity, capacity), vectorWidth);
 
         const auto alignment = elementType->getPrimitiveSizeInBits() / 8;

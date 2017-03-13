@@ -122,8 +122,6 @@ private:
 
     bool                                            mHasLongAdvance;
 
-    bool                                            mHasVariableLengthCarryData;
-
     bool                                            mHasLoop;
     unsigned                                        mLoopDepth;
     llvm::Value *                                   mLoopSelector;
@@ -136,7 +134,8 @@ private:
     unsigned                                        mCarryScopes;
     std::vector<unsigned>                           mCarryScopeIndex;
 
-    std::vector<llvm::Value *>                      mCarrySummary;
+    std::vector<llvm::Value *>                      mCarryInSummary;
+    std::vector<llvm::Value *>                      mCarryOutSummary;
 };
 
 }

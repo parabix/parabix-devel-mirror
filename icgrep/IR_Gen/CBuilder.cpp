@@ -13,6 +13,8 @@
 #include <fcntl.h>
 #include <toolchain.h>
 
+#include <llvm/Support/raw_ostream.h>
+
 using namespace llvm;
 
 Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) {
@@ -105,8 +107,9 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
     CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), num});
 }
 
-Value * CBuilder::CreateMalloc(Type * type, Value * size) {
-    DataLayout DL(getModule());
+Value * CBuilder::CreateMalloc(Value * size) {
+    Module * const m = getModule();
+    DataLayout DL(m);
     IntegerType * const intTy = getIntPtrTy(DL);
     if (size->getType() != intTy) {
         if (isa<Constant>(size)) {
@@ -115,71 +118,52 @@ Value * CBuilder::CreateMalloc(Type * type, Value * size) {
             size = CreateZExtOrTrunc(size, intTy);
         }
     }    
-    Constant * width = ConstantExpr::getSizeOf(type);
-    if (LLVM_UNLIKELY(width->getType() != intTy)) {
-        width = ConstantExpr::getIntegerCast(width, intTy, false);
-    }
-    if (!width->isOneValue()) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getMul(cast<Constant>(size), width);
-        } else {
-            size = CreateMul(size, width);
-        }
-    }
-    Module * const m = getModule();
+    PointerType * const voidPtrTy = getVoidPtrTy();
     Function * malloc = m->getFunction("malloc");
     if (malloc == nullptr) {
-        PointerType * const voidPtrTy = getVoidPtrTy();
         FunctionType * fty = FunctionType::get(voidPtrTy, {intTy}, false);
         malloc = Function::Create(fty, Function::ExternalLinkage, "malloc", mMod);
         malloc->setCallingConv(CallingConv::C);
         malloc->setDoesNotAlias(0);
     }
     assert (size->getType() == intTy);
-    CallInst * ci = CreateCall(malloc, size);
+    CallInst * ci = CreateCall(malloc, size); assert (ci);
     ci->setTailCall();
     ci->setCallingConv(malloc->getCallingConv());
-    Value * ptr = CreateBitOrPointerCast(ci, type->getPointerTo());
+    Value * ptr = CreatePointerCast(ci, voidPtrTy); assert (ptr);
     CreateAssert(ptr, "FATAL ERROR: out of memory");
     return ptr;
 }
 
-Value * CBuilder::CreateAlignedMalloc(Type * type, Value * size, const unsigned alignment) {
-    assert ((alignment & (alignment - 1)) == 0); // is power of 2
-    DataLayout DL(getModule());
+Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
+    if (LLVM_UNLIKELY((alignment & (alignment - 1)) != 0)) {
+        report_fatal_error("CreateAlignedMalloc: alignment must be a power of 2");
+    }
+    DataLayout DL(mMod);
     IntegerType * const intTy = getIntPtrTy(DL);
-    if (size->getType() != intTy) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
-        } else {
-            size = CreateZExtOrTrunc(size, intTy);
-        }
-    }
-    const auto byteWidth = (intTy->getBitWidth() / 8);
-    Constant * const offset = ConstantInt::get(intTy, alignment + byteWidth - 1);
-    Constant * width = ConstantExpr::getSizeOf(type);
-    if (LLVM_UNLIKELY(width->getType() != intTy)) {
-        width = ConstantExpr::getIntegerCast(width, intTy, false);
-    }
-    if (!width->isOneValue()) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getMul(cast<Constant>(size), width);
-        } else {
-            size = CreateMul(size, width);
-        }
-    }
-    if (isa<Constant>(size)) {
-        size = ConstantExpr::getAdd(cast<Constant>(size), offset);
-    } else {
+    Function * aligned_malloc = mMod->getFunction("aligned_malloc" + std::to_string(alignment));
+    if (LLVM_UNLIKELY(aligned_malloc == nullptr)) {
+        const auto ip = saveIP();
+        PointerType * const voidPtrTy = getVoidPtrTy();
+        FunctionType * fty = FunctionType::get(voidPtrTy, {intTy}, false);
+        aligned_malloc = Function::Create(fty, Function::InternalLinkage, "aligned_malloc" + std::to_string(alignment), mMod);
+        aligned_malloc->setCallingConv(CallingConv::C);
+        aligned_malloc->setDoesNotAlias(0);
+        aligned_malloc->addFnAttr(Attribute::AlwaysInline);
+        Value * size = &*aligned_malloc->arg_begin();
+        SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", aligned_malloc));
+        const auto byteWidth = (intTy->getBitWidth() / 8);
+        Constant * const offset = ConstantInt::get(intTy, alignment + byteWidth - 1);
         size = CreateAdd(size, offset);
+        Value * unaligned = CreatePtrToInt(CreateMalloc(size), intTy);
+        Value * aligned = CreateAnd(CreateAdd(unaligned, offset), ConstantExpr::getNot(ConstantInt::get(intTy, alignment - 1)));
+        Value * prefix = CreateIntToPtr(CreateSub(aligned, ConstantInt::get(intTy, byteWidth)), intTy->getPointerTo());
+        assert (unaligned->getType() == prefix->getType()->getPointerElementType());
+        CreateAlignedStore(unaligned, prefix, byteWidth);
+        CreateRet(CreateIntToPtr(aligned, voidPtrTy));
+        restoreIP(ip);
     }
-    assert (size->getType() == intTy);
-    Value * unaligned = CreatePtrToInt(CreateMalloc(getInt8Ty(), size), intTy);
-    Value * aligned = CreateAnd(CreateAdd(unaligned, offset), ConstantExpr::getNot(ConstantInt::get(intTy, alignment - 1)));
-    Value * prefix = CreateIntToPtr(CreateSub(aligned, ConstantInt::get(intTy, byteWidth)), intTy->getPointerTo());
-    assert (unaligned->getType() == prefix->getType()->getPointerElementType());
-    CreateAlignedStore(unaligned, prefix, byteWidth);
-    return CreateIntToPtr(aligned, type->getPointerTo());
+    return CreateCall(aligned_malloc, {CreateZExtOrTrunc(size, intTy)});
 }
 
 void CBuilder::CreateFree(Value * const ptr) {
@@ -229,22 +213,11 @@ Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
     DataLayout DL(getModule());
     IntegerType * const intTy = getIntPtrTy(DL);
     PointerType * type = cast<PointerType>(ptr->getType());
-    Constant * width = ConstantExpr::getSizeOf(type->getPointerElementType());
-    if (LLVM_UNLIKELY(width->getType() != intTy)) {
-        width = ConstantExpr::getIntegerCast(width, intTy, false);
-    }
     if (size->getType() != intTy) {
         if (isa<Constant>(size)) {
             size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
         } else {
             size = CreateZExtOrTrunc(size, intTy);
-        }
-    }
-    if (!width->isOneValue()) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getMul(cast<Constant>(size), width);
-        } else {
-            size = CreateMul(size, width);
         }
     }
     Module * const m = getModule();
@@ -274,13 +247,13 @@ LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
     return inst;
     
 }
+
 StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     const auto alignment = ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
     StoreInst * inst = CreateAlignedStore(val, ptr, alignment);
     inst->setOrdering(AtomicOrdering::Release);
     return inst;
 }
-
 
 PointerType * CBuilder::getFILEptrTy() {
     if (mFILEtype == nullptr) {
@@ -389,7 +362,7 @@ void CBuilder::CreateAssert(Value * const assertion, StringRef failureMessage) {
             SetInsertPoint(failure);
             Value * len = CreateAdd(sz, getSize(21));
             ConstantInt * _11 = getSize(11);
-            Value * bytes = CreateMalloc(getInt8Ty(), len);
+            Value * bytes = CreatePointerCast(CreateMalloc(len), getInt8PtrTy());
             CreateMemCpy(bytes, CreateGlobalStringPtr("Assertion `"), _11, 1);
             CreateMemCpy(CreateGEP(bytes, _11), msg, sz, 1);
             CreateMemCpy(CreateGEP(bytes, CreateAdd(sz, _11)), CreateGlobalStringPtr("' failed.\n"), getSize(10), 1);
@@ -421,6 +394,15 @@ BranchInst * CBuilder::CreateLikelyCondBr(Value * Cond, BasicBlock * True, Basic
         report_fatal_error("branch weight probability must be in [0,100]");
     }
     return CreateCondBr(Cond, True, False, mdb.createBranchWeights(probability, 100 - probability));
+}
+
+llvm::Value * CBuilder::CreateCeilLog2(llvm::Value * value) {
+    IntegerType * ty = cast<IntegerType>(value->getType());
+    CreateAssert(value, "CreateCeilLog2: value cannot be zero");
+    Value * m = CreateCall(Intrinsic::getDeclaration(mMod, Intrinsic::ctlz, ty), {value, ConstantInt::getFalse(getContext())});
+    Value * isPowOf2 = CreateICmpEQ(CreateAnd(value, CreateSub(value, ConstantInt::get(ty, 1))), ConstantInt::getNullValue(ty));
+    m = CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m);
+    return CreateSelect(isPowOf2, m, CreateAdd(m, ConstantInt::get(m->getType(), 1)));
 }
 
 CBuilder::CBuilder(Module * const m, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes)

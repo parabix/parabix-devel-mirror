@@ -20,6 +20,11 @@ using namespace llvm;
 
 namespace pablo {
 
+inline static unsigned floor_log2(const unsigned v) {
+    assert ("log2(0) is undefined!" && v != 0);
+    return 31 - __builtin_clz(v);
+}
+
 inline static unsigned nearest_pow2(const uint32_t v) {
     assert(v > 0 && v < (UINT32_MAX / 2));
     return (v < 2) ? 1 : (1 << (32 - __builtin_clz(v - 1)));
@@ -96,8 +101,15 @@ void CarryManager::initializeCodeGen() {
     mCurrentFrameIndex = 0;
     mCarryScopes = 0;
     mCarryScopeIndex.push_back(0);
+
+
     assert (mCarryFrame.empty());
-    assert (mCarrySummary.empty());
+
+    assert (mCarryInSummary.empty());
+    mCarryInSummary.push_back(Constant::getNullValue(mCarryPackType));
+
+    assert (mCarryOutSummary.empty());
+    mCarryOutSummary.push_back(Constant::getNullValue(mCarryPackType));
 
     if (mHasLoop) {
         mLoopSelector = mKernel->getScalarField("selector");
@@ -117,7 +129,13 @@ void CarryManager::finalizeCodeGen() {
         mKernel->setScalarField("CarryBlockIndex", idx);
     }
     assert (mCarryFrame.empty());
-    assert (mCarrySummary.empty());
+
+    assert (mCarryInSummary.size() == 1);
+    mCarryInSummary.clear();
+
+    assert (mCarryOutSummary.size() == 1);
+    mCarryOutSummary.clear();
+
     assert (mCarryScopeIndex.size() == 1);
     mCarryScopeIndex.clear();
 }
@@ -139,94 +157,235 @@ void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
     assert (mHasLoop);
 
     if (mCarryInfo->hasSummary()) {
-        PHINode * carrySummary = iBuilder->CreatePHI(mCarryPackType, 2, "summary");
-        assert (!mCarrySummary.empty());
-        carrySummary->addIncoming(mCarrySummary.back(), entryBlock);
+        PHINode * phiCarryOutSummary = iBuilder->CreatePHI(mCarryPackType, 2, "summary");
+        assert (!mCarryOutSummary.empty());
+        phiCarryOutSummary->addIncoming(mCarryOutSummary.back(), entryBlock);
         // Replace the incoming carry summary with the phi node and add the phi node to the stack
         // so that we can properly OR it into the outgoing summary value.
-        mCarrySummary.back() = carrySummary;
-        mCarrySummary.push_back(carrySummary);
+        mCarryOutSummary.back() = phiCarryOutSummary;
+        Value * carryOut = phiCarryOutSummary;
+        // In non-carry-collapsing mode, the carry out summary of this block iteration *MUST* match the carry in of the
+        // subsequent block iteration. Otherwise the subsequent block iteration may become trapped in an infinite loop.
+        // To ensure this, we effectively "zero-initialize" the carry-out coming into this loop but OR in carry-out
+        // of the outer scope for the phi value the end of the loop body. This avoids us needing to maintain a carry-in
+        // summary for all outer scopes whenever only a nested scope requires this mode.
+        if (LLVM_UNLIKELY(mCarryInfo->hasCountingSummary())) {
+            carryOut = Constant::getNullValue(mCarryPackType);
+        }
+        mCarryOutSummary.push_back(carryOut);
     }
 
-    if (LLVM_UNLIKELY(mCarryInfo->nonCarryCollapsingMode())) {
+    if (LLVM_UNLIKELY(mCarryInfo->hasCountingSummary())) {
+
         // Check whether we need to resize the carry state
         PHINode * index = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
         mLoopIndicies.push_back(index);
         index->addIncoming(iBuilder->getSize(0), entryBlock);
+
+        mCarryInSummary.push_back(Constant::getNullValue(mCarryPackType));
+
         Value * capacityPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
         Value * capacity = iBuilder->CreateLoad(capacityPtr, false, "capacity");
+        Constant * const ONE = ConstantInt::get(capacity->getType(), 1);
         Value * arrayPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
         Value * array = iBuilder->CreateLoad(arrayPtr, false, "array");
 
-        BasicBlock * entry = iBuilder->GetInsertBlock();
-        BasicBlock * resizeBlock = mKernel->CreateBasicBlock("");
-        BasicBlock * cleanUpBlock = mKernel->CreateBasicBlock("");
-        BasicBlock * zeroBlock = mKernel->CreateBasicBlock("");
-        BasicBlock * codeBlock = mKernel->CreateBasicBlock("");
+        BasicBlock * const entry = iBuilder->GetInsertBlock();
+        BasicBlock * const resizeCarryState = mKernel->CreateBasicBlock("ResizeCarryState");
+        BasicBlock * const reallocExisting = mKernel->CreateBasicBlock("ReallocExisting");
+        BasicBlock * const createNew = mKernel->CreateBasicBlock("CreateNew");
+        BasicBlock * const resumeKernel = mKernel->CreateBasicBlock("ResumeKernel");
 
-        Value * cond = iBuilder->CreateICmpULT(index, capacity);
-        iBuilder->CreateCondBr(cond, codeBlock, resizeBlock);
-        iBuilder->SetInsertPoint(resizeBlock);
+        iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpULT(index, capacity), resumeKernel, resizeCarryState);
 
-        Type * const carryStateType = array->getType()->getPointerElementType();
+        // RESIZE CARRY BLOCK
+        iBuilder->SetInsertPoint(resizeCarryState);
+        const auto BlockWidth = mCarryPackType->getPrimitiveSizeInBits() / 8;
+        const auto Log2BlockWidth = floor_log2(BlockWidth);
+        Constant * const carryStateWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(array->getType()->getPointerElementType()), iBuilder->getSizeTy(), false);
+        Value * summaryPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
 
-        Constant * carryStateWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(carryStateType), capacity->getType(), false);
-        Value * newCapacity = iBuilder->CreateSelect(iBuilder->CreateICmpNE(index, ConstantInt::getNullValue(index->getType())), iBuilder->CreateMul(index, iBuilder->getSize(2)), iBuilder->getSize(4));
-        Value * newArray = iBuilder->CreateAlignedMalloc(carryStateType, newCapacity, iBuilder->getCacheAlignment());
+        Value * const hasCarryState = iBuilder->CreateICmpNE(array, ConstantPointerNull::get(cast<PointerType>(array->getType())));
 
-        assert (newCapacity->getType() == capacity->getType());
-        assert (newArray->getType() == array->getType());
+        iBuilder->CreateLikelyCondBr(hasCarryState, reallocExisting, createNew);
 
-        Value * isNullCarryState = iBuilder->CreateICmpEQ(array, ConstantPointerNull::get(cast<PointerType>(array->getType())));
+        // REALLOCATE EXISTING
+        iBuilder->SetInsertPoint(reallocExisting);
 
-        iBuilder->CreateCondBr(isNullCarryState, zeroBlock, cleanUpBlock);
-        iBuilder->SetInsertPoint(cleanUpBlock);
+        Value * const capacitySize = iBuilder->CreateMul(capacity, carryStateWidth);
+        Value * const newCapacitySize = iBuilder->CreateShl(capacitySize, 1); // x 2
 
-        iBuilder->CreateMemCpy(newArray, array, iBuilder->CreateMul(capacity, carryStateWidth), iBuilder->getCacheAlignment());
+
+        Value * newArray = iBuilder->CreateAlignedMalloc(newCapacitySize, iBuilder->getCacheAlignment());
+        iBuilder->CreateMemCpy(newArray, array, capacitySize, BlockWidth);
+        iBuilder->CreateMemZero(iBuilder->CreateGEP(newArray, capacitySize), capacitySize, BlockWidth);
         iBuilder->CreateAlignedFree(array);
-        iBuilder->CreateBr(zeroBlock);
-
-        iBuilder->SetInsertPoint(zeroBlock);
-
-        iBuilder->CreateMemZero(iBuilder->CreateGEP(newArray, capacity), iBuilder->CreateMul(iBuilder->CreateSub(newCapacity, capacity), carryStateWidth), iBuilder->getCacheAlignment());
-        iBuilder->CreateStore(newCapacity, capacityPtr);
+        newArray = iBuilder->CreatePointerCast(newArray, array->getType());
         iBuilder->CreateStore(newArray, arrayPtr);
 
-        iBuilder->CreateBr(codeBlock);
+        Value * const log2capacity = iBuilder->CreateAdd(iBuilder->CreateCeilLog2(capacity), ONE);
+        Value * const summarySize = iBuilder->CreateShl(log2capacity, Log2BlockWidth + 1); // x 2(BlockWidth)
+        Value * const newLog2Capacity = iBuilder->CreateAdd(log2capacity, ONE);
+        Value * const newSummarySize = iBuilder->CreateShl(newLog2Capacity, Log2BlockWidth + 1); // x 2(BlockWidth)
 
+        Value * const summary = iBuilder->CreateLoad(summaryPtr, false);
+        Value * newSummary = iBuilder->CreateAlignedMalloc(newSummarySize, BlockWidth);
+        iBuilder->CreateMemCpy(newSummary, summary, summarySize, BlockWidth);
+        iBuilder->CreateMemZero(iBuilder->CreateGEP(newSummary, summarySize), iBuilder->getSize(2 * BlockWidth), BlockWidth);
+        iBuilder->CreateAlignedFree(summary);
+
+        Value * ptr1 = iBuilder->CreateGEP(newSummary, summarySize);
+        ptr1 = iBuilder->CreatePointerCast(ptr1, mCarryPackType->getPointerTo());
+
+        Value * ptr2 = iBuilder->CreateGEP(newSummary, iBuilder->CreateAdd(summarySize, iBuilder->getSize(BlockWidth)));
+        ptr2 = iBuilder->CreatePointerCast(ptr2, mCarryPackType->getPointerTo());
+
+        newSummary = iBuilder->CreatePointerCast(newSummary, mCarryPackType->getPointerTo());
+        iBuilder->CreateStore(newSummary, summaryPtr);
+        Value * const newCapacity = iBuilder->CreateShl(ONE, log2capacity);
+
+        iBuilder->CreateStore(newCapacity, capacityPtr);
+
+        iBuilder->CreateBr(resumeKernel);
+
+        // CREATE NEW
+        iBuilder->SetInsertPoint(createNew);
+
+        Constant * const initialLog2Capacity = iBuilder->getInt64(4);
+        Constant * const initialCapacity = ConstantExpr::getShl(ONE, initialLog2Capacity);
+        Constant * const initialCapacitySize = ConstantExpr::getMul(initialCapacity, carryStateWidth);
+
+        Value * initialArray = iBuilder->CreateAlignedMalloc(initialCapacitySize, iBuilder->getCacheAlignment());
+        iBuilder->CreateMemZero(initialArray, initialCapacitySize, BlockWidth);
+        initialArray = iBuilder->CreatePointerCast(initialArray, array->getType());
+        iBuilder->CreateStore(initialArray, arrayPtr);
+
+        Constant * initialSummarySize = ConstantExpr::getShl(ConstantExpr::getAdd(initialLog2Capacity, iBuilder->getInt64(1)), iBuilder->getInt64(Log2BlockWidth + 1));
+        Value * initialSummary = iBuilder->CreateAlignedMalloc(initialSummarySize, BlockWidth);
+        iBuilder->CreateMemZero(initialSummary, initialSummarySize, BlockWidth);
+        initialSummary = iBuilder->CreatePointerCast(initialSummary, mCarryPackType->getPointerTo());
+        iBuilder->CreateStore(initialSummary, summaryPtr);
+
+        iBuilder->CreateStore(initialCapacity, capacityPtr);
+
+        iBuilder->CreateBr(resumeKernel);
+
+        // RESUME KERNEL
+        iBuilder->SetInsertPoint(resumeKernel);
         // Load the appropriate carry stat block
-        iBuilder->SetInsertPoint(codeBlock);
+        PHINode * phiArrayPtr = iBuilder->CreatePHI(array->getType(), 3);
+        phiArrayPtr->addIncoming(array, entry);
+        phiArrayPtr->addIncoming(initialArray, createNew);
+        phiArrayPtr->addIncoming(newArray, reallocExisting);
 
-        PHINode * phiArray = iBuilder->CreatePHI(array->getType(), 2);
-        phiArray->addIncoming(array, entry);
-        phiArray->addIncoming(newArray, zeroBlock);
-
-        mCurrentFrame = iBuilder->CreateGEP(phiArray, index);
-
+        // note: the 3 here is only to pass the assertion later. It refers to the number of elements in the carry data struct.
+        mCarryFrame.emplace_back(mCurrentFrame, 3);
+        mCurrentFrame = iBuilder->CreateGEP(phiArrayPtr, index);
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief leaveLoopBody
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::leaveLoopBody(BasicBlock * const exitBlock) {
-    if (mCarryInfo->hasSummary()) {
-        const auto n = mCarrySummary.size(); assert (n > 1);
-        cast<PHINode>(mCarrySummary[n - 2])->addIncoming(mCarrySummary[n - 1], exitBlock);
-        mCarrySummary.pop_back();
-    }
-    if (LLVM_UNLIKELY(mCarryInfo->nonCarryCollapsingMode())) {
+void CarryManager::leaveLoopBody(BasicBlock * /* exitBlock */) {
+
+    if (LLVM_UNLIKELY(mCarryInfo->hasCountingSummary())) {
+
+        std::tie(mCurrentFrame, mCurrentFrameIndex) = mCarryFrame.back();
+        mCarryFrame.pop_back();
+        assert (!mCarryInSummary.empty());
+        Value * carryInAccumulator = mCarryInSummary.back();
+        Value * carryOutAccumulator = mCarryOutSummary.back();
+
+        // In non-carry-collapsing mode, we cannot rely on the fact that performing a single iteration of this
+        // loop will consume all of the incoming carries from the prior block. We need to subtract the carries
+        // consumed by this iteration from our carry summary state. To do so in parallel, we use the the half-
+        // subtractor circuit to do it in ceil log2 steps. Similarly, we compute our carry out summary state
+        // (for the subsequent block to subtract) using a half-adder circuit.
+
+        // NOTE: this requires that, for all loop iterations, i, and all block iterations, j, the carry in
+        // summary, CI_i,j, matches the carry out summary of the prior block iteration, CO_i,j - 1.
+        // Otherwise we may end up with an incorrect result or being trapped in an infinite loop.
+
+        Value * capacityPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+        Value * capacity = iBuilder->CreateLoad(capacityPtr, false);
+        Value * summaryPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
+        Value * summary = iBuilder->CreateLoad(summaryPtr, false);
+
+        Constant * const ONE = ConstantInt::get(capacity->getType(), 1);
+
+        Value * loopSelector = iBuilder->CreateZExt(mLoopSelector, capacity->getType());
+
+        BasicBlock * entry = iBuilder->GetInsertBlock();
+        BasicBlock * update = mKernel->CreateBasicBlock("UpdateNonCarryCollapsingSummary");
+        BasicBlock * resume = mKernel->CreateBasicBlock("ResumeAfterUpdatingNonCarryCollapsingSummary");
+
+        iBuilder->CreateBr(update);
+
+        iBuilder->SetInsertPoint(update);
+        PHINode * i = iBuilder->CreatePHI(capacity->getType(), 2);
+        i->addIncoming(ConstantInt::getNullValue(capacity->getType()), entry);
+        PHINode * const borrow = iBuilder->CreatePHI(carryInAccumulator->getType(), 2);
+        borrow->addIncoming(carryInAccumulator, entry);
+        PHINode * const carry = iBuilder->CreatePHI(carryOutAccumulator->getType(), 2);
+        carry->addIncoming(carryOutAccumulator, entry);
+        // OR the updated carry in summary later for the summaryTest
+        PHINode * const carryInSummary = iBuilder->CreatePHI(mCarryPackType, 2);
+        carryInSummary->addIncoming(Constant::getNullValue(mCarryPackType), entry);
+
+        // half subtractor
+        Value * const carryInOffset = iBuilder->CreateOr(iBuilder->CreateShl(i, 1), loopSelector);
+        Value * const carryInPtr = iBuilder->CreateGEP(summary, carryInOffset);
+        Value * const carryIn = iBuilder->CreateBlockAlignedLoad(carryInPtr);
+        Value * const carryInPrime = iBuilder->CreateXor(carryIn, borrow);
+        Value * const finalCarryInSummary = iBuilder->CreateOr(carryInSummary, carryInPrime);
+        iBuilder->CreateBlockAlignedStore(carryInPrime, carryInPtr);
+        carryInSummary->addIncoming(finalCarryInSummary, update);
+        Value * finalBorrow = iBuilder->CreateAnd(iBuilder->CreateNot(carryIn), borrow);
+        borrow->addIncoming(finalBorrow, update);
+
+        // half adder
+        Value * const carryOutOffset = iBuilder->CreateXor(carryInOffset, ConstantInt::get(carryInOffset->getType(), 1));
+        Value * const carryOutPtr = iBuilder->CreateGEP(summary, carryOutOffset);
+        Value * const carryOut = iBuilder->CreateBlockAlignedLoad(carryOutPtr);
+        Value * const carryOutPrime = iBuilder->CreateXor(carryOut, carry);
+        iBuilder->CreateBlockAlignedStore(carryOutPrime, carryOutPtr);
+        Value * finalCarry = iBuilder->CreateAnd(carryOut, carry);
+        carry->addIncoming(finalCarry, update);
+
+        // loop condition
+        Value * n = iBuilder->CreateAdd(i, ONE);
+        i->addIncoming(n, update);
+        iBuilder->CreateCondBr(iBuilder->CreateICmpNE(iBuilder->CreateShl(ONE, i), capacity), update, resume);
+
+        iBuilder->SetInsertPoint(resume);
+
+        IntegerType * ty = IntegerType::get(iBuilder->getContext(), iBuilder->getBitBlockWidth());
+        iBuilder->CreateAssert(iBuilder->CreateICmpEQ(iBuilder->CreateBitCast(finalBorrow, ty), Constant::getNullValue(ty)), "borrow != 0");
+        iBuilder->CreateAssert(iBuilder->CreateICmpEQ(iBuilder->CreateBitCast(finalCarry, ty), Constant::getNullValue(ty)), "carry != 0");
+
         assert (!mLoopIndicies.empty());
         PHINode * index = mLoopIndicies.back();
-        index->addIncoming(iBuilder->CreateAdd(index, iBuilder->getSize(1)), exitBlock);
+        index->addIncoming(iBuilder->CreateAdd(index, iBuilder->getSize(1)), resume);
         mLoopIndicies.pop_back();
+        mCarryInSummary.back() = finalCarryInSummary;
+    }
+    if (mCarryInfo->hasSummary()) {
+        const auto n = mCarryOutSummary.size(); assert (n > 1);
+        Value * carryOut = mCarryOutSummary.back();
+        mCarryOutSummary.pop_back();
+        PHINode * phiCarryOut = cast<PHINode>(mCarryOutSummary.back());
+        if (LLVM_UNLIKELY(mCarryInfo->hasCountingSummary())) {
+            carryOut = iBuilder->CreateOr(phiCarryOut, carryOut);
+        }
+        phiCarryOut->addIncoming(carryOut, iBuilder->GetInsertBlock());
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief leaveLoopScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::leaveLoopScope(BasicBlock * const entryBlock, BasicBlock * const exitBlock) {
+void CarryManager::leaveLoopScope(BasicBlock * const /* entryBlock */, BasicBlock * const /* exitBlock */) {
     assert (mLoopDepth > 0);
     --mLoopDepth;
     leaveScope();
@@ -238,7 +397,7 @@ void CarryManager::leaveLoopScope(BasicBlock * const entryBlock, BasicBlock * co
 void CarryManager::enterIfScope(const PabloBlock * const scope) {
     ++mIfDepth;
     enterScope(scope);
-    mCarrySummary.push_back(Constant::getNullValue(mCarryPackType));
+    mCarryOutSummary.push_back(Constant::getNullValue(mCarryPackType));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -246,28 +405,34 @@ void CarryManager::enterIfScope(const PabloBlock * const scope) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::generateSummaryTest(Value * condition) {
     if (LLVM_LIKELY(mCarryInfo->hasSummary())) {
-        // enter the (potentially nested) struct and extract the summary element (always element 0)
-        unsigned count = 2;
-        if (LLVM_UNLIKELY(mCarryInfo->hasBorrowedSummary())) {
-            Type * frameTy = mCurrentFrame->getType()->getPointerElementType();
-            count = 1;
-            while (frameTy->isStructTy()) {
-                ++count;
-                frameTy = frameTy->getStructElementType(0);
+        Value * summary = nullptr;
+        if (LLVM_UNLIKELY(mCarryInfo->hasCountingSummary())) {
+            summary = mCarryInSummary.back();
+            mCarryInSummary.pop_back();
+        } else {
+            // enter the (potentially nested) struct and extract the summary element (always element 0)
+            unsigned count = 2;
+            if (LLVM_UNLIKELY(mCarryInfo->hasBorrowedSummary())) {
+                Type * frameTy = mCurrentFrame->getType()->getPointerElementType();
+                count = 1;
+                while (frameTy->isStructTy()) {
+                    ++count;
+                    frameTy = frameTy->getStructElementType(0);
+                }
             }
+            const bool useLoopSelector = mCarryInfo->hasImplicitSummary() && mLoopDepth > 0;
+            const auto length = count + (useLoopSelector ? 1 : 0);
+            Value * indicies[length];
+            std::fill(indicies, indicies + count, iBuilder->getInt32(0));
+            if (LLVM_UNLIKELY(useLoopSelector)) {
+                indicies[count] = mLoopSelector;
+            }
+            ArrayRef<Value *> ar(indicies, length);
+            Value * ptr = iBuilder->CreateGEP(mCurrentFrame, ar);
+            // Sanity check: make sure we're accessing a summary value
+            assert (ptr->getType()->getPointerElementType()->canLosslesslyBitCastTo(condition->getType()));
+            summary = iBuilder->CreateBlockAlignedLoad(ptr);
         }
-        const bool useLoopSelector = mCarryInfo->hasImplicitSummary() && mLoopDepth > 0;
-        const auto length = count + (useLoopSelector ? 1 : 0);
-        Value * indicies[length];
-        std::fill(indicies, indicies + count, iBuilder->getInt32(0));
-        if (LLVM_UNLIKELY(useLoopSelector)) {
-            indicies[count] = mLoopSelector;
-        }
-        ArrayRef<Value *> ar(indicies, length);
-        Value * ptr = iBuilder->CreateGEP(mCurrentFrame, ar);
-        // Sanity check: make sure we're accessing a summary value
-        assert (ptr->getType()->getPointerElementType()->canLosslesslyBitCastTo(condition->getType()));
-        Value * summary = iBuilder->CreateBlockAlignedLoad(ptr);
         condition = iBuilder->simd_or(condition, summary);
     }
     return condition;
@@ -284,15 +449,15 @@ void CarryManager::enterIfBody(BasicBlock * const entryBlock) { assert (entryBlo
  * @brief leaveIfBody
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::leaveIfBody(BasicBlock * const exitBlock) { assert (exitBlock);
-    const auto n = mCarrySummary.size();
+    const auto n = mCarryOutSummary.size();
     if (LLVM_LIKELY(mCarryInfo->hasExplicitSummary())) {
-        assert (!mCarrySummary.empty());
+        assert (!mCarryOutSummary.empty());
         Value * ptr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-        Value * const value = iBuilder->CreateBitCast(mCarrySummary.back(), mBitBlockType);
+        Value * const value = iBuilder->CreateBitCast(mCarryOutSummary.back(), mBitBlockType);
         iBuilder->CreateBlockAlignedStore(value, ptr);
     }
     if (n > 1) {
-        mCarrySummary[n - 1] = iBuilder->CreateOr(mCarrySummary[n - 1], mCarrySummary[n - 2], "summary");
+        mCarryOutSummary[n - 1] = iBuilder->CreateOr(mCarryOutSummary[n - 1], mCarryOutSummary[n - 2], "summary");
     }
 }
 
@@ -302,24 +467,24 @@ void CarryManager::leaveIfBody(BasicBlock * const exitBlock) { assert (exitBlock
 void CarryManager::leaveIfScope(BasicBlock * const entryBlock, BasicBlock * const exitBlock) {
     assert (mIfDepth > 0);
     if (mCarryInfo->hasSummary()) {
-        const auto n = mCarrySummary.size(); assert (n > 0);
+        const auto n = mCarryOutSummary.size(); assert (n > 0);
         if (n > 1) {
             // When leaving a nested If scope with a summary value, phi out the summary to ensure the
             // appropriate summary is stored in the outer scope.
-            Value * nested = mCarrySummary[n - 1];
-            Value * outer = mCarrySummary[n - 2];
+            Value * nested = mCarryOutSummary[n - 1];
+            Value * outer = mCarryOutSummary[n - 2];
             if (LLVM_LIKELY(nested != outer)) {
                 assert (nested->getType() == outer->getType());
                 PHINode * const phi = iBuilder->CreatePHI(nested->getType(), 2, "summary");
                 phi->addIncoming(outer, entryBlock);
                 phi->addIncoming(nested, exitBlock);
-                mCarrySummary[n - 2] = phi;
+                mCarryOutSummary[n - 2] = phi;
             }
         }        
     }
     --mIfDepth;
     leaveScope();
-    mCarrySummary.pop_back();
+    mCarryOutSummary.pop_back();
 }
 
 /** ------------------------------------------------------------------------------------------------------------ *
@@ -446,6 +611,11 @@ Value * CarryManager::longAdvanceCarryInCarryOut(const unsigned shiftAmount, Val
     Value * storeIndex = iBuilder->CreateAnd(blockIndex, indexMask);
     Value * carryIn = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(buffer, loadIndex0));
     assert (carryIn->getType() == mBitBlockType);
+    // in non-carry collapsing mode, we need to accumulate the carry in value in order to properly subtract it from the
+    // carry in state in order to deduce whether we still have pending iterations even if the loop condition fails.
+    if (LLVM_UNLIKELY(mCarryInfo->hasCountingSummary())) {
+        mCarryInSummary.back() = iBuilder->CreateOr(mCarryInSummary.back(), carryIn);
+    }
     // If the long advance is an exact multiple of mBitBlockWidth, we simply return the oldest
     // block in the long advance carry data area.  
     if (blockShift == 0) {
@@ -471,9 +641,14 @@ Value * CarryManager::getNextCarryIn() {
     mCarryPackPtr = carryInPtr;
     if (mLoopDepth > 0) {
         carryInPtr = iBuilder->CreateGEP(carryInPtr, {iBuilder->getInt32(0), mLoopSelector});        
-    }
+    }   
     assert (carryInPtr->getType()->getPointerElementType() == mCarryPackType);
     Value * const carryIn = iBuilder->CreateBlockAlignedLoad(carryInPtr);
+    // in non-carry collapsing mode, we need to accumulate the carry in value in order to properly subtract it from the
+    // carry in state in order to deduce whether we still have pending iterations even if the loop condition fails.
+    if (LLVM_UNLIKELY(mCarryInfo->hasCountingSummary())) {
+        mCarryInSummary.back() = iBuilder->CreateOr(mCarryInSummary.back(), carryIn);
+    }
     if (mLoopDepth > 0) {
         iBuilder->CreateBlockAlignedStore(Constant::getNullValue(mCarryPackType), carryInPtr);
     }
@@ -484,7 +659,7 @@ Value * CarryManager::getNextCarryIn() {
  * @brief setNextCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::setNextCarryOut(Value * carryOut) {
-    if (LLVM_LIKELY(mCarryInfo->hasExplicitSummary())) {        
+    if (mCarryInfo->hasExplicitSummary() || mCarryInfo->hasCountingSummary()) {
         addToSummary(carryOut);
     }
     Value * carryOutPtr = mCarryPackPtr;
@@ -505,8 +680,8 @@ void CarryManager::setNextCarryOut(Value * carryOut) {
  * @brief addToSummary
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::addToSummary(Value * value) { assert (value);
-    assert (mIfDepth > 0 && !mCarrySummary.empty());
-    Value * const summary = mCarrySummary.back(); assert (summary);
+    assert (!mCarryOutSummary.empty());
+    Value * const summary = mCarryOutSummary.back(); assert (summary);
     if (LLVM_UNLIKELY(summary == value)) {
         return;  //Nothing to add.
     }
@@ -515,25 +690,25 @@ void CarryManager::addToSummary(Value * value) { assert (value);
         if (LLVM_UNLIKELY(cast<Constant>(value)->isZeroValue())) {
             return;
         } else if (LLVM_UNLIKELY(cast<Constant>(value)->isAllOnesValue())) {
-            mCarrySummary.back() = value;
+            mCarryOutSummary.back() = value;
             return;
         }
     } else if (LLVM_UNLIKELY(isa<Constant>(summary))) {
         if (LLVM_UNLIKELY(cast<Constant>(summary)->isZeroValue())) {
-            mCarrySummary.back() = value;
+            mCarryOutSummary.back() = value;
             return;
         } else if (LLVM_UNLIKELY(cast<Constant>(summary)->isAllOnesValue())) {
             return;
         }
     }    
-    mCarrySummary.back() = iBuilder->CreateOr(summary, value);
+    mCarryOutSummary.back() = iBuilder->CreateOr(summary, value);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief collapsingCarryMode
  ** ------------------------------------------------------------------------------------------------------------- */
 bool CarryManager::inCollapsingCarryMode() const {
-    return (mCurrentScope->getBranch() && isa<While>(mCurrentScope->getBranch()) && !mCarryInfo->nonCarryCollapsingMode());
+    return (mCurrentScope->getBranch() && isa<While>(mCurrentScope->getBranch()) && !mCarryInfo->hasCountingSummary());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -620,19 +795,19 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
     }
 
     StructType * carryState = nullptr;
-
     // Add the summary pack if needed.
     CarryData::SummaryType summaryType = CarryData::NoSummary;
     if (LLVM_UNLIKELY(state.empty())) {
         carryState = StructType::get(iBuilder->getContext());
     } else {
-        cd.setNonCarryCollapsingMode(loopDepth > 0 && hasIterationSpecificAssignment(scope));
-        if (ifDepth > 0) {
-            // A non-collapsing loop requires a unique summary for each iteration. Thus whenever
-            // we have a non-collapsing While within an If scope with an implicit summary, the If
-            // scope requires an explicit summary.
-            if (cd.nonCarryCollapsingMode() || isa<If>(scope->getBranch())) {
-                if (LLVM_LIKELY(state.size() > 1 || hasLongAdvances)) {
+        const bool nonCarryCollapsingMode = loopDepth > 0 && hasIterationSpecificAssignment(scope);
+        if (LLVM_UNLIKELY(nonCarryCollapsingMode)) {
+            summaryType = CarryData::CountingSummary;
+        } else if (ifDepth > 0) {
+            // A non-collapsing loop requires a unique summary for each iteration. Thus whenever we have a non-collapsing While
+            // within an If scope with an implicit summary, the If scope requires an explicit summary.
+            if (isa<If>(scope->getBranch())) {
+                if (LLVM_LIKELY(hasLongAdvances || state.size() > 1)) {
                     summaryType = CarryData::ExplicitSummary;
                     state.insert(state.begin(), mCarryPackType);
                 } else {
@@ -644,10 +819,10 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
             }
         }
         carryState = StructType::get(iBuilder->getContext(), state);
-        // If we in a loop and cannot use collapsing carry mode, convert the struct into a capacity and pointer pair.
-        if (LLVM_UNLIKELY(cd.nonCarryCollapsingMode())) {
-            mHasVariableLengthCarryData = true;
-            carryState = StructType::get(iBuilder->getSizeTy(), carryState->getPointerTo(), nullptr);
+        // If we're in a loop and cannot use collapsing carry mode, convert the carry state struct into a capacity,
+        // carry state pointer, and summary pointer struct.
+        if (LLVM_UNLIKELY(nonCarryCollapsingMode)) {
+            carryState = StructType::get(iBuilder->getSizeTy(), carryState->getPointerTo(), mCarryPackType->getPointerTo(), nullptr);
         }
     }
     cd.setSummaryType(summaryType);
@@ -672,7 +847,6 @@ CarryManager::CarryManager(IDISA::IDISA_Builder * idb) noexcept
 , mCarryPackPtr(nullptr)
 , mIfDepth(0)
 , mHasLongAdvance(false)
-, mHasVariableLengthCarryData(false)
 , mHasLoop(false)
 , mLoopDepth(0)
 , mLoopSelector(nullptr)
@@ -681,4 +855,3 @@ CarryManager::CarryManager(IDISA::IDISA_Builder * idb) noexcept
 }
 
 }
-

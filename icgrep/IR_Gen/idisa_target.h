@@ -11,9 +11,9 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace IDISA {
     
-IDISA::IDISA_Builder * GetIDISA_Builder(llvm::Module * m);
+IDISA::IDISA_Builder * GetIDISA_Builder(llvm::Module * const m);
 
-IDISA::IDISA_Builder * GetIDISA_GPU_Builder(llvm::Module * m);
+IDISA::IDISA_Builder * GetIDISA_GPU_Builder(llvm::Module * const m);
 
 }
 
