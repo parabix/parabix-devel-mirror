@@ -258,7 +258,7 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
 
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::ThreadNum+1;
-    
+
     assert (iBuilder);
 
     Type * const size_ty = iBuilder->getSizeTy();
@@ -304,36 +304,29 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     
     u8u16_pablo(&u8u16k);
     u8u16k.generateKernel({&BasisBits}, {&U8u16Bits, &DelMask, &ErrorMask});
-    
-    
-    // Apply a deletion algorithm to discard all but the final position of the UTF-8
-    // sequences for each UTF-16 code unit.
-    CircularBuffer u16CompressedInFields(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
-    CircularBuffer DeletionCounts(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
 
-    DeleteByPEXTkernel delK(iBuilder, 64, 16);
-    delK.generateKernel({&U8u16Bits, &DelMask}, {&u16CompressedInFields, &DeletionCounts});
-    
-    // Swizzle for sequential compression within SIMD lanes.
+    // Apply a deletion algorithm to discard all but the final position of the UTF-8
+    // sequences for each UTF-16 code unit. Swizzle the results.
     CircularBuffer SwizzleFields0(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments);
     CircularBuffer SwizzleFields1(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments);
     CircularBuffer SwizzleFields2(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments);
     CircularBuffer SwizzleFields3(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments);
-    SwizzleGenerator swizzleK(iBuilder, 16, 4, 1);
-    swizzleK.generateKernel({&u16CompressedInFields}, {&SwizzleFields0, &SwizzleFields1, &SwizzleFields2, &SwizzleFields3});
-    
+    CircularBuffer DeletionCounts(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
+
+    DeleteByPEXTkernel delK(iBuilder, 64, 16, true);
+    delK.generateKernel({&U8u16Bits, &DelMask}, {&SwizzleFields0, &SwizzleFields1, &SwizzleFields2, &SwizzleFields3, &DeletionCounts});
+;
     //  Produce fully compressed swizzled UTF-16 bit streams
     SwizzledCopybackBuffer u16Swizzle0(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
     SwizzledCopybackBuffer u16Swizzle1(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
     SwizzledCopybackBuffer u16Swizzle2(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
     SwizzledCopybackBuffer u16Swizzle3(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
-    //
+
     SwizzledBitstreamCompressByCount compressK(iBuilder, 16);
     compressK.generateKernel({&DeletionCounts, &SwizzleFields0, &SwizzleFields1, &SwizzleFields2, &SwizzleFields3},
                              {&u16Swizzle0, &u16Swizzle1, &u16Swizzle2, &u16Swizzle3});
-    
+ 
     // Produce unswizzled UTF-16 bit streams
-    //
     CircularBuffer u16bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
     SwizzleGenerator unSwizzleK(iBuilder, 16, 1, 4);
     unSwizzleK.setName("unswizzle");
@@ -363,7 +356,6 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     U8u16Bits.allocateBuffer();
     DelMask.allocateBuffer();
     ErrorMask.allocateBuffer();
-    u16CompressedInFields.allocateBuffer();
     DeletionCounts.allocateBuffer();
     SwizzleFields0.allocateBuffer();
     SwizzleFields1.allocateBuffer();
@@ -374,6 +366,7 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     u16Swizzle2.allocateBuffer();
     u16Swizzle3.allocateBuffer();
     u16bits.allocateBuffer();
+
     if (mMapBuffering || memAlignBuffering) {
         U16external.setEmptyBuffer(outputStream);
     } else {
@@ -383,9 +376,9 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     outK.setInitialArguments({fName});
 
     if (segmentPipelineParallel){
-        generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &swizzleK, &compressK, &unSwizzleK, &p2sk, &outK});
+        generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &compressK, &unSwizzleK, &p2sk, &outK});
     } else {
-        generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &swizzleK, &compressK, &unSwizzleK, &p2sk, &outK});
+        generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &compressK, &unSwizzleK, &p2sk, &outK});
     }
 
     iBuilder->CreateRetVoid();

@@ -6,6 +6,7 @@
 #define DELETION_H
 
 #include "kernel.h"
+#include <llvm/IR/Value.h>
 namespace IDISA { class IDISA_Builder; }
 
 //
@@ -39,18 +40,27 @@ private:
 
 class DeleteByPEXTkernel : public BlockOrientedKernel {
 public:
-    
-    DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount);
+
+    DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle);
     
 protected:
     
     void generateDoBlockMethod() override;
     
     void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
+
+    void generatePEXTAndSwizzleLoop(const std::vector<llvm::Value *> & masks);
+
+    void generatePEXTLoop(const std::vector<llvm::Value *> & masks);
+
+    void generateProcessingLoop(const std::vector<llvm::Value *> & masks, llvm::Value * delMask);
     
 private:
     const unsigned mDelCountFieldWidth;
     const unsigned mStreamCount;
+    const unsigned mSwizzleFactor;
+    const bool mShouldSwizzle;
+    static constexpr const char* mOutputSwizzleNameBase = "outputStreamSet";
 };
     
 class SwizzledBitstreamCompressByCount : public BlockOrientedKernel {

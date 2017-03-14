@@ -91,8 +91,6 @@ DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, uns
 , mStreamCount(streamCount) {
 }
 
-
-
 const unsigned PEXT_width = 64;
 
 inline std::vector<Value *> get_PEXT_masks(IDISA::IDISA_Builder * iBuilder, Value * del_mask) {
@@ -104,13 +102,59 @@ inline std::vector<Value *> get_PEXT_masks(IDISA::IDISA_Builder * iBuilder, Valu
     return masks;
 }
 
-inline Value * apply_PEXT_deletion(IDISA::IDISA_Builder * iBuilder, const std::vector<Value *> & masks, Value * strm) {    
+// Apply PEXT deletion to a collection of blocks and swizzle the result.
+// strms contains the blocks to process
+inline std::vector<Value *> apply_PEXT_deletion_with_swizzle(IDISA::IDISA_Builder * iBuilder, const std::vector<Value *> & masks, std::vector<Value *> strms) {    
     Value * PEXT_func = nullptr;
     if (PEXT_width == 64) {
         PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_64);
     } else if (PEXT_width == 32) {
         PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_32);
     }
+    
+    std::vector<Value *> output;     
+    for (unsigned i = 0; i < strms.size(); i++) {
+        Value * v = iBuilder->fwCast(PEXT_width, strms[i]);
+        output.push_back(Constant::getNullValue(v->getType())); 
+    }
+
+    // For each of the input streams
+    for (unsigned j = 0; j < strms.size(); j++) {
+        Value * v = iBuilder->fwCast(PEXT_width, strms[j]); // load stream j
+        // Process the stream's block in PEXT_width chunks (PEXT operation can't do more than 64 bits at a time)
+        for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/PEXT_width; i++) {
+            Value * field = iBuilder->CreateExtractElement(v, i); // Load from block j at index i (fw of j is PEXT_width)
+            Value * compressed = iBuilder->CreateCall(PEXT_func, {field, masks[i]}); // Apply PEXT deletion to the block segment we just loaded
+            /*
+             We loaded from input at index i within stream j's block. We store result in ouput within stream i's block at position j. This swizzles the output blocks . E.g.:
+
+             a b c d
+             e f g h 
+             i j k l
+             m n o p
+
+             Apply pext deletion at each position, then swizzle results:
+
+             a` e` i` m`
+             b` f` j` n`
+             c` g` k` o`  
+             d` i` l` p`          
+            */      
+            output[i] = iBuilder->CreateInsertElement(output[i], compressed, j); 
+        }
+    }
+    
+    return output;
+}
+
+inline Value * apply_PEXT_deletion(IDISA::IDISA_Builder * iBuilder, const std::vector<Value *> & masks, Value * strm) {  
+    Value * PEXT_func = nullptr;
+    if (PEXT_width == 64) {
+        PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_64);
+    } else if (PEXT_width == 32) {
+        PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_32);
+    }
+       
     Value * v = iBuilder->fwCast(PEXT_width, strm);
     Value * output = Constant::getNullValue(v->getType());
     for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/PEXT_width; i++) {
@@ -121,21 +165,14 @@ inline Value * apply_PEXT_deletion(IDISA::IDISA_Builder * iBuilder, const std::v
     return output;
 }
 
-// Apply deletion to a set of stream_count input streams to produce a set of output streams.
+// Apply deletion to a set of stream_count input streams and produce a set of swizzled output streams.
 // Kernel inputs: stream_count data streams plus one del_mask stream
-// Outputs: the deleted streams, plus a partial sum popcount
+// Outputs: swizzles containing the swizzled deleted streams, plus a partial sum popcount
 
 void DeleteByPEXTkernel::generateDoBlockMethod() {
     Value * delMask = loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0));
     const auto masks = get_PEXT_masks(iBuilder, delMask);
-    for (unsigned j = 0; j < mStreamCount; ++j) {
-        Value * input = loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(j));
-        Value * output = apply_PEXT_deletion(iBuilder, masks, input);
-        storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
-    }
-    //Value * delCount = partial_sum_popcount(iBuilder, mDelCountFieldWidth, apply_PEXT_deletion(iBuilder, masks, iBuilder->simd_not(delMask)));
-    Value * delCount = iBuilder->simd_popcount(mDelCountFieldWidth, iBuilder->simd_not(delMask));
-    storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
+    generateProcessingLoop(masks, delMask);
 }
 
 void DeleteByPEXTkernel::generateFinalBlockMethod(Value * remainingBytes) {
@@ -144,25 +181,67 @@ void DeleteByPEXTkernel::generateFinalBlockMethod(Value * remainingBytes) {
     Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
     Value * delMask = iBuilder->CreateOr(EOF_del, loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0)));
     const auto masks = get_PEXT_masks(iBuilder, delMask);
-    for (unsigned j = 0; j < mStreamCount; ++j) {
-        Value * input = loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(j));
-        Value * output = apply_PEXT_deletion(iBuilder, masks, input);
-        storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
-    }
+    generateProcessingLoop(masks, delMask);
+}
+
+void DeleteByPEXTkernel::generateProcessingLoop(const std::vector<Value *> & masks, Value * delMask) {
+    if (mShouldSwizzle)    
+        generatePEXTAndSwizzleLoop(masks);
+    else
+        generatePEXTLoop(masks);    
+    
     //Value * delCount = partial_sum_popcount(iBuilder, mDelCountFieldWidth, apply_PEXT_deletion(iBuilder, masks, iBuilder->simd_not(delMask)));
     Value * delCount = iBuilder->simd_popcount(mDelCountFieldWidth, iBuilder->simd_not(delMask));
     storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
 }
 
-DeleteByPEXTkernel::DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount)
+void DeleteByPEXTkernel::generatePEXTLoop(const std::vector<Value *> & masks) {
+    for (unsigned j = 0; j < mStreamCount; ++j) {
+        Value * input = loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(j));
+        Value * output = apply_PEXT_deletion(iBuilder, masks, input);
+        storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
+    }
+}
+
+void DeleteByPEXTkernel::generatePEXTAndSwizzleLoop(const std::vector<Value *> & masks) {
+    // Group blocks together into input vector. Input should contain mStreamCount/mSwizzleFactor blocks (e.g. for U8U16 16/4=4)
+    // mStreamCount/mSwizzleFactor -> (mStreamCount + mSwizzleFactor - 1) / mSwizzleFactor
+    for (unsigned j = 0; j < (mStreamCount + mSwizzleFactor - 1)/mSwizzleFactor; ++j) {
+        std::vector<Value *> input;
+        unsigned streamSelectionIndex = j * mSwizzleFactor;
+        for (unsigned i = streamSelectionIndex; i < (streamSelectionIndex + mSwizzleFactor); ++i) {
+	    	// Check if i > mStreamCount. If it is, add null streams until we get mStreamCount/mSwizzleFactor streams in the input vector
+            if ( i >= mStreamCount)
+				input.push_back(iBuilder->allZeroes());
+			else
+	    		input.push_back(loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(i)));
+        }
+        std::vector<Value *> output = apply_PEXT_deletion_with_swizzle(iBuilder, masks, input);
+        for (unsigned i = 0; i < mSwizzleFactor; i++) { 
+             storeOutputStreamBlock(std::string(mOutputSwizzleNameBase) + std::to_string(j), iBuilder->getInt32(i), output[i]);
+        }
+    }
+}
+
+DeleteByPEXTkernel::DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle)
 : BlockOrientedKernel(iBuilder, "PEXTdel",
                       {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
                           Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
-                      {Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet"},
-                          Binding{iBuilder->getStreamSetTy(), "deletionCounts"}},
-                      {}, {}, {})
+                      {}, {}, {}, {})
 , mDelCountFieldWidth(fw)
-, mStreamCount(streamCount) {
+, mStreamCount(streamCount)
+, mSwizzleFactor(iBuilder->getBitBlockWidth() / PEXT_width)
+, mShouldSwizzle(shouldSwizzle)
+{
+    if(mShouldSwizzle) {        
+        for (unsigned i = 0; i < (mStreamCount + mSwizzleFactor - 1)/mSwizzleFactor; i++) { 
+            mStreamSetOutputs.emplace_back(iBuilder->getStreamSetTy(mSwizzleFactor), std::string(mOutputSwizzleNameBase) + std::to_string(i));
+        }
+    } else {
+        // No swizzling. Output results as single stream set
+        mStreamSetOutputs.emplace_back(iBuilder->getStreamSetTy(mStreamCount), "outputStreamSet");
+    }
+    mStreamSetOutputs.emplace_back(iBuilder->getStreamSetTy(), "deletionCounts");
 }
 
     
