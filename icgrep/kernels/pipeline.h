@@ -13,6 +13,6 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
 
 void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
 
-void generatePipelineParallel(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
+void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
 
 #endif // PIPELINE_H

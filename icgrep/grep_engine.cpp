@@ -335,7 +335,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
         KernelList.push_back(&matchCountK);  
 
         if (pipelineParallel){
-            generatePipelineParallel(iBuilder, KernelList);
+            generateParallelPipeline(iBuilder, KernelList);
         } else if (segmentPipelineParallel){
             generateSegmentParallelPipeline(iBuilder, KernelList);
         }  else{
@@ -351,7 +351,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
         KernelList.push_back(&scanMatchK);
 
         if (pipelineParallel) {
-            generatePipelineParallel(iBuilder, KernelList);
+            generateParallelPipeline(iBuilder, KernelList);
         } else if (segmentPipelineParallel) {
             generateSegmentParallelPipeline(iBuilder, KernelList);
         } else {
@@ -497,7 +497,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     if (CountOnly) {
         icgrepK.generateKernel({&BasisBits, &LineBreakStream}, {});
         if (pipelineParallel) {
-            generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK});
+            generateParallelPipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK});
         } else if (segmentPipelineParallel) {
             generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK});
         } else {
@@ -526,7 +526,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
 	    
             if (pipelineParallel) {
-                generatePipelineParallel(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK, &scanMatchK});
+                generateParallelPipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK, &scanMatchK});
             } else if (segmentPipelineParallel) {
                 generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK, &scanMatchK});
             } else {
