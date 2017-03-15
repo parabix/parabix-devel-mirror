@@ -7,9 +7,13 @@
 #ifndef TOOLCHAIN_H
 #define TOOLCHAIN_H
 #include <string>
+#include <IR_Gen/idisa_builder.h>
+
 namespace llvm { class ExecutionEngine; }
 namespace llvm { class Module; }
 namespace llvm { namespace cl { class OptionCategory; } }
+namespace IDISA { class IDISA_Builder; }
+namespace kernel { class KernelBuilder; }
 
 namespace codegen {
 const llvm::cl::OptionCategory * codegen_flags();
@@ -48,5 +52,7 @@ bool AVX2_available();
 llvm::ExecutionEngine * JIT_to_ExecutionEngine (llvm::Module * m);
 
 void ApplyObjectCache(llvm::ExecutionEngine * e);
+
+void generatePipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
 
 #endif

@@ -19,7 +19,6 @@
 #include <kernels/linebreak_kernel.h>
 #include <kernels/streams_merge.h>
 #include <kernels/match_count.h>
-#include <kernels/pipeline.h>
 #include <kernels/mmap_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/scanmatchgen.h>
@@ -56,10 +55,6 @@ static cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl
 
 static cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
 static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
-
-static cl::opt<bool> pipelineParallel("enable-pipeline-parallel", cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(bGrepOutputOptions));
-
-static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(bGrepOutputOptions));
 
 bool isUTF_16 = false;
 std::string IRFilename = "icgrep.ll";
@@ -246,7 +241,7 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
     scanMatchK.generateKernel({&MatchResults, &LineBreak}, {});
     scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
     
-    generatePipelineLoop(iBuilder, {&mmapK1, &mmapK2, &scanMatchK});
+    generatePipeline(iBuilder, {&mmapK1, &mmapK2, &scanMatchK});
     iBuilder->CreateRetVoid();
 
     return mainCPUFn;
@@ -259,7 +254,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
     IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_Builder(M);; 
 
     const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned bufferSegments = segmentPipelineParallel ? (codegen::BufferSegments * codegen::ThreadNum) : codegen::BufferSegments;
+    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = UTF_16 ? 16 : 8;
 
     mGrepType = grepType;
@@ -334,13 +329,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
 
         KernelList.push_back(&matchCountK);  
 
-        if (pipelineParallel){
-            generateParallelPipeline(iBuilder, KernelList);
-        } else if (segmentPipelineParallel){
-            generateSegmentParallelPipeline(iBuilder, KernelList);
-        }  else{
-            generatePipelineLoop(iBuilder, KernelList);
-        }
+        generatePipeline(iBuilder, KernelList);
         iBuilder->CreateRet(matchCountK.getScalarField(matchCountK.getInstance(), "matchedLineCount"));
 
     } else {
@@ -350,13 +339,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
 
         KernelList.push_back(&scanMatchK);
 
-        if (pipelineParallel) {
-            generateParallelPipeline(iBuilder, KernelList);
-        } else if (segmentPipelineParallel) {
-            generateSegmentParallelPipeline(iBuilder, KernelList);
-        } else {
-            generatePipelineLoop(iBuilder, KernelList);
-        }
+        generatePipeline(iBuilder, KernelList);
         
         iBuilder->CreateRetVoid();
     }
@@ -412,7 +395,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     // segment size made availabe for each call to the mmap source kernel
     const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned bufferSegments = segmentPipelineParallel ? (codegen::BufferSegments * codegen::ThreadNum) : codegen::BufferSegments;
+    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = UTF_16 ? 16 : 8;
 
     mGrepType = grepType;
@@ -496,13 +479,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     if (CountOnly) {
         icgrepK.generateKernel({&BasisBits, &LineBreakStream}, {});
-        if (pipelineParallel) {
-            generateParallelPipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK});
-        } else if (segmentPipelineParallel) {
-            generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK});
-        } else {
-            generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK});
-        }
+        generatePipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK});
         iBuilder->CreateRet(icgrepK.createGetAccumulatorCall(icgrepK.getInstance(), "matchedLineCount"));
     } else {
 #ifdef CUDA_ENABLED 
@@ -525,13 +502,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
             scanMatchK.generateKernel({&MatchResults, &LineBreakStream}, {});                
             scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
 	    
-            if (pipelineParallel) {
-                generateParallelPipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK, &scanMatchK});
-            } else if (segmentPipelineParallel) {
-                generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK, &scanMatchK});
-            } else {
-                generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK, &scanMatchK});
-            }
+            generatePipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK, &scanMatchK});
         }
         iBuilder->CreateRetVoid();
     }

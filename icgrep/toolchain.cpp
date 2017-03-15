@@ -22,6 +22,7 @@
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
 #include <object_cache.h>
+#include <kernels/pipeline.h>
 #ifdef CUDA_ENABLED
 #include <IR_Gen/llvm2ptx.h>
 #endif
@@ -78,6 +79,11 @@ static cl::opt<bool, true> EnableAssertsOption("ea", cl::location(EnableAsserts)
 const cl::OptionCategory * codegen_flags() {return &CodeGenOptions;}
 
 bool DebugOptionIsSet(DebugFlags flag) {return DebugOptions.isSet(flag);}
+
+static cl::opt<bool> pipelineParallel("enable-pipeline-parallel", cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(CodeGenOptions));
+    
+static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
+    
 
     
 #ifdef CUDA_ENABLED
@@ -235,6 +241,17 @@ void ApplyObjectCache(ExecutionEngine * e) {
         else
             cache = new ICGrepObjectCache(codegen::ObjectCacheDir);
         e->setObjectCache(cache);
+    }
+}
+
+void generatePipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels) {
+    if (codegen::pipelineParallel) {
+        generateParallelPipeline(iBuilder, kernels);
+    } else if (codegen::segmentPipelineParallel) {
+        generateSegmentParallelPipeline(iBuilder, kernels);
+    } else {
+        codegen::ThreadNum = 1;
+        generatePipelineLoop(iBuilder, kernels);
     }
 }
 

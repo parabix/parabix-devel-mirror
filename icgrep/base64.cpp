@@ -29,7 +29,6 @@ static cl::OptionCategory base64Options("base64 Options",
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(base64Options));
 
-static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(base64Options));
 static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(base64Options));
 static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(base64Options));
 
@@ -91,11 +90,7 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     Radix64out.allocateBuffer();
     Base64out.allocateBuffer();
 
-    if (segmentPipelineParallel) {
-        generateSegmentParallelPipeline(iBuilder, {&mmapK, &expandK, &radix64K, &base64K, &stdoutK});
-    } else {
-        generatePipelineLoop(iBuilder, {&mmapK, &expandK, &radix64K, &base64K, &stdoutK});
-    }
+    generatePipeline(iBuilder, {&mmapK, &expandK, &radix64K, &base64K, &stdoutK});
 
     iBuilder->CreateRetVoid();
     return main;

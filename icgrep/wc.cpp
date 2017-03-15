@@ -172,7 +172,7 @@ Function * pipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
     
-    generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &wck});
+    generatePipeline(iBuilder, {&mmapK, &s2pk, &wck});
     
     Value * lineCount = wck.createGetAccumulatorCall(wck.getInstance(), "lineCount");
     Value * wordCount = wck.createGetAccumulatorCall(wck.getInstance(), "wordCount");

@@ -153,7 +153,7 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
     matches.allocateBuffer();
     errors.allocateBuffer();
 
-    generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &bm, &printer});
+    generatePipeline(iBuilder, {&mmapK, &s2pk, &bm, &printer});
     iBuilder->CreateRetVoid();
 
     return main;

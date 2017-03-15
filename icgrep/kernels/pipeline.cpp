@@ -226,9 +226,7 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
 
 
 void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
-    
-    const unsigned threadNum = codegen::ThreadNum;
-    
+        
     Module * m = iBuilder->getModule();
     
     IntegerType * const size_ty = iBuilder->getSizeTy();
@@ -239,10 +237,10 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     
     ProducerTable producerTable = createProducerTable(kernels);
     
-    Type * const pthreadsTy = ArrayType::get(size_ty, threadNum);
+    Type * const pthreadsTy = ArrayType::get(size_ty, codegen::ThreadNum);
     AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
     std::vector<Value *> pthreadsPtrs;
-    for (unsigned i = 0; i < threadNum; i++) {
+    for (unsigned i = 0; i < codegen::ThreadNum; i++) {
         pthreadsPtrs.push_back(iBuilder->CreateGEP(pthreads, {iBuilder->getInt32(0), iBuilder->getInt32(i)}));
     }
     Value * nullVal = Constant::getNullValue(voidPtrTy);
@@ -265,21 +263,21 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
 
     std::vector<Function *> thread_functions;
     const auto ip = iBuilder->saveIP();
-    for (unsigned i = 0; i < threadNum; i++) {
+    for (unsigned i = 0; i < codegen::ThreadNum; i++) {
         thread_functions.push_back(generateSegmentParallelPipelineThreadFunction("thread"+std::to_string(i), iBuilder, kernels, sharedStructType, producerTable, i));
     }
     iBuilder->restoreIP(ip);
     
-    for (unsigned i = 0; i < threadNum; i++) {
+    for (unsigned i = 0; i < codegen::ThreadNum; i++) {
         iBuilder->CreatePThreadCreateCall(pthreadsPtrs[i], nullVal, thread_functions[i], iBuilder->CreateBitCast(sharedStruct, int8PtrTy));
     }
     
     std::vector<Value *> threadIDs;
-    for (unsigned i = 0; i < threadNum; i++) { 
+    for (unsigned i = 0; i < codegen::ThreadNum; i++) {
         threadIDs.push_back(iBuilder->CreateLoad(pthreadsPtrs[i]));
     }
     
-    for (unsigned i = 0; i < threadNum; i++) { 
+    for (unsigned i = 0; i < codegen::ThreadNum; i++) {
         iBuilder->CreatePThreadJoinCall(threadIDs[i], status);
     }
     

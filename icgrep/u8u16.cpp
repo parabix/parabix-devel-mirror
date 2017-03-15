@@ -45,7 +45,6 @@ using namespace llvm;
 static cl::OptionCategory u8u16Options("u8u16 Options", "Transcoding control options.");
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(u8u16Options));
 static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"),  cl::Required, cl::cat(u8u16Options));
-static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(u8u16Options));
 static cl::opt<bool> enableAVXdel("enable-AVX-deletion", cl::desc("Enable AVX2 deletion algorithms."), cl::cat(u8u16Options));
 static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
 static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
@@ -375,11 +374,7 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
     outK.setInitialArguments({fName});
 
-    if (segmentPipelineParallel){
-        generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &compressK, &unSwizzleK, &p2sk, &outK});
-    } else {
-        generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &compressK, &unSwizzleK, &p2sk, &outK});
-    }
+    generatePipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &compressK, &unSwizzleK, &p2sk, &outK});
 
     iBuilder->CreateRetVoid();
     return main;
@@ -474,11 +469,7 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
     outK.setInitialArguments({fName});
     
-    if (segmentPipelineParallel){
-        generateSegmentParallelPipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &outK});
-    } else {
-        generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &outK});
-    }
+    generatePipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &outK});
     
     iBuilder->CreateRetVoid();
     return main;
