@@ -13,6 +13,8 @@
 #include <pablo/builder.hpp>
 #include <llvm/IR/Module.h>
 
+#include <llvm/Support/raw_ostream.h>
+
 using namespace cc;
 using namespace kernel;
 using namespace pablo;

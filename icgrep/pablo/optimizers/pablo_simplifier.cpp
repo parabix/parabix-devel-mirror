@@ -559,6 +559,10 @@ void Simplifier::deadCodeElimination(PabloBlock * const block) {
         if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
             Branch * const br = cast<Branch>(stmt);
             deadCodeElimination(br->getBody());
+            if (LLVM_UNLIKELY(br->getEscaped().empty())) {
+                stmt = stmt->eraseFromParent(true);
+                continue;
+            }
         } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
             // An Assign statement is locally dead whenever its variable is not read
             // before being reassigned a value.

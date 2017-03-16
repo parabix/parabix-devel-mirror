@@ -11,6 +11,7 @@
 #include <vector>
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class BasicBlock; }
+namespace llvm { class ConstantInt; }
 namespace llvm { class Function; }
 namespace llvm { class PHINode; }
 namespace llvm { class StructType; }
@@ -78,14 +79,14 @@ public:
     /* Methods for getting and setting carry summary values for If statements */
          
     llvm::Value * generateSummaryTest(llvm::Value * condition);
-    
+
 protected:
 
     static unsigned getScopeCount(PabloBlock * const scope, unsigned index = 0);
 
     static bool hasIterationSpecificAssignment(const PabloBlock * const scope);
 
-    llvm::StructType * analyse(PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0);
+    llvm::StructType * analyse(PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false);
 
     /* Entering and leaving scopes. */
     void enterScope(const PabloBlock * const scope);
@@ -94,12 +95,13 @@ protected:
     /* Methods for processing individual carry-generating operations. */
     llvm::Value * getNextCarryIn();
     void setNextCarryOut(llvm::Value * const carryOut);
-    llvm::Value * longAdvanceCarryInCarryOut(const unsigned shiftAmount, llvm::Value * const value);
+    llvm::Value * longAdvanceCarryInCarryOut(llvm::Value * const value, const unsigned shiftAmount);
+    llvm::Value * readCarryInSummary(llvm::ConstantInt *index) const;
+    bool inCarryCollapsingMode() const;
+    void writeCarryOutSummary(llvm::Value * const summary, llvm::ConstantInt * index) const;
 
     /* Summary handling routines */
-    void addToSummary(llvm::Value * const value);
-
-    bool inCollapsingCarryMode() const;
+    void addToCarryOutSummary(llvm::Value * const value);
 
 private:
 
@@ -116,7 +118,7 @@ private:
     CarryData *                                     mCarryInfo;
 
     llvm::Type *                                    mCarryPackType;
-    llvm::Value *                                   mCarryPackPtr;
+    llvm::Value *                                   mNextSummaryTest;
 
     unsigned                                        mIfDepth;
 
@@ -125,16 +127,17 @@ private:
     bool                                            mHasLoop;
     unsigned                                        mLoopDepth;
     llvm::Value *                                   mLoopSelector;
+    llvm::Value *                                   mNextLoopSelector;
     std::vector<llvm::PHINode *>                    mLoopIndicies;
 
     std::vector<CarryData>                          mCarryMetadata;
 
-    std::vector<std::pair<llvm::Value *, unsigned>> mCarryFrame;
+    std::vector<std::pair<llvm::Value *, unsigned>> mCarryFrameStack;
 
     unsigned                                        mCarryScopes;
     std::vector<unsigned>                           mCarryScopeIndex;
 
-    std::vector<llvm::Value *>                      mCarryInSummary;
+//    std::vector<llvm::Value *>                      mCarryInSummary;
     std::vector<llvm::Value *>                      mCarryOutSummary;
 };
 

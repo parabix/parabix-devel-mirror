@@ -43,6 +43,8 @@ kernels/interface.cpp
 kernels/interface.h
 kernels/kernel.cpp
 kernels/kernel.h
+kernels/linebreak_kernel.cpp
+kernels/linebreak_kernel.h
 kernels/match_count.cpp
 kernels/match_count.h
 kernels/mmap_kernel.cpp
@@ -67,8 +69,6 @@ kernels/streamset.cpp
 kernels/streamset.h
 kernels/swizzle.cpp
 kernels/swizzle.h
-kernels/unicode_linebreak_kernel.cpp
-kernels/unicode_linebreak_kernel.h
 pablo/analysis/pabloverifier.cpp
 pablo/analysis/pabloverifier.hpp
 pablo/optimizers/booleanreassociationpass.cpp
