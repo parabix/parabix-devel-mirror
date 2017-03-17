@@ -80,8 +80,6 @@ void CarryManager::initializeCarryData(PabloKernel * const kernel) {
 
     Type * ty = analyse(kernel->getEntryBlock());
 
-    ty->dump();
-
     mKernel->addScalar(ty, "carries");
 
     if (mHasLoop) {
