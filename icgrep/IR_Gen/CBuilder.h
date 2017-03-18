@@ -125,11 +125,11 @@ public:
     llvm::Value * CreateCeilLog2(llvm::Value * value);
 
 protected:
-    llvm::Module *      mMod;    
-    unsigned            mCacheLineAlignment;
-    llvm::IntegerType * mSizeType;
-    llvm::StructType *  mFILEtype;
-    const bool          mSupportsIndirectBr;
+    llvm::Module *                  mMod;
+    unsigned                        mCacheLineAlignment;
+    llvm::IntegerType *             mSizeType;
+    llvm::StructType *              mFILEtype;
+    const bool                      mSupportsIndirectBr;
 };
 
 #endif

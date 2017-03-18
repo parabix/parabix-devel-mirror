@@ -97,7 +97,6 @@ protected:
     void setNextCarryOut(llvm::Value * const carryOut);
     llvm::Value * longAdvanceCarryInCarryOut(llvm::Value * const value, const unsigned shiftAmount);
     llvm::Value * readCarryInSummary(llvm::ConstantInt *index) const;
-    bool inCarryCollapsingMode() const;
     void writeCarryOutSummary(llvm::Value * const summary, llvm::ConstantInt * index) const;
 
     /* Summary handling routines */
@@ -138,7 +137,7 @@ private:
     std::vector<unsigned>                           mCarryScopeIndex;
 
 //    std::vector<llvm::Value *>                      mCarryInSummary;
-    std::vector<llvm::Value *>                      mCarryOutSummary;
+    std::vector<llvm::Value *>                      mCarrySummaryStack;
 };
 
 }

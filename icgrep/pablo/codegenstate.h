@@ -32,6 +32,7 @@ namespace pablo { class Not; }
 namespace pablo { class Ones; }
 namespace pablo { class Or; }
 namespace pablo { class PabloKernel; }
+namespace pablo { class Phi; }
 namespace pablo { class ScanThru; }
 namespace pablo { class ScanTo; }
 namespace pablo { class Sel; }
@@ -40,7 +41,6 @@ namespace pablo { class Subtract; }
 namespace pablo { class Var; }
 namespace pablo { class Xor; }
 namespace pablo { class Zeroes; }
-
 
 namespace pablo {
 
@@ -273,6 +273,16 @@ public:
     If * createIf(PabloAST * condition, PabloBlock * body);
 
     While * createWhile(PabloAST * condition, PabloBlock * body);
+
+    Phi * createPhi(llvm::Type * type = nullptr) {
+        return createPhi(type, nullptr);
+    }
+
+    Phi * createPhi(llvm::Type * type, const llvm::StringRef & prefix) {
+        return createPhi(type, makeName(prefix));
+    }
+
+    Phi * createPhi(llvm::Type * type, String * name);
 
     llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return mParent->getStreamSetTy(NumElements, FieldWidth);

@@ -396,7 +396,7 @@ BranchInst * CBuilder::CreateLikelyCondBr(Value * Cond, BasicBlock * True, Basic
     return CreateCondBr(Cond, True, False, mdb.createBranchWeights(probability, 100 - probability));
 }
 
-llvm::Value * CBuilder::CreateCeilLog2(llvm::Value * value) {
+Value * CBuilder::CreateCeilLog2(Value * value) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     CreateAssert(value, "CreateCeilLog2: value cannot be zero");
     Value * m = CreateCall(Intrinsic::getDeclaration(mMod, Intrinsic::ctlz, ty), {value, ConstantInt::getFalse(getContext())});

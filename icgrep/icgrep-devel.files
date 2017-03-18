@@ -233,3 +233,6 @@ utf8_encoder.cpp
 utf8_encoder.h
 wc.cpp
 CMakeLists.txt
+pablo/pe_phi.h
+pablo/passes/ssapass.h
+pablo/passes/ssapass.cpp

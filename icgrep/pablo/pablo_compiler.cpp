@@ -44,17 +44,12 @@ inline static unsigned getPointerElementAlignment(const Value * const ptr) {
 }
 
 void PabloCompiler::compile() {
-
-    mCarryManager->initializeCodeGen();
-      
+    mCarryManager->initializeCodeGen();     
     PabloBlock * const entryBlock = mKernel->getEntryBlock(); assert (entryBlock);
     mMarker.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
     mMarker.emplace(entryBlock->createOnes(), iBuilder->allOnes());
-
     compileBlock(entryBlock);
-
     mCarryManager->finalizeCodeGen();
-
 }
 
 void PabloCompiler::initializeKernelData() {

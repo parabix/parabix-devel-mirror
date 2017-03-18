@@ -46,16 +46,10 @@ public:
     }
 
     enum class ClassTypeId : unsigned {
-        /** Non-statements **/
+        /** Expressions and Constants **/
         // Constants
         Zeroes
         , Ones
-        // Internal types
-        , Var        
-        , Integer
-        , String
-        , Block
-        , Kernel
         // Arithmetic expressions
         , Add
         , Subtract
@@ -66,6 +60,12 @@ public:
         , GreaterThanEquals
         , GreaterThan
         , NotEquals
+        // Internal types
+        , Var
+        , Integer
+        , String
+        , Block
+        , Kernel
         /** Statements **/
         // Boolean operations
         , And
@@ -91,6 +91,8 @@ public:
         // Scope blocks
         , If
         , While
+        // Internal types
+        , Phi
     };
 
     inline ClassTypeId getClassTypeId() const noexcept {

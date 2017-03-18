@@ -15,7 +15,7 @@
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_var.h>
-// #include <llvm/Support/raw_ostream.h>
+
 using namespace llvm;
 
 namespace pablo {
@@ -106,8 +106,8 @@ void CarryManager::initializeCodeGen() {
 
     assert (mCarryFrameStack.empty());
 
-    assert (mCarryOutSummary.empty());
-    mCarryOutSummary.push_back(Constant::getNullValue(mCarryPackType));
+    assert (mCarrySummaryStack.empty());
+    mCarrySummaryStack.push_back(Constant::getNullValue(mCarryPackType));
 
     if (mHasLoop) {
         mLoopSelector = mKernel->getScalarField("selector");
@@ -127,10 +127,10 @@ void CarryManager::finalizeCodeGen() {
         idx = iBuilder->CreateAdd(idx, iBuilder->getSize(1));
         mKernel->setScalarField("CarryBlockIndex", idx);
     }
-    assert (mCarryFrameStack.empty());
-
-    assert (mCarryOutSummary.size() == 1);
-    mCarryOutSummary.clear();
+    assert (mCarryFrameStack.empty());    
+    assert (mCarrySummaryStack.size() == 1);
+    assert ("base summary value was overwritten!" && isa<Constant>(mCarrySummaryStack[0]) && cast<Constant>(mCarrySummaryStack[0])->isNullValue());
+    mCarrySummaryStack.clear();
 
     assert (mCarryScopeIndex.size() == 1);
     mCarryScopeIndex.clear();
@@ -152,12 +152,14 @@ void CarryManager::enterLoopScope(const PabloBlock * const scope) {
 void CarryManager::enterLoopBody(BasicBlock * const entryBlock) {
     if (mCarryInfo->hasSummary()) {
         PHINode * phiCarryOutSummary = iBuilder->CreatePHI(mCarryPackType, 2, "summary");
-        assert (!mCarryOutSummary.empty());
-        phiCarryOutSummary->addIncoming(mCarryOutSummary.back(), entryBlock);
-        // Replace the incoming carry summary with the phi node and add the phi node to the stack
-        // so that we can properly OR it into the outgoing summary value.
-        mCarryOutSummary.back() = phiCarryOutSummary;
-        mCarryOutSummary.push_back(phiCarryOutSummary);
+        assert (!mCarrySummaryStack.empty());
+        phiCarryOutSummary->addIncoming(mCarrySummaryStack.back(), entryBlock);
+        // Replace the incoming carry summary with the phi node and add the phi node to the stack  so that we can
+        // properly OR it into the outgoing summary value.
+        // NOTE: this may change the base summary value; when exiting to the base scope, replace this summary with
+        // a null value to prevent subsequent nested scopes from inheriting the summary of this scope.
+        mCarrySummaryStack.back() = phiCarryOutSummary;
+        mCarrySummaryStack.push_back(phiCarryOutSummary);
     }
     if (LLVM_UNLIKELY(mCarryInfo->nonCarryCollapsingMode())) {
 
@@ -277,10 +279,10 @@ void CarryManager::leaveLoopBody(BasicBlock * /* exitBlock */) {
 
         assert (mCarryInfo->hasSummary());
 
-        ConstantInt * const summaryIndex = iBuilder->getInt32(mCurrentFrame->getType()->getPointerElementType()->getStructNumElements() - 1);
+        ConstantInt * const summaryIndex = iBuilder->getInt32(mCarryInfo->hasExplicitSummary() ? mCurrentFrameIndex : (mCurrentFrameIndex - 1));
 
-        Value * carryInAccumulator = readCarryInSummary(summaryIndex);
-        Value * carryOutAccumulator = mCarryOutSummary.back();
+        Value * const carryInAccumulator = readCarryInSummary(summaryIndex);
+        Value * const carryOutAccumulator = mCarrySummaryStack.back();
 
         if (mCarryInfo->hasExplicitSummary()) {
             writeCarryOutSummary(carryOutAccumulator, summaryIndex);
@@ -329,10 +331,10 @@ void CarryManager::leaveLoopBody(BasicBlock * /* exitBlock */) {
         Value * const carryInOffset = iBuilder->CreateOr(iBuilder->CreateShl(i, 1), loopSelector);
         Value * const carryInPtr = iBuilder->CreateGEP(summary, carryInOffset);
         Value * const carryIn = iBuilder->CreateBlockAlignedLoad(carryInPtr);
-        Value * const carryInPrime = iBuilder->CreateXor(carryIn, borrow);
-        Value * const finalCarryInSummary = iBuilder->CreateOr(carryInSummary, carryInPrime);
-        iBuilder->CreateBlockAlignedStore(carryInPrime, carryInPtr);
-        carryInSummary->addIncoming(finalCarryInSummary, update);
+        Value * const nextCarryIn = iBuilder->CreateXor(carryIn, borrow);
+        Value * const nextSummary = iBuilder->CreateOr(carryInSummary, nextCarryIn);
+        iBuilder->CreateBlockAlignedStore(nextCarryIn, carryInPtr);
+        carryInSummary->addIncoming(nextSummary, update);
         Value * finalBorrow = iBuilder->CreateAnd(iBuilder->CreateNot(carryIn), borrow);
         borrow->addIncoming(finalBorrow, update);
 
@@ -340,8 +342,8 @@ void CarryManager::leaveLoopBody(BasicBlock * /* exitBlock */) {
         Value * const carryOutOffset = iBuilder->CreateXor(carryInOffset, ConstantInt::get(carryInOffset->getType(), 1));
         Value * const carryOutPtr = iBuilder->CreateGEP(summary, carryOutOffset);
         Value * const carryOut = iBuilder->CreateBlockAlignedLoad(carryOutPtr);
-        Value * const carryOutPrime = iBuilder->CreateXor(carryOut, carry);
-        iBuilder->CreateBlockAlignedStore(carryOutPrime, carryOutPtr);
+        Value * const nextCarryOut = iBuilder->CreateXor(carryOut, carry);
+        iBuilder->CreateBlockAlignedStore(nextCarryOut, carryOutPtr);
         Value * finalCarry = iBuilder->CreateAnd(carryOut, carry);
         carry->addIncoming(finalCarry, update);
 
@@ -351,20 +353,28 @@ void CarryManager::leaveLoopBody(BasicBlock * /* exitBlock */) {
 
         iBuilder->SetInsertPoint(resume);
 
+        IntegerType * ty = IntegerType::get(iBuilder->getContext(), mCarryPackType->getPrimitiveSizeInBits());
+        iBuilder->CreateAssert(iBuilder->CreateICmpEQ(iBuilder->CreateBitCast(finalBorrow, ty), ConstantInt::getNullValue(ty)), "finalBorrow != 0");
+        iBuilder->CreateAssert(iBuilder->CreateICmpEQ(iBuilder->CreateBitCast(finalCarry, ty), ConstantInt::getNullValue(ty)), "finalCarry != 0");
+
         assert (!mLoopIndicies.empty());
         PHINode * index = mLoopIndicies.back();
         index->addIncoming(iBuilder->CreateAdd(index, iBuilder->getSize(1)), resume);
         mLoopIndicies.pop_back();
 
-        mNextSummaryTest = finalCarryInSummary;
+        mNextSummaryTest = nextSummary;
     }
     if (mCarryInfo->hasSummary()) {
-        const auto n = mCarryOutSummary.size(); assert (n > 1);
-        Value * carryOut = mCarryOutSummary.back();
-        mCarryOutSummary.pop_back();
-        PHINode * phiCarryOut = cast<PHINode>(mCarryOutSummary.back());
+        const auto n = mCarrySummaryStack.size(); assert (n > 1);
+        Value * carryOut = mCarrySummaryStack.back();
+        mCarrySummaryStack.pop_back();
+        PHINode * phiCarryOut = cast<PHINode>(mCarrySummaryStack.back());
         phiCarryOut->addIncoming(carryOut, iBuilder->GetInsertBlock());
-        mCarryOutSummary.back() = carryOut;
+        // If we're returning to the base scope, reset our accumulated summary value.
+        if (n == 2) {
+            carryOut = Constant::getNullValue(mCarryPackType);
+        }
+        mCarrySummaryStack.back() = carryOut;
     }
 }
 
@@ -383,10 +393,9 @@ void CarryManager::leaveLoopScope(BasicBlock * const /* entryBlock */, BasicBloc
 void CarryManager::enterIfScope(const PabloBlock * const scope) {
     ++mIfDepth;
     enterScope(scope);
-    // We start with zero-initialized carry in order and later OR in the current carry summary so that upon
-    // processing the subsequent block iteration, we branch into this If scope iff a carry was generated by
-    // a statement within the If scope and not by a dominating statement in the outer scope.
-    mCarryOutSummary.push_back(Constant::getNullValue(mCarryPackType));
+    // We zero-initialized the nested summary value and later OR in the current summary into the escaping summary
+    // so that upon processing the subsequent block iteration, we branch into this If scope iff a carry out was
+    // generated by a statement within this If scope and not by a dominating statement in the outer scope.
     if (LLVM_LIKELY(mCarryInfo->hasSummary())) {
         assert (mCurrentFrameIndex == 0);
         mNextSummaryTest = readCarryInSummary(iBuilder->getInt32(0));
@@ -394,6 +403,7 @@ void CarryManager::enterIfScope(const PabloBlock * const scope) {
             mCurrentFrameIndex = 1;
         }
     }
+    mCarrySummaryStack.push_back(Constant::getNullValue(mCarryPackType));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -421,14 +431,12 @@ void CarryManager::enterIfBody(BasicBlock * const entryBlock) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::leaveIfBody(BasicBlock * const exitBlock) {
     assert (exitBlock);
-    const auto n = mCarryOutSummary.size();
-    if (LLVM_LIKELY(mCarryInfo->hasSummary())) {
-        if (LLVM_LIKELY(mCarryInfo->hasExplicitSummary())) {
-            writeCarryOutSummary(mCarryOutSummary[n - 1], iBuilder->getInt32(0));
-        }
+    const auto n = mCarrySummaryStack.size();
+    if (LLVM_LIKELY(mCarryInfo->hasExplicitSummary())) {
+        writeCarryOutSummary(mCarrySummaryStack[n - 1], iBuilder->getInt32(0));
     }
     if (n > 2) {
-        mCarryOutSummary[n - 1] = iBuilder->CreateOr(mCarryOutSummary[n - 1], mCarryOutSummary[n - 2], "summary");
+        mCarrySummaryStack[n - 1] = iBuilder->CreateOr(mCarrySummaryStack[n - 1], mCarrySummaryStack[n - 2], "summary");
     }
 }
 
@@ -438,24 +446,22 @@ void CarryManager::leaveIfBody(BasicBlock * const exitBlock) {
 void CarryManager::leaveIfScope(BasicBlock * const entryBlock, BasicBlock * const exitBlock) {
     assert (mIfDepth > 0);
     if (LLVM_LIKELY(mCarryInfo->hasSummary())) {
-        const auto n = mCarryOutSummary.size(); assert (n > 0);
+        const auto n = mCarrySummaryStack.size(); assert (n > 0);
         if (n > 2) {
             // When leaving a nested If scope with a summary value, phi out the summary to ensure the
             // appropriate summary is stored in the outer scope.
-            Value * nested = mCarryOutSummary[n - 1];
-            Value * outer = mCarryOutSummary[n - 2];
-            if (LLVM_LIKELY(nested != outer)) {
-                assert (nested->getType() == outer->getType());
-                PHINode * const phi = iBuilder->CreatePHI(nested->getType(), 2, "summary");
-                phi->addIncoming(outer, entryBlock);
-                phi->addIncoming(nested, exitBlock);
-                mCarryOutSummary[n - 2] = phi;
-            }
+            Value * nested = mCarrySummaryStack[n - 1];
+            Value * outer = mCarrySummaryStack[n - 2];
+            assert (nested->getType() == outer->getType());
+            PHINode * const phi = iBuilder->CreatePHI(nested->getType(), 2, "summary");
+            phi->addIncoming(outer, entryBlock);
+            phi->addIncoming(nested, exitBlock);
+            mCarrySummaryStack[n - 2] = phi;
         }
     }
     --mIfDepth;
     leaveScope();
-    mCarryOutSummary.pop_back();
+    mCarrySummaryStack.pop_back();
 }
 
 /** ------------------------------------------------------------------------------------------------------------ *
@@ -617,19 +623,12 @@ Value * CarryManager::getNextCarryIn() {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief collapsingCarryMode
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool CarryManager::inCarryCollapsingMode() const {
-    return (dyn_cast_or_null<While>(mCurrentScope->getBranch()) && !mCarryInfo->nonCarryCollapsingMode());
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief setNextCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::setNextCarryOut(Value * carryOut) {
     assert (mCurrentFrameIndex < mCurrentFrame->getType()->getPointerElementType()->getStructNumElements());
     carryOut = iBuilder->CreateBitCast(carryOut, mCarryPackType);
-    if (mCarryInfo->hasExplicitSummary()) {
+    if (mCarryInfo->hasSummary()) {
         addToCarryOutSummary(carryOut);
     }
     Value * carryOutPtr = nullptr;
@@ -637,15 +636,14 @@ void CarryManager::setNextCarryOut(Value * carryOut) {
         carryOutPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex)});
     } else {
         carryOutPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex), mNextLoopSelector});
+        if (LLVM_LIKELY(!mCarryInfo->nonCarryCollapsingMode())) {
+            Value * accum = iBuilder->CreateBlockAlignedLoad(carryOutPtr);
+            carryOut = iBuilder->CreateOr(carryOut, accum);
+        }
     }
     ++mCurrentFrameIndex;
-    if (inCarryCollapsingMode()) {
-        Value * accum = iBuilder->CreateBlockAlignedLoad(carryOutPtr);
-        carryOut = iBuilder->CreateOr(carryOut, accum);
-    }
     assert (carryOutPtr->getType()->getPointerElementType() == mCarryPackType);
     iBuilder->CreateBlockAlignedStore(carryOut, carryOutPtr);
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -666,13 +664,13 @@ Value * CarryManager::readCarryInSummary(ConstantInt * index) const {
     Value * indicies[length];
     std::fill(indicies, indicies + count - 1, iBuilder->getInt32(0));
     indicies[count - 1] = index;
-    if (mLoopDepth > 0) {
+    if (mLoopDepth != 0) {
         indicies[count] = mLoopSelector;
     }
     ArrayRef<Value *> ar(indicies, length);
     Value * const ptr = iBuilder->CreateGEP(mCurrentFrame, ar);
     Value * const summary = iBuilder->CreateBlockAlignedLoad(ptr);
-    if (mLoopDepth > 0) {
+    if (mLoopDepth != 0 && mCarryInfo->hasExplicitSummary()) {
         iBuilder->CreateBlockAlignedStore(Constant::getNullValue(mCarryPackType), ptr);
     }
     return summary;
@@ -692,14 +690,14 @@ inline void CarryManager::writeCarryOutSummary(Value * const summary, ConstantIn
     iBuilder->CreateBlockAlignedStore(summary, ptr);
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addToCarryOutSummary
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void CarryManager::addToCarryOutSummary(Value * const value) {
-    assert ("cannot add null summary value!" && value);
-    assert ("summary stack is empty!" && !mCarryOutSummary.empty());
-    mCarryOutSummary.back() = iBuilder->CreateOr(value, mCarryOutSummary.back());
+    assert ("cannot add null summary value!" && value);    
+    assert ("summary stack is empty!" && !mCarrySummaryStack.empty());
+    assert (mCarryInfo->hasSummary());
+    mCarrySummaryStack.back() = iBuilder->CreateOr(value, mCarrySummaryStack.back());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

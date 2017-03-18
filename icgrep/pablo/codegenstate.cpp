@@ -10,16 +10,17 @@
 #include <pablo/arithmetic.h>
 #include <pablo/branch.h>
 #include <pablo/pe_advance.h>
+#include <pablo/pe_count.h>
+#include <pablo/pe_infile.h>
+#include <pablo/pe_integer.h>
 #include <pablo/pe_lookahead.h>
 #include <pablo/pe_matchstar.h>
-#include <pablo/pe_scanthru.h>
-#include <pablo/pe_infile.h>
-#include <pablo/pe_count.h>
-#include <pablo/pe_integer.h>
-#include <pablo/pe_string.h>
-#include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
+#include <pablo/pe_phi.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_string.h>
 #include <pablo/pe_var.h>
+#include <pablo/pe_zeroes.h>
 #include <pablo/ps_assign.h>
 #include <pablo/pablo_kernel.h>
 #include <llvm/Support/raw_os_ostream.h>
@@ -31,6 +32,17 @@
 using namespace llvm;
 
 namespace pablo {
+
+
+Phi * PabloBlock::createPhi(Type * type, String * name) {
+    if (type == nullptr) {
+        type = getParent()->getBuilder()->getStreamTy();
+    }
+    if (name == nullptr) {
+        name = makeName("phi");
+    }
+    return insertAtInsertionPoint(new (mAllocator) Phi(type, 2, name, mAllocator));
+}
 
 /// UNARY CREATE FUNCTIONS
 ///
