@@ -9,7 +9,8 @@
 #include <string>  // for string
 #include <vector>  // for vector
 namespace IDISA { class IDISA_Builder; }
-namespace llvm { class ConstantInt; }
+//namespace llvm { class ConstantInt; }
+#include <llvm/IR/Constants.h>
 namespace llvm { class Function; }
 namespace llvm { class Module; }
 namespace llvm { class PointerType; }
@@ -37,14 +38,16 @@ namespace llvm { class Value; }
 // 
 
 struct ProcessingRate  {
-    enum ProcessingRateKind : uint8_t {Fixed, RoundUp, Max, Unknown};
+    enum ProcessingRateKind : uint8_t {Fixed, RoundUp, Max, Add1, Unknown};
     ProcessingRate() {}
     ProcessingRateKind getKind() const {return mKind;}
-    bool isExact() const {return (mKind == Fixed)||(mKind == RoundUp) ;}
+    bool isExact() const {return (mKind == Fixed)||(mKind == RoundUp)||(mKind == Add1) ;}
+    llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems, llvm::Value * doFinal) const;
     llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems) const;
     friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems);
     friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems);
-    friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple);
+    friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple);    
+    friend ProcessingRate Add1();
     friend ProcessingRate UnknownRate();
     
 protected:
@@ -59,6 +62,7 @@ protected:
 ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1);
 ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1);
 ProcessingRate RoundUpToMultiple(unsigned itemMultiple);
+ProcessingRate Add1();
 ProcessingRate UnknownRate();
 
 struct Binding {
@@ -114,7 +118,7 @@ public:
 
     virtual void setProcessedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
 
-    virtual llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name) const = 0;
+
 
     virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
 

@@ -477,7 +477,9 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
             Value * EOFbit = mKernel->getScalarField("EOFbit");
             value = iBuilder->simd_and(compileExpression(e->getExpr()), EOFbit);
         } else if (const Count * c = dyn_cast<Count>(stmt)) {
-            Value * const to_count = compileExpression(c->getExpr());
+	    Value * EOFbit = mKernel->getScalarField("EOFbit");
+	    Value * EOFmask = mKernel->getScalarField("EOFmask");
+	    Value * const to_count = iBuilder->simd_and(iBuilder->simd_or(iBuilder->simd_not(EOFmask), EOFbit), compileExpression(c->getExpr()));
             const unsigned counterSize = iBuilder->getSizeTy()->getBitWidth();
             const auto f = mAccumulator.find(c);
             if (LLVM_UNLIKELY(f == mAccumulator.end())) {

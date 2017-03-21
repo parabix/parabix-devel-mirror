@@ -27,11 +27,12 @@ LineBreakKernelBuilder::LineBreakKernelBuilder (
 IDISA::IDISA_Builder * iBuilder
 , std::string linebreak
 , unsigned basisBitsCount)
-: PabloKernel(iBuilder, linebreak +"_kernel", {Binding{iBuilder->getStreamSetTy(basisBitsCount), "basis"}}) {
+: PabloKernel(iBuilder, linebreak +"_kernel", {Binding{iBuilder->getStreamSetTy(basisBitsCount), "basis"}}, {Binding{iBuilder->getStreamSetTy(1), "linebreak", Add1()}}) {
 
     CC_Compiler ccc(this, getInput(0));
     auto & builder = ccc.getBuilder();
     
+    PabloAST * LineBreak = nullptr;
     PabloAST * LF = ccc.compileCC("LF", makeCC(0x0A), builder);
     PabloAST * CR = ccc.compileCC(makeCC(0x0D));
     PabloAST * LF_VT_FF_CR = ccc.compileCC(makeCC(0x0A, 0x0D));
@@ -74,7 +75,7 @@ IDISA::IDISA_Builder * iBuilder
     
     PabloAST * lb = UNICODE_LINE_BREAK ? UnicodeLineBreak : LF;
     PabloAST * unterminatedLineAtEOF = builder.createAtEOF(builder.createAdvance(builder.createNot(LB_chars), 1));
-    PabloAST * LineBreak = builder.createOr(lb, unterminatedLineAtEOF);
-    Var * const r = addOutput("linebreak", getStreamTy());
+    LineBreak = builder.createOr(lb, unterminatedLineAtEOF);
+    PabloAST * const r = builder.createExtract(getOutput(0), builder.getInteger(0));
     builder.createAssign(r, LineBreak);
 }

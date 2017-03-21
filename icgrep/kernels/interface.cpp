@@ -33,8 +33,30 @@ ProcessingRate RoundUpToMultiple(unsigned itemMultiple) {
     return ProcessingRate(ProcessingRate::ProcessingRateKind::RoundUp, itemMultiple, itemMultiple);
 }
 
+ProcessingRate Add1() {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Add1, 0, 0);
+}
+
 ProcessingRate UnknownRate() {
     return ProcessingRate(ProcessingRate::ProcessingRateKind::Unknown, 0, 0);
+}
+
+Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value * principalInputItems, Value * doFinal) const {
+    Type * T = principalInputItems->getType();
+    if (mKind == ProcessingRate::ProcessingRateKind::Fixed || mKind == ProcessingRate::ProcessingRateKind::Max) {
+        Value * strmItems = (ratio_numerator == 1) ? principalInputItems : b->CreateMul(principalInputItems, ConstantInt::get(T, ratio_numerator)); 
+        if (ratio_denominator == 1) return strmItems;
+        return b->CreateUDiv(b->CreateAdd(ConstantInt::get(T, ratio_denominator - 1), strmItems), ConstantInt::get(T, ratio_denominator)); 
+    }
+    if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
+        Constant * multiple = ConstantInt::get(T, ratio_denominator);
+        Constant * multipleLess1 = ConstantInt::get(T, ratio_denominator - 1);
+        return b->CreateMul(b->CreateUDiv(b->CreateAdd(principalInputItems, multipleLess1), multiple), multiple);
+    }
+    if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
+        return b->CreateAdd(principalInputItems, b->CreateZExt(doFinal, principalInputItems->getType()));
+    }
+    return nullptr;
 }
 
 Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value * principalInputItems) const {
@@ -48,6 +70,9 @@ Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value *
         Constant * multiple = ConstantInt::get(T, ratio_denominator);
         Constant * multipleLess1 = ConstantInt::get(T, ratio_denominator - 1);
         return b->CreateMul(b->CreateUDiv(b->CreateAdd(principalInputItems, multipleLess1), multiple), multiple);
+    }
+    if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
+        return principalInputItems;
     }
     return nullptr;
 }

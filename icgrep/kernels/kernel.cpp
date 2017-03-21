@@ -248,6 +248,16 @@ Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string
     return getScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX);
 }
 
+Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name, Value * doFinal) const {
+    unsigned ssIdx = getStreamSetIndex(name);
+    if (mStreamSetOutputs[ssIdx].rate.isExact()) {
+        std::string principalField = mStreamSetInputs.empty() ? mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX : mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
+        Value * principalItemsProcessed = getScalarField(instance, principalField);
+        return mStreamSetOutputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed, doFinal);
+    }
+    return getScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX);
+}
+
 Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name) const {
     unsigned ssIdx = getStreamSetIndex(name);
     if (mStreamSetOutputs[ssIdx].rate.isExact()) {

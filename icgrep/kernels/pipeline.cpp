@@ -190,15 +190,15 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
             doSegmentArgs.push_back(ProducerPos[producerKernel][outputIndex]);
         }
         kernels[k]->createDoSegmentCall(doSegmentArgs);
-        std::vector<Value *> produced;
-        for (unsigned i = 0; i < kernels[k]->getStreamOutputs().size(); i++) {
-            produced.push_back(kernels[k]->getProducedItemCount(instancePtrs[k], kernels[k]->getStreamOutputs()[i].name));
-        }
-        ProducerPos.push_back(produced);
-        if (! (kernels[k]->hasNoTerminateAttribute())) {
+         if (! (kernels[k]->hasNoTerminateAttribute())) {
             Value * terminated = kernels[k]->getTerminationSignal(instancePtrs[k]);
             doFinal = iBuilder->CreateOr(doFinal, terminated);
         }
+       std::vector<Value *> produced;
+        for (unsigned i = 0; i < kernels[k]->getStreamOutputs().size(); i++) {
+            produced.push_back(kernels[k]->getProducedItemCount(instancePtrs[k], kernels[k]->getStreamOutputs()[i].name, doFinal));
+        }
+        ProducerPos.push_back(produced);
 
         kernels[k]->releaseLogicalSegmentNo(instancePtrs[k], nextSegNo);
         if (k == last_kernel) {
@@ -514,7 +514,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
         }
         std::vector<Value *> produced;
         for (unsigned i = 0; i < kernels[k]->getStreamOutputs().size(); i++) {
-            produced.push_back(kernels[k]->getProducedItemCount(instance, kernels[k]->getStreamOutputs()[i].name));
+            produced.push_back(kernels[k]->getProducedItemCount(instance, kernels[k]->getStreamOutputs()[i].name, terminationFound));
         }
         ProducerPos.push_back(produced);
         Value * segNo = kernels[k]->acquireLogicalSegmentNo(instance);

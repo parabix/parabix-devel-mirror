@@ -12,7 +12,8 @@
 #include <boost/container/flat_map.hpp>
 #include <IR_Gen/idisa_builder.h>
 
-namespace llvm { class ConstantInt; }
+//namespace llvm { class ConstantInt; }
+#include <llvm/IR/Constants.h>
 namespace llvm { class Function; }
 namespace llvm { class IntegerType; }
 namespace llvm { class LoadInst; }
@@ -40,7 +41,9 @@ public:
 
     virtual void setProcessedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const;
 
-    virtual llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name) const override;
+    llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * doFinal) const;
+
+    llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name) const;
 
     virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const;
 
