@@ -32,6 +32,7 @@
 #include <toolchain.h>
 #include <iostream>
 #include <sstream>
+#include <cc/multiplex_CCs.h>
 #ifdef CUDA_ENABLED
 #include <IR_Gen/CudaDriver.h>
 #include "preprocess.cpp"
