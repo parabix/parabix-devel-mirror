@@ -66,6 +66,7 @@ public:
         , String
         , Block
         , Kernel
+        , Phi
         /** Statements **/
         // Boolean operations
         , And
@@ -91,8 +92,6 @@ public:
         // Scope blocks
         , If
         , While
-        // Internal types
-        , Phi
     };
 
     inline ClassTypeId getClassTypeId() const noexcept {
@@ -249,7 +248,7 @@ protected:
     explicit Statement(const ClassTypeId id, llvm::Type * const type, const unsigned reserved, const String * const name, Allocator & allocator)
     : PabloAST(id, type, allocator)
     , mOperands(0)
-    , mOperand(allocator.allocate(mOperands))
+    , mOperand(allocator.allocate(reserved))
     , mNext(nullptr)
     , mPrev(nullptr)
     , mName(name)

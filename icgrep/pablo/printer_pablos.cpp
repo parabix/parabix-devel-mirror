@@ -5,23 +5,24 @@
  */
 
 #include "printer_pablos.h"
-#include <pablo/codegenstate.h>
-#include <pablo/boolean.h>
 #include <pablo/arithmetic.h>
+#include <pablo/boolean.h>
 #include <pablo/branch.h>
+#include <pablo/codegenstate.h>
+#include <pablo/pablo_kernel.h>
 #include <pablo/pe_advance.h>
+#include <pablo/pe_count.h>
+#include <pablo/pe_infile.h>
+#include <pablo/pe_integer.h>
 #include <pablo/pe_lookahead.h>
 #include <pablo/pe_matchstar.h>
-#include <pablo/pe_scanthru.h>
-#include <pablo/pe_infile.h>
-#include <pablo/pe_count.h>
-#include <pablo/pe_integer.h>
-#include <pablo/pe_string.h>
-#include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
+#include <pablo/pe_phi.h>
+#include <pablo/pe_scanthru.h>
+#include <pablo/pe_string.h>
 #include <pablo/pe_var.h>
+#include <pablo/pe_zeroes.h>
 #include <pablo/ps_assign.h>
-#include <pablo/pablo_kernel.h>
 #include <llvm/Support/raw_os_ostream.h>
 
 using namespace pablo;
@@ -159,6 +160,13 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
         out << "1";
     } else if (const Var * var = dyn_cast<Var>(expr)) {
         out << var->getName();
+    } else if (const Phi * const phi = dyn_cast<Phi>(expr)) {
+        out << "phi(";
+        for (unsigned i = 0; i != phi->getNumIncomingValues(); ++i) {
+            if (i) out << ", ";
+            print(phi->getIncomingValue(i), out);
+        }
+        out << ")";
     } else if (const If * ifstmt = dyn_cast<If>(expr)) {
         out << "If ";
         print(ifstmt->getCondition(), out);

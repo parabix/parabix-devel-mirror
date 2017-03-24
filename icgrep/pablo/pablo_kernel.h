@@ -11,7 +11,7 @@
 #include <pablo/symbol_generator.h>
 #include <util/slab_allocator.h>
 #include <llvm/ADT/StringRef.h>
-#include <boost/container/flat_map.hpp>      // for mScalarOutputNameMap
+#include <boost/container/flat_map.hpp>
 
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Type; }

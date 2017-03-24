@@ -432,13 +432,13 @@ inline PabloAST * RE_Compiler::consecutive_matches(PabloAST * repeated, int leng
     int i = length;
     int total = repeat_count * length;
     PabloAST * consecutive_i = repeated;
-    while (i * 2 < total) {
+    while ((i * 2) < total) {
         PabloAST * v = consecutive_i;
         PabloAST * v2 =  pb.createAdvance(v, i);
         i *= 2;
         consecutive_i = pb.createAnd(v, v2, "at" + std::to_string(i) + "of" + std::to_string(total));
     }
-    if (i < total) {
+    if (LLVM_LIKELY(i < total)) {
         PabloAST * v = consecutive_i;
         consecutive_i = pb.createAnd(v, pb.createAdvance(v, total - i), "at" + std::to_string(total));
     }
@@ -452,13 +452,13 @@ inline PabloAST * RE_Compiler::reachable(PabloAST * repeated, int length, int re
         return repeated;
     }
     PabloAST * reachable_i = pb.createOr(repeated, pb.createAdvance(repeated, 1), "within1");
-    while (i * 2 < total_lgth) {
+    while ((i * 2) < total_lgth) {
         PabloAST * v = reachable_i;
         PabloAST * v2 =  pb.createAdvance(v, i);
         i *= 2;
         reachable_i = pb.createOr(v, v2, "within" + std::to_string(i));
     }
-    if (i < total_lgth) {
+    if (LLVM_LIKELY(i < total_lgth)) {
         PabloAST * v = reachable_i;
         reachable_i = pb.createOr(v, pb.createAdvance(v, total_lgth - i), "within" + std::to_string(total_lgth));
     }
@@ -466,8 +466,9 @@ inline PabloAST * RE_Compiler::reachable(PabloAST * repeated, int length, int re
 }
 
 MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, PabloBuilder & pb) {
-    if (lb == 0) return marker;
-    if (!mGraphemeBoundaryRule && isByteLength(repeated) && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
+    if (lb == 0) {
+        return marker;
+    } else if (!mGraphemeBoundaryRule && isByteLength(repeated) && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * cc_lb = consecutive_matches(cc, 1, lb, pb);
         PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), markerPos(marker) == MarkerPosition::FinalMatchUnit ? lb : lb - 1);
@@ -478,7 +479,9 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
     if (mGraphemeBoundaryRule) {
         marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
     }
-    if (lb == 1) return marker;
+    if (lb == 1) {
+        return marker;
+    }
     Var * m = pb.createVar("m", pb.createZeroes());
     PabloBuilder nested = PabloBuilder::Create(pb);
     MarkerType m1 = processLowerBound(repeated, lb - 1, marker, nested);
@@ -488,8 +491,9 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
 }
     
 MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType marker, PabloBuilder & pb) {
-    if (ub == 0) return marker;
-    if (!mGraphemeBoundaryRule && isByteLength(repeated) && ub > 1 && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
+    if (ub == 0) {
+        return marker;
+    } else if (!mGraphemeBoundaryRule && isByteLength(repeated) && ub > 1 && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
         // log2 upper bound for fixed length (=1) class
         // Create a mask of positions reachable within ub from current marker.
         // Use matchstar, then apply filter.
@@ -507,7 +511,9 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
     if (mGraphemeBoundaryRule) {
         marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
     }
-    if (ub == 1) return marker;
+    if (ub == 1) {
+        return marker;
+    }
     Var * m1a = pb.createVar("m", pb.createZeroes());
     PabloBuilder nested = PabloBuilder::Create(pb);
     MarkerType m1 = processBoundedRep(repeated, ub - 1, marker, nested);

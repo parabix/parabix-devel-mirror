@@ -55,6 +55,7 @@ SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_buil
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/branch.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_kernel.cpp pablo/pablo_compiler.cpp pablo/carry_manager.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/analysis/pabloverifier.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/passes/ssapass.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp pablo/passes/flattenif.cpp)
 IF(ENABLE_MULTIPLEXING)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/booleanreassociationpass.cpp)

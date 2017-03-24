@@ -16,18 +16,25 @@
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_var.h>
 
+#include <llvm/Support/raw_ostream.h>
+
 using namespace llvm;
 
 namespace pablo {
+
+inline static unsigned ceil_log2(const unsigned v) {
+    assert ("log2(0) is undefined!" && v != 0);
+    return 32 - __builtin_clz(v - 1);
+}
 
 inline static unsigned floor_log2(const unsigned v) {
     assert ("log2(0) is undefined!" && v != 0);
     return 31 - __builtin_clz(v);
 }
 
-inline static unsigned nearest_pow2(const uint32_t v) {
+inline static unsigned nearest_pow2(const unsigned v) {
     assert(v > 0 && v < (UINT32_MAX / 2));
-    return (v < 2) ? 1 : (1 << (32 - __builtin_clz(v - 1)));
+    return (v < 2) ? 1 : (1 << ceil_log2(v));
 }
 
 inline static unsigned ceil_udiv(const unsigned x, const unsigned y) {
@@ -48,6 +55,8 @@ inline static bool isNonAdvanceCarryGeneratingStatement(const Statement * const 
             return false;
     }
 }
+
+#define LONG_ADVANCE_BREAKPOINT 64
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeCarryData
@@ -78,9 +87,9 @@ void CarryManager::initializeCarryData(PabloKernel * const kernel) {
 
     mCarryMetadata.resize(getScopeCount(kernel->getEntryBlock()));
 
-    Type * ty = analyse(kernel->getEntryBlock());
+    Type * const carryStateTy = analyse(kernel->getEntryBlock());
 
-    mKernel->addScalar(ty, "carries");
+    mKernel->addScalar(carryStateTy, "carries");
 
     if (mHasLoop) {
         mKernel->addScalar(iBuilder->getInt32Ty(), "selector");
@@ -128,10 +137,9 @@ void CarryManager::finalizeCodeGen() {
         mKernel->setScalarField("CarryBlockIndex", idx);
     }
     assert (mCarryFrameStack.empty());    
-    assert (mCarrySummaryStack.size() == 1);
-    assert ("base summary value was overwritten!" && isa<Constant>(mCarrySummaryStack[0]) && cast<Constant>(mCarrySummaryStack[0])->isNullValue());
+    assert ("base summary value was deleted!" && mCarrySummaryStack.size() == 1);
+    assert ("base summary value was overwritten with non-zero value!" && isa<Constant>(mCarrySummaryStack[0]) && cast<Constant>(mCarrySummaryStack[0])->isNullValue());
     mCarrySummaryStack.clear();
-
     assert (mCarryScopeIndex.size() == 1);
     mCarryScopeIndex.clear();
 }
@@ -523,15 +531,10 @@ Value * CarryManager::addCarryInCarryOut(const Statement * const operation, Valu
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::advanceCarryInCarryOut(const Advance * const advance, Value * const value) {
     const auto shiftAmount = advance->getAmount();
-    if (LLVM_LIKELY(shiftAmount <= mBitBlockWidth)) {
+    if (LLVM_LIKELY(shiftAmount < LONG_ADVANCE_BREAKPOINT)) {
         Value * const carryIn = getNextCarryIn();
         Value * carryOut, * result;
-        if (LLVM_UNLIKELY(shiftAmount == mBitBlockWidth)) {
-            result = carryIn;
-            carryOut = value;
-        } else {
-            std::tie(carryOut, result) = iBuilder->bitblock_advance(value, carryIn, shiftAmount);
-        }
+        std::tie(carryOut, result) = iBuilder->bitblock_advance(value, carryIn, shiftAmount);
         setNextCarryOut(carryOut);
         assert (result->getType() == mBitBlockType);
         return result;
@@ -543,64 +546,81 @@ Value * CarryManager::advanceCarryInCarryOut(const Advance * const advance, Valu
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief longAdvanceCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * CarryManager::longAdvanceCarryInCarryOut(Value * const value, const unsigned shiftAmount) {
+inline Value * CarryManager::longAdvanceCarryInCarryOut(Value * const value, const unsigned shiftAmount) {
 
-    assert (shiftAmount > mBitBlockWidth);
     assert (mHasLongAdvance);
+    assert (shiftAmount >= LONG_ADVANCE_BREAKPOINT);
 
-    Type * const streamVectorTy = iBuilder->getIntNTy(mBitBlockWidth);
-    Value * buffer = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex++), iBuilder->getInt32(0)});
+    Type * const streamTy = iBuilder->getIntNTy(mBitBlockWidth);
 
-    const unsigned blockShift = shiftAmount % mBitBlockWidth;
-    const unsigned entries = ceil_udiv(shiftAmount, mBitBlockWidth);
-
-    if (LLVM_LIKELY(mCarryInfo->hasExplicitSummary())) {
-        Value * const summaryPtr = iBuilder->CreateGEP(buffer, iBuilder->getInt32(0));
-        assert (summaryPtr->getType()->getPointerElementType() == mBitBlockType);
-        Value * carry = iBuilder->CreateZExtOrBitCast(iBuilder->bitblock_any(value), streamVectorTy);
-        const auto limit = ceil_udiv(shiftAmount, std::pow(mBitBlockWidth, 2));
-        assert (limit == summaryPtr->getType()->getPointerElementType()->getArrayNumElements());
-        for (unsigned i = 0;;++i) {
-            Value * ptr = iBuilder->CreateGEP(summaryPtr, iBuilder->getInt32(i));
-            Value * prior = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(ptr), streamVectorTy);
-            Value * stream = iBuilder->CreateOr(iBuilder->CreateShl(prior, 1), carry);
-            if (LLVM_LIKELY(i == limit)) {
-                stream = iBuilder->CreateAnd(stream, iBuilder->bitblock_mask_from(iBuilder->getInt32(entries % mBitBlockWidth)));
+    if (mIfDepth > 0) {
+        if (shiftAmount > mBitBlockWidth) {
+            const auto frameIndex = mCurrentFrameIndex++;
+            Value * carry = iBuilder->CreateZExt(iBuilder->bitblock_any(value), streamTy);
+            const unsigned summarySize = ceil_udiv(shiftAmount, mBitBlockWidth * mBitBlockWidth);
+            for (unsigned i = 0;;++i) {
+                Value * const ptr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(frameIndex), iBuilder->getInt32(i)});
+                Value * const prior = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(ptr), streamTy);
+                Value * const stream = iBuilder->CreateBitCast(iBuilder->CreateOr(iBuilder->CreateShl(prior, 1), carry), mBitBlockType);
+                if (LLVM_LIKELY(i == summarySize)) {
+                    Value * const maskedStream = iBuilder->CreateAnd(stream, iBuilder->bitblock_mask_from(iBuilder->getInt32(summarySize % mBitBlockWidth)));
+                    addToCarryOutSummary(maskedStream);
+                    iBuilder->CreateBlockAlignedStore(maskedStream, ptr);
+                    break;
+                }
                 addToCarryOutSummary(stream);
-                iBuilder->CreateBlockAlignedStore(stream, ptr);                
-                buffer = iBuilder->CreateGEP(buffer, iBuilder->getInt32(1));
-                break;
+                iBuilder->CreateBlockAlignedStore(stream, ptr);
+                carry = iBuilder->CreateLShr(prior, mBitBlockWidth - 1);
             }
-            addToCarryOutSummary(stream);
-            iBuilder->CreateBlockAlignedStore(stream, ptr);
-            carry = iBuilder->CreateLShr(prior, mBitBlockWidth - 1);
+        } else if (LLVM_LIKELY(mCarryInfo->hasExplicitSummary())) {
+            addToCarryOutSummary(value);
         }
     }
-    assert (buffer->getType()->getPointerElementType() == mBitBlockType);
+    const auto frameIndex = mCurrentFrameIndex++;
+    // special case using a single buffer entry and the carry_out value.
+    if (LLVM_LIKELY((shiftAmount < mBitBlockWidth) && (mLoopDepth == 0))) {
+        Value * const buffer = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(frameIndex), iBuilder->getInt32(0)});
+        assert (buffer->getType()->getPointerElementType() == mBitBlockType);
+        Value * carryIn = iBuilder->CreateBlockAlignedLoad(buffer);       
+        iBuilder->CreateBlockAlignedStore(value, buffer);
+        /* Very special case - no combine */
+        if (LLVM_UNLIKELY(shiftAmount == mBitBlockWidth)) {
+            return iBuilder->CreateBitCast(carryIn, mBitBlockType);
+        }
+        Value* block0_shr = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryIn, streamTy), mBitBlockWidth - shiftAmount);
+        Value* block1_shl = iBuilder->CreateShl(iBuilder->CreateBitCast(value, streamTy), shiftAmount);
+        return iBuilder->CreateBitCast(iBuilder->CreateOr(block1_shl, block0_shr), mBitBlockType);
+    } else { //
+        const unsigned blockShift = shiftAmount % mBitBlockWidth;
+        const unsigned blocks = ceil_udiv(shiftAmount, mBitBlockWidth);
+        // Create a mask to implement circular buffer indexing
+        Value * indexMask = iBuilder->getSize(nearest_pow2(blocks + ((mLoopDepth != 0) ? 1 : 0)) - 1);
+        Value * blockIndex = mKernel->getScalarField("CarryBlockIndex");
+        Value * carryIndex0 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(blocks));
+        Value * loadIndex0 = iBuilder->CreateAnd(carryIndex0, indexMask);
+        Value * const carryInPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(frameIndex), loadIndex0});
+        Value * carryIn = iBuilder->CreateBlockAlignedLoad(carryInPtr);
 
-    // Create a mask to implement circular buffer indexing
-    Value * indexMask = iBuilder->getSize(nearest_pow2(entries) - 1);    
-    Value * blockIndex = mKernel->getScalarField("CarryBlockIndex");
-    Value * carryIndex0 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(entries));
-    Value * loadIndex0 = iBuilder->CreateAnd(carryIndex0, indexMask);
-    Value * storeIndex = iBuilder->CreateAnd(blockIndex, indexMask);
-    Value * carryIn = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(buffer, loadIndex0));
-    assert (carryIn->getType() == mBitBlockType);
+        Value * storeIndex = iBuilder->CreateAnd(blockIndex, indexMask);
+        Value * const carryOutPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(frameIndex), storeIndex});
+        assert (carryIn->getType() == mBitBlockType);
 
-    // If the long advance is an exact multiple of BitBlockWidth, we simply return the oldest
-    // block in the long advance carry data area.  
-    if (blockShift == 0) {
-        iBuilder->CreateBlockAlignedStore(value, iBuilder->CreateGEP(buffer, storeIndex));
-        return carryIn;
+        // If the long advance is an exact multiple of BitBlockWidth, we simply return the oldest
+        // block in the long advance carry data area.
+        if (LLVM_UNLIKELY(blockShift == 0)) {
+            iBuilder->CreateBlockAlignedStore(value, carryOutPtr);
+            return carryIn;
+        } else { // Otherwise we need to combine data from the two oldest blocks.
+            Value * carryIndex1 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(blocks - 1));
+            Value * loadIndex1 = iBuilder->CreateAnd(carryIndex1, indexMask);
+            Value * const carryInPtr2 = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(frameIndex), loadIndex1});
+            Value * carry_block1 = iBuilder->CreateBlockAlignedLoad(carryInPtr2);
+            Value * block0_shr = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryIn, streamTy), mBitBlockWidth - blockShift);
+            Value * block1_shl = iBuilder->CreateShl(iBuilder->CreateBitCast(carry_block1, streamTy), blockShift);
+            iBuilder->CreateBlockAlignedStore(value, carryOutPtr);
+            return iBuilder->CreateBitCast(iBuilder->CreateOr(block1_shl, block0_shr), mBitBlockType);
+        }
     }
-    // Otherwise we need to combine data from the two oldest blocks.
-    Value * carryIndex1 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(entries - 1));
-    Value * loadIndex1 = iBuilder->CreateAnd(carryIndex1, indexMask);
-    Value * carry_block1 = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(buffer, loadIndex1));
-    Value * block0_shr = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryIn, streamVectorTy), mBitBlockWidth - blockShift);
-    Value * block1_shl = iBuilder->CreateShl(iBuilder->CreateBitCast(carry_block1, streamVectorTy), blockShift);
-    iBuilder->CreateBlockAlignedStore(value, iBuilder->CreateGEP(buffer, storeIndex));
-    return iBuilder->CreateBitCast(iBuilder->CreateOr(block1_shl, block0_shr), mBitBlockType);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -608,16 +628,15 @@ Value * CarryManager::longAdvanceCarryInCarryOut(Value * const value, const unsi
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::getNextCarryIn() {
     assert (mCurrentFrameIndex < mCurrentFrame->getType()->getPointerElementType()->getStructNumElements());
-    Value * carryInPtr = nullptr;
     if (mLoopDepth == 0) {
-        carryInPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex)});
+        mCarryPackPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex)});
     } else {
-        carryInPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex), mLoopSelector});
+        mCarryPackPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex), mLoopSelector});
     }
-    assert (carryInPtr->getType()->getPointerElementType() == mCarryPackType);
-    Value * const carryIn = iBuilder->CreateBlockAlignedLoad(carryInPtr);
+    assert (mCarryPackPtr->getType()->getPointerElementType() == mCarryPackType);
+    Value * const carryIn = iBuilder->CreateBlockAlignedLoad(mCarryPackPtr);
     if (mLoopDepth > 0) {
-        iBuilder->CreateBlockAlignedStore(Constant::getNullValue(mCarryPackType), carryInPtr);
+        iBuilder->CreateBlockAlignedStore(Constant::getNullValue(mCarryPackType), mCarryPackPtr);
     }
     return carryIn;
 }
@@ -631,19 +650,16 @@ void CarryManager::setNextCarryOut(Value * carryOut) {
     if (mCarryInfo->hasSummary()) {
         addToCarryOutSummary(carryOut);
     }
-    Value * carryOutPtr = nullptr;
-    if (mLoopDepth == 0) {
-        carryOutPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex)});
-    } else {
-        carryOutPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex), mNextLoopSelector});
+    if (mLoopDepth != 0) {
+        mCarryPackPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex), mNextLoopSelector});
         if (LLVM_LIKELY(!mCarryInfo->nonCarryCollapsingMode())) {
-            Value * accum = iBuilder->CreateBlockAlignedLoad(carryOutPtr);
+            Value * accum = iBuilder->CreateBlockAlignedLoad(mCarryPackPtr);
             carryOut = iBuilder->CreateOr(carryOut, accum);
         }
     }
     ++mCurrentFrameIndex;
-    assert (carryOutPtr->getType()->getPointerElementType() == mCarryPackType);
-    iBuilder->CreateBlockAlignedStore(carryOut, carryOutPtr);
+    assert (mCarryPackPtr->getType()->getPointerElementType() == mCarryPackType);
+    iBuilder->CreateBlockAlignedStore(carryOut, mCarryPackPtr);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -651,6 +667,7 @@ void CarryManager::setNextCarryOut(Value * carryOut) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::readCarryInSummary(ConstantInt * index) const {
     assert (mCarryInfo->hasSummary());
+
     unsigned count = 2;
     if (LLVM_UNLIKELY(mCarryInfo->hasBorrowedSummary())) {
         Type * frameTy = mCurrentFrame->getType()->getPointerElementType();
@@ -667,6 +684,7 @@ Value * CarryManager::readCarryInSummary(ConstantInt * index) const {
     if (mLoopDepth != 0) {
         indicies[count] = mLoopSelector;
     }
+
     ArrayRef<Value *> ar(indicies, length);
     Value * const ptr = iBuilder->CreateGEP(mCurrentFrame, ar);
     Value * const summary = iBuilder->CreateBlockAlignedLoad(ptr);
@@ -753,22 +771,21 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
     const unsigned carryScopeIndex = mCarryScopes++;
     const bool nonCarryCollapsingMode = hasIterationSpecificAssignment(scope);
     Type * const carryPackType = (loopDepth == 0) ? mCarryPackType : ArrayType::get(mCarryPackType, 2);
-    bool hasLongAdvances = false;
     std::vector<Type *> state;
 
     for (Statement * stmt : *scope) {
         if (LLVM_UNLIKELY(isa<Advance>(stmt))) {
             const auto amount = cast<Advance>(stmt)->getAmount();
             Type * type = carryPackType;
-            if (LLVM_UNLIKELY(amount > mBitBlockWidth)) {
-                const auto blocks = ceil_udiv(amount, mBitBlockWidth); assert (blocks > 1);
-                type = ArrayType::get(mBitBlockType, nearest_pow2(blocks));
-                if (LLVM_UNLIKELY(ifDepth > 0)) {
-                    Type * carryType = ArrayType::get(mBitBlockType, ceil_udiv(amount, std::pow(mBitBlockWidth, 2)));
-                    type = StructType::get(carryType, type, nullptr);
-                    hasLongAdvances = true;                    
+            if (LLVM_UNLIKELY(amount >= LONG_ADVANCE_BREAKPOINT)) {
+                const unsigned blocks = ceil_udiv(amount, mBitBlockWidth);
+                type = ArrayType::get(mBitBlockType, nearest_pow2(blocks + ((loopDepth != 0) ? 1 : 0)));
+                if (LLVM_UNLIKELY(ifDepth > 0 && amount > mBitBlockWidth)) {
+                    // 1 bit will mark the presense of any bit in each block.
+                    Type * carryType = ArrayType::get(mBitBlockType, ceil_udiv(amount, mBitBlockWidth * mBitBlockWidth));
+                    state.push_back(carryType);
                 }
-                mHasLongAdvance = true;
+                mHasLongAdvance = true;                
             }
             state.push_back(type);
         } else if (LLVM_UNLIKELY(isNonAdvanceCarryGeneratingStatement(stmt))) {
@@ -789,7 +806,7 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
     } else {
         //if (ifDepth > 0 || (nonCarryCollapsingMode | isNestedWithinNonCarryCollapsingLoop)) {
         if (dyn_cast_or_null<If>(scope->getBranch()) || nonCarryCollapsingMode || isNestedWithinNonCarryCollapsingLoop) {
-            if (LLVM_LIKELY(state.size() > 1 || hasLongAdvances)) {
+            if (LLVM_LIKELY(state.size() > 1)) {
                 summaryType = CarryData::ExplicitSummary;
                 // NOTE: summaries are stored differently depending whether we're entering an If or While branch. With an If branch, they
                 // preceed the carry state data and with a While loop they succeed it. This is to help cache prefectching performance.
@@ -834,6 +851,7 @@ CarryManager::CarryManager(IDISA::IDISA_Builder * idb) noexcept
 , mLoopDepth(0)
 , mLoopSelector(nullptr)
 , mNextLoopSelector(nullptr)
+, mCarryPackPtr(nullptr)
 , mCarryScopes(0) {
 
 }

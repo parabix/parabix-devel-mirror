@@ -10,12 +10,6 @@ using namespace llvm;
 
 namespace pablo {
 
-Branch::Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body, Allocator &allocator)
-: Statement(typeId, nullptr, {condition}, nullptr, allocator)
-, mBody(body) {
-
-}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief escapes
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -97,12 +91,29 @@ Branch::EscapedVars Branch::getEscaped() const {
     return escaped;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setBody
+ ** ------------------------------------------------------------------------------------------------------------- */
 PabloBlock * Branch::setBody(PabloBlock * const body) {
     body->setBranch(this);
     PabloBlock * const priorBody = mBody;
     mBody = body;
     priorBody->setBranch(nullptr);
     return priorBody;
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructor
+ ** ------------------------------------------------------------------------------------------------------------- */
+Branch::Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body, Allocator &allocator)
+: Statement(typeId, nullptr, {condition}, nullptr, allocator)
+, mBody(body)
+, mEscapedCount(0)
+, mEscapedCapacity(0)
+, mEscaped(nullptr)
+{
+
 }
 
 }

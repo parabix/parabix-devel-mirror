@@ -1,6 +1,7 @@
 #include "pabloverifier.hpp"
 #include <pablo/branch.h>
 #include <pablo/pe_var.h>
+#include <pablo/pe_phi.h>
 #include <pablo/ps_assign.h>
 #include <pablo/codegenstate.h>
 #include <pablo/pablo_kernel.h>

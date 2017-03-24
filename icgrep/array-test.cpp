@@ -33,6 +33,8 @@
 #include <pablo/pablo_toolchain.h>
 #include <iostream>
 
+#include <pablo/passes/ssapass.h>
+
 namespace llvm { class Type; }
 namespace pablo { class Integer; }
 namespace pablo { class Var; }
@@ -76,9 +78,13 @@ void generate(PabloKernel * kernel) {
 
     Var * matches = kernel->getOutputStreamVar("matches");
 
-    PabloBuilder body = PabloBuilder::Create(pb);
+//    PabloBuilder outer = PabloBuilder::Create(pb);
 
-    pb.createWhile(pending_lparen, body);
+//    pb.createWhile(pending_lparen, outer);
+
+    PabloBuilder body = PabloBuilder::Create(pb); // outer
+
+    pb.createWhile(pending_lparen, body); // outer
 
         PabloAST * adv_pending_lparen = body.createAdvance(pending_lparen, 1);
 
@@ -117,204 +123,6 @@ void generate(PabloKernel * kernel) {
 
 }
 
-
-//void generate(PabloKernel * kernel) {
-
-//    PabloBuilder pb(kernel->getEntryBlock());
-
-//    Var * input = kernel->getInputStreamVar("input");
-
-//    PabloAST * basis[8];
-//    for (int i = 0; i < 8; ++i) {
-//        basis[i] = pb.createExtract(input, i);
-//    }
-
-//    PabloAST * temp1 = pb.createOr(basis[0], basis[1], "temp1");
-//    PabloAST * temp2 = pb.createAnd(basis[2], pb.createNot(basis[3]), "temp2");
-//    PabloAST * temp3 = pb.createAnd(temp2, pb.createNot(temp1), "temp3");
-//    PabloAST * temp4 = pb.createAnd(basis[4], pb.createNot(basis[5]), "temp4");
-//    PabloAST * temp5 = pb.createOr(basis[6], basis[7], "temp5");
-//    PabloAST * temp6 = pb.createAnd(temp4, pb.createNot(temp5), "temp6");
-//    PabloAST * lparen = pb.createAnd(temp3, temp6, "lparens");
-//    PabloAST * temp7 = pb.createAnd(basis[7], pb.createNot(basis[6]), "temp7");
-//    PabloAST * temp8 = pb.createAnd(temp4, temp7, "temp8");
-//    PabloAST * rparen = pb.createAnd(temp3, temp8, "rparens");
-//    PabloAST * parens = pb.createOr(lparen, rparen, "parens");
-
-
-//    Var * const pending_lparen = pb.createVar("pending_lparen", lparen);
-//    Var * const all_closed = pb.createVar("all_closed", pb.createZeroes());
-//    Var * const accumulated_errors = pb.createVar("accumulated_errors", pb.createZeroes());
-//    Var * const in_play = pb.createVar("in_play", parens);
-//    Var * const index = pb.createVar("i", pb.getInteger(0));
-
-//    Var * matches = kernel->getOutputStreamVar("matches");
-
-//    PabloBuilder body = PabloBuilder::Create(pb);
-
-//    pb.createWhile(pending_lparen, body);
-
-//        PabloAST * adv_pending_lparen = body.createAdvance(pending_lparen, 1);
-
-//        Var * closed_rparen = body.createVar("closed_rparen", pb.createZeroes());
-
-//        PabloBuilder ifPScan = PabloBuilder::Create(body);
-
-//        body.createIf(adv_pending_lparen, ifPScan); // <-- inefficient but tests whether we're probably calculating the summary later
-
-//            PabloAST * pscan = ifPScan.createScanTo(adv_pending_lparen, in_play, "pscan");
-
-//            ifPScan.createAssign(pending_lparen, ifPScan.createAnd(pscan, lparen));
-
-//            ifPScan.createAssign(closed_rparen, ifPScan.createAnd(pscan, rparen));
-
-//            ifPScan.createAssign(all_closed, ifPScan.createOr(all_closed, closed_rparen));
-
-//            // Mark any opening paren without a matching closer as an error.
-//            PabloAST * unmatched_lparen = ifPScan.createAtEOF(pscan, "unmatched_lparen");
-
-//            ifPScan.createAssign(accumulated_errors, ifPScan.createOr(accumulated_errors, unmatched_lparen));
-
-//            PabloAST * pending_rparen = ifPScan.createAnd(rparen, ifPScan.createNot(all_closed, "open_rparen"), "pending_rparen");
-
-//            ifPScan.createAssign(in_play, ifPScan.createOr(pending_lparen, pending_rparen));
-
-//        body.createAssign(body.createExtract(matches, index), closed_rparen);
-
-//        body.createAssign(index, body.createAdd(index, body.getInteger(1)));
-
-//    // Mark any closing paren that was not actually used to close an opener as an error.
-//    PabloAST * const unmatched_rparen = pb.createAnd(rparen, pb.createNot(all_closed), "unmatched_rparen");
-//    pb.createAssign(kernel->getOutputStreamVar("errors"), pb.createOr(accumulated_errors, unmatched_rparen));
-
-//}
-
-//void generate(PabloKernel * kernel) {
-
-//    PabloBuilder pb(kernel->getEntryBlock());
-
-//    Var * input = kernel->getInputStreamVar("input");
-
-//    PabloAST * basis[8];
-//    for (int i = 0; i < 8; ++i) {
-//        basis[i] = pb.createExtract(input, i);
-//    }
-
-//    PabloAST * temp1 = pb.createOr(basis[0], basis[1], "temp1");
-//    PabloAST * temp2 = pb.createAnd(basis[2], pb.createNot(basis[3]), "temp2");
-//    PabloAST * temp3 = pb.createAnd(temp2, pb.createNot(temp1), "temp3");
-//    PabloAST * temp4 = pb.createAnd(basis[4], pb.createNot(basis[5]), "temp4");
-//    PabloAST * temp5 = pb.createOr(basis[6], basis[7], "temp5");
-//    PabloAST * temp6 = pb.createAnd(temp4, pb.createNot(temp5), "temp6");
-//    PabloAST * lparen = pb.createAnd(temp3, temp6, "lparens");
-//    PabloAST * temp7 = pb.createAnd(basis[7], pb.createNot(basis[6]), "temp7");
-//    PabloAST * temp8 = pb.createAnd(temp4, temp7, "temp8");
-//    PabloAST * rparen = pb.createAnd(temp3, temp8, "rparens");
-//    PabloAST * parens = pb.createOr(lparen, rparen, "parens");
-
-
-//    Var * const pending_lparen = pb.createVar("pending_lparen", lparen);
-//    Var * const all_closed = pb.createVar("all_closed", pb.createZeroes());
-//    Var * const accumulated_errors = pb.createVar("accumulated_errors", pb.createZeroes());
-//    Var * const in_play = pb.createVar("in_play", parens);
-//    Var * const index = pb.createVar("i", pb.getInteger(0));
-
-//    Var * matches = kernel->getOutputStreamVar("matches");
-
-//    PabloBuilder body = PabloBuilder::Create(pb);
-
-//    pb.createWhile(pending_lparen, body);
-
-//        PabloAST * pscan = body.createAdvanceThenScanTo(pending_lparen, in_play, "pscan");
-
-//        Var * closed_rparen = body.createVar("closed_rparen", pb.createZeroes());
-
-//        body.createAssign(pending_lparen, body.createAnd(pscan, lparen));
-
-//        PabloBuilder ifPScan = PabloBuilder::Create(body);
-
-//        body.createIf(pscan, ifPScan);
-
-//            ifPScan.createAssign(closed_rparen, ifPScan.createAnd(pscan, rparen));
-
-//            ifPScan.createAssign(all_closed, ifPScan.createOr(all_closed, closed_rparen));
-
-//            // Mark any opening paren without a matching closer as an error.
-//            PabloAST * unmatched_lparen = ifPScan.createAtEOF(pscan, "unmatched_lparen");
-//            ifPScan.createAssign(accumulated_errors, ifPScan.createOr(accumulated_errors, unmatched_lparen));
-
-//            PabloAST * pending_rparen = ifPScan.createAnd(rparen, ifPScan.createNot(all_closed, "open_rparen"), "pending_rparen");
-
-//            ifPScan.createAssign(in_play, ifPScan.createOr(pending_lparen, pending_rparen));
-
-//            ifPScan.createAssign(ifPScan.createExtract(matches, index), closed_rparen);
-
-//        body.createAssign(index, body.createAdd(index, body.getInteger(1)));
-
-//    // Mark any closing paren that was not actually used to close an opener as an error.
-//    PabloAST * const unmatched_rparen = pb.createAnd(rparen, pb.createNot(all_closed), "unmatched_rparen");
-//    pb.createAssign(kernel->getOutputStreamVar("errors"), pb.createOr(accumulated_errors, unmatched_rparen));
-
-//}
-
-//void generate(PabloKernel * kernel) {
-
-//    PabloBuilder pb(kernel->getEntryBlock());
-
-//    Var * input = kernel->getInputStreamVar("input");
-
-//    PabloAST * basis[8];
-//    for (int i = 0; i < 8; ++i) {
-//        basis[i] = pb.createExtract(input, i);
-//    }
-
-//    PabloAST * temp1 = pb.createOr(basis[0], basis[1], "temp1");
-//    PabloAST * temp2 = pb.createAnd(basis[2], pb.createNot(basis[3]), "temp2");
-//    PabloAST * temp3 = pb.createAnd(temp2, pb.createNot(temp1), "temp3");
-//    PabloAST * temp4 = pb.createAnd(basis[4], pb.createNot(basis[5]), "temp4");
-//    PabloAST * temp5 = pb.createOr(basis[6], basis[7], "temp5");
-//    PabloAST * temp6 = pb.createAnd(temp4, pb.createNot(temp5), "temp6");
-//    PabloAST * lparen = pb.createAnd(temp3, temp6, "lparens");
-//    PabloAST * temp7 = pb.createAnd(basis[7], pb.createNot(basis[6]), "temp7");
-//    PabloAST * temp8 = pb.createAnd(temp4, temp7, "temp8");
-//    PabloAST * rparen = pb.createAnd(temp3, temp8, "rparens");
-//    PabloAST * parens = pb.createOr(lparen, rparen, "parens");
-
-
-//    Var * const pending_lparen = pb.createVar("pending_lparen", lparen);
-//    Var * const all_closed = pb.createVar("all_closed", pb.createZeroes());
-//    Var * const accumulated_errors = pb.createVar("accumulated_errors", pb.createZeroes());
-//    Var * const in_play = pb.createVar("in_play", parens);
-//    Var * const index = pb.createVar("i", pb.getInteger(0));
-
-//    Var * matches = kernel->getOutputStreamVar("matches");
-
-//    PabloBuilder body = PabloBuilder::Create(pb);
-
-//    pb.createWhile(pending_lparen, body);
-
-//        PabloAST * pscan = body.createAdvanceThenScanTo(pending_lparen, in_play, "pscan");
-
-//        PabloAST * closed_rparen = body.createAnd(pscan, rparen, "closed_rparen");
-//        body.createAssign(all_closed, body.createOr(all_closed, closed_rparen));
-
-//        body.createAssign(pending_lparen, body.createAnd(pscan, lparen));
-//        // Mark any opening paren without a matching closer as an error.
-//        PabloAST * unmatched_lparen = body.createAtEOF(pscan, "unmatched_lparen");
-//        body.createAssign(accumulated_errors, body.createOr(accumulated_errors, unmatched_lparen));
-
-//        body.createAssign(body.createExtract(matches, index), closed_rparen);
-
-//        PabloAST * pending_rparen = body.createAnd(rparen, body.createNot(all_closed, "open_rparen"), "pending_rparen");
-//        body.createAssign(in_play, body.createOr(pending_lparen, pending_rparen));
-//        body.createAssign(index, body.createAdd(index, body.getInteger(1)));
-
-//    // Mark any closing paren that was not actually used to close an opener as an error.
-//    PabloAST * const unmatched_rparen = pb.createAnd(rparen, pb.createNot(all_closed), "unmatched_rparen");
-//    pb.createAssign(kernel->getOutputStreamVar("errors"), pb.createOr(accumulated_errors, unmatched_rparen));
-
-//}
-
 Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
 
     Type * byteStreamTy = iBuilder->getStreamSetTy(1, 8);
@@ -349,6 +157,8 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
         {Binding{iBuilder->getStreamSetTy(count), "matches"}, Binding{iBuilder->getStreamTy(), "errors"}});
 
     generate(&bm);
+//    SSAPass::transform(&bm);
+
 //    pablo_function_passes(&bm);
 
     bm.getEntryBlock()->print(errs());

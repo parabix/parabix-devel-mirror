@@ -40,9 +40,14 @@ public:
     PabloBlock * setBody(PabloBlock * const body);
     EscapedVars getEscaped() const;
 protected:
+    void addEscaped(PabloAST * const node);
+    void removeEscaped(PabloAST * const node);
     Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body, Allocator & allocator);
 protected:
-    PabloBlock * mBody;
+    PabloBlock *    mBody;
+    unsigned        mEscapedCount;
+    unsigned        mEscapedCapacity;
+    PabloAST **     mEscaped;
 };
 
 class If : public Branch {

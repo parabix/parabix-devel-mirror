@@ -125,8 +125,9 @@ private:
 
     bool                                            mHasLoop;
     unsigned                                        mLoopDepth;
-    llvm::Value *                                   mLoopSelector;
+    llvm::Value *                                   mLoopSelector;    
     llvm::Value *                                   mNextLoopSelector;
+    llvm::Value *                                   mCarryPackPtr;
     std::vector<llvm::PHINode *>                    mLoopIndicies;
 
     std::vector<CarryData>                          mCarryMetadata;

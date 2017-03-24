@@ -34,14 +34,8 @@ using namespace llvm;
 namespace pablo {
 
 
-Phi * PabloBlock::createPhi(Type * type, String * name) {
-    if (type == nullptr) {
-        type = getParent()->getBuilder()->getStreamTy();
-    }
-    if (name == nullptr) {
-        name = makeName("phi");
-    }
-    return insertAtInsertionPoint(new (mAllocator) Phi(type, 2, name, mAllocator));
+Phi * PabloBlock::createPhi(Type * type) {
+    return new (mAllocator) Phi(type, mAllocator);
 }
 
 /// UNARY CREATE FUNCTIONS

@@ -396,13 +396,12 @@ BranchInst * CBuilder::CreateLikelyCondBr(Value * Cond, BasicBlock * True, Basic
     return CreateCondBr(Cond, True, False, mdb.createBranchWeights(probability, 100 - probability));
 }
 
-Value * CBuilder::CreateCeilLog2(Value * value) {
+Value * CBuilder::CreateCeilLog2(Value * const value) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     CreateAssert(value, "CreateCeilLog2: value cannot be zero");
-    Value * m = CreateCall(Intrinsic::getDeclaration(mMod, Intrinsic::ctlz, ty), {value, ConstantInt::getFalse(getContext())});
-    Value * isPowOf2 = CreateICmpEQ(CreateAnd(value, CreateSub(value, ConstantInt::get(ty, 1))), ConstantInt::getNullValue(ty));
-    m = CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m);
-    return CreateSelect(isPowOf2, m, CreateAdd(m, ConstantInt::get(m->getType(), 1)));
+    Value * v = CreateSub(value, ConstantInt::get(ty, 1));
+    Value * m = CreateCall(Intrinsic::getDeclaration(mMod, Intrinsic::ctlz, ty), {v, ConstantInt::getFalse(getContext())});
+    return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth()), m);
 }
 
 CBuilder::CBuilder(Module * const m, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes)

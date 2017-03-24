@@ -548,7 +548,7 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
         } else {
             std::string tmp;
             raw_string_ostream out(tmp);
-            out << "PabloCompiler: statement ";
+            out << "PabloCompiler: ";
             stmt->print(out);
             out << " was not recognized by the compiler";
             report_fatal_error(out.str());
@@ -613,6 +613,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
         }
         std::string tmp;
         raw_string_ostream out(tmp);
+        out << "PabloCompiler: ";
         expr->print(out);
         out << " is not a valid Operator";
         report_fatal_error(out.str());
@@ -621,7 +622,7 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
     if (LLVM_UNLIKELY(f == mMarker.end())) {
         std::string tmp;
         raw_string_ostream out(tmp);
-        out << "Compilation error: ";
+        out << "PabloCompiler: ";
         expr->print(out);
         out << " was used before definition!";
         report_fatal_error(out.str());

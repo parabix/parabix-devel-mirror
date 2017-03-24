@@ -274,15 +274,7 @@ public:
 
     While * createWhile(PabloAST * condition, PabloBlock * body);
 
-    Phi * createPhi(llvm::Type * type = nullptr) {
-        return createPhi(type, nullptr);
-    }
-
-    Phi * createPhi(llvm::Type * type, const llvm::StringRef & prefix) {
-        return createPhi(type, makeName(prefix));
-    }
-
-    Phi * createPhi(llvm::Type * type, String * name);
+    Phi * createPhi(llvm::Type * type);
 
     llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return mParent->getStreamSetTy(NumElements, FieldWidth);

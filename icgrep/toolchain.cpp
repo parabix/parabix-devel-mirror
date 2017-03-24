@@ -170,7 +170,6 @@ void WriteAssembly (TargetMachine *TM, Module * m) {
 #endif
 
 ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
-
     // Use the pass manager to optimize the function.
     legacy::PassManager PM;
     #ifndef NDEBUG
