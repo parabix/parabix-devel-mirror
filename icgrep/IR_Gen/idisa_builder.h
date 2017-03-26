@@ -23,6 +23,8 @@ public:
 
     virtual ~IDISA_Builder();
     
+    virtual std::string getBuilderUniqueName() = 0;  // A name uniquely identifying builder/bitBlockWidth/stride.
+    
     std::string getBitBlockTypeName() const;  // A short string such as v4i64 or i256.
 
     llvm::Value * bitCast(llvm::Value * a) {

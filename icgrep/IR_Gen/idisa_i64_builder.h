@@ -18,6 +18,7 @@ public:
     IDISA_I64_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth = 64, unsigned stride = 64, const bool SupportsIndirectBr = true)
     : IDISA_Builder(m, archBitWidth, bitBlockWidth, stride, SupportsIndirectBr) {
     } 
+    virtual std::string getBuilderUniqueName() override;
 
     Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;
     Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;

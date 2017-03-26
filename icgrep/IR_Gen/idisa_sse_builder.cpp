@@ -8,6 +8,9 @@
 
 namespace IDISA {
 
+std::string IDISA_SSE_Builder::getBuilderUniqueName() { return mBitBlockWidth != 128 ? "SSE_" + std::to_string(mBitBlockWidth) : "SSE";}
+std::string IDISA_SSE2_Builder::getBuilderUniqueName() { return mBitBlockWidth != 128 ? "SSE2_" + std::to_string(mBitBlockWidth) : "SSE2";}
+
 Value * IDISA_SSE2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
     if ((fw == 16) && (mBitBlockWidth == 128)) {
         Value * packuswb_func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_sse2_packuswb_128);

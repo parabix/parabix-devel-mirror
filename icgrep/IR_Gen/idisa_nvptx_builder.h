@@ -26,7 +26,7 @@ public:
     }
     
     ~IDISA_NVPTX20_Builder() {}
-
+    virtual std::string getBuilderUniqueName() override;
     int getGroupThreads();
     
     Value * bitblock_any(Value * a) override;
@@ -67,7 +67,7 @@ class IDISA_NVPTX35_Builder : public IDISA_NVPTX20_Builder {
     std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift) override;
 
     ~IDISA_NVPTX35_Builder() {};
-
+    virtual std::string getBuilderUniqueName() override;
 };
 #endif    
     

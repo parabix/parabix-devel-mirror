@@ -7,6 +7,9 @@
 #include "idisa_avx_builder.h"
 
 namespace IDISA {
+    
+std::string IDISA_AVX_Builder::getBuilderUniqueName() { return mBitBlockWidth != 256 ? "AVX_" + std::to_string(mBitBlockWidth) : "AVX";}
+std::string IDISA_AVX2_Builder::getBuilderUniqueName() { return mBitBlockWidth != 256 ? "AVX2_" + std::to_string(mBitBlockWidth) : "AVX2";}
 
 Value * IDISA_AVX_Builder::hsimd_signmask(unsigned fw, Value * a) {
     // AVX2 special cases

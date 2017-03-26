@@ -7,6 +7,8 @@
 #include "idisa_i64_builder.h"
 
 namespace IDISA {
+    
+std::string IDISA_I64_Builder::getBuilderUniqueName() { return mBitBlockWidth != 64 ? "C" + std::to_string(mBitBlockWidth) : "C";}
 
 Value * IDISA_I64_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
     Value * a_ = a;

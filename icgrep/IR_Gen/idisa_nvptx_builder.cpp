@@ -9,6 +9,8 @@
 #include <llvm/IR/Module.h>
 
 namespace IDISA {
+    
+std::string IDISA_NVPTX20_Builder::getBuilderUniqueName() { return "NVPTX20_" + std::to_string(groupThreads);}
 
 int IDISA_NVPTX20_Builder::getGroupThreads(){
     return groupThreads;

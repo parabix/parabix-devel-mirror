@@ -18,7 +18,7 @@ public:
     IDISA_AVX_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth)
     : IDISA_SSE2_Builder(m, archBitWidth, bitBlockWidth) {
     }
-
+    virtual std::string getBuilderUniqueName() override;
     Value * hsimd_signmask(unsigned fw, Value * a) override;
     ~IDISA_AVX_Builder() {}
 
@@ -30,7 +30,7 @@ public:
     IDISA_AVX2_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth)
     : IDISA_AVX_Builder(m, archBitWidth, bitBlockWidth) {
     }
-
+    virtual std::string getBuilderUniqueName() override;
     Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;
     Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;
     Value * esimd_mergeh(unsigned fw, Value * a, Value * b) override;
