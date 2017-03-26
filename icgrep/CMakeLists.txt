@@ -7,13 +7,22 @@ enable_testing()
 set (icgrep_VERSION_MAJOR 1)
 set (icgrep_VERSION_MINOR 6)
 
+
+
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(PRINT_TIMING_INFORMATION "Write compilation and execution timing information to standard error stream")
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 find_package(LLVM REQUIRED CONFIG)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in: ${LLVM_DIR}")
+
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake") # ensure custom FindXYZ.cmake files are found
+
+set (Parabix_REVISION "svn")
+include(VersionFromVCS)
+add_version_info_from_vcs(Parabix_REVISION)
+message(STATUS "Parabix_REVISION: ${Parabix_REVISION}")
+
 
 # Now set the header and library paths:
 include_directories( ${LLVM_INCLUDE_DIRS} )
@@ -178,6 +187,8 @@ IF (${LLVM_VERSION_MAJOR} EQUAL 3)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LLVM_3_7")
   ENDIF()
 ENDIF()
+
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_VERSION='\"${Parabix_REVISION}\"'")
 
 IF (PRINT_TIMING_INFORMATION)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPRINT_TIMING_INFORMATION")

@@ -247,6 +247,7 @@ void wc(wcFunctionType fn_ptr, const int64_t fileIdx) {
 
 
 int main(int argc, char *argv[]) {
+    AddParabixVersionPrinter();
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&wcFlags, pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
     if (wcOptions.size() == 0) {

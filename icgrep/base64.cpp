@@ -175,6 +175,7 @@ void base64(base64FunctionType fn_ptr, const std::string & fileName) {
 
 
 int main(int argc, char *argv[]) {
+    AddParabixVersionPrinter();
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&base64Options, codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
 

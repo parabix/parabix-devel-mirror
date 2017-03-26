@@ -47,6 +47,8 @@ void setNVPTXOption();
 void Compile2PTX (llvm::Module * m, std::string IRFilename, std::string PTXFilename);
 #endif
 
+void AddParabixVersionPrinter();
+
 bool AVX2_available();
 
 llvm::ExecutionEngine * JIT_to_ExecutionEngine (llvm::Module * m);

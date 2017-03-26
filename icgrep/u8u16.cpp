@@ -551,6 +551,7 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
 
 
 int main(int argc, char *argv[]) {
+    AddParabixVersionPrinter();
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&u8u16Options, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
 

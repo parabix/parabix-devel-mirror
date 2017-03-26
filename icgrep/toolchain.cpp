@@ -125,6 +125,16 @@ void Compile2PTX (Module * m, std::string IRFilename, std::string PTXFilename) {
 }
 #endif
 
+void printParabixVersion () {
+    raw_ostream &OS = outs();
+    OS << "Parabix (http://parabix.costar.sfu.ca/):\n  " << "Parabix revision " << PARABIX_VERSION << "\n";
+}
+
+void AddParabixVersionPrinter() {
+    cl::AddExtraVersionPrinter(&printParabixVersion);
+}
+
+
 
 void setAllFeatures(EngineBuilder &builder) {
     StringMap<bool> HostCPUFeatures;
@@ -170,6 +180,7 @@ void WriteAssembly (TargetMachine *TM, Module * m) {
 #endif
 
 ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
+
     // Use the pass manager to optimize the function.
     legacy::PassManager PM;
     #ifndef NDEBUG
