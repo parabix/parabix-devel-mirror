@@ -44,25 +44,27 @@ struct ProcessingRate  {
     bool isExact() const {return (mKind == Fixed)||(mKind == RoundUp)||(mKind == Add1) ;}
     llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems, llvm::Value * doFinal) const;
     llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems) const;
-    friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems);
-    friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems);
-    friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple);    
-    friend ProcessingRate Add1();
+    friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet);
+    friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet);
+    friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string referenceStreamSet);    
+    friend ProcessingRate Add1(std::string referenceStreamSet);
     friend ProcessingRate UnknownRate();
+    std::string referenceStreamSet() const { return mReferenceStreamSet;}
     
 protected:
-    ProcessingRate(ProcessingRateKind k, unsigned numerator, unsigned denominator) 
-    : mKind(k), ratio_numerator(numerator), ratio_denominator(denominator) {}
+    ProcessingRate(ProcessingRateKind k, unsigned numerator, unsigned denominator, std::string referenceStreamSet) 
+    : mKind(k), ratio_numerator(numerator), ratio_denominator(denominator), mReferenceStreamSet(referenceStreamSet) {}
     ProcessingRateKind mKind;
     uint16_t ratio_numerator;
     uint16_t ratio_denominator;
+    std::string mReferenceStreamSet;
     bool isVariableRate();
 }; 
 
-ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1);
-ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1);
-ProcessingRate RoundUpToMultiple(unsigned itemMultiple);
-ProcessingRate Add1();
+ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1, std::string referenceStreamSet = "");
+ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1, std::string referenceStreamSet = "");
+ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string referenceStreamSet = "");
+ProcessingRate Add1(std::string referenceStreamSet = "");
 ProcessingRate UnknownRate();
 
 struct Binding {

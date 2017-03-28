@@ -21,24 +21,24 @@ static const auto ACCUMULATOR_INFIX = "_get_";
 
 using namespace llvm;
 
-ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Fixed, strmItemsPer, perPrincipalInputItems);
+ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Fixed, strmItemsPer, perPrincipalInputItems, referenceStreamSet);
 }
 
-ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Max, strmItemsPer, perPrincipalInputItems);
+ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Max, strmItemsPer, perPrincipalInputItems, referenceStreamSet);
 }
 
-ProcessingRate RoundUpToMultiple(unsigned itemMultiple) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::RoundUp, itemMultiple, itemMultiple);
+ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string referenceStreamSet) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::RoundUp, itemMultiple, itemMultiple, referenceStreamSet);
 }
 
-ProcessingRate Add1() {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Add1, 0, 0);
+ProcessingRate Add1(std::string referenceStreamSet) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Add1, 0, 0, referenceStreamSet);
 }
 
 ProcessingRate UnknownRate() {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Unknown, 0, 0);
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Unknown, 0, 0, "");
 }
 
 Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value * principalInputItems, Value * doFinal) const {

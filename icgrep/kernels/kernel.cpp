@@ -242,7 +242,9 @@ void KernelBuilder::setScalarField(Value * instance, Value * index, Value * valu
 Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string & name) const {
     unsigned ssIdx = getStreamSetIndex(name);
     if (mStreamSetInputs[ssIdx].rate.isExact()) {
-        Value * principalItemsProcessed = getScalarField(instance, mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX);
+        std::string refSet = mStreamSetInputs[ssIdx].rate.referenceStreamSet();
+        if (refSet == "") refSet = mStreamSetInputs[0].name;
+        Value * principalItemsProcessed = getScalarField(instance, refSet + PROCESSED_ITEM_COUNT_SUFFIX);
         return mStreamSetInputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed);
     }
     return getScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX);
@@ -251,7 +253,20 @@ Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string
 Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name, Value * doFinal) const {
     unsigned ssIdx = getStreamSetIndex(name);
     if (mStreamSetOutputs[ssIdx].rate.isExact()) {
-        std::string principalField = mStreamSetInputs.empty() ? mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX : mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
+        std::string refSet = mStreamSetOutputs[ssIdx].rate.referenceStreamSet();
+        std::string principalField;
+        if (refSet == "") {
+            principalField = mStreamSetInputs.empty() ? mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX : mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
+        }
+        else {
+            unsigned pfIndex = getStreamSetIndex(refSet);
+            if (mStreamSetInputs.size() > pfIndex && mStreamSetInputs[pfIndex].name == refSet) {
+               principalField = refSet + PROCESSED_ITEM_COUNT_SUFFIX;
+            }
+            else {
+               principalField = refSet + PRODUCED_ITEM_COUNT_SUFFIX;
+            }
+        }
         Value * principalItemsProcessed = getScalarField(instance, principalField);
         return mStreamSetOutputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed, doFinal);
     }
@@ -260,8 +275,22 @@ Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string 
 
 Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name) const {
     unsigned ssIdx = getStreamSetIndex(name);
+    std::string refSet = mStreamSetOutputs[ssIdx].rate.referenceStreamSet();
     if (mStreamSetOutputs[ssIdx].rate.isExact()) {
-        std::string principalField = mStreamSetInputs.empty() ? mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX : mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
+        std::string refSet = mStreamSetOutputs[ssIdx].rate.referenceStreamSet();
+        std::string principalField;
+        if (refSet == "") {
+            principalField = mStreamSetInputs.empty() ? mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX : mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
+        }
+        else {
+            unsigned pfIndex = getStreamSetIndex(refSet);
+            if (mStreamSetInputs.size() > pfIndex && mStreamSetInputs[pfIndex].name == refSet) {
+               principalField = refSet + PROCESSED_ITEM_COUNT_SUFFIX;
+            }
+            else {
+               principalField = refSet + PRODUCED_ITEM_COUNT_SUFFIX;
+            }
+        }
         Value * principalItemsProcessed = getScalarField(instance, principalField);
         return mStreamSetOutputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed);
     }

@@ -271,9 +271,12 @@ SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(IDISA::IDISA_
     , mSwizzleSetCount((mBitStreamCount + mSwizzleFactor - 1)/mSwizzleFactor) {
         assert((fieldWidth > 0) && ((fieldWidth & (fieldWidth - 1)) == 0) && "fieldWidth must be a power of 2");
         assert(mSwizzleFactor > 1 && "fieldWidth must be less than the block width");
-        for (unsigned i = 0; i < mSwizzleSetCount; i++) {
+        mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle0"});
+        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle0", MaxRatio(1)});
+        addScalar(iBuilder->getBitBlockType(), "pendingSwizzleData0");
+        for (unsigned i = 1; i < mSwizzleSetCount; i++) {
             mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle" + std::to_string(i)});
-            mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle" + std::to_string(i), MaxRatio(1)});
+            mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle" + std::to_string(i), FixedRatio(1, 1, "outputSwizzle0")});
             addScalar(iBuilder->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
         }
         addScalar(iBuilder->getSizeTy(), "pendingOffset");
@@ -333,8 +336,8 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod() {
     Value * produced = iBuilder->CreateAdd(outputProduced, newlyProduced);
     for (unsigned j = 0; j < mSwizzleSetCount; j++) {
         setScalarField("pendingSwizzleData" + std::to_string(j), pendingData[j]);
-        setProducedItemCount("outputSwizzle" + std::to_string(j), produced);
     }
+    setProducedItemCount("outputSwizzle0", produced);
 }
 
 void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(Value * remainingBytes) {
@@ -342,8 +345,6 @@ void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(Value * remainin
     // All the data has been written.  Update the count to include pending data.
     Value * pendingOffset = getScalarField("pendingOffset");
     Value * produced = iBuilder->CreateAdd(pendingOffset, getProducedItemCount("outputSwizzle0"));
-    for (unsigned j = 0; j < mSwizzleSetCount; j++) {
-        setProducedItemCount("outputSwizzle" + std::to_string(j), produced);
-    }
+    setProducedItemCount("outputSwizzle0", produced);
 }
 }
