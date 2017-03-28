@@ -342,9 +342,20 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod() {
 
 void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(Value * remainingBytes) {
     CreateDoBlockMethodCall();
-    // All the data has been written.  Update the count to include pending data.
+    Constant * blockOffsetMask = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
+    Constant * outputIndexShift = iBuilder->getSize(std::log2(mFieldWidth));
+    
+    Value * outputProduced = getProducedItemCount("outputSwizzle0"); // All output groups have the same count.
+    Value * producedOffset = iBuilder->CreateAnd(outputProduced, blockOffsetMask);
+    Value * outputIndex = iBuilder->CreateLShr(producedOffset, outputIndexShift);
     Value * pendingOffset = getScalarField("pendingOffset");
-    Value * produced = iBuilder->CreateAdd(pendingOffset, getProducedItemCount("outputSwizzle0"));
-    setProducedItemCount("outputSwizzle0", produced);
+
+    // Write the pending data.
+    for (unsigned i = 0; i < mSwizzleSetCount; i++) {
+        Value * pendingData = getScalarField("pendingSwizzleData" + std::to_string(i));
+        Value * outputStreamPtr = getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), iBuilder->getInt32(0));
+        iBuilder->CreateBlockAlignedStore(pendingData, iBuilder->CreateGEP(outputStreamPtr, outputIndex));
+    }
+    setProducedItemCount("outputSwizzle0", iBuilder->CreateAdd(pendingOffset, outputProduced));
 }
 }
