@@ -23,7 +23,7 @@ VectorType * IDISA_Builder::fwVectorType(const unsigned fw) {
 
 Value * IDISA_Builder::fwCast(const unsigned fw, Value * const a) {
     VectorType * const ty = fwVectorType(fw);
-    assert (a->getType()->canLosslesslyBitCastTo(fwVectorType(fw)));
+    assert (a->getType()->getPrimitiveSizeInBits() == ty->getPrimitiveSizeInBits());
     return CreateBitCast(a, ty);
 }
 
