@@ -350,7 +350,7 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
-    ByteStream.setStreamSetBuffer(inputStream, fileSize);
+    ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
     U8u16Bits.allocateBuffer();
     DelMask.allocateBuffer();
@@ -367,7 +367,7 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     u16bits.allocateBuffer();
 
     if (mMapBuffering || memAlignBuffering) {
-        U16external.setEmptyBuffer(outputStream);
+        U16external.setStreamSetBuffer(outputStream);
     } else {
         U16out.allocateBuffer();
     }
@@ -454,7 +454,7 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     }
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
     
-    ByteStream.setStreamSetBuffer(inputStream, fileSize);
+    ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
     U8u16Bits.allocateBuffer();
     DelMask.allocateBuffer();
@@ -462,7 +462,7 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     U16Bits.allocateBuffer();
     DeletionCounts.allocateBuffer();
     if (mMapBuffering || memAlignBuffering) {
-        U16external.setEmptyBuffer(outputStream);
+        U16external.setStreamSetBuffer(outputStream);
     } else {
         U16out.allocateBuffer();
     }

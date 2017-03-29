@@ -13,23 +13,23 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class StdInKernel : public SegmentOrientedKernel {
+class StdInKernel final : public SegmentOrientedKernel {
 public:
     StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
 protected:
-    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override final;
+    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;
 };
     
 
-class FileSource : public SegmentOrientedKernel {
+class FileSource final : public SegmentOrientedKernel {
 public:
     FileSource(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
 protected:
-    void generateInitMethod() override final;
-    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override final;
+    void generateInitMethod() override;
+    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;

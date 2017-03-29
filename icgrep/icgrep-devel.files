@@ -2,6 +2,8 @@ cc/alphabet.cpp
 cc/alphabet.h
 cc/cc_compiler.cpp
 cc/cc_compiler.h
+cc/multiplex_CCs.cpp
+cc/multiplex_CCs.h
 editd/editd.cpp
 editd/editd_cpu_kernel.cpp
 editd/editd_cpu_kernel.h
@@ -93,6 +95,8 @@ pablo/passes/flattenassociativedfg.cpp
 pablo/passes/flattenassociativedfg.h
 pablo/passes/flattenif.cpp
 pablo/passes/flattenif.hpp
+pablo/passes/ssapass.cpp
+pablo/passes/ssapass.h
 pablo/arithmetic.h
 pablo/boolean.h
 pablo/branch.cpp
@@ -121,6 +125,7 @@ pablo/pe_integer.h
 pablo/pe_lookahead.h
 pablo/pe_matchstar.h
 pablo/pe_ones.h
+pablo/pe_phi.h
 pablo/pe_scanthru.h
 pablo/pe_string.h
 pablo/pe_var.h
@@ -233,6 +238,3 @@ utf8_encoder.cpp
 utf8_encoder.h
 wc.cpp
 CMakeLists.txt
-pablo/pe_phi.h
-pablo/passes/ssapass.h
-pablo/passes/ssapass.cpp

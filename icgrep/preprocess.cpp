@@ -67,9 +67,9 @@ Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder){
     unsigned bufferSegments = codegen::BufferSegments;
 
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    ByteStream.setStreamSetBuffer(inputStream, fileSize);
+    ByteStream.setStreamSetBuffer(inputStream);
     ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
-    MatchResults.setStreamSetBuffer(lineBreak, fileSize);
+    MatchResults.setStreamSetBuffer(lineBreak);
 
     kernel::MMapSourceKernel mmapK(iBuilder, segmentSize); 
     mmapK.generateKernel({}, {&ByteStream});

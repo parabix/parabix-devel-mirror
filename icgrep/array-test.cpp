@@ -173,7 +173,7 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main, 0));
 
-    ByteStream.setStreamSetBuffer(inputStream, fileSize);
+    ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
     matches.allocateBuffer();
     errors.allocateBuffer();

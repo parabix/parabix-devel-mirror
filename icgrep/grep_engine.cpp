@@ -23,7 +23,7 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/scanmatchgen.h>
 #include <kernels/streamset.h>
-#include <kernels/interface.h>
+#include <kernels/stdin_kernel.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
@@ -33,12 +33,14 @@
 #include <iostream>
 #include <sstream>
 #include <cc/multiplex_CCs.h>
+
+#include <llvm/Support/raw_ostream.h>
+
 #ifdef CUDA_ENABLED
 #include <IR_Gen/CudaDriver.h>
 #include "preprocess.cpp"
 #endif
 #include <util/aligned_allocator.h>
-
 
 using namespace parabix;
 using namespace llvm;
@@ -57,6 +59,9 @@ static cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl
 static cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
 static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
 
+/// iNVESTIGATE: icgrep is reporting stdin is not empty even when nothing is being piped into it?
+static cl::opt<bool> UseStdIn("stdin", cl::desc("Read from standard input."), cl::cat(bGrepOutputOptions));
+
 bool isUTF_16 = false;
 std::string IRFilename = "icgrep.ll";
 std::string PTXFilename = "icgrep.ptx";
@@ -70,7 +75,7 @@ size_t * startPoints = nullptr;
 size_t * accumBytes = nullptr;
 #endif
 
-void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly, bool UTF_16) {
+void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly) {
     boost::filesystem::path file(fileName);
     if (exists(file)) {
         if (is_directory(file)) {
@@ -145,6 +150,13 @@ void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool Co
     }
 }
 
+void GrepEngine::doGrep(const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly) {
+    if (CountOnly) {
+        total_CountOnly[fileIdx] = mGrepFunction_CountOnly(nullptr, 0, fileIdx);
+    } else {
+        mGrepFunction(nullptr, 0, fileIdx);
+    }
+}
 
 Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool CountOnly){
     Type * const int64ty = iBuilder->getInt64Ty();
@@ -222,8 +234,11 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
 
     const unsigned segmentSize = codegen::SegmentSize;
     
+    ExternalFileBuffer InputStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    InputStream.setStreamSetBuffer(inputStream);
+
     ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1));
-    MatchResults.setStreamSetBuffer(rsltStream, fileSize);
+    MatchResults.setStreamSetBuffer(rsltStream);
 
     kernel::MMapSourceKernel mmapK1(iBuilder, segmentSize); 
     mmapK1.setName("mmap1");
@@ -231,16 +246,16 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
     mmapK1.setInitialArguments({fileSize});
 
     ExternalFileBuffer LineBreak(iBuilder, iBuilder->getStreamSetTy(1, 1));
-    LineBreak.setStreamSetBuffer(lbStream, fileSize);
+    LineBreak.setStreamSetBuffer(lbStream);
     
     kernel::MMapSourceKernel mmapK2(iBuilder, segmentSize); 
     mmapK2.setName("mmap2");
     mmapK2.generateKernel({}, {&LineBreak});
     mmapK2.setInitialArguments({fileSize});
 
-    kernel::ScanMatchKernel scanMatchK(iBuilder, grepType);
-    scanMatchK.generateKernel({&MatchResults, &LineBreak}, {});
-    scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
+    kernel::ScanMatchKernel scanMatchK(iBuilder, grepType, 8);
+    scanMatchK.generateKernel({&InputStream, &MatchResults, &LineBreak}, {});
+    scanMatchK.setInitialArguments({fileIdx});
     
     generatePipeline(iBuilder, {&mmapK1, &mmapK2, &scanMatchK});
     iBuilder->CreateRetVoid();
@@ -260,12 +275,11 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
 
     mGrepType = grepType;
 
-    Type * const size_ty = iBuilder->getSizeTy();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+    Type * const sizeTy = iBuilder->getSizeTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), encodingBits), 1), 0);
-    Type * const resultTy = CountOnly ? size_ty : iBuilder->getVoidTy();
+    Type * const resultTy = CountOnly ? sizeTy : iBuilder->getVoidTy();
 
-    Function * mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, size_ty, size_ty, nullptr));
+    Function * mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, sizeTy, sizeTy, nullptr));
     mainFn->setCallingConv(CallingConv::C);
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
     Function::arg_iterator args = mainFn->arg_begin();
@@ -277,17 +291,26 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
     Value * fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
 
-    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));    
+    StreamSetBuffer * byteStream = nullptr;
+    kernel::KernelBuilder * sourceK = nullptr;
+//    if (usingStdIn) {
+//        byteStream = new ExtensibleBuffer(iBuilder, iBuilder->getStreamSetTy(1, 8));
+//        cast<ExtensibleBuffer>(byteStream)->allocateBuffer();
+//        sourceK = new kernel::StdInKernel(iBuilder, segmentSize);
+//        sourceK->generateKernel({}, {byteStream});
+//    } else {
+        byteStream = new ExternalFileBuffer(iBuilder, iBuilder->getStreamSetTy(1, 8));
+        cast<ExternalFileBuffer>(byteStream)->setStreamSetBuffer(inputStream);
+        sourceK = new kernel::MMapSourceKernel(iBuilder, segmentSize);
+        sourceK->generateKernel({}, {byteStream});
+        sourceK->setInitialArguments({fileSize});
+//    }
+
     CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
-    ByteStream.setStreamSetBuffer(inputStream, fileSize);
     BasisBits.allocateBuffer();
-    
-    kernel::MMapSourceKernel mmapK(iBuilder, segmentSize); 
-    mmapK.generateKernel({}, {&ByteStream});
-    mmapK.setInitialArguments({fileSize});
 
     kernel::S2PKernel  s2pk(iBuilder);
-    s2pk.generateKernel({&ByteStream}, {&BasisBits});
+    s2pk.generateKernel({byteStream}, {&BasisBits});
    
     std::vector<pablo::PabloKernel *> icgrepKs;
     std::vector<StreamSetBuffer *> MatchResultsBufs;
@@ -303,7 +326,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
     }   
 
     std::vector<kernel::KernelBuilder *> KernelList;
-    KernelList.push_back(&mmapK);
+    KernelList.push_back(sourceK);
     KernelList.push_back(&s2pk);
 
     CircularBuffer mergedResults(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
@@ -334,9 +357,9 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
         iBuilder->CreateRet(matchCountK.getScalarField(matchCountK.getInstance(), "matchedLineCount"));
 
     } else {
-        kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType);
-        scanMatchK.generateKernel({&mergedResults, &LineBreakStream}, {});                
-        scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
+        kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType, encodingBits);
+        scanMatchK.generateKernel({byteStream, &mergedResults, &LineBreakStream}, {});
+        scanMatchK.setInitialArguments({fileIdx});
 
         KernelList.push_back(&scanMatchK);
 
@@ -355,7 +378,9 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
 
     mEngine->finalizeObject();
     delete iBuilder;
-    
+    delete sourceK;
+    delete byteStream;
+
     if (CountOnly) {
         mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(mEngine->getPointerToFunction(mainFn));
     } else {
@@ -364,7 +389,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
 
 }
 
-void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16, GrepType grepType) {
+void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16, GrepType grepType, const bool usingStdIn) {
     isUTF_16 = UTF_16;
     int addrSpace = 0;
     bool CPU_Only = true;
@@ -402,7 +427,6 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     mGrepType = grepType;
 
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), encodingBits), 1), addrSpace);
     Type * const resultTy = CountOnly ? size_ty : iBuilder->getVoidTy();
 
@@ -452,18 +476,28 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         fileSize->setName("fileSize");
         fileIdx = &*(args++);
         fileIdx->setName("fileIdx");
+
+    }  
+
+    StreamSetBuffer * byteStream = nullptr;
+    kernel::KernelBuilder * sourceK = nullptr;
+    if (usingStdIn) {
+        byteStream = new ExtensibleBuffer(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments);
+        cast<ExtensibleBuffer>(byteStream)->allocateBuffer();
+        sourceK = new kernel::StdInKernel(iBuilder, segmentSize);
+        sourceK->generateKernel({}, {byteStream});
+    } else {
+        byteStream = new ExternalFileBuffer(iBuilder, iBuilder->getStreamSetTy(1, 8));
+        cast<ExternalFileBuffer>(byteStream)->setStreamSetBuffer(inputStream);
+        sourceK = new kernel::MMapSourceKernel(iBuilder, segmentSize);
+        sourceK->generateKernel({}, {byteStream});
+        sourceK->setInitialArguments({fileSize});
     }
-       
-    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    
-    kernel::MMapSourceKernel mmapK(iBuilder, segmentSize); 
-    mmapK.generateKernel({}, {&ByteStream});
-    mmapK.setInitialArguments({fileSize});
     
     CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
 
     kernel::S2PKernel  s2pk(iBuilder);
-    s2pk.generateKernel({&ByteStream}, {&BasisBits});
+    s2pk.generateKernel({byteStream}, {&BasisBits});
     
     kernel::LineBreakKernelBuilder linebreakK(iBuilder, "lb", encodingBits);
     CircularBuffer LineBreakStream(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
@@ -475,21 +509,21 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     re::re2pablo_compiler(&icgrepK, re::regular_expression_passes(re_ast), CountOnly);
     pablo_function_passes(&icgrepK);
 
-    ByteStream.setStreamSetBuffer(inputStream, fileSize);
+
     BasisBits.allocateBuffer();
 
     if (CountOnly) {
         icgrepK.generateKernel({&BasisBits, &LineBreakStream}, {});
-        generatePipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK});
+        generatePipeline(iBuilder, {sourceK, &s2pk, &linebreakK, &icgrepK});
         iBuilder->CreateRet(icgrepK.createGetAccumulatorCall(icgrepK.getInstance(), "matchedLineCount"));
     } else {
 #ifdef CUDA_ENABLED 
         if (codegen::NVPTX){
             ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1), addrSpace);
-            MatchResults.setStreamSetBuffer(outputStream, fileSize);
+            MatchResults.setStreamSetBuffer(outputStream);
 
             icgrepK.generateKernel({&BasisBits, &LineBreakStream},  {&MatchResults});
-            generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK});
+            generatePipelineLoop(iBuilder, {sourceK, &s2pk, &linebreakK, &icgrepK});
 
         }
 #endif
@@ -499,11 +533,11 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
             icgrepK.generateKernel({&BasisBits, &LineBreakStream}, {&MatchResults});
 
-            kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType);
-            scanMatchK.generateKernel({&MatchResults, &LineBreakStream}, {});                
-            scanMatchK.setInitialArguments({iBuilder->CreateBitCast(inputStream, int8PtrTy), fileSize, fileIdx});
+            kernel::ScanMatchKernel scanMatchK(iBuilder, mGrepType, encodingBits);
+            scanMatchK.generateKernel({byteStream, &MatchResults, &LineBreakStream}, {});
+            scanMatchK.setInitialArguments({fileIdx});
 	    
-            generatePipeline(iBuilder, {&mmapK, &s2pk, &linebreakK, &icgrepK, &scanMatchK});
+            generatePipeline(iBuilder, {sourceK, &s2pk, &linebreakK, &icgrepK, &scanMatchK});
         }
         iBuilder->CreateRetVoid();
     }
@@ -536,6 +570,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
     mEngine->finalizeObject();
     delete iBuilder;
+    delete sourceK;
+    delete byteStream;
     
     if (CountOnly) {
         mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(mEngine->getPointerToFunction(mainFn));
@@ -580,7 +616,7 @@ static int * total_count;
 static std::stringstream * resultStrs = nullptr;
 static std::vector<std::string> inputFiles;
 
-void initResult(std::vector<std::string> filenames){
+void initFileResult(std::vector<std::string> filenames){
     const int n = filenames.size();
     if (n > 1) {
         ShowFileNames = true;
@@ -594,70 +630,60 @@ void initResult(std::vector<std::string> filenames){
     
 }
 
-extern "C" {
-    void wrapped_report_match(size_t lineNum, size_t line_start, size_t line_end, const char * buffer, size_t filesize, int fileIdx) {
-        assert (buffer);
-#ifdef CUDA_ENABLED 
-    if (codegen::NVPTX){
-        while(line_start>startPoints[blockNo]) blockNo++;
-        line_start -= accumBytes[blockNo-1];
-        line_end -= accumBytes[blockNo-1];
-    }
+template<typename CodeUnit>
+void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_end, const CodeUnit * const buffer, const size_t filesize, const int fileIdx) {
+    assert (buffer);
+    assert (line_start <= line_end);
+    assert (line_end < filesize);
+#ifdef CUDA_ENABLED
+if (codegen::NVPTX){
+    while(line_start>startPoints[blockNo]) blockNo++;
+    line_start -= accumBytes[blockNo-1];
+    line_end -= accumBytes[blockNo-1];
+}
 #endif
-        int index = isUTF_16 ? 2 : 1;
-        int idx = fileIdx;
-          
-        if (ShowFileNames) {
-            resultStrs[idx] << inputFiles[idx] << ':';
-        }
-        if (ShowLineNumbers) {
-            resultStrs[idx] << lineNum << ":";
-        }
-        
-        if ((!isUTF_16 && buffer[line_start] == 0xA) && (line_start != line_end)) {
-            // The line "starts" on the LF of a CRLF.  Really the end of the last line.
-            line_start++;
-        }
-        if (((isUTF_16 && buffer[line_start] == 0x0) && buffer[line_start + 1] == 0xA) && (line_start != line_end)) {
-            // The line "starts" on the LF of a CRLF.  Really the end of the last line.
-            line_start += 2;
-        }
-        if (line_end == filesize) {
-            // The match position is at end-of-file.   We have a final unterminated line.
-            resultStrs[idx].write(&buffer[line_start * index], (line_end - line_start) * index);
-            if (NormalizeLineBreaks) {
-                resultStrs[idx] << '\n';  // terminate it
-            }
-            return;
-        }
-        unsigned char end_byte = (unsigned char)buffer[line_end]; 
-        unsigned char penult_byte = (unsigned char)(buffer[line_end - 1]);
+
+    if (ShowFileNames) {
+        resultStrs[fileIdx] << inputFiles[fileIdx] << ':';
+    }
+    if (ShowLineNumbers) {
+        resultStrs[fileIdx] << lineNum << ":";
+    }
+
+    // If the line "starts" on the LF of a CRLF, it is actually the end of the last line.
+    if ((buffer[line_start] == 0xA) && (line_start != line_end)) {
+        ++line_start;
+    }
+
+    if (LLVM_UNLIKELY(line_end == filesize)) {
+        // The match position is at end-of-file.   We have a final unterminated line.
+        resultStrs[fileIdx].write((char *)&buffer[line_start], (line_end - line_start) * sizeof(CodeUnit));
         if (NormalizeLineBreaks) {
-            if (end_byte == 0x85) {
+            resultStrs[fileIdx] << '\n';  // terminate it
+        }
+    } else {
+        const auto end_byte = buffer[line_end];
+        if (NormalizeLineBreaks) {
+            if (LLVM_UNLIKELY(end_byte == 0x85)) {
                 // Line terminated with NEL, on the second byte.  Back up 1.
-                line_end--;
-            } else if (end_byte > 0xD) {
+                line_end -= 1;
+            } else if (LLVM_UNLIKELY(end_byte > 0xD)) {
                 // Line terminated with PS or LS, on the third byte.  Back up 2.
-                isUTF_16 ? line_end-- : line_end -= 2;
+                line_end -= 2;
             }
-            resultStrs[idx].write(&buffer[line_start * index], (line_end - line_start) * index);
-            resultStrs[idx] << '\n';
+            resultStrs[fileIdx].write((char *)&buffer[line_start], (line_end - line_start) * sizeof(CodeUnit));
+            resultStrs[fileIdx] << '\n';
         } else {
-            if ((!isUTF_16 && end_byte == 0x0D) || (isUTF_16 && (end_byte == 0x0D && penult_byte == 0x0))) {
-                // Check for line_end on first byte of CRLF;  note that we don't
-                // want to access past the end of buffer.
-                if (line_end + 1 < filesize) {
-                    if (!isUTF_16 && buffer[line_end + 1] == 0x0A) {
+            if (end_byte == 0x0D) {
+                // Check for line_end on first byte of CRLF; we don't want to access past the end of buffer.
+                if ((line_end + 1) < filesize) {
+                    if (buffer[line_end + 1] == 0x0A) {
                         // Found CRLF; preserve both bytes.
-                        line_end++;
-                    }
-                    if (isUTF_16 && buffer[line_end + 1] == 0x0 && buffer[line_end + 2] == 0x0A) {
-                        // Found CRLF; preserve both bytes.
-                        line_end += 2;
+                        ++line_end;
                     }
                 }
             }
-            resultStrs[idx].write(&buffer[line_start * index], (line_end - line_start + 1) * index);
+            resultStrs[fileIdx].write((char *)&buffer[line_start], (line_end - line_start + 1) * sizeof(CodeUnit));
         }
     }
 }
@@ -683,29 +709,28 @@ void PrintResult(bool CountOnly, std::vector<size_t> & total_CountOnly){
     }
 }
 
-extern "C" {
-    void insert_codepoints(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
-        assert (buffer);
-        re::codepoint_t c = 0;
-        ssize_t line_pos = line_start;
-        while (isxdigit(buffer[line_pos])) {
-            if (isdigit(buffer[line_pos])) {
-                c = (c << 4) | (buffer[line_pos] - '0');
-            }
-            else {
-                c = (c << 4) | (tolower(buffer[line_pos]) - 'a' + 10);
-            }
-            line_pos++;
+void insert_codepoints(const size_t lineNum, const size_t line_start, const size_t line_end, const char * const buffer) {
+    assert (buffer);
+    assert (line_start <= line_end);
+    re::codepoint_t c = 0;
+    size_t line_pos = line_start;
+    while (isxdigit(buffer[line_pos])) {
+        assert (line_pos < line_end);
+        if (isdigit(buffer[line_pos])) {
+            c = (c << 4) | (buffer[line_pos] - '0');
         }
-        assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.       
-        parsedCodePointSet->insert(c);
+        else {
+            c = (c << 4) | (tolower(buffer[line_pos]) - 'a' + 10);
+        }
+        line_pos++;
     }
+    assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.
+    parsedCodePointSet->insert(c);
 }
 
-extern "C" {
-    void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
-        parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
-    }
+void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
+    assert (line_start <= line_end);
+    parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
 }
 
 void icgrep_Linking(Module * m, ExecutionEngine * e) {
@@ -716,8 +741,11 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
         if (fnName == "process_block") continue;
         if (fnName == "process_block_initialize_carries") continue;
         
-        if (fnName == "wrapped_report_match") {
-            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_report_match);
+        if (fnName == "wrapped_report_match8") {
+            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_report_match<uint8_t>);
+        }
+        if (fnName == "wrapped_report_match16") {
+            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_report_match<uint16_t>);
         }
         if (fnName == "insert_codepoints") {
             e->addGlobalMapping(cast<GlobalValue>(it), (void *)&insert_codepoints);

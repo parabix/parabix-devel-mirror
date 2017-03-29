@@ -15,8 +15,10 @@ namespace llvm { class Value; }
 using namespace llvm;
 
 namespace kernel {
-            
+
 void MMapSourceKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
+
+    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * setTermination = CreateBasicBlock("setTermination");
     BasicBlock * mmapSourceExit = CreateBasicBlock("mmapSourceExit");
     ConstantInt * segmentItems = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth());
@@ -25,19 +27,26 @@ void MMapSourceKernel::generateDoSegmentMethod(Value *doFinal, const std::vector
         fileItems = iBuilder->CreateUDiv(fileItems, iBuilder->getSize(mCodeUnitWidth / 8));
     }
     Value * produced = getProducedItemCount("sourceBuffer");
-    Value * nextProduced = iBuilder->CreateAdd(produced, segmentItems);
-    Value * lessThanFullSegment = iBuilder->CreateICmpULT(fileItems, nextProduced);
-    produced = iBuilder->CreateSelect(lessThanFullSegment, fileItems, nextProduced);
-    setProducedItemCount("sourceBuffer", produced);
-
+    produced = iBuilder->CreateAdd(produced, segmentItems);
+    Value * lessThanFullSegment = iBuilder->CreateICmpULT(fileItems, produced);
     iBuilder->CreateCondBr(lessThanFullSegment, setTermination, mmapSourceExit);
     iBuilder->SetInsertPoint(setTermination);
     setTerminationSignal();
-    iBuilder->CreateBr(mmapSourceExit);    
+    iBuilder->CreateBr(mmapSourceExit);
 
     iBuilder->SetInsertPoint(mmapSourceExit);
+
+    PHINode * itemsRead = iBuilder->CreatePHI(produced->getType(), 2);
+    itemsRead->addIncoming(produced, entryBlock);
+    itemsRead->addIncoming(fileItems, setTermination);
+    setProducedItemCount("sourceBuffer", itemsRead);
 }
 
+void MMapSourceKernel::generateInitMethod() {
+//    Value * fileSize = getScalarField("fileSize");
+//    fileSize = iBuilder->CreateUDiv(fileSize, iBuilder->getSize(mCodeUnitWidth / 8));
+//    setProducedItemCount("sourceBuffer", fileSize);
+}
 
 MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
 : SegmentOrientedKernel(iBuilder, "mmap_source",

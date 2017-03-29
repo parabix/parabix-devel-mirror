@@ -5,23 +5,24 @@
 #ifndef SCANMATCHGEN_H
 #define SCANMATCHGEN_H
 
-#include "grep_type.h"  // for GrepType
-#include "kernel.h"     // for KernelBuilder
-namespace IDISA { class IDISA_Builder; }  // lines 16-16
-namespace llvm { class Function; }  // lines 14-14
-namespace llvm { class Module; }  // lines 14-14
+#include "grep_type.h"
+#include "kernel.h"
+namespace IDISA { class IDISA_Builder; }
+namespace llvm { class Function; }
+namespace llvm { class Module; }
 
 namespace kernel {
     
-class ScanMatchKernel : public BlockOrientedKernel {
+class ScanMatchKernel final : public BlockOrientedKernel {
 public:
-    ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType);
+    ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType, unsigned codeUnitWidth);
 protected:
+    void generateInitMethod() override;
     void generateDoBlockMethod() override;
+    void generateFinalBlockMethod(llvm::Value * remainingItems) override;
 private:
-    llvm::Function * generateScanWordRoutine(llvm::Module * m) const;
-private:
-    GrepType mGrepType;
+    GrepType        mGrepType;
+    const unsigned  mCodeUnitWidth;
 };
 }
 

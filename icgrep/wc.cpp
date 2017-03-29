@@ -169,7 +169,7 @@ Function * pipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
-    ByteStream.setStreamSetBuffer(inputStream, fileSize);
+    ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
     
     generatePipeline(iBuilder, {&mmapK, &s2pk, &wck});

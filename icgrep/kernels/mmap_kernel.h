@@ -14,15 +14,17 @@ namespace kernel {
    The doSegment method of this kernel feeds one segment at a time to a 
    pipeline. */
     
-class MMapSourceKernel : public SegmentOrientedKernel {
+class MMapSourceKernel final: public SegmentOrientedKernel {
 public:
     MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);  
 private:
-    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override final;
+    void generateInitMethod() override;
+    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override;
 private:
     const unsigned mSegmentBlocks;
     const unsigned mCodeUnitWidth;
 };
+
 }
 
 #endif

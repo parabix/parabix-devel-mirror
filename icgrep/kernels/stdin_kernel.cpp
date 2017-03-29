@@ -9,37 +9,37 @@
 
 using namespace llvm;
 
+inline static unsigned ceil_log2(const unsigned v) {
+    assert ("log2(0) is undefined!" && v != 0);
+    return 32 - __builtin_clz(v - 1);
+}
+
 namespace kernel {
-    
-void StdInKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
+
+void StdInKernel::generateDoSegmentMethod(Value * /* doFinal */, const std::vector<Value *> & /* producerPos */) {
 
     BasicBlock * setTermination = CreateBasicBlock("setTermination");
     BasicBlock * stdInExit = CreateBasicBlock("stdInExit");
-//    ConstantInt * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
-    ConstantInt * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
-    ConstantInt * segmentBytes = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth() * mCodeUnitWidth/8);
-    ConstantInt * stdin_fileno = iBuilder->getInt32(STDIN_FILENO);
-    Value * produced = getProducedItemCount("codeUnitBuffer");
-//    Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(produced, blockItems), itemBytes);
-//    Value * bytePtr = getRawItemPointer("codeUnitBuffer", iBuilder->getInt32(0), produced);
-    Value * bytePtr = getOutputStream("codeUnitBuffer", iBuilder->getInt32(0));
+    ConstantInt * segmentItems = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth() / mCodeUnitWidth);
+    ConstantInt * segmentItems2 = iBuilder->getSize(2 * mSegmentBlocks * iBuilder->getBitBlockWidth() / mCodeUnitWidth);
+    // on the first segment, we buffer twice the data necessary to ensure that we can safely check for a non-LF line break
+    Value * itemsRead = getProducedItemCount("codeUnitBuffer");
+    Value * isFirst = iBuilder->CreateICmpEQ(itemsRead, iBuilder->getSize(0));
+    Value * itemsToRead = iBuilder->CreateSelect(isFirst, segmentItems2, segmentItems);
+
+    Value * segmentBytes = reserveItemCount("codeUnitBuffer", itemsToRead);
+    Value * bytePtr =  getOutputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0));
     bytePtr = iBuilder->CreatePointerCast(bytePtr, iBuilder->getInt8PtrTy());
+    Value * bytesRead = iBuilder->CreateReadCall(iBuilder->getInt32(STDIN_FILENO), bytePtr, segmentBytes);
+    itemsRead = iBuilder->CreateAdd(itemsRead, iBuilder->CreateUDiv(bytesRead, iBuilder->getSize(mCodeUnitWidth / 8)));
 
-
-    
-    Value * nRead = iBuilder->CreateReadCall(stdin_fileno, bytePtr, segmentBytes);
-    Value * bytesRead = iBuilder->CreateSelect(iBuilder->CreateICmpSLT(nRead, iBuilder->getSize(0)), iBuilder->getSize(0), nRead);
-    produced = iBuilder->CreateAdd(produced, iBuilder->CreateUDiv(bytesRead, itemBytes));
-    setProducedItemCount("codeUnitBuffer", produced);
-    Value * lessThanFullSegment = iBuilder->CreateICmpULT(bytesRead, segmentBytes);
-    iBuilder->CreateCondBr(lessThanFullSegment, setTermination, stdInExit);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(bytesRead, iBuilder->getSize(0)), setTermination, stdInExit);
     iBuilder->SetInsertPoint(setTermination);
     setTerminationSignal();
     iBuilder->CreateBr(stdInExit);
-    
     iBuilder->SetInsertPoint(stdInExit);
 
-    
+    setProducedItemCount("codeUnitBuffer", itemsRead);
 }
 
 StdInKernel::StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
@@ -62,14 +62,14 @@ void FileSource::generateInitMethod() {
     iBuilder->SetInsertPoint(fileSourceInitExit);
 }
     
-void FileSource::generateDoSegmentMethod(Value * doFinal, const std::vector<Value *> & producerPos) {
+void FileSource::generateDoSegmentMethod(Value * /* doFinal */, const std::vector<Value *> & /* producerPos */) {
 
     BasicBlock * closeFile = CreateBasicBlock("closeFile");
     BasicBlock * fileSourceExit = CreateBasicBlock("fileSourceExit");
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
     
     Value * produced = getProducedItemCount("codeUnitBuffer");
-    Value * bytePtr = getOutputStream("codeUnitBuffer", iBuilder->getInt32(0));
+    Value * bytePtr = getOutputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0));
     bytePtr = iBuilder->CreatePointerCast(bytePtr, iBuilder->getInt8PtrTy());
 
     Value * IOstreamPtr = getScalarField("IOstreamPtr");

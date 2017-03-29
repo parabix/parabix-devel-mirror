@@ -28,7 +28,7 @@ public:
     std::string getBitBlockTypeName() const;  // A short string such as v4i64 or i256.
 
     llvm::Value * bitCast(llvm::Value * a) {
-        return (a->getType() == mBitBlockType) ? a : CreateBitCast(a, mBitBlockType);
+        return CreateBitCast(a, mBitBlockType);
     }
 
     unsigned getBitBlockWidth() const {
@@ -55,7 +55,7 @@ public:
     void CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr, llvm::Value * const index);
     void CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr, std::initializer_list<llvm::Value *> indices);
 
-    llvm::VectorType * fwVectorType(unsigned fw);
+    llvm::VectorType * fwVectorType(const unsigned fw);
 
     llvm::Constant * simd_himask(unsigned fw);
     llvm::Constant * simd_lomask(unsigned fw);

@@ -26,8 +26,7 @@ void s2p_step(IDISA::IDISA_Builder * iBuilder, Value * s0, Value * s1, Value * h
         Value * x1 = iBuilder->esimd_mergeh(128, s0, s1);
         t0 = iBuilder->hsimd_packh_in_lanes(PACK_LANES, 16, x0, x1);
         t1 = iBuilder->hsimd_packl_in_lanes(PACK_LANES, 16, x0, x1);
-    }
-    else {
+    } else {
         t0 = iBuilder->hsimd_packh(16, s0, s1);
         t1 = iBuilder->hsimd_packl(16, s0, s1);
     }

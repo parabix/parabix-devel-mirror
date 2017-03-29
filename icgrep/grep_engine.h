@@ -22,10 +22,12 @@ public:
     GrepEngine();
     ~GrepEngine();
   
-    void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal);
+    void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal, const bool usingStdIn = false);
     void multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal);
      
-    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly, bool UTF_16);
+    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly);
+
+    void doGrep(const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly);
     
     re::CC *  grepCodepoints();
 
@@ -49,8 +51,7 @@ void setParsedCodePointSet();
 
 void setParsedPropertyValues();
 
-
-void initResult(std::vector<std::string> filenames);
+void initFileResult(std::vector<std::string> filenames);
 void PrintResult(bool CountOnly, std::vector<size_t> & total_CountOnly);
 
 #endif

@@ -47,6 +47,8 @@ public:
 
     virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const;
 
+    virtual llvm::Value * reserveItemCount(llvm::Value * instance, const std::string & name, llvm::Value * requested) const;
+
     bool hasNoTerminateAttribute() { return mNoTerminateAttribute;}
     
     llvm::Value * getTerminationSignal(llvm::Value * instance) const override final;
@@ -193,6 +195,10 @@ protected:
 
     llvm::Value * getRawOutputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
+    llvm::Value * reserveItemCount(const std::string & name, llvm::Value * requested) const {
+        return reserveItemCount(getSelf(), name, requested);
+    }
+
     llvm::Value * getScalarFieldPtr(const std::string & name) const {
         return getScalarFieldPtr(getSelf(), name);
     }
@@ -224,7 +230,6 @@ protected:
     void setTerminationSignal() const {
         return setTerminationSignal(getSelf());
     }
-
 
     llvm::Value * getSelf() const {
         return mSelf;

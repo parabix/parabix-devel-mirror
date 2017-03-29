@@ -30,6 +30,14 @@
 #include <hrtime.h>
 #include <util/papi_helper.hpp>
 #endif
+#include <poll.h>
+
+inline bool hasInputFromStdIn() {
+    pollfd stdin_poll;
+    stdin_poll.fd = STDIN_FILENO;
+    stdin_poll.events = POLLIN | POLLRDBAND | POLLRDNORM | POLLPRI;
+    return poll(&stdin_poll, 1, 0) == 1;
+}
 
 using namespace llvm;
 
@@ -199,7 +207,7 @@ void *DoGrep(void *args)
     count_mutex.unlock();
 
     while (fileIdx < allFiles.size()){
-        grepEngine->doGrep(allFiles[fileIdx], fileIdx, CountOnly, total_CountOnly, UTF_16);
+        grepEngine->doGrep(allFiles[fileIdx], fileIdx, CountOnly, total_CountOnly);
         
         count_mutex.lock();
         fileIdx = fileCount;
@@ -383,79 +391,94 @@ int main(int argc, char *argv[]) {
         pipeIcGrepOutputToGrep(argc, argv);
         return 0;   // icgrep is called again, so we need to end this process.
     }
-    
+
+    const bool usingStdIn = hasInputFromStdIn();
+
     GrepEngine grepEngine;
-    if(MultiGrepKernels){
+    if (MultiGrepKernels) {
         grepEngine.multiGrepCodeGen(module_name, RELists, CountOnly, UTF_16);
-    }
-    else{
-        grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16);
+    } else {
+        grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16, GrepType::Normal, usingStdIn);
     }
 
-    allFiles = getFullFileList(inputFiles);
-    
-    if (FileNamesOnly && NonMatchingFileNamesOnly) {
-        // Strange request: print names of all matching files and all non-matching files: i.e., all of them.
-        // (Although GNU grep prints nothing.)
-        for (auto & f : allFiles) {
-            if (boost::filesystem::exists(f)) {
-                std::cout << f << "\n";
-            } else {
-                std::cerr << "Error: cannot open " << f << " for processing. Skipped.\n";
-            }
-        }
-        exit(0);
-    }
-    if (FileNamesOnly) {
-        llvm::report_fatal_error("Sorry, -l/-files-with-matches not yet supported\n.");
-    }
-    if (NonMatchingFileNamesOnly) {
-        llvm::report_fatal_error("Sorry, -L/-files-without-match not yet supported\n.");
-    }
-    
-    initResult(allFiles);
-    for (unsigned i=0; i < allFiles.size(); ++i){
+    if (usingStdIn)  {
+
+        allFiles = { "stdin" };
+        initFileResult(allFiles);
         total_CountOnly.push_back(0);
-    }
+        grepEngine.doGrep(0, CountOnly, total_CountOnly);
 
-    if (Threads <= 1) {
+    } else {
 
-        #ifdef PRINT_TIMING_INFORMATION
-        // PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY
-        // PAPI_RES_STL, PAPI_BR_MSP, PAPI_LST_INS, PAPI_L1_TCM
-        papi::PapiCounter<4> papiCounters({PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY});
-        #endif
-        for (unsigned i = 0; i != allFiles.size(); ++i) {
+        allFiles = getFullFileList(inputFiles);
+
+        if (FileNamesOnly && NonMatchingFileNamesOnly) {
+            // Strange request: print names of all matching files and all non-matching files: i.e., all of them.
+            // (Although GNU grep prints nothing.)
+            for (auto & f : allFiles) {
+                if (boost::filesystem::exists(f)) {
+                    std::cout << f << "\n";
+                } else {
+                    std::cerr << "Error: cannot open " << f << " for processing. Skipped.\n";
+                }
+            }
+            exit(0);
+        }
+
+        if (FileNamesOnly) {
+            llvm::report_fatal_error("Sorry, -l/-files-with-matches not yet supported\n.");
+        }
+        if (NonMatchingFileNamesOnly) {
+            llvm::report_fatal_error("Sorry, -L/-files-without-match not yet supported\n.");
+        }
+        initFileResult(allFiles);
+
+        for (unsigned i=0; i < allFiles.size(); ++i){
+            total_CountOnly.push_back(0);
+        }
+
+        if (Threads <= 1) {
+
             #ifdef PRINT_TIMING_INFORMATION
-            papiCounters.start();
-            const timestamp_t execution_start = read_cycle_counter();
+            // PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY
+            // PAPI_RES_STL, PAPI_BR_MSP, PAPI_LST_INS, PAPI_L1_TCM
+            papi::PapiCounter<4> papiCounters({PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY});
             #endif
-            grepEngine.doGrep(allFiles[i], i, CountOnly, total_CountOnly, UTF_16);
-            #ifdef PRINT_TIMING_INFORMATION
-            const timestamp_t execution_end = read_cycle_counter();
-            papiCounters.stop();
-            std::cerr << "EXECUTION TIME: " << allFiles[i] << ":" << "CYCLES|" << (execution_end - execution_start) << papiCounters << std::endl;
-            #endif
-        }        
-    } else if (Threads > 1) {
-        const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
-        pthread_t threads[numOfThreads];
+            for (unsigned i = 0; i != allFiles.size(); ++i) {
+                #ifdef PRINT_TIMING_INFORMATION
+                papiCounters.start();
+                const timestamp_t execution_start = read_cycle_counter();
+                #endif
+                grepEngine.doGrep(allFiles[i], i, CountOnly, total_CountOnly);
+                #ifdef PRINT_TIMING_INFORMATION
+                const timestamp_t execution_end = read_cycle_counter();
+                papiCounters.stop();
+                std::cerr << "EXECUTION TIME: " << allFiles[i] << ":" << "CYCLES|" << (execution_end - execution_start) << papiCounters << std::endl;
+                #endif
+            }
+        } else if (Threads > 1) {
+            const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
+            pthread_t threads[numOfThreads];
 
-        for(unsigned long i = 0; i < numOfThreads; ++i){
-            const int rc = pthread_create(&threads[i], nullptr, DoGrep, (void *)&grepEngine);
-            if (rc) {
-                llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
+            for(unsigned long i = 0; i < numOfThreads; ++i){
+                const int rc = pthread_create(&threads[i], nullptr, DoGrep, (void *)&grepEngine);
+                if (rc) {
+                    llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
+                }
+            }
+
+            for(unsigned i = 0; i < numOfThreads; ++i) {
+                void * status = nullptr;
+                const int rc = pthread_join(threads[i], &status);
+                if (rc) {
+                    llvm::report_fatal_error("Failed to join thread: code " + std::to_string(rc));
+                }
             }
         }
 
-        for(unsigned i = 0; i < numOfThreads; ++i) {
-            void * status = nullptr;
-            const int rc = pthread_join(threads[i], &status);
-            if (rc) {
-                llvm::report_fatal_error("Failed to join thread: code " + std::to_string(rc));
-            }
-        }
     }
+    
+
     
     PrintResult(CountOnly, total_CountOnly);
     

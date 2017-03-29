@@ -85,7 +85,7 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
 
-    ByteStream.setStreamSetBuffer(inputStream, fileSize);
+    ByteStream.setStreamSetBuffer(inputStream);
     Expanded3_4Out.allocateBuffer();
     Radix64out.allocateBuffer();
     Base64out.allocateBuffer();

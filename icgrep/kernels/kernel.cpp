@@ -216,10 +216,12 @@ unsigned KernelBuilder::getScalarCount() const {
 }
 
 Value * KernelBuilder::getScalarFieldPtr(Value * instance, Value * index) const {
+    assert ("instance cannot be null!" && instance);
     return iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), index});
 }
 
 Value * KernelBuilder::getScalarFieldPtr(Value * instance, const std::string & fieldName) const {
+    assert ("instance cannot be null!" && instance);
     return getScalarFieldPtr(instance, getScalarIndex(fieldName));
 }
 
@@ -228,22 +230,28 @@ Value * KernelBuilder::getScalarField(Value * instance, const std::string & fiel
 }
 
 Value * KernelBuilder::getScalarField(Value * instance, Value * index) const {
+    assert ("instance cannot be null!" && instance);
     return iBuilder->CreateLoad(getScalarFieldPtr(instance, index));
 }
 
 void KernelBuilder::setScalarField(Value * instance, const std::string & fieldName, Value * value) const {
+    assert ("instance cannot be null!" && instance);
     iBuilder->CreateStore(value, getScalarFieldPtr(instance, fieldName));
 }
 
 void KernelBuilder::setScalarField(Value * instance, Value * index, Value * value) const {
+    assert ("instance cannot be null!" && instance);
     iBuilder->CreateStore(value, getScalarFieldPtr(instance, index));
 }
 
 Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string & name) const {
+    assert ("instance cannot be null!" && instance);
     unsigned ssIdx = getStreamSetIndex(name);
     if (mStreamSetInputs[ssIdx].rate.isExact()) {
         std::string refSet = mStreamSetInputs[ssIdx].rate.referenceStreamSet();
-        if (refSet == "") refSet = mStreamSetInputs[0].name;
+        if (refSet.empty()) {
+            refSet = mStreamSetInputs[0].name;
+        }
         Value * principalItemsProcessed = getScalarField(instance, refSet + PROCESSED_ITEM_COUNT_SUFFIX);
         return mStreamSetInputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed);
     }
@@ -251,19 +259,22 @@ Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string
 }
 
 Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name, Value * doFinal) const {
+    assert ("instance cannot be null!" && instance);
     unsigned ssIdx = getStreamSetIndex(name);
     if (mStreamSetOutputs[ssIdx].rate.isExact()) {
         std::string refSet = mStreamSetOutputs[ssIdx].rate.referenceStreamSet();
         std::string principalField;
-        if (refSet == "") {
-            principalField = mStreamSetInputs.empty() ? mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX : mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
-        }
-        else {
+        if (refSet.empty()) {
+            if (mStreamSetInputs.empty()) {
+                principalField = mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX;
+            } else {
+                principalField = mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
+            }
+        } else {
             unsigned pfIndex = getStreamSetIndex(refSet);
             if (mStreamSetInputs.size() > pfIndex && mStreamSetInputs[pfIndex].name == refSet) {
                principalField = refSet + PROCESSED_ITEM_COUNT_SUFFIX;
-            }
-            else {
+            } else {
                principalField = refSet + PRODUCED_ITEM_COUNT_SUFFIX;
             }
         }
@@ -274,20 +285,19 @@ Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string 
 }
 
 Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name) const {
+    assert ("instance cannot be null!" && instance);
     unsigned ssIdx = getStreamSetIndex(name);
     std::string refSet = mStreamSetOutputs[ssIdx].rate.referenceStreamSet();
     if (mStreamSetOutputs[ssIdx].rate.isExact()) {
         std::string refSet = mStreamSetOutputs[ssIdx].rate.referenceStreamSet();
         std::string principalField;
-        if (refSet == "") {
+        if (refSet.empty()) {
             principalField = mStreamSetInputs.empty() ? mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX : mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
-        }
-        else {
+        } else {
             unsigned pfIndex = getStreamSetIndex(refSet);
             if (mStreamSetInputs.size() > pfIndex && mStreamSetInputs[pfIndex].name == refSet) {
                principalField = refSet + PROCESSED_ITEM_COUNT_SUFFIX;
-            }
-            else {
+            } else {
                principalField = refSet + PRODUCED_ITEM_COUNT_SUFFIX;
             }
         }
@@ -298,26 +308,39 @@ Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string 
 }
 
 void KernelBuilder::setProcessedItemCount(Value * instance, const std::string & name, Value * value) const {
+    assert ("instance cannot be null!" && instance);
     setScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX, value);
 }
 
 void KernelBuilder::setProducedItemCount(Value * instance, const std::string & name, Value * value) const {
+    assert ("instance cannot be null!" && instance);
     setScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX, value);
 }
 
+llvm::Value * KernelBuilder::reserveItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const {
+    assert ("instance cannot be null!" && instance);
+    Value * itemCount = getProducedItemCount(instance, name);
+    const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
+    return buf->reserveItemCount(getStreamSetBufferPtr(name), itemCount, value);
+}
+
 Value * KernelBuilder::getTerminationSignal(Value * instance) const {
+    assert ("instance cannot be null!" && instance);
     return getScalarField(instance, TERMINATION_SIGNAL);
 }
 
 void KernelBuilder::setTerminationSignal(Value * instance) const {
+    assert ("instance cannot be null!" && instance);
     setScalarField(instance, TERMINATION_SIGNAL, iBuilder->getInt1(true));
 }
 
 LoadInst * KernelBuilder::acquireLogicalSegmentNo(Value * instance) const {
+    assert ("instance cannot be null!" && instance);
     return iBuilder->CreateAtomicLoadAcquire(getScalarFieldPtr(instance, LOGICAL_SEGMENT_NO_SCALAR));
 }
 
 void KernelBuilder::releaseLogicalSegmentNo(Value * instance, Value * newCount) const {
+    assert ("instance cannot be null!" && instance);
     iBuilder->CreateAtomicStoreRelease(newCount, getScalarFieldPtr(instance, LOGICAL_SEGMENT_NO_SCALAR));
 }
 
@@ -622,13 +645,14 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
             Value * newlyProduced = iBuilder->CreateSub(getProducedItemCount(mStreamSetOutputs[i].name), priorProduced[priorIdx]);
             Value * priorBlock = iBuilder->CreateLShr(priorProduced[priorIdx], log2BlockSize);
             Value * priorOffset = iBuilder->CreateAnd(priorProduced[priorIdx], iBuilder->getSize(iBuilder->getBitBlockWidth() - 1));
-            Value * accessibleBlocks = cb->getLinearlyAccessibleBlocks(priorBlock);
+            Value * instance = getStreamSetBufferPtr(mStreamSetOutputs[i].name);
+            Value * accessibleBlocks = cb->getLinearlyAccessibleBlocks(instance, priorBlock);
             Value * accessible = iBuilder->CreateSub(iBuilder->CreateShl(accessibleBlocks, log2BlockSize), priorOffset);
             Value * wraparound = iBuilder->CreateICmpULT(accessible, newlyProduced);
             iBuilder->CreateCondBr(wraparound, copyBack, done);
             iBuilder->SetInsertPoint(copyBack);
             Value * copyItems = iBuilder->CreateSub(newlyProduced, accessible);
-            cb->createCopyBack(getStreamSetBufferPtr(mStreamSetOutputs[i].name), copyItems);
+            cb->createCopyBack(instance, copyItems);
             iBuilder->CreateBr(done);
             iBuilder->SetInsertPoint(done);
             priorIdx++;
@@ -636,13 +660,14 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
         if (auto cb = dyn_cast<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
             BasicBlock * copyBack = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
             BasicBlock * done = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
+            Value * instance = getStreamSetBufferPtr(mStreamSetOutputs[i].name);
             Value * newlyProduced = iBuilder->CreateSub(getProducedItemCount(mStreamSetOutputs[i].name), priorProduced[priorIdx]);
-            Value * accessible = cb->getLinearlyAccessibleItems(priorProduced[priorIdx]);
+            Value * accessible = cb->getLinearlyAccessibleItems(instance, priorProduced[priorIdx]);
             Value * wraparound = iBuilder->CreateICmpULT(accessible, newlyProduced);
             iBuilder->CreateCondBr(wraparound, copyBack, done);
             iBuilder->SetInsertPoint(copyBack);
             Value * copyItems = iBuilder->CreateSub(newlyProduced, accessible);
-            cb->createCopyBack(getStreamSetBufferPtr(mStreamSetOutputs[i].name), copyItems);
+            cb->createCopyBack(instance, copyItems);
             iBuilder->CreateBr(done);
             iBuilder->SetInsertPoint(done);
             priorIdx++;

@@ -182,6 +182,9 @@ void WriteAssembly (TargetMachine *TM, Module * m) {
 ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
 
     // Use the pass manager to optimize the function.
+    #ifndef NDEBUG
+    try {
+    #endif
     legacy::PassManager PM;
     #ifndef NDEBUG
     PM.add(createVerifierPass());
@@ -191,7 +194,9 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
     PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
     PM.add(createCFGSimplificationPass());    
     PM.run(*m);
-
+    #ifndef NDEBUG
+    } catch (...) { m->dump(); throw; }
+    #endif
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();

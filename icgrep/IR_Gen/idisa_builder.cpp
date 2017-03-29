@@ -17,13 +17,14 @@ using namespace llvm;
 
 namespace IDISA {
 
-VectorType * IDISA_Builder::fwVectorType(unsigned fw) {
-    int fieldCount = mBitBlockWidth/fw;
-    return VectorType::get(getIntNTy(fw), fieldCount);
+VectorType * IDISA_Builder::fwVectorType(const unsigned fw) {
+    return VectorType::get(getIntNTy(fw), mBitBlockWidth / fw);
 }
 
-Value * IDISA_Builder::fwCast(unsigned fw, Value * a) {
-    return a->getType() == fwVectorType(fw) ? a : CreateBitCast(a, fwVectorType(fw));
+Value * IDISA_Builder::fwCast(const unsigned fw, Value * const a) {
+    VectorType * const ty = fwVectorType(fw);
+    assert (a->getType()->canLosslesslyBitCastTo(fwVectorType(fw)));
+    return CreateBitCast(a, ty);
 }
 
 std::string IDISA_Builder::getBitBlockTypeName() const {

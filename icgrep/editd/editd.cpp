@@ -244,7 +244,7 @@ Function * editdPipeline(Module * m, IDISA::IDISA_Builder * iBuilder, const std:
 
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
-    ChStream.setStreamSetBuffer(inputStream, fileSize);
+    ChStream.setStreamSetBuffer(inputStream);
     MatchResults.allocateBuffer();
     
     generatePipelineLoop(iBuilder, {&mmapK, &editdk, &editdScanK});
@@ -323,9 +323,9 @@ Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
-    ByteStream.setStreamSetBuffer(inputStream, fileSize);
+    ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
-    CCResults.setStreamSetBuffer(outputStream, fileSize);
+    CCResults.setStreamSetBuffer(outputStream);
     
     generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &ccck});
         
@@ -515,8 +515,8 @@ void editdGPUCodeGen(unsigned patternLen){
     Value * resultStreamPtr = iBuilder->CreateGEP(resultStream, iBuilder->CreateAdd(iBuilder->CreateMul(bid, outputBlocks), tid));
 
     Value * inputSize = iBuilder->CreateLoad(inputSizePtr);
-    CCStream.setStreamSetBuffer(inputThreadPtr, inputSize);
-    ResultStream.setEmptyBuffer(resultStreamPtr);
+    CCStream.setStreamSetBuffer(inputThreadPtr);
+    ResultStream.setStreamSetBuffer(resultStreamPtr);
     mmapK.setInitialArguments({inputSize});
 
     const unsigned numOfCarries = patternLen * (editDistance + 1) * 4;
@@ -643,7 +643,7 @@ editdFunctionType editdScanCPUCodeGen() {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main,0));
 
-    MatchResults.setStreamSetBuffer(inputStream, fileSize);
+    MatchResults.setStreamSetBuffer(inputStream);
     mmapK.setInitialArguments({fileSize});
    
     generatePipelineLoop(iBuilder, {&mmapK, &editdScanK});
