@@ -157,7 +157,9 @@ void ExtensibleBuffer::allocateBuffer() {
     Type * ty = getType();
     Value * instance = iBuilder->CreateCacheAlignedAlloca(ty);
     Value * const capacityPtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    Constant * const initialSize = ConstantExpr::getMul(ConstantExpr::getSizeOf(ty->getStructElementType(1)->getPointerElementType()), iBuilder->getSize(mBufferBlocks));
+    Constant * initialSize = ConstantExpr::getSizeOf(ty->getStructElementType(1)->getPointerElementType());
+    initialSize = ConstantExpr::getMul(initialSize, iBuilder->getSize(mBufferBlocks));
+    initialSize = ConstantExpr::getIntegerCast(initialSize, iBuilder->getSizeTy(), false);
     iBuilder->CreateStore(initialSize, capacityPtr);
     Value * addr = iBuilder->CreateAlignedMalloc(initialSize, iBuilder->getCacheAlignment());
     iBuilder->CreateMemZero(addr, initialSize, iBuilder->getCacheAlignment());
