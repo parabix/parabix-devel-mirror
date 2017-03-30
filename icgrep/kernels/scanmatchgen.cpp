@@ -62,7 +62,7 @@ void ScanMatchKernel::generateDoBlockMethod() {
     Value * const lastRecordNum = getScalarField("LineNum");
     Value * const inputStream = iBuilder->CreatePointerCast(getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0)), codeUnitTy);
 
-    Value * fileSize = iBuilder->CreateAdd(getProcessedItemCount("InputStream"), getScalarField("PendingBytes"));
+    Value * const fileSize = iBuilder->CreateAdd(getProcessedItemCount("InputStream"), getScalarField("PendingBytes"));
 
     Constant * matchProcessor = nullptr;
     Value * fileIdx = nullptr;
@@ -79,11 +79,9 @@ void ScanMatchKernel::generateDoBlockMethod() {
             break;
         default: llvm_unreachable("unknown grep type");
     }
-    Value * const matchesPtr = getInputStreamBlockPtr("matchResult", iBuilder->getInt32(0));
-    Value * const matches = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(matchesPtr), scanwordVectorType);
 
-    Value * const linebreaksPtr = getInputStreamBlockPtr("lineBreak", iBuilder->getInt32(0));
-    Value * const linebreaks = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(linebreaksPtr), scanwordVectorType);
+    Value * const matches = iBuilder->CreateBitCast(loadInputStreamBlock("matchResult", iBuilder->getInt32(0)), scanwordVectorType);
+    Value * const linebreaks = iBuilder->CreateBitCast(loadInputStreamBlock("lineBreak", iBuilder->getInt32(0)), scanwordVectorType);
 
     iBuilder->CreateBr(scanWordIteration);
 
@@ -205,7 +203,6 @@ void ScanMatchKernel::generateDoBlockMethod() {
 
         Value * nextScanwordPos = iBuilder->CreateAdd(phiScanwordPos, ConstantInt::get(sizeTy, sizeTy->getBitWidth()));
         phiScanwordPos->addIncoming(nextScanwordPos, return_block);
-
         Value * nextIndex = iBuilder->CreateAdd(phiIndex, iBuilder->getInt32(1));
         phiIndex->addIncoming(nextIndex, return_block);
         iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpNE(nextIndex, iBuilder->getInt32(fieldCount)), scanWordIteration, scanWordExit);

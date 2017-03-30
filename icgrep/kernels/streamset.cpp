@@ -114,7 +114,7 @@ Value * StreamSetBuffer::getLinearlyAccessibleBlocks(Value * self, Value * fromB
     return iBuilder->CreateSub(bufBlocks, iBuilder->CreateURem(fromBlock, bufBlocks));
 }
 
-Value * StreamSetBuffer::reserveItemCount(Value * self, llvm::Value * position, llvm::Value *requested) const {
+void StreamSetBuffer::reserveBytes(Value * self, llvm::Value * position, llvm::Value *requested) const {
     report_fatal_error("reserve() can only be used with ExtensibleBuffers");
 }
 
@@ -156,12 +156,11 @@ Value * ExtensibleBuffer::getLinearlyAccessibleItems(Value * self, Value * fromP
 void ExtensibleBuffer::allocateBuffer() {
     Type * ty = getType();
     Value * instance = iBuilder->CreateCacheAlignedAlloca(ty);
-    ConstantInt * const capacity = iBuilder->getSize(mBufferBlocks);
     Value * const capacityPtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    iBuilder->CreateStore(capacity, capacityPtr);
-    Constant * const size = ConstantExpr::getMul(ConstantExpr::getSizeOf(ty), capacity);
-    Value * addr = iBuilder->CreateAlignedMalloc(iBuilder->CreateMul(iBuilder->CreateShl(size, 1), size), iBuilder->getCacheAlignment());
-    iBuilder->CreateMemZero(addr, size, iBuilder->getCacheAlignment());
+    Constant * const initialSize = ConstantExpr::getMul(ConstantExpr::getSizeOf(ty->getStructElementType(1)->getPointerElementType()), iBuilder->getSize(mBufferBlocks));
+    iBuilder->CreateStore(initialSize, capacityPtr);
+    Value * addr = iBuilder->CreateAlignedMalloc(initialSize, iBuilder->getCacheAlignment());
+    iBuilder->CreateMemZero(addr, initialSize, iBuilder->getCacheAlignment());
     Value * const addrPtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     addr = iBuilder->CreatePointerCast(addr, addrPtr->getType()->getPointerElementType());
     iBuilder->CreateStore(addr, addrPtr);
@@ -172,54 +171,42 @@ Value * ExtensibleBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex)
     return iBuilder->CreateGEP(self, blockIndex);
 }
 
-Value * ExtensibleBuffer::reserveItemCount(Value * self, llvm::Value * position, llvm::Value * requested) const {
-
+void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const position, llvm::Value * const requested) const {
     Value * const capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    Value * const capacity = iBuilder->CreateLoad(capacityPtr);
-    Type * const intTy = capacity->getType();
-    Constant * const blockSize = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(getType()->getStructElementType(1)), intTy, false);
-    Constant * const blockSize2 = ConstantExpr::getMul(blockSize, ConstantInt::get(intTy, 2));
-
+    Value * const currentSize = iBuilder->CreateLoad(capacityPtr);
+    Type * const intTy = currentSize->getType();
+    assert (position->getType() == requested->getType());
+    Constant * const blockSize = ConstantExpr::getIntegerCast(ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(getType()->getStructElementType(1)), intTy, false), requested->getType(), false);
     BasicBlock * const entry = iBuilder->GetInsertBlock();
     BasicBlock * const expand = BasicBlock::Create(iBuilder->getContext(), "expand", entry->getParent());
     BasicBlock * const resume = BasicBlock::Create(iBuilder->getContext(), "resume", entry->getParent());
-
-    Value * const reserved = iBuilder->CreateAdd(position, requested);
-
-    iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpULT(reserved, capacity), resume, expand);
+    Value * const reserved = iBuilder->CreateAdd(iBuilder->CreateMul(position, blockSize), requested);
+    iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpULT(reserved, currentSize), resume, expand);
 
     iBuilder->SetInsertPoint(expand);
-
-    Value * const currentSize = iBuilder->CreateMul(capacity, blockSize);
-    Value * const reservedSize = iBuilder->CreateMul(reserved, blockSize2);
-
+    Value * const reservedSize = iBuilder->CreateShl(reserved, 1);
     Value * newAddr = iBuilder->CreateAlignedMalloc(reservedSize, iBuilder->getCacheAlignment());
     Value * const baseAddrPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     Value * const baseAddr = iBuilder->CreateLoad(baseAddrPtr);
-
     iBuilder->CreateMemCpy(newAddr, baseAddr, currentSize, iBuilder->getCacheAlignment());
     iBuilder->CreateAlignedFree(baseAddr);
-    iBuilder->CreateMemZero(iBuilder->CreateGEP(newAddr, currentSize), iBuilder->CreateSub(reservedSize, currentSize), iBuilder->getCacheAlignment());
-
+    Value * const remainingSize = iBuilder->CreateSub(reservedSize, currentSize);
+    iBuilder->CreateMemZero(iBuilder->CreateGEP(newAddr, currentSize), remainingSize, iBuilder->getBitBlockWidth() / 8);
     newAddr = iBuilder->CreatePointerCast(newAddr, baseAddr->getType());
-
+    iBuilder->CreateStore(reservedSize, capacityPtr);
     iBuilder->CreateStore(newAddr, baseAddrPtr);
-    iBuilder->CreateStore(iBuilder->CreateShl(capacity, 1), capacityPtr);
-
     iBuilder->CreateBr(resume);
 
     iBuilder->SetInsertPoint(resume);
-
-    return iBuilder->CreateMul(requested, blockSize);
 }
 
-Value * ExtensibleBuffer::getBaseAddress(Value * self) const {
+Value * ExtensibleBuffer::getBaseAddress(Value * const self) const {
     return iBuilder->CreateLoad(iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
 }
 
 // Circular Buffer
 
-Value * CircularBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
+Value * CircularBuffer::getStreamSetBlockPtr(Value * const self, Value * const blockIndex) const {
     return iBuilder->CreateGEP(self, modByBufferBlocks(blockIndex));
 }
 

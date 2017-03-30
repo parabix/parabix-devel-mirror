@@ -9,37 +9,28 @@
 
 using namespace llvm;
 
-inline static unsigned ceil_log2(const unsigned v) {
-    assert ("log2(0) is undefined!" && v != 0);
-    return 32 - __builtin_clz(v - 1);
-}
-
 namespace kernel {
 
 void StdInKernel::generateDoSegmentMethod(Value * /* doFinal */, const std::vector<Value *> & /* producerPos */) {
 
     BasicBlock * setTermination = CreateBasicBlock("setTermination");
     BasicBlock * stdInExit = CreateBasicBlock("stdInExit");
-    ConstantInt * segmentItems = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth() / mCodeUnitWidth);
-    ConstantInt * segmentItems2 = iBuilder->getSize(2 * mSegmentBlocks * iBuilder->getBitBlockWidth() / mCodeUnitWidth);
-    // on the first segment, we buffer twice the data necessary to ensure that we can safely check for a non-LF line break
-    Value * itemsRead = getProducedItemCount("codeUnitBuffer");
-    Value * isFirst = iBuilder->CreateICmpEQ(itemsRead, iBuilder->getSize(0));
-    Value * itemsToRead = iBuilder->CreateSelect(isFirst, segmentItems2, segmentItems);
-
-    Value * segmentBytes = reserveItemCount("codeUnitBuffer", itemsToRead);
-    Value * bytePtr =  getOutputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0));
-    bytePtr = iBuilder->CreatePointerCast(bytePtr, iBuilder->getInt8PtrTy());
-    Value * bytesRead = iBuilder->CreateReadCall(iBuilder->getInt32(STDIN_FILENO), bytePtr, segmentBytes);
-    itemsRead = iBuilder->CreateAdd(itemsRead, iBuilder->CreateUDiv(bytesRead, iBuilder->getSize(mCodeUnitWidth / 8)));
-
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(bytesRead, iBuilder->getSize(0)), setTermination, stdInExit);
+    ConstantInt * segmentBytes = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth());
+    ConstantInt * segmentBytes2 = iBuilder->getSize(2 * mSegmentBlocks * iBuilder->getBitBlockWidth());
+    // on the first segment, we buffer twice the data to ensure the ScanMatch kernel can safely check for a non-LF line break
+    Value * const itemsAlreadyRead = getProducedItemCount("codeUnitBuffer");
+    Value * const bytesToRead = iBuilder->CreateSelect(iBuilder->CreateICmpEQ(itemsAlreadyRead, iBuilder->getSize(0)), segmentBytes2, segmentBytes);
+    reserveBytes("codeUnitBuffer", bytesToRead);
+    Value * const bytePtr = iBuilder->CreatePointerCast(getOutputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), iBuilder->getInt8PtrTy());
+    Value * const bytesRead = iBuilder->CreateReadCall(iBuilder->getInt32(STDIN_FILENO), bytePtr, bytesToRead);
+    Value * const itemsRead = iBuilder->CreateAdd(itemsAlreadyRead, iBuilder->CreateUDiv(bytesRead, iBuilder->getSize(mCodeUnitWidth / 8)));
+    setProducedItemCount("codeUnitBuffer", itemsRead);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(bytesRead, ConstantInt::getNullValue(bytesRead->getType())), setTermination, stdInExit);
     iBuilder->SetInsertPoint(setTermination);
     setTerminationSignal();
     iBuilder->CreateBr(stdInExit);
+    stdInExit->moveAfter(iBuilder->GetInsertBlock());
     iBuilder->SetInsertPoint(stdInExit);
-
-    setProducedItemCount("codeUnitBuffer", itemsRead);
 }
 
 StdInKernel::StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)

@@ -30,14 +30,6 @@
 #include <hrtime.h>
 #include <util/papi_helper.hpp>
 #endif
-#include <poll.h>
-
-inline bool hasInputFromStdIn() {
-    pollfd stdin_poll;
-    stdin_poll.fd = STDIN_FILENO;
-    stdin_poll.events = POLLIN | POLLRDBAND | POLLRDNORM | POLLPRI;
-    return poll(&stdin_poll, 1, 0) == 1;
-}
 
 using namespace llvm;
 
@@ -343,9 +335,12 @@ std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
     if (FollowSubdirectorySymlinks) {
         EnterDirectoriesRecursively = true;
     }
-    for (auto & f : inputFiles) {
+    for (const std::string & f : inputFiles) {
+//        if (f == "-") {
+//            continue;
+//        }
         path p(f);
-        if (EnterDirectoriesRecursively && is_directory(p)) {
+        if (LLVM_UNLIKELY(EnterDirectoriesRecursively && is_directory(p))) {
             if (!excludeDirectory(p)) {
                 recursive_directory_iterator di(p, follow_symlink, errc), end;
                 if (errc) {
@@ -356,17 +351,21 @@ std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
                 while (di != end) {
                     auto & e = di->path();
                     if (is_directory(e)) {
-                        if (excludeDirectory(e)) di.no_push();
+                        if (LLVM_UNLIKELY(excludeDirectory(e))) {
+                            di.no_push();
+                        }
+                    } else {
+                        expanded_paths.push_back(e.string());
                     }
-                    else expanded_paths.push_back(e.string());
                     di.increment(errc);
                     if (errc) {
                         expanded_paths.push_back(e.string()); 
                     }
                 }
             }
+        } else {
+            expanded_paths.push_back(p.string());
         }
-        else expanded_paths.push_back(p.string());
     }
     return expanded_paths;
 }
@@ -392,25 +391,26 @@ int main(int argc, char *argv[]) {
         return 0;   // icgrep is called again, so we need to end this process.
     }
 
-    const bool usingStdIn = hasInputFromStdIn();
+
+    allFiles = getFullFileList(inputFiles);
 
     GrepEngine grepEngine;
-    if (MultiGrepKernels) {
-        grepEngine.multiGrepCodeGen(module_name, RELists, CountOnly, UTF_16);
-    } else {
-        grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16, GrepType::Normal, usingStdIn);
-    }
 
-    if (usingStdIn)  {
+    if (allFiles.empty()) {
 
-        allFiles = { "stdin" };
+        grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16, GrepType::Normal, true);
+        allFiles = { "-" };
         initFileResult(allFiles);
         total_CountOnly.push_back(0);
         grepEngine.doGrep(0, CountOnly, total_CountOnly);
 
     } else {
 
-        allFiles = getFullFileList(inputFiles);
+        if (MultiGrepKernels) {
+            grepEngine.multiGrepCodeGen(module_name, RELists, CountOnly, UTF_16);
+        } else {
+            grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16, GrepType::Normal, false);
+        }
 
         if (FileNamesOnly && NonMatchingFileNamesOnly) {
             // Strange request: print names of all matching files and all non-matching files: i.e., all of them.
@@ -477,7 +477,6 @@ int main(int argc, char *argv[]) {
         }
 
     }
-    
 
     
     PrintResult(CountOnly, total_CountOnly);

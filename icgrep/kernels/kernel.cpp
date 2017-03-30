@@ -317,11 +317,11 @@ void KernelBuilder::setProducedItemCount(Value * instance, const std::string & n
     setScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX, value);
 }
 
-llvm::Value * KernelBuilder::reserveItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const {
+void KernelBuilder::reserveBytes(llvm::Value * instance, const std::string & name, llvm::Value * value) const {
     assert ("instance cannot be null!" && instance);
     Value * itemCount = getProducedItemCount(instance, name);
     const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
-    return buf->reserveItemCount(getStreamSetBufferPtr(name), itemCount, value);
+    buf->reserveBytes(getStreamSetBufferPtr(name), itemCount, value);
 }
 
 Value * KernelBuilder::getTerminationSignal(Value * instance) const {

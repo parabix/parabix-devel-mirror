@@ -58,7 +58,7 @@ public:
     virtual llvm::Value * getLinearlyAccessibleItems(llvm::Value * self, llvm::Value * fromPosition) const;
     virtual llvm::Value * getLinearlyAccessibleBlocks(llvm::Value * self, llvm::Value * fromBlock) const;
 
-    virtual llvm::Value * reserveItemCount(llvm::Value * self, llvm::Value * position, llvm::Value * requested) const;
+    virtual void reserveBytes(llvm::Value * self, llvm::Value * position, llvm::Value * requested) const;
 
     virtual ~StreamSetBuffer() = 0;
 
@@ -128,7 +128,7 @@ public:
 
     void allocateBuffer() override;
 
-    llvm::Value * reserveItemCount(llvm::Value * self, llvm::Value * position, llvm::Value * requested) const override;
+    void reserveBytes(llvm::Value * self, llvm::Value * position, llvm::Value * requested) const override;
 
 protected:
 

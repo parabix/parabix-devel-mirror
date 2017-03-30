@@ -47,7 +47,7 @@ public:
 
     virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const;
 
-    virtual llvm::Value * reserveItemCount(llvm::Value * instance, const std::string & name, llvm::Value * requested) const;
+    virtual void reserveBytes(llvm::Value * instance, const std::string & name, llvm::Value * requested) const;
 
     bool hasNoTerminateAttribute() { return mNoTerminateAttribute;}
     
@@ -195,8 +195,8 @@ protected:
 
     llvm::Value * getRawOutputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
-    llvm::Value * reserveItemCount(const std::string & name, llvm::Value * requested) const {
-        return reserveItemCount(getSelf(), name, requested);
+    void reserveBytes(const std::string & name, llvm::Value * requested) const {
+        reserveBytes(getSelf(), name, requested);
     }
 
     llvm::Value * getScalarFieldPtr(const std::string & name) const {

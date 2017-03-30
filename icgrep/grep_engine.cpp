@@ -632,9 +632,13 @@ void initFileResult(std::vector<std::string> filenames){
 
 template<typename CodeUnit>
 void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_end, const CodeUnit * const buffer, const size_t filesize, const int fileIdx) {
+
+    errs() << lineNum << " : (" << line_start << ", " << line_end << ") -- " << filesize << "\n";
+
     assert (buffer);
     assert (line_start <= line_end);
-    assert (line_end < filesize);
+    assert (line_end <= filesize);
+
 #ifdef CUDA_ENABLED
 if (codegen::NVPTX){
     while(line_start>startPoints[blockNo]) blockNo++;

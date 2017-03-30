@@ -70,9 +70,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
 
         printRegister = function;
     }
-    if (value->getType()->canLosslesslyBitCastTo(mBitBlockType)) {
-        CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), CreateBitCast(value, mBitBlockType)});
-    }
+    CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), CreateBitCast(value, mBitBlockType)});
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
