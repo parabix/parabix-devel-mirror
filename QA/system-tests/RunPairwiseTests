@@ -10,7 +10,7 @@ Tests=(
 		"-i" 		"\\*" 						"TestFiles/EmptyFile1 TestFiles/EmptyFile2"
 		"" 			"ψ.*"						"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile1"
 		"-i"		"ω"							"TestFiles/NonEmptyFile1"
-		"-c"		"\\*lolfff"					""														#5
+		"-c"		"\\*lolfff"					"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"										#5
 		"-i -c"		"\\*lolfff"					"TestFiles/EmptyFile1"
 		""			"nope\\*No"					"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i"		"jK\\?.*Jk.*"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
@@ -28,28 +28,28 @@ Tests=(
 		# Ones with Extended Regex operators.
 		"-i -c"		"\\*\p{Greek}"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-c"		"\p{Lu}.*\\*.*\p{Greek}"	"TestFiles/NonEmptyFile1"
-		"-i -c"		"nope\p{Greek}"				""														#20
+		"-i -c"		"nope\p{Greek}"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"											#20
 		""			"nope\p{Greek}"				"TestFiles/EmptyFile1 TestFiles/EmptyFile2"
 		"-i"		"\\$.*\p{Lu}.*5$"			"TestFiles/NonEmptyFile1"
 		"-i -c"		"\\$.*\p{Lu}"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i -c"		"\p{Lu}.*\\^蕉香蕉aAaσ5"		"TestFiles/NonEmptyFile1"
 		""			"\p{Lu}\\^蕉"				"TestFiles/EmptyFile1 TestFiles/EmptyFile2"				#25
-		""			"\p{Greek}nope$"			""
+		""			"\p{Greek}nope$"			"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i -c"		"\p{Latin}\\?"				"TestFiles/EmptyFile1"
-		""			"\p{Lu}\\.\\?"				""
+		""			"\p{Lu}\\.\\?"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-c"		"\p{Greek}.*\\?\\*[0-9]"	"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i"		"\p{Lu}\\.\\?"				"TestFiles/EmptyFile1 TestFiles/EmptyFile2"				#30
-		""			"\p{Lu}蕉香蕉aAaσ"			""
+		""			"\p{Lu}蕉香蕉aAaσ"			"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i -c"		"\p{Lu}.*香.*\p{Greek}"		"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
-		""			"\p{Greek}\\&.*"			""
+		""			"\p{Greek}\\&.*"			"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-c"		"\p{Greek}\\&.*"			"TestFiles/EmptyFile1"
-		""			"\p{Lu}"					""
-		""			"\p{Latin}蕉香蕉"				""
+		""			"\p{Lu}"					"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
+		""			"\p{Latin}蕉香蕉"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		""			"\p{Greek}νάνα"				"TestFiles/NonEmptyFile1"
 		"-i"		"\p{Greek}νάνα"				"TestFiles/EmptyFile1"
 		"-c"		"^\p{Armenian}$"			"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
-		"-i -c"		"\p{Lu}\\^"					""
-		"-c"		"\p{Lu}.*\\^.*\p{Armenian}"	""
+		"-i -c"		"\p{Lu}\\^"					"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
+		"-c"		"\p{Lu}.*\\^.*\p{Armenian}"	"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		""			"My.*\\*.*\p{Greek}$"		"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 
 
@@ -60,7 +60,7 @@ Tests=(
 		"-i" 		"\\*" 						"TestFiles/EmptyFile1 TestFiles/EmptyFile2"
 		"" 			"haz lo?l"  				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"" 			"q"  						"TestFiles/NonEmptyFile1"
-		"-i" 		"Q"  						""													# Test 5
+		"-i" 		"Q"  						"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"					# Test 5
 		"-i -c" 	"\\.Jk.*"					"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i"		"nope\\*No"					"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i -c"		"jK\\?.*Jk"					"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
@@ -77,7 +77,7 @@ Tests=(
 		""			"香蕉"						"TestFiles/EmptyFile1"
 		"-i -c"		".*[a-z]"					"TestFiles/EmptyFile1 TestFiles/EmptyFile2"			# Test 20
 		"-i"		"z$"						"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
-		""			"\\.LLL"					""
+		""			"\\.LLL"					"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 
 		# Tests involving Extended regular expressions like \p{Greek}
 		"-i -c"		"\\*\p{Greek}"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
@@ -88,19 +88,19 @@ Tests=(
 		"-i -c"		"\\$.*\p{Lu}"				"TestFiles/EmptyFile1"
 		""			"\p{Lu}.*\\^.*\p{Greek}"	"TestFiles/NonEmptyFile1"
 		"-i"		"\p{Lu}.*\\^.*\p{Greek}"	"TestFiles/EmptyFile1 TestFiles/EmptyFile2"			# Test 30
-		"-c"		"\p{Lu}jk.*\\*$"			""
+		"-c"		"\p{Lu}jk.*\\*$"			"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i -c"		"\p{Lu}.*\p{Latin}.*\\*$"	"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
-		"-c"		"\\^\p{Lu}trolol$"			""
+		"-c"		"\\^\p{Lu}trolol$"			"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i -c"		"\p{Lu}.*\\*\p{Greek}"		"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i -c"		"\\^\p{L}"					"TestFiles/EmptyFile1 TestFiles/EmptyFile2"			# Test 35
-		"-c"		"\p{L}asdasd"				""
+		"-c"		"\p{L}asdasd"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i -c"		"^\p{Lu}.*σω"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
-		"-i"		"\p{L}\\*.?ada"				""
+		"-i"		"\p{L}\\*.?ada"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 		"-i -c"		"\p{Lu}.*\\^蕉香蕉aAaσ$"		"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
-		"-c"		"\p{L}"						""													# Test 40
-		"-i -c"		"^\p{Greek}.*蕉香蕉"			""
-		"-i"		"^\p{L}.*\\$"				""
-		"-c"		"^\p{L}\\.Aaσ$"				""
+		"-c"		"\p{L}"						"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"									# Test 40
+		"-i -c"		"^\p{Greek}.*蕉香蕉"			"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
+		"-i"		"^\p{L}.*\\$"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
+		"-c"		"^\p{L}\\.Aaσ$"				"TestFiles/NonEmptyFile1 TestFiles/NonEmptyFile2"
 
 
 

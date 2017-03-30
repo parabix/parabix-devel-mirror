@@ -20,7 +20,7 @@ mkdir $output_directory
 for f in $input_directory/*
 do
    fbase=`echo $f | sed "s#$input_directory/##"`
-   $test_program 'ab*c' $input_directory/$fbase >$output_directory/$fbase
+   $test_program 'ab*c' < $input_directory/$fbase >$output_directory/$fbase
 done
 
 echo "diff -q abc/ExpectedOutput abc/TestOutput"
