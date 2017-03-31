@@ -179,6 +179,7 @@ Value * CBuilder::CreateAnonymousMMap(Value * size) {
         FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy, intTy, intTy, intTy, offTy}, false);
         fMMap = Function::Create(fty, Function::ExternalLinkage, "mmap", mMod);
     }
+    size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ | PROT_WRITE);
     ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE | MAP_ANONYMOUS);
     ConstantInt * const fd =  ConstantInt::get(intTy, -1);
@@ -188,7 +189,7 @@ Value * CBuilder::CreateAnonymousMMap(Value * size) {
     return ptr;
 }
 
-Value * CBuilder::CreateFileSourceMMap(Value * const fd, Value * const size) {
+Value * CBuilder::CreateFileSourceMMap(Value * const fd, Value * size) {
     DataLayout DL(mMod);
     PointerType * const voidPtrTy = getVoidPtrTy();
     IntegerType * const intTy = getIntPtrTy(DL);
@@ -199,6 +200,7 @@ Value * CBuilder::CreateFileSourceMMap(Value * const fd, Value * const size) {
         FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy, intTy, intTy, intTy, offTy}, false);
         fMMap = Function::Create(fty, Function::ExternalLinkage, "mmap", mMod);
     }
+    size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ);
     ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE);
     ConstantInt * const offset = ConstantInt::get(intTy, 0); // getCacheAlignment()
@@ -214,31 +216,32 @@ Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize, c
     IntegerType * const sizeTy = getSizeTy();
     Function * fMRemap = mMod->getFunction("mremap");
     if (LLVM_UNLIKELY(fMRemap == nullptr)) {
-        //    void * mremap (void *addr, size_t old_size,
-        //                   size_t new_size, unsigned long flags);
-
         FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy, sizeTy, intTy}, false);
         fMRemap = Function::Create(fty, Function::ExternalLinkage, "mremap", mMod);
     }    
     addr = CreatePointerCast(addr, voidPtrTy);
-    CreateAssert(addr, "CreateMRemap: initial addr is null");
-    Value * ptr = CreateCall(fMRemap, {addr, oldSize, newSize, ConstantInt::get(intTy, mayMove ? MREMAP_MAYMOVE : 0)});
+    CreateAssert(addr, "CreateMRemap: addr cannot be null");
+    oldSize = CreateZExtOrTrunc(oldSize, sizeTy);
+    newSize = CreateZExtOrTrunc(newSize, sizeTy);
+    ConstantInt * const flags = ConstantInt::get(intTy, mayMove ? MREMAP_MAYMOVE : 0);
+    Value * ptr = CreateCall(fMRemap, {addr, oldSize, newSize, flags});
     CreateAssert(addr, "CreateMRemap: mremap failed to allocate memory");
     return ptr;
 }
 
 Value * CBuilder::CreateMUnmap(Value * addr, Value * size) {
     DataLayout DL(mMod);
-    IntegerType * const intTy = getIntPtrTy(DL);
     IntegerType * const sizeTy = getSizeTy();
+    PointerType * const voidPtrTy = getVoidPtrTy();
     Function * fMUnmap = mMod->getFunction("munmap");
     if (LLVM_UNLIKELY(fMUnmap == nullptr)) {
-        // int munmap (void *addr, size_t len);
-
-        PointerType * const voidPtrTy = getVoidPtrTy();
+        IntegerType * const intTy = getIntPtrTy(DL);
         FunctionType * fty = FunctionType::get(intTy, {voidPtrTy, sizeTy}, false);
         fMUnmap = Function::Create(fty, Function::ExternalLinkage, "munmap", mMod);
     }
+    addr = CreatePointerCast(addr, voidPtrTy);
+    CreateAssert(addr, "CreateMUnmap: addr cannot be null");
+    size = CreateZExtOrTrunc(size, sizeTy);
     return CreateCall(fMUnmap, {addr, size});
 }
 
