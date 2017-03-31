@@ -61,7 +61,7 @@ void PabloCompiler::examineBlock(const PabloBlock * const block) {
     for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
-            assert (isa<Var>(la->getExpr()) || isa<Extract>(la->getExpr()));
+            //assert ((isa<Var>(la->getExpr()) || isa<Extract>(la->getExpr())));
             if (LLVM_LIKELY(la->getAmount() > mKernel->getLookAhead())) {
                 mKernel->setLookAhead(la->getAmount());
             }
