@@ -505,10 +505,17 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
             Var * var = nullptr;
             PabloAST * stream = l->getExpr();
             Value * index = iBuilder->getInt32(0);
-
             if (LLVM_UNLIKELY(isa<Extract>(stream))) {
-                stream = cast<Extract>(stream)->getArray();
+                var = dyn_cast<Var>(cast<Extract>(stream)->getArray());
                 index = compileExpression(cast<Extract>(stream)->getIndex());
+                if (!var->isKernelParameter() || var->isReadNone()) {
+                    std::string tmp;
+                    raw_string_ostream out(tmp);
+                    out << "Lookahead operation cannot be applied to ";
+                    stmt->print(out);
+                    out << " - not an input stream";
+                    report_fatal_error(out.str());
+                }
             }
             if (LLVM_LIKELY(isa<Var>(stream))) {
                 var = cast<Var>(stream);
@@ -523,7 +530,6 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
                     report_fatal_error(out.str());
                 }
             }
-
             const auto bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
             const auto block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
 

@@ -40,8 +40,10 @@ IDISA::IDISA_Builder * iBuilder
     Zeroes * const zero = builder.createZeroes();
     Var * crlf = builder.createVar("crlf", zero);
     PabloBuilder crb = PabloBuilder::Create(builder);
-    PabloAST * cr1 = crb.createAdvance(CR, 1, "cr1");
-    crb.createAssign(crlf, crb.createAnd(cr1, LF));
+    //PabloAST * cr1 = crb.createAdvance(CR, 1, "cr1");
+    //crb.createAssign(crlf, crb.createAnd(cr1, LF));
+    PabloAST * lookaheadLF = crb.createLookahead(LF, 1, "lookaheadLF");
+    crb.createAssign(crlf, crb.createAnd(CR, lookaheadLF));
     builder.createIf(CR, crb);
     
     Var * NEL_LS_PS = builder.createVar("NEL_LS_PS", zero);
@@ -72,10 +74,11 @@ IDISA::IDISA_Builder * iBuilder
 
     PabloAST * LB_chars = builder.createOr(LF_VT_FF_CR, NEL_LS_PS);
     PabloAST * UnicodeLineBreak = builder.createAnd(LB_chars, builder.createNot(crlf));  // count the CR, but not CRLF
-    
+
     PabloAST * lb = UNICODE_LINE_BREAK ? UnicodeLineBreak : LF;
     PabloAST * unterminatedLineAtEOF = builder.createAtEOF(builder.createAdvance(builder.createNot(LB_chars), 1));
     LineBreak = builder.createOr(lb, unterminatedLineAtEOF);
     PabloAST * const r = builder.createExtract(getOutput(0), builder.getInteger(0));
     builder.createAssign(r, LineBreak);
+    setLookAhead(1);
 }
