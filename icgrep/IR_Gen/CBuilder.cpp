@@ -183,7 +183,7 @@ Value * CBuilder::CreateAnonymousMMap(Value * size) {
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ | PROT_WRITE);
     ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE | MAP_ANONYMOUS);
     ConstantInt * const fd =  ConstantInt::get(intTy, -1);
-    ConstantInt * const offset = ConstantInt::get(intTy, 0); // getCacheAlignment()
+    Constant * const offset = ConstantInt::get(offTy, 0); // getCacheAlignment()
     Value * const ptr = CreateCall(fMMap, {Constant::getNullValue(voidPtrTy), size, prot, flags, fd, offset});
     CreateAssert(CreateICmpNE(CreatePtrToInt(ptr, getSizeTy()), getSize((size_t)MAP_FAILED)), "CreateAnonymousMMap: mmap failed to allocate memory");
     return ptr;
@@ -203,7 +203,7 @@ Value * CBuilder::CreateFileSourceMMap(Value * const fd, Value * size) {
     size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ);
     ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE);
-    ConstantInt * const offset = ConstantInt::get(intTy, 0); // getCacheAlignment()
+    Constant * const offset = ConstantInt::get(offTy, 0); // getCacheAlignment()
     Value * const ptr = CreateCall(fMMap, {Constant::getNullValue(voidPtrTy), size, prot, flags, fd, offset});
     CreateAssert(CreateICmpNE(CreatePtrToInt(ptr, getSizeTy()), getSize((size_t)MAP_FAILED)), "CreateFileSourceMMap: mmap failed to allocate memory");
     return ptr;
