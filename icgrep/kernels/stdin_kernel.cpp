@@ -9,32 +9,63 @@
 
 using namespace llvm;
 
+inline static size_t round_up_to_nearest(const size_t x, const size_t y) {
+    return (((x - 1) | (y - 1)) + 1);
+}
+
 namespace kernel {
 
 void StdInKernel::generateDoSegmentMethod(Value * /* doFinal */, const std::vector<Value *> & /* producerPos */) {
 
-    BasicBlock * setTermination = CreateBasicBlock("setTermination");
-    BasicBlock * stdInExit = CreateBasicBlock("stdInExit");
-    ConstantInt * segmentBytes = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth());
-    ConstantInt * segmentBytes2 = iBuilder->getSize(2 * mSegmentBlocks * iBuilder->getBitBlockWidth());
-    // on the first segment, we buffer twice the data to ensure the ScanMatch kernel can safely check for a non-LF line break
+    BasicBlock * const entryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * const readBlock = CreateBasicBlock("ReadMoreData");
+    BasicBlock * const setTermination = CreateBasicBlock("SetTermination");
+    BasicBlock * const stdInExit = CreateBasicBlock("StdInExit");
+
+    ConstantInt * const segmentSize = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth());
+    Value * bufferedSize = getScalarField("BufferedSize");
     Value * const itemsAlreadyRead = getProducedItemCount("codeUnitBuffer");
-    Value * const bytesToRead = iBuilder->CreateSelect(iBuilder->CreateICmpEQ(itemsAlreadyRead, iBuilder->getSize(0)), segmentBytes2, segmentBytes);
+    Value * const bytesAlreadyRead = iBuilder->CreateMul(itemsAlreadyRead, iBuilder->getSize(mCodeUnitWidth / 8));
+    Value * unreadSize = iBuilder->CreateSub(bufferedSize, bytesAlreadyRead);
+    Value * const exaustedBuffer = iBuilder->CreateICmpULT(unreadSize, segmentSize);
+    iBuilder->CreateUnlikelyCondBr(exaustedBuffer, readBlock, stdInExit);
+
+    iBuilder->SetInsertPoint(readBlock);
+    // how many pages are required to have enough data for the segment plus one overflow block?
+    const auto PageAlignedSegmentSize = round_up_to_nearest((mSegmentBlocks + 1) * iBuilder->getBitBlockWidth() * (mCodeUnitWidth / 8), getpagesize());
+    ConstantInt * const bytesToRead = iBuilder->getSize(PageAlignedSegmentSize);
     reserveBytes("codeUnitBuffer", bytesToRead);
-    Value * const bytePtr = iBuilder->CreatePointerCast(getOutputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), iBuilder->getInt8PtrTy());
+    BasicBlock * const readExit = iBuilder->GetInsertBlock();
+
+    Value * const ptr = getRawOutputPointer("codeUnitBuffer", iBuilder->getInt32(0), bufferedSize);
+    Value * const bytePtr = iBuilder->CreatePointerCast(ptr, iBuilder->getInt8PtrTy());
     Value * const bytesRead = iBuilder->CreateReadCall(iBuilder->getInt32(STDIN_FILENO), bytePtr, bytesToRead);
-    Value * const itemsRead = iBuilder->CreateAdd(itemsAlreadyRead, iBuilder->CreateUDiv(bytesRead, iBuilder->getSize(mCodeUnitWidth / 8)));
-    setProducedItemCount("codeUnitBuffer", itemsRead);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(bytesRead, ConstantInt::getNullValue(bytesRead->getType())), setTermination, stdInExit);
+
+    unreadSize = iBuilder->CreateAdd(unreadSize, bytesRead);
+    bufferedSize = iBuilder->CreateAdd(bufferedSize, bytesRead);
+    setScalarField("BufferedSize", bufferedSize);
+    iBuilder->CreateUnlikelyCondBr(iBuilder->CreateICmpULT(unreadSize, segmentSize), setTermination, stdInExit);
+
     iBuilder->SetInsertPoint(setTermination);
+    Value * const itemsRemaining = iBuilder->CreateUDiv(unreadSize, iBuilder->getSize(mCodeUnitWidth / 8));
     setTerminationSignal();
     iBuilder->CreateBr(stdInExit);
+
     stdInExit->moveAfter(iBuilder->GetInsertBlock());
+
     iBuilder->SetInsertPoint(stdInExit);
+    PHINode * const produced = iBuilder->CreatePHI(itemsAlreadyRead->getType(), 3);
+
+    produced->addIncoming(segmentSize, entryBlock);
+    produced->addIncoming(segmentSize, readExit);
+    produced->addIncoming(itemsRemaining, setTermination);
+    Value * const itemsRead = iBuilder->CreateAdd(itemsAlreadyRead, produced);
+
+    setProducedItemCount("codeUnitBuffer", itemsRead);
 }
 
 StdInKernel::StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "stdin_source", {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {})
+: SegmentOrientedKernel(iBuilder, "stdin_source", {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {Binding{iBuilder->getSizeTy(), "BufferedSize"}})
 , mSegmentBlocks(blocksPerSegment)
 , mCodeUnitWidth(codeUnitWidth) {
     

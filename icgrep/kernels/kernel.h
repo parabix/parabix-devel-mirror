@@ -248,11 +248,15 @@ protected:
     unsigned getStreamSetIndex(const std::string & name) const;
 
     const parabix::StreamSetBuffer * getInputStreamSetBuffer(const std::string & name) const {
-        return mStreamSetInputBuffers[getStreamSetIndex(name)];
+        const auto index = getStreamSetIndex(name);
+        assert (index < mStreamSetInputBuffers.size());
+        return mStreamSetInputBuffers[index];
     }
 
     const parabix::StreamSetBuffer * getOutputStreamSetBuffer(const std::string & name) const {
-        return mStreamSetOutputBuffers[getStreamSetIndex(name)];
+        const auto index = getStreamSetIndex(name);
+        assert (index < mStreamSetOutputBuffers.size());
+        return mStreamSetOutputBuffers[index];
     }
 
     void callGenerateInitMethod();

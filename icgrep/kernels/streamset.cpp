@@ -122,6 +122,10 @@ Value * StreamSetBuffer::getBaseAddress(Value * self) const {
     return self;
 }
 
+void StreamSetBuffer::releaseBuffer(Value * /* self */) {
+    /* do nothing: memory is stack allocated */
+}
+
 // Single Block Buffer
 
 // For a single block buffer, the block pointer is always the buffer base pointer.
@@ -161,8 +165,7 @@ void ExtensibleBuffer::allocateBuffer() {
     initialSize = ConstantExpr::getMul(initialSize, iBuilder->getSize(mBufferBlocks));
     initialSize = ConstantExpr::getIntegerCast(initialSize, iBuilder->getSizeTy(), false);
     iBuilder->CreateStore(initialSize, capacityPtr);
-    Value * addr = iBuilder->CreateAlignedMalloc(initialSize, iBuilder->getCacheAlignment());
-    iBuilder->CreateMemZero(addr, initialSize, iBuilder->getCacheAlignment());
+    Value * addr = iBuilder->CreateAnonymousMMap(initialSize);
     Value * const addrPtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     addr = iBuilder->CreatePointerCast(addr, addrPtr->getType()->getPointerElementType());
     iBuilder->CreateStore(addr, addrPtr);
@@ -184,16 +187,11 @@ void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const posi
     BasicBlock * const resume = BasicBlock::Create(iBuilder->getContext(), "resume", entry->getParent());
     Value * const reserved = iBuilder->CreateAdd(iBuilder->CreateMul(position, blockSize), requested);
     iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpULT(reserved, currentSize), resume, expand);
-
     iBuilder->SetInsertPoint(expand);
     Value * const reservedSize = iBuilder->CreateShl(reserved, 1);
-    Value * newAddr = iBuilder->CreateAlignedMalloc(reservedSize, iBuilder->getCacheAlignment());
     Value * const baseAddrPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     Value * const baseAddr = iBuilder->CreateLoad(baseAddrPtr);
-    iBuilder->CreateMemCpy(newAddr, baseAddr, currentSize, iBuilder->getCacheAlignment());
-    iBuilder->CreateAlignedFree(baseAddr);
-    Value * const remainingSize = iBuilder->CreateSub(reservedSize, currentSize);
-    iBuilder->CreateMemZero(iBuilder->CreateGEP(newAddr, currentSize), remainingSize, iBuilder->getBitBlockWidth() / 8);
+    Value * newAddr = iBuilder->CreateMRemap(baseAddr, currentSize, reservedSize);
     newAddr = iBuilder->CreatePointerCast(newAddr, baseAddr->getType());
     iBuilder->CreateStore(reservedSize, capacityPtr);
     iBuilder->CreateStore(newAddr, baseAddrPtr);
@@ -204,6 +202,12 @@ void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const posi
 
 Value * ExtensibleBuffer::getBaseAddress(Value * const self) const {
     return iBuilder->CreateLoad(iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
+}
+
+void ExtensibleBuffer::releaseBuffer(Value * self) {
+    Value * const sizePtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+    Value * size = iBuilder->CreateLoad(sizePtr);
+    iBuilder->CreateMUnmap(getBaseAddress(self), size);
 }
 
 // Circular Buffer
@@ -444,6 +448,10 @@ Value * ExpandableBuffer::getStreamSetCount(Value * self) const {
 
 Value * ExpandableBuffer::getBaseAddress(Value * self) const {
     return iBuilder->CreateLoad(iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
+}
+
+void ExpandableBuffer::releaseBuffer(Value * self) {
+    iBuilder->CreateAlignedFree(getBaseAddress(self));
 }
 
 Value * ExpandableBuffer::getStreamSetBlockPtr(Value *, Value *) const {

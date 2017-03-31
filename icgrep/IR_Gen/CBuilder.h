@@ -18,7 +18,7 @@ namespace llvm { class Value; }
 class CBuilder : public llvm::IRBuilder<> {
     
 public:
-    
+
     CBuilder(llvm::Module * m, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes = 64);
     
     virtual ~CBuilder() {}
@@ -50,7 +50,7 @@ public:
         instr->setAlignment(getCacheAlignment());
         return instr;
     }
-    
+
     // stdio.h functions
     //
     //  Create a call to:  FILE * fopen(const char *filename, const char *mode);
@@ -74,6 +74,17 @@ public:
     llvm::Value * CreateReadCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
     //  Create a call to:  int close(int filedes);
     llvm::Value * CreateCloseCall(llvm::Value * fildes);
+
+
+    llvm::Value * CreateAnonymousMMap(llvm::Value * size);
+
+    llvm::Value * CreateFileSourceMMap(llvm::Value * fd, llvm::Value * size);
+
+    llvm::Value * CreateMRemap(llvm::Value * addr, llvm::Value * oldSize, llvm::Value * newSize, const bool mayMove = true);
+
+    llvm::Value * CreateMUnmap(llvm::Value * addr, llvm::Value * size);
+
+
 
     //  Posix thread (pthread.h) functions.
     //

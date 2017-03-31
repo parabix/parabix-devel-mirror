@@ -35,6 +35,8 @@
 #include <cc/multiplex_CCs.h>
 
 #include <llvm/Support/raw_ostream.h>
+#include <sys/stat.h>
+
 
 #ifdef CUDA_ENABLED
 #include <IR_Gen/CudaDriver.h>
@@ -301,7 +303,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
 //    } else {
         byteStream = new ExternalFileBuffer(iBuilder, iBuilder->getStreamSetTy(1, 8));
         cast<ExternalFileBuffer>(byteStream)->setStreamSetBuffer(inputStream);
-        sourceK = new kernel::MMapSourceKernel(iBuilder, segmentSize);
+        sourceK = new kernel::MMapSourceKernel(iBuilder, segmentSize * bufferSegments);
         sourceK->generateKernel({}, {byteStream});
         sourceK->setInitialArguments({fileSize});
 //    }
@@ -482,6 +484,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     StreamSetBuffer * byteStream = nullptr;
     kernel::KernelBuilder * sourceK = nullptr;
     if (usingStdIn) {
+        // TODO: use fstat(STDIN_FILENO) to see if we can mmap the stdin safely and avoid the calls to read
+
         byteStream = new ExtensibleBuffer(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments);
         cast<ExtensibleBuffer>(byteStream)->allocateBuffer();
         sourceK = new kernel::StdInKernel(iBuilder, segmentSize);
@@ -632,9 +636,6 @@ void initFileResult(std::vector<std::string> filenames){
 
 template<typename CodeUnit>
 void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_end, const CodeUnit * const buffer, const size_t filesize, const int fileIdx) {
-
- //   errs() << lineNum << " : (" << line_start << ", " << line_end << ") -- " << filesize << "\n";
-
     assert (buffer);
     assert (line_start <= line_end);
     assert (line_end <= filesize);

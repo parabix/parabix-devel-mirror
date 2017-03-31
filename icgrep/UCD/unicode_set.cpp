@@ -512,7 +512,7 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
     if (lo_index) {
         runs.push_back(std::make_pair(type, lo_index));
         if (type == Mixed) {
-            assert (std::distance(qi, mQuads.cend()) >= lo_index);
+            assert (static_cast<codepoint_t>(std::distance(qi, mQuads.cend())) >= lo_index);
             qi += lo_index;
         }
         hi_index -= lo_index;
@@ -565,7 +565,7 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
             append_run(Full, 1, runs);
         } else {
             if (type == Mixed) {
-                assert (std::distance(qi, mQuads.cend()) > hi_index);
+                assert (static_cast<codepoint_t>(std::distance(qi, mQuads.cend())) > hi_index);
                 qi += hi_index;
                 hi_quad |= *qi++;
             }
