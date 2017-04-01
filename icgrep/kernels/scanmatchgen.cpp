@@ -36,8 +36,6 @@ Value * generateResetLowestBit(IDISA::IDISA_Builder * iBuilder, Value * bits) {
     Value * bits_minus1 = iBuilder->CreateSub(bits, ConstantInt::get(bits->getType(), 1));
     return iBuilder->CreateAnd(bits_minus1, bits);
 }
-        
-
 
 void ScanMatchKernel::generateDoBlockMethod() {
 

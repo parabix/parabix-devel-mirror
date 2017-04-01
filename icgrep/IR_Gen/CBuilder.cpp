@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <toolchain.h>
-
+#include <errno.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
@@ -169,44 +169,46 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
 }
 
 Value * CBuilder::CreateAnonymousMMap(Value * size) {
-    DataLayout DL(mMod);
     PointerType * const voidPtrTy = getVoidPtrTy();
-    IntegerType * const intTy = getIntPtrTy(DL);
+    IntegerType * const intTy = getInt32Ty();
     IntegerType * const sizeTy = getSizeTy();
-    Type * const offTy = TypeBuilder<off_t, false>::get(getContext());
-    Function * fMMap = mMod->getFunction("mmap");
-    if (LLVM_UNLIKELY(fMMap == nullptr)) {
-        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy, intTy, intTy, intTy, offTy}, false);
-        fMMap = Function::Create(fty, Function::ExternalLinkage, "mmap", mMod);
-    }
     size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ | PROT_WRITE);
     ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE | MAP_ANONYMOUS);
     ConstantInt * const fd =  ConstantInt::get(intTy, -1);
-    Constant * const offset = ConstantInt::get(offTy, 0); // getCacheAlignment()
-    Value * const ptr = CreateCall(fMMap, {Constant::getNullValue(voidPtrTy), size, prot, flags, fd, offset});
-    CreateAssert(CreateICmpNE(CreatePtrToInt(ptr, getSizeTy()), getSize((size_t)MAP_FAILED)), "CreateAnonymousMMap: mmap failed to allocate memory");
-    return ptr;
+    Constant * const offset = ConstantInt::get(sizeTy, 0);
+    return CreateMMap(Constant::getNullValue(voidPtrTy), size, prot, flags, fd, offset);
 }
 
 Value * CBuilder::CreateFileSourceMMap(Value * const fd, Value * size) {
-    DataLayout DL(mMod);
     PointerType * const voidPtrTy = getVoidPtrTy();
-    IntegerType * const intTy = getIntPtrTy(DL);
+    IntegerType * const intTy = getInt32Ty();
     IntegerType * const sizeTy = getSizeTy();
-    Type * const offTy = TypeBuilder<off_t, false>::get(getContext());
-    Function * fMMap = mMod->getFunction("mmap");
-    if (LLVM_UNLIKELY(fMMap == nullptr)) {
-        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy, intTy, intTy, intTy, offTy}, false);
-        fMMap = Function::Create(fty, Function::ExternalLinkage, "mmap", mMod);
-    }
     size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ);
     ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE);
-    Constant * const offset = ConstantInt::get(offTy, 0); // getCacheAlignment()
-    Value * const ptr = CreateCall(fMMap, {Constant::getNullValue(voidPtrTy), size, prot, flags, fd, offset});
-    CreateAssert(CreateICmpNE(CreatePtrToInt(ptr, getSizeTy()), getSize((size_t)MAP_FAILED)), "CreateFileSourceMMap: mmap failed to allocate memory");
+    Constant * const offset = ConstantInt::get(sizeTy, 0);
+    return CreateMMap(Constant::getNullValue(voidPtrTy), size, prot, flags, fd, offset);
+}
+
+Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const prot, Value * const flags, Value * const fd, Value * const offset) {
+    Function * fMMap = mMod->getFunction("mmap");
+    if (LLVM_UNLIKELY(fMMap == nullptr)) {
+        PointerType * const voidPtrTy = getVoidPtrTy();
+        IntegerType * const intTy = getInt32Ty();
+        IntegerType * const sizeTy = getSizeTy();
+        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy, intTy, intTy, intTy, sizeTy}, false);
+        fMMap = Function::Create(fty, Function::ExternalLinkage, "mmap", mMod);
+    }
+    Value * ptr = CreateCall(fMMap, {addr, size, prot, flags, fd, offset});
+    CreateAssert(CheckMMapSuccess(ptr), "CreateMMap: mmap failed to allocate memory");
     return ptr;
+}
+
+Value * CBuilder::CheckMMapSuccess(Value * const addr) {
+    DataLayout DL(mMod);
+    IntegerType * const ty = getIntPtrTy(DL);
+    return CreateICmpNE(CreatePtrToInt(addr, ty), ConstantInt::getAllOnesValue(ty)); // MAP_FAILED = -1
 }
 
 Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize, const bool mayMove) {
@@ -220,12 +222,11 @@ Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize, c
         fMRemap = Function::Create(fty, Function::ExternalLinkage, "mremap", mMod);
     }    
     addr = CreatePointerCast(addr, voidPtrTy);
-    CreateAssert(addr, "CreateMRemap: addr cannot be null");
     oldSize = CreateZExtOrTrunc(oldSize, sizeTy);
     newSize = CreateZExtOrTrunc(newSize, sizeTy);
     ConstantInt * const flags = ConstantInt::get(intTy, mayMove ? MREMAP_MAYMOVE : 0);
-    Value * ptr = CreateCall(fMRemap, {addr, oldSize, newSize, flags});
-    CreateAssert(addr, "CreateMRemap: mremap failed to allocate memory");
+    Value * ptr = CreateCall(fMRemap, {addr, oldSize, newSize, flags});   
+    CreateAssert(CheckMMapSuccess(ptr), "CreateMRemap: mremap failed to allocate memory");
     return ptr;
 }
 

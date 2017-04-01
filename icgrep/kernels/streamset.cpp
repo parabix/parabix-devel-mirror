@@ -114,7 +114,7 @@ Value * StreamSetBuffer::getLinearlyAccessibleBlocks(Value * self, Value * fromB
     return iBuilder->CreateSub(bufBlocks, iBuilder->CreateURem(fromBlock, bufBlocks));
 }
 
-void StreamSetBuffer::reserveBytes(Value * self, llvm::Value * position, llvm::Value *requested) const {
+void StreamSetBuffer::reserveBytes(Value * self, llvm::Value *requested) const {
     report_fatal_error("reserve() can only be used with ExtensibleBuffers");
 }
 
@@ -176,19 +176,15 @@ Value * ExtensibleBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex)
     return iBuilder->CreateGEP(self, blockIndex);
 }
 
-void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const position, llvm::Value * const requested) const {
+void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const requiredSize) const {
     Value * const capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     Value * const currentSize = iBuilder->CreateLoad(capacityPtr);
-    Type * const intTy = currentSize->getType();
-    assert (position->getType() == requested->getType());
-    Constant * const blockSize = ConstantExpr::getIntegerCast(ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(getType()->getStructElementType(1)), intTy, false), requested->getType(), false);
     BasicBlock * const entry = iBuilder->GetInsertBlock();
     BasicBlock * const expand = BasicBlock::Create(iBuilder->getContext(), "expand", entry->getParent());
     BasicBlock * const resume = BasicBlock::Create(iBuilder->getContext(), "resume", entry->getParent());
-    Value * const reserved = iBuilder->CreateAdd(iBuilder->CreateMul(position, blockSize), requested);
-    iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpULT(reserved, currentSize), resume, expand);
+    iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpULT(requiredSize, currentSize), resume, expand);
     iBuilder->SetInsertPoint(expand);
-    Value * const reservedSize = iBuilder->CreateShl(reserved, 1);
+    Value * const reservedSize = iBuilder->CreateShl(requiredSize, 1);
     Value * const baseAddrPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     Value * const baseAddr = iBuilder->CreateLoad(baseAddrPtr);
     Value * newAddr = iBuilder->CreateMRemap(baseAddr, currentSize, reservedSize);
@@ -196,7 +192,6 @@ void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const posi
     iBuilder->CreateStore(reservedSize, capacityPtr);
     iBuilder->CreateStore(newAddr, baseAddrPtr);
     iBuilder->CreateBr(resume);
-
     iBuilder->SetInsertPoint(resume);
 }
 

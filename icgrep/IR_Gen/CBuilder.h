@@ -80,6 +80,10 @@ public:
 
     llvm::Value * CreateFileSourceMMap(llvm::Value * fd, llvm::Value * size);
 
+    llvm::Value * CreateMMap(llvm::Value * const addr, llvm::Value * size, llvm::Value * const prot, llvm::Value * const flags, llvm::Value * const fd, llvm::Value * const offset);
+
+    llvm::Value * CheckMMapSuccess(llvm::Value * const addr);
+
     llvm::Value * CreateMRemap(llvm::Value * addr, llvm::Value * oldSize, llvm::Value * newSize, const bool mayMove = true);
 
     llvm::Value * CreateMUnmap(llvm::Value * addr, llvm::Value * size);

@@ -321,7 +321,7 @@ void KernelBuilder::reserveBytes(llvm::Value * instance, const std::string & nam
     assert ("instance cannot be null!" && instance);
     Value * itemCount = getProducedItemCount(instance, name);
     const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
-    buf->reserveBytes(getStreamSetBufferPtr(name), itemCount, value);
+    buf->reserveBytes(getStreamSetBufferPtr(name), iBuilder->CreateAdd(itemCount, value));
 }
 
 Value * KernelBuilder::getTerminationSignal(Value * instance) const {
