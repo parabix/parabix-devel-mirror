@@ -42,36 +42,28 @@ ProcessingRate UnknownRate() {
 }
 
 Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value * principalInputItems, Value * doFinal) const {
-    Type * T = principalInputItems->getType();
     if (mKind == ProcessingRate::ProcessingRateKind::Fixed || mKind == ProcessingRate::ProcessingRateKind::Max) {
-        Value * strmItems = (ratio_numerator == 1) ? principalInputItems : b->CreateMul(principalInputItems, ConstantInt::get(T, ratio_numerator)); 
-        if (ratio_denominator == 1) return strmItems;
-        return b->CreateUDiv(b->CreateAdd(ConstantInt::get(T, ratio_denominator - 1), strmItems), ConstantInt::get(T, ratio_denominator)); 
+        if (ratio_numerator == 1) {
+            return principalInputItems;
+        }
+        Type * const T = principalInputItems->getType();
+        Constant * const numerator = ConstantInt::get(T, ratio_numerator);
+        Constant * const denominator = ConstantInt::get(T, ratio_denominator);
+        Constant * const denominatorLess1 = ConstantInt::get(T, ratio_denominator - 1);
+        Value * strmItems = b->CreateMul(principalInputItems, numerator);
+        return b->CreateUDiv(b->CreateAdd(denominatorLess1, strmItems), denominator);
     }
     if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
-        Constant * multiple = ConstantInt::get(T, ratio_denominator);
-        Constant * multipleLess1 = ConstantInt::get(T, ratio_denominator - 1);
-        return b->CreateMul(b->CreateUDiv(b->CreateAdd(principalInputItems, multipleLess1), multiple), multiple);
+        Type * const T = principalInputItems->getType();
+        Constant * const denominator = ConstantInt::get(T, ratio_denominator);
+        Constant * const denominatorLess1 = ConstantInt::get(T, ratio_denominator - 1);
+        return b->CreateMul(b->CreateUDiv(b->CreateAdd(principalInputItems, denominatorLess1), denominator), denominator);
     }
     if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
-        return b->CreateAdd(principalInputItems, b->CreateZExt(doFinal, principalInputItems->getType()));
-    }
-    return nullptr;
-}
-
-Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value * principalInputItems) const {
-    Type * T = principalInputItems->getType();
-    if (mKind == ProcessingRate::ProcessingRateKind::Fixed || mKind == ProcessingRate::ProcessingRateKind::Max) {
-        Value * strmItems = (ratio_numerator == 1) ? principalInputItems : b->CreateMul(principalInputItems, ConstantInt::get(T, ratio_numerator)); 
-        if (ratio_denominator == 1) return strmItems;
-        return b->CreateUDiv(b->CreateAdd(ConstantInt::get(T, ratio_denominator - 1), strmItems), ConstantInt::get(T, ratio_denominator)); 
-    }
-    if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
-        Constant * multiple = ConstantInt::get(T, ratio_denominator);
-        Constant * multipleLess1 = ConstantInt::get(T, ratio_denominator - 1);
-        return b->CreateMul(b->CreateUDiv(b->CreateAdd(principalInputItems, multipleLess1), multiple), multiple);
-    }
-    if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
+        if (doFinal) {
+            Type * const T = principalInputItems->getType();
+            principalInputItems = b->CreateAdd(principalInputItems, b->CreateZExt(doFinal, T));
+        }
         return principalInputItems;
     }
     return nullptr;

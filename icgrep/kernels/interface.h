@@ -42,8 +42,7 @@ struct ProcessingRate  {
     ProcessingRate() {}
     ProcessingRateKind getKind() const {return mKind;}
     bool isExact() const {return (mKind == Fixed)||(mKind == RoundUp)||(mKind == Add1) ;}
-    llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems, llvm::Value * doFinal) const;
-    llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems) const;
+    llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems, llvm::Value * doFinal = nullptr) const;
     friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet);
     friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet);
     friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string referenceStreamSet);    
@@ -116,13 +115,17 @@ public:
         return iBuilder;
     }
 
+    virtual llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * doFinal = nullptr) const = 0;
+
+    virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
+
+    virtual llvm::Value * getConsumedItemCount(llvm::Value * instance, const std::string & name) const = 0;
+
+    virtual void setConsumedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
+
     virtual llvm::Value * getProcessedItemCount(llvm::Value * instance, const std::string & name) const = 0;
 
     virtual void setProcessedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
-
-
-
-    virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
 
     virtual llvm::Value * getTerminationSignal(llvm::Value * instance) const = 0;
 

@@ -22,6 +22,8 @@ static const auto LOGICAL_SEGMENT_NO_SCALAR = "logicalSegNo";
 
 static const auto PROCESSED_ITEM_COUNT_SUFFIX = "_processedItemCount";
 
+static const auto CONSUMED_ITEM_COUNT_SUFFIX = "_consumedItemCount";
+
 static const auto PRODUCED_ITEM_COUNT_SUFFIX = "_producedItemCount";
 
 static const auto TERMINATION_SIGNAL = "terminationSignal";
@@ -244,20 +246,6 @@ void KernelBuilder::setScalarField(Value * instance, Value * index, Value * valu
     iBuilder->CreateStore(value, getScalarFieldPtr(instance, index));
 }
 
-Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string & name) const {
-    assert ("instance cannot be null!" && instance);
-    unsigned ssIdx = getStreamSetIndex(name);
-    if (mStreamSetInputs[ssIdx].rate.isExact()) {
-        std::string refSet = mStreamSetInputs[ssIdx].rate.referenceStreamSet();
-        if (refSet.empty()) {
-            refSet = mStreamSetInputs[0].name;
-        }
-        Value * principalItemsProcessed = getScalarField(instance, refSet + PROCESSED_ITEM_COUNT_SUFFIX);
-        return mStreamSetInputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed);
-    }
-    return getScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX);
-}
-
 Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name, Value * doFinal) const {
     assert ("instance cannot be null!" && instance);
     unsigned ssIdx = getStreamSetIndex(name);
@@ -284,37 +272,38 @@ Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string 
     return getScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX);
 }
 
-Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name) const {
+llvm::Value * KernelBuilder::getConsumedItemCount(llvm::Value * instance, const std::string & name) const {
     assert ("instance cannot be null!" && instance);
-    unsigned ssIdx = getStreamSetIndex(name);
-    std::string refSet = mStreamSetOutputs[ssIdx].rate.referenceStreamSet();
-    if (mStreamSetOutputs[ssIdx].rate.isExact()) {
-        std::string refSet = mStreamSetOutputs[ssIdx].rate.referenceStreamSet();
-        std::string principalField;
-        if (refSet.empty()) {
-            principalField = mStreamSetInputs.empty() ? mStreamSetOutputs[0].name + PRODUCED_ITEM_COUNT_SUFFIX : mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
-        } else {
-            unsigned pfIndex = getStreamSetIndex(refSet);
-            if (mStreamSetInputs.size() > pfIndex && mStreamSetInputs[pfIndex].name == refSet) {
-               principalField = refSet + PROCESSED_ITEM_COUNT_SUFFIX;
-            } else {
-               principalField = refSet + PRODUCED_ITEM_COUNT_SUFFIX;
-            }
-        }
-        Value * principalItemsProcessed = getScalarField(instance, principalField);
-        return mStreamSetOutputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed);
-    }
-    return getScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX);
+    return getScalarField(instance, name + CONSUMED_ITEM_COUNT_SUFFIX);
 }
 
-void KernelBuilder::setProcessedItemCount(Value * instance, const std::string & name, Value * value) const {
+Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string & name) const {
     assert ("instance cannot be null!" && instance);
-    setScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX, value);
+    unsigned ssIdx = getStreamSetIndex(name);
+    if (mStreamSetInputs[ssIdx].rate.isExact()) {
+        std::string refSet = mStreamSetInputs[ssIdx].rate.referenceStreamSet();
+        if (refSet.empty()) {
+            refSet = mStreamSetInputs[0].name;
+        }
+        Value * principalItemsProcessed = getScalarField(instance, refSet + PROCESSED_ITEM_COUNT_SUFFIX);
+        return mStreamSetInputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed);
+    }
+    return getScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX);
 }
 
 void KernelBuilder::setProducedItemCount(Value * instance, const std::string & name, Value * value) const {
     assert ("instance cannot be null!" && instance);
     setScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX, value);
+}
+
+void KernelBuilder::setConsumedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const {
+    assert ("instance cannot be null!" && instance);
+    setScalarField(instance, name + CONSUMED_ITEM_COUNT_SUFFIX, value);
+}
+
+void KernelBuilder::setProcessedItemCount(Value * instance, const std::string & name, Value * value) const {
+    assert ("instance cannot be null!" && instance);
+    setScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX, value);
 }
 
 void KernelBuilder::reserveBytes(llvm::Value * instance, const std::string & name, llvm::Value * value) const {

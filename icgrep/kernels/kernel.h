@@ -37,23 +37,25 @@ public:
     
     void createInstance() override;
 
-    virtual llvm::Value * getProcessedItemCount(llvm::Value * instance, const std::string & name) const override;
+    llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * doFinal = nullptr) const final;
 
-    virtual void setProcessedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const;
+    void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const final;
 
-    llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * doFinal) const;
+    llvm::Value * getConsumedItemCount(llvm::Value * instance, const std::string & name) const final;
 
-    llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name) const;
+    void setConsumedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const final;
 
-    virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const;
+    llvm::Value * getProcessedItemCount(llvm::Value * instance, const std::string & name) const final;
+
+    void setProcessedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const final;
 
     virtual void reserveBytes(llvm::Value * instance, const std::string & name, llvm::Value * requested) const;
 
     bool hasNoTerminateAttribute() { return mNoTerminateAttribute;}
     
-    llvm::Value * getTerminationSignal(llvm::Value * instance) const override final;
+    llvm::Value * getTerminationSignal(llvm::Value * instance) const final;
 
-    void setTerminationSignal(llvm::Value * instance) const override final;
+    void setTerminationSignal(llvm::Value * instance) const final;
 
     // Get the value of a scalar field for a given instance.
     llvm::Value * getScalarField(llvm::Value * instance, const std::string & fieldName) const;
@@ -207,20 +209,28 @@ protected:
         return getScalarFieldPtr(getSelf(), index);
     }
 
-    inline llvm::Value * getProcessedItemCount(const std::string & name) const {
-        return getProcessedItemCount(getSelf(), name);
-    }
-
-    inline void setProcessedItemCount(const std::string & name, llvm::Value * value) const {
-        setProcessedItemCount(getSelf(), name, value);
-    }
-
     inline llvm::Value * getProducedItemCount(const std::string & name) const {
         return getProducedItemCount(getSelf(), name);
     }
 
     inline void setProducedItemCount(const std::string & name, llvm::Value * value) const {
         setProducedItemCount(getSelf(), name, value);
+    }
+
+    inline llvm::Value * getConsumedItemCount(const std::string & name) const {
+        return getConsumedItemCount(getSelf(), name);
+    }
+
+    inline void setConsumedItemCount(const std::string & name, llvm::Value * value) const {
+        setConsumedItemCount(getSelf(), name, value);
+    }
+
+    inline llvm::Value * getProcessedItemCount(const std::string & name) const {
+        return getProcessedItemCount(getSelf(), name);
+    }
+
+    inline void setProcessedItemCount(const std::string & name, llvm::Value * value) const {
+        setProcessedItemCount(getSelf(), name, value);
     }
 
     llvm::Value * getTerminationSignal() const {

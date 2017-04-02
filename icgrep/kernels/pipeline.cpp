@@ -8,102 +8,78 @@
 #include <kernels/kernel.h>
 #include <kernels/streamset.h>
 #include <llvm/IR/Module.h>
-#include <unordered_map>
+#include <boost/container/flat_map.hpp>
 
 using namespace kernel;
 using namespace parabix;
 using namespace llvm;
 
-#include <iostream>
-
 using ProducerTable = std::vector<std::vector<std::pair<unsigned, unsigned>>>;
-
-ProducerTable createProducerTable(const std::vector<KernelBuilder *> & kernels) {
-    ProducerTable producerTable(kernels.size());
-    
-    std::vector<std::vector<bool>> userTable(kernels.size());
-    
-    // First prepare a map from streamSet output buffers to their producing kernel and output index.
-    std::unordered_map<const StreamSetBuffer *, std::pair<unsigned, unsigned>> bufferMap;
-    
-    for (unsigned k = 0; k < kernels.size(); k++) {
-        auto outputSets = kernels[k]->getStreamSetOutputBuffers();
-        for (unsigned j = 0; j < outputSets.size(); j++) {
-            userTable[k].push_back(false);
-            bufferMap.insert(std::make_pair(outputSets[j], std::make_pair(k, j)));
-        }
-    }
-    for (unsigned k = 0; k < kernels.size(); k++) {
-        auto inputSets = kernels[k]->getStreamSetInputBuffers();
-        for (unsigned i = 0; i < inputSets.size(); i++) {
-            auto f = bufferMap.find(inputSets[i]);
-            if (f == bufferMap.end()) {
-                llvm::report_fatal_error("Pipeline error: input buffer #" + std::to_string(i) + " of " + kernels[k]->getName() + ": no corresponding output buffer. ");
-            }
-            producerTable[k].push_back(f->second);
-            unsigned sourceKernel, outputIndex;
-            std::tie(sourceKernel, outputIndex) = f->second;
-            if (sourceKernel >= k) {
-                llvm::report_fatal_error("Pipeline error: input buffer #" + std::to_string(i) + " of " + kernels[k]->getName() + ": not defined before use. ");
-            }
-            //errs() << "sourceKernel: " + std::to_string(sourceKernel) + ", outputIndex: " + std::to_string(outputIndex) + ", user: " + std::to_string(k) + "\n";
-            userTable[sourceKernel][outputIndex]= true;
-            
-        }
-    }
-    /*  TODO:  define sinks for  all outputs so that the following check succeeds on
-     *  well-structured pipelines. 
-    for (unsigned k = 0; k < kernels.size(); k++) {
-        auto outputSets = kernels[k]->getStreamSetOutputBuffers();
-        //errs() << "kernel: " + kernels[k]->getName() + "\n";
-        for (unsigned j = 0; j < outputSets.size(); j++) {
-            if (userTable[k][j] == false) {
-                llvm::report_fatal_error("Pipeline error: output buffer #" + std::to_string(j) + " of " + kernels[k]->getName() + ": no users. ");
-            }
-        }
-    }
-    */
-    return producerTable;
-}
 
 using ConsumerTable = std::vector<std::vector<std::vector<unsigned>>>;
 
-ConsumerTable createConsumerTable(const std::vector<KernelBuilder *> & kernels) {
-    ConsumerTable consumerTable(kernels.size());
-    
-    // First prepare a map from streamSet input buffers to their consuming kernel and input index.
-    std::unordered_map<const StreamSetBuffer *, std::vector<unsigned>> bufferMap;
-    
+template <typename Value>
+using StreamSetBufferMap = boost::container::flat_map<const StreamSetBuffer *, Value>;
+
+
+ProducerTable createProducerTable(const std::vector<KernelBuilder *> & kernels) {
+    // map each output streamSet to its producing kernel and output index.
+    StreamSetBufferMap<std::pair<unsigned, unsigned>> map;
     for (unsigned k = 0; k < kernels.size(); k++) {
-        auto inputSets = kernels[k]->getStreamSetInputBuffers();
-        for (unsigned j = 0; j < inputSets.size(); j++) {
-            auto f = bufferMap.find(inputSets[j]);
-            std::vector<unsigned> kernelNo;
-            kernelNo.push_back(k);
-            if (f == bufferMap.end()) {
-                bufferMap.insert(std::make_pair(inputSets[j], kernelNo));
+        const auto & outputSets = kernels[k]->getStreamSetOutputBuffers();
+        for (unsigned j = 0; j < outputSets.size(); j++) {
+            map.emplace(outputSets[j], std::make_pair(k, j));
+        }
+    }
+    // TODO: replace this with a sparse matrix? it would be easier to understand that the i,j-th element indicated kernel i's input was from the j-th kernel
+    ProducerTable producerTable(kernels.size());
+    for (unsigned k = 0; k < kernels.size(); k++) {
+        const KernelBuilder * const kernel = kernels[k];
+        const auto & inputSets = kernel->getStreamSetInputBuffers();
+        for (unsigned i = 0; i < inputSets.size(); i++) {
+            const auto f = map.find(inputSets[i]);
+            if (LLVM_UNLIKELY(f == map.end())) {
+                report_fatal_error("Pipeline error: input buffer #" + std::to_string(i) + " of " + kernel->getName() + ": no corresponding output buffer. ");
             }
-            else{
+            unsigned sourceKernel, outputIndex;
+            std::tie(sourceKernel, outputIndex) = f->second;
+            producerTable[k].emplace_back(sourceKernel, outputIndex);
+            if (LLVM_UNLIKELY(sourceKernel >= k)) {
+                report_fatal_error("Pipeline error: input buffer #" + std::to_string(i) + " of " + kernel->getName() + ": not defined before use. ");
+            }
+        }
+    }
+    return producerTable;
+}
+
+ConsumerTable createConsumerTable(const std::vector<KernelBuilder *> & kernels) {
+    // map each input streamSet to its set of consuming kernels
+    StreamSetBufferMap<std::vector<unsigned>> map;
+    for (unsigned k = 0; k < kernels.size(); k++) {
+        const auto & inputSets = kernels[k]->getStreamSetInputBuffers();
+        for (const StreamSetBuffer * inputSet : inputSets) {
+            auto f = map.find(inputSet);
+            if (f == map.end()) {
+                map.emplace(inputSet, std::vector<unsigned>({k}));
+            } else {
                 f->second.push_back(k);
             }
         }
     }
+    ConsumerTable consumerTable(kernels.size());
     for (unsigned k = 0; k < kernels.size(); k++) {
-        auto outputSets = kernels[k]->getStreamSetOutputBuffers();
-        for (unsigned i = 0; i < outputSets.size(); i++) {
-            auto f = bufferMap.find(outputSets[i]);
-            if (f == bufferMap.end()) {
-                llvm::report_fatal_error("Pipeline error: output buffer #" + std::to_string(i) + " of " + kernels[k]->getName() + ": not used by any kernel. ");
-            }
-            else {
-                consumerTable[k].push_back(f->second);  
+        const auto & outputSets = kernels[k]->getStreamSetOutputBuffers();
+        for (const StreamSetBuffer * outputSet : outputSets) {
+            auto f = map.find(outputSet);
+            if (LLVM_LIKELY(f != map.end())) {
+                consumerTable[k].emplace_back(std::move(f->second));
             }          
         }
     }
     return consumerTable;
 }
 
-Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels, Type * sharedStructType, ProducerTable & producerTable, int id) {
+Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels, Type * sharedStructType, const ProducerTable & producerTable, int id) {
     
     // ProducerPos[k][i] will hold the producedItemCount of the i^th output stream
     // set of the k^th kernel.  These values will be loaded immediately after the
@@ -168,39 +144,41 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
         Value * processedSegmentCount = kernels[waitForKernel]->acquireLogicalSegmentNo(instancePtrs[waitForKernel]);
         Value * ready = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
 
-        if (kernels[k]->hasNoTerminateAttribute()) {
+        KernelBuilder * const K = kernels[k];
+
+        if (K->hasNoTerminateAttribute()) {
             iBuilder->CreateCondBr(ready, segmentLoopBody[k], segmentWait[k]);
         } else { // If the kernel was terminated in a previous segment then the pipeline is done.
-            BasicBlock * completionTest = BasicBlock::Create(iBuilder->getContext(), kernels[k]->getName() + "Completed", threadFunc, 0);
-            BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), kernels[k]->getName() + "Exit", threadFunc, 0);
+            BasicBlock * completionTest = BasicBlock::Create(iBuilder->getContext(), K->getName() + "Completed", threadFunc, 0);
+            BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), K->getName() + "Exit", threadFunc, 0);
             iBuilder->CreateCondBr(ready, completionTest, segmentWait[k]);
             iBuilder->SetInsertPoint(completionTest);
-            Value * alreadyDone = kernels[k]->getTerminationSignal(instancePtrs[k]);
+            Value * alreadyDone = K->getTerminationSignal(instancePtrs[k]);
             iBuilder->CreateCondBr(alreadyDone, exitBlock, segmentLoopBody[k]);
             iBuilder->SetInsertPoint(exitBlock);
             // Ensure that the next thread will also exit.
-            kernels[k]->releaseLogicalSegmentNo(instancePtrs[k], nextSegNo);
+            K->releaseLogicalSegmentNo(instancePtrs[k], nextSegNo);
             iBuilder->CreateBr(exitThreadBlock);
         }
         iBuilder->SetInsertPoint(segmentLoopBody[k]);
         std::vector<Value *> doSegmentArgs = {instancePtrs[k], doFinal};
-        for (unsigned j = 0; j < kernels[k]->getStreamInputs().size(); j++) {
+        for (unsigned j = 0; j < K->getStreamInputs().size(); j++) {
             unsigned producerKernel, outputIndex;
             std::tie(producerKernel, outputIndex) = producerTable[k][j];
             doSegmentArgs.push_back(ProducerPos[producerKernel][outputIndex]);
         }
-        kernels[k]->createDoSegmentCall(doSegmentArgs);
-         if (! (kernels[k]->hasNoTerminateAttribute())) {
-            Value * terminated = kernels[k]->getTerminationSignal(instancePtrs[k]);
+        K->createDoSegmentCall(doSegmentArgs);
+         if (! (K->hasNoTerminateAttribute())) {
+            Value * terminated = K->getTerminationSignal(instancePtrs[k]);
             doFinal = iBuilder->CreateOr(doFinal, terminated);
         }
        std::vector<Value *> produced;
-        for (unsigned i = 0; i < kernels[k]->getStreamOutputs().size(); i++) {
-            produced.push_back(kernels[k]->getProducedItemCount(instancePtrs[k], kernels[k]->getStreamOutputs()[i].name, doFinal));
+        for (unsigned i = 0; i < K->getStreamOutputs().size(); i++) {
+            produced.push_back(K->getProducedItemCount(instancePtrs[k], K->getStreamOutputs()[i].name, doFinal));
         }
         ProducerPos.push_back(produced);
 
-        kernels[k]->releaseLogicalSegmentNo(instancePtrs[k], nextSegNo);
+        K->releaseLogicalSegmentNo(instancePtrs[k], nextSegNo);
         if (k == last_kernel) {
             segNo->addIncoming(iBuilder->CreateAdd(segNo, iBuilder->getSize(codegen::ThreadNum)), segmentLoopBody[last_kernel]);
             iBuilder->CreateCondBr(doFinal, exitThreadBlock, segmentLoop);
@@ -235,7 +213,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     
     for (auto k : kernels) k->createInstance();
     
-    ProducerTable producerTable = createProducerTable(kernels);
+    const ProducerTable producerTable = createProducerTable(kernels);
     
     Type * const pthreadsTy = ArrayType::get(size_ty, codegen::ThreadNum);
     AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
@@ -283,7 +261,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     
 }
 
-Function * generateParallelPipelineThreadFunction(std::string name, IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels, Type * sharedStructType, ProducerTable & producerTable, ConsumerTable & consumerTable, int id) {
+Function * generateParallelPipelineThreadFunction(std::string name, IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels, Type * sharedStructType, const ProducerTable & producerTable, const ConsumerTable & consumerTable, const unsigned id) {
         
     const auto ip = iBuilder->saveIP();
     
@@ -301,7 +279,7 @@ Function * generateParallelPipelineThreadFunction(std::string name, IDISA::IDISA
     Value * const input = &*(args++);
     input->setName("input");
 
-    KernelBuilder * targetK = kernels[id];
+    KernelBuilder * const targetK = kernels[id];
     Value * bufferSegments = ConstantInt::get(size_ty, codegen::BufferSegments - 1);
     ConstantInt * segmentItems = iBuilder->getSize(codegen::SegmentSize * iBuilder->getBitBlockWidth());
     Value * waitCondTest = nullptr;
@@ -318,12 +296,14 @@ Function * generateParallelPipelineThreadFunction(std::string name, IDISA::IDISA
     std::vector<Value *> instancePtrs;
     std::vector<std::vector<Value *>> ProducerPos;
     for (unsigned k = 0; k < kernels.size(); k++) {
+        KernelBuilder * K = kernels[k];
+
         Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
         instancePtrs.push_back(iBuilder->CreateLoad(ptr));
 
         std::vector<Value *> produced;
-        for (unsigned i = 0; i < kernels[k]->getStreamOutputs().size(); i++) {
-            produced.push_back(kernels[k]->getProducedItemCount(instancePtrs[k], kernels[k]->getStreamOutputs()[i].name));
+        for (unsigned i = 0; i < K->getStreamOutputs().size(); i++) {
+            produced.push_back(K->getProducedItemCount(instancePtrs[k], K->getStreamOutputs()[i].name));
         }
         ProducerPos.push_back(produced);
     }
@@ -335,16 +315,16 @@ Function * generateParallelPipelineThreadFunction(std::string name, IDISA::IDISA
     segNo->addIncoming(iBuilder->getSize(0), entryBlock);
     segNo->addIncoming(segNo, outputCheckBlock);
 
-    waitCondTest = ConstantInt::get(int1ty, 1);
+    waitCondTest = ConstantInt::getTrue(int1ty);
     for (unsigned j = 0; j < targetK->getStreamOutputs().size(); j++) {
-        std::vector<unsigned> consumerKernels = consumerTable[id][j];
+        const auto & consumerKernels = consumerTable[id][j];
         for (unsigned k = 0; k < consumerKernels.size(); k++) {
             Value * consumerSegNo = kernels[consumerKernels[k]]->acquireLogicalSegmentNo(instancePtrs[consumerKernels[k]]);
             waitCondTest = iBuilder->CreateAnd(waitCondTest, iBuilder->CreateICmpULE(segNo, iBuilder->CreateAdd(consumerSegNo, bufferSegments)));
         } 
     }
 
-    if(targetK->getStreamInputs().size() == 0) {
+    if (targetK->getStreamInputs().empty()) {
 
         iBuilder->CreateCondBr(waitCondTest, doSegmentBlock, outputCheckBlock); 
 
@@ -359,8 +339,7 @@ Function * generateParallelPipelineThreadFunction(std::string name, IDISA::IDISA
 
         iBuilder->CreateCondBr(terminated, exitThreadBlock, outputCheckBlock);
 
-    }
-    else{
+    } else {
 
         BasicBlock * inputCheckBlock = BasicBlock::Create(iBuilder->getContext(), "inputCheck", threadFunc, 0);
 
@@ -368,7 +347,7 @@ Function * generateParallelPipelineThreadFunction(std::string name, IDISA::IDISA
 
         iBuilder->SetInsertPoint(inputCheckBlock); 
         
-        waitCondTest = ConstantInt::get(int1ty, 1);
+        waitCondTest = ConstantInt::getTrue(int1ty);
         for (unsigned j = 0; j < targetK->getStreamInputs().size(); j++) {
             unsigned producerKernel, outputIndex;
             std::tie(producerKernel, outputIndex) = producerTable[id][j];
@@ -394,7 +373,6 @@ Function * generateParallelPipelineThreadFunction(std::string name, IDISA::IDISA
         for (unsigned j = 0; j < targetK->getStreamInputs().size(); j++) {
             unsigned producerKernel, outputIndex;
             std::tie(producerKernel, outputIndex) = producerTable[id][j];
-            // doSegmentArgs.push_back(ProducerPos[producerKernel][outputIndex]);
             doSegmentArgs.push_back(iBuilder->CreateMul(segmentItems, segNo));
         }
         targetK->createDoSegmentCall(doSegmentArgs);
@@ -424,10 +402,12 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
     PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
     PointerType * const int8PtrTy = iBuilder->getInt8PtrTy();
     
-    for (auto k : kernels) k->createInstance();
+    for (auto k : kernels) {
+        k->createInstance();
+    }
     
-    ProducerTable producerTable = createProducerTable(kernels);
-    ConsumerTable consumerTable = createConsumerTable(kernels);
+    const ProducerTable producerTable = createProducerTable(kernels);
+    const ConsumerTable consumerTable = createConsumerTable(kernels);
     
     Type * const pthreadsTy = ArrayType::get(size_ty, threadNum);
     AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
@@ -450,7 +430,8 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
         iBuilder->CreateStore(kernels[i]->getInstance(), ptr);
     }
     for (unsigned i = 0; i < kernels.size(); i++) {
-        kernels[i]->releaseLogicalSegmentNo(kernels[i]->getInstance(), iBuilder->getSize(0));
+        KernelBuilder * const K = kernels[i];
+        K->releaseLogicalSegmentNo(K->getInstance(), iBuilder->getSize(0));
     }
 
     std::vector<Function *> thread_functions;
@@ -486,7 +467,9 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
     BasicBlock * segmentLoop = BasicBlock::Create(iBuilder->getContext(), "segmentLoop", main, 0);
     BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), "exitBlock", main, 0);
     
-    ProducerTable producerTable = createProducerTable(kernels);
+    const ProducerTable producer = createProducerTable(kernels);
+
+//    const ConsumerTable consumer = createConsumerTable(kernels);
     
     // ProducerPos[k][i] will hold the producedItemCount of the i^th output stream
     // set of the k^th kernel.  These values will be loaded immediately after the
@@ -498,30 +481,30 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
     iBuilder->CreateBr(segmentLoop);
     iBuilder->SetInsertPoint(segmentLoop);
 
-    Value * terminationFound = ConstantInt::getNullValue(iBuilder->getInt1Ty());
+    Value * terminated = ConstantInt::getFalse(iBuilder->getContext());
     for (unsigned k = 0; k < kernels.size(); k++) {
-        Value * instance = kernels[k]->getInstance();
-        std::vector<Value *> doSegmentArgs = {instance, terminationFound};
-        for (unsigned j = 0; j < kernels[k]->getStreamInputs().size(); j++) {
+        KernelBuilder * const K = kernels[k];
+        Value * const instance = K->getInstance();
+        std::vector<Value *> args = {instance, terminated};
+        for (unsigned j = 0; j < K->getStreamInputs().size(); j++) {
             unsigned producerKernel, outputIndex;
-            std::tie(producerKernel, outputIndex) = producerTable[k][j];
-            doSegmentArgs.push_back(ProducerPos[producerKernel][outputIndex]);
+            std::tie(producerKernel, outputIndex) = producer[k][j];
+            args.push_back(ProducerPos[producerKernel][outputIndex]);
         }
-        kernels[k]->createDoSegmentCall(doSegmentArgs);
-        if (! (kernels[k]->hasNoTerminateAttribute())) {
-            Value * terminated = kernels[k]->getTerminationSignal(instance);
-            terminationFound = iBuilder->CreateOr(terminationFound, terminated);
+        K->createDoSegmentCall(args);
+        if (!K->hasNoTerminateAttribute()) {
+            terminated = iBuilder->CreateOr(terminated, K->getTerminationSignal(instance));
         }
         std::vector<Value *> produced;
-        for (unsigned i = 0; i < kernels[k]->getStreamOutputs().size(); i++) {
-            produced.push_back(kernels[k]->getProducedItemCount(instance, kernels[k]->getStreamOutputs()[i].name, terminationFound));
+        const auto & streamOutputs = K->getStreamOutputs();
+        for (unsigned i = 0; i < streamOutputs.size(); i++) {
+            produced.push_back(K->getProducedItemCount(instance, streamOutputs[i].name, terminated));
         }
         ProducerPos.push_back(produced);
-        Value * segNo = kernels[k]->acquireLogicalSegmentNo(instance);
-        kernels[k]->releaseLogicalSegmentNo(instance, iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
+        Value * segNo = K->acquireLogicalSegmentNo(instance);
+        K->releaseLogicalSegmentNo(instance, iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
     }
-    iBuilder->CreateCondBr(terminationFound, exitBlock, segmentLoop);
+
+    iBuilder->CreateCondBr(terminated, exitBlock, segmentLoop);
     iBuilder->SetInsertPoint(exitBlock);
 }
-
-    

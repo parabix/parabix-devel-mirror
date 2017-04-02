@@ -122,7 +122,7 @@ Value * StreamSetBuffer::getBaseAddress(Value * self) const {
     return self;
 }
 
-void StreamSetBuffer::releaseBuffer(Value * /* self */) {
+void StreamSetBuffer::releaseBuffer(Value * /* self */) const {
     /* do nothing: memory is stack allocated */
 }
 
@@ -199,7 +199,7 @@ Value * ExtensibleBuffer::getBaseAddress(Value * const self) const {
     return iBuilder->CreateLoad(iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
 }
 
-void ExtensibleBuffer::releaseBuffer(Value * self) {
+void ExtensibleBuffer::releaseBuffer(Value * self) const {
     Value * const sizePtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     Value * size = iBuilder->CreateLoad(sizePtr);
     iBuilder->CreateMUnmap(getBaseAddress(self), size);
@@ -445,7 +445,7 @@ Value * ExpandableBuffer::getBaseAddress(Value * self) const {
     return iBuilder->CreateLoad(iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
 }
 
-void ExpandableBuffer::releaseBuffer(Value * self) {
+void ExpandableBuffer::releaseBuffer(Value * self) const {
     iBuilder->CreateAlignedFree(getBaseAddress(self));
 }
 

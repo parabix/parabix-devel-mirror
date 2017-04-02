@@ -46,7 +46,7 @@ public:
 
     virtual void allocateBuffer();
 
-    virtual void releaseBuffer(llvm::Value * self);
+    virtual void releaseBuffer(llvm::Value * self) const;
 
     virtual llvm::Value * getStreamBlockPtr(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, const bool readOnly) const;
 
@@ -132,7 +132,7 @@ public:
 
     void reserveBytes(llvm::Value * self, llvm::Value * required) const override;
 
-    void releaseBuffer(llvm::Value * self) override;
+    void releaseBuffer(llvm::Value * self) const override;
 
 protected:
 
@@ -217,7 +217,7 @@ public:
 
     llvm::Value * getStreamSetCount(llvm::Value * self) const override;
 
-    void releaseBuffer(llvm::Value * self) override;
+    void releaseBuffer(llvm::Value * self) const override;
 
 protected:
 
