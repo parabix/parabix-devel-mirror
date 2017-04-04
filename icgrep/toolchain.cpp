@@ -23,6 +23,8 @@
 #include <llvm/Transforms/Utils/Local.h>
 #include <object_cache.h>
 #include <kernels/pipeline.h>
+#include <kernels/interface.h>
+#include <kernels/kernel.h>
 #ifdef CUDA_ENABLED
 #include <IR_Gen/llvm2ptx.h>
 #endif
@@ -248,13 +250,13 @@ ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
 }
 
 void ApplyObjectCache(ExecutionEngine * e) {
-    ICGrepObjectCache * cache = nullptr;
+    ParabixObjectCache * cache = nullptr;
     if (codegen::EnableObjectCache) {
         if (codegen::ObjectCacheDir.empty())
             // Default is $HOME/.cache/icgrep
-            cache = new ICGrepObjectCache();
+            cache = new ParabixObjectCache();
         else
-            cache = new ICGrepObjectCache(codegen::ObjectCacheDir);
+            cache = new ParabixObjectCache(codegen::ObjectCacheDir);
         e->setObjectCache(cache);
     }
 }
@@ -270,4 +272,125 @@ void generatePipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel:
     }
 }
 
+
+ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder) : iBuilder(iBuilder) {
+    mMainModule = iBuilder->getModule();
+    if (codegen::EnableObjectCache) {
+        if (codegen::ObjectCacheDir.empty()) {
+            mCache = llvm::make_unique<ParabixObjectCache>();
+        }
+        else {
+            mCache = llvm::make_unique<ParabixObjectCache>(codegen::ObjectCacheDir);
+        }
+    }
+}
+
+void ParabixDriver::JITcompileMain () {
+
+    // Use the pass manager to optimize the function.
+    #ifndef NDEBUG
+    try {
+    #endif
+    legacy::PassManager PM;
+    #ifndef NDEBUG
+    PM.add(createVerifierPass());
+    #endif
+    PM.add(createReassociatePass());             //Reassociate expressions.
+    PM.add(createGVNPass());                     //Eliminate common subexpressions.
+    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
+    PM.add(createCFGSimplificationPass());    
+    PM.run(*mMainModule);
+    #ifndef NDEBUG
+    } catch (...) { mMainModule->dump(); throw; }
+    #endif
+    InitializeNativeTarget();
+    InitializeNativeTargetAsmPrinter();
+    InitializeNativeTargetAsmParser();
+
+    PassRegistry * Registry = PassRegistry::getPassRegistry();
+    initializeCore(*Registry);
+    initializeCodeGen(*Registry);
+    initializeLowerIntrinsicsPass(*Registry);
+
+    std::string errMessage;
+    EngineBuilder builder{std::unique_ptr<Module>(mMainModule)};
+    builder.setErrorStr(&errMessage);
+    TargetOptions opts = InitTargetOptionsFromCodeGenFlags();
+    opts.MCOptions.AsmVerbose = codegen::AsmVerbose;
+
+    builder.setTargetOptions(opts);
+    builder.setVerifyModules(true);
+    CodeGenOpt::Level optLevel = CodeGenOpt::Level::None;
+    switch (codegen::OptLevel) {
+        case '0': optLevel = CodeGenOpt::None; break;
+        case '1': optLevel = CodeGenOpt::Less; break;
+        case '2': optLevel = CodeGenOpt::Default; break;
+        case '3': optLevel = CodeGenOpt::Aggressive; break;
+        default: errs() << codegen::OptLevel << " is an invalid optimization level.\n";
+    }
+    builder.setOptLevel(optLevel);
+
+    setAllFeatures(builder);
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
+        if (codegen::IROutputFilename.empty()) {
+            mMainModule->dump();
+        } else {
+            std::error_code error;
+            raw_fd_ostream out(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
+            mMainModule->print(out, nullptr);
+        }
+    }
+#if LLVM_VERSION_MINOR > 6
+    if (codegen::DebugOptionIsSet(codegen::ShowASM)) {
+        WriteAssembly(builder.selectTarget(), mMainModule);
+    }
+#endif
+    ExecutionEngine * engine = builder.create();
+    if (engine == nullptr) {
+        throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
+    }
+    if (mCache) {
+        engine->setObjectCache(mCache.get());
+    }
+    mEngine = engine;
+}
+
+void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
+    mKernelList.push_back(&kb);
+    kb.setCallParameters(inputs, outputs);
+}
+
+
+void ParabixDriver::generatePipelineIR() {
+    for (auto kb : mKernelList) {
+        kb->addKernelDeclarations(mMainModule);
+    }
+    if (codegen::pipelineParallel) {
+        generateParallelPipeline(iBuilder, mKernelList);
+    } else if (codegen::segmentPipelineParallel) {
+        generateSegmentParallelPipeline(iBuilder, mKernelList);
+    } else {
+        codegen::ThreadNum = 1;
+        generatePipelineLoop(iBuilder, mKernelList);
+    }
+}
+
+void ParabixDriver::linkAndFinalize() {
+    for (auto kb : mKernelList) {
+        std::unique_ptr<Module> km = kb->createKernelStub();
+        if (!(mCache && mCache->loadCachedObjectFile(km.get()))) {
+            Module * saveM = iBuilder->getModule();
+            iBuilder->setModule(km.get());
+            kb->generateKernel();
+            iBuilder->setModule(saveM);
+        }
+        mEngine->addModule(std::move(km));
+    }
+    mEngine->finalizeObject();
+}
+
+void * ParabixDriver::getPointerToMain() {
+    return mEngine->getPointerToNamedFunction("Main");
+}
 

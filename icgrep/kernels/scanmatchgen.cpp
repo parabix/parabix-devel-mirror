@@ -221,7 +221,7 @@ void ScanMatchKernel::generateFinalBlockMethod(llvm::Value * remainingItems) {
 }
 
 ScanMatchKernel::ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType, const unsigned codeUnitWidth)
-: BlockOrientedKernel(iBuilder, "scanMatch" + std::to_string(codeUnitWidth),
+: BlockOrientedKernel(iBuilder, "Parabix:scanMatch" + std::to_string(codeUnitWidth),
     {Binding{iBuilder->getStreamSetTy(1, 8), "InputStream"}, Binding{iBuilder->getStreamSetTy(1, 1), "matchResult"}, Binding{iBuilder->getStreamSetTy(1, 1), "lineBreak"}},
     {},
     {Binding{iBuilder->getSizeTy(), "FileIdx"}},

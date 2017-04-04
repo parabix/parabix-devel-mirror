@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -8,12 +8,14 @@
 #define TOOLCHAIN_H
 #include <string>
 #include <IR_Gen/idisa_builder.h>
+#include <object_cache.h>
 
 namespace llvm { class ExecutionEngine; }
 namespace llvm { class Module; }
 namespace llvm { namespace cl { class OptionCategory; } }
 namespace IDISA { class IDISA_Builder; }
 namespace kernel { class KernelBuilder; }
+namespace parabix { class StreamSetBuffer; }
 
 namespace codegen {
 const llvm::cl::OptionCategory * codegen_flags();
@@ -57,4 +59,30 @@ void ApplyObjectCache(llvm::ExecutionEngine * e);
 
 void generatePipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
 
+
+class ParabixDriver {
+public:
+    ParabixDriver(IDISA::IDISA_Builder * iBuilder);
+    
+    IDISA::IDISA_Builder * getIDISA_Builder() {return iBuilder;}
+    
+    void JITcompileMain ();
+    
+    void addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
+    
+    void generatePipelineIR();
+    
+    void linkAndFinalize();
+    
+    void * getPointerToMain();
+
+    
+private:
+    llvm::Module * mMainModule;
+    IDISA::IDISA_Builder * iBuilder;
+    std::unique_ptr<ParabixObjectCache> mCache;
+    //std::unique_ptr<llvm::ExecutionEngine> mEngine;
+    llvm::ExecutionEngine * mEngine;
+    std::vector<kernel::KernelBuilder *> mKernelList;
+};
 #endif

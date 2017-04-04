@@ -122,7 +122,16 @@ void wc_gen(PabloKernel * kernel) {
     }
 }
 
-Function * pipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
+
+
+
+typedef void (*wcFunctionType)(char * byte_data, size_t filesize, size_t fileIdx);
+
+void wcPipelineGen(ParabixDriver & pxDriver) {
+
+    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    Module * m = iBuilder->getModule();
+    
     Type * mBitBlockType = iBuilder->getBitBlockType();
     Constant * record_counts_routine;
     Type * const size_ty = iBuilder->getSizeTy();
@@ -144,13 +153,14 @@ Function * pipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
     SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
-    
+    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
+
     MMapSourceKernel mmapK(iBuilder);
-    std::unique_ptr<Module> mmapM = mmapK.createKernelModule({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
-    
+    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
+
     S2PKernel  s2pk(iBuilder);
-    std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
+    pxDriver.addKernelCall(s2pk, {&ByteStream}, {&BasisBits});
     
     PabloKernel wck(iBuilder, "wc",
         {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
@@ -160,19 +170,12 @@ Function * pipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
 
     wc_gen(&wck);
     pablo_function_passes(&wck);
-    
-    std::unique_ptr<Module> wcM = wck.createKernelModule({&BasisBits}, {});
-    
-    mmapK.addKernelDeclarations(m);
-    s2pk.addKernelDeclarations(m);
-    wck.addKernelDeclarations(m);
-    
-    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
+    pxDriver.addKernelCall(wck, {&BasisBits}, {});
 
     ByteStream.setStreamSetBuffer(inputStream);
     BasisBits.allocateBuffer();
-    
-    generatePipeline(iBuilder, {&mmapK, &s2pk, &wck});
+
+    pxDriver.generatePipelineIR();
     
     Value * lineCount = wck.createGetAccumulatorCall(wck.getInstance(), "lineCount");
     Value * wordCount = wck.createGetAccumulatorCall(wck.getInstance(), "wordCount");
@@ -182,31 +185,21 @@ Function * pipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     
     iBuilder->CreateRetVoid();
     
-    Linker L(*m);
-    L.linkInModule(std::move(mmapM));
-    L.linkInModule(std::move(s2pM));
-    L.linkInModule(std::move(wcM));
-    
-    return main;
+    pxDriver.JITcompileMain();
+    pxDriver.linkAndFinalize();
 }
 
-
-typedef void (*wcFunctionType)(char * byte_data, size_t filesize, size_t fileIdx);
-
-static ExecutionEngine * wcEngine = nullptr;
 
 wcFunctionType wcCodeGen(void) {
     Module * M = new Module("wc", getGlobalContext());
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-
-    llvm::Function * main_IR = pipeline(M, idb);
-
-    wcEngine = JIT_to_ExecutionEngine(M);
+    ParabixDriver pxDriver(idb);
     
-    wcEngine->finalizeObject();
+    wcPipelineGen(pxDriver);
 
+    wcFunctionType main = reinterpret_cast<wcFunctionType>(pxDriver.getPointerToMain());
     delete idb;
-    return reinterpret_cast<wcFunctionType>(wcEngine->getPointerToFunction(main_IR));
+    return main;
 }
 
 void wc(wcFunctionType fn_ptr, const int64_t fileIdx) {

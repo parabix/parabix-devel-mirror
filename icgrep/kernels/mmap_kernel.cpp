@@ -49,7 +49,7 @@ void MMapSourceKernel::generateInitMethod() {
 }
 
 MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "mmap_source",
+: SegmentOrientedKernel(iBuilder, "Parabix:mmap_source",
     {},
     {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
     {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})

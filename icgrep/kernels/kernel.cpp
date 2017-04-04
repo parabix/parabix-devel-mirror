@@ -119,19 +119,11 @@ void KernelBuilder::prepareKernel() {
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, getName());
 }
 
-std::unique_ptr<Module> KernelBuilder::createKernelModule(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
-    auto saveModule = iBuilder->getModule();
-    auto savePoint = iBuilder->saveIP();
-    auto module = make_unique<Module>(getName() + "_" + iBuilder->getBitBlockTypeName(), iBuilder->getContext());
-    iBuilder->setModule(module.get());
-    generateKernel(inputs, outputs);
-    iBuilder->setModule(saveModule);
-    iBuilder->restoreIP(savePoint);
-    return module;
+std::unique_ptr<Module> KernelBuilder::createKernelStub() {
+    return make_unique<Module>(getName() + "_" + iBuilder->getBuilderUniqueName(), iBuilder->getContext());
 }
 
-void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
-
+void KernelBuilder::setCallParameters(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
     mStreamSetInputBuffers.assign(inputs.begin(), inputs.end());
     for (unsigned i = 0; i < mStreamSetInputBuffers.size(); ++i) {
         if (LLVM_UNLIKELY(mStreamSetInputBuffers[i] == nullptr)) {
@@ -144,7 +136,7 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
                            " input stream sets but generateKernel() was given "
                            + std::to_string(mStreamSetInputBuffers.size()));
     }
-
+    
     mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
         if (LLVM_UNLIKELY(mStreamSetOutputBuffers[i] == nullptr)) {
@@ -157,10 +149,28 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
                            + " output stream sets but generateKernel() was given "
                            + std::to_string(mStreamSetOutputBuffers.size()));
     }
-
-
-    auto savePoint = iBuilder->saveIP();
     prepareKernel(); // possibly overridden by the KernelBuilder subtype
+    
+}    
+
+std::unique_ptr<Module> KernelBuilder::createKernelModule(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
+    auto saveModule = iBuilder->getModule();
+    auto savePoint = iBuilder->saveIP();
+    auto module = createKernelStub();
+    iBuilder->setModule(module.get());
+    generateKernel(inputs, outputs);
+    iBuilder->setModule(saveModule);
+    iBuilder->restoreIP(savePoint);
+    return module;
+}
+
+void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
+    setCallParameters(inputs, outputs);
+    generateKernel();
+}
+
+void KernelBuilder::generateKernel() {
+    auto savePoint = iBuilder->saveIP();
     addKernelDeclarations(iBuilder->getModule());
     callGenerateInitMethod();
     callGenerateDoSegmentMethod();

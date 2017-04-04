@@ -144,7 +144,7 @@ public:
 protected:
 
     KernelInterface(IDISA::IDISA_Builder * builder,
-                    std::string && kernelName,
+                    std::string kernelName,
                     std::vector<Binding> && stream_inputs,
                     std::vector<Binding> && stream_outputs,
                     std::vector<Binding> && scalar_inputs,

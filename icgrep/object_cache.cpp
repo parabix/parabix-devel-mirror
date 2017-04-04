@@ -5,6 +5,8 @@
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
 #include <llvm/IR/Module.h>
+
+
 #ifdef OBJECT_CACHE_DEBUG
 #include <iostream>
 #endif
@@ -19,22 +21,27 @@ using namespace llvm;
 // descriptor. The cache tries to load a saved object using that path if the
 // file exists.
 //
-ICGrepObjectCache::ICGrepObjectCache(const std::string &dir): CacheDir(dir) {}
+ParabixObjectCache::ParabixObjectCache(const std::string &dir): CacheDir(dir) {}
 
-ICGrepObjectCache::ICGrepObjectCache() {
+ParabixObjectCache::ParabixObjectCache() {
     // $HOME/.cache/icgrep
     // TODO use path::user_cache_directory once we have llvm >= 3.7.
     sys::path::home_directory(CacheDir);
-    sys::path::append(CacheDir, ".cache", "icgrep");
+    std::string Version = PARABIX_VERSION;
+    std::string Date = __DATE__;
+    std::string Time = __TIME__;
+    std::string DateStamp = Date.substr(7) + Date.substr(0,3) + (Date[4] == ' ' ? Date.substr(5,1) : Date.substr(4,2));
+    std::string CacheSubDir = "Parabix" + Version + "_" + DateStamp + "@" + Time;
+    sys::path::append(CacheDir, ".cache", CacheSubDir);
 }
 
-ICGrepObjectCache::~ICGrepObjectCache() {}
+ParabixObjectCache::~ParabixObjectCache() {}
 
-void ICGrepObjectCache::notifyObjectCompiled(const Module *M, MemoryBufferRef Obj) {
+void ParabixObjectCache::notifyObjectCompiled(const Module *M, MemoryBufferRef Obj) {
     const std::string &ModuleID = M->getModuleIdentifier();
+    
     Path CacheName(CacheDir);
-    if (!getCacheFilename(ModuleID, CacheName))
-        return;
+    if (!getCacheFilename(ModuleID, CacheName)) return;
     if (!CacheDir.empty())      // Re-creating an existing directory is fine.
         sys::fs::create_directories(Twine(CacheDir));
     std::error_code EC;
@@ -46,32 +53,41 @@ void ICGrepObjectCache::notifyObjectCompiled(const Module *M, MemoryBufferRef Ob
 #endif
 }
 
-std::unique_ptr<MemoryBuffer> ICGrepObjectCache::getObject(const Module* M) {
+
+bool ParabixObjectCache::loadCachedObjectFile(const Module* M) {
+    const std::string ModuleID = M->getModuleIdentifier();
+    auto f = cachedObjectMap.find(ModuleID);
+    if (f != cachedObjectMap.end()) {
+        return true;
+    }
+    Path CachedObjectName(CacheDir);
+    if (!getCacheFilename(ModuleID, CachedObjectName)) return false;
+    ErrorOr<std::unique_ptr<MemoryBuffer>> KernelObjectBuffer = MemoryBuffer::getFile(CachedObjectName.c_str(), -1, false);
+    if (!KernelObjectBuffer) return false;
+    // Make a copy so that the JIT engine can freely modify it.
+    cachedObjectMap.emplace(ModuleID, std::move(KernelObjectBuffer.get()));
+    return true;
+}
+
+
+std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module* M) {
     const std::string &ModuleID = M->getModuleIdentifier();
-    Path CacheName(CacheDir);
-    if (!getCacheFilename(ModuleID, CacheName))
+    auto f = cachedObjectMap.find(ModuleID);
+    if (f == cachedObjectMap.end()) {
         return nullptr;
-    // Load the object from the cache filename
-    ErrorOr<std::unique_ptr<MemoryBuffer>> IRObjectBuffer =
-        MemoryBuffer::getFile(CacheName.c_str(), -1, false);
-    // If the file isn't there, that's OK.
-    if (!IRObjectBuffer)
-        return nullptr;
+    }
 #ifdef OBJECT_CACHE_DEBUG
     std::cerr << "Found cached object." << std::endl;
 #endif
-    // MCJIT will want to write into this buffer, and we don't want that
-    // because the file has probably just been mmapped.  Instead we make
-    // a copy.  The filed-based buffer will be released when it goes
-    // out of scope.
-    return MemoryBuffer::getMemBufferCopy(IRObjectBuffer.get()->getBuffer());
+    // Return a copy of the buffer, for MCJIT to modify, if necessary.
+    return MemoryBuffer::getMemBufferCopy(f->second.get()->getBuffer());
 }
 
-bool ICGrepObjectCache::getCacheFilename(const std::string &ModID, Path &CacheName) {
+bool ParabixObjectCache::getCacheFilename(const std::string &ModID, Path &CacheName) {
 #ifdef OBJECT_CACHE_DEBUG
     std::cerr << "ModuleID: " << ModID << std::endl;
 #endif
-    const std::string Prefix("grepcode:");
+    const std::string Prefix("Parabix:");
     size_t PrefixLength = Prefix.length();
     if (ModID.substr(0, PrefixLength) != Prefix)
         return false;

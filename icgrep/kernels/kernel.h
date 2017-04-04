@@ -27,12 +27,19 @@ class KernelBuilder : public KernelInterface {
     using NameMap = boost::container::flat_map<std::string, unsigned>;
 public:
     
+    // Create a module stub for the kernel, populated only with its Module ID.     
+    //
+    std::unique_ptr<llvm::Module> createKernelStub();
+    
     // Create a module for the kernel, including the kernel state type declaration and
     // the full implementation of all required methods.     
     //
     std::unique_ptr<llvm::Module> createKernelModule(const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
     
+    void setCallParameters(const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
+
     // Generate the Kernel to the current module (iBuilder->getModule()).
+    void generateKernel();
     void generateKernel(const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
     
     void createInstance() override;
