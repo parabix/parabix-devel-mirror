@@ -303,7 +303,7 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
 //    } else {
         byteStream = new ExternalFileBuffer(iBuilder, iBuilder->getStreamSetTy(1, 8));
         cast<ExternalFileBuffer>(byteStream)->setStreamSetBuffer(inputStream);
-        sourceK = new kernel::MMapSourceKernel(iBuilder, segmentSize * bufferSegments);
+        sourceK = new kernel::MMapSourceKernel(iBuilder, segmentSize);
         sourceK->generateKernel({}, {byteStream});
         sourceK->setInitialArguments({fileSize});
 //    }
