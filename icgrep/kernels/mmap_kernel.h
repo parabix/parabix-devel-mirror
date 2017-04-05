@@ -17,6 +17,7 @@ namespace kernel {
 class MMapSourceKernel final: public SegmentOrientedKernel {
 public:
     MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);  
+    bool moduleIDisSignature() override {return true;}
 private:
     void generateInitMethod() override;
     void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override;

@@ -12,6 +12,7 @@
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/Transforms/Utils/Local.h>
 
 static const auto DO_BLOCK_SUFFIX = "_DoBlock";
@@ -58,7 +59,7 @@ unsigned KernelBuilder::addUnnamedScalar(Type * const type) {
     return index;
 }
 
-void KernelBuilder::prepareKernelSignature() {
+void KernelBuilder::prepareStreamSetNameMap() {
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         mStreamSetNameMap.emplace(mStreamSetInputs[i].name, i);
     }
@@ -109,7 +110,7 @@ void KernelBuilder::prepareKernel() {
         addScalar(binding.type, binding.name);
     }
     if (mStreamSetNameMap.empty()) {
-        prepareKernelSignature();
+        prepareStreamSetNameMap();
     }
     for (auto binding : mInternalScalars) {
         addScalar(binding.type, binding.name);
@@ -152,6 +153,15 @@ void KernelBuilder::setCallParameters(const std::vector<StreamSetBuffer *> & inp
     prepareKernel(); // possibly overridden by the KernelBuilder subtype
     
 }    
+
+
+// Default kernel signature: generate the IR and emit as byte code.
+void KernelBuilder::generateKernelSignature(std::string &signature) {
+    generateKernel();
+    raw_string_ostream OS(signature);
+    WriteBitcodeToFile(iBuilder->getModule(), OS);
+}
+
 
 std::unique_ptr<Module> KernelBuilder::createKernelModule(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
     auto saveModule = iBuilder->getModule();

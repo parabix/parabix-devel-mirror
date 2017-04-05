@@ -7,6 +7,7 @@
 #include <llvm/IR/Module.h>
 
 
+#define OBJECT_CACHE_DEBUG
 #ifdef OBJECT_CACHE_DEBUG
 #include <iostream>
 #endif

@@ -26,9 +26,9 @@ class DeletionKernel : public BlockOrientedKernel {
 public:
 
     DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount);
-    
-protected:
+    bool moduleIDisSignature() override {return true;}
 
+protected:
     void generateDoBlockMethod() override;
 
     void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
@@ -42,9 +42,9 @@ class DeleteByPEXTkernel : public BlockOrientedKernel {
 public:
 
     DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle);
+    bool moduleIDisSignature() override {return true;}
     
 protected:
-    
     void generateDoBlockMethod() override;
     
     void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
@@ -67,10 +67,11 @@ class SwizzledBitstreamCompressByCount : public BlockOrientedKernel {
 public:
     
     SwizzledBitstreamCompressByCount(IDISA::IDISA_Builder * iBuilder, unsigned bitStreamCount, unsigned fieldWidth = 64);
+    bool moduleIDisSignature() override {return true;}
     
 protected:
-    
     void generateDoBlockMethod() override;
+    
     void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
    
 private:

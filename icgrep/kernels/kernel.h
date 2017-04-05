@@ -27,6 +27,37 @@ class KernelBuilder : public KernelInterface {
     using NameMap = boost::container::flat_map<std::string, unsigned>;
 public:
     
+    // Kernel Signatures and Module IDs
+    //
+    // A kernel signature uniquely identifies a kernel and its full functionality.
+    // In the event that a particular kernel instance is to be generated and compiled
+    // to produce object code, and we have a cached kernel object code instance with 
+    // the same signature and targetting the same IDISA architecture, then the cached 
+    // object code may safely be used to avoid recompilation.
+    //
+    // A kernel signature is a byte string of arbitrary length.
+    //
+    // Kernel developers should take responsibility for designing appropriate signature
+    // mechanisms that are short, inexpensive to compute and guarantee uniqueness
+    // based on the semantics of the kernel.  
+    //
+    // If no other mechanism is available, the default generateKernelSignature() method
+    // uses the full LLVM IR (before optimization) of the kernel instance.
+    //
+    // A kernel Module ID is short string that is used as a name for a particular kernel
+    // instance.  Kernel Module IDs are used to look up and retrieve cached kernel instances
+    // and so should be highly likely to uniquely identify a kernel instance.
+    //
+    // The ideal case is that a kernel Module ID serves as a full kernel signature thus
+    // guaranteeing uniqueness.  In this case, the moduleIDisUnique() method 
+    // should return true.
+    //
+    
+    // Can the module ID itself serve as the unique signature?
+    virtual bool moduleIDisSignature() {/* default */  return false;}
+    
+    virtual void generateKernelSignature(std::string & signature);
+    
     // Create a module stub for the kernel, populated only with its Module ID.     
     //
     std::unique_ptr<llvm::Module> createKernelStub();
@@ -138,7 +169,7 @@ protected:
         mNoTerminateAttribute = noTerminate;
     }
 
-    void prepareKernelSignature();
+    void prepareStreamSetNameMap();
 
     virtual void prepareKernel();
 
