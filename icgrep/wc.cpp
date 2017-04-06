@@ -162,7 +162,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     S2PKernel  s2pk(iBuilder);
     pxDriver.addKernelCall(s2pk, {&ByteStream}, {&BasisBits});
     
-    PabloKernel wck(iBuilder, "wc",
+    PabloKernel wck(iBuilder, "Parabix:wc",
         {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
         {},
         {},

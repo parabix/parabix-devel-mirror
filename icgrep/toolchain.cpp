@@ -378,13 +378,21 @@ void ParabixDriver::generatePipelineIR() {
 
 void ParabixDriver::linkAndFinalize() {
     for (auto kb : mKernelList) {
+        Module * saveM = iBuilder->getModule();
         std::unique_ptr<Module> km = kb->createKernelStub();
-        if (!(mCache && mCache->loadCachedObjectFile(km.get()))) {
-            Module * saveM = iBuilder->getModule();
+        std::string moduleID = km->getModuleIdentifier();
+        std::string signature;
+        if (kb->moduleIDisSignature()) {
+            signature = moduleID;
+        }
+        else {
+            kb->generateKernelSignature(signature);
+        }
+        if (!(mCache && mCache->loadCachedObjectFile(moduleID, signature))) {
             iBuilder->setModule(km.get());
             kb->generateKernel();
-            iBuilder->setModule(saveM);
         }
+        iBuilder->setModule(saveM);
         mEngine->addModule(std::move(km));
     }
     mEngine->finalizeObject();

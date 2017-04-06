@@ -10,6 +10,7 @@
 #include <llvm/ADT/SmallString.h>
 #include <llvm/ExecutionEngine/ObjectCache.h>
 #include <llvm/Support/MemoryBuffer.h>
+#include <llvm/ADT/StringRef.h>
 #include <string>
 #include <map>
 
@@ -34,10 +35,11 @@ class ParabixObjectCache : public llvm::ObjectCache {
         virtual ~ParabixObjectCache();
 
         void notifyObjectCompiled(const llvm::Module *M, llvm::MemoryBufferRef Obj) override;
-        bool loadCachedObjectFile(const llvm::Module* M);
+        bool loadCachedObjectFile(std::string ModuleID, std::string signature);
         std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) override;
     
     private:
+        std::map<std::string, std::string> kernelSignatureMap;
         std::map<std::string, std::unique_ptr<llvm::MemoryBuffer>> cachedObjectMap;
         using Path = llvm::SmallString<128>;
         Path CacheDir;
