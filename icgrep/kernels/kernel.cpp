@@ -121,7 +121,14 @@ void KernelBuilder::prepareKernel() {
 }
 
 std::unique_ptr<Module> KernelBuilder::createKernelStub() {
-    return make_unique<Module>(getName() + "_" + iBuilder->getBuilderUniqueName(), iBuilder->getContext());
+    std::string cacheName = getName() + "_" + iBuilder->getBuilderUniqueName();
+    for (auto & b: mStreamSetInputBuffers) {
+        cacheName += ":" + b->getUniqueID();
+    }
+    for (auto & b: mStreamSetOutputBuffers) {
+        cacheName += ":" + b->getUniqueID();
+    }
+    return make_unique<Module>(cacheName, iBuilder->getContext());
 }
 
 void KernelBuilder::setCallParameters(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
@@ -180,6 +187,7 @@ void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs
 }
 
 void KernelBuilder::generateKernel() {
+    if (mIsGenerated) return;
     auto savePoint = iBuilder->saveIP();
     addKernelDeclarations(iBuilder->getModule());
     callGenerateInitMethod();
@@ -194,6 +202,7 @@ void KernelBuilder::generateKernel() {
         iBuilder->CreateRet(retVal);
     }
     iBuilder->restoreIP(savePoint);
+    mIsGenerated = true;
 }
 
 void KernelBuilder::callGenerateDoSegmentMethod() {
@@ -522,11 +531,6 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
 
     ConstantInt * stride = iBuilder->getSize(iBuilder->getStride());
     Value * availablePos = producerPos[0];
-    for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
-        Value * p = producerPos[i];
-        availablePos = iBuilder->CreateSelect(iBuilder->CreateICmpULT(availablePos, p), availablePos, p);
-    }
-
     Value * processed = getProcessedItemCount(mStreamSetInputs[0].name);
     Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
     Value * stridesToDo = iBuilder->CreateUDiv(itemsAvail, stride);
@@ -777,7 +781,8 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
 : KernelInterface(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
 , mSelf(nullptr)
 , mCurrentMethod(nullptr)
-, mNoTerminateAttribute(false) {
+, mNoTerminateAttribute(false) 
+, mIsGenerated(false) {
 
 }
 

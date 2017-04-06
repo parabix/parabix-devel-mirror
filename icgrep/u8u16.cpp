@@ -253,8 +253,10 @@ void u8u16_pablo(PabloKernel * kernel) {
     pablo_function_passes(kernel);
 }
 
-Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
+void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
 
+    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    Module * mod = iBuilder->getModule();
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::ThreadNum+1;
 
@@ -281,14 +283,14 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
     MMapSourceKernel mmapK(iBuilder, segmentSize); 
-    mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
-    
+    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
+
     // Transposed bits from s2p
     CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
 
     S2PKernel s2pk(iBuilder);
-    s2pk.generateKernel({&ByteStream}, {&BasisBits});
+    pxDriver.addKernelCall(s2pk, {&ByteStream}, {&BasisBits});
     
     // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
     CircularBuffer U8u16Bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
@@ -302,7 +304,7 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
                            Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {});
     
     u8u16_pablo(&u8u16k);
-    u8u16k.generateKernel({&BasisBits}, {&U8u16Bits, &DelMask, &ErrorMask});
+    pxDriver.addKernelCall(u8u16k, {&BasisBits}, {&U8u16Bits, &DelMask, &ErrorMask});
 
     // Apply a deletion algorithm to discard all but the final position of the UTF-8
     // sequences for each UTF-16 code unit. Swizzle the results.
@@ -313,7 +315,7 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     CircularBuffer DeletionCounts(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
 
     DeleteByPEXTkernel delK(iBuilder, 64, 16, true);
-    delK.generateKernel({&U8u16Bits, &DelMask}, {&SwizzleFields0, &SwizzleFields1, &SwizzleFields2, &SwizzleFields3, &DeletionCounts});
+    pxDriver.addKernelCall(delK, {&U8u16Bits, &DelMask}, {&SwizzleFields0, &SwizzleFields1, &SwizzleFields2, &SwizzleFields3, &DeletionCounts});
 ;
     //  Produce fully compressed swizzled UTF-16 bit streams
     SwizzledCopybackBuffer u16Swizzle0(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
@@ -322,14 +324,14 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     SwizzledCopybackBuffer u16Swizzle3(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
 
     SwizzledBitstreamCompressByCount compressK(iBuilder, 16);
-    compressK.generateKernel({&DeletionCounts, &SwizzleFields0, &SwizzleFields1, &SwizzleFields2, &SwizzleFields3},
+    pxDriver.addKernelCall(compressK, {&DeletionCounts, &SwizzleFields0, &SwizzleFields1, &SwizzleFields2, &SwizzleFields3},
                              {&u16Swizzle0, &u16Swizzle1, &u16Swizzle2, &u16Swizzle3});
  
     // Produce unswizzled UTF-16 bit streams
     CircularBuffer u16bits(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
     SwizzleGenerator unSwizzleK(iBuilder, 16, 1, 4);
     unSwizzleK.setName("unswizzle");
-    unSwizzleK.generateKernel({&u16Swizzle0, &u16Swizzle1, &u16Swizzle2, &u16Swizzle3}, {&u16bits});
+    pxDriver.addKernelCall(unSwizzleK, {&u16Swizzle0, &u16Swizzle1, &u16Swizzle2, &u16Swizzle3}, {&u16bits});
     
     // Different choices for the output buffer depending on chosen option.
     ExternalFileBuffer U16external(iBuilder, iBuilder->getStreamSetTy(1, 16));
@@ -341,11 +343,11 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
 
     FileSink outK(iBuilder, 16);
     if (mMapBuffering || memAlignBuffering) {
-        p2sk.generateKernel({&u16bits}, {&U16external});
-        outK.generateKernel({&U16external}, {});
+        pxDriver.addKernelCall(p2sk, {&u16bits}, {&U16external});
+        pxDriver.addKernelCall(outK, {&U16external}, {});
     } else {
-        p2sk.generateKernel({&u16bits}, {&U16out});
-        outK.generateKernel({&U16out}, {});
+        pxDriver.addKernelCall(p2sk, {&u16bits}, {&U16out});
+        pxDriver.addKernelCall(outK, {&U16out}, {});
     }
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
@@ -374,14 +376,17 @@ Function * u8u16PipelineAVX2(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
     outK.setInitialArguments({fName});
 
-    generatePipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &compressK, &unSwizzleK, &p2sk, &outK});
+    pxDriver.generatePipelineIR();
 
     iBuilder->CreateRetVoid();
-    return main;
+    pxDriver.JITcompileMain();
+    pxDriver.linkAndFinalize();
 }
 
-
-Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
+void u8u16PipelineGen(ParabixDriver & pxDriver) {
+    
+    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    Module * mod = iBuilder->getModule();
     
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::ThreadNum+1;
@@ -422,12 +427,11 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     CircularCopybackBuffer U16out(iBuilder, iBuilder->getStreamSetTy(1, 16), segmentSize * bufferSegments, 1 /*overflow block*/);
     
     MMapSourceKernel mmapK(iBuilder, segmentSize); 
-    mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
+    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
     
     S2PKernel s2pk(iBuilder);
-    
-    s2pk.generateKernel({&ByteStream}, {&BasisBits});
+    pxDriver.addKernelCall(s2pk, {&ByteStream}, {&BasisBits});
     
     PabloKernel u8u16k(iBuilder, "u8u16",
                        {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
@@ -436,21 +440,20 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
                            Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {});
     
     u8u16_pablo(&u8u16k);
-    
-    u8u16k.generateKernel({&BasisBits}, {&U8u16Bits, &DelMask, &ErrorMask});
+    pxDriver.addKernelCall(u8u16k, {&BasisBits}, {&U8u16Bits, &DelMask, &ErrorMask});
     
     DeletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
-    delK.generateKernel({&U8u16Bits, &DelMask}, {&U16Bits, &DeletionCounts});
+    pxDriver.addKernelCall(delK, {&U8u16Bits, &DelMask}, {&U16Bits, &DeletionCounts});
     
     P2S16KernelWithCompressedOutput p2sk(iBuilder);
     
     FileSink outK(iBuilder, 16);
     if (mMapBuffering || memAlignBuffering) {
-        p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16external});
-        outK.generateKernel({&U16external}, {});
+        pxDriver.addKernelCall(p2sk, {&U16Bits, &DeletionCounts}, {&U16external});
+        pxDriver.addKernelCall(outK, {&U16external}, {});
     } else {
-        p2sk.generateKernel({&U16Bits, &DeletionCounts}, {&U16out});
-        outK.generateKernel({&U16out}, {});
+        pxDriver.addKernelCall(p2sk, {&U16Bits, &DeletionCounts}, {&U16out});
+        pxDriver.addKernelCall(outK, {&U16out}, {});
     }
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
     
@@ -469,31 +472,36 @@ Function * u8u16Pipeline(Module * mod, IDISA::IDISA_Builder * iBuilder) {
     Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
     outK.setInitialArguments({fName});
     
-    generatePipeline(iBuilder, {&mmapK, &s2pk, &u8u16k, &delK, &p2sk, &outK});
+    pxDriver.generatePipelineIR();
+
     
     iBuilder->CreateRetVoid();
-    return main;
+    pxDriver.JITcompileMain();
+    pxDriver.linkAndFinalize();
 }
 
 
 
 typedef void (*u8u16FunctionType)(char * byte_data, char * output_data, size_t filesize);
 
-static ExecutionEngine * u8u16Engine = nullptr;
-
 u8u16FunctionType u8u16CodeGen(void) {
     LLVMContext TheContext;                            
     Module * M = new Module("u8u16", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-
-    llvm::Function * main_IR = (enableAVXdel && AVX2_available() && codegen::BlockSize==256) ? u8u16PipelineAVX2(M, idb) : u8u16Pipeline(M, idb);
-
-    verifyModule(*M, &dbgs());
-    u8u16Engine = JIT_to_ExecutionEngine(M);   
-    u8u16Engine->finalizeObject();
+    ParabixDriver pxDriver(idb);
+    
+    if (enableAVXdel && AVX2_available() && codegen::BlockSize==256) {
+        //u8u16PipelineAVX2(M, idb)
+        u8u16PipelineAVX2Gen(pxDriver);
+    }
+    else{
+        //u8u16Pipeline(M, idb);
+        u8u16PipelineGen(pxDriver);
+    }
+    u8u16FunctionType main = reinterpret_cast<u8u16FunctionType>(pxDriver.getPointerToMain());
 
     delete idb;
-    return reinterpret_cast<u8u16FunctionType>(u8u16Engine->getPointerToFunction(main_IR));
+    return main;
 }
 
 void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {

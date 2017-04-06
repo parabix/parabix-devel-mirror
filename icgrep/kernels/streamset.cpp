@@ -302,7 +302,10 @@ Value * SwizzledCopybackBuffer::getStreamSetBlockPtr(Value * self, Value * block
 
 SwizzledCopybackBuffer::SwizzledCopybackBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned fieldwidth, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::SwizzledCopybackBuffer, b, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace), mOverflowBlocks(overflowBlocks), mFieldWidth(fieldwidth) {
-    
+    mUniqueID = "SW" + std::to_string(fieldwidth) + ":" + std::to_string(bufferBlocks);
+    if (mOverflowBlocks != 1) mUniqueID += "_" + std::to_string(mOverflowBlocks);
+    if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
+
 }
 
 // Expandable Buffer
@@ -460,33 +463,41 @@ Value * ExpandableBuffer::getLinearlyAccessibleItems(Value * self, Value *) cons
 // Constructors
 SingleBlockBuffer::SingleBlockBuffer(IDISA::IDISA_Builder * b, Type * type)
 : StreamSetBuffer(BufferKind::BlockBuffer, b, type, resolveStreamSetType(b, type), 1, 0) {
+    mUniqueID = "S";
 
 }
 
 ExternalFileBuffer::ExternalFileBuffer(IDISA::IDISA_Builder * b, Type * type, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::ExternalFileBuffer, b, type, resolveStreamSetType(b, type), 0, AddressSpace) {
-
+    mUniqueID = "E";
+    if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }
 
 ExtensibleBuffer::ExtensibleBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::ExtensibleBuffer, b, type, StructType::get(b->getSizeTy(), resolveStreamSetType(b, type)->getPointerTo(), nullptr), bufferBlocks, AddressSpace) {
-
+    mUniqueID = "XT" + std::to_string(bufferBlocks);
+    if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }
 
 CircularBuffer::CircularBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::CircularBuffer, b, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace) {
+    mUniqueID = "C" + std::to_string(bufferBlocks);
+    if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 
 }
 
 CircularCopybackBuffer::CircularCopybackBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::CircularCopybackBuffer, b, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace), mOverflowBlocks(overflowBlocks) {
-
+    mUniqueID = "CC" + std::to_string(bufferBlocks);
+    if (mOverflowBlocks != 1) mUniqueID += "_" + std::to_string(mOverflowBlocks);
+    if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }
 
 ExpandableBuffer::ExpandableBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::ExpandableBuffer, b, type, resolveExpandableStreamSetType(b, type), bufferBlocks, AddressSpace)
 , mInitialCapacity(type->getArrayNumElements()) {
-
+    mUniqueID = "XP" + std::to_string(bufferBlocks);
+    if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }
 
 inline StreamSetBuffer::StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, Type * baseType, Type * resolvedType, unsigned blocks, unsigned AddressSpace)

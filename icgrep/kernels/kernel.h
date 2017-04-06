@@ -326,6 +326,7 @@ protected:
     std::vector<const parabix::StreamSetBuffer *>   mStreamSetInputBuffers;
     std::vector<const parabix::StreamSetBuffer *>   mStreamSetOutputBuffers;
     bool                                            mNoTerminateAttribute;
+    bool                                            mIsGenerated;
 
 };
 

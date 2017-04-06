@@ -23,6 +23,10 @@ public:
     BufferKind getBufferKind() const {
         return mBufferKind;
     }
+    
+    std::string getUniqueID() const {
+        return mUniqueID;
+    }
 
     llvm::Type * getType() const {
         return mType;
@@ -85,6 +89,7 @@ protected:
     const unsigned                  mAddressSpace;
     llvm::Value *                   mStreamSetBufferPtr;
     llvm::Type * const              mBaseType;
+    std::string                     mUniqueID;
 };   
 
 class SingleBlockBuffer final : public StreamSetBuffer {
