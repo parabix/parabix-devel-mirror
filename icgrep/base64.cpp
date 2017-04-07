@@ -36,16 +36,19 @@ static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable po
 using namespace kernel;
 using namespace parabix;
 
-Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
+void base64PipelineGen(ParabixDriver & pxDriver) {
+        
+    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    Module * mod = iBuilder->getModule();
     Type * mBitBlockType = iBuilder->getBitBlockType();
 
     Type * const size_ty = iBuilder->getSizeTy();
-    Type * const voidTy = Type::getVoidTy(mMod->getContext());
+    Type * const voidTy = Type::getVoidTy(mod->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     Type * const outputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     
     
-    Function * const main = cast<Function>(mMod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
@@ -68,56 +71,49 @@ Function * base64Pipeline(Module * mMod, IDISA::IDISA_Builder * iBuilder) {
     CircularCopybackBuffer Base64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments, 1);
     
     MMapSourceKernel mmapK(iBuilder, segmentSize);
-    mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
-        
+    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
+    
     expand3_4Kernel expandK(iBuilder);
-    expandK.generateKernel({&ByteStream}, {&Expanded3_4Out});
+    pxDriver.addKernelCall(expandK, {&ByteStream}, {&Expanded3_4Out});
 
     radix64Kernel radix64K(iBuilder);
-    radix64K.generateKernel({&Expanded3_4Out}, {&Radix64out});
+    pxDriver.addKernelCall(radix64K, {&Expanded3_4Out}, {&Radix64out});
 
     base64Kernel base64K(iBuilder);
-    base64K.generateKernel({&Radix64out}, {&Base64out});
+    pxDriver.addKernelCall(base64K, {&Radix64out}, {&Base64out});
     
     StdOutKernel stdoutK(iBuilder, 8);
-    stdoutK.generateKernel({&Base64out}, {});
+    pxDriver.addKernelCall(stdoutK, {&Base64out}, {});
     
-    iBuilder->SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", main,0));
+    iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
     ByteStream.setStreamSetBuffer(inputStream);
     Expanded3_4Out.allocateBuffer();
     Radix64out.allocateBuffer();
     Base64out.allocateBuffer();
 
-    generatePipeline(iBuilder, {&mmapK, &expandK, &radix64K, &base64K, &stdoutK});
+    pxDriver.generatePipelineIR();
 
     iBuilder->CreateRetVoid();
-    return main;
+    pxDriver.JITcompileMain();
+    pxDriver.linkAndFinalize();
 }
 
 
 typedef void (*base64FunctionType)(char * byte_data, char * output_data, size_t filesize);
 
-static ExecutionEngine * base64Engine = nullptr;
-
 base64FunctionType base64CodeGen(void) {
     LLVMContext TheContext;                            
     Module * M = new Module("base64", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-
+    ParabixDriver pxDriver(idb);
     
-    llvm::Function * main_IR = base64Pipeline(M, idb);
+    base64PipelineGen(pxDriver);
+    base64FunctionType main = reinterpret_cast<base64FunctionType>(pxDriver.getPointerToMain());
     
-    verifyModule(*M, &dbgs());
-    //std::cerr << "ExecuteKernels(); done\n";
-    base64Engine = JIT_to_ExecutionEngine(M);
-    
-    base64Engine->finalizeObject();
-    //std::cerr << "finalizeObject(); done\n";
-
     delete idb;
-    return reinterpret_cast<base64FunctionType>(base64Engine->getPointerToFunction(main_IR));
+    return main;
 }
 
 void base64(base64FunctionType fn_ptr, const std::string & fileName) {
@@ -154,7 +150,6 @@ void base64(base64FunctionType fn_ptr, const std::string & fileName) {
         boost::interprocess::mapped_region outputBuffer(boost::interprocess::anonymous_shared_memory(2*mFileSize));
         outputBuffer.advise(boost::interprocess::mapped_region::advice_willneed);
         outputBuffer.advise(boost::interprocess::mapped_region::advice_sequential);
-        std::cerr << "outputBuffer " << std::hex << (intptr_t)(outputBuffer.get_address()) << std::dec << "\n";
         fn_ptr(mFileBuffer, static_cast<char*>(outputBuffer.get_address()), mFileSize);
     }
     else if (memAlignBuffering) {

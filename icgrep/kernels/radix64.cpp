@@ -449,21 +449,21 @@ void base64Kernel::generateFinalBlockMethod(Value * remainingBytes) {
 }
 
 expand3_4Kernel::expand3_4Kernel(IDISA::IDISA_Builder * iBuilder)
-: SegmentOrientedKernel(iBuilder, "expand3_4",
+: SegmentOrientedKernel(iBuilder, "Parabix:expand3_4",
             {Binding{iBuilder->getStreamSetTy(1, 8), "sourceStream"}},
             {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream", FixedRatio(4,3)}},
             {}, {}, {}) {
 }
 
 radix64Kernel::radix64Kernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "radix64",
+: BlockOrientedKernel(iBuilder, "Parabix:radix64",
             {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream"}},
             {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
             {}, {}, {}) {
 }
 
 base64Kernel::base64Kernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "base64",
+: BlockOrientedKernel(iBuilder, "Parabix:base64",
             {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
             {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream", RoundUpToMultiple(4)}},
             {}, {}, {}) {
