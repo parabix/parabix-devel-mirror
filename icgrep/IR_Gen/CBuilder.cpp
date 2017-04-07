@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <llvm/Support/raw_ostream.h>
 
+
 using namespace llvm;
 
 Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) {
@@ -168,6 +169,10 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     return CreateCall(aligned_malloc, {CreateZExtOrTrunc(size, intTy)});
 }
 
+#ifdef __APPLE__
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+
 Value * CBuilder::CreateAnonymousMMap(Value * size) {
     PointerType * const voidPtrTy = getVoidPtrTy();
     IntegerType * const intTy = getInt32Ty();
@@ -211,6 +216,7 @@ Value * CBuilder::CheckMMapSuccess(Value * const addr) {
     return CreateICmpNE(CreatePtrToInt(addr, ty), ConstantInt::getAllOnesValue(ty)); // MAP_FAILED = -1
 }
 
+#ifndef __APPLE__
 Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize, const bool mayMove) {
     DataLayout DL(mMod);
     PointerType * const voidPtrTy = getVoidPtrTy();
@@ -229,6 +235,7 @@ Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize, c
     CreateAssert(CheckMMapSuccess(ptr), "CreateMRemap: mremap failed to allocate memory");
     return ptr;
 }
+#endif
 
 Value * CBuilder::CreateMUnmap(Value * addr, Value * size) {
     DataLayout DL(mMod);

@@ -185,10 +185,21 @@ void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const requ
     iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpULT(requiredSize, currentSize), resume, expand);
     iBuilder->SetInsertPoint(expand);
     Value * const reservedSize = iBuilder->CreateShl(requiredSize, 1);
+#ifdef __APPLE__
+    Value * newAddr = iBuilder->CreateAlignedMalloc(reservedSize, iBuilder->getCacheAlignment());
+    Value * const baseAddrPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+    Value * const baseAddr = iBuilder->CreateLoad(baseAddrPtr);
+    iBuilder->CreateMemCpy(newAddr, baseAddr, currentSize, iBuilder->getCacheAlignment());
+    iBuilder->CreateAlignedFree(baseAddr);
+    Value * const remainingSize = iBuilder->CreateSub(reservedSize, currentSize);
+    iBuilder->CreateMemZero(iBuilder->CreateGEP(newAddr, currentSize), remainingSize, iBuilder->getBitBlockWidth() / 8);
+    newAddr = iBuilder->CreatePointerCast(newAddr, baseAddr->getType());
+#else
     Value * const baseAddrPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     Value * const baseAddr = iBuilder->CreateLoad(baseAddrPtr);
     Value * newAddr = iBuilder->CreateMRemap(baseAddr, currentSize, reservedSize);
     newAddr = iBuilder->CreatePointerCast(newAddr, baseAddr->getType());
+#endif
     iBuilder->CreateStore(reservedSize, capacityPtr);
     iBuilder->CreateStore(newAddr, baseAddrPtr);
     iBuilder->CreateBr(resume);
