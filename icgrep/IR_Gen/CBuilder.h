@@ -104,6 +104,8 @@ public:
     
     void CallPrintInt(const std::string & name, llvm::Value * const value);
     
+    llvm::Value * GetString(llvm::StringRef Str);
+
     inline llvm::IntegerType * getSizeTy() const {
         return mSizeType;
     }
@@ -122,7 +124,7 @@ public:
     virtual llvm::LoadInst* CreateAtomicLoadAcquire(llvm::Value * ptr);
 
     virtual llvm::StoreInst *  CreateAtomicStoreRelease(llvm::Value * val, llvm::Value * ptr);
-    
+
     void CreateAssert(llvm::Value * assertion, llvm::StringRef failureMessage);
 
     void CreateExit(const int exitCode);
@@ -136,6 +138,12 @@ public:
     bool supportsIndirectBr() const {
         return mSupportsIndirectBr;
     }
+
+    llvm::Value * CreatePopcount(llvm::Value * bits);
+
+    llvm::Value * CreateCountForwardZeroes(llvm::Value * value);
+
+    llvm::Value * CreateCountReverseZeroes(llvm::Value * value);
 
     llvm::Value * CreateCeilLog2(llvm::Value * value);
 

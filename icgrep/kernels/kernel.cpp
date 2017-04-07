@@ -61,10 +61,10 @@ unsigned KernelBuilder::addUnnamedScalar(Type * const type) {
 
 void KernelBuilder::prepareStreamSetNameMap() {
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        mStreamSetNameMap.emplace(mStreamSetInputs[i].name, i);
+        mStreamMap.emplace(mStreamSetInputs[i].name, std::make_pair(Port::Input, i));
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        mStreamSetNameMap.emplace(mStreamSetOutputs[i].name, i);
+        mStreamMap.emplace(mStreamSetOutputs[i].name, std::make_pair(Port::Output, i));
     }
 }
     
@@ -94,8 +94,7 @@ void KernelBuilder::prepareKernel() {
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
         if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
             addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
-        }
-        
+        }        
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
@@ -109,7 +108,7 @@ void KernelBuilder::prepareKernel() {
     for (const auto binding : mScalarOutputs) {
         addScalar(binding.type, binding.name);
     }
-    if (mStreamSetNameMap.empty()) {
+    if (mStreamMap.empty()) {
         prepareStreamSetNameMap();
     }
     for (auto binding : mInternalScalars) {
@@ -277,7 +276,9 @@ void KernelBuilder::setScalarField(Value * instance, Value * index, Value * valu
 
 Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name, Value * doFinal) const {
     assert ("instance cannot be null!" && instance);
-    unsigned ssIdx = getStreamSetIndex(name);
+    Port port; unsigned ssIdx;
+    std::tie(port, ssIdx) = getStreamPort(name);
+    assert (port == Port::Output);
     if (mStreamSetOutputs[ssIdx].rate.isExact()) {
         std::string refSet = mStreamSetOutputs[ssIdx].rate.referenceStreamSet();
         std::string principalField;
@@ -288,8 +289,9 @@ Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string 
                 principalField = mStreamSetInputs[0].name + PROCESSED_ITEM_COUNT_SUFFIX;
             }
         } else {
-            unsigned pfIndex = getStreamSetIndex(refSet);
-            if (mStreamSetInputs.size() > pfIndex && mStreamSetInputs[pfIndex].name == refSet) {
+            Port port; unsigned pfIndex;
+            std::tie(port, pfIndex) = getStreamPort(refSet);
+            if (port == Port::Input) {
                principalField = refSet + PROCESSED_ITEM_COUNT_SUFFIX;
             } else {
                principalField = refSet + PRODUCED_ITEM_COUNT_SUFFIX;
@@ -301,14 +303,11 @@ Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string 
     return getScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX);
 }
 
-llvm::Value * KernelBuilder::getConsumedItemCount(llvm::Value * instance, const std::string & name) const {
-    assert ("instance cannot be null!" && instance);
-    return getScalarField(instance, name + CONSUMED_ITEM_COUNT_SUFFIX);
-}
-
 Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string & name) const {
     assert ("instance cannot be null!" && instance);
-    unsigned ssIdx = getStreamSetIndex(name);
+    Port port; unsigned ssIdx;
+    std::tie(port, ssIdx) = getStreamPort(name);
+    assert (port == Port::Input);
     if (mStreamSetInputs[ssIdx].rate.isExact()) {
         std::string refSet = mStreamSetInputs[ssIdx].rate.referenceStreamSet();
         if (refSet.empty()) {
@@ -325,21 +324,9 @@ void KernelBuilder::setProducedItemCount(Value * instance, const std::string & n
     setScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX, value);
 }
 
-void KernelBuilder::setConsumedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const {
-    assert ("instance cannot be null!" && instance);
-    setScalarField(instance, name + CONSUMED_ITEM_COUNT_SUFFIX, value);
-}
-
 void KernelBuilder::setProcessedItemCount(Value * instance, const std::string & name, Value * value) const {
     assert ("instance cannot be null!" && instance);
     setScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX, value);
-}
-
-void KernelBuilder::reserveBytes(llvm::Value * instance, const std::string & name, llvm::Value * value) const {
-    assert ("instance cannot be null!" && instance);
-    Value * itemCount = getProducedItemCount(instance, name);
-    const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
-    buf->reserveBytes(getStreamSetBufferPtr(name), iBuilder->CreateAdd(itemCount, value));
 }
 
 Value * KernelBuilder::getTerminationSignal(Value * instance) const {
@@ -439,9 +426,57 @@ Value * KernelBuilder::getRawOutputPointer(const std::string & name, Value * str
     return getOutputStreamSetBuffer(name)->getRawItemPointer(getStreamSetBufferPtr(name), streamIndex, absolutePosition);
 }
 
-unsigned KernelBuilder::getStreamSetIndex(const std::string & name) const {
-    const auto f = mStreamSetNameMap.find(name);
-    if (LLVM_UNLIKELY(f == mStreamSetNameMap.end())) {
+void KernelBuilder::setBaseAddress(const std::string & name, llvm::Value * addr) const {
+    unsigned index; Port port;
+    std::tie(port, index) = getStreamPort(name);
+    const StreamSetBuffer * buf = nullptr;
+    if (port == Port::Input) {
+        assert (index < mStreamSetInputBuffers.size());
+        buf = mStreamSetInputBuffers[index];
+    } else {
+        assert (index < mStreamSetOutputBuffers.size());
+        buf = mStreamSetOutputBuffers[index];
+    }
+    return buf->setBaseAddress(getStreamSetBufferPtr(name), addr);
+}
+
+Value * KernelBuilder::getBufferedSize(const std::string & name) const {
+    unsigned index; Port port;
+    std::tie(port, index) = getStreamPort(name);
+    const StreamSetBuffer * buf = nullptr;
+    if (port == Port::Input) {
+        assert (index < mStreamSetInputBuffers.size());
+        buf = mStreamSetInputBuffers[index];
+    } else {
+        assert (index < mStreamSetOutputBuffers.size());
+        buf = mStreamSetOutputBuffers[index];
+    }
+    return buf->getBufferedSize(getStreamSetBufferPtr(name));
+}
+
+void KernelBuilder::setBufferedSize(const std::string & name, Value * size) const {
+    unsigned index; Port port;
+    std::tie(port, index) = getStreamPort(name);
+    const StreamSetBuffer * buf = nullptr;
+    if (port == Port::Input) {
+        assert (index < mStreamSetInputBuffers.size());
+        buf = mStreamSetInputBuffers[index];
+    } else {
+        assert (index < mStreamSetOutputBuffers.size());
+        buf = mStreamSetOutputBuffers[index];
+    }
+    buf->setBufferedSize(getStreamSetBufferPtr(name), size);
+}
+
+void KernelBuilder::reserveBytes(const std::string & name, llvm::Value * value) const {
+    Value * itemCount = getProducedItemCount(name);
+    const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
+    buf->reserveBytes(getStreamSetBufferPtr(name), iBuilder->CreateAdd(itemCount, value));
+}
+
+KernelBuilder::StreamPort KernelBuilder::getStreamPort(const std::string & name) const {
+    const auto f = mStreamMap.find(name);
+    if (LLVM_UNLIKELY(f == mStreamMap.end())) {
         report_fatal_error(getName() + " does not contain stream set: " + name);
     }
     return f->second;
@@ -629,7 +664,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
     /// Check if the do block method is called and create the function if necessary    
     if (!useIndirectBr()) {
         FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), {mSelf->getType()}, false);
-        mCurrentMethod = Function::Create(type, GlobalValue::ExternalLinkage, getName() + DO_BLOCK_SUFFIX, iBuilder->getModule());
+        mCurrentMethod = Function::Create(type, GlobalValue::InternalLinkage, getName() + DO_BLOCK_SUFFIX, iBuilder->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
         mCurrentMethod->setDoesNotThrow();
         mCurrentMethod->setDoesNotCapture(1);
@@ -708,7 +743,7 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(Value * remainingItems) {
 
     if (!useIndirectBr()) {
         FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), {mSelf->getType(), iBuilder->getSizeTy()}, false);
-        mCurrentMethod = Function::Create(type, GlobalValue::ExternalLinkage, getName() + FINAL_BLOCK_SUFFIX, iBuilder->getModule());
+        mCurrentMethod = Function::Create(type, GlobalValue::InternalLinkage, getName() + FINAL_BLOCK_SUFFIX, iBuilder->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
         mCurrentMethod->setDoesNotThrow();
         mCurrentMethod->setDoesNotCapture(1);

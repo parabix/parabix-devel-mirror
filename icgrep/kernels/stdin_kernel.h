@@ -16,25 +16,25 @@ namespace kernel {
 class StdInKernel final : public SegmentOrientedKernel {
 public:
     StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
+    bool moduleIDisSignature() override { return true; }
 protected:
     void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;
 };
-    
 
-class FileSource final : public SegmentOrientedKernel {
+class FileSourceKernel final : public SegmentOrientedKernel {
 public:
-    FileSource(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
+    FileSourceKernel(IDISA::IDISA_Builder * iBuilder, llvm::Type * fileSourceTy, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
+    bool moduleIDisSignature() override { return true; }
 protected:
     void generateInitMethod() override;
     void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;
-  
-};
+  };
 
 }
 

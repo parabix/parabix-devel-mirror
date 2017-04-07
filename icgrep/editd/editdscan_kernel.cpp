@@ -12,11 +12,6 @@ using namespace llvm;
 
 namespace kernel {
 
-Value * generateCountForwardZeroes(IDISA::IDISA_Builder * iBuilder, Value * bits) {
-    Value * cttzFunc = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::cttz, bits->getType());
-    return iBuilder->CreateCall(cttzFunc, std::vector<Value *>({bits, ConstantInt::get(iBuilder->getInt1Ty(), 0)}));
-}
-
 void editdScanKernel::generateDoBlockMethod() {
     auto savePoint = iBuilder->saveIP();
     Function * scanWordFunction = generateScanWordRoutine(iBuilder->getModule());
@@ -78,7 +73,7 @@ Function * editdScanKernel::generateScanWordRoutine(Module * m) const {
     iBuilder->CreateCondBr(have_matches_cond, matchesLoopBlock, matchesDoneBlock);
 
     iBuilder->SetInsertPoint(matchesLoopBlock);
-    Value * match_pos = iBuilder->CreateAdd(generateCountForwardZeroes(iBuilder, matches_phi), basePos);
+    Value * match_pos = iBuilder->CreateAdd(iBuilder->CreateCountForwardZeroes(matches_phi), basePos);
     Value * matches_new = iBuilder->CreateAnd(matches_phi, iBuilder->CreateSub(matches_phi, ConstantInt::get(T, 1)));
     matches_phi->addIncoming(matches_new, matchesLoopBlock);
     iBuilder->CreateCall(matchProcessor, std::vector<Value *>({match_pos, dist}));

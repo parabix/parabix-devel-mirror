@@ -18,12 +18,13 @@ public:
     ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType, unsigned codeUnitWidth);
     bool moduleIDisSignature() override {return true;}
 protected:
-    void generateInitMethod() override;
     void generateDoBlockMethod() override;
-    void generateFinalBlockMethod(llvm::Value * remainingItems) override;
 private:
-    GrepType        mGrepType;
-    const unsigned  mCodeUnitWidth;
+    llvm::Value * makeForwardZeroesMask(llvm::Value * const value) const;
+    llvm::Value * resetLowestBit(llvm::Value * const value) const;
+private:
+    const GrepType      mGrepType;
+    const unsigned      mCodeUnitWidth;
 };
 }
 

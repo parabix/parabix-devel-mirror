@@ -24,7 +24,11 @@ namespace parabix { class StreamSetBuffer; }
 namespace kernel {
     
 class KernelBuilder : public KernelInterface {
-    using NameMap = boost::container::flat_map<std::string, unsigned>;
+protected:
+    using KernelMap = boost::container::flat_map<std::string, unsigned>;
+    enum class Port { Input, Output };
+    using StreamPort = std::pair<Port, unsigned>;
+    using StreamMap = boost::container::flat_map<std::string, StreamPort>;
 public:
     
     // Kernel Signatures and Module IDs
@@ -79,15 +83,9 @@ public:
 
     void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const final;
 
-    llvm::Value * getConsumedItemCount(llvm::Value * instance, const std::string & name) const final;
-
-    void setConsumedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const final;
-
     llvm::Value * getProcessedItemCount(llvm::Value * instance, const std::string & name) const final;
 
     void setProcessedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const final;
-
-    virtual void reserveBytes(llvm::Value * instance, const std::string & name, llvm::Value * requested) const;
 
     bool hasNoTerminateAttribute() { return mNoTerminateAttribute;}
     
@@ -235,9 +233,13 @@ protected:
 
     llvm::Value * getRawOutputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
-    void reserveBytes(const std::string & name, llvm::Value * requested) const {
-        reserveBytes(getSelf(), name, requested);
-    }
+    void setBaseAddress(const std::string & name, llvm::Value * addr) const;
+
+    llvm::Value * getBufferedSize(const std::string & name) const;
+
+    void setBufferedSize(const std::string & name, llvm::Value * size) const;
+
+    void reserveBytes(const std::string & name, llvm::Value * requested) const;
 
     llvm::Value * getScalarFieldPtr(const std::string & name) const {
         return getScalarFieldPtr(getSelf(), name);
@@ -253,14 +255,6 @@ protected:
 
     inline void setProducedItemCount(const std::string & name, llvm::Value * value) const {
         setProducedItemCount(getSelf(), name, value);
-    }
-
-    inline llvm::Value * getConsumedItemCount(const std::string & name) const {
-        return getConsumedItemCount(getSelf(), name);
-    }
-
-    inline void setConsumedItemCount(const std::string & name, llvm::Value * value) const {
-        setConsumedItemCount(getSelf(), name, value);
     }
 
     inline llvm::Value * getProcessedItemCount(const std::string & name) const {
@@ -293,18 +287,20 @@ protected:
 
     llvm::Value * getScalarFieldPtr(llvm::Value * instance, llvm::Value * index) const;
 
-    unsigned getStreamSetIndex(const std::string & name) const;
+    StreamPort getStreamPort(const std::string & name) const;
 
     const parabix::StreamSetBuffer * getInputStreamSetBuffer(const std::string & name) const {
-        const auto index = getStreamSetIndex(name);
-        assert (index < mStreamSetInputBuffers.size());
-        return mStreamSetInputBuffers[index];
+        const auto port = getStreamPort(name);
+        assert (port.first == Port::Input);
+        assert (port.second < mStreamSetInputBuffers.size());
+        return mStreamSetInputBuffers[port.second];
     }
 
     const parabix::StreamSetBuffer * getOutputStreamSetBuffer(const std::string & name) const {
-        const auto index = getStreamSetIndex(name);
-        assert (index < mStreamSetOutputBuffers.size());
-        return mStreamSetOutputBuffers[index];
+        const auto port = getStreamPort(name);
+        assert (port.first == Port::Output);
+        assert (port.second < mStreamSetOutputBuffers.size());
+        return mStreamSetOutputBuffers[port.second];
     }
 
     void callGenerateInitMethod();
@@ -321,8 +317,8 @@ protected:
     llvm::Function *                                mCurrentMethod;
 
     std::vector<llvm::Type *>                       mKernelFields;
-    NameMap                                         mKernelMap;
-    NameMap                                         mStreamSetNameMap;
+    KernelMap                                       mKernelMap;
+    StreamMap                                       mStreamMap;
     std::vector<const parabix::StreamSetBuffer *>   mStreamSetInputBuffers;
     std::vector<const parabix::StreamSetBuffer *>   mStreamSetOutputBuffers;
     bool                                            mNoTerminateAttribute;

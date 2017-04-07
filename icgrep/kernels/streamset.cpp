@@ -43,6 +43,18 @@ Value * StreamSetBuffer::getStreamPackPtr(Value * self, Value * streamIndex, Val
     return iBuilder->CreateGEP(getStreamSetBlockPtr(getBaseAddress(self), blockIndex), {iBuilder->getInt32(0), streamIndex, packIndex});
 }
 
+void StreamSetBuffer::setBaseAddress(Value * /* self */, Value * /* addr */) const {
+    report_fatal_error("setBaseAddress is not supported by this buffer type");
+}
+
+Value * StreamSetBuffer::getBufferedSize(Value * /* self */) const {
+    report_fatal_error("getBufferedSize is not supported by this buffer type");
+}
+
+void StreamSetBuffer::setBufferedSize(Value * /* self */, llvm::Value * /* size */) const {
+    report_fatal_error("setBufferedSize is not supported by this buffer type");
+}
+
 inline bool StreamSetBuffer::isCapacityGuaranteed(const Value * const index, const size_t capacity) const {
     if (LLVM_UNLIKELY(isa<ConstantInt>(index))) {
         if (LLVM_LIKELY(cast<ConstantInt>(index)->getLimitedValue() < capacity)) {
@@ -82,7 +94,7 @@ inline Value * StreamSetBuffer::modByBufferBlocks(Value * const offset) const {
  */
 Value * StreamSetBuffer::getRawItemPointer(Value * self, Value * streamIndex, Value * absolutePosition) const {
     Value * ptr = getBaseAddress(self);
-    if (isa<ConstantInt>(streamIndex) && cast<ConstantInt>(streamIndex)->isZero()) {
+    if (!isa<ConstantInt>(streamIndex) || !cast<ConstantInt>(streamIndex)->isZero()) {
         ptr = iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), streamIndex});
     }
     IntegerType * const ty = cast<IntegerType>(mBaseType->getArrayElementType()->getVectorElementType());
@@ -150,6 +162,35 @@ Value * ExternalFileBuffer::getLinearlyAccessibleItems(Value * self, Value *) co
     report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
 }
 
+// Source File Buffer
+Value * SourceFileBuffer::getBufferedSize(Value * self) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+    return iBuilder->CreateLoad(ptr);
+}
+
+void SourceFileBuffer::setBufferedSize(Value * self, llvm::Value * size) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+    iBuilder->CreateStore(size, ptr);
+}
+
+void SourceFileBuffer::setBaseAddress(Value * self, Value * addr) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+    iBuilder->CreateStore(addr, ptr);
+}
+
+Value * SourceFileBuffer::getBaseAddress(Value * const self) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+    return iBuilder->CreateLoad(ptr);
+}
+
+Value * SourceFileBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
+    return iBuilder->CreateGEP(self, blockIndex);
+}
+
+Value * SourceFileBuffer::getLinearlyAccessibleItems(Value * self, Value *) const {
+    report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
+}
+
 // ExtensibleBuffer
 Value * ExtensibleBuffer::getLinearlyAccessibleItems(Value * self, Value * fromPosition) const {
     Value * capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
@@ -169,6 +210,8 @@ void ExtensibleBuffer::allocateBuffer() {
     Value * const addrPtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     addr = iBuilder->CreatePointerCast(addr, addrPtr->getType()->getPointerElementType());
     iBuilder->CreateStore(addr, addrPtr);
+    Value * const bufferSizePtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
+    iBuilder->CreateStore(ConstantInt::getNullValue(bufferSizePtr->getType()->getPointerElementType()), bufferSizePtr);
     mStreamSetBufferPtr = instance;
 }
 
@@ -204,6 +247,16 @@ void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const requ
     iBuilder->CreateStore(newAddr, baseAddrPtr);
     iBuilder->CreateBr(resume);
     iBuilder->SetInsertPoint(resume);
+}
+
+Value * ExtensibleBuffer::getBufferedSize(Value * self) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
+    return iBuilder->CreateLoad(ptr);
+}
+
+void ExtensibleBuffer::setBufferedSize(Value * self, llvm::Value * size) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
+    iBuilder->CreateStore(size, ptr);
 }
 
 Value * ExtensibleBuffer::getBaseAddress(Value * const self) const {
@@ -484,8 +537,13 @@ ExternalFileBuffer::ExternalFileBuffer(IDISA::IDISA_Builder * b, Type * type, un
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }
 
+SourceFileBuffer::SourceFileBuffer(IDISA::IDISA_Builder * b, Type * type, unsigned AddressSpace)
+: StreamSetBuffer(BufferKind::SourceFileBuffer, b, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(), b->getSizeTy(), nullptr), 0, AddressSpace) {
+
+}
+
 ExtensibleBuffer::ExtensibleBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::ExtensibleBuffer, b, type, StructType::get(b->getSizeTy(), resolveStreamSetType(b, type)->getPointerTo(), nullptr), bufferBlocks, AddressSpace) {
+: StreamSetBuffer(BufferKind::ExtensibleBuffer, b, type, StructType::get(b->getSizeTy(), resolveStreamSetType(b, type)->getPointerTo(), b->getSizeTy(), nullptr), bufferBlocks, AddressSpace) {
     mUniqueID = "XT" + std::to_string(bufferBlocks);
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }

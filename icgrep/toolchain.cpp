@@ -21,6 +21,7 @@
 #include <llvm/Target/TargetOptions.h>             // for TargetOptions
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
+#include <llvm/IR/Module.h>
 #include <object_cache.h>
 #include <kernels/pipeline.h>
 #include <kernels/interface.h>
@@ -29,6 +30,8 @@
 #include <IR_Gen/llvm2ptx.h>
 #endif
  
+
+
 using namespace llvm;
 
 namespace codegen {
@@ -85,7 +88,7 @@ bool DebugOptionIsSet(DebugFlags flag) {return DebugOptions.isSet(flag);}
 static cl::opt<bool> pipelineParallel("enable-pipeline-parallel", cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(CodeGenOptions));
     
 static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
-    
+
 
     
 #ifdef CUDA_ENABLED
@@ -272,37 +275,12 @@ void generatePipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel:
     }
 }
 
-
-ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder) : iBuilder(iBuilder) {
-    mMainModule = iBuilder->getModule();
-    if (codegen::EnableObjectCache) {
-        if (codegen::ObjectCacheDir.empty()) {
-            mCache = llvm::make_unique<ParabixObjectCache>();
-        }
-        else {
-            mCache = llvm::make_unique<ParabixObjectCache>(codegen::ObjectCacheDir);
-        }
-    }
-}
-
-void ParabixDriver::JITcompileMain () {
-
-    // Use the pass manager to optimize the function.
-    #ifndef NDEBUG
-    try {
-    #endif
-    legacy::PassManager PM;
-    #ifndef NDEBUG
-    PM.add(createVerifierPass());
-    #endif
-    PM.add(createReassociatePass());             //Reassociate expressions.
-    PM.add(createGVNPass());                     //Eliminate common subexpressions.
-    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-    PM.add(createCFGSimplificationPass());    
-    PM.run(*mMainModule);
-    #ifndef NDEBUG
-    } catch (...) { mMainModule->dump(); throw; }
-    #endif
+ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
+: iBuilder(iBuilder)
+, mMainModule(iBuilder->getModule())
+, mTarget(nullptr)
+, mEngine(nullptr)
+{
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
@@ -332,6 +310,41 @@ void ParabixDriver::JITcompileMain () {
 
     setAllFeatures(builder);
 
+    mEngine = builder.create();
+    if (mEngine == nullptr) {
+        throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
+    }
+    mTarget = builder.selectTarget();
+    if (codegen::EnableObjectCache) {
+        if (codegen::ObjectCacheDir.empty()) {
+            mCache = llvm::make_unique<ParabixObjectCache>();
+        } else {
+            mCache = llvm::make_unique<ParabixObjectCache>(codegen::ObjectCacheDir);
+        }
+        if (mCache) {
+            mEngine->setObjectCache(mCache.get());
+        }
+    }
+}
+
+void ParabixDriver::JITcompileMain () {
+    // Use the pass manager to optimize the function.
+    #ifndef NDEBUG
+    try {
+    #endif
+    legacy::PassManager PM;
+    #ifndef NDEBUG
+    PM.add(createVerifierPass());
+    #endif
+    PM.add(createReassociatePass());             //Reassociate expressions.
+    PM.add(createGVNPass());                     //Eliminate common subexpressions.
+    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
+    PM.add(createCFGSimplificationPass());    
+    PM.run(*mMainModule);
+    #ifndef NDEBUG
+    } catch (...) { mMainModule->dump(); throw; }
+    #endif
+
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
         if (codegen::IROutputFilename.empty()) {
             mMainModule->dump();
@@ -341,29 +354,24 @@ void ParabixDriver::JITcompileMain () {
             mMainModule->print(out, nullptr);
         }
     }
-#if LLVM_VERSION_MINOR > 6
+    #if LLVM_VERSION_MINOR > 6
     if (codegen::DebugOptionIsSet(codegen::ShowASM)) {
-        WriteAssembly(builder.selectTarget(), mMainModule);
+        WriteAssembly(mTarget, mMainModule);
     }
-#endif
-    ExecutionEngine * engine = builder.create();
-    if (engine == nullptr) {
-        throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
-    }
-    if (mCache) {
-        engine->setObjectCache(mCache.get());
-    }
-    mEngine = engine;
+    #endif
 }
 
 void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
+    assert (mModuleMap.count(&kb) == 0);
     mKernelList.push_back(&kb);
+    Module * saveM = iBuilder->getModule();
+    mModuleMap.emplace(&kb, std::move(kb.createKernelStub()));
+    assert (iBuilder->getModule() == saveM);
     kb.setCallParameters(inputs, outputs);
 }
 
-
 void ParabixDriver::generatePipelineIR() {
-    for (auto kb : mKernelList) {
+    for (kernel::KernelBuilder * kb : mKernelList) {
         kb->addKernelDeclarations(mMainModule);
     }
     if (codegen::pipelineParallel) {
@@ -376,16 +384,26 @@ void ParabixDriver::generatePipelineIR() {
     }
 }
 
+void ParabixDriver::addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, FunctionType *type, void * functionPtr) const {
+    const auto f = mModuleMap.find(&kb);
+    assert ("addKernelCall(kb, ...) must be called before addExternalLink(kb, ...)" && f != mModuleMap.end());
+    llvm::Module * const m = f->second.get();
+    mEngine->addGlobalMapping(cast<Function>(m->getOrInsertFunction(name, type)), functionPtr);
+}
+
 void ParabixDriver::linkAndFinalize() {
-    for (auto kb : mKernelList) {
+    for (kernel::KernelBuilder * kb : mKernelList) {
         Module * saveM = iBuilder->getModule();
-        std::unique_ptr<Module> km = kb->createKernelStub();
+        const auto f = mModuleMap.find(kb);
+        if (LLVM_UNLIKELY(f == mModuleMap.end())) {
+            report_fatal_error("linkAndFinalize was called twice!");
+        }
+        std::unique_ptr<Module> km(std::move(f->second));
         std::string moduleID = km->getModuleIdentifier();
         std::string signature;
         if (kb->moduleIDisSignature()) {
             signature = moduleID;
-        }
-        else {
+        } else {
             kb->generateKernelSignature(signature);
         }
         if (!(mCache && mCache->loadCachedObjectFile(moduleID, signature))) {
@@ -396,6 +414,7 @@ void ParabixDriver::linkAndFinalize() {
         mEngine->addModule(std::move(km));
     }
     mEngine->finalizeObject();
+    mModuleMap.clear();
 }
 
 void * ParabixDriver::getPointerToMain() {

@@ -50,7 +50,7 @@ TraceTool::TraceTool(IDISA::IDISA_Builder * b, unsigned log2TraceBufSize) :
 
 unsigned TraceTool::newTraceVar(std::string traceName) {
     std::string formatString = traceName + " = %" PRIx64 "\n";
-    mTraceFormatString.push_back(iBuilder->CreateGlobalStringPtr(formatString.c_str()));
+    mTraceFormatString.push_back(iBuilder->GetString(formatString.c_str()));
     return mTraceVarCount++;
 }
 

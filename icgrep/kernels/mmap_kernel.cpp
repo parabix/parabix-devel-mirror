@@ -42,12 +42,6 @@ void MMapSourceKernel::generateDoSegmentMethod(Value *doFinal, const std::vector
     setProducedItemCount("sourceBuffer", itemsRead);
 }
 
-void MMapSourceKernel::generateInitMethod() {
-//    Value * fileSize = getScalarField("fileSize");
-//    fileSize = iBuilder->CreateUDiv(fileSize, iBuilder->getSize(mCodeUnitWidth / 8));
-//    setProducedItemCount("sourceBuffer", fileSize);
-}
-
 MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
 : SegmentOrientedKernel(iBuilder, "Parabix:mmap_source",
     {},

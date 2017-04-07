@@ -161,18 +161,18 @@ Function * generateSegmentParallelPipelineThreadFunction(std::string name, IDISA
             iBuilder->CreateBr(exitThreadBlock);
         }
         iBuilder->SetInsertPoint(segmentLoopBody[k]);
-        std::vector<Value *> doSegmentArgs = {instancePtrs[k], doFinal};
+        std::vector<Value *> args = {instancePtrs[k], doFinal};
         for (unsigned j = 0; j < K->getStreamInputs().size(); j++) {
             unsigned producerKernel, outputIndex;
             std::tie(producerKernel, outputIndex) = producerTable[k][j];
-            doSegmentArgs.push_back(ProducerPos[producerKernel][outputIndex]);
+            args.push_back(ProducerPos[producerKernel][outputIndex]);
         }
-        K->createDoSegmentCall(doSegmentArgs);
+        K->createDoSegmentCall(args);
          if (! (K->hasNoTerminateAttribute())) {
             Value * terminated = K->getTerminationSignal(instancePtrs[k]);
             doFinal = iBuilder->CreateOr(doFinal, terminated);
         }
-       std::vector<Value *> produced;
+        std::vector<Value *> produced;
         for (unsigned i = 0; i < K->getStreamOutputs().size(); i++) {
             produced.push_back(K->getProducedItemCount(instancePtrs[k], K->getStreamOutputs()[i].name, doFinal));
         }
@@ -437,7 +437,7 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
     std::vector<Function *> thread_functions;
     const auto ip = iBuilder->saveIP();
     for (unsigned i = 0; i < threadNum; i++) {
-        thread_functions.push_back(generateParallelPipelineThreadFunction("thread"+std::to_string(i), iBuilder, kernels, sharedStructType, producerTable, consumerTable, i));
+        thread_functions.push_back(generateParallelPipelineThreadFunction("thread" + std::to_string(i), iBuilder, kernels, sharedStructType, producerTable, consumerTable, i));
     }
     iBuilder->restoreIP(ip);
     
@@ -469,7 +469,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
     
     const ProducerTable producer = createProducerTable(kernels);
 
-//    const ConsumerTable consumer = createConsumerTable(kernels);
+ //   const ConsumerTable consumer = createConsumerTable(kernels);
     
     // ProducerPos[k][i] will hold the producedItemCount of the i^th output stream
     // set of the k^th kernel.  These values will be loaded immediately after the
@@ -483,26 +483,26 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
 
     Value * terminated = ConstantInt::getFalse(iBuilder->getContext());
     for (unsigned k = 0; k < kernels.size(); k++) {
-        KernelBuilder * const K = kernels[k];
-        Value * const instance = K->getInstance();
+        KernelBuilder * const kernel = kernels[k];
+        Value * const instance = kernel->getInstance();
         std::vector<Value *> args = {instance, terminated};
-        for (unsigned j = 0; j < K->getStreamInputs().size(); j++) {
+        for (unsigned j = 0; j < kernel->getStreamInputs().size(); j++) {
             unsigned producerKernel, outputIndex;
             std::tie(producerKernel, outputIndex) = producer[k][j];
             args.push_back(ProducerPos[producerKernel][outputIndex]);
         }
-        K->createDoSegmentCall(args);
-        if (!K->hasNoTerminateAttribute()) {
-            terminated = iBuilder->CreateOr(terminated, K->getTerminationSignal(instance));
+        kernel->createDoSegmentCall(args);
+        if (!kernel->hasNoTerminateAttribute()) {
+            terminated = iBuilder->CreateOr(terminated, kernel->getTerminationSignal(instance));
         }
         std::vector<Value *> produced;
-        const auto & streamOutputs = K->getStreamOutputs();
+        const auto & streamOutputs = kernel->getStreamOutputs();
         for (unsigned i = 0; i < streamOutputs.size(); i++) {
-            produced.push_back(K->getProducedItemCount(instance, streamOutputs[i].name, terminated));
+            produced.push_back(kernel->getProducedItemCount(instance, streamOutputs[i].name, terminated));
         }
         ProducerPos.push_back(produced);
-        Value * segNo = K->acquireLogicalSegmentNo(instance);
-        K->releaseLogicalSegmentNo(instance, iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
+        Value * segNo = kernel->acquireLogicalSegmentNo(instance);
+        kernel->releaseLogicalSegmentNo(instance, iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
     }
 
     iBuilder->CreateCondBr(terminated, exitBlock, segmentLoop);

@@ -88,7 +88,7 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
         BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
-        args.push_back(CreateGlobalStringPtr(out.c_str()));
+        args.push_back(GetString(out.c_str()));
         Value * const name = &*(arg++);
         name->setName("name");
         args.push_back(name);
@@ -107,7 +107,7 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
         num = CreateZExtOrBitCast(value, getSizeTy());
     }
     assert (num->getType()->isIntegerTy());
-    CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), num});
+    CreateCall(printRegister, {GetString(name.c_str()), num});
 }
 
 Value * CBuilder::CreateMalloc(Value * size) {
@@ -206,7 +206,9 @@ Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const pro
         fMMap = Function::Create(fty, Function::ExternalLinkage, "mmap", mMod);
     }
     Value * ptr = CreateCall(fMMap, {addr, size, prot, flags, fd, offset});
-    CreateAssert(CheckMMapSuccess(ptr), "CreateMMap: mmap failed to allocate memory");
+    if (codegen::EnableAsserts) {
+        CreateAssert(CheckMMapSuccess(ptr), "CreateMMap: mmap failed to allocate memory");
+    }
     return ptr;
 }
 
@@ -231,8 +233,10 @@ Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize, c
     oldSize = CreateZExtOrTrunc(oldSize, sizeTy);
     newSize = CreateZExtOrTrunc(newSize, sizeTy);
     ConstantInt * const flags = ConstantInt::get(intTy, mayMove ? MREMAP_MAYMOVE : 0);
-    Value * ptr = CreateCall(fMRemap, {addr, oldSize, newSize, flags});   
-    CreateAssert(CheckMMapSuccess(ptr), "CreateMRemap: mremap failed to allocate memory");
+    Value * ptr = CreateCall(fMRemap, {addr, oldSize, newSize, flags});
+    if (codegen::EnableAsserts) {
+        CreateAssert(CheckMMapSuccess(ptr), "CreateMRemap: mremap failed to allocate memory");
+    }
     return ptr;
 }
 #endif
@@ -248,7 +252,6 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * size) {
         fMUnmap = Function::Create(fty, Function::ExternalLinkage, "munmap", mMod);
     }
     addr = CreatePointerCast(addr, voidPtrTy);
-    CreateAssert(addr, "CreateMUnmap: addr cannot be null");
     size = CreateZExtOrTrunc(size, sizeTy);
     return CreateCall(fMUnmap, {addr, size});
 }
@@ -450,17 +453,19 @@ void CBuilder::CreateAssert(Value * const assertion, StringRef failureMessage) {
             Value * len = CreateAdd(sz, getSize(21));
             ConstantInt * _11 = getSize(11);
             Value * bytes = CreatePointerCast(CreateMalloc(len), getInt8PtrTy());
-            CreateMemCpy(bytes, CreateGlobalStringPtr("Assertion `"), _11, 1);
+            CreateMemCpy(bytes, GetString("Assertion `"), _11, 1);
             CreateMemCpy(CreateGEP(bytes, _11), msg, sz, 1);
-            CreateMemCpy(CreateGEP(bytes, CreateAdd(sz, _11)), CreateGlobalStringPtr("' failed.\n"), getSize(10), 1);
+            CreateMemCpy(CreateGEP(bytes, CreateAdd(sz, _11)), GetString("' failed.\n"), getSize(10), 1);
             CreateWriteCall(getInt32(2), bytes, len);
+
+
             CreateExit(-1);
             CreateBr(success); // necessary to satisfy the LLVM verifier. this is not actually executed.
             SetInsertPoint(success);
             CreateRetVoid();
             restoreIP(ip);
         }
-        CreateCall(function, {CreateICmpEQ(assertion, Constant::getNullValue(assertion->getType())), CreateGlobalStringPtr(failureMessage), getSize(failureMessage.size())});
+        CreateCall(function, {CreateICmpEQ(assertion, Constant::getNullValue(assertion->getType())), GetString(failureMessage), getSize(failureMessage.size())});
     }
 }
 
@@ -483,13 +488,40 @@ BranchInst * CBuilder::CreateLikelyCondBr(Value * Cond, BasicBlock * True, Basic
     return CreateCondBr(Cond, True, False, mdb.createBranchWeights(probability, 100 - probability));
 }
 
+inline static unsigned ceil_log2(const unsigned v) {
+    assert ("log2(0) is undefined!" && v != 0);
+    return 32 - __builtin_clz(v - 1);
+}
+
+Value * CBuilder::CreatePopcount(Value * bits) {
+    Value * ctpopFunc = Intrinsic::getDeclaration(mMod, Intrinsic::ctpop, bits->getType());
+    return CreateCall(ctpopFunc, bits);
+}
+
+Value * CBuilder::CreateCountForwardZeroes(Value * value) {
+    Value * cttzFunc = Intrinsic::getDeclaration(mMod, Intrinsic::cttz, value->getType());
+    return CreateCall(cttzFunc, {value, ConstantInt::getFalse(getContext())});
+}
+
+Value * CBuilder::CreateCountReverseZeroes(Value * value) {
+    Value * ctlzFunc = Intrinsic::getDeclaration(mMod, Intrinsic::ctlz, value->getType());
+    return CreateCall(ctlzFunc, {value, ConstantInt::getFalse(getContext())});
+}
+
 Value * CBuilder::CreateCeilLog2(Value * value) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     CreateAssert(value, "CreateCeilLog2: value cannot be zero");
-    Value * m = CreateCall(Intrinsic::getDeclaration(mMod, Intrinsic::ctlz, ty), {value, ConstantInt::getFalse(getContext())});
-    Value * isPowOf2 = CreateICmpEQ(CreateAnd(value, CreateSub(value, ConstantInt::get(ty, 1))), ConstantInt::getNullValue(ty));
-    m = CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m);
-    return CreateSelect(isPowOf2, m, CreateAdd(m, ConstantInt::get(m->getType(), 1)));
+    Value * m = CreateCountForwardZeroes(CreateSub(value, ConstantInt::get(ty, 1)));
+    return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m);
+}
+
+Value * CBuilder::GetString(StringRef Str) {
+    Value * ptr = mMod->getGlobalVariable(Str, true);
+    if (ptr == nullptr) {
+        ptr = CreateGlobalString(Str, Str);
+    }
+    Value * zero = getInt32(0);
+    return CreateInBoundsGEP(ptr, { zero, zero });
 }
 
 CBuilder::CBuilder(Module * const m, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes)

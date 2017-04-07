@@ -126,7 +126,7 @@ void PrintStreamSet::generateDoBlockMethod() {
         ConstantInt * const streamLength = iBuilder->getSize(iBuilder->getBitBlockWidth() + mNameWidth + 1);
         Value * output = iBuilder->CreateAlloca(iBuilder->getInt8Ty(), streamLength);
 
-        Value * outputName = iBuilder->CreateGlobalStringPtr(name.c_str());
+        Value * outputName = iBuilder->GetString(name.c_str());
         ConstantInt * const length = iBuilder->getInt32(name.length());
         iBuilder->CreateMemCpy(output, outputName, length, 1);
         iBuilder->CreateMemSet(iBuilder->CreateGEP(output, iBuilder->getInt32(name.length())), iBuilder->getInt8(' '), iBuilder->getInt32(mNameWidth - name.length()), 1);

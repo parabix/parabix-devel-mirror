@@ -27,18 +27,24 @@ inline bool isStreamType(const Type * ty) {
     return false;
 }
 
-Var * PabloKernel::getInputStreamVar(const std::string & inputSetName) {
-    return mInputs[getStreamSetIndex(inputSetName)];
+Var * PabloKernel::getInputStreamVar(const std::string & name) {
+    Port port; unsigned index;
+    std::tie(port, index) = getStreamPort(name);
+    assert (port == Port::Input);
+    return mInputs[index];
 }
 
-Var * PabloKernel::getOutputStreamVar(const std::string & outputSetName) {
-    return mOutputs[getStreamSetIndex(outputSetName)];
+Var * PabloKernel::getOutputStreamVar(const std::string & name) {
+    Port port; unsigned index;
+    std::tie(port, index) = getStreamPort(name);
+    assert (port == Port::Output);
+    return mOutputs[index];
 }
 
-Var * PabloKernel::getOutputScalarVar(const std::string & outputName) {
-    const auto f = mScalarOutputNameMap.find(outputName);
+Var * PabloKernel::getOutputScalarVar(const std::string & name) {
+    const auto f = mScalarOutputNameMap.find(name);
     if (LLVM_UNLIKELY(f == mScalarOutputNameMap.end())) {
-        report_fatal_error("Kernel does not contain scalar: " + outputName);
+        report_fatal_error("Kernel does not contain scalar: " + name);
     }
     return f->second;
 }
@@ -49,7 +55,7 @@ Var * PabloKernel::addInput(const std::string & name, Type * const type) {
     mInputs.push_back(param);
     mVariables.push_back(param);
     if (isStreamType(type)) {
-        mStreamSetNameMap.emplace(name, mStreamSetInputs.size());
+        mStreamMap.emplace(name, std::make_pair(Port::Input, mStreamSetInputs.size()));
         mStreamSetInputs.emplace_back(type, name);        
     } else {
         mScalarInputs.emplace_back(type, name);
@@ -65,7 +71,7 @@ Var * PabloKernel::addOutput(const std::string & name, Type * const type) {
     mOutputs.push_back(result);
     mVariables.push_back(result);
     if (isStreamType(type)) {
-        mStreamSetNameMap.emplace(name, mStreamSetOutputs.size());
+        mStreamMap.emplace(name, std::make_pair(Port::Output, mStreamSetOutputs.size()));
         mStreamSetOutputs.emplace_back(type, name);
     } else {
         mScalarOutputs.emplace_back(type, name);

@@ -279,7 +279,21 @@ void buildPreprocessKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder
     pablo_function_passes(&kernel);
 }
 
-Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
+//
+// Handler for errors reported through llvm::report_fatal_error.  Report
+// and signal error code 2 (grep convention).
+//
+static void error_handler(void *UserData, const std::string &Message, bool GenCrashDiag) {
+    throw std::runtime_error(Message);
+}
+
+
+void preprocessPipeline(ParabixDriver & pxDriver) {
+
+    llvm::install_fatal_error_handler(&error_handler);
+
+    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    Module * m = iBuilder->getModule();
     Type * mBitBlockType = iBuilder->getBitBlockType();
     
     Type * const size_ty = iBuilder->getSizeTy();
@@ -297,65 +311,59 @@ Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder) {
     fileSize->setName("fileSize");
     Value * const outputStream = &*(args++);
     outputStream->setName("output");
-    
+    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main));
+
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
     SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8));
     ExternalFileBuffer CCResults(iBuilder, iBuilder->getStreamSetTy(4));
 
     MMapSourceKernel mmapK(iBuilder);
-    std::unique_ptr<Module> mmapM = mmapK.createKernelModule({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
+    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
     
-    S2PKernel  s2pk(iBuilder);
-    std::unique_ptr<Module> s2pM = s2pk.createKernelModule({&ByteStream}, {&BasisBits});
+    S2PKernel s2pk(iBuilder);
+    pxDriver.addKernelCall(s2pk, {&ByteStream}, {&BasisBits});
 
     PabloKernel ccck(iBuilder, "ccc",
                 {{iBuilder->getStreamSetTy(8), "basis"}},
                 {{iBuilder->getStreamSetTy(4), "pat"}});
 
     buildPreprocessKernel(ccck, iBuilder);
-    
-    std::unique_ptr<Module> cccM = ccck.createKernelModule({&BasisBits}, {&CCResults});
-    
-    mmapK.addKernelDeclarations(m);
-    s2pk.addKernelDeclarations(m);
-    ccck.addKernelDeclarations(m);
-    
-    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
-
+    pxDriver.addKernelCall(ccck, {&BasisBits}, {&CCResults});
+          
     ByteStream.setStreamSetBuffer(inputStream);
+
     BasisBits.allocateBuffer();
+
     CCResults.setStreamSetBuffer(outputStream);
     
-    generatePipelineLoop(iBuilder, {&mmapK, &s2pk, &ccck});
-        
+    pxDriver.generatePipelineIR();
+
     iBuilder->CreateRetVoid();
-    
-    Linker L(*m);
-    L.linkInModule(std::move(mmapM));
-    L.linkInModule(std::move(s2pM));
-    L.linkInModule(std::move(cccM));
-    
-    return main;
+
+    errs() << "JitCompileMain()\n";
+
+    pxDriver.JITcompileMain();
+
+    errs() << "linkAndFinalize()\n";
+
+    pxDriver.linkAndFinalize();
+
+    errs() << "done\n";
 }
 
 
 typedef void (*preprocessFunctionType)(char * byte_data, size_t filesize, char * output_data);
 
-preprocessFunctionType preprocessCodeGen() {
-                            
+preprocessFunctionType preprocessCodeGen() {                           
     LLVMContext TheContext;
     Module * M = new Module("preprocess", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-
-    llvm::Function * main_IR = preprocessPipeline(M, idb);
-
-    ExecutionEngine * preprocessEngine = JIT_to_ExecutionEngine(M);
-    
-    preprocessEngine->finalizeObject();
-
+    ParabixDriver pxDriver(idb);
+    preprocessPipeline(pxDriver);
+    auto f = reinterpret_cast<preprocessFunctionType>(pxDriver.getPointerToMain());
     delete idb;
-    return reinterpret_cast<preprocessFunctionType>(preprocessEngine->getPointerToFunction(main_IR));
+    return f;
 }
 
 typedef void (*editdFunctionType)(char * byte_data, size_t filesize);
@@ -739,18 +747,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

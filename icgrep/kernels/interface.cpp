@@ -43,20 +43,20 @@ ProcessingRate UnknownRate() {
 
 Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value * principalInputItems, Value * doFinal) const {
     if (mKind == ProcessingRate::ProcessingRateKind::Fixed || mKind == ProcessingRate::ProcessingRateKind::Max) {
-        if (ratio_numerator == 1) {
+        if (mRatioNumerator == 1) {
             return principalInputItems;
         }
         Type * const T = principalInputItems->getType();
-        Constant * const numerator = ConstantInt::get(T, ratio_numerator);
-        Constant * const denominator = ConstantInt::get(T, ratio_denominator);
-        Constant * const denominatorLess1 = ConstantInt::get(T, ratio_denominator - 1);
+        Constant * const numerator = ConstantInt::get(T, mRatioNumerator);
+        Constant * const denominator = ConstantInt::get(T, mRatioDenominator);
+        Constant * const denominatorLess1 = ConstantInt::get(T, mRatioDenominator - 1);
         Value * strmItems = b->CreateMul(principalInputItems, numerator);
         return b->CreateUDiv(b->CreateAdd(denominatorLess1, strmItems), denominator);
     }
     if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
         Type * const T = principalInputItems->getType();
-        Constant * const denominator = ConstantInt::get(T, ratio_denominator);
-        Constant * const denominatorLess1 = ConstantInt::get(T, ratio_denominator - 1);
+        Constant * const denominator = ConstantInt::get(T, mRatioDenominator);
+        Constant * const denominatorLess1 = ConstantInt::get(T, mRatioDenominator - 1);
         return b->CreateMul(b->CreateUDiv(b->CreateAdd(principalInputItems, denominatorLess1), denominator), denominator);
     }
     if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
@@ -94,11 +94,13 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     }
 
     // Create the doSegment function prototype.
-    std::vector<Type *> doSegmentParameters = {selfType, iBuilder->getInt1Ty()};
+    std::vector<Type *> params = {selfType, iBuilder->getInt1Ty()};
+    // const auto count = mStreamSetInputs.size() + mStreamSetOutputs.size();
     for (unsigned i = 0; i < mStreamSetInputs.size(); ++i) {
-        doSegmentParameters.push_back(iBuilder->getSizeTy());
+        params.push_back(iBuilder->getSizeTy());
     }
-    FunctionType * doSegmentType = FunctionType::get(iBuilder->getVoidTy(), doSegmentParameters, false);
+
+    FunctionType * doSegmentType = FunctionType::get(iBuilder->getVoidTy(), params, false);
     Function * doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, client);
     doSegment->setCallingConv(CallingConv::C);
     doSegment->setDoesNotThrow();
@@ -106,9 +108,12 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     args = doSegment->arg_begin();
     args->setName("self");
     (++args)->setName("doFinal");
-    for (auto ss : mStreamSetInputs) {
-        (++args)->setName(ss.name + "_availableItems");
+    for (const Binding & input : mStreamSetInputs) {
+        (++args)->setName(input.name + "_availableItems");
     }
+//    for (const Binding & output : mStreamSetOutputs) {
+//        (++args)->setName(output.name + "_consumedItems");
+//    }
 
     // Create the accumulator get function prototypes
     for (const auto & binding : mScalarOutputs) {

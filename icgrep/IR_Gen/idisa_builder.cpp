@@ -12,6 +12,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/TypeBuilder.h>
+#include <toolchain.h>
 
 using namespace llvm;
 
@@ -54,7 +55,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
-        args.push_back(CreateGlobalStringPtr(out.str().c_str()));
+        args.push_back(GetString(out.str().c_str()));
         Value * const name = &*(arg++);
         name->setName("name");
         args.push_back(name);
@@ -70,7 +71,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
 
         printRegister = function;
     }
-    CreateCall(printRegister, {CreateGlobalStringPtr(name.c_str()), CreateBitCast(value, mBitBlockType)});
+    CreateCall(printRegister, {GetString(name.c_str()), CreateBitCast(value, mBitBlockType)});
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
@@ -352,6 +353,26 @@ Value * IDISA_Builder::simd_xor(Value * a, Value * b) {
 
 Value * IDISA_Builder::simd_not(Value * a) {
     return simd_xor(a, Constant::getAllOnesValue(a->getType()));
+}
+
+LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr) {
+    const auto alignment = mBitBlockWidth / 8;
+    if (codegen::EnableAsserts) {
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(ptr, getSizeTy()), getSize(alignment));
+        Value * alignmentCheck = CreateICmpEQ(alignmentOffset, getSize(0));
+        CreateAssert(alignmentCheck, "CreateBlockAlignedLoad: pointer is unaligned");
+    }
+    return CreateAlignedLoad(ptr, alignment);
+}
+
+void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr) {
+    const auto alignment = mBitBlockWidth / 8;
+    if (codegen::EnableAsserts) {
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(ptr, getSizeTy()), getSize(alignment));
+        Value * alignmentCheck = CreateICmpEQ(alignmentOffset, getSize(0));
+        CreateAssert(alignmentCheck, "CreateBlockAlignedStore: pointer is not aligned");
+    }
+    CreateAlignedStore(value, ptr, alignment);
 }
 
 IDISA_Builder::IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, const bool SupportsIndirectBr, unsigned CacheAlignment)

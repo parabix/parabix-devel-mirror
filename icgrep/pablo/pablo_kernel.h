@@ -67,7 +67,7 @@ public:
         return entryBlock;
     }
     
-    Var * getInputStreamVar(const std::string & inputSetName);
+    Var * getInputStreamVar(const std::string & name);
 
     Var * getInput(const unsigned index) {
         return mInputs[index];
@@ -83,9 +83,9 @@ public:
         return mInputs.size();
     }
     
-    Var * getOutputStreamVar(const std::string & inputSetName);
+    Var * getOutputStreamVar(const std::string & name);
     
-    Var * getOutputScalarVar(const std::string & outputName);
+    Var * getOutputScalarVar(const std::string & name);
 
     Var * getOutput(const unsigned index) {
         return mOutputs[index];

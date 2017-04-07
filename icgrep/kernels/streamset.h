@@ -18,7 +18,16 @@ class StreamSetBuffer {
 
 public:
 
-    enum class BufferKind : unsigned {BlockBuffer, ExternalFileBuffer, CircularBuffer, CircularCopybackBuffer, SwizzledCopybackBuffer, ExpandableBuffer, ExtensibleBuffer};
+    enum class BufferKind : unsigned {
+        BlockBuffer
+        , ExternalFileBuffer
+        , SourceFileBuffer
+        , CircularBuffer
+        , CircularCopybackBuffer
+        , SwizzledCopybackBuffer
+        , ExpandableBuffer
+        , ExtensibleBuffer
+    };
 
     BufferKind getBufferKind() const {
         return mBufferKind;
@@ -60,8 +69,16 @@ public:
 
     llvm::Value * getRawItemPointer(llvm::Value * self, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
+
+    virtual void setBaseAddress(llvm::Value * self, llvm::Value * addr) const;
+
+    virtual void setBufferedSize(llvm::Value * self, llvm::Value * size) const;
+
+    virtual llvm::Value * getBufferedSize(llvm::Value * self) const;
+
     // The number of items that cam be linearly accessed from a given logical stream position.
     virtual llvm::Value * getLinearlyAccessibleItems(llvm::Value * self, llvm::Value * fromPosition) const;
+
     virtual llvm::Value * getLinearlyAccessibleBlocks(llvm::Value * self, llvm::Value * fromBlock) const;
 
     virtual void reserveBytes(llvm::Value * self, llvm::Value * requested) const;
@@ -101,6 +118,7 @@ public:
     SingleBlockBuffer(IDISA::IDISA_Builder * b, llvm::Type * type);
 
 protected:
+
     llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const override;
 };
 
@@ -109,7 +127,7 @@ public:
     static inline bool classof(const StreamSetBuffer * b) {
         return b->getBufferKind() == BufferKind::ExternalFileBuffer;
     }
-    
+
     ExternalFileBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, unsigned AddressSpace = 0);
 
     void setStreamSetBuffer(llvm::Value * ptr);
@@ -118,8 +136,31 @@ public:
     void allocateBuffer() override;
 
     llvm::Value * getLinearlyAccessibleItems(llvm::Value * self, llvm::Value * fromPosition) const override;
-    
+
 protected:
+    llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const override;
+};
+
+class SourceFileBuffer final : public StreamSetBuffer {
+public:
+    static inline bool classof(const StreamSetBuffer * b) {
+        return b->getBufferKind() == BufferKind::SourceFileBuffer;
+    }
+
+    SourceFileBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, unsigned AddressSpace = 0);
+
+    void setBaseAddress(llvm::Value * self, llvm::Value * addr) const override;
+
+    void setBufferedSize(llvm::Value * self, llvm::Value * size) const override;
+
+    llvm::Value * getBufferedSize(llvm::Value * self) const override;
+
+    llvm::Value * getLinearlyAccessibleItems(llvm::Value * self, llvm::Value * fromPosition) const override;
+
+protected:
+
+    llvm::Value * getBaseAddress(llvm::Value * self) const override;
+
     llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const override;
 };
 
@@ -136,6 +177,10 @@ public:
     void allocateBuffer() override;
 
     void reserveBytes(llvm::Value * self, llvm::Value * required) const override;
+
+    void setBufferedSize(llvm::Value * self, llvm::Value * size) const override;
+
+    llvm::Value * getBufferedSize(llvm::Value * self) const override;
 
     void releaseBuffer(llvm::Value * self) const override;
 

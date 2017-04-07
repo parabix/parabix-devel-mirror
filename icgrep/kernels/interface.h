@@ -42,6 +42,7 @@ struct ProcessingRate  {
     ProcessingRate() {}
     ProcessingRateKind getKind() const {return mKind;}
     bool isExact() const {return (mKind == Fixed)||(mKind == RoundUp)||(mKind == Add1) ;}
+    bool isUnknown() const { return !isExact(); }
     llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems, llvm::Value * doFinal = nullptr) const;
     friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet);
     friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet);
@@ -49,15 +50,14 @@ struct ProcessingRate  {
     friend ProcessingRate Add1(std::string referenceStreamSet);
     friend ProcessingRate UnknownRate();
     std::string referenceStreamSet() const { return mReferenceStreamSet;}
-    
 protected:
     ProcessingRate(ProcessingRateKind k, unsigned numerator, unsigned denominator, std::string referenceStreamSet) 
-    : mKind(k), ratio_numerator(numerator), ratio_denominator(denominator), mReferenceStreamSet(referenceStreamSet) {}
+    : mKind(k), mRatioNumerator(numerator), mRatioDenominator(denominator), mReferenceStreamSet(referenceStreamSet) {}
+private:
     ProcessingRateKind mKind;
-    uint16_t ratio_numerator;
-    uint16_t ratio_denominator;
+    uint16_t mRatioNumerator;
+    uint16_t mRatioDenominator;
     std::string mReferenceStreamSet;
-    bool isVariableRate();
 }; 
 
 ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1, std::string referenceStreamSet = "");
@@ -118,10 +118,6 @@ public:
     virtual llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * doFinal = nullptr) const = 0;
 
     virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
-
-    virtual llvm::Value * getConsumedItemCount(llvm::Value * instance, const std::string & name) const = 0;
-
-    virtual void setConsumedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
 
     virtual llvm::Value * getProcessedItemCount(llvm::Value * instance, const std::string & name) const = 0;
 

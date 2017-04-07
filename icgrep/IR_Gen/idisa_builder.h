@@ -132,15 +132,12 @@ public:
 protected:
     unsigned            mBitBlockWidth;
     unsigned            mStride;
+
     llvm::VectorType *  mBitBlockType;
     llvm::Constant *    mZeroInitializer;
     llvm::Constant *    mOneInitializer;
     llvm::Constant *    mPrintRegisterFunction;
 };
-
-inline llvm::LoadInst * IDISA_Builder::CreateBlockAlignedLoad(llvm::Value * const ptr) {
-    return CreateAlignedLoad(ptr, mBitBlockWidth / 8);
-}
 
 inline llvm::LoadInst * IDISA_Builder::CreateBlockAlignedLoad(llvm::Value * const ptr, llvm::Value * const index) {
     return CreateBlockAlignedLoad(CreateGEP(ptr, index));
@@ -150,10 +147,6 @@ inline llvm::LoadInst * IDISA_Builder::CreateBlockAlignedLoad(llvm::Value * cons
     return CreateBlockAlignedLoad(CreateGEP(ptr, indices));
 }
 
-inline void IDISA_Builder::CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr) {
-    CreateAlignedStore(value, ptr, mBitBlockWidth / 8);
-}
-
 inline void IDISA_Builder::CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr, llvm::Value * const index) {
     CreateBlockAlignedStore(value, CreateGEP(ptr, index));
 }
@@ -161,8 +154,6 @@ inline void IDISA_Builder::CreateBlockAlignedStore(llvm::Value * const value, ll
 inline void IDISA_Builder::CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr, std::initializer_list<llvm::Value *> indices) {
     CreateBlockAlignedStore(value, CreateGEP(ptr, indices));
 }
-    
-
     
 }
 #endif // IDISA_BUILDER_H
