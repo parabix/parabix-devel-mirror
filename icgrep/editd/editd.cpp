@@ -205,58 +205,50 @@ void buildPatternKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder, c
 }
 
 
-Function * editdPipeline(Module * m, IDISA::IDISA_Builder * iBuilder, const std::vector<std::string> & patterns) {
+void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & patterns) {
     
+    IDISA::IDISA_Builder * const iBuilder = pxDriver.getIDISA_Builder();
+    Module * const m = iBuilder->getModule();
     Type * const sizeTy = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
     Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), 8), 1), 0);
     
     Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, sizeTy, nullptr));
     main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
-    
+    auto args = main->arg_begin();
     Value * const inputStream = &*(args++);
     inputStream->setName("input");
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
-    
+    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
+
+
     ExternalFileBuffer ChStream(iBuilder, iBuilder->getStreamSetTy(4));
     SingleBlockBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(editDistance + 1));
 
     MMapSourceKernel mmapK(iBuilder);
-    std::unique_ptr<Module> mmapM = mmapK.createKernelModule({}, {&ChStream});
     mmapK.setInitialArguments({fileSize});
-    
+    pxDriver.addKernelCall(mmapK, {}, {&ChStream});
+
     PabloKernel editdk(iBuilder, "editd",
                         {Binding{iBuilder->getStreamSetTy(4), "pat"}},
                         {Binding{iBuilder->getStreamSetTy(editDistance + 1), "E"}});
 
-    buildPatternKernel(editdk, iBuilder, patterns);
-
-    kernel::editdScanKernel editdScanK(iBuilder, editDistance);
-    
-    std::unique_ptr<Module> editdM = editdk.createKernelModule({&ChStream}, {&MatchResults});
-    std::unique_ptr<Module> scanM = editdScanK.createKernelModule({&MatchResults}, {});                
-    
-    mmapK.addKernelDeclarations(m);
-    editdk.addKernelDeclarations(m);
-    editdScanK.addKernelDeclarations(m);
-
-    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
-
     ChStream.setStreamSetBuffer(inputStream);
     MatchResults.allocateBuffer();
-    
-    generatePipelineLoop(iBuilder, {&mmapK, &editdk, &editdScanK});
+
+    buildPatternKernel(editdk, iBuilder, patterns);
+    pxDriver.addKernelCall(editdk, {&ChStream}, {&MatchResults});
+
+    kernel::editdScanKernel editdScanK(iBuilder, editDistance);
+    pxDriver.addKernelCall(editdScanK, {&MatchResults}, {});
         
+    pxDriver.generatePipelineIR();
+
     iBuilder->CreateRetVoid();
-    
-    Linker L(*m);
-    L.linkInModule(std::move(mmapM));
-    L.linkInModule(std::move(editdM));
-    L.linkInModule(std::move(scanM));
-    
-    return main;
+
+    pxDriver.JITcompileMain();
+    pxDriver.linkAndFinalize();
 }
 
 void buildPreprocessKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder) {
@@ -279,18 +271,7 @@ void buildPreprocessKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder
     pablo_function_passes(&kernel);
 }
 
-//
-// Handler for errors reported through llvm::report_fatal_error.  Report
-// and signal error code 2 (grep convention).
-//
-static void error_handler(void *UserData, const std::string &Message, bool GenCrashDiag) {
-    throw std::runtime_error(Message);
-}
-
-
 void preprocessPipeline(ParabixDriver & pxDriver) {
-
-    llvm::install_fatal_error_handler(&error_handler);
 
     IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
     Module * m = iBuilder->getModule();
@@ -341,15 +322,8 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 
     iBuilder->CreateRetVoid();
 
-    errs() << "JitCompileMain()\n";
-
     pxDriver.JITcompileMain();
-
-    errs() << "linkAndFinalize()\n";
-
     pxDriver.linkAndFinalize();
-
-    errs() << "done\n";
 }
 
 
@@ -368,20 +342,15 @@ preprocessFunctionType preprocessCodeGen() {
 
 typedef void (*editdFunctionType)(char * byte_data, size_t filesize);
 
-editdFunctionType editdCodeGen(const std::vector<std::string> & patterns) {
-                            
+editdFunctionType editdCodeGen(const std::vector<std::string> & patterns) {                           
     LLVMContext TheContext;
     Module * M = new Module("editd", TheContext);
-    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-
-    llvm::Function * main_IR = editdPipeline(M, idb, patterns);
-
-    ExecutionEngine * editdEngine = JIT_to_ExecutionEngine(M);
-    
-    editdEngine->finalizeObject();
-
+    IDISA::IDISA_Builder * const idb = IDISA::GetIDISA_Builder(M);
+    ParabixDriver pxDriver(idb);
+    editdPipeline(pxDriver, patterns);
+    auto f = reinterpret_cast<editdFunctionType>(pxDriver.getPointerToMain());
     delete idb;
-    return reinterpret_cast<editdFunctionType>(editdEngine->getPointerToFunction(main_IR));
+    return f;
 }
 
 char * chStream;

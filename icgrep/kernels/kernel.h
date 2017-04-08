@@ -29,6 +29,7 @@ protected:
     enum class Port { Input, Output };
     using StreamPort = std::pair<Port, unsigned>;
     using StreamMap = boost::container::flat_map<std::string, StreamPort>;
+    using StreamSetBuffers = std::vector<parabix::StreamSetBuffer *>;
 public:
     
     // Kernel Signatures and Module IDs
@@ -64,18 +65,18 @@ public:
     
     // Create a module stub for the kernel, populated only with its Module ID.     
     //
-    std::unique_ptr<llvm::Module> createKernelStub();
+    std::unique_ptr<llvm::Module> createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
     
     // Create a module for the kernel, including the kernel state type declaration and
     // the full implementation of all required methods.     
     //
-    std::unique_ptr<llvm::Module> createKernelModule(const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
+    std::unique_ptr<llvm::Module> createKernelModule(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
     
-    void setCallParameters(const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
+    void setCallParameters(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
 
     // Generate the Kernel to the current module (iBuilder->getModule()).
     void generateKernel();
-    void generateKernel(const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
+    void generateKernel(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
     
     void createInstance() override;
 

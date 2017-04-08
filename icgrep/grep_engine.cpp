@@ -287,6 +287,9 @@ void initFileResult(std::vector<std::string> filenames){
 
 template<typename CodeUnit>
 void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_end, const CodeUnit * const buffer, const size_t filesize, const size_t fileIdx) {
+
+//    errs() << lineNum << " : (" << line_start << ", " << line_end << ", " << filesize << ")\n";
+
     assert (buffer);
     assert (line_start <= line_end);
     assert (line_end <= filesize);
@@ -572,7 +575,6 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     }
 
     #ifdef CUDA_ENABLED
-    Function * mainCPUFn = nullptr;
     if(codegen::NVPTX){
         Function * kernelFunction = generateGPUKernel(M, iBuilder, CountOnly);
         MDNode * Node = MDNode::get(M->getContext(),
@@ -583,7 +585,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
         NMD->addOperand(Node);
 
         Compile2PTX(M, IRFilename, PTXFilename);
-        mainCPUFn = generateCPUKernel(cpuM, CPUBuilder, mGrepType);
+        Function * mainCPUFn = generateCPUKernel(cpuM, CPUBuilder, mGrepType);
         if (CountOnly) return;
     }
     #endif

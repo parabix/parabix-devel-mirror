@@ -99,24 +99,24 @@ private:
 
 namespace {
 
-// NOTE: Currently, LLVM TypeBuilder only work for up to 5 arguments. The following templates
-// avoid that limit but should be deprecated if the TypeBuilder ever supports n-ary functions.
+// NOTE: Currently, LLVM TypeBuilder can deduce FuntionTypes for only up to 5 arguments. The following
+// templates have no limit but should be deprecated if the TypeBuilder ever supports n-ary functions.
 
-template <typename... Args>
+template<unsigned i, typename... Args>
 class ParameterTypeBuilder;
 
-template<typename A1, typename... An>
-struct ParameterTypeBuilder<A1, An...> {
-    static void get(llvm::LLVMContext & C, std::vector<llvm::Type *> & params) {
-        ParameterTypeBuilder<A1>::get(C, params);
-        ParameterTypeBuilder<An...>::get(C, params);
+template<unsigned i, typename A1, typename... An>
+struct ParameterTypeBuilder<i, A1, An...> {
+    static void get(llvm::LLVMContext & C, llvm::Type ** params) {
+        ParameterTypeBuilder<i, A1>::get(C, params);
+        ParameterTypeBuilder<i + 1, An...>::get(C, params);
     }
 };
 
-template<typename A>
-struct ParameterTypeBuilder<A> {
-    static void get(llvm::LLVMContext & C, std::vector<llvm::Type *> & params) {
-        params.push_back(llvm::TypeBuilder<A, false>::get(C));
+template<unsigned i, typename A>
+struct ParameterTypeBuilder<i, A> {
+    static void get(llvm::LLVMContext & C, llvm::Type ** params) {
+        params[i] = llvm::TypeBuilder<A, false>::get(C);
     }
 };
 
@@ -126,19 +126,16 @@ struct FunctionTypeBuilder;
 template<typename R, typename... Args>
 struct FunctionTypeBuilder<R(Args...)> {
     static llvm::FunctionType * get(llvm::LLVMContext & C) {
-        auto result = llvm::TypeBuilder<R, false>::get(C);
-        std::vector<llvm::Type *> params(0);
-        params.reserve(sizeof...(Args));
-        ParameterTypeBuilder<Args...>::get(C, params);
-        return llvm::FunctionType::get(result, params, false);
+        llvm::Type * params[sizeof...(Args)];
+        ParameterTypeBuilder<0, Args...>::get(C, params);
+        return llvm::FunctionType::get(llvm::TypeBuilder<R, false>::get(C), params, false);
     }
 };
 
 template<typename R>
 struct FunctionTypeBuilder<R()> {
     static llvm::FunctionType * get(llvm::LLVMContext & C) {
-        auto result = llvm::TypeBuilder<R, false>::get(C);
-        return llvm::FunctionType::get(result, false);
+        return llvm::FunctionType::get(llvm::TypeBuilder<R, false>::get(C), false);
     }
 };
 
@@ -147,7 +144,7 @@ struct FunctionTypeBuilder<R()> {
 template <typename ExternalFunctionType>
 void ParabixDriver::addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const {
     llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(iBuilder->getContext());
-    assert ("FunctionTypeBuilder did not correctly resolve the current function type." && type);
+    assert ("FunctionTypeBuilder did not resolve a function type." && type);
     addExternalLink(kb, name, type, reinterpret_cast<void *>(functionPtr));
 }
 

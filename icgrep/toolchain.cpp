@@ -321,9 +321,8 @@ ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
         } else {
             mCache = llvm::make_unique<ParabixObjectCache>(codegen::ObjectCacheDir);
         }
-        if (mCache) {
-            mEngine->setObjectCache(mCache.get());
-        }
+        assert (mCache);
+        mEngine->setObjectCache(mCache.get());
     }
 }
 
@@ -364,10 +363,7 @@ void ParabixDriver::JITcompileMain () {
 void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
     assert (mModuleMap.count(&kb) == 0);
     mKernelList.push_back(&kb);
-    Module * saveM = iBuilder->getModule();
-    mModuleMap.emplace(&kb, std::move(kb.createKernelStub()));
-    assert (iBuilder->getModule() == saveM);
-    kb.setCallParameters(inputs, outputs);
+    mModuleMap.emplace(&kb, std::move(kb.createKernelStub(inputs, outputs)));
 }
 
 void ParabixDriver::generatePipelineIR() {
@@ -393,24 +389,30 @@ void ParabixDriver::addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef 
 
 void ParabixDriver::linkAndFinalize() {
     for (kernel::KernelBuilder * kb : mKernelList) {
-        Module * saveM = iBuilder->getModule();
         const auto f = mModuleMap.find(kb);
         if (LLVM_UNLIKELY(f == mModuleMap.end())) {
             report_fatal_error("linkAndFinalize was called twice!");
         }
         std::unique_ptr<Module> km(std::move(f->second));
-        std::string moduleID = km->getModuleIdentifier();
-        std::string signature;
-        if (kb->moduleIDisSignature()) {
-            signature = moduleID;
-        } else {
-            kb->generateKernelSignature(signature);
+        bool uncachedObject = true;
+        if (mCache) {
+            std::string moduleID = km->getModuleIdentifier();
+            std::string signature;
+            if (kb->moduleIDisSignature()) {
+                signature = moduleID;
+            } else {
+                kb->generateKernelSignature(signature);
+            }
+            if (mCache->loadCachedObjectFile(moduleID, signature)) {
+                uncachedObject = false;
+            }
         }
-        if (!(mCache && mCache->loadCachedObjectFile(moduleID, signature))) {
+        if (uncachedObject) {
+            Module * const saveM = iBuilder->getModule();
             iBuilder->setModule(km.get());
             kb->generateKernel();
-        }
-        iBuilder->setModule(saveM);
+            iBuilder->setModule(saveM);
+        }        
         mEngine->addModule(std::move(km));
     }
     mEngine->finalizeObject();
@@ -420,4 +422,3 @@ void ParabixDriver::linkAndFinalize() {
 void * ParabixDriver::getPointerToMain() {
     return mEngine->getPointerToNamedFunction("Main");
 }
-

@@ -151,7 +151,6 @@ bool ParabixObjectCache::getCacheFilename(const std::string &ModID, Path &CacheN
     size_t PrefixLength = Prefix.length();
     if (ModID.substr(0, PrefixLength) != Prefix)
         return false;
-
     CacheName = CacheDir;
     sys::path::append(CacheName, ModID.substr(PrefixLength) + ".o");
 #ifdef OBJECT_CACHE_DEBUG

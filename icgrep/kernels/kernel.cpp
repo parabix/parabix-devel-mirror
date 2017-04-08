@@ -119,7 +119,8 @@ void KernelBuilder::prepareKernel() {
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, getName());
 }
 
-std::unique_ptr<Module> KernelBuilder::createKernelStub() {
+std::unique_ptr<Module> KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
+    setCallParameters(inputs, outputs);
     std::string cacheName = getName() + "_" + iBuilder->getBuilderUniqueName();
     for (auto & b: mStreamSetInputBuffers) {
         cacheName += ":" + b->getUniqueID();
@@ -127,10 +128,12 @@ std::unique_ptr<Module> KernelBuilder::createKernelStub() {
     for (auto & b: mStreamSetOutputBuffers) {
         cacheName += ":" + b->getUniqueID();
     }
+    prepareKernel();
     return make_unique<Module>(cacheName, iBuilder->getContext());
 }
 
-void KernelBuilder::setCallParameters(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
+void KernelBuilder::setCallParameters(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
+    assert (mStreamSetInputBuffers.empty());
     mStreamSetInputBuffers.assign(inputs.begin(), inputs.end());
     for (unsigned i = 0; i < mStreamSetInputBuffers.size(); ++i) {
         if (LLVM_UNLIKELY(mStreamSetInputBuffers[i] == nullptr)) {
@@ -143,7 +146,7 @@ void KernelBuilder::setCallParameters(const std::vector<StreamSetBuffer *> & inp
                            " input stream sets but generateKernel() was given "
                            + std::to_string(mStreamSetInputBuffers.size()));
     }
-    
+    assert (mStreamSetOutputBuffers.empty());
     mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
         if (LLVM_UNLIKELY(mStreamSetOutputBuffers[i] == nullptr)) {
@@ -155,9 +158,7 @@ void KernelBuilder::setCallParameters(const std::vector<StreamSetBuffer *> & inp
         report_fatal_error(getName() + ": expected " + std::to_string(mStreamSetOutputs.size())
                            + " output stream sets but generateKernel() was given "
                            + std::to_string(mStreamSetOutputBuffers.size()));
-    }
-    prepareKernel(); // possibly overridden by the KernelBuilder subtype
-    
+    }        
 }    
 
 
@@ -169,10 +170,10 @@ void KernelBuilder::generateKernelSignature(std::string &signature) {
 }
 
 
-std::unique_ptr<Module> KernelBuilder::createKernelModule(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
+std::unique_ptr<Module> KernelBuilder::createKernelModule(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
     auto saveModule = iBuilder->getModule();
     auto savePoint = iBuilder->saveIP();
-    auto module = createKernelStub();
+    auto module = createKernelStub(inputs, outputs);
     iBuilder->setModule(module.get());
     generateKernel(inputs, outputs);
     iBuilder->setModule(saveModule);
@@ -180,8 +181,9 @@ std::unique_ptr<Module> KernelBuilder::createKernelModule(const std::vector<Stre
     return module;
 }
 
-void KernelBuilder::generateKernel(const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
+void KernelBuilder::generateKernel(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
     setCallParameters(inputs, outputs);
+    prepareKernel(); // possibly overridden by the KernelBuilder subtype
     generateKernel();
 }
 

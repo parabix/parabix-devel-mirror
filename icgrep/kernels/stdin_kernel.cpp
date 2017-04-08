@@ -67,7 +67,7 @@ void StdInKernel::generateDoSegmentMethod(Value * /* doFinal */, const std::vect
 }
 
 StdInKernel::StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "stdin_source", {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "InputStream"}}, {}, {}, {})
+: SegmentOrientedKernel(iBuilder, "Parabix:stdin_source", {}, {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "InputStream"}}, {}, {}, {})
 , mSegmentBlocks(blocksPerSegment)
 , mCodeUnitWidth(codeUnitWidth) {
     
