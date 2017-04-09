@@ -25,9 +25,8 @@ using namespace llvm;
 
 LineBreakKernelBuilder::LineBreakKernelBuilder (
 IDISA::IDISA_Builder * iBuilder
-, std::string linebreak
 , unsigned basisBitsCount)
-: PabloKernel(iBuilder, "Parabix:" + linebreak + "_kernel", {Binding{iBuilder->getStreamSetTy(basisBitsCount), "basis"}}, {Binding{iBuilder->getStreamSetTy(1), "linebreak", Add1()}}) {
+: PabloKernel(iBuilder, "Parabix:lb_kernel", {Binding{iBuilder->getStreamSetTy(basisBitsCount), "basis"}}, {Binding{iBuilder->getStreamSetTy(1), "linebreak", Add1()}}) {
 
     CC_Compiler ccc(this, getInput(0));
     auto & builder = ccc.getBuilder();

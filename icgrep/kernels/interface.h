@@ -38,40 +38,39 @@ namespace llvm { class Value; }
 // 
 
 struct ProcessingRate  {
-    enum ProcessingRateKind : uint8_t {Fixed, RoundUp, Max, Add1, Unknown};
-    ProcessingRate() {}
+    enum class ProcessingRateKind : uint8_t { Fixed, RoundUp, Add1, Max, Unknown };
     ProcessingRateKind getKind() const {return mKind;}
-    bool isExact() const {return (mKind == Fixed)||(mKind == RoundUp)||(mKind == Add1) ;}
+    bool isExact() const {return (mKind == ProcessingRateKind::Fixed)||(mKind == ProcessingRateKind::RoundUp)||(mKind == ProcessingRateKind::Add1) ;}
     bool isUnknown() const { return !isExact(); }
     llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems, llvm::Value * doFinal = nullptr) const;
-    friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet);
-    friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet);
-    friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string referenceStreamSet);    
-    friend ProcessingRate Add1(std::string referenceStreamSet);
+    friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet);
+    friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet);
+    friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string && referenceStreamSet);
+    friend ProcessingRate Add1(std::string && referenceStreamSet);
     friend ProcessingRate UnknownRate();
     std::string referenceStreamSet() const { return mReferenceStreamSet;}
 protected:
-    ProcessingRate(ProcessingRateKind k, unsigned numerator, unsigned denominator, std::string referenceStreamSet) 
+    ProcessingRate(ProcessingRateKind k, unsigned numerator, unsigned denominator, std::string && referenceStreamSet)
     : mKind(k), mRatioNumerator(numerator), mRatioDenominator(denominator), mReferenceStreamSet(referenceStreamSet) {}
 private:
-    ProcessingRateKind mKind;
-    uint16_t mRatioNumerator;
-    uint16_t mRatioDenominator;
-    std::string mReferenceStreamSet;
+    const ProcessingRateKind mKind;
+    const uint16_t mRatioNumerator;
+    const uint16_t mRatioDenominator;
+    const std::string mReferenceStreamSet;
 }; 
 
-ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1, std::string referenceStreamSet = "");
-ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1, std::string referenceStreamSet = "");
-ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string referenceStreamSet = "");
-ProcessingRate Add1(std::string referenceStreamSet = "");
+ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1, std::string && referenceStreamSet = "");
+ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1, std::string && referenceStreamSet = "");
+ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string &&referenceStreamSet = "");
+ProcessingRate Add1(std::string && referenceStreamSet = "");
 ProcessingRate UnknownRate();
 
 struct Binding {
     Binding(llvm::Type * type, const std::string & name, ProcessingRate r = FixedRatio(1))
     : type(type), name(name), rate(r) { }
-    llvm::Type *        type;
-    std::string         name;
-    ProcessingRate      rate;
+    llvm::Type * const        type;
+    const std::string         name;
+    const ProcessingRate      rate;
 };
 
 class KernelInterface {

@@ -15,6 +15,7 @@
 namespace llvm { class ExecutionEngine; }
 namespace llvm { class Module; }
 namespace llvm { class TargetMachine; }
+namespace llvm { class formatted_raw_ostream; }
 namespace llvm { namespace cl { class OptionCategory; } }
 namespace IDISA { class IDISA_Builder; }
 namespace kernel { class KernelBuilder; }
@@ -26,7 +27,7 @@ const llvm::cl::OptionCategory * codegen_flags();
 // Command Parameters
 enum DebugFlags {
     ShowIR,
-#if LLVM_VERSION_MINOR > 6
+#ifndef USE_LLVM_3_6
     ShowASM,
 #endif
     SerializeThreads
@@ -56,24 +57,13 @@ void AddParabixVersionPrinter();
 
 bool AVX2_available();
 
-llvm::ExecutionEngine * JIT_to_ExecutionEngine (llvm::Module * m);
-
-void ApplyObjectCache(llvm::ExecutionEngine * e);
-
-void generatePipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
-
-
 class ParabixDriver {
-
-    using ModuleMap = boost::container::flat_map<kernel::KernelBuilder *, std::unique_ptr<llvm::Module>>;
-
+    using ModuleMap = boost::container::flat_map<kernel::KernelBuilder *, llvm::Module *>;
 public:
     ParabixDriver(IDISA::IDISA_Builder * iBuilder);
     
     IDISA::IDISA_Builder * getIDISA_Builder() {return iBuilder;}
     
-    void JITcompileMain ();
-
     void addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
     
     void generatePipelineIR();
@@ -99,7 +89,7 @@ private:
 
 namespace {
 
-// NOTE: Currently, LLVM TypeBuilder can deduce FuntionTypes for only up to 5 arguments. The following
+// NOTE: Currently, LLVM TypeBuilder can deduce FuntionTypes for up to 5 arguments. The following
 // templates have no limit but should be deprecated if the TypeBuilder ever supports n-ary functions.
 
 template<unsigned i, typename... Args>

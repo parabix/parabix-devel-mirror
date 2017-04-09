@@ -486,10 +486,13 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
         KernelBuilder * const kernel = kernels[k];
         Value * const instance = kernel->getInstance();
         std::vector<Value *> args = {instance, terminated};
-        for (unsigned j = 0; j < kernel->getStreamInputs().size(); j++) {
+        for (unsigned i = 0; i < kernel->getStreamInputs().size(); ++i) {
             unsigned producerKernel, outputIndex;
-            std::tie(producerKernel, outputIndex) = producer[k][j];
+            std::tie(producerKernel, outputIndex) = producer[k][i];
             args.push_back(ProducerPos[producerKernel][outputIndex]);
+        }
+        for (unsigned i = 0; i < kernel->getStreamOutputs().size(); ++i) {
+            args.push_back(iBuilder->getSize(0));
         }
         kernel->createDoSegmentCall(args);
         if (!kernel->hasNoTerminateAttribute()) {
@@ -501,7 +504,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
             produced.push_back(kernel->getProducedItemCount(instance, streamOutputs[i].name, terminated));
         }
         ProducerPos.push_back(produced);
-        Value * segNo = kernel->acquireLogicalSegmentNo(instance);
+        Value * const segNo = kernel->acquireLogicalSegmentNo(instance);
         kernel->releaseLogicalSegmentNo(instance, iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
     }
 

@@ -247,7 +247,6 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
 
     iBuilder->CreateRetVoid();
 
-    pxDriver.JITcompileMain();
     pxDriver.linkAndFinalize();
 }
 
@@ -322,7 +321,6 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 
     iBuilder->CreateRetVoid();
 
-    pxDriver.JITcompileMain();
     pxDriver.linkAndFinalize();
 }
 

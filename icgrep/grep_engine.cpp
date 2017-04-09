@@ -61,14 +61,13 @@ static cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl
 static cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
 static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
 
-/// iNVESTIGATE: icgrep is reporting stdin is not empty even when nothing is being piped into it?
-static cl::opt<bool> UseStdIn("stdin", cl::desc("Read from standard input."), cl::cat(bGrepOutputOptions));
-
-bool isUTF_16 = false;
-std::string IRFilename = "icgrep.ll";
-std::string PTXFilename = "icgrep.ptx";
+#ifdef CUDA_ENABLED
+const auto IRFilename = "icgrep.ll";
+const auto PTXFilename = "icgrep.ptx";
+#endif
 
 static re::CC * parsedCodePointSet = nullptr;
+
 static std::vector<std::string> parsedPropertyValues;
 
 #ifdef CUDA_ENABLED 
@@ -287,9 +286,6 @@ void initFileResult(std::vector<std::string> filenames){
 
 template<typename CodeUnit>
 void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_end, const CodeUnit * const buffer, const size_t filesize, const size_t fileIdx) {
-
-//    errs() << lineNum << " : (" << line_start << ", " << line_end << ", " << filesize << ")\n";
-
     assert (buffer);
     assert (line_start <= line_end);
     assert (line_end <= filesize);
@@ -389,8 +385,25 @@ void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, 
     parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
 }
 
-void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16, GrepType grepType, const bool usingStdIn) {
-    isUTF_16 = UTF_16;
+inline void linkGrepFunction(ParabixDriver & pxDriver, const GrepType grepType, const bool UTF_16, kernel::KernelBuilder & kernel) {
+    switch (grepType) {
+        case GrepType::Normal:
+            if (UTF_16) {
+                pxDriver.addExternalLink(kernel, "matcher", &wrapped_report_match<uint16_t>);
+            } else {
+                pxDriver.addExternalLink(kernel, "matcher", &wrapped_report_match<uint8_t>);
+            }
+            break;
+        case GrepType::NameExpression:
+            pxDriver.addExternalLink(kernel, "matcher", &insert_codepoints);
+            break;
+        case GrepType::PropertyValue:
+            pxDriver.addExternalLink(kernel, "matcher", &insert_property_values);
+            break;
+    }
+}
+
+void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool CountOnly, const bool UTF_16, const GrepType grepType, const bool usingStdIn) {
     int addrSpace = 0;
     bool CPU_Only = true;
     Module * M = nullptr;
@@ -498,7 +511,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
     kernel::S2PKernel s2pk(iBuilder);
     pxDriver.addKernelCall(s2pk, {byteStream}, {&BasisBits});
 
-    kernel::LineBreakKernelBuilder linebreakK(iBuilder, "lb", encodingBits);
+    kernel::LineBreakKernelBuilder linebreakK(iBuilder, encodingBits);
     CircularBuffer LineBreakStream(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
     LineBreakStream.allocateBuffer();
 
@@ -516,7 +529,6 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
         iBuilder->CreateRet(icgrepK.createGetAccumulatorCall(icgrepK.getInstance(), "matchedLineCount"));
 
-        pxDriver.JITcompileMain();
         pxDriver.linkAndFinalize();
 
     } else {
@@ -549,27 +561,12 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 
             pxDriver.addKernelCall(scanMatchK, {&MatchResults, &LineBreakStream, byteStream}, {});
 
-            switch (grepType) {
-                case GrepType::Normal:
-                    if (UTF_16) {
-                        pxDriver.addExternalLink(scanMatchK, "matcher", &wrapped_report_match<uint16_t>);
-                    } else {
-                        pxDriver.addExternalLink(scanMatchK, "matcher", &wrapped_report_match<uint8_t>);
-                    }
-                    break;
-                case GrepType::NameExpression:
-                    pxDriver.addExternalLink(scanMatchK, "matcher", &insert_codepoints);
-                    break;
-                case GrepType::PropertyValue:
-                    pxDriver.addExternalLink(scanMatchK, "matcher", &insert_property_values);
-                    break;
-            }
+            linkGrepFunction(pxDriver, grepType, UTF_16, scanMatchK);
 
             pxDriver.generatePipelineIR();
 
             iBuilder->CreateRetVoid();
 
-            pxDriver.JITcompileMain();
             pxDriver.linkAndFinalize();
         }
     }
@@ -609,11 +606,12 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, bool Count
 }
 
 
-void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16, GrepType grepType, const bool usingStdIn) {
 
-    isUTF_16 = UTF_16;
+void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16, const GrepType grepType, const bool usingStdIn) {
+
     Module * M = new Module(moduleName + ":icgrep", getGlobalContext());;
     IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_Builder(M);;
+    ParabixDriver pxDriver(iBuilder);
 
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
@@ -638,94 +636,77 @@ void GrepEngine::multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> 
     StreamSetBuffer * byteStream = nullptr;
     kernel::KernelBuilder * sourceK = nullptr;
     if (usingStdIn) {
+        // TODO: use fstat(STDIN_FILENO) to see if we can mmap the stdin safely and avoid the calls to read
         byteStream = new ExtensibleBuffer(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize);
-        cast<ExtensibleBuffer>(byteStream)->allocateBuffer();
         sourceK = new kernel::StdInKernel(iBuilder, segmentSize);
     } else {
-        byteStream = new ExternalFileBuffer(iBuilder, iBuilder->getStreamSetTy(1, 8));
-        cast<ExternalFileBuffer>(byteStream)->setStreamSetBuffer(inputStream);
-        sourceK = new kernel::MMapSourceKernel(iBuilder, segmentSize);
-        sourceK->setInitialArguments({fileSize});
+        byteStream = new SourceFileBuffer(iBuilder, iBuilder->getStreamSetTy(1, 8));
+        sourceK = new kernel::FileSourceKernel(iBuilder, inputStream->getType(), segmentSize);
+        sourceK->setInitialArguments({inputStream, fileSize});
     }
-    sourceK->generateKernel({}, {byteStream});
+    byteStream->allocateBuffer();
+    pxDriver.addKernelCall(*sourceK, {}, {byteStream});
 
     CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
     BasisBits.allocateBuffer();
 
-    kernel::S2PKernel  s2pk(iBuilder);
-    s2pk.generateKernel({byteStream}, {&BasisBits});
+    kernel::S2PKernel s2pk(iBuilder);
+    pxDriver.addKernelCall(s2pk, {byteStream}, {&BasisBits});
+
+    kernel::LineBreakKernelBuilder linebreakK(iBuilder, encodingBits);
+    CircularBuffer LineBreakStream(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+    LineBreakStream.allocateBuffer();
+    pxDriver.addKernelCall(linebreakK, {&BasisBits}, {&LineBreakStream});
 
     std::vector<pablo::PabloKernel *> icgrepKs;
     std::vector<StreamSetBuffer *> MatchResultsBufs;
 
-    for(unsigned i=0; i<REs.size(); i++){
-        pablo::PabloKernel * icgrepK = new pablo::PabloKernel(iBuilder, "icgrep"+std::to_string(i), {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}});
+    for(unsigned i = 0; i < REs.size(); ++i){
+        pablo::PabloKernel * const icgrepK = new pablo::PabloKernel(iBuilder, "icgrep" + std::to_string(i), {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}});
         re::re2pablo_compiler(icgrepK, re::regular_expression_passes(REs[i]), false);
         pablo_function_passes(icgrepK);
-        icgrepKs.push_back(icgrepK);
-        CircularBuffer * MatchResults = new CircularBuffer(iBuilder, iBuilder->getStreamSetTy(2, 1), segmentSize * bufferSegments);
-        MatchResults->allocateBuffer();
-        MatchResultsBufs.push_back(MatchResults);
-    }
+        CircularBuffer * const matchResults = new CircularBuffer(iBuilder, iBuilder->getStreamSetTy(2, 1), segmentSize * bufferSegments);
+        matchResults->allocateBuffer();
 
-    std::vector<kernel::KernelBuilder *> KernelList;
-    KernelList.push_back(sourceK);
-    KernelList.push_back(&s2pk);
+        pxDriver.addKernelCall(*icgrepK, {&BasisBits, &LineBreakStream}, {matchResults});
+        icgrepKs.push_back(icgrepK);
+        MatchResultsBufs.push_back(matchResults);
+    }
 
     CircularBuffer mergedResults(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
     mergedResults.allocateBuffer();
 
     kernel::StreamsMerge streamsMergeK(iBuilder, 1, REs.size());
-    streamsMergeK.generateKernel(MatchResultsBufs, {&mergedResults});
-
-    kernel::LineBreakKernelBuilder linebreakK(iBuilder, "lb", encodingBits);
-    CircularBuffer LineBreakStream(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
-    LineBreakStream.allocateBuffer();
-    linebreakK.generateKernel({&BasisBits}, {&LineBreakStream});
-
-    KernelList.push_back(&linebreakK);
-    for(unsigned i=0; i<REs.size(); i++){
-        icgrepKs[i]->generateKernel({&BasisBits, &LineBreakStream}, {MatchResultsBufs[i]});
-        KernelList.push_back(icgrepKs[i]);
-    }
-    KernelList.push_back(&streamsMergeK);
+    pxDriver.addKernelCall(streamsMergeK, MatchResultsBufs, {&mergedResults});
 
     if (CountOnly) {
         kernel::MatchCount matchCountK(iBuilder);
-        matchCountK.generateKernel({&mergedResults}, {});
-
-        KernelList.push_back(&matchCountK);
-
-        generatePipeline(iBuilder, KernelList);
+        pxDriver.addKernelCall(matchCountK, {&mergedResults}, {});
+        pxDriver.generatePipelineIR();
         iBuilder->CreateRet(matchCountK.getScalarField(matchCountK.getInstance(), "matchedLineCount"));
-
+        pxDriver.linkAndFinalize();
     } else {
         kernel::ScanMatchKernel scanMatchK(iBuilder, grepType, encodingBits);
-        scanMatchK.generateKernel({byteStream, &mergedResults, &LineBreakStream}, {});
         scanMatchK.setInitialArguments({fileIdx});
-
-        KernelList.push_back(&scanMatchK);
-
-        generatePipeline(iBuilder, KernelList);
-
+        pxDriver.addKernelCall(scanMatchK, {&mergedResults, &LineBreakStream, byteStream}, {});
+        linkGrepFunction(pxDriver, grepType, UTF_16, scanMatchK);
+        pxDriver.generatePipelineIR();
         iBuilder->CreateRetVoid();
+        pxDriver.linkAndFinalize();
     }
 
-    mEngine = JIT_to_ExecutionEngine(M);
-    ApplyObjectCache(mEngine);
-    icgrep_Linking(M, mEngine);
-
-    mEngine->finalizeObject();
     delete iBuilder;
     delete sourceK;
     delete byteStream;
-
-    if (CountOnly) {
-        mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(mEngine->getPointerToFunction(mainFn));
-    } else {
-        mGrepFunction = reinterpret_cast<GrepFunctionType>(mEngine->getPointerToFunction(mainFn));
+    for (StreamSetBuffer * buf : MatchResultsBufs) {
+        delete buf;
     }
 
+    if (CountOnly) {
+        mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(pxDriver.getPointerToMain());
+    } else {
+        mGrepFunction = reinterpret_cast<GrepFunctionType>(pxDriver.getPointerToMain());
+    }
 }
 
 re::CC * GrepEngine::grepCodepoints() {
@@ -752,39 +733,12 @@ const std::vector<std::string> & GrepEngine::grepPropertyValues(const std::strin
     return parsedPropertyValues;
 }
 
-void icgrep_Linking(Module * m, ExecutionEngine * e) {
-    Module::FunctionListType & fns = m->getFunctionList();
-    for (auto it = fns.begin(), it_end = fns.end(); it != it_end; ++it) {
-        std::string fnName = it->getName().str();
-        if (fnName == "s2p_block") continue;
-        if (fnName == "process_block") continue;
-        if (fnName == "process_block_initialize_carries") continue;
-        
-        if (fnName == "wrapped_report_match8") {
-            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_report_match<uint8_t>);
-        }
-        if (fnName == "wrapped_report_match16") {
-            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_report_match<uint16_t>);
-        }
-        if (fnName == "insert_codepoints") {
-            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&insert_codepoints);
-        }
-        if (fnName == "insert_property_values") {
-            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&insert_property_values);
-        }
-    }
-}
-
 GrepEngine::GrepEngine()
 : mGrepFunction(nullptr)
 , mGrepFunction_CountOnly(nullptr)
 #ifdef CUDA_ENABLED
 , mGrepFunction_CPU(nullptr)
 #endif
-, mEngine(nullptr) {
+{
 
-}
-
-GrepEngine::~GrepEngine() {
-    delete mEngine;
 }

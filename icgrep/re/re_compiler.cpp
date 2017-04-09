@@ -197,23 +197,6 @@ void RE_Compiler::compileUnicodeNames(RE *& re) {
     re = resolveUnicodeProperties(re);
 }
 
-//void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatches) {
-//    PabloAST * match_follow = mPB.createMatchStar(markerVar(match_result), mAny);
-//    if (InvertMatches) {
-//        match_follow = mPB.createNot(match_follow);
-//    }
-//    PabloAST * matches = mPB.createAnd(match_follow, mLineBreak, "matches");
-//    if (mCountOnly) {
-//        Var * const output = mKernel->getOutputScalarVar("matchedLineCount");
-//        PabloBuilder nestedCount = PabloBuilder::Create(mPB);
-//        mPB.createIf(matches, nestedCount);
-//        nestedCount.createAssign(output, nestedCount.createCount(matches));
-//    } else {
-//        Var * const output = mKernel->getOutputStreamVar("output");
-//        mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), matches);
-//    }
-//}
-
 void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatches) {
     PabloAST * match_follow = mPB.createMatchStar(markerVar(match_result), mAny);
     if (InvertMatches) {

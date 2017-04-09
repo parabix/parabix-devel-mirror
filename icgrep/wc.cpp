@@ -184,8 +184,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     iBuilder->CreateCall(record_counts_routine, std::vector<Value *>({lineCount, wordCount, charCount, fileSize, fileIdx}));
     
     iBuilder->CreateRetVoid();
-    
-    pxDriver.JITcompileMain();
+
     pxDriver.linkAndFinalize();
 }
 

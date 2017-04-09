@@ -96,7 +96,7 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
     pxDriver.generatePipelineIR();
 
     iBuilder->CreateRetVoid();
-    pxDriver.JITcompileMain();
+
     pxDriver.linkAndFinalize();
 }
 

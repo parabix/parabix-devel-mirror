@@ -10,8 +10,10 @@
 #include <llvm/Support/CommandLine.h>              // for OptionCategory
 #include <llvm/Support/TargetSelect.h>             // for InitializeNativeTa...
 #include <llvm/Support/raw_ostream.h>              // for errs, raw_ostream
+#include <llvm/Support/FormattedStream.h>
 #include <llvm/ADT/SmallString.h>                  // for SmallString
 #include <llvm/IR/LegacyPassManager.h>             // for PassManager
+#include <llvm/IR/IRPrintingPasses.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/InitializePasses.h>                 // for initializeCodeGen
 #include <llvm/PassRegistry.h>                     // for PassRegistry
@@ -40,14 +42,14 @@ static cl::OptionCategory CodeGenOptions("Code Generation Options", "These optio
 
 static cl::bits<DebugFlags>
 DebugOptions(cl::values(clEnumVal(ShowIR, "Print generated LLVM IR."),
-#if LLVM_VERSION_MINOR > 6
+#ifndef USE_LLVM_3_6
                         clEnumVal(ShowASM, "Print assembly code."),
 #endif
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
                         clEnumValEnd), cl::cat(CodeGenOptions));
 
 static cl::opt<std::string> IROutputFilename("dump-generated-IR-output", cl::init(""), cl::desc("output IR filename"), cl::cat(CodeGenOptions));
-#if LLVM_VERSION_MINOR > 6
+#ifndef USE_LLVM_3_6
 static cl::opt<std::string> ASMOutputFilename("asm-output", cl::init(""), cl::desc("output ASM filename"), cl::cat(CodeGenOptions));
 static cl::opt<bool> AsmVerbose("asm-verbose",
                                 cl::desc("Add comments to directives."),
@@ -59,7 +61,7 @@ static cl::opt<char, true> OptLevelOption("O", cl::desc("Optimization level. [-O
                               cl::cat(CodeGenOptions), cl::Prefix, cl::ZeroOrMore, cl::init('1'));
 
 
-static cl::opt<bool> EnableObjectCache("enable-object-cache", cl::init(false), cl::desc("Enable object caching"), cl::cat(CodeGenOptions));
+static cl::opt<bool> EnableObjectCache("enable-object-cache", cl::init(true), cl::desc("Enable object caching"), cl::cat(CodeGenOptions));
 
 static cl::opt<std::string> ObjectCacheDir("object-cache-dir", cl::init(""), cl::desc("Path to the object cache diretory"), cl::cat(CodeGenOptions));
 
@@ -88,8 +90,6 @@ bool DebugOptionIsSet(DebugFlags flag) {return DebugOptions.isSet(flag);}
 static cl::opt<bool> pipelineParallel("enable-pipeline-parallel", cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(CodeGenOptions));
     
 static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
-
-
     
 #ifdef CUDA_ENABLED
 bool NVPTX;
@@ -99,7 +99,6 @@ static cl::opt<int, true> GroupNumOption("group-num", cl::location(GroupNum), cl
 #endif
 
 }
-
 
 #ifdef CUDA_ENABLED
 void setNVPTXOption(){
@@ -139,8 +138,6 @@ void AddParabixVersionPrinter() {
     cl::AddExtraVersionPrinter(&printParabixVersion);
 }
 
-
-
 void setAllFeatures(EngineBuilder &builder) {
     StringMap<bool> HostCPUFeatures;
     if (sys::getHostCPUFeatures(HostCPUFeatures)) {
@@ -160,119 +157,6 @@ bool AVX2_available() {
         return ((f != HostCPUFeatures.end()) && f->second);
     }
     return false;
-}
-
-#ifndef USE_LLVM_3_6
-void WriteAssembly (TargetMachine *TM, Module * m) {
-    legacy::PassManager PM;
-
-    SmallString<128> Str;
-    raw_svector_ostream dest(Str);
-
-    if (TM->addPassesToEmitFile(PM, dest, TargetMachine::CGFT_AssemblyFile ) ) {
-        throw std::runtime_error("LLVM error: addPassesToEmitFile failed.");
-    }
-    PM.run(*m);
-
-    if (codegen::ASMOutputFilename.empty()) {
-        errs() << Str;
-    } else {
-        std::error_code error;
-        raw_fd_ostream out(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None);
-        out << Str;
-    }
-}
-#endif
-
-ExecutionEngine * JIT_to_ExecutionEngine (Module * m) {
-
-    // Use the pass manager to optimize the function.
-    #ifndef NDEBUG
-    try {
-    #endif
-    legacy::PassManager PM;
-    #ifndef NDEBUG
-    PM.add(createVerifierPass());
-    #endif
-    PM.add(createReassociatePass());             //Reassociate expressions.
-    PM.add(createGVNPass());                     //Eliminate common subexpressions.
-    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-    PM.add(createCFGSimplificationPass());    
-    PM.run(*m);
-    #ifndef NDEBUG
-    } catch (...) { m->dump(); throw; }
-    #endif
-    InitializeNativeTarget();
-    InitializeNativeTargetAsmPrinter();
-    InitializeNativeTargetAsmParser();
-
-    PassRegistry * Registry = PassRegistry::getPassRegistry();
-    initializeCore(*Registry);
-    initializeCodeGen(*Registry);
-    initializeLowerIntrinsicsPass(*Registry);
-
-    std::string errMessage;
-    EngineBuilder builder{std::unique_ptr<Module>(m)};
-    builder.setErrorStr(&errMessage);
-    TargetOptions opts = InitTargetOptionsFromCodeGenFlags();
-    opts.MCOptions.AsmVerbose = codegen::AsmVerbose;
-
-    builder.setTargetOptions(opts);
-    builder.setVerifyModules(true);
-    CodeGenOpt::Level optLevel = CodeGenOpt::Level::None;
-    switch (codegen::OptLevel) {
-        case '0': optLevel = CodeGenOpt::None; break;
-        case '1': optLevel = CodeGenOpt::Less; break;
-        case '2': optLevel = CodeGenOpt::Default; break;
-        case '3': optLevel = CodeGenOpt::Aggressive; break;
-        default: errs() << codegen::OptLevel << " is an invalid optimization level.\n";
-    }
-    builder.setOptLevel(optLevel);
-
-    setAllFeatures(builder);
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
-        if (codegen::IROutputFilename.empty()) {
-            m->dump();
-        } else {
-            std::error_code error;
-            raw_fd_ostream out(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
-            m->print(out, nullptr);
-        }
-    }
-#if LLVM_VERSION_MINOR > 6
-    if (codegen::DebugOptionIsSet(codegen::ShowASM)) {
-        WriteAssembly(builder.selectTarget(), m);
-    }
-#endif
-    ExecutionEngine * engine = builder.create();
-    if (engine == nullptr) {
-        throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
-    }
-    return engine;
-}
-
-void ApplyObjectCache(ExecutionEngine * e) {
-    ParabixObjectCache * cache = nullptr;
-    if (codegen::EnableObjectCache) {
-        if (codegen::ObjectCacheDir.empty())
-            // Default is $HOME/.cache/icgrep
-            cache = new ParabixObjectCache();
-        else
-            cache = new ParabixObjectCache(codegen::ObjectCacheDir);
-        e->setObjectCache(cache);
-    }
-}
-
-void generatePipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels) {
-    if (codegen::pipelineParallel) {
-        generateParallelPipeline(iBuilder, kernels);
-    } else if (codegen::segmentPipelineParallel) {
-        generateSegmentParallelPipeline(iBuilder, kernels);
-    } else {
-        codegen::ThreadNum = 1;
-        generatePipelineLoop(iBuilder, kernels);
-    }
 }
 
 ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
@@ -315,7 +199,7 @@ ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
     mTarget = builder.selectTarget();
-    if (codegen::EnableObjectCache) {
+    if (LLVM_LIKELY(codegen::EnableObjectCache && codegen::DebugOptions.getBits() == 0)) {
         if (codegen::ObjectCacheDir.empty()) {
             mCache = llvm::make_unique<ParabixObjectCache>();
         } else {
@@ -326,44 +210,10 @@ ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
     }
 }
 
-void ParabixDriver::JITcompileMain () {
-    // Use the pass manager to optimize the function.
-    #ifndef NDEBUG
-    try {
-    #endif
-    legacy::PassManager PM;
-    #ifndef NDEBUG
-    PM.add(createVerifierPass());
-    #endif
-    PM.add(createReassociatePass());             //Reassociate expressions.
-    PM.add(createGVNPass());                     //Eliminate common subexpressions.
-    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-    PM.add(createCFGSimplificationPass());    
-    PM.run(*mMainModule);
-    #ifndef NDEBUG
-    } catch (...) { mMainModule->dump(); throw; }
-    #endif
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
-        if (codegen::IROutputFilename.empty()) {
-            mMainModule->dump();
-        } else {
-            std::error_code error;
-            raw_fd_ostream out(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
-            mMainModule->print(out, nullptr);
-        }
-    }
-    #if LLVM_VERSION_MINOR > 6
-    if (codegen::DebugOptionIsSet(codegen::ShowASM)) {
-        WriteAssembly(mTarget, mMainModule);
-    }
-    #endif
-}
-
 void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
     assert (mModuleMap.count(&kb) == 0);
     mKernelList.push_back(&kb);
-    mModuleMap.emplace(&kb, std::move(kb.createKernelStub(inputs, outputs)));
+    mModuleMap.emplace(&kb, kb.createKernelStub(inputs, outputs));
 }
 
 void ParabixDriver::generatePipelineIR() {
@@ -383,39 +233,79 @@ void ParabixDriver::generatePipelineIR() {
 void ParabixDriver::addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, FunctionType *type, void * functionPtr) const {
     const auto f = mModuleMap.find(&kb);
     assert ("addKernelCall(kb, ...) must be called before addExternalLink(kb, ...)" && f != mModuleMap.end());
-    llvm::Module * const m = f->second.get();
-    mEngine->addGlobalMapping(cast<Function>(m->getOrInsertFunction(name, type)), functionPtr);
+    mEngine->addGlobalMapping(cast<Function>(f->second->getOrInsertFunction(name, type)), functionPtr);
 }
 
 void ParabixDriver::linkAndFinalize() {
-    for (kernel::KernelBuilder * kb : mKernelList) {
-        const auto f = mModuleMap.find(kb);
-        if (LLVM_UNLIKELY(f == mModuleMap.end())) {
-            report_fatal_error("linkAndFinalize was called twice!");
+    Module * m = mMainModule;
+    #ifndef NDEBUG
+    try {
+    #endif
+    legacy::PassManager PM;
+    #ifndef NDEBUG
+    PM.add(createVerifierPass());
+    #endif
+    PM.add(createReassociatePass());             //Reassociate expressions.
+    PM.add(createGVNPass());                     //Eliminate common subexpressions.
+    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
+    PM.add(createCFGSimplificationPass());
+
+    raw_fd_ostream * IROutputStream = nullptr;
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
+        if (codegen::IROutputFilename.empty()) {
+            IROutputStream = new raw_fd_ostream(STDERR_FILENO, false, false);
+        } else {
+            std::error_code error;
+            IROutputStream = new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
         }
-        std::unique_ptr<Module> km(std::move(f->second));
+        PM.add(createPrintModulePass(*IROutputStream));
+    }
+
+    #ifndef USE_LLVM_3_6
+    raw_fd_ostream * ASMOutputStream = nullptr;
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowASM))) {
+        if (codegen::ASMOutputFilename.empty()) {
+            ASMOutputStream = new raw_fd_ostream(STDERR_FILENO, false, false);
+        } else {
+            std::error_code error;
+            ASMOutputStream = new raw_fd_ostream(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None);
+        }
+        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *ASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+            report_fatal_error("LLVM error: could not add emit assembly pass");
+        }
+    }
+    #endif
+
+    PM.run(*m);
+    for (auto pair : mModuleMap) {
+        kernel::KernelBuilder * const kb = std::get<0>(pair);
+        m = std::get<1>(pair);
         bool uncachedObject = true;
         if (mCache) {
-            std::string moduleID = km->getModuleIdentifier();
-            std::string signature;
-            if (kb->moduleIDisSignature()) {
-                signature = moduleID;
-            } else {
-                kb->generateKernelSignature(signature);
-            }
+            const std::string moduleID = m->getModuleIdentifier();
+            const std::string signature = kb->generateKernelSignature(moduleID);
             if (mCache->loadCachedObjectFile(moduleID, signature)) {
                 uncachedObject = false;
             }
         }
         if (uncachedObject) {
-            Module * const saveM = iBuilder->getModule();
-            iBuilder->setModule(km.get());
+            Module * const cm = iBuilder->getModule();
+            iBuilder->setModule(m);
             kb->generateKernel();
-            iBuilder->setModule(saveM);
+            PM.run(*m);
+            iBuilder->setModule(cm);
         }        
-        mEngine->addModule(std::move(km));
-    }
+        mEngine->addModule(std::unique_ptr<Module>(m));
+    }    
     mEngine->finalizeObject();
+
+    delete IROutputStream;
+    #ifndef USE_LLVM_3_6
+    delete ASMOutputStream;
+    #endif
+    #ifndef NDEBUG
+    } catch (...) { m->dump(); throw; }
+    #endif
     mModuleMap.clear();
 }
 

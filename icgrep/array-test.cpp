@@ -123,11 +123,12 @@ void generate(PabloKernel * kernel) {
 
 }
 
-Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
+void pipeline(ParabixDriver & pxDriver, const unsigned count) {
+
+    IDISA::IDISA_Builder * const iBuilder = pxDriver.getIDISA_Builder();
+    Module * const mod = iBuilder->getModule();
 
     Type * byteStreamTy = iBuilder->getStreamSetTy(1, 8);
-
-    Module * const mod = iBuilder->getModule();
 
     Function * const main = cast<Function>(mod->getOrInsertFunction("Main", iBuilder->getVoidTy(), byteStreamTy->getPointerTo(), iBuilder->getSizeTy(), nullptr));
     main->setCallingConv(CallingConv::C);
@@ -144,32 +145,28 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
     ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
     MMapSourceKernel mmapK(iBuilder, segmentSize);
-    mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
+
+    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
 
     CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
 
-    S2PKernel  s2pk(iBuilder);
-    s2pk.generateKernel({&ByteStream}, {&BasisBits});
+    S2PKernel s2pk(iBuilder);
+    pxDriver.addKernelCall(s2pk, {&ByteStream}, {&BasisBits});
 
     PabloKernel bm(iBuilder, "MatchParens",
         {Binding{iBuilder->getStreamSetTy(8), "input"}},
         {Binding{iBuilder->getStreamSetTy(count), "matches"}, Binding{iBuilder->getStreamTy(), "errors"}});
 
     generate(&bm);
-//    SSAPass::transform(&bm);
-
-//    pablo_function_passes(&bm);
-
-    bm.getEntryBlock()->print(errs());
 
     ExpandableBuffer matches(iBuilder, iBuilder->getStreamSetTy(count), segmentSize * bufferSegments);
     SingleBlockBuffer errors(iBuilder, iBuilder->getStreamTy());
 
-    bm.generateKernel({&BasisBits}, {&matches, &errors});
+    pxDriver.addKernelCall(bm, {&BasisBits}, {&matches, &errors});
 
     PrintStreamSet printer(iBuilder, {"matches", "errors"});
-    printer.generateKernel({&matches, &errors}, {});
+    pxDriver.addKernelCall(printer, {&matches, &errors}, {});
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main, 0));
 
@@ -178,12 +175,10 @@ Function * pipeline(IDISA::IDISA_Builder * iBuilder, const unsigned count) {
     matches.allocateBuffer();
     errors.allocateBuffer();
 
-//    generatePipeline(iBuilder, {&mmapK, &s2pk, &bm});
-
-    generatePipeline(iBuilder, {&mmapK, &s2pk, &bm, &printer});
+    pxDriver.generatePipelineIR();
     iBuilder->CreateRetVoid();
 
-    return main;
+    pxDriver.linkAndFinalize();
 }
 
 typedef void (*MatchParens)(char * byteStream, size_t fileSize);
@@ -192,18 +187,10 @@ MatchParens generateAlgorithm() {
     LLVMContext ctx;
     Module * M = new Module("mp", ctx);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-
-    llvm::Function * f = pipeline(idb, 3);
-
-    verifyModule(*M, &dbgs());
-
-    ExecutionEngine * wcEngine = JIT_to_ExecutionEngine(M);
-
-    wcEngine->finalizeObject();
-
+    ParabixDriver pxDriver(idb);
+    pipeline(pxDriver, 3);
     delete idb;
-
-    return reinterpret_cast<MatchParens>(wcEngine->getPointerToFunction(f));
+    return reinterpret_cast<MatchParens>(pxDriver.getPointerToMain());
 }
 
 template <typename T>

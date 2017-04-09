@@ -21,20 +21,20 @@ static const auto ACCUMULATOR_INFIX = "_get_";
 
 using namespace llvm;
 
-ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Fixed, strmItemsPer, perPrincipalInputItems, referenceStreamSet);
+ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Fixed, strmItemsPer, perPrincipalInputItems, std::move(referenceStreamSet));
 }
 
-ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Max, strmItemsPer, perPrincipalInputItems, referenceStreamSet);
+ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Max, strmItemsPer, perPrincipalInputItems, std::move(referenceStreamSet));
 }
 
-ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::RoundUp, itemMultiple, itemMultiple, referenceStreamSet);
+ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string && referenceStreamSet) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::RoundUp, itemMultiple, itemMultiple, std::move(referenceStreamSet));
 }
 
-ProcessingRate Add1(std::string referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Add1, 0, 0, referenceStreamSet);
+ProcessingRate Add1(std::string && referenceStreamSet) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Add1, 0, 0, std::move(referenceStreamSet));
 }
 
 ProcessingRate UnknownRate() {
@@ -93,14 +93,24 @@ void KernelInterface::addKernelDeclarations(Module * client) {
         (++args)->setName(binding.name);
     }
 
-    // Create the doSegment function prototype.
+    /// INVESTIGATE: should we explicitly mark whether to track a kernel output's consumed amount? It would have
+    /// to be done at the binding level using the current architecture. It would reduce the number of arguments
+    /// passed between kernels.
+
+    // Create the doSegment function prototype.    
+    IntegerType * const sizeTy = iBuilder->getSizeTy();
+
     std::vector<Type *> params = {selfType, iBuilder->getInt1Ty()};
-    // const auto count = mStreamSetInputs.size() + mStreamSetOutputs.size();
-    for (unsigned i = 0; i < mStreamSetInputs.size(); ++i) {
-        params.push_back(iBuilder->getSizeTy());
+    params.insert(params.end(), mStreamSetInputs.size() + mStreamSetOutputs.size(), sizeTy);
+
+    Type * retType = nullptr;
+    if (mStreamSetInputs.empty()) {
+        retType = iBuilder->getVoidTy();
+    } else {
+        retType = ArrayType::get(sizeTy, mStreamSetInputs.size());
     }
 
-    FunctionType * doSegmentType = FunctionType::get(iBuilder->getVoidTy(), params, false);
+    FunctionType * const doSegmentType = FunctionType::get(retType, params, false);
     Function * doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, client);
     doSegment->setCallingConv(CallingConv::C);
     doSegment->setDoesNotThrow();
@@ -111,9 +121,12 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     for (const Binding & input : mStreamSetInputs) {
         (++args)->setName(input.name + "_availableItems");
     }
-//    for (const Binding & output : mStreamSetOutputs) {
-//        (++args)->setName(output.name + "_consumedItems");
-//    }
+    for (const Binding & output : mStreamSetOutputs) {
+        (++args)->setName(output.name + "_consumedItems");
+    }
+
+    /// INVESTIGATE: replace the accumulator methods with a single Exit method that handles any clean up and returns
+    /// a struct containing all scalar outputs?
 
     // Create the accumulator get function prototypes
     for (const auto & binding : mScalarOutputs) {

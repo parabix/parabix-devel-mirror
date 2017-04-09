@@ -14,7 +14,7 @@ namespace kernel {
 
 class LineBreakKernelBuilder: public pablo::PabloKernel {
 public:
-    LineBreakKernelBuilder(IDISA::IDISA_Builder * iBuilder, std::string linebreak, unsigned basisBitsCount);
+    LineBreakKernelBuilder(IDISA::IDISA_Builder * iBuilder, unsigned basisBitsCount);
     bool moduleIDisSignature() override {return true;}
 };
 

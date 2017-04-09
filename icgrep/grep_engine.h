@@ -20,11 +20,10 @@ class GrepEngine {
 public:
 
     GrepEngine();
-    ~GrepEngine();
-  
+
     void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal, const bool usingStdIn = false);
 
-    void multiGrepCodeGen(std::string moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal, const bool usingStdIn = false);
+    void grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal, const bool usingStdIn = false);
      
     void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly);
 
@@ -41,7 +40,6 @@ private:
 #ifdef CUDA_ENABLED
     GrepFunctionType_CPU mGrepFunction_CPU;
 #endif
-    llvm::ExecutionEngine * mEngine;
 };
 
 void icgrep_Linking(llvm::Module * m, llvm::ExecutionEngine * e);

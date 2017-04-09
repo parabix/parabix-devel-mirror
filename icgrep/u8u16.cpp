@@ -379,7 +379,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     pxDriver.generatePipelineIR();
 
     iBuilder->CreateRetVoid();
-    pxDriver.JITcompileMain();
+
     pxDriver.linkAndFinalize();
 }
 
@@ -476,7 +476,7 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
 
     
     iBuilder->CreateRetVoid();
-    pxDriver.JITcompileMain();
+
     pxDriver.linkAndFinalize();
 }
 

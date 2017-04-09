@@ -119,7 +119,7 @@ void KernelBuilder::prepareKernel() {
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, getName());
 }
 
-std::unique_ptr<Module> KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
+Module * KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
     setCallParameters(inputs, outputs);
     std::string cacheName = getName() + "_" + iBuilder->getBuilderUniqueName();
     for (auto & b: mStreamSetInputBuffers) {
@@ -129,7 +129,7 @@ std::unique_ptr<Module> KernelBuilder::createKernelStub(const StreamSetBuffers &
         cacheName += ":" + b->getUniqueID();
     }
     prepareKernel();
-    return make_unique<Module>(cacheName, iBuilder->getContext());
+    return new Module(cacheName, iBuilder->getContext());
 }
 
 void KernelBuilder::setCallParameters(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
@@ -161,49 +161,39 @@ void KernelBuilder::setCallParameters(const StreamSetBuffers & inputs, const Str
     }        
 }    
 
-
 // Default kernel signature: generate the IR and emit as byte code.
-void KernelBuilder::generateKernelSignature(std::string &signature) {
-    generateKernel();
-    raw_string_ostream OS(signature);
-    WriteBitcodeToFile(iBuilder->getModule(), OS);
-}
-
-
-std::unique_ptr<Module> KernelBuilder::createKernelModule(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
-    auto saveModule = iBuilder->getModule();
-    auto savePoint = iBuilder->saveIP();
-    auto module = createKernelStub(inputs, outputs);
-    iBuilder->setModule(module.get());
-    generateKernel(inputs, outputs);
-    iBuilder->setModule(saveModule);
-    iBuilder->restoreIP(savePoint);
-    return module;
-}
-
-void KernelBuilder::generateKernel(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
-    setCallParameters(inputs, outputs);
-    prepareKernel(); // possibly overridden by the KernelBuilder subtype
-    generateKernel();
+std::string KernelBuilder::generateKernelSignature(std::string moduleId) {
+    if (moduleIDisSignature()) {
+        return moduleId;
+    } else {
+        generateKernel();
+        std::string signature;
+        raw_string_ostream OS(signature);
+        WriteBitcodeToFile(iBuilder->getModule(), OS);
+        return signature;
+    }
 }
 
 void KernelBuilder::generateKernel() {
-    if (mIsGenerated) return;
-    auto savePoint = iBuilder->saveIP();
-    addKernelDeclarations(iBuilder->getModule());
-    callGenerateInitMethod();
-    callGenerateDoSegmentMethod();
-    // Implement the accumulator get functions
-    for (auto binding : mScalarOutputs) {
-        Function * f = getAccumulatorFunction(binding.name);
-        iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "get_" + binding.name, f));
-        Value * self = &*(f->arg_begin());
-        Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
-        Value * retVal = iBuilder->CreateLoad(ptr);
-        iBuilder->CreateRet(retVal);
+    // If the module id is cannot uniquely identify this kernel, "generateKernelSignature()" will have already
+    // generated the unoptimized IR.
+    if (!mIsGenerated) {
+        auto savePoint = iBuilder->saveIP();
+        addKernelDeclarations(iBuilder->getModule());
+        callGenerateInitMethod();
+        callGenerateDoSegmentMethod();
+        // Implement the accumulator get functions
+        for (auto binding : mScalarOutputs) {
+            Function * f = getAccumulatorFunction(binding.name);
+            iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "get_" + binding.name, f));
+            Value * self = &*(f->arg_begin());
+            Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
+            Value * retVal = iBuilder->CreateLoad(ptr);
+            iBuilder->CreateRet(retVal);
+        }
+        iBuilder->restoreIP(savePoint);
+        mIsGenerated = true;
     }
-    iBuilder->restoreIP(savePoint);
-    mIsGenerated = true;
 }
 
 void KernelBuilder::callGenerateDoSegmentMethod() {
@@ -217,7 +207,16 @@ void KernelBuilder::callGenerateDoSegmentMethod() {
         producerPos.push_back(&*(args++));
     }
     generateDoSegmentMethod(doFinal, producerPos); // must be overridden by the KernelBuilder subtype
-    iBuilder->CreateRetVoid();
+    if (LLVM_UNLIKELY(mStreamSetInputs.empty())) {
+        iBuilder->CreateRetVoid();
+    } else {
+        const unsigned n = mStreamSetInputs.size();
+        Value * values[n];
+        for (unsigned i = 0; i < n; ++i) {
+            values[i] = getProcessedItemCount(mStreamSetInputs[i].name);
+        }
+        iBuilder->CreateAggregateRet(values, n);
+    }
 }
 
 void KernelBuilder::callGenerateInitMethod() {

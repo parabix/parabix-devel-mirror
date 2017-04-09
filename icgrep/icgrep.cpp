@@ -407,7 +407,7 @@ int main(int argc, char *argv[]) {
     } else {
 
         if (MultiGrepKernels) {
-            grepEngine.multiGrepCodeGen(module_name, RELists, CountOnly, UTF_16);
+            grepEngine.grepCodeGen(module_name, RELists, CountOnly, UTF_16);
         } else {
             grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16, GrepType::Normal, false);
         }

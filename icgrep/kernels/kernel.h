@@ -59,24 +59,18 @@ public:
     //
     
     // Can the module ID itself serve as the unique signature?
-    virtual bool moduleIDisSignature() {/* default */  return false;}
+    virtual bool moduleIDisSignature() { return false; }
     
-    virtual void generateKernelSignature(std::string & signature);
+    virtual std::string generateKernelSignature(std::string moduleId);
     
     // Create a module stub for the kernel, populated only with its Module ID.     
     //
-    std::unique_ptr<llvm::Module> createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
-    
-    // Create a module for the kernel, including the kernel state type declaration and
-    // the full implementation of all required methods.     
-    //
-    std::unique_ptr<llvm::Module> createKernelModule(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
-    
+    llvm::Module * createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
+      
     void setCallParameters(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
 
     // Generate the Kernel to the current module (iBuilder->getModule()).
     void generateKernel();
-    void generateKernel(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
     
     void createInstance() override;
 
