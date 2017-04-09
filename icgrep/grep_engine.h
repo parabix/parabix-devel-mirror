@@ -38,7 +38,9 @@ private:
    
     GrepFunctionType mGrepFunction;
     GrepFunctionType_CountOnly mGrepFunction_CountOnly;
+#ifdef CUDA_ENABLED
     GrepFunctionType_CPU mGrepFunction_CPU;
+#endif
     llvm::ExecutionEngine * mEngine;
 };
 

@@ -778,7 +778,9 @@ void icgrep_Linking(Module * m, ExecutionEngine * e) {
 GrepEngine::GrepEngine()
 : mGrepFunction(nullptr)
 , mGrepFunction_CountOnly(nullptr)
+#ifdef CUDA_ENABLED
 , mGrepFunction_CPU(nullptr)
+#endif
 , mEngine(nullptr) {
 
 }

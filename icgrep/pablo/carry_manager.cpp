@@ -836,7 +836,6 @@ StructType * CarryManager::analyse(PabloBlock * const scope, const unsigned ifDe
 CarryManager::CarryManager(IDISA::IDISA_Builder * idb) noexcept
 : iBuilder(idb)
 , mKernel(nullptr)
-, mSelf(nullptr)
 , mBitBlockType(idb->getBitBlockType())
 , mBitBlockWidth(idb->getBitBlockWidth())
 , mCurrentFrame(nullptr)

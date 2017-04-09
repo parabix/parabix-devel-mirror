@@ -103,7 +103,7 @@ namespace {
 // templates have no limit but should be deprecated if the TypeBuilder ever supports n-ary functions.
 
 template<unsigned i, typename... Args>
-class ParameterTypeBuilder;
+struct ParameterTypeBuilder;
 
 template<unsigned i, typename A1, typename... An>
 struct ParameterTypeBuilder<i, A1, An...> {

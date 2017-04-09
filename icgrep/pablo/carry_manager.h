@@ -106,7 +106,6 @@ private:
 
     IDISA::IDISA_Builder * const                    iBuilder;
     PabloKernel *                                   mKernel;
-    llvm::Value *                                   mSelf;
     llvm::Type * const                              mBitBlockType;
     const unsigned                                  mBitBlockWidth;
 
