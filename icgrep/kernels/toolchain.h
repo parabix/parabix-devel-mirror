@@ -10,7 +10,6 @@
 #include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/TypeBuilder.h>
 #include <boost/container/flat_map.hpp>
-#include <object_cache.h>
 
 namespace llvm { class ExecutionEngine; }
 namespace llvm { class Module; }
@@ -20,6 +19,7 @@ namespace llvm { namespace cl { class OptionCategory; } }
 namespace IDISA { class IDISA_Builder; }
 namespace kernel { class KernelBuilder; }
 namespace parabix { class StreamSetBuffer; }
+class ParabixObjectCache;
 
 namespace codegen {
 const llvm::cl::OptionCategory * codegen_flags();
@@ -61,6 +61,8 @@ class ParabixDriver {
     using ModuleMap = boost::container::flat_map<kernel::KernelBuilder *, llvm::Module *>;
 public:
     ParabixDriver(IDISA::IDISA_Builder * iBuilder);
+
+    ~ParabixDriver();
     
     IDISA::IDISA_Builder * getIDISA_Builder() {return iBuilder;}
     
@@ -82,7 +84,7 @@ private:
     llvm::Module * const                    mMainModule;
     llvm::TargetMachine *                   mTarget;
     llvm::ExecutionEngine *                 mEngine;
-    std::unique_ptr<ParabixObjectCache>     mCache;
+    ParabixObjectCache *                    mCache;
     std::vector<kernel::KernelBuilder *>    mKernelList;
     ModuleMap                               mModuleMap;
 };

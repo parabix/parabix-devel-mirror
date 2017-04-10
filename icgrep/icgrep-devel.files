@@ -51,6 +51,8 @@ kernels/match_count.cpp
 kernels/match_count.h
 kernels/mmap_kernel.cpp
 kernels/mmap_kernel.h
+kernels/object_cache.cpp
+kernels/object_cache.h
 kernels/p2s_kernel.cpp
 kernels/p2s_kernel.h
 kernels/pipeline.cpp
@@ -71,6 +73,8 @@ kernels/streamset.cpp
 kernels/streamset.h
 kernels/swizzle.cpp
 kernels/swizzle.h
+kernels/toolchain.cpp
+kernels/toolchain.h
 pablo/analysis/pabloverifier.cpp
 pablo/analysis/pabloverifier.hpp
 pablo/optimizers/booleanreassociationpass.cpp
@@ -226,11 +230,7 @@ grep_engine.h
 grep_type.h
 hrtime.h
 icgrep.cpp
-object_cache.cpp
-object_cache.h
 preprocess.cpp
-toolchain.cpp
-toolchain.h
 u8u16.cpp
 utf16_encoder.cpp
 utf16_encoder.h

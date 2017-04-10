@@ -1,14 +1,9 @@
-#include <string>
-
 #include "object_cache.h"
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
 #include <llvm/IR/Module.h>
-
-#ifdef OBJECT_CACHE_DEBUG
-#include <iostream>
-#endif
+#include <string>
 
 using namespace llvm;
 
@@ -50,9 +45,6 @@ void ParabixObjectCache::notifyObjectCompiled(const Module *M, MemoryBufferRef O
     raw_fd_ostream outfile(CacheName, EC, sys::fs::F_None);
     outfile.write(Obj.getBufferStart(), Obj.getBufferSize());
     outfile.close();
-#ifdef OBJECT_CACHE_DEBUG
-    std::cerr << "Cache file created: " << CacheName.c_str() << std::endl;
-#endif
     auto s = kernelSignatureMap.find(ModuleID);  // Check for a kernel signature.
     if (s != kernelSignatureMap.end()) { 
         if (s->second == ModuleID) return;  // No signature is written when the signature is the ModuleID.
@@ -60,9 +52,6 @@ void ParabixObjectCache::notifyObjectCompiled(const Module *M, MemoryBufferRef O
         raw_fd_ostream sigfile(CacheName, EC, sys::fs::F_None);
         sigfile << s->second;
         sigfile.close();
-#ifdef OBJECT_CACHE_DEBUG
-        std::cerr << "Signature file created: " << CacheName.c_str() << std::endl;
-#endif
     }
 }
 
@@ -71,17 +60,21 @@ bool ParabixObjectCache::loadCachedObjectFile(std::string ModuleID, std::string 
     auto s = kernelSignatureMap.find(ModuleID);
     if (s!= kernelSignatureMap.end()) {
         if (s->second != signature) {
+
+
 #ifdef OBJECT_CACHE_DEBUG
             std::cerr << "loadCachedObjectFile:  conflicting signatures for the same moduleID! " << ModuleID << std::endl;
 #endif
             return false;
         }
         // A cached entry exists if it has already been loaded.
-        return cachedObjectMap.find(ModuleID) != cachedObjectMap.end();
+        return cachedObjectMap.count(ModuleID) != 0;
     }
     // Confirm that the module is cacheable.
     Path CachedObjectName(CacheDir);
-    if (!getCacheFilename(ModuleID, CachedObjectName)) return false;
+    if (!getCacheFilename(ModuleID, CachedObjectName)) {
+        return false;
+    }
     //
     // Save the signature.
     kernelSignatureMap.emplace(ModuleID, signature);
@@ -95,27 +88,14 @@ bool ParabixObjectCache::loadCachedObjectFile(std::string ModuleID, std::string 
         sys::path::replace_extension(CachedObjectName, ".sig");
         ErrorOr<std::unique_ptr<MemoryBuffer>> SignatureBuffer = MemoryBuffer::getFile(CachedObjectName.c_str(), -1, false);
         if (!SignatureBuffer) {
-#ifdef OBJECT_CACHE_DEBUG
-            std::cerr << "signature file expected but not Found. " << ModuleID << std::endl;
-#endif
+            report_fatal_error("signature file expected but not found: " + ModuleID);
             return false;
         }
-        StringRef loadedSig = SignatureBuffer.get()->getBuffer();
-        StringRef computedSig = signature;
-        if (!computedSig.equals(loadedSig)) {
-#ifdef OBJECT_CACHE_DEBUG
-            std::cerr << "computed signature does not match stored signature: " << ModuleID << std::endl;
-#endif
-            return false;
+        StringRef loadedSig = SignatureBuffer.get()->getBuffer();  
+        if (!loadedSig.equals(signature)) {
+            report_fatal_error("computed signature does not match stored signature: " + ModuleID);
         }
-        // Signature is confirmed.
-#ifdef OBJECT_CACHE_DEBUG
-        std::cerr << "loadCachedObjectFile: computed signature matches stored signature. " << ModuleID << std::endl;
-#endif
     }
-#ifdef OBJECT_CACHE_DEBUG
-    std::cerr << "Found cached object." << CachedObjectName.c_str() << std::endl;
-#endif
     // Make a copy so that the JIT engine can freely modify it.
     cachedObjectMap.emplace(ModuleID, std::move(KernelObjectBuffer.get()));
     return true;
@@ -139,9 +119,6 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module* M) {
     if (f == cachedObjectMap.end()) {
         return nullptr;
     }
-#ifdef OBJECT_CACHE_DEBUG
-    std::cerr << "Object retrieved by engine. "<< ModuleID << std::endl;
-#endif
     // Return a copy of the buffer, for MCJIT to modify, if necessary.
     return MemoryBuffer::getMemBufferCopy(f->second.get()->getBuffer());
 }
@@ -153,8 +130,5 @@ bool ParabixObjectCache::getCacheFilename(const std::string &ModID, Path &CacheN
         return false;
     CacheName = CacheDir;
     sys::path::append(CacheName, ModID.substr(PrefixLength) + ".o");
-#ifdef OBJECT_CACHE_DEBUG
-    std::cerr << "CacheName: " << CacheName.c_str() << std::endl;
-#endif
     return true;
 }

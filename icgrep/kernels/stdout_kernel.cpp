@@ -93,8 +93,9 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
 
     Value * IOstreamPtr = getScalarField("IOstreamPtr");
+    Value * available = getAvailableItemCount("codeUnitBuffer");
     Value * processed = getProcessedItemCount("codeUnitBuffer");
-    Value * itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
+    Value * itemsToDo = iBuilder->CreateSub(available, processed);
     // There may be two memory areas if we are at the physical end of a circular buffer.
     const auto b  = getInputStreamSetBuffer("codeUnitBuffer");
     Value * wraparound = nullptr;
@@ -126,10 +127,10 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
         byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
         Value * bytePtr = iBuilder->CreatePointerCast(getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
         bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
-        itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
+        itemsToDo = iBuilder->CreateSub(available, processed);
         iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);
         processed = iBuilder->CreateAdd(processed, itemsToDo);
-        setProcessedItemCount("codeUnitBuffer", producerPos[0]);
+        setProcessedItemCount("codeUnitBuffer", available);
         iBuilder->CreateBr(checkFinal);
         iBuilder->SetInsertPoint(checkFinal);
     }

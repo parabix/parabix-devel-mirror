@@ -40,7 +40,7 @@ namespace kernel {
 // The pipeline must guarantee that the doSegment method is called with the
 // a continous buffer for the full segment (number of blocks).
 
-void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
+void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &) {
 
     BasicBlock * expand2_3entry = iBuilder->GetInsertBlock();
     BasicBlock * expand_3_4_loop = CreateBasicBlock("expand_3_4_loop");
@@ -86,7 +86,8 @@ void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<
     const unsigned packAlign = iBuilder->getBitBlockWidth()/8;
 
     Value * processed = getProcessedItemCount("sourceStream");
-    Value * itemsAvail = iBuilder->CreateSub(producerPos[0], processed);
+    Value * available = getAvailableItemCount("sourceStream");
+    Value * itemsAvail = iBuilder->CreateSub(available, processed);
     
     //
     // The main loop processes 3 packs of data at a time.  For doFinal

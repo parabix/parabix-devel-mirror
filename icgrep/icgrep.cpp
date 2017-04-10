@@ -20,7 +20,7 @@
 #include <fstream>
 #include <string>
 #include <boost/uuid/sha1.hpp>
-#include <toolchain.h>
+#include <kernels/toolchain.h>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <mutex>

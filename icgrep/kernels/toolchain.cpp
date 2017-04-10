@@ -10,12 +10,12 @@
 #include <llvm/Support/CommandLine.h>              // for OptionCategory
 #include <llvm/Support/TargetSelect.h>             // for InitializeNativeTa...
 #include <llvm/Support/raw_ostream.h>              // for errs, raw_ostream
-#include <llvm/Support/FormattedStream.h>
-#include <llvm/ADT/SmallString.h>                  // for SmallString
 #include <llvm/IR/LegacyPassManager.h>             // for PassManager
 #include <llvm/IR/IRPrintingPasses.h>
-#include <llvm/IR/Verifier.h>
 #include <llvm/InitializePasses.h>                 // for initializeCodeGen
+#ifndef NDEBUG
+#include <llvm/IR/Verifier.h>
+#endif
 #include <llvm/PassRegistry.h>                     // for PassRegistry
 #include <llvm/Support/CodeGen.h>                  // for Level, Level::None
 #include <llvm/Support/Compiler.h>                 // for LLVM_UNLIKELY
@@ -24,7 +24,7 @@
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
 #include <llvm/IR/Module.h>
-#include <object_cache.h>
+#include <kernels/object_cache.h>
 #include <kernels/pipeline.h>
 #include <kernels/interface.h>
 #include <kernels/kernel.h>
@@ -164,6 +164,7 @@ ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
 , mMainModule(iBuilder->getModule())
 , mTarget(nullptr)
 , mEngine(nullptr)
+, mCache(nullptr)
 {
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
@@ -201,12 +202,12 @@ ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
     mTarget = builder.selectTarget();
     if (LLVM_LIKELY(codegen::EnableObjectCache && codegen::DebugOptions.getBits() == 0)) {
         if (codegen::ObjectCacheDir.empty()) {
-            mCache = llvm::make_unique<ParabixObjectCache>();
+            mCache = new ParabixObjectCache();
         } else {
-            mCache = llvm::make_unique<ParabixObjectCache>(codegen::ObjectCacheDir);
+            mCache = new ParabixObjectCache(codegen::ObjectCacheDir);
         }
         assert (mCache);
-        mEngine->setObjectCache(mCache.get());
+        mEngine->setObjectCache(mCache);
     }
 }
 
@@ -311,4 +312,8 @@ void ParabixDriver::linkAndFinalize() {
 
 void * ParabixDriver::getPointerToMain() {
     return mEngine->getPointerToNamedFunction("Main");
+}
+
+ParabixDriver::~ParabixDriver() {
+    delete mCache;
 }

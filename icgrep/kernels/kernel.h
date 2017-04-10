@@ -130,7 +130,11 @@ public:
     
     const std::vector<const parabix::StreamSetBuffer *> & getStreamSetInputBuffers() const { return mStreamSetInputBuffers; }
 
+    const parabix::StreamSetBuffer * getStreamSetInputBuffer(const unsigned i) const { return mStreamSetInputBuffers[i]; }
+
     const std::vector<const parabix::StreamSetBuffer *> & getStreamSetOutputBuffers() const { return mStreamSetOutputBuffers; }
+
+    const parabix::StreamSetBuffer * getStreamSetOutputBuffer(const unsigned i) const { return mStreamSetOutputBuffers[i]; }
 
     llvm::Value * createDoSegmentCall(const std::vector<llvm::Value *> & args) const;
 
@@ -252,6 +256,8 @@ protected:
         setProducedItemCount(getSelf(), name, value);
     }
 
+    llvm::Value * getAvailableItemCount(const std::string & name) const;
+
     inline llvm::Value * getProcessedItemCount(const std::string & name) const {
         return getProcessedItemCount(getSelf(), name);
     }
@@ -259,6 +265,8 @@ protected:
     inline void setProcessedItemCount(const std::string & name, llvm::Value * value) const {
         setProcessedItemCount(getSelf(), name, value);
     }
+
+    llvm::Value * getConsumedItemCount(const std::string & name) const;
 
     llvm::Value * getTerminationSignal() const {
         return getTerminationSignal(getSelf());
@@ -332,8 +340,6 @@ protected:
                           std::vector<Binding> && scalar_outputs,
                           std::vector<Binding> && internal_scalars);
 
-    virtual ~SegmentOrientedKernel() { }
-
 };
 
 class BlockOrientedKernel : public KernelBuilder {
@@ -363,8 +369,6 @@ protected:
                         std::vector<Binding> && scalar_parameters,
                         std::vector<Binding> && scalar_outputs,
                         std::vector<Binding> && internal_scalars);
-
-    virtual ~BlockOrientedKernel() { }
 
 private:
 

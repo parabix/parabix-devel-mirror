@@ -10,13 +10,12 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/TypeBuilder.h>
 #include <llvm/IR/MDBuilder.h>
+#include <llvm/Support/raw_ostream.h>
+#include <kernels/toolchain.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
-#include <toolchain.h>
 #include <errno.h>
-#include <llvm/Support/raw_ostream.h>
-
 
 using namespace llvm;
 
@@ -401,7 +400,7 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
         pthreadCreateFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_create", mMod);
         pthreadCreateFunc->setCallingConv(CallingConv::C);
     }
-    return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, arg});
+    return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, CreatePointerCast(arg, getVoidPtrTy())});
 }
 
 Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {

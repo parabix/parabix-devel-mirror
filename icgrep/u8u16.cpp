@@ -22,7 +22,7 @@
 #include <pablo/pablo_kernel.h>                    // for PabloKernel
 #include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
 #include <pablo/pe_zeroes.h>
-#include <toolchain.h>                             // for JIT_to_ExecutionEn...
+#include <kernels/toolchain.h>
 #include <boost/iostreams/device/mapped_file.hpp>  // for mapped_file_source
 #include <boost/filesystem.hpp>
 #include <boost/interprocess/anonymous_shared_memory.hpp>
@@ -316,7 +316,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
 
     DeleteByPEXTkernel delK(iBuilder, 64, 16, true);
     pxDriver.addKernelCall(delK, {&U8u16Bits, &DelMask}, {&SwizzleFields0, &SwizzleFields1, &SwizzleFields2, &SwizzleFields3, &DeletionCounts});
-;
+
     //  Produce fully compressed swizzled UTF-16 bit streams
     SwizzledCopybackBuffer u16Swizzle0(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
     SwizzledCopybackBuffer u16Swizzle1(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
@@ -505,33 +505,28 @@ u8u16FunctionType u8u16CodeGen(void) {
 }
 
 void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
-    std::string mFileName = fileName;
-    size_t fileSize;
-    char * fileBuffer;
-    
-    const boost::filesystem::path file(mFileName);
+
+    const boost::filesystem::path file(fileName);
     if (exists(file)) {
         if (is_directory(file)) {
             return;
         }
     } else {
-        std::cerr << "Error: cannot open " << mFileName << " for processing. Skipped.\n";
+        std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
         return;
     }
     
-    fileSize = file_size(file);
-    boost::iostreams::mapped_file_source mFile;
-    if (fileSize == 0) {
-        fileBuffer = nullptr;
-    }
-    else {
+    size_t fileSize = file_size(file);
+    boost::iostreams::mapped_file_source input;
+
+    char * fileBuffer = nullptr;
+    if (fileSize) {
         try {
-            mFile.open(mFileName);
-        } catch (std::exception &e) {
-            std::cerr << "Error: Boost mmap of " << mFileName << ": " << e.what() << std::endl;
-            return;
-        }
-        fileBuffer = const_cast<char *>(mFile.data());
+            input.open(fileName);
+            fileBuffer = const_cast<char *>(input.data());
+        } catch (std::exception & e) {
+            throw std::runtime_error("Boost mmap error: " + fileName + ": " + e.what());
+        }        
     }
 
     if (mMapBuffering) {
@@ -539,8 +534,7 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
         outputBuffer.advise(boost::interprocess::mapped_region::advice_willneed);
         outputBuffer.advise(boost::interprocess::mapped_region::advice_sequential);
         fn_ptr(fileBuffer, static_cast<char*>(outputBuffer.get_address()), fileSize);
-    }
-    else if (memAlignBuffering) {
+    } else if (memAlignBuffering) {
         char * outputBuffer;
         const auto r = posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2*fileSize);
         if (LLVM_UNLIKELY(r != 0)) {
@@ -548,25 +542,19 @@ void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
         }
         fn_ptr(fileBuffer, outputBuffer, fileSize);
         free(reinterpret_cast<void *>(outputBuffer));
-    }
-    else {
+    } else {
         /* No external output buffer */
         fn_ptr(fileBuffer, nullptr, fileSize);
     }
-    mFile.close();
+    input.close();
     
 }
-
 
 int main(int argc, char *argv[]) {
     AddParabixVersionPrinter();
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&u8u16Options, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
-
-    u8u16FunctionType fn_ptr = u8u16CodeGen();
-
-    u8u16(fn_ptr, inputFile);
-
+    u8u16(u8u16CodeGen(), inputFile);
     return 0;
 }
 

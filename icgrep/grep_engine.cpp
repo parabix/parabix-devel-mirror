@@ -29,7 +29,7 @@
 #include <pablo/pablo_toolchain.h>
 #include <re/re_cc.h>
 #include <re/re_toolchain.h>
-#include <toolchain.h>
+#include <kernels/toolchain.h>
 #include <iostream>
 #include <sstream>
 #include <cc/multiplex_CCs.h>

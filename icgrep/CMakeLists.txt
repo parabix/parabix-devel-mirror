@@ -57,6 +57,7 @@ include_directories("${Boost_INCLUDE_DIRS}")
 link_directories(${Boost_LIBRARY_DIR})
 
 SET(KERNEL_SRC kernels/kernel.cpp kernels/pipeline.cpp kernels/streamset.cpp kernels/interface.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/toolchain.cpp kernels/object_cache.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/s2p_kernel.cpp kernels/mmap_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdin_kernel.cpp kernels/stdout_kernel.cpp)
 
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp IR_Gen/idisa_nvptx_builder.cpp IR_Gen/idisa_target.cpp)
@@ -71,7 +72,7 @@ SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/booleanreassociationpass.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/schedulingprepass.cpp pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 
-add_library(CodeGen ${KERNEL_SRC} ${IDISA_SRC} object_cache.cpp)
+add_library(CodeGen ${KERNEL_SRC} ${IDISA_SRC})
 add_library(PabloADT ${PABLO_SRC})
 add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
 add_library(RegExpCompiler re/re_parser.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_parser_pcre.cpp re/re_parser_ere.cpp re/re_parser_bre.cpp re/re_parser_prosite.cpp re/re_utility.cpp)
@@ -85,12 +86,12 @@ target_link_libraries (UCDlib RegExpADT PabloADT CCADT)
 target_link_libraries (RegExpADT PabloADT CCADT UCDlib)
 target_link_libraries (RegExpCompiler RegExpADT)
 
-add_executable(icgrep icgrep.cpp toolchain.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/match_count.cpp)
-add_executable(u8u16 u8u16.cpp toolchain.cpp)
-add_executable(base64 base64.cpp kernels/radix64.cpp toolchain.cpp)
-add_executable(wc wc.cpp toolchain.cpp)
-add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp toolchain.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp)
-add_executable(array-test array-test.cpp toolchain.cpp kernels/alignedprint.cpp)
+add_executable(icgrep icgrep.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/match_count.cpp)
+add_executable(u8u16 u8u16.cpp)
+add_executable(base64 base64.cpp kernels/radix64.cpp)
+add_executable(wc wc.cpp)
+add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp)
+add_executable(array-test array-test.cpp kernels/alignedprint.cpp)
 
 ## IWYU detects superfluous includes and when the include can be replaced with a forward declaration.
 ## It can be obtained using "apt-get install iwyu" or from "github.com/include-what-you-use".

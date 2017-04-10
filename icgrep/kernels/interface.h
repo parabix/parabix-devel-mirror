@@ -158,8 +158,6 @@ protected:
 
     }
     
-//    virtual void addAdditionalKernelDeclarations(llvm::Module * module, llvm::PointerType * selfType) {}
-
 protected:
     
     IDISA::IDISA_Builder * const iBuilder;

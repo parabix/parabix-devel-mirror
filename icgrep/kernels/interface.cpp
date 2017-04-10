@@ -103,14 +103,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     std::vector<Type *> params = {selfType, iBuilder->getInt1Ty()};
     params.insert(params.end(), mStreamSetInputs.size() + mStreamSetOutputs.size(), sizeTy);
 
-    Type * retType = nullptr;
-    if (mStreamSetInputs.empty()) {
-        retType = iBuilder->getVoidTy();
-    } else {
-        retType = ArrayType::get(sizeTy, mStreamSetInputs.size());
-    }
-
-    FunctionType * const doSegmentType = FunctionType::get(retType, params, false);
+    FunctionType * const doSegmentType = FunctionType::get(iBuilder->getVoidTy(), params, false);
     Function * doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, client);
     doSegment->setCallingConv(CallingConv::C);
     doSegment->setDoesNotThrow();

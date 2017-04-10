@@ -73,7 +73,7 @@ StdInKernel::StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegm
     
 }
 
-void FileSourceKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
+void FileSourceKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &) {
 
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * setTermination = CreateBasicBlock("setTermination");

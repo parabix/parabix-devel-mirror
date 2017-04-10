@@ -4,7 +4,7 @@
  */
 
 #include "kernel.h"
-#include <toolchain.h>
+#include <kernels/toolchain.h>
 #include <kernels/streamset.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
@@ -207,16 +207,7 @@ void KernelBuilder::callGenerateDoSegmentMethod() {
         producerPos.push_back(&*(args++));
     }
     generateDoSegmentMethod(doFinal, producerPos); // must be overridden by the KernelBuilder subtype
-    if (LLVM_UNLIKELY(mStreamSetInputs.empty())) {
-        iBuilder->CreateRetVoid();
-    } else {
-        const unsigned n = mStreamSetInputs.size();
-        Value * values[n];
-        for (unsigned i = 0; i < n; ++i) {
-            values[i] = getProcessedItemCount(mStreamSetInputs[i].name);
-        }
-        iBuilder->CreateAggregateRet(values, n);
-    }
+    iBuilder->CreateRetVoid();
 }
 
 void KernelBuilder::callGenerateInitMethod() {
@@ -304,6 +295,19 @@ Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string 
     return getScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX);
 }
 
+llvm::Value * KernelBuilder::getAvailableItemCount(const std::string & name) const {
+    auto arg = mCurrentMethod->arg_begin();
+    ++arg; // self
+    ++arg; // doFinal
+    for (unsigned i = 0; i < mStreamSetInputs.size(); ++i) {
+        if (mStreamSetInputs[i].name == name) {
+            return &*arg;
+        }
+        ++arg;
+    }
+    return nullptr;
+}
+
 Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string & name) const {
     assert ("instance cannot be null!" && instance);
     Port port; unsigned ssIdx;
@@ -318,6 +322,22 @@ Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string
         return mStreamSetInputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed);
     }
     return getScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX);
+}
+
+llvm::Value * KernelBuilder::getConsumedItemCount(const std::string & name) const {
+    auto arg = mCurrentMethod->arg_begin();
+    ++arg; // self
+    ++arg; // doFinal
+    for (unsigned i = 0; i < mStreamSetInputs.size(); ++i) {
+        ++arg; // input
+    }
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); ++i) {
+        if (mStreamSetOutputs[i].name == name) {
+            return &*arg;
+        }
+        ++arg;
+    }
+    return nullptr;
 }
 
 void KernelBuilder::setProducedItemCount(Value * instance, const std::string & name, Value * value) const {
@@ -337,7 +357,7 @@ Value * KernelBuilder::getTerminationSignal(Value * instance) const {
 
 void KernelBuilder::setTerminationSignal(Value * instance) const {
     assert ("instance cannot be null!" && instance);
-    setScalarField(instance, TERMINATION_SIGNAL, iBuilder->getInt1(true));
+    setScalarField(instance, TERMINATION_SIGNAL, iBuilder->getTrue());
 }
 
 LoadInst * KernelBuilder::acquireLogicalSegmentNo(Value * instance) const {

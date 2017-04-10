@@ -12,7 +12,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/TypeBuilder.h>
-#include <toolchain.h>
+#include <kernels/toolchain.h>
 
 using namespace llvm;
 

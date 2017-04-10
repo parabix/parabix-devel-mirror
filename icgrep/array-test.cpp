@@ -20,7 +20,7 @@
 #include <pablo/pablo_kernel.h>                    // for PabloKernel
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
-#include <toolchain.h>                             // for JIT_to_ExecutionEn...
+#include <kernels/toolchain.h>
 #include <pablo/builder.hpp>                       // for PabloBuilder
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>

@@ -4,7 +4,7 @@
  */
 
 #include "idisa_target.h"
-#include <toolchain.h>
+#include <kernels/toolchain.h>
 #include <IR_Gen/idisa_avx_builder.h>
 #include <IR_Gen/idisa_sse_builder.h>
 #include <IR_Gen/idisa_i64_builder.h>

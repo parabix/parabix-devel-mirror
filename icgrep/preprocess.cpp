@@ -21,7 +21,7 @@
 #include <kernels/cc_scan_kernel.h>
 #include <kernels/pipeline.h>
 #include <boost/filesystem.hpp>
-#include <toolchain.h>
+#include <kernels/toolchain.h>
 #include <boost/iostreams/device/mapped_file.hpp>
 
 using namespace llvm;

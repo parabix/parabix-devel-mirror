@@ -10,7 +10,7 @@
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/CommandLine.h>
-#include <toolchain.h>
+#include <kernels/toolchain.h>
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/pipeline.h>
