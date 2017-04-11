@@ -392,15 +392,16 @@ Value * CBuilder::CreateFCloseCall(Value * stream) {
 }
 
 Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg) {
+    Type * const voidPtrTy = getVoidPtrTy();
     Function * pthreadCreateFunc = mMod->getFunction("pthread_create");
     if (pthreadCreateFunc == nullptr) {
         Type * pthreadTy = getSizeTy();
         FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), {getVoidPtrTy()}, false);
-        FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy->getPointerTo(), getVoidPtrTy(), funVoidPtrVoidTy->getPointerTo(), getVoidPtrTy()}, false);
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy->getPointerTo(), voidPtrTy, funVoidPtrVoidTy->getPointerTo(), voidPtrTy}, false);
         pthreadCreateFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_create", mMod);
         pthreadCreateFunc->setCallingConv(CallingConv::C);
     }
-    return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, CreatePointerCast(arg, getVoidPtrTy())});
+    return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, CreatePointerCast(arg, voidPtrTy)});
 }
 
 Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {

@@ -516,11 +516,11 @@ Argument * KernelBuilder::getParameter(Function * const f, const std::string & n
     report_fatal_error(getName() + " does not have parameter " + name);
 }
 
-Value * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) const {
+CallInst * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) const {
     return iBuilder->CreateCall(getDoSegmentFunction(), args);
 }
 
-Value * KernelBuilder::createGetAccumulatorCall(Value * self, const std::string & accumName) const {
+CallInst * KernelBuilder::createGetAccumulatorCall(Value * self, const std::string & accumName) const {
     return iBuilder->CreateCall(getAccumulatorFunction(accumName), {self});
 }
 

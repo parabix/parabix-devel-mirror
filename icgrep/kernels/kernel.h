@@ -136,9 +136,9 @@ public:
 
     const parabix::StreamSetBuffer * getStreamSetOutputBuffer(const unsigned i) const { return mStreamSetOutputBuffers[i]; }
 
-    llvm::Value * createDoSegmentCall(const std::vector<llvm::Value *> & args) const;
+    llvm::CallInst * createDoSegmentCall(const std::vector<llvm::Value *> & args) const;
 
-    llvm::Value * createGetAccumulatorCall(llvm::Value * self, const std::string & accumName) const;
+    llvm::CallInst * createGetAccumulatorCall(llvm::Value * self, const std::string & accumName) const;
 
 protected:
 
