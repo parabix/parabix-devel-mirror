@@ -56,8 +56,10 @@ message(STATUS "Found Boost_LIBRARY_DIR: ${Boost_LIBRARY_DIR}")
 include_directories("${Boost_INCLUDE_DIRS}")
 link_directories(${Boost_LIBRARY_DIR})
 
+SET(OBJECT_CACHE_SRC kernels/object_cache.cpp)
+
 SET(KERNEL_SRC kernels/kernel.cpp kernels/pipeline.cpp kernels/streamset.cpp kernels/interface.cpp)
-SET(KERNEL_SRC ${KERNEL_SRC} kernels/toolchain.cpp kernels/object_cache.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/toolchain.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/s2p_kernel.cpp kernels/mmap_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdin_kernel.cpp kernels/stdout_kernel.cpp)
 
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp IR_Gen/idisa_nvptx_builder.cpp IR_Gen/idisa_target.cpp)
@@ -72,12 +74,16 @@ SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/booleanreassociationpass.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/schedulingprepass.cpp pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 
-add_library(CodeGen ${KERNEL_SRC} ${IDISA_SRC})
+add_library(CodeGen ${KERNEL_SRC} ${OBJECT_CACHE_SRC} ${IDISA_SRC})
 add_library(PabloADT ${PABLO_SRC})
 add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
 add_library(RegExpCompiler re/re_parser.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_parser_pcre.cpp re/re_parser_ere.cpp re/re_parser_bre.cpp re/re_parser_prosite.cpp re/re_utility.cpp)
 add_library(CCADT cc/cc_compiler.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/CaseFolding_txt.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp UCD/UnicodeNameData.cpp)
+
+# force the compiler to compile the object cache to ensure that the versioning information is up to date
+add_custom_target(RecompileObjectCache ALL touch ${CMAKE_CURRENT_SOURCE_DIR}/${OBJECT_CACHE_SRC})
+add_dependencies(CodeGen RecompileObjectCache)
 
 # add the executable
 target_link_libraries (PabloADT CodeGen ${REQ_LLVM_LIBRARIES})
