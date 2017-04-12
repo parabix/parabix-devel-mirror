@@ -16,6 +16,7 @@
 #include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
 #include <kernels/cc_kernel.h>
+#include <kernels/grep_kernel.h>
 #include <kernels/linebreak_kernel.h>
 #include <kernels/streams_merge.h>
 #include <kernels/match_count.h>
@@ -24,9 +25,7 @@
 #include <kernels/scanmatchgen.h>
 #include <kernels/streamset.h>
 #include <kernels/stdin_kernel.h>
-#include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
-#include <pablo/pablo_toolchain.h>
 #include <re/re_cc.h>
 #include <re/re_toolchain.h>
 #include <kernels/toolchain.h>
@@ -516,13 +515,11 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
     LineBreakStream.allocateBuffer();
 
     pxDriver.addKernelCall(linebreakK, {&BasisBits}, {&LineBreakStream});
-
-    pablo::PabloKernel icgrepK(iBuilder, "icgrep", {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}});
-    re::re2pablo_compiler(&icgrepK, re::regular_expression_passes(re_ast), CountOnly);
-    pablo_function_passes(&icgrepK);
+   
+    kernel::ICgrepKernelBuilder icgrepK(iBuilder, re_ast, CountOnly);
 
     if (CountOnly) {
-
+       
         pxDriver.addKernelCall(icgrepK, {&BasisBits, &LineBreakStream}, {});
 
         pxDriver.generatePipelineIR();
@@ -544,7 +541,6 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
 
             iBuilder->CreateRetVoid();
 
-            pxDriver.JITcompileMain();
             pxDriver.linkAndFinalize();
         }
         #endif
@@ -662,10 +658,8 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
     std::vector<StreamSetBuffer *> MatchResultsBufs;
 
     for(unsigned i = 0; i < REs.size(); ++i){
-        pablo::PabloKernel * const icgrepK = new pablo::PabloKernel(iBuilder, "icgrep" + std::to_string(i), {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}});
-        re::re2pablo_compiler(icgrepK, re::regular_expression_passes(REs[i]), false);
-        pablo_function_passes(icgrepK);
-        CircularBuffer * const matchResults = new CircularBuffer(iBuilder, iBuilder->getStreamSetTy(2, 1), segmentSize * bufferSegments);
+        pablo::PabloKernel * const icgrepK = new kernel::ICgrepKernelBuilder(iBuilder, REs[i], false);
+        CircularBuffer * const matchResults = new CircularBuffer(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
         matchResults->allocateBuffer();
 
         pxDriver.addKernelCall(*icgrepK, {&BasisBits, &LineBreakStream}, {matchResults});

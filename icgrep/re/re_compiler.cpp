@@ -204,12 +204,12 @@ void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatche
     }
     PabloAST * matches = mPB.createAnd(match_follow, mLineBreak, "matches");
     if (mCountOnly) {
-        Var * const output = mKernel->addOutput("matchedLineCount", mKernel->getSizeTy());
+        Var * const output = mKernel->getOutputScalarVar("matchedLineCount");
         PabloBuilder nestedCount = PabloBuilder::Create(mPB);
         mPB.createIf(matches, nestedCount);
         nestedCount.createAssign(output, nestedCount.createCount(matches));
     } else {
-        Var * const output = mKernel->addOutput("output", mKernel->getStreamSetTy(1));
+        Var * const output = mKernel->getOutputStreamVar("matches");
         mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), matches);
     }
 }
