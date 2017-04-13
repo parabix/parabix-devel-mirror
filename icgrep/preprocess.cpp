@@ -37,18 +37,9 @@ void wrapped_report_pos(size_t match_pos, int dist) {
 
 }
 
-void preprocess_Linking(Module * m, ExecutionEngine * e) {
-    Module::FunctionListType & fns = m->getFunctionList();
-    for (Module::FunctionListType::iterator it = fns.begin(), it_end = fns.end(); it != it_end; ++it) {
-        std::string fnName = it->getName().str();
-        if (fnName == "wrapped_report_pos") {
-            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_report_pos);
-        }
-    }
-}
-
-
-Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder){
+void preprocessPipeline(ParabixDriver & pxDriver){
+    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    Module * m = iBuilder->getModule();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const inputType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 1), 0);
 
@@ -72,19 +63,20 @@ Function * preprocessPipeline(Module * m, IDISA::IDISA_Builder * iBuilder){
     MatchResults.setStreamSetBuffer(lineBreak);
 
     kernel::MMapSourceKernel mmapK(iBuilder, segmentSize); 
-    mmapK.generateKernel({}, {&ByteStream});
     mmapK.setInitialArguments({fileSize});
+    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
 
     kernel::DirectCharacterClassKernelBuilder linefeedK(iBuilder, "linefeed", {re::makeCC(0x0A)}, 1);
-    linefeedK.generateKernel({&ByteStream}, {&MatchResults});
+    pxDriver.addKernelCall(linefeedK, {&ByteStream}, {&MatchResults});
     
     kernel::CCScanKernel scanMatchK(iBuilder, 1);
-    scanMatchK.generateKernel({&MatchResults}, {}); 
+    pxDriver.addKernelCall(scanMatchK, {&MatchResults}, {}); 
     
-    generatePipelineLoop(iBuilder, {&mmapK, &linefeedK, &scanMatchK});
+    pxDriver.generatePipelineIR();
     iBuilder->CreateRetVoid();
 
-    return mainFn;
+    pxDriver.addExternalLink(scanMatchK, "wrapped_report_pos", &wrapped_report_pos);
+    pxDriver.linkAndFinalize();
 
 }
 
@@ -95,18 +87,14 @@ preprocessFunctionType preprocessCodeGen() {
     LLVMContext TheContext;
     Module * M = new Module("preprocess", TheContext);
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
+    ParabixDriver pxDriver(idb);
 
-    llvm::Function * main_IR = preprocessPipeline(M, idb);
-
-    ExecutionEngine * preprocessEngine = JIT_to_ExecutionEngine(M);
-    ApplyObjectCache(preprocessEngine);
-
-    preprocess_Linking(M, preprocessEngine);
+    preprocessPipeline(pxDriver);
     
-    preprocessEngine->finalizeObject();
+    preprocessFunctionType main = reinterpret_cast<preprocessFunctionType>(pxDriver.getPointerToMain());
 
     delete idb;
-    return reinterpret_cast<preprocessFunctionType>(preprocessEngine->getPointerToFunction(main_IR));
+    return main;
 }
 
 std::vector<size_t> preprocess(char * fileBuffer, size_t fileSize, char * LineBreak) {

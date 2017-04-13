@@ -159,7 +159,9 @@ void GrepEngine::doGrep(const int fileIdx, bool CountOnly, std::vector<size_t> &
 }
 
 #ifdef CUDA_ENABLED
-Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool CountOnly){
+Function * generateGPUKernel(ParabixDriver & nvptxDriver, bool CountOnly){
+    IDISA::IDISA_Builder * iBuilder = nvptxDriver.getIDISA_Builder();
+    Module * m = iBuilder->getModule();
     Type * const int64ty = iBuilder->getInt64Ty();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int32ty = iBuilder->getInt32Ty();
@@ -167,7 +169,7 @@ Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool C
     Type * const int64tyPtr = PointerType::get(int64ty, 1);
     Type * const inputType = PointerType::get(iBuilder->getInt8Ty(), 1);
     Type * const resultTy = iBuilder->getVoidTy();
-    Function * kernelFunc = cast<Function>(m->getOrInsertFunction("GPU_Main", resultTy, inputType, sizeTyPtr, sizeTyPtr, int64tyPtr, nullptr));
+    Function * kernelFunc = cast<Function>(m->getOrInsertFunction("Main", resultTy, inputType, sizeTyPtr, sizeTyPtr, int64tyPtr, nullptr));
     kernelFunc->setCallingConv(CallingConv::C);
     Function::arg_iterator args = kernelFunc->arg_begin();
 
@@ -210,14 +212,18 @@ Function * generateGPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, bool C
     }    
 
     iBuilder->CreateRetVoid();
+
     return kernelFunc;
 }
 
-Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepType grepType){
+void generateCPUKernel(ParabixDriver & pxDriver, GrepType grepType){
+    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    Module * m = iBuilder->getModule();
+
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     Type * const rsltType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 1), 0);
-    Function * const mainCPUFn = cast<Function>(m->getOrInsertFunction("CPU_Main", iBuilder->getVoidTy(), rsltType, rsltType, int8PtrTy, size_ty, size_ty, nullptr));
+    Function * const mainCPUFn = cast<Function>(m->getOrInsertFunction("Main", iBuilder->getVoidTy(), rsltType, rsltType, int8PtrTy, size_ty, size_ty, nullptr));
     mainCPUFn->setCallingConv(CallingConv::C);
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", mainCPUFn, 0));
     Function::arg_iterator args = mainCPUFn->arg_begin();
@@ -241,27 +247,32 @@ Function * generateCPUKernel(Module * m, IDISA::IDISA_Builder * iBuilder, GrepTy
     ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1));
     MatchResults.setStreamSetBuffer(rsltStream);
 
+    kernel::MMapSourceKernel mmapK0(iBuilder, segmentSize); 
+    mmapK0.setName("mmap0");
+    mmapK0.setInitialArguments({fileSize});
+    pxDriver.addKernelCall(mmapK0, {}, {&InputStream});
+
+
     kernel::MMapSourceKernel mmapK1(iBuilder, segmentSize); 
     mmapK1.setName("mmap1");
-    mmapK1.generateKernel({}, {&MatchResults});
     mmapK1.setInitialArguments({fileSize});
+    pxDriver.addKernelCall(mmapK1, {}, {&MatchResults});
 
     ExternalFileBuffer LineBreak(iBuilder, iBuilder->getStreamSetTy(1, 1));
     LineBreak.setStreamSetBuffer(lbStream);
     
     kernel::MMapSourceKernel mmapK2(iBuilder, segmentSize); 
     mmapK2.setName("mmap2");
-    mmapK2.generateKernel({}, {&LineBreak});
     mmapK2.setInitialArguments({fileSize});
+    pxDriver.addKernelCall(mmapK2, {}, {&LineBreak});
 
     kernel::ScanMatchKernel scanMatchK(iBuilder, grepType, 8);
-    scanMatchK.generateKernel({&InputStream, &MatchResults, &LineBreak}, {});
     scanMatchK.setInitialArguments({fileIdx});
-    
-    generatePipeline(iBuilder, {&mmapK1, &mmapK2, &scanMatchK});
+    pxDriver.addKernelCall(scanMatchK, {&InputStream, &MatchResults, &LineBreak}, {});
+    pxDriver.generatePipelineIR();
     iBuilder->CreateRetVoid();
 
-    return mainCPUFn;
+    pxDriver.linkAndFinalize();
 }
 #endif
 
@@ -569,7 +580,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
 
     #ifdef CUDA_ENABLED
     if(codegen::NVPTX){
-        Function * kernelFunction = generateGPUKernel(M, iBuilder, CountOnly);
+        ParabixDriver nvptxDriver(iBuilder);
+        Function * kernelFunction = generateGPUKernel(nvptxDriver, CountOnly);
+        
         MDNode * Node = MDNode::get(M->getContext(),
                                     {llvm::ValueAsMetadata::get(kernelFunction),
                                      MDString::get(M->getContext(), "kernel"),
@@ -578,7 +591,11 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
         NMD->addOperand(Node);
 
         Compile2PTX(M, IRFilename, PTXFilename);
-        Function * mainCPUFn = generateCPUKernel(cpuM, CPUBuilder, mGrepType);
+        
+        ParabixDriver pxDriver(CPUBuilder);
+        generateCPUKernel(pxDriver, grepType);
+        
+        mGrepFunction_CPU = reinterpret_cast<GrepFunctionType_CPU>(pxDriver.getPointerToMain());
         if (CountOnly) return;
     }
     #endif
@@ -590,11 +607,6 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
     if (CountOnly) {
         mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(pxDriver.getPointerToMain());
     } else {
-        #ifdef CUDA_ENABLED
-        if(codegen::NVPTX){
-            mGrepFunction_CPU = reinterpret_cast<GrepFunctionType_CPU>(pxDriver.getPointerToMain());
-        }
-        #endif
         if (CPU_Only) {
             mGrepFunction = reinterpret_cast<GrepFunctionType>(pxDriver.getPointerToMain());
         }
