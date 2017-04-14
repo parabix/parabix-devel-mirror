@@ -218,7 +218,7 @@ void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<
 }
 
 void ParabixDriver::generatePipelineIR() {
-    for (kernel::KernelBuilder * kb : mKernelList) {
+    for (auto & kb : mKernelList) {
         kb->addKernelDeclarations(mMainModule);
     }
     if (codegen::pipelineParallel) {

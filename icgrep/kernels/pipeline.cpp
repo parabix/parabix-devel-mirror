@@ -98,7 +98,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     StreamSetBufferMap<Value *> producedPos;
 
     for (unsigned k = 0;;) {
-        KernelBuilder * const kernel = kernels[k];
+        const auto & kernel = kernels[k];
         const unsigned waitIdx = codegen::DebugOptionIsSet(codegen::SerializeThreads) ? (n - 1) : k;
 
         segmentLoopBody = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Do", threadFunc);
@@ -223,7 +223,7 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
     ConstantInt * segmentItems = ConstantInt::get(sizeTy, codegen::SegmentSize * iBuilder->getBitBlockWidth());
     Constant * const nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
 
-    for (auto k : kernels) {
+    for (auto & k : kernels) {
         k->createInstance();
     }
 
@@ -246,15 +246,15 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
         Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
         iBuilder->CreateStore(kernels[i]->getInstance(), ptr);
     }
-    for (unsigned i = 0; i < n; i++) {
-        kernels[i]->releaseLogicalSegmentNo(kernels[i]->getInstance(), iBuilder->getSize(0));
+    for (auto & kernel : kernels) {
+        kernel->releaseLogicalSegmentNo(kernel->getInstance(), iBuilder->getSize(0));
     }
 
     // GENERATE THE PRODUCING AND CONSUMING KERNEL MAPS
     StreamSetBufferMap<unsigned> producingKernel;
     StreamSetBufferMap<std::vector<unsigned>> consumingKernels;
     for (unsigned id = 0; id < n; ++id) {
-        KernelBuilder * const kernel = kernels[id];
+        const auto & kernel = kernels[id];
         const auto & inputs = kernel->getStreamInputs();
         const auto & outputs = kernel->getStreamOutputs();
         // add any outputs from this kernel to the producing kernel map
@@ -288,7 +288,7 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
 
     Function * thread_functions[n];
     for (unsigned id = 0; id < n; id++) {
-        KernelBuilder * const kernel = kernels[id];
+        const auto & kernel = kernels[id];
         const auto & inputs = kernel->getStreamInputs();
         const auto & outputs = kernel->getStreamOutputs();
 
@@ -409,7 +409,7 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
  ** ------------------------------------------------------------------------------------------------------------- */
 void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
 
-    for (auto k : kernels) {
+    for (auto & k : kernels) {
         k->createInstance();
     }
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
@@ -426,8 +426,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
     iBuilder->SetInsertPoint(pipelineLoop);
 
     // Build up the initial phi nodes for each of the consumed (minimum processed) positions
-    for (unsigned k = 0; k < kernels.size(); k++) {
-        KernelBuilder * const kernel = kernels[k];
+    for (auto & kernel : kernels) {
         const auto & outputs = kernel->getStreamOutputs();
         for (unsigned i = 0; i < outputs.size(); ++i) {
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
@@ -441,8 +440,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
     }
 
     Value * terminated = iBuilder->getFalse();
-    for (unsigned k = 0; k < kernels.size(); k++) {
-        KernelBuilder * const kernel = kernels[k];
+    for (auto & kernel : kernels) {
         Value * const instance = kernel->getInstance();
         const auto & inputs = kernel->getStreamInputs();
         const auto & outputs = kernel->getStreamOutputs();
