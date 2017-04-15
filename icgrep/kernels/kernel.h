@@ -11,6 +11,7 @@
 #include "interface.h"      // for KernelInterface
 #include <boost/container/flat_map.hpp>
 #include <IR_Gen/idisa_builder.h>
+#include <kernels/pipeline.h>
 
 //namespace llvm { class ConstantInt; }
 #include <llvm/IR/Constants.h>
@@ -30,6 +31,10 @@ protected:
     using StreamPort = std::pair<Port, unsigned>;
     using StreamMap = boost::container::flat_map<std::string, StreamPort>;
     using StreamSetBuffers = std::vector<parabix::StreamSetBuffer *>;
+
+    friend void ::generateSegmentParallelPipeline(IDISA::IDISA_Builder *, const std::vector<KernelBuilder *> &);
+    friend void ::generatePipelineLoop(IDISA::IDISA_Builder *, const std::vector<KernelBuilder *> &);
+    friend void ::generateParallelPipeline(IDISA::IDISA_Builder *, const std::vector<KernelBuilder *> &);
 public:
     
     // Kernel Signatures and Module IDs
@@ -67,36 +72,55 @@ public:
     //
     llvm::Module * createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
       
-    void setCallParameters(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
-
     // Generate the Kernel to the current module (iBuilder->getModule()).
     void generateKernel();
     
-    void createInstance() override;
+    llvm::Value * createInstance() final;
 
-    llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * doFinal = nullptr) const final;
+    void initializeInstance() final;
 
-    void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const final;
+    llvm::Value * getProducedItemCount(const std::string & name, llvm::Value * doFinal = nullptr) const final;
 
-    llvm::Value * getProcessedItemCount(llvm::Value * instance, const std::string & name) const final;
+    void setProducedItemCount(const std::string & name, llvm::Value * value) const final;
 
-    void setProcessedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const final;
+    llvm::Value * getProcessedItemCount(const std::string & name) const final;
 
-    bool hasNoTerminateAttribute() { return mNoTerminateAttribute;}
+    void setProcessedItemCount(const std::string & name, llvm::Value * value) const final;
+
+    bool hasNoTerminateAttribute() const {
+        return mNoTerminateAttribute;
+    }
     
-    llvm::Value * getTerminationSignal(llvm::Value * instance) const final;
+    llvm::Value * getTerminationSignal() const final;
 
-    void setTerminationSignal(llvm::Value * instance) const final;
+    void setTerminationSignal() const final;
 
-    // Get the value of a scalar field for a given instance.
-    llvm::Value * getScalarField(llvm::Value * instance, const std::string & fieldName) const;
+    // Get the value of a scalar field for the current instance.
+    llvm::Value * getScalarFieldPtr(llvm::Value * index) const {
+        return getScalarFieldPtr(getInstance(), index);
+    }
 
-    llvm::Value * getScalarField(llvm::Value * instance, llvm::Value * index) const;
+    llvm::Value * getScalarFieldPtr(const std::string & fieldName) const {
+        return getScalarFieldPtr(getInstance(), fieldName);
+    }
 
-    // Set the value of a scalar field for a given instance.
-    void setScalarField(llvm::Value *instance, const std::string & fieldName, llvm::Value * value) const;
+    llvm::Value * getScalarField(const std::string & fieldName) const {
+        return iBuilder->CreateLoad(getScalarFieldPtr(fieldName));
+    }
 
-    void setScalarField(llvm::Value * instance, llvm::Value * index, llvm::Value * value) const;
+    llvm::Value * getScalarField(llvm::Value * index) const {
+        return iBuilder->CreateLoad(getScalarFieldPtr(index));
+    }
+
+    // Set the value of a scalar field for the current instance.
+    void setScalarField(const std::string & fieldName, llvm::Value * value) const {
+        iBuilder->CreateStore(value, getScalarFieldPtr(fieldName));
+    }
+
+    void setScalarField(llvm::Value * index, llvm::Value * value) const {
+        iBuilder->CreateStore(value, getScalarFieldPtr(index));
+    }
+
 
     // Synchronization actions for executing a kernel for a particular logical segment.
     //
@@ -107,9 +131,11 @@ public:
     // After all segment processing actions for the kernel are complete, and any necessary
     // data has been extracted from the kernel for further pipeline processing, the
     // segment number must be incremented and stored using releaseLogicalSegmentNo.
-    llvm::LoadInst * acquireLogicalSegmentNo(llvm::Value * instance) const;
+    llvm::LoadInst * acquireLogicalSegmentNo() const;
 
-    void releaseLogicalSegmentNo(llvm::Value * instance, llvm::Value * newFieldVal) const;
+    void releaseLogicalSegmentNo(llvm::Value * nextSegNo) const;
+
+    llvm::Value * getConsumerState(const std::string & name) const;
 
     // Get a parameter by name.
     llvm::Argument * getParameter(llvm::Function * f, const std::string & name) const;
@@ -125,20 +151,20 @@ public:
     inline llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return getBuilder()->getStreamSetTy(NumElements, FieldWidth);
     }
-    
-    virtual ~KernelBuilder() = 0;
-    
-    const std::vector<const parabix::StreamSetBuffer *> & getStreamSetInputBuffers() const { return mStreamSetInputBuffers; }
+       
+    const StreamSetBuffers & getStreamSetInputBuffers() const { return mStreamSetInputBuffers; }
 
     const parabix::StreamSetBuffer * getStreamSetInputBuffer(const unsigned i) const { return mStreamSetInputBuffers[i]; }
 
-    const std::vector<const parabix::StreamSetBuffer *> & getStreamSetOutputBuffers() const { return mStreamSetOutputBuffers; }
+    const StreamSetBuffers & getStreamSetOutputBuffers() const { return mStreamSetOutputBuffers; }
 
     const parabix::StreamSetBuffer * getStreamSetOutputBuffer(const unsigned i) const { return mStreamSetOutputBuffers[i]; }
 
     llvm::CallInst * createDoSegmentCall(const std::vector<llvm::Value *> & args) const;
 
     llvm::CallInst * createGetAccumulatorCall(llvm::Value * self, const std::string & accumName) const;
+
+    virtual ~KernelBuilder() = 0;
 
 protected:
 
@@ -180,31 +206,11 @@ protected:
 
     unsigned addUnnamedScalar(llvm::Type * type);
 
-    unsigned getScalarCount() const;
-
     // Run-time access of Kernel State and parameters of methods for
     // use in implementing kernels.
     
     // Get the index of a named scalar field within the kernel state struct.
     llvm::ConstantInt * getScalarIndex(const std::string & name) const;
-
-    // Get the value of a scalar field for a given instance.
-    llvm::Value * getScalarField(const std::string & fieldName) const {
-        return getScalarField(getSelf(), fieldName);
-    }
-
-    llvm::Value * getScalarField(llvm::Value * index) const {
-        return getScalarField(getSelf(), index);
-    }
-
-    // Set the value of a scalar field for a given instance.
-    void setScalarField(const std::string & fieldName, llvm::Value * value) const {
-        return setScalarField(getSelf(), fieldName, value);
-    }
-
-    void setScalarField(llvm::Value * index, llvm::Value * value) const {
-        return setScalarField(getSelf(), index, value);
-    }
 
     llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex) const;
 
@@ -240,45 +246,7 @@ protected:
 
     void reserveBytes(const std::string & name, llvm::Value * requested) const;
 
-    llvm::Value * getScalarFieldPtr(const std::string & name) const {
-        return getScalarFieldPtr(getSelf(), name);
-    }
-
-    llvm::Value * getScalarFieldPtr(llvm::Value * index) const {
-        return getScalarFieldPtr(getSelf(), index);
-    }
-
-    inline llvm::Value * getProducedItemCount(const std::string & name) const {
-        return getProducedItemCount(getSelf(), name);
-    }
-
-    inline void setProducedItemCount(const std::string & name, llvm::Value * value) const {
-        setProducedItemCount(getSelf(), name, value);
-    }
-
     llvm::Value * getAvailableItemCount(const std::string & name) const;
-
-    inline llvm::Value * getProcessedItemCount(const std::string & name) const {
-        return getProcessedItemCount(getSelf(), name);
-    }
-
-    inline void setProcessedItemCount(const std::string & name, llvm::Value * value) const {
-        setProcessedItemCount(getSelf(), name, value);
-    }
-
-    llvm::Value * getConsumedItemCount(const std::string & name) const;
-
-    llvm::Value * getTerminationSignal() const {
-        return getTerminationSignal(getSelf());
-    }
-
-    void setTerminationSignal() const {
-        return setTerminationSignal(getSelf());
-    }
-
-    llvm::Value * getSelf() const {
-        return mSelf;
-    }
 
     llvm::BasicBlock * CreateBasicBlock(std::string && name) const;
 
@@ -286,9 +254,14 @@ protected:
 
     llvm::Value * getStreamSetBufferPtr(const std::string & name) const;
 
-    llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & name) const;
+    llvm::Value * getScalarFieldPtr(llvm::Value * const instance, llvm::Value * index) const {
+        assert ("instance cannot be null!" && instance);
+        return iBuilder->CreateGEP(getInstance(), {iBuilder->getInt32(0), index});
+    }
 
-    llvm::Value * getScalarFieldPtr(llvm::Value * instance, llvm::Value * index) const;
+    llvm::Value * getScalarFieldPtr(llvm::Value * const instance, const std::string & fieldName) const {
+        return getScalarFieldPtr(instance, getScalarIndex(fieldName));
+    }
 
     StreamPort getStreamPort(const std::string & name) const;
 
@@ -310,22 +283,23 @@ protected:
 
     void callGenerateDoSegmentMethod();
 
+
 private:
+
+    void setConsumerState(const std::string & name, llvm::Value * value) const;
 
     llvm::Value * computeBlockIndex(const std::vector<Binding> & binding, const std::string & name, llvm::Value * itemCount) const;
 
 protected:
 
-    llvm::Value *                                   mSelf;
-    llvm::Function *                                mCurrentMethod;
-
-    std::vector<llvm::Type *>                       mKernelFields;
-    KernelMap                                       mKernelMap;
-    StreamMap                                       mStreamMap;
-    std::vector<const parabix::StreamSetBuffer *>   mStreamSetInputBuffers;
-    std::vector<const parabix::StreamSetBuffer *>   mStreamSetOutputBuffers;
-    bool                                            mNoTerminateAttribute;
-    bool                                            mIsGenerated;
+    llvm::Function *                mCurrentMethod;
+    std::vector<llvm::Type *>       mKernelFields;
+    KernelMap                       mKernelMap;
+    StreamMap                       mStreamMap;
+    StreamSetBuffers                mStreamSetInputBuffers;
+    StreamSetBuffers                mStreamSetOutputBuffers;
+    bool                            mNoTerminateAttribute;
+    bool                            mIsGenerated;
 
 };
 

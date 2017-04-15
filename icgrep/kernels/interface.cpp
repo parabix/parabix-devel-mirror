@@ -69,20 +69,24 @@ Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value *
     return nullptr;
 }
 
-void KernelInterface::addKernelDeclarations(Module * client) {
+void KernelInterface::addKernelDeclarations(Module * const client) {
     Module * saveModule = iBuilder->getModule();
     auto savePoint = iBuilder->saveIP();
     iBuilder->setModule(client);
     if (mKernelStateType == nullptr) {
         throw std::runtime_error("Kernel interface " + getName() + " not yet finalized.");
     }
-    PointerType * selfType = PointerType::getUnqual(mKernelStateType);
+    PointerType * const selfType = mKernelStateType->getPointerTo();
+    IntegerType * const sizeTy = iBuilder->getSizeTy();
+    PointerType * const consumerTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
 
     // Create the initialization function prototype
-    std::vector<Type *> initParameters = {selfType};
+    std::vector<Type *> initParameters = {selfType};   
     for (auto binding : mScalarInputs) {
         initParameters.push_back(binding.type);
     }
+    initParameters.insert(initParameters.end(), mStreamSetOutputs.size(), consumerTy);
+
     FunctionType * initType = FunctionType::get(iBuilder->getVoidTy(), initParameters, false);
     Function * init = Function::Create(initType, GlobalValue::ExternalLinkage, getName() + INIT_SUFFIX, client);
     init->setCallingConv(CallingConv::C);
@@ -92,16 +96,16 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     for (auto binding : mScalarInputs) {
         (++args)->setName(binding.name);
     }
+    for (auto binding : mStreamSetOutputs) {
+        args->setName(binding.name + "ConsumerLogicalSegments");       
+//        args->addAttr(Attribute::NoCapture);
+//        args->addAttr(Attribute::ReadOnly);
+        ++args;
+    }
 
-    /// INVESTIGATE: should we explicitly mark whether to track a kernel output's consumed amount? It would have
-    /// to be done at the binding level using the current architecture. It would reduce the number of arguments
-    /// passed between kernels.
-
-    // Create the doSegment function prototype.    
-    IntegerType * const sizeTy = iBuilder->getSizeTy();
-
+    // Create the doSegment function prototype.
     std::vector<Type *> params = {selfType, iBuilder->getInt1Ty()};
-    params.insert(params.end(), mStreamSetInputs.size() + mStreamSetOutputs.size(), sizeTy);
+    params.insert(params.end(), mStreamSetInputs.size(), sizeTy);
 
     FunctionType * const doSegmentType = FunctionType::get(iBuilder->getVoidTy(), params, false);
     Function * doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, client);
@@ -112,10 +116,7 @@ void KernelInterface::addKernelDeclarations(Module * client) {
     args->setName("self");
     (++args)->setName("doFinal");
     for (const Binding & input : mStreamSetInputs) {
-        (++args)->setName(input.name + "_availableItems");
-    }
-    for (const Binding & output : mStreamSetOutputs) {
-        (++args)->setName(output.name + "_consumedItems");
+        (++args)->setName(input.name + "AvailableItems");
     }
 
     /// INVESTIGATE: replace the accumulator methods with a single Exit method that handles any clean up and returns

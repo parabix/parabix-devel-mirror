@@ -74,7 +74,6 @@ struct Binding {
 };
 
 class KernelInterface {
-
 public:
     /*
      
@@ -100,11 +99,15 @@ public:
     // Add ExternalLinkage method declarations for the kernel to a given client module.
     void addKernelDeclarations(llvm::Module * client);
 
-    virtual void createInstance() = 0;
+    virtual llvm::Value * createInstance() = 0;
+
+    virtual void initializeInstance() = 0;
 
     void setInitialArguments(std::vector<llvm::Value *> args);
 
-    llvm::Value * getInstance() const { return mKernelInstance; }
+    llvm::Value * getInstance() const {
+        return mKernelInstance;
+    }
 
     unsigned getLookAhead() const {
         return mLookAheadPositions;
@@ -114,17 +117,17 @@ public:
         return iBuilder;
     }
 
-    virtual llvm::Value * getProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * doFinal = nullptr) const = 0;
+    virtual llvm::Value * getProducedItemCount(const std::string & name, llvm::Value * doFinal = nullptr) const = 0;
 
-    virtual void setProducedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
+    virtual void setProducedItemCount(const std::string & name, llvm::Value * value) const = 0;
 
-    virtual llvm::Value * getProcessedItemCount(llvm::Value * instance, const std::string & name) const = 0;
+    virtual llvm::Value * getProcessedItemCount(const std::string & name) const = 0;
 
-    virtual void setProcessedItemCount(llvm::Value * instance, const std::string & name, llvm::Value * value) const = 0;
+    virtual void setProcessedItemCount(const std::string & name, llvm::Value * value) const = 0;
 
-    virtual llvm::Value * getTerminationSignal(llvm::Value * instance) const = 0;
+    virtual llvm::Value * getTerminationSignal() const = 0;
 
-    virtual void setTerminationSignal(llvm::Value * instance) const = 0;
+    virtual void setTerminationSignal() const = 0;
     
     void setLookAhead(unsigned lookAheadPositions) {
         mLookAheadPositions = lookAheadPositions;
@@ -146,32 +149,38 @@ protected:
                     std::vector<Binding> && scalar_outputs,
                     std::vector<Binding> && internal_scalars)
     : iBuilder(builder)
+    , mKernelInstance(nullptr)
+    , mKernelStateType(nullptr)
+    , mLookAheadPositions(0)
     , mKernelName(kernelName)
     , mStreamSetInputs(stream_inputs)
     , mStreamSetOutputs(stream_outputs)
     , mScalarInputs(scalar_inputs)
     , mScalarOutputs(scalar_outputs)
     , mInternalScalars(internal_scalars)
-    , mKernelStateType(nullptr)
-    , mKernelInstance(nullptr)
-    , mLookAheadPositions(0) {
+    {
 
     }
     
+    void setInstance(llvm::Value * const instance) {
+        assert ("kernel instance cannot be null!" && instance);
+        assert ("kernel instance must point to a valid kernel state type!" && (instance->getType()->getPointerElementType() == mKernelStateType));
+        mKernelInstance = instance;
+    }
+
 protected:
     
-    IDISA::IDISA_Builder * const iBuilder;
-    std::string mKernelName;
-    std::vector<llvm::Value *> mInitialArguments;
-    std::vector<Binding> mStreamSetInputs;
-    std::vector<Binding> mStreamSetOutputs;
-    std::vector<Binding> mScalarInputs;
-    std::vector<Binding> mScalarOutputs;
-    std::vector<Binding> mInternalScalars;
-    llvm::StructType * mKernelStateType;
-    llvm::Value * mKernelInstance;
-    unsigned mLookAheadPositions;
-    
+    IDISA::IDISA_Builder * const    iBuilder;
+    llvm::Value *                   mKernelInstance;
+    llvm::StructType *              mKernelStateType;
+    unsigned                        mLookAheadPositions;
+    std::string                     mKernelName;
+    std::vector<llvm::Value *>      mInitialArguments;
+    std::vector<Binding>            mStreamSetInputs;
+    std::vector<Binding>            mStreamSetOutputs;
+    std::vector<Binding>            mScalarInputs;
+    std::vector<Binding>            mScalarOutputs;
+    std::vector<Binding>            mInternalScalars;
 };
 
 #endif 

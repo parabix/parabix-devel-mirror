@@ -6,26 +6,23 @@
 #define GREP_KERNEL_H
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
-#include "kernel.h"              // for KernelBuilder
-#include <re/re_re.h>
-#include <vector>                // for vector
-#include <string>                // for string
-namespace IDISA { class IDISA_Builder; }
 
+namespace IDISA { class IDISA_Builder; }
+namespace re { class RE; }
 namespace kernel {
 
 class ICgrepKernelBuilder: public pablo::PabloKernel {
 public:
-    ICgrepKernelBuilder(IDISA::IDISA_Builder * iBuilder, re::RE * re_ast, bool CountOnly = false);
+    ICgrepKernelBuilder(IDISA::IDISA_Builder * const iBuilder, re::RE * const re_ast, const bool CountOnly = false);
     
     std::string generateKernelSignature(std::string moduleId) override;
     
     void prepareKernel() override;
 
 private:
-    bool mCountOnly;
-    re::RE * mRE;
-    std::string mSignature;
+    const bool      mCountOnly;
+    re::RE * const  mRE;
+    std::string     mSignature;
 };
 
 }

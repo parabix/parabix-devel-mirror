@@ -14,24 +14,26 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/Transforms/Utils/Local.h>
+#include <kernels/streamset.h>
+#include <sstream>
 
-static const auto DO_BLOCK_SUFFIX = "_DoBlock";
+static const std::string DO_BLOCK_SUFFIX = "_DoBlock";
 
-static const auto FINAL_BLOCK_SUFFIX = "_FinalBlock";
+static const std::string FINAL_BLOCK_SUFFIX = "_FinalBlock";
 
-static const auto LOGICAL_SEGMENT_NO_SCALAR = "logicalSegNo";
+static const std::string LOGICAL_SEGMENT_NO_SCALAR = "logicalSegNo";
 
-static const auto PROCESSED_ITEM_COUNT_SUFFIX = "_processedItemCount";
+static const std::string PROCESSED_ITEM_COUNT_SUFFIX = "_processedItemCount";
 
-static const auto CONSUMED_ITEM_COUNT_SUFFIX = "_consumedItemCount";
+static const std::string CONSUMED_ITEM_COUNT_SUFFIX = "_consumedItemCount";
 
-static const auto PRODUCED_ITEM_COUNT_SUFFIX = "_producedItemCount";
+static const std::string PRODUCED_ITEM_COUNT_SUFFIX = "_producedItemCount";
 
-static const auto TERMINATION_SIGNAL = "terminationSignal";
+static const std::string TERMINATION_SIGNAL = "terminationSignal";
 
-static const auto BUFFER_PTR_SUFFIX = "_bufferPtr";
+static const std::string BUFFER_PTR_SUFFIX = "_bufferPtr";
 
-static const auto BLOCK_MASK_SUFFIX = "_blkMask";
+static const std::string CONSUMER_LOGICAL_SEGMENT_SUFFIX = "_cls";
 
 using namespace llvm;
 using namespace kernel;
@@ -69,9 +71,11 @@ void KernelBuilder::prepareStreamSetNameMap() {
 }
     
 void KernelBuilder::prepareKernel() {
+
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
         report_fatal_error("Cannot prepare kernel after kernel state finalized");
     }
+
     if (mStreamSetInputs.size() != mStreamSetInputBuffers.size()) {
         std::string tmp;
         raw_string_ostream out(tmp);
@@ -96,10 +100,12 @@ void KernelBuilder::prepareKernel() {
             addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
         }        
     }
+
+    IntegerType * const sizeTy = iBuilder->getSizeTy();
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
         if ((mStreamSetInputs.empty() && (i == 0)) || !mStreamSetOutputs[i].rate.isExact()) {
-            addScalar(iBuilder->getSizeTy(), mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
+            addScalar(sizeTy, mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
         }
     }
     for (const auto binding : mScalarInputs) {
@@ -114,52 +120,74 @@ void KernelBuilder::prepareKernel() {
     for (auto binding : mInternalScalars) {
         addScalar(binding.type, binding.name);
     }
-    addScalar(iBuilder->getSizeTy(), LOGICAL_SEGMENT_NO_SCALAR);
+
+    Type * const consumerSetTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        addScalar(consumerSetTy, mStreamSetOutputs[i].name + CONSUMER_LOGICAL_SEGMENT_SUFFIX);
+    }
+
+    addScalar(sizeTy, LOGICAL_SEGMENT_NO_SCALAR);
     addScalar(iBuilder->getInt1Ty(), TERMINATION_SIGNAL);
+
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, getName());
 }
 
 Module * KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
-    setCallParameters(inputs, outputs);
-    std::string cacheName = getName() + "_" + iBuilder->getBuilderUniqueName();
-    for (auto & b: mStreamSetInputBuffers) {
-        cacheName += ":" + b->getUniqueID();
-    }
-    for (auto & b: mStreamSetOutputBuffers) {
-        cacheName += ":" + b->getUniqueID();
-    }
-    prepareKernel();
-    return new Module(cacheName, iBuilder->getContext());
-}
 
-void KernelBuilder::setCallParameters(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
     assert (mStreamSetInputBuffers.empty());
-    mStreamSetInputBuffers.assign(inputs.begin(), inputs.end());
-    for (unsigned i = 0; i < mStreamSetInputBuffers.size(); ++i) {
-        if (LLVM_UNLIKELY(mStreamSetInputBuffers[i] == nullptr)) {
-            report_fatal_error(getName() + ": input stream set " + std::to_string(i)
-                               + " cannot be null when calling generateKernel()");
-        }
-    }
-    if (LLVM_UNLIKELY(mStreamSetInputs.size() != mStreamSetInputBuffers.size())) {
+    assert (mStreamSetOutputBuffers.empty());
+
+    if (LLVM_UNLIKELY(mStreamSetInputs.size() != inputs.size())) {
         report_fatal_error(getName() + ": expected " + std::to_string(mStreamSetInputs.size()) +
-                           " input stream sets but generateKernel() was given "
+                           " input stream sets but was given "
                            + std::to_string(mStreamSetInputBuffers.size()));
     }
-    assert (mStreamSetOutputBuffers.empty());
-    mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
-    for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
-        if (LLVM_UNLIKELY(mStreamSetOutputBuffers[i] == nullptr)) {
+
+    for (unsigned i = 0; i < inputs.size(); ++i) {
+        StreamSetBuffer * const buf = inputs[i];
+        if (LLVM_UNLIKELY(buf == nullptr)) {
+            report_fatal_error(getName() + ": input stream set " + std::to_string(i)
+                               + " cannot be null");
+        }
+        buf->addConsumer(this);
+    }
+
+    if (LLVM_UNLIKELY(mStreamSetOutputs.size() != outputs.size())) {
+        report_fatal_error(getName() + ": expected " + std::to_string(mStreamSetOutputs.size())
+                           + " output stream sets but was given "
+                           + std::to_string(mStreamSetOutputBuffers.size()));
+    }
+
+    for (unsigned i = 0; i < outputs.size(); ++i) {
+        StreamSetBuffer * const buf = outputs[i];
+        if (LLVM_UNLIKELY(buf == nullptr)) {
             report_fatal_error(getName() + ": output stream set " + std::to_string(i)
-                               + " cannot be null when calling generateKernel()");
+                               + " cannot be null");
+        }
+        if (LLVM_LIKELY(buf->getProducer() == nullptr)) {
+            buf->setProducer(this);
+        } else {
+            report_fatal_error(getName() + ": output stream set " + std::to_string(i)
+                               + " is already produced by kernel " + buf->getProducer()->getName());
         }
     }
-    if (LLVM_UNLIKELY(mStreamSetOutputs.size() != mStreamSetOutputBuffers.size())) {
-        report_fatal_error(getName() + ": expected " + std::to_string(mStreamSetOutputs.size())
-                           + " output stream sets but generateKernel() was given "
-                           + std::to_string(mStreamSetOutputBuffers.size()));
-    }        
-}    
+
+    std::stringstream cacheName;
+
+    cacheName << getName() << '_' << iBuilder->getBuilderUniqueName();
+    for (const StreamSetBuffer * b: inputs) {
+        cacheName <<  ':' <<  b->getUniqueID();
+    }
+    for (const StreamSetBuffer * b: outputs) {
+        cacheName <<  ':' <<  b->getUniqueID();
+    }
+
+    mStreamSetInputBuffers.assign(inputs.begin(), inputs.end());
+    mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
+
+    prepareKernel();
+    return new Module(cacheName.str(), iBuilder->getContext());
+}
 
 // Default kernel signature: generate the IR and emit as byte code.
 std::string KernelBuilder::generateKernelSignature(std::string moduleId) {
@@ -192,7 +220,7 @@ void KernelBuilder::generateKernel() {
             iBuilder->CreateRet(retVal);
         }
         iBuilder->restoreIP(savePoint);
-        mIsGenerated = true;
+        mIsGenerated = true;       
     }
 }
 
@@ -200,7 +228,7 @@ void KernelBuilder::callGenerateDoSegmentMethod() {
     mCurrentMethod = getDoSegmentFunction();
     iBuilder->SetInsertPoint(CreateBasicBlock(getName() + "_entry"));
     auto args = mCurrentMethod->arg_begin();
-    mSelf = &*(args++);
+    setInstance(&*(args++));
     Value * doFinal = &*(args++);
     std::vector<Value *> producerPos;
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
@@ -214,12 +242,13 @@ void KernelBuilder::callGenerateInitMethod() {
     mCurrentMethod = getInitFunction();
     iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     Function::arg_iterator args = mCurrentMethod->arg_begin();
-    mSelf = &*(args++);
-    iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), mSelf);
+    setInstance(&*(args++));
+    iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), getInstance());
     for (auto binding : mScalarInputs) {
-        Value * param = &*(args++);
-        Value * ptr = iBuilder->CreateGEP(mSelf, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
-        iBuilder->CreateStore(param, ptr);
+        setScalarField(binding.name, &*(args++));
+    }
+    for (auto binding : mStreamSetOutputs) {
+        setConsumerState(binding.name, &*(args++));
     }
     generateInitMethod();
     iBuilder->CreateRetVoid();
@@ -233,41 +262,7 @@ ConstantInt * KernelBuilder::getScalarIndex(const std::string & name) const {
     return iBuilder->getInt32(f->second);
 }
 
-unsigned KernelBuilder::getScalarCount() const {
-    return mKernelFields.size();
-}
-
-Value * KernelBuilder::getScalarFieldPtr(Value * instance, Value * index) const {
-    assert ("instance cannot be null!" && instance);
-    return iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), index});
-}
-
-Value * KernelBuilder::getScalarFieldPtr(Value * instance, const std::string & fieldName) const {
-    assert ("instance cannot be null!" && instance);
-    return getScalarFieldPtr(instance, getScalarIndex(fieldName));
-}
-
-Value * KernelBuilder::getScalarField(Value * instance, const std::string & fieldName) const {
-    return iBuilder->CreateLoad(getScalarFieldPtr(instance, fieldName));
-}
-
-Value * KernelBuilder::getScalarField(Value * instance, Value * index) const {
-    assert ("instance cannot be null!" && instance);
-    return iBuilder->CreateLoad(getScalarFieldPtr(instance, index));
-}
-
-void KernelBuilder::setScalarField(Value * instance, const std::string & fieldName, Value * value) const {
-    assert ("instance cannot be null!" && instance);
-    iBuilder->CreateStore(value, getScalarFieldPtr(instance, fieldName));
-}
-
-void KernelBuilder::setScalarField(Value * instance, Value * index, Value * value) const {
-    assert ("instance cannot be null!" && instance);
-    iBuilder->CreateStore(value, getScalarFieldPtr(instance, index));
-}
-
-Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string & name, Value * doFinal) const {
-    assert ("instance cannot be null!" && instance);
+Value * KernelBuilder::getProducedItemCount(const std::string & name, Value * doFinal) const {
     Port port; unsigned ssIdx;
     std::tie(port, ssIdx) = getStreamPort(name);
     assert (port == Port::Output);
@@ -289,10 +284,10 @@ Value * KernelBuilder::getProducedItemCount(Value * instance, const std::string 
                principalField = refSet + PRODUCED_ITEM_COUNT_SUFFIX;
             }
         }
-        Value * principalItemsProcessed = getScalarField(instance, principalField);
+        Value * principalItemsProcessed = getScalarField(principalField);
         return mStreamSetOutputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed, doFinal);
     }
-    return getScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX);
+    return getScalarField(name + PRODUCED_ITEM_COUNT_SUFFIX);
 }
 
 llvm::Value * KernelBuilder::getAvailableItemCount(const std::string & name) const {
@@ -308,8 +303,7 @@ llvm::Value * KernelBuilder::getAvailableItemCount(const std::string & name) con
     return nullptr;
 }
 
-Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string & name) const {
-    assert ("instance cannot be null!" && instance);
+Value * KernelBuilder::getProcessedItemCount(const std::string & name) const {
     Port port; unsigned ssIdx;
     std::tie(port, ssIdx) = getStreamPort(name);
     assert (port == Port::Input);
@@ -318,56 +312,42 @@ Value * KernelBuilder::getProcessedItemCount(Value * instance, const std::string
         if (refSet.empty()) {
             refSet = mStreamSetInputs[0].name;
         }
-        Value * principalItemsProcessed = getScalarField(instance, refSet + PROCESSED_ITEM_COUNT_SUFFIX);
+        Value * principalItemsProcessed = getScalarField(refSet + PROCESSED_ITEM_COUNT_SUFFIX);
         return mStreamSetInputs[ssIdx].rate.CreateRatioCalculation(iBuilder, principalItemsProcessed);
     }
-    return getScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX);
+    return getScalarField(name + PROCESSED_ITEM_COUNT_SUFFIX);
 }
 
-llvm::Value * KernelBuilder::getConsumedItemCount(const std::string & name) const {
-    auto arg = mCurrentMethod->arg_begin();
-    ++arg; // self
-    ++arg; // doFinal
-    for (unsigned i = 0; i < mStreamSetInputs.size(); ++i) {
-        ++arg; // input
-    }
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); ++i) {
-        if (mStreamSetOutputs[i].name == name) {
-            return &*arg;
-        }
-        ++arg;
-    }
-    return nullptr;
+void KernelBuilder::setProducedItemCount(const std::string & name, Value * value) const {
+    setScalarField(name + PRODUCED_ITEM_COUNT_SUFFIX, value);
 }
 
-void KernelBuilder::setProducedItemCount(Value * instance, const std::string & name, Value * value) const {
-    assert ("instance cannot be null!" && instance);
-    setScalarField(instance, name + PRODUCED_ITEM_COUNT_SUFFIX, value);
+void KernelBuilder::setProcessedItemCount(const std::string & name, Value * value) const {
+    setScalarField(name + PROCESSED_ITEM_COUNT_SUFFIX, value);
 }
 
-void KernelBuilder::setProcessedItemCount(Value * instance, const std::string & name, Value * value) const {
-    assert ("instance cannot be null!" && instance);
-    setScalarField(instance, name + PROCESSED_ITEM_COUNT_SUFFIX, value);
+Value * KernelBuilder::getTerminationSignal() const {
+    return getScalarField(TERMINATION_SIGNAL);
 }
 
-Value * KernelBuilder::getTerminationSignal(Value * instance) const {
-    assert ("instance cannot be null!" && instance);
-    return getScalarField(instance, TERMINATION_SIGNAL);
+void KernelBuilder::setTerminationSignal() const {
+    setScalarField(TERMINATION_SIGNAL, iBuilder->getTrue());
 }
 
-void KernelBuilder::setTerminationSignal(Value * instance) const {
-    assert ("instance cannot be null!" && instance);
-    setScalarField(instance, TERMINATION_SIGNAL, iBuilder->getTrue());
+LoadInst * KernelBuilder::acquireLogicalSegmentNo() const {
+    return iBuilder->CreateAtomicLoadAcquire(getScalarFieldPtr(getInstance(), LOGICAL_SEGMENT_NO_SCALAR));
 }
 
-LoadInst * KernelBuilder::acquireLogicalSegmentNo(Value * instance) const {
-    assert ("instance cannot be null!" && instance);
-    return iBuilder->CreateAtomicLoadAcquire(getScalarFieldPtr(instance, LOGICAL_SEGMENT_NO_SCALAR));
+void KernelBuilder::releaseLogicalSegmentNo(Value * nextSegNo) const {
+    iBuilder->CreateAtomicStoreRelease(nextSegNo, getScalarFieldPtr(getInstance(), LOGICAL_SEGMENT_NO_SCALAR));
 }
 
-void KernelBuilder::releaseLogicalSegmentNo(Value * instance, Value * newCount) const {
-    assert ("instance cannot be null!" && instance);
-    iBuilder->CreateAtomicStoreRelease(newCount, getScalarFieldPtr(instance, LOGICAL_SEGMENT_NO_SCALAR));
+llvm::Value * KernelBuilder::getConsumerState(const std::string & name) const {
+    return getScalarField(name + CONSUMER_LOGICAL_SEGMENT_SUFFIX);
+}
+
+void KernelBuilder::setConsumerState(const std::string & name, llvm::Value * value) const {
+    setScalarField(name + CONSUMER_LOGICAL_SEGMENT_SUFFIX, value);
 }
 
 inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bindings, const std::string & name, Value * itemCount) const {
@@ -504,7 +484,7 @@ KernelBuilder::StreamPort KernelBuilder::getStreamPort(const std::string & name)
 }
 
 Value * KernelBuilder::getStreamSetBufferPtr(const std::string & name) const {
-    return getScalarField(getSelf(), name + BUFFER_PTR_SUFFIX);
+    return getScalarField(name + BUFFER_PTR_SUFFIX);
 }
 
 Argument * KernelBuilder::getParameter(Function * const f, const std::string & name) const {
@@ -517,6 +497,7 @@ Argument * KernelBuilder::getParameter(Function * const f, const std::string & n
 }
 
 CallInst * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) const {
+    assert (getDoSegmentFunction()->getArgumentList().size() == args.size());
     return iBuilder->CreateCall(getDoSegmentFunction(), args);
 }
 
@@ -528,15 +509,21 @@ BasicBlock * KernelBuilder::CreateBasicBlock(std::string && name) const {
     return BasicBlock::Create(iBuilder->getContext(), name, mCurrentMethod);
 }
 
-void KernelBuilder::createInstance() {
+Value * KernelBuilder::createInstance() {
     if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
         report_fatal_error("Cannot instantiate " + getName() + " before calling prepareKernel()");
     }
-    mKernelInstance = iBuilder->CreateCacheAlignedAlloca(mKernelStateType);
+    setInstance(iBuilder->CreateCacheAlignedAlloca(mKernelStateType));
+    return getInstance();
+}
 
+void KernelBuilder::initializeInstance() {
+    if (LLVM_UNLIKELY(getInstance() == nullptr)) {
+        report_fatal_error("Cannot initialize " + getName() + " before calling createInstance()");
+    }
     std::vector<Value *> args;
-    args.reserve(mInitialArguments.size() + mStreamSetInputBuffers.size() + mStreamSetOutputBuffers.size() + 1);
-    args.push_back(mKernelInstance);
+    args.reserve(1 + mInitialArguments.size() + mStreamSetInputBuffers.size() + (mStreamSetOutputBuffers.size() * 2));
+    args.push_back(getInstance());
     for (unsigned i = 0; i < mInitialArguments.size(); ++i) {
         Value * arg = mInitialArguments[i];
         if (LLVM_UNLIKELY(arg == nullptr)) {
@@ -565,6 +552,30 @@ void KernelBuilder::createInstance() {
         args.push_back(arg);
     }
     assert (mStreamSetOutputs.size() == mStreamSetOutputBuffers.size());
+
+    IntegerType * const sizeTy = iBuilder->getSizeTy();
+    PointerType * const sizePtrTy = sizeTy->getPointerTo();
+    PointerType * const sizePtrPtrTy = sizePtrTy->getPointerTo();
+    StructType * const consumerTy = StructType::get(sizeTy, sizePtrPtrTy, nullptr);
+    Constant * const sizeOfSizePtrTy = ConstantExpr::getSizeOf(sizePtrTy);
+
+    for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
+        const auto & consumers = mStreamSetOutputBuffers[i]->getConsumers();
+        AllocaInst * const outputConsumers = iBuilder->CreateAlloca(consumerTy);
+        Value * const numPtr = iBuilder->CreateGEP(outputConsumers, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+        const auto n = consumers.size();
+        const auto consumerCount = iBuilder->getSize(n);
+        iBuilder->CreateStore(consumerCount, numPtr);
+        Value * const consumerPtr = iBuilder->CreateGEP(outputConsumers, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+        Value * const segNoPtrs = iBuilder->CreatePointerCast(iBuilder->CreateMalloc(ConstantExpr::getMul(consumerCount, sizeOfSizePtrTy)), sizePtrPtrTy);
+        iBuilder->CreateStore(segNoPtrs, consumerPtr);
+        for (unsigned i = 0; i < n; ++i) {
+            KernelBuilder * const consumer = consumers[i];
+            assert (consumer->getInstance());
+            iBuilder->CreateStore(consumer->getScalarFieldPtr(consumer->getInstance(), LOGICAL_SEGMENT_NO_SCALAR), iBuilder->CreateGEP(segNoPtrs, iBuilder->getSize(i)));
+        }
+        args.push_back(outputConsumers);
+    }
     iBuilder->CreateCall(getInitFunction(), args);
 }
 
@@ -601,7 +612,7 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
         branchTarget->addIncoming(baseTarget, entryBlock);
     }
 
-    PHINode * stridesRemaining = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "stridesRemaining");
+    PHINode * const stridesRemaining = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "stridesRemaining");
     stridesRemaining->addIncoming(stridesToDo, entryBlock);
     // NOTE: stridesRemaining may go to a negative number in the final block if the generateFinalBlockMethod(...)
     // calls CreateDoBlockMethodCall(). Do *not* replace the comparator with an unsigned one!
@@ -678,21 +689,21 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
 
 inline void BlockOrientedKernel::writeDoBlockMethod() {
 
-    Value * const self = mSelf;
+    Value * const self = getInstance();
     Function * const cp = mCurrentMethod;
     auto ip = iBuilder->saveIP();
 
     /// Check if the do block method is called and create the function if necessary    
     if (!useIndirectBr()) {
-        FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), {mSelf->getType()}, false);
+        FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), {self->getType()}, false);
         mCurrentMethod = Function::Create(type, GlobalValue::InternalLinkage, getName() + DO_BLOCK_SUFFIX, iBuilder->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
         mCurrentMethod->setDoesNotThrow();
         mCurrentMethod->setDoesNotCapture(1);
         auto args = mCurrentMethod->arg_begin();
         mCurrentMethod = mCurrentMethod;
-        mSelf = &*args;
-        mSelf->setName("self");
+        args->setName("self");
+        setInstance(&*args);
         iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     }
 
@@ -749,7 +760,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
         mDoBlockMethod = mCurrentMethod;
         iBuilder->restoreIP(ip);
         iBuilder->CreateCall(mCurrentMethod, self);
-        mSelf = self;
+        setInstance(self);
         mCurrentMethod = cp;
     }
 
@@ -757,20 +768,20 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
 
 inline void BlockOrientedKernel::writeFinalBlockMethod(Value * remainingItems) {
 
-    Value * const self = mSelf;
+    Value * const self = getInstance();
     Function * const cp = mCurrentMethod;
     Value * const remainingItemCount = remainingItems;
     auto ip = iBuilder->saveIP();
 
     if (!useIndirectBr()) {
-        FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), {mSelf->getType(), iBuilder->getSizeTy()}, false);
+        FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), {self->getType(), iBuilder->getSizeTy()}, false);
         mCurrentMethod = Function::Create(type, GlobalValue::InternalLinkage, getName() + FINAL_BLOCK_SUFFIX, iBuilder->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
         mCurrentMethod->setDoesNotThrow();
         mCurrentMethod->setDoesNotCapture(1);
         auto args = mCurrentMethod->arg_begin();
-        mSelf = &*args;
-        mSelf->setName("self");
+        args->setName("self");
+        setInstance(&*args);
         remainingItems = &*(++args);
         remainingItems->setName("remainingItems");
         iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
@@ -785,7 +796,7 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(Value * remainingItems) {
         iBuilder->restoreIP(ip);
         iBuilder->CreateCall(mCurrentMethod, {self, remainingItemCount});
         mCurrentMethod = cp;
-        mSelf = self;
+        setInstance(self);
     }
 
 }
@@ -804,25 +815,8 @@ void BlockOrientedKernel::CreateDoBlockMethodCall() {
         bb->moveAfter(iBuilder->GetInsertBlock());
         iBuilder->SetInsertPoint(bb);
     } else {
-        iBuilder->CreateCall(mDoBlockMethod, mSelf);
+        iBuilder->CreateCall(mDoBlockMethod, getInstance());
     }
-}
-
-// CONSTRUCTOR
-
-BlockOrientedKernel::BlockOrientedKernel(IDISA::IDISA_Builder * builder,
-                                                           std::string && kernelName,
-                                                           std::vector<Binding> && stream_inputs,
-                                                           std::vector<Binding> && stream_outputs,
-                                                           std::vector<Binding> && scalar_parameters,
-                                                           std::vector<Binding> && scalar_outputs,
-                                                           std::vector<Binding> && internal_scalars)
-: KernelBuilder(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
-, mDoBlockMethod(nullptr)
-, mStrideLoopBody(nullptr)
-, mStrideLoopBranch(nullptr)
-, mStrideLoopTarget(nullptr) {
-
 }
 
 
@@ -835,14 +829,31 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
                              std::vector<Binding> && scalar_outputs,
                              std::vector<Binding> && internal_scalars)
 : KernelInterface(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
-, mSelf(nullptr)
 , mCurrentMethod(nullptr)
-, mNoTerminateAttribute(false) 
+, mNoTerminateAttribute(false)
 , mIsGenerated(false) {
 
 }
 
-KernelBuilder::~KernelBuilder() { }
+KernelBuilder::~KernelBuilder() {
+
+}
+
+// CONSTRUCTOR
+BlockOrientedKernel::BlockOrientedKernel(IDISA::IDISA_Builder * builder,
+                                         std::string && kernelName,
+                                         std::vector<Binding> && stream_inputs,
+                                         std::vector<Binding> && stream_outputs,
+                                         std::vector<Binding> && scalar_parameters,
+                                         std::vector<Binding> && scalar_outputs,
+                                         std::vector<Binding> && internal_scalars)
+: KernelBuilder(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
+, mDoBlockMethod(nullptr)
+, mStrideLoopBody(nullptr)
+, mStrideLoopBranch(nullptr)
+, mStrideLoopTarget(nullptr) {
+
+}
 
 // CONSTRUCTOR
 SegmentOrientedKernel::SegmentOrientedKernel(IDISA::IDISA_Builder * builder,

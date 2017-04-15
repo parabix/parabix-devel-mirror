@@ -26,7 +26,6 @@
 #include <llvm/IR/Module.h>
 #include <kernels/object_cache.h>
 #include <kernels/pipeline.h>
-#include <kernels/interface.h>
 #include <kernels/kernel.h>
 #ifdef CUDA_ENABLED
 #include <IR_Gen/llvm2ptx.h>
@@ -218,8 +217,15 @@ void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<
 }
 
 void ParabixDriver::generatePipelineIR() {
-    for (auto & kb : mKernelList) {
-        kb->addKernelDeclarations(mMainModule);
+    // note: instantiation of all kernels must occur prior to initialization
+    for (const auto & k : mKernelList) {
+        k->addKernelDeclarations(mMainModule);
+    }
+    for (const auto & k : mKernelList) {
+        k->createInstance();
+    }
+    for (const auto & k : mKernelList) {
+        k->initializeInstance();
     }
     if (codegen::pipelineParallel) {
         generateParallelPipeline(iBuilder, mKernelList);

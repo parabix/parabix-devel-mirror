@@ -10,9 +10,7 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel { class KernelBuilder; }
 
 void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
-
 void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
-
 void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
 
 #endif // PIPELINE_H

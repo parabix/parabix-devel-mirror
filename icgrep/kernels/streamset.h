@@ -85,6 +85,14 @@ public:
 
     virtual ~StreamSetBuffer() = 0;
 
+    kernel::KernelBuilder * getProducer() const {
+        return mProducer;
+    }
+
+    const std::vector<kernel::KernelBuilder *> & getConsumers() const {
+        return mConsumers;
+    }
+
 protected:
 
     StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, llvm::Type * baseType, llvm::Type * resolvedType, unsigned blocks, unsigned AddressSpace);
@@ -98,15 +106,27 @@ protected:
 
     virtual llvm::Value * getBaseAddress(llvm::Value * self) const;
 
+    void setProducer(kernel::KernelBuilder * const producer) {
+        assert (producer);
+        mProducer = producer;
+    }
+
+    void addConsumer(kernel::KernelBuilder * const consumer) {
+        assert (consumer);
+        mConsumers.push_back(consumer);
+    }
+
 protected:
-    const BufferKind                mBufferKind;
-    IDISA::IDISA_Builder * const    iBuilder;
-    llvm::Type * const              mType;
-    const size_t                    mBufferBlocks;
-    const unsigned                  mAddressSpace;
-    llvm::Value *                   mStreamSetBufferPtr;
-    llvm::Type * const              mBaseType;
-    std::string                     mUniqueID;
+    const BufferKind                        mBufferKind;
+    IDISA::IDISA_Builder * const            iBuilder;
+    llvm::Type * const                      mType;
+    const size_t                            mBufferBlocks;
+    const unsigned                          mAddressSpace;
+    llvm::Value *                           mStreamSetBufferPtr;
+    llvm::Type * const                      mBaseType;
+    std::string                             mUniqueID;
+    kernel::KernelBuilder *                 mProducer;
+    std::vector<kernel::KernelBuilder *>    mConsumers;
 };   
 
 class SingleBlockBuffer final : public StreamSetBuffer {

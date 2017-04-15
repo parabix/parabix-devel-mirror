@@ -689,7 +689,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
         kernel::MatchCount matchCountK(iBuilder);
         pxDriver.addKernelCall(matchCountK, {&mergedResults}, {});
         pxDriver.generatePipelineIR();
-        iBuilder->CreateRet(matchCountK.getScalarField(matchCountK.getInstance(), "matchedLineCount"));
+        iBuilder->CreateRet(matchCountK.getScalarField("matchedLineCount"));
         pxDriver.linkAndFinalize();
     } else {
         kernel::ScanMatchKernel scanMatchK(iBuilder, grepType, encodingBits);

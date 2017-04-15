@@ -42,7 +42,7 @@ Function * makeThreadFunction(const std::string & name, Module * const m) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
 
-    const unsigned n = kernels.size(); assert (n > 0);
+    const unsigned n = kernels.size();
     Module * const m = iBuilder->getModule();
     IntegerType * const sizeTy = iBuilder->getSizeTy();
     PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
@@ -50,19 +50,24 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     const unsigned threads = codegen::ThreadNum;
     Constant * nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
 
+    assert (!kernels.empty());
+
     std::vector<Type *> structTypes;
-    for (unsigned i = 0; i < n; i++) {
-        kernels[i]->createInstance();
-        structTypes.push_back(kernels[i]->getInstance()->getType());
+
+    Value * instance[n];
+    for (unsigned i = 0; i < n; ++i) {
+        instance[i] = kernels[i]->getInstance();
+        structTypes.push_back(instance[i]->getType());
     }
     StructType * const sharedStructType = StructType::get(m->getContext(), structTypes);
     StructType * const threadStructType = StructType::get(sharedStructType->getPointerTo(), sizeTy, nullptr);
+
+    Function * const threadFunc = makeThreadFunction("segment", m);
 
     // -------------------------------------------------------------------------------------------------------------------------
     // MAKE SEGMENT PARALLEL PIPELINE THREAD
     // -------------------------------------------------------------------------------------------------------------------------
     const auto ip = iBuilder->saveIP();
-    Function * const threadFunc = makeThreadFunction("sppt", m);
 
      // Create the basic blocks for the thread function.
     BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc);
@@ -70,10 +75,9 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     Value * const input = &threadFunc->getArgumentList().front();
     Value * const threadStruct = iBuilder->CreatePointerCast(input, threadStructType->getPointerTo());
     Value * const sharedStatePtr = iBuilder->CreateLoad(iBuilder->CreateGEP(threadStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
-    Value * instance[n];
-    for (unsigned k = 0; k < n; k++) {
-        Value * ptr = iBuilder->CreateGEP(sharedStatePtr, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
-        instance[k] = iBuilder->CreateLoad(ptr);
+    for (unsigned k = 0; k < n; ++k) {
+        Value * ptr = iBuilder->CreateLoad(iBuilder->CreateGEP(sharedStatePtr, {iBuilder->getInt32(0), iBuilder->getInt32(k)}));
+        kernels[k]->setInstance(ptr);
     }
     Value * const segOffset = iBuilder->CreateLoad(iBuilder->CreateGEP(threadStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
 
@@ -87,24 +91,23 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     Value * doFinal = iBuilder->getFalse();
     Value * const nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
 
-    BasicBlock * segmentWait = BasicBlock::Create(iBuilder->getContext(), kernels[0]->getName() + "Wait", threadFunc);
-
     BasicBlock * segmentLoopBody = nullptr;
-
     BasicBlock * const exitThreadBlock = BasicBlock::Create(iBuilder->getContext(), "exitThread", threadFunc);
-
-    iBuilder->CreateBr(segmentWait);
 
     StreamSetBufferMap<Value *> producedPos;
 
-    for (unsigned k = 0;;) {
+    for (unsigned k = 0; k < n; ++k) {
+
         const auto & kernel = kernels[k];
-        const unsigned waitIdx = codegen::DebugOptionIsSet(codegen::SerializeThreads) ? (n - 1) : k;
+
+        BasicBlock * const segmentWait = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Wait", threadFunc);
+        iBuilder->CreateBr(segmentWait);
 
         segmentLoopBody = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Do", threadFunc);
 
         iBuilder->SetInsertPoint(segmentWait);
-        Value * const processedSegmentCount = kernels[waitIdx]->acquireLogicalSegmentNo(instance[waitIdx]);
+        const unsigned waitIdx = codegen::DebugOptionIsSet(codegen::SerializeThreads) ? (n - 1) : k;
+        Value * const processedSegmentCount = kernels[waitIdx]->acquireLogicalSegmentNo();
         assert (processedSegmentCount->getType() == segNo->getType());
         Value * const ready = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
 
@@ -114,12 +117,12 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
             BasicBlock * completionTest = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Completed", threadFunc, 0);
             BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Exit", threadFunc, 0);
             iBuilder->CreateCondBr(ready, completionTest, segmentWait);
+
             iBuilder->SetInsertPoint(completionTest);
-            Value * alreadyDone = kernel->getTerminationSignal(instance[k]);
-            iBuilder->CreateCondBr(alreadyDone, exitBlock, segmentLoopBody);
+            iBuilder->CreateCondBr(kernel->getTerminationSignal(), exitBlock, segmentLoopBody);
             iBuilder->SetInsertPoint(exitBlock);
             // Ensure that the next thread will also exit.
-            kernel->releaseLogicalSegmentNo(instance[k], nextSegNo);
+            kernel->releaseLogicalSegmentNo(nextSegNo);
             iBuilder->CreateBr(exitThreadBlock);
         }
 
@@ -127,7 +130,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
         iBuilder->SetInsertPoint(segmentLoopBody);
         const auto & inputs = kernel->getStreamInputs();
         const auto & outputs = kernel->getStreamOutputs();
-        std::vector<Value *> args = {instance[k], doFinal};
+        std::vector<Value *> args = {kernel->getInstance(), doFinal};
         for (unsigned i = 0; i < inputs.size(); ++i) {
             const auto f = producedPos.find(kernel->getStreamSetInputBuffer(i));
             if (LLVM_UNLIKELY(f == producedPos.end())) {
@@ -135,65 +138,62 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
             }
             args.push_back(f->second);
         }
-        for (unsigned i = 0; i < outputs.size(); ++i) {
-            args.push_back(iBuilder->getSize(0));
-        }
+
         CallInst * ci = kernel->createDoSegmentCall(args);
         // TODO: investigate whether this actually inlines the function call correctly despite being in a seperate module.
         ci->addAttribute(AttributeSet::FunctionIndex, Attribute::AlwaysInline);
 
         if (!kernel->hasNoTerminateAttribute()) {
-            doFinal = iBuilder->CreateOr(doFinal, kernel->getTerminationSignal(instance[k]));
+            doFinal = iBuilder->CreateOr(doFinal, kernel->getTerminationSignal());
         }
-        for (unsigned i = 0; i < outputs.size(); i++) {
-            Value * const produced = kernel->getProducedItemCount(instance[k], outputs[i].name, doFinal);
+        for (unsigned i = 0; i < outputs.size(); ++i) {
+            Value * const produced = kernel->getProducedItemCount(outputs[i].name, doFinal);
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
             assert (producedPos.count(buf) == 0);
             producedPos.emplace(buf, produced);
         }
 
-        kernel->releaseLogicalSegmentNo(instance[k], nextSegNo);
-        if (LLVM_UNLIKELY(++k == n)) {
-            assert (segmentLoopBody);
-            exitThreadBlock->moveAfter(segmentLoopBody);
-            segNo->addIncoming(iBuilder->CreateAdd(segNo, iBuilder->getSize(threads)), segmentLoopBody);
-            iBuilder->CreateCondBr(doFinal, exitThreadBlock, segmentLoop);
-
-            iBuilder->SetInsertPoint(exitThreadBlock);
-            iBuilder->CreatePThreadExitCall(nullVoidPtrVal);
-            iBuilder->CreateRetVoid();
-            break;
-        } else {
-            segmentWait = BasicBlock::Create(iBuilder->getContext(), kernels[k]->getName() + "Wait", threadFunc);
-            iBuilder->CreateBr(segmentWait);
-        }
+        kernel->releaseLogicalSegmentNo(nextSegNo);
     }
+
+    assert (segmentLoopBody);
+    exitThreadBlock->moveAfter(segmentLoopBody);
+    segNo->addIncoming(iBuilder->CreateAdd(segNo, iBuilder->getSize(threads)), segmentLoopBody);
+    iBuilder->CreateCondBr(doFinal, exitThreadBlock, segmentLoop);
+
+    iBuilder->SetInsertPoint(exitThreadBlock);
+    iBuilder->CreatePThreadExitCall(nullVoidPtrVal);
+    iBuilder->CreateRetVoid();
 
     // -------------------------------------------------------------------------------------------------------------------------
     iBuilder->restoreIP(ip);
 
+    for (unsigned i = 0; i < n; ++i) {
+        kernels[i]->setInstance(instance[i]);
+    }
+
     // -------------------------------------------------------------------------------------------------------------------------
     // MAKE SEGMENT PARALLEL PIPELINE DRIVER
     // -------------------------------------------------------------------------------------------------------------------------
-
     Type * const pthreadsTy = ArrayType::get(sizeTy, threads);
     AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
     Value * threadIdPtr[threads];
-    for (unsigned i = 0; i < threads; i++) {
+
+    for (unsigned i = 0; i < threads; ++i) {
         threadIdPtr[i] = iBuilder->CreateGEP(pthreads, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
 
-    for (unsigned i = 0; i < n; i++) {
-        kernels[i]->releaseLogicalSegmentNo(kernels[i]->getInstance(), iBuilder->getSize(0));
+    for (unsigned i = 0; i < n; ++i) {
+        kernels[i]->releaseLogicalSegmentNo(iBuilder->getSize(0));
     }
 
     AllocaInst * const sharedStruct = iBuilder->CreateCacheAlignedAlloca(sharedStructType);
-    for (unsigned i = 0; i < n; i++) {
+    for (unsigned i = 0; i < n; ++i) {
         Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
         iBuilder->CreateStore(kernels[i]->getInstance(), ptr);
     }
 
-    for (unsigned i = 0; i < threads; i++) {
+    for (unsigned i = 0; i < threads; ++i) {
         AllocaInst * threadState = iBuilder->CreateAlloca(threadStructType);
         Value * const sharedStatePtr = iBuilder->CreateGEP(threadState, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
         iBuilder->CreateStore(sharedStruct, sharedStatePtr);
@@ -203,7 +203,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     }
 
     AllocaInst * const status = iBuilder->CreateAlloca(int8PtrTy);
-    for (unsigned i = 0; i < threads; i++) {
+    for (unsigned i = 0; i < threads; ++i) {
         Value * threadId = iBuilder->CreateLoad(threadIdPtr[i]);
         iBuilder->CreatePThreadJoinCall(threadId, status);
     }
@@ -213,7 +213,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateParallelPipeline
  ** ------------------------------------------------------------------------------------------------------------- */
-void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
+void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> &kernels) {
 
     Module * const m = iBuilder->getModule();
     IntegerType * const sizeTy = iBuilder->getSizeTy();
@@ -223,31 +223,33 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
     ConstantInt * segmentItems = ConstantInt::get(sizeTy, codegen::SegmentSize * iBuilder->getBitBlockWidth());
     Constant * const nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
 
-    for (auto & k : kernels) {
-        k->createInstance();
-    }
-
     const unsigned n = kernels.size();
 
     Type * const pthreadsTy = ArrayType::get(sizeTy, n);
     AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
     Value * threadIdPtr[n];
-    for (unsigned i = 0; i < n; i++) {
+    for (unsigned i = 0; i < n; ++i) {
         threadIdPtr[i] = iBuilder->CreateGEP(pthreads, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
     }
 
+    Value * instance[n];
     Type * structTypes[n];
-    for (unsigned i = 0; i < n; i++) {
-        structTypes[i] = kernels[i]->getInstance()->getType();
+    for (unsigned i = 0; i < n; ++i) {
+        instance[i] = kernels[i]->getInstance();
+        structTypes[i] = instance[i]->getType();
     }
+
     Type * const sharedStructType = StructType::get(m->getContext(), ArrayRef<Type *>{structTypes, n});
+
+
     AllocaInst * sharedStruct = iBuilder->CreateAlloca(sharedStructType);
-    for (unsigned i = 0; i < n; i++) {
+    for (unsigned i = 0; i < n; ++i) {
         Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
-        iBuilder->CreateStore(kernels[i]->getInstance(), ptr);
+        iBuilder->CreateStore(instance[i], ptr);
     }
+
     for (auto & kernel : kernels) {
-        kernel->releaseLogicalSegmentNo(kernel->getInstance(), iBuilder->getSize(0));
+        kernel->releaseLogicalSegmentNo(iBuilder->getSize(0));
     }
 
     // GENERATE THE PRODUCING AND CONSUMING KERNEL MAPS
@@ -287,10 +289,10 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
     kernelSet.reserve(n);
 
     Function * thread_functions[n];
+    Value * producerSegNo[n];
     for (unsigned id = 0; id < n; id++) {
         const auto & kernel = kernels[id];
         const auto & inputs = kernel->getStreamInputs();
-        const auto & outputs = kernel->getStreamOutputs();
 
         Function * const threadFunc = makeThreadFunction("ppt:" + kernel->getName(), m);
 
@@ -305,10 +307,9 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
 
         Value * sharedStruct = iBuilder->CreateBitCast(&threadFunc->getArgumentList().front(), sharedStructType->getPointerTo());
 
-        Value * instancePtrs[n];
         for (unsigned k = 0; k < n; k++) {
             Value * const ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
-            instancePtrs[k] = iBuilder->CreateLoad(ptr);
+            kernels[k]->setInstance(iBuilder->CreateLoad(ptr));
         }
 
         iBuilder->CreateBr(outputCheckBlock);
@@ -326,7 +327,7 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
             kernelSet.insert(list.begin(), list.end());
         }
         for (unsigned k : kernelSet) {
-            Value * consumerSegNo = kernels[k]->acquireLogicalSegmentNo(instancePtrs[k]);
+            Value * consumerSegNo = kernels[k]->acquireLogicalSegmentNo();
             assert (consumerSegNo->getType() == segNo->getType());
             Value * consumedSegNo = iBuilder->CreateAdd(consumerSegNo, bufferSegments);
             outputWaitCond = iBuilder->CreateAnd(outputWaitCond, iBuilder->CreateICmpULE(segNo, consumedSegNo));
@@ -339,17 +340,12 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
         for (const StreamSetBuffer * buf : kernel->getStreamSetInputBuffers()) {
             kernelSet.insert(producingKernel[buf]);
         }
-        const auto m = kernelSet.size();
-        Value * producerSegNo[m];
 
         Value * inputWaitCond = iBuilder->getTrue();
-        if (m) {
-            unsigned j = 0;
-            for (unsigned k : kernelSet) {
-                producerSegNo[j] = kernels[k]->acquireLogicalSegmentNo(instancePtrs[k]);
-                assert (producerSegNo[j]->getType() == segNo->getType());
-                inputWaitCond = iBuilder->CreateAnd(inputWaitCond, iBuilder->CreateICmpULT(segNo, producerSegNo[j++]));
-            }
+        for (unsigned k : kernelSet) {
+            producerSegNo[k] = kernels[k]->acquireLogicalSegmentNo();
+            assert (producerSegNo[k]->getType() == segNo->getType());
+            inputWaitCond = iBuilder->CreateAnd(inputWaitCond, iBuilder->CreateICmpULT(segNo, producerSegNo[k]));
         }
         iBuilder->CreateCondBr(inputWaitCond, doSegmentBlock, inputCheckBlock);
 
@@ -357,29 +353,26 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
         iBuilder->SetInsertPoint(doSegmentBlock);
 
         Value * const nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
-
         Value * terminated = nullptr;
-        if (m == 0) {
+        if (kernelSet.empty()) {
             // if this kernel has no input streams, the kernel itself must decide when it terminates.
-            terminated = kernel->getTerminationSignal(instancePtrs[id]);
+            terminated = kernel->getTerminationSignal();
         } else {
             // ... otherwise the kernel terminates only when it exhausts all of its input streams
             terminated = iBuilder->getTrue();
-            unsigned j = 0;
             for (unsigned k : kernelSet) {
-                terminated = iBuilder->CreateAnd(terminated, kernels[k]->getTerminationSignal(instancePtrs[k]));
-                terminated = iBuilder->CreateAnd(terminated, iBuilder->CreateICmpEQ(nextSegNo, producerSegNo[j++]));
+                terminated = iBuilder->CreateAnd(terminated, kernels[k]->getTerminationSignal());
+                terminated = iBuilder->CreateAnd(terminated, iBuilder->CreateICmpEQ(nextSegNo, producerSegNo[k]));
             }
             kernelSet.clear();
         }
 
-        std::vector<Value *> args = {instancePtrs[id], terminated};
+        std::vector<Value *> args = {kernel->getInstance(), terminated};
         args.insert(args.end(), inputs.size(), iBuilder->CreateMul(segmentItems, segNo));
-        args.insert(args.end(), outputs.size(), iBuilder->getSize(0));
 
         kernel->createDoSegmentCall(args);
         segNo->addIncoming(nextSegNo, doSegmentBlock);
-        kernel->releaseLogicalSegmentNo(instancePtrs[id], nextSegNo);
+        kernel->releaseLogicalSegmentNo(nextSegNo);
 
         iBuilder->CreateCondBr(terminated, exitThreadBlock, outputCheckBlock);
 
@@ -392,12 +385,16 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
 
     iBuilder->restoreIP(ip);
 
-    for (unsigned i = 0; i < n; i++) {
+    for (unsigned i = 0; i < n; ++i) {
+        kernels[i]->setInstance(instance[i]);
+    }
+
+    for (unsigned i = 0; i < n; ++i) {
         iBuilder->CreatePThreadCreateCall(threadIdPtr[i], nullVoidPtrVal, thread_functions[i], sharedStruct);
     }
 
     AllocaInst * const status = iBuilder->CreateAlloca(int8PtrTy);
-    for (unsigned i = 0; i < n; i++) {
+    for (unsigned i = 0; i < n; ++i) {
         Value * threadId = iBuilder->CreateLoad(threadIdPtr[i]);
         iBuilder->CreatePThreadJoinCall(threadId, status);
     }
@@ -409,42 +406,24 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
  ** ------------------------------------------------------------------------------------------------------------- */
 void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<KernelBuilder *> & kernels) {
 
-    for (auto & k : kernels) {
-        k->createInstance();
-    }
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     Function * main = entryBlock->getParent();
+
+    assert (!kernels.empty());
 
     // Create the basic blocks for the loop.
     BasicBlock * pipelineLoop = BasicBlock::Create(iBuilder->getContext(), "pipelineLoop", main);
     BasicBlock * pipelineExit = BasicBlock::Create(iBuilder->getContext(), "pipelineExit", main);
 
     StreamSetBufferMap<Value *> producedPos;
-    StreamSetBufferMap<std::pair<PHINode *, Value *>> consumedPos;
 
     iBuilder->CreateBr(pipelineLoop);
     iBuilder->SetInsertPoint(pipelineLoop);
 
-    // Build up the initial phi nodes for each of the consumed (minimum processed) positions
-    for (auto & kernel : kernels) {
-        const auto & outputs = kernel->getStreamOutputs();
-        for (unsigned i = 0; i < outputs.size(); ++i) {
-            const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
-            if (LLVM_UNLIKELY(consumedPos.count(buf) != 0)) {
-                report_fatal_error(kernel->getName() + " redefines stream set " + outputs[i].name);
-            }
-            PHINode * phi = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
-            phi->addIncoming(iBuilder->getSize(0), entryBlock);
-            consumedPos.emplace(buf, std::make_pair(phi, nullptr));
-        }
-    }
-
     Value * terminated = iBuilder->getFalse();
     for (auto & kernel : kernels) {
-        Value * const instance = kernel->getInstance();
         const auto & inputs = kernel->getStreamInputs();
-        const auto & outputs = kernel->getStreamOutputs();
-        std::vector<Value *> args = {instance, terminated};
+        std::vector<Value *> args = {kernel->getInstance(), terminated};
         for (unsigned i = 0; i < inputs.size(); ++i) {
             const auto f = producedPos.find(kernel->getStreamSetInputBuffer(i));
             if (LLVM_UNLIKELY(f == producedPos.end())) {
@@ -452,42 +431,22 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
             }
             args.push_back(f->second);
         }
-        for (unsigned i = 0; i < outputs.size(); ++i) {
-            const auto f = consumedPos.find(kernel->getStreamSetOutputBuffer(i));
-            assert (f != consumedPos.end());
-            args.push_back(std::get<0>(f->second));
-        }
         kernel->createDoSegmentCall(args);
         if (!kernel->hasNoTerminateAttribute()) {
-            terminated = iBuilder->CreateOr(terminated, kernel->getTerminationSignal(instance));
+            terminated = iBuilder->CreateOr(terminated, kernel->getTerminationSignal());
         }
-        for (unsigned i = 0; i < outputs.size(); i++) {
-            Value * const produced = kernel->getProducedItemCount(instance, outputs[i].name, terminated);
+        const auto & outputs = kernel->getStreamOutputs();
+        for (unsigned i = 0; i < outputs.size(); ++i) {
+            Value * const produced = kernel->getProducedItemCount(outputs[i].name, terminated);
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
             assert (producedPos.count(buf) == 0);
             producedPos.emplace(buf, produced);
         }
-        for (unsigned i = 0; i < inputs.size(); i++) {
-            Value * const processed = kernel->getProcessedItemCount(instance, inputs[i].name);
-            const StreamSetBuffer * const buf = kernel->getStreamSetInputBuffer(i);
-            const auto f = consumedPos.find(buf);
-            assert (f != consumedPos.end());
-            Value *& consumed = std::get<1>(f->second);
-            if (consumed) {
-                consumed = iBuilder->CreateSelect(iBuilder->CreateICmpULT(processed, consumed), processed, consumed);
-            } else {
-                consumed = processed;
-            }
-        }
-        Value * const segNo = kernel->acquireLogicalSegmentNo(instance);
-        kernel->releaseLogicalSegmentNo(instance, iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
+
+        Value * const segNo = kernel->acquireLogicalSegmentNo();
+        kernel->releaseLogicalSegmentNo(iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
     }
-    // update the consumed position phi nodes with the last min processed count of each input stream
-    for (const auto entry : consumedPos) {
-        PHINode * const phi = std::get<0>(entry.second);
-        Value * const value = std::get<1>(entry.second);
-        phi->addIncoming(value ? value : phi, pipelineLoop);
-    }
+
     iBuilder->CreateCondBr(terminated, pipelineExit, pipelineLoop);
     iBuilder->SetInsertPoint(pipelineExit);
 }

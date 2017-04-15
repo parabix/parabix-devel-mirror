@@ -41,6 +41,8 @@ kernels/deletion.cpp
 kernels/deletion.h
 kernels/evenodd.cpp
 kernels/evenodd.h
+kernels/grep_kernel.cpp
+kernels/grep_kernel.h
 kernels/interface.cpp
 kernels/interface.h
 kernels/kernel.cpp

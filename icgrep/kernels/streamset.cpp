@@ -13,6 +13,7 @@
 #include <llvm/IR/Value.h>         // for Value
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/CFG.h>
+#include <kernels/kernel.h>
 
 namespace llvm { class Constant; }
 namespace llvm { class Function; }
@@ -220,17 +221,72 @@ Value * ExtensibleBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex)
 }
 
 void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const requiredSize) const {
+
+    // TODO: tweak this function to allow AlignedMalloc to begin copying prior to waiting for the
+    // consumers to finish. MRemap could be used with the "do not move" flag set safely.
+
     Value * const capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     Value * const currentSize = iBuilder->CreateLoad(capacityPtr);
     BasicBlock * const entry = iBuilder->GetInsertBlock();
-    BasicBlock * const expand = BasicBlock::Create(iBuilder->getContext(), "expand", entry->getParent());
-    BasicBlock * const resume = BasicBlock::Create(iBuilder->getContext(), "resume", entry->getParent());
-    iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpULT(requiredSize, currentSize), resume, expand);
+    Function * const parent = entry->getParent();
+    IntegerType * const sizeTy = iBuilder->getSizeTy();
+    ConstantInt * const zero = iBuilder->getInt32(0);
+    ConstantInt * const one = iBuilder->getInt32(1);
+
+    BasicBlock * const expand = BasicBlock::Create(iBuilder->getContext(), "expand", parent);
+    BasicBlock * const resume = BasicBlock::Create(iBuilder->getContext(), "resume", parent);
+
+    Value * noExpansionNeeded = iBuilder->CreateICmpULT(requiredSize, currentSize);
+
+    kernel::KernelBuilder * const kernel = getProducer();
+    auto consumers = kernel->getStreamOutputs();
+    if (LLVM_UNLIKELY(consumers.empty())) {
+        iBuilder->CreateLikelyCondBr(noExpansionNeeded, resume, expand);
+    } else { // we cannot risk expanding this buffer until all of the consumers have finished reading the data
+
+        ConstantInt * const zeroSz = iBuilder->getSize(0);
+        Value * const segNo = kernel->acquireLogicalSegmentNo();
+        const auto n = consumers.size();
+
+        BasicBlock * load[n + 1];
+        BasicBlock * wait[n];
+        for (unsigned i = 0; i < n; ++i) {
+            load[i] = BasicBlock::Create(iBuilder->getContext(), consumers[i].name + "Load", parent);
+            wait[i] = BasicBlock::Create(iBuilder->getContext(), consumers[i].name + "Wait", parent);
+        }
+        load[n] = expand;
+        iBuilder->CreateLikelyCondBr(noExpansionNeeded, resume, load[0]);
+
+        for (unsigned i = 0; i < n; ++i) {
+
+            iBuilder->SetInsertPoint(load[i]);
+            Value * const outputConsumers = kernel->getConsumerState(consumers[i].name);
+            Value * const consumerCount = iBuilder->CreateLoad(iBuilder->CreateGEP(outputConsumers, {zero, zero}));
+            Value * const consumerPtr = iBuilder->CreateLoad(iBuilder->CreateGEP(outputConsumers, {zero, one}));
+            Value * const noConsumers = iBuilder->CreateICmpEQ(consumerCount, zeroSz);
+            iBuilder->CreateUnlikelyCondBr(noConsumers, load[i + 1], wait[i]);
+
+            iBuilder->SetInsertPoint(wait[i]);
+            PHINode * const consumerPhi = iBuilder->CreatePHI(sizeTy, 2);
+            consumerPhi->addIncoming(zeroSz, load[i]);
+
+            Value * const conSegPtr = iBuilder->CreateLoad(iBuilder->CreateGEP(consumerPtr, consumerPhi));
+            Value * const processedSegmentCount = iBuilder->CreateAtomicLoadAcquire(conSegPtr);
+            Value * const ready = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
+            Value * const nextConsumerIdx = iBuilder->CreateAdd(consumerPhi, iBuilder->CreateZExt(ready, sizeTy));
+            consumerPhi->addIncoming(nextConsumerIdx, wait[i]);
+            Value * const next = iBuilder->CreateICmpEQ(nextConsumerIdx, consumerCount);
+            iBuilder->CreateCondBr(next, load[i + 1], wait[i]);
+
+        }
+        expand->moveAfter(wait[n - 1]);
+        resume->moveAfter(expand);
+    }
     iBuilder->SetInsertPoint(expand);
     Value * const reservedSize = iBuilder->CreateShl(requiredSize, 1);
 #ifdef __APPLE__
     Value * newAddr = iBuilder->CreateAlignedMalloc(reservedSize, iBuilder->getCacheAlignment());
-    Value * const baseAddrPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+    Value * const baseAddrPtr = iBuilder->CreateGEP(self, {zero, one});
     Value * const baseAddr = iBuilder->CreateLoad(baseAddrPtr);
     iBuilder->CreateMemCpy(newAddr, baseAddr, currentSize, iBuilder->getCacheAlignment());
     iBuilder->CreateAlignedFree(baseAddr);
@@ -238,13 +294,13 @@ void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const requ
     iBuilder->CreateMemZero(iBuilder->CreateGEP(newAddr, currentSize), remainingSize, iBuilder->getBitBlockWidth() / 8);
     newAddr = iBuilder->CreatePointerCast(newAddr, baseAddr->getType());
 #else
-    Value * const baseAddrPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+    Value * const baseAddrPtr = iBuilder->CreateGEP(self, {zero, one});
     Value * const baseAddr = iBuilder->CreateLoad(baseAddrPtr);
     Value * newAddr = iBuilder->CreateMRemap(baseAddr, currentSize, reservedSize);
     newAddr = iBuilder->CreatePointerCast(newAddr, baseAddr->getType());
 #endif
-    iBuilder->CreateStore(reservedSize, capacityPtr);
     iBuilder->CreateStore(newAddr, baseAddrPtr);
+    iBuilder->CreateStore(reservedSize, capacityPtr);
     iBuilder->CreateBr(resume);
     iBuilder->SetInsertPoint(resume);
 }
@@ -260,7 +316,8 @@ void ExtensibleBuffer::setBufferedSize(Value * self, llvm::Value * size) const {
 }
 
 Value * ExtensibleBuffer::getBaseAddress(Value * const self) const {
-    return iBuilder->CreateLoad(iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+    return iBuilder->CreateLoad(ptr);
 }
 
 void ExtensibleBuffer::releaseBuffer(Value * self) const {
@@ -576,7 +633,8 @@ inline StreamSetBuffer::StreamSetBuffer(BufferKind k, IDISA::IDISA_Builder * b, 
 , mBufferBlocks(blocks)
 , mAddressSpace(AddressSpace)
 , mStreamSetBufferPtr(nullptr)
-, mBaseType(baseType) {
+, mBaseType(baseType)
+, mProducer(nullptr) {
 
 }
 
