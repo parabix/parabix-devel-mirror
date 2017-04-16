@@ -18,7 +18,8 @@ namespace llvm { class formatted_raw_ostream; }
 namespace llvm { namespace cl { class OptionCategory; } }
 namespace IDISA { class IDISA_Builder; }
 namespace kernel { class KernelBuilder; }
-namespace parabix { class StreamSetBuffer; }
+//namespace parabix { class StreamSetBuffer; }
+#include <kernels/streamset.h>
 class ParabixObjectCache;
 
 namespace codegen {
@@ -66,6 +67,10 @@ public:
     
     IDISA::IDISA_Builder * getIDISA_Builder() {return iBuilder;}
     
+    parabix::ExternalFileBuffer * addExternalBuffer(std::unique_ptr<parabix::ExternalFileBuffer> b, llvm::Value * externalBuf);
+    
+    parabix::StreamSetBuffer * addBuffer(std::unique_ptr<parabix::StreamSetBuffer> b);
+    
     void addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
     
     void generatePipelineIR();
@@ -86,6 +91,9 @@ private:
     llvm::ExecutionEngine *                 mEngine;
     ParabixObjectCache *                    mCache;
     std::vector<kernel::KernelBuilder *>    mKernelList;
+    // Owned kernels and buffers that will persist with this ParabixDriver instance.
+    std::vector<std::unique_ptr<kernel::KernelBuilder>> mOwnedKernels;
+    std::vector<std::unique_ptr<parabix::StreamSetBuffer>> mOwnedBuffers;
     ModuleMap                               mModuleMap;
 };
 

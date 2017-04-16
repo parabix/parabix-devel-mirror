@@ -34,6 +34,7 @@
 
 
 using namespace llvm;
+using namespace parabix;
 
 namespace codegen {
 
@@ -209,6 +210,20 @@ ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
         mEngine->setObjectCache(mCache);
     }
 }
+
+ExternalFileBuffer * ParabixDriver::addExternalBuffer(std::unique_ptr<ExternalFileBuffer> b, Value * externalBuf) {
+    ExternalFileBuffer * rawBuf = b.get();
+    mOwnedBuffers.push_back(std::move(b));
+    rawBuf->setStreamSetBuffer(externalBuf);
+    return rawBuf;
+}
+
+StreamSetBuffer * ParabixDriver::addBuffer(std::unique_ptr<StreamSetBuffer> b) {
+    b->allocateBuffer();
+    mOwnedBuffers.push_back(std::move(b));
+    return mOwnedBuffers.back().get();
+}
+
 
 void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
     assert (mModuleMap.count(&kb) == 0);

@@ -149,18 +149,18 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     fileSize->setName("fileSize");
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
-    
-    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
-
-    SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8, 1));
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
+
+    StreamSetBuffer * ByteStream = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)), inputStream);
+
+    StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1)));
 
     MMapSourceKernel mmapK(iBuilder);
     mmapK.setInitialArguments({fileSize});
-    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
+    pxDriver.addKernelCall(mmapK, {}, {ByteStream});
 
     S2PKernel  s2pk(iBuilder);
-    pxDriver.addKernelCall(s2pk, {&ByteStream}, {&BasisBits});
+    pxDriver.addKernelCall(s2pk, {ByteStream}, {BasisBits});
     
     PabloKernel wck(iBuilder, "Parabix:wc",
         {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
@@ -170,10 +170,8 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     wc_gen(&wck);
     pablo_function_passes(&wck);
-    pxDriver.addKernelCall(wck, {&BasisBits}, {});
+    pxDriver.addKernelCall(wck, {BasisBits}, {});
 
-    ByteStream.setStreamSetBuffer(inputStream);
-    BasisBits.allocateBuffer();
 
     pxDriver.generatePipelineIR();
     
