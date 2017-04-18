@@ -15,6 +15,8 @@ namespace llvm { class Type; }
 
 static const auto INIT_SUFFIX = "_Init";
 
+static const auto TERMINATE_SUFFIX = "_Terminate";
+
 static const auto DO_SEGMENT_SUFFIX = "_DoSegment";
 
 static const auto ACCUMULATOR_INFIX = "_get_";
@@ -98,8 +100,6 @@ void KernelInterface::addKernelDeclarations(Module * const client) {
     }
     for (auto binding : mStreamSetOutputs) {
         args->setName(binding.name + "ConsumerLogicalSegments");       
-//        args->addAttr(Attribute::NoCapture);
-//        args->addAttr(Attribute::ReadOnly);
         ++args;
     }
 
@@ -118,6 +118,15 @@ void KernelInterface::addKernelDeclarations(Module * const client) {
     for (const Binding & input : mStreamSetInputs) {
         (++args)->setName(input.name + "AvailableItems");
     }
+
+    // Create the terminate function prototype
+    FunctionType * terminateType = FunctionType::get(iBuilder->getVoidTy(), {selfType}, false);
+    Function * terminateFunc = Function::Create(terminateType, GlobalValue::ExternalLinkage, getName() + TERMINATE_SUFFIX, client);
+    terminateFunc->setCallingConv(CallingConv::C);
+    terminateFunc->setDoesNotThrow();
+    terminateFunc->setDoesNotCapture(1);
+    args = terminateFunc->arg_begin();
+    args->setName("self");
 
     /// INVESTIGATE: replace the accumulator methods with a single Exit method that handles any clean up and returns
     /// a struct containing all scalar outputs?
@@ -161,6 +170,15 @@ Function * KernelInterface::getInitFunction() const {
 
 Function * KernelInterface::getDoSegmentFunction() const {
     const auto name = getName() + DO_SEGMENT_SUFFIX;
+    Function * f = iBuilder->getModule()->getFunction(name);
+    if (LLVM_UNLIKELY(f == nullptr)) {
+        llvm::report_fatal_error("Cannot find " + name);
+    }
+    return f;
+}
+
+Function * KernelInterface::getTerminateFunction() const {
+    const auto name = getName() + TERMINATE_SUFFIX;
     Function * f = iBuilder->getModule()->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
         llvm::report_fatal_error("Cannot find " + name);

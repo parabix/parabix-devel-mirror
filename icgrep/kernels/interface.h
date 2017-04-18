@@ -103,6 +103,8 @@ public:
 
     virtual void initializeInstance() = 0;
 
+    virtual void terminateInstance() = 0;
+
     void setInitialArguments(std::vector<llvm::Value *> args);
 
     llvm::Value * getInstance() const {
@@ -138,6 +140,8 @@ public:
     llvm::Function * getDoSegmentFunction() const;
 
     llvm::Function * getAccumulatorFunction(const std::string & accumName) const;
+
+    llvm::Function * getTerminateFunction() const;
 
 protected:
 

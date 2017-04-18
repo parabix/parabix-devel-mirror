@@ -14,6 +14,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/CFG.h>
 #include <kernels/kernel.h>
+#include <kernels/toolchain.h>
 
 namespace llvm { class Constant; }
 namespace llvm { class Function; }
@@ -199,15 +200,26 @@ Value * ExtensibleBuffer::getLinearlyAccessibleItems(Value * self, Value * fromP
     return iBuilder->CreateSub(capacity, fromPosition);
 }
 
+Value * ExtensibleBuffer::roundUpToPageSize(Value * const value) const {
+    const auto pageSize = getpagesize();
+    assert ((pageSize & (pageSize - 1)) == 0);
+    Constant * const pageMask = ConstantInt::get(value->getType(), pageSize - 1);
+    return iBuilder->CreateAnd(iBuilder->CreateAdd(value, pageMask), iBuilder->CreateNot(pageMask));
+}
+
 void ExtensibleBuffer::allocateBuffer() {
     Type * ty = getType();
     Value * instance = iBuilder->CreateCacheAlignedAlloca(ty);
     Value * const capacityPtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    Constant * initialSize = ConstantExpr::getSizeOf(ty->getStructElementType(1)->getPointerElementType());
-    initialSize = ConstantExpr::getMul(initialSize, iBuilder->getSize(mBufferBlocks));
-    initialSize = ConstantExpr::getIntegerCast(initialSize, iBuilder->getSizeTy(), false);
+
+    Type * const elementType = ty->getStructElementType(1)->getPointerElementType();
+    Constant * size = ConstantExpr::getSizeOf(elementType);
+    size = ConstantExpr::getMul(size, iBuilder->getSize(mBufferBlocks));
+    size = ConstantExpr::getIntegerCast(size, iBuilder->getSizeTy(), false);
+    Value * const initialSize = roundUpToPageSize(size);
+
     iBuilder->CreateStore(initialSize, capacityPtr);
-    Value * addr = iBuilder->CreateAnonymousMMap(initialSize);
+    Value * addr = iBuilder->CreateAnonymousMMap(size);
     Value * const addrPtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     addr = iBuilder->CreatePointerCast(addr, addrPtr->getType()->getPointerElementType());
     iBuilder->CreateStore(addr, addrPtr);
@@ -221,9 +233,6 @@ Value * ExtensibleBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex)
 }
 
 void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const requiredSize) const {
-
-    // TODO: tweak this function to allow AlignedMalloc to begin copying prior to waiting for the
-    // consumers to finish. MRemap could be used with the "do not move" flag set safely.
 
     Value * const capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     Value * const currentSize = iBuilder->CreateLoad(capacityPtr);
@@ -240,11 +249,11 @@ void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const requ
 
     kernel::KernelBuilder * const kernel = getProducer();
     auto consumers = kernel->getStreamOutputs();
-    if (LLVM_UNLIKELY(consumers.empty())) {
+    if (consumers.empty()) {
         iBuilder->CreateLikelyCondBr(noExpansionNeeded, resume, expand);
     } else { // we cannot risk expanding this buffer until all of the consumers have finished reading the data
 
-        ConstantInt * const zeroSz = iBuilder->getSize(0);
+        ConstantInt * const size0 = iBuilder->getSize(0);
         Value * const segNo = kernel->acquireLogicalSegmentNo();
         const auto n = consumers.size();
 
@@ -261,18 +270,20 @@ void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const requ
 
             iBuilder->SetInsertPoint(load[i]);
             Value * const outputConsumers = kernel->getConsumerState(consumers[i].name);
+
             Value * const consumerCount = iBuilder->CreateLoad(iBuilder->CreateGEP(outputConsumers, {zero, zero}));
             Value * const consumerPtr = iBuilder->CreateLoad(iBuilder->CreateGEP(outputConsumers, {zero, one}));
-            Value * const noConsumers = iBuilder->CreateICmpEQ(consumerCount, zeroSz);
+            Value * const noConsumers = iBuilder->CreateICmpEQ(consumerCount, size0);
             iBuilder->CreateUnlikelyCondBr(noConsumers, load[i + 1], wait[i]);
 
             iBuilder->SetInsertPoint(wait[i]);
             PHINode * const consumerPhi = iBuilder->CreatePHI(sizeTy, 2);
-            consumerPhi->addIncoming(zeroSz, load[i]);
+            consumerPhi->addIncoming(size0, load[i]);
 
             Value * const conSegPtr = iBuilder->CreateLoad(iBuilder->CreateGEP(consumerPtr, consumerPhi));
             Value * const processedSegmentCount = iBuilder->CreateAtomicLoadAcquire(conSegPtr);
             Value * const ready = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
+            assert (ready->getType() == iBuilder->getInt1Ty());
             Value * const nextConsumerIdx = iBuilder->CreateAdd(consumerPhi, iBuilder->CreateZExt(ready, sizeTy));
             consumerPhi->addIncoming(nextConsumerIdx, wait[i]);
             Value * const next = iBuilder->CreateICmpEQ(nextConsumerIdx, consumerCount);
@@ -283,22 +294,12 @@ void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const requ
         resume->moveAfter(expand);
     }
     iBuilder->SetInsertPoint(expand);
-    Value * const reservedSize = iBuilder->CreateShl(requiredSize, 1);
-#ifdef __APPLE__
-    Value * newAddr = iBuilder->CreateAlignedMalloc(reservedSize, iBuilder->getCacheAlignment());
+    Value * const reservedSize = roundUpToPageSize(iBuilder->CreateShl(requiredSize, 1));
     Value * const baseAddrPtr = iBuilder->CreateGEP(self, {zero, one});
-    Value * const baseAddr = iBuilder->CreateLoad(baseAddrPtr);
-    iBuilder->CreateMemCpy(newAddr, baseAddr, currentSize, iBuilder->getCacheAlignment());
-    iBuilder->CreateAlignedFree(baseAddr);
-    Value * const remainingSize = iBuilder->CreateSub(reservedSize, currentSize);
-    iBuilder->CreateMemZero(iBuilder->CreateGEP(newAddr, currentSize), remainingSize, iBuilder->getBitBlockWidth() / 8);
-    newAddr = iBuilder->CreatePointerCast(newAddr, baseAddr->getType());
-#else
-    Value * const baseAddrPtr = iBuilder->CreateGEP(self, {zero, one});
+
     Value * const baseAddr = iBuilder->CreateLoad(baseAddrPtr);
     Value * newAddr = iBuilder->CreateMRemap(baseAddr, currentSize, reservedSize);
     newAddr = iBuilder->CreatePointerCast(newAddr, baseAddr->getType());
-#endif
     iBuilder->CreateStore(newAddr, baseAddrPtr);
     iBuilder->CreateStore(reservedSize, capacityPtr);
     iBuilder->CreateBr(resume);
@@ -424,9 +425,12 @@ Value * SwizzledCopybackBuffer::getStreamSetBlockPtr(Value * self, Value * block
 SwizzledCopybackBuffer::SwizzledCopybackBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned fieldwidth, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::SwizzledCopybackBuffer, b, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace), mOverflowBlocks(overflowBlocks), mFieldWidth(fieldwidth) {
     mUniqueID = "SW" + std::to_string(fieldwidth) + ":" + std::to_string(bufferBlocks);
-    if (mOverflowBlocks != 1) mUniqueID += "_" + std::to_string(mOverflowBlocks);
-    if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
-
+    if (mOverflowBlocks != 1) {
+        mUniqueID += "_" + std::to_string(mOverflowBlocks);
+    }
+    if (AddressSpace > 0) {
+        mUniqueID += "@" + std::to_string(AddressSpace);
+    }
 }
 
 // Expandable Buffer

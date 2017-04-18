@@ -15,6 +15,7 @@
 #include <llvm/InitializePasses.h>                 // for initializeCodeGen
 #ifndef NDEBUG
 #include <llvm/IR/Verifier.h>
+#include <boost/container/flat_set.hpp>
 #endif
 #include <llvm/PassRegistry.h>                     // for PassRegistry
 #include <llvm/Support/CodeGen.h>                  // for Level, Level::None
@@ -30,8 +31,6 @@
 #ifdef CUDA_ENABLED
 #include <IR_Gen/llvm2ptx.h>
 #endif
- 
-
 
 using namespace llvm;
 using namespace parabix;
@@ -232,6 +231,16 @@ void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<
 }
 
 void ParabixDriver::generatePipelineIR() {
+    #ifndef NDEBUG
+    if (LLVM_UNLIKELY(mKernelList.empty())) {
+        report_fatal_error("Pipeline must contain at least one kernel");
+    } else {
+        boost::container::flat_set<kernel::KernelBuilder *> K(mKernelList.begin(), mKernelList.end());
+        if (LLVM_UNLIKELY(K.size() != mKernelList.size())) {
+            report_fatal_error("Kernel definitions can only occur once in the pipeline");
+        }
+    }
+    #endif
     // note: instantiation of all kernels must occur prior to initialization
     for (const auto & k : mKernelList) {
         k->addKernelDeclarations(mMainModule);
@@ -249,6 +258,9 @@ void ParabixDriver::generatePipelineIR() {
     } else {
         codegen::ThreadNum = 1;
         generatePipelineLoop(iBuilder, mKernelList);
+    }
+    for (const auto & k : mKernelList) {
+        k->terminateInstance();
     }
 }
 

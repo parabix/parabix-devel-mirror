@@ -34,17 +34,12 @@ void StdInKernel::generateDoSegmentMethod(Value * /* doFinal */, const std::vect
 
     iBuilder->SetInsertPoint(readBlock);
 
-
-
-
     // how many pages are required to have enough data for the segment plus one overflow block?
     const auto PageAlignedSegmentSize = round_up_to_nearest((mSegmentBlocks + 1) * iBuilder->getBitBlockWidth() * (mCodeUnitWidth / 8), getpagesize());
     ConstantInt * const bytesToRead = iBuilder->getSize(PageAlignedSegmentSize);
     reserveBytes("InputStream", bytesToRead);
     BasicBlock * const readExit = iBuilder->GetInsertBlock();
-
     Value * const ptr = getRawOutputPointer("InputStream", iBuilder->getInt32(0), bufferedSize);
-
     Value * const bytePtr = iBuilder->CreatePointerCast(ptr, iBuilder->getInt8PtrTy());
     Value * const bytesRead = iBuilder->CreateReadCall(iBuilder->getInt32(STDIN_FILENO), bytePtr, bytesToRead);
 

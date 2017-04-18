@@ -300,6 +300,8 @@ void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_e
     assert (line_start <= line_end);
     assert (line_end <= filesize);
 
+  //  errs().write_hex((size_t)buffer) << " : " << lineNum << " (" << line_start << ", " << line_end << ", " << filesize << ")\n";
+
     #ifdef CUDA_ENABLED
     if (codegen::NVPTX){
         while(line_start>startPoints[blockNo]) blockNo++;
@@ -531,7 +533,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
 
         pxDriver.generatePipelineIR();
 
-        iBuilder->CreateRet(icgrepK.createGetAccumulatorCall(icgrepK.getInstance(), "matchedLineCount"));
+        iBuilder->CreateRet(icgrepK.createGetAccumulatorCall("matchedLineCount"));
 
         pxDriver.linkAndFinalize();
 

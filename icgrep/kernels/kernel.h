@@ -79,6 +79,8 @@ public:
 
     void initializeInstance() final;
 
+    void terminateInstance() final;
+
     llvm::Value * getProducedItemCount(const std::string & name, llvm::Value * doFinal = nullptr) const final;
 
     void setProducedItemCount(const std::string & name, llvm::Value * value) const final;
@@ -121,7 +123,6 @@ public:
         iBuilder->CreateStore(value, getScalarFieldPtr(index));
     }
 
-
     // Synchronization actions for executing a kernel for a particular logical segment.
     //
     // Before the segment is processed, acquireLogicalSegmentNo must be used to load
@@ -162,7 +163,7 @@ public:
 
     llvm::CallInst * createDoSegmentCall(const std::vector<llvm::Value *> & args) const;
 
-    llvm::CallInst * createGetAccumulatorCall(llvm::Value * self, const std::string & accumName) const;
+    llvm::CallInst * createGetAccumulatorCall(const std::string & accumName) const;
 
     virtual ~KernelBuilder() = 0;
 
@@ -199,6 +200,8 @@ protected:
     virtual void generateInitMethod() { }
     
     virtual void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) = 0;
+
+    virtual void generateTerminateMethod() { }
 
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
@@ -283,6 +286,7 @@ protected:
 
     void callGenerateDoSegmentMethod();
 
+    void callGenerateTerminateMethod();
 
 private:
 

@@ -206,6 +206,8 @@ public:
 
 protected:
 
+    llvm::Value * roundUpToPageSize(llvm::Value * const value) const;
+
     llvm::Value * getBaseAddress(llvm::Value * self) const override;
 
     llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const override;

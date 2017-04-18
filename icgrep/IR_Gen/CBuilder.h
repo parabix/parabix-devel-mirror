@@ -80,15 +80,37 @@ public:
 
     llvm::Value * CreateFileSourceMMap(llvm::Value * fd, llvm::Value * size);
 
+    enum class MADV {
+        NORMAL
+        , RANDOM
+        , SEQUENTIAL
+        , WILLNEED
+        , DONTNEED
+//        , REMOVE
+//        , DONTFORK
+//        , DOFORK
+//        , HWPOISON
+//        , MERGEABLE
+//        , UNMERGEABLE
+//        , HUGEPAGE
+//        , NOHUGEPAGE
+//        , DONTDUMP
+//        , DODUMP
+    };
+
+    llvm::Value * CreateMMapAdvise(llvm::Value * addr, llvm::Value * length, MADV advice) {
+        return CreateMMapAdvise(addr, length, { advice });
+    }
+
+    llvm::Value * CreateMMapAdvise(llvm::Value * addr, llvm::Value * length, std::initializer_list<MADV> advice);
+
     llvm::Value * CreateMMap(llvm::Value * const addr, llvm::Value * size, llvm::Value * const prot, llvm::Value * const flags, llvm::Value * const fd, llvm::Value * const offset);
 
     llvm::Value * CheckMMapSuccess(llvm::Value * const addr);
 
-    llvm::Value * CreateMRemap(llvm::Value * addr, llvm::Value * oldSize, llvm::Value * newSize, const bool mayMove = true);
+    llvm::Value * CreateMRemap(llvm::Value * addr, llvm::Value * oldSize, llvm::Value * newSize);
 
     llvm::Value * CreateMUnmap(llvm::Value * addr, llvm::Value * size);
-
-
 
     //  Posix thread (pthread.h) functions.
     //

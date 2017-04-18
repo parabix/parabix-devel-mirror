@@ -175,9 +175,9 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     pxDriver.generatePipelineIR();
     
-    Value * lineCount = wck.createGetAccumulatorCall(wck.getInstance(), "lineCount");
-    Value * wordCount = wck.createGetAccumulatorCall(wck.getInstance(), "wordCount");
-    Value * charCount = wck.createGetAccumulatorCall(wck.getInstance(), "charCount");
+    Value * lineCount = wck.createGetAccumulatorCall("lineCount");
+    Value * wordCount = wck.createGetAccumulatorCall("wordCount");
+    Value * charCount = wck.createGetAccumulatorCall("charCount");
 
     iBuilder->CreateCall(record_counts_routine, std::vector<Value *>({lineCount, wordCount, charCount, fileSize, fileIdx}));
     

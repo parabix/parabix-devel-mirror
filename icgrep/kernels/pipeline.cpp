@@ -21,11 +21,8 @@ using StreamSetBufferMap = boost::container::flat_map<const StreamSetBuffer *, V
 template <typename Value>
 using FlatSet = boost::container::flat_set<Value>;
 
-Function * makeThreadFunction(const std::string & name, Module * const m) {
-    LLVMContext & C = m->getContext();
-    Type * const voidTy = Type::getVoidTy(C);
-    PointerType * const int8PtrTy = Type::getInt8PtrTy(C);
-    Function * const f = Function::Create(FunctionType::get(voidTy, {int8PtrTy}, false), Function::InternalLinkage, name, m);
+Function * makeThreadFunction(IDISA::IDISA_Builder * const b, const std::string & name) {
+    Function * const f = Function::Create(FunctionType::get(b->getVoidTy(), {b->getVoidPtrTy()}, false), Function::InternalLinkage, name, b->getModule());
     f->setCallingConv(CallingConv::C);
     f->arg_begin()->setName("input");
     return f;
@@ -46,11 +43,8 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     Module * const m = iBuilder->getModule();
     IntegerType * const sizeTy = iBuilder->getSizeTy();
     PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
-    PointerType * const int8PtrTy = iBuilder->getInt8PtrTy();
     const unsigned threads = codegen::ThreadNum;
     Constant * nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
-
-    assert (!kernels.empty());
 
     std::vector<Type *> structTypes;
 
@@ -62,7 +56,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
     StructType * const sharedStructType = StructType::get(m->getContext(), structTypes);
     StructType * const threadStructType = StructType::get(sharedStructType->getPointerTo(), sizeTy, nullptr);
 
-    Function * const threadFunc = makeThreadFunction("segment", m);
+    Function * const threadFunc = makeThreadFunction(iBuilder, "segment");
 
     // -------------------------------------------------------------------------------------------------------------------------
     // MAKE SEGMENT PARALLEL PIPELINE THREAD
@@ -129,7 +123,6 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
         // Execute the kernel segment
         iBuilder->SetInsertPoint(segmentLoopBody);
         const auto & inputs = kernel->getStreamInputs();
-        const auto & outputs = kernel->getStreamOutputs();
         std::vector<Value *> args = {kernel->getInstance(), doFinal};
         for (unsigned i = 0; i < inputs.size(); ++i) {
             const auto f = producedPos.find(kernel->getStreamSetInputBuffer(i));
@@ -139,13 +132,12 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
             args.push_back(f->second);
         }
 
-        CallInst * ci = kernel->createDoSegmentCall(args);
-        // TODO: investigate whether this actually inlines the function call correctly despite being in a seperate module.
-        ci->addAttribute(AttributeSet::FunctionIndex, Attribute::AlwaysInline);
-
+        kernel->createDoSegmentCall(args);
         if (!kernel->hasNoTerminateAttribute()) {
             doFinal = iBuilder->CreateOr(doFinal, kernel->getTerminationSignal());
         }
+
+        const auto & outputs = kernel->getStreamOutputs();
         for (unsigned i = 0; i < outputs.size(); ++i) {
             Value * const produced = kernel->getProducedItemCount(outputs[i].name, doFinal);
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
@@ -202,7 +194,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std:
         iBuilder->CreatePThreadCreateCall(threadIdPtr[i], nullVoidPtrVal, threadFunc, threadState);
     }
 
-    AllocaInst * const status = iBuilder->CreateAlloca(int8PtrTy);
+    AllocaInst * const status = iBuilder->CreateAlloca(voidPtrTy);
     for (unsigned i = 0; i < threads; ++i) {
         Value * threadId = iBuilder->CreateLoad(threadIdPtr[i]);
         iBuilder->CreatePThreadJoinCall(threadId, status);
@@ -218,7 +210,6 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
     Module * const m = iBuilder->getModule();
     IntegerType * const sizeTy = iBuilder->getSizeTy();
     PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
-    PointerType * const int8PtrTy = iBuilder->getInt8PtrTy();
     ConstantInt * bufferSegments = ConstantInt::get(sizeTy, codegen::BufferSegments - 1);
     ConstantInt * segmentItems = ConstantInt::get(sizeTy, codegen::SegmentSize * iBuilder->getBitBlockWidth());
     Constant * const nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
@@ -294,7 +285,7 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
         const auto & kernel = kernels[id];
         const auto & inputs = kernel->getStreamInputs();
 
-        Function * const threadFunc = makeThreadFunction("ppt:" + kernel->getName(), m);
+        Function * const threadFunc = makeThreadFunction(iBuilder, "ppt:" + kernel->getName());
 
          // Create the basic blocks for the thread function.
         BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc);
@@ -393,7 +384,7 @@ void generateParallelPipeline(IDISA::IDISA_Builder * iBuilder, const std::vector
         iBuilder->CreatePThreadCreateCall(threadIdPtr[i], nullVoidPtrVal, thread_functions[i], sharedStruct);
     }
 
-    AllocaInst * const status = iBuilder->CreateAlloca(int8PtrTy);
+    AllocaInst * const status = iBuilder->CreateAlloca(voidPtrTy);
     for (unsigned i = 0; i < n; ++i) {
         Value * threadId = iBuilder->CreateLoad(threadIdPtr[i]);
         iBuilder->CreatePThreadJoinCall(threadId, status);
@@ -408,8 +399,6 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
 
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     Function * main = entryBlock->getParent();
-
-    assert (!kernels.empty());
 
     // Create the basic blocks for the loop.
     BasicBlock * pipelineLoop = BasicBlock::Create(iBuilder->getContext(), "pipelineLoop", main);
@@ -431,6 +420,7 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
             }
             args.push_back(f->second);
         }
+        Value * const segNo = kernel->acquireLogicalSegmentNo();
         kernel->createDoSegmentCall(args);
         if (!kernel->hasNoTerminateAttribute()) {
             terminated = iBuilder->CreateOr(terminated, kernel->getTerminationSignal());
@@ -443,7 +433,6 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
             producedPos.emplace(buf, produced);
         }
 
-        Value * const segNo = kernel->acquireLogicalSegmentNo();
         kernel->releaseLogicalSegmentNo(iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
     }
 

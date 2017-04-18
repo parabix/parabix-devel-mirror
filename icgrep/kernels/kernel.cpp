@@ -186,7 +186,10 @@ Module * KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const 
     mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
 
     prepareKernel();
-    return new Module(cacheName.str(), iBuilder->getContext());
+
+    Module * const m = new Module(cacheName.str(), iBuilder->getContext());
+    m->setTargetTriple(iBuilder->getModule()->getTargetTriple());
+    return m;
 }
 
 // Default kernel signature: generate the IR and emit as byte code.
@@ -203,13 +206,14 @@ std::string KernelBuilder::generateKernelSignature(std::string moduleId) {
 }
 
 void KernelBuilder::generateKernel() {
-    // If the module id is cannot uniquely identify this kernel, "generateKernelSignature()" will have already
+    // If the module id cannot uniquely identify this kernel, "generateKernelSignature()" will have already
     // generated the unoptimized IR.
     if (!mIsGenerated) {
+        auto saveInstance = getInstance();
         auto savePoint = iBuilder->saveIP();
         addKernelDeclarations(iBuilder->getModule());
         callGenerateInitMethod();
-        callGenerateDoSegmentMethod();
+        callGenerateDoSegmentMethod();        
         // Implement the accumulator get functions
         for (auto binding : mScalarOutputs) {
             Function * f = getAccumulatorFunction(binding.name);
@@ -219,7 +223,9 @@ void KernelBuilder::generateKernel() {
             Value * retVal = iBuilder->CreateLoad(ptr);
             iBuilder->CreateRet(retVal);
         }
+        callGenerateTerminateMethod();
         iBuilder->restoreIP(savePoint);
+        setInstance(saveInstance);
         mIsGenerated = true;       
     }
 }
@@ -251,6 +257,15 @@ void KernelBuilder::callGenerateInitMethod() {
         setConsumerState(binding.name, &*(args++));
     }
     generateInitMethod();
+    iBuilder->CreateRetVoid();
+}
+
+void KernelBuilder::callGenerateTerminateMethod() {
+    mCurrentMethod = getTerminateFunction();
+    iBuilder->SetInsertPoint(CreateBasicBlock(getName() + "_entry"));
+    auto args = mCurrentMethod->arg_begin();
+    setInstance(&*(args++));
+    generateTerminateMethod(); // may be overridden by the KernelBuilder subtype
     iBuilder->CreateRetVoid();
 }
 
@@ -501,8 +516,8 @@ CallInst * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args)
     return iBuilder->CreateCall(getDoSegmentFunction(), args);
 }
 
-CallInst * KernelBuilder::createGetAccumulatorCall(Value * self, const std::string & accumName) const {
-    return iBuilder->CreateCall(getAccumulatorFunction(accumName), {self});
+CallInst * KernelBuilder::createGetAccumulatorCall(const std::string & accumName) const {
+    return iBuilder->CreateCall(getAccumulatorFunction(accumName), { getInstance() });
 }
 
 BasicBlock * KernelBuilder::CreateBasicBlock(std::string && name) const {
@@ -518,6 +533,8 @@ Value * KernelBuilder::createInstance() {
 }
 
 void KernelBuilder::initializeInstance() {
+
+
     if (LLVM_UNLIKELY(getInstance() == nullptr)) {
         report_fatal_error("Cannot initialize " + getName() + " before calling createInstance()");
     }
@@ -557,26 +574,28 @@ void KernelBuilder::initializeInstance() {
     PointerType * const sizePtrTy = sizeTy->getPointerTo();
     PointerType * const sizePtrPtrTy = sizePtrTy->getPointerTo();
     StructType * const consumerTy = StructType::get(sizeTy, sizePtrPtrTy, nullptr);
-    Constant * const sizeOfSizePtrTy = ConstantExpr::getSizeOf(sizePtrTy);
-
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
         const auto & consumers = mStreamSetOutputBuffers[i]->getConsumers();
-        AllocaInst * const outputConsumers = iBuilder->CreateAlloca(consumerTy);
-        Value * const numPtr = iBuilder->CreateGEP(outputConsumers, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
         const auto n = consumers.size();
-        const auto consumerCount = iBuilder->getSize(n);
-        iBuilder->CreateStore(consumerCount, numPtr);
-        Value * const consumerPtr = iBuilder->CreateGEP(outputConsumers, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
-        Value * const segNoPtrs = iBuilder->CreatePointerCast(iBuilder->CreateMalloc(ConstantExpr::getMul(consumerCount, sizeOfSizePtrTy)), sizePtrPtrTy);
-        iBuilder->CreateStore(segNoPtrs, consumerPtr);
+        AllocaInst * const outputConsumers = iBuilder->CreateAlloca(consumerTy);
+        Value * const consumerSegNoArray = iBuilder->CreateAlloca(ArrayType::get(sizePtrTy, n));
         for (unsigned i = 0; i < n; ++i) {
             KernelBuilder * const consumer = consumers[i];
             assert (consumer->getInstance());
-            iBuilder->CreateStore(consumer->getScalarFieldPtr(consumer->getInstance(), LOGICAL_SEGMENT_NO_SCALAR), iBuilder->CreateGEP(segNoPtrs, iBuilder->getSize(i)));
+            Value * const segNo = consumer->getScalarFieldPtr(consumer->getInstance(), LOGICAL_SEGMENT_NO_SCALAR);
+            iBuilder->CreateStore(segNo, iBuilder->CreateGEP(consumerSegNoArray, { iBuilder->getInt32(0), iBuilder->getInt32(i) }));
         }
+        Value * const consumerCountPtr = iBuilder->CreateGEP(outputConsumers, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+        iBuilder->CreateStore(iBuilder->getSize(n), consumerCountPtr);
+        Value * const consumerSegNoArrayPtr = iBuilder->CreateGEP(outputConsumers, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
+        iBuilder->CreateStore(iBuilder->CreatePointerCast(consumerSegNoArray, sizePtrPtrTy), consumerSegNoArrayPtr);
         args.push_back(outputConsumers);
     }
     iBuilder->CreateCall(getInitFunction(), args);
+}
+
+void KernelBuilder::terminateInstance() {
+    iBuilder->CreateCall(getTerminateFunction(), { getInstance() });
 }
 
 //  The default doSegment method dispatches to the doBlock routine for

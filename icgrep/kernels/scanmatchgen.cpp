@@ -44,14 +44,12 @@ void ScanMatchKernel::generateDoBlockMethod() {
     BasicBlock * const return_block = CreateBasicBlock("return_block");
     BasicBlock * const scanWordExit = CreateBasicBlock("ScanWordExit");
     IntegerType * const sizeTy = iBuilder->getSizeTy();
-    PointerType * const codeUnitTy = iBuilder->getIntNTy(mCodeUnitWidth)->getPointerTo();
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / sizeTy->getBitWidth();
     VectorType * const scanwordVectorType =  VectorType::get(sizeTy, fieldCount);
     Value * const blockNo = getScalarField("BlockNo");
     Value * const scanwordPos = iBuilder->CreateShl(blockNo, floor_log2(iBuilder->getBitBlockWidth()));
     Value * const lastRecordStart = getProcessedItemCount("InputStream");
     Value * const lastRecordNum = getScalarField("LineNum");
-    Value * const inputStream = iBuilder->CreatePointerCast(getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0)), codeUnitTy);
 
     Value * const matches = iBuilder->CreateBitCast(loadInputStreamBlock("matchResult", iBuilder->getInt32(0)), scanwordVectorType);
     Value * const linebreaks = iBuilder->CreateBitCast(loadInputStreamBlock("lineBreak", iBuilder->getInt32(0)), scanwordVectorType);
@@ -126,19 +124,21 @@ void ScanMatchKernel::generateDoBlockMethod() {
             matchRecordStart->addIncoming(phiRecordStart, processMatchesEntry);
             matchRecordStart->addIncoming(priorRecordStart, prior_breaks_block);
             phiRecordStart->addIncoming(matchRecordStart, loop_final_block);
-
             Value * matchRecordEnd = iBuilder->CreateAdd(phiScanwordPos, iBuilder->CreateCountForwardZeroes(phiMatchWord));
-            Function * const matcher = m->getFunction("matcher");
-            assert (matcher);
-            switch (mGrepType) {
-                case GrepType::Normal:
-                    iBuilder->CreateCall(matcher, {matchRecordNum, matchRecordStart, matchRecordEnd, inputStream, getBufferedSize("InputStream"), getScalarField("FileIdx")});
-                    break;
-                case GrepType::NameExpression:
-                case GrepType::PropertyValue:
-                    iBuilder->CreateCall(matcher, {matchRecordNum, matchRecordStart, matchRecordEnd, inputStream});
-                    break;
-                default: break;
+
+            Function * const matcher = m->getFunction("matcher"); assert (matcher);
+            auto args = matcher->arg_begin();
+            Value * const mrn = iBuilder->CreateZExtOrTrunc(matchRecordNum, args->getType());
+            Value * const mrs = iBuilder->CreateZExtOrTrunc(matchRecordStart, (++args)->getType());
+            Value * const mre = iBuilder->CreateZExtOrTrunc(matchRecordEnd, (++args)->getType());
+            Value * const inputStream = getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
+            Value * const is = iBuilder->CreatePointerCast(inputStream, (++args)->getType());
+            if (mGrepType == GrepType::Normal) {
+                Value * const sz = iBuilder->CreateZExtOrTrunc(getBufferedSize("InputStream"), (++args)->getType());
+                Value * const fi = iBuilder->CreateZExtOrTrunc(getScalarField("FileIdx"), (++args)->getType());
+                iBuilder->CreateCall(matcher, {mrn, mrs, mre, is, sz, fi});
+            } else {
+                iBuilder->CreateCall(matcher, {mrn, mrs, mre, is});
             }
 
             Value * remaining_matches = resetLowestBit(phiMatchWord);
@@ -203,8 +203,7 @@ ScanMatchKernel::ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepT
     {Binding{iBuilder->getSizeTy(), "FileIdx"}},
     {},
     {Binding{iBuilder->getSizeTy(), "BlockNo"}, Binding{iBuilder->getSizeTy(), "LineNum"}})
-, mGrepType(grepType)
-, mCodeUnitWidth(codeUnitWidth) {
+, mGrepType(grepType) {
 
 }
 

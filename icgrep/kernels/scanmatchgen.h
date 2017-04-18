@@ -15,8 +15,8 @@ namespace kernel {
     
 class ScanMatchKernel final : public BlockOrientedKernel {
 public:
-    ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType, unsigned codeUnitWidth);
-    bool moduleIDisSignature() override {return true;}
+    ScanMatchKernel(IDISA::IDISA_Builder * const iBuilder, const GrepType grepType, const unsigned codeUnitWidth);
+    bool moduleIDisSignature() override { return true; }
 protected:
     void generateDoBlockMethod() override;
 private:
@@ -24,7 +24,6 @@ private:
     llvm::Value * resetLowestBit(llvm::Value * const value) const;
 private:
     const GrepType      mGrepType;
-    const unsigned      mCodeUnitWidth;
 };
 }
 

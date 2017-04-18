@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <errno.h>
+#include <llvm/ADT/Triple.h>
 
 using namespace llvm;
 
@@ -79,8 +80,9 @@ Function * CBuilder::GetPrintf() {
 
 void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
     Constant * printRegister = mMod->getFunction("PrintInt");
+    IntegerType * int64Ty = getInt64Ty();
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
-        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getSizeTy() }, false);
+        FunctionType *FT = FunctionType::get(getVoidTy(), { getInt8PtrTy(), int64Ty }, false);
         Function * function = Function::Create(FT, Function::InternalLinkage, "PrintInt", mMod);
         auto arg = function->arg_begin();
         std::string out = "%-40s = %" PRIx64 "\n";
@@ -101,9 +103,9 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
     }
     Value * num = nullptr;
     if (value->getType()->isPointerTy()) {
-        num = CreatePtrToInt(value, getSizeTy());
+        num = CreatePtrToInt(value, int64Ty);
     } else {
-        num = CreateZExtOrBitCast(value, getSizeTy());
+        num = CreateZExtOrBitCast(value, int64Ty);
     }
     assert (num->getType()->isIntegerTy());
     CreateCall(printRegister, {GetString(name.c_str()), num});
@@ -168,20 +170,16 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     return CreateCall(aligned_malloc, {CreateZExtOrTrunc(size, intTy)});
 }
 
-#ifdef __APPLE__
-#define MAP_ANONYMOUS MAP_ANON
-#endif
-
 Value * CBuilder::CreateAnonymousMMap(Value * size) {
     PointerType * const voidPtrTy = getVoidPtrTy();
     IntegerType * const intTy = getInt32Ty();
     IntegerType * const sizeTy = getSizeTy();
     size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ | PROT_WRITE);
-    ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE | MAP_ANONYMOUS);
+    ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE | MAP_ANON);
     ConstantInt * const fd =  ConstantInt::get(intTy, -1);
     Constant * const offset = ConstantInt::get(sizeTy, 0);
-    return CreateMMap(Constant::getNullValue(voidPtrTy), size, prot, flags, fd, offset);
+    return CreateMMap(ConstantPointerNull::getNullValue(voidPtrTy), size, prot, flags, fd, offset);
 }
 
 Value * CBuilder::CreateFileSourceMMap(Value * const fd, Value * size) {
@@ -192,7 +190,7 @@ Value * CBuilder::CreateFileSourceMMap(Value * const fd, Value * size) {
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ);
     ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE);
     Constant * const offset = ConstantInt::get(sizeTy, 0);
-    return CreateMMap(Constant::getNullValue(voidPtrTy), size, prot, flags, fd, offset);
+    return CreateMMap(ConstantPointerNull::getNullValue(voidPtrTy), size, prot, flags, fd, offset);
 }
 
 Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const prot, Value * const flags, Value * const fd, Value * const offset) {
@@ -211,48 +209,122 @@ Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const pro
     return ptr;
 }
 
-Value * CBuilder::CheckMMapSuccess(Value * const addr) {
-    DataLayout DL(mMod);
-    IntegerType * const ty = getIntPtrTy(DL);
-    return CreateICmpNE(CreatePtrToInt(addr, ty), ConstantInt::getAllOnesValue(ty)); // MAP_FAILED = -1
+/*
+    MADV_NORMAL
+        No special treatment. This is the default.
+    MADV_RANDOM
+        Expect page references in random order. (Hence, read ahead may be less useful than normally.)
+    MADV_SEQUENTIAL
+        Expect page references in sequential order. (Hence, pages in the given range can be aggressively read ahead, and may be freed
+        soon after they are accessed.)
+    MADV_WILLNEED
+        Expect access in the near future. (Hence, it might be a good idea to read some pages ahead.)
+    MADV_DONTNEED
+        Do not expect access in the near future. (For the time being, the application is finished with the given range, so the kernel
+        can free resources associated with it.) Subsequent accesses of pages in this range will succeed, but will result either in
+        reloading of the memory contents from the underlying mapped file (see mmap(2)) or zero-fill-on-demand pages for mappings
+        without an underlying file.
+*/
+
+Value * CBuilder::CreateMMapAdvise(Value * addr, Value * length, std::initializer_list<MADV> advice) {
+    Triple T(mMod->getTargetTriple());
+    Value * result = nullptr;
+    if (T.isOSLinux()) {
+        DataLayout DL(mMod);
+        IntegerType * const intTy = getIntPtrTy(DL);
+        IntegerType * const sizeTy = getSizeTy();
+        PointerType * const voidPtrTy = getVoidPtrTy();
+        Function * MAdviseFunc = mMod->getFunction("madvise");
+        if (LLVM_UNLIKELY(MAdviseFunc == nullptr)) {
+            FunctionType * fty = FunctionType::get(intTy, {voidPtrTy, sizeTy, intTy}, false);
+            MAdviseFunc = Function::Create(fty, Function::ExternalLinkage, "madvise", mMod);
+        }
+        addr = CreatePointerCast(addr, voidPtrTy);
+        length = CreateZExtOrTrunc(length, sizeTy);
+        int adviceFlags = 0;
+        for (const MADV adv : advice) {
+            switch (adv) {
+                case MADV::NORMAL: adviceFlags |= MADV_NORMAL; break;
+                case MADV::RANDOM: adviceFlags |= MADV_RANDOM; break;
+                case MADV::SEQUENTIAL: adviceFlags |= MADV_SEQUENTIAL; break;
+                case MADV::DONTNEED: adviceFlags |= MADV_DONTNEED; break;
+                case MADV::WILLNEED: adviceFlags |= MADV_WILLNEED; break;
+//                case MADV::REMOVE: adviceFlags |= MADV_REMOVE; break;
+//                case MADV::DONTFORK: adviceFlags |= MADV_DONTFORK; break;
+//                case MADV::DOFORK: adviceFlags |= MADV_DOFORK; break;
+//                case MADV::HWPOISON: adviceFlags |= MADV_HWPOISON; break;
+//                case MADV::MERGEABLE: adviceFlags |= MADV_MERGEABLE; break;
+//                case MADV::UNMERGEABLE: adviceFlags |= MADV_UNMERGEABLE; break;
+//                case MADV::HUGEPAGE: adviceFlags |= MADV_HUGEPAGE; break;
+//                case MADV::NOHUGEPAGE: adviceFlags |= MADV_NOHUGEPAGE; break;
+//                case MADV::DONTDUMP: adviceFlags |= MADV_DONTDUMP; break;
+//                case MADV::DODUMP: adviceFlags |= MADV_DODUMP; break;
+            }
+        }
+        result = CreateCall(MAdviseFunc, {addr, length, ConstantInt::get(intTy, adviceFlags)});
+        if (codegen::EnableAsserts) {
+            CreateAssert(CreateICmpEQ(result, ConstantInt::getNullValue(result->getType())), "CreateMMapAdvise: failed");
+        }
+    }
+    return result;
 }
 
-#ifndef __APPLE__
-Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize, const bool mayMove) {
+Value * CBuilder::CheckMMapSuccess(Value * const addr) {
     DataLayout DL(mMod);
-    PointerType * const voidPtrTy = getVoidPtrTy();
     IntegerType * const intTy = getIntPtrTy(DL);
-    IntegerType * const sizeTy = getSizeTy();
-    Function * fMRemap = mMod->getFunction("mremap");
-    if (LLVM_UNLIKELY(fMRemap == nullptr)) {
-        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy, sizeTy, intTy}, false);
-        fMRemap = Function::Create(fty, Function::ExternalLinkage, "mremap", mMod);
-    }    
-    addr = CreatePointerCast(addr, voidPtrTy);
-    oldSize = CreateZExtOrTrunc(oldSize, sizeTy);
-    newSize = CreateZExtOrTrunc(newSize, sizeTy);
-    ConstantInt * const flags = ConstantInt::get(intTy, mayMove ? MREMAP_MAYMOVE : 0);
-    Value * ptr = CreateCall(fMRemap, {addr, oldSize, newSize, flags});
-    if (codegen::EnableAsserts) {
-        CreateAssert(CheckMMapSuccess(ptr), "CreateMRemap: mremap failed to allocate memory");
+    return CreateICmpNE(CreatePtrToInt(addr, intTy), ConstantInt::getAllOnesValue(intTy)); // MAP_FAILED = -1
+}
+
+Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize) {
+    Triple T(mMod->getTargetTriple());
+    Value * ptr = nullptr;
+    if (T.isOSLinux()) {
+        DataLayout DL(mMod);
+        PointerType * const voidPtrTy = getVoidPtrTy();
+        IntegerType * const sizeTy = getSizeTy();
+        IntegerType * const intTy = getIntPtrTy(DL);
+        Function * fMRemap = mMod->getFunction("mremap");
+        if (LLVM_UNLIKELY(fMRemap == nullptr)) {
+            FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy, sizeTy, intTy}, false);
+            fMRemap = Function::Create(fty, Function::ExternalLinkage, "mremap", mMod);
+        }
+        addr = CreatePointerCast(addr, voidPtrTy);
+        oldSize = CreateZExtOrTrunc(oldSize, sizeTy);
+        newSize = CreateZExtOrTrunc(newSize, sizeTy);
+        ConstantInt * const flags = ConstantInt::get(intTy, MREMAP_MAYMOVE);
+        ptr = CreateCall(fMRemap, {addr, oldSize, newSize, flags});
+        if (codegen::EnableAsserts) {
+            CreateAssert(CheckMMapSuccess(ptr), "CreateMRemap: mremap failed to allocate memory");
+        }
+    } else { // no OS mremap support
+        ptr = CreateAnonymousMMap(newSize);
+        CreateMemCpy(ptr, addr, oldSize, getpagesize());
+        CreateMUnmap(addr, oldSize);
     }
     return ptr;
 }
-#endif
 
 Value * CBuilder::CreateMUnmap(Value * addr, Value * size) {
-    DataLayout DL(mMod);
     IntegerType * const sizeTy = getSizeTy();
     PointerType * const voidPtrTy = getVoidPtrTy();
     Function * fMUnmap = mMod->getFunction("munmap");
     if (LLVM_UNLIKELY(fMUnmap == nullptr)) {
+        DataLayout DL(mMod);
         IntegerType * const intTy = getIntPtrTy(DL);
         FunctionType * fty = FunctionType::get(intTy, {voidPtrTy, sizeTy}, false);
         fMUnmap = Function::Create(fty, Function::ExternalLinkage, "munmap", mMod);
     }
+    if (codegen::EnableAsserts) {
+        Value * const pageOffset = CreateURem(CreatePtrToInt(addr, sizeTy), getSize(getpagesize()));
+        CreateAssert(CreateICmpEQ(pageOffset, getSize(0)), "CreateMUnmap: addr must be a multiple of the page size");
+    }
     addr = CreatePointerCast(addr, voidPtrTy);
     size = CreateZExtOrTrunc(size, sizeTy);
-    return CreateCall(fMUnmap, {addr, size});
+    CallInst * result = CreateCall(fMUnmap, {addr, size});
+    if (codegen::EnableAsserts) {
+        CreateAssert(CreateICmpEQ(result, ConstantInt::getNullValue(result->getType())), "CreateMUnmap: failed");
+    }
+    return result;
 }
 
 void CBuilder::CreateFree(Value * const ptr) {
@@ -326,7 +398,7 @@ Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
 }
 
 PointerType * CBuilder::getVoidPtrTy() const {
-    return TypeBuilder<void *, false>::get(getContext());
+    return TypeBuilder<void *, true>::get(getContext());
 }
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
@@ -363,21 +435,27 @@ Value * CBuilder::CreateFOpenCall(Value * filename, Value * mode) {
 
 Value * CBuilder::CreateFReadCall(Value * ptr, Value * size, Value * nitems, Value * stream) {
     Function * fReadFunc = mMod->getFunction("fread");
+    PointerType * const voidPtrTy = getVoidPtrTy();
     if (fReadFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getSizeTy(), {getVoidPtrTy(), getSizeTy(), getSizeTy(), getFILEptrTy()}, false);
+        IntegerType * const sizeTy = getSizeTy();
+        FunctionType * fty = FunctionType::get(sizeTy, {voidPtrTy, sizeTy, sizeTy, getFILEptrTy()}, false);
         fReadFunc = Function::Create(fty, Function::ExternalLinkage, "fread", mMod);
         fReadFunc->setCallingConv(CallingConv::C);
     }
+    ptr = CreatePointerCast(ptr, voidPtrTy);
     return CreateCall(fReadFunc, {ptr, size, nitems, stream});
 }
 
 Value * CBuilder::CreateFWriteCall(Value * ptr, Value * size, Value * nitems, Value * stream) {
     Function * fWriteFunc = mMod->getFunction("fwrite");
+    PointerType * const voidPtrTy = getVoidPtrTy();
     if (fWriteFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getSizeTy(), {getVoidPtrTy(), getSizeTy(), getSizeTy(), getFILEptrTy()}, false);
+        IntegerType * const sizeTy = getSizeTy();
+        FunctionType * fty = FunctionType::get(sizeTy, {voidPtrTy, sizeTy, sizeTy, getFILEptrTy()}, false);
         fWriteFunc = Function::Create(fty, Function::ExternalLinkage, "fwrite", mMod);
         fWriteFunc->setCallingConv(CallingConv::C);
     }
+    ptr = CreatePointerCast(ptr, voidPtrTy);
     return CreateCall(fWriteFunc, {ptr, size, nitems, stream});
 }
 
