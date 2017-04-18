@@ -30,6 +30,9 @@ inline std::string makeSignature(RE * const re_ast, const bool CountOnly) {
     if (CountOnly) {
         signature += "-c";
     }
+    if (AlgorithmOptionIsSet(InvertMatches)) {
+        signature += "-v";
+    }
     return signature;
 }
 
