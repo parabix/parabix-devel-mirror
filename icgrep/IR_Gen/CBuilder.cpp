@@ -275,6 +275,10 @@ Value * CBuilder::CheckMMapSuccess(Value * const addr) {
     return CreateICmpNE(CreatePtrToInt(addr, intTy), ConstantInt::getAllOnesValue(intTy)); // MAP_FAILED = -1
 }
 
+#ifndef MREMAP_MAYMOVE
+#define MREMAP_MAYMOVE	1
+#endif
+
 Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize) {
     Triple T(mMod->getTargetTriple());
     Value * ptr = nullptr;
