@@ -73,9 +73,24 @@ StdOutKernel::StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWid
 void FileSink::generateInitMethod() {
     BasicBlock * setTerminationOnFailure = CreateBasicBlock("setTerminationOnFailure");
     BasicBlock * fileSinkInitExit = CreateBasicBlock("fileSinkInitExit");
-    Value * handle = iBuilder->CreateFOpenCall(getScalarField("fileName"), iBuilder->CreateGlobalStringPtr("w"));
-    setScalarField("IOstreamPtr", handle);
-    Value * failure = iBuilder->CreateICmpEQ(iBuilder->CreatePtrToInt(handle, iBuilder->getSizeTy()), iBuilder->getSize(0));
+    Value * fileName = getScalarField("fileName");
+    Value * fileNameLength = iBuilder->CreateStrlenCall(fileName);
+    // Make a temporary file name template with the characters "XXXXXX" appended 
+    // as required by mkstemp.
+    Constant * suffixPlusNullLength = iBuilder->getSize(7);
+    Value * tmpFileNamePtr = iBuilder->CreatePointerCast(iBuilder->CreateMalloc(iBuilder->CreateAdd(fileNameLength, suffixPlusNullLength)), iBuilder->getInt8PtrTy());
+    setScalarField("tmpFileName", tmpFileNamePtr);
+    iBuilder->CreateMemCpy(tmpFileNamePtr, fileName, fileNameLength, 1);
+#ifdef BACKUP_OLDFILE
+    iBuilder->CreateMemCpy(iBuilder->CreateGEP(tmpFileNamePtr, fileNameLength), iBuilder->CreateGlobalStringPtr(".saved"), suffixPlusNullLength, 1);
+    iBuilder->CreateRenameCall(fileName, tmpFileNamePtr);
+#else
+    iBuilder->CreateUnlinkCall(fileName);
+#endif
+    iBuilder->CreateMemCpy(iBuilder->CreateGEP(tmpFileNamePtr, fileNameLength), iBuilder->CreateGlobalStringPtr("XXXXXX"), suffixPlusNullLength, 1);
+    Value * fileDes = iBuilder->CreateMkstempCall(tmpFileNamePtr);
+    setScalarField("fileDes", fileDes);
+    Value * failure = iBuilder->CreateICmpEQ(fileDes, iBuilder->getInt32(-1));
     iBuilder->CreateCondBr(failure, setTerminationOnFailure, fileSinkInitExit);
     iBuilder->SetInsertPoint(setTerminationOnFailure);
     setTerminationSignal();
@@ -92,7 +107,7 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
     Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
 
-    Value * IOstreamPtr = getScalarField("IOstreamPtr");
+    Value * fileDes = getScalarField("fileDes");
     Value * available = getAvailableItemCount("codeUnitBuffer");
     Value * processed = getProcessedItemCount("codeUnitBuffer");
     Value * itemsToDo = iBuilder->CreateSub(available, processed);
@@ -109,9 +124,7 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
     Value * bytePtr = iBuilder->CreatePointerCast(getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
     bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
-
-    iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);
-
+    iBuilder->CreateWriteCall(fileDes, bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
     
     processed = iBuilder->CreateAdd(processed, itemsToDo);
     setProcessedItemCount("codeUnitBuffer", processed);
@@ -128,7 +141,7 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
         Value * bytePtr = iBuilder->CreatePointerCast(getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
         bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
         itemsToDo = iBuilder->CreateSub(available, processed);
-        iBuilder->CreateFWriteCall(bytePtr, itemsToDo, itemBytes, IOstreamPtr);
+        iBuilder->CreateWriteCall(fileDes, bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
         processed = iBuilder->CreateAdd(processed, itemsToDo);
         setProcessedItemCount("codeUnitBuffer", available);
         iBuilder->CreateBr(checkFinal);
@@ -137,7 +150,12 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
     iBuilder->CreateCondBr(doFinal, closeFile, fileOutExit);
 
     iBuilder->SetInsertPoint(closeFile);
-    iBuilder->CreateFCloseCall(IOstreamPtr);
+    iBuilder->CreateCloseCall(fileDes);
+    Value * newFileNamePtr = getScalarField("fileName");
+    Value * tmpFileNamePtr = getScalarField("tmpFileName");
+    iBuilder->CreateRenameCall(tmpFileNamePtr, newFileNamePtr);
+    iBuilder->CreateFree(tmpFileNamePtr);
+    
     iBuilder->CreateBr(fileOutExit);
 
     iBuilder->SetInsertPoint(fileOutExit);
@@ -145,7 +163,7 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
 
 FileSink::FileSink(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth)
 : SegmentOrientedKernel(iBuilder, "filesink", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {},
-                {Binding{iBuilder->getInt8PtrTy(), "fileName"}}, {}, {Binding{iBuilder->getFILEptrTy(), "IOstreamPtr"}})
+                {Binding{iBuilder->getInt8PtrTy(), "fileName"}}, {}, {Binding{iBuilder->getInt8PtrTy(), "tmpFileName"}, Binding{iBuilder->getInt32Ty(), "fileDes"}})
 , mCodeUnitWidth(codeUnitWidth) {
 }
 

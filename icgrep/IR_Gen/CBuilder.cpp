@@ -68,6 +68,35 @@ Value * CBuilder::CreateCloseCall(Value * fildes) {
     return CreateCall(closeFn, {fildes});
 }
 
+
+Value * CBuilder::CreateUnlinkCall(Value * path) {
+    Function * unlinkFunc = mMod->getFunction("unlink");
+    if (unlinkFunc == nullptr) {
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, false);
+        unlinkFunc = Function::Create(fty, Function::ExternalLinkage, "unlink", mMod);
+        unlinkFunc->setCallingConv(CallingConv::C);
+    }
+    return CreateCall(unlinkFunc, {path});
+}
+
+Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
+    Function * mkstempFn = mMod->getFunction("mkstemp");
+    if (mkstempFn == nullptr) {
+        mkstempFn = cast<Function>(mMod->getOrInsertFunction("mkstemp", getInt32Ty(), getInt8PtrTy(), nullptr));
+    }
+    return CreateCall(mkstempFn, {ftemplate});
+}
+
+
+Value * CBuilder::CreateStrlenCall(Value * str) {
+    Function * strlenFn = mMod->getFunction("strlen");
+    if (strlenFn == nullptr) {
+        strlenFn = cast<Function>(mMod->getOrInsertFunction("strlen", getSizeTy(), getInt8PtrTy(), nullptr));
+    }
+    return CreateCall(strlenFn, {str});
+}
+
+
 Function * CBuilder::GetPrintf() {
     Function * printf = mMod->getFunction("printf");
     if (printf == nullptr) {
@@ -471,6 +500,26 @@ Value * CBuilder::CreateFCloseCall(Value * stream) {
         fCloseFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fCloseFunc, {stream});
+}
+
+Value * CBuilder::CreateRenameCall(Value * oldName, Value * newName) {
+    Function * renameFunc = mMod->getFunction("rename");
+    if (renameFunc == nullptr) {
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy(), getInt8PtrTy()}, false);
+        renameFunc = Function::Create(fty, Function::ExternalLinkage, "rename", mMod);
+        renameFunc->setCallingConv(CallingConv::C);
+    }
+    return CreateCall(renameFunc, {oldName, newName});
+}
+
+Value * CBuilder::CreateRemoveCall(Value * path) {
+    Function * removeFunc = mMod->getFunction("remove");
+    if (removeFunc == nullptr) {
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, false);
+        removeFunc = Function::Create(fty, Function::ExternalLinkage, "remove", mMod);
+        removeFunc->setCallingConv(CallingConv::C);
+    }
+    return CreateCall(removeFunc, {path});
 }
 
 Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg) {

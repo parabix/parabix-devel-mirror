@@ -61,6 +61,11 @@ public:
     llvm::Value * CreateFWriteCall(llvm::Value * ptr, llvm::Value * size, llvm::Value * nitems, llvm::Value * stream);
     //  Create a call to:  int fclose ( FILE * stream );
     llvm::Value * CreateFCloseCall(llvm::Value * stream);
+    //  Create a call to:  int remove(const char *path);
+    llvm::Value * CreateRemoveCall(llvm::Value * path);
+    
+    //  Create a call to:  int rename(const char *old, const char *new);
+    llvm::Value * CreateRenameCall(llvm::Value * oldName, llvm::Value * newName);
     
     llvm::Function * GetPrintf();
 
@@ -74,8 +79,19 @@ public:
     llvm::Value * CreateReadCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
     //  Create a call to:  int close(int filedes);
     llvm::Value * CreateCloseCall(llvm::Value * fildes);
+    //  Create a call to:  int unlink(const char *path);
+    llvm::Value * CreateUnlinkCall(llvm::Value * path);
 
-
+    //  Create calls to stdlib.h functions.
+    //
+    //  Create a call to:  int mkstemp (char *template);
+    llvm::Value * CreateMkstempCall(llvm::Value * ftemplate);
+    
+    //  Create a call to:  size_t strlen(const char *str);
+    llvm::Value * CreateStrlenCall(llvm::Value * str);
+    
+    
+    
     llvm::Value * CreateAnonymousMMap(llvm::Value * size);
 
     llvm::Value * CreateFileSourceMMap(llvm::Value * fd, llvm::Value * size);
