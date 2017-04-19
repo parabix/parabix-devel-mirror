@@ -223,43 +223,54 @@ StreamSetBuffer * ParabixDriver::addBuffer(std::unique_ptr<StreamSetBuffer> b) {
     return mOwnedBuffers.back().get();
 }
 
+kernel::KernelBuilder * ParabixDriver::addKernelInstance(std::unique_ptr<kernel::KernelBuilder> kb) {
+    mOwnedKernels.push_back(std::move(kb));
+    return mOwnedKernels.back().get();
+}
+
 
 void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
     assert (mModuleMap.count(&kb) == 0);
-    mKernelList.push_back(&kb);
+    mPipeline.push_back(&kb);
     mModuleMap.emplace(&kb, kb.createKernelStub(inputs, outputs));
+}
+
+void ParabixDriver::makeKernelCall(kernel::KernelBuilder * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
+    assert (mModuleMap.count(kb) == 0);
+    mPipeline.push_back(kb);
+    mModuleMap.emplace(kb, kb->createKernelStub(inputs, outputs));
 }
 
 void ParabixDriver::generatePipelineIR() {
     #ifndef NDEBUG
-    if (LLVM_UNLIKELY(mKernelList.empty())) {
+    if (LLVM_UNLIKELY(mPipeline.empty())) {
         report_fatal_error("Pipeline must contain at least one kernel");
     } else {
-        boost::container::flat_set<kernel::KernelBuilder *> K(mKernelList.begin(), mKernelList.end());
-        if (LLVM_UNLIKELY(K.size() != mKernelList.size())) {
+        boost::container::flat_set<kernel::KernelBuilder *> K(mPipeline.begin(), mPipeline.end());
+        if (LLVM_UNLIKELY(K.size() != mPipeline.size())) {
             report_fatal_error("Kernel definitions can only occur once in the pipeline");
         }
     }
     #endif
     // note: instantiation of all kernels must occur prior to initialization
-    for (const auto & k : mKernelList) {
+    for (const auto & k : mPipeline) {
         k->addKernelDeclarations(mMainModule);
     }
-    for (const auto & k : mKernelList) {
+    for (const auto & k : mPipeline) {
         k->createInstance();
     }
-    for (const auto & k : mKernelList) {
+    for (const auto & k : mPipeline) {
         k->initializeInstance();
     }
     if (codegen::pipelineParallel) {
-        generateParallelPipeline(iBuilder, mKernelList);
+        generateParallelPipeline(iBuilder, mPipeline);
     } else if (codegen::segmentPipelineParallel) {
-        generateSegmentParallelPipeline(iBuilder, mKernelList);
+        generateSegmentParallelPipeline(iBuilder, mPipeline);
     } else {
         codegen::ThreadNum = 1;
-        generatePipelineLoop(iBuilder, mKernelList);
+        generatePipelineLoop(iBuilder, mPipeline);
     }
-    for (const auto & k : mKernelList) {
+    for (const auto & k : mPipeline) {
         k->terminateInstance();
     }
 }

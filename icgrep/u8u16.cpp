@@ -50,14 +50,21 @@ static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffe
 static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
 
 
-void u8u16_pablo(PabloKernel * kernel) {
+std::unique_ptr<PabloKernel> u8u16_pablo(IDISA::IDISA_Builder * iBuilder) {
+
+    auto kernel = std::unique_ptr<PabloKernel>(new PabloKernel(iBuilder, "u8u16",
+                       {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
+                       {Binding{iBuilder->getStreamSetTy(16, 1), "u16bit"},
+                           Binding{iBuilder->getStreamSetTy(1, 1), "delMask"},
+                           Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {}));
+    
     //  input: 8 basis bit streams
     
     const auto u8bitSet = kernel->getInputStreamVar("u8bit");
     
     //  output: 16 u8-indexed streams, + delmask stream + error stream
     
-    cc::CC_Compiler ccc(kernel, u8bitSet);
+    cc::CC_Compiler ccc(kernel.get(), u8bitSet);
     
     PabloBuilder & main = ccc.getBuilder();
     const auto u8_bits = ccc.getBasisBits();
@@ -250,7 +257,8 @@ void u8u16_pablo(PabloKernel * kernel) {
     main.createAssign(main.createExtract(delmask_out, main.getInteger(0)), delmask);
     main.createAssign(main.createExtract(error_mask_out,  main.getInteger(0)), error_mask);
 
-    pablo_function_passes(kernel);
+    pablo_function_passes(kernel.get());
+    return kernel;
 }
 
 void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
@@ -284,29 +292,23 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     // File data from mmap
     StreamSetBuffer * ByteStream = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)), inputStream);
     
-    MMapSourceKernel mmapK(iBuilder, segmentSize);
-    mmapK.setInitialArguments({fileSize});
-    pxDriver.addKernelCall(mmapK, {}, {ByteStream});
+    KernelBuilder * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, segmentSize));
+    mmapK->setInitialArguments({fileSize});
+    pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
     
     // Transposed bits from s2p
     StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
     
-    S2PKernel s2pk(iBuilder);
-    pxDriver.addKernelCall(s2pk, {ByteStream}, {BasisBits});
+    KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
+    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
     // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
     StreamSetBuffer * U8u16Bits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments));
     StreamSetBuffer * DelMask = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
     StreamSetBuffer * ErrorMask = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
     
-    PabloKernel u8u16k(iBuilder, "u8u16",
-                       {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
-                       {Binding{iBuilder->getStreamSetTy(16, 1), "u16bit"},
-                           Binding{iBuilder->getStreamSetTy(1, 1), "delMask"},
-                           Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {});
-    
-    u8u16_pablo(&u8u16k);
-    pxDriver.addKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask, ErrorMask});
+    KernelBuilder * u8u16k = pxDriver.addKernelInstance(u8u16_pablo(iBuilder));
+    pxDriver.makeKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask, ErrorMask});
     
     // Apply a deletion algorithm to discard all but the final position of the UTF-8
     // sequences for each UTF-16 code unit. Swizzle the results.
@@ -316,8 +318,8 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     StreamSetBuffer * SwizzleFields3 = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments));
     StreamSetBuffer * DeletionCounts = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
     
-    DeleteByPEXTkernel delK(iBuilder, 64, 16, true);
-    pxDriver.addKernelCall(delK, {U8u16Bits, DelMask}, {SwizzleFields0, SwizzleFields1, SwizzleFields2, SwizzleFields3, DeletionCounts});
+    KernelBuilder * delK = pxDriver.addKernelInstance(make_unique<DeleteByPEXTkernel>(iBuilder, 64, 16, true));
+    pxDriver.makeKernelCall(delK, {U8u16Bits, DelMask}, {SwizzleFields0, SwizzleFields1, SwizzleFields2, SwizzleFields3, DeletionCounts});
     
     //  Produce fully compressed swizzled UTF-16 bit streams
     StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer(make_unique<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1));
@@ -325,23 +327,22 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     StreamSetBuffer * u16Swizzle2 = pxDriver.addBuffer(make_unique<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1));
     StreamSetBuffer * u16Swizzle3 = pxDriver.addBuffer(make_unique<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1));
     
-    SwizzledBitstreamCompressByCount compressK(iBuilder, 16);
-    pxDriver.addKernelCall(compressK, {DeletionCounts, SwizzleFields0, SwizzleFields1, SwizzleFields2, SwizzleFields3},
+    KernelBuilder * compressK = pxDriver.addKernelInstance(make_unique<SwizzledBitstreamCompressByCount>(iBuilder, 16));
+    pxDriver.makeKernelCall(compressK, {DeletionCounts, SwizzleFields0, SwizzleFields1, SwizzleFields2, SwizzleFields3},
                            {u16Swizzle0, u16Swizzle1, u16Swizzle2, u16Swizzle3});
     
     // Produce unswizzled UTF-16 bit streams
     StreamSetBuffer * u16bits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments));
-    SwizzleGenerator unSwizzleK(iBuilder, 16, 1, 4);
-    unSwizzleK.setName("unswizzle");
-    pxDriver.addKernelCall(unSwizzleK, {u16Swizzle0, u16Swizzle1, u16Swizzle2, u16Swizzle3}, {u16bits});
     
+    KernelBuilder * unSwizzleK = pxDriver.addKernelInstance(make_unique<SwizzleGenerator>(iBuilder, 16, 1, 4));
+    pxDriver.makeKernelCall(unSwizzleK, {u16Swizzle0, u16Swizzle1, u16Swizzle2, u16Swizzle3}, {u16bits});
     
-    P2S16Kernel p2sk(iBuilder);
+    KernelBuilder * p2sk = pxDriver.addKernelInstance(make_unique<P2S16Kernel>(iBuilder));
     
-    FileSink outK(iBuilder, 16);
+    KernelBuilder * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 16));
     Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
-    outK.setInitialArguments({fName});
-    
+    outK->setInitialArguments({fName});
+        
     // Different choices for the output buffer depending on chosen option.
     StreamSetBuffer * U16out = nullptr;
     if (mMapBuffering || memAlignBuffering) {
@@ -349,8 +350,8 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     } else {
         U16out = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), segmentSize * bufferSegments));
     }
-    pxDriver.addKernelCall(p2sk, {u16bits}, {U16out});
-    pxDriver.addKernelCall(outK, {U16out}, {});
+    pxDriver.makeKernelCall(p2sk, {u16bits}, {U16out});
+    pxDriver.makeKernelCall(outK, {U16out}, {});
     
     pxDriver.generatePipelineIR();
     
@@ -391,42 +392,36 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     // File data from mmap
     StreamSetBuffer * ByteStream = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)), inputStream);
     
-    MMapSourceKernel mmapK(iBuilder, segmentSize);
-    mmapK.setInitialArguments({fileSize});
-    pxDriver.addKernelCall(mmapK, {}, {ByteStream});
+    KernelBuilder * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, segmentSize));
+    mmapK->setInitialArguments({fileSize});
+    pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
     
     // Transposed bits from s2p
     StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
     
-    S2PKernel s2pk(iBuilder);
-    pxDriver.addKernelCall(s2pk, {ByteStream}, {BasisBits});
-
+    KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
+    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
+    
     // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
     StreamSetBuffer * U8u16Bits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments));
     StreamSetBuffer * DelMask = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
     StreamSetBuffer * ErrorMask = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
     
-    PabloKernel u8u16k(iBuilder, "u8u16",
-                       {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
-                       {Binding{iBuilder->getStreamSetTy(16, 1), "u16bit"},
-                           Binding{iBuilder->getStreamSetTy(1, 1), "delMask"},
-                           Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {});
-    
-    u8u16_pablo(&u8u16k);
-    pxDriver.addKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask, ErrorMask});
+    KernelBuilder * u8u16k = pxDriver.addKernelInstance(u8u16_pablo(iBuilder));
+    pxDriver.makeKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask, ErrorMask});
     
     StreamSetBuffer * U16Bits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments));
     
     StreamSetBuffer * DeletionCounts = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
 
-    DeletionKernel delK(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
-    pxDriver.addKernelCall(delK, {U8u16Bits, DelMask}, {U16Bits, DeletionCounts});
+    KernelBuilder * delK = pxDriver.addKernelInstance(make_unique<DeletionKernel>(iBuilder, iBuilder->getBitBlockWidth()/16, 16));
+    pxDriver.makeKernelCall(delK, {U8u16Bits, DelMask}, {U16Bits, DeletionCounts});
     
-    P2S16KernelWithCompressedOutput p2sk(iBuilder);
+    KernelBuilder * p2sk = pxDriver.addKernelInstance(make_unique<P2S16KernelWithCompressedOutput>(iBuilder));
     
-    FileSink outK(iBuilder, 16);
+    KernelBuilder * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 16));
     Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
-    outK.setInitialArguments({fName});
+    outK->setInitialArguments({fName});
     
     // Different choices for the output buffer depending on chosen option.
     StreamSetBuffer * U16out = nullptr;
@@ -435,8 +430,8 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     } else {
         U16out = pxDriver.addBuffer(make_unique<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), segmentSize * bufferSegments, 1 /*overflow block*/));
     }
-    pxDriver.addKernelCall(p2sk, {U16Bits, DeletionCounts}, {U16out});
-    pxDriver.addKernelCall(outK, {U16out}, {});
+    pxDriver.makeKernelCall(p2sk, {U16Bits, DeletionCounts}, {U16out});
+    pxDriver.makeKernelCall(outK, {U16out}, {});
     
     pxDriver.generatePipelineIR();
     

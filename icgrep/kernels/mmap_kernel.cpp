@@ -43,7 +43,7 @@ void MMapSourceKernel::generateDoSegmentMethod(Value *doFinal, const std::vector
 }
 
 MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "Parabix:mmap_source",
+    : SegmentOrientedKernel(iBuilder, "Parabix:mmap_source" + std::to_string(blocksPerSegment) + "@" + std::to_string(codeUnitWidth),
     {},
     {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
     {Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})

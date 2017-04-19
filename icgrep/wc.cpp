@@ -87,12 +87,19 @@ extern "C" {
 //
 //
 
-void wc_gen(PabloKernel * kernel) {
+std::unique_ptr<PabloKernel> wc_gen(IDISA::IDISA_Builder * iBuilder) {
+    
+    auto kernel = std::unique_ptr<PabloKernel>(new PabloKernel(iBuilder, "Parabix:wc",
+                    {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
+                    {},
+                    {},
+                    {Binding{iBuilder->getSizeTy(), "lineCount"}, Binding{iBuilder->getSizeTy(), "wordCount"}, Binding{iBuilder->getSizeTy(), "charCount"}}));
+    
     //  input: 8 basis bit streams
     const auto u8bitSet = kernel->getInputStreamVar("u8bit");
     //  output: 3 counters
     
-    cc::CC_Compiler ccc(kernel, u8bitSet);
+    cc::CC_Compiler ccc(kernel.get(), u8bitSet);
     
     PabloBuilder & pb = ccc.getBuilder();
 
@@ -120,6 +127,8 @@ void wc_gen(PabloKernel * kernel) {
         PabloAST * u8Begin = ccc.compileCC(re::makeCC(re::makeCC(0, 0x7F), re::makeCC(0xC2, 0xF4)));        
         pb.createAssign(cc, pb.createCount(u8Begin));
     }
+    pablo_function_passes(kernel.get());
+    return kernel;
 }
 
 
@@ -155,29 +164,22 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1)));
 
-    MMapSourceKernel mmapK(iBuilder);
-    mmapK.setInitialArguments({fileSize});
-    pxDriver.addKernelCall(mmapK, {}, {ByteStream});
+    KernelBuilder * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder));
+    mmapK->setInitialArguments({fileSize});
+    pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
-    S2PKernel  s2pk(iBuilder);
-    pxDriver.addKernelCall(s2pk, {ByteStream}, {BasisBits});
+    KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
+    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
-    PabloKernel wck(iBuilder, "Parabix:wc",
-        {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
-        {},
-        {},
-        {Binding{iBuilder->getSizeTy(), "lineCount"}, Binding{iBuilder->getSizeTy(), "wordCount"}, Binding{iBuilder->getSizeTy(), "charCount"}});
-
-    wc_gen(&wck);
-    pablo_function_passes(&wck);
-    pxDriver.addKernelCall(wck, {BasisBits}, {});
+    KernelBuilder * wck = pxDriver.addKernelInstance(wc_gen(iBuilder));
+    pxDriver.makeKernelCall(wck, {BasisBits}, {});
 
 
     pxDriver.generatePipelineIR();
     
-    Value * lineCount = wck.createGetAccumulatorCall("lineCount");
-    Value * wordCount = wck.createGetAccumulatorCall("wordCount");
-    Value * charCount = wck.createGetAccumulatorCall("charCount");
+    Value * lineCount = wck->createGetAccumulatorCall("lineCount");
+    Value * wordCount = wck->createGetAccumulatorCall("wordCount");
+    Value * charCount = wck->createGetAccumulatorCall("charCount");
 
     iBuilder->CreateCall(record_counts_routine, std::vector<Value *>({lineCount, wordCount, charCount, fileSize, fileIdx}));
     

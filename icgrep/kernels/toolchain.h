@@ -71,7 +71,10 @@ public:
     
     parabix::StreamSetBuffer * addBuffer(std::unique_ptr<parabix::StreamSetBuffer> b);
     
+    kernel::KernelBuilder * addKernelInstance(std::unique_ptr<kernel::KernelBuilder> kb);
+    
     void addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
+    void makeKernelCall(kernel::KernelBuilder * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
     
     void generatePipelineIR();
     
@@ -90,7 +93,7 @@ private:
     llvm::TargetMachine *                   mTarget;
     llvm::ExecutionEngine *                 mEngine;
     ParabixObjectCache *                    mCache;
-    std::vector<kernel::KernelBuilder *>    mKernelList;
+    std::vector<kernel::KernelBuilder *>    mPipeline;
     // Owned kernels and buffers that will persist with this ParabixDriver instance.
     std::vector<std::unique_ptr<kernel::KernelBuilder>> mOwnedKernels;
     std::vector<std::unique_ptr<parabix::StreamSetBuffer>> mOwnedBuffers;
