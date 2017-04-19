@@ -197,21 +197,11 @@ void RE_Compiler::compileUnicodeNames(RE *& re) {
     re = resolveUnicodeProperties(re);
 }
 
-void RE_Compiler::finalizeMatchResult(MarkerType match_result, bool InvertMatches) {
+void RE_Compiler::finalizeMatchResult(MarkerType match_result) {
     PabloAST * match_follow = mPB.createMatchStar(markerVar(match_result), mAny);
-    if (InvertMatches) {
-        match_follow = mPB.createNot(match_follow);
-    }
-    PabloAST * matches = mPB.createAnd(match_follow, mLineBreak, "matches");
-    if (mCountOnly) {
-        Var * const output = mKernel->getOutputScalarVar("matchedLineCount");
-        PabloBuilder nestedCount = PabloBuilder::Create(mPB);
-        mPB.createIf(matches, nestedCount);
-        nestedCount.createAssign(output, nestedCount.createCount(matches));
-    } else {
-        Var * const output = mKernel->getOutputStreamVar("matches");
-        mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), matches);
-    }
+    PabloAST * matches = mPB.createAnd(match_follow, mLineBreak, "matchedLine3s");
+    Var * const output = mKernel->getOutputStreamVar("matches");
+    mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), matches);
 }
 
 MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
@@ -624,9 +614,8 @@ LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
     
     
 
-RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler, bool CountOnly)
+RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 : mKernel(kernel)
-, mCountOnly(CountOnly)
 , mCCCompiler(ccCompiler)
 , mLineBreak(nullptr)
 , mCRLF(nullptr)

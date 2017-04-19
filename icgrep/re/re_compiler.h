@@ -59,10 +59,10 @@ inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {ret
 class RE_Compiler {
 public:
 
-    RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler, bool CountOnly = false);
+    RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler);
     void initializeRequiredStreams(const unsigned encodingBits, pablo::Var * linebreak);
     void compileUnicodeNames(RE *& re);
-    void finalizeMatchResult(MarkerType match_result, bool InvertMatches = false);
+    void finalizeMatchResult(MarkerType match_result);
     MarkerType compile(RE * re) {
         return compile(re, mPB);
     }

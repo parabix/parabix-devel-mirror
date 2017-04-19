@@ -13,16 +13,28 @@ namespace kernel {
 
 class ICgrepKernelBuilder: public pablo::PabloKernel {
 public:
-    ICgrepKernelBuilder(IDISA::IDISA_Builder * const iBuilder, re::RE * const re_ast, const bool CountOnly = false);
+    ICgrepKernelBuilder(IDISA::IDISA_Builder * const iBuilder, re::RE * const re_ast);
     
     std::string generateKernelSignature(std::string moduleId) override;
     
     void prepareKernel() override;
 
 private:
-    const bool      mCountOnly;
     re::RE * const  mRE;
     std::string     mSignature;
+};
+
+class InvertMatchesKernel : public BlockOrientedKernel {
+public:
+    InvertMatchesKernel(IDISA::IDISA_Builder * builder);
+private:
+    void generateDoBlockMethod() override;
+};
+
+
+class PopcountKernel : public pablo::PabloKernel {
+public:
+    PopcountKernel(IDISA::IDISA_Builder * builder);
 };
 
 }

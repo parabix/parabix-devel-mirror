@@ -8,6 +8,9 @@
 #include <re/printer_re.h>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
+#include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
+#include <pablo/builder.hpp>  // for PabloBuilder
+#include <pablo/pe_count.h>
 
 using namespace kernel;
 using namespace pablo;
@@ -25,26 +28,19 @@ inline static std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
-inline std::string makeSignature(RE * const re_ast, const bool CountOnly) {
+inline std::string makeSignature(RE * const re_ast) {
     std::string signature = Printer_RE::PrintRE(re_ast);
-    if (CountOnly) {
-        signature += "-c";
-    }
-    if (AlgorithmOptionIsSet(InvertMatches)) {
-        signature += "-v";
-    }
     return signature;
 }
 
-ICgrepKernelBuilder::ICgrepKernelBuilder (IDISA::IDISA_Builder * const iBuilder, RE * const re_ast, const bool CountOnly)
+ICgrepKernelBuilder::ICgrepKernelBuilder (IDISA::IDISA_Builder * const iBuilder, RE * const re_ast)
 : PabloKernel(iBuilder, "",
               {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}},
-              CountOnly ? std::vector<Binding>{} : std::vector<Binding>{Binding{iBuilder->getStreamSetTy(1, 1), "matches"}},
+              {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}},
               {},
-              CountOnly ? std::vector<Binding>{Binding{iBuilder->getSizeTy(), "matchedLineCount"}} : std::vector<Binding>{})
-, mCountOnly(CountOnly)
+              {})
 , mRE(re_ast)
-, mSignature(makeSignature(re_ast, CountOnly)) {
+, mSignature(makeSignature(re_ast)) {
     setName("Parabix:" + sha1sum(mSignature));
 }
 
@@ -53,7 +49,34 @@ std::string ICgrepKernelBuilder::generateKernelSignature(std::string moduleId) {
 }
 
 void ICgrepKernelBuilder::prepareKernel() {
-    re2pablo_compiler(this, regular_expression_passes(mRE), mCountOnly);
+    re2pablo_compiler(this, regular_expression_passes(mRE));
     pablo_function_passes(this);
     PabloKernel::prepareKernel();
+}
+
+void InvertMatchesKernel::generateDoBlockMethod() {
+    Value * input = loadInputStreamBlock("matchedLines", iBuilder->getInt32(0));
+    Value * lbs = loadInputStreamBlock("lineBreaks", iBuilder->getInt32(0));
+    Value * inverted = iBuilder->CreateXor(input, lbs);
+    storeOutputStreamBlock("nonMatches", iBuilder->getInt32(0), inverted);
+}
+
+InvertMatchesKernel::InvertMatchesKernel(IDISA::IDISA_Builder * builder)
+: BlockOrientedKernel(builder, "Invert", {Binding{builder->getStreamSetTy(1, 1), "matchedLines"}, Binding{builder->getStreamSetTy(1, 1), "lineBreaks"}}, {Binding{builder->getStreamSetTy(1, 1), "nonMatches"}}, {}, {}, {}) {
+    setNoTerminateAttribute(true);
+    
+}
+
+
+PopcountKernel::PopcountKernel (IDISA::IDISA_Builder * const iBuilder)
+: PabloKernel(iBuilder, "Popcount",
+              {Binding{iBuilder->getStreamSetTy(1), "toCount"}},
+              {},
+              {},
+              {Binding{iBuilder->getSizeTy(), "countResult"}}) {
+    
+    auto pb = this->getEntryBlock();
+    const auto toCount = pb->createExtract(getInputStreamVar("toCount"), pb->getInteger(0));
+    pablo::Var * countResult = getOutputScalarVar("countResult");
+    pb->createAssign(countResult, pb->createCount(toCount));
 }

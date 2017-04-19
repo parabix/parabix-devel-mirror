@@ -525,15 +525,33 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
     StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
     pxDriver.addKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
    
-    kernel::ICgrepKernelBuilder icgrepK(iBuilder, re_ast, CountOnly);
+    StreamSetBuffer * MatchResults = nullptr;
+#ifdef CUDA_ENABLED
+    if (codegen::NVPTX){
+        MatchResults = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), addrSpace), outputStream);
+
+    }
+    else {
+#endif
+    MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+#ifdef CUDA_ENABLED
+    }
+#endif
+    kernel::ICgrepKernelBuilder icgrepK(iBuilder, re_ast);
+    pxDriver.addKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
+    
+    kernel::InvertMatchesKernel invertK(iBuilder);
+    if (AlgorithmOptionIsSet(re::InvertMatches)) {
+        StreamSetBuffer * OriginalMatches = MatchResults;
+        MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        pxDriver.addKernelCall(invertK, {OriginalMatches, LineBreakStream}, {MatchResults});
+    }
 
     if (CountOnly) {
-       
-        pxDriver.addKernelCall(icgrepK, {BasisBits, LineBreakStream}, {});
-
+        kernel::PopcountKernel popcountK(iBuilder);
+        pxDriver.addKernelCall(popcountK, {MatchResults}, {});
         pxDriver.generatePipelineIR();
-
-        iBuilder->CreateRet(icgrepK.createGetAccumulatorCall("matchedLineCount"));
+        iBuilder->CreateRet(popcountK.createGetAccumulatorCall("countResult"));
 
         pxDriver.linkAndFinalize();
 
@@ -541,9 +559,6 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
 
         #ifdef CUDA_ENABLED
         if (codegen::NVPTX){
-            ExternalFileBuffer * MatchResults = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), addrSpace), outputStream);
-
-            pxDriver.addKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
 
             pxDriver.generatePipelineIR();
 
@@ -554,10 +569,6 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
         #endif
 
         if (CPU_Only) {
-
-            StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-
-            pxDriver.addKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
 
             kernel::ScanMatchKernel scanMatchK(iBuilder, grepType, encodingBits);
             scanMatchK.setInitialArguments({fileIdx});
@@ -673,7 +684,13 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
 
     kernel::StreamsMerge streamsMergeK(iBuilder, 1, REs.size());
     pxDriver.addKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
-
+    
+    kernel::InvertMatchesKernel invertK(iBuilder);
+    if (AlgorithmOptionIsSet(re::InvertMatches)) {
+        StreamSetBuffer * OriginalMatches = MergedResults;
+        MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        pxDriver.addKernelCall(invertK, {OriginalMatches, LineBreakStream}, {MergedResults});
+    }
     if (CountOnly) {
         kernel::MatchCount matchCountK(iBuilder);
         pxDriver.addKernelCall(matchCountK, {MergedResults}, {});
