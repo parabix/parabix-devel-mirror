@@ -508,22 +508,22 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
     if (usingStdIn) {
         // TODO: use fstat(STDIN_FILENO) to see if we can mmap the stdin safely and avoid the calls to read
         ByteStream = pxDriver.addBuffer(make_unique<ExtensibleBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize));
-        sourceK = new kernel::StdInKernel(iBuilder, segmentSize);
+        sourceK = pxDriver.addKernelInstance(make_unique<kernel::StdInKernel>(iBuilder, segmentSize));
     } else {
         ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
-        sourceK = new kernel::FileSourceKernel(iBuilder, inputStream->getType(), segmentSize);
+        sourceK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(iBuilder, inputStream->getType(), segmentSize));
         sourceK->setInitialArguments({inputStream, fileSize});
     }
-    pxDriver.addKernelCall(*sourceK, {}, {ByteStream});
+    pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
     
     StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
 
-    kernel::S2PKernel s2pk(iBuilder);
-    pxDriver.addKernelCall(s2pk, {ByteStream}, {BasisBits});
+    kernel::KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<kernel::S2PKernel>(iBuilder));
+    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
-    kernel::LineBreakKernelBuilder linebreakK(iBuilder, encodingBits);
+    kernel::KernelBuilder * linebreakK = pxDriver.addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(iBuilder, encodingBits));
     StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-    pxDriver.addKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
+    pxDriver.makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
    
     StreamSetBuffer * MatchResults = nullptr;
 #ifdef CUDA_ENABLED
@@ -537,21 +537,21 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
 #ifdef CUDA_ENABLED
     }
 #endif
-    kernel::ICgrepKernelBuilder icgrepK(iBuilder, re_ast);
-    pxDriver.addKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
+    kernel::KernelBuilder * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICgrepKernelBuilder>(iBuilder, re_ast));
+    pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
     
-    kernel::InvertMatchesKernel invertK(iBuilder);
+    kernel::KernelBuilder * invertK = pxDriver.addKernelInstance(make_unique<kernel::InvertMatchesKernel>(iBuilder));
     if (AlgorithmOptionIsSet(re::InvertMatches)) {
         StreamSetBuffer * OriginalMatches = MatchResults;
         MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        pxDriver.addKernelCall(invertK, {OriginalMatches, LineBreakStream}, {MatchResults});
+        pxDriver.makeKernelCall(invertK, {OriginalMatches, LineBreakStream}, {MatchResults});
     }
 
     if (CountOnly) {
-        kernel::PopcountKernel popcountK(iBuilder);
-        pxDriver.addKernelCall(popcountK, {MatchResults}, {});
+        kernel::KernelBuilder * popcountK = pxDriver.addKernelInstance(make_unique<kernel::PopcountKernel>(iBuilder));
+        pxDriver.makeKernelCall(popcountK, {MatchResults}, {});
         pxDriver.generatePipelineIR();
-        iBuilder->CreateRet(popcountK.createGetAccumulatorCall("countResult"));
+        iBuilder->CreateRet(popcountK->createGetAccumulatorCall("countResult"));
 
         pxDriver.linkAndFinalize();
 
@@ -569,13 +569,12 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
         #endif
 
         if (CPU_Only) {
+            kernel::KernelBuilder * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::ScanMatchKernel>(iBuilder, grepType, encodingBits));
+            scanMatchK->setInitialArguments({fileIdx});
 
-            kernel::ScanMatchKernel scanMatchK(iBuilder, grepType, encodingBits);
-            scanMatchK.setInitialArguments({fileIdx});
+            pxDriver.makeKernelCall(scanMatchK, {MatchResults, LineBreakStream, ByteStream}, {});
 
-            pxDriver.addKernelCall(scanMatchK, {MatchResults, LineBreakStream, ByteStream}, {});
-
-            linkGrepFunction(pxDriver, grepType, UTF_16, scanMatchK);
+            linkGrepFunction(pxDriver, grepType, UTF_16, *scanMatchK);
 
             pxDriver.generatePipelineIR();
 
@@ -608,7 +607,6 @@ void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool
     #endif
 
     delete iBuilder;
-    delete sourceK;
 
     if (CountOnly) {
         mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(pxDriver.getPointerToMain());
@@ -652,44 +650,42 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
     if (usingStdIn) {
         // TODO: use fstat(STDIN_FILENO) to see if we can mmap the stdin safely and avoid the calls to read
         ByteStream = pxDriver.addBuffer(make_unique<ExtensibleBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize));
-        sourceK = new kernel::StdInKernel(iBuilder, segmentSize);
+        sourceK = pxDriver.addKernelInstance(make_unique<kernel::StdInKernel>(iBuilder, segmentSize));
     } else {
-        ByteStream = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)), inputStream);
-        sourceK = new kernel::MMapSourceKernel(iBuilder, segmentSize);
-        sourceK->setInitialArguments({fileSize});
+        ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+        sourceK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(iBuilder, inputStream->getType(), segmentSize));
+        sourceK->setInitialArguments({inputStream, fileSize});
     }
-    pxDriver.addKernelCall(*sourceK, {}, {ByteStream});
-
+    pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
     StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
-
-    kernel::S2PKernel s2pk(iBuilder);
-    pxDriver.addKernelCall(s2pk, {ByteStream}, {BasisBits});
-
-    kernel::LineBreakKernelBuilder linebreakK(iBuilder, encodingBits);
-    StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-    pxDriver.addKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
     
-    std::vector<pablo::PabloKernel *> icgrepKs;
+    kernel::KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<kernel::S2PKernel>(iBuilder));
+    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
+    
+    kernel::KernelBuilder * linebreakK = pxDriver.addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(iBuilder, encodingBits));
+    StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+    pxDriver.makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
+    
     std::vector<StreamSetBuffer *> MatchResultsBufs;
 
     for(unsigned i = 0; i < REs.size(); ++i){
-        pablo::PabloKernel * const icgrepK = new kernel::ICgrepKernelBuilder(iBuilder, REs[i]);
         StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        pxDriver.addKernelCall(*icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
-        icgrepKs.push_back(icgrepK);
+        kernel::KernelBuilder * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICgrepKernelBuilder>(iBuilder, REs[i]));
+        pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
         MatchResultsBufs.push_back(MatchResults);
     }
-
-    StreamSetBuffer * MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-
-    kernel::StreamsMerge streamsMergeK(iBuilder, 1, REs.size());
-    pxDriver.addKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
+    StreamSetBuffer * MergedResults = MatchResultsBufs[0];
+    if (REs.size() > 1) {
+        MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        kernel::KernelBuilder * streamsMergeK = pxDriver.addKernelInstance(make_unique<kernel::StreamsMerge>(iBuilder, 1, REs.size()));
+        pxDriver.makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
+    }
     
-    kernel::InvertMatchesKernel invertK(iBuilder);
     if (AlgorithmOptionIsSet(re::InvertMatches)) {
+        kernel::KernelBuilder * invertK = pxDriver.addKernelInstance(make_unique<kernel::InvertMatchesKernel>(iBuilder));
         StreamSetBuffer * OriginalMatches = MergedResults;
         MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        pxDriver.addKernelCall(invertK, {OriginalMatches, LineBreakStream}, {MergedResults});
+        pxDriver.makeKernelCall(invertK, {OriginalMatches, LineBreakStream}, {MergedResults});
     }
     if (CountOnly) {
         kernel::MatchCount matchCountK(iBuilder);
@@ -707,8 +703,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
         pxDriver.linkAndFinalize();
     }
 
-    delete iBuilder;
-    delete sourceK;
+    //delete iBuilder;
 
     if (CountOnly) {
         mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(pxDriver.getPointerToMain());
