@@ -123,6 +123,10 @@ public:
         return std::malloc(size);
     }
 
+    void operator delete(void* ptr) noexcept {
+        std::free(ptr);
+    }
+
 protected:
 
     // A custom method for preparing kernel declarations is needed,
