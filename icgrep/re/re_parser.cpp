@@ -643,7 +643,7 @@ RE * RE_Parser::parsePropertyExpression() {
 RE * RE_Parser::parseRegexPropertyValue(const std::string & propName, const std::string& regexValue) {
     RE * propValueRe = RE_Parser::parse("^" + regexValue + "$", fModeFlagSet, mReSyntax);
     GrepEngine engine;
-    engine.grepCodeGen("NamePattern", propValueRe, false, false, GrepType::PropertyValue);
+    engine.grepCodeGen("NamePattern", { propValueRe }, false, false, GrepSource::Internal, GrepType::PropertyValue);
     const auto matches = engine.grepPropertyValues(propName);
     if (matches.empty()) {
         ParseFailure("regex " + regexValue + " match no property values");
@@ -676,7 +676,7 @@ Name * RE_Parser::parseNamePatternExpression(){
     RE * embedded = makeSeq({mMemoizer.memoize(makeCC(0x3B)), makeRep(makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
     
     GrepEngine engine;
-    engine.grepCodeGen("NamePattern", embedded, false, false, GrepType::NameExpression);
+    engine.grepCodeGen("NamePattern", { embedded }, false, false, GrepSource::Internal, GrepType::NameExpression);
     CC * codepoints = engine.grepCodepoints();
     
     if (codepoints) {

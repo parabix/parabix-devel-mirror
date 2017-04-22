@@ -7,6 +7,16 @@
 #ifndef ICGREP_GREP_TYPE_H
 #define ICGREP_GREP_TYPE_H
 
-enum GrepType {Normal, NameExpression, PropertyValue};
+enum class GrepType {
+    Normal
+    , NameExpression
+    , PropertyValue
+};
+
+enum class GrepSource {
+    File
+    , StdIn
+    , Internal
+};
 
 #endif //ICGREP_GREP_TYPE_H

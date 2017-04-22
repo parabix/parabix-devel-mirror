@@ -28,9 +28,7 @@
 #include <kernels/object_cache.h>
 #include <kernels/pipeline.h>
 #include <kernels/kernel.h>
-#ifdef CUDA_ENABLED
-#include <IR_Gen/llvm2ptx.h>
-#endif
+#include <sys/stat.h>
 
 using namespace llvm;
 using namespace parabix;
@@ -228,17 +226,16 @@ kernel::KernelBuilder * ParabixDriver::addKernelInstance(std::unique_ptr<kernel:
     return mOwnedKernels.back().get();
 }
 
-
 void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
-    assert (mModuleMap.count(&kb) == 0);
+    assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb.getModule() == nullptr));
     mPipeline.push_back(&kb);
-    mModuleMap.emplace(&kb, kb.createKernelStub(inputs, outputs));
+    kb.createKernelStub(inputs, outputs);
 }
 
 void ParabixDriver::makeKernelCall(kernel::KernelBuilder * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
-    assert (mModuleMap.count(kb) == 0);
+    assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb->getModule() == nullptr));
     mPipeline.push_back(kb);
-    mModuleMap.emplace(kb, kb->createKernelStub(inputs, outputs));
+    kb->createKernelStub(inputs, outputs);
 }
 
 void ParabixDriver::generatePipelineIR() {
@@ -271,14 +268,21 @@ void ParabixDriver::generatePipelineIR() {
         generatePipelineLoop(iBuilder, mPipeline);
     }
     for (const auto & k : mPipeline) {
-        k->terminateInstance();
+        k->finalizeInstance();
     }
 }
 
-void ParabixDriver::addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, FunctionType *type, void * functionPtr) const {
-    const auto f = mModuleMap.find(&kb);
-    assert ("addKernelCall(kb, ...) must be called before addExternalLink(kb, ...)" && f != mModuleMap.end());
-    mEngine->addGlobalMapping(cast<Function>(f->second->getOrInsertFunction(name, type)), functionPtr);
+void ParabixDriver::addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
+    assert ("addKernelCall or makeKernelCall must be called before addExternalLink" && (kb.getModule() != nullptr));
+    mEngine->addGlobalMapping(cast<Function>(kb.getModule()->getOrInsertFunction(name, type)), functionPtr);
+}
+
+uint64_t file_size(const uint32_t fd) {
+    struct stat st;
+    if (LLVM_UNLIKELY(fstat(fd, &st) != 0)) {
+        st.st_size = 0;
+    }
+    return st.st_size;
 }
 
 void ParabixDriver::linkAndFinalize() {
@@ -321,10 +325,12 @@ void ParabixDriver::linkAndFinalize() {
     }
     #endif
 
+    FunctionType * fileSizeType = FunctionType::get(iBuilder->getInt64Ty(), { iBuilder->getInt32Ty() });
+    mEngine->addGlobalMapping(cast<Function>(mMainModule->getOrInsertFunction("file_size", fileSizeType)), (void *)&file_size);
+
     PM.run(*m);
-    for (auto pair : mModuleMap) {
-        kernel::KernelBuilder * const kb = std::get<0>(pair);
-        m = std::get<1>(pair);
+    for (kernel::KernelBuilder * const kb : mPipeline) {
+        m = kb->getModule();
         bool uncachedObject = true;
         if (mCache) {
             const std::string moduleID = m->getModuleIdentifier();
@@ -351,7 +357,6 @@ void ParabixDriver::linkAndFinalize() {
     #ifndef NDEBUG
     } catch (...) { m->dump(); throw; }
     #endif
-    mModuleMap.clear();
 }
 
 void * ParabixDriver::getPointerToMain() {

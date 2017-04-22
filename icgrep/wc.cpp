@@ -24,9 +24,7 @@
 #include <kernels/pipeline.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
-#include <boost/filesystem.hpp>
-#include <boost/iostreams/device/mapped_file.hpp>
-
+#include <fcntl.h>
 
 using namespace llvm;
 
@@ -134,38 +132,37 @@ std::unique_ptr<PabloKernel> wc_gen(IDISA::IDISA_Builder * iBuilder) {
 
 
 
-typedef void (*wcFunctionType)(char * byte_data, size_t filesize, size_t fileIdx);
+typedef void (*WordCountFunctionType)(uint32_t fd, size_t fileIdx);
 
 void wcPipelineGen(ParabixDriver & pxDriver) {
 
     IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
     Module * m = iBuilder->getModule();
     
-    Type * mBitBlockType = iBuilder->getBitBlockType();
-    Constant * record_counts_routine;
-    Type * const size_ty = iBuilder->getSizeTy();
+    Type * const int32Ty = iBuilder->getInt32Ty();
+    Type * const sizeTy = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
-    record_counts_routine = m->getOrInsertFunction("record_counts", voidTy, size_ty, size_ty, size_ty, size_ty, size_ty, nullptr);
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
-    
-    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, size_ty, size_ty, nullptr));
+
+    FunctionType * const recordCountsType = FunctionType::get(voidTy, {sizeTy, sizeTy, sizeTy, sizeTy, sizeTy}, false);
+    Constant * const recordCounts = m->getOrInsertFunction("record_counts", recordCountsType);
+
+    FunctionType * const mainType = FunctionType::get(voidTy, {int32Ty, sizeTy}, false);
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", mainType));
     main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
-    
-    Value * const inputStream = &*(args++);
-    inputStream->setName("input");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
+    Function::arg_iterator args = main->arg_begin();    
+    Value * const fileDecriptor = &*(args++);
+    fileDecriptor->setName("fileDecriptor");
     Value * const fileIdx = &*(args++);
     fileIdx->setName("fileIdx");
+
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
-    StreamSetBuffer * ByteStream = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)), inputStream);
+    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
 
-    StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1)));
+    StreamSetBuffer * const BasisBits = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1)));
 
     KernelBuilder * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder));
-    mmapK->setInitialArguments({fileSize});
+    mmapK->setInitialArguments({fileDecriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
     KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
@@ -177,11 +174,12 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     pxDriver.generatePipelineIR();
     
-    Value * lineCount = wck->createGetAccumulatorCall("lineCount");
-    Value * wordCount = wck->createGetAccumulatorCall("wordCount");
-    Value * charCount = wck->createGetAccumulatorCall("charCount");
+    Value * const fileSize = mmapK->getAccumulator("fileSize");
+    Value * const lineCount = wck->getAccumulator("lineCount");
+    Value * const wordCount = wck->getAccumulator("wordCount");
+    Value * const charCount = wck->getAccumulator("charCount");
 
-    iBuilder->CreateCall(record_counts_routine, std::vector<Value *>({lineCount, wordCount, charCount, fileSize, fileIdx}));
+    iBuilder->CreateCall(recordCounts, {lineCount, wordCount, charCount, fileSize, fileIdx});
     
     iBuilder->CreateRetVoid();
 
@@ -189,54 +187,28 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 }
 
 
-wcFunctionType wcCodeGen(void) {
+WordCountFunctionType wcCodeGen() {
     Module * M = new Module("wc", getGlobalContext());
     IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
     ParabixDriver pxDriver(idb);
     
     wcPipelineGen(pxDriver);
 
-    wcFunctionType main = reinterpret_cast<wcFunctionType>(pxDriver.getPointerToMain());
+    WordCountFunctionType main = reinterpret_cast<WordCountFunctionType>(pxDriver.getPointerToMain());
     delete idb;
     return main;
 }
 
-void wc(wcFunctionType fn_ptr, const int64_t fileIdx) {
+void wc(WordCountFunctionType fn_ptr, const int64_t fileIdx) {
     std::string fileName = inputFiles[fileIdx];
-    size_t fileSize;
-    char * fileBuffer;
-    
-    const boost::filesystem::path file(fileName);
-    if (exists(file)) {
-        if (is_directory(file)) {
-            return;
-        }
-    } else {
+    const int fd = open(fileName.c_str(), O_RDONLY);
+    if (LLVM_UNLIKELY(fd == -1)) {
         std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
-        return;
+    } else {
+        fn_ptr(fd, fileIdx);
+        close(fd);
     }
-    
-    fileSize = file_size(file);
-    boost::iostreams::mapped_file_source mappedFile;
-    if (fileSize == 0) {
-        fileBuffer = nullptr;
-    }
-    else {
-        try {
-            mappedFile.open(fileName);
-        } catch (std::exception &e) {
-            std::cerr << "Error: Boost mmap of " << fileName << ": " << e.what() << std::endl;
-            return;
-        }
-        fileBuffer = const_cast<char *>(mappedFile.data());
-    }
-    fn_ptr(fileBuffer, fileSize, fileIdx);
-
-    mappedFile.close();
-    
 }
-
-
 
 int main(int argc, char *argv[]) {
     AddParabixVersionPrinter();
@@ -246,8 +218,7 @@ int main(int argc, char *argv[]) {
         CountLines = true;
         CountWords = true;
         CountBytes = true;
-    }
-    else {
+    } else {
         CountLines = false;
         CountWords = false;
         CountBytes = false;
@@ -262,17 +233,16 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    
-    wcFunctionType fn_ptr = wcCodeGen();
+    WordCountFunctionType wordCountFunctionPtr = wcCodeGen();
 
-    int fileCount = inputFiles.size();
+    const auto fileCount = inputFiles.size();
     lineCount.resize(fileCount);
     wordCount.resize(fileCount);
     charCount.resize(fileCount);
     byteCount.resize(fileCount);
     
-    for (unsigned i = 0; i < inputFiles.size(); ++i) {
-        wc(fn_ptr, i);
+    for (unsigned i = 0; i < fileCount; ++i) {
+        wc(wordCountFunctionPtr, i);
     }
     
     size_t maxCount = 0;

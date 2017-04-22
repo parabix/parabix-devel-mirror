@@ -9,6 +9,7 @@
 #include <pablo/pe_var.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
+#include <pablo/pablo_toolchain.h>
 #include "llvm/Support/Debug.h"
 
 using namespace pablo;
@@ -166,6 +167,9 @@ PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName,
         mVariables.push_back(result);
         mScalarOutputNameMap.emplace(ss.name, result);
         result->setScalar();
+    }
+    if (DebugOptionIsSet(DumpTrace)) {
+        setName(getName() + "_DumpTrace");
     }
 }
 

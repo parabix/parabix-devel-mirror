@@ -13,33 +13,26 @@ namespace llvm { class Module; }
 namespace re { class CC; }
 namespace re { class RE; }
 
-    typedef void (*GrepFunctionType)(char * byte_data, size_t filesize, const int fileIdx);
-    typedef uint64_t (*GrepFunctionType_CountOnly)(char * byte_data, size_t filesize, const int fileIdx);
-    typedef void (*GrepFunctionType_CPU)(char * rslt, char * LineBreak, char * byte_data, size_t filesize, const int fileIdx);
 class GrepEngine {
 public:
 
     GrepEngine();
 
-    void grepCodeGen(std::string moduleName, re::RE * re_ast, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal, const bool usingStdIn = false);
+    void grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
 
-    void grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16 = false, GrepType grepType = GrepType::Normal, const bool usingStdIn = false);
-     
-    void doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly);
+    uint64_t doGrep(const std::string & fileName, const int fileIdx) const;
 
-    void doGrep(const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly);
+    uint64_t doGrep(const uint32_t fileDescriptor, const int fileIdx) const;
     
-    re::CC *  grepCodepoints();
+    void doGrep(const char * buffer, const uint64_t length, const int fileIdx) const;
+
+    re::CC * grepCodepoints();
 
     const std::vector<std::string> & grepPropertyValues(const std::string & propertyName);
     
 private:
    
-    GrepFunctionType mGrepFunction;
-    GrepFunctionType_CountOnly mGrepFunction_CountOnly;
-#ifdef CUDA_ENABLED
-    GrepFunctionType_CPU mGrepFunction_CPU;
-#endif
+    void * mGrepFunction;
 };
 
 

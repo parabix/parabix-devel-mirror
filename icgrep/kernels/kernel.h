@@ -6,15 +6,15 @@
 #ifndef KERNEL_BUILDER_H
 #define KERNEL_BUILDER_H
 
-#include <string>           // for string
-#include <memory>           // for unique_ptr
 #include "interface.h"      // for KernelInterface
 #include <boost/container/flat_map.hpp>
 #include <IR_Gen/idisa_builder.h>
 #include <kernels/pipeline.h>
-
-//namespace llvm { class ConstantInt; }
 #include <llvm/IR/Constants.h>
+
+//#include <string>           // for string
+//#include <memory>           // for unique_ptr
+
 namespace llvm { class Function; }
 namespace llvm { class IntegerType; }
 namespace llvm { class LoadInst; }
@@ -31,10 +31,11 @@ protected:
     using StreamPort = std::pair<Port, unsigned>;
     using StreamMap = boost::container::flat_map<std::string, StreamPort>;
     using StreamSetBuffers = std::vector<parabix::StreamSetBuffer *>;
+    using Kernels = std::vector<KernelBuilder *>;
 
-    friend void ::generateSegmentParallelPipeline(IDISA::IDISA_Builder *, const std::vector<KernelBuilder *> &);
-    friend void ::generatePipelineLoop(IDISA::IDISA_Builder *, const std::vector<KernelBuilder *> &);
-    friend void ::generateParallelPipeline(IDISA::IDISA_Builder *, const std::vector<KernelBuilder *> &);
+    friend void ::generateSegmentParallelPipeline(IDISA::IDISA_Builder *, const Kernels &);
+    friend void ::generatePipelineLoop(IDISA::IDISA_Builder *, const Kernels &);
+    friend void ::generateParallelPipeline(IDISA::IDISA_Builder *, const Kernels &);
 public:
     
     // Kernel Signatures and Module IDs
@@ -70,8 +71,12 @@ public:
     
     // Create a module stub for the kernel, populated only with its Module ID.     
     //
-    llvm::Module * createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
-      
+    void createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
+
+    llvm::Module * getModule() const {
+        return mModule;
+    }
+
     // Generate the Kernel to the current module (iBuilder->getModule()).
     void generateKernel();
     
@@ -79,7 +84,7 @@ public:
 
     void initializeInstance() final;
 
-    void terminateInstance() final;
+    void finalizeInstance() final;
 
     llvm::Value * getProducedItemCount(const std::string & name, llvm::Value * doFinal = nullptr) const final;
 
@@ -88,6 +93,10 @@ public:
     llvm::Value * getProcessedItemCount(const std::string & name) const final;
 
     void setProcessedItemCount(const std::string & name, llvm::Value * value) const final;
+
+    llvm::Value * getConsumedItemCount(const std::string & name) const final;
+
+    void setConsumedItemCount(const std::string & name, llvm::Value * value) const final;
 
     bool hasNoTerminateAttribute() const {
         return mNoTerminateAttribute;
@@ -163,7 +172,7 @@ public:
 
     llvm::CallInst * createDoSegmentCall(const std::vector<llvm::Value *> & args) const;
 
-    llvm::CallInst * createGetAccumulatorCall(const std::string & accumName) const;
+    llvm::Value * getAccumulator(const std::string & accumName) const;
 
     virtual ~KernelBuilder() = 0;
 
@@ -197,11 +206,11 @@ protected:
 
     virtual void prepareKernel();
 
-    virtual void generateInitMethod() { }
+    virtual void generateInitializeMethod() { }
     
-    virtual void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) = 0;
+    virtual void generateDoSegmentMethod() = 0;
 
-    virtual void generateTerminateMethod() { }
+    virtual void generateFinalizeMethod() { }
 
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
@@ -241,6 +250,8 @@ protected:
 
     llvm::Value * getRawOutputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
+    llvm::Value * getBaseAddress(const std::string & name) const;
+
     void setBaseAddress(const std::string & name, llvm::Value * addr) const;
 
     llvm::Value * getBufferedSize(const std::string & name) const;
@@ -250,6 +261,11 @@ protected:
     void reserveBytes(const std::string & name, llvm::Value * requested) const;
 
     llvm::Value * getAvailableItemCount(const std::string & name) const;
+
+    llvm::Value * getIsFinal() const {
+        return mIsFinal;
+    }
+
 
     llvm::BasicBlock * CreateBasicBlock(std::string && name) const;
 
@@ -265,6 +281,12 @@ protected:
     llvm::Value * getScalarFieldPtr(llvm::Value * const instance, const std::string & fieldName) const {
         return getScalarFieldPtr(instance, getScalarIndex(fieldName));
     }
+
+    void callGenerateInitializeMethod();
+
+    void callGenerateDoSegmentMethod();
+
+    void callGenerateFinalizeMethod();
 
     StreamPort getStreamPort(const std::string & name) const;
 
@@ -282,11 +304,17 @@ protected:
         return mStreamSetOutputBuffers[port.second];
     }
 
-    void callGenerateInitMethod();
-
-    void callGenerateDoSegmentMethod();
-
-    void callGenerateTerminateMethod();
+    const parabix::StreamSetBuffer * getAnyStreamSetBuffer(const std::string & name) const {
+        unsigned index; Port port;
+        std::tie(port, index) = getStreamPort(name);
+        if (port == Port::Input) {
+            assert (index < mStreamSetInputBuffers.size());
+            return mStreamSetInputBuffers[index];
+        } else {
+            assert (index < mStreamSetOutputBuffers.size());
+            return mStreamSetOutputBuffers[index];
+        }
+    }
 
 private:
 
@@ -296,14 +324,21 @@ private:
 
 protected:
 
-    llvm::Function *                mCurrentMethod;
-    std::vector<llvm::Type *>       mKernelFields;
-    KernelMap                       mKernelMap;
-    StreamMap                       mStreamMap;
-    StreamSetBuffers                mStreamSetInputBuffers;
-    StreamSetBuffers                mStreamSetOutputBuffers;
-    bool                            mNoTerminateAttribute;
-    bool                            mIsGenerated;
+    llvm::Module *                      mModule;
+    llvm::Function *                    mCurrentMethod;
+    bool                                mNoTerminateAttribute;
+    bool                                mIsGenerated;
+
+    llvm::Value *                       mIsFinal;
+    std::vector<llvm::Value *>          mAvailableItemCount;
+    llvm::Value *                       mOutputScalarResult;
+
+
+    std::vector<llvm::Type *>           mKernelFields;
+    KernelMap                           mKernelMap;
+    StreamMap                           mStreamMap;
+    StreamSetBuffers                    mStreamSetInputBuffers;
+    StreamSetBuffers                    mStreamSetOutputBuffers;
 
 };
 
@@ -338,7 +373,7 @@ protected:
 
     virtual void generateFinalBlockMethod(llvm::Value * remainingItems);
 
-    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override final;
+    void generateDoSegmentMethod() override final;
 
     BlockOrientedKernel(IDISA::IDISA_Builder * builder,
                         std::string && kernelName,

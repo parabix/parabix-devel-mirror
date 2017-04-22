@@ -177,7 +177,7 @@ void SourceFileBuffer::setBufferedSize(Value * self, llvm::Value * size) const {
 
 void SourceFileBuffer::setBaseAddress(Value * self, Value * addr) const {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    iBuilder->CreateStore(addr, ptr);
+    iBuilder->CreateStore(iBuilder->CreatePointerCast(addr, ptr->getType()->getPointerElementType()), ptr);
 }
 
 Value * SourceFileBuffer::getBaseAddress(Value * const self) const {

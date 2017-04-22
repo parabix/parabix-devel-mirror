@@ -10,7 +10,6 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/CommandLine.h>
 #include <boost/filesystem.hpp>
-#include <boost/iostreams/device/mapped_file.hpp>
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <UCD/UnicodeNameData.h>
@@ -32,16 +31,10 @@
 #include <iostream>
 #include <sstream>
 #include <cc/multiplex_CCs.h>
-
 #include <llvm/Support/raw_ostream.h>
-#include <sys/stat.h>
-
-
-#ifdef CUDA_ENABLED
-#include <IR_Gen/CudaDriver.h>
-#include "preprocess.cpp"
-#endif
 #include <util/aligned_allocator.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 using namespace parabix;
 using namespace llvm;
@@ -60,221 +53,31 @@ static cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl
 static cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
 static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
 
-#ifdef CUDA_ENABLED
-const auto IRFilename = "icgrep.ll";
-const auto PTXFilename = "icgrep.ptx";
-#endif
-
 static re::CC * parsedCodePointSet = nullptr;
 
 static std::vector<std::string> parsedPropertyValues;
 
-#ifdef CUDA_ENABLED 
-int blockNo = 0;
-size_t * startPoints = nullptr;
-size_t * accumBytes = nullptr;
-#endif
-
-void GrepEngine::doGrep(const std::string & fileName, const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly) {
-    boost::filesystem::path file(fileName);
-    if (exists(file)) {
-        if (is_directory(file)) {
-            return;
-        }
-    } else {
-        if (!SilenceFileErrors) {
-            std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
-            return;
-        }
+uint64_t GrepEngine::doGrep(const std::string & fileName, const int fileIdx) const {
+    const int fd = open(fileName.c_str(), O_RDONLY);
+    if (LLVM_UNLIKELY(fd == -1)) {
+        return 0;
     }
-
-    const auto fileSize = file_size(file);
-    if (fileSize > 0) {
-        try {
-            boost::iostreams::mapped_file_source source(fileName, fileSize, 0);
-            char * fileBuffer = const_cast<char *>(source.data());
-            
-#ifdef CUDA_ENABLED  
-            if(codegen::NVPTX){
-                codegen::BlockSize = 128;
-		char * LineBreak;
-                if (posix_memalign((void**)&LineBreak, 32, fileSize)) {
-                    std::cerr << "Cannot allocate memory for linebreak.\n";
-                    exit(-1);
-                }
-                std::vector<size_t> LFPositions = preprocess(fileBuffer, fileSize, LineBreak);
-
-                const unsigned numOfGroups = codegen::GroupNum;
-                if (posix_memalign((void**)&startPoints, 8, (numOfGroups+1)*sizeof(size_t)) ||
-                    posix_memalign((void**)&accumBytes, 8, (numOfGroups+1)*sizeof(size_t))) {
-                    std::cerr << "Cannot allocate memory for startPoints or accumBytes.\n";
-                    exit(-1);
-                }
-
-                ulong * rslt = RunPTX(PTXFilename, fileBuffer, fileSize, CountOnly, LFPositions, startPoints, accumBytes);
-                if (CountOnly){
-                    exit(0);
-                }
-                else{
-                    size_t intputSize = startPoints[numOfGroups]-accumBytes[numOfGroups]+accumBytes[numOfGroups-1];
-                    mGrepFunction_CPU((char *)rslt, LineBreak, fileBuffer, intputSize, fileIdx);
-                    return;
-                }
-                
-            } 
-#endif
-            if (CountOnly) {
-                total_CountOnly[fileIdx] = mGrepFunction_CountOnly(fileBuffer, fileSize, fileIdx);
-            } else {
-                mGrepFunction(fileBuffer, fileSize, fileIdx);
-            }
-            source.close();
-        } catch (std::exception & e) {
-            if (!SilenceFileErrors) {
-                std::cerr << "Boost mmap error: " + fileName + ": " + e.what() + " Skipped.\n";
-                return;
-            }
-        }
-    } else {
-#ifdef CUDA_ENABLED 
-        if (codegen::NVPTX){
-            std::cout << 0 << std::endl;
-            exit(0);
-        }
-#endif
-        if (CountOnly) {
-            total_CountOnly[fileIdx] = mGrepFunction_CountOnly(nullptr, 0, fileIdx);
-        } else {
-            mGrepFunction(nullptr, 0, fileIdx);
-        }
-    }
+    const auto result = doGrep(fd, fileIdx);
+    close(fd);
+    return result;
 }
 
-void GrepEngine::doGrep(const int fileIdx, bool CountOnly, std::vector<size_t> & total_CountOnly) {
-    if (CountOnly) {
-        total_CountOnly[fileIdx] = mGrepFunction_CountOnly(nullptr, 0, fileIdx);
-    } else {
-        mGrepFunction(nullptr, 0, fileIdx);
-    }
+uint64_t GrepEngine::doGrep(const uint32_t fileDescriptor, const int fileIdx) const {
+    assert (mGrepFunction);
+    typedef uint64_t (*GrepFunctionType)(size_t fileDescriptor, const int fileIdx);
+    return reinterpret_cast<GrepFunctionType>(mGrepFunction)(fileDescriptor, fileIdx);
 }
 
-#ifdef CUDA_ENABLED
-Function * generateGPUKernel(NVPTXDriver & nvptxDriver, bool CountOnly){
-    IDISA::IDISA_Builder * iBuilder = nvptxDriver.getIDISA_Builder();
-    Module * m = iBuilder->getModule();
-    Type * const int64ty = iBuilder->getInt64Ty();
-    Type * const size_ty = iBuilder->getSizeTy();
-    Type * const int32ty = iBuilder->getInt32Ty();
-    Type * const sizeTyPtr = PointerType::get(size_ty, 1);
-    Type * const int64tyPtr = PointerType::get(int64ty, 1);
-    Type * const inputType = PointerType::get(iBuilder->getInt8Ty(), 1);
-    Type * const resultTy = iBuilder->getVoidTy();
-    Function * kernelFunc = cast<Function>(m->getOrInsertFunction("Main", resultTy, inputType, sizeTyPtr, sizeTyPtr, int64tyPtr, nullptr));
-    kernelFunc->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = kernelFunc->arg_begin();
-
-    Value * const inputPtr = &*(args++);
-    inputPtr->setName("inputPtr");
-    Value * const startPointsPtr = &*(args++);
-    startPointsPtr->setName("startPointsPtr");
-    Value * const bufferSizesPtr = &*(args++);
-    bufferSizesPtr->setName("bufferSizesPtr");
-    Value * const outputPtr = &*(args++);
-    outputPtr->setName("resultPtr");
-
-    BasicBlock * entryBlock = BasicBlock::Create(m->getContext(), "entry", kernelFunc, 0);
-    iBuilder->SetInsertPoint(entryBlock);
-
-    Function * tidFunc = m->getFunction("llvm.nvvm.read.ptx.sreg.tid.x");
-    Value * tid = iBuilder->CreateCall(tidFunc);
-    Function * bidFunc = cast<Function>(m->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty, nullptr));
-    Value * bid = iBuilder->CreateCall(bidFunc);
-
-    Value * startPoint = iBuilder->CreateLoad(iBuilder->CreateGEP(startPointsPtr, bid));
-
-    Function * mainFunc = m->getFunction("Main");
-    Value * startBlock = iBuilder->CreateUDiv(startPoint, ConstantInt::get(int64ty, iBuilder->getBitBlockWidth()));
-    Type * const inputStreamType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), 8), 1), 1);    
-    Value * inputStreamPtr = iBuilder->CreateGEP(iBuilder->CreateBitCast(inputPtr, inputStreamType), startBlock);
-    Value * inputStream = iBuilder->CreateGEP(inputStreamPtr, tid);
-    Value * bufferSize = iBuilder->CreateLoad(iBuilder->CreateGEP(bufferSizesPtr, bid));
-
-    if (CountOnly) {
-        Value * strideBlocks = ConstantInt::get(int32ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
-        Value * outputThreadPtr = iBuilder->CreateGEP(outputPtr, iBuilder->CreateAdd(iBuilder->CreateMul(bid, strideBlocks), tid));
-        Value * result = iBuilder->CreateCall(mainFunc, {inputStream, bufferSize});
-        iBuilder->CreateStore(result, outputThreadPtr);
-    } else {
-        Type * const outputStremType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 1), 1);
-        Value * outputStreamPtr = iBuilder->CreateGEP(iBuilder->CreateBitCast(outputPtr, outputStremType), startBlock);
-        Value * outputStream = iBuilder->CreateGEP(outputStreamPtr, tid);
-        iBuilder->CreateCall(mainFunc, {inputStream, bufferSize, outputStream});
-    }    
-
-    iBuilder->CreateRetVoid();
-
-    return kernelFunc;
+void GrepEngine::doGrep(const char * buffer, const uint64_t length, const int fileIdx) const {
+    assert (mGrepFunction);
+    typedef uint64_t (*GrepFunctionType)(const char * buffer, const uint64_t length, const int fileIdx);
+    reinterpret_cast<GrepFunctionType>(mGrepFunction)(buffer, length, fileIdx);
 }
-
-void generateCPUKernel(ParabixDriver & pxDriver, GrepType grepType){
-    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
-    Module * m = iBuilder->getModule();
-
-    Type * const size_ty = iBuilder->getSizeTy();
-    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
-    Type * const rsltType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 1), 0);
-    Function * const mainCPUFn = cast<Function>(m->getOrInsertFunction("Main", iBuilder->getVoidTy(), rsltType, rsltType, int8PtrTy, size_ty, size_ty, nullptr));
-    mainCPUFn->setCallingConv(CallingConv::C);
-    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", mainCPUFn, 0));
-    Function::arg_iterator args = mainCPUFn->arg_begin();
-    
-    Value * const rsltStream = &*(args++);
-    rsltStream->setName("rslt");
-    Value * const lbStream = &*(args++);
-    lbStream->setName("lb");
-    Value * const inputStream = &*(args++);
-    inputStream->setName("input");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
-    Value * const fileIdx = &*(args++);
-    fileIdx->setName("fileIdx");
-
-    const unsigned segmentSize = codegen::SegmentSize;
-    
-    ExternalFileBuffer InputStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    InputStream.setStreamSetBuffer(inputStream);
-
-    ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(1, 1));
-    MatchResults.setStreamSetBuffer(rsltStream);
-
-    kernel::MMapSourceKernel mmapK0(iBuilder, segmentSize); 
-    mmapK0.setName("mmap0");
-    mmapK0.setInitialArguments({fileSize});
-    pxDriver.addKernelCall(mmapK0, {}, {InputStream});
-
-
-    kernel::MMapSourceKernel mmapK1(iBuilder, segmentSize); 
-    mmapK1.setName("mmap1");
-    mmapK1.setInitialArguments({fileSize});
-    pxDriver.addKernelCall(mmapK1, {}, {MatchResults});
-
-    ExternalFileBuffer LineBreak(iBuilder, iBuilder->getStreamSetTy(1, 1));
-    LineBreak.setStreamSetBuffer(lbStream);
-    
-    kernel::MMapSourceKernel mmapK2(iBuilder, segmentSize); 
-    mmapK2.setName("mmap2");
-    mmapK2.setInitialArguments({fileSize});
-    pxDriver.addKernelCall(mmapK2, {}, {LineBreak});
-
-    kernel::ScanMatchKernel scanMatchK(iBuilder, grepType, 8);
-    scanMatchK.setInitialArguments({fileIdx});
-    pxDriver.addKernelCall(scanMatchK, {InputStream, MatchResults, LineBreak}, {});
-    pxDriver.generatePipelineIR();
-    iBuilder->CreateRetVoid();
-
-    pxDriver.linkAndFinalize();
-}
-#endif
 
 static int * total_count;
 static std::stringstream * resultStrs = nullptr;
@@ -296,19 +99,12 @@ void initFileResult(std::vector<std::string> filenames){
 
 template<typename CodeUnit>
 void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_end, const CodeUnit * const buffer, const size_t filesize, const size_t fileIdx) {
+
+//    errs().write_hex((size_t)buffer) << " : " << lineNum << " (" << line_start << ", " << line_end << ", " << filesize << ")\n";
+
     assert (buffer);
     assert (line_start <= line_end);
     assert (line_end <= filesize);
-
-  //  errs().write_hex((size_t)buffer) << " : " << lineNum << " (" << line_start << ", " << line_end << ", " << filesize << ")\n";
-
-    #ifdef CUDA_ENABLED
-    if (codegen::NVPTX){
-        while(line_start>startPoints[blockNo]) blockNo++;
-        line_start -= accumBytes[blockNo-1];
-        line_end -= accumBytes[blockNo-1];
-    }
-    #endif
 
     if (ShowFileNames) {
         resultStrs[fileIdx] << inputFiles[fileIdx] << ':';
@@ -415,211 +211,7 @@ inline void linkGrepFunction(ParabixDriver & pxDriver, const GrepType grepType, 
     }
 }
 
-void GrepEngine::grepCodeGen(std::string moduleName, re::RE * re_ast, const bool CountOnly, const bool UTF_16, const GrepType grepType, const bool usingStdIn) {
-    int addrSpace = 0;
-    bool CPU_Only = true;
-    Module * M = nullptr;
-    IDISA::IDISA_Builder * iBuilder = nullptr;
-
-    #ifdef CUDA_ENABLED
-    setNVPTXOption();
-    if (codegen::NVPTX) {
-        Module * gpuM = new Module(moduleName+":gpu", getGlobalContext());
-        IDISA::IDISA_Builder * GPUBuilder = IDISA::GetIDISA_GPU_Builder(gpuM);
-        M = gpuM;
-        iBuilder = GPUBuilder;
-        M->setDataLayout("e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v32:32:32-v64:64:64-v128:128:128-n16:32:64");
-        M->setTargetTriple("nvptx64-nvidia-cuda");
-        addrSpace = 1;
-        CPU_Only = false;
-        codegen::BlockSize = 64;
-    }
-    #endif
-
-    Module * cpuM = new Module(moduleName + ":cpu", getGlobalContext());
-    IDISA::IDISA_Builder * CPUBuilder = IDISA::GetIDISA_Builder(cpuM);
-    if (CPU_Only) {
-        M = cpuM;
-        iBuilder = CPUBuilder;
-    }
-    ParabixDriver pxDriver(iBuilder);
-
-    // segment size made available for each call to the mmap source kernel
-    const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
-    const unsigned encodingBits = UTF_16 ? 16 : 8;
-
-    Type * const size_ty = iBuilder->getSizeTy();
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), encodingBits), 1), addrSpace);
-    Type * const resultTy = CountOnly ? size_ty : iBuilder->getVoidTy();
-
-    Function * mainFn = nullptr;
-    Value * inputStream = nullptr;
-    Value * fileSize = nullptr;
-    Value * fileIdx = nullptr;
-
-    #ifdef CUDA_ENABLED
-    Value * outputStream = nullptr;
-    Type * const outputType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 1), addrSpace);
-    if (codegen::NVPTX){
-        if (CountOnly){
-            mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, size_ty, nullptr));
-            mainFn->setCallingConv(CallingConv::C);
-            iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
-            Function::arg_iterator args = mainFn->arg_begin();
-
-            inputStream = &*(args++);
-            inputStream->setName("input");
-            fileSize = &*(args++);
-            fileSize->setName("fileSize");
-        } else {
-            mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, size_ty, outputType, nullptr));
-            mainFn->setCallingConv(CallingConv::C);
-            iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
-            Function::arg_iterator args = mainFn->arg_begin();
-
-            inputStream = &*(args++);
-            inputStream->setName("input");
-            fileSize = &*(args++);
-            fileSize->setName("fileSize");
-            outputStream = &*(args++);
-            outputStream->setName("output");
-        }
-    }
-    #endif
-
-    if (CPU_Only) {
-        mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, size_ty, size_ty, nullptr));
-        mainFn->setCallingConv(CallingConv::C);
-        iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
-        Function::arg_iterator args = mainFn->arg_begin();
-
-        inputStream = &*(args++);
-        inputStream->setName("input");
-        fileSize = &*(args++);
-        fileSize->setName("fileSize");
-        fileIdx = &*(args++);
-        fileIdx->setName("fileIdx");
-
-    }
-
-    StreamSetBuffer * ByteStream = nullptr;
-    kernel::KernelBuilder * sourceK = nullptr;
-    if (usingStdIn) {
-        // TODO: use fstat(STDIN_FILENO) to see if we can mmap the stdin safely and avoid the calls to read
-        ByteStream = pxDriver.addBuffer(make_unique<ExtensibleBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize));
-        sourceK = pxDriver.addKernelInstance(make_unique<kernel::StdInKernel>(iBuilder, segmentSize));
-    } else {
-        ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
-        sourceK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(iBuilder, inputStream->getType(), segmentSize));
-        sourceK->setInitialArguments({inputStream, fileSize});
-    }
-    pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
-    
-    StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
-
-    kernel::KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<kernel::S2PKernel>(iBuilder));
-    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
-
-    kernel::KernelBuilder * linebreakK = pxDriver.addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(iBuilder, encodingBits));
-    StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-    pxDriver.makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
-   
-    StreamSetBuffer * MatchResults = nullptr;
-#ifdef CUDA_ENABLED
-    if (codegen::NVPTX){
-        MatchResults = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), addrSpace), outputStream);
-
-    }
-    else {
-#endif
-    MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-#ifdef CUDA_ENABLED
-    }
-#endif
-    kernel::KernelBuilder * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICgrepKernelBuilder>(iBuilder, re_ast));
-    pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
-    
-    kernel::KernelBuilder * invertK = pxDriver.addKernelInstance(make_unique<kernel::InvertMatchesKernel>(iBuilder));
-    if (AlgorithmOptionIsSet(re::InvertMatches)) {
-        StreamSetBuffer * OriginalMatches = MatchResults;
-        MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        pxDriver.makeKernelCall(invertK, {OriginalMatches, LineBreakStream}, {MatchResults});
-    }
-
-    if (CountOnly) {
-        kernel::KernelBuilder * popcountK = pxDriver.addKernelInstance(make_unique<kernel::PopcountKernel>(iBuilder));
-        pxDriver.makeKernelCall(popcountK, {MatchResults}, {});
-        pxDriver.generatePipelineIR();
-        iBuilder->CreateRet(popcountK->createGetAccumulatorCall("countResult"));
-
-        pxDriver.linkAndFinalize();
-
-    } else {
-
-        #ifdef CUDA_ENABLED
-        if (codegen::NVPTX){
-
-            pxDriver.generatePipelineIR();
-
-            iBuilder->CreateRetVoid();
-
-            pxDriver.linkAndFinalize();
-        }
-        #endif
-
-        if (CPU_Only) {
-            kernel::KernelBuilder * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::ScanMatchKernel>(iBuilder, grepType, encodingBits));
-            scanMatchK->setInitialArguments({fileIdx});
-
-            pxDriver.makeKernelCall(scanMatchK, {MatchResults, LineBreakStream, ByteStream}, {});
-
-            linkGrepFunction(pxDriver, grepType, UTF_16, *scanMatchK);
-
-            pxDriver.generatePipelineIR();
-
-            iBuilder->CreateRetVoid();
-
-            pxDriver.linkAndFinalize();
-        }
-    }
-
-    #ifdef CUDA_ENABLED
-    if(codegen::NVPTX){
-        NVPTXDriver nvptxDriver(iBuilder);
-        Function * kernelFunction = generateGPUKernel(nvptxDriver, CountOnly);
-        
-        MDNode * Node = MDNode::get(M->getContext(),
-                                    {llvm::ValueAsMetadata::get(kernelFunction),
-                                     MDString::get(M->getContext(), "kernel"),
-                                     ConstantAsMetadata::get(ConstantInt::get(iBuilder->getInt32Ty(), 1))});
-        NamedMDNode *NMD = M->getOrInsertNamedMetadata("nvvm.annotations");
-        NMD->addOperand(Node);
-
-        Compile2PTX(M, IRFilename, PTXFilename);
-        
-        ParabixDriver pxDriver(CPUBuilder);
-        generateCPUKernel(pxDriver, grepType);
-        
-        mGrepFunction_CPU = reinterpret_cast<GrepFunctionType_CPU>(pxDriver.getPointerToMain());
-        if (CountOnly) return;
-    }
-    #endif
-
-    delete iBuilder;
-
-    if (CountOnly) {
-        mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(pxDriver.getPointerToMain());
-    } else {
-        if (CPU_Only) {
-            mGrepFunction = reinterpret_cast<GrepFunctionType>(pxDriver.getPointerToMain());
-        }
-    }
-}
-
-
-
-void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16, const GrepType grepType, const bool usingStdIn) {
+void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16, GrepSource grepSource, const GrepType grepType) {
 
     Module * M = new Module(moduleName + ":icgrep", getGlobalContext());;
     IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_Builder(M);;
@@ -629,33 +221,54 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = UTF_16 ? 16 : 8;
 
-    Type * const sizeTy = iBuilder->getSizeTy();
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), encodingBits), 1), 0);
-    Type * const resultTy = CountOnly ? sizeTy : iBuilder->getVoidTy();
+    Type * const int64Ty = iBuilder->getInt64Ty();
 
-    Function * mainFn = cast<Function>(M->getOrInsertFunction("Main", resultTy, inputType, sizeTy, sizeTy, nullptr));
-    mainFn->setCallingConv(CallingConv::C);
-    iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFn, 0));
-    Function::arg_iterator args = mainFn->arg_begin();
-
-    Value * inputStream = &*(args++);
-    inputStream->setName("input");
-    Value * fileSize = &*(args++);
-    fileSize->setName("fileSize");
-    Value * fileIdx = &*(args++);
-    fileIdx->setName("fileIdx");
-
+    Function * mainFunc = nullptr;
+    Value * fileIdx = nullptr;
     StreamSetBuffer * ByteStream = nullptr;
     kernel::KernelBuilder * sourceK = nullptr;
-    if (usingStdIn) {
-        // TODO: use fstat(STDIN_FILENO) to see if we can mmap the stdin safely and avoid the calls to read
-        ByteStream = pxDriver.addBuffer(make_unique<ExtensibleBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize));
-        sourceK = pxDriver.addKernelInstance(make_unique<kernel::StdInKernel>(iBuilder, segmentSize));
-    } else {
+
+    if (grepSource == GrepSource::Internal) {
+
+        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, iBuilder->getInt8PtrTy(), int64Ty, int64Ty, nullptr));
+        mainFunc->setCallingConv(CallingConv::C);
+        iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+        Function::arg_iterator args = mainFunc->arg_begin();
+
+        Value * const buffer = &*(args++);
+        buffer->setName("buffer");
+        Value * const length = &*(args++);
+        length->setName("length");
+        fileIdx = &*(args++);
+        fileIdx->setName("fileIdx");
+
         ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
-        sourceK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(iBuilder, inputStream->getType(), segmentSize));
-        sourceK->setInitialArguments({inputStream, fileSize});
+
+        sourceK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize));
+        sourceK->setInitialArguments({buffer, length});
+
+    } else {
+
+        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, iBuilder->getInt32Ty(), int64Ty, nullptr));
+        mainFunc->setCallingConv(CallingConv::C);
+        iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+        Function::arg_iterator args = mainFunc->arg_begin();
+
+        Value * const fileDescriptor = &*(args++);
+        fileDescriptor->setName("fileDescriptor");
+        fileIdx = &*(args++);
+        fileIdx->setName("fileIdx");
+
+        if (grepSource == GrepSource::File) {
+            ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+            sourceK = pxDriver.addKernelInstance(make_unique<kernel::MMapSourceKernel>(iBuilder, segmentSize));
+            sourceK->setInitialArguments({fileDescriptor});
+        } else { // if (grepSource == GrepSource::StdIn) {
+            ByteStream = pxDriver.addBuffer(make_unique<ExtensibleBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize));
+            sourceK = pxDriver.addKernelInstance(make_unique<kernel::StdInKernel>(iBuilder, segmentSize));
+        }
     }
+
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
     StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
     
@@ -666,13 +279,15 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
     StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
     pxDriver.makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
     
-    std::vector<StreamSetBuffer *> MatchResultsBufs;
+    const auto n = REs.size();
 
-    for(unsigned i = 0; i < REs.size(); ++i){
+    std::vector<StreamSetBuffer *> MatchResultsBufs(n);
+
+    for(unsigned i = 0; i < n; ++i){
         StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
         kernel::KernelBuilder * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICgrepKernelBuilder>(iBuilder, REs[i]));
         pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
-        MatchResultsBufs.push_back(MatchResults);
+        MatchResultsBufs[i] = MatchResults;
     }
     StreamSetBuffer * MergedResults = MatchResultsBufs[0];
     if (REs.size() > 1) {
@@ -699,24 +314,18 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
         pxDriver.addKernelCall(scanMatchK, {MergedResults, LineBreakStream, ByteStream}, {});
         linkGrepFunction(pxDriver, grepType, UTF_16, scanMatchK);
         pxDriver.generatePipelineIR();
-        iBuilder->CreateRetVoid();
+        iBuilder->CreateRet(iBuilder->getInt64(0));
         pxDriver.linkAndFinalize();
     }
 
-    //delete iBuilder;
-
-    if (CountOnly) {
-        mGrepFunction_CountOnly = reinterpret_cast<GrepFunctionType_CountOnly>(pxDriver.getPointerToMain());
-    } else {
-        mGrepFunction = reinterpret_cast<GrepFunctionType>(pxDriver.getPointerToMain());
-    }
+    mGrepFunction = pxDriver.getPointerToMain();
 }
 
 re::CC * GrepEngine::grepCodepoints() {
     parsedCodePointSet = re::makeCC();
     char * mFileBuffer = getUnicodeNameDataPtr();
     size_t mFileSize = getUnicodeNameDataSize();
-    mGrepFunction(mFileBuffer, mFileSize, 0);
+    doGrep(mFileBuffer, mFileSize, 0);
     return parsedCodePointSet;
 }
 
@@ -731,17 +340,12 @@ const std::vector<std::string> & GrepEngine::grepPropertyValues(const std::strin
     char * aligned = alloc.allocate(n + MaxSupportedVectorWidthInBytes, 0);
     std::memcpy(aligned, str.data(), n);
     std::memset(aligned + n, 0, MaxSupportedVectorWidthInBytes);
-    mGrepFunction(aligned, n, 0);
+    doGrep(aligned, n, 0);
     alloc.deallocate(aligned, 0);
     return parsedPropertyValues;
 }
 
 GrepEngine::GrepEngine()
-: mGrepFunction(nullptr)
-, mGrepFunction_CountOnly(nullptr)
-#ifdef CUDA_ENABLED
-, mGrepFunction_CPU(nullptr)
-#endif
-{
+: mGrepFunction(nullptr) {
 
 }

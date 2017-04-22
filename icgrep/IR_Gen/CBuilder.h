@@ -74,13 +74,15 @@ public:
     //  Create a call to:  int open(const char *filename, int oflag, ...);
     llvm::Value * CreateOpenCall(llvm::Value * filename, llvm::Value * oflag, llvm::Value * mode);
     //  Create a call to:  ssize_t write(int fildes, const void *buf, size_t nbyte);
-    llvm::Value * CreateWriteCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
+    llvm::Value * CreateWriteCall(llvm::Value * fileDescriptor, llvm::Value * buf, llvm::Value * nbyte);
     //  Create a call to:  ssize_t read(int fildes, void *buf, size_t nbyte);
-    llvm::Value * CreateReadCall(llvm::Value * fildes, llvm::Value * buf, llvm::Value * nbyte);
+    llvm::Value * CreateReadCall(llvm::Value * fileDescriptor, llvm::Value * buf, llvm::Value * nbyte);
     //  Create a call to:  int close(int filedes);
-    llvm::Value * CreateCloseCall(llvm::Value * fildes);
+    llvm::Value * CreateCloseCall(llvm::Value * fileDescriptor);
     //  Create a call to:  int unlink(const char *path);
     llvm::Value * CreateUnlinkCall(llvm::Value * path);
+
+    llvm::Value * CreateFileSize(llvm::Value * fileDescriptor);
 
     //  Create calls to stdlib.h functions.
     //
@@ -90,35 +92,23 @@ public:
     //  Create a call to:  size_t strlen(const char *str);
     llvm::Value * CreateStrlenCall(llvm::Value * str);
     
-    
-    
     llvm::Value * CreateAnonymousMMap(llvm::Value * size);
 
     llvm::Value * CreateFileSourceMMap(llvm::Value * fd, llvm::Value * size);
 
-    enum class MADV {
-        NORMAL
-        , RANDOM
-        , SEQUENTIAL
-        , WILLNEED
-        , DONTNEED
-//        , REMOVE
-//        , DONTFORK
-//        , DOFORK
-//        , HWPOISON
-//        , MERGEABLE
-//        , UNMERGEABLE
-//        , HUGEPAGE
-//        , NOHUGEPAGE
-//        , DONTDUMP
-//        , DODUMP
+    enum MAdviceFlags {
+        MMAP_NORMAL
+        , MMAP_RANDOM
+        , MMAP_SEQUENTIAL
+        , MMAP_WILLNEED
+        , MMAP_DONTNEED
     };
 
-    llvm::Value * CreateMMapAdvise(llvm::Value * addr, llvm::Value * length, MADV advice) {
-        return CreateMMapAdvise(addr, length, { advice });
+    llvm::Value * CreateMAdvise(llvm::Value * addr, llvm::Value * length, MAdviceFlags advice) {
+        return CreateMAdvise(addr, length, { advice });
     }
 
-    llvm::Value * CreateMMapAdvise(llvm::Value * addr, llvm::Value * length, std::initializer_list<MADV> advice);
+    llvm::Value * CreateMAdvise(llvm::Value * addr, llvm::Value * length, std::initializer_list<MAdviceFlags> advice);
 
     llvm::Value * CreateMMap(llvm::Value * const addr, llvm::Value * size, llvm::Value * const prot, llvm::Value * const flags, llvm::Value * const fd, llvm::Value * const offset);
 

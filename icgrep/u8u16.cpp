@@ -23,9 +23,6 @@
 #include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
 #include <pablo/pe_zeroes.h>
 #include <kernels/toolchain.h>
-#include <boost/iostreams/device/mapped_file.hpp>  // for mapped_file_source
-#include <boost/filesystem.hpp>
-#include <boost/interprocess/anonymous_shared_memory.hpp>
 #include "kernels/streamset.h"                     // for CircularBuffer
 #include <kernels/pipeline.h>
 #include "llvm/ADT/StringRef.h"                    // for StringRef
@@ -35,6 +32,8 @@
 #include "llvm/IR/Value.h"                         // for Value
 #include "llvm/Support/Compiler.h"                 // for LLVM_UNLIKELY
 #include <pablo/builder.hpp>                       // for PabloBuilder
+#include <boost/interprocess/anonymous_shared_memory.hpp>
+#include <boost/interprocess/mapped_region.hpp>
 #include <iostream>
 
 using namespace pablo;
@@ -270,30 +269,26 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
 
     assert (iBuilder);
 
-    Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
     Type * const bitBlockType = iBuilder->getBitBlockType();
-    Type * const inputType = ArrayType::get(ArrayType::get(bitBlockType, 8), 1)->getPointerTo();
     Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
-    
-    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
+
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, iBuilder->getInt32Ty(), outputType, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
-    
-    Value * const inputStream = &*(args++);
-    inputStream->setName("inputStream");
+
+    Value * const fileDecriptor = &*(args++);
+    fileDecriptor->setName("fileDecriptor");
     Value * const outputStream = &*(args++);
     outputStream->setName("outputStream");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
     
     // File data from mmap
-    StreamSetBuffer * ByteStream = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)), inputStream);
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
     
     KernelBuilder * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, segmentSize));
-    mmapK->setInitialArguments({fileSize});
+    mmapK->setInitialArguments({fileDecriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
     
     // Transposed bits from s2p
@@ -370,30 +365,26 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     
     assert (iBuilder);
     
-    Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
     Type * const bitBlockType = iBuilder->getBitBlockType();
-    Type * const inputType = ArrayType::get(ArrayType::get(bitBlockType, 8), 1)->getPointerTo();
     Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
     
-    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, iBuilder->getInt32Ty(), outputType, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
-    Value * const inputStream = &*(args++);
-    inputStream->setName("inputStream");
+    Value * const fileDecriptor = &*(args++);
+    fileDecriptor->setName("fileDecriptor");
     Value * const outputStream = &*(args++);
     outputStream->setName("outputStream");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
-    
+
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
     // File data from mmap
-    StreamSetBuffer * ByteStream = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)), inputStream);
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
     
     KernelBuilder * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, segmentSize));
-    mmapK->setInitialArguments({fileSize});
+    mmapK->setInitialArguments({fileDecriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
     
     // Transposed bits from s2p
@@ -442,7 +433,7 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
 
 
 
-typedef void (*u8u16FunctionType)(char * byte_data, char * output_data, size_t filesize);
+typedef void (*u8u16FunctionType)(uint32_t fd, char * output_data);
 
 u8u16FunctionType u8u16CodeGen(void) {
     LLVMContext TheContext;                            
@@ -464,50 +455,38 @@ u8u16FunctionType u8u16CodeGen(void) {
     return main;
 }
 
+size_t file_size(const int fd) {
+    struct stat st;
+    if (LLVM_UNLIKELY(fstat(fd, &st) != 0)) {
+        st.st_size = 0;
+    }
+    return st.st_size;
+}
+
 void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
-
-    const boost::filesystem::path file(fileName);
-    if (exists(file)) {
-        if (is_directory(file)) {
-            return;
-        }
-    } else {
+    const int fd = open(fileName.c_str(), O_RDONLY);
+    if (LLVM_UNLIKELY(fd == -1)) {
         std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
-        return;
-    }
-    
-    size_t fileSize = file_size(file);
-    boost::iostreams::mapped_file_source input;
-
-    char * fileBuffer = nullptr;
-    if (fileSize) {
-        try {
-            input.open(fileName);
-            fileBuffer = const_cast<char *>(input.data());
-        } catch (std::exception & e) {
-            throw std::runtime_error("Boost mmap error: " + fileName + ": " + e.what());
-        }        
-    }
-
-    if (mMapBuffering) {
-        boost::interprocess::mapped_region outputBuffer(boost::interprocess::anonymous_shared_memory(2*fileSize));
-        outputBuffer.advise(boost::interprocess::mapped_region::advice_willneed);
-        outputBuffer.advise(boost::interprocess::mapped_region::advice_sequential);
-        fn_ptr(fileBuffer, static_cast<char*>(outputBuffer.get_address()), fileSize);
-    } else if (memAlignBuffering) {
-        char * outputBuffer;
-        const auto r = posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2*fileSize);
-        if (LLVM_UNLIKELY(r != 0)) {
-            throw std::runtime_error("posix_memalign failed with return code " + std::to_string(r));
-        }
-        fn_ptr(fileBuffer, outputBuffer, fileSize);
-        free(reinterpret_cast<void *>(outputBuffer));
     } else {
-        /* No external output buffer */
-        fn_ptr(fileBuffer, nullptr, fileSize);
+        const auto fileSize = file_size(fd);
+        if (mMapBuffering) {
+            boost::interprocess::mapped_region outputBuffer(boost::interprocess::anonymous_shared_memory(2 * fileSize));
+            outputBuffer.advise(boost::interprocess::mapped_region::advice_willneed);
+            outputBuffer.advise(boost::interprocess::mapped_region::advice_sequential);
+            fn_ptr(fd, static_cast<char*>(outputBuffer.get_address()));
+        } else if (memAlignBuffering) {
+            char * outputBuffer;
+            const auto r = posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2 * fileSize);
+            if (LLVM_UNLIKELY(r != 0)) {
+                throw std::runtime_error("posix_memalign failed with return code " + std::to_string(r));
+            }
+            fn_ptr(fd, outputBuffer);
+            free(reinterpret_cast<void *>(outputBuffer));
+        } else { /* No external output buffer */
+            fn_ptr(fd, nullptr);
+        }
+        close(fd);
     }
-    input.close();
-    
 }
 
 int main(int argc, char *argv[]) {

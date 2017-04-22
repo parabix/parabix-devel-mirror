@@ -19,7 +19,9 @@ public:
     MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);  
     bool moduleIDisSignature() override {return true;}
 private:
-    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override;
+    void generateInitializeMethod() override;
+    void generateDoSegmentMethod() override;
+    void generateFinalizeMethod() override;
 private:
     const unsigned mSegmentBlocks;
     const unsigned mCodeUnitWidth;

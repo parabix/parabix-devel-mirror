@@ -18,7 +18,7 @@ public:
     StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool moduleIDisSignature() override { return true; }
 protected:
-    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override;
+    void generateDoSegmentMethod() override;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;
@@ -29,8 +29,8 @@ public:
     FileSourceKernel(IDISA::IDISA_Builder * iBuilder, llvm::Type * fileSourceTy, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool moduleIDisSignature() override { return true; }
 protected:
-    void generateInitMethod() override;
-    void generateDoSegmentMethod(llvm::Value * doFinal, const std::vector<llvm::Value *> & producerPos) override;
+    void generateInitializeMethod() override;
+    void generateDoSegmentMethod() override;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;

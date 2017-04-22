@@ -9,6 +9,8 @@
 #include <string>
 #include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/TypeBuilder.h>
+#include <kernels/kernel.h>
+#include <kernels/streamset.h>
 #include <boost/container/flat_map.hpp>
 
 namespace llvm { class ExecutionEngine; }
@@ -18,8 +20,7 @@ namespace llvm { class formatted_raw_ostream; }
 namespace llvm { namespace cl { class OptionCategory; } }
 namespace IDISA { class IDISA_Builder; }
 namespace kernel { class KernelBuilder; }
-//namespace parabix { class StreamSetBuffer; }
-#include <kernels/streamset.h>
+
 class ParabixObjectCache;
 
 namespace codegen {
@@ -81,11 +82,15 @@ public:
     template <typename ExternalFunctionType>
     void addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const;
 
-    void addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
-
     void linkAndFinalize();
     
     void * getPointerToMain();
+
+private:
+
+
+    void addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
+
 
 private:
     IDISA::IDISA_Builder * const            iBuilder;
@@ -97,7 +102,6 @@ private:
     // Owned kernels and buffers that will persist with this ParabixDriver instance.
     std::vector<std::unique_ptr<kernel::KernelBuilder>> mOwnedKernels;
     std::vector<std::unique_ptr<parabix::StreamSetBuffer>> mOwnedBuffers;
-    ModuleMap                               mModuleMap;
 };
 
 namespace {

@@ -12,11 +12,12 @@
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <kernels/toolchain.h>
+#include <llvm/ADT/Triple.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <errno.h>
-#include <llvm/ADT/Triple.h>
 
 using namespace llvm;
 
@@ -32,7 +33,7 @@ Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) 
 }
 
 // ssize_t write(int fildes, const void *buf, size_t nbyte);
-Value * CBuilder::CreateWriteCall(Value * fildes, Value * buf, Value * nbyte) {
+Value * CBuilder::CreateWriteCall(Value * fileDescriptor, Value * buf, Value * nbyte) {
     Function * write = mMod->getFunction("write");
     if (write == nullptr) {
         IntegerType * sizeTy = getSizeTy();
@@ -42,7 +43,7 @@ Value * CBuilder::CreateWriteCall(Value * fildes, Value * buf, Value * nbyte) {
                                                         AttributeSet().addAttribute(mMod->getContext(), 2U, Attribute::NoAlias),
                                                         sizeTy, int32Ty, int8PtrTy, sizeTy, nullptr));
     }
-    return CreateCall(write, {fildes, buf, nbyte});
+    return CreateCall(write, {fileDescriptor, buf, nbyte});
 }
 
 Value * CBuilder::CreateReadCall(Value * fildes, Value * buf, Value * nbyte) {
@@ -58,14 +59,14 @@ Value * CBuilder::CreateReadCall(Value * fildes, Value * buf, Value * nbyte) {
     return CreateCall(readFn, {fildes, buf, nbyte});
 }
 
-Value * CBuilder::CreateCloseCall(Value * fildes) {
+Value * CBuilder::CreateCloseCall(Value * fileDescriptor) {
     Function * closeFn = mMod->getFunction("close");
     if (closeFn == nullptr) {
         IntegerType * int32Ty = getInt32Ty();
         FunctionType * fty = FunctionType::get(int32Ty, {int32Ty}, true);
         closeFn = Function::Create(fty, Function::ExternalLinkage, "close", mMod);
     }
-    return CreateCall(closeFn, {fildes});
+    return CreateCall(closeFn, {fileDescriptor});
 }
 
 
@@ -77,6 +78,15 @@ Value * CBuilder::CreateUnlinkCall(Value * path) {
         unlinkFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(unlinkFunc, {path});
+}
+
+Value * CBuilder::CreateFileSize(Value * fileDescriptor) {
+    Function * fileSizeFunc = mMod->getFunction("file_size");
+    if (fileSizeFunc == nullptr) {
+        FunctionType * fty = FunctionType::get(getSizeTy(), {getInt32Ty()}, true);
+        fileSizeFunc = Function::Create(fty, Function::ExternalLinkage, "file_size", mMod);
+    }
+    return CreateCall(fileSizeFunc, {fileDescriptor});
 }
 
 Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
@@ -211,9 +221,10 @@ Value * CBuilder::CreateAnonymousMMap(Value * size) {
     return CreateMMap(ConstantPointerNull::getNullValue(voidPtrTy), size, prot, flags, fd, offset);
 }
 
-Value * CBuilder::CreateFileSourceMMap(Value * const fd, Value * size) {
+Value * CBuilder::CreateFileSourceMMap(Value * fd, Value * size) {
     PointerType * const voidPtrTy = getVoidPtrTy();
     IntegerType * const intTy = getInt32Ty();
+    fd = CreateZExtOrTrunc(fd, intTy);
     IntegerType * const sizeTy = getSizeTy();
     size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ);
@@ -255,7 +266,7 @@ Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const pro
         without an underlying file.
 */
 
-Value * CBuilder::CreateMMapAdvise(Value * addr, Value * length, std::initializer_list<MADV> advice) {
+Value * CBuilder::CreateMAdvise(Value * addr, Value * length, std::initializer_list<MAdviceFlags> advice) {
     Triple T(mMod->getTargetTriple());
     Value * result = nullptr;
     if (T.isOSLinux()) {
@@ -271,13 +282,13 @@ Value * CBuilder::CreateMMapAdvise(Value * addr, Value * length, std::initialize
         addr = CreatePointerCast(addr, voidPtrTy);
         length = CreateZExtOrTrunc(length, sizeTy);
         int adviceFlags = 0;
-        for (const MADV adv : advice) {
+        for (const MAdviceFlags adv : advice) {
             switch (adv) {
-                case MADV::NORMAL: adviceFlags |= MADV_NORMAL; break;
-                case MADV::RANDOM: adviceFlags |= MADV_RANDOM; break;
-                case MADV::SEQUENTIAL: adviceFlags |= MADV_SEQUENTIAL; break;
-                case MADV::DONTNEED: adviceFlags |= MADV_DONTNEED; break;
-                case MADV::WILLNEED: adviceFlags |= MADV_WILLNEED; break;
+                case MAdviceFlags::MMAP_NORMAL: adviceFlags |= MADV_NORMAL; break;
+                case MAdviceFlags::MMAP_RANDOM: adviceFlags |= MADV_RANDOM; break;
+                case MAdviceFlags::MMAP_SEQUENTIAL: adviceFlags |= MADV_SEQUENTIAL; break;
+                case MAdviceFlags::MMAP_DONTNEED: adviceFlags |= MADV_DONTNEED; break;
+                case MAdviceFlags::MMAP_WILLNEED: adviceFlags |= MADV_WILLNEED; break;
 //                case MADV::REMOVE: adviceFlags |= MADV_REMOVE; break;
 //                case MADV::DONTFORK: adviceFlags |= MADV_DONTFORK; break;
 //                case MADV::DOFORK: adviceFlags |= MADV_DOFORK; break;

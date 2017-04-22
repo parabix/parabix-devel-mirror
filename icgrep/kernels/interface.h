@@ -6,18 +6,11 @@
 #ifndef KERNEL_INTERFACE_H
 #define KERNEL_INTERFACE_H
 
-#include <string>  // for string
-#include <vector>  // for vector
-namespace IDISA { class IDISA_Builder; }
-//namespace llvm { class ConstantInt; }
 #include <llvm/IR/Constants.h>
-namespace llvm { class Function; }
-namespace llvm { class Module; }
-namespace llvm { class PointerType; }
-namespace llvm { class StructType; }
-namespace llvm { class Type; }
-namespace llvm { class Value; }
+#include <string>
+#include <vector>
 
+namespace IDISA { class IDISA_Builder; }
 
 // Processing rate attributes are required for all stream set bindings for a kernel.
 // These attributes describe the number of items that are processed or produced as
@@ -103,7 +96,7 @@ public:
 
     virtual void initializeInstance() = 0;
 
-    virtual void terminateInstance() = 0;
+    virtual void finalizeInstance() = 0;
 
     void setInitialArguments(std::vector<llvm::Value *> args);
 
@@ -127,6 +120,10 @@ public:
 
     virtual void setProcessedItemCount(const std::string & name, llvm::Value * value) const = 0;
 
+    virtual llvm::Value * getConsumedItemCount(const std::string & name) const = 0;
+
+    virtual void setConsumedItemCount(const std::string & name, llvm::Value * value) const = 0;
+
     virtual llvm::Value * getTerminationSignal() const = 0;
 
     virtual void setTerminationSignal() const = 0;
@@ -138,8 +135,6 @@ public:
     llvm::Function * getInitFunction() const;
 
     llvm::Function * getDoSegmentFunction() const;
-
-    llvm::Function * getAccumulatorFunction(const std::string & accumName) const;
 
     llvm::Function * getTerminateFunction() const;
 

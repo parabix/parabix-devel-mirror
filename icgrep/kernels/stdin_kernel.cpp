@@ -16,7 +16,7 @@ inline static size_t round_up_to_nearest(const size_t x, const size_t y) {
 
 namespace kernel {
 
-void StdInKernel::generateDoSegmentMethod(Value * /* doFinal */, const std::vector<Value *> & /* producerPos */) {
+void StdInKernel::generateDoSegmentMethod() {
 
     BasicBlock * const entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * const readBlock = CreateBasicBlock("ReadMoreData");
@@ -34,11 +34,16 @@ void StdInKernel::generateDoSegmentMethod(Value * /* doFinal */, const std::vect
 
     iBuilder->SetInsertPoint(readBlock);
 
+//    Value * consumed = getConsumedItemCount("InputStream");
+//    Value * remaining = iBuilder->CreateSub(itemsAlreadyRead, consumed);
+
     // how many pages are required to have enough data for the segment plus one overflow block?
     const auto PageAlignedSegmentSize = round_up_to_nearest((mSegmentBlocks + 1) * iBuilder->getBitBlockWidth() * (mCodeUnitWidth / 8), getpagesize());
     ConstantInt * const bytesToRead = iBuilder->getSize(PageAlignedSegmentSize);
     reserveBytes("InputStream", bytesToRead);
     BasicBlock * const readExit = iBuilder->GetInsertBlock();
+
+
     Value * const ptr = getRawOutputPointer("InputStream", iBuilder->getInt32(0), bufferedSize);
     Value * const bytePtr = iBuilder->CreatePointerCast(ptr, iBuilder->getInt8PtrTy());
     Value * const bytesRead = iBuilder->CreateReadCall(iBuilder->getInt32(STDIN_FILENO), bytePtr, bytesToRead);
@@ -74,7 +79,7 @@ StdInKernel::StdInKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegm
     
 }
 
-void FileSourceKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &) {
+void FileSourceKernel::generateDoSegmentMethod() {
 
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * setTermination = CreateBasicBlock("setTermination");
@@ -100,7 +105,7 @@ void FileSourceKernel::generateDoSegmentMethod(Value *doFinal, const std::vector
     setProducedItemCount("sourceBuffer", itemsRead);
 }
 
-void FileSourceKernel::generateInitMethod() {
+void FileSourceKernel::generateInitializeMethod() {
     setBaseAddress("sourceBuffer", getScalarField("fileSource"));
     setBufferedSize("sourceBuffer", getScalarField("fileSize"));
 }

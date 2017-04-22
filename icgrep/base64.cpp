@@ -18,9 +18,10 @@
 #include <kernels/streamset.h>
 #include <kernels/radix64.h>
 #include <kernels/stdout_kernel.h>
-#include <boost/filesystem.hpp>
-#include <boost/iostreams/device/mapped_file.hpp>
+#include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/anonymous_shared_memory.hpp>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 using namespace llvm;
 
@@ -42,36 +43,33 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
     Module * mod = iBuilder->getModule();
     Type * mBitBlockType = iBuilder->getBitBlockType();
 
-    Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = Type::getVoidTy(mod->getContext());
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
+    Type * const int32Ty = iBuilder->getInt32Ty();
     Type * const outputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
     
     
-    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, inputType, outputType, size_ty, nullptr));
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, int32Ty, outputType, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
-    Value * const inputStream = &*(args++);
-    inputStream->setName("inputStream");
+    Value * const fileDescriptor = &*(args++);
+    fileDescriptor->setName("fileDescriptor");
     Value * const outputStream = &*(args++);
     outputStream->setName("outputStream");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
 
     //Round up to a multiple of 3.
     const unsigned segmentSize = ((codegen::SegmentSize + 2)/3) * 3;
     
     const unsigned bufferSegments = codegen::BufferSegments;
     
-    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    SourceFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
     CircularBuffer Expanded3_4Out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments);
     CircularBuffer Radix64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments);
     CircularCopybackBuffer Base64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments, 1);
     
     MMapSourceKernel mmapK(iBuilder, segmentSize);
-    mmapK.setInitialArguments({fileSize});
+    mmapK.setInitialArguments({fileDescriptor});
     pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
     
     expand3_4Kernel expandK(iBuilder);
@@ -88,7 +86,7 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
-    ByteStream.setStreamSetBuffer(inputStream);
+    ByteStream.allocateBuffer();
     Expanded3_4Out.allocateBuffer();
     Radix64out.allocateBuffer();
     Base64out.allocateBuffer();
@@ -101,7 +99,7 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
 }
 
 
-typedef void (*base64FunctionType)(char * byte_data, char * output_data, size_t filesize);
+typedef void (*base64FunctionType)(const uint32_t fd, char * outputBuffer);
 
 base64FunctionType base64CodeGen(void) {
     LLVMContext TheContext;                            
@@ -116,55 +114,37 @@ base64FunctionType base64CodeGen(void) {
     return main;
 }
 
-void base64(base64FunctionType fn_ptr, const std::string & fileName) {
-    std::string mFileName = fileName;
-    size_t mFileSize;
-    char * mFileBuffer;
+size_t file_size(const int fd) {
+    struct stat st;
+    if (LLVM_UNLIKELY(fstat(fd, &st) != 0)) {
+        st.st_size = 0;
+    }
+    return st.st_size;
+}
 
-    const boost::filesystem::path file(mFileName);
-    if (exists(file)) {
-        if (is_directory(file)) {
-            return;
-        }
-    } else {
-        std::cerr << "Error: cannot open " << mFileName << " for processing. Skipped.\n";
+void base64(base64FunctionType fn_ptr, const std::string & fileName) {
+
+    const int fd = open(fileName.c_str(), O_RDONLY);
+    if (LLVM_UNLIKELY(fd == -1)) {
+        std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
         return;
     }
-    
-    mFileSize = file_size(file);
-    boost::iostreams::mapped_file_source mFile;
-    if (mFileSize == 0) {
-        mFileBuffer = nullptr;
-    }
-    else {
-        try {
-            mFile.open(mFileName);
-        } catch (std::exception &e) {
-            std::cerr << "Error: Boost mmap of " << mFileName << ": " << e.what() << std::endl;
-            return;
-        }
-        mFileBuffer = const_cast<char *>(mFile.data());
-    }
-
     if (mMapBuffering) {
-        boost::interprocess::mapped_region outputBuffer(boost::interprocess::anonymous_shared_memory(2*mFileSize));
+        boost::interprocess::mapped_region outputBuffer(boost::interprocess::anonymous_shared_memory(2 * file_size(fd)));
         outputBuffer.advise(boost::interprocess::mapped_region::advice_willneed);
         outputBuffer.advise(boost::interprocess::mapped_region::advice_sequential);
-        fn_ptr(mFileBuffer, static_cast<char*>(outputBuffer.get_address()), mFileSize);
-    }
-    else if (memAlignBuffering) {
+        fn_ptr(fd, static_cast<char*>(outputBuffer.get_address()));
+    } else if (memAlignBuffering) {
         char * outputBuffer;
-        if (posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2*mFileSize)) {
+        if (posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2 * file_size(fd))) {
             throw std::bad_alloc();
         }
-        fn_ptr(mFileBuffer, outputBuffer, mFileSize);
+        fn_ptr(fd, outputBuffer);
         free(reinterpret_cast<void *>(outputBuffer));
+    } else { /* No external output buffer */
+        fn_ptr(fd, nullptr);
     }
-    else {
-        /* No external output buffer */
-        fn_ptr(mFileBuffer, nullptr, mFileSize);
-    }
-    mFile.close();
+    close(fd);
     
 }
 

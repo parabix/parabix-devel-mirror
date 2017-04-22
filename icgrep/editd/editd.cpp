@@ -21,12 +21,13 @@
 #include <IR_Gen/idisa_target.h>
 #include <kernels/streamset.h>
 #include <kernels/mmap_kernel.h>
+#include <kernels/stdin_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <editd/editdscan_kernel.h>
 #include <kernels/pipeline.h>
 #include <editd/pattern_compiler.h>
-#include <boost/filesystem.hpp>
-#include <boost/iostreams/device/mapped_file.hpp>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <mutex>
 #ifdef CUDA_ENABLED
 #include <editd/EditdCudaDriver.h>
@@ -186,10 +187,10 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
     }
 }
 
-void buildPatternKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder, const std::vector<std::string> & patterns) {
-    PabloBuilder entry(kernel.getEntryBlock());
+void buildPatternKernel(PabloKernel * const kernel, const std::vector<std::string> & patterns) {
+    PabloBuilder entry(kernel->getEntryBlock());
 
-    Var * pat = kernel.getInputStreamVar("pat");
+    Var * pat = kernel->getInputStreamVar("pat");
 
     PabloAST * basisBits[4];
 
@@ -198,10 +199,10 @@ void buildPatternKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder, c
     basisBits[2] = entry.createExtract(pat, 2, "T");
     basisBits[3] = entry.createExtract(pat, 3, "G");
 
-    re::Pattern_Compiler pattern_compiler(kernel);
+    re::Pattern_Compiler pattern_compiler(*kernel);
     pattern_compiler.compile(patterns, entry, basisBits, editDistance, optPosition, stepSize);
 
-    pablo_function_passes(&kernel);
+    pablo_function_passes(kernel);
 }
 
 
@@ -223,25 +224,24 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
 
-    ExternalFileBuffer ChStream(iBuilder, iBuilder->getStreamSetTy(4));
-    SingleBlockBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy(editDistance + 1));
+    auto ChStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(4)));
 
-    MMapSourceKernel mmapK(iBuilder);
-    mmapK.setInitialArguments({fileSize});
-    pxDriver.addKernelCall(mmapK, {}, {&ChStream});
+    auto mmapK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(iBuilder, inputType));
+    mmapK->setInitialArguments({inputStream, fileSize});
 
-    PabloKernel editdk(iBuilder, "editd",
-                        {Binding{iBuilder->getStreamSetTy(4), "pat"}},
-                        {Binding{iBuilder->getStreamSetTy(editDistance + 1), "E"}});
+    pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
-    ChStream.setStreamSetBuffer(inputStream);
-    MatchResults.allocateBuffer();
+    auto MatchResults = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance + 1)));
 
-    buildPatternKernel(editdk, iBuilder, patterns);
-    pxDriver.addKernelCall(editdk, {&ChStream}, {&MatchResults});
+    auto editdk = pxDriver.addKernelInstance(make_unique<PabloKernel>(
+        iBuilder, "editd", std::vector<Binding>{{iBuilder->getStreamSetTy(4), "pat"}}, std::vector<Binding>{{iBuilder->getStreamSetTy(editDistance + 1), "E"}}
+        ));
 
-    kernel::editdScanKernel editdScanK(iBuilder, editDistance);
-    pxDriver.addKernelCall(editdScanK, {&MatchResults}, {});
+    buildPatternKernel(reinterpret_cast<PabloKernel *>(editdk), patterns);
+    pxDriver.makeKernelCall(editdk, {ChStream}, {MatchResults});
+
+    auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(iBuilder, editDistance));
+    pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
         
     pxDriver.generatePipelineIR();
 
@@ -250,8 +250,8 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     pxDriver.linkAndFinalize();
 }
 
-void buildPreprocessKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder) {
-    cc::CC_Compiler ccc(&kernel, kernel.getInputStreamVar("basis"));
+void buildPreprocessKernel(PabloKernel * const kernel) {
+    cc::CC_Compiler ccc(kernel, kernel->getInputStreamVar("basis"));
 
     PabloBuilder & pb = ccc.getBuilder();
 
@@ -260,14 +260,14 @@ void buildPreprocessKernel(PabloKernel & kernel, IDISA::IDISA_Builder * iBuilder
     PabloAST * T = ccc.compileCC(re::makeCC(re::makeCC(0x54), re::makeCC(0x74)), pb);
     PabloAST * G = ccc.compileCC(re::makeCC(re::makeCC(0x47), re::makeCC(0x67)), pb);
 
-    Var * const pat = kernel.getOutputStreamVar("pat");
+    Var * const pat = kernel->getOutputStreamVar("pat");
 
     pb.createAssign(pb.createExtract(pat, 0), A);
     pb.createAssign(pb.createExtract(pat, 1), C);
     pb.createAssign(pb.createExtract(pat, 2), T);
     pb.createAssign(pb.createExtract(pat, 3), G);
 
-    pablo_function_passes(&kernel);
+    pablo_function_passes(kernel);
 }
 
 void preprocessPipeline(ParabixDriver & pxDriver) {
@@ -276,47 +276,42 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
     Module * m = iBuilder->getModule();
     Type * mBitBlockType = iBuilder->getBitBlockType();
     
-    Type * const size_ty = iBuilder->getSizeTy();
+
     Type * const voidTy = iBuilder->getVoidTy();
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
+    Type * const int32Ty = iBuilder->getInt32Ty();
     Type * const outputType = PointerType::get(ArrayType::get(mBitBlockType, 4), 0);
     
-    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, size_ty, outputType, nullptr));
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, int32Ty, outputType, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     
-    Value * const inputStream = &*(args++);
-    inputStream->setName("input");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
+    Value * const fileDescriptor = &*(args++);
+    fileDescriptor->setName("fileDescriptor");
     Value * const outputStream = &*(args++);
     outputStream->setName("output");
+
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main));
 
-    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    SingleBlockBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8));
-    ExternalFileBuffer CCResults(iBuilder, iBuilder->getStreamSetTy(4));
+    auto ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
 
-    MMapSourceKernel mmapK(iBuilder);
-    mmapK.setInitialArguments({fileSize});
-    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
-    
-    S2PKernel s2pk(iBuilder);
-    pxDriver.addKernelCall(s2pk, {&ByteStream}, {&BasisBits});
+    auto mmapK = pxDriver.addKernelInstance(make_unique<kernel::MMapSourceKernel>(iBuilder, 1));
+    mmapK->setInitialArguments({fileDescriptor});
+    pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
-    PabloKernel ccck(iBuilder, "ccc",
-                {{iBuilder->getStreamSetTy(8), "basis"}},
-                {{iBuilder->getStreamSetTy(4), "pat"}});
+    auto BasisBits = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(8)));
+    auto s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
+    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
-    buildPreprocessKernel(ccck, iBuilder);
-    pxDriver.addKernelCall(ccck, {&BasisBits}, {&CCResults});
-          
-    ByteStream.setStreamSetBuffer(inputStream);
+    auto CCResults = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(4)), outputStream);
 
-    BasisBits.allocateBuffer();
 
-    CCResults.setStreamSetBuffer(outputStream);
-    
+
+    auto ccck = pxDriver.addKernelInstance(make_unique<PabloKernel>(
+        iBuilder, "ccc", std::vector<Binding>{{iBuilder->getStreamSetTy(8), "basis"}}, std::vector<Binding>{{iBuilder->getStreamSetTy(4), "pat"}}
+        ));
+    buildPreprocessKernel(reinterpret_cast<PabloKernel *>(ccck));
+    pxDriver.makeKernelCall(ccck, {BasisBits}, {CCResults});
+             
     pxDriver.generatePipelineIR();
 
     iBuilder->CreateRetVoid();
@@ -325,7 +320,7 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 }
 
 
-typedef void (*preprocessFunctionType)(char * byte_data, size_t filesize, char * output_data);
+typedef void (*preprocessFunctionType)(const int fd, char * output_data);
 
 preprocessFunctionType preprocessCodeGen() {                           
     LLVMContext TheContext;
@@ -351,54 +346,37 @@ editdFunctionType editdCodeGen(const std::vector<std::string> & patterns) {
     return f;
 }
 
-char * chStream;
-int size;
+static char * chStream;
+static size_t size;
+
+size_t file_size(const int fd) {
+    struct stat st;
+    if (LLVM_UNLIKELY(fstat(fd, &st) != 0)) {
+        st.st_size = 0;
+    }
+    return st.st_size;
+}
+
 
 char * preprocess(preprocessFunctionType fn_ptr) {
     std::string fileName = inputFiles[0];
-    size_t fileSize;
-    char * fileBuffer;
-    
-    const boost::filesystem::path file(fileName);
-    if (exists(file)) {
-        if (is_directory(file)) {
-            exit(0);
-        }
-    } else {
+    const int fd = open(inputFiles[0].c_str(), O_RDONLY);
+    if (LLVM_UNLIKELY(fd == -1)) {
         std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
-        exit(0);
-    }
-    
-    fileSize = file_size(file);
-    boost::iostreams::mapped_file_source mappedFile;
-    if (fileSize == 0) {
-        fileBuffer = nullptr;
-    }
-    else {
-        try {
-            mappedFile.open(fileName);
-        } catch (std::exception &e) {
-            std::cerr << "Error: Boost mmap of " << fileName << ": " << e.what() << std::endl;
-            exit(0);
-        }
-        fileBuffer = const_cast<char *>(mappedFile.data());
-    }
-
-    int ret = posix_memalign((void**)&chStream, 32, fileSize);
-    if (ret) {
-        std::cerr << "Cannot allocate memory for output.\n";
         exit(-1);
     }
-
-    fn_ptr(fileBuffer, fileSize, chStream);
-    size = fileSize;
-
-    mappedFile.close();
-
+    size = file_size(fd);
+    int ret = posix_memalign((void**)&chStream, 32, size);
+    if (ret) {
+        std::cerr << "Cannot allocate memory for output.\n";
+        exit(-2);
+    }
+    fn_ptr(fd, chStream);
+    close(fd);
     return chStream;   
 }
 
-void editd(editdFunctionType fn_ptr, char * inputStream, int size) {
+void editd(editdFunctionType fn_ptr, char * inputStream, size_t size) {
  
     if (size == 0) {
         inputStream = nullptr;
@@ -410,7 +388,7 @@ void editd(editdFunctionType fn_ptr, char * inputStream, int size) {
 
 std::mutex count_mutex;
 size_t groupCount;
-void *DoEditd(void *threadid)
+void * DoEditd(void *)
 {
     size_t groupIdx;
     count_mutex.lock();

@@ -40,7 +40,7 @@ namespace kernel {
 // The pipeline must guarantee that the doSegment method is called with the
 // a continous buffer for the full segment (number of blocks).
 
-void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &) {
+void expand3_4Kernel::generateDoSegmentMethod() {
 
     BasicBlock * expand2_3entry = iBuilder->GetInsertBlock();
     BasicBlock * expand_3_4_loop = CreateBasicBlock("expand_3_4_loop");
@@ -94,7 +94,7 @@ void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<
     // processing, process all the remaining sets of 3 packs, otherwise
     // process in multiples of 3 full blocks of data.
     //
-    Value * loopDivisor = iBuilder->CreateSelect(doFinal, triplePackSize, tripleBlockSize);
+    Value * loopDivisor = iBuilder->CreateSelect(getIsFinal(), triplePackSize, tripleBlockSize);
     Value * excessItems = iBuilder->CreateURem(itemsAvail, loopDivisor);
     Value * loopItemsToDo = iBuilder->CreateSub(itemsAvail, excessItems);
 
@@ -161,7 +161,7 @@ void expand3_4Kernel::generateDoSegmentMethod(Value *doFinal, const std::vector<
 
 
     // Except for final segment processing, we are done.
-    iBuilder->CreateCondBr(doFinal, expand3_4_final, expand3_4_exit);
+    iBuilder->CreateCondBr(getIsFinal(), expand3_4_final, expand3_4_exit);
 
     // Final segment processing.   Less than a triplePack remains.
     iBuilder->SetInsertPoint(expand3_4_final);

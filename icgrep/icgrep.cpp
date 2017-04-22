@@ -30,6 +30,8 @@
 #include <hrtime.h>
 #include <util/papi_helper.hpp>
 #endif
+#include <sys/stat.h>
+#include <fcntl.h>
 
 using namespace llvm;
 
@@ -112,11 +114,9 @@ static void icgrep_error_handler(void *UserData, const std::string &Message, boo
 
 static std::string allREs;
 static re::ModeFlagSet globalFlags = 0;
-std::vector<re::RE *> RELists;
 
-re::RE * get_icgrep_RE() {
+std::vector<re::RE *> readExpressions() {
   
-    //std::vector<std::string> regexVector;
     if (RegexFilename != "") {
         std::ifstream regexFile(RegexFilename.c_str());
         std::string r;
@@ -135,42 +135,51 @@ re::RE * get_icgrep_RE() {
         regexVector.push_back(inputFiles[0]);
         inputFiles.erase(inputFiles.begin());
     }
-    if (CaseInsensitive) globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
+    if (CaseInsensitive) {
+        globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
+    }
 
     std::vector<re::RE *> REs;
-    re::RE * re_ast = nullptr;
     for (unsigned i = 0; i < regexVector.size(); i++) {
 #ifdef FUTURE
-        re_ast = re::RE_Parser::parse(regexVector[i], globalFlags, RegexpSyntax);
+        re::RE * re_ast = re::RE_Parser::parse(regexVector[i], globalFlags, RegexpSyntax);
 #else
-        re_ast = re::RE_Parser::parse(regexVector[i], globalFlags);
+        re::RE * re_ast = re::RE_Parser::parse(regexVector[i], globalFlags);
 #endif
         REs.push_back(re_ast);
         allREs += regexVector[i] + "\n";
     }
 
-    std::vector<re::RE *>::iterator start = REs.begin();
-    std::vector<re::RE *>::iterator end = start + REsPerGroup;
-    while(end < REs.end()) {
-        RELists.push_back(re::makeAlt(start, end));
-        start = end;
-        end += REsPerGroup;
+    if (MultiGrepKernels) {
+        std::vector<re::RE *> groups;
+        auto start = REs.begin();
+        auto end = start + REsPerGroup;
+        while (end < REs.end()) {
+            groups.push_back(re::makeAlt(start, end));
+            start = end;
+            end += REsPerGroup;
+        }
+        if ((REs.end() - start) > 1) {
+            groups.push_back(re::makeAlt(start, REs.end()));
+        } else {
+            groups.push_back(*start);
+        }
+        REs.swap(groups);
+    } else if (REs.size() > 1) {
+        re::RE * re_ast = re::makeAlt(REs.begin(), REs.end());
+        REs.assign({re_ast});
     }
-    if(REs.end()-start>1)
-        RELists.push_back(re::makeAlt(start, REs.end()));
-    else
-        RELists.push_back(*start);
 
-    if (REs.size() > 1) {
-        re_ast = re::makeAlt(REs.begin(), REs.end());
+    for (re::RE *& re_ast : REs) {
+        if (WholeWordMatching) {
+            re_ast = re::makeSeq({re::makeWordBoundary(), re_ast, re::makeWordBoundary()});
+        }
+        if (EntireLineMatching) {
+            re_ast = re::makeSeq({re::makeStart(), re_ast, re::makeEnd()});
+        }
     }
-    if (WholeWordMatching) {
-        re_ast = re::makeSeq({re::makeWordBoundary(), re_ast, re::makeWordBoundary()});
-    }
-    if (EntireLineMatching) {
-        re_ast = re::makeSeq({re::makeStart(), re_ast, re::makeEnd()});
-    }    
-    return re_ast;
+
+    return REs;
 }
 
 std::string sha1sum(const std::string & str) {
@@ -198,8 +207,8 @@ void *DoGrep(void *args)
     fileCount++;
     count_mutex.unlock();
 
-    while (fileIdx < allFiles.size()){
-        grepEngine->doGrep(allFiles[fileIdx], fileIdx, CountOnly, total_CountOnly);
+    while (fileIdx < allFiles.size()) {
+        total_CountOnly[fileIdx] = grepEngine->doGrep(allFiles[fileIdx], fileIdx);
         
         count_mutex.lock();
         fileIdx = fileCount;
@@ -383,7 +392,9 @@ int main(int argc, char *argv[]) {
         llvm::report_fatal_error("Sorry, FixedStrings syntax is not fully supported\n.");
     }
 #endif
-    re::RE * re_ast = get_icgrep_RE();
+
+    const auto REs = readExpressions();
+
     std::string module_name = "grepcode:" + sha1sum(allREs) + ":" + std::to_string(globalFlags);
     
     if (GrepSupport) {  // Calls icgrep again on command line and passes output to grep.
@@ -398,19 +409,15 @@ int main(int argc, char *argv[]) {
 
     if (allFiles.empty()) {
 
-        grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16, GrepType::Normal, true);
+        grepEngine.grepCodeGen(module_name, REs, CountOnly, UTF_16, GrepSource::StdIn);
         allFiles = { "-" };
         initFileResult(allFiles);
-        total_CountOnly.push_back(0);
-        grepEngine.doGrep(0, CountOnly, total_CountOnly);
+        total_CountOnly.resize(1);
+        total_CountOnly[0] = grepEngine.doGrep(STDIN_FILENO, 0);
 
     } else {
 
-        if (MultiGrepKernels) {
-            grepEngine.grepCodeGen(module_name, RELists, CountOnly, UTF_16);
-        } else {
-            grepEngine.grepCodeGen(module_name, re_ast, CountOnly, UTF_16, GrepType::Normal, false);
-        }
+        grepEngine.grepCodeGen(module_name, REs, CountOnly, UTF_16, GrepSource::File);
 
         if (FileNamesOnly && NonMatchingFileNamesOnly) {
             // Strange request: print names of all matching files and all non-matching files: i.e., all of them.
@@ -432,29 +439,11 @@ int main(int argc, char *argv[]) {
             llvm::report_fatal_error("Sorry, -L/-files-without-match not yet supported\n.");
         }
         initFileResult(allFiles);
-
-        for (unsigned i=0; i < allFiles.size(); ++i){
-            total_CountOnly.push_back(0);
-        }
+        total_CountOnly.resize(allFiles.size());
 
         if (Threads <= 1) {
-
-            #ifdef PRINT_TIMING_INFORMATION
-            // PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY
-            // PAPI_RES_STL, PAPI_BR_MSP, PAPI_LST_INS, PAPI_L1_TCM
-            papi::PapiCounter<4> papiCounters({PAPI_RES_STL, PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_MEM_WCY});
-            #endif
             for (unsigned i = 0; i != allFiles.size(); ++i) {
-                #ifdef PRINT_TIMING_INFORMATION
-                papiCounters.start();
-                const timestamp_t execution_start = read_cycle_counter();
-                #endif
-                grepEngine.doGrep(allFiles[i], i, CountOnly, total_CountOnly);
-                #ifdef PRINT_TIMING_INFORMATION
-                const timestamp_t execution_end = read_cycle_counter();
-                papiCounters.stop();
-                std::cerr << "EXECUTION TIME: " << allFiles[i] << ":" << "CYCLES|" << (execution_end - execution_start) << papiCounters << std::endl;
-                #endif
+                total_CountOnly[i] = grepEngine.doGrep(allFiles[i], i);
             }
         } else if (Threads > 1) {
             const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
@@ -466,7 +455,6 @@ int main(int argc, char *argv[]) {
                     llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
                 }
             }
-
             for(unsigned i = 0; i < numOfThreads; ++i) {
                 void * status = nullptr;
                 const int rc = pthread_join(threads[i], &status);
@@ -477,7 +465,6 @@ int main(int argc, char *argv[]) {
         }
 
     }
-
     
     PrintResult(CountOnly, total_CountOnly);
     

@@ -17,13 +17,13 @@ namespace kernel {
 // doSegment method attempts to write the entire segment with a single write call.
 // However, if the segment spans two memory areas (e.g., because of wraparound),
 // then two write calls are made.
-void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
+void StdOutKernel::generateDoSegmentMethod() {
     PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
 
     Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth / 8);
     Value * processed = getProcessedItemCount("codeUnitBuffer");
-    Value * itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
+    Value * itemsToDo = iBuilder->CreateSub(mAvailableItemCount[0], processed);
     // There may be two memory areas if we are at the physical end of a circular buffer.
     const auto b  = getInputStreamSetBuffer("codeUnitBuffer");
     Value * wraparound = nullptr;
@@ -55,10 +55,10 @@ void StdOutKernel::generateDoSegmentMethod(Value *doFinal, const std::vector<Val
         Value * bytePtr = iBuilder->CreatePointerCast(getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
         bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
 
-        itemsToDo = iBuilder->CreateSub(producerPos[0], processed);
+        itemsToDo = iBuilder->CreateSub(mAvailableItemCount[0], processed);
         iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
         processed = iBuilder->CreateAdd(processed, itemsToDo);
-        setProcessedItemCount("codeUnitBuffer", producerPos[0]);
+        setProcessedItemCount("codeUnitBuffer", mAvailableItemCount[0]);
         iBuilder->CreateBr(stdoutExit);
         iBuilder->SetInsertPoint(stdoutExit);
     }
@@ -70,7 +70,7 @@ StdOutKernel::StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWid
     setNoTerminateAttribute(true);
 }
 
-void FileSink::generateInitMethod() {
+void FileSink::generateInitializeMethod() {
     BasicBlock * setTerminationOnFailure = CreateBasicBlock("setTerminationOnFailure");
     BasicBlock * fileSinkInitExit = CreateBasicBlock("fileSinkInitExit");
     Value * fileName = getScalarField("fileName");
@@ -98,7 +98,7 @@ void FileSink::generateInitMethod() {
     iBuilder->SetInsertPoint(fileSinkInitExit);
 }
 
-void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *> &producerPos) {
+void FileSink::generateDoSegmentMethod() {
 
     PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
 
@@ -147,7 +147,7 @@ void FileSink::generateDoSegmentMethod(Value *doFinal, const std::vector<Value *
         iBuilder->CreateBr(checkFinal);
         iBuilder->SetInsertPoint(checkFinal);
     }
-    iBuilder->CreateCondBr(doFinal, closeFile, fileOutExit);
+    iBuilder->CreateCondBr(mIsFinal, closeFile, fileOutExit);
 
     iBuilder->SetInsertPoint(closeFile);
     iBuilder->CreateCloseCall(fileDes);

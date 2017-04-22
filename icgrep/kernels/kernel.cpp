@@ -33,7 +33,7 @@ static const std::string TERMINATION_SIGNAL = "terminationSignal";
 
 static const std::string BUFFER_PTR_SUFFIX = "_bufferPtr";
 
-static const std::string CONSUMER_LOGICAL_SEGMENT_SUFFIX = "_cls";
+static const std::string CONSUMER_SUFFIX = "_cls";
 
 using namespace llvm;
 using namespace kernel;
@@ -54,7 +54,7 @@ unsigned KernelBuilder::addScalar(Type * const type, const std::string & name) {
 
 unsigned KernelBuilder::addUnnamedScalar(Type * const type) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        report_fatal_error("Cannot add unnamed kernel field after kernel state finalized");
+        report_fatal_error("Cannot add unnamed field  to " + getName() + " after kernel state finalized");
     }
     const auto index = mKernelFields.size();
     mKernelFields.push_back(type);
@@ -71,11 +71,9 @@ void KernelBuilder::prepareStreamSetNameMap() {
 }
     
 void KernelBuilder::prepareKernel() {
-
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
         report_fatal_error("Cannot prepare kernel after kernel state finalized");
     }
-
     if (mStreamSetInputs.size() != mStreamSetInputBuffers.size()) {
         std::string tmp;
         raw_string_ostream out(tmp);
@@ -96,7 +94,7 @@ void KernelBuilder::prepareKernel() {
             report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
         }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
-        if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
+        if ((i == 0) || mStreamSetInputs[i].rate.isUnknown()) {
             addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
         }        
     }
@@ -123,17 +121,22 @@ void KernelBuilder::prepareKernel() {
 
     Type * const consumerSetTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        addScalar(consumerSetTy, mStreamSetOutputs[i].name + CONSUMER_LOGICAL_SEGMENT_SUFFIX);
+        addScalar(consumerSetTy, mStreamSetOutputs[i].name + CONSUMER_SUFFIX);
     }
 
     addScalar(sizeTy, LOGICAL_SEGMENT_NO_SCALAR);
     addScalar(iBuilder->getInt1Ty(), TERMINATION_SIGNAL);
 
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        addScalar(sizeTy, mStreamSetOutputs[i].name + CONSUMED_ITEM_COUNT_SUFFIX);
+    }
+
     mKernelStateType = StructType::create(iBuilder->getContext(), mKernelFields, getName());
 }
 
-Module * KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
+void KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
 
+    assert (mModule == nullptr);
     assert (mStreamSetInputBuffers.empty());
     assert (mStreamSetOutputBuffers.empty());
 
@@ -187,9 +190,8 @@ Module * KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const 
 
     prepareKernel();
 
-    Module * const m = new Module(cacheName.str(), iBuilder->getContext());
-    m->setTargetTriple(iBuilder->getModule()->getTargetTriple());
-    return m;
+    mModule = new Module(cacheName.str(), iBuilder->getContext());
+    mModule->setTargetTriple(iBuilder->getModule()->getTargetTriple());
 }
 
 // Default kernel signature: generate the IR and emit as byte code.
@@ -212,39 +214,16 @@ void KernelBuilder::generateKernel() {
         auto saveInstance = getInstance();
         auto savePoint = iBuilder->saveIP();
         addKernelDeclarations(iBuilder->getModule());
-        callGenerateInitMethod();
+        callGenerateInitializeMethod();
         callGenerateDoSegmentMethod();        
-        // Implement the accumulator get functions
-        for (auto binding : mScalarOutputs) {
-            Function * f = getAccumulatorFunction(binding.name);
-            iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "get_" + binding.name, f));
-            Value * self = &*(f->arg_begin());
-            Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), getScalarIndex(binding.name)});
-            Value * retVal = iBuilder->CreateLoad(ptr);
-            iBuilder->CreateRet(retVal);
-        }
-        callGenerateTerminateMethod();
+        callGenerateFinalizeMethod();
         iBuilder->restoreIP(savePoint);
         setInstance(saveInstance);
         mIsGenerated = true;       
     }
 }
 
-void KernelBuilder::callGenerateDoSegmentMethod() {
-    mCurrentMethod = getDoSegmentFunction();
-    iBuilder->SetInsertPoint(CreateBasicBlock(getName() + "_entry"));
-    auto args = mCurrentMethod->arg_begin();
-    setInstance(&*(args++));
-    Value * doFinal = &*(args++);
-    std::vector<Value *> producerPos;
-    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        producerPos.push_back(&*(args++));
-    }
-    generateDoSegmentMethod(doFinal, producerPos); // must be overridden by the KernelBuilder subtype
-    iBuilder->CreateRetVoid();
-}
-
-void KernelBuilder::callGenerateInitMethod() {
+inline void KernelBuilder::callGenerateInitializeMethod() {
     mCurrentMethod = getInitFunction();
     iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     Function::arg_iterator args = mCurrentMethod->arg_begin();
@@ -256,17 +235,48 @@ void KernelBuilder::callGenerateInitMethod() {
     for (auto binding : mStreamSetOutputs) {
         setConsumerState(binding.name, &*(args++));
     }
-    generateInitMethod();
+    generateInitializeMethod();
     iBuilder->CreateRetVoid();
 }
 
-void KernelBuilder::callGenerateTerminateMethod() {
-    mCurrentMethod = getTerminateFunction();
-    iBuilder->SetInsertPoint(CreateBasicBlock(getName() + "_entry"));
+inline void KernelBuilder::callGenerateDoSegmentMethod() {
+    mCurrentMethod = getDoSegmentFunction();
+    BasicBlock * const entry = CreateBasicBlock(getName() + "_entry");
+    iBuilder->SetInsertPoint(entry);
     auto args = mCurrentMethod->arg_begin();
     setInstance(&*(args++));
-    generateTerminateMethod(); // may be overridden by the KernelBuilder subtype
+    mIsFinal = &*(args++);
+    const auto n = mStreamSetInputs.size();
+    mAvailableItemCount.resize(n, nullptr);
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        mAvailableItemCount[i] = &*(args++);
+    }
+    generateDoSegmentMethod(); // must be overridden by the KernelBuilder subtype
+    mIsFinal = nullptr;
+    mAvailableItemCount.clear();
     iBuilder->CreateRetVoid();
+}
+
+inline void KernelBuilder::callGenerateFinalizeMethod() {
+    mCurrentMethod = getTerminateFunction();
+    iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
+    auto args = mCurrentMethod->arg_begin();
+    setInstance(&*(args++));
+    generateFinalizeMethod(); // may be overridden by the KernelBuilder subtype
+    const auto n = mScalarOutputs.size();
+    if (n == 0) {
+        iBuilder->CreateRetVoid();
+    } else {
+        Value * outputs[n];
+        for (unsigned i = 0; i < n; ++i) {
+            outputs[i] = getScalarField(mScalarOutputs[i].name);
+        }
+        if (n == 1) {
+            iBuilder->CreateRet(outputs[0]);
+        } else {
+            iBuilder->CreateAggregateRet(outputs, n);
+        }
+    }
 }
 
 ConstantInt * KernelBuilder::getScalarIndex(const std::string & name) const {
@@ -306,14 +316,10 @@ Value * KernelBuilder::getProducedItemCount(const std::string & name, Value * do
 }
 
 llvm::Value * KernelBuilder::getAvailableItemCount(const std::string & name) const {
-    auto arg = mCurrentMethod->arg_begin();
-    ++arg; // self
-    ++arg; // doFinal
     for (unsigned i = 0; i < mStreamSetInputs.size(); ++i) {
         if (mStreamSetInputs[i].name == name) {
-            return &*arg;
+            return mAvailableItemCount[i];
         }
-        ++arg;
     }
     return nullptr;
 }
@@ -333,12 +339,20 @@ Value * KernelBuilder::getProcessedItemCount(const std::string & name) const {
     return getScalarField(name + PROCESSED_ITEM_COUNT_SUFFIX);
 }
 
+Value * KernelBuilder::getConsumedItemCount(const std::string & name) const {
+    return getScalarField(name + CONSUMED_ITEM_COUNT_SUFFIX);
+}
+
 void KernelBuilder::setProducedItemCount(const std::string & name, Value * value) const {
     setScalarField(name + PRODUCED_ITEM_COUNT_SUFFIX, value);
 }
 
 void KernelBuilder::setProcessedItemCount(const std::string & name, Value * value) const {
     setScalarField(name + PROCESSED_ITEM_COUNT_SUFFIX, value);
+}
+
+void KernelBuilder::setConsumedItemCount(const std::string & name, Value * value) const {
+    setScalarField(name + CONSUMED_ITEM_COUNT_SUFFIX, value);
 }
 
 Value * KernelBuilder::getTerminationSignal() const {
@@ -358,11 +372,11 @@ void KernelBuilder::releaseLogicalSegmentNo(Value * nextSegNo) const {
 }
 
 llvm::Value * KernelBuilder::getConsumerState(const std::string & name) const {
-    return getScalarField(name + CONSUMER_LOGICAL_SEGMENT_SUFFIX);
+    return getScalarField(name + CONSUMER_SUFFIX);
 }
 
 void KernelBuilder::setConsumerState(const std::string & name, llvm::Value * value) const {
-    setScalarField(name + CONSUMER_LOGICAL_SEGMENT_SUFFIX, value);
+    setScalarField(name + CONSUMER_SUFFIX, value);
 }
 
 inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bindings, const std::string & name, Value * itemCount) const {
@@ -442,32 +456,16 @@ Value * KernelBuilder::getRawOutputPointer(const std::string & name, Value * str
     return getOutputStreamSetBuffer(name)->getRawItemPointer(getStreamSetBufferPtr(name), streamIndex, absolutePosition);
 }
 
-void KernelBuilder::setBaseAddress(const std::string & name, llvm::Value * addr) const {
-    unsigned index; Port port;
-    std::tie(port, index) = getStreamPort(name);
-    const StreamSetBuffer * buf = nullptr;
-    if (port == Port::Input) {
-        assert (index < mStreamSetInputBuffers.size());
-        buf = mStreamSetInputBuffers[index];
-    } else {
-        assert (index < mStreamSetOutputBuffers.size());
-        buf = mStreamSetOutputBuffers[index];
-    }
-    return buf->setBaseAddress(getStreamSetBufferPtr(name), addr);
+Value * KernelBuilder::getBaseAddress(const std::string & name) const {
+    return getAnyStreamSetBuffer(name)->getBaseAddress(getStreamSetBufferPtr(name));
+}
+
+void KernelBuilder::setBaseAddress(const std::string & name, Value * const addr) const {
+    return getAnyStreamSetBuffer(name)->setBaseAddress(getStreamSetBufferPtr(name), addr);
 }
 
 Value * KernelBuilder::getBufferedSize(const std::string & name) const {
-    unsigned index; Port port;
-    std::tie(port, index) = getStreamPort(name);
-    const StreamSetBuffer * buf = nullptr;
-    if (port == Port::Input) {
-        assert (index < mStreamSetInputBuffers.size());
-        buf = mStreamSetInputBuffers[index];
-    } else {
-        assert (index < mStreamSetOutputBuffers.size());
-        buf = mStreamSetOutputBuffers[index];
-    }
-    return buf->getBufferedSize(getStreamSetBufferPtr(name));
+    return getAnyStreamSetBuffer(name)->getBufferedSize(getStreamSetBufferPtr(name));
 }
 
 void KernelBuilder::setBufferedSize(const std::string & name, Value * size) const {
@@ -490,14 +488,6 @@ void KernelBuilder::reserveBytes(const std::string & name, llvm::Value * value) 
     buf->reserveBytes(getStreamSetBufferPtr(name), iBuilder->CreateAdd(itemCount, value));
 }
 
-KernelBuilder::StreamPort KernelBuilder::getStreamPort(const std::string & name) const {
-    const auto f = mStreamMap.find(name);
-    if (LLVM_UNLIKELY(f == mStreamMap.end())) {
-        report_fatal_error(getName() + " does not contain stream set: " + name);
-    }
-    return f->second;
-}
-
 Value * KernelBuilder::getStreamSetBufferPtr(const std::string & name) const {
     return getScalarField(name + BUFFER_PTR_SUFFIX);
 }
@@ -512,12 +502,31 @@ Argument * KernelBuilder::getParameter(Function * const f, const std::string & n
 }
 
 CallInst * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) const {
-    assert (getDoSegmentFunction()->getArgumentList().size() == args.size());
-    return iBuilder->CreateCall(getDoSegmentFunction(), args);
+    Function * const doSegment = getDoSegmentFunction();
+    assert (doSegment->getArgumentList().size() == args.size());
+    return iBuilder->CreateCall(doSegment, args);
 }
 
-CallInst * KernelBuilder::createGetAccumulatorCall(const std::string & accumName) const {
-    return iBuilder->CreateCall(getAccumulatorFunction(accumName), { getInstance() });
+Value * KernelBuilder::getAccumulator(const std::string & accumName) const {
+    if (LLVM_UNLIKELY(mOutputScalarResult == nullptr)) {
+        report_fatal_error("Cannot get accumulator " + accumName + " until " + getName() + " has terminated.");
+    }
+    const auto n = mScalarOutputs.size();
+    if (LLVM_UNLIKELY(n == 0)) {
+        report_fatal_error(getName() + " has no output scalars.");
+    } else {
+        for (unsigned i = 0; i < n; ++i) {
+            const Binding & b = mScalarOutputs[i];
+            if (b.name == accumName) {
+                if (n == 1) {
+                    return mOutputScalarResult;
+                } else {
+                    return iBuilder->CreateExtractValue(mOutputScalarResult, {i});
+                }
+            }
+        }
+        report_fatal_error(getName() + " has no output scalar named " + accumName);
+    }
 }
 
 BasicBlock * KernelBuilder::CreateBasicBlock(std::string && name) const {
@@ -575,15 +584,16 @@ void KernelBuilder::initializeInstance() {
     PointerType * const sizePtrPtrTy = sizePtrTy->getPointerTo();
     StructType * const consumerTy = StructType::get(sizeTy, sizePtrPtrTy, nullptr);
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
-        const auto & consumers = mStreamSetOutputBuffers[i]->getConsumers();
+        const auto output = mStreamSetOutputBuffers[i];
+        const auto & consumers = output->getConsumers();
         const auto n = consumers.size();
         AllocaInst * const outputConsumers = iBuilder->CreateAlloca(consumerTy);
         Value * const consumerSegNoArray = iBuilder->CreateAlloca(ArrayType::get(sizePtrTy, n));
         for (unsigned i = 0; i < n; ++i) {
             KernelBuilder * const consumer = consumers[i];
-            assert (consumer->getInstance());
-            Value * const segNo = consumer->getScalarFieldPtr(consumer->getInstance(), LOGICAL_SEGMENT_NO_SCALAR);
-            iBuilder->CreateStore(segNo, iBuilder->CreateGEP(consumerSegNoArray, { iBuilder->getInt32(0), iBuilder->getInt32(i) }));
+            assert ("all instances must be created prior to initialization of any instance" && consumer->getInstance());
+            Value * const segmentNoPtr = consumer->getScalarFieldPtr(LOGICAL_SEGMENT_NO_SCALAR);
+            iBuilder->CreateStore(segmentNoPtr, iBuilder->CreateGEP(consumerSegNoArray, { iBuilder->getInt32(0), iBuilder->getInt32(i) }));
         }
         Value * const consumerCountPtr = iBuilder->CreateGEP(outputConsumers, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
         iBuilder->CreateStore(iBuilder->getSize(n), consumerCountPtr);
@@ -591,17 +601,15 @@ void KernelBuilder::initializeInstance() {
         iBuilder->CreateStore(iBuilder->CreatePointerCast(consumerSegNoArray, sizePtrPtrTy), consumerSegNoArrayPtr);
         args.push_back(outputConsumers);
     }
-    iBuilder->CreateCall(getInitFunction(), args);
-}
 
-void KernelBuilder::terminateInstance() {
-    iBuilder->CreateCall(getTerminateFunction(), { getInstance() });
+
+    iBuilder->CreateCall(getInitFunction(), args);
 }
 
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.
 
-void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::vector<Value *> & producerPos) {
+void BlockOrientedKernel::generateDoSegmentMethod() {
 
     BasicBlock * const entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * const strideLoopCond = CreateBasicBlock(getName() + "_strideLoopCond");
@@ -612,11 +620,11 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
 
     Value * baseTarget = nullptr;
     if (useIndirectBr()) {
-        baseTarget = iBuilder->CreateSelect(doFinal, BlockAddress::get(doFinalBlock), BlockAddress::get(segmentDone));
+        baseTarget = iBuilder->CreateSelect(mIsFinal, BlockAddress::get(doFinalBlock), BlockAddress::get(segmentDone));
     }
 
     ConstantInt * stride = iBuilder->getSize(iBuilder->getStride());
-    Value * availablePos = producerPos[0];
+    Value * availablePos = mAvailableItemCount[0];
     Value * processed = getProcessedItemCount(mStreamSetInputs[0].name);
     Value * itemsAvail = iBuilder->CreateSub(availablePos, processed);
     Value * stridesToDo = iBuilder->CreateUDiv(itemsAvail, stride);
@@ -673,17 +681,17 @@ void BlockOrientedKernel::generateDoSegmentMethod(Value * doFinal, const std::ve
         mStrideLoopBranch->addDestination(doFinalBlock);
         mStrideLoopBranch->addDestination(segmentDone);
     } else {
-        iBuilder->CreateUnlikelyCondBr(doFinal, doFinalBlock, segmentDone);
+        iBuilder->CreateUnlikelyCondBr(mIsFinal, doFinalBlock, segmentDone);
     }
 
     doFinalBlock->moveAfter(stridesDone);
 
     iBuilder->SetInsertPoint(doFinalBlock);
 
-    Value * remainingItems = iBuilder->CreateSub(producerPos[0], getProcessedItemCount(mStreamSetInputs[0].name));
+    Value * remainingItems = iBuilder->CreateSub(mAvailableItemCount[0], getProcessedItemCount(mStreamSetInputs[0].name));
     writeFinalBlockMethod(remainingItems);
 
-    itemsDone = producerPos[0];
+    itemsDone = mAvailableItemCount[0];
     setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);
     setTerminationSignal();
     iBuilder->CreateBr(segmentDone);
@@ -838,6 +846,17 @@ void BlockOrientedKernel::CreateDoBlockMethodCall() {
     }
 }
 
+void KernelBuilder::finalizeInstance() {
+    mOutputScalarResult = iBuilder->CreateCall(getTerminateFunction(), { getInstance() });
+}
+
+KernelBuilder::StreamPort KernelBuilder::getStreamPort(const std::string & name) const {
+    const auto f = mStreamMap.find(name);
+    if (LLVM_UNLIKELY(f == mStreamMap.end())) {
+        report_fatal_error(getName() + " does not contain stream set " + name);
+    }
+    return f->second;
+}
 
 // CONSTRUCTOR
 KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
@@ -848,9 +867,12 @@ KernelBuilder::KernelBuilder(IDISA::IDISA_Builder * builder,
                              std::vector<Binding> && scalar_outputs,
                              std::vector<Binding> && internal_scalars)
 : KernelInterface(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
+, mModule(nullptr)
 , mCurrentMethod(nullptr)
 , mNoTerminateAttribute(false)
-, mIsGenerated(false) {
+, mIsGenerated(false)
+, mIsFinal(nullptr)
+, mOutputScalarResult(nullptr) {
 
 }
 
@@ -885,3 +907,4 @@ SegmentOrientedKernel::SegmentOrientedKernel(IDISA::IDISA_Builder * builder,
 : KernelBuilder(builder, std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
 
 }
+
