@@ -255,7 +255,7 @@ Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const pro
  * @param length
  * @param advice
  *
- * Note: intermittent failures are possible. Test if this is more than a simple hint and handle accordingly.
+ * Note: this funcition can fail if a kernel resource was temporarily unavailable. Test if this is more than a simple hint and handle accordingly.
  *
  *  ADVICE_NORMAL
  *      No special treatment. This is the default.
@@ -278,8 +278,7 @@ Value * CBuilder::CreateMAdvise(Value * addr, Value * length, Advice advice) {
     Triple T(mMod->getTargetTriple());
     Value * result = nullptr;
     if (T.isOSLinux() || T.isOSDarwin()) {
-        DataLayout DL(mMod);
-        IntegerType * const intTy = getIntPtrTy(DL);
+        IntegerType * const intTy = getInt32Ty();
         IntegerType * const sizeTy = getSizeTy();
         PointerType * const voidPtrTy = getVoidPtrTy();
         Function * MAdviseFunc = mMod->getFunction("madvise");
@@ -346,27 +345,25 @@ Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize) {
     return ptr;
 }
 
-Value * CBuilder::CreateMUnmap(Value * addr, Value * size) {
+Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
     IntegerType * const sizeTy = getSizeTy();
     PointerType * const voidPtrTy = getVoidPtrTy();
-    Function * fMUnmap = mMod->getFunction("munmap");
-    if (LLVM_UNLIKELY(fMUnmap == nullptr)) {
-        DataLayout DL(mMod);
-        IntegerType * const intTy = getIntPtrTy(DL);
-        FunctionType * fty = FunctionType::get(intTy, {voidPtrTy, sizeTy}, false);
-        fMUnmap = Function::Create(fty, Function::ExternalLinkage, "munmap", mMod);
+    Function * munmapFunc = mMod->getFunction("munmap");
+    if (LLVM_UNLIKELY(munmapFunc == nullptr)) {
+        FunctionType * const fty = FunctionType::get(sizeTy, {voidPtrTy, sizeTy}, false);
+        munmapFunc = Function::Create(fty, Function::ExternalLinkage, "munmap", mMod);
     }
+    len = CreateZExtOrTrunc(len, sizeTy);
     if (codegen::EnableAsserts) {
-        Value * const pageOffset = CreateURem(CreatePtrToInt(addr, sizeTy), getSize(getpagesize()));
+        CreateAssert(len, "CreateMUnmap: length cannot be 0");
+        Value * const addrValue = CreatePtrToInt(addr, sizeTy);
+        Value * const pageOffset = CreateURem(addrValue, getSize(getpagesize()));
         CreateAssert(CreateICmpEQ(pageOffset, getSize(0)), "CreateMUnmap: addr must be a multiple of the page size");
+        Value * const boundCheck = CreateICmpULT(addrValue, CreateSub(ConstantInt::getAllOnesValue(sizeTy), len));
+        CreateAssert(boundCheck, "CreateMUnmap: addresses in [addr, addr+len) are outside the valid address space range");
     }
     addr = CreatePointerCast(addr, voidPtrTy);
-    size = CreateZExtOrTrunc(size, sizeTy);
-    CallInst * result = CreateCall(fMUnmap, {addr, size});
-    if (codegen::EnableAsserts) {
-        CreateAssert(CreateICmpEQ(result, ConstantInt::getNullValue(result->getType())), "CreateMUnmap: failed");
-    }
-    return result;
+    return CreateCall(munmapFunc, {addr, len});
 }
 
 void CBuilder::CreateFree(Value * const ptr) {
