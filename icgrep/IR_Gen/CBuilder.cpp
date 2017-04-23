@@ -229,7 +229,7 @@ Value * CBuilder::CreateFileSourceMMap(Value * fd, Value * size) {
     size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ);
     ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE);
-    Constant * const offset = ConstantInt::get(sizeTy, 0);
+    Constant * const offset = ConstantInt::get(sizeTy, 0);       
     return CreateMMap(ConstantPointerNull::getNullValue(voidPtrTy), size, prot, flags, fd, offset);
 }
 
@@ -272,7 +272,7 @@ Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const pro
  *      reloading of the memory contents from the underlying mapped file (see mmap(2)) or zero-fill-on-demand pages for mappings
  *      without an underlying file.
  *
- * @return Value indicating success (0) or failure (non-zero).
+ * @return Value indicating success (0) or failure (-1).
  */
 Value * CBuilder::CreateMAdvise(Value * addr, Value * length, Advice advice) {
     Triple T(mMod->getTargetTriple());

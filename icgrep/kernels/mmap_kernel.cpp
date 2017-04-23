@@ -12,17 +12,41 @@ using namespace llvm;
 namespace kernel {
 
 void MMapSourceKernel::generateInitializeMethod() {
+    BasicBlock * emptyFile = CreateBasicBlock("EmptyFile");
+    BasicBlock * nonEmptyFile = CreateBasicBlock("NonEmptyFile");
+    BasicBlock * exit = CreateBasicBlock("Exit");
+
     Value * fd = getScalarField("fileDescriptor");
     Value * fileSize = iBuilder->CreateFileSize(fd);
     if (mCodeUnitWidth > 8) {
         fileSize = iBuilder->CreateUDiv(fileSize, iBuilder->getSize(mCodeUnitWidth / 8));
     }
-    Value * buffer = iBuilder->CreateFileSourceMMap(fd, fileSize);
+    Value * const isEmpty = iBuilder->CreateICmpEQ(fileSize, ConstantInt::getNullValue(fileSize->getType()));
+    iBuilder->CreateUnlikelyCondBr(isEmpty, emptyFile, nonEmptyFile);
+    // we cannot mmap a 0 length file; just create a 1-page sized fake file buffer for simplicity
+    iBuilder->SetInsertPoint(emptyFile);
+    Constant * pageSize = ConstantInt::get(fileSize->getType(), getpagesize());
+    Value * fakeFileBuffer = iBuilder->CreateAnonymousMMap(pageSize);
+    iBuilder->CreateBr(exit);
+
+    iBuilder->SetInsertPoint(nonEmptyFile);
+    Value * fileBackedBuffer = iBuilder->CreateFileSourceMMap(fd, fileSize);
+    iBuilder->CreateBr(exit);
+
+    iBuilder->SetInsertPoint(exit);
+    PHINode * buffer = iBuilder->CreatePHI(fileBackedBuffer->getType(), 2);
+    buffer->addIncoming(fakeFileBuffer, emptyFile);
+    buffer->addIncoming(fileBackedBuffer, nonEmptyFile);
+    PHINode * size = iBuilder->CreatePHI(fileSize->getType(), 2);
+    size->addIncoming(pageSize, emptyFile);
+    size->addIncoming(fileSize, nonEmptyFile);
+
     setBaseAddress("sourceBuffer", buffer);
-    setBufferedSize("sourceBuffer", fileSize);    
+    setBufferedSize("sourceBuffer", size);
     setScalarField("readableBuffer", buffer);
     setScalarField("fileSize", fileSize);
     iBuilder->CreateMAdvise(buffer, fileSize, CBuilder::ADVICE_WILLNEED);
+
 }
 
 void MMapSourceKernel::generateDoSegmentMethod() {
@@ -66,7 +90,7 @@ void MMapSourceKernel::generateDoSegmentMethod() {
     // determine whether or not we've exhausted the file buffer
     iBuilder->SetInsertPoint(produceData);
     ConstantInt * segmentItems = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth());
-    Value * const fileSize = getBufferedSize("sourceBuffer");
+    Value * const fileSize = getScalarField("fileSize");
     Value * produced = getProducedItemCount("sourceBuffer");
     produced = iBuilder->CreateAdd(produced, segmentItems);
 
