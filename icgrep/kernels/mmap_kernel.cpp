@@ -22,7 +22,7 @@ void MMapSourceKernel::generateInitializeMethod() {
     setBufferedSize("sourceBuffer", fileSize);    
     setScalarField("readableBuffer", buffer);
     setScalarField("fileSize", fileSize);
-    iBuilder->CreateMAdvise(buffer, fileSize, CBuilder::MMAP_WILLNEED);
+    iBuilder->CreateMAdvise(buffer, fileSize, CBuilder::ADVICE_WILLNEED);
 }
 
 void MMapSourceKernel::generateDoSegmentMethod() {
@@ -58,7 +58,7 @@ void MMapSourceKernel::generateDoSegmentMethod() {
     iBuilder->CreateLikelyCondBr(hasPagesToDrop, produceData, dropPages);
 
     iBuilder->SetInsertPoint(dropPages);
-    iBuilder->CreateMAdvise(iBuilder->CreateIntToPtr(readableBuffer, voidPtrTy), unnecessaryBytes, CBuilder::MMAP_DONTNEED);    
+    iBuilder->CreateMAdvise(iBuilder->CreateIntToPtr(readableBuffer, voidPtrTy), unnecessaryBytes, CBuilder::ADVICE_DONTNEED);    
     readableBuffer = iBuilder->CreateIntToPtr(iBuilder->CreateAdd(readableBuffer, unnecessaryBytes), voidPtrTy);
     setScalarField("readableBuffer", readableBuffer);
     iBuilder->CreateBr(produceData);
@@ -86,9 +86,7 @@ void MMapSourceKernel::generateDoSegmentMethod() {
 }
 
 void MMapSourceKernel::generateFinalizeMethod() {
-    Value * buffer = getBaseAddress("sourceBuffer");
-    Value * fileSize = getBufferedSize("sourceBuffer");
-    iBuilder->CreateMUnmap(buffer, fileSize);
+    iBuilder->CreateMUnmap(getBaseAddress("sourceBuffer"), getBufferedSize("sourceBuffer"));
 }
 
 MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)

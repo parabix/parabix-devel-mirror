@@ -249,27 +249,35 @@ Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const pro
     return ptr;
 }
 
-/*
-    MADV_NORMAL
-        No special treatment. This is the default.
-    MADV_RANDOM
-        Expect page references in random order. (Hence, read ahead may be less useful than normally.)
-    MADV_SEQUENTIAL
-        Expect page references in sequential order. (Hence, pages in the given range can be aggressively read ahead, and may be freed
-        soon after they are accessed.)
-    MADV_WILLNEED
-        Expect access in the near future. (Hence, it might be a good idea to read some pages ahead.)
-    MADV_DONTNEED
-        Do not expect access in the near future. (For the time being, the application is finished with the given range, so the kernel
-        can free resources associated with it.) Subsequent accesses of pages in this range will succeed, but will result either in
-        reloading of the memory contents from the underlying mapped file (see mmap(2)) or zero-fill-on-demand pages for mappings
-        without an underlying file.
-*/
-
-Value * CBuilder::CreateMAdvise(Value * addr, Value * length, std::initializer_list<MAdviceFlags> advice) {
+/**
+ * @brief CBuilder::CreateMAdvise
+ * @param addr
+ * @param length
+ * @param advice
+ *
+ * Note: intermittent failures are possible. Test if this is more than a simple hint and handle accordingly.
+ *
+ *  ADVICE_NORMAL
+ *      No special treatment. This is the default.
+ *  ADVICE_RANDOM
+ *      Expect page references in random order. (Hence, read ahead may be less useful than normally.)
+ *  ADVICE_SEQUENTIAL
+ *      Expect page references in sequential order. (Hence, pages in the given range can be aggressively read ahead, and may be freed
+ *      soon after they are accessed.)
+ *  ADVICE_WILLNEED
+ *      Expect access in the near future. (Hence, it might be a good idea to read some pages ahead.)
+ *  ADVICE_DONTNEED
+ *      Do not expect access in the near future. (For the time being, the application is finished with the given range, so the kernel
+ *      can free resources associated with it.) Subsequent accesses of pages in this range will succeed, but will result either in
+ *      reloading of the memory contents from the underlying mapped file (see mmap(2)) or zero-fill-on-demand pages for mappings
+ *      without an underlying file.
+ *
+ * @return Value indicating success (0) or failure (non-zero).
+ */
+Value * CBuilder::CreateMAdvise(Value * addr, Value * length, Advice advice) {
     Triple T(mMod->getTargetTriple());
     Value * result = nullptr;
-    if (T.isOSLinux()) {
+    if (T.isOSLinux() || T.isOSDarwin()) {
         DataLayout DL(mMod);
         IntegerType * const intTy = getIntPtrTy(DL);
         IntegerType * const sizeTy = getSizeTy();
@@ -281,30 +289,20 @@ Value * CBuilder::CreateMAdvise(Value * addr, Value * length, std::initializer_l
         }
         addr = CreatePointerCast(addr, voidPtrTy);
         length = CreateZExtOrTrunc(length, sizeTy);
-        int adviceFlags = 0;
-        for (const MAdviceFlags adv : advice) {
-            switch (adv) {
-                case MAdviceFlags::MMAP_NORMAL: adviceFlags |= MADV_NORMAL; break;
-                case MAdviceFlags::MMAP_RANDOM: adviceFlags |= MADV_RANDOM; break;
-                case MAdviceFlags::MMAP_SEQUENTIAL: adviceFlags |= MADV_SEQUENTIAL; break;
-                case MAdviceFlags::MMAP_DONTNEED: adviceFlags |= MADV_DONTNEED; break;
-                case MAdviceFlags::MMAP_WILLNEED: adviceFlags |= MADV_WILLNEED; break;
-//                case MADV::REMOVE: adviceFlags |= MADV_REMOVE; break;
-//                case MADV::DONTFORK: adviceFlags |= MADV_DONTFORK; break;
-//                case MADV::DOFORK: adviceFlags |= MADV_DOFORK; break;
-//                case MADV::HWPOISON: adviceFlags |= MADV_HWPOISON; break;
-//                case MADV::MERGEABLE: adviceFlags |= MADV_MERGEABLE; break;
-//                case MADV::UNMERGEABLE: adviceFlags |= MADV_UNMERGEABLE; break;
-//                case MADV::HUGEPAGE: adviceFlags |= MADV_HUGEPAGE; break;
-//                case MADV::NOHUGEPAGE: adviceFlags |= MADV_NOHUGEPAGE; break;
-//                case MADV::DONTDUMP: adviceFlags |= MADV_DONTDUMP; break;
-//                case MADV::DODUMP: adviceFlags |= MADV_DODUMP; break;
-            }
+        int madv_flag = 0;
+        switch (advice) {
+            case Advice::ADVICE_NORMAL:
+                madv_flag = MADV_NORMAL; break;
+            case Advice::ADVICE_RANDOM:
+                madv_flag = MADV_RANDOM; break;
+            case Advice::ADVICE_SEQUENTIAL:
+                madv_flag = MADV_SEQUENTIAL; break;
+            case Advice::ADVICE_WILLNEED:
+                madv_flag = MADV_WILLNEED; break;
+            case Advice::ADVICE_DONTNEED:
+                madv_flag = MADV_DONTNEED; break;
         }
-        result = CreateCall(MAdviseFunc, {addr, length, ConstantInt::get(intTy, adviceFlags)});
-        if (codegen::EnableAsserts) {
-            CreateAssert(CreateICmpEQ(result, ConstantInt::getNullValue(result->getType())), "CreateMMapAdvise: failed");
-        }
+        result = CreateCall(MAdviseFunc, {addr, length, ConstantInt::get(intTy, madv_flag)});
     }
     return result;
 }

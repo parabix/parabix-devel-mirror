@@ -200,7 +200,7 @@ ScanMatchKernel::ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepT
 : BlockOrientedKernel(iBuilder, "Parabix:scanMatch" + getGrepTypeId(grepType) + std::to_string(codeUnitWidth),
     {Binding{iBuilder->getStreamSetTy(1, 1), "matchResult"}, Binding{iBuilder->getStreamSetTy(1, 1), "lineBreak"}, Binding{iBuilder->getStreamSetTy(1, 8), "InputStream", UnknownRate()}},
     {},
-    {Binding{iBuilder->getSizeTy(), "FileIdx"}},
+    {Binding{iBuilder->getInt32Ty(), "FileIdx"}},
     {},
     {Binding{iBuilder->getSizeTy(), "BlockNo"}, Binding{iBuilder->getSizeTy(), "LineNum"}})
 , mGrepType(grepType) {

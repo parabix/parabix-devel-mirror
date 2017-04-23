@@ -57,8 +57,8 @@ static re::CC * parsedCodePointSet = nullptr;
 
 static std::vector<std::string> parsedPropertyValues;
 
-uint64_t GrepEngine::doGrep(const std::string & fileName, const int fileIdx) const {
-    const int fd = open(fileName.c_str(), O_RDONLY);
+uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) const {
+    const int32_t fd = open(fileName.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
         return 0;
     }
@@ -67,15 +67,15 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const int fileIdx) con
     return result;
 }
 
-uint64_t GrepEngine::doGrep(const uint32_t fileDescriptor, const int fileIdx) const {
+uint64_t GrepEngine::doGrep(const int32_t fileDescriptor, const uint32_t fileIdx) const {
     assert (mGrepFunction);
-    typedef uint64_t (*GrepFunctionType)(size_t fileDescriptor, const int fileIdx);
+    typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor, const uint32_t fileIdx);
     return reinterpret_cast<GrepFunctionType>(mGrepFunction)(fileDescriptor, fileIdx);
 }
 
-void GrepEngine::doGrep(const char * buffer, const uint64_t length, const int fileIdx) const {
+void GrepEngine::doGrep(const char * buffer, const uint64_t length, const uint32_t fileIdx) const {
     assert (mGrepFunction);
-    typedef uint64_t (*GrepFunctionType)(const char * buffer, const uint64_t length, const int fileIdx);
+    typedef uint64_t (*GrepFunctionType)(const char * buffer, const uint64_t length, const uint32_t fileIdx);
     reinterpret_cast<GrepFunctionType>(mGrepFunction)(buffer, length, fileIdx);
 }
 
@@ -222,6 +222,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
     const unsigned encodingBits = UTF_16 ? 16 : 8;
 
     Type * const int64Ty = iBuilder->getInt64Ty();
+    Type * const int32Ty = iBuilder->getInt32Ty();
 
     Function * mainFunc = nullptr;
     Value * fileIdx = nullptr;
@@ -230,15 +231,18 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
 
     if (grepSource == GrepSource::Internal) {
 
-        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, iBuilder->getInt8PtrTy(), int64Ty, int64Ty, nullptr));
+        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, iBuilder->getInt8PtrTy(), int64Ty, int32Ty, nullptr));
         mainFunc->setCallingConv(CallingConv::C);
         iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
         Function::arg_iterator args = mainFunc->arg_begin();
 
         Value * const buffer = &*(args++);
         buffer->setName("buffer");
-        Value * const length = &*(args++);
+
+        Value * length = &*(args++);
         length->setName("length");
+        length = iBuilder->CreateZExtOrTrunc(length, iBuilder->getSizeTy());
+
         fileIdx = &*(args++);
         fileIdx->setName("fileIdx");
 
@@ -249,7 +253,7 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
 
     } else {
 
-        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, iBuilder->getInt32Ty(), int64Ty, nullptr));
+        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, iBuilder->getInt32Ty(), int32Ty, nullptr));
         mainFunc->setCallingConv(CallingConv::C);
         iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
         Function::arg_iterator args = mainFunc->arg_begin();
@@ -306,7 +310,9 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
         kernel::MatchCount matchCountK(iBuilder);
         pxDriver.addKernelCall(matchCountK, {MergedResults}, {});
         pxDriver.generatePipelineIR();
-        iBuilder->CreateRet(matchCountK.getScalarField("matchedLineCount"));
+        Value * matchedLineCount = matchCountK.getScalarField("matchedLineCount");
+        matchedLineCount = iBuilder->CreateZExt(matchedLineCount, int64Ty);
+        iBuilder->CreateRet(matchedLineCount);
         pxDriver.linkAndFinalize();
     } else {
         kernel::ScanMatchKernel scanMatchK(iBuilder, grepType, encodingBits);

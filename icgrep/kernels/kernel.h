@@ -116,21 +116,21 @@ public:
     }
 
     llvm::Value * getScalarField(const std::string & fieldName) const {
-        return iBuilder->CreateLoad(getScalarFieldPtr(fieldName));
+        return iBuilder->CreateLoad(getScalarFieldPtr(fieldName), fieldName);
     }
 
-    llvm::Value * getScalarField(llvm::Value * index) const {
-        return iBuilder->CreateLoad(getScalarFieldPtr(index));
-    }
+//    llvm::Value * getScalarField(llvm::Value * index) const {
+//        return iBuilder->CreateLoad(getScalarFieldPtr(index));
+//    }
 
     // Set the value of a scalar field for the current instance.
     void setScalarField(const std::string & fieldName, llvm::Value * value) const {
         iBuilder->CreateStore(value, getScalarFieldPtr(fieldName));
     }
 
-    void setScalarField(llvm::Value * index, llvm::Value * value) const {
-        iBuilder->CreateStore(value, getScalarFieldPtr(index));
-    }
+//    void setScalarField(llvm::Value * index, llvm::Value * value) const {
+//        iBuilder->CreateStore(value, getScalarFieldPtr(index));
+//    }
 
     // Synchronization actions for executing a kernel for a particular logical segment.
     //

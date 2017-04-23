@@ -96,19 +96,15 @@ public:
 
     llvm::Value * CreateFileSourceMMap(llvm::Value * fd, llvm::Value * size);
 
-    enum MAdviceFlags {
-        MMAP_NORMAL
-        , MMAP_RANDOM
-        , MMAP_SEQUENTIAL
-        , MMAP_WILLNEED
-        , MMAP_DONTNEED
+    enum Advice {
+        ADVICE_NORMAL
+        , ADVICE_RANDOM
+        , ADVICE_SEQUENTIAL
+        , ADVICE_WILLNEED
+        , ADVICE_DONTNEED
     };
 
-    llvm::Value * CreateMAdvise(llvm::Value * addr, llvm::Value * length, MAdviceFlags advice) {
-        return CreateMAdvise(addr, length, { advice });
-    }
-
-    llvm::Value * CreateMAdvise(llvm::Value * addr, llvm::Value * length, std::initializer_list<MAdviceFlags> advice);
+    llvm::Value * CreateMAdvise(llvm::Value * addr, llvm::Value * length, Advice advice);
 
     llvm::Value * CreateMMap(llvm::Value * const addr, llvm::Value * size, llvm::Value * const prot, llvm::Value * const flags, llvm::Value * const fd, llvm::Value * const offset);
 

@@ -20,11 +20,11 @@ public:
 
     void grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
 
-    uint64_t doGrep(const std::string & fileName, const int fileIdx) const;
+    uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) const;
 
-    uint64_t doGrep(const uint32_t fileDescriptor, const int fileIdx) const;
+    uint64_t doGrep(const int32_t fileDescriptor, const uint32_t fileIdx) const;
     
-    void doGrep(const char * buffer, const uint64_t length, const int fileIdx) const;
+    void doGrep(const char * buffer, const uint64_t length, const uint32_t fileIdx) const;
 
     re::CC * grepCodepoints();
 
