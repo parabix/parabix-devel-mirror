@@ -123,7 +123,13 @@ void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuild
 void S2PKernel::generateDoBlockMethod() {
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        bytepack[i] = loadInputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
+        if (mAligned) {
+            bytepack[i] = loadInputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
+        } else {
+            Value * ptr = getInputStreamPackPtr("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
+            // CreateLoad defaults to aligned here, so we need to force the alignment to 1 byte.
+            bytepack[i] = iBuilder->CreateAlignedLoad(ptr, 1);
+        }
     }
     Value * basisbits[8];
     s2p(iBuilder, bytepack, basisbits);
@@ -160,9 +166,10 @@ void S2PKernel::generateFinalBlockMethod(Value * remainingBytes) {
     iBuilder->SetInsertPoint(exitBlock);
 }
 
-S2PKernel::S2PKernel(IDISA::IDISA_Builder * builder)
-: BlockOrientedKernel(builder, "Parabix:s2p", 
-    {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {Binding{builder->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}) {
+S2PKernel::S2PKernel(IDISA::IDISA_Builder * builder, bool aligned)
+: BlockOrientedKernel(builder, aligned ? "Parabix:s2p" : "Parabix:s2p_unaligned", 
+    {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {Binding{builder->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
+  mAligned(aligned) {
     setNoTerminateAttribute(true);
 }
 

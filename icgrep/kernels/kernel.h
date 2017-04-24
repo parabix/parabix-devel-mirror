@@ -385,7 +385,7 @@ protected:
 
 private:
 
-    bool useIndirectBr() const {
+    virtual bool useIndirectBr() const {
         return iBuilder->supportsIndirectBr();
     }
 

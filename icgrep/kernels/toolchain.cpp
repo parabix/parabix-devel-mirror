@@ -294,6 +294,7 @@ void ParabixDriver::linkAndFinalize() {
     #ifndef NDEBUG
     PM.add(createVerifierPass());
     #endif
+    PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
     PM.add(createReassociatePass());             //Reassociate expressions.
     PM.add(createGVNPass());                     //Eliminate common subexpressions.
     PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.

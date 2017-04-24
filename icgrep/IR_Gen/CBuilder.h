@@ -69,6 +69,8 @@ public:
     
     llvm::Function * GetPrintf();
 
+    llvm::Function * GetDprintf();
+
     //  Create calls to unistd.h functions.
     //
     //  Create a call to:  int open(const char *filename, int oflag, ...);
@@ -128,7 +130,11 @@ public:
     
     void CallPrintInt(const std::string & name, llvm::Value * const value);
     
+    void CallPrintIntToStderr(const std::string & name, llvm::Value * const value);
+    
     llvm::Value * GetString(llvm::StringRef Str);
+    
+    void CallPrintMsgToStderr(const std::string & message);
 
     inline llvm::IntegerType * getSizeTy() const {
         return mSizeType;

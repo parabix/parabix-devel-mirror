@@ -117,6 +117,15 @@ Function * CBuilder::GetPrintf() {
     return printf;
 }
 
+Function * CBuilder::GetDprintf() {
+    Function * dprintf = mMod->getFunction("dprintf");
+    if (dprintf == nullptr) {
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt32Ty(), getInt8PtrTy()}, true);
+        dprintf = Function::Create(fty, Function::ExternalLinkage, "dprintf", mMod);
+    }
+    return dprintf;
+}
+
 void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
     Constant * printRegister = mMod->getFunction("PrintInt");
     IntegerType * int64Ty = getInt64Ty();
@@ -148,6 +157,62 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
     }
     assert (num->getType()->isIntegerTy());
     CreateCall(printRegister, {GetString(name.c_str()), num});
+}
+
+void CBuilder::CallPrintIntToStderr(const std::string & name, Value * const value) {
+    Constant * printRegister = mMod->getFunction("PrintIntToStderr");
+    if (LLVM_UNLIKELY(printRegister == nullptr)) {
+        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getSizeTy() }, false);
+        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintIntToStderr", mMod);
+        auto arg = function->arg_begin();
+        std::string out = "%-40s = %" PRIx64 "\n";
+        BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
+        IRBuilder<> builder(entry);
+        std::vector<Value *> args;
+        args.push_back(getInt32(2));    // fd 2 (stderr)
+        args.push_back(GetString(out.c_str()));
+        Value * const name = &*(arg++);
+        name->setName("name");
+        args.push_back(name);
+        Value * value = &*arg;
+        value->setName("value");
+        args.push_back(value);
+        builder.CreateCall(GetDprintf(), args);
+        builder.CreateRetVoid();
+
+        printRegister = function;
+    }
+    Value * num = nullptr;
+    if (value->getType()->isPointerTy()) {
+        num = CreatePtrToInt(value, getSizeTy());
+    } else {
+        num = CreateZExtOrBitCast(value, getSizeTy());
+    }
+    assert (num->getType()->isIntegerTy());
+    CreateCall(printRegister, {GetString(name.c_str()), num});
+}
+
+void CBuilder::CallPrintMsgToStderr(const std::string & message) {
+    Constant * printMsg = mMod->getFunction("PrintMsgToStderr");
+    if (LLVM_UNLIKELY(printMsg == nullptr)) {
+        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0) }, false);
+        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintMsgToStderr", mMod);
+        auto arg = function->arg_begin();
+        std::string out = "%s\n";
+        BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
+        IRBuilder<> builder(entry);
+        std::vector<Value *> args;
+        args.push_back(getInt32(2));    // fd 2 (stderr)
+        args.push_back(GetString(out.c_str()));
+        Value * const msg = &*(arg++);
+        msg->setName("msg");
+        args.push_back(msg);
+        builder.CreateCall(GetDprintf(), args);
+        builder.CreateRetVoid();
+
+        printMsg = function;
+    }
+    CreateCall(printMsg, {GetString(message.c_str())});
 }
 
 Value * CBuilder::CreateMalloc(Value * size) {
