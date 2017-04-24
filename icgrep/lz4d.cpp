@@ -53,7 +53,6 @@ void generatePipeline(ParabixDriver & pxDriver) {
     IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
     Module * M = iBuilder->getModule();
 
-    Type * const mBitBlockType = iBuilder->getBitBlockType();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const bool_ty = iBuilder->getIntNTy(sizeof(bool) * 8);
     Type * const voidTy = iBuilder->getVoidTy();

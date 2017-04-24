@@ -98,6 +98,7 @@ add_executable(base64 base64.cpp kernels/radix64.cpp)
 add_executable(wc wc.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp)
 add_executable(array-test array-test.cpp kernels/alignedprint.cpp)
+add_executable(lz4d lz4d.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4_index_decoder.cpp kernels/lz4_bytestream_decoder.cpp)
 
 ## IWYU detects superfluous includes and when the include can be replaced with a forward declaration.
 ## It can be obtained using "apt-get install iwyu" or from "github.com/include-what-you-use".
@@ -134,6 +135,7 @@ target_link_libraries (base64 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ
 target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (editd UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (array-test PabloADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (lz4d PabloADT RegExpCompiler CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 
 IF(ENABLE_MULTIPLEXING)
     message(STATUS "Enabling Multiplexing")
@@ -225,6 +227,11 @@ add_test(
   COMMAND ./run_all ${CMAKE_BINARY_DIR}/u8u16)
 
 add_test(
+  NAME lz4d_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
+  COMMAND ./run_all ${CMAKE_BINARY_DIR}/lz4d)
+
+add_test(
   NAME editd_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
   COMMAND python run_all.py -e ${CMAKE_BINARY_DIR})
@@ -237,6 +244,10 @@ add_test(
 add_custom_target (u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
   COMMAND ./run_all ${CMAKE_BINARY_DIR}/u8u16)
+
+add_custom_target (lz4d_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
+  COMMAND ./run_all ${CMAKE_BINARY_DIR}/lz4d)
 
 add_custom_target (editd_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
