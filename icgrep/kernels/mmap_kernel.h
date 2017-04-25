@@ -17,14 +17,16 @@ namespace kernel {
 class MMapSourceKernel final: public SegmentOrientedKernel {
 public:
     MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);  
-    bool moduleIDisSignature() override {return true;}
+    bool moduleIDisSignature() override { return true; }
 private:
+    void linkExternalMethods() override;
     void generateInitializeMethod() override;
     void generateDoSegmentMethod() override;
     void generateFinalizeMethod() override;
 private:
-    const unsigned mSegmentBlocks;
-    const unsigned mCodeUnitWidth;
+    const unsigned          mSegmentBlocks;
+    const unsigned          mCodeUnitWidth;
+    llvm::Function *        mFileSizeFunction;
 };
 
 }

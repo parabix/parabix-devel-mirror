@@ -11,13 +11,8 @@
 #include <llvm/IR/TypeBuilder.h>
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/Support/raw_ostream.h>
-#include <kernels/toolchain.h>
-#include <llvm/ADT/Triple.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include <toolchain/toolchain.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
-#include <errno.h>
 
 using namespace llvm;
 
@@ -40,23 +35,23 @@ Value * CBuilder::CreateWriteCall(Value * fileDescriptor, Value * buf, Value * n
         IntegerType * int32Ty = getInt32Ty();
         PointerType * int8PtrTy = getInt8PtrTy();
         write = cast<Function>(mMod->getOrInsertFunction("write",
-                                                        AttributeSet().addAttribute(mMod->getContext(), 2U, Attribute::NoAlias),
+                                                        AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias),
                                                         sizeTy, int32Ty, int8PtrTy, sizeTy, nullptr));
     }
     return CreateCall(write, {fileDescriptor, buf, nbyte});
 }
 
-Value * CBuilder::CreateReadCall(Value * fildes, Value * buf, Value * nbyte) {
+Value * CBuilder::CreateReadCall(Value * fileDescriptor, Value * buf, Value * nbyte) {
     Function * readFn = mMod->getFunction("read");
     if (readFn == nullptr) {
         IntegerType * sizeTy = getSizeTy();
         IntegerType * int32Ty = getInt32Ty();
         PointerType * int8PtrTy = getInt8PtrTy();
         readFn = cast<Function>(mMod->getOrInsertFunction("read",
-                                                         AttributeSet().addAttribute(mMod->getContext(), 2U, Attribute::NoAlias),
+                                                         AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias),
                                                          sizeTy, int32Ty, int8PtrTy, sizeTy, nullptr));
     }
-    return CreateCall(readFn, {fildes, buf, nbyte});
+    return CreateCall(readFn, {fileDescriptor, buf, nbyte});
 }
 
 Value * CBuilder::CreateCloseCall(Value * fileDescriptor) {
@@ -66,7 +61,7 @@ Value * CBuilder::CreateCloseCall(Value * fileDescriptor) {
         FunctionType * fty = FunctionType::get(int32Ty, {int32Ty}, true);
         closeFn = Function::Create(fty, Function::ExternalLinkage, "close", mMod);
     }
-    return CreateCall(closeFn, {fileDescriptor});
+    return CreateCall(closeFn, fileDescriptor);
 }
 
 
@@ -77,16 +72,7 @@ Value * CBuilder::CreateUnlinkCall(Value * path) {
         unlinkFunc = Function::Create(fty, Function::ExternalLinkage, "unlink", mMod);
         unlinkFunc->setCallingConv(CallingConv::C);
     }
-    return CreateCall(unlinkFunc, {path});
-}
-
-Value * CBuilder::CreateFileSize(Value * fileDescriptor) {
-    Function * fileSizeFunc = mMod->getFunction("file_size");
-    if (fileSizeFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getSizeTy(), {getInt32Ty()}, true);
-        fileSizeFunc = Function::Create(fty, Function::ExternalLinkage, "file_size", mMod);
-    }
-    return CreateCall(fileSizeFunc, {fileDescriptor});
+    return CreateCall(unlinkFunc, path);
 }
 
 Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
@@ -94,7 +80,7 @@ Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
     if (mkstempFn == nullptr) {
         mkstempFn = cast<Function>(mMod->getOrInsertFunction("mkstemp", getInt32Ty(), getInt8PtrTy(), nullptr));
     }
-    return CreateCall(mkstempFn, {ftemplate});
+    return CreateCall(mkstempFn, ftemplate);
 }
 
 
@@ -103,7 +89,7 @@ Value * CBuilder::CreateStrlenCall(Value * str) {
     if (strlenFn == nullptr) {
         strlenFn = cast<Function>(mMod->getOrInsertFunction("strlen", getSizeTy(), getInt8PtrTy(), nullptr));
     }
-    return CreateCall(strlenFn, {str});
+    return CreateCall(strlenFn, str);
 }
 
 
@@ -134,7 +120,7 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
         Function * function = Function::Create(FT, Function::InternalLinkage, "PrintInt", mMod);
         auto arg = function->arg_begin();
         std::string out = "%-40s = %" PRIx64 "\n";
-        BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
+        BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
         args.push_back(GetString(out.c_str()));
@@ -166,7 +152,7 @@ void CBuilder::CallPrintIntToStderr(const std::string & name, Value * const valu
         Function * function = Function::Create(FT, Function::InternalLinkage, "PrintIntToStderr", mMod);
         auto arg = function->arg_begin();
         std::string out = "%-40s = %" PRIx64 "\n";
-        BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
+        BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
         args.push_back(getInt32(2));    // fd 2 (stderr)
@@ -199,7 +185,7 @@ void CBuilder::CallPrintMsgToStderr(const std::string & message) {
         Function * function = Function::Create(FT, Function::InternalLinkage, "PrintMsgToStderr", mMod);
         auto arg = function->arg_begin();
         std::string out = "%s\n";
-        BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
+        BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
         args.push_back(getInt32(2));    // fd 2 (stderr)
@@ -259,7 +245,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
         aligned_malloc->setDoesNotAlias(0);
         aligned_malloc->addFnAttr(Attribute::AlwaysInline);
         Value * size = &*aligned_malloc->arg_begin();
-        SetInsertPoint(BasicBlock::Create(mMod->getContext(), "entry", aligned_malloc));
+        SetInsertPoint(BasicBlock::Create(getContext(), "entry", aligned_malloc));
         const auto byteWidth = (intTy->getBitWidth() / 8);
         Constant * const offset = ConstantInt::get(intTy, alignment + byteWidth - 1);
         size = CreateAdd(size, offset);
@@ -340,7 +326,7 @@ Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const pro
  * @return Value indicating success (0) or failure (-1).
  */
 Value * CBuilder::CreateMAdvise(Value * addr, Value * length, Advice advice) {
-    Triple T(mMod->getTargetTriple());
+    Triple T(mTriple);
     Value * result = nullptr;
     if (T.isOSLinux() || T.isOSDarwin()) {
         IntegerType * const intTy = getInt32Ty();
@@ -382,7 +368,7 @@ Value * CBuilder::CheckMMapSuccess(Value * const addr) {
 #endif
 
 Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize) {
-    Triple T(mMod->getTargetTriple());
+    Triple T(mTriple);
     Value * ptr = nullptr;
     if (T.isOSLinux()) {
         DataLayout DL(mMod);
@@ -713,7 +699,7 @@ Value * CBuilder::CreateCountReverseZeroes(Value * value) {
 Value * CBuilder::CreateCeilLog2(Value * value) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     CreateAssert(value, "CreateCeilLog2: value cannot be zero");
-    Value * m = CreateCountForwardZeroes(CreateSub(value, ConstantInt::get(ty, 1)));
+    Value * m = CreateCountReverseZeroes(CreateSub(value, ConstantInt::get(ty, 1)));
     return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m);
 }
 
@@ -731,12 +717,18 @@ Value * CBuilder::CreateReadCycleCounter() {
     return CreateCall(cycleCountFunc, std::vector<Value *>({}));
 }
 
+Function * CBuilder::LinkFunction(llvm::StringRef name, FunctionType * type, void * functionPtr) const {
+    assert (mDriver);
+    return mDriver->LinkFunction(mMod, name, type, functionPtr);
+}
 
-CBuilder::CBuilder(Module * const m, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes)
-: IRBuilder<>(m->getContext())
-, mMod(m)
+CBuilder::CBuilder(Module * const module, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes)
+: IRBuilder<>(module->getContext())
+, mMod(module)
 , mCacheLineAlignment(CacheLineAlignmentInBytes)
 , mSizeType(getIntNTy(GeneralRegisterWidthInBits))
 , mFILEtype(nullptr)
-, mSupportsIndirectBr(SupportsIndirectBr) {
+, mSupportsIndirectBr(SupportsIndirectBr)
+, mDriver(nullptr) {
+
 }

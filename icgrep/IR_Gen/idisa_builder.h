@@ -19,7 +19,7 @@ class IDISA_Builder : public CBuilder {
 
 public:
 
-    IDISA_Builder(llvm::Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, const bool SupportsIndirectBr=true, unsigned CacheAlignment=64);
+    IDISA_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, const bool SupportsIndirectBr=true, unsigned CacheAlignment=64);
 
     virtual ~IDISA_Builder();
     

@@ -138,6 +138,8 @@ void KernelInterface::addKernelDeclarations(Module * const client) {
     args = terminateFunc->arg_begin();
     args->setName("self");
 
+    linkExternalMethods();
+
     iBuilder->setModule(saveModule);
 }
 

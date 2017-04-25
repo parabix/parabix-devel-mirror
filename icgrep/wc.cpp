@@ -7,7 +7,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
@@ -21,7 +21,6 @@
 #include <kernels/streamset.h>
 #include <kernels/mmap_kernel.h>
 #include <kernels/s2p_kernel.h>
-#include <kernels/pipeline.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
 #include <fcntl.h>
@@ -136,7 +135,7 @@ typedef void (*WordCountFunctionType)(uint32_t fd, size_t fileIdx);
 
 void wcPipelineGen(ParabixDriver & pxDriver) {
 
-    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    auto iBuilder = pxDriver.getIDISA_Builder();
     Module * m = iBuilder->getModule();
     
     Type * const int32Ty = iBuilder->getInt32Ty();
@@ -188,15 +187,9 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
 
 WordCountFunctionType wcCodeGen() {
-    Module * M = new Module("wc", getGlobalContext());
-    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-    ParabixDriver pxDriver(idb);
-    
+    ParabixDriver pxDriver("wc");
     wcPipelineGen(pxDriver);
-
-    WordCountFunctionType main = reinterpret_cast<WordCountFunctionType>(pxDriver.getPointerToMain());
-    delete idb;
-    return main;
+    return reinterpret_cast<WordCountFunctionType>(pxDriver.getPointerToMain());
 }
 
 void wc(WordCountFunctionType fn_ptr, const int64_t fileIdx) {

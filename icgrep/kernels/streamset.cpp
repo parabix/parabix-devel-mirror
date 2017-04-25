@@ -14,7 +14,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/CFG.h>
 #include <kernels/kernel.h>
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 
 namespace llvm { class Constant; }
 namespace llvm { class Function; }

@@ -5,9 +5,12 @@
 #ifndef CBUILDER_H
 #define CBUILDER_H
 
-#include <string>
+#include <IR_Gen/FunctionTypeBuilder.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Constants.h>
+#include <llvm/ADT/Triple.h>
+
+namespace kernels { class KernelBuilder; }
 namespace llvm { class Function; }
 namespace llvm { class IntegerType; }
 namespace llvm { class Module; }
@@ -15,11 +18,13 @@ namespace llvm { class PointerType; }
 namespace llvm { class Type; }
 namespace llvm { class Value; }
 
+class ParabixDriver;
+
 class CBuilder : public llvm::IRBuilder<> {
-    
+    friend class ParabixDriver;
 public:
 
-    CBuilder(llvm::Module * m, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes = 64);
+    CBuilder(llvm::Module * const module, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes = 64);
     
     virtual ~CBuilder() {}
 
@@ -27,9 +32,11 @@ public:
         return mMod;
     }
     
-    void setModule(llvm::Module * m)  {
+    void setModule(llvm::Module * m) {
+        assert (m);
         mMod = m;
     }
+
 
     llvm::Value * CreateMalloc(llvm::Value * size);
 
@@ -137,6 +144,7 @@ public:
     void CallPrintMsgToStderr(const std::string & message);
 
     inline llvm::IntegerType * getSizeTy() const {
+        assert (mSizeType);
         return mSizeType;
     }
     
@@ -179,12 +187,33 @@ public:
     
     llvm::Value * CreateReadCycleCounter();
 
+    template <typename ExternalFunctionType>
+    llvm::Function * LinkFunction(llvm::StringRef name, ExternalFunctionType * functionPtr) const;
+
 protected:
-    llvm::Module *                  mMod;
+
+    llvm::Function * LinkFunction(llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
+
+    void setDriver(ParabixDriver * driver) {
+        mDriver = driver;
+    }
+
+protected:
+    llvm::Module *                  mMod;    
     unsigned                        mCacheLineAlignment;
     llvm::IntegerType *             mSizeType;
     llvm::StructType *              mFILEtype;
     const bool                      mSupportsIndirectBr;
+    ParabixDriver *                 mDriver;
+    llvm::LLVMContext               mContext;
+    const std::string               mTriple;
 };
+
+template <typename ExternalFunctionType>
+llvm::Function *CBuilder::LinkFunction(llvm::StringRef name, ExternalFunctionType * functionPtr) const {
+    llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(getContext());
+    assert ("FunctionTypeBuilder did not resolve a function type." && type);
+    return LinkFunction(name, type, reinterpret_cast<void *>(functionPtr));
+}
 
 #endif

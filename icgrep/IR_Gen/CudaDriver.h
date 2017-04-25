@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cassert>
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 #include "cuda.h"
 
 #define GROUPTHREADS 64

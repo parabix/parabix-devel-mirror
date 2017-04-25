@@ -12,7 +12,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/TypeBuilder.h>
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 
 using namespace llvm;
 
@@ -375,8 +375,8 @@ void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const p
     CreateAlignedStore(value, ptr, alignment);
 }
 
-IDISA_Builder::IDISA_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, const bool SupportsIndirectBr, unsigned CacheAlignment)
-: CBuilder(m, archBitWidth, SupportsIndirectBr, CacheAlignment)
+IDISA_Builder::IDISA_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, const bool SupportsIndirectBr, unsigned CacheAlignment)
+: CBuilder(module, archBitWidth, SupportsIndirectBr, CacheAlignment)
 , mBitBlockWidth(bitBlockWidth)
 , mStride(stride)
 , mBitBlockType(VectorType::get(IntegerType::get(getContext(), 64), bitBlockWidth / 64))

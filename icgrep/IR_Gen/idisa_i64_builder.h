@@ -15,9 +15,11 @@ namespace IDISA {
 class IDISA_I64_Builder : public IDISA_Builder {
 public:
   
-    IDISA_I64_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth = 64, unsigned stride = 64, const bool SupportsIndirectBr = true)
-    : IDISA_Builder(m, archBitWidth, bitBlockWidth, stride, SupportsIndirectBr) {
+    IDISA_I64_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth = 64, unsigned stride = 64, const bool SupportsIndirectBr = true)
+    : IDISA_Builder(module, archBitWidth, bitBlockWidth, stride, SupportsIndirectBr) {
+
     } 
+
     virtual std::string getBuilderUniqueName() override;
 
     Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;

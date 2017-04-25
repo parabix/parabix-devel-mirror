@@ -4,7 +4,7 @@
  */
 
 #include "idisa_target.h"
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 #include <IR_Gen/idisa_avx_builder.h>
 #include <IR_Gen/idisa_sse_builder.h>
 #include <IR_Gen/idisa_i64_builder.h>
@@ -14,15 +14,9 @@
 
 namespace IDISA {
     
-IDISA_Builder * GetIDISA_Builder(llvm::Module * const mod) {
-    if (LLVM_UNLIKELY(mod == nullptr)) {
-        report_fatal_error("GetIDISA_Builder: module cannot be null");
-    }
-    if (LLVM_LIKELY(mod->getTargetTriple().empty())) {
-        mod->setTargetTriple(llvm::sys::getProcessTriple());
-    }
+IDISA_Builder * GetIDISA_Builder(llvm::Module * const module) {
     unsigned registerWidth = 0;
-    Triple T(mod->getTargetTriple());
+    Triple T(module->getTargetTriple());
     if (T.isArch64Bit()) {
         registerWidth = 64;
     } else if (T.isArch32Bit()) {
@@ -36,16 +30,16 @@ IDISA_Builder * GetIDISA_Builder(llvm::Module * const mod) {
     }
     if (codegen::BlockSize >= 256) {
         if (hasAVX2) {
-            return new IDISA_AVX2_Builder(mod, registerWidth, codegen::BlockSize);
+            return new IDISA_AVX2_Builder(module, registerWidth, codegen::BlockSize);
         }
     } else if (codegen::BlockSize == 64) {
-        return new IDISA_I64_Builder(mod, registerWidth);
+        return new IDISA_I64_Builder(module, registerWidth);
     }
-    return new IDISA_SSE2_Builder(mod, registerWidth, codegen::BlockSize);
+    return new IDISA_SSE2_Builder(module, registerWidth, codegen::BlockSize);
 }
 
-IDISA_Builder * GetIDISA_GPU_Builder(llvm::Module * const mod) {
-    return new IDISA_NVPTX20_Builder(mod, 64);
+IDISA_Builder * GetIDISA_GPU_Builder(llvm::Module * const module) {
+    return new IDISA_NVPTX20_Builder(module, 64);
 }
 
 }

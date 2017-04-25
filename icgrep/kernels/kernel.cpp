@@ -4,7 +4,7 @@
  */
 
 #include "kernel.h"
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 #include <kernels/streamset.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>

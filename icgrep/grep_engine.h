@@ -18,7 +18,7 @@ public:
 
     GrepEngine();
 
-    void grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
+    void grepCodeGen(const std::string & moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
 
     uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) const;
 

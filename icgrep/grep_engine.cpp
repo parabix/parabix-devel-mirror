@@ -11,7 +11,6 @@
 #include <llvm/Support/CommandLine.h>
 #include <boost/filesystem.hpp>
 #include <IR_Gen/idisa_builder.h>
-#include <IR_Gen/idisa_target.h>
 #include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
 #include <kernels/cc_kernel.h>
@@ -27,7 +26,7 @@
 #include <pablo/pablo_kernel.h>
 #include <re/re_cc.h>
 #include <re/re_toolchain.h>
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 #include <iostream>
 #include <sstream>
 #include <cc/multiplex_CCs.h>
@@ -193,36 +192,18 @@ void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, 
     parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
 }
 
-inline void linkGrepFunction(ParabixDriver & pxDriver, const GrepType grepType, const bool UTF_16, kernel::KernelBuilder & kernel) {
-    switch (grepType) {
-        case GrepType::Normal:
-            if (UTF_16) {
-                pxDriver.addExternalLink(kernel, "matcher", &wrapped_report_match<uint16_t>);
-            } else {
-                pxDriver.addExternalLink(kernel, "matcher", &wrapped_report_match<uint8_t>);
-            }
-            break;
-        case GrepType::NameExpression:
-            pxDriver.addExternalLink(kernel, "matcher", &insert_codepoints);
-            break;
-        case GrepType::PropertyValue:
-            pxDriver.addExternalLink(kernel, "matcher", &insert_property_values);
-            break;
-    }
-}
+void GrepEngine::grepCodeGen(const std::string & moduleName, std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16, GrepSource grepSource, const GrepType grepType) {
 
-void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16, GrepSource grepSource, const GrepType grepType) {
-
-    Module * M = new Module(moduleName + ":icgrep", getGlobalContext());;
-    IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_Builder(M);;
-    ParabixDriver pxDriver(iBuilder);
+    ParabixDriver pxDriver(moduleName + ":icgrep");
+    auto idb = pxDriver.getIDISA_Builder();
+    Module * M = idb->getModule();
 
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = UTF_16 ? 16 : 8;
 
-    Type * const int64Ty = iBuilder->getInt64Ty();
-    Type * const int32Ty = iBuilder->getInt32Ty();
+    Type * const int64Ty = idb->getInt64Ty();
+    Type * const int32Ty = idb->getInt32Ty();
 
     Function * mainFunc = nullptr;
     Value * fileIdx = nullptr;
@@ -231,32 +212,32 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
 
     if (grepSource == GrepSource::Internal) {
 
-        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, iBuilder->getInt8PtrTy(), int64Ty, int32Ty, nullptr));
+        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, idb->getInt8PtrTy(), int64Ty, int32Ty, nullptr));
         mainFunc->setCallingConv(CallingConv::C);
-        iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
-        Function::arg_iterator args = mainFunc->arg_begin();
+        idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+        auto args = mainFunc->arg_begin();
 
         Value * const buffer = &*(args++);
         buffer->setName("buffer");
 
         Value * length = &*(args++);
         length->setName("length");
-        length = iBuilder->CreateZExtOrTrunc(length, iBuilder->getSizeTy());
+        length = idb->CreateZExtOrTrunc(length, idb->getSizeTy());
 
         fileIdx = &*(args++);
         fileIdx->setName("fileIdx");
 
-        ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+        ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(idb, idb->getStreamSetTy(1, 8)));
 
-        sourceK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize));
+        sourceK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(idb, idb->getInt8PtrTy(), segmentSize));
         sourceK->setInitialArguments({buffer, length});
 
     } else {
 
-        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, iBuilder->getInt32Ty(), int32Ty, nullptr));
+        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, idb->getInt32Ty(), int32Ty, nullptr));
         mainFunc->setCallingConv(CallingConv::C);
-        iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
-        Function::arg_iterator args = mainFunc->arg_begin();
+        idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+        auto args = mainFunc->arg_begin();
 
         Value * const fileDescriptor = &*(args++);
         fileDescriptor->setName("fileDescriptor");
@@ -264,23 +245,23 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
         fileIdx->setName("fileIdx");
 
         if (grepSource == GrepSource::File) {
-            ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
-            sourceK = pxDriver.addKernelInstance(make_unique<kernel::MMapSourceKernel>(iBuilder, segmentSize));
+            ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(idb, idb->getStreamSetTy(1, 8)));
+            sourceK = pxDriver.addKernelInstance(make_unique<kernel::MMapSourceKernel>(idb, segmentSize));
             sourceK->setInitialArguments({fileDescriptor});
         } else { // if (grepSource == GrepSource::StdIn) {
-            ByteStream = pxDriver.addBuffer(make_unique<ExtensibleBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize));
-            sourceK = pxDriver.addKernelInstance(make_unique<kernel::StdInKernel>(iBuilder, segmentSize));
+            ByteStream = pxDriver.addBuffer(make_unique<ExtensibleBuffer>(idb, idb->getStreamSetTy(1, 8), segmentSize));
+            sourceK = pxDriver.addKernelInstance(make_unique<kernel::StdInKernel>(idb, segmentSize));
         }
     }
 
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
-    StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
+    StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize * bufferSegments));
     
-    kernel::KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<kernel::S2PKernel>(iBuilder));
+    kernel::KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<kernel::S2PKernel>(idb));
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
-    kernel::KernelBuilder * linebreakK = pxDriver.addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(iBuilder, encodingBits));
-    StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+    kernel::KernelBuilder * linebreakK = pxDriver.addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(idb, encodingBits));
+    StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
     pxDriver.makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
     
     const auto n = REs.size();
@@ -288,39 +269,53 @@ void GrepEngine::grepCodeGen(std::string moduleName, std::vector<re::RE *> REs, 
     std::vector<StreamSetBuffer *> MatchResultsBufs(n);
 
     for(unsigned i = 0; i < n; ++i){
-        StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        kernel::KernelBuilder * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICgrepKernelBuilder>(iBuilder, REs[i]));
+        StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        kernel::KernelBuilder * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICgrepKernelBuilder>(idb, REs[i]));
         pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
         MatchResultsBufs[i] = MatchResults;
     }
     StreamSetBuffer * MergedResults = MatchResultsBufs[0];
     if (REs.size() > 1) {
-        MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        kernel::KernelBuilder * streamsMergeK = pxDriver.addKernelInstance(make_unique<kernel::StreamsMerge>(iBuilder, 1, REs.size()));
+        MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        kernel::KernelBuilder * streamsMergeK = pxDriver.addKernelInstance(make_unique<kernel::StreamsMerge>(idb, 1, REs.size()));
         pxDriver.makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
     }
     
     if (AlgorithmOptionIsSet(re::InvertMatches)) {
-        kernel::KernelBuilder * invertK = pxDriver.addKernelInstance(make_unique<kernel::InvertMatchesKernel>(iBuilder));
+        kernel::KernelBuilder * invertK = pxDriver.addKernelInstance(make_unique<kernel::InvertMatchesKernel>(idb));
         StreamSetBuffer * OriginalMatches = MergedResults;
-        MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
         pxDriver.makeKernelCall(invertK, {OriginalMatches, LineBreakStream}, {MergedResults});
     }
     if (CountOnly) {
-        kernel::MatchCount matchCountK(iBuilder);
+        kernel::MatchCount matchCountK(idb);
         pxDriver.addKernelCall(matchCountK, {MergedResults}, {});
         pxDriver.generatePipelineIR();
         Value * matchedLineCount = matchCountK.getScalarField("matchedLineCount");
-        matchedLineCount = iBuilder->CreateZExt(matchedLineCount, int64Ty);
-        iBuilder->CreateRet(matchedLineCount);
+        matchedLineCount = idb->CreateZExt(matchedLineCount, int64Ty);
+        idb->CreateRet(matchedLineCount);
         pxDriver.linkAndFinalize();
     } else {
-        kernel::ScanMatchKernel scanMatchK(iBuilder, grepType, encodingBits);
+        kernel::ScanMatchKernel scanMatchK(idb, grepType, encodingBits);
         scanMatchK.setInitialArguments({fileIdx});
         pxDriver.addKernelCall(scanMatchK, {MergedResults, LineBreakStream, ByteStream}, {});
-        linkGrepFunction(pxDriver, grepType, UTF_16, scanMatchK);
+        switch (grepType) {
+            case GrepType::Normal:
+                if (UTF_16) {
+                    pxDriver.LinkFunction(scanMatchK, "matcher", &wrapped_report_match<uint16_t>);
+                } else {
+                    pxDriver.LinkFunction(scanMatchK, "matcher", &wrapped_report_match<uint8_t>);
+                }
+                break;
+            case GrepType::NameExpression:
+                pxDriver.LinkFunction(scanMatchK, "matcher", &insert_codepoints);
+                break;
+            case GrepType::PropertyValue:
+                pxDriver.LinkFunction(scanMatchK, "matcher", &insert_property_values);
+                break;
+        }
         pxDriver.generatePipelineIR();
-        iBuilder->CreateRet(iBuilder->getInt64(0));
+        idb->CreateRet(idb->getInt64(0));
         pxDriver.linkAndFinalize();
     }
 

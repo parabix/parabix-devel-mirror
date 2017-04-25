@@ -8,10 +8,9 @@
 #define TOOLCHAIN_H
 #include <string>
 #include <IR_Gen/idisa_builder.h>
-#include <llvm/IR/TypeBuilder.h>
+#include <IR_Gen/FunctionTypeBuilder.h>
 #include <kernels/kernel.h>
 #include <kernels/streamset.h>
-#include <boost/container/flat_map.hpp>
 
 namespace llvm { class ExecutionEngine; }
 namespace llvm { class Module; }
@@ -61,13 +60,13 @@ void AddParabixVersionPrinter();
 bool AVX2_available();
 
 class ParabixDriver {
-    using ModuleMap = boost::container::flat_map<kernel::KernelBuilder *, llvm::Module *>;
+    friend class CBuilder;
 public:
-    ParabixDriver(IDISA::IDISA_Builder * iBuilder);
+    ParabixDriver(std::string && moduleName);
 
     ~ParabixDriver();
     
-    IDISA::IDISA_Builder * getIDISA_Builder() {return iBuilder;}
+    IDISA::IDISA_Builder * getIDISA_Builder() { return iBuilder.get(); }
     
     parabix::ExternalFileBuffer * addExternalBuffer(std::unique_ptr<parabix::ExternalFileBuffer> b, llvm::Value * externalBuf);
     
@@ -76,84 +75,41 @@ public:
     kernel::KernelBuilder * addKernelInstance(std::unique_ptr<kernel::KernelBuilder> kb);
     
     void addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
+
     void makeKernelCall(kernel::KernelBuilder * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
     
     void generatePipelineIR();
     
     template <typename ExternalFunctionType>
-    void addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const;
+    llvm::Function * LinkFunction(kernel::KernelBuilder & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const;
 
     void linkAndFinalize();
     
     void * getPointerToMain();
 
-private:
+protected:
 
-
-    void addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
-
+    llvm::Function * LinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
 
 private:
-    IDISA::IDISA_Builder * const            iBuilder;
+    std::unique_ptr<llvm::LLVMContext>      mContext;
     llvm::Module * const                    mMainModule;
+    std::unique_ptr<IDISA::IDISA_Builder>   iBuilder;
     llvm::TargetMachine *                   mTarget;
     llvm::ExecutionEngine *                 mEngine;
     ParabixObjectCache *                    mCache;
+
     std::vector<kernel::KernelBuilder *>    mPipeline;
     // Owned kernels and buffers that will persist with this ParabixDriver instance.
     std::vector<std::unique_ptr<kernel::KernelBuilder>> mOwnedKernels;
     std::vector<std::unique_ptr<parabix::StreamSetBuffer>> mOwnedBuffers;
 };
 
-namespace {
-
-// NOTE: Currently, LLVM TypeBuilder can deduce FuntionTypes for up to 5 arguments. The following
-// templates have no limit but should be deprecated if the TypeBuilder ever supports n-ary functions.
-
-template<unsigned i, typename... Args>
-struct ParameterTypeBuilder;
-
-template<unsigned i, typename A1, typename... An>
-struct ParameterTypeBuilder<i, A1, An...> {
-    static void get(llvm::LLVMContext & C, llvm::Type ** params) {
-        ParameterTypeBuilder<i, A1>::get(C, params);
-        ParameterTypeBuilder<i + 1, An...>::get(C, params);
-    }
-};
-
-template<unsigned i, typename A>
-struct ParameterTypeBuilder<i, A> {
-    static void get(llvm::LLVMContext & C, llvm::Type ** params) {
-        params[i] = llvm::TypeBuilder<A, false>::get(C);
-    }
-};
-
-template<typename T>
-struct FunctionTypeBuilder;
-
-template<typename R, typename... Args>
-struct FunctionTypeBuilder<R(Args...)> {
-    static llvm::FunctionType * get(llvm::LLVMContext & C) {
-        llvm::Type * params[sizeof...(Args)];
-        ParameterTypeBuilder<0, Args...>::get(C, params);
-        return llvm::FunctionType::get(llvm::TypeBuilder<R, false>::get(C), params, false);
-    }
-};
-
-template<typename R>
-struct FunctionTypeBuilder<R()> {
-    static llvm::FunctionType * get(llvm::LLVMContext & C) {
-        return llvm::FunctionType::get(llvm::TypeBuilder<R, false>::get(C), false);
-    }
-};
-
-}
-
 template <typename ExternalFunctionType>
-void ParabixDriver::addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const {
+llvm::Function * ParabixDriver::LinkFunction(kernel::KernelBuilder & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const {
     llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(iBuilder->getContext());
     assert ("FunctionTypeBuilder did not resolve a function type." && type);
-    addExternalLink(kb, name, type, reinterpret_cast<void *>(functionPtr));
+    return LinkFunction(kb.getModule(), name, type, reinterpret_cast<void *>(functionPtr));
 }
 
 #endif

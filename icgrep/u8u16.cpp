@@ -22,9 +22,8 @@
 #include <pablo/pablo_kernel.h>                    // for PabloKernel
 #include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
 #include <pablo/pe_zeroes.h>
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 #include "kernels/streamset.h"                     // for CircularBuffer
-#include <kernels/pipeline.h>
 #include "llvm/ADT/StringRef.h"                    // for StringRef
 #include "llvm/IR/CallingConv.h"                   // for ::C
 #include "llvm/IR/DerivedTypes.h"                  // for ArrayType, Pointer...
@@ -357,14 +356,11 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
 
 void u8u16PipelineGen(ParabixDriver & pxDriver) {
     
-    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    auto iBuilder = pxDriver.getIDISA_Builder();
     Module * mod = iBuilder->getModule();
     
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::ThreadNum+1;
-    
-    assert (iBuilder);
-    
     Type * const voidTy = iBuilder->getVoidTy();
     Type * const bitBlockType = iBuilder->getBitBlockType();
     Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
@@ -435,24 +431,14 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
 
 typedef void (*u8u16FunctionType)(uint32_t fd, char * output_data);
 
-u8u16FunctionType u8u16CodeGen(void) {
-    LLVMContext TheContext;                            
-    Module * M = new Module("u8u16", TheContext);
-    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-    ParabixDriver pxDriver(idb);
-    
+u8u16FunctionType u8u16CodeGen() {
+    ParabixDriver pxDriver("u8u16");
     if (enableAVXdel && AVX2_available() && codegen::BlockSize==256) {
-        //u8u16PipelineAVX2(M, idb)
         u8u16PipelineAVX2Gen(pxDriver);
-    }
-    else{
-        //u8u16Pipeline(M, idb);
+    } else{
         u8u16PipelineGen(pxDriver);
     }
-    u8u16FunctionType main = reinterpret_cast<u8u16FunctionType>(pxDriver.getPointerToMain());
-
-    delete idb;
-    return main;
+    return reinterpret_cast<u8u16FunctionType>(pxDriver.getPointerToMain());
 }
 
 size_t file_size(const int fd) {

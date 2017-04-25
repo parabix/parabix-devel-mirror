@@ -5,6 +5,7 @@
  */
 
 #include "toolchain.h"
+#include <IR_Gen/idisa_target.h>
 #include <llvm/CodeGen/CommandFlags.h>             // for InitTargetOptionsF...
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for EngineBuilder
 #include <llvm/Support/CommandLine.h>              // for OptionCategory
@@ -25,8 +26,8 @@
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
 #include <llvm/IR/Module.h>
-#include <kernels/object_cache.h>
-#include <kernels/pipeline.h>
+#include <toolchain/object_cache.h>
+#include <toolchain/pipeline.h>
 #include <kernels/kernel.h>
 #include <sys/stat.h>
 
@@ -70,16 +71,16 @@ int ThreadNum;
 bool EnableAsserts;
 bool EnableCycleCounter;
 #ifndef NDEBUG
-#define DEFAULT_TO_TRUE_IN_DEBUG_MODE true
+#define IN_DEBUG_MODE true
 #else
-#define DEFAULT_TO_TRUE_IN_DEBUG_MODE false
+#define IN_DEBUG_MODE false
 #endif
 
 static cl::opt<int, true> BlockSizeOption("BlockSize", cl::location(BlockSize), cl::init(0), cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 static cl::opt<int, true> SegmentSizeOption("segment-size", cl::location(SegmentSize), cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
 static cl::opt<int, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::desc("Buffer Segments"), cl::value_desc("positive integer"), cl::init(1));
 static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"), cl::init(2));
-static cl::opt<bool, true> EnableAssertsOption("ea", cl::location(EnableAsserts), cl::desc("Enable Asserts"), cl::init(DEFAULT_TO_TRUE_IN_DEBUG_MODE));
+static cl::opt<bool, true> EnableAssertsOption("ea", cl::location(EnableAsserts), cl::desc("Enable Asserts"), cl::init(IN_DEBUG_MODE));
 static cl::opt<bool, true> EnableCycleCountOption("ShowKernelCycles", cl::location(EnableCycleCounter), cl::desc("Count and report CPU cycles per kernel"), cl::init(false), cl::cat(CodeGenOptions));
 
 const cl::OptionCategory * codegen_flags() {return &CodeGenOptions;}
@@ -158,13 +159,14 @@ bool AVX2_available() {
     return false;
 }
 
-ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
-: iBuilder(iBuilder)
-, mMainModule(iBuilder->getModule())
+ParabixDriver::ParabixDriver(std::string && moduleName)
+: mContext(new llvm::LLVMContext())
+, mMainModule(new Module(moduleName, *mContext))
+, iBuilder(nullptr)
 , mTarget(nullptr)
 , mEngine(nullptr)
-, mCache(nullptr)
-{
+, mCache(nullptr) {
+
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
@@ -181,7 +183,7 @@ ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
     opts.MCOptions.AsmVerbose = codegen::AsmVerbose;
 
     builder.setTargetOptions(opts);
-    builder.setVerifyModules(true);
+    builder.setVerifyModules(IN_DEBUG_MODE);
     CodeGenOpt::Level optLevel = CodeGenOpt::Level::None;
     switch (codegen::OptLevel) {
         case '0': optLevel = CodeGenOpt::None; break;
@@ -193,7 +195,6 @@ ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
     builder.setOptLevel(optLevel);
 
     setAllFeatures(builder);
-
     mEngine = builder.create();
     if (mEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
@@ -208,11 +209,16 @@ ParabixDriver::ParabixDriver(IDISA::IDISA_Builder * iBuilder)
         assert (mCache);
         mEngine->setObjectCache(mCache);
     }
+
+    mMainModule->setTargetTriple(mTarget->getTargetTriple().getTriple());
+
+    iBuilder.reset(IDISA::GetIDISA_Builder(mMainModule));
+    iBuilder->setDriver(this);
 }
 
 ExternalFileBuffer * ParabixDriver::addExternalBuffer(std::unique_ptr<ExternalFileBuffer> b, Value * externalBuf) {
-    ExternalFileBuffer * rawBuf = b.get();
     mOwnedBuffers.push_back(std::move(b));
+    ExternalFileBuffer * rawBuf = cast<ExternalFileBuffer>(mOwnedBuffers.back().get());
     rawBuf->setStreamSetBuffer(externalBuf);
     return rawBuf;
 }
@@ -251,6 +257,7 @@ void ParabixDriver::generatePipelineIR() {
         }
     }
     #endif
+
     // note: instantiation of all kernels must occur prior to initialization
     for (const auto & k : mPipeline) {
         k->addKernelDeclarations(mMainModule);
@@ -274,17 +281,11 @@ void ParabixDriver::generatePipelineIR() {
     }
 }
 
-void ParabixDriver::addExternalLink(kernel::KernelBuilder & kb, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
-    assert ("addKernelCall or makeKernelCall must be called before addExternalLink" && (kb.getModule() != nullptr));
-    mEngine->addGlobalMapping(cast<Function>(kb.getModule()->getOrInsertFunction(name, type)), functionPtr);
-}
-
-uint64_t file_size(const uint32_t fd) {
-    struct stat st;
-    if (LLVM_UNLIKELY(fstat(fd, &st) != 0)) {
-        st.st_size = 0;
-    }
-    return st.st_size;
+Function * ParabixDriver::LinkFunction(Module * mod, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
+    assert ("addKernelCall or makeKernelCall must be called before LinkFunction" && (mod != nullptr));
+    Function * f = cast<Function>(mod->getOrInsertFunction(name, type));
+    mEngine->addGlobalMapping(f, functionPtr);
+    return f;
 }
 
 void ParabixDriver::linkAndFinalize() {
@@ -327,9 +328,6 @@ void ParabixDriver::linkAndFinalize() {
         }
     }
     #endif
-
-    FunctionType * fileSizeType = FunctionType::get(iBuilder->getInt64Ty(), { iBuilder->getInt32Ty() });
-    mEngine->addGlobalMapping(cast<Function>(mMainModule->getOrInsertFunction("file_size", fileSizeType)), (void *)&file_size);
 
     PM.run(*m);
     for (kernel::KernelBuilder * const kb : mPipeline) {

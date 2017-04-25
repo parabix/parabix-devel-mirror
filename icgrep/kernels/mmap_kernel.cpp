@@ -6,18 +6,32 @@
 #include <llvm/IR/Module.h>
 #include <IR_Gen/idisa_builder.h>
 #include <kernels/streamset.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 using namespace llvm;
 
+uint64_t file_size(const uint32_t fd) {
+    struct stat st;
+    if (LLVM_UNLIKELY(fstat(fd, &st) != 0)) {
+        st.st_size = 0;
+    }
+    return st.st_size;
+}
+
 namespace kernel {
+
+void MMapSourceKernel::linkExternalMethods() {
+    mFileSizeFunction = iBuilder->LinkFunction("file_size", &file_size);
+}
 
 void MMapSourceKernel::generateInitializeMethod() {
     BasicBlock * emptyFile = CreateBasicBlock("EmptyFile");
     BasicBlock * nonEmptyFile = CreateBasicBlock("NonEmptyFile");
     BasicBlock * exit = CreateBasicBlock("Exit");
 
-    Value * fd = getScalarField("fileDescriptor");
-    Value * fileSize = iBuilder->CreateFileSize(fd);
+    Value * const fd = getScalarField("fileDescriptor");
+    Value * fileSize = iBuilder->CreateCall(mFileSizeFunction, fd);
     if (mCodeUnitWidth > 8) {
         fileSize = iBuilder->CreateUDiv(fileSize, iBuilder->getSize(mCodeUnitWidth / 8));
     }
@@ -119,7 +133,8 @@ MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blo
     {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
     {Binding{iBuilder->getInt32Ty(), "fileDescriptor"}}, {Binding{iBuilder->getSizeTy(), "fileSize"}}, {Binding{iBuilder->getVoidPtrTy(), "readableBuffer"}})
 , mSegmentBlocks(blocksPerSegment)
-, mCodeUnitWidth(codeUnitWidth) {
+, mCodeUnitWidth(codeUnitWidth)
+, mFileSizeFunction(nullptr) {
 
 }
 

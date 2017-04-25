@@ -10,7 +10,6 @@
 #include <kernels/s2p_kernel.h>                    // for S2PKernel
 #include <kernels/alignedprint.h>
 #include <kernels/streamset.h>                     // for SingleBlockBuffer
-#include <kernels/pipeline.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for ExecutionEngine
 #include <llvm/IR/Function.h>                      // for Function, Function...
 #include <llvm/IR/Module.h>                        // for Module
@@ -20,7 +19,7 @@
 #include <pablo/pablo_kernel.h>                    // for PabloKernel
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 #include <pablo/builder.hpp>                       // for PabloBuilder
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
@@ -184,12 +183,8 @@ void pipeline(ParabixDriver & pxDriver, const unsigned count) {
 typedef void (*MatchParens)(char * byteStream, size_t fileSize);
 
 MatchParens generateAlgorithm() {
-    LLVMContext ctx;
-    Module * M = new Module("mp", ctx);
-    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-    ParabixDriver pxDriver(idb);
+    ParabixDriver pxDriver("mp");
     pipeline(pxDriver, 3);
-    delete idb;
     return reinterpret_cast<MatchParens>(pxDriver.getPointerToMain());
 }
 

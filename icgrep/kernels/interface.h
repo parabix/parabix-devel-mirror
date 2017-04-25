@@ -140,6 +140,8 @@ public:
 
 protected:
 
+    virtual void linkExternalMethods() = 0;
+
     KernelInterface(IDISA::IDISA_Builder * builder,
                     std::string kernelName,
                     std::vector<Binding> && stream_inputs,

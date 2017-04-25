@@ -10,10 +10,9 @@
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/CommandLine.h>
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
-#include <kernels/pipeline.h>
 #include <kernels/mmap_kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/radix64.h>
@@ -39,13 +38,13 @@ using namespace parabix;
 
 void base64PipelineGen(ParabixDriver & pxDriver) {
         
-    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    auto iBuilder = pxDriver.getIDISA_Builder();
     Module * mod = iBuilder->getModule();
-    Type * mBitBlockType = iBuilder->getBitBlockType();
+    Type * bitBlockType = iBuilder->getBitBlockType();
 
-    Type * const voidTy = Type::getVoidTy(mod->getContext());
+    Type * const voidTy = iBuilder->getVoidTy();
     Type * const int32Ty = iBuilder->getInt32Ty();
-    Type * const outputType = PointerType::get(ArrayType::get(ArrayType::get(mBitBlockType, 8), 1), 0);
+    Type * const outputType = PointerType::get(ArrayType::get(ArrayType::get(bitBlockType, 8), 1), 0);
     
     
     Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, int32Ty, outputType, nullptr));
@@ -102,16 +101,9 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
 typedef void (*base64FunctionType)(const uint32_t fd, char * outputBuffer);
 
 base64FunctionType base64CodeGen(void) {
-    LLVMContext TheContext;                            
-    Module * M = new Module("base64", TheContext);
-    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-    ParabixDriver pxDriver(idb);
-    
+    ParabixDriver pxDriver("base64");
     base64PipelineGen(pxDriver);
-    base64FunctionType main = reinterpret_cast<base64FunctionType>(pxDriver.getPointerToMain());
-    
-    delete idb;
-    return main;
+    return reinterpret_cast<base64FunctionType>(pxDriver.getPointerToMain());
 }
 
 size_t file_size(const int fd) {

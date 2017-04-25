@@ -19,7 +19,7 @@
 
 #include <lz4FrameDecoder.h>
 #include <cc/cc_compiler.h>
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 #include <kernels/cc_kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/s2p_kernel.h>
@@ -28,7 +28,6 @@
 #include <kernels/mmap_kernel.h>
 #include <kernels/lz4_index_decoder.h>
 #include <kernels/lz4_bytestream_decoder.h>
-#include <kernels/pipeline.h>
 
 #include <string>
 #include <iostream>
@@ -45,9 +44,6 @@ static cl::opt<bool> overwriteOutput("f", cl::desc("Overwrite existing output fi
 
 
 typedef void (*MainFunctionType)(char * byte_data, size_t filesize, bool hasBlockChecksum);
-
-ParabixDriver * pxDriver = nullptr;
-
 
 void generatePipeline(ParabixDriver & pxDriver) {
     IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
@@ -115,14 +111,9 @@ void generatePipeline(ParabixDriver & pxDriver) {
 
 
 MainFunctionType codeGen() {
-    Module * M = new Module("lz4d", getGlobalContext());
-    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-    pxDriver = new ParabixDriver(idb);
-
-    generatePipeline(*pxDriver);
-
-    delete idb;
-    return reinterpret_cast<MainFunctionType>(pxDriver->getPointerToMain());
+    ParabixDriver pxDriver("lz4d");
+    generatePipeline(pxDriver);
+    return reinterpret_cast<MainFunctionType>(pxDriver.getPointerToMain());
 }
 
 

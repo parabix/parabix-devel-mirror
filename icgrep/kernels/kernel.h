@@ -6,14 +6,11 @@
 #ifndef KERNEL_BUILDER_H
 #define KERNEL_BUILDER_H
 
-#include "interface.h"      // for KernelInterface
+#include "interface.h"
 #include <boost/container/flat_map.hpp>
 #include <IR_Gen/idisa_builder.h>
-#include <kernels/pipeline.h>
+#include <toolchain/pipeline.h>
 #include <llvm/IR/Constants.h>
-
-//#include <string>           // for string
-//#include <memory>           // for unique_ptr
 
 namespace llvm { class Function; }
 namespace llvm { class IntegerType; }
@@ -33,9 +30,9 @@ protected:
     using StreamSetBuffers = std::vector<parabix::StreamSetBuffer *>;
     using Kernels = std::vector<KernelBuilder *>;
 
-    friend void ::generateSegmentParallelPipeline(IDISA::IDISA_Builder *, const Kernels &);
-    friend void ::generatePipelineLoop(IDISA::IDISA_Builder *, const Kernels &);
-    friend void ::generateParallelPipeline(IDISA::IDISA_Builder *, const Kernels &);
+    friend void ::generateSegmentParallelPipeline(std::unique_ptr<IDISA::IDISA_Builder> &, const Kernels &);
+    friend void ::generatePipelineLoop(std::unique_ptr<IDISA::IDISA_Builder> &, const Kernels &);
+    friend void ::generateParallelPipeline(std::unique_ptr<IDISA::IDISA_Builder> &, const Kernels &);
 public:
     
     // Kernel Signatures and Module IDs
@@ -119,18 +116,10 @@ public:
         return iBuilder->CreateLoad(getScalarFieldPtr(fieldName), fieldName);
     }
 
-//    llvm::Value * getScalarField(llvm::Value * index) const {
-//        return iBuilder->CreateLoad(getScalarFieldPtr(index));
-//    }
-
     // Set the value of a scalar field for the current instance.
     void setScalarField(const std::string & fieldName, llvm::Value * value) const {
         iBuilder->CreateStore(value, getScalarFieldPtr(fieldName));
     }
-
-//    void setScalarField(llvm::Value * index, llvm::Value * value) const {
-//        iBuilder->CreateStore(value, getScalarFieldPtr(index));
-//    }
 
     // Synchronization actions for executing a kernel for a particular logical segment.
     //
@@ -203,6 +192,8 @@ protected:
     }
 
     void prepareStreamSetNameMap();
+
+    void linkExternalMethods() override { }
 
     virtual void prepareKernel();
 

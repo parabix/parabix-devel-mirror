@@ -7,7 +7,7 @@
 #include <string>
 #include <iostream>
 #include <fstream>
-#include <kernels/toolchain.h>
+#include <toolchain/toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
@@ -24,7 +24,6 @@
 #include <kernels/stdin_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <editd/editdscan_kernel.h>
-#include <kernels/pipeline.h>
 #include <editd/pattern_compiler.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -323,27 +322,17 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 typedef void (*preprocessFunctionType)(const int fd, char * output_data);
 
 preprocessFunctionType preprocessCodeGen() {                           
-    LLVMContext TheContext;
-    Module * M = new Module("preprocess", TheContext);
-    IDISA::IDISA_Builder * idb = IDISA::GetIDISA_Builder(M);
-    ParabixDriver pxDriver(idb);
+    ParabixDriver pxDriver("preprocess");
     preprocessPipeline(pxDriver);
-    auto f = reinterpret_cast<preprocessFunctionType>(pxDriver.getPointerToMain());
-    delete idb;
-    return f;
+    return reinterpret_cast<preprocessFunctionType>(pxDriver.getPointerToMain());
 }
 
 typedef void (*editdFunctionType)(char * byte_data, size_t filesize);
 
 editdFunctionType editdCodeGen(const std::vector<std::string> & patterns) {                           
-    LLVMContext TheContext;
-    Module * M = new Module("editd", TheContext);
-    IDISA::IDISA_Builder * const idb = IDISA::GetIDISA_Builder(M);
-    ParabixDriver pxDriver(idb);
+    ParabixDriver pxDriver("editd");
     editdPipeline(pxDriver, patterns);
-    auto f = reinterpret_cast<editdFunctionType>(pxDriver.getPointerToMain());
-    delete idb;
-    return f;
+    return reinterpret_cast<editdFunctionType>(pxDriver.getPointerToMain());
 }
 
 static char * chStream;
@@ -356,7 +345,6 @@ size_t file_size(const int fd) {
     }
     return st.st_size;
 }
-
 
 char * preprocess(preprocessFunctionType fn_ptr) {
     std::string fileName = inputFiles[0];

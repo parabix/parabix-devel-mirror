@@ -16,9 +16,10 @@ namespace IDISA {
 class IDISA_SSE_Builder : public IDISA_Builder {
 public:
   
-    IDISA_SSE_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth)
-    : IDISA_Builder(m, archBitWidth, bitBlockWidth, bitBlockWidth) {
+    IDISA_SSE_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth)
+    : IDISA_Builder(module, archBitWidth, bitBlockWidth, bitBlockWidth) {
     }
+
     virtual std::string getBuilderUniqueName() override;
     Value * hsimd_signmask(unsigned fw, Value * a) override;
     ~IDISA_SSE_Builder() {}
@@ -28,9 +29,10 @@ public:
 class IDISA_SSE2_Builder : public IDISA_SSE_Builder {
 public:
   
-    IDISA_SSE2_Builder(Module * m, unsigned archBitWidth, unsigned bitBlockWidth)
-    : IDISA_SSE_Builder(m, archBitWidth, bitBlockWidth) {
+    IDISA_SSE2_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth)
+    : IDISA_SSE_Builder(module, archBitWidth, bitBlockWidth) {
     }
+
     virtual std::string getBuilderUniqueName() override;
     Value * hsimd_signmask(unsigned fw, Value * a) override;
     Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;

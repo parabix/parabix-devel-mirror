@@ -26,3 +26,5 @@ kernels/type
 IDISA/types
 IR_Gen
 IR_Gen/types
+pipeline
+toolchain
