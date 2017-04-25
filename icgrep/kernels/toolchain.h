@@ -44,6 +44,7 @@ extern int SegmentSize;  // set from command line
 extern int BufferSegments;
 extern int ThreadNum;
 extern bool EnableAsserts;
+extern bool EnableCycleCounter;
 #ifdef CUDA_ENABLED
 extern bool NVPTX;
 extern int GroupNum;

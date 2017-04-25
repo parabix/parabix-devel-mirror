@@ -438,6 +438,12 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
 
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     Function * main = entryBlock->getParent();
+    Value * mCycleCounts = nullptr;
+    if (codegen::EnableCycleCounter) {
+        ArrayType * cycleCountArray = ArrayType::get(iBuilder->getInt64Ty(), kernels.size());
+        mCycleCounts = iBuilder->CreateAlloca(ArrayType::get(iBuilder->getInt64Ty(), kernels.size()));
+        iBuilder->CreateStore(Constant::getNullValue(cycleCountArray), mCycleCounts);
+    }
 
     // Create the basic blocks for the loop.
     BasicBlock * pipelineLoop = BasicBlock::Create(iBuilder->getContext(), "pipelineLoop", main);
@@ -448,9 +454,15 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
 
     iBuilder->CreateBr(pipelineLoop);
     iBuilder->SetInsertPoint(pipelineLoop);
-
+    
+    Value * cycleCountStart = nullptr;
+    Value * cycleCountEnd = nullptr;
+    if (codegen::EnableCycleCounter) {
+        cycleCountStart = iBuilder->CreateReadCycleCounter();
+    }
     Value * terminated = iBuilder->getFalse();
-    for (auto & kernel : kernels) {
+    for (unsigned k = 0; k < kernels.size(); k++) {
+        auto & kernel = kernels[k];
 
         const auto & inputs = kernel->getStreamInputs();
         const auto & outputs = kernel->getStreamOutputs();
@@ -486,7 +498,12 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
                 f->second = iBuilder->CreateSelect(lesser, processedItemCount, f->second);
             }
         }
-
+        if (codegen::EnableCycleCounter) {
+            cycleCountEnd = iBuilder->CreateReadCycleCounter();
+            Value * counterPtr = iBuilder->CreateGEP(mCycleCounts, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
+            iBuilder->CreateStore(iBuilder->CreateAdd(iBuilder->CreateLoad(counterPtr), iBuilder->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
+            cycleCountStart = cycleCountEnd;
+        }
         Value * const segNo = kernel->acquireLogicalSegmentNo();
         kernel->releaseLogicalSegmentNo(iBuilder->CreateAdd(segNo, iBuilder->getSize(1)));
     }
@@ -505,4 +522,18 @@ void generatePipelineLoop(IDISA::IDISA_Builder * iBuilder, const std::vector<Ker
 
     iBuilder->CreateCondBr(terminated, pipelineExit, pipelineLoop);
     iBuilder->SetInsertPoint(pipelineExit);
+    if (codegen::EnableCycleCounter) {
+        for (unsigned k = 0; k < kernels.size(); k++) {
+            auto & kernel = kernels[k];
+            const auto & inputs = kernel->getStreamInputs();
+            const auto & outputs = kernel->getStreamOutputs();
+            Value * items = inputs.size() > 0 ? kernel->getProcessedItemCount(inputs[0].name) : kernel->getProducedItemCount(outputs[0].name);
+            Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
+            Value * cycles = iBuilder->CreateLoad(iBuilder->CreateGEP(mCycleCounts, {iBuilder->getInt32(0), iBuilder->getInt32(k)}));
+            Value * fCycles = iBuilder->CreateUIToFP(cycles, iBuilder->getDoubleTy());
+            std::string formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
+            Value * stringPtr = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(formatString.c_str()), iBuilder->getInt8PtrTy());
+            iBuilder->CreateCall(iBuilder->GetDprintf(), {iBuilder->getInt32(2), stringPtr, fItems, fCycles, iBuilder->CreateFDiv(fCycles, fItems)});
+        }
+    }
 }

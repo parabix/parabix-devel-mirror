@@ -176,6 +176,8 @@ public:
     llvm::Value * CreateCountReverseZeroes(llvm::Value * value);
 
     llvm::Value * CreateCeilLog2(llvm::Value * value);
+    
+    llvm::Value * CreateReadCycleCounter();
 
 protected:
     llvm::Module *                  mMod;

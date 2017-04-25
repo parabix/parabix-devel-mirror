@@ -726,6 +726,12 @@ Value * CBuilder::GetString(StringRef Str) {
     return CreateInBoundsGEP(ptr, { zero, zero });
 }
 
+Value * CBuilder::CreateReadCycleCounter() {
+    Value * cycleCountFunc = Intrinsic::getDeclaration(mMod, Intrinsic::readcyclecounter);
+    return CreateCall(cycleCountFunc, std::vector<Value *>({}));
+}
+
+
 CBuilder::CBuilder(Module * const m, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes)
 : IRBuilder<>(m->getContext())
 , mMod(m)
