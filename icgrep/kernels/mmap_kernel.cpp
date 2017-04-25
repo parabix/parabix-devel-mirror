@@ -26,12 +26,13 @@ void MMapSourceKernel::linkExternalMethods() {
 }
 
 void MMapSourceKernel::generateInitializeMethod() {
-    BasicBlock * emptyFile = CreateBasicBlock("EmptyFile");
-    BasicBlock * nonEmptyFile = CreateBasicBlock("NonEmptyFile");
-    BasicBlock * exit = CreateBasicBlock("Exit");
-
+    BasicBlock * const emptyFile = CreateBasicBlock("EmptyFile");
+    BasicBlock * const nonEmptyFile = CreateBasicBlock("NonEmptyFile");
+    BasicBlock * const exit = CreateBasicBlock("Exit");
+    IntegerType * const sizeTy = iBuilder->getSizeTy();
     Value * const fd = getScalarField("fileDescriptor");
     Value * fileSize = iBuilder->CreateCall(mFileSizeFunction, fd);
+    fileSize = iBuilder->CreateZExtOrTrunc(fileSize, sizeTy);
     if (mCodeUnitWidth > 8) {
         fileSize = iBuilder->CreateUDiv(fileSize, iBuilder->getSize(mCodeUnitWidth / 8));
     }
@@ -39,7 +40,7 @@ void MMapSourceKernel::generateInitializeMethod() {
     iBuilder->CreateUnlikelyCondBr(isEmpty, emptyFile, nonEmptyFile);
     // we cannot mmap a 0 length file; just create a 1-page sized fake file buffer for simplicity
     iBuilder->SetInsertPoint(emptyFile);
-    Constant * pageSize = ConstantInt::get(fileSize->getType(), getpagesize());
+    Constant * pageSize = ConstantInt::get(sizeTy, getpagesize());
     Value * fakeFileBuffer = iBuilder->CreateAnonymousMMap(pageSize);
     iBuilder->CreateBr(exit);
 
@@ -51,7 +52,7 @@ void MMapSourceKernel::generateInitializeMethod() {
     PHINode * buffer = iBuilder->CreatePHI(fileBackedBuffer->getType(), 2);
     buffer->addIncoming(fakeFileBuffer, emptyFile);
     buffer->addIncoming(fileBackedBuffer, nonEmptyFile);
-    PHINode * size = iBuilder->CreatePHI(fileSize->getType(), 2);
+    PHINode * size = iBuilder->CreatePHI(sizeTy, 2);
     size->addIncoming(pageSize, emptyFile);
     size->addIncoming(fileSize, nonEmptyFile);
 
