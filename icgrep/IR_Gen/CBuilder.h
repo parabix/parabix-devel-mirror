@@ -182,7 +182,18 @@ public:
     llvm::Value * CreateCountForwardZeroes(llvm::Value * value);
 
     llvm::Value * CreateCountReverseZeroes(llvm::Value * value);
-
+    
+    // Useful bit manipulation operations  
+    llvm::Value * CreateResetLowestBit(llvm::Value * bits);   
+    
+    llvm::Value * CreateIsolateLowestBit(llvm::Value * bits);
+    
+    llvm::Value * CreateMaskToLowestBitInclusive(llvm::Value * bits);
+    
+    llvm::Value * CreateMaskToLowestBitExclusive(llvm::Value * bits);
+    
+    llvm::Value * CreateExtractBitField(llvm::Value * bits, llvm::Value * start, llvm::Value * length);
+    
     llvm::Value * CreateCeilLog2(llvm::Value * value);
     
     llvm::Value * CreateReadCycleCounter();

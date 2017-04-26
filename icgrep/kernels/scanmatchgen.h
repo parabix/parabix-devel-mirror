@@ -20,9 +20,6 @@ public:
 protected:
     void generateDoBlockMethod() override;
 private:
-    llvm::Value * makeForwardZeroesMask(llvm::Value * const value) const;
-    llvm::Value * resetLowestBit(llvm::Value * const value) const;
-private:
     const GrepType      mGrepType;
 };
 }

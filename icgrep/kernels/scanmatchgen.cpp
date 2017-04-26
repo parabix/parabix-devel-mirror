@@ -97,7 +97,7 @@ void ScanMatchKernel::generateDoBlockMethod() {
             // LOOP BODY
             // The loop body is entered if we have more matches to process.
             iBuilder->SetInsertPoint(processMatchesEntry);
-            Value * prior_breaks = iBuilder->CreateAnd(makeForwardZeroesMask(phiMatchWord), phiRecordBreaks);
+            Value * prior_breaks = iBuilder->CreateAnd(iBuilder->CreateMaskToLowestBitExclusive(phiMatchWord), phiRecordBreaks);
             // Within the loop we have a conditional block that is executed if there are any prior record breaks.
             Value * prior_breaks_cond = iBuilder->CreateICmpNE(prior_breaks, ConstantInt::getNullValue(sizeTy));
             iBuilder->CreateCondBr(prior_breaks_cond, prior_breaks_block, loop_final_block);
@@ -141,7 +141,7 @@ void ScanMatchKernel::generateDoBlockMethod() {
                 iBuilder->CreateCall(matcher, {mrn, mrs, mre, is});
             }
 
-            Value * remaining_matches = resetLowestBit(phiMatchWord);
+            Value * remaining_matches = iBuilder->CreateResetLowestBit(phiMatchWord);
             phiMatchWord->addIncoming(remaining_matches, loop_final_block);
 
             Value * remaining_breaks = iBuilder->CreateXor(phiRecordBreaks, prior_breaks);
@@ -186,14 +186,6 @@ void ScanMatchKernel::generateDoBlockMethod() {
     setScalarField("BlockNo", iBuilder->CreateAdd(blockNo, ConstantInt::get(blockNo->getType(), 1)));
     setScalarField("LineNum", phiFinalRecordNum);
     setProcessedItemCount("InputStream", phiFinalRecordStart);
-}
-
-inline Value * ScanMatchKernel::makeForwardZeroesMask(Value * const value) const {
-    return iBuilder->CreateAnd(iBuilder->CreateSub(value, ConstantInt::get(value->getType(), 1)), iBuilder->CreateNot(value));
-}
-
-inline Value * ScanMatchKernel::resetLowestBit(Value * const value) const {
-    return iBuilder->CreateAnd(iBuilder->CreateSub(value, ConstantInt::get(value->getType(), 1)), value);
 }
 
 ScanMatchKernel::ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType, const unsigned codeUnitWidth)

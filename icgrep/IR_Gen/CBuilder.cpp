@@ -696,6 +696,27 @@ Value * CBuilder::CreateCountReverseZeroes(Value * value) {
     return CreateCall(ctlzFunc, {value, ConstantInt::getFalse(getContext())});
 }
 
+Value * CBuilder::CreateResetLowestBit(Value * bits) {
+    return CreateAnd(bits, CreateSub(bits, ConstantInt::get(bits->getType(), 1)));
+}
+
+Value * CBuilder::CreateIsolateLowestBit(Value * bits) {
+    return CreateAnd(bits, CreateNeg(bits));
+}
+
+Value * CBuilder::CreateMaskToLowestBitInclusive(Value * bits) {
+    return CreateXor(bits, CreateSub(bits, ConstantInt::get(bits->getType(), 1)));
+}
+
+Value * CBuilder::CreateMaskToLowestBitExclusive(Value * bits) {
+    return CreateAnd(CreateSub(bits, ConstantInt::get(bits->getType(), 1)), CreateNot(bits));
+}
+
+Value * CBuilder::CreateExtractBitField(llvm::Value * bits, Value * start, Value * length) {
+    Constant * One = ConstantInt::get(bits->getType(), 1);
+    return CreateAnd(CreateLShr(bits, start), CreateSub(CreateShl(One, length), One));
+}
+
 Value * CBuilder::CreateCeilLog2(Value * value) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     CreateAssert(value, "CreateCeilLog2: value cannot be zero");
