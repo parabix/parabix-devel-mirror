@@ -12,15 +12,7 @@ namespace re {
 
 namespace UCD {
 
-
-class UnicodePropertyExpressionError : public std::exception {
-public:
-    UnicodePropertyExpressionError(const std::string && msg) noexcept : _msg(msg) {}
-    const char* what() const noexcept { return _msg.c_str();}
-private:
-    inline UnicodePropertyExpressionError() noexcept {}
-    const std::string _msg;
-};
+LLVM_ATTRIBUTE_NORETURN void UnicodePropertyExpressionError(std::string errmsg);
 
 void generateGraphemeClusterBoundaryRule(re::Name * const &property);
 bool resolvePropertyDefinition(re::Name * const property);

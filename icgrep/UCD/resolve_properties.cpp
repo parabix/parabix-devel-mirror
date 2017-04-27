@@ -17,6 +17,7 @@
 #include "UCD/PropertyObjects.h"
 #include "UCD/PropertyObjectTable.h"
 #include "UCD/PropertyValueAliases.h"
+#include <llvm/Support/ErrorHandling.h>
 
 using namespace UCD;
 using namespace re;
@@ -27,6 +28,12 @@ inline int GetPropertyValueEnumCode(const UCD::property_t type, const std::strin
 }
 
 namespace UCD {
+    
+void UnicodePropertyExpressionError(std::string errmsg) {
+    llvm::report_fatal_error(errmsg);
+
+}
+
 
 void generateGraphemeClusterBoundaryRule(Name * const &property) {
     // 3.1.1 Grapheme Cluster Boundary Rules
@@ -77,7 +84,7 @@ bool resolvePropertyDefinition(Name * const property) {
     if (property->hasNamespace()) {
         auto propit = alias_map.find(property->getNamespace());
         if (propit == alias_map.end()) {
-            throw UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead");
+            UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead");
         }
         auto theprop = propit->second;
         if (isa<BinaryPropertyObject>(property_object_table[theprop])){
@@ -126,13 +133,13 @@ std::string resolvePropertyFunction(Name * const property) {
     if (property->hasNamespace()) {
         auto propit = alias_map.find(property->getNamespace());
         if (propit == alias_map.end()) {
-            throw UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead");
+            UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead");
         }
         auto theprop = propit->second;
         if (EnumeratedPropertyObject * p = dyn_cast<EnumeratedPropertyObject>(property_object_table[theprop])){
             int valcode = p->GetPropertyValueEnumCode(value);
             if (valcode < 0) {
-                throw UnicodePropertyExpressionError("Erroneous property value '" + value + "' for " + property_full_name[theprop] + " property");
+                UnicodePropertyExpressionError("Erroneous property value '" + value + "' for " + property_full_name[theprop] + " property");
             }
             functionName = "__get_" + property_enum_name[theprop] + "_" + p->GetValueEnumName(valcode);
         }
@@ -140,23 +147,23 @@ std::string resolvePropertyFunction(Name * const property) {
             // Script extension property identified
             int valcode = GetPropertyValueEnumCode(sc, value);
             if (valcode < 0) {
-                throw UnicodePropertyExpressionError("Erroneous property value for script_extension property");
+                UnicodePropertyExpressionError("Erroneous property value for script_extension property");
             }
             functionName = "__get_scx_" + SC_ns::enum_names[valcode];
         }
         else if (isa<BinaryPropertyObject>(property_object_table[theprop])){
             auto valit = Binary_ns::aliases_only_map.find(value);
             if (valit == Binary_ns::aliases_only_map.end()) {
-                throw UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
+                UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
             }
             if (valit->second == Binary_ns::Y) {
                 functionName = "__get_" + property_enum_name[theprop] + "_Y";
             } else {
-                throw UnicodePropertyExpressionError("Unexpected property value for binary property " + property_full_name[theprop]);
+                UnicodePropertyExpressionError("Unexpected property value for binary property " + property_full_name[theprop]);
             }
         }
         else {
-            throw UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
+            UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
         }
     } else { // No namespace (property) name.
         // Try as a general category, script or binary property.
@@ -175,11 +182,11 @@ std::string resolvePropertyFunction(Name * const property) {
                     functionName = "__get_" + property_enum_name[theprop] + "_Y";
                 }
                 else {
-                    throw UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
+                    UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
                 }
             }
             else {
-                throw UnicodePropertyExpressionError("Expected a general category, script or binary property name but '" + value + "' was found instead");
+                UnicodePropertyExpressionError("Expected a general category, script or binary property name but '" + value + "' was found instead");
             }
         }
     }
@@ -190,7 +197,7 @@ std::string resolvePropertyFunction(Name * const property) {
 const std::string & getPropertyValueGrepString(const std::string & prop) {
     auto propit = alias_map.find(canonicalize_value_name(prop));
     if (propit == alias_map.end()) {
-        throw UnicodePropertyExpressionError("Expected a property name, but '" + prop + "' found instead");
+        UnicodePropertyExpressionError("Expected a property name, but '" + prop + "' found instead");
     }
     auto theprop = propit->second;
     if (EnumeratedPropertyObject * p = dyn_cast<EnumeratedPropertyObject>(property_object_table[theprop])){
@@ -199,7 +206,7 @@ const std::string & getPropertyValueGrepString(const std::string & prop) {
         return p->GetPropertyValueGrepString();
     }
 
-    throw UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
+    UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
 }
 
 UnicodeSet resolveUnicodeSet(Name * const name) {
@@ -210,7 +217,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             prop = canonicalize_value_name(prop);
             auto propit = alias_map.find(prop);
             if (propit == alias_map.end()) {
-                throw UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
+                UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
             }
             auto theprop = propit->second;
             if (EnumeratedPropertyObject * p = dyn_cast<EnumeratedPropertyObject>(property_object_table[theprop])){
@@ -219,11 +226,11 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             else if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(property_object_table[theprop])){
                 auto valit = Binary_ns::aliases_only_map.find(value);
                 if (valit == Binary_ns::aliases_only_map.end()) {
-                    throw UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
+                    UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
                 }
                 return p->GetCodepointSet(value);
             }           
-            throw UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
+            UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
         }
         else {
             // No namespace (property) name.   Try as a general category.
@@ -243,7 +250,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                     return p->GetCodepointSet(Binary_ns::Y);
                 }
                 else {
-                    throw UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
+                    UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
                 }
             }
             // Try special cases of Unicode TR #18
@@ -274,7 +281,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
 
         }
     }
-    throw UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
+    UnicodePropertyExpressionError("Expected a general category, script or binary property name, but '" + name->getName() + "' found instead");
 }
 
 }
