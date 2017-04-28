@@ -11,8 +11,6 @@
 #include <pablo/pablo_toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include "llvm/Linker/Linker.h"
 #include <llvm/Support/CommandLine.h>
 #include <cc/cc_compiler.h>
 #include <pablo/pablo_compiler.h>
@@ -20,8 +18,7 @@
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/streamset.h>
-#include <kernels/mmap_kernel.h>
-#include <kernels/stdin_kernel.h>
+#include <kernels/source_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <editd/editdscan_kernel.h>
 #include <editd/pattern_compiler.h>
@@ -67,7 +64,7 @@ std::vector<struct matchPosition> matchList;
 std::vector<std::vector<std::string>> pattGroups;
 
 void run_second_filter(int total_len, int pattern_segs, float errRate){
-    
+
     if(matchList.empty()) return;
 
     //remove the duplicates
@@ -125,42 +122,16 @@ void run_second_filter(int total_len, int pattern_segs, float errRate){
     std::cout << "total candidate from the second filter is " << count << std::endl;
 }
 
-extern "C" {
-std::mutex store_mutex;
-void wrapped_report_pos(size_t match_pos, int dist) {
-        struct matchPosition curMatch;
-        curMatch.pos = match_pos;
-        curMatch.dist = dist;
-
-        store_mutex.lock();
-        matchList.push_back(curMatch);
-        if(ShowPositions)
-            std::cout << "pos: " << match_pos << ", dist:" << dist << "\n";
-        store_mutex.unlock();
-    }
-
-}
-
-void icgrep_Linking(Module * m, ExecutionEngine * e) {
-    Module::FunctionListType & fns = m->getFunctionList();
-    for (Module::FunctionListType::iterator it = fns.begin(), it_end = fns.end(); it != it_end; ++it) {
-        std::string fnName = it->getName().str();
-        if (fnName == "wrapped_report_pos") {
-            e->addGlobalMapping(cast<GlobalValue>(it), (void *)&wrapped_report_pos);
-        }
-    }
-}
-
 void get_editd_pattern(int & pattern_segs, int & total_len) {
-  
+
     if (PatternFilename != "") {
         std::ifstream pattFile(PatternFilename.c_str());
         std::string r;
         if (pattFile.is_open()) {
             while (std::getline(pattFile, r)) {
                 pattVector.push_back(r);
-                pattern_segs ++; 
-                total_len += r.size(); 
+                pattern_segs ++;
+                total_len += r.size();
             }
             std::sort(pattVector.begin(), pattVector.end());
             unsigned i = 0;
@@ -170,16 +141,16 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
                 while(i < pattVector.size() && pattVector[i].substr(0, prefixLen) == prefix){
                     pattGroup.push_back(pattVector[i]);
                     i++;
-                } 
+                }
                 pattGroups.push_back(pattGroup);
             }
             pattFile.close();
         }
     }
-    
+
     // if there are no regexes specified through -e or -f, the first positional argument
     // must be a regex, not an input file.
-    
+
     if (pattVector.size() == 0) {
         pattVector.push_back(inputFiles[0]);
         inputFiles.erase(inputFiles.begin());
@@ -204,15 +175,29 @@ void buildPatternKernel(PabloKernel * const kernel, const std::vector<std::strin
     pablo_function_passes(kernel);
 }
 
+std::mutex store_mutex;
+void wrapped_report_pos(size_t match_pos, int dist) {
+    struct matchPosition curMatch;
+    curMatch.pos = match_pos;
+    curMatch.dist = dist;
+
+    store_mutex.lock();
+    matchList.push_back(curMatch);
+    if(ShowPositions)
+        std::cout << "pos: " << match_pos << ", dist:" << dist << "\n";
+    store_mutex.unlock();
+}
 
 void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & patterns) {
-    
-    IDISA::IDISA_Builder * const iBuilder = pxDriver.getIDISA_Builder();
-    Module * const m = iBuilder->getModule();
-    Type * const sizeTy = iBuilder->getSizeTy();
-    Type * const voidTy = iBuilder->getVoidTy();
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(iBuilder->getBitBlockType(), 8), 1), 0);
-    
+
+    IDISA::IDISA_Builder * const idb = pxDriver.getIDISA_Builder();
+    Module * const m = idb->getModule();
+    Type * const sizeTy = idb->getSizeTy();
+    Type * const voidTy = idb->getVoidTy();
+    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(idb->getBitBlockType(), 8), 1), 0);
+
+    idb->LinkFunction("wrapped_report_pos", &wrapped_report_pos);
+
     Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, sizeTy, nullptr));
     main->setCallingConv(CallingConv::C);
     auto args = main->arg_begin();
@@ -220,31 +205,30 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     inputStream->setName("input");
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
-    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
+    idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
+    auto ChStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(4)));
 
-    auto ChStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(4)));
-
-    auto mmapK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(iBuilder, inputType));
+    auto mmapK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(idb, inputType));
     mmapK->setInitialArguments({inputStream, fileSize});
 
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
-    auto MatchResults = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance + 1)));
+    auto MatchResults = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(idb, idb->getStreamSetTy(editDistance + 1)));
 
     auto editdk = pxDriver.addKernelInstance(make_unique<PabloKernel>(
-        iBuilder, "editd", std::vector<Binding>{{iBuilder->getStreamSetTy(4), "pat"}}, std::vector<Binding>{{iBuilder->getStreamSetTy(editDistance + 1), "E"}}
+        idb, "editd", std::vector<Binding>{{idb->getStreamSetTy(4), "pat"}}, std::vector<Binding>{{idb->getStreamSetTy(editDistance + 1), "E"}}
         ));
 
     buildPatternKernel(reinterpret_cast<PabloKernel *>(editdk), patterns);
     pxDriver.makeKernelCall(editdk, {ChStream}, {MatchResults});
 
-    auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(iBuilder, editDistance));
+    auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(idb, editDistance));
     pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
-        
+
     pxDriver.generatePipelineIR();
 
-    iBuilder->CreateRetVoid();
+    idb->CreateRetVoid();
 
     pxDriver.linkAndFinalize();
 }
@@ -274,16 +258,16 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
     IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
     Module * m = iBuilder->getModule();
     Type * mBitBlockType = iBuilder->getBitBlockType();
-    
+
 
     Type * const voidTy = iBuilder->getVoidTy();
     Type * const int32Ty = iBuilder->getInt32Ty();
     Type * const outputType = PointerType::get(ArrayType::get(mBitBlockType, 4), 0);
-    
+
     Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, int32Ty, outputType, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
-    
+
     Value * const fileDescriptor = &*(args++);
     fileDescriptor->setName("fileDescriptor");
     Value * const outputStream = &*(args++);
@@ -291,9 +275,9 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main));
 
-    auto ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+    auto ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
 
-    auto mmapK = pxDriver.addKernelInstance(make_unique<kernel::MMapSourceKernel>(iBuilder, 1));
+    auto mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, 1));
     mmapK->setInitialArguments({fileDescriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
@@ -301,16 +285,16 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
     auto s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
-    auto CCResults = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(4)), outputStream);
-
-
+    auto CCResults = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputStream));
 
     auto ccck = pxDriver.addKernelInstance(make_unique<PabloKernel>(
         iBuilder, "ccc", std::vector<Binding>{{iBuilder->getStreamSetTy(8), "basis"}}, std::vector<Binding>{{iBuilder->getStreamSetTy(4), "pat"}}
-        ));
+    ));
+
     buildPreprocessKernel(reinterpret_cast<PabloKernel *>(ccck));
+
     pxDriver.makeKernelCall(ccck, {BasisBits}, {CCResults});
-             
+
     pxDriver.generatePipelineIR();
 
     iBuilder->CreateRetVoid();
@@ -321,7 +305,7 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 
 typedef void (*preprocessFunctionType)(const int fd, char * output_data);
 
-preprocessFunctionType preprocessCodeGen() {                           
+preprocessFunctionType preprocessCodeGen() {
     ParabixDriver pxDriver("preprocess");
     preprocessPipeline(pxDriver);
     return reinterpret_cast<preprocessFunctionType>(pxDriver.getPointerToMain());
@@ -329,7 +313,7 @@ preprocessFunctionType preprocessCodeGen() {
 
 typedef void (*editdFunctionType)(char * byte_data, size_t filesize);
 
-editdFunctionType editdCodeGen(const std::vector<std::string> & patterns) {                           
+editdFunctionType editdCodeGen(const std::vector<std::string> & patterns) {
     ParabixDriver pxDriver("editd");
     editdPipeline(pxDriver, patterns);
     return reinterpret_cast<editdFunctionType>(pxDriver.getPointerToMain());
@@ -361,17 +345,11 @@ char * preprocess(preprocessFunctionType fn_ptr) {
     }
     fn_ptr(fd, chStream);
     close(fd);
-    return chStream;   
+    return chStream;
 }
 
 void editd(editdFunctionType fn_ptr, char * inputStream, size_t size) {
- 
-    if (size == 0) {
-        inputStream = nullptr;
-    }
-
     fn_ptr(inputStream, size);
-    
 }
 
 std::mutex count_mutex;
@@ -397,12 +375,12 @@ void * DoEditd(void *)
     pthread_exit(NULL);
 }
 
-#ifdef CUDA_ENABLED 
+#ifdef CUDA_ENABLED
 
 #define GROUPTHREADS 64
 #define GROUPBLOCKS 64
 
-void editdGPUCodeGen(unsigned patternLen){  
+void editdGPUCodeGen(unsigned patternLen){
     LLVMContext TheContext;
     Module * M = new Module("editd-gpu", TheContext);
     IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_GPU_Builder(M);
@@ -425,13 +403,13 @@ void editdGPUCodeGen(unsigned patternLen){
     MMapSourceKernel mmapK(iBuilder);
     mmapK.generateKernel({}, {&CCStream});
 
-    kernel::editdGPUKernel editdk(iBuilder, editDistance, patternLen); 
+    kernel::editdGPUKernel editdk(iBuilder, editDistance, patternLen);
     editdk.generateKernel({&CCStream}, {&ResultStream});
 
     Function * const main = cast<Function>(M->getOrInsertFunction("GPU_Main", voidTy, inputTy, inputSizeTy, patternPtrTy, outputTy, stridesTy, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
-    
+
     Value * const inputStream = &*(args++);
     inputStream->setName("input");
     Value * const inputSizePtr = &*(args++);
@@ -442,7 +420,7 @@ void editdGPUCodeGen(unsigned patternLen){
     resultStream->setName("resultStream");
     Value * const stridesPtr = &*(args++);
     stridesPtr->setName("stridesPtr");
-    
+
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main,0));
 
     Function * tidFunc = M->getFunction("llvm.nvvm.read.ptx.sreg.tid.x");
@@ -466,14 +444,14 @@ void editdGPUCodeGen(unsigned patternLen){
     iBuilder->CreateStore(Constant::getNullValue(strideCarryTy), strideCarry);
 
     editdk.setInitialArguments({pattStream, strideCarry});
-   
+
     generatePipelineLoop(iBuilder, {&mmapK, &editdk});
-        
+
     iBuilder->CreateRetVoid();
-    
+
     MDNode * Node = MDNode::get(M->getContext(),
                                 {llvm::ValueAsMetadata::get(main),
-                                 MDString::get(M->getContext(), "kernel"), 
+                                 MDString::get(M->getContext(), "kernel"),
                                  ConstantAsMetadata::get(ConstantInt::get(iBuilder->getInt32Ty(), 1))});
     NamedMDNode *NMD = M->getOrInsertNamedMetadata("nvvm.annotations");
     NMD->addOperand(Node);
@@ -498,7 +476,7 @@ void mergeGPUCodeGen(){
     Function * const main = cast<Function>(M->getOrInsertFunction("mergeResult", voidTy, resultTy, stridesTy, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
-    
+
     Value * const resultStream = &*(args++);
     resultStream->setName("resultStream");
     Value * const stridesPtr = &*(args++);
@@ -508,7 +486,7 @@ void mergeGPUCodeGen(){
     BasicBlock * strideLoopCond = BasicBlock::Create(iBuilder->getContext(), "strideLoopCond", main, 0);
     BasicBlock * strideLoopBody = BasicBlock::Create(iBuilder->getContext(), "strideLoopBody", main, 0);
     BasicBlock * stridesDone = BasicBlock::Create(iBuilder->getContext(), "stridesDone", main, 0);
-    
+
     iBuilder->SetInsertPoint(entryBlock);
 
     Function * tidFunc = M->getFunction("llvm.nvvm.read.ptx.sreg.tid.x");
@@ -527,24 +505,24 @@ void mergeGPUCodeGen(){
     strideNo->addIncoming(ConstantInt::get(int32ty, 0), entryBlock);
     Value * notDone = iBuilder->CreateICmpULT(strideNo, strides);
     iBuilder->CreateCondBr(notDone, strideLoopBody, stridesDone);
- 
+
     iBuilder->SetInsertPoint(strideLoopBody);
     Value * myResultStreamPtr = iBuilder->CreateGEP(resultStreamPtr, {iBuilder->CreateMul(strideBlocks, strideNo)});
     Value * myResultStream = iBuilder->CreateLoad(iBuilder->CreateGEP(myResultStreamPtr, {iBuilder->getInt32(0), bid}));
     for (unsigned i=1; i<GROUPBLOCKS; i++){
         Value * nextStreamPtr = iBuilder->CreateGEP(myResultStreamPtr, {iBuilder->CreateMul(outputBlocks, iBuilder->getInt32(i)), bid});
         myResultStream = iBuilder->CreateOr(myResultStream, iBuilder->CreateLoad(nextStreamPtr));
-    }    
+    }
     iBuilder->CreateStore(myResultStream, iBuilder->CreateGEP(myResultStreamPtr, {iBuilder->getInt32(0), bid}));
     strideNo->addIncoming(iBuilder->CreateAdd(strideNo, ConstantInt::get(int32ty, 1)), strideLoopBody);
     iBuilder->CreateBr(strideLoopCond);
-    
+
     iBuilder->SetInsertPoint(stridesDone);
     iBuilder->CreateRetVoid();
-    
+
     MDNode * Node = MDNode::get(M->getContext(),
                                 {llvm::ValueAsMetadata::get(main),
-                                 MDString::get(M->getContext(), "kernel"), 
+                                 MDString::get(M->getContext(), "kernel"),
                                  ConstantAsMetadata::get(ConstantInt::get(iBuilder->getInt32Ty(), 1))});
     NamedMDNode *NMD = M->getOrInsertNamedMetadata("nvvm.annotations");
     NMD->addOperand(Node);
@@ -554,7 +532,7 @@ void mergeGPUCodeGen(){
 }
 
 editdFunctionType editdScanCPUCodeGen() {
-                            
+
     LLVMContext TheContext;
     Module * M = new Module("editd", TheContext);
     IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_Builder(M);
@@ -571,28 +549,28 @@ editdFunctionType editdScanCPUCodeGen() {
     mmapK.generateKernel({}, {&MatchResults});
 
     kernel::editdScanKernel editdScanK(iBuilder, editDistance);
-    editdScanK.generateKernel({&MatchResults}, {});                
-   
+    editdScanK.generateKernel({&MatchResults}, {});
+
     Function * const main = cast<Function>(M->getOrInsertFunction("CPU_Main", voidTy, inputType, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
-    
+
     Value * const inputStream = &*(args++);
     inputStream->setName("input");
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
-    
+
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main,0));
 
     MatchResults.setStreamSetBuffer(inputStream);
     mmapK.setInitialArguments({fileSize});
-   
+
     generatePipelineLoop(iBuilder, {&mmapK, &editdScanK});
-        
+
     iBuilder->CreateRetVoid();
 
     editdEngine = JIT_to_ExecutionEngine(M);
-    
+
     editdEngine->finalizeObject();
 
     return reinterpret_cast<editdFunctionType>(editdEngine->getPointerToFunction(main));
@@ -609,22 +587,22 @@ int main(int argc, char *argv[]) {
 
     get_editd_pattern(pattern_segs, total_len);
 
-#ifdef CUDA_ENABLED 
+#ifdef CUDA_ENABLED
     codegen::BlockSize = 64;
 #endif
 
     preprocessFunctionType preprocess_ptr = preprocessCodeGen();
     preprocess(preprocess_ptr);
 
-#ifdef CUDA_ENABLED  
-    setNVPTXOption();    
+#ifdef CUDA_ENABLED
+    setNVPTXOption();
     if(codegen::NVPTX){
 
         std::ifstream t(PatternFilename);
         if (!t.is_open()) {
             std::cerr << "Error: cannot open " << PatternFilename << " for processing. Skipped.\n";
             exit(-1);
-        }  
+        }
         std::string patterns((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
 
         editdGPUCodeGen(patterns.length()/GROUPTHREADS - 1);
@@ -636,13 +614,13 @@ int main(int argc, char *argv[]) {
         editdFunctionType editd_ptr = editdScanCPUCodeGen();
 
         editd(editd_ptr, (char*)rslt, size);
-        
+
         run_second_filter(pattern_segs, total_len, 0.15);
 
         return 0;
     }
 #endif
-   
+
     if(pattVector.size() == 1){
         editdFunctionType editd_ptr = editdCodeGen(pattVector);
         editd(editd_ptr, chStream, size);

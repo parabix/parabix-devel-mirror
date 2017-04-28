@@ -56,10 +56,12 @@ message(STATUS "Found Boost_LIBRARY_DIR: ${Boost_LIBRARY_DIR}")
 include_directories("${Boost_INCLUDE_DIRS}")
 link_directories(${Boost_LIBRARY_DIR})
 
-SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/pipeline.cpp toolchain/object_cache.cpp)
+SET(OBJECT_CACHE_SRC toolchain/object_cache.cpp)
+
+SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/pipeline.cpp ${OBJECT_CACHE_SRC})
 
 SET(KERNEL_SRC kernels/kernel.cpp kernels/streamset.cpp kernels/interface.cpp)
-SET(KERNEL_SRC ${KERNEL_SRC} kernels/s2p_kernel.cpp kernels/mmap_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdin_kernel.cpp kernels/stdout_kernel.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp)
 
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp IR_Gen/idisa_nvptx_builder.cpp IR_Gen/idisa_target.cpp)
 

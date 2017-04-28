@@ -134,8 +134,6 @@ public:
 
     void releaseLogicalSegmentNo(llvm::Value * nextSegNo) const;
 
-    llvm::Value * getConsumerState(const std::string & name) const;
-
     // Get a parameter by name.
     llvm::Argument * getParameter(llvm::Function * f, const std::string & name) const;
 
@@ -257,6 +255,7 @@ protected:
         return mIsFinal;
     }
 
+    llvm::BasicBlock * CreateWaitForConsumers() const;
 
     llvm::BasicBlock * CreateBasicBlock(std::string && name) const;
 
@@ -309,7 +308,9 @@ protected:
 
 private:
 
-    void setConsumerState(const std::string & name, llvm::Value * value) const;
+    llvm::Value * getConsumerLock(const std::string & name) const;
+
+    void setConsumerLock(const std::string & name, llvm::Value * value) const;
 
     llvm::Value * computeBlockIndex(const std::vector<Binding> & binding, const std::string & name, llvm::Value * itemCount) const;
 

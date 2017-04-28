@@ -29,28 +29,30 @@ Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) 
 
 // ssize_t write(int fildes, const void *buf, size_t nbyte);
 Value * CBuilder::CreateWriteCall(Value * fileDescriptor, Value * buf, Value * nbyte) {
+    PointerType * voidPtrTy = getVoidPtrTy();
     Function * write = mMod->getFunction("write");
     if (write == nullptr) {
         IntegerType * sizeTy = getSizeTy();
         IntegerType * int32Ty = getInt32Ty();
-        PointerType * int8PtrTy = getInt8PtrTy();
         write = cast<Function>(mMod->getOrInsertFunction("write",
                                                         AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias),
-                                                        sizeTy, int32Ty, int8PtrTy, sizeTy, nullptr));
+                                                        sizeTy, int32Ty, voidPtrTy, sizeTy, nullptr));
     }
+    buf = CreatePointerCast(buf, voidPtrTy);
     return CreateCall(write, {fileDescriptor, buf, nbyte});
 }
 
 Value * CBuilder::CreateReadCall(Value * fileDescriptor, Value * buf, Value * nbyte) {
+    PointerType * voidPtrTy = getVoidPtrTy();
     Function * readFn = mMod->getFunction("read");
     if (readFn == nullptr) {
         IntegerType * sizeTy = getSizeTy();
         IntegerType * int32Ty = getInt32Ty();
-        PointerType * int8PtrTy = getInt8PtrTy();
         readFn = cast<Function>(mMod->getOrInsertFunction("read",
                                                          AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias),
-                                                         sizeTy, int32Ty, int8PtrTy, sizeTy, nullptr));
+                                                         sizeTy, int32Ty, voidPtrTy, sizeTy, nullptr));
     }
+    buf = CreatePointerCast(buf, voidPtrTy);
     return CreateCall(readFn, {fileDescriptor, buf, nbyte});
 }
 

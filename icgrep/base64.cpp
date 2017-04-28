@@ -13,7 +13,7 @@
 #include <toolchain/toolchain.h>
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
-#include <kernels/mmap_kernel.h>
+#include <kernels/source_kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/radix64.h>
 #include <kernels/stdout_kernel.h>
@@ -61,7 +61,7 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
     
     const unsigned bufferSegments = codegen::BufferSegments;
     
-    SourceFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    SourceBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
     CircularBuffer Expanded3_4Out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments);
     CircularBuffer Radix64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments);

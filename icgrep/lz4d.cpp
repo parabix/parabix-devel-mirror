@@ -23,9 +23,8 @@
 #include <kernels/cc_kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/s2p_kernel.h>
-#include <kernels/stdin_kernel.h>
+#include <kernels/source_kernel.h>
 #include <kernels/stdout_kernel.h>
-#include <kernels/mmap_kernel.h>
 #include <kernels/lz4_index_decoder.h>
 #include <kernels/lz4_bytestream_decoder.h>
 
@@ -72,7 +71,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
 
-    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
     StreamSetBuffer * const BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
     StreamSetBuffer * const Extenders = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
     StreamSetBuffer * const LiteralIndexes = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments));
@@ -80,7 +79,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
     StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), decompressBufBlocks));
 
     
-    kernel::KernelBuilder * sourceK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize));
+    kernel::KernelBuilder * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize));
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
 

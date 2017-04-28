@@ -6,7 +6,7 @@
 
 #include "grep_engine.h"
 #include <llvm/IR/Module.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
+//#include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/CommandLine.h>
 #include <boost/filesystem.hpp>
@@ -18,11 +18,10 @@
 #include <kernels/linebreak_kernel.h>
 #include <kernels/streams_merge.h>
 #include <kernels/match_count.h>
-#include <kernels/mmap_kernel.h>
+#include <kernels/source_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/scanmatchgen.h>
 #include <kernels/streamset.h>
-#include <kernels/stdin_kernel.h>
 #include <pablo/pablo_kernel.h>
 #include <re/re_cc.h>
 #include <re/re_toolchain.h>
@@ -227,9 +226,9 @@ void GrepEngine::grepCodeGen(const std::string & moduleName, std::vector<re::RE 
         fileIdx = &*(args++);
         fileIdx->setName("fileIdx");
 
-        ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(idb, idb->getStreamSetTy(1, 8)));
+        ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
 
-        sourceK = pxDriver.addKernelInstance(make_unique<kernel::FileSourceKernel>(idb, idb->getInt8PtrTy(), segmentSize));
+        sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(idb, idb->getInt8PtrTy(), segmentSize));
         sourceK->setInitialArguments({buffer, length});
 
     } else {
@@ -244,13 +243,14 @@ void GrepEngine::grepCodeGen(const std::string & moduleName, std::vector<re::RE 
         fileIdx = &*(args++);
         fileIdx->setName("fileIdx");
 
+        ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
+
         if (grepSource == GrepSource::File) {
-            ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(idb, idb->getStreamSetTy(1, 8)));
             sourceK = pxDriver.addKernelInstance(make_unique<kernel::MMapSourceKernel>(idb, segmentSize));
             sourceK->setInitialArguments({fileDescriptor});
         } else { // if (grepSource == GrepSource::StdIn) {
-            ByteStream = pxDriver.addBuffer(make_unique<ExtensibleBuffer>(idb, idb->getStreamSetTy(1, 8), segmentSize));
-            sourceK = pxDriver.addKernelInstance(make_unique<kernel::StdInKernel>(idb, segmentSize));
+            sourceK = pxDriver.addKernelInstance(make_unique<kernel::ReadSourceKernel>(idb, segmentSize));
+            sourceK->setInitialArguments({idb->getInt32(STDIN_FILENO)});
         }
     }
 

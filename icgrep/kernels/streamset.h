@@ -20,13 +20,12 @@ public:
 
     enum class BufferKind : unsigned {
         BlockBuffer
-        , ExternalFileBuffer
-        , SourceFileBuffer
+        , SourceBuffer
+        , ExternalBuffer
         , CircularBuffer
         , CircularCopybackBuffer
         , SwizzledCopybackBuffer
         , ExpandableBuffer
-        , ExtensibleBuffer
     };
 
     BufferKind getBufferKind() const {
@@ -142,32 +141,13 @@ protected:
     llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const override;
 };
 
-class ExternalFileBuffer final : public StreamSetBuffer {
+class SourceBuffer final : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {
-        return b->getBufferKind() == BufferKind::ExternalFileBuffer;
+        return b->getBufferKind() == BufferKind::SourceBuffer;
     }
 
-    ExternalFileBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, unsigned AddressSpace = 0);
-
-    void setStreamSetBuffer(llvm::Value * ptr);
-
-    // Can't allocate - raise an error. */
-    void allocateBuffer() override;
-
-    llvm::Value * getLinearlyAccessibleItems(llvm::Value * self, llvm::Value * fromPosition) const override;
-
-protected:
-    llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const override;
-};
-
-class SourceFileBuffer final : public StreamSetBuffer {
-public:
-    static inline bool classof(const StreamSetBuffer * b) {
-        return b->getBufferKind() == BufferKind::SourceFileBuffer;
-    }
-
-    SourceFileBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, unsigned AddressSpace = 0);
+    SourceBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, unsigned AddressSpace = 0);
 
     void setBaseAddress(llvm::Value * self, llvm::Value * addr) const override;
 
@@ -182,38 +162,26 @@ protected:
     llvm::Value * getBaseAddress(llvm::Value * self) const override;
 
     llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const override;
+
 };
 
-class ExtensibleBuffer final : public StreamSetBuffer {
+class ExternalBuffer final : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {
-        return b->getBufferKind() == BufferKind::ExtensibleBuffer;
+        return b->getBufferKind() == BufferKind::ExternalBuffer;
     }
 
-    ExtensibleBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
+    ExternalBuffer(IDISA::IDISA_Builder * b, llvm::Type * type, llvm::Value * addr, unsigned AddressSpace = 0);
 
-    llvm::Value * getLinearlyAccessibleItems(llvm::Value * self,llvm::Value * fromPosition) const override;
-
+    // Can't allocate - raise an error. */
     void allocateBuffer() override;
 
-    void reserveBytes(llvm::Value * self, llvm::Value * required) const override;
-
-    void setBufferedSize(llvm::Value * self, llvm::Value * size) const override;
-
-    llvm::Value * getBufferedSize(llvm::Value * self) const override;
-
-    void releaseBuffer(llvm::Value * self) const override;
+    llvm::Value * getLinearlyAccessibleItems(llvm::Value * self, llvm::Value * fromPosition) const override;
 
 protected:
-
-    llvm::Value * roundUpToPageSize(llvm::Value * const value) const;
-
-    llvm::Value * getBaseAddress(llvm::Value * self) const override;
-
     llvm::Value * getStreamSetBlockPtr(llvm::Value * self, llvm::Value * blockNo) const override;
-
 };
-    
+
 class CircularBuffer final : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {

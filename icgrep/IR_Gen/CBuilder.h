@@ -37,7 +37,6 @@ public:
         mMod = m;
     }
 
-
     llvm::Value * CreateMalloc(llvm::Value * size);
 
     llvm::Value * CreateAlignedMalloc(llvm::Value * size, const unsigned alignment);
@@ -153,6 +152,7 @@ public:
     }
     
     llvm::PointerType * getVoidPtrTy() const;
+
     llvm::PointerType * getFILEptrTy();
     
     inline unsigned getCacheAlignment() const {

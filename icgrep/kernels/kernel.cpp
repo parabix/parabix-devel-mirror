@@ -33,7 +33,7 @@ static const std::string TERMINATION_SIGNAL = "terminationSignal";
 
 static const std::string BUFFER_PTR_SUFFIX = "_bufferPtr";
 
-static const std::string CONSUMER_SUFFIX = "_cls";
+static const std::string CONSUMER_SUFFIX = "_consumerLocks";
 
 using namespace llvm;
 using namespace kernel;
@@ -233,7 +233,7 @@ inline void KernelBuilder::callGenerateInitializeMethod() {
         setScalarField(binding.name, &*(args++));
     }
     for (auto binding : mStreamSetOutputs) {
-        setConsumerState(binding.name, &*(args++));
+        setConsumerLock(binding.name, &*(args++));
     }
     generateInitializeMethod();
     iBuilder->CreateRetVoid();
@@ -371,11 +371,11 @@ void KernelBuilder::releaseLogicalSegmentNo(Value * nextSegNo) const {
     iBuilder->CreateAtomicStoreRelease(nextSegNo, getScalarFieldPtr(getInstance(), LOGICAL_SEGMENT_NO_SCALAR));
 }
 
-llvm::Value * KernelBuilder::getConsumerState(const std::string & name) const {
+llvm::Value * KernelBuilder::getConsumerLock(const std::string & name) const {
     return getScalarField(name + CONSUMER_SUFFIX);
 }
 
-void KernelBuilder::setConsumerState(const std::string & name, llvm::Value * value) const {
+void KernelBuilder::setConsumerLock(const std::string & name, llvm::Value * value) const {
     setScalarField(name + CONSUMER_SUFFIX, value);
 }
 
@@ -488,6 +488,60 @@ void KernelBuilder::reserveBytes(const std::string & name, llvm::Value * value) 
     buf->reserveBytes(getStreamSetBufferPtr(name), iBuilder->CreateAdd(itemCount, value));
 }
 
+BasicBlock * KernelBuilder::CreateWaitForConsumers() const {
+
+    const auto consumers = getStreamOutputs();
+    BasicBlock * const entry = iBuilder->GetInsertBlock();
+    if (consumers.empty()) {
+        return entry;
+    } else {
+        Function * const parent = entry->getParent();
+        IntegerType * const sizeTy = iBuilder->getSizeTy();
+        ConstantInt * const zero = iBuilder->getInt32(0);
+        ConstantInt * const one = iBuilder->getInt32(1);
+        ConstantInt * const size0 = iBuilder->getSize(0);
+
+        Value * const segNo = acquireLogicalSegmentNo();
+        const auto n = consumers.size();
+        BasicBlock * load[n + 1];
+        BasicBlock * wait[n];
+        for (unsigned i = 0; i < n; ++i) {
+            load[i] = BasicBlock::Create(iBuilder->getContext(), consumers[i].name + "Load", parent);
+            wait[i] = BasicBlock::Create(iBuilder->getContext(), consumers[i].name + "Wait", parent);
+        }
+        load[n] = BasicBlock::Create(iBuilder->getContext(), "Resume", parent);
+        iBuilder->CreateBr(load[0]);
+        for (unsigned i = 0; i < n; ++i) {
+
+            iBuilder->SetInsertPoint(load[i]);
+            Value * const outputConsumers = getConsumerLock(consumers[i].name);
+
+            Value * const consumerCount = iBuilder->CreateLoad(iBuilder->CreateGEP(outputConsumers, {zero, zero}));
+            Value * const consumerPtr = iBuilder->CreateLoad(iBuilder->CreateGEP(outputConsumers, {zero, one}));
+            Value * const noConsumers = iBuilder->CreateICmpEQ(consumerCount, size0);
+            iBuilder->CreateUnlikelyCondBr(noConsumers, load[i + 1], wait[i]);
+
+            iBuilder->SetInsertPoint(wait[i]);
+            PHINode * const consumerPhi = iBuilder->CreatePHI(sizeTy, 2);
+            consumerPhi->addIncoming(size0, load[i]);
+
+            Value * const conSegPtr = iBuilder->CreateLoad(iBuilder->CreateGEP(consumerPtr, consumerPhi));
+            Value * const processedSegmentCount = iBuilder->CreateAtomicLoadAcquire(conSegPtr);
+            Value * const ready = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
+            assert (ready->getType() == iBuilder->getInt1Ty());
+            Value * const nextConsumerIdx = iBuilder->CreateAdd(consumerPhi, iBuilder->CreateZExt(ready, sizeTy));
+            consumerPhi->addIncoming(nextConsumerIdx, wait[i]);
+            Value * const next = iBuilder->CreateICmpEQ(nextConsumerIdx, consumerCount);
+            iBuilder->CreateCondBr(next, load[i + 1], wait[i]);
+        }
+
+        BasicBlock * const exit = load[n];
+        iBuilder->SetInsertPoint(exit);
+        return exit;
+    }
+
+}
+
 Value * KernelBuilder::getStreamSetBufferPtr(const std::string & name) const {
     return getScalarField(name + BUFFER_PTR_SUFFIX);
 }
@@ -547,6 +601,7 @@ void KernelBuilder::initializeInstance() {
     if (LLVM_UNLIKELY(getInstance() == nullptr)) {
         report_fatal_error("Cannot initialize " + getName() + " before calling createInstance()");
     }
+
     std::vector<Value *> args;
     args.reserve(1 + mInitialArguments.size() + mStreamSetInputBuffers.size() + (mStreamSetOutputBuffers.size() * 2));
     args.push_back(getInstance());
@@ -601,7 +656,6 @@ void KernelBuilder::initializeInstance() {
         iBuilder->CreateStore(iBuilder->CreatePointerCast(consumerSegNoArray, sizePtrPtrTy), consumerSegNoArrayPtr);
         args.push_back(outputConsumers);
     }
-
 
     iBuilder->CreateCall(getInitFunction(), args);
 }

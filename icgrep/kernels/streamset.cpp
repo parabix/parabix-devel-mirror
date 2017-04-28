@@ -28,21 +28,23 @@ ArrayType * resolveStreamSetType(IDISA_Builder * const b, Type * type);
 StructType * resolveExpandableStreamSetType(IDISA_Builder * const b, Type * type);
 
 void StreamSetBuffer::allocateBuffer() {
-    Type * const ty = getType();
-    ConstantInt * blocks = iBuilder->getSize(mBufferBlocks);
-    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(ty, iBuilder->getSize(mBufferBlocks));
-    Constant * width = ConstantExpr::getMul(ConstantExpr::getSizeOf(ty), blocks);
-    iBuilder->CreateMemZero(mStreamSetBufferPtr, width, iBuilder->getCacheAlignment());
+    if (LLVM_LIKELY(mStreamSetBufferPtr == nullptr)) {
+        Type * const ty = getType();
+        mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(ty, iBuilder->getSize(mBufferBlocks));
+        iBuilder->CreateAlignedStore(Constant::getNullValue(ty), mStreamSetBufferPtr, iBuilder->getCacheAlignment());
+    } else {
+        report_fatal_error("StreamSetBuffer::allocateBuffer() was called twice on the same stream set");
+    }
 }
 
 Value * StreamSetBuffer::getStreamBlockPtr(Value * self, Value * streamIndex, Value * blockIndex, const bool /* readOnly */) const {
     iBuilder->CreateAssert(iBuilder->CreateICmpULT(streamIndex, getStreamSetCount(self)), "StreamSetBuffer: out-of-bounds stream access");
-    return iBuilder->CreateGEP(getStreamSetBlockPtr(getBaseAddress(self), blockIndex), {iBuilder->getInt32(0), streamIndex});
+    return iBuilder->CreateGEP(getStreamSetBlockPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex});
 }
 
 Value * StreamSetBuffer::getStreamPackPtr(Value * self, Value * streamIndex, Value * blockIndex, Value * packIndex, const bool /* readOnly */) const {
     iBuilder->CreateAssert(iBuilder->CreateICmpULT(streamIndex, getStreamSetCount(self)), "StreamSetBuffer: out-of-bounds stream access");
-    return iBuilder->CreateGEP(getStreamSetBlockPtr(getBaseAddress(self), blockIndex), {iBuilder->getInt32(0), streamIndex, packIndex});
+    return iBuilder->CreateGEP(getStreamSetBlockPtr(self, blockIndex), {iBuilder->getInt32(0), streamIndex, packIndex});
 }
 
 void StreamSetBuffer::setBaseAddress(Value * /* self */, Value * /* addr */) const {
@@ -147,194 +149,55 @@ Value * SingleBlockBuffer::getStreamSetBlockPtr(Value * self, Value *) const {
     return self;
 }
 
-// External File Buffer
-void ExternalFileBuffer::setStreamSetBuffer(Value * ptr) {
-    mStreamSetBufferPtr = iBuilder->CreatePointerBitCastOrAddrSpaceCast(ptr, getPointerType());
-}
-
-void ExternalFileBuffer::allocateBuffer() {
-    report_fatal_error("External buffers cannot be allocated.");
-}
-
-Value * ExternalFileBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
-    return iBuilder->CreateGEP(self, blockIndex);
-}
-
-Value * ExternalFileBuffer::getLinearlyAccessibleItems(Value * self, Value *) const {
-    report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
-}
-
 // Source File Buffer
-Value * SourceFileBuffer::getBufferedSize(Value * self) const {
+Value * SourceBuffer::getBufferedSize(Value * self) const {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     return iBuilder->CreateLoad(ptr);
 }
 
-void SourceFileBuffer::setBufferedSize(Value * self, llvm::Value * size) const {
+void SourceBuffer::setBufferedSize(Value * self, llvm::Value * size) const {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     iBuilder->CreateStore(size, ptr);
 }
 
-void SourceFileBuffer::setBaseAddress(Value * self, Value * addr) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+void SourceBuffer::setBaseAddress(Value * self, Value * addr) const {
+    Value * const ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     iBuilder->CreateStore(iBuilder->CreatePointerCast(addr, ptr->getType()->getPointerElementType()), ptr);
 }
 
-Value * SourceFileBuffer::getBaseAddress(Value * const self) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    return iBuilder->CreateLoad(ptr);
+Value * SourceBuffer::getBaseAddress(Value * const self) const {
+    Value * const ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
+    Value * const addr = iBuilder->CreateLoad(ptr);
+    return addr;
 }
 
-Value * SourceFileBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
-    return iBuilder->CreateGEP(self, blockIndex);
+Value * SourceBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
+    return iBuilder->CreateGEP(getBaseAddress(self), blockIndex);
 }
 
-Value * SourceFileBuffer::getLinearlyAccessibleItems(Value * self, Value *) const {
+Value * SourceBuffer::getLinearlyAccessibleItems(Value * self, Value *) const {
     report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
 }
 
-// ExtensibleBuffer
-Value * ExtensibleBuffer::getLinearlyAccessibleItems(Value * self, Value * fromPosition) const {
-    Value * capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    Value * capacity = iBuilder->CreateLoad(capacityPtr);
-    return iBuilder->CreateSub(capacity, fromPosition);
+// External File Buffer
+void ExternalBuffer::allocateBuffer() {
+    report_fatal_error("External buffers cannot be allocated.");
 }
 
-Value * ExtensibleBuffer::roundUpToPageSize(Value * const value) const {
-    const auto pageSize = getpagesize();
-    assert ((pageSize & (pageSize - 1)) == 0);
-    Constant * const pageMask = ConstantInt::get(value->getType(), pageSize - 1);
-    return iBuilder->CreateAnd(iBuilder->CreateAdd(value, pageMask), iBuilder->CreateNot(pageMask));
+Value * ExternalBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
+    return iBuilder->CreateGEP(getBaseAddress(self), blockIndex);
 }
 
-void ExtensibleBuffer::allocateBuffer() {
-    Type * ty = getType();
-    Value * instance = iBuilder->CreateCacheAlignedAlloca(ty);
-    Value * const capacityPtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-
-    Type * const elementType = ty->getStructElementType(1)->getPointerElementType();
-    Constant * size = ConstantExpr::getSizeOf(elementType);
-    size = ConstantExpr::getMul(size, iBuilder->getSize(mBufferBlocks));
-    size = ConstantExpr::getIntegerCast(size, iBuilder->getSizeTy(), false);
-    Value * const initialSize = roundUpToPageSize(size);
-
-    iBuilder->CreateStore(initialSize, capacityPtr);
-    Value * addr = iBuilder->CreateAnonymousMMap(size);
-    Value * const addrPtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
-    addr = iBuilder->CreatePointerCast(addr, addrPtr->getType()->getPointerElementType());
-    iBuilder->CreateStore(addr, addrPtr);
-    Value * const bufferSizePtr = iBuilder->CreateGEP(instance, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
-    iBuilder->CreateStore(ConstantInt::getNullValue(bufferSizePtr->getType()->getPointerElementType()), bufferSizePtr);
-    mStreamSetBufferPtr = instance;
-}
-
-Value * ExtensibleBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
-    return iBuilder->CreateGEP(self, blockIndex);
-}
-
-void ExtensibleBuffer::reserveBytes(Value * const self, llvm::Value * const requiredSize) const {
-
-    Value * const capacityPtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    Value * const currentSize = iBuilder->CreateLoad(capacityPtr);
-    BasicBlock * const entry = iBuilder->GetInsertBlock();
-    Function * const parent = entry->getParent();
-    IntegerType * const sizeTy = iBuilder->getSizeTy();
-    ConstantInt * const zero = iBuilder->getInt32(0);
-    ConstantInt * const one = iBuilder->getInt32(1);
-
-    BasicBlock * const expand = BasicBlock::Create(iBuilder->getContext(), "expand", parent);
-    BasicBlock * const resume = BasicBlock::Create(iBuilder->getContext(), "resume", parent);
-
-    Value * noExpansionNeeded = iBuilder->CreateICmpULT(requiredSize, currentSize);
-
-    kernel::KernelBuilder * const kernel = getProducer();
-    auto consumers = kernel->getStreamOutputs();
-    if (consumers.empty()) {
-        iBuilder->CreateLikelyCondBr(noExpansionNeeded, resume, expand);
-    } else { // we cannot risk expanding this buffer until all of the consumers have finished reading the data
-
-        ConstantInt * const size0 = iBuilder->getSize(0);
-        Value * const segNo = kernel->acquireLogicalSegmentNo();
-        const auto n = consumers.size();
-
-        BasicBlock * load[n + 1];
-        BasicBlock * wait[n];
-        for (unsigned i = 0; i < n; ++i) {
-            load[i] = BasicBlock::Create(iBuilder->getContext(), consumers[i].name + "Load", parent);
-            wait[i] = BasicBlock::Create(iBuilder->getContext(), consumers[i].name + "Wait", parent);
-        }
-        load[n] = expand;
-        iBuilder->CreateLikelyCondBr(noExpansionNeeded, resume, load[0]);
-
-        for (unsigned i = 0; i < n; ++i) {
-
-            iBuilder->SetInsertPoint(load[i]);
-            Value * const outputConsumers = kernel->getConsumerState(consumers[i].name);
-
-            Value * const consumerCount = iBuilder->CreateLoad(iBuilder->CreateGEP(outputConsumers, {zero, zero}));
-            Value * const consumerPtr = iBuilder->CreateLoad(iBuilder->CreateGEP(outputConsumers, {zero, one}));
-            Value * const noConsumers = iBuilder->CreateICmpEQ(consumerCount, size0);
-            iBuilder->CreateUnlikelyCondBr(noConsumers, load[i + 1], wait[i]);
-
-            iBuilder->SetInsertPoint(wait[i]);
-            PHINode * const consumerPhi = iBuilder->CreatePHI(sizeTy, 2);
-            consumerPhi->addIncoming(size0, load[i]);
-
-            Value * const conSegPtr = iBuilder->CreateLoad(iBuilder->CreateGEP(consumerPtr, consumerPhi));
-            Value * const processedSegmentCount = iBuilder->CreateAtomicLoadAcquire(conSegPtr);
-            Value * const ready = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
-            assert (ready->getType() == iBuilder->getInt1Ty());
-            Value * const nextConsumerIdx = iBuilder->CreateAdd(consumerPhi, iBuilder->CreateZExt(ready, sizeTy));
-            consumerPhi->addIncoming(nextConsumerIdx, wait[i]);
-            Value * const next = iBuilder->CreateICmpEQ(nextConsumerIdx, consumerCount);
-            iBuilder->CreateCondBr(next, load[i + 1], wait[i]);
-
-        }
-        expand->moveAfter(wait[n - 1]);
-        resume->moveAfter(expand);
-    }
-    iBuilder->SetInsertPoint(expand);
-    Value * const reservedSize = roundUpToPageSize(iBuilder->CreateShl(requiredSize, 1));
-    Value * const baseAddrPtr = iBuilder->CreateGEP(self, {zero, one});
-
-    Value * const baseAddr = iBuilder->CreateLoad(baseAddrPtr);
-    Value * newAddr = iBuilder->CreateMRemap(baseAddr, currentSize, reservedSize);
-    newAddr = iBuilder->CreatePointerCast(newAddr, baseAddr->getType());
-    iBuilder->CreateStore(newAddr, baseAddrPtr);
-    iBuilder->CreateStore(reservedSize, capacityPtr);
-    iBuilder->CreateBr(resume);
-    iBuilder->SetInsertPoint(resume);
-}
-
-Value * ExtensibleBuffer::getBufferedSize(Value * self) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
-    return iBuilder->CreateLoad(ptr);
-}
-
-void ExtensibleBuffer::setBufferedSize(Value * self, llvm::Value * size) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
-    iBuilder->CreateStore(size, ptr);
-}
-
-Value * ExtensibleBuffer::getBaseAddress(Value * const self) const {
-    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
-    return iBuilder->CreateLoad(ptr);
-}
-
-void ExtensibleBuffer::releaseBuffer(Value * self) const {
-    Value * const sizePtr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-    Value * size = iBuilder->CreateLoad(sizePtr);
-    iBuilder->CreateMUnmap(getBaseAddress(self), size);
+Value * ExternalBuffer::getLinearlyAccessibleItems(Value *, Value *) const {
+    report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
 }
 
 // Circular Buffer
-
 Value * CircularBuffer::getStreamSetBlockPtr(Value * const self, Value * const blockIndex) const {
-    return iBuilder->CreateGEP(self, modByBufferBlocks(blockIndex));
+    return iBuilder->CreateGEP(getBaseAddress(self), modByBufferBlocks(blockIndex));
 }
 
 // CircularCopybackBuffer Buffer
-
 void CircularCopybackBuffer::allocateBuffer() {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks + mOverflowBlocks));
 }
@@ -374,7 +237,7 @@ void CircularCopybackBuffer::createCopyBack(Value * self, Value * overFlowItems)
 }
 
 Value * CircularCopybackBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
-    return iBuilder->CreateGEP(self, modByBufferBlocks(blockIndex));
+    return iBuilder->CreateGEP(getBaseAddress(self), modByBufferBlocks(blockIndex));
 }
 
 // SwizzledCopybackBuffer Buffer
@@ -419,7 +282,7 @@ void SwizzledCopybackBuffer::createCopyBack(Value * self, Value * overFlowItems)
 }
 
 Value * SwizzledCopybackBuffer::getStreamSetBlockPtr(Value * self, Value * blockIndex) const {
-    return iBuilder->CreateGEP(self, modByBufferBlocks(blockIndex));
+    return iBuilder->CreateGEP(getBaseAddress(self), modByBufferBlocks(blockIndex));
 }
 
 SwizzledCopybackBuffer::SwizzledCopybackBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned fieldwidth, unsigned AddressSpace)
@@ -592,28 +455,23 @@ SingleBlockBuffer::SingleBlockBuffer(IDISA::IDISA_Builder * b, Type * type)
 
 }
 
-ExternalFileBuffer::ExternalFileBuffer(IDISA::IDISA_Builder * b, Type * type, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::ExternalFileBuffer, b, type, resolveStreamSetType(b, type), 0, AddressSpace) {
+SourceBuffer::SourceBuffer(IDISA::IDISA_Builder * b, Type * type, unsigned AddressSpace)
+: StreamSetBuffer(BufferKind::SourceBuffer, b, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(), b->getSizeTy(), nullptr), 0, AddressSpace) {
+    mUniqueID = "M"; // + std::to_string(bufferBlocks);
+    if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
+}
+
+ExternalBuffer::ExternalBuffer(IDISA::IDISA_Builder * b, Type * type, llvm::Value * addr, unsigned AddressSpace)
+: StreamSetBuffer(BufferKind::ExternalBuffer, b, type, resolveStreamSetType(b, type), 0, AddressSpace) {
     mUniqueID = "E";
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
-}
-
-SourceFileBuffer::SourceFileBuffer(IDISA::IDISA_Builder * b, Type * type, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::SourceFileBuffer, b, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(), b->getSizeTy(), nullptr), 0, AddressSpace) {
-
-}
-
-ExtensibleBuffer::ExtensibleBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::ExtensibleBuffer, b, type, StructType::get(b->getSizeTy(), resolveStreamSetType(b, type)->getPointerTo(), b->getSizeTy(), nullptr), bufferBlocks, AddressSpace) {
-    mUniqueID = "XT" + std::to_string(bufferBlocks);
-    if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
+    mStreamSetBufferPtr = b->CreatePointerBitCastOrAddrSpaceCast(addr, getPointerType());
 }
 
 CircularBuffer::CircularBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::CircularBuffer, b, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace) {
     mUniqueID = "C" + std::to_string(bufferBlocks);
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
-
 }
 
 CircularCopybackBuffer::CircularCopybackBuffer(IDISA::IDISA_Builder * b, Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace)

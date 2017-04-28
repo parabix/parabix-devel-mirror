@@ -6,7 +6,7 @@
 
 #include <IR_Gen/idisa_builder.h>                  // for IDISA_Builder
 #include <IR_Gen/idisa_target.h>                   // for GetIDISA_Builder
-#include <kernels/mmap_kernel.h>                   // for MMapSourceKernel
+#include <kernels/source_kernel.h>
 #include <kernels/s2p_kernel.h>                    // for S2PKernel
 #include <kernels/alignedprint.h>
 #include <kernels/streamset.h>                     // for SingleBlockBuffer
@@ -141,7 +141,7 @@ void pipeline(ParabixDriver & pxDriver, const unsigned count) {
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments;
     
-    ExternalFileBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    SourceBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
     MMapSourceKernel mmapK(iBuilder, segmentSize);
     mmapK.setInitialArguments({fileSize});
@@ -169,7 +169,7 @@ void pipeline(ParabixDriver & pxDriver, const unsigned count) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main, 0));
 
-    ByteStream.setStreamSetBuffer(inputStream);
+ //   ByteStream.setExternalBuffer(inputStream);
     BasisBits.allocateBuffer();
     matches.allocateBuffer();
     errors.allocateBuffer();

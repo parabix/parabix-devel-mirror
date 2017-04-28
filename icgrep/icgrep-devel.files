@@ -56,8 +56,6 @@ kernels/lz4_index_decoder.cpp
 kernels/lz4_index_decoder.h
 kernels/match_count.cpp
 kernels/match_count.h
-kernels/mmap_kernel.cpp
-kernels/mmap_kernel.h
 kernels/p2s_kernel.cpp
 kernels/p2s_kernel.h
 kernels/radix64.cpp
@@ -66,8 +64,6 @@ kernels/s2p_kernel.cpp
 kernels/s2p_kernel.h
 kernels/scanmatchgen.cpp
 kernels/scanmatchgen.h
-kernels/stdin_kernel.cpp
-kernels/stdin_kernel.h
 kernels/stdout_kernel.cpp
 kernels/stdout_kernel.h
 kernels/streams_merge.cpp
@@ -247,3 +243,5 @@ utf8_encoder.cpp
 utf8_encoder.h
 wc.cpp
 CMakeLists.txt
+kernels/source_kernel.h
+kernels/source_kernel.cpp

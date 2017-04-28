@@ -19,7 +19,7 @@
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/streamset.h>
-#include <kernels/mmap_kernel.h>
+#include <kernels/source_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
@@ -156,7 +156,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
-    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
 
     StreamSetBuffer * const BasisBits = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1)));
 

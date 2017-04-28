@@ -216,33 +216,31 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     iBuilder->setDriver(this);
 }
 
-ExternalFileBuffer * ParabixDriver::addExternalBuffer(std::unique_ptr<ExternalFileBuffer> b, Value * externalBuf) {
-    mOwnedBuffers.push_back(std::move(b));
-    ExternalFileBuffer * rawBuf = cast<ExternalFileBuffer>(mOwnedBuffers.back().get());
-    rawBuf->setStreamSetBuffer(externalBuf);
-    return rawBuf;
+ExternalBuffer * ParabixDriver::addExternalBuffer(std::unique_ptr<ExternalBuffer> b) {
+    mOwnedBuffers.emplace_back(std::move(b));
+    return cast<ExternalBuffer>(mOwnedBuffers.back().get());
 }
 
 StreamSetBuffer * ParabixDriver::addBuffer(std::unique_ptr<StreamSetBuffer> b) {
     b->allocateBuffer();
-    mOwnedBuffers.push_back(std::move(b));
+    mOwnedBuffers.emplace_back(std::move(b));
     return mOwnedBuffers.back().get();
 }
 
 kernel::KernelBuilder * ParabixDriver::addKernelInstance(std::unique_ptr<kernel::KernelBuilder> kb) {
-    mOwnedKernels.push_back(std::move(kb));
+    mOwnedKernels.emplace_back(std::move(kb));
     return mOwnedKernels.back().get();
 }
 
 void ParabixDriver::addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
     assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb.getModule() == nullptr));
-    mPipeline.push_back(&kb);
+    mPipeline.emplace_back(&kb);
     kb.createKernelStub(inputs, outputs);
 }
 
 void ParabixDriver::makeKernelCall(kernel::KernelBuilder * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
     assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb->getModule() == nullptr));
-    mPipeline.push_back(kb);
+    mPipeline.emplace_back(kb);
     kb->createKernelStub(inputs, outputs);
 }
 
@@ -262,12 +260,15 @@ void ParabixDriver::generatePipelineIR() {
     for (const auto & k : mPipeline) {
         k->addKernelDeclarations(mMainModule);
     }
+
     for (const auto & k : mPipeline) {
         k->createInstance();
     }
+
     for (const auto & k : mPipeline) {
         k->initializeInstance();
     }
+
     if (codegen::pipelineParallel) {
         generateParallelPipeline(iBuilder, mPipeline);
     } else if (codegen::segmentPipelineParallel) {
@@ -276,6 +277,7 @@ void ParabixDriver::generatePipelineIR() {
         codegen::ThreadNum = 1;
         generatePipelineLoop(iBuilder, mPipeline);
     }
+
     for (const auto & k : mPipeline) {
         k->finalizeInstance();
     }

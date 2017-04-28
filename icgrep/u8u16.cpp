@@ -9,7 +9,7 @@
 #include <cc/cc_compiler.h>                        // for CC_Compiler
 #include <kernels/deletion.h>                      // for DeletionKernel
 #include <kernels/swizzle.h>                      // for DeletionKernel
-#include <kernels/mmap_kernel.h>                   // for MMapSourceKernel
+#include <kernels/source_kernel.h>
 #include <kernels/p2s_kernel.h>                    // for P2S16KernelWithCom...
 #include <kernels/s2p_kernel.h>                    // for S2PKernel
 #include <kernels/stdout_kernel.h>                 // for StdOutKernel
@@ -284,7 +284,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
     
     // File data from mmap
-    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
     
     KernelBuilder * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, segmentSize));
     mmapK->setInitialArguments({fileDecriptor});
@@ -340,7 +340,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     // Different choices for the output buffer depending on chosen option.
     StreamSetBuffer * U16out = nullptr;
     if (mMapBuffering || memAlignBuffering) {
-        U16out = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16)), outputStream);
+        U16out = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), outputStream));
     } else {
         U16out = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), segmentSize * bufferSegments));
     }
@@ -377,7 +377,7 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
     // File data from mmap
-    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
     
     KernelBuilder * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, segmentSize));
     mmapK->setInitialArguments({fileDecriptor});
@@ -413,7 +413,7 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     // Different choices for the output buffer depending on chosen option.
     StreamSetBuffer * U16out = nullptr;
     if (mMapBuffering || memAlignBuffering) {
-        U16out = pxDriver.addExternalBuffer(make_unique<ExternalFileBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16)), outputStream);
+        U16out = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), outputStream));
     } else {
         U16out = pxDriver.addBuffer(make_unique<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), segmentSize * bufferSegments, 1 /*overflow block*/));
     }
@@ -426,8 +426,6 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
 
     pxDriver.linkAndFinalize();
 }
-
-
 
 typedef void (*u8u16FunctionType)(uint32_t fd, char * output_data);
 

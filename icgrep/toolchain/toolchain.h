@@ -68,7 +68,7 @@ public:
     
     IDISA::IDISA_Builder * getIDISA_Builder() { return iBuilder.get(); }
     
-    parabix::ExternalFileBuffer * addExternalBuffer(std::unique_ptr<parabix::ExternalFileBuffer> b, llvm::Value * externalBuf);
+    parabix::ExternalBuffer * addExternalBuffer(std::unique_ptr<parabix::ExternalBuffer> b);
     
     parabix::StreamSetBuffer * addBuffer(std::unique_ptr<parabix::StreamSetBuffer> b);
     
