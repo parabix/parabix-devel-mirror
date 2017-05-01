@@ -54,6 +54,9 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         retVal = "Name \"";
         retVal += re_name->getName();
         retVal += "\" ";
+        if (re_name->getType() == Name::Type::Capture) {
+            retVal += "=(" + PrintRE(re_name->getDefinition()) + ")";
+        }
     } else if (const Assertion * a = dyn_cast<const Assertion>(re)) {
         retVal = (a->getSense() == Assertion::Sense::Positive) ? "" : "Negative";
         switch (a->getKind()) {
