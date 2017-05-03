@@ -16,7 +16,8 @@ namespace kernel {
 class ScanMatchKernel final : public BlockOrientedKernel {
 public:
     ScanMatchKernel(IDISA::IDISA_Builder * const iBuilder, const GrepType grepType, const unsigned codeUnitWidth);
-    bool moduleIDisSignature() override { return true; }
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 protected:
     void generateDoBlockMethod() override;
 private:

@@ -18,28 +18,31 @@ namespace kernel {
     Each 3 bytes of the input abc produces a 4 byte output abcc.   
     This is a useful preparatory transformation in various radix-64 encodings. */
  
-class expand3_4Kernel : public SegmentOrientedKernel {
+class expand3_4Kernel final : public SegmentOrientedKernel {
 public:   
     expand3_4Kernel(IDISA::IDISA_Builder * iBuilder);
+    bool isCachable() const override { return true; }
 private:
-    void generateDoSegmentMethod() override final;
+    void generateDoSegmentMethod() override;
 };
 
-class radix64Kernel : public BlockOrientedKernel {
+class radix64Kernel final : public BlockOrientedKernel {
 public:
     radix64Kernel(IDISA::IDISA_Builder * iBuilder);
+    bool isCachable() const override { return true; }
 private:
-    virtual void generateDoBlockMethod() override final;
-    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override final;
+    virtual void generateDoBlockMethod() override;
+    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
     llvm::Value* processPackData(llvm::Value* packData) const;
 };
 
-class base64Kernel : public BlockOrientedKernel {
+class base64Kernel final : public BlockOrientedKernel {
 public:
     base64Kernel(IDISA::IDISA_Builder * iBuilder);
+    bool isCachable() const override { return true; }
 private:
-    virtual void generateDoBlockMethod() override final;
-    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override final;
+    virtual void generateDoBlockMethod() override;
+    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
     llvm::Value* processPackData(llvm::Value* packData) const;
 };
 

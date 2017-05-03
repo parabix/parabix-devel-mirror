@@ -29,7 +29,10 @@ void StdOutKernel::generateDoSegmentMethod() {
     Value * wraparound = nullptr;
     if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
         Value * instance = getStreamSetBufferPtr("codeUnitBuffer");
-        Value * accessible = b->getLinearlyAccessibleItems(instance, processed);
+
+
+
+        Value * accessible = b->getLinearlyAccessibleItems(iBuilder, instance, processed);
         wraparound = iBuilder->CreateICmpULT(accessible, itemsToDo);
         itemsToDo = iBuilder->CreateSelect(wraparound, accessible, itemsToDo);
     }
@@ -116,7 +119,7 @@ void FileSink::generateDoSegmentMethod() {
     Value * wraparound = nullptr;
     if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
         Value * instance = getStreamSetBufferPtr("codeUnitBuffer");
-        Value * accessible = b->getLinearlyAccessibleItems(instance, processed);
+        Value * accessible = b->getLinearlyAccessibleItems(iBuilder, instance, processed);
         wraparound = iBuilder->CreateICmpULT(accessible, itemsToDo);
         itemsToDo = iBuilder->CreateSelect(wraparound, accessible, itemsToDo);
     }

@@ -96,9 +96,16 @@ void MMapSourceKernel::generateDoSegmentMethod() {
     Value * sourceBuffer = getBaseAddress("sourceBuffer");
     sourceBuffer = iBuilder->CreatePtrToInt(sourceBuffer, consumedTy);
     Value * consumedBuffer = iBuilder->CreateAdd(sourceBuffer, consumed);
+
+
+
+
     Value * readableBuffer = getScalarField("readableBuffer");
     readableBuffer = iBuilder->CreatePtrToInt(readableBuffer, consumedTy);
     Value * unnecessaryBytes = iBuilder->CreateSub(consumedBuffer, readableBuffer);
+
+
+
     // avoid calling madvise unless an actual page table change could occur
     Value * hasPagesToDrop = iBuilder->CreateICmpEQ(unnecessaryBytes, ConstantInt::getNullValue(unnecessaryBytes->getType()));
     iBuilder->CreateLikelyCondBr(hasPagesToDrop, processSegment, dropPages);
@@ -134,7 +141,7 @@ void MMapSourceKernel::generateFinalizeMethod() {
 }
 
 MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "Parabix:mmap_source" + std::to_string(blocksPerSegment) + "@" + std::to_string(codeUnitWidth),
+: SegmentOrientedKernel(iBuilder, "mmap_source" + std::to_string(blocksPerSegment) + "@" + std::to_string(codeUnitWidth),
 {},
 {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
 {Binding{iBuilder->getInt32Ty(), "fileDescriptor"}},
@@ -274,7 +281,7 @@ void ReadSourceKernel::generateFinalizeMethod() {
 }
 
 ReadSourceKernel::ReadSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "Parabix:read_source"
+: SegmentOrientedKernel(iBuilder, "read_source"
 , {}
 , {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}
 , {Binding{iBuilder->getInt32Ty(), "fileDescriptor"}}
@@ -319,7 +326,7 @@ void MemorySourceKernel::generateDoSegmentMethod() {
 }
 
 MemorySourceKernel::MemorySourceKernel(IDISA::IDISA_Builder * iBuilder, Type * type, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "Parabix:memory_source",
+: SegmentOrientedKernel(iBuilder, "memory_source",
     {},
     {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
     {Binding{cast<PointerType>(type), "fileSource"}, Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})

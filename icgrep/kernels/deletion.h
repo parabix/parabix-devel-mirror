@@ -22,39 +22,30 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class DeletionKernel : public BlockOrientedKernel {
+class DeletionKernel final : public BlockOrientedKernel {
 public:
-
     DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount);
-    bool moduleIDisSignature() override {return true;}
-
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 protected:
     void generateDoBlockMethod() override;
-
     void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
-
 private:
     const unsigned mDeletionFieldWidth;
     const unsigned mStreamCount;
 };
 
-class DeleteByPEXTkernel : public BlockOrientedKernel {
+class DeleteByPEXTkernel final : public BlockOrientedKernel {
 public:
-
     DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle);
-    bool moduleIDisSignature() override {return true;}
-    
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 protected:
     void generateDoBlockMethod() override;
-    
     void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
-
     void generatePEXTAndSwizzleLoop(const std::vector<llvm::Value *> & masks);
-
     void generatePEXTLoop(const std::vector<llvm::Value *> & masks);
-
-    void generateProcessingLoop(const std::vector<llvm::Value *> & masks, llvm::Value * delMask);
-    
+    void generateProcessingLoop(const std::vector<llvm::Value *> & masks, llvm::Value * delMask);   
 private:
     const unsigned mDelCountFieldWidth;
     const unsigned mStreamCount;
@@ -63,17 +54,14 @@ private:
     static constexpr const char* mOutputSwizzleNameBase = "outputStreamSet";
 };
     
-class SwizzledBitstreamCompressByCount : public BlockOrientedKernel {
+class SwizzledBitstreamCompressByCount final : public BlockOrientedKernel {
 public:
-    
     SwizzledBitstreamCompressByCount(IDISA::IDISA_Builder * iBuilder, unsigned bitStreamCount, unsigned fieldWidth = 64);
-    bool moduleIDisSignature() override {return true;}
-    
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 protected:
     void generateDoBlockMethod() override;
-    
-    void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
-   
+    void generateFinalBlockMethod(llvm::Value * remainingBytes) override;   
 private:
     const unsigned mBitStreamCount;
     const unsigned mFieldWidth;

@@ -60,15 +60,20 @@ public:
     // guaranteeing uniqueness.  In this case, the moduleIDisUnique() method 
     // should return true.
     //
-    
+       
+    bool isCachable() const override { return false; }
+
+    std::string makeSignature() override;
+
     // Can the module ID itself serve as the unique signature?
-    virtual bool moduleIDisSignature() { return false; }
-    
-    virtual std::string generateKernelSignature(std::string moduleId);
-    
+    virtual bool moduleIDisSignature() const { return false; }
+
     // Create a module stub for the kernel, populated only with its Module ID.     
     //
+
     void createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
+
+    void createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs, llvm::Module * const kernelModule);
 
     llvm::Module * getModule() const {
         return mModule;
@@ -105,11 +110,11 @@ public:
 
     // Get the value of a scalar field for the current instance.
     llvm::Value * getScalarFieldPtr(llvm::Value * index) const {
-        return getScalarFieldPtr(getInstance(), index);
+        return iBuilder->CreateGEP(getInstance(), {iBuilder->getInt32(0), index});
     }
 
     llvm::Value * getScalarFieldPtr(const std::string & fieldName) const {
-        return getScalarFieldPtr(getInstance(), fieldName);
+        return getScalarFieldPtr(getScalarIndex(fieldName));
     }
 
     llvm::Value * getScalarField(const std::string & fieldName) const {
@@ -167,12 +172,12 @@ protected:
 
     // Constructor
     KernelBuilder(IDISA::IDISA_Builder * builder,
-                    std::string && kernelName,
-                    std::vector<Binding> && stream_inputs,
-                    std::vector<Binding> && stream_outputs,
-                    std::vector<Binding> && scalar_parameters,
-                    std::vector<Binding> && scalar_outputs,
-                    std::vector<Binding> && internal_scalars);
+                  std::string && kernelName,
+                  std::vector<Binding> && stream_inputs,
+                  std::vector<Binding> && stream_outputs,
+                  std::vector<Binding> && scalar_parameters,
+                  std::vector<Binding> && scalar_outputs,
+                  std::vector<Binding> && internal_scalars);
 
     //
     // Kernel builder subtypes define their logic of kernel construction
@@ -251,6 +256,8 @@ protected:
 
     llvm::Value * getAvailableItemCount(const std::string & name) const;
 
+    llvm::Value * getLinearlyAccessibleItems(const std::string & name, llvm::Value * fromPosition) const;
+
     llvm::Value * getIsFinal() const {
         return mIsFinal;
     }
@@ -259,18 +266,7 @@ protected:
 
     llvm::BasicBlock * CreateBasicBlock(std::string && name) const;
 
-    // Stream set helpers.
-
     llvm::Value * getStreamSetBufferPtr(const std::string & name) const;
-
-    llvm::Value * getScalarFieldPtr(llvm::Value * const instance, llvm::Value * index) const {
-        assert ("instance cannot be null!" && instance);
-        return iBuilder->CreateGEP(getInstance(), {iBuilder->getInt32(0), index});
-    }
-
-    llvm::Value * getScalarFieldPtr(llvm::Value * const instance, const std::string & fieldName) const {
-        return getScalarFieldPtr(instance, getScalarIndex(fieldName));
-    }
 
     void callGenerateInitializeMethod();
 

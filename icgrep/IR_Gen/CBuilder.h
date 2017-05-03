@@ -31,10 +31,9 @@ public:
     llvm::Module * getModule() const {
         return mMod;
     }
-    
-    void setModule(llvm::Module * m) {
-        assert (m);
-        mMod = m;
+
+    void setModule(llvm::Module * const mod) {
+        mMod = mod;
     }
 
     llvm::Value * CreateMalloc(llvm::Value * size);
@@ -210,7 +209,7 @@ protected:
     }
 
 protected:
-    llvm::Module *                  mMod;    
+    llvm::Module *                  mMod;
     unsigned                        mCacheLineAlignment;
     llvm::IntegerType *             mSizeType;
     llvm::StructType *              mFILEtype;

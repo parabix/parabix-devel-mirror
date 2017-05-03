@@ -11,34 +11,38 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel {
 
    
-class P2SKernel : public BlockOrientedKernel {
+class P2SKernel final : public BlockOrientedKernel {
 public:
     P2SKernel(IDISA::IDISA_Builder * iBuilder);
-    bool moduleIDisSignature() override {return true;}
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 private:
     void generateDoBlockMethod() override;
 };
 
-class P2SKernelWithCompressedOutput : public BlockOrientedKernel {
+class P2SKernelWithCompressedOutput final : public BlockOrientedKernel {
 public:
     P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder);    
-    bool moduleIDisSignature() override {return true;}
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 private:
     void generateDoBlockMethod() override;
 };
 
-class P2S16Kernel : public BlockOrientedKernel {
+class P2S16Kernel final : public BlockOrientedKernel {
 public:
     P2S16Kernel(IDISA::IDISA_Builder * iBuilder);
-    bool moduleIDisSignature() override {return true;}
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 private:
     void generateDoBlockMethod() override;
 };
     
-class P2S16KernelWithCompressedOutput : public BlockOrientedKernel {
+class P2S16KernelWithCompressedOutput final : public BlockOrientedKernel {
 public:
     P2S16KernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder);
-    bool moduleIDisSignature() override {return true;}
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 private:
     void generateDoBlockMethod() override;
 };

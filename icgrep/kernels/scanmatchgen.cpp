@@ -189,7 +189,7 @@ void ScanMatchKernel::generateDoBlockMethod() {
 }
 
 ScanMatchKernel::ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType, const unsigned codeUnitWidth)
-: BlockOrientedKernel(iBuilder, "Parabix:scanMatch" + getGrepTypeId(grepType) + std::to_string(codeUnitWidth),
+: BlockOrientedKernel(iBuilder, "scanMatch" + getGrepTypeId(grepType) + std::to_string(codeUnitWidth),
     {Binding{iBuilder->getStreamSetTy(1, 1), "matchResult"}, Binding{iBuilder->getStreamSetTy(1, 1), "lineBreak"}, Binding{iBuilder->getStreamSetTy(1, 8), "InputStream", UnknownRate()}},
     {},
     {Binding{iBuilder->getInt32Ty(), "FileIdx"}},

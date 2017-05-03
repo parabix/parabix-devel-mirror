@@ -90,44 +90,8 @@ bool DebugOptionIsSet(DebugFlags flag) {return DebugOptions.isSet(flag);}
 static cl::opt<bool> pipelineParallel("enable-pipeline-parallel", cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(CodeGenOptions));
     
 static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
-    
-#ifdef CUDA_ENABLED
-bool NVPTX;
-int GroupNum;
-static cl::opt<bool> USENVPTX("NVPTX", cl::desc("Run on GPU only."), cl::init(false));
-static cl::opt<int, true> GroupNumOption("group-num", cl::location(GroupNum), cl::desc("NUmber of groups declared on GPU"), cl::value_desc("positive integer"), cl::init(256));
-#endif
 
 }
-
-#ifdef CUDA_ENABLED
-void setNVPTXOption(){
-    codegen::NVPTX = codegen::USENVPTX;
-}
-
-void Compile2PTX (Module * m, std::string IRFilename, std::string PTXFilename) {
-    InitializeAllTargets();
-    InitializeAllTargetMCs();
-    InitializeAllAsmPrinters();
-    InitializeAllAsmParsers();
-
-    PassRegistry *Registry = PassRegistry::getPassRegistry();
-    initializeCore(*Registry);
-    initializeCodeGen(*Registry);
-    initializeLoopStrengthReducePass(*Registry);
-    initializeLowerIntrinsicsPass(*Registry);
-    initializeUnreachableBlockElimPass(*Registry);
-
-    std::error_code error;
-    raw_fd_ostream out(IRFilename, error, sys::fs::OpenFlags::F_None);
-    m->print(out, nullptr);
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR)))
-            m->dump();
-
-    llvm2ptx(IRFilename, PTXFilename);
-}
-#endif
 
 void printParabixVersion () {
     raw_ostream &OS = outs();
@@ -222,12 +186,13 @@ ExternalBuffer * ParabixDriver::addExternalBuffer(std::unique_ptr<ExternalBuffer
 }
 
 StreamSetBuffer * ParabixDriver::addBuffer(std::unique_ptr<StreamSetBuffer> b) {
-    b->allocateBuffer();
+    b->allocateBuffer(iBuilder.get());
     mOwnedBuffers.emplace_back(std::move(b));
     return mOwnedBuffers.back().get();
 }
 
 kernel::KernelBuilder * ParabixDriver::addKernelInstance(std::unique_ptr<kernel::KernelBuilder> kb) {
+    kb->setBuilder(iBuilder.get());
     mOwnedKernels.emplace_back(std::move(kb));
     return mOwnedKernels.back().get();
 }
@@ -258,17 +223,14 @@ void ParabixDriver::generatePipelineIR() {
 
     // note: instantiation of all kernels must occur prior to initialization
     for (const auto & k : mPipeline) {
-        k->addKernelDeclarations(mMainModule);
+        k->addKernelDeclarations();
     }
-
     for (const auto & k : mPipeline) {
         k->createInstance();
     }
-
     for (const auto & k : mPipeline) {
         k->initializeInstance();
     }
-
     if (codegen::pipelineParallel) {
         generateParallelPipeline(iBuilder, mPipeline);
     } else if (codegen::segmentPipelineParallel) {
@@ -277,7 +239,6 @@ void ParabixDriver::generatePipelineIR() {
         codegen::ThreadNum = 1;
         generatePipelineLoop(iBuilder, mPipeline);
     }
-
     for (const auto & k : mPipeline) {
         k->finalizeInstance();
     }
@@ -332,26 +293,23 @@ void ParabixDriver::linkAndFinalize() {
     #endif
 
     PM.run(*m);
+
     for (kernel::KernelBuilder * const kb : mPipeline) {
         m = kb->getModule();
         bool uncachedObject = true;
-        if (mCache) {
-            const std::string moduleID = m->getModuleIdentifier();
-            const std::string signature = kb->generateKernelSignature(moduleID);
-            if (mCache->loadCachedObjectFile(moduleID, signature)) {
-                uncachedObject = false;
-            }
+        if (mCache && mCache->loadCachedObjectFile(kb)) {
+            uncachedObject = false;
         }
         if (uncachedObject) {
-            Module * const cm = iBuilder->getModule();
-            iBuilder->setModule(m);
+            iBuilder->setModule(kb->getModule());
             kb->generateKernel();
             PM.run(*m);
-            iBuilder->setModule(cm);
-        }        
+        }
         mEngine->addModule(std::unique_ptr<Module>(m));
     }    
     mEngine->finalizeObject();
+
+    iBuilder->setModule(mMainModule);
 
     delete IROutputStream;
     #ifndef USE_LLVM_3_6

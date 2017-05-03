@@ -11,9 +11,6 @@
 #include <pablo/pe_zeroes.h>        // for Zeroes
 #include <cc/cc_compiler.h>
 #include <pablo/builder.hpp>
-#include <llvm/IR/Module.h>
-
-#include <llvm/Support/raw_ostream.h>
 
 using namespace cc;
 using namespace kernel;
@@ -23,10 +20,8 @@ using namespace llvm;
 
 #define UNICODE_LINE_BREAK (!AlgorithmOptionIsSet(DisableUnicodeLineBreak))
 
-LineBreakKernelBuilder::LineBreakKernelBuilder (
-IDISA::IDISA_Builder * iBuilder
-, unsigned basisBitsCount)
-: PabloKernel(iBuilder, "Parabix:lb_kernel", {Binding{iBuilder->getStreamSetTy(basisBitsCount), "basis"}}, {Binding{iBuilder->getStreamSetTy(1), "linebreak", Add1()}}) {
+LineBreakKernelBuilder::LineBreakKernelBuilder (IDISA::IDISA_Builder * iBuilder, unsigned basisBitsCount)
+: PabloKernel(iBuilder, "lb", {Binding{iBuilder->getStreamSetTy(basisBitsCount), "basis"}}, {Binding{iBuilder->getStreamSetTy(1), "linebreak", Add1()}}) {
 
     CC_Compiler ccc(this, getInput(0));
     auto & builder = ccc.getBuilder();

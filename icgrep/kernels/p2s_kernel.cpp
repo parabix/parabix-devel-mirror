@@ -146,21 +146,21 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod() {
 }
 
 P2SKernel::P2SKernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "Parabix:p2s",
+: BlockOrientedKernel(iBuilder, "p2s",
               {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}},
               {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
               {}, {}, {}) {
 }
 
 P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "Parabix:p2s_compress",
+: BlockOrientedKernel(iBuilder, "p2s_compress",
               {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
                       {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream", MaxRatio(1)}},
               {}, {}, {}) {
 }
 
 P2S16Kernel::P2S16Kernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "Parabix:p2s_16",
+: BlockOrientedKernel(iBuilder, "p2s_16",
               {Binding{iBuilder->getStreamSetTy(16, 1), "basisBits"}},
               {Binding{iBuilder->getStreamSetTy(1, 16), "i16Stream"}},
               {}, {}, {}) {
@@ -168,7 +168,7 @@ P2S16Kernel::P2S16Kernel(IDISA::IDISA_Builder * iBuilder)
 
 
 P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(IDISA::IDISA_Builder * b)
-: BlockOrientedKernel(b, "Parabix:p2s_16_compress",
+: BlockOrientedKernel(b, "p2s_16_compress",
               {Binding{b->getStreamSetTy(16, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "deletionCounts"}},
               {Binding{b->getStreamSetTy(1, 16), "i16Stream", MaxRatio(1)}},
               {},

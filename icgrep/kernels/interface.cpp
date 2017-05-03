@@ -67,26 +67,27 @@ Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value *
     return nullptr;
 }
 
-void KernelInterface::addKernelDeclarations(Module * const client) {
-    Module * const saveModule = iBuilder->getModule();
-    iBuilder->setModule(client);
+void KernelInterface::addKernelDeclarations() {
+
     if (mKernelStateType == nullptr) {
         throw std::runtime_error("Kernel interface " + getName() + " not yet finalized.");
     }
+
+    Module * const module = iBuilder->getModule();
     PointerType * const selfType = mKernelStateType->getPointerTo();
     IntegerType * const sizeTy = iBuilder->getSizeTy();
     PointerType * const consumerTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
     Type * const voidTy = iBuilder->getVoidTy();
 
     // Create the initialization function prototype
-    std::vector<Type *> initParameters = {selfType};   
+    std::vector<Type *> initParameters = {selfType};
     for (auto binding : mScalarInputs) {
         initParameters.push_back(binding.type);
     }
     initParameters.insert(initParameters.end(), mStreamSetOutputs.size(), consumerTy);
 
     FunctionType * const initType = FunctionType::get(voidTy, initParameters, false);
-    Function * const initFunc = Function::Create(initType, GlobalValue::ExternalLinkage, getName() + INIT_SUFFIX, client);
+    Function * const initFunc = Function::Create(initType, GlobalValue::ExternalLinkage, getName() + INIT_SUFFIX, module);
     initFunc->setCallingConv(CallingConv::C);
     initFunc->setDoesNotThrow();
     auto args = initFunc->arg_begin();
@@ -103,10 +104,10 @@ void KernelInterface::addKernelDeclarations(Module * const client) {
     params.insert(params.end(), mStreamSetInputs.size(), sizeTy);
 
     FunctionType * const doSegmentType = FunctionType::get(voidTy, params, false);
-    Function * const doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, client);
+    Function * const doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, module);
     doSegment->setCallingConv(CallingConv::C);
     doSegment->setDoesNotThrow();
-    doSegment->setDoesNotCapture(1); // for self parameter only.   
+    doSegment->setDoesNotCapture(1); // for self parameter only.
     args = doSegment->arg_begin();
     args->setName("self");
     (++args)->setName("doFinal");
@@ -131,7 +132,7 @@ void KernelInterface::addKernelDeclarations(Module * const client) {
         }
     }
     FunctionType * const terminateType = FunctionType::get(resultType, {selfType}, false);
-    Function * const terminateFunc = Function::Create(terminateType, GlobalValue::ExternalLinkage, getName() + TERMINATE_SUFFIX, client);
+    Function * const terminateFunc = Function::Create(terminateType, GlobalValue::ExternalLinkage, getName() + TERMINATE_SUFFIX, module);
     terminateFunc->setCallingConv(CallingConv::C);
     terminateFunc->setDoesNotThrow();
     terminateFunc->setDoesNotCapture(1);
@@ -139,35 +140,33 @@ void KernelInterface::addKernelDeclarations(Module * const client) {
     args->setName("self");
 
     linkExternalMethods();
-
-    iBuilder->setModule(saveModule);
 }
 
 void KernelInterface::setInitialArguments(std::vector<Value *> args) {
     mInitialArguments = args;
 }
 
-Function * KernelInterface::getInitFunction() const {
+Function * KernelInterface::getInitFunction(Module * const module) const {
     const auto name = getName() + INIT_SUFFIX;
-    Function * f = iBuilder->getModule()->getFunction(name);
+    Function * f = module->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
         llvm::report_fatal_error("Cannot find " + name);
     }
     return f;
 }
 
-Function * KernelInterface::getDoSegmentFunction() const {
+Function * KernelInterface::getDoSegmentFunction(llvm::Module * const module) const {
     const auto name = getName() + DO_SEGMENT_SUFFIX;
-    Function * f = iBuilder->getModule()->getFunction(name);
+    Function * f = module->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
         llvm::report_fatal_error("Cannot find " + name);
     }
     return f;
 }
 
-Function * KernelInterface::getTerminateFunction() const {
+Function * KernelInterface::getTerminateFunction(Module * const module) const {
     const auto name = getName() + TERMINATE_SUFFIX;
-    Function * f = iBuilder->getModule()->getFunction(name);
+    Function * f = module->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
         llvm::report_fatal_error("Cannot find " + name);
     }

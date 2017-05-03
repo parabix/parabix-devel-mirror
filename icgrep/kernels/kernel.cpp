@@ -135,7 +135,20 @@ void KernelBuilder::prepareKernel() {
 }
 
 void KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
+    std::stringstream cacheName;
+    cacheName << getName() << '_' << iBuilder->getBuilderUniqueName();
+    for (const StreamSetBuffer * b: inputs) {
+        cacheName <<  ':' <<  b->getUniqueID();
+    }
+    for (const StreamSetBuffer * b: outputs) {
+        cacheName <<  ':' <<  b->getUniqueID();
+    }
+    Module * const kernelModule = new Module(cacheName.str(), iBuilder->getContext());
+    kernelModule->setTargetTriple(iBuilder->getModule()->getTargetTriple());
+    createKernelStub(inputs, outputs, kernelModule);
+}
 
+void KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs, Module * const kernelModule) {
     assert (mModule == nullptr);
     assert (mStreamSetInputBuffers.empty());
     assert (mStreamSetOutputBuffers.empty());
@@ -175,34 +188,24 @@ void KernelBuilder::createKernelStub(const StreamSetBuffers & inputs, const Stre
         }
     }
 
-    std::stringstream cacheName;
-
-    cacheName << getName() << '_' << iBuilder->getBuilderUniqueName();
-    for (const StreamSetBuffer * b: inputs) {
-        cacheName <<  ':' <<  b->getUniqueID();
-    }
-    for (const StreamSetBuffer * b: outputs) {
-        cacheName <<  ':' <<  b->getUniqueID();
-    }
+    mModule = kernelModule;
 
     mStreamSetInputBuffers.assign(inputs.begin(), inputs.end());
     mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
 
     prepareKernel();
-
-    mModule = new Module(cacheName.str(), iBuilder->getContext());
-    mModule->setTargetTriple(iBuilder->getModule()->getTargetTriple());
 }
 
+
 // Default kernel signature: generate the IR and emit as byte code.
-std::string KernelBuilder::generateKernelSignature(std::string moduleId) {
-    if (moduleIDisSignature()) {
-        return moduleId;
+std::string KernelBuilder::makeSignature() {
+    if (LLVM_LIKELY(moduleIDisSignature())) {
+        return getModule()->getModuleIdentifier();
     } else {
         generateKernel();
         std::string signature;
         raw_string_ostream OS(signature);
-        WriteBitcodeToFile(iBuilder->getModule(), OS);
+        WriteBitcodeToFile(getModule(), OS);
         return signature;
     }
 }
@@ -211,20 +214,20 @@ void KernelBuilder::generateKernel() {
     // If the module id cannot uniquely identify this kernel, "generateKernelSignature()" will have already
     // generated the unoptimized IR.
     if (!mIsGenerated) {
+        auto ip = iBuilder->saveIP();
         auto saveInstance = getInstance();
-        auto savePoint = iBuilder->saveIP();
-        addKernelDeclarations(iBuilder->getModule());
+        addKernelDeclarations();
         callGenerateInitializeMethod();
         callGenerateDoSegmentMethod();        
         callGenerateFinalizeMethod();
-        iBuilder->restoreIP(savePoint);
         setInstance(saveInstance);
-        mIsGenerated = true;       
+        iBuilder->restoreIP(ip);
+        mIsGenerated = true;
     }
 }
 
 inline void KernelBuilder::callGenerateInitializeMethod() {
-    mCurrentMethod = getInitFunction();
+    mCurrentMethod = getInitFunction(iBuilder->getModule());
     iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     Function::arg_iterator args = mCurrentMethod->arg_begin();
     setInstance(&*(args++));
@@ -240,7 +243,7 @@ inline void KernelBuilder::callGenerateInitializeMethod() {
 }
 
 inline void KernelBuilder::callGenerateDoSegmentMethod() {
-    mCurrentMethod = getDoSegmentFunction();
+    mCurrentMethod = getDoSegmentFunction(iBuilder->getModule());
     BasicBlock * const entry = CreateBasicBlock(getName() + "_entry");
     iBuilder->SetInsertPoint(entry);
     auto args = mCurrentMethod->arg_begin();
@@ -258,7 +261,7 @@ inline void KernelBuilder::callGenerateDoSegmentMethod() {
 }
 
 inline void KernelBuilder::callGenerateFinalizeMethod() {
-    mCurrentMethod = getTerminateFunction();
+    mCurrentMethod = getTerminateFunction(iBuilder->getModule());
     iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
     auto args = mCurrentMethod->arg_begin();
     setInstance(&*(args++));
@@ -364,11 +367,17 @@ void KernelBuilder::setTerminationSignal() const {
 }
 
 LoadInst * KernelBuilder::acquireLogicalSegmentNo() const {
-    return iBuilder->CreateAtomicLoadAcquire(getScalarFieldPtr(getInstance(), LOGICAL_SEGMENT_NO_SCALAR));
+    return iBuilder->CreateAtomicLoadAcquire(getScalarFieldPtr(LOGICAL_SEGMENT_NO_SCALAR));
 }
 
 void KernelBuilder::releaseLogicalSegmentNo(Value * nextSegNo) const {
-    iBuilder->CreateAtomicStoreRelease(nextSegNo, getScalarFieldPtr(getInstance(), LOGICAL_SEGMENT_NO_SCALAR));
+    iBuilder->CreateAtomicStoreRelease(nextSegNo, getScalarFieldPtr(LOGICAL_SEGMENT_NO_SCALAR));
+}
+
+llvm::Value * KernelBuilder::getLinearlyAccessibleItems(const std::string & name, llvm::Value * fromPosition) const {
+    llvm::Value * instance = getStreamSetBufferPtr(name);
+    const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
+    return buf->getLinearlyAccessibleItems(iBuilder, instance, fromPosition);
 }
 
 llvm::Value * KernelBuilder::getConsumerLock(const std::string & name) const {
@@ -396,7 +405,7 @@ inline Value * KernelBuilder::computeBlockIndex(const std::vector<Binding> & bin
 Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * streamIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
-    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, true);
+    return buf->getStreamBlockPtr(iBuilder, getStreamSetBufferPtr(name), streamIndex, blockIndex, true);
 }
 
 Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * streamIndex) const {
@@ -406,7 +415,7 @@ Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * st
 Value * KernelBuilder::getInputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
-    return buf->getStreamPackPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex, true);
+    return buf->getStreamPackPtr(iBuilder, getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex, true);
 }
 
 Value * KernelBuilder::loadInputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex) const {
@@ -414,20 +423,20 @@ Value * KernelBuilder::loadInputStreamPack(const std::string & name, Value * str
 }
 
 llvm::Value * KernelBuilder::getInputStreamSetCount(const std::string & name) const {
-    return getInputStreamSetBuffer(name)->getStreamSetCount(getStreamSetBufferPtr(name));
+    return getInputStreamSetBuffer(name)->getStreamSetCount(iBuilder, getStreamSetBufferPtr(name));
 }
 
 llvm::Value * KernelBuilder::getAdjustedInputStreamBlockPtr(Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex) const {
     Value * blockIndex = computeBlockIndex(mStreamSetInputs, name, getProcessedItemCount(name));
     blockIndex = iBuilder->CreateAdd(blockIndex, blockAdjustment);
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
-    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, true);
+    return buf->getStreamBlockPtr(iBuilder, getStreamSetBufferPtr(name), streamIndex, blockIndex, true);
 }
 
 Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value * streamIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetOutputs, name, getProducedItemCount(name));
     const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
-    return buf->getStreamBlockPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, false);
+    return buf->getStreamBlockPtr(iBuilder, getStreamSetBufferPtr(name), streamIndex, blockIndex, false);
 }
 
 void KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, Value * toStore) const {
@@ -437,7 +446,7 @@ void KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * str
 Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) const {
     Value * const blockIndex = computeBlockIndex(mStreamSetOutputs, name, getProducedItemCount(name));
     const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
-    return buf->getStreamPackPtr(getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex, false);
+    return buf->getStreamPackPtr(iBuilder, getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex, false);
 }
 
 void KernelBuilder::storeOutputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex, Value * toStore) const {
@@ -445,27 +454,27 @@ void KernelBuilder::storeOutputStreamPack(const std::string & name, Value * stre
 }
 
 llvm::Value * KernelBuilder::getOutputStreamSetCount(const std::string & name) const {
-    return getOutputStreamSetBuffer(name)->getStreamSetCount(getStreamSetBufferPtr(name));
+    return getOutputStreamSetBuffer(name)->getStreamSetCount(iBuilder, getStreamSetBufferPtr(name));
 }
 
 Value * KernelBuilder::getRawInputPointer(const std::string & name, Value * streamIndex, Value * absolutePosition) const {
-    return getInputStreamSetBuffer(name)->getRawItemPointer(getStreamSetBufferPtr(name), streamIndex, absolutePosition);
+    return getInputStreamSetBuffer(name)->getRawItemPointer(iBuilder, getStreamSetBufferPtr(name), streamIndex, absolutePosition);
 }
 
 Value * KernelBuilder::getRawOutputPointer(const std::string & name, Value * streamIndex, Value * absolutePosition) const {
-    return getOutputStreamSetBuffer(name)->getRawItemPointer(getStreamSetBufferPtr(name), streamIndex, absolutePosition);
+    return getOutputStreamSetBuffer(name)->getRawItemPointer(iBuilder, getStreamSetBufferPtr(name), streamIndex, absolutePosition);
 }
 
 Value * KernelBuilder::getBaseAddress(const std::string & name) const {
-    return getAnyStreamSetBuffer(name)->getBaseAddress(getStreamSetBufferPtr(name));
+    return getAnyStreamSetBuffer(name)->getBaseAddress(iBuilder, getStreamSetBufferPtr(name));
 }
 
 void KernelBuilder::setBaseAddress(const std::string & name, Value * const addr) const {
-    return getAnyStreamSetBuffer(name)->setBaseAddress(getStreamSetBufferPtr(name), addr);
+    return getAnyStreamSetBuffer(name)->setBaseAddress(iBuilder, getStreamSetBufferPtr(name), addr);
 }
 
 Value * KernelBuilder::getBufferedSize(const std::string & name) const {
-    return getAnyStreamSetBuffer(name)->getBufferedSize(getStreamSetBufferPtr(name));
+    return getAnyStreamSetBuffer(name)->getBufferedSize(iBuilder, getStreamSetBufferPtr(name));
 }
 
 void KernelBuilder::setBufferedSize(const std::string & name, Value * size) const {
@@ -479,13 +488,13 @@ void KernelBuilder::setBufferedSize(const std::string & name, Value * size) cons
         assert (index < mStreamSetOutputBuffers.size());
         buf = mStreamSetOutputBuffers[index];
     }
-    buf->setBufferedSize(getStreamSetBufferPtr(name), size);
+    buf->setBufferedSize(iBuilder, getStreamSetBufferPtr(name), size);
 }
 
 void KernelBuilder::reserveBytes(const std::string & name, llvm::Value * value) const {
     Value * itemCount = getProducedItemCount(name);
     const StreamSetBuffer * const buf = getOutputStreamSetBuffer(name);
-    buf->reserveBytes(getStreamSetBufferPtr(name), iBuilder->CreateAdd(itemCount, value));
+    buf->reserveBytes(iBuilder, getStreamSetBufferPtr(name), iBuilder->CreateAdd(itemCount, value));
 }
 
 BasicBlock * KernelBuilder::CreateWaitForConsumers() const {
@@ -556,12 +565,13 @@ Argument * KernelBuilder::getParameter(Function * const f, const std::string & n
 }
 
 CallInst * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) const {
-    Function * const doSegment = getDoSegmentFunction();
+    Function * const doSegment = getDoSegmentFunction(iBuilder->getModule());
     assert (doSegment->getArgumentList().size() == args.size());
     return iBuilder->CreateCall(doSegment, args);
 }
 
 Value * KernelBuilder::getAccumulator(const std::string & accumName) const {
+    assert ("KernelBuilder does not have a valid IDISA Builder" && iBuilder);
     if (LLVM_UNLIKELY(mOutputScalarResult == nullptr)) {
         report_fatal_error("Cannot get accumulator " + accumName + " until " + getName() + " has terminated.");
     }
@@ -596,7 +606,6 @@ Value * KernelBuilder::createInstance() {
 }
 
 void KernelBuilder::initializeInstance() {
-
 
     if (LLVM_UNLIKELY(getInstance() == nullptr)) {
         report_fatal_error("Cannot initialize " + getName() + " before calling createInstance()");
@@ -657,7 +666,7 @@ void KernelBuilder::initializeInstance() {
         args.push_back(outputConsumers);
     }
 
-    iBuilder->CreateCall(getInitFunction(), args);
+    iBuilder->CreateCall(getInitFunction(iBuilder->getModule()), args);
 }
 
 //  The default doSegment method dispatches to the doBlock routine for
@@ -782,7 +791,6 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
         mCurrentMethod->setDoesNotThrow();
         mCurrentMethod->setDoesNotCapture(1);
         auto args = mCurrentMethod->arg_begin();
-        mCurrentMethod = mCurrentMethod;
         args->setName("self");
         setInstance(&*args);
         iBuilder->SetInsertPoint(CreateBasicBlock("entry"));
@@ -800,40 +808,41 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
     unsigned priorIdx = 0;
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         Value * log2BlockSize = iBuilder->getSize(std::log2(iBuilder->getBitBlockWidth()));
-        if (auto cb = dyn_cast<SwizzledCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
+        if (SwizzledCopybackBuffer * const cb = dyn_cast<SwizzledCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
             BasicBlock * copyBack = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
             BasicBlock * done = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
             Value * newlyProduced = iBuilder->CreateSub(getProducedItemCount(mStreamSetOutputs[i].name), priorProduced[priorIdx]);
             Value * priorBlock = iBuilder->CreateLShr(priorProduced[priorIdx], log2BlockSize);
             Value * priorOffset = iBuilder->CreateAnd(priorProduced[priorIdx], iBuilder->getSize(iBuilder->getBitBlockWidth() - 1));
             Value * instance = getStreamSetBufferPtr(mStreamSetOutputs[i].name);
-            Value * accessibleBlocks = cb->getLinearlyAccessibleBlocks(instance, priorBlock);
+            Value * accessibleBlocks = cb->getLinearlyAccessibleBlocks(iBuilder, instance, priorBlock);
             Value * accessible = iBuilder->CreateSub(iBuilder->CreateShl(accessibleBlocks, log2BlockSize), priorOffset);
             Value * wraparound = iBuilder->CreateICmpULT(accessible, newlyProduced);
             iBuilder->CreateCondBr(wraparound, copyBack, done);
             iBuilder->SetInsertPoint(copyBack);
             Value * copyItems = iBuilder->CreateSub(newlyProduced, accessible);
-            cb->createCopyBack(instance, copyItems);
+            cb->createCopyBack(iBuilder, instance, copyItems);
             iBuilder->CreateBr(done);
             iBuilder->SetInsertPoint(done);
             priorIdx++;
         }
-        if (auto cb = dyn_cast<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
+        if (CircularCopybackBuffer * const cb = dyn_cast<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
             BasicBlock * copyBack = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
             BasicBlock * done = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
             Value * instance = getStreamSetBufferPtr(mStreamSetOutputs[i].name);
             Value * newlyProduced = iBuilder->CreateSub(getProducedItemCount(mStreamSetOutputs[i].name), priorProduced[priorIdx]);
-            Value * accessible = cb->getLinearlyAccessibleItems(instance, priorProduced[priorIdx]);
+            Value * accessible = cb->getLinearlyAccessibleItems(iBuilder, instance, priorProduced[priorIdx]);
             Value * wraparound = iBuilder->CreateICmpULT(accessible, newlyProduced);
             iBuilder->CreateCondBr(wraparound, copyBack, done);
             iBuilder->SetInsertPoint(copyBack);
             Value * copyItems = iBuilder->CreateSub(newlyProduced, accessible);
-            cb->createCopyBack(instance, copyItems);
+            cb->createCopyBack(iBuilder, instance, copyItems);
             iBuilder->CreateBr(done);
             iBuilder->SetInsertPoint(done);
             priorIdx++;
         }
     }
+
 
     /// Call the do block method if necessary then restore the current function state to the do segement method
     if (!useIndirectBr()) {
@@ -901,7 +910,7 @@ void BlockOrientedKernel::CreateDoBlockMethodCall() {
 }
 
 void KernelBuilder::finalizeInstance() {
-    mOutputScalarResult = iBuilder->CreateCall(getTerminateFunction(), { getInstance() });
+    mOutputScalarResult = iBuilder->CreateCall(getTerminateFunction(iBuilder->getModule()), { getInstance() });
 }
 
 KernelBuilder::StreamPort KernelBuilder::getStreamPort(const std::string & name) const {

@@ -9,12 +9,14 @@
 
 #include <llvm/ADT/SmallString.h>
 #include <llvm/ExecutionEngine/ObjectCache.h>
-#include <llvm/Support/MemoryBuffer.h>
 #include <llvm/ADT/StringRef.h>
 #include <string>
-#include <map>
+#include <boost/container/flat_map.hpp>
 
 namespace llvm { class Module; }
+namespace llvm { class MemoryBuffer; }
+namespace llvm { class MemoryBufferRef; }
+namespace kernel { class KernelBuilder; }
 
 // The ParabixObjectCache is a two-level cache compatible with the requirements
 // of the LLVM ExecutionEngine as well as the Parabix Kernel builder infrastructure.
@@ -28,23 +30,32 @@ namespace llvm { class Module; }
 // it to the ExecutionEngine.
 //
 
-class ParabixObjectCache : public llvm::ObjectCache {
-    public:
-        ParabixObjectCache(const std::string &dir);
-        ParabixObjectCache();
-        virtual ~ParabixObjectCache();
+class ParabixObjectCache final : public llvm::ObjectCache {
+    using Path = llvm::SmallString<128>;
+    template <typename K, typename V>
+    using Map = boost::container::flat_map<K, V>;
+    using CacheEntry = std::pair<kernel::KernelBuilder *, std::unique_ptr<llvm::MemoryBuffer>>;
+    using CacheMap = Map<llvm::Module *, CacheEntry>;
+public:
 
-        void notifyObjectCompiled(const llvm::Module *M, llvm::MemoryBufferRef Obj) override;
-        bool loadCachedObjectFile(std::string ModuleID, std::string signature);
-        std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) override;
-    
-    private:
-        std::map<std::string, std::string> kernelSignatureMap;
-        std::map<std::string, std::unique_ptr<llvm::MemoryBuffer>> cachedObjectMap;
-        using Path = llvm::SmallString<128>;
-        Path CacheDir;
+//    enum Status {
+//        Failed
+//        , Succeeded
+//        , ObjectFileLocked
+//    };
 
-        bool getCacheFilename(const std::string & ModID, Path & CacheName);
+    ParabixObjectCache(const std::string &dir);
+    ParabixObjectCache();
+    bool loadCachedObjectFile(kernel::KernelBuilder * const kernel);
+    void notifyObjectCompiled(const llvm::Module *M, llvm::MemoryBufferRef Obj) override;
+    std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module * M) override;
+private:
+//    CacheMap        mCachedObject;
+
+    Map<std::string, std::string>                           mKernelSignatureMap;
+    Map<std::string, std::unique_ptr<llvm::MemoryBuffer>>   mCachedObjectMap;
+    Path                                                    mCachePath;
+    Path                                                    mCachePrefix;
 };
 
 #endif

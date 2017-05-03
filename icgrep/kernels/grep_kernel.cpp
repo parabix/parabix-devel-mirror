@@ -28,23 +28,18 @@ inline static std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
-inline std::string makeSignature(RE * const re_ast) {
-    std::string signature = Printer_RE::PrintRE(re_ast);
-    return signature;
-}
-
-ICgrepKernelBuilder::ICgrepKernelBuilder (IDISA::IDISA_Builder * const iBuilder, RE * const re_ast)
+ICgrepKernelBuilder::ICgrepKernelBuilder (IDISA::IDISA_Builder * const iBuilder, RE * const re)
 : PabloKernel(iBuilder, "",
               {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}},
               {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}},
               {},
               {})
-, mRE(re_ast)
-, mSignature(makeSignature(re_ast)) {
-    setName("Parabix:" + sha1sum(mSignature));
+, mRE(re)
+, mSignature(Printer_RE::PrintRE(re)) {
+    setName(sha1sum(mSignature));
 }
 
-std::string ICgrepKernelBuilder::generateKernelSignature(std::string moduleId) {
+std::string ICgrepKernelBuilder::makeSignature() {
     return mSignature;
 }
 

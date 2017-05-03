@@ -85,10 +85,10 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
     
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
-    ByteStream.allocateBuffer();
-    Expanded3_4Out.allocateBuffer();
-    Radix64out.allocateBuffer();
-    Base64out.allocateBuffer();
+    ByteStream.allocateBuffer(iBuilder);
+    Expanded3_4Out.allocateBuffer(iBuilder);
+    Radix64out.allocateBuffer(iBuilder);
+    Base64out.allocateBuffer(iBuilder);
 
     pxDriver.generatePipelineIR();
 

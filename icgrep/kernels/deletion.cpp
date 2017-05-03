@@ -81,7 +81,7 @@ void DeletionKernel::generateFinalBlockMethod(Value * remainingBytes) {
 }
 
 DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount)
-: BlockOrientedKernel(iBuilder, "Parabix:del" + std::to_string(fw) + "_" + std::to_string(streamCount),
+: BlockOrientedKernel(iBuilder, "del" + std::to_string(fw) + "_" + std::to_string(streamCount),
               {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
                Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
               {Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet"},
@@ -224,7 +224,7 @@ void DeleteByPEXTkernel::generatePEXTAndSwizzleLoop(const std::vector<Value *> &
 }
 
 DeleteByPEXTkernel::DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle)
-    : BlockOrientedKernel(iBuilder, "Parabix:PEXTdel" + std::to_string(fw) + "_" + std::to_string(streamCount) + (shouldSwizzle ? "swiz" : "noswiz"),
+    : BlockOrientedKernel(iBuilder, "PEXTdel" + std::to_string(fw) + "_" + std::to_string(streamCount) + (shouldSwizzle ? "swiz" : "noswiz"),
                       {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
                           Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
                       {}, {}, {}, {})
@@ -264,7 +264,7 @@ DeleteByPEXTkernel::DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned
     
 
 SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(IDISA::IDISA_Builder * iBuilder, unsigned bitStreamCount, unsigned fieldWidth)
-    : BlockOrientedKernel(iBuilder, "Parabix:swizzled_compress" + std::to_string(fieldWidth) + "_" + std::to_string(bitStreamCount), 
+    : BlockOrientedKernel(iBuilder, "swizzled_compress" + std::to_string(fieldWidth) + "_" + std::to_string(bitStreamCount),
                          {Binding{iBuilder->getStreamSetTy(), "countsPerStride"}}, {}, {}, {}, {})
 , mBitStreamCount(bitStreamCount)
     , mFieldWidth(fieldWidth)

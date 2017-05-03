@@ -44,6 +44,8 @@ inline static unsigned getPointerElementAlignment(const Value * const ptr) {
 }
 
 void PabloCompiler::compile() {
+    iBuilder = mKernel->getBuilder();
+    assert ("PabloCompiler does not have a IDISA builder" && iBuilder);
     mCarryManager->initializeCodeGen();     
     PabloBlock * const entryBlock = mKernel->getEntryBlock(); assert (entryBlock);
     mMarker.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
@@ -53,8 +55,10 @@ void PabloCompiler::compile() {
 }
 
 void PabloCompiler::initializeKernelData() {
+    iBuilder = mKernel->getBuilder();
+    assert ("PabloCompiler does not have a IDISA builder" && iBuilder);
     examineBlock(mKernel->getEntryBlock());
-    mCarryManager->initializeCarryData(mKernel);
+    mCarryManager->initializeCarryData();
 }
 
 void PabloCompiler::examineBlock(const PabloBlock * const block) {
@@ -640,11 +644,11 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
     return value;
 }
 
-PabloCompiler::PabloCompiler(PabloKernel * kernel)
-: iBuilder(kernel->getBuilder())
+PabloCompiler::PabloCompiler(PabloKernel * const kernel)
+: iBuilder(nullptr)
 , mKernel(kernel)
-, mCarryManager(new CarryManager(iBuilder)) {
-
+, mCarryManager(new CarryManager(kernel)) {
+    assert ("PabloKernel cannot be null!" && kernel);
 }
 
 PabloCompiler::~PabloCompiler() {

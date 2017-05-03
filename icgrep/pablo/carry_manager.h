@@ -22,7 +22,6 @@ namespace pablo { class PabloBlock; }
 namespace pablo { class PabloKernel; }
 namespace pablo { class Statement; }
 
-
 /* 
  * Carry Data Manager.
  * 
@@ -42,9 +41,9 @@ class CarryManager {
 
 public:
   
-    CarryManager(IDISA::IDISA_Builder * idb) noexcept;
+    CarryManager(PabloKernel * const kernel) noexcept;
 
-    void initializeCarryData(PabloKernel * const kernel);
+    void initializeCarryData();
 
     void initializeCodeGen();
 
@@ -102,12 +101,16 @@ protected:
     /* Summary handling routines */
     void addToCarryOutSummary(llvm::Value * const value);
 
+    llvm::Type * getBitBlockType() const;
+
+    unsigned getBitBlockWidth() const;
+
+    llvm::Type * getCarryPackType() const;
+
 private:
 
-    IDISA::IDISA_Builder * const                    iBuilder;
-    PabloKernel *                                   mKernel;
-    llvm::Type * const                              mBitBlockType;
-    const unsigned                                  mBitBlockWidth;
+    PabloKernel * const                             mKernel;
+    IDISA::IDISA_Builder *                          iBuilder;
 
     llvm::Value *                                   mCurrentFrame;
     unsigned                                        mCurrentFrameIndex;
@@ -115,7 +118,6 @@ private:
     const PabloBlock *                              mCurrentScope;
     CarryData *                                     mCarryInfo;
 
-    llvm::Type *                                    mCarryPackType;
     llvm::Value *                                   mNextSummaryTest;
 
     unsigned                                        mIfDepth;
@@ -136,7 +138,6 @@ private:
     unsigned                                        mCarryScopes;
     std::vector<unsigned>                           mCarryScopeIndex;
 
-//    std::vector<llvm::Value *>                      mCarryInSummary;
     std::vector<llvm::Value *>                      mCarrySummaryStack;
 };
 

@@ -81,6 +81,10 @@ public:
 
     void setName(std::string newName) { mKernelName = newName; }
        
+    virtual bool isCachable() const = 0;
+
+    virtual std::string makeSignature() = 0;
+
     const std::vector<Binding> & getStreamInputs() const { return mStreamSetInputs; }
 
     const std::vector<Binding> & getStreamOutputs() const { return mStreamSetOutputs; }
@@ -90,7 +94,9 @@ public:
     const std::vector<Binding> & getScalarOutputs() const { return mScalarOutputs; }
         
     // Add ExternalLinkage method declarations for the kernel to a given client module.
-    void addKernelDeclarations(llvm::Module * client);
+    void addKernelDeclarations();
+
+    virtual void linkExternalMethods() = 0;
 
     virtual llvm::Value * createInstance() = 0;
 
@@ -108,10 +114,6 @@ public:
         return mLookAheadPositions;
     }
     
-    IDISA::IDISA_Builder * getBuilder() const {
-        return iBuilder;
-    }
-
     virtual llvm::Value * getProducedItemCount(const std::string & name, llvm::Value * doFinal = nullptr) const = 0;
 
     virtual void setProducedItemCount(const std::string & name, llvm::Value * value) const = 0;
@@ -132,17 +134,23 @@ public:
         mLookAheadPositions = lookAheadPositions;
     }
 
-    llvm::Function * getInitFunction() const;
+    IDISA::IDISA_Builder * getBuilder() const {
+        return iBuilder;
+    }
 
-    llvm::Function * getDoSegmentFunction() const;
-
-    llvm::Function * getTerminateFunction() const;
+    void setBuilder(IDISA::IDISA_Builder * const builder) {
+        iBuilder = builder;
+    }
 
 protected:
 
-    virtual void linkExternalMethods() = 0;
+    llvm::Function * getInitFunction(llvm::Module * const module) const;
 
-    KernelInterface(IDISA::IDISA_Builder * builder,
+    llvm::Function * getDoSegmentFunction(llvm::Module * const module) const;
+
+    llvm::Function * getTerminateFunction(llvm::Module * const module) const;
+
+    KernelInterface(IDISA::IDISA_Builder * const builder,
                     std::string kernelName,
                     std::vector<Binding> && stream_inputs,
                     std::vector<Binding> && stream_outputs,
@@ -171,7 +179,7 @@ protected:
 
 protected:
     
-    IDISA::IDISA_Builder * const    iBuilder;
+    IDISA::IDISA_Builder *          iBuilder;
     llvm::Value *                   mKernelInstance;
     llvm::StructType *              mKernelStateType;
     unsigned                        mLookAheadPositions;

@@ -55,7 +55,7 @@ private:
 
 private:
 
-    IDISA::IDISA_Builder * const    iBuilder;
+    IDISA::IDISA_Builder *          iBuilder;
     PabloKernel * const             mKernel;
     CarryManager * const            mCarryManager;
     TranslationMap                  mMarker;

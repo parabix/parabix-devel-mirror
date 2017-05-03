@@ -169,10 +169,9 @@ void pipeline(ParabixDriver & pxDriver, const unsigned count) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main, 0));
 
- //   ByteStream.setExternalBuffer(inputStream);
-    BasisBits.allocateBuffer();
-    matches.allocateBuffer();
-    errors.allocateBuffer();
+    BasisBits.allocateBuffer(iBuilder);
+    matches.allocateBuffer(iBuilder);
+    errors.allocateBuffer(iBuilder);
 
     pxDriver.generatePipelineIR();
     iBuilder->CreateRetVoid();

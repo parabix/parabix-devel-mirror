@@ -167,7 +167,7 @@ void S2PKernel::generateFinalBlockMethod(Value * remainingBytes) {
 }
 
 S2PKernel::S2PKernel(IDISA::IDISA_Builder * builder, bool aligned)
-: BlockOrientedKernel(builder, aligned ? "Parabix:s2p" : "Parabix:s2p_unaligned", 
+: BlockOrientedKernel(builder, aligned ? "s2p" : "s2p_unaligned",
     {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {Binding{builder->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
   mAligned(aligned) {
     setNoTerminateAttribute(true);

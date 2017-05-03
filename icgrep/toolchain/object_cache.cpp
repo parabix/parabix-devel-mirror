@@ -1,9 +1,15 @@
 #include "object_cache.h"
+#include <kernels/kernel.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
 #include <llvm/IR/Module.h>
-#include <string>
+#include <sys/file.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <boost/filesystem.hpp>
+#include <ctime>
 
 using namespace llvm;
 
@@ -15,90 +21,95 @@ using namespace llvm;
 // descriptor. The cache tries to load a saved object using that path if the
 // file exists.
 //
-ParabixObjectCache::ParabixObjectCache(const std::string &dir): CacheDir(dir) {}
+ParabixObjectCache::ParabixObjectCache(const std::string &dir): mCachePath(dir) {}
 
 ParabixObjectCache::ParabixObjectCache() {
     // $HOME/.cache/icgrep
     // TODO use path::user_cache_directory once we have llvm >= 3.7.
-    sys::path::home_directory(CacheDir);
-    std::string Version = PARABIX_VERSION;
-    std::string Date = __DATE__;
-    std::string Time = __TIME__;
-    std::string DateStamp = Date.substr(7) + Date.substr(0,3) + (Date[4] == ' ' ? Date.substr(5,1) : Date.substr(4,2));
-    std::string CacheSubDir = "Parabix" + Version + "_" + DateStamp + "@" + Time;
-    sys::path::append(CacheDir, ".cache", CacheSubDir);
+    sys::path::home_directory(mCachePath);
+    sys::path::append(mCachePath, ".cache", "parabix");
+
+    const std::string Version = PARABIX_VERSION;
+    const std::string Date = __DATE__;
+    const std::string Time = __TIME__;
+    const std::string DateStamp = Date.substr(7) + Date.substr(0, 3) + (Date[4] == ' ' ? Date.substr(5, 1) : Date.substr(4, 2));
+    mCachePrefix = Version + "_" + DateStamp + "@" + Time;
 }
 
-ParabixObjectCache::~ParabixObjectCache() {}
+bool ParabixObjectCache::loadCachedObjectFile(kernel::KernelBuilder * const kernel) {
+    if (LLVM_LIKELY(kernel->isCachable())) {
 
-// A new module has been compiled.   If it is cacheable and no conflicting module
-// exists, write it out.  
-void ParabixObjectCache::notifyObjectCompiled(const Module *M, MemoryBufferRef Obj) {
-    const std::string &ModuleID = M->getModuleIdentifier();
-    auto f = cachedObjectMap.find(ModuleID);
-    if (f!= cachedObjectMap.end()) return;
-    Path CacheName(CacheDir);
-    if (!getCacheFilename(ModuleID, CacheName)) return;
-    if (!CacheDir.empty())      // Re-creating an existing directory is fine.
-        sys::fs::create_directories(Twine(CacheDir));
-    std::error_code EC;
-    raw_fd_ostream outfile(CacheName, EC, sys::fs::F_None);
-    outfile.write(Obj.getBufferStart(), Obj.getBufferSize());
-    outfile.close();
-    auto s = kernelSignatureMap.find(ModuleID);  // Check for a kernel signature.
-    if (s != kernelSignatureMap.end()) { 
-        if (s->second == ModuleID) return;  // No signature is written when the signature is the ModuleID.
-        sys::path::replace_extension(CacheName, ".sig");
-        raw_fd_ostream sigfile(CacheName, EC, sys::fs::F_None);
-        sigfile << s->second;
-        sigfile.close();
+        Module * const module = kernel->getModule();
+        assert ("kernel module cannot be null!" && module);
+        const auto moduleId = module->getModuleIdentifier();
+
+        // Have we already seen this module before?
+        if (LLVM_UNLIKELY(mCachedObjectMap.count(moduleId) != 0)) {
+            const auto f = mKernelSignatureMap.find(moduleId);
+            if (f == mKernelSignatureMap.end()) {
+                return kernel->moduleIDisSignature();
+            } else if (kernel->moduleIDisSignature() || (kernel->makeSignature() != f->second)) {
+                return false;
+            }
+            return true;
+        }
+
+        // No, check for an existing cache file.
+        Path objectName(mCachePath);
+        sys::path::append(objectName, mCachePrefix + moduleId + ".o");
+        auto objectBuffer = MemoryBuffer::getFile(objectName.c_str(), -1, false);
+        if (objectBuffer) {
+            if (!kernel->moduleIDisSignature()) {
+                sys::path::replace_extension(objectName, ".sig");
+                const auto signatureBuffer = MemoryBuffer::getFile(objectName.c_str(), -1, false);
+                if (signatureBuffer) {
+                    const StringRef loadedSig = signatureBuffer.get()->getBuffer();
+                    if (!loadedSig.equals(kernel->makeSignature())) {
+                        return false;
+                    }
+                } else {
+                    report_fatal_error("signature file expected but not found: " + moduleId);
+                    return false;
+                }
+            }
+            // updae the modified time of the file then add it to our cache
+            boost::filesystem::last_write_time(objectName.c_str(), time(0));
+            mCachedObjectMap.emplace(moduleId, std::move(objectBuffer.get()));
+            return true;
+        } else if (!kernel->moduleIDisSignature()) {
+            mKernelSignatureMap.emplace(moduleId, kernel->makeSignature());
+        }
     }
+    return false;
 }
 
-bool ParabixObjectCache::loadCachedObjectFile(std::string ModuleID, std::string signature) {
-    // Have we already seen this module before.
-    auto s = kernelSignatureMap.find(ModuleID);
-    if (s!= kernelSignatureMap.end()) {
-        if (s->second != signature) {
+// A new module has been compiled. If it is cacheable and no conflicting module
+// exists, write it out.
+void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef Obj) {
+    const auto moduleId = M->getModuleIdentifier();
+    if (mCachedObjectMap.count(moduleId) == 0) {
 
+        Path objectName(mCachePath);
+        sys::path::append(objectName, mCachePrefix + moduleId + ".o");
 
-#ifdef OBJECT_CACHE_DEBUG
-            std::cerr << "loadCachedObjectFile:  conflicting signatures for the same moduleID! " << ModuleID << std::endl;
-#endif
-            return false;
+        if (LLVM_LIKELY(!mCachePath.empty())) {
+            sys::fs::create_directories(Twine(mCachePath));
         }
-        // A cached entry exists if it has already been loaded.
-        return cachedObjectMap.count(ModuleID) != 0;
-    }
-    // Confirm that the module is cacheable.
-    Path CachedObjectName(CacheDir);
-    if (!getCacheFilename(ModuleID, CachedObjectName)) {
-        return false;
-    }
-    //
-    // Save the signature.
-    kernelSignatureMap.emplace(ModuleID, signature);
-    //
-    // Now checkfor a cache file.
-    ErrorOr<std::unique_ptr<MemoryBuffer>> KernelObjectBuffer = MemoryBuffer::getFile(CachedObjectName.c_str(), -1, false);
-    if (!KernelObjectBuffer) return false;
-    //
-    if (ModuleID != signature) {
-        // Confirm the signature.
-        sys::path::replace_extension(CachedObjectName, ".sig");
-        ErrorOr<std::unique_ptr<MemoryBuffer>> SignatureBuffer = MemoryBuffer::getFile(CachedObjectName.c_str(), -1, false);
-        if (!SignatureBuffer) {
-            report_fatal_error("signature file expected but not found: " + ModuleID);
-            return false;
-        }
-        StringRef loadedSig = SignatureBuffer.get()->getBuffer();  
-        if (!loadedSig.equals(signature)) {
-            report_fatal_error("computed signature does not match stored signature: " + ModuleID);
+
+        std::error_code EC;
+        raw_fd_ostream outfile(objectName, EC, sys::fs::F_None);
+        outfile.write(Obj.getBufferStart(), Obj.getBufferSize());
+        outfile.close();
+
+        // Check for a kernel signature.
+        const auto sig = mKernelSignatureMap.find(moduleId);
+        if (LLVM_UNLIKELY(sig != mKernelSignatureMap.end())) {
+            sys::path::replace_extension(objectName, ".sig");
+            raw_fd_ostream sigfile(objectName, EC, sys::fs::F_None);
+            sigfile << sig->second;
+            sigfile.close();
         }
     }
-    // Make a copy so that the JIT engine can freely modify it.
-    cachedObjectMap.emplace(ModuleID, std::move(KernelObjectBuffer.get()));
-    return true;
 }
 
 /*  May need this.
@@ -114,21 +125,11 @@ void ParabixObjectCache::removeCacheFile(std::string ModuleID) {
 */
 
 std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module* M) {
-    const std::string &ModuleID = M->getModuleIdentifier();
-    auto f = cachedObjectMap.find(ModuleID);
-    if (f == cachedObjectMap.end()) {
+    auto f = mCachedObjectMap.find(M->getModuleIdentifier());
+    if (f == mCachedObjectMap.end()) {
         return nullptr;
     }
     // Return a copy of the buffer, for MCJIT to modify, if necessary.
     return MemoryBuffer::getMemBufferCopy(f->second.get()->getBuffer());
 }
 
-bool ParabixObjectCache::getCacheFilename(const std::string &ModID, Path &CacheName) {
-    const std::string Prefix("Parabix:");
-    size_t PrefixLength = Prefix.length();
-    if (ModID.substr(0, PrefixLength) != Prefix)
-        return false;
-    CacheName = CacheDir;
-    sys::path::append(CacheName, ModID.substr(PrefixLength) + ".o");
-    return true;
-}

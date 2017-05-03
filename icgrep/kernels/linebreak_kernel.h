@@ -6,8 +6,7 @@
 #define LINEBREAK_KERNEL_H
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
-#include "kernel.h"              // for KernelBuilder
-#include <string>                // for string
+
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
@@ -15,7 +14,8 @@ namespace kernel {
 class LineBreakKernelBuilder: public pablo::PabloKernel {
 public:
     LineBreakKernelBuilder(IDISA::IDISA_Builder * iBuilder, unsigned basisBitsCount);
-    bool moduleIDisSignature() override {return true;}
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 };
 
 }

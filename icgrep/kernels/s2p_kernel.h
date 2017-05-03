@@ -11,11 +11,11 @@ namespace llvm { class Value; }
 
 namespace kernel {
 
-class S2PKernel : public BlockOrientedKernel {
+class S2PKernel final : public BlockOrientedKernel {
 public:    
     S2PKernel(IDISA::IDISA_Builder * builder, bool aligned = true);
-    bool moduleIDisSignature() override {return true;}
-    virtual ~S2PKernel() {}
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 protected:
     void generateDoBlockMethod() override;
     void generateFinalBlockMethod(llvm::Value * remainingBytes) override;

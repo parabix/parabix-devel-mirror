@@ -15,8 +15,9 @@ class ICgrepKernelBuilder: public pablo::PabloKernel {
 public:
     ICgrepKernelBuilder(IDISA::IDISA_Builder * const iBuilder, re::RE * const re_ast);
     
-    std::string generateKernelSignature(std::string moduleId) override;
-    
+    std::string makeSignature() override;
+    bool isCachable() const override { return true; }
+
     void prepareKernel() override;
 
 private:
