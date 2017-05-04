@@ -78,6 +78,8 @@ public:
     virtual llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const;
 
     virtual llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const;
+    
+    virtual void createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy) const;
 
     virtual void reserveBytes(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * requested) const;
 
@@ -226,8 +228,11 @@ public:
     
     void allocateBuffer(IDISA::IDISA_Builder * const iBuilder) override;
     
+    void createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy) const override;
+
     // Generate copyback code for the given number of overflowItems.
     void createCopyBack(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * overflowItems) const;
+    
 protected:
     llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const override;
 private:

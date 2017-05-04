@@ -142,6 +142,41 @@ void StreamSetBuffer::releaseBuffer(IDISA_Builder * const iBuilder, Value * /* s
     /* do nothing: memory is stack allocated */
 }
 
+void StreamSetBuffer::createBlockAlignedCopy(IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * itemsToCopy) const {
+    Type * size_ty = iBuilder->getSizeTy();
+    Type * i8ptr = iBuilder->getInt8PtrTy();
+    Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
+    Function * f = iBuilder->GetInsertBlock()->getParent();
+    BasicBlock * wholeBlockCopy = BasicBlock::Create(iBuilder->getContext(), "wholeBlockCopy", f, 0);
+    BasicBlock * partialBlockCopy = BasicBlock::Create(iBuilder->getContext(), "partialBlockCopy", f, 0);
+    BasicBlock * copyDone = BasicBlock::Create(iBuilder->getContext(), "copyDone", f, 0);
+    unsigned numStreams = getType()->getArrayNumElements();
+    auto elemTy = getType()->getArrayElementType();
+    unsigned fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
+    Value * blocksToCopy = iBuilder->CreateUDiv(itemsToCopy, blockSize);
+    Value * partialItems = iBuilder->CreateURem(itemsToCopy, blockSize);
+    Value * partialBlockTargetPtr = iBuilder->CreateGEP(targetBlockPtr, blocksToCopy);
+    Value * partialBlockSourcePtr = iBuilder->CreateGEP(sourceBlockPtr, blocksToCopy);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(blocksToCopy, iBuilder->getSize(0)), wholeBlockCopy, partialBlockCopy);
+    iBuilder->SetInsertPoint(wholeBlockCopy);
+    unsigned alignment = iBuilder->getBitBlockWidth() / 8;
+    Value * copyLength = iBuilder->CreateSub(iBuilder->CreatePtrToInt(partialBlockTargetPtr, size_ty), iBuilder->CreatePtrToInt(targetBlockPtr, size_ty));
+    iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, i8ptr), iBuilder->CreateBitCast(sourceBlockPtr, i8ptr), copyLength, alignment);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(partialItems, iBuilder->getSize(0)), partialBlockCopy, copyDone);
+    iBuilder->SetInsertPoint(partialBlockCopy);
+    Value * copyBits = iBuilder->CreateMul(itemsToCopy, iBuilder->getSize(fieldWidth));
+    Value * copyBytes = iBuilder->CreateLShr(iBuilder->CreateAdd(copyBits, iBuilder->getSize(7)), iBuilder->getSize(3));
+    for (unsigned strm = 0; strm < numStreams; strm++) {
+        Value * strmTargetPtr = iBuilder->CreateGEP(partialBlockTargetPtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
+        Value * strmSourcePtr = iBuilder->CreateGEP(partialBlockSourcePtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
+        iBuilder->CreateMemMove(iBuilder->CreateBitCast(strmTargetPtr, i8ptr), iBuilder->CreateBitCast(strmSourcePtr, i8ptr), copyBytes, alignment);
+    }
+    iBuilder->CreateBr(copyDone);
+    iBuilder->SetInsertPoint(copyDone);
+}
+
+
+
 // Single Block Buffer
 
 // For a single block buffer, the block pointer is always the buffer base pointer.
@@ -203,37 +238,8 @@ void CircularCopybackBuffer::allocateBuffer(IDISA_Builder * const iBuilder) {
 }
 
 void CircularCopybackBuffer::createCopyBack(IDISA_Builder * const iBuilder, Value * self, Value * overFlowItems) const {
-    Type * size_ty = iBuilder->getSizeTy();
-    Type * i8ptr = iBuilder->getInt8PtrTy();
-    Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
-    Function * f = iBuilder->GetInsertBlock()->getParent();
-    BasicBlock * wholeBlockCopy = BasicBlock::Create(iBuilder->getContext(), "wholeBlockCopy", f, 0);
-    BasicBlock * partialBlockCopy = BasicBlock::Create(iBuilder->getContext(), "partialBlockCopy", f, 0);
-    BasicBlock * copyBackDone = BasicBlock::Create(iBuilder->getContext(), "copyBackDone", f, 0);
-    unsigned numStreams = getType()->getArrayNumElements();
-    auto elemTy = getType()->getArrayElementType();
-    unsigned fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
     Value * overFlowAreaPtr = iBuilder->CreateGEP(self, iBuilder->getSize(mBufferBlocks));
-    Value * overFlowBlocks = iBuilder->CreateUDiv(overFlowItems, blockSize);
-    Value * partialItems = iBuilder->CreateURem(overFlowItems, blockSize);
-    Value * partialBlockTargetPtr = iBuilder->CreateGEP(self, overFlowBlocks);
-    Value * partialBlockSourcePtr = iBuilder->CreateGEP(overFlowAreaPtr, overFlowBlocks);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(overFlowBlocks, iBuilder->getSize(0)), wholeBlockCopy, partialBlockCopy);
-    iBuilder->SetInsertPoint(wholeBlockCopy);
-    unsigned alignment = iBuilder->getBitBlockWidth() / 8;
-    Value * copyLength = iBuilder->CreateSub(iBuilder->CreatePtrToInt(partialBlockTargetPtr, size_ty), iBuilder->CreatePtrToInt(self, size_ty));
-    iBuilder->CreateMemMove(iBuilder->CreateBitCast(self, i8ptr), iBuilder->CreateBitCast(overFlowAreaPtr, i8ptr), copyLength, alignment);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(partialItems, iBuilder->getSize(0)), partialBlockCopy, copyBackDone);
-    iBuilder->SetInsertPoint(partialBlockCopy);
-    Value * copyBits = iBuilder->CreateMul(overFlowItems, iBuilder->getSize(fieldWidth));
-    Value * copyBytes = iBuilder->CreateLShr(iBuilder->CreateAdd(copyBits, iBuilder->getSize(7)), iBuilder->getSize(3));
-    for (unsigned strm = 0; strm < numStreams; strm++) {
-        Value * strmTargetPtr = iBuilder->CreateGEP(partialBlockTargetPtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
-        Value * strmSourcePtr = iBuilder->CreateGEP(partialBlockSourcePtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
-        iBuilder->CreateMemMove(iBuilder->CreateBitCast(strmTargetPtr, i8ptr), iBuilder->CreateBitCast(strmSourcePtr, i8ptr), copyBytes, alignment);
-    }
-    iBuilder->CreateBr(copyBackDone);
-    iBuilder->SetInsertPoint(copyBackDone);
+    createBlockAlignedCopy(iBuilder, self, overFlowAreaPtr, overFlowItems);
 }
 
 Value * CircularCopybackBuffer::getStreamSetBlockPtr(IDISA_Builder * const iBuilder, Value * self, Value * blockIndex) const {
@@ -246,39 +252,43 @@ void SwizzledCopybackBuffer::allocateBuffer(IDISA_Builder * const iBuilder) {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks + mOverflowBlocks));
 }
 
-void SwizzledCopybackBuffer::createCopyBack(IDISA_Builder * const iBuilder, Value * self, Value * overFlowItems) const {
+void SwizzledCopybackBuffer::createBlockAlignedCopy(IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * itemsToCopy) const {
     Type * size_ty = iBuilder->getSizeTy();
     Type * i8ptr = iBuilder->getInt8PtrTy();
     Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Function * f = iBuilder->GetInsertBlock()->getParent();
     BasicBlock * wholeBlockCopy = BasicBlock::Create(iBuilder->getContext(), "wholeBlockCopy", f, 0);
     BasicBlock * partialBlockCopy = BasicBlock::Create(iBuilder->getContext(), "partialBlockCopy", f, 0);
-    BasicBlock * copyBackDone = BasicBlock::Create(iBuilder->getContext(), "copyBackDone", f, 0);
+    BasicBlock * copyDone = BasicBlock::Create(iBuilder->getContext(), "copyDone", f, 0);
     unsigned numStreams = getType()->getArrayNumElements();
     unsigned swizzleFactor = iBuilder->getBitBlockWidth()/mFieldWidth;
     auto elemTy = getType()->getArrayElementType();
     unsigned fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
-    Value * overFlowAreaPtr = iBuilder->CreateGEP(self, iBuilder->getSize(mBufferBlocks));
-    Value * overFlowBlocks = iBuilder->CreateUDiv(overFlowItems, blockSize);
-    Value * partialItems = iBuilder->CreateURem(overFlowItems, blockSize);
-    Value * partialBlockTargetPtr = iBuilder->CreateGEP(self, overFlowBlocks);
-    Value * partialBlockSourcePtr = iBuilder->CreateGEP(overFlowAreaPtr, overFlowBlocks);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(overFlowBlocks, iBuilder->getSize(0)), wholeBlockCopy, partialBlockCopy);
+    Value * blocksToCopy = iBuilder->CreateUDiv(itemsToCopy, blockSize);
+    Value * partialItems = iBuilder->CreateURem(itemsToCopy, blockSize);
+    Value * partialBlockTargetPtr = iBuilder->CreateGEP(targetBlockPtr, blocksToCopy);
+    Value * partialBlockSourcePtr = iBuilder->CreateGEP(sourceBlockPtr, blocksToCopy);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(blocksToCopy, iBuilder->getSize(0)), wholeBlockCopy, partialBlockCopy);
     iBuilder->SetInsertPoint(wholeBlockCopy);
     unsigned alignment = iBuilder->getBitBlockWidth() / 8;
-    Value * copyLength = iBuilder->CreateSub(iBuilder->CreatePtrToInt(partialBlockTargetPtr, size_ty), iBuilder->CreatePtrToInt(self, size_ty));
-    iBuilder->CreateMemMove(iBuilder->CreateBitCast(self, i8ptr), iBuilder->CreateBitCast(overFlowAreaPtr, i8ptr), copyLength, alignment);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(partialItems, iBuilder->getSize(0)), partialBlockCopy, copyBackDone);
+    Value * copyLength = iBuilder->CreateSub(iBuilder->CreatePtrToInt(partialBlockTargetPtr, size_ty), iBuilder->CreatePtrToInt(targetBlockPtr, size_ty));
+    iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, i8ptr), iBuilder->CreateBitCast(sourceBlockPtr, i8ptr), copyLength, alignment);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(partialItems, iBuilder->getSize(0)), partialBlockCopy, copyDone);
     iBuilder->SetInsertPoint(partialBlockCopy);
-    Value * copyBits = iBuilder->CreateMul(overFlowItems, iBuilder->getSize(fieldWidth * swizzleFactor));
+    Value * copyBits = iBuilder->CreateMul(itemsToCopy, iBuilder->getSize(fieldWidth * swizzleFactor));
     Value * copyBytes = iBuilder->CreateLShr(iBuilder->CreateAdd(copyBits, iBuilder->getSize(7)), iBuilder->getSize(3));
     for (unsigned strm = 0; strm < numStreams; strm += swizzleFactor) {
         Value * strmTargetPtr = iBuilder->CreateGEP(partialBlockTargetPtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
         Value * strmSourcePtr = iBuilder->CreateGEP(partialBlockSourcePtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
         iBuilder->CreateMemMove(iBuilder->CreateBitCast(strmTargetPtr, i8ptr), iBuilder->CreateBitCast(strmSourcePtr, i8ptr), copyBytes, alignment);
     }
-    iBuilder->CreateBr(copyBackDone);
-    iBuilder->SetInsertPoint(copyBackDone);
+    iBuilder->CreateBr(copyDone);
+    iBuilder->SetInsertPoint(copyDone);
+}
+
+void SwizzledCopybackBuffer::createCopyBack(IDISA_Builder * const iBuilder, Value * self, Value * overFlowItems) const {
+    Value * overFlowAreaPtr = iBuilder->CreateGEP(self, iBuilder->getSize(mBufferBlocks));
+    createBlockAlignedCopy(iBuilder, self, overFlowAreaPtr, overFlowItems);
 }
 
 Value * SwizzledCopybackBuffer::getStreamSetBlockPtr(IDISA_Builder * const iBuilder, Value * self, Value * blockIndex) const {
