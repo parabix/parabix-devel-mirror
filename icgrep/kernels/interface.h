@@ -31,11 +31,12 @@ namespace IDISA { class IDISA_Builder; }
 // 
 
 struct ProcessingRate  {
-    enum class ProcessingRateKind : uint8_t { Fixed, RoundUp, Add1, Max, Unknown };
+    enum class ProcessingRateKind : uint8_t { FixedRatio, RoundUp, Add1, MaxRatio, Unknown };
     ProcessingRateKind getKind() const {return mKind;}
-    bool isExact() const {return (mKind == ProcessingRateKind::Fixed)||(mKind == ProcessingRateKind::RoundUp)||(mKind == ProcessingRateKind::Add1) ;}
+    bool isExact() const {return (mKind == ProcessingRateKind::FixedRatio)||(mKind == ProcessingRateKind::RoundUp)||(mKind == ProcessingRateKind::Add1) ;}
     bool isUnknown() const { return !isExact(); }
     llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems, llvm::Value * doFinal = nullptr) const;
+    llvm::Value * CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * b, llvm::Value * outputItems, llvm::Value * doFinal) const;
     friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet);
     friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet);
     friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string && referenceStreamSet);

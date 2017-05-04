@@ -19,12 +19,12 @@ static const auto TERMINATE_SUFFIX = "_Terminate";
 
 using namespace llvm;
 
-ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Fixed, strmItemsPer, perPrincipalInputItems, std::move(referenceStreamSet));
+ProcessingRate FixedRatio(unsigned strmItems, unsigned referenceItems, std::string && referenceStreamSet) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::FixedRatio, strmItems, referenceItems, std::move(referenceStreamSet));
 }
 
-ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Max, strmItemsPer, perPrincipalInputItems, std::move(referenceStreamSet));
+ProcessingRate MaxRatio(unsigned strmItems, unsigned referenceItems, std::string && referenceStreamSet) {
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::MaxRatio, strmItems, referenceItems, std::move(referenceStreamSet));
 }
 
 ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string && referenceStreamSet) {
@@ -39,30 +39,55 @@ ProcessingRate UnknownRate() {
     return ProcessingRate(ProcessingRate::ProcessingRateKind::Unknown, 0, 0, "");
 }
 
-Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value * principalInputItems, Value * doFinal) const {
-    if (mKind == ProcessingRate::ProcessingRateKind::Fixed || mKind == ProcessingRate::ProcessingRateKind::Max) {
-        if (mRatioNumerator == 1) {
-            return principalInputItems;
+Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value * referenceItems, Value * doFinal) const {
+    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
+        if (mRatioNumerator == mRatioDenominator) {
+            return referenceItems;
         }
-        Type * const T = principalInputItems->getType();
+        Type * const T = referenceItems->getType();
         Constant * const numerator = ConstantInt::get(T, mRatioNumerator);
         Constant * const denominator = ConstantInt::get(T, mRatioDenominator);
         Constant * const denominatorLess1 = ConstantInt::get(T, mRatioDenominator - 1);
-        Value * strmItems = b->CreateMul(principalInputItems, numerator);
+        Value * strmItems = b->CreateMul(referenceItems, numerator);
         return b->CreateUDiv(b->CreateAdd(denominatorLess1, strmItems), denominator);
     }
     if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
-        Type * const T = principalInputItems->getType();
+        Type * const T = referenceItems->getType();
         Constant * const denominator = ConstantInt::get(T, mRatioDenominator);
         Constant * const denominatorLess1 = ConstantInt::get(T, mRatioDenominator - 1);
-        return b->CreateMul(b->CreateUDiv(b->CreateAdd(principalInputItems, denominatorLess1), denominator), denominator);
+        return b->CreateMul(b->CreateUDiv(b->CreateAdd(referenceItems, denominatorLess1), denominator), denominator);
     }
     if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
         if (doFinal) {
-            Type * const T = principalInputItems->getType();
-            principalInputItems = b->CreateAdd(principalInputItems, b->CreateZExt(doFinal, T));
+            Type * const T = referenceItems->getType();
+            referenceItems = b->CreateAdd(referenceItems, b->CreateZExt(doFinal, T));
         }
-        return principalInputItems;
+        return referenceItems;
+    }
+    return nullptr;
+}
+
+Value * ProcessingRate::CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * b, Value * outputItems, Value * doFinal) const {
+    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio) {
+        if (mRatioNumerator == mRatioDenominator) {
+            return outputItems;
+        }
+        Type * const T = outputItems->getType();
+        Constant * const numerator = ConstantInt::get(T, mRatioNumerator);
+        Constant * const denominator = ConstantInt::get(T, mRatioDenominator);
+        return b->CreateMul(b->CreateUDiv(outputItems, numerator), denominator);
+    }
+    if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
+        Type * const T = outputItems->getType();
+        Constant * const denominator = ConstantInt::get(T, mRatioDenominator);
+        return b->CreateMul(b->CreateUDiv(outputItems, denominator), denominator);
+    }
+    if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
+        Type * const T = outputItems->getType();
+        if (doFinal) {
+            return b->CreateSub(outputItems, b->CreateZExt(doFinal, T));
+        }
+        return b->CreateSub(outputItems, ConstantInt::get(T, 1));
     }
     return nullptr;
 }
