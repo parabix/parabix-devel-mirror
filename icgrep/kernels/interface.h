@@ -33,15 +33,19 @@ namespace IDISA { class IDISA_Builder; }
 struct ProcessingRate  {
     enum class ProcessingRateKind : uint8_t { FixedRatio, RoundUp, Add1, MaxRatio, Unknown };
     ProcessingRateKind getKind() const {return mKind;}
+    bool isFixedRatio() const {return mKind == ProcessingRateKind::FixedRatio;}
+    bool isMaxRatio() const {return mKind == ProcessingRateKind::MaxRatio;}
     bool isExact() const {return (mKind == ProcessingRateKind::FixedRatio)||(mKind == ProcessingRateKind::RoundUp)||(mKind == ProcessingRateKind::Add1) ;}
-    bool isUnknown() const { return !isExact(); }
+    bool isUnknownRate() const { return mKind == ProcessingRateKind::Unknown; }
     llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems, llvm::Value * doFinal = nullptr) const;
-    llvm::Value * CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * b, llvm::Value * outputItems, llvm::Value * doFinal) const;
+    llvm::Value * CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * b, llvm::Value * outputItems, llvm::Value * doFinal = nullptr) const;
     friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet);
     friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet);
     friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string && referenceStreamSet);
     friend ProcessingRate Add1(std::string && referenceStreamSet);
     friend ProcessingRate UnknownRate();
+    uint16_t getRatioNumerator() const { return mRatioNumerator;}
+    uint16_t getRatioDenominator() const { return mRatioDenominator;}
     std::string referenceStreamSet() const { return mReferenceStreamSet;}
 protected:
     ProcessingRate(ProcessingRateKind k, unsigned numerator, unsigned denominator, std::string && referenceStreamSet)

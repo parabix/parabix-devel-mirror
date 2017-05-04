@@ -130,6 +130,14 @@ Value * StreamSetBuffer::getLinearlyAccessibleBlocks(IDISA_Builder * const iBuil
     return iBuilder->CreateSub(bufBlocks, iBuilder->CreateURem(fromBlock, bufBlocks));
 }
 
+Value * StreamSetBuffer::getLinearlyWritableItems(IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
+    return getLinearlyAccessibleItems(iBuilder, self, fromPosition);
+}
+
+Value * StreamSetBuffer::getLinearlyWritableBlocks(IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
+    return getLinearlyAccessibleBlocks(iBuilder, self, fromBlock);
+}
+
 void StreamSetBuffer::reserveBytes(IDISA_Builder * const iBuilder, Value * self, llvm::Value *requested) const {
     report_fatal_error("reserve() can only be used with ExtensibleBuffers");
 }
@@ -246,6 +254,14 @@ Value * CircularCopybackBuffer::getStreamSetBlockPtr(IDISA_Builder * const iBuil
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), modByBufferBlocks(iBuilder, blockIndex));
 }
 
+Value * CircularCopybackBuffer::getLinearlyWritableItems(IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
+    return iBuilder->CreateAdd(getLinearlyAccessibleItems(iBuilder, self, fromPosition), iBuilder->getSize(mOverflowBlocks * iBuilder->getBitBlockWidth()));
+}
+
+Value * CircularCopybackBuffer::getLinearlyWritableBlocks(IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
+    return iBuilder->CreateAdd(getLinearlyAccessibleBlocks(iBuilder, self, fromBlock), iBuilder->getSize(mOverflowBlocks));
+}
+
 // SwizzledCopybackBuffer Buffer
 
 void SwizzledCopybackBuffer::allocateBuffer(IDISA_Builder * const iBuilder) {
@@ -293,6 +309,14 @@ void SwizzledCopybackBuffer::createCopyBack(IDISA_Builder * const iBuilder, Valu
 
 Value * SwizzledCopybackBuffer::getStreamSetBlockPtr(IDISA_Builder * const iBuilder, Value * self, Value * blockIndex) const {
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), modByBufferBlocks(iBuilder, blockIndex));
+}
+
+Value * SwizzledCopybackBuffer::getLinearlyWritableItems(IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
+    return iBuilder->CreateAdd(getLinearlyAccessibleItems(iBuilder, self, fromPosition), iBuilder->getSize(mOverflowBlocks * iBuilder->getBitBlockWidth()));
+}
+
+Value * SwizzledCopybackBuffer::getLinearlyWritableBlocks(IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
+    return iBuilder->CreateAdd(getLinearlyAccessibleBlocks(iBuilder, self, fromBlock), iBuilder->getSize(mOverflowBlocks));
 }
 
 // Expandable Buffer

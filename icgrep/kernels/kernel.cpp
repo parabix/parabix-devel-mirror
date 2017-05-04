@@ -94,7 +94,7 @@ void KernelBuilder::prepareKernel() {
             report_fatal_error("Kernel preparation: Buffer size too small " + mStreamSetInputs[i].name);
         }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
-        if ((i == 0) || mStreamSetInputs[i].rate.isUnknown()) {
+        if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
             addScalar(iBuilder->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
         }        
     }
