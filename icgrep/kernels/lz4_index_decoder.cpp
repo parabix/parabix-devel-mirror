@@ -35,41 +35,17 @@ using namespace kernel;
 
 namespace {
 
-Value * countForwardZeroes(IDISA::IDISA_Builder * iBuilder, Value * bits) {
-    Value * cttzFunc = Intrinsic::getDeclaration(iBuilder->getModule(),
-            Intrinsic::cttz, iBuilder->getSizeTy());
-    // The last argument is is_zero_undef.  We'd like it to be false (defined)
-    // so that cttz(0) == width.
-    return iBuilder->CreateCall(cttzFunc, {bits, iBuilder->getFalse()});
-}
-
-#if 0
-Value * countReverseZeroes(IDISA::IDISA_Builder * iBuilder, Value * bits) {
-    Value * ctlzFunc = Intrinsic::getDeclaration(iBuilder->getModule(),
-            Intrinsic::ctlz, iBuilder->getSizeTy());
-    // The last argument is is_zero_undef.  We'd like it to be false (defined)
-    // so that ctlz(0) == width.
-    return iBuilder->CreateCall(ctlzFunc, {bits, iBuilder->getFalse()});
-}
-#endif
-
-Value * generateBitswap(IDISA::IDISA_Builder * iBuilder, Value * v) {
+Value * generateBitswap(IDISA::IDISA_Builder * const iBuilder, Value * v) {
     Value * bswapFunc = Intrinsic::getDeclaration(iBuilder->getModule(),
             Intrinsic::bswap, v->getType());
     return iBuilder->CreateCall(bswapFunc, {v});
 }
 
-Value * selectMin(IDISA::IDISA_Builder * iBuilder, Value * a, Value * b) {
+Value * selectMin(IDISA::IDISA_Builder * const iBuilder, Value * a, Value * b) {
     return iBuilder->CreateSelect(iBuilder->CreateICmpULT(a, b), a, b);
 }
 
-#if 0
-Value * selectMax(IDISA::IDISA_Builder * iBuilder, Value * a, Value * b) {
-    return iBuilder->CreateSelect(iBuilder->CreateICmpUGT(a, b), a, b);
-}
-#endif
-
-Value * createStackVar(IDISA::IDISA_Builder * iBuilder, Type * type, StringRef name, Value * initializer = nullptr) {
+Value * createStackVar(IDISA::IDISA_Builder * const iBuilder, Type * type, StringRef name, Value * initializer = nullptr) {
     Value * var = iBuilder->CreateAlloca(type, nullptr, name);
     if (initializer) {
         iBuilder->CreateStore(initializer, var);
@@ -79,7 +55,7 @@ Value * createStackVar(IDISA::IDISA_Builder * iBuilder, Type * type, StringRef n
     return var;
 }
 
-void incStackVar(IDISA::IDISA_Builder * iBuilder, Value * svar, Value * increment = nullptr) {
+void incStackVar(IDISA::IDISA_Builder * const iBuilder, Value * svar, Value * increment = nullptr) {
     Value * value = iBuilder->CreateLoad(svar);
     if (increment) {
         value = iBuilder->CreateAdd(value, increment);
@@ -89,7 +65,7 @@ void incStackVar(IDISA::IDISA_Builder * iBuilder, Value * svar, Value * incremen
     iBuilder->CreateStore(value, svar);
 }
 
-Value * getOutputPtr(IDISA::IDISA_Builder * iBuilder, Value * blockStartPtr, Value * offset) {
+Value * getOutputPtr(IDISA::IDISA_Builder * const iBuilder, Value * blockStartPtr, Value * offset) {
     return iBuilder->CreateGEP(
             iBuilder->CreatePointerCast(blockStartPtr, iBuilder->getInt32Ty()->getPointerTo()),
             offset
@@ -527,9 +503,8 @@ void LZ4IndexDecoderKernel::generateExtendingLiteralLen(BasicBlock * bb, BasicBl
     Value * blockOffset = getWordStartOffset();
     Value * literalLen = iBuilder->CreateLoad(sTempLength);
     Value * literalExtEnd = iBuilder->CreateTrunc(
-        countForwardZeroes(iBuilder, iBuilder->CreateNot(iBuilder->CreateLoad(sExtender))),
-        iBuilder->getInt32Ty()
-        );
+                iBuilder->CreateCountForwardZeroes(iBuilder->CreateNot(iBuilder->CreateLoad(sExtender))),
+                iBuilder->getInt32Ty());
     printRTDebugInt("wordOffset", wordOffset);
     printRTDebugInt("literalExtEnd", literalExtEnd);
     // number of extender = literalExtEnd - wordOffset
@@ -648,7 +623,7 @@ void LZ4IndexDecoderKernel::generateExtendingMatchLen(BasicBlock * bb, BasicBloc
     Value * blockOffset = getWordStartOffset();
     Value * matchLen = iBuilder->CreateLoad(sTempLength);
     Value * matchExtEnd = iBuilder->CreateTrunc(
-        countForwardZeroes(iBuilder, iBuilder->CreateNot(iBuilder->CreateLoad(sExtender))),
+        iBuilder->CreateCountForwardZeroes(iBuilder->CreateNot(iBuilder->CreateLoad(sExtender))),
         iBuilder->getInt32Ty()
         );
     printRTDebugInt("wordoffset", wordOffset);
@@ -738,8 +713,8 @@ void LZ4IndexDecoderKernel::generateAtBlockChecksum(BasicBlock * bb, BasicBlock 
     // No checksum, offset not advanced.  Falls through to the next block (block_size).
 }
 
-LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "lz4IndexDecoder",
+LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+: BlockOrientedKernel("lz4IndexDecoder",
     // Inputs
     {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"},
      Binding{iBuilder->getStreamSetTy(1, 1), "extenders"}},

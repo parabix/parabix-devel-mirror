@@ -12,7 +12,7 @@ namespace kernel {
 
 class MMapSourceKernel final : public SegmentOrientedKernel {
 public:
-    MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
+    MMapSourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
@@ -28,7 +28,7 @@ protected:
 
 class ReadSourceKernel final : public SegmentOrientedKernel {
 public:
-    ReadSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
+    ReadSourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
@@ -42,7 +42,7 @@ private:
 
 class MemorySourceKernel final : public SegmentOrientedKernel {
 public:
-    MemorySourceKernel(IDISA::IDISA_Builder * iBuilder, llvm::Type * type, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
+    MemorySourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, llvm::Type * type, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool moduleIDisSignature() const override { return true; }
 protected:
     void generateInitializeMethod() override;

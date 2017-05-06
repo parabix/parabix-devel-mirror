@@ -20,16 +20,18 @@ namespace kernel {
  
 class expand3_4Kernel final : public SegmentOrientedKernel {
 public:   
-    expand3_4Kernel(IDISA::IDISA_Builder * iBuilder);
+    expand3_4Kernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder);
     bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 private:
     void generateDoSegmentMethod() override;
 };
 
 class radix64Kernel final : public BlockOrientedKernel {
 public:
-    radix64Kernel(IDISA::IDISA_Builder * iBuilder);
+    radix64Kernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder);
     bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 private:
     virtual void generateDoBlockMethod() override;
     virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
@@ -38,8 +40,9 @@ private:
 
 class base64Kernel final : public BlockOrientedKernel {
 public:
-    base64Kernel(IDISA::IDISA_Builder * iBuilder);
+    base64Kernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder);
     bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 private:
     virtual void generateDoBlockMethod() override;
     virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override;

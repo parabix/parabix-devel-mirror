@@ -14,29 +14,23 @@ namespace re { class CC; }
 
 namespace kernel {
 
-class DirectCharacterClassKernelBuilder : public BlockOrientedKernel {
-public:
-    
-    DirectCharacterClassKernelBuilder(IDISA::IDISA_Builder * iBuilder, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize)
-    : BlockOrientedKernel(iBuilder, std::move(ccSetName),
-                  {Binding{iBuilder->getStreamSetTy(1, 8 * codeUnitSize), "codeUnitStream"}},
-                  {Binding{iBuilder->getStreamSetTy(charClasses.size(), 1), "ccStream"}},
-                  {}, {}, {})
-    , mCharClasses(charClasses)
-    , mCodeUnitSize(codeUnitSize) {
-    }
-    
+class DirectCharacterClassKernelBuilder final : public BlockOrientedKernel {
+public:    
+    DirectCharacterClassKernelBuilder(const std::unique_ptr<IDISA::IDISA_Builder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize);
     void generateDoBlockMethod() override;
-
 private:
-    std::vector<re::CC *> mCharClasses;
-    unsigned mCodeUnitSize;
+    const std::vector<re::CC *> mCharClasses;
+    const unsigned              mCodeUnitSize;
     
 };
 
-class ParabixCharacterClassKernelBuilder: public pablo::PabloKernel {
+class ParabixCharacterClassKernelBuilder final : public pablo::PabloKernel {
 public:
-    ParabixCharacterClassKernelBuilder(IDISA::IDISA_Builder * iBuilder, std::string ccSetName, const std::vector<re::CC *> & charClasses, unsigned basisBitsCount);
+    ParabixCharacterClassKernelBuilder(const std::unique_ptr<IDISA::IDISA_Builder> & b, std::string ccSetName, const std::vector<re::CC *> & charClasses, unsigned codeUnitSize);
+protected:
+    void prepareKernel() override;
+private:
+    const std::vector<re::CC *> mCharClasses;
 };
 
 }

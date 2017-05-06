@@ -10,7 +10,7 @@ using namespace llvm;
 
 namespace kernel {
 
-void bitblock_advance_ci_co(IDISA::IDISA_Builder * iBuilder, Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j){   
+void bitblock_advance_ci_co(IDISA::IDISA_Builder * const iBuilder, Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j){
     if (!calculated[i][j]) {
         Value * ptr = iBuilder->CreateGEP(stideCarryArr, {iBuilder->getInt32(0), iBuilder->getInt32(carryIdx)});
         Value * ci = iBuilder->CreateLoad(ptr);
@@ -79,8 +79,8 @@ void editdGPUKernel::generateFinalBlockMethod(Value * remainingBytes) {
     CreateDoBlockMethodCall();
 }
 
-editdGPUKernel::editdGPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen) :
-BlockOrientedKernel(b, "editd_gpu",
+editdGPUKernel::editdGPUKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b, unsigned dist, unsigned pattLen) :
+BlockOrientedKernel("editd_gpu",
               {Binding{b->getStreamSetTy(4), "CCStream"}},
               {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
               {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},

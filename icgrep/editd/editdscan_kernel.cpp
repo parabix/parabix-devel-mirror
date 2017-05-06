@@ -86,8 +86,8 @@ Function * editdScanKernel::generateScanWordRoutine(Module * m) const {
 
 }
 
-editdScanKernel::editdScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist) :
-BlockOrientedKernel(iBuilder, "scanMatch",
+editdScanKernel::editdScanKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned dist) :
+BlockOrientedKernel("scanMatch",
               {Binding{iBuilder->getStreamSetTy(dist + 1), "matchResults"}},
               {}, {}, {}, {Binding{iBuilder->getSizeTy(), "BlockNo"}}),
 mEditDistance(dist),

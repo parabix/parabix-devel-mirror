@@ -13,14 +13,14 @@ using namespace parabix;
 
 namespace kernel{
 	
-void p2s_step(IDISA::IDISA_Builder * iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
+void p2s_step(IDISA::IDISA_Builder * const iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
     Value * t0 = iBuilder->simd_if(1, hi_mask, p0, iBuilder->simd_srli(16, p1, shift));
     Value * t1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, p0, shift), p1);
     s1 = iBuilder->esimd_mergeh(8, t1, t0);
     s0 = iBuilder->esimd_mergel(8, t1, t0);
 }
 
-inline void p2s(IDISA::IDISA_Builder * iBuilder, Value * p[], Value * s[]) {
+inline void p2s(IDISA::IDISA_Builder * const iBuilder, Value * p[], Value * s[]) {
     Value * bit00004444[2];
     Value * bit22226666[2];
     Value * bit11115555[2];
@@ -145,30 +145,30 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod() {
     setProducedItemCount("i16Stream", i16UnitsFinal);
 }
 
-P2SKernel::P2SKernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "p2s",
+P2SKernel::P2SKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+: BlockOrientedKernel("p2s",
               {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}},
               {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"}},
               {}, {}, {}) {
 }
 
-P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "p2s_compress",
+P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+: BlockOrientedKernel("p2s_compress",
               {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
                       {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream", MaxRatio(1)}},
               {}, {}, {}) {
 }
 
-P2S16Kernel::P2S16Kernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "p2s_16",
+P2S16Kernel::P2S16Kernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+: BlockOrientedKernel("p2s_16",
               {Binding{iBuilder->getStreamSetTy(16, 1), "basisBits"}},
               {Binding{iBuilder->getStreamSetTy(1, 16), "i16Stream"}},
               {}, {}, {}) {
 }
 
 
-P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(IDISA::IDISA_Builder * b)
-: BlockOrientedKernel(b, "p2s_16_compress",
+P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<IDISA::IDISA_Builder> & b)
+: BlockOrientedKernel("p2s_16_compress",
               {Binding{b->getStreamSetTy(16, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "deletionCounts"}},
               {Binding{b->getStreamSetTy(1, 16), "i16Stream", MaxRatio(1)}},
               {},

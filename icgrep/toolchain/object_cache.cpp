@@ -21,22 +21,37 @@ using namespace llvm;
 // descriptor. The cache tries to load a saved object using that path if the
 // file exists.
 //
-ParabixObjectCache::ParabixObjectCache(const std::string &dir): mCachePath(dir) {}
 
-ParabixObjectCache::ParabixObjectCache() {
-    // $HOME/.cache/icgrep
-    // TODO use path::user_cache_directory once we have llvm >= 3.7.
-    sys::path::home_directory(mCachePath);
-    sys::path::append(mCachePath, ".cache", "parabix");
+#define MONTH_1 \
+    ((__DATE__ [0] == 'O' || __DATE__ [0] == 'N' || __DATE__ [0] == 'D') ? '1' : '0')
+#define MONTH_2 \
+    (__DATE__ [2] == 'n' ? (__DATE__ [1] == 'a' ? '1' : '6') \
+    : __DATE__ [2] == 'b' ? '2' \
+    : __DATE__ [2] == 'r' ? (__DATE__ [0] == 'M' ? '3' : '4') \
+    : __DATE__ [2] == 'y' ? '5' \
+    : __DATE__ [2] == 'l' ? '7' \
+    : __DATE__ [2] == 'g' ? '8' \
+    : __DATE__ [2] == 'p' ? '9' \
+    : __DATE__ [2] == 't' ? '0' \
+    : __DATE__ [2] == 'v' ? '1' : '2')
+#define DAY_1 (__DATE__[4] == ' ' ? '0' : __DATE__[4])
+#define DAY_2 (__DATE__[5])
+#define YEAR_1 (__DATE__[9])
+#define YEAR_2 (__DATE__[10])
+#define HOUR_1 (__TIME__[0])
+#define HOUR_2 (__TIME__[1])
+#define MINUTE_1 (__TIME__[3])
+#define MINUTE_2 (__TIME__[4])
+#define SECOND_1 (__TIME__[6])
+#define SECOND_2 (__TIME__[7])
 
-    const std::string Version = PARABIX_VERSION;
-    const std::string Date = __DATE__;
-    const std::string Time = __TIME__;
-    const std::string DateStamp = Date.substr(7) + Date.substr(0, 3) + (Date[4] == ' ' ? Date.substr(5, 1) : Date.substr(4, 2));
-    mCachePrefix = Version + "_" + DateStamp + "@" + Time;
-}
+const static auto CACHE_PREFIX = PARABIX_VERSION +
+                          std::string{'@',
+                          MONTH_1, MONTH_2, DAY_1, DAY_2, YEAR_1, YEAR_2,
+                          HOUR_1, HOUR_2, MINUTE_1, MINUTE_2, SECOND_1, SECOND_2,
+                          '_'};
 
-bool ParabixObjectCache::loadCachedObjectFile(kernel::KernelBuilder * const kernel) {
+bool ParabixObjectCache::loadCachedObjectFile(kernel::Kernel * const kernel) {
     if (LLVM_LIKELY(kernel->isCachable())) {
 
         Module * const module = kernel->getModule();
@@ -56,7 +71,10 @@ bool ParabixObjectCache::loadCachedObjectFile(kernel::KernelBuilder * const kern
 
         // No, check for an existing cache file.
         Path objectName(mCachePath);
-        sys::path::append(objectName, mCachePrefix + moduleId + ".o");
+        sys::path::append(objectName, CACHE_PREFIX);
+        objectName.append(moduleId);
+        objectName.append(".o");
+
         auto objectBuffer = MemoryBuffer::getFile(objectName.c_str(), -1, false);
         if (objectBuffer) {
             if (!kernel->moduleIDisSignature()) {
@@ -90,7 +108,9 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
     if (mCachedObjectMap.count(moduleId) == 0) {
 
         Path objectName(mCachePath);
-        sys::path::append(objectName, mCachePrefix + moduleId + ".o");
+        sys::path::append(objectName, CACHE_PREFIX);
+        objectName.append(moduleId);
+        objectName.append(".o");
 
         if (LLVM_LIKELY(!mCachePath.empty())) {
             sys::fs::create_directories(Twine(mCachePath));
@@ -101,7 +121,7 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
         outfile.write(Obj.getBufferStart(), Obj.getBufferSize());
         outfile.close();
 
-        // Check for a kernel signature.
+        // If this kernel has a signature, write it.
         const auto sig = mKernelSignatureMap.find(moduleId);
         if (LLVM_UNLIKELY(sig != mKernelSignatureMap.end())) {
             sys::path::replace_extension(objectName, ".sig");
@@ -113,7 +133,7 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
 }
 
 /*  May need this.
- 
+
 void ParabixObjectCache::removeCacheFile(std::string ModuleID) {
     Path CacheName(CacheDir);
     if (!getCacheFilename(ModuleID, CacheName)) return;
@@ -133,3 +153,21 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module* M) {
     return MemoryBuffer::getMemBufferCopy(f->second.get()->getBuffer());
 }
 
+inline ParabixObjectCache::Path ParabixObjectCache::getDefaultPath() {
+    // $HOME/.cache/parabix/
+    Path cachePath;
+    // TODO use path::user_cache_directory once we have llvm >= 3.7.
+    sys::path::home_directory(cachePath);
+    sys::path::append(cachePath, ".cache", "parabix");
+    return cachePath;
+}
+
+ParabixObjectCache::ParabixObjectCache()
+: mCachePath(std::move(getDefaultPath())) {
+
+}
+
+ParabixObjectCache::ParabixObjectCache(const std::string & dir)
+: mCachePath(dir) {
+
+}

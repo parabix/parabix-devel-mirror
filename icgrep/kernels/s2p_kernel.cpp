@@ -18,7 +18,7 @@ namespace kernel {
 
 const int PACK_LANES = 1;
 
-void s2p_step(IDISA::IDISA_Builder * iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
+void s2p_step(IDISA::IDISA_Builder * const iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
     Value * t0 = nullptr;
     Value * t1 = nullptr;
     if ((iBuilder->getBitBlockWidth() == 256) && (PACK_LANES == 2)) {
@@ -34,7 +34,7 @@ void s2p_step(IDISA::IDISA_Builder * iBuilder, Value * s0, Value * s1, Value * h
     p1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, t0, shift), t1);
 }
 
-void s2p(IDISA::IDISA_Builder * iBuilder, Value * input[], Value * output[]) {
+void s2p(IDISA::IDISA_Builder * const iBuilder, Value * input[], Value * output[]) {
     Value * bit00224466[4];
     Value * bit11335577[4];
 
@@ -61,7 +61,7 @@ void s2p(IDISA::IDISA_Builder * iBuilder, Value * input[], Value * output[]) {
 
 /* Alternative transposition model, but small field width packs are problematic. */
 #if 0
-void s2p_ideal(IDISA::IDISA_Builder * iBuilder, Value * input[], Value * output[]) {
+void s2p_ideal(IDISA::IDISA_Builder * const iBuilder, Value * input[], Value * output[]) {
     Value * hi_nybble[4];
     Value * lo_nybble[4];
     for (unsigned i = 0; i<4; i++) {
@@ -92,7 +92,7 @@ void s2p_ideal(IDISA::IDISA_Builder * iBuilder, Value * input[], Value * output[
 #endif
     
 #if 0
-void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * iBuilder, KernelBuilder * kBuilder) {
+void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * const iBuilder, KernelBuilder * kBuilder) {
     kBuilder->addInputStream(16, "unit_pack");
     for(unsigned i = 0; i < 16; i++) {
 	    kBuilder->addOutputStream(1);
@@ -166,9 +166,9 @@ void S2PKernel::generateFinalBlockMethod(Value * remainingBytes) {
     iBuilder->SetInsertPoint(exitBlock);
 }
 
-S2PKernel::S2PKernel(IDISA::IDISA_Builder * builder, bool aligned)
-: BlockOrientedKernel(builder, aligned ? "s2p" : "s2p_unaligned",
-    {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {Binding{builder->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
+S2PKernel::S2PKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b, bool aligned)
+: BlockOrientedKernel(aligned ? "s2p" : "s2p_unaligned",
+    {Binding{b->getStreamSetTy(1, 8), "byteStream"}}, {Binding{b->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
   mAligned(aligned) {
     setNoTerminateAttribute(true);
 }

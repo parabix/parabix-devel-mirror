@@ -7,9 +7,9 @@
 #ifndef TOOLCHAIN_H
 #define TOOLCHAIN_H
 #include <string>
-#include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/FunctionTypeBuilder.h>
 #include <kernels/kernel.h>
+#include <kernels/kernel_builder.h>
 #include <kernels/streamset.h>
 
 namespace llvm { class ExecutionEngine; }
@@ -18,7 +18,7 @@ namespace llvm { class TargetMachine; }
 namespace llvm { class formatted_raw_ostream; }
 namespace llvm { namespace cl { class OptionCategory; } }
 namespace IDISA { class IDISA_Builder; }
-namespace kernel { class KernelBuilder; }
+namespace kernel { class Kernel; }
 
 class ParabixObjectCache;
 
@@ -66,22 +66,22 @@ public:
 
     ~ParabixDriver();
     
-    IDISA::IDISA_Builder * getIDISA_Builder() { return iBuilder.get(); }
+    const std::unique_ptr<IDISA::IDISA_Builder> & getBuilder() { return iBuilder; }
     
     parabix::ExternalBuffer * addExternalBuffer(std::unique_ptr<parabix::ExternalBuffer> b);
     
     parabix::StreamSetBuffer * addBuffer(std::unique_ptr<parabix::StreamSetBuffer> b);
     
-    kernel::KernelBuilder * addKernelInstance(std::unique_ptr<kernel::KernelBuilder> kb);
+    kernel::Kernel * addKernelInstance(std::unique_ptr<kernel::Kernel> kb);
     
-    void addKernelCall(kernel::KernelBuilder & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
+    void addKernelCall(kernel::Kernel & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
 
-    void makeKernelCall(kernel::KernelBuilder * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
+    void makeKernelCall(kernel::Kernel * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs);
     
     void generatePipelineIR();
     
     template <typename ExternalFunctionType>
-    llvm::Function * LinkFunction(kernel::KernelBuilder & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const;
+    llvm::Function * LinkFunction(kernel::Kernel & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const;
 
     void linkAndFinalize();
     
@@ -99,14 +99,14 @@ private:
     llvm::ExecutionEngine *                 mEngine;
     ParabixObjectCache *                    mCache;
 
-    std::vector<kernel::KernelBuilder *>    mPipeline;
+    std::vector<kernel::Kernel *>    mPipeline;
     // Owned kernels and buffers that will persist with this ParabixDriver instance.
-    std::vector<std::unique_ptr<kernel::KernelBuilder>> mOwnedKernels;
+    std::vector<std::unique_ptr<kernel::Kernel>> mOwnedKernels;
     std::vector<std::unique_ptr<parabix::StreamSetBuffer>> mOwnedBuffers;
 };
 
 template <typename ExternalFunctionType>
-llvm::Function * ParabixDriver::LinkFunction(kernel::KernelBuilder & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const {
+llvm::Function * ParabixDriver::LinkFunction(kernel::Kernel & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const {
     llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(iBuilder->getContext());
     assert ("FunctionTypeBuilder did not resolve a function type." && type);
     return LinkFunction(kb.getModule(), name, type, reinterpret_cast<void *>(functionPtr));

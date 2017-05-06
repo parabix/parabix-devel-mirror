@@ -83,8 +83,8 @@ void editdCPUKernel::generateFinalBlockMethod(Value * remainingBytes) {
     CreateDoBlockMethodCall();
 }
 
-editdCPUKernel::editdCPUKernel(IDISA::IDISA_Builder * b, unsigned dist, unsigned pattLen) :
-BlockOrientedKernel(b, "editd_cpu",
+editdCPUKernel::editdCPUKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b, unsigned dist, unsigned pattLen) :
+BlockOrientedKernel("editd_cpu",
              {Binding{b->getStreamSetTy(4), "CCStream"}},
              {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
              {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},

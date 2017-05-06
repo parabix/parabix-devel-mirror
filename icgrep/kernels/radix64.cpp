@@ -449,22 +449,22 @@ void base64Kernel::generateFinalBlockMethod(Value * remainingBytes) {
     iBuilder->SetInsertPoint(fbExit);
 }
 
-expand3_4Kernel::expand3_4Kernel(IDISA::IDISA_Builder * iBuilder)
-: SegmentOrientedKernel(iBuilder, "expand3_4",
+expand3_4Kernel::expand3_4Kernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+: SegmentOrientedKernel("expand3_4",
             {Binding{iBuilder->getStreamSetTy(1, 8), "sourceStream"}},
             {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream", FixedRatio(4,3)}},
             {}, {}, {}) {
 }
 
-radix64Kernel::radix64Kernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "radix64",
+radix64Kernel::radix64Kernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+: BlockOrientedKernel("radix64",
             {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream"}},
             {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
             {}, {}, {}) {
 }
 
-base64Kernel::base64Kernel(IDISA::IDISA_Builder * iBuilder)
-: BlockOrientedKernel(iBuilder, "base64",
+base64Kernel::base64Kernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+: BlockOrientedKernel("base64",
             {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
             {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream", RoundUpToMultiple(4)}},
             {}, {}, {}) {

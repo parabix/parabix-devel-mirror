@@ -12,9 +12,13 @@
 #include <llvm/IR/Module.h>
 #include <llvm/ADT/Triple.h>
 
+#include <kernels/kernel_builder.h>
+
+using namespace kernel;
+
 namespace IDISA {
     
-IDISA_Builder * GetIDISA_Builder(llvm::Module * const module) {
+KernelBuilder * GetIDISA_Builder(llvm::Module * const module) {
     unsigned registerWidth = 0;
     Triple T(module->getTargetTriple());
     if (T.isArch64Bit()) {
@@ -30,16 +34,16 @@ IDISA_Builder * GetIDISA_Builder(llvm::Module * const module) {
     }
     if (codegen::BlockSize >= 256) {
         if (hasAVX2) {
-            return new IDISA_AVX2_Builder(module, registerWidth, codegen::BlockSize);
+            return new KernelBuilderImpl<IDISA_AVX2_Builder>(module, registerWidth, codegen::BlockSize, codegen::BlockSize);
         }
     } else if (codegen::BlockSize == 64) {
-        return new IDISA_I64_Builder(module, registerWidth);
+        return new KernelBuilderImpl<IDISA_I64_Builder>(module, registerWidth, codegen::BlockSize, codegen::BlockSize);
     }
-    return new IDISA_SSE2_Builder(module, registerWidth, codegen::BlockSize);
+    return new KernelBuilderImpl<IDISA_SSE2_Builder>(module, registerWidth, codegen::BlockSize, codegen::BlockSize);
 }
 
-IDISA_Builder * GetIDISA_GPU_Builder(llvm::Module * const module) {
-    return new IDISA_NVPTX20_Builder(module, 64);
+KernelBuilder * GetIDISA_GPU_Builder(llvm::Module * const module) {
+    return new KernelBuilderImpl<IDISA_NVPTX20_Builder>(module, 64, 64, 64);
 }
 
 }

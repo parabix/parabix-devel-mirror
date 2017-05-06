@@ -45,7 +45,7 @@ static cl::opt<bool> overwriteOutput("f", cl::desc("Overwrite existing output fi
 typedef void (*MainFunctionType)(char * byte_data, size_t filesize, bool hasBlockChecksum);
 
 void generatePipeline(ParabixDriver & pxDriver) {
-    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    auto & iBuilder = pxDriver.getBuilder();
     Module * M = iBuilder->getModule();
 
     Type * const size_ty = iBuilder->getSizeTy();
@@ -79,25 +79,25 @@ void generatePipeline(ParabixDriver & pxDriver) {
     StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), decompressBufBlocks));
 
     
-    kernel::KernelBuilder * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize));
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
 
     // Input stream is not aligned due to the offset.
-    KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder, /*aligned = */ false));
+    Kernel * s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder, /*aligned = */ false));
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
-    KernelBuilder * extenderK = pxDriver.addKernelInstance(make_unique<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8));
+    Kernel * extenderK = pxDriver.addKernelInstance(make_unique<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8));
     pxDriver.makeKernelCall(extenderK, {BasisBits}, {Extenders});
 
-    KernelBuilder * lz4iK = pxDriver.addKernelInstance(make_unique<LZ4IndexDecoderKernel>(iBuilder));
+    Kernel * lz4iK = pxDriver.addKernelInstance(make_unique<LZ4IndexDecoderKernel>(iBuilder));
     lz4iK->setInitialArguments({iBuilder->CreateTrunc(hasBlockChecksum, iBuilder->getInt1Ty())});
     pxDriver.makeKernelCall(lz4iK, {ByteStream, Extenders}, {LiteralIndexes, MatchIndexes});
 
-    KernelBuilder * lz4bK = pxDriver.addKernelInstance(make_unique<LZ4ByteStreamDecoderKernel>(iBuilder, decompressBufBlocks * codegen::BlockSize));
+    Kernel * lz4bK = pxDriver.addKernelInstance(make_unique<LZ4ByteStreamDecoderKernel>(iBuilder, decompressBufBlocks * codegen::BlockSize));
     pxDriver.makeKernelCall(lz4bK, {LiteralIndexes, MatchIndexes, ByteStream}, {DecompressedByteStream});
 
-    KernelBuilder * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 8));
+    Kernel * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 8));
     outK->setInitialArguments({iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile), iBuilder->getInt8PtrTy())});
     pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
  

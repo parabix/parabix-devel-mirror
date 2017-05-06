@@ -15,7 +15,7 @@ namespace kernel {
 
 class LZ4ByteStreamDecoderKernel : public BlockOrientedKernel {
 public:
-    LZ4ByteStreamDecoderKernel(IDISA::IDISA_Builder * iBuilder, size_t bufferSize);
+    LZ4ByteStreamDecoderKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, size_t bufferSize);
 protected:
     void generateDoBlockMethod() override;
 private:

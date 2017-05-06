@@ -188,13 +188,13 @@ void ScanMatchKernel::generateDoBlockMethod() {
     setProcessedItemCount("InputStream", phiFinalRecordStart);
 }
 
-ScanMatchKernel::ScanMatchKernel(IDISA::IDISA_Builder * iBuilder, GrepType grepType, const unsigned codeUnitWidth)
-: BlockOrientedKernel(iBuilder, "scanMatch" + getGrepTypeId(grepType) + std::to_string(codeUnitWidth),
-    {Binding{iBuilder->getStreamSetTy(1, 1), "matchResult"}, Binding{iBuilder->getStreamSetTy(1, 1), "lineBreak"}, Binding{iBuilder->getStreamSetTy(1, 8), "InputStream", UnknownRate()}},
+ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b, GrepType grepType, const unsigned codeUnitWidth)
+: BlockOrientedKernel("scanMatch" + getGrepTypeId(grepType) + std::to_string(codeUnitWidth),
+    {Binding{b->getStreamSetTy(1, 1), "matchResult"}, Binding{b->getStreamSetTy(1, 1), "lineBreak"}, Binding{b->getStreamSetTy(1, 8), "InputStream", UnknownRate()}},
     {},
-    {Binding{iBuilder->getInt32Ty(), "FileIdx"}},
+    {Binding{b->getInt32Ty(), "FileIdx"}},
     {},
-    {Binding{iBuilder->getSizeTy(), "BlockNo"}, Binding{iBuilder->getSizeTy(), "LineNum"}})
+    {Binding{b->getSizeTy(), "BlockNo"}, Binding{b->getSizeTy(), "LineNum"}})
 , mGrepType(grepType) {
 
 }

@@ -13,11 +13,12 @@ using namespace llvm;
 
 namespace IDISA {
 
-class IDISA_SSE_Builder : public IDISA_Builder {
+class IDISA_SSE_Builder : public virtual IDISA_Builder {
 public:
   
-    IDISA_SSE_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth)
-    : IDISA_Builder(module, archBitWidth, bitBlockWidth, bitBlockWidth) {
+    IDISA_SSE_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
+    : IDISA_Builder(module, archBitWidth, bitBlockWidth, stride) {
+
     }
 
     virtual std::string getBuilderUniqueName() override;
@@ -29,15 +30,17 @@ public:
 class IDISA_SSE2_Builder : public IDISA_SSE_Builder {
 public:
   
-    IDISA_SSE2_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth)
-    : IDISA_SSE_Builder(module, archBitWidth, bitBlockWidth) {
+    IDISA_SSE2_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
+    : IDISA_Builder(module, archBitWidth, bitBlockWidth, stride)
+    , IDISA_SSE_Builder(module, archBitWidth, bitBlockWidth, stride) {
+
     }
 
     virtual std::string getBuilderUniqueName() override;
     Value * hsimd_signmask(unsigned fw, Value * a) override;
     Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;
     Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;
-    std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift) override;
+    std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift) final;
 
     ~IDISA_SSE2_Builder() {}
 

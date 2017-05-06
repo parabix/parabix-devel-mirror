@@ -8,6 +8,7 @@
 #define CARRY_MANAGER_H
 
 #include <pablo/carry_data.h>
+#include <memory>
 #include <vector>
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class BasicBlock; }
@@ -41,76 +42,69 @@ class CarryManager {
 
 public:
   
-    CarryManager(PabloKernel * const kernel) noexcept;
+    CarryManager() noexcept;
 
-    void initializeCarryData();
+    void initializeCarryData(IDISA::IDISA_Builder * const builder, PabloKernel * const kernel);
 
-    void initializeCodeGen();
+    void initializeCodeGen(IDISA::IDISA_Builder * const builder);
 
-    void finalizeCodeGen();
+    void finalizeCodeGen(IDISA::IDISA_Builder * const builder);
 
     /* Entering and leaving loops. */
 
-    void enterLoopScope(const PabloBlock * const scope);
+    void enterLoopScope(IDISA::IDISA_Builder * const builder, const PabloBlock * const scope);
 
-    void enterLoopBody(llvm::BasicBlock * const entryBlock);
+    void enterLoopBody(IDISA::IDISA_Builder * const builder, llvm::BasicBlock * const entryBlock);
 
-    void leaveLoopBody(llvm::BasicBlock * const exitBlock);
+    void leaveLoopBody(IDISA::IDISA_Builder * const builder, llvm::BasicBlock * const exitBlock);
 
-    void leaveLoopScope(llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
+    void leaveLoopScope(IDISA::IDISA_Builder * const builder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
 
     /* Entering and leaving ifs. */
 
-    void enterIfScope(const PabloBlock * const scope);
+    void enterIfScope(IDISA::IDISA_Builder * const builder, const PabloBlock * const scope);
 
-    void enterIfBody(llvm::BasicBlock * const entryBlock);
+    void enterIfBody(IDISA::IDISA_Builder * const builder, llvm::BasicBlock * const entryBlock);
 
-    void leaveIfBody(llvm::BasicBlock * const exitBlock);
+    void leaveIfBody(IDISA::IDISA_Builder * const builder, llvm::BasicBlock * const exitBlock);
 
-    void leaveIfScope(llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
+    void leaveIfScope(IDISA::IDISA_Builder * const builder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
 
     /* Methods for processing individual carry-generating operations. */
     
-    llvm::Value * addCarryInCarryOut(const Statement * operation, llvm::Value * const e1, llvm::Value * const e2);
+    llvm::Value * addCarryInCarryOut(IDISA::IDISA_Builder * const builder, const Statement * operation, llvm::Value * const e1, llvm::Value * const e2);
 
-    llvm::Value * advanceCarryInCarryOut(const Advance * advance, llvm::Value * const strm);
+    llvm::Value * advanceCarryInCarryOut(IDISA::IDISA_Builder * const builder, const Advance * advance, llvm::Value * const strm);
  
     /* Methods for getting and setting carry summary values for If statements */
          
-    llvm::Value * generateSummaryTest(llvm::Value * condition);
+    llvm::Value * generateSummaryTest(IDISA::IDISA_Builder * const builder, llvm::Value * condition);
 
 protected:
 
-    static unsigned getScopeCount(PabloBlock * const scope, unsigned index = 0);
+    static unsigned getScopeCount(const PabloBlock * const scope, unsigned index = 0);
 
     static bool hasIterationSpecificAssignment(const PabloBlock * const scope);
 
-    llvm::StructType * analyse(PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false);
+    llvm::StructType * analyse(IDISA::IDISA_Builder * const builder, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false);
 
     /* Entering and leaving scopes. */
-    void enterScope(const PabloBlock * const scope);
-    void leaveScope();
+    void enterScope(IDISA::IDISA_Builder * const builder, const PabloBlock * const scope);
+    void leaveScope(IDISA::IDISA_Builder * const builder);
 
     /* Methods for processing individual carry-generating operations. */
-    llvm::Value * getNextCarryIn();
-    void setNextCarryOut(llvm::Value * const carryOut);
-    llvm::Value * longAdvanceCarryInCarryOut(llvm::Value * const value, const unsigned shiftAmount);
-    llvm::Value * readCarryInSummary(llvm::ConstantInt *index) const;
-    void writeCarryOutSummary(llvm::Value * const summary, llvm::ConstantInt * index) const;
+    llvm::Value * getNextCarryIn(IDISA::IDISA_Builder * const builder);
+    void setNextCarryOut(IDISA::IDISA_Builder * const builder, llvm::Value * const carryOut);
+    llvm::Value * longAdvanceCarryInCarryOut(IDISA::IDISA_Builder * const builder, llvm::Value * const value, const unsigned shiftAmount);
+    llvm::Value * readCarryInSummary(IDISA::IDISA_Builder * const builder, llvm::ConstantInt *index) const;
+    void writeCarryOutSummary(IDISA::IDISA_Builder * const builder, llvm::Value * const summary, llvm::ConstantInt * index) const;
 
     /* Summary handling routines */
-    void addToCarryOutSummary(llvm::Value * const value);
-
-    llvm::Type * getBitBlockType() const;
-
-    unsigned getBitBlockWidth() const;
-
-    llvm::Type * getCarryPackType() const;
+    void addToCarryOutSummary(IDISA::IDISA_Builder * const builder, llvm::Value * const value);
 
 private:
 
-    PabloKernel * const                             mKernel;
-    IDISA::IDISA_Builder *                          iBuilder;
+    const PabloKernel *                             mKernel;
 
     llvm::Value *                                   mCurrentFrame;
     unsigned                                        mCurrentFrameIndex;

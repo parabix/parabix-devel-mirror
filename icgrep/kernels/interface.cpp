@@ -39,7 +39,7 @@ ProcessingRate UnknownRate() {
     return ProcessingRate(ProcessingRate::ProcessingRateKind::Unknown, 0, 0, "");
 }
 
-Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value * referenceItems, Value * doFinal) const {
+Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * const b, Value * referenceItems, Value * doFinal) const {
     if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
         if (mRatioNumerator == mRatioDenominator) {
             return referenceItems;
@@ -67,7 +67,7 @@ Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * b, Value *
     return nullptr;
 }
 
-Value * ProcessingRate::CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * b, Value * outputItems, Value * doFinal) const {
+Value * ProcessingRate::CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * const b, Value * outputItems, Value * doFinal) const {
     if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio) {
         if (mRatioNumerator == mRatioDenominator) {
             return outputItems;
@@ -165,10 +165,6 @@ void KernelInterface::addKernelDeclarations() {
     args->setName("self");
 
     linkExternalMethods();
-}
-
-void KernelInterface::setInitialArguments(std::vector<Value *> args) {
-    mInitialArguments = args;
 }
 
 Function * KernelInterface::getInitFunction(Module * const module) const {

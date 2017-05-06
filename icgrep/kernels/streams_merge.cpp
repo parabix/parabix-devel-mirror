@@ -11,15 +11,15 @@ using namespace llvm;
 
 namespace kernel {
 
-StreamsMerge::StreamsMerge(IDISA::IDISA_Builder * iBuilder, unsigned streamsPerSet, unsigned inputSets)
-    : BlockOrientedKernel(iBuilder, "streamsMerge", {}, {}, {}, {}, {})
-    , mStreamsPerSet(streamsPerSet)
-    , mInputSets(inputSets) {
-        for (unsigned i = 0; i < mInputSets; i++) {
-            mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(streamsPerSet, 1), "inputGroup" + std::to_string(i)});
-        }
-        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamsPerSet, 1), "output"});
+StreamsMerge::StreamsMerge(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned streamsPerSet, unsigned inputSets)
+: BlockOrientedKernel("streamsMerge", {}, {}, {}, {}, {})
+, mStreamsPerSet(streamsPerSet)
+, mInputSets(inputSets) {
+    for (unsigned i = 0; i < mInputSets; i++) {
+        mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(streamsPerSet, 1), "inputGroup" + std::to_string(i)});
     }
+    mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamsPerSet, 1), "output"});
+}
 
 void StreamsMerge::generateDoBlockMethod() {
 

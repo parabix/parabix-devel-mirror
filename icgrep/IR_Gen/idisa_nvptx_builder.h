@@ -15,8 +15,9 @@ namespace IDISA {
 class IDISA_NVPTX20_Builder : public IDISA_I64_Builder {
 public:
     
-    IDISA_NVPTX20_Builder(llvm::Module * const module, unsigned groupSize)
-    : IDISA_I64_Builder(module, 64, 64, 64 * groupSize, false)
+    IDISA_NVPTX20_Builder(llvm::Module * const module, unsigned registerWidth, unsigned vectorWidth, unsigned groupSize)
+    : IDISA_Builder(module, registerWidth, registerWidth, (vectorWidth * groupSize))
+    , IDISA_I64_Builder(module, registerWidth, registerWidth, (vectorWidth * groupSize))
     , groupThreads(groupSize) {
         CreateGlobals();
         CreateBuiltinFunctions();
@@ -42,6 +43,10 @@ public:
 
     LoadInst * CreateAtomicLoadAcquire(Value * ptr) override;
     StoreInst * CreateAtomicStoreRelease(Value * val, Value * ptr) override; 
+
+    bool supportsIndirectBr() const final {
+        return false;
+    }
 
 private:
     void CreateGlobals();

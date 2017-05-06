@@ -13,7 +13,7 @@ namespace kernel {
 class StreamsMerge : public BlockOrientedKernel {
 public:
     
-    StreamsMerge(IDISA::IDISA_Builder * iBuilder, unsigned streamsPerSet=1, unsigned inputSets = 1);
+    StreamsMerge(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned streamsPerSet=1, unsigned inputSets = 1);
     
 protected:
     

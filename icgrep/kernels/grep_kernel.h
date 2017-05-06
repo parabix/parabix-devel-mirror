@@ -13,7 +13,7 @@ namespace kernel {
 
 class ICgrepKernelBuilder: public pablo::PabloKernel {
 public:
-    ICgrepKernelBuilder(IDISA::IDISA_Builder * const iBuilder, re::RE * const re_ast);
+    ICgrepKernelBuilder(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, re::RE * const re_ast);
     
     std::string makeSignature() override;
     bool isCachable() const override { return true; }
@@ -27,7 +27,7 @@ private:
 
 class InvertMatchesKernel : public BlockOrientedKernel {
 public:
-    InvertMatchesKernel(IDISA::IDISA_Builder * builder);
+    InvertMatchesKernel(const std::unique_ptr<IDISA::IDISA_Builder> & builder);
 private:
     void generateDoBlockMethod() override;
 };
@@ -35,7 +35,7 @@ private:
 
 class PopcountKernel : public pablo::PabloKernel {
 public:
-    PopcountKernel(IDISA::IDISA_Builder * builder);
+    PopcountKernel(const std::unique_ptr<IDISA::IDISA_Builder> & builder);
 };
 
 }

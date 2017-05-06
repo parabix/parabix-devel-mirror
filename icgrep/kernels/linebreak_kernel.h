@@ -11,11 +11,13 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class LineBreakKernelBuilder: public pablo::PabloKernel {
+class LineBreakKernelBuilder final : public pablo::PabloKernel {
 public:
-    LineBreakKernelBuilder(IDISA::IDISA_Builder * iBuilder, unsigned basisBitsCount);
+    LineBreakKernelBuilder(const std::unique_ptr<IDISA::IDISA_Builder> & b, unsigned basisBitsCount);
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
+protected:
+    void prepareKernel() override;
 };
 
 }

@@ -24,7 +24,7 @@ class CBuilder : public llvm::IRBuilder<> {
     friend class ParabixDriver;
 public:
 
-    CBuilder(llvm::Module * const module, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes = 64);
+    CBuilder(llvm::Module * const module, const unsigned GeneralRegisterWidthInBits);
     
     virtual ~CBuilder() {}
 
@@ -172,8 +172,8 @@ public:
         return CreateLikelyCondBr(Cond, True, False, 100 - probability);
     }
 
-    bool supportsIndirectBr() const {
-        return mSupportsIndirectBr;
+    virtual bool supportsIndirectBr() const {
+        return true;
     }
 
     llvm::Value * CreatePopcount(llvm::Value * bits);
@@ -213,7 +213,6 @@ protected:
     unsigned                        mCacheLineAlignment;
     llvm::IntegerType *             mSizeType;
     llvm::StructType *              mFILEtype;
-    const bool                      mSupportsIndirectBr;
     ParabixDriver *                 mDriver;
     llvm::LLVMContext               mContext;
     const std::string               mTriple;

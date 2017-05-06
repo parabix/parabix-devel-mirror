@@ -38,7 +38,7 @@ using namespace parabix;
 
 void base64PipelineGen(ParabixDriver & pxDriver) {
         
-    auto iBuilder = pxDriver.getIDISA_Builder();
+    auto & iBuilder = pxDriver.getBuilder();
     Module * mod = iBuilder->getModule();
     Type * bitBlockType = iBuilder->getBitBlockType();
 

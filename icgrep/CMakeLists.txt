@@ -60,7 +60,7 @@ SET(OBJECT_CACHE_SRC toolchain/object_cache.cpp)
 
 SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/pipeline.cpp ${OBJECT_CACHE_SRC})
 
-SET(KERNEL_SRC kernels/kernel.cpp kernels/streamset.cpp kernels/interface.cpp)
+SET(KERNEL_SRC kernels/kernel.cpp kernels/streamset.cpp kernels/interface.cpp kernels/kernel_builder.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp)
 
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp IR_Gen/idisa_nvptx_builder.cpp IR_Gen/idisa_target.cpp)

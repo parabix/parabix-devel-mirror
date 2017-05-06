@@ -11,14 +11,14 @@ using namespace llvm;
 
 namespace kernel {
 
-    void ap_p2s_step(IDISA::IDISA_Builder * iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
+inline void ap_p2s_step(IDISA::IDISA_Builder * const iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
     Value * t0 = iBuilder->simd_if(1, hi_mask, p0, iBuilder->simd_srli(16, p1, shift));
     Value * t1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, p0, shift), p1);
     s1 = iBuilder->esimd_mergeh(8, t1, t0);
     s0 = iBuilder->esimd_mergel(8, t1, t0);
 }
 
-void p2s(IDISA::IDISA_Builder * iBuilder, Value * p[], Value * s[]) {
+inline void p2s(IDISA::IDISA_Builder * const iBuilder, Value * p[], Value * s[]) {
     Value * bit00004444[2];
     Value * bit22226666[2];
     Value * bit11115555[2];
@@ -255,19 +255,19 @@ void PrintStreamSet::generateDoBlockMethod() {
 
 }
 
-PrintableBits::PrintableBits(IDISA::IDISA_Builder * builder)
-: BlockOrientedKernel(builder, "PrintableBits", {Binding{builder->getStreamSetTy(1), "bitStream"}}, {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {}, {}, {}) {
+PrintableBits::PrintableBits(const std::unique_ptr<IDISA::IDISA_Builder> & builder)
+: BlockOrientedKernel("PrintableBits", {Binding{builder->getStreamSetTy(1), "bitStream"}}, {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {}, {}, {}) {
     setNoTerminateAttribute(true);
 }
 
-SelectStream::SelectStream(IDISA::IDISA_Builder * builder, unsigned sizeInputStreamSet, unsigned streamIndex)
-: BlockOrientedKernel(builder, "SelectStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(1, 1), "bitStream"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mStreamIndex(streamIndex) {
+SelectStream::SelectStream(const std::unique_ptr<IDISA::IDISA_Builder> & builder, unsigned sizeInputStreamSet, unsigned streamIndex)
+: BlockOrientedKernel("SelectStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(1, 1), "bitStream"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mStreamIndex(streamIndex) {
     setNoTerminateAttribute(true);
 
 }
 
-PrintStreamSet::PrintStreamSet(IDISA::IDISA_Builder * builder, std::vector<std::string> && names, const unsigned minWidth)
-: BlockOrientedKernel(builder, "PrintableStreamSet", {}, {}, {}, {}, {})
+PrintStreamSet::PrintStreamSet(const std::unique_ptr<IDISA::IDISA_Builder> & builder, std::vector<std::string> && names, const unsigned minWidth)
+: BlockOrientedKernel("PrintableStreamSet", {}, {}, {}, {}, {})
 , mNames(names)
 , mNameWidth(0) {
     auto width = minWidth;

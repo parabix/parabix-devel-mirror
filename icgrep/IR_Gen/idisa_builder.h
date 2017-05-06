@@ -19,7 +19,7 @@ class IDISA_Builder : public CBuilder {
 
 public:
 
-    IDISA_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, const bool SupportsIndirectBr=true, unsigned CacheAlignment=64);
+    IDISA_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride);
 
     virtual ~IDISA_Builder();
     
@@ -130,6 +130,10 @@ public:
     void CallPrintRegister(const std::string & regName, llvm::Value * const value);
     
 protected:
+
+    void initialize(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride);
+
+protected:
     unsigned            mBitBlockWidth;
     unsigned            mStride;
 
@@ -154,6 +158,6 @@ inline void IDISA_Builder::CreateBlockAlignedStore(llvm::Value * const value, ll
 inline void IDISA_Builder::CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr, std::initializer_list<llvm::Value *> indices) {
     CreateBlockAlignedStore(value, CreateGEP(ptr, indices));
 }
-    
+
 }
 #endif // IDISA_BUILDER_H

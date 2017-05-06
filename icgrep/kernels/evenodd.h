@@ -13,7 +13,7 @@ namespace kernel {
 
 class EvenOddKernel : public BlockOrientedKernel {
 public:
-    EvenOddKernel(IDISA::IDISA_Builder * builder);
+    EvenOddKernel(const std::unique_ptr<IDISA::IDISA_Builder> & builder);
     virtual ~EvenOddKernel() {}
 private:
     void generateDoBlockMethod() override;

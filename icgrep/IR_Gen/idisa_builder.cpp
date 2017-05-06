@@ -375,11 +375,15 @@ void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const p
     CreateAlignedStore(value, ptr, alignment);
 }
 
-IDISA_Builder::IDISA_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride, const bool SupportsIndirectBr, unsigned CacheAlignment)
-: CBuilder(module, archBitWidth, SupportsIndirectBr, CacheAlignment)
+void IDISA_Builder::initialize(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride) {
+
+}
+
+IDISA_Builder::IDISA_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
+: CBuilder(module, archBitWidth)
 , mBitBlockWidth(bitBlockWidth)
 , mStride(stride)
-, mBitBlockType(VectorType::get(IntegerType::get(getContext(), 64), bitBlockWidth / 64))
+, mBitBlockType(VectorType::get(IntegerType::get(module->getContext(), 64), bitBlockWidth / 64))
 , mZeroInitializer(Constant::getNullValue(mBitBlockType))
 , mOneInitializer(Constant::getAllOnesValue(mBitBlockType))
 , mPrintRegisterFunction(nullptr) {

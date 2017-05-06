@@ -13,7 +13,7 @@ namespace kernel {
 
 class PrintableBits : public BlockOrientedKernel {
 public:
-    PrintableBits(IDISA::IDISA_Builder * builder);
+    PrintableBits(const std::unique_ptr<IDISA::IDISA_Builder> & builder);
     virtual ~PrintableBits() {}
 private:
     void generateDoBlockMethod() override;
@@ -21,7 +21,7 @@ private:
 
 class SelectStream : public BlockOrientedKernel {
 public:
-    SelectStream(IDISA::IDISA_Builder * builder, unsigned sizeInputStreamSet, unsigned streamIndex);
+    SelectStream(const std::unique_ptr<IDISA::IDISA_Builder> & builder, unsigned sizeInputStreamSet, unsigned streamIndex);
     virtual ~SelectStream() {}
 private:
     void generateDoBlockMethod() override;
@@ -31,7 +31,7 @@ private:
 
 class PrintStreamSet : public BlockOrientedKernel {
 public:
-    PrintStreamSet(IDISA::IDISA_Builder * builder, std::vector<std::string> && names, const unsigned minWidth = 16);
+    PrintStreamSet(const std::unique_ptr<IDISA::IDISA_Builder> & builder, std::vector<std::string> && names, const unsigned minWidth = 16);
     virtual ~PrintStreamSet() {}
 private:
     void generateDoBlockMethod() override;

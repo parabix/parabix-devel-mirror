@@ -89,8 +89,8 @@ Function * CCScanKernel::generateScanWordRoutine(Module * m) const {
 
 }
 
-CCScanKernel::CCScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned streamNum) :
-BlockOrientedKernel(iBuilder, "CCScan",
+CCScanKernel::CCScanKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned streamNum) :
+BlockOrientedKernel("CCScan",
               {Binding{iBuilder->getStreamSetTy(streamNum), "matchResults"}},
               {}, {}, {}, {Binding{iBuilder->getSizeTy(), "BlockNo"}}),
 mStreamNum(streamNum),

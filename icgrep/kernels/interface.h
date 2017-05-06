@@ -37,8 +37,8 @@ struct ProcessingRate  {
     bool isMaxRatio() const {return mKind == ProcessingRateKind::MaxRatio;}
     bool isExact() const {return (mKind == ProcessingRateKind::FixedRatio)||(mKind == ProcessingRateKind::RoundUp)||(mKind == ProcessingRateKind::Add1) ;}
     bool isUnknownRate() const { return mKind == ProcessingRateKind::Unknown; }
-    llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * b, llvm::Value * principalInputItems, llvm::Value * doFinal = nullptr) const;
-    llvm::Value * CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * b, llvm::Value * outputItems, llvm::Value * doFinal = nullptr) const;
+    llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * const b, llvm::Value * principalInputItems, llvm::Value * doFinal = nullptr) const;
+    llvm::Value * CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * const b, llvm::Value * outputItems, llvm::Value * doFinal) const;
     friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet);
     friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet);
     friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string && referenceStreamSet);
@@ -46,7 +46,7 @@ struct ProcessingRate  {
     friend ProcessingRate UnknownRate();
     uint16_t getRatioNumerator() const { return mRatioNumerator;}
     uint16_t getRatioDenominator() const { return mRatioDenominator;}
-    std::string referenceStreamSet() const { return mReferenceStreamSet;}
+    const std::string & referenceStreamSet() const { return mReferenceStreamSet;}
 protected:
     ProcessingRate(ProcessingRateKind k, unsigned numerator, unsigned denominator, std::string && referenceStreamSet)
     : mKind(k), mRatioNumerator(numerator), mRatioDenominator(denominator), mReferenceStreamSet(referenceStreamSet) {}
@@ -90,14 +90,38 @@ public:
 
     virtual std::string makeSignature() = 0;
 
-    const std::vector<Binding> & getStreamInputs() const { return mStreamSetInputs; }
+    const std::vector<Binding> & getStreamInputs() const {
+        return mStreamSetInputs;
+    }
 
-    const std::vector<Binding> & getStreamOutputs() const { return mStreamSetOutputs; }
+    const Binding & getStreamInput(const unsigned i) const {
+        return mStreamSetInputs[i];
+    }
 
-    const std::vector<Binding> & getScalarInputs() const { return mScalarInputs; }
+    const std::vector<Binding> & getStreamOutputs() const {
+        return mStreamSetOutputs;
+    }
 
-    const std::vector<Binding> & getScalarOutputs() const { return mScalarOutputs; }
-        
+    const Binding & getStreamOutput(const unsigned i) const {
+        return mStreamSetOutputs[i];
+    }
+
+    const std::vector<Binding> & getScalarInputs() const {
+        return mScalarInputs;
+    }
+
+    const Binding & getScalarInput(const unsigned i) const {
+        return mScalarInputs[i];
+    }
+
+    const std::vector<Binding> & getScalarOutputs() const {
+        return mScalarOutputs;
+    }
+
+    const Binding & getScalarOutput(const unsigned i) const {
+        return mScalarOutputs[i];
+    }
+
     // Add ExternalLinkage method declarations for the kernel to a given client module.
     void addKernelDeclarations();
 
@@ -109,8 +133,9 @@ public:
 
     virtual void finalizeInstance() = 0;
 
-    void setInitialArguments(std::vector<llvm::Value *> args);
-
+    void setInitialArguments(std::vector<llvm::Value *> && args) {
+        mInitialArguments.swap(args);
+    }
     llvm::Value * getInstance() const {
         return mKernelInstance;
     }
@@ -118,7 +143,21 @@ public:
     unsigned getLookAhead() const {
         return mLookAheadPositions;
     }
-    
+
+    void setLookAhead(const unsigned lookAheadPositions) {
+        mLookAheadPositions = lookAheadPositions;
+    }
+
+    IDISA::IDISA_Builder * getBuilder() const {
+        return iBuilder;
+    }
+
+    void setBuilder(IDISA::IDISA_Builder * const builder) {
+        iBuilder = builder;
+    }
+
+protected:
+
     virtual llvm::Value * getProducedItemCount(const std::string & name, llvm::Value * doFinal = nullptr) const = 0;
 
     virtual void setProducedItemCount(const std::string & name, llvm::Value * value) const = 0;
@@ -134,20 +173,6 @@ public:
     virtual llvm::Value * getTerminationSignal() const = 0;
 
     virtual void setTerminationSignal() const = 0;
-    
-    void setLookAhead(unsigned lookAheadPositions) {
-        mLookAheadPositions = lookAheadPositions;
-    }
-
-    IDISA::IDISA_Builder * getBuilder() const {
-        return iBuilder;
-    }
-
-    void setBuilder(IDISA::IDISA_Builder * const builder) {
-        iBuilder = builder;
-    }
-
-protected:
 
     llvm::Function * getInitFunction(llvm::Module * const module) const;
 
@@ -155,14 +180,14 @@ protected:
 
     llvm::Function * getTerminateFunction(llvm::Module * const module) const;
 
-    KernelInterface(IDISA::IDISA_Builder * const builder,
-                    std::string kernelName,
+    KernelInterface(std::string kernelName,
                     std::vector<Binding> && stream_inputs,
                     std::vector<Binding> && stream_outputs,
                     std::vector<Binding> && scalar_inputs,
                     std::vector<Binding> && scalar_outputs,
                     std::vector<Binding> && internal_scalars)
-    : iBuilder(builder)
+    : iBuilder(nullptr)
+    , mModule(nullptr)
     , mKernelInstance(nullptr)
     , mKernelStateType(nullptr)
     , mLookAheadPositions(0)
@@ -184,17 +209,19 @@ protected:
 
 protected:
     
-    IDISA::IDISA_Builder *          iBuilder;
-    llvm::Value *                   mKernelInstance;
-    llvm::StructType *              mKernelStateType;
-    unsigned                        mLookAheadPositions;
-    std::string                     mKernelName;
-    std::vector<llvm::Value *>      mInitialArguments;
-    std::vector<Binding>            mStreamSetInputs;
-    std::vector<Binding>            mStreamSetOutputs;
-    std::vector<Binding>            mScalarInputs;
-    std::vector<Binding>            mScalarOutputs;
-    std::vector<Binding>            mInternalScalars;
+    IDISA::IDISA_Builder *                  iBuilder;
+    llvm::Module *                          mModule;
+
+    llvm::Value *                           mKernelInstance;
+    llvm::StructType *                      mKernelStateType;
+    unsigned                                mLookAheadPositions;
+    std::string                             mKernelName;
+    std::vector<llvm::Value *>              mInitialArguments;
+    std::vector<Binding>                    mStreamSetInputs;
+    std::vector<Binding>                    mStreamSetOutputs;
+    std::vector<Binding>                    mScalarInputs;
+    std::vector<Binding>                    mScalarOutputs;
+    std::vector<Binding>                    mInternalScalars;
 };
 
 #endif 

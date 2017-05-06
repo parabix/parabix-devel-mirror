@@ -14,7 +14,7 @@ namespace kernel {
     
 class editdScanKernel : public BlockOrientedKernel {
 public:
-    editdScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned dist);
+    editdScanKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned dist);
         
 private:
     void generateDoBlockMethod() override;

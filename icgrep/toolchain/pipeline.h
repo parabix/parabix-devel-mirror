@@ -9,10 +9,10 @@
 #include <memory>
 
 namespace IDISA { class IDISA_Builder; }
-namespace kernel { class KernelBuilder; }
+namespace kernel { class Kernel; }
 
-void generateSegmentParallelPipeline(std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
-void generatePipelineLoop(std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
-void generateParallelPipeline(std::unique_ptr<IDISA::IDISA_Builder> &iBuilder, const std::vector<kernel::KernelBuilder *> & kernels);
+void generateSegmentParallelPipeline(IDISA::IDISA_Builder * const iBuilder, const std::vector<kernel::Kernel *> & kernels);
+void generatePipelineLoop(IDISA::IDISA_Builder * const iBuilder, const std::vector<kernel::Kernel *> & kernels);
+void generateParallelPipeline(IDISA::IDISA_Builder * const iBuilder, const std::vector<kernel::Kernel *> & kernels);
 
 #endif // PIPELINE_H

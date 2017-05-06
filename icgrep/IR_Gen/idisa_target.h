@@ -8,13 +8,13 @@
 
 #include <string>
 namespace llvm { class Module; }
-namespace IDISA { class IDISA_Builder; }
+namespace kernel { class KernelBuilder; }
 
 namespace IDISA {
     
-IDISA::IDISA_Builder * GetIDISA_Builder(llvm::Module * const module);
+kernel::KernelBuilder * GetIDISA_Builder(llvm::Module * const module);
 
-IDISA::IDISA_Builder * GetIDISA_GPU_Builder(llvm::Module * const module);
+kernel::KernelBuilder * GetIDISA_GPU_Builder(llvm::Module * const module);
 
 }
 

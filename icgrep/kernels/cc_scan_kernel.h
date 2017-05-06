@@ -14,7 +14,7 @@ namespace kernel {
     
 class CCScanKernel : public BlockOrientedKernel {
 public:
-    CCScanKernel(IDISA::IDISA_Builder * iBuilder, unsigned streamNum);
+    CCScanKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned streamNum);
         
 private:
     void generateDoBlockMethod() override;

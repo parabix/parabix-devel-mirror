@@ -190,7 +190,7 @@ void wrapped_report_pos(size_t match_pos, int dist) {
 
 void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & patterns) {
 
-    IDISA::IDISA_Builder * const idb = pxDriver.getIDISA_Builder();
+    auto & idb = pxDriver.getBuilder();
     Module * const m = idb->getModule();
     Type * const sizeTy = idb->getSizeTy();
     Type * const voidTy = idb->getVoidTy();
@@ -220,6 +220,7 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
         idb, "editd", std::vector<Binding>{{idb->getStreamSetTy(4), "pat"}}, std::vector<Binding>{{idb->getStreamSetTy(editDistance + 1), "E"}}
         ));
 
+    editdk->setBuilder(idb.get());
     buildPatternKernel(reinterpret_cast<PabloKernel *>(editdk), patterns);
     pxDriver.makeKernelCall(editdk, {ChStream}, {MatchResults});
 
@@ -234,6 +235,7 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
 }
 
 void buildPreprocessKernel(PabloKernel * const kernel) {
+    assert (kernel->getBuilder());
     cc::CC_Compiler ccc(kernel, kernel->getInputStreamVar("basis"));
 
     PabloBuilder & pb = ccc.getBuilder();
@@ -255,7 +257,7 @@ void buildPreprocessKernel(PabloKernel * const kernel) {
 
 void preprocessPipeline(ParabixDriver & pxDriver) {
 
-    IDISA::IDISA_Builder * iBuilder = pxDriver.getIDISA_Builder();
+    auto & iBuilder = pxDriver.getBuilder();
     Module * m = iBuilder->getModule();
     Type * mBitBlockType = iBuilder->getBitBlockType();
 
@@ -291,6 +293,7 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
         iBuilder, "ccc", std::vector<Binding>{{iBuilder->getStreamSetTy(8), "basis"}}, std::vector<Binding>{{iBuilder->getStreamSetTy(4), "pat"}}
     ));
 
+    ccck->setBuilder(iBuilder.get());
     buildPreprocessKernel(reinterpret_cast<PabloKernel *>(ccck));
 
     pxDriver.makeKernelCall(ccck, {BasisBits}, {CCResults});

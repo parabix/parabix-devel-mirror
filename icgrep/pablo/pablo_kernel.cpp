@@ -51,7 +51,7 @@ Var * PabloKernel::getOutputScalarVar(const std::string & name) {
 }
 
 Var * PabloKernel::addInput(const std::string & name, Type * const type) {
-    Var * param = new (mAllocator) Var(mSymbolTable->makeString(name, iBuilder), type, mAllocator, Var::KernelInputParameter);
+    Var * param = new (mAllocator) Var(mSymbolTable->makeString(type->getContext(), name), type, mAllocator, Var::KernelInputParameter);
     param->addUser(this);
     mInputs.push_back(param);
     mVariables.push_back(param);
@@ -67,7 +67,7 @@ Var * PabloKernel::addInput(const std::string & name, Type * const type) {
 }
 
 Var * PabloKernel::addOutput(const std::string & name, Type * const type) {
-    Var * result = new (mAllocator) Var(mSymbolTable->makeString(name, iBuilder), type, mAllocator, Var::KernelOutputParameter);
+    Var * result = new (mAllocator) Var(mSymbolTable->makeString(type->getContext(), name), type, mAllocator, Var::KernelOutputParameter);
     result->addUser(this);
     mOutputs.push_back(result);
     mVariables.push_back(result);
@@ -91,7 +91,7 @@ Var * PabloKernel::makeVariable(String * name, Type * const type) {
 
 Zeroes * PabloKernel::getNullValue(Type * type) {
     if (type == nullptr) {
-        type = getStreamTy();
+        type = iBuilder->getStreamTy();
     }
     for (PabloAST * constant : mConstants) {
         if (isa<Zeroes>(constant) && constant->getType() == type) {
@@ -105,7 +105,7 @@ Zeroes * PabloKernel::getNullValue(Type * type) {
 
 Ones * PabloKernel::getAllOnesValue(Type * type) {
     if (type == nullptr) {
-        type = getStreamTy();
+        type = iBuilder->getStreamTy();
     }
     for (PabloAST * constant : mConstants) {
         if (isa<Ones>(constant) && constant->getType() == type) {
@@ -118,12 +118,12 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
 }
 
 void PabloKernel::prepareKernel() {
-    mPabloCompiler->initializeKernelData();
+    mPabloCompiler->initializeKernelData(iBuilder);
     BlockOrientedKernel::prepareKernel();
 }
 
 void PabloKernel::generateDoBlockMethod() {
-    mPabloCompiler->compile();
+    mPabloCompiler->compile(iBuilder);
 }
 
 void PabloKernel::generateFinalBlockMethod(Value * remainingBytes) {
@@ -134,34 +134,35 @@ void PabloKernel::generateFinalBlockMethod(Value * remainingBytes) {
     CreateDoBlockMethodCall();
 }
 
-PabloKernel::PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName,
+PabloKernel::PabloKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b,
+                         std::string kernelName,
                          std::vector<Binding> stream_inputs,
                          std::vector<Binding> stream_outputs,
                          std::vector<Binding> scalar_parameters,
                          std::vector<Binding> scalar_outputs)
-: BlockOrientedKernel(builder, std::move(kernelName), 
+: BlockOrientedKernel(std::move(kernelName),
                       std::move(stream_inputs), std::move(stream_outputs), 
                       std::move(scalar_parameters), std::move(scalar_outputs),
-                      {Binding{builder->getBitBlockType(), "EOFbit"}, Binding{builder->getBitBlockType(), "EOFmask"}})
+                      {Binding{b->getBitBlockType(), "EOFbit"}, Binding{b->getBitBlockType(), "EOFmask"}})
 , PabloAST(PabloAST::ClassTypeId::Kernel, nullptr, mAllocator)
 , mPabloCompiler(new PabloCompiler(this))
 , mSymbolTable(new SymbolGenerator(mAllocator))
 , mEntryBlock(PabloBlock::Create(this)) {
     prepareStreamSetNameMap();
     for (const Binding & ss : mStreamSetInputs) {
-        Var * param = new (mAllocator) Var(mSymbolTable->makeString(ss.name, iBuilder), ss.type, mAllocator, Var::KernelInputParameter);
+        Var * param = new (mAllocator) Var(mSymbolTable->makeString(b->getContext(), ss.name), ss.type, mAllocator, Var::KernelInputParameter);
         param->addUser(this);
         mInputs.push_back(param);
         mVariables.push_back(param);
     }
     for (const Binding & ss : mStreamSetOutputs) {
-        Var * result = new (mAllocator) Var(mSymbolTable->makeString(ss.name, iBuilder), ss.type, mAllocator, Var::KernelOutputParameter);
+        Var * result = new (mAllocator) Var(mSymbolTable->makeString(b->getContext(), ss.name), ss.type, mAllocator, Var::KernelOutputParameter);
         result->addUser(this);
         mOutputs.push_back(result);
         mVariables.push_back(result);
     }
     for (const Binding & ss : mScalarOutputs) {
-        Var * result = new (mAllocator) Var(mSymbolTable->makeString(ss.name, iBuilder), ss.type, mAllocator, Var::KernelOutputParameter);
+        Var * result = new (mAllocator) Var(mSymbolTable->makeString(b->getContext(), ss.name), ss.type, mAllocator, Var::KernelOutputParameter);
         result->addUser(this);
         mOutputs.push_back(result);
         mVariables.push_back(result);

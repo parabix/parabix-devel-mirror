@@ -43,25 +43,23 @@ inline static unsigned getPointerElementAlignment(const Value * const ptr) {
     return ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
 }
 
-void PabloCompiler::compile() {
-    iBuilder = mKernel->getBuilder();
-    assert ("PabloCompiler does not have a IDISA builder" && iBuilder);
-    mCarryManager->initializeCodeGen();     
+void PabloCompiler::initializeKernelData(IDISA::IDISA_Builder * const builder) {
+    assert ("PabloCompiler does not have a IDISA builder" && builder);
+    examineBlock(builder, mKernel->getEntryBlock());
+    mCarryManager->initializeCarryData(builder, mKernel);
+}
+
+void PabloCompiler::compile(IDISA::IDISA_Builder * const builder) {
+    assert ("PabloCompiler does not have a IDISA builder" && builder);
+    mCarryManager->initializeCodeGen(builder);
     PabloBlock * const entryBlock = mKernel->getEntryBlock(); assert (entryBlock);
-    mMarker.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
-    mMarker.emplace(entryBlock->createOnes(), iBuilder->allOnes());
-    compileBlock(entryBlock);
-    mCarryManager->finalizeCodeGen();
+    mMarker.emplace(entryBlock->createZeroes(), builder->allZeroes());
+    mMarker.emplace(entryBlock->createOnes(), builder->allOnes());
+    compileBlock(builder, entryBlock);
+    mCarryManager->finalizeCodeGen(builder);
 }
 
-void PabloCompiler::initializeKernelData() {
-    iBuilder = mKernel->getBuilder();
-    assert ("PabloCompiler does not have a IDISA builder" && iBuilder);
-    examineBlock(mKernel->getEntryBlock());
-    mCarryManager->initializeCarryData();
-}
-
-void PabloCompiler::examineBlock(const PabloBlock * const block) {
+void PabloCompiler::examineBlock(IDISA::IDISA_Builder * const builder, const PabloBlock * const block) {
     for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
@@ -70,20 +68,20 @@ void PabloCompiler::examineBlock(const PabloBlock * const block) {
                 mKernel->setLookAhead(la->getAmount());
             }
         } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
-            examineBlock(cast<Branch>(stmt)->getBody());
+            examineBlock(builder, cast<Branch>(stmt)->getBody());
         } else if (LLVM_UNLIKELY(isa<Count>(stmt))) {
-            mAccumulator.insert(std::make_pair(stmt, iBuilder->getInt32(mKernel->addUnnamedScalar(stmt->getType()))));
+            mAccumulator.insert(std::make_pair(stmt, builder->getInt32(mKernel->addUnnamedScalar(stmt->getType()))));
         }
     }    
 }
 
-inline void PabloCompiler::compileBlock(const PabloBlock * const block) {
+inline void PabloCompiler::compileBlock(IDISA::IDISA_Builder * const builder, const PabloBlock * const block) {
     for (const Statement * statement : *block) {
-        compileStatement(statement);
+        compileStatement(builder, statement);
     }
 }
 
-void PabloCompiler::compileIf(const If * const ifStatement) {
+void PabloCompiler::compileIf(IDISA::IDISA_Builder * const builder, const If * const ifStatement) {
     //
     //  The If-ElseZero stmt:
     //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
@@ -102,7 +100,7 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
     //  body.
     //
 
-    BasicBlock * const ifEntryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * const ifEntryBlock = builder->GetInsertBlock();
     BasicBlock * const ifBodyBlock = mKernel->CreateBasicBlock("if.body");
     BasicBlock * const ifEndBlock = mKernel->CreateBasicBlock("if.end");
     
@@ -114,9 +112,9 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
             if (var->isScalar()) {
                 marker = mKernel->getScalarFieldPtr(var->getName());
             } else if (var->isReadOnly()) {
-                marker = mKernel->getInputStreamBlockPtr(var->getName(), iBuilder->getInt32(0));
+                marker = mKernel->getInputStreamBlockPtr(var->getName(), builder->getInt32(0));
             } else if (var->isReadNone()) {
-                marker = mKernel->getOutputStreamBlockPtr(var->getName(), iBuilder->getInt32(0));
+                marker = mKernel->getOutputStreamBlockPtr(var->getName(), builder->getInt32(0));
             }
             mMarker[var] = marker;
         } else {
@@ -135,34 +133,34 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
 
     const PabloBlock * ifBody = ifStatement->getBody();
     
-    mCarryManager->enterIfScope(ifBody);
+    mCarryManager->enterIfScope(builder, ifBody);
 
-    Value * condition = compileExpression(ifStatement->getCondition());
-    if (condition->getType() == iBuilder->getBitBlockType()) {
-        condition = iBuilder->bitblock_any(mCarryManager->generateSummaryTest(condition));
+    Value * condition = compileExpression(builder, ifStatement->getCondition());
+    if (condition->getType() == builder->getBitBlockType()) {
+        condition = builder->bitblock_any(mCarryManager->generateSummaryTest(builder, condition));
     }
     
-    iBuilder->CreateCondBr(condition, ifBodyBlock, ifEndBlock);
+    builder->CreateCondBr(condition, ifBodyBlock, ifEndBlock);
     
     // Entry processing is complete, now handle the body of the if.
-    iBuilder->SetInsertPoint(ifBodyBlock);
+    builder->SetInsertPoint(ifBodyBlock);
 
-    mCarryManager->enterIfBody(ifEntryBlock);
+    mCarryManager->enterIfBody(builder, ifEntryBlock);
 
-    compileBlock(ifBody);
+    compileBlock(builder, ifBody);
 
-    mCarryManager->leaveIfBody(iBuilder->GetInsertBlock());
+    mCarryManager->leaveIfBody(builder, builder->GetInsertBlock());
 
-    BasicBlock * ifExitBlock = iBuilder->GetInsertBlock();
+    BasicBlock * ifExitBlock = builder->GetInsertBlock();
 
-    iBuilder->CreateBr(ifEndBlock);
+    builder->CreateBr(ifEndBlock);
 
     ifEndBlock->moveAfter(ifExitBlock);
 
     //End Block
-    iBuilder->SetInsertPoint(ifEndBlock);
+    builder->SetInsertPoint(ifEndBlock);
 
-    mCarryManager->leaveIfScope(ifEntryBlock, ifExitBlock);
+    mCarryManager->leaveIfScope(builder, ifEntryBlock, ifExitBlock);
 
     for (const auto i : incoming) {
         const Var * var; Value * incoming;
@@ -197,18 +195,18 @@ void PabloCompiler::compileIf(const If * const ifStatement) {
             report_fatal_error(out.str());
         }
 
-        PHINode * phi = iBuilder->CreatePHI(incoming->getType(), 2, var->getName());
+        PHINode * phi = builder->CreatePHI(incoming->getType(), 2, var->getName());
         phi->addIncoming(incoming, ifEntryBlock);
         phi->addIncoming(outgoing, ifExitBlock);
         f->second = phi;
     }    
 }
 
-void PabloCompiler::compileWhile(const While * const whileStatement) {
+void PabloCompiler::compileWhile(IDISA::IDISA_Builder * const builder, const While * const whileStatement) {
 
     const PabloBlock * const whileBody = whileStatement->getBody();
 
-    BasicBlock * whileEntryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * whileEntryBlock = builder->GetInsertBlock();
 
     const auto escaped = whileStatement->getEscaped();
 
@@ -225,21 +223,21 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
             if (var->isScalar()) {
                 marker = mKernel->getScalarFieldPtr(var->getName());
             } else if (var->isReadOnly()) {
-                marker = mKernel->getInputStreamBlockPtr(var->getName(), iBuilder->getInt32(0));
+                marker = mKernel->getInputStreamBlockPtr(var->getName(), builder->getInt32(0));
             } else if (var->isReadNone()) {
-                marker = mKernel->getOutputStreamBlockPtr(var->getName(), iBuilder->getInt32(0));
+                marker = mKernel->getOutputStreamBlockPtr(var->getName(), builder->getInt32(0));
             }
             mMarker[var] = marker;
         }
     }
 
-    mCarryManager->enterLoopScope(whileBody);
+    mCarryManager->enterLoopScope(builder, whileBody);
 
     BasicBlock * whileBodyBlock = mKernel->CreateBasicBlock("while.body");
 
-    iBuilder->CreateBr(whileBodyBlock);
+    builder->CreateBr(whileBodyBlock);
 
-    iBuilder->SetInsertPoint(whileBodyBlock);
+    builder->SetInsertPoint(whileBodyBlock);
 
     //
     // There are 3 sets of Phi nodes for the while loop.
@@ -265,7 +263,7 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
             report_fatal_error(out.str());
         }
         Value * entryValue = f->second;
-        PHINode * phi = iBuilder->CreatePHI(entryValue->getType(), 2, var->getName());
+        PHINode * phi = builder->CreatePHI(entryValue->getType(), 2, var->getName());
         phi->addIncoming(entryValue, whileEntryBlock);
         f->second = phi;
         assert(mMarker[var] == phi);
@@ -278,13 +276,13 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     }
 #endif
 
-    mCarryManager->enterLoopBody(whileEntryBlock);
+    mCarryManager->enterLoopBody(builder, whileEntryBlock);
 
-    compileBlock(whileBody);
+    compileBlock(builder, whileBody);
 
     // After the whileBody has been compiled, we may be in a different basic block.
 
-    mCarryManager->leaveLoopBody(iBuilder->GetInsertBlock());
+    mCarryManager->leaveLoopBody(builder, builder->GetInsertBlock());
 
 
 #ifdef ENABLE_BOUNDED_WHILE
@@ -295,7 +293,7 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     }
 #endif
 
-    BasicBlock * const whileExitBlock = iBuilder->GetInsertBlock();
+    BasicBlock * const whileExitBlock = builder->GetInsertBlock();
 
     // and for any variant nodes in the loop body
     for (const auto variant : variants) {
@@ -333,30 +331,30 @@ void PabloCompiler::compileWhile(const While * const whileStatement) {
     BasicBlock * whileEndBlock = mKernel->CreateBasicBlock("while.end");
 
     // Terminate the while loop body with a conditional branch back.
-    Value * condition = compileExpression(whileStatement->getCondition());
-    if (condition->getType() == iBuilder->getBitBlockType()) {
-        condition = iBuilder->bitblock_any(mCarryManager->generateSummaryTest(condition));
+    Value * condition = compileExpression(builder, whileStatement->getCondition());
+    if (condition->getType() == builder->getBitBlockType()) {
+        condition = builder->bitblock_any(mCarryManager->generateSummaryTest(builder, condition));
     }
 
-    iBuilder->CreateCondBr(condition, whileBodyBlock, whileEndBlock);
+    builder->CreateCondBr(condition, whileBodyBlock, whileEndBlock);
 
-    iBuilder->SetInsertPoint(whileEndBlock);
+    builder->SetInsertPoint(whileEndBlock);
 
-    mCarryManager->leaveLoopScope(whileEntryBlock, whileExitBlock);
+    mCarryManager->leaveLoopScope(builder, whileEntryBlock, whileExitBlock);
 
 }
 
-void PabloCompiler::compileStatement(const Statement * const stmt) {
+void PabloCompiler::compileStatement(IDISA::IDISA_Builder * const builder, const Statement * const stmt) {
 
     if (LLVM_UNLIKELY(isa<If>(stmt))) {
-        compileIf(cast<If>(stmt));
+        compileIf(builder, cast<If>(stmt));
     } else if (LLVM_UNLIKELY(isa<While>(stmt))) {
-        compileWhile(cast<While>(stmt));
+        compileWhile(builder, cast<While>(stmt));
     } else {
         const PabloAST * expr = stmt;
         Value * value = nullptr;
         if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
-            value = compileExpression(cast<Assign>(stmt)->getValue());
+            value = compileExpression(builder, cast<Assign>(stmt)->getValue());
             expr = cast<Assign>(stmt)->getVariable();
             Value * ptr = nullptr;
             if (LLVM_LIKELY(isa<Var>(expr))) {
@@ -376,7 +374,7 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
                     if (var->isScalar()) {
                         ptr = mKernel->getScalarFieldPtr(var->getName());
                     } else {
-                        ptr = mKernel->getOutputStreamBlockPtr(var->getName(), iBuilder->getInt32(0));
+                        ptr = mKernel->getOutputStreamBlockPtr(var->getName(), builder->getInt32(0));
                     }
                 }
             } else if (isa<Extract>(expr)) {
@@ -397,11 +395,11 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
                 assert (ptr);
             }
             if (ptr) {
-                iBuilder->CreateAlignedStore(value, ptr, getAlignment(value));
+                builder->CreateAlignedStore(value, ptr, getAlignment(value));
                 value = ptr;
             }
         } else if (const Extract * extract = dyn_cast<Extract>(stmt)) {
-            Value * index = compileExpression(extract->getIndex());
+            Value * index = compileExpression(builder, extract->getIndex());
             Var * const array = dyn_cast<Var>(extract->getArray());
             if (LLVM_LIKELY(array && array->isKernelParameter())) {
                 if (array->isReadOnly()) {
@@ -418,100 +416,100 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
                     report_fatal_error(out.str());
                 }
             } else {
-                Value * ptr = compileExpression(extract->getArray(), false);
-                value = iBuilder->CreateGEP(ptr, {ConstantInt::getNullValue(index->getType()), index}, "extract");
+                Value * ptr = compileExpression(builder, extract->getArray(), false);
+                value = builder->CreateGEP(ptr, {ConstantInt::getNullValue(index->getType()), index}, "extract");
             }
         } else if (isa<And>(stmt)) {
-            value = compileExpression(stmt->getOperand(0));
+            value = compileExpression(builder, stmt->getOperand(0));
             for (unsigned i = 1; i < stmt->getNumOperands(); ++i) {
-                value = iBuilder->simd_and(value, compileExpression(stmt->getOperand(1)));
+                value = builder->simd_and(value, compileExpression(builder, stmt->getOperand(1)));
             }
         } else if (isa<Or>(stmt)) {
-            value = compileExpression(stmt->getOperand(0));
+            value = compileExpression(builder, stmt->getOperand(0));
             for (unsigned i = 1; i < stmt->getNumOperands(); ++i) {
-                value = iBuilder->simd_or(value, compileExpression(stmt->getOperand(1)));
+                value = builder->simd_or(value, compileExpression(builder, stmt->getOperand(1)));
             }
         } else if (isa<Xor>(stmt)) {
-            value = compileExpression(stmt->getOperand(0));
+            value = compileExpression(builder, stmt->getOperand(0));
             for (unsigned i = 1; i < stmt->getNumOperands(); ++i) {
-                value = iBuilder->simd_xor(value, compileExpression(stmt->getOperand(1)));
+                value = builder->simd_xor(value, compileExpression(builder, stmt->getOperand(1)));
             }
         } else if (const Sel * sel = dyn_cast<Sel>(stmt)) {
-            Value* ifMask = compileExpression(sel->getCondition());
-            Value* ifTrue = iBuilder->simd_and(ifMask, compileExpression(sel->getTrueExpr()));
-            Value* ifFalse = iBuilder->simd_and(iBuilder->simd_not(ifMask), compileExpression(sel->getFalseExpr()));
-            value = iBuilder->simd_or(ifTrue, ifFalse);
+            Value* ifMask = compileExpression(builder, sel->getCondition());
+            Value* ifTrue = builder->simd_and(ifMask, compileExpression(builder, sel->getTrueExpr()));
+            Value* ifFalse = builder->simd_and(builder->simd_not(ifMask), compileExpression(builder, sel->getFalseExpr()));
+            value = builder->simd_or(ifTrue, ifFalse);
         } else if (isa<Not>(stmt)) {
-            value = iBuilder->simd_not(compileExpression(stmt->getOperand(0)));
+            value = builder->simd_not(compileExpression(builder, stmt->getOperand(0)));
         } else if (isa<Advance>(stmt)) {
             const Advance * const adv = cast<Advance>(stmt);
             // If our expr is an Extract op on a mutable Var then we need to pass the index value to the carry
             // manager so that it properly selects the correct carry bit.
-            value = mCarryManager->advanceCarryInCarryOut(adv, compileExpression(adv->getExpression()));
+            value = mCarryManager->advanceCarryInCarryOut(builder, adv, compileExpression(builder, adv->getExpression()));
         } else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt)) {
-            Value * const marker = compileExpression(mstar->getMarker());
-            Value * const cc = compileExpression(mstar->getCharClass());
-            Value * const marker_and_cc = iBuilder->simd_and(marker, cc);
-            Value * const sum = mCarryManager->addCarryInCarryOut(mstar, marker_and_cc, cc);
-            value = iBuilder->simd_or(iBuilder->simd_xor(sum, cc), marker);
+            Value * const marker = compileExpression(builder, mstar->getMarker());
+            Value * const cc = compileExpression(builder, mstar->getCharClass());
+            Value * const marker_and_cc = builder->simd_and(marker, cc);
+            Value * const sum = mCarryManager->addCarryInCarryOut(builder, mstar, marker_and_cc, cc);
+            value = builder->simd_or(builder->simd_xor(sum, cc), marker);
         } else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt)) {
-            Value * const from = compileExpression(sthru->getScanFrom());
-            Value * const thru = compileExpression(sthru->getScanThru());
-            Value * const sum = mCarryManager->addCarryInCarryOut(sthru, from, thru);
-            value = iBuilder->simd_and(sum, iBuilder->simd_not(thru));
+            Value * const from = compileExpression(builder, sthru->getScanFrom());
+            Value * const thru = compileExpression(builder, sthru->getScanThru());
+            Value * const sum = mCarryManager->addCarryInCarryOut(builder, sthru, from, thru);
+            value = builder->simd_and(sum, builder->simd_not(thru));
         } else if (const ScanTo * sthru = dyn_cast<ScanTo>(stmt)) {
-            Value * const marker_expr = compileExpression(sthru->getScanFrom());
-            Value * const to = iBuilder->simd_xor(compileExpression(sthru->getScanTo()), mKernel->getScalarField("EOFmask"));
-            Value * const sum = mCarryManager->addCarryInCarryOut(sthru, marker_expr, iBuilder->simd_not(to));
-            value = iBuilder->simd_and(sum, to);
+            Value * const marker_expr = compileExpression(builder, sthru->getScanFrom());
+            Value * const to = builder->simd_xor(compileExpression(builder, sthru->getScanTo()), mKernel->getScalarField("EOFmask"));
+            Value * const sum = mCarryManager->addCarryInCarryOut(builder, sthru, marker_expr, builder->simd_not(to));
+            value = builder->simd_and(sum, to);
         } else if (const AdvanceThenScanThru * sthru = dyn_cast<AdvanceThenScanThru>(stmt)) {
-            Value * const from = compileExpression(sthru->getScanFrom());
-            Value * const thru = compileExpression(sthru->getScanThru());
-            Value * const sum = mCarryManager->addCarryInCarryOut(sthru, from, iBuilder->simd_or(from, thru));
-            value = iBuilder->simd_and(sum, iBuilder->simd_not(thru));
+            Value * const from = compileExpression(builder, sthru->getScanFrom());
+            Value * const thru = compileExpression(builder, sthru->getScanThru());
+            Value * const sum = mCarryManager->addCarryInCarryOut(builder, sthru, from, builder->simd_or(from, thru));
+            value = builder->simd_and(sum, builder->simd_not(thru));
         } else if (const AdvanceThenScanTo * sthru = dyn_cast<AdvanceThenScanTo>(stmt)) {
-            Value * const from = compileExpression(sthru->getScanFrom());
-            Value * const to = iBuilder->simd_xor(compileExpression(sthru->getScanTo()), mKernel->getScalarField("EOFmask"));
-            Value * const sum = mCarryManager->addCarryInCarryOut(sthru, from, iBuilder->simd_or(from, iBuilder->simd_not(to)));
-            value = iBuilder->simd_and(sum, to);
+            Value * const from = compileExpression(builder, sthru->getScanFrom());
+            Value * const to = builder->simd_xor(compileExpression(builder, sthru->getScanTo()), mKernel->getScalarField("EOFmask"));
+            Value * const sum = mCarryManager->addCarryInCarryOut(builder, sthru, from, builder->simd_or(from, builder->simd_not(to)));
+            value = builder->simd_and(sum, to);
         } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
             Value * EOFmask = mKernel->getScalarField("EOFmask");
-            value = iBuilder->simd_and(compileExpression(e->getExpr()), iBuilder->simd_not(EOFmask));
+            value = builder->simd_and(compileExpression(builder, e->getExpr()), builder->simd_not(EOFmask));
         } else if (const AtEOF * e = dyn_cast<AtEOF>(stmt)) {
             Value * EOFbit = mKernel->getScalarField("EOFbit");
-            value = iBuilder->simd_and(compileExpression(e->getExpr()), EOFbit);
+            value = builder->simd_and(compileExpression(builder, e->getExpr()), EOFbit);
         } else if (const Count * c = dyn_cast<Count>(stmt)) {
 	    Value * EOFbit = mKernel->getScalarField("EOFbit");
 	    Value * EOFmask = mKernel->getScalarField("EOFmask");
-	    Value * const to_count = iBuilder->simd_and(iBuilder->simd_or(iBuilder->simd_not(EOFmask), EOFbit), compileExpression(c->getExpr()));
-            const unsigned counterSize = iBuilder->getSizeTy()->getBitWidth();
+        Value * const to_count = builder->simd_and(builder->simd_or(builder->simd_not(EOFmask), EOFbit), compileExpression(builder, c->getExpr()));
+            const unsigned counterSize = builder->getSizeTy()->getBitWidth();
             const auto f = mAccumulator.find(c);
             if (LLVM_UNLIKELY(f == mAccumulator.end())) {
                 report_fatal_error("Unknown accumulator: " + c->getName().str());
             }
             Value * ptr = mKernel->getScalarFieldPtr(f->second);
             const auto alignment = getPointerElementAlignment(ptr);
-            Value * count = iBuilder->CreateAlignedLoad(ptr, alignment, c->getName() + "_accumulator");
-            Value * const partial = iBuilder->simd_popcount(counterSize, to_count);
+            Value * count = builder->CreateAlignedLoad(ptr, alignment, c->getName() + "_accumulator");
+            Value * const partial = builder->simd_popcount(counterSize, to_count);
             if (LLVM_UNLIKELY(counterSize <= 1)) {
                 value = partial;
             } else {
-                value = iBuilder->mvmd_extract(counterSize, partial, 0);
-                const auto fields = (iBuilder->getBitBlockWidth() / counterSize);
+                value = builder->mvmd_extract(counterSize, partial, 0);
+                const auto fields = (builder->getBitBlockWidth() / counterSize);
                 for (unsigned i = 1; i < fields; ++i) {
-                    Value * temp = iBuilder->mvmd_extract(counterSize, partial, i);
-                    value = iBuilder->CreateAdd(value, temp);
+                    Value * temp = builder->mvmd_extract(counterSize, partial, i);
+                    value = builder->CreateAdd(value, temp);
                 }
             }
-            value = iBuilder->CreateAdd(value, count);
-            iBuilder->CreateAlignedStore(value, ptr, alignment);
+            value = builder->CreateAdd(value, count);
+            builder->CreateAlignedStore(value, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             Var * var = nullptr;
             PabloAST * stream = l->getExpr();
-            Value * index = iBuilder->getInt32(0);
+            Value * index = builder->getInt32(0);
             if (LLVM_UNLIKELY(isa<Extract>(stream))) {
                 var = dyn_cast<Var>(cast<Extract>(stream)->getArray());
-                index = compileExpression(cast<Extract>(stream)->getIndex());
+                index = compileExpression(builder, cast<Extract>(stream)->getIndex());
                 if (!var->isKernelParameter() || var->isReadNone()) {
                     std::string tmp;
                     raw_string_ostream out(tmp);
@@ -534,24 +532,24 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
                     report_fatal_error(out.str());
                 }
             }
-            const auto bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
-            const auto block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
+            const auto bit_shift = (l->getAmount() % builder->getBitBlockWidth());
+            const auto block_shift = (l->getAmount() / builder->getBitBlockWidth());
 
-            Value * ptr = mKernel->getAdjustedInputStreamBlockPtr(iBuilder->getSize(block_shift), var->getName(), index);
-            Value * lookAhead = iBuilder->CreateBlockAlignedLoad(ptr);
+            Value * ptr = mKernel->getAdjustedInputStreamBlockPtr(builder->getSize(block_shift), var->getName(), index);
+            Value * lookAhead = builder->CreateBlockAlignedLoad(ptr);
             if (bit_shift == 0) {  // Simple case with no intra-block shifting.
                 value = lookAhead;
             } else { // Need to form shift result from two adjacent blocks.
-                Value * ptr = mKernel->getAdjustedInputStreamBlockPtr(iBuilder->getSize(block_shift + 1), var->getName(), index);
-                Value * lookAhead1 = iBuilder->CreateBlockAlignedLoad(ptr);
+                Value * ptr = mKernel->getAdjustedInputStreamBlockPtr(builder->getSize(block_shift + 1), var->getName(), index);
+                Value * lookAhead1 = builder->CreateBlockAlignedLoad(ptr);
                 if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
-                    value = iBuilder->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));
+                    value = builder->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));
                 } else {
-                    Type  * const streamType = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
-                    Value * b1 = iBuilder->CreateBitCast(lookAhead1, streamType);
-                    Value * b0 = iBuilder->CreateBitCast(lookAhead, streamType);
-                    Value * result = iBuilder->CreateOr(iBuilder->CreateShl(b1, iBuilder->getBitBlockWidth() - bit_shift), iBuilder->CreateLShr(b0, bit_shift));
-                    value = iBuilder->CreateBitCast(result, iBuilder->getBitBlockType());
+                    Type  * const streamType = builder->getIntNTy(builder->getBitBlockWidth());
+                    Value * b1 = builder->CreateBitCast(lookAhead1, streamType);
+                    Value * b0 = builder->CreateBitCast(lookAhead, streamType);
+                    Value * result = builder->CreateOr(builder->CreateShl(b1, builder->getBitBlockWidth() - bit_shift), builder->CreateLShr(b0, bit_shift));
+                    value = builder->CreateBitCast(result, builder->getBitBlockType());
                 }
             }
 
@@ -568,28 +566,28 @@ void PabloCompiler::compileStatement(const Statement * const stmt) {
         if (DebugOptionIsSet(DumpTrace)) {
             const String & name = isa<Var>(expr) ? cast<Var>(expr)->getName() : cast<Statement>(expr)->getName();
             if (value->getType()->isPointerTy()) {
-                value = iBuilder->CreateLoad(value);
+                value = builder->CreateLoad(value);
             }
             if (value->getType()->isVectorTy()) {
-                iBuilder->CallPrintRegister(name.str(), value);
+                builder->CallPrintRegister(name.str(), value);
             } else if (value->getType()->isIntegerTy()) {
-                iBuilder->CallPrintInt(name.str(), value);
+                builder->CallPrintInt(name.str(), value);
             }
         }
     }
 }
 
-Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensureLoaded) const {
+Value * PabloCompiler::compileExpression(IDISA::IDISA_Builder * const builder, const PabloAST * expr, const bool ensureLoaded) const {
     if (LLVM_UNLIKELY(isa<Ones>(expr))) {
-        return iBuilder->allOnes();
+        return builder->allOnes();
     } else if (LLVM_UNLIKELY(isa<Zeroes>(expr))) {
-        return iBuilder->allZeroes();
+        return builder->allZeroes();
     } else if (LLVM_UNLIKELY(isa<Integer>(expr))) {
         return ConstantInt::get(cast<Integer>(expr)->getType(), cast<Integer>(expr)->value());
     } else if (LLVM_UNLIKELY(isa<Operator>(expr))) {
         const Operator * op = cast<Operator>(expr);
-        Value * lh = compileExpression(op->getLH());
-        Value * rh = compileExpression(op->getRH());
+        Value * lh = compileExpression(builder, op->getLH());
+        Value * rh = compileExpression(builder, op->getRH());
         if (LLVM_UNLIKELY(lh->getType() != rh->getType())) {
             std::string tmp;
             raw_string_ostream out(tmp);
@@ -604,21 +602,21 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
         }
         switch (op->getClassTypeId()) {
             case TypeId::Add:
-                return iBuilder->CreateAdd(lh, rh);
+                return builder->CreateAdd(lh, rh);
             case TypeId::Subtract:
-                return iBuilder->CreateSub(lh, rh);
+                return builder->CreateSub(lh, rh);
             case TypeId::LessThan:
-                return iBuilder->CreateICmpSLT(lh, rh);
+                return builder->CreateICmpSLT(lh, rh);
             case TypeId::LessThanEquals:
-                return iBuilder->CreateICmpSLE(lh, rh);
+                return builder->CreateICmpSLE(lh, rh);
             case TypeId::Equals:
-                return iBuilder->CreateICmpEQ(lh, rh);
+                return builder->CreateICmpEQ(lh, rh);
             case TypeId::GreaterThanEquals:
-                return iBuilder->CreateICmpSGE(lh, rh);
+                return builder->CreateICmpSGE(lh, rh);
             case TypeId::GreaterThan:
-                return iBuilder->CreateICmpSGT(lh, rh);
+                return builder->CreateICmpSGT(lh, rh);
             case TypeId::NotEquals:
-                return iBuilder->CreateICmpNE(lh, rh);
+                return builder->CreateICmpNE(lh, rh);
             default: break;
         }
         std::string tmp;
@@ -639,15 +637,14 @@ Value * PabloCompiler::compileExpression(const PabloAST * expr, const bool ensur
     }
     Value * value = f->second;
     if (LLVM_UNLIKELY(isa<GetElementPtrInst>(value) && ensureLoaded)) {
-        value = iBuilder->CreateAlignedLoad(value, getPointerElementAlignment(value));
+        value = builder->CreateAlignedLoad(value, getPointerElementAlignment(value));
     }
     return value;
 }
 
 PabloCompiler::PabloCompiler(PabloKernel * const kernel)
-: iBuilder(nullptr)
-, mKernel(kernel)
-, mCarryManager(new CarryManager(kernel)) {
+: mKernel(kernel)
+, mCarryManager(new CarryManager) {
     assert ("PabloKernel cannot be null!" && kernel);
 }
 

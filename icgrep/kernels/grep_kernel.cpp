@@ -28,7 +28,7 @@ inline static std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
-ICgrepKernelBuilder::ICgrepKernelBuilder (IDISA::IDISA_Builder * const iBuilder, RE * const re)
+ICgrepKernelBuilder::ICgrepKernelBuilder (const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, RE * const re)
 : PabloKernel(iBuilder, "",
               {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}},
               {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}},
@@ -56,14 +56,13 @@ void InvertMatchesKernel::generateDoBlockMethod() {
     storeOutputStreamBlock("nonMatches", iBuilder->getInt32(0), inverted);
 }
 
-InvertMatchesKernel::InvertMatchesKernel(IDISA::IDISA_Builder * builder)
-: BlockOrientedKernel(builder, "Invert", {Binding{builder->getStreamSetTy(1, 1), "matchedLines"}, Binding{builder->getStreamSetTy(1, 1), "lineBreaks"}}, {Binding{builder->getStreamSetTy(1, 1), "nonMatches"}}, {}, {}, {}) {
-    setNoTerminateAttribute(true);
-    
+InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<IDISA::IDISA_Builder> & builder)
+: BlockOrientedKernel("Invert", {Binding{builder->getStreamSetTy(1, 1), "matchedLines"}, Binding{builder->getStreamSetTy(1, 1), "lineBreaks"}}, {Binding{builder->getStreamSetTy(1, 1), "nonMatches"}}, {}, {}, {}) {
+    setNoTerminateAttribute(true);    
 }
 
 
-PopcountKernel::PopcountKernel (IDISA::IDISA_Builder * const iBuilder)
+PopcountKernel::PopcountKernel (const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
 : PabloKernel(iBuilder, "Popcount",
               {Binding{iBuilder->getStreamSetTy(1), "toCount"}},
               {},

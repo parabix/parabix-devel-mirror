@@ -81,28 +81,36 @@ extern "C" {
     }
 }
 
-//
-//
+class WordCountKernel final: public pablo::PabloKernel {
+public:
+    WordCountKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b);
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
+    void prepareKernel() override;
+};
 
-std::unique_ptr<PabloKernel> wc_gen(IDISA::IDISA_Builder * iBuilder) {
-    
-    auto kernel = std::unique_ptr<PabloKernel>(new PabloKernel(iBuilder, "Parabix:wc",
-                    {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
-                    {},
-                    {},
-                    {Binding{iBuilder->getSizeTy(), "lineCount"}, Binding{iBuilder->getSizeTy(), "wordCount"}, Binding{iBuilder->getSizeTy(), "charCount"}}));
-    
+WordCountKernel::WordCountKernel (const std::unique_ptr<IDISA::IDISA_Builder> & b)
+: PabloKernel(b, "wc",
+    {Binding{b->getStreamSetTy(8, 1), "u8bit"}},
+    {},
+    {},
+    {Binding{b->getSizeTy(), "lineCount"}, Binding{b->getSizeTy(), "wordCount"}, Binding{b->getSizeTy(), "charCount"}}) {
+
+}
+
+void WordCountKernel::prepareKernel() {
+
     //  input: 8 basis bit streams
-    const auto u8bitSet = kernel->getInputStreamVar("u8bit");
+    const auto u8bitSet = getInputStreamVar("u8bit");
     //  output: 3 counters
-    
-    cc::CC_Compiler ccc(kernel.get(), u8bitSet);
-    
+
+    cc::CC_Compiler ccc(this, u8bitSet);
+
     PabloBuilder & pb = ccc.getBuilder();
 
-    Var * lc = kernel->getOutputScalarVar("lineCount");
-    Var * wc = kernel->getOutputScalarVar("wordCount");
-    Var * cc = kernel->getOutputScalarVar("charCount");
+    Var * lc = getOutputScalarVar("lineCount");
+    Var * wc = getOutputScalarVar("wordCount");
+    Var * cc = getOutputScalarVar("charCount");
 
     if (CountLines) {
         PabloAST * LF = ccc.compileCC(re::makeCC(0x0A));
@@ -121,21 +129,18 @@ std::unique_ptr<PabloKernel> wc_gen(IDISA::IDISA_Builder * iBuilder) {
         // FIXME: This correctly counts characters assuming valid UTF-8 input.  But what if input is
         // not UTF-8, or is not valid?
         //
-        PabloAST * u8Begin = ccc.compileCC(re::makeCC(re::makeCC(0, 0x7F), re::makeCC(0xC2, 0xF4)));        
+        PabloAST * u8Begin = ccc.compileCC(re::makeCC(re::makeCC(0, 0x7F), re::makeCC(0xC2, 0xF4)));
         pb.createAssign(cc, pb.createCount(u8Begin));
     }
-    pablo_function_passes(kernel.get());
-    return kernel;
+    pablo_function_passes(this);
+    PabloKernel::prepareKernel();
 }
-
-
-
 
 typedef void (*WordCountFunctionType)(uint32_t fd, size_t fileIdx);
 
 void wcPipelineGen(ParabixDriver & pxDriver) {
 
-    auto iBuilder = pxDriver.getIDISA_Builder();
+    auto & iBuilder = pxDriver.getBuilder();
     Module * m = iBuilder->getModule();
     
     Type * const int32Ty = iBuilder->getInt32Ty();
@@ -160,16 +165,15 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     StreamSetBuffer * const BasisBits = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1)));
 
-    KernelBuilder * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder));
+    Kernel * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder));
     mmapK->setInitialArguments({fileDecriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
-    KernelBuilder * s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
+    Kernel * s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
-    KernelBuilder * wck = pxDriver.addKernelInstance(wc_gen(iBuilder));
+    Kernel * wck = pxDriver.addKernelInstance(make_unique<WordCountKernel>(iBuilder));
     pxDriver.makeKernelCall(wck, {BasisBits}, {});
-
 
     pxDriver.generatePipelineIR();
     

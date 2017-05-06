@@ -3,8 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#ifndef KERNEL_BUILDER_H
-#define KERNEL_BUILDER_H
+#ifndef KERNEL_H
+#define KERNEL_H
 
 #include "interface.h"
 #include <boost/container/flat_map.hpp>
@@ -21,18 +21,30 @@ namespace parabix { class StreamSetBuffer; }
 
 namespace kernel {
     
-class KernelBuilder : public KernelInterface {
+class Kernel : public KernelInterface {
 protected:
     using KernelMap = boost::container::flat_map<std::string, unsigned>;
     enum class Port { Input, Output };
     using StreamPort = std::pair<Port, unsigned>;
     using StreamMap = boost::container::flat_map<std::string, StreamPort>;
     using StreamSetBuffers = std::vector<parabix::StreamSetBuffer *>;
-    using Kernels = std::vector<KernelBuilder *>;
+    using Kernels = std::vector<Kernel *>;
 
-    friend void ::generateSegmentParallelPipeline(std::unique_ptr<IDISA::IDISA_Builder> &, const Kernels &);
-    friend void ::generatePipelineLoop(std::unique_ptr<IDISA::IDISA_Builder> &, const Kernels &);
-    friend void ::generateParallelPipeline(std::unique_ptr<IDISA::IDISA_Builder> &, const Kernels &);
+    friend class KernelBuilder;
+    friend void ::generateSegmentParallelPipeline(IDISA::IDISA_Builder * const, const Kernels &);
+    friend void ::generatePipelineLoop(IDISA::IDISA_Builder * const, const Kernels &);
+    friend void ::generateParallelPipeline(IDISA::IDISA_Builder * const, const Kernels &);
+
+    static const std::string DO_BLOCK_SUFFIX;
+    static const std::string FINAL_BLOCK_SUFFIX;
+    static const std::string LOGICAL_SEGMENT_NO_SCALAR;
+    static const std::string PROCESSED_ITEM_COUNT_SUFFIX;
+    static const std::string CONSUMED_ITEM_COUNT_SUFFIX;
+    static const std::string PRODUCED_ITEM_COUNT_SUFFIX;
+    static const std::string TERMINATION_SIGNAL;
+    static const std::string BUFFER_PTR_SUFFIX;
+    static const std::string CONSUMER_SUFFIX;
+
 public:
     
     // Kernel Signatures and Module IDs
@@ -100,13 +112,13 @@ public:
 
     void setConsumedItemCount(const std::string & name, llvm::Value * value) const final;
 
-    bool hasNoTerminateAttribute() const {
-        return mNoTerminateAttribute;
-    }
-    
     llvm::Value * getTerminationSignal() const final;
 
     void setTerminationSignal() const final;
+
+    bool hasNoTerminateAttribute() const {
+        return mNoTerminateAttribute;
+    }
 
     // Get the value of a scalar field for the current instance.
     llvm::Value * getScalarFieldPtr(llvm::Value * index) const {
@@ -114,7 +126,7 @@ public:
     }
 
     llvm::Value * getScalarFieldPtr(const std::string & fieldName) const {
-        return getScalarFieldPtr(getScalarIndex(fieldName));
+        return getScalarFieldPtr(iBuilder->getInt32(getScalarIndex(fieldName)));
     }
 
     llvm::Value * getScalarField(const std::string & fieldName) const {
@@ -142,37 +154,32 @@ public:
     // Get a parameter by name.
     llvm::Argument * getParameter(llvm::Function * f, const std::string & name) const;
 
-    inline llvm::IntegerType * getSizeTy() const {
-        return getBuilder()->getSizeTy();
+    const StreamSetBuffers & getStreamSetInputBuffers() const {
+        return mStreamSetInputBuffers;
     }
 
-    inline llvm::Type * getStreamTy(const unsigned FieldWidth = 1) {
-        return getBuilder()->getStreamTy(FieldWidth);
+    const parabix::StreamSetBuffer * getStreamSetInputBuffer(const unsigned i) const {
+        return mStreamSetInputBuffers[i];
     }
-    
-    inline llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
-        return getBuilder()->getStreamSetTy(NumElements, FieldWidth);
+
+    const StreamSetBuffers & getStreamSetOutputBuffers() const {
+        return mStreamSetOutputBuffers;
     }
-       
-    const StreamSetBuffers & getStreamSetInputBuffers() const { return mStreamSetInputBuffers; }
 
-    const parabix::StreamSetBuffer * getStreamSetInputBuffer(const unsigned i) const { return mStreamSetInputBuffers[i]; }
-
-    const StreamSetBuffers & getStreamSetOutputBuffers() const { return mStreamSetOutputBuffers; }
-
-    const parabix::StreamSetBuffer * getStreamSetOutputBuffer(const unsigned i) const { return mStreamSetOutputBuffers[i]; }
+    const parabix::StreamSetBuffer * getStreamSetOutputBuffer(const unsigned i) const {
+        return mStreamSetOutputBuffers[i];
+    }
 
     llvm::CallInst * createDoSegmentCall(const std::vector<llvm::Value *> & args) const;
 
     llvm::Value * getAccumulator(const std::string & accumName) const;
 
-    virtual ~KernelBuilder() = 0;
+    virtual ~Kernel() = 0;
 
 protected:
 
     // Constructor
-    KernelBuilder(IDISA::IDISA_Builder * builder,
-                  std::string && kernelName,
+    Kernel(std::string && kernelName,
                   std::vector<Binding> && stream_inputs,
                   std::vector<Binding> && stream_outputs,
                   std::vector<Binding> && scalar_parameters,
@@ -189,7 +196,7 @@ protected:
     // Note: the kernel state data structure must only be finalized after
     // all scalar fields have been added.   If there are no fields to
     // be added, the default method for preparing kernel state may be used.
-    
+
     void setNoTerminateAttribute(const bool noTerminate = true) {
         mNoTerminateAttribute = noTerminate;
     }
@@ -216,7 +223,7 @@ protected:
     // use in implementing kernels.
     
     // Get the index of a named scalar field within the kernel state struct.
-    llvm::ConstantInt * getScalarIndex(const std::string & name) const;
+    unsigned getScalarIndex(const std::string & name) const;
 
     llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex) const;
 
@@ -258,15 +265,15 @@ protected:
 
     llvm::Value * getLinearlyAccessibleItems(const std::string & name, llvm::Value * fromPosition) const;
 
-    llvm::Value * getIsFinal() const {
-        return mIsFinal;
-    }
-
     llvm::BasicBlock * CreateWaitForConsumers() const;
 
     llvm::BasicBlock * CreateBasicBlock(std::string && name) const;
 
     llvm::Value * getStreamSetBufferPtr(const std::string & name) const;
+
+    llvm::Value * getIsFinal() const {
+        return mIsFinal;
+    }
 
     void callGenerateInitializeMethod();
 
@@ -312,7 +319,6 @@ private:
 
 protected:
 
-    llvm::Module *                      mModule;
     llvm::Function *                    mCurrentMethod;
     bool                                mNoTerminateAttribute;
     bool                                mIsGenerated;
@@ -330,11 +336,10 @@ protected:
 
 };
 
-class SegmentOrientedKernel : public KernelBuilder {
+class SegmentOrientedKernel : public Kernel {
 protected:
 
-    SegmentOrientedKernel(IDISA::IDISA_Builder * builder,
-                          std::string && kernelName,
+    SegmentOrientedKernel(std::string && kernelName,
                           std::vector<Binding> && stream_inputs,
                           std::vector<Binding> && stream_outputs,
                           std::vector<Binding> && scalar_parameters,
@@ -343,7 +348,7 @@ protected:
 
 };
 
-class BlockOrientedKernel : public KernelBuilder {
+class BlockOrientedKernel : public Kernel {
 protected:
 
     void CreateDoBlockMethodCall();
@@ -363,8 +368,7 @@ protected:
 
     void generateDoSegmentMethod() override final;
 
-    BlockOrientedKernel(IDISA::IDISA_Builder * builder,
-                        std::string && kernelName,
+    BlockOrientedKernel(std::string && kernelName,
                         std::vector<Binding> && stream_inputs,
                         std::vector<Binding> && stream_outputs,
                         std::vector<Binding> && scalar_parameters,

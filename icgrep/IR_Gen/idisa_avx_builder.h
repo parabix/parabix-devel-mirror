@@ -15,12 +15,17 @@ namespace IDISA {
 class IDISA_AVX_Builder : public IDISA_SSE2_Builder {
 public:
     
-    IDISA_AVX_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth)
-    : IDISA_SSE2_Builder(module, archBitWidth, bitBlockWidth) {
+    IDISA_AVX_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
+    : IDISA_Builder(module, archBitWidth, bitBlockWidth, stride)
+    , IDISA_SSE2_Builder(module, archBitWidth, bitBlockWidth, stride)
+    {
+
     }
 
     virtual std::string getBuilderUniqueName() override;
+
     Value * hsimd_signmask(unsigned fw, Value * a) override;
+
     ~IDISA_AVX_Builder() {}
 
 };
@@ -28,8 +33,10 @@ public:
 class IDISA_AVX2_Builder : public IDISA_AVX_Builder {
 public:
     
-    IDISA_AVX2_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth)
-    : IDISA_AVX_Builder(module, archBitWidth, bitBlockWidth) {
+    IDISA_AVX2_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
+    : IDISA_Builder(module, archBitWidth, bitBlockWidth, stride)
+    , IDISA_AVX_Builder(module, archBitWidth, bitBlockWidth, stride) {
+
     }
 
     virtual std::string getBuilderUniqueName() override;

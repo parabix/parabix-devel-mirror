@@ -13,7 +13,7 @@ using namespace llvm;
 
 namespace kernel {
 
-inline std::vector<Value *> parallel_prefix_deletion_masks(IDISA::IDISA_Builder * iBuilder, const unsigned fw, Value * del_mask) {
+inline std::vector<Value *> parallel_prefix_deletion_masks(IDISA::IDISA_Builder * const iBuilder, const unsigned fw, Value * del_mask) {
     Value * m = iBuilder->simd_not(del_mask);
     Value * mk = iBuilder->simd_slli(fw, del_mask, 1);
     std::vector<Value *> move_masks;
@@ -30,7 +30,7 @@ inline std::vector<Value *> parallel_prefix_deletion_masks(IDISA::IDISA_Builder 
     return move_masks;
 }
 
-inline Value * apply_parallel_prefix_deletion(IDISA::IDISA_Builder * iBuilder, const unsigned fw, Value * del_mask, const std::vector<Value *> & mv, Value * strm) {
+inline Value * apply_parallel_prefix_deletion(IDISA::IDISA_Builder * const iBuilder, const unsigned fw, Value * del_mask, const std::vector<Value *> & mv, Value * strm) {
     Value * s = iBuilder->simd_and(strm, iBuilder->simd_not(del_mask));
     for (unsigned i = 0; i < mv.size(); i++) {
         unsigned shift = 1 << i;
@@ -40,7 +40,7 @@ inline Value * apply_parallel_prefix_deletion(IDISA::IDISA_Builder * iBuilder, c
     return s;
 }
 
-inline Value * partial_sum_popcount(IDISA::IDISA_Builder * iBuilder, const unsigned fw, Value * mask) {
+inline Value * partial_sum_popcount(IDISA::IDISA_Builder * const iBuilder, const unsigned fw, Value * mask) {
     Value * field = iBuilder->simd_popcount(fw, mask);
     const auto count = iBuilder->getBitBlockWidth() / fw;
     for (unsigned move = 1; move < count; move *= 2) {
@@ -80,8 +80,8 @@ void DeletionKernel::generateFinalBlockMethod(Value * remainingBytes) {
     storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
 }
 
-DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount)
-: BlockOrientedKernel(iBuilder, "del" + std::to_string(fw) + "_" + std::to_string(streamCount),
+DeletionKernel::DeletionKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned fw, unsigned streamCount)
+: BlockOrientedKernel("del" + std::to_string(fw) + "_" + std::to_string(streamCount),
               {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
                Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
               {Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet"},
@@ -93,7 +93,7 @@ DeletionKernel::DeletionKernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, uns
 
 const unsigned PEXT_width = 64;
 
-inline std::vector<Value *> get_PEXT_masks(IDISA::IDISA_Builder * iBuilder, Value * del_mask) {
+inline std::vector<Value *> get_PEXT_masks(IDISA::IDISA_Builder * const iBuilder, Value * del_mask) {
     Value * m = iBuilder->fwCast(PEXT_width, iBuilder->simd_not(del_mask));
     std::vector<Value *> masks;
     for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/PEXT_width; i++) {
@@ -104,7 +104,7 @@ inline std::vector<Value *> get_PEXT_masks(IDISA::IDISA_Builder * iBuilder, Valu
 
 // Apply PEXT deletion to a collection of blocks and swizzle the result.
 // strms contains the blocks to process
-inline std::vector<Value *> apply_PEXT_deletion_with_swizzle(IDISA::IDISA_Builder * iBuilder, const std::vector<Value *> & masks, std::vector<Value *> strms) {    
+inline std::vector<Value *> apply_PEXT_deletion_with_swizzle(IDISA::IDISA_Builder * const iBuilder, const std::vector<Value *> & masks, std::vector<Value *> strms) {
     Value * PEXT_func = nullptr;
     if (PEXT_width == 64) {
         PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_64);
@@ -147,7 +147,7 @@ inline std::vector<Value *> apply_PEXT_deletion_with_swizzle(IDISA::IDISA_Builde
     return output;
 }
 
-inline Value * apply_PEXT_deletion(IDISA::IDISA_Builder * iBuilder, const std::vector<Value *> & masks, Value * strm) {  
+inline Value * apply_PEXT_deletion(IDISA::IDISA_Builder * const iBuilder, const std::vector<Value *> & masks, Value * strm) {
     Value * PEXT_func = nullptr;
     if (PEXT_width == 64) {
         PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_64);
@@ -223,11 +223,11 @@ void DeleteByPEXTkernel::generatePEXTAndSwizzleLoop(const std::vector<Value *> &
     }
 }
 
-DeleteByPEXTkernel::DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle)
-    : BlockOrientedKernel(iBuilder, "PEXTdel" + std::to_string(fw) + "_" + std::to_string(streamCount) + (shouldSwizzle ? "swiz" : "noswiz"),
-                      {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
-                          Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
-                      {}, {}, {}, {})
+DeleteByPEXTkernel::DeleteByPEXTkernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle)
+: BlockOrientedKernel("PEXTdel" + std::to_string(fw) + "_" + std::to_string(streamCount) + (shouldSwizzle ? "swiz" : "noswiz"),
+                  {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
+                      Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
+                  {}, {}, {}, {})
 , mDelCountFieldWidth(fw)
 , mStreamCount(streamCount)
 , mSwizzleFactor(iBuilder->getBitBlockWidth() / PEXT_width)
@@ -261,11 +261,9 @@ DeleteByPEXTkernel::DeleteByPEXTkernel(IDISA::IDISA_Builder * iBuilder, unsigned
 // Note: that both input streams and output streams are stored in swizzled form.
 //
 
-    
-
-SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(IDISA::IDISA_Builder * iBuilder, unsigned bitStreamCount, unsigned fieldWidth)
-    : BlockOrientedKernel(iBuilder, "swizzled_compress" + std::to_string(fieldWidth) + "_" + std::to_string(bitStreamCount),
-                         {Binding{iBuilder->getStreamSetTy(), "countsPerStride"}}, {}, {}, {}, {})
+SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned bitStreamCount, unsigned fieldWidth)
+: BlockOrientedKernel("swizzled_compress" + std::to_string(fieldWidth) + "_" + std::to_string(bitStreamCount),
+                     {Binding{iBuilder->getStreamSetTy(), "countsPerStride"}}, {}, {}, {}, {})
 , mBitStreamCount(bitStreamCount)
     , mFieldWidth(fieldWidth)
     , mSwizzleFactor(iBuilder->getBitBlockWidth() / fieldWidth)
@@ -282,7 +280,6 @@ SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(IDISA::IDISA_
         }
         addScalar(iBuilder->getSizeTy(), "pendingOffset");
 }
-
     
 void SwizzledBitstreamCompressByCount::generateDoBlockMethod() {
         

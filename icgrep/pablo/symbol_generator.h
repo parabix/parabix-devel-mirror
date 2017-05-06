@@ -10,10 +10,12 @@
 #include <pablo/pabloAST.h>
 #include <llvm/ADT/StringMap.h>
 #include <boost/container/flat_map.hpp>
+#include <memory>
 
 namespace IDISA { class IDISA_Builder; }
 namespace pablo { class String; }
 namespace pablo { class Integer; }
+namespace llvm { class LLVMContext; }
 
 namespace pablo {
 
@@ -22,8 +24,8 @@ class SymbolGenerator {
     using Allocator = PabloAST::Allocator;
 public:
     using IntTy = int64_t;
-    String * makeString(const llvm::StringRef prefix, IDISA::IDISA_Builder * builder) noexcept;
-    Integer * getInteger(const IntTy value, IDISA::IDISA_Builder * builder) noexcept;
+    String * makeString(llvm::LLVMContext & C, const llvm::StringRef prefix) noexcept;
+    Integer * getInteger(llvm::LLVMContext & C, const IntTy value) noexcept;
     ~SymbolGenerator() { }
 protected:
     SymbolGenerator(Allocator & allocator) : mAllocator(allocator) { }

@@ -15,6 +15,17 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 
+DirectCharacterClassKernelBuilder::DirectCharacterClassKernelBuilder(
+        const std::unique_ptr<IDISA::IDISA_Builder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize)
+: BlockOrientedKernel(std::move(ccSetName),
+              {Binding{b->getStreamSetTy(1, 8 * codeUnitSize), "codeUnitStream"}},
+              {Binding{b->getStreamSetTy(charClasses.size(), 1), "ccStream"}},
+              {}, {}, {})
+, mCharClasses(charClasses)
+, mCodeUnitSize(codeUnitSize) {
+
+}
+
 void DirectCharacterClassKernelBuilder::generateDoBlockMethod() {
     unsigned packCount = 8 * mCodeUnitSize;  
     unsigned codeUnitWidth = 8 * mCodeUnitSize;
@@ -59,16 +70,19 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod() {
 }
 
 ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
-IDISA::IDISA_Builder * iBuilder
-, std::string ccSetName
-, const std::vector<CC *> & charClasses
-, unsigned basisBitsCount)
-: PabloKernel(iBuilder, ccSetName +"_kernel", {Binding{iBuilder->getStreamSetTy(basisBitsCount), "basis"}}) {
+        const std::unique_ptr<IDISA::IDISA_Builder> & b, std::string ccSetName, const std::vector<CC *> & charClasses, unsigned codeUnitSize)
+: PabloKernel(b, ccSetName +"_kernel", {Binding{b->getStreamSetTy(codeUnitSize), "basis"}})
+, mCharClasses(charClasses) {
+    for (CC * cc : mCharClasses) {
+        addOutput(cc->canonicalName(re::ByteClass), b->getStreamTy());
+    }
+}
+
+void ParabixCharacterClassKernelBuilder::prepareKernel() {
     CC_Compiler ccc(this, getInput(0));
     auto & builder = ccc.getBuilder();
-    for (CC * cc : charClasses) {
-        Var * const r = addOutput(cc->canonicalName(re::ByteClass), getStreamTy());
-        builder.createAssign(r, ccc.compileCC("cc", cc, builder));
+    for (unsigned i = 0; i < mCharClasses.size(); ++i) {
+        builder.createAssign(getOutput(i), ccc.compileCC("cc", mCharClasses[i], builder));
     }
-
+    PabloKernel::prepareKernel();
 }

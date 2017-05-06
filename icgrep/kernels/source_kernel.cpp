@@ -140,8 +140,8 @@ void MMapSourceKernel::generateFinalizeMethod() {
     iBuilder->CreateMUnmap(getBaseAddress("sourceBuffer"), getBufferedSize("sourceBuffer"));
 }
 
-MMapSourceKernel::MMapSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "mmap_source" + std::to_string(blocksPerSegment) + "@" + std::to_string(codeUnitWidth),
+MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
+: SegmentOrientedKernel("mmap_source" + std::to_string(blocksPerSegment) + "@" + std::to_string(codeUnitWidth),
 {},
 {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
 {Binding{iBuilder->getInt32Ty(), "fileDescriptor"}},
@@ -280,8 +280,8 @@ void ReadSourceKernel::generateFinalizeMethod() {
     iBuilder->CreateAlignedFree(getScalarField("buffer"));
 }
 
-ReadSourceKernel::ReadSourceKernel(IDISA::IDISA_Builder * iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "read_source"
+ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
+: SegmentOrientedKernel("read_source"
 , {}
 , {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}
 , {Binding{iBuilder->getInt32Ty(), "fileDescriptor"}}
@@ -325,8 +325,8 @@ void MemorySourceKernel::generateDoSegmentMethod() {
     setProducedItemCount("sourceBuffer", itemsRead);
 }
 
-MemorySourceKernel::MemorySourceKernel(IDISA::IDISA_Builder * iBuilder, Type * type, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel(iBuilder, "memory_source",
+MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, Type * type, unsigned blocksPerSegment, unsigned codeUnitWidth)
+: SegmentOrientedKernel("memory_source",
     {},
     {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
     {Binding{cast<PointerType>(type), "fileSource"}, Binding{iBuilder->getSizeTy(), "fileSize"}}, {}, {})

@@ -12,14 +12,14 @@ using namespace kernel;
 
 namespace {
 
-Value * getInputPtr(IDISA::IDISA_Builder * iBuilder, Value * blockStartPtr, Value * offset) {
+Value * getInputPtr(IDISA::IDISA_Builder * const iBuilder, Value * blockStartPtr, Value * offset) {
     return iBuilder->CreateGEP(
             iBuilder->CreatePointerCast(blockStartPtr, iBuilder->getInt32Ty()->getPointerTo()),
             offset
             );
 }
 
-Value * selectMin(IDISA::IDISA_Builder * iBuilder, Value * a, Value * b) {
+Value * selectMin(IDISA::IDISA_Builder * const iBuilder, Value * a, Value * b) {
     return iBuilder->CreateSelect(iBuilder->CreateICmpULT(a, b), a, b);
 }
 
@@ -191,8 +191,8 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod() {
 }
 
 
-LZ4ByteStreamDecoderKernel::LZ4ByteStreamDecoderKernel(IDISA::IDISA_Builder * iBuilder, size_t bufferSize)
-: BlockOrientedKernel(iBuilder, "lz4ByteStreamDecoder",
+LZ4ByteStreamDecoderKernel::LZ4ByteStreamDecoderKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, size_t bufferSize)
+: BlockOrientedKernel("lz4ByteStreamDecoder",
     // Inputs
     {Binding{iBuilder->getStreamSetTy(2, 32), "literalIndexes"},
      Binding{iBuilder->getStreamSetTy(2, 32), "matchIndexes"},

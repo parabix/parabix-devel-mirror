@@ -48,6 +48,8 @@ kernels/interface.cpp
 kernels/interface.h
 kernels/kernel.cpp
 kernels/kernel.h
+kernels/kernel_builder.cpp
+kernels/kernel_builder.h
 kernels/linebreak_kernel.cpp
 kernels/linebreak_kernel.h
 kernels/lz4_bytestream_decoder.cpp
@@ -64,6 +66,8 @@ kernels/s2p_kernel.cpp
 kernels/s2p_kernel.h
 kernels/scanmatchgen.cpp
 kernels/scanmatchgen.h
+kernels/source_kernel.cpp
+kernels/source_kernel.h
 kernels/stdout_kernel.cpp
 kernels/stdout_kernel.h
 kernels/streams_merge.cpp
@@ -243,5 +247,3 @@ utf8_encoder.cpp
 utf8_encoder.h
 wc.cpp
 CMakeLists.txt
-kernels/source_kernel.h
-kernels/source_kernel.cpp

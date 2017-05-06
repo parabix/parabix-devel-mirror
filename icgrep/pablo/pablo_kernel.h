@@ -45,7 +45,7 @@ public:
         return false;
     }
 
-    PabloKernel(IDISA::IDISA_Builder * builder, std::string kernelName,                      
+    PabloKernel(const std::unique_ptr<IDISA::IDISA_Builder> & builder, std::string kernelName,
                 std::vector<Binding> stream_inputs = {},
                 std::vector<Binding> stream_outputs = {},
                 std::vector<Binding> scalar_parameters = {},
@@ -53,11 +53,7 @@ public:
 
     virtual ~PabloKernel();
 
-    PabloBlock * getEntryBlock() {
-        return mEntryBlock;
-    }
-
-    const PabloBlock * getEntryBlock() const {
+    PabloBlock * getEntryBlock() const {
         return mEntryBlock;
     }
 
@@ -142,11 +138,11 @@ protected:
     virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override final;
 
     inline String * makeName(const llvm::StringRef & prefix) const {
-        return mSymbolTable->makeString(prefix, iBuilder);
+        return mSymbolTable->makeString(iBuilder->getContext(), prefix);
     }
 
     inline Integer * getInteger(const int64_t value) const {
-        return mSymbolTable->getInteger(value, iBuilder);
+        return mSymbolTable->getInteger(iBuilder->getContext(), value);
     }
 
 private:

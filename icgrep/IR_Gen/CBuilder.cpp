@@ -745,13 +745,12 @@ Function * CBuilder::LinkFunction(llvm::StringRef name, FunctionType * type, voi
     return mDriver->LinkFunction(mMod, name, type, functionPtr);
 }
 
-CBuilder::CBuilder(Module * const module, const unsigned GeneralRegisterWidthInBits, const bool SupportsIndirectBr, const unsigned CacheLineAlignmentInBytes)
+CBuilder::CBuilder(Module * const module, const unsigned GeneralRegisterWidthInBits)
 : IRBuilder<>(module->getContext())
 , mMod(module)
-, mCacheLineAlignment(CacheLineAlignmentInBytes)
+, mCacheLineAlignment(64)
 , mSizeType(getIntNTy(GeneralRegisterWidthInBits))
 , mFILEtype(nullptr)
-, mSupportsIndirectBr(SupportsIndirectBr)
 , mDriver(nullptr) {
 
 }

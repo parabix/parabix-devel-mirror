@@ -16,7 +16,7 @@
 namespace llvm { class Module; }
 namespace llvm { class MemoryBuffer; }
 namespace llvm { class MemoryBufferRef; }
-namespace kernel { class KernelBuilder; }
+namespace kernel { class Kernel; }
 
 // The ParabixObjectCache is a two-level cache compatible with the requirements
 // of the LLVM ExecutionEngine as well as the Parabix Kernel builder infrastructure.
@@ -34,28 +34,20 @@ class ParabixObjectCache final : public llvm::ObjectCache {
     using Path = llvm::SmallString<128>;
     template <typename K, typename V>
     using Map = boost::container::flat_map<K, V>;
-    using CacheEntry = std::pair<kernel::KernelBuilder *, std::unique_ptr<llvm::MemoryBuffer>>;
+    using CacheEntry = std::pair<kernel::Kernel *, std::unique_ptr<llvm::MemoryBuffer>>;
     using CacheMap = Map<llvm::Module *, CacheEntry>;
 public:
-
-//    enum Status {
-//        Failed
-//        , Succeeded
-//        , ObjectFileLocked
-//    };
-
-    ParabixObjectCache(const std::string &dir);
     ParabixObjectCache();
-    bool loadCachedObjectFile(kernel::KernelBuilder * const kernel);
+    ParabixObjectCache(const std::string & dir);
+    bool loadCachedObjectFile(kernel::Kernel * const kernel);
     void notifyObjectCompiled(const llvm::Module *M, llvm::MemoryBufferRef Obj) override;
     std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module * M) override;
+protected:
+    static Path getDefaultPath();
 private:
-//    CacheMap        mCachedObject;
-
     Map<std::string, std::string>                           mKernelSignatureMap;
     Map<std::string, std::unique_ptr<llvm::MemoryBuffer>>   mCachedObjectMap;
-    Path                                                    mCachePath;
-    Path                                                    mCachePrefix;
+    const Path                                              mCachePath;
 };
 
 #endif

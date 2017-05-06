@@ -124,7 +124,7 @@ void generate(PabloKernel * kernel) {
 
 void pipeline(ParabixDriver & pxDriver, const unsigned count) {
 
-    IDISA::IDISA_Builder * const iBuilder = pxDriver.getIDISA_Builder();
+    auto & iBuilder = pxDriver.getBuilder();
     Module * const mod = iBuilder->getModule();
 
     Type * byteStreamTy = iBuilder->getStreamSetTy(1, 8);

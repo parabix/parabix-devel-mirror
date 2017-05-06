@@ -17,8 +17,8 @@ void EvenOddKernel::generateDoBlockMethod() {
     storeOutputStreamBlock("even_odd", iBuilder->getInt32(1), odd);
 }
 
-EvenOddKernel::EvenOddKernel(IDISA::IDISA_Builder * builder)
-: BlockOrientedKernel(builder, "EvenOdd", {Binding{builder->getStreamSetTy(8, 1), "BasisBits"}}, {Binding{builder->getStreamSetTy(2, 1), "even_odd"}}, {}, {}, {}) {
+EvenOddKernel::EvenOddKernel(const std::unique_ptr<IDISA::IDISA_Builder> & builder)
+: BlockOrientedKernel("EvenOdd", {Binding{builder->getStreamSetTy(8, 1), "BasisBits"}}, {Binding{builder->getStreamSetTy(2, 1), "even_odd"}}, {}, {}, {}) {
     setNoTerminateAttribute(true);
 
 }

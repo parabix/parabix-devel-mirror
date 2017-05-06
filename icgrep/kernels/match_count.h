@@ -13,7 +13,7 @@ namespace kernel {
 class MatchCount : public BlockOrientedKernel {
 public:
     
-    MatchCount(IDISA::IDISA_Builder * iBuilder);
+    MatchCount(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder);
     
 protected:
     

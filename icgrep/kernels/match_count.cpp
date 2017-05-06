@@ -11,8 +11,8 @@ using namespace llvm;
 
 namespace kernel {
 
-MatchCount::MatchCount(IDISA::IDISA_Builder * iBuilder)
-    : BlockOrientedKernel(iBuilder, "matchCount", 
+MatchCount::MatchCount(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+    : BlockOrientedKernel("matchCount",
                         {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}}, {}, {}, {Binding{iBuilder->getSizeTy(), "matchedLineCount"}}, {}) {
     }
 

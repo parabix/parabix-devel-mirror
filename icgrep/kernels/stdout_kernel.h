@@ -13,7 +13,7 @@ namespace kernel {
 
 class StdOutKernel : public SegmentOrientedKernel {
 public:
-    StdOutKernel(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth); 
+    StdOutKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned codeUnitWidth);
 private:
     void generateDoSegmentMethod() override final;
 private:
@@ -24,7 +24,7 @@ private:
 
 class FileSink : public SegmentOrientedKernel {
 public:  
-    FileSink(IDISA::IDISA_Builder * iBuilder, unsigned codeUnitWidth);
+    FileSink(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned codeUnitWidth);
 protected:
     void generateInitializeMethod() override final;
     void generateDoSegmentMethod() override final;
