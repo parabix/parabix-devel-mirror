@@ -2,7 +2,7 @@
 #define SOURCE_KERNEL_H
 
 #include "kernel.h"
-namespace IDISA { class IDISA_Builder; }
+namespace kernel { class KernelBuilder; }
 
 namespace kernel {
 
@@ -12,7 +12,7 @@ namespace kernel {
 
 class MMapSourceKernel final : public SegmentOrientedKernel {
 public:
-    MMapSourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
+    MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
@@ -28,7 +28,7 @@ protected:
 
 class ReadSourceKernel final : public SegmentOrientedKernel {
 public:
-    ReadSourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
+    ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
@@ -42,7 +42,7 @@ private:
 
 class MemorySourceKernel final : public SegmentOrientedKernel {
 public:
-    MemorySourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, llvm::Type * type, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
+    MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Type * type, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool moduleIDisSignature() const override { return true; }
 protected:
     void generateInitializeMethod() override;

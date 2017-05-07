@@ -3,8 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 #include "source_kernel.h"
-#include <llvm/IR/Module.h>
-#include <IR_Gen/idisa_builder.h>
+#include <kernels/kernel_builder.h>
 #include <kernels/streamset.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -140,7 +139,7 @@ void MMapSourceKernel::generateFinalizeMethod() {
     iBuilder->CreateMUnmap(getBaseAddress("sourceBuffer"), getBufferedSize("sourceBuffer"));
 }
 
-MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
+MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
 : SegmentOrientedKernel("mmap_source" + std::to_string(blocksPerSegment) + "@" + std::to_string(codeUnitWidth),
 {},
 {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
@@ -280,7 +279,7 @@ void ReadSourceKernel::generateFinalizeMethod() {
     iBuilder->CreateAlignedFree(getScalarField("buffer"));
 }
 
-ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
+ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)
 : SegmentOrientedKernel("read_source"
 , {}
 , {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}
@@ -325,7 +324,7 @@ void MemorySourceKernel::generateDoSegmentMethod() {
     setProducedItemCount("sourceBuffer", itemsRead);
 }
 
-MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, Type * type, unsigned blocksPerSegment, unsigned codeUnitWidth)
+MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Type * type, unsigned blocksPerSegment, unsigned codeUnitWidth)
 : SegmentOrientedKernel("memory_source",
     {},
     {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},

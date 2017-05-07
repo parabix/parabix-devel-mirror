@@ -15,9 +15,9 @@ namespace IDISA {
 class IDISA_NVPTX20_Builder : public IDISA_I64_Builder {
 public:
     
-    IDISA_NVPTX20_Builder(llvm::Module * const module, unsigned registerWidth, unsigned vectorWidth, unsigned groupSize)
-    : IDISA_Builder(module, registerWidth, registerWidth, (vectorWidth * groupSize))
-    , IDISA_I64_Builder(module, registerWidth, registerWidth, (vectorWidth * groupSize))
+    IDISA_NVPTX20_Builder(llvm::LLVMContext & C, unsigned registerWidth, unsigned vectorWidth, unsigned groupSize)
+    : IDISA_Builder(C, registerWidth, registerWidth, (vectorWidth * groupSize))
+    , IDISA_I64_Builder(C, registerWidth, registerWidth, (vectorWidth * groupSize))
     , groupThreads(groupSize) {
         CreateGlobals();
         CreateBuiltinFunctions();

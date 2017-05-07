@@ -12,7 +12,6 @@
 #include <llvm/Support/PrettyStackTrace.h>
 #include <llvm/Support/Signals.h>
 #include <llvm/Support/ManagedStatic.h>
-#include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
@@ -27,6 +26,8 @@
 #include <kernels/stdout_kernel.h>
 #include <kernels/lz4_index_decoder.h>
 #include <kernels/lz4_bytestream_decoder.h>
+
+#include <kernels/kernel_builder.h>
 
 #include <string>
 #include <iostream>

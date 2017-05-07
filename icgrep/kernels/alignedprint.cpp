@@ -4,8 +4,7 @@
  */
 
 #include "alignedprint.h"
-#include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
-#include <llvm/IR/Module.h>
+#include <kernels/kernel_builder.h>
 
 using namespace llvm;
 
@@ -255,18 +254,18 @@ void PrintStreamSet::generateDoBlockMethod() {
 
 }
 
-PrintableBits::PrintableBits(const std::unique_ptr<IDISA::IDISA_Builder> & builder)
+PrintableBits::PrintableBits(const std::unique_ptr<kernel::KernelBuilder> & builder)
 : BlockOrientedKernel("PrintableBits", {Binding{builder->getStreamSetTy(1), "bitStream"}}, {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {}, {}, {}) {
     setNoTerminateAttribute(true);
 }
 
-SelectStream::SelectStream(const std::unique_ptr<IDISA::IDISA_Builder> & builder, unsigned sizeInputStreamSet, unsigned streamIndex)
+SelectStream::SelectStream(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned streamIndex)
 : BlockOrientedKernel("SelectStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(1, 1), "bitStream"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mStreamIndex(streamIndex) {
     setNoTerminateAttribute(true);
 
 }
 
-PrintStreamSet::PrintStreamSet(const std::unique_ptr<IDISA::IDISA_Builder> & builder, std::vector<std::string> && names, const unsigned minWidth)
+PrintStreamSet::PrintStreamSet(const std::unique_ptr<kernel::KernelBuilder> & builder, std::vector<std::string> && names, const unsigned minWidth)
 : BlockOrientedKernel("PrintableStreamSet", {}, {}, {}, {}, {})
 , mNames(names)
 , mNameWidth(0) {

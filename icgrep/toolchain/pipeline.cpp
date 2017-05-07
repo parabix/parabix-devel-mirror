@@ -10,10 +10,12 @@
 #include <llvm/IR/Module.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
+#include <kernels/kernel_builder.h>
 
 using namespace kernel;
 using namespace parabix;
 using namespace llvm;
+
 
 template <typename Value>
 using StreamSetBufferMap = boost::container::flat_map<const StreamSetBuffer *, Value>;
@@ -21,7 +23,7 @@ using StreamSetBufferMap = boost::container::flat_map<const StreamSetBuffer *, V
 template <typename Value>
 using FlatSet = boost::container::flat_set<Value>;
 
-Function * makeThreadFunction(IDISA::IDISA_Builder * const b, const std::string & name) {
+Function * makeThreadFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const std::string & name) {
     Function * const f = Function::Create(FunctionType::get(b->getVoidTy(), {b->getVoidPtrTy()}, false), Function::InternalLinkage, name, b->getModule());
     f->setCallingConv(CallingConv::C);
     f->arg_begin()->setName("input");
@@ -37,7 +39,7 @@ Function * makeThreadFunction(IDISA::IDISA_Builder * const b, const std::string 
  * Let S_0, S_1, ... S_N be the segments of S.   Segments are assigned to threads in a round-robin
  * fashion such that processing of segment S_i by the full pipeline is carried out by thread i mod T.
  ** ------------------------------------------------------------------------------------------------------------- */
-void generateSegmentParallelPipeline(IDISA::IDISA_Builder * const iBuilder, const std::vector<Kernel *> & kernels) {
+void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<Kernel *> & kernels) {
 
     const unsigned n = kernels.size();
     Module * const m = iBuilder->getModule();
@@ -255,7 +257,7 @@ void generateSegmentParallelPipeline(IDISA::IDISA_Builder * const iBuilder, cons
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateParallelPipeline
  ** ------------------------------------------------------------------------------------------------------------- */
-void generateParallelPipeline(IDISA::IDISA_Builder * const iBuilder, const std::vector<Kernel *> &kernels) {
+void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<Kernel *> &kernels) {
 
     Module * const m = iBuilder->getModule();
     IntegerType * const sizeTy = iBuilder->getSizeTy();
@@ -449,7 +451,7 @@ void generateParallelPipeline(IDISA::IDISA_Builder * const iBuilder, const std::
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generatePipelineLoop
  ** ------------------------------------------------------------------------------------------------------------- */
-void generatePipelineLoop(IDISA::IDISA_Builder * const iBuilder, const std::vector<Kernel *> & kernels) {
+void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<Kernel *> & kernels) {
 
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     Function * main = entryBlock->getParent();

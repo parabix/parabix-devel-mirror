@@ -5,7 +5,7 @@
 
 
 #include "editdscan_kernel.h"
-#include <IR_Gen/idisa_builder.h>
+#include <kernels/kernel_builder.h>
 #include <llvm/IR/Module.h>
 
 using namespace llvm;
@@ -86,7 +86,7 @@ Function * editdScanKernel::generateScanWordRoutine(Module * m) const {
 
 }
 
-editdScanKernel::editdScanKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned dist) :
+editdScanKernel::editdScanKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned dist) :
 BlockOrientedKernel("scanMatch",
               {Binding{iBuilder->getStreamSetTy(dist + 1), "matchResults"}},
               {}, {}, {}, {Binding{iBuilder->getSizeTy(), "BlockNo"}}),

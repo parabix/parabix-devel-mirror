@@ -4,9 +4,7 @@
  */
 
 #include "deletion.h"
-#include <IR_Gen/idisa_builder.h>
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Module.h>
+#include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
@@ -80,7 +78,7 @@ void DeletionKernel::generateFinalBlockMethod(Value * remainingBytes) {
     storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
 }
 
-DeletionKernel::DeletionKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned fw, unsigned streamCount)
+DeletionKernel::DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount)
 : BlockOrientedKernel("del" + std::to_string(fw) + "_" + std::to_string(streamCount),
               {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
                Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
@@ -223,7 +221,7 @@ void DeleteByPEXTkernel::generatePEXTAndSwizzleLoop(const std::vector<Value *> &
     }
 }
 
-DeleteByPEXTkernel::DeleteByPEXTkernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle)
+DeleteByPEXTkernel::DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle)
 : BlockOrientedKernel("PEXTdel" + std::to_string(fw) + "_" + std::to_string(streamCount) + (shouldSwizzle ? "swiz" : "noswiz"),
                   {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
                       Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
@@ -261,7 +259,7 @@ DeleteByPEXTkernel::DeleteByPEXTkernel(const std::unique_ptr<IDISA::IDISA_Builde
 // Note: that both input streams and output streams are stored in swizzled form.
 //
 
-SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned bitStreamCount, unsigned fieldWidth)
+SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned bitStreamCount, unsigned fieldWidth)
 : BlockOrientedKernel("swizzled_compress" + std::to_string(fieldWidth) + "_" + std::to_string(bitStreamCount),
                      {Binding{iBuilder->getStreamSetTy(), "countsPerStride"}}, {}, {}, {}, {})
 , mBitStreamCount(bitStreamCount)

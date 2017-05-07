@@ -10,7 +10,6 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/CommandLine.h>
 #include <boost/filesystem.hpp>
-#include <IR_Gen/idisa_builder.h>
 #include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
 #include <kernels/cc_kernel.h>
@@ -22,6 +21,7 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/scanmatchgen.h>
 #include <kernels/streamset.h>
+#include <kernels/kernel_builder.h>
 #include <pablo/pablo_kernel.h>
 #include <re/re_cc.h>
 #include <re/re_toolchain.h>

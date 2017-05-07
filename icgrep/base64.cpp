@@ -11,12 +11,12 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/CommandLine.h>
 #include <toolchain/toolchain.h>
-#include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/source_kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/radix64.h>
 #include <kernels/stdout_kernel.h>
+#include <kernels/kernel_builder.h>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/anonymous_shared_memory.hpp>
 #include <sys/stat.h>

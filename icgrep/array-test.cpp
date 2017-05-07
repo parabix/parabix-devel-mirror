@@ -4,11 +4,11 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <IR_Gen/idisa_builder.h>                  // for IDISA_Builder
 #include <IR_Gen/idisa_target.h>                   // for GetIDISA_Builder
 #include <kernels/source_kernel.h>
 #include <kernels/s2p_kernel.h>                    // for S2PKernel
 #include <kernels/alignedprint.h>
+#include <kernels/kernel_builder.h>
 #include <kernels/streamset.h>                     // for SingleBlockBuffer
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for ExecutionEngine
 #include <llvm/IR/Function.h>                      // for Function, Function...
@@ -45,11 +45,27 @@ using namespace llvm;
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore);
 
-void generate(PabloKernel * kernel) {
+class ParenthesisMatchingKernel final: public pablo::PabloKernel {
+public:
+    ParenthesisMatchingKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned count);
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
+protected:
+    void generatePabloMethod() override;
+};
 
-    PabloBuilder pb(kernel->getEntryBlock());
+ParenthesisMatchingKernel::ParenthesisMatchingKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned count)
+: PabloKernel(b, "MatchParens",
+    {Binding{b->getStreamSetTy(8), "input"}},
+    {Binding{b->getStreamSetTy(count), "matches"}, Binding{b->getStreamTy(), "errors"}}) {
 
-    Var * input = kernel->getInputStreamVar("input");
+}
+
+void ParenthesisMatchingKernel::generatePabloMethod() {
+
+    PabloBuilder pb(getEntryBlock());
+
+    Var * input = getInputStreamVar("input");
 
     PabloAST * basis[8];
     for (int i = 0; i < 8; ++i) {
@@ -75,7 +91,7 @@ void generate(PabloKernel * kernel) {
     Var * const in_play = pb.createVar("in_play", parens);
     Var * const index = pb.createVar("i", pb.getInteger(0));
 
-    Var * matches = kernel->getOutputStreamVar("matches");
+    Var * matches = getOutputStreamVar("matches");
 
 //    PabloBuilder outer = PabloBuilder::Create(pb);
 
@@ -118,7 +134,7 @@ void generate(PabloKernel * kernel) {
 
     // Mark any closing paren that was not actually used to close an opener as an error.
     PabloAST * const unmatched_rparen = pb.createAnd(rparen, pb.createNot(all_closed), "unmatched_rparen");
-    pb.createAssign(kernel->getOutputStreamVar("errors"), pb.createOr(accumulated_errors, unmatched_rparen));
+    pb.createAssign(getOutputStreamVar("errors"), pb.createOr(accumulated_errors, unmatched_rparen));
 
 }
 
@@ -127,52 +143,42 @@ void pipeline(ParabixDriver & pxDriver, const unsigned count) {
     auto & iBuilder = pxDriver.getBuilder();
     Module * const mod = iBuilder->getModule();
 
-    Type * byteStreamTy = iBuilder->getStreamSetTy(1, 8);
+    Type * const byteStreamTy = iBuilder->getStreamSetTy(1, 8);
 
-    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", iBuilder->getVoidTy(), byteStreamTy->getPointerTo(), iBuilder->getSizeTy(), nullptr));
+    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", iBuilder->getVoidTy(), iBuilder->getSizeTy(), nullptr));
     main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
+    auto args = main->arg_begin();
     
-    Value * const inputStream = &*(args++);
-    inputStream->setName("input");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
+    Value * const fileDecriptor = &*(args++);
+    fileDecriptor->setName("input");
 
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments;
     
-    SourceBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    auto ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, byteStreamTy));
 
-    MMapSourceKernel mmapK(iBuilder, segmentSize);
-    mmapK.setInitialArguments({fileSize});
+    auto mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, segmentSize));
+    mmapK->setInitialArguments({fileDecriptor});
 
-    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
+    pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
-    CircularBuffer BasisBits(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
+    auto BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, byteStreamTy, segmentSize * bufferSegments));
 
-    S2PKernel s2pk(iBuilder);
-    pxDriver.addKernelCall(s2pk, {&ByteStream}, {&BasisBits});
+    auto s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
+    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
-    PabloKernel bm(iBuilder, "MatchParens",
-        {Binding{iBuilder->getStreamSetTy(8), "input"}},
-        {Binding{iBuilder->getStreamSetTy(count), "matches"}, Binding{iBuilder->getStreamTy(), "errors"}});
+    auto bm = pxDriver.addKernelInstance(make_unique<ParenthesisMatchingKernel>(iBuilder, count));
 
-    generate(&bm);
+    auto matches = pxDriver.addBuffer(make_unique<ExpandableBuffer>(iBuilder, iBuilder->getStreamSetTy(count), segmentSize * bufferSegments));
 
-    ExpandableBuffer matches(iBuilder, iBuilder->getStreamSetTy(count), segmentSize * bufferSegments);
-    SingleBlockBuffer errors(iBuilder, iBuilder->getStreamTy());
+    auto errors = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamTy()));
 
-    pxDriver.addKernelCall(bm, {&BasisBits}, {&matches, &errors});
+    pxDriver.makeKernelCall(bm, {BasisBits}, {matches, errors});
 
-    PrintStreamSet printer(iBuilder, {"matches", "errors"});
-    pxDriver.addKernelCall(printer, {&matches, &errors}, {});
+    auto printer = pxDriver.addKernelInstance(make_unique<PrintStreamSet>(iBuilder, std::vector<std::string>{"matches", "errors"}));
+    pxDriver.makeKernelCall(printer, {&matches, &errors}, {});
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main, 0));
-
-    BasisBits.allocateBuffer(iBuilder);
-    matches.allocateBuffer(iBuilder);
-    errors.allocateBuffer(iBuilder);
-
     pxDriver.generatePipelineIR();
     iBuilder->CreateRetVoid();
 

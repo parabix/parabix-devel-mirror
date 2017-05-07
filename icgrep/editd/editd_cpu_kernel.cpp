@@ -4,7 +4,7 @@
  */
 
 #include "editd_cpu_kernel.h"
-#include <IR_Gen/idisa_builder.h>
+#include <kernels/kernel_builder.h>
 #include <llvm/IR/Module.h>
 
 using namespace llvm;
@@ -83,7 +83,7 @@ void editdCPUKernel::generateFinalBlockMethod(Value * remainingBytes) {
     CreateDoBlockMethodCall();
 }
 
-editdCPUKernel::editdCPUKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b, unsigned dist, unsigned pattLen) :
+editdCPUKernel::editdCPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen) :
 BlockOrientedKernel("editd_cpu",
              {Binding{b->getStreamSetTy(4), "CCStream"}},
              {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},

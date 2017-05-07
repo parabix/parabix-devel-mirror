@@ -28,17 +28,6 @@ Value * IDISA_Builder::fwCast(const unsigned fw, Value * const a) {
     return CreateBitCast(a, ty);
 }
 
-std::string IDISA_Builder::getBitBlockTypeName() const {
-    const auto type = getBitBlockType();
-    if (type->isIntegerTy()) {
-        return "i" + std::to_string(getBitBlockWidth());
-    }
-    assert("BitBlockType is neither integer nor vector" && type->isVectorTy());
-    const auto fw = type->getScalarSizeInBits();
-    return "v" + std::to_string(getBitBlockWidth() / fw) + "i" + std::to_string(fw);
-}
-
-
 void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const value) {
     Constant * printRegister = mMod->getFunction("PrintRegister");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
@@ -375,15 +364,11 @@ void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const p
     CreateAlignedStore(value, ptr, alignment);
 }
 
-void IDISA_Builder::initialize(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride) {
-
-}
-
-IDISA_Builder::IDISA_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
-: CBuilder(module, archBitWidth)
+IDISA_Builder::IDISA_Builder(llvm::LLVMContext & C, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
+: CBuilder(C, archBitWidth)
 , mBitBlockWidth(bitBlockWidth)
 , mStride(stride)
-, mBitBlockType(VectorType::get(IntegerType::get(module->getContext(), 64), bitBlockWidth / 64))
+, mBitBlockType(VectorType::get(IntegerType::get(C, 64), bitBlockWidth / 64))
 , mZeroInitializer(Constant::getNullValue(mBitBlockType))
 , mOneInitializer(Constant::getAllOnesValue(mBitBlockType))
 , mPrintRegisterFunction(nullptr) {

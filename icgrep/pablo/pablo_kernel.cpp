@@ -10,6 +10,7 @@
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
 #include <pablo/pablo_toolchain.h>
+#include <kernels/kernel_builder.h>
 #include "llvm/Support/Debug.h"
 
 using namespace pablo;
@@ -118,6 +119,11 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
 }
 
 void PabloKernel::prepareKernel() {
+    if (DebugOptionIsSet(DumpTrace)) {
+        setName(getName() + "_DumpTrace");
+    }
+    generatePabloMethod();
+    pablo_function_passes(this);
     mPabloCompiler->initializeKernelData(iBuilder);
     BlockOrientedKernel::prepareKernel();
 }
@@ -126,7 +132,7 @@ void PabloKernel::generateDoBlockMethod() {
     mPabloCompiler->compile(iBuilder);
 }
 
-void PabloKernel::generateFinalBlockMethod(Value * remainingBytes) {
+void PabloKernel::generateFinalBlockMethod(Value * const remainingBytes) {
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
     setScalarField("EOFbit", iBuilder->bitblock_set_bit(remainingBytes));
@@ -134,7 +140,15 @@ void PabloKernel::generateFinalBlockMethod(Value * remainingBytes) {
     CreateDoBlockMethodCall();
 }
 
-PabloKernel::PabloKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b,
+String * PabloKernel::makeName(const llvm::StringRef & prefix) const {
+    return mSymbolTable->makeString(iBuilder->getContext(), prefix);
+}
+
+Integer * PabloKernel::getInteger(const int64_t value) const {
+    return mSymbolTable->getInteger(iBuilder->getContext(), value);
+}
+
+PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
                          std::string kernelName,
                          std::vector<Binding> stream_inputs,
                          std::vector<Binding> stream_outputs,
@@ -168,9 +182,6 @@ PabloKernel::PabloKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b,
         mVariables.push_back(result);
         mScalarOutputNameMap.emplace(ss.name, result);
         result->setScalar();
-    }
-    if (DebugOptionIsSet(DumpTrace)) {
-        setName(getName() + "_DumpTrace");
     }
 }
 

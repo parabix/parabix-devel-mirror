@@ -4,14 +4,13 @@
  */
 
 #include "streams_merge.h"
-#include <IR_Gen/idisa_builder.h>
-#include <llvm/IR/Value.h>
+#include <kernels/kernel_builder.h>
 
 using namespace llvm;
 
 namespace kernel {
 
-StreamsMerge::StreamsMerge(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned streamsPerSet, unsigned inputSets)
+StreamsMerge::StreamsMerge(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamsPerSet, unsigned inputSets)
 : BlockOrientedKernel("streamsMerge", {}, {}, {}, {}, {})
 , mStreamsPerSet(streamsPerSet)
 , mInputSets(inputSets) {

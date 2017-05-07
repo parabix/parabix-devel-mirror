@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 #include "editd_gpu_kernel.h"
-#include <IR_Gen/idisa_builder.h>
+#include <kernels/kernel_builder.h>
 #include <llvm/IR/Module.h>
 
 using namespace llvm;
@@ -79,7 +79,7 @@ void editdGPUKernel::generateFinalBlockMethod(Value * remainingBytes) {
     CreateDoBlockMethodCall();
 }
 
-editdGPUKernel::editdGPUKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b, unsigned dist, unsigned pattLen) :
+editdGPUKernel::editdGPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen) :
 BlockOrientedKernel("editd_gpu",
               {Binding{b->getStreamSetTy(4), "CCStream"}},
               {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},

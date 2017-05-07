@@ -4,16 +4,10 @@
  */
 
 #include "streamset.h"
-#include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
-#include <llvm/IR/BasicBlock.h>    // for BasicBlock
-#include <llvm/IR/Constants.h>     // for ConstantInt
-#include <llvm/IR/DataLayout.h>    // for DataLayout
-#include <llvm/IR/DerivedTypes.h>  // for IntegerType (ptr only), PointerType
-#include <llvm/IR/Module.h>        // for Module
-#include <llvm/IR/Value.h>         // for Value
+#include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/IR/CFG.h>
 #include <kernels/kernel.h>
+#include <kernels/kernel_builder.h>
 #include <toolchain/toolchain.h>
 
 namespace llvm { class Constant; }
@@ -23,11 +17,11 @@ using namespace parabix;
 using namespace llvm;
 using namespace IDISA;
 
-ArrayType * resolveStreamSetType(const std::unique_ptr<IDISA_Builder> &b, Type * type);
+ArrayType * resolveStreamSetType(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type);
 
-StructType * resolveExpandableStreamSetType(const std::unique_ptr<IDISA::IDISA_Builder> & b, Type * type);
+StructType * resolveExpandableStreamSetType(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type);
 
-void StreamSetBuffer::allocateBuffer(const std::unique_ptr<IDISA_Builder> & iBuilder) {
+void StreamSetBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     if (LLVM_LIKELY(mStreamSetBufferPtr == nullptr)) {
         Type * const ty = getType();
         mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(ty, iBuilder->getSize(mBufferBlocks));
@@ -138,11 +132,11 @@ Value * StreamSetBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const 
     return getLinearlyAccessibleBlocks(iBuilder, self, fromBlock);
 }
 
-Value * StreamSetBuffer::getBaseAddress(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
+Value * StreamSetBuffer::getBaseAddress(IDISA::IDISA_Builder * const /* iBuilder */, Value * self) const {
     return self;
 }
 
-void StreamSetBuffer::releaseBuffer(IDISA::IDISA_Builder * const iBuilder, Value * /* self */) const {
+void StreamSetBuffer::releaseBuffer(IDISA::IDISA_Builder * const /* iBuilder */, Value * /* self */) const {
     /* do nothing: memory is stack allocated */
 }
 
@@ -219,7 +213,7 @@ Value * SourceBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iB
 }
 
 // External File Buffer
-void ExternalBuffer::allocateBuffer(const std::unique_ptr<IDISA_Builder> &) {
+void ExternalBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> &) {
     report_fatal_error("External buffers cannot be allocated.");
 }
 
@@ -237,7 +231,7 @@ Value * CircularBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuild
 }
 
 // CircularCopybackBuffer Buffer
-void CircularCopybackBuffer::allocateBuffer(const std::unique_ptr<IDISA_Builder> & iBuilder) {
+void CircularCopybackBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks + mOverflowBlocks));
 }
 
@@ -260,7 +254,7 @@ Value * CircularCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder *
 
 // SwizzledCopybackBuffer Buffer
 
-void SwizzledCopybackBuffer::allocateBuffer(const std::unique_ptr<IDISA_Builder> & iBuilder) {
+void SwizzledCopybackBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks + mOverflowBlocks));
 }
 
@@ -317,7 +311,7 @@ Value * SwizzledCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder *
 
 // Expandable Buffer
 
-void ExpandableBuffer::allocateBuffer(const std::unique_ptr<IDISA_Builder> & iBuilder) {
+void ExpandableBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType());
     Value * const capacityPtr = iBuilder->CreateGEP(mStreamSetBufferPtr, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     iBuilder->CreateStore(iBuilder->getSize(mInitialCapacity), capacityPtr);
@@ -468,46 +462,46 @@ Value * ExpandableBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * cons
 }
 
 // Constructors
-SingleBlockBuffer::SingleBlockBuffer(const std::unique_ptr<IDISA::IDISA_Builder> &  b, Type * type)
+SingleBlockBuffer::SingleBlockBuffer(const std::unique_ptr<kernel::KernelBuilder> &  b, Type * type)
 : StreamSetBuffer(BufferKind::BlockBuffer, type, resolveStreamSetType(b, type), 1, 0) {
     mUniqueID = "S";
 
 }
 
-SourceBuffer::SourceBuffer(const std::unique_ptr<IDISA_Builder> & b, Type * type, unsigned AddressSpace)
+SourceBuffer::SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(), b->getSizeTy(), nullptr), 0, AddressSpace) {
     mUniqueID = "M"; // + std::to_string(bufferBlocks);
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }
 
-ExternalBuffer::ExternalBuffer(const std::unique_ptr<IDISA_Builder> & b, Type * type, llvm::Value * addr, unsigned AddressSpace)
+ExternalBuffer::ExternalBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, llvm::Value * addr, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::ExternalBuffer, type, resolveStreamSetType(b, type), 0, AddressSpace) {
     mUniqueID = "E";
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
     mStreamSetBufferPtr = b->CreatePointerBitCastOrAddrSpaceCast(addr, getPointerType());
 }
 
-CircularBuffer::CircularBuffer(const std::unique_ptr<IDISA::IDISA_Builder> & b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
+CircularBuffer::CircularBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::CircularBuffer, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace) {
     mUniqueID = "C" + std::to_string(bufferBlocks);
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }
 
-CircularCopybackBuffer::CircularCopybackBuffer(const std::unique_ptr<IDISA::IDISA_Builder> & b, Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace)
+CircularCopybackBuffer::CircularCopybackBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::CircularCopybackBuffer, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace), mOverflowBlocks(overflowBlocks) {
     mUniqueID = "CC" + std::to_string(bufferBlocks);
     if (mOverflowBlocks != 1) mUniqueID += "_" + std::to_string(mOverflowBlocks);
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }
 
-ExpandableBuffer::ExpandableBuffer(const std::unique_ptr<IDISA_Builder> & b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
+ExpandableBuffer::ExpandableBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::ExpandableBuffer, type, resolveExpandableStreamSetType(b, type), bufferBlocks, AddressSpace)
 , mInitialCapacity(type->getArrayNumElements()) {
     mUniqueID = "XP" + std::to_string(bufferBlocks);
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }
 
-SwizzledCopybackBuffer::SwizzledCopybackBuffer(const std::unique_ptr<IDISA::IDISA_Builder> & b, Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned fieldwidth, unsigned AddressSpace)
+SwizzledCopybackBuffer::SwizzledCopybackBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned fieldwidth, unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::SwizzledCopybackBuffer, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace), mOverflowBlocks(overflowBlocks), mFieldWidth(fieldwidth) {
     mUniqueID = "SW" + std::to_string(fieldwidth) + ":" + std::to_string(bufferBlocks);
     if (mOverflowBlocks != 1) {
@@ -532,7 +526,7 @@ inline StreamSetBuffer::StreamSetBuffer(BufferKind k, Type * baseType, Type * re
 StreamSetBuffer::~StreamSetBuffer() { }
 
 // Helper routines
-ArrayType * resolveStreamSetType(const std::unique_ptr<IDISA::IDISA_Builder> & b, Type * type) {
+ArrayType * resolveStreamSetType(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type) {
     unsigned numElements = 1;
     if (LLVM_LIKELY(type->isArrayTy())) {
         numElements = type->getArrayNumElements();
@@ -556,7 +550,7 @@ ArrayType * resolveStreamSetType(const std::unique_ptr<IDISA::IDISA_Builder> & b
     report_fatal_error(out.str());
 }
 
-StructType * resolveExpandableStreamSetType(const std::unique_ptr<IDISA_Builder> & b, Type * type) {
+StructType * resolveExpandableStreamSetType(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type) {
     if (LLVM_LIKELY(type->isArrayTy())) {
         type = type->getArrayElementType();
     }

@@ -19,14 +19,12 @@ class IDISA_Builder : public CBuilder {
 
 public:
 
-    IDISA_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride);
+    IDISA_Builder(llvm::LLVMContext & C, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride);
 
     virtual ~IDISA_Builder();
     
     virtual std::string getBuilderUniqueName() = 0;  // A name uniquely identifying builder/bitBlockWidth/stride.
     
-    std::string getBitBlockTypeName() const;  // A short string such as v4i64 or i256.
-
     llvm::Value * bitCast(llvm::Value * a) {
         return CreateBitCast(a, mBitBlockType);
     }
@@ -128,19 +126,15 @@ public:
     }
 
     void CallPrintRegister(const std::string & regName, llvm::Value * const value);
-    
-protected:
-
-    void initialize(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride);
 
 protected:
-    unsigned            mBitBlockWidth;
-    unsigned            mStride;
+    const unsigned              mBitBlockWidth;
+    const unsigned              mStride;
+    llvm::VectorType * const    mBitBlockType;
+    llvm::Constant * const      mZeroInitializer;
+    llvm::Constant * const      mOneInitializer;
 
-    llvm::VectorType *  mBitBlockType;
-    llvm::Constant *    mZeroInitializer;
-    llvm::Constant *    mOneInitializer;
-    llvm::Constant *    mPrintRegisterFunction;
+    llvm::Constant *            mPrintRegisterFunction;
 };
 
 inline llvm::LoadInst * IDISA_Builder::CreateBlockAlignedLoad(llvm::Value * const ptr, llvm::Value * const index) {

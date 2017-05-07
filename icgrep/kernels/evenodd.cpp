@@ -4,7 +4,7 @@
  */
 
 #include "evenodd.h"
-#include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
+#include <kernels/kernel_builder.h>
 
 using namespace llvm;
 
@@ -17,7 +17,7 @@ void EvenOddKernel::generateDoBlockMethod() {
     storeOutputStreamBlock("even_odd", iBuilder->getInt32(1), odd);
 }
 
-EvenOddKernel::EvenOddKernel(const std::unique_ptr<IDISA::IDISA_Builder> & builder)
+EvenOddKernel::EvenOddKernel(const std::unique_ptr<kernel::KernelBuilder> & builder)
 : BlockOrientedKernel("EvenOdd", {Binding{builder->getStreamSetTy(8, 1), "BasisBits"}}, {Binding{builder->getStreamSetTy(2, 1), "even_odd"}}, {}, {}, {}) {
     setNoTerminateAttribute(true);
 

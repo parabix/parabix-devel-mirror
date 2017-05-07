@@ -11,6 +11,7 @@
 #include <pablo/pe_zeroes.h>        // for Zeroes
 #include <cc/cc_compiler.h>
 #include <pablo/builder.hpp>
+#include <kernels/kernel_builder.h>
 
 using namespace cc;
 using namespace kernel;
@@ -18,14 +19,12 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 
-#define UNICODE_LINE_BREAK (!AlgorithmOptionIsSet(DisableUnicodeLineBreak))
-
-LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<IDISA::IDISA_Builder> & b, unsigned basisBitsCount)
+LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned basisBitsCount)
 : PabloKernel(b, "lb", {Binding{b->getStreamSetTy(basisBitsCount), "basis"}}, {Binding{b->getStreamSetTy(1), "linebreak", Add1()}}) {
 
 }
 
-void LineBreakKernelBuilder::prepareKernel() {
+void LineBreakKernelBuilder::generatePabloMethod() {
 
     CC_Compiler ccc(this, getInput(0));
     auto & pb = ccc.getBuilder();
@@ -72,9 +71,13 @@ void LineBreakKernelBuilder::prepareKernel() {
     it.createAssign(NEL_LS_PS, it.createOr(NEL, LS_PS));
 
     PabloAST * LB_chars = pb.createOr(LF_VT_FF_CR, NEL_LS_PS);
-    PabloAST * UnicodeLineBreak = pb.createAnd(LB_chars, pb.createNot(crlf));  // count the CR, but not CRLF
+    PabloAST * lb = nullptr;
+    if (AlgorithmOptionIsSet(DisableUnicodeLineBreak)) {
+        lb = LF;
+    } else {
+        lb = pb.createAnd(LB_chars, pb.createNot(crlf));  // count the CR, but not CRLF
+    }
 
-    PabloAST * lb = UNICODE_LINE_BREAK ? UnicodeLineBreak : LF;
     PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LB_chars), 1));
     LineBreak = pb.createOr(lb, unterminatedLineAtEOF);
     PabloAST * const r = pb.createExtract(getOutput(0), pb.getInteger(0));
@@ -82,6 +85,4 @@ void LineBreakKernelBuilder::prepareKernel() {
 #ifdef USE_LOOKAHEAD_CRLF
     setLookAhead(1);
 #endif
-
-    PabloKernel::prepareKernel();
 }

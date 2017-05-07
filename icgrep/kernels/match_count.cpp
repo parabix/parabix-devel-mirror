@@ -4,14 +4,13 @@
  */
 
 #include "match_count.h"
-#include <IR_Gen/idisa_builder.h>
-#include <llvm/IR/Value.h>
+#include <kernels/kernel_builder.h>
 
 using namespace llvm;
 
 namespace kernel {
 
-MatchCount::MatchCount(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+MatchCount::MatchCount(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
     : BlockOrientedKernel("matchCount",
                         {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}}, {}, {}, {Binding{iBuilder->getSizeTy(), "matchedLineCount"}}, {}) {
     }

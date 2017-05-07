@@ -28,6 +28,7 @@
 #include <llvm/IR/Module.h>
 #include <toolchain/object_cache.h>
 #include <toolchain/pipeline.h>
+#include <kernels/kernel_builder.h>
 #include <kernels/kernel.h>
 #include <sys/stat.h>
 #include <thread>
@@ -180,6 +181,7 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
 
     iBuilder.reset(IDISA::GetIDISA_Builder(mMainModule));
     iBuilder->setDriver(this);
+    iBuilder->setModule(mMainModule);
 }
 
 ExternalBuffer * ParabixDriver::addExternalBuffer(std::unique_ptr<ExternalBuffer> b) {
@@ -198,17 +200,18 @@ kernel::Kernel * ParabixDriver::addKernelInstance(std::unique_ptr<kernel::Kernel
     return mOwnedKernels.back().get();
 }
 
-void ParabixDriver::addKernelCall(kernel::Kernel & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
+void ParabixDriver::addKernelCall(kernel::Kernel & kb, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
     assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb.getModule() == nullptr));
     mPipeline.emplace_back(&kb);
-    kb.setBuilder(iBuilder.get());
+    assert (mMainModule);
+    kb.setBuilder(iBuilder);
     kb.createKernelStub(inputs, outputs);
 }
 
-void ParabixDriver::makeKernelCall(kernel::Kernel * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
+void ParabixDriver::makeKernelCall(kernel::Kernel * kb, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
     assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb->getModule() == nullptr));
-    mPipeline.emplace_back(kb);
-    kb->setBuilder(iBuilder.get());
+    mPipeline.emplace_back(kb);    
+    kb->setBuilder(iBuilder);
     kb->createKernelStub(inputs, outputs);
 }
 
@@ -226,27 +229,24 @@ void ParabixDriver::generatePipelineIR() {
 
     // note: instantiation of all kernels must occur prior to initialization
     for (const auto & k : mPipeline) {
-        k->setBuilder(iBuilder.get());
         k->addKernelDeclarations();
     }
     for (const auto & k : mPipeline) {
-        k->setBuilder(iBuilder.get());
         k->createInstance();
     }
     for (const auto & k : mPipeline) {
-        k->setBuilder(iBuilder.get());
         k->initializeInstance();
     }
     if (codegen::pipelineParallel) {
-        generateParallelPipeline(iBuilder.get(), mPipeline);
+        generateParallelPipeline(iBuilder, mPipeline);
     } else if (codegen::segmentPipelineParallel) {
-        generateSegmentParallelPipeline(iBuilder.get(), mPipeline);
+        generateSegmentParallelPipeline(iBuilder, mPipeline);
     } else {
         codegen::ThreadNum = 1;
-        generatePipelineLoop(iBuilder.get(), mPipeline);
+        generatePipelineLoop(iBuilder, mPipeline);
     }
     for (const auto & k : mPipeline) {
-        k->setBuilder(iBuilder.get());
+        k->setBuilder(iBuilder);
         k->finalizeInstance();
     }
 }
@@ -309,7 +309,7 @@ void ParabixDriver::linkAndFinalize() {
         }
         if (uncachedObject) {
             iBuilder->setModule(m);
-            k->setBuilder(iBuilder.get());
+            k->setBuilder(iBuilder);
             k->generateKernel();
             PM.run(*m);
         }
@@ -326,6 +326,10 @@ void ParabixDriver::linkAndFinalize() {
     #ifndef NDEBUG
     } catch (...) { m->dump(); throw; }
     #endif
+}
+
+const std::unique_ptr<kernel::KernelBuilder> & ParabixDriver::getBuilder() {
+    return iBuilder;
 }
 
 void * ParabixDriver::getPointerToMain() {

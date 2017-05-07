@@ -5,12 +5,10 @@
  */
 
 #include "lz4_bytestream_decoder.h"
+#include <kernels/kernel_builder.h>
 
 using namespace llvm;
 using namespace kernel;
-
-
-namespace {
 
 Value * getInputPtr(IDISA::IDISA_Builder * const iBuilder, Value * blockStartPtr, Value * offset) {
     return iBuilder->CreateGEP(
@@ -22,9 +20,6 @@ Value * getInputPtr(IDISA::IDISA_Builder * const iBuilder, Value * blockStartPtr
 Value * selectMin(IDISA::IDISA_Builder * const iBuilder, Value * a, Value * b) {
     return iBuilder->CreateSelect(iBuilder->CreateICmpULT(a, b), a, b);
 }
-
-}
-
 
 void LZ4ByteStreamDecoderKernel::generateDoBlockMethod() {
     BasicBlock * entry_block = iBuilder->GetInsertBlock();
@@ -191,7 +186,7 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod() {
 }
 
 
-LZ4ByteStreamDecoderKernel::LZ4ByteStreamDecoderKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, size_t bufferSize)
+LZ4ByteStreamDecoderKernel::LZ4ByteStreamDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, size_t bufferSize)
 : BlockOrientedKernel("lz4ByteStreamDecoder",
     // Inputs
     {Binding{iBuilder->getStreamSetTy(2, 32), "literalIndexes"},

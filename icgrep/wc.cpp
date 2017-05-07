@@ -16,7 +16,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <cc/cc_compiler.h>
 #include <pablo/pablo_kernel.h>
-#include <IR_Gen/idisa_builder.h>
+#include <kernels/kernel_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/streamset.h>
 #include <kernels/source_kernel.h>
@@ -83,13 +83,14 @@ extern "C" {
 
 class WordCountKernel final: public pablo::PabloKernel {
 public:
-    WordCountKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b);
+    WordCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
-    void prepareKernel() override;
+protected:
+    void generatePabloMethod() override;
 };
 
-WordCountKernel::WordCountKernel (const std::unique_ptr<IDISA::IDISA_Builder> & b)
+WordCountKernel::WordCountKernel (const std::unique_ptr<kernel::KernelBuilder> & b)
 : PabloKernel(b, "wc",
     {Binding{b->getStreamSetTy(8, 1), "u8bit"}},
     {},
@@ -98,7 +99,7 @@ WordCountKernel::WordCountKernel (const std::unique_ptr<IDISA::IDISA_Builder> & 
 
 }
 
-void WordCountKernel::prepareKernel() {
+void WordCountKernel::generatePabloMethod() {
 
     //  input: 8 basis bit streams
     const auto u8bitSet = getInputStreamVar("u8bit");
@@ -132,8 +133,6 @@ void WordCountKernel::prepareKernel() {
         PabloAST * u8Begin = ccc.compileCC(re::makeCC(re::makeCC(0, 0x7F), re::makeCC(0xC2, 0xF4)));
         pb.createAssign(cc, pb.createCount(u8Begin));
     }
-    pablo_function_passes(this);
-    PabloKernel::prepareKernel();
 }
 
 typedef void (*WordCountFunctionType)(uint32_t fd, size_t fileIdx);

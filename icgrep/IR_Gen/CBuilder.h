@@ -24,7 +24,7 @@ class CBuilder : public llvm::IRBuilder<> {
     friend class ParabixDriver;
 public:
 
-    CBuilder(llvm::Module * const module, const unsigned GeneralRegisterWidthInBits);
+    CBuilder(llvm::LLVMContext & C, const unsigned GeneralRegisterWidthInBits);
     
     virtual ~CBuilder() {}
 

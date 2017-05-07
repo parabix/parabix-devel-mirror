@@ -21,6 +21,8 @@ namespace parabix { class StreamSetBuffer; }
 
 namespace kernel {
     
+class KernelBuilder;
+
 class Kernel : public KernelInterface {
 protected:
     using KernelMap = boost::container::flat_map<std::string, unsigned>;
@@ -31,9 +33,9 @@ protected:
     using Kernels = std::vector<Kernel *>;
 
     friend class KernelBuilder;
-    friend void ::generateSegmentParallelPipeline(IDISA::IDISA_Builder * const, const Kernels &);
-    friend void ::generatePipelineLoop(IDISA::IDISA_Builder * const, const Kernels &);
-    friend void ::generateParallelPipeline(IDISA::IDISA_Builder * const, const Kernels &);
+    friend void ::generateSegmentParallelPipeline(const std::unique_ptr<kernel::KernelBuilder> &, const Kernels &);
+    friend void ::generatePipelineLoop(const std::unique_ptr<kernel::KernelBuilder> &, const Kernels &);
+    friend void ::generateParallelPipeline(const std::unique_ptr<kernel::KernelBuilder> &, const Kernels &);
 
     static const std::string DO_BLOCK_SUFFIX;
     static const std::string FINAL_BLOCK_SUFFIX;
@@ -116,27 +118,15 @@ public:
 
     void setTerminationSignal() const final;
 
-    bool hasNoTerminateAttribute() const {
-        return mNoTerminateAttribute;
-    }
-
     // Get the value of a scalar field for the current instance.
-    llvm::Value * getScalarFieldPtr(llvm::Value * index) const {
-        return iBuilder->CreateGEP(getInstance(), {iBuilder->getInt32(0), index});
-    }
+    llvm::Value * getScalarFieldPtr(llvm::Value * index) const;
 
-    llvm::Value * getScalarFieldPtr(const std::string & fieldName) const {
-        return getScalarFieldPtr(iBuilder->getInt32(getScalarIndex(fieldName)));
-    }
+    llvm::Value * getScalarFieldPtr(const std::string & fieldName) const;
 
-    llvm::Value * getScalarField(const std::string & fieldName) const {
-        return iBuilder->CreateLoad(getScalarFieldPtr(fieldName), fieldName);
-    }
+    llvm::Value * getScalarField(const std::string & fieldName) const;
 
     // Set the value of a scalar field for the current instance.
-    void setScalarField(const std::string & fieldName, llvm::Value * value) const {
-        iBuilder->CreateStore(value, getScalarFieldPtr(fieldName));
-    }
+    void setScalarField(const std::string & fieldName, llvm::Value * value) const;
 
     // Synchronization actions for executing a kernel for a particular logical segment.
     //
@@ -151,8 +141,9 @@ public:
 
     void releaseLogicalSegmentNo(llvm::Value * nextSegNo) const;
 
-    // Get a parameter by name.
-    llvm::Argument * getParameter(llvm::Function * f, const std::string & name) const;
+    bool hasNoTerminateAttribute() const {
+        return mNoTerminateAttribute;
+    }
 
     const StreamSetBuffers & getStreamSetInputBuffers() const {
         return mStreamSetInputBuffers;
@@ -377,9 +368,7 @@ protected:
 
 private:
 
-    virtual bool useIndirectBr() const {
-        return iBuilder->supportsIndirectBr();
-    }
+    virtual bool useIndirectBr() const;
 
     void writeDoBlockMethod();
 

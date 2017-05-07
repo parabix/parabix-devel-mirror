@@ -5,8 +5,9 @@
 
 
 #include "cc_scan_kernel.h"
-#include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Module.h>
+#include <kernels/kernel_builder.h>
+
 
 using namespace llvm;
 
@@ -89,7 +90,7 @@ Function * CCScanKernel::generateScanWordRoutine(Module * m) const {
 
 }
 
-CCScanKernel::CCScanKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned streamNum) :
+CCScanKernel::CCScanKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamNum) :
 BlockOrientedKernel("CCScan",
               {Binding{iBuilder->getStreamSetTy(streamNum), "matchResults"}},
               {}, {}, {}, {Binding{iBuilder->getSizeTy(), "BlockNo"}}),

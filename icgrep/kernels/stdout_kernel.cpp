@@ -4,8 +4,9 @@
  */
 #include "stdout_kernel.h"
 #include <llvm/IR/Module.h>
-#include <IR_Gen/idisa_builder.h>
+#include <kernels/kernel_builder.h>
 #include <kernels/streamset.h>
+
 namespace llvm { class Type; }
 
 using namespace llvm;
@@ -67,7 +68,7 @@ void StdOutKernel::generateDoSegmentMethod() {
     }
 }
 
-StdOutKernel::StdOutKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned codeUnitWidth)
+StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth)
 : SegmentOrientedKernel("stdout", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {})
 , mCodeUnitWidth(codeUnitWidth) {
     setNoTerminateAttribute(true);
@@ -164,7 +165,7 @@ void FileSink::generateDoSegmentMethod() {
     iBuilder->SetInsertPoint(fileOutExit);
 }
 
-FileSink::FileSink(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned codeUnitWidth)
+FileSink::FileSink(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth)
 : SegmentOrientedKernel("filesink", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {},
                 {Binding{iBuilder->getInt8PtrTy(), "fileName"}}, {}, {Binding{iBuilder->getInt8PtrTy(), "tmpFileName"}, Binding{iBuilder->getInt32Ty(), "fileDes"}})
 , mCodeUnitWidth(codeUnitWidth) {

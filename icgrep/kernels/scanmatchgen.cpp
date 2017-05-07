@@ -5,8 +5,8 @@
 
 #include "scanmatchgen.h"
 #include <llvm/IR/Intrinsics.h>
-#include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Module.h>
+#include <kernels/kernel_builder.h>
 
 using namespace llvm;
 
@@ -188,7 +188,7 @@ void ScanMatchKernel::generateDoBlockMethod() {
     setProcessedItemCount("InputStream", phiFinalRecordStart);
 }
 
-ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b, GrepType grepType, const unsigned codeUnitWidth)
+ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, GrepType grepType, const unsigned codeUnitWidth)
 : BlockOrientedKernel("scanMatch" + getGrepTypeId(grepType) + std::to_string(codeUnitWidth),
     {Binding{b->getStreamSetTy(1, 1), "matchResult"}, Binding{b->getStreamSetTy(1, 1), "lineBreak"}, Binding{b->getStreamSetTy(1, 8), "InputStream", UnknownRate()}},
     {},

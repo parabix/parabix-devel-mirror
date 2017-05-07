@@ -4,13 +4,8 @@
  */
 
 #include "s2p_kernel.h"
-#include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
-#include <llvm/IR/Constant.h>      // for Constant
-#include <llvm/IR/Module.h>
+#include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
-namespace llvm { class BasicBlock; }
-namespace llvm { class Function; }
-namespace llvm { class Value; }
 
 using namespace llvm;
 
@@ -166,7 +161,7 @@ void S2PKernel::generateFinalBlockMethod(Value * remainingBytes) {
     iBuilder->SetInsertPoint(exitBlock);
 }
 
-S2PKernel::S2PKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b, bool aligned)
+S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, bool aligned)
 : BlockOrientedKernel(aligned ? "s2p" : "s2p_unaligned",
     {Binding{b->getStreamSetTy(1, 8), "byteStream"}}, {Binding{b->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
   mAligned(aligned) {

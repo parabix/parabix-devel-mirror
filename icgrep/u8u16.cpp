@@ -4,7 +4,6 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <IR_Gen/idisa_builder.h>                  // for IDISA_Builder
 #include <IR_Gen/idisa_target.h>                   // for GetIDISA_Builder
 #include <cc/cc_compiler.h>                        // for CC_Compiler
 #include <kernels/deletion.h>                      // for DeletionKernel
@@ -21,6 +20,7 @@
 #include <llvm/Support/Debug.h>                    // for dbgs
 #include <pablo/pablo_kernel.h>                    // for PabloKernel
 #include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
+#include <kernels/kernel_builder.h>
 #include <pablo/pe_zeroes.h>
 #include <toolchain/toolchain.h>
 #include "kernels/streamset.h"                     // for CircularBuffer
@@ -47,28 +47,34 @@ static cl::opt<bool> enableAVXdel("enable-AVX-deletion", cl::desc("Enable AVX2 d
 static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
 static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
 
+class U8U16Kernel final: public pablo::PabloKernel {
+public:
+    U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b);
+    bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
+    void generatePabloMethod() override;
+};
 
-std::unique_ptr<PabloKernel> u8u16_pablo(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder) {
+U8U16Kernel::U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b)
+: PabloKernel(b, "u8u16",
+{Binding{b->getStreamSetTy(8, 1), "u8bit"}},
+{Binding{b->getStreamSetTy(16, 1), "u16bit"}, Binding{b->getStreamSetTy(1, 1), "delMask"}, Binding{b->getStreamSetTy(1, 1), "errMask"}}) {
 
-    auto kernel = std::unique_ptr<PabloKernel>(new PabloKernel(iBuilder, "u8u16",
-                       {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
-                       {Binding{iBuilder->getStreamSetTy(16, 1), "u16bit"},
-                           Binding{iBuilder->getStreamSetTy(1, 1), "delMask"},
-                           Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {}));
-    
-    kernel->setBuilder(iBuilder.get());
+}
+
+void U8U16Kernel::generatePabloMethod() {
 
     //  input: 8 basis bit streams
-    
-    const auto u8bitSet = kernel->getInputStreamVar("u8bit");
-    
+
+    const auto u8bitSet = getInputStreamVar("u8bit");
+
     //  output: 16 u8-indexed streams, + delmask stream + error stream
-    
-    cc::CC_Compiler ccc(kernel.get(), u8bitSet);
-    
+
+    cc::CC_Compiler ccc(this, u8bitSet);
+
     PabloBuilder & main = ccc.getBuilder();
     const auto u8_bits = ccc.getBasisBits();
-    
+
     Zeroes * zeroes = main.createZeroes();
 
     // Outputs
@@ -85,17 +91,17 @@ std::unique_ptr<PabloKernel> u8u16_pablo(const std::unique_ptr<IDISA::IDISA_Buil
 
     // The logic for processing non-ASCII bytes will be embedded within an if-hierarchy.
     PabloAST * nonASCII = ccc.compileCC(re::makeCC(0x80, 0xFF));
-    
+
     // Builder for the if statement handling all non-ASCII logic
     PabloBuilder nAb = PabloBuilder::Create(main);
     // Bits 3 through 7 of a 2-byte prefix are data bits, needed to
-    // produce the UTF-16 code unit data ..., 
+    // produce the UTF-16 code unit data ...,
     PabloAST * bit3a1 = nAb.createAdvance(u8_bits[3], 1);
     PabloAST * bit4a1 = nAb.createAdvance(u8_bits[4], 1);
     PabloAST * bit5a1 = nAb.createAdvance(u8_bits[5], 1);
     PabloAST * bit6a1 = nAb.createAdvance(u8_bits[6], 1);
     PabloAST * bit7a1 = nAb.createAdvance(u8_bits[7], 1);
-    
+
     // Entry condition for 3 or 4 byte sequences: we have a prefix byte in the range 0xE0-0xFF.
     PabloAST * pfx34 = ccc.compileCC(re::makeCC(0xE0, 0xFF), nAb);
     // Builder for the if statement handling all logic for 3- and 4-byte sequences.
@@ -107,7 +113,6 @@ std::unique_ptr<PabloKernel> u8u16_pablo(const std::unique_ptr<IDISA::IDISA_Buil
     PabloAST * bit5a2 = p34b.createAdvance(bit5a1, 1);
     PabloAST * bit6a2 = p34b.createAdvance(bit6a1, 1);
     PabloAST * bit7a2 = p34b.createAdvance(bit7a1, 1);
-
 
     Var * const u8scope32 = nAb.createVar("u8scope32", zeroes);
     Var * const u8scope33 = nAb.createVar("u8scope33", zeroes);
@@ -139,7 +144,7 @@ std::unique_ptr<PabloKernel> u8u16_pablo(const std::unique_ptr<IDISA::IDISA_Buil
     p4b.createAssign(u8scope43, p4b.createAdvance(u8scope42, 1));
     p4b.createAssign(u8scope44, p4b.createAdvance(u8scope43, 1));
     //
-    
+
     //  From the 4-byte sequence 11110abc 10defghi 10jklmno 10pqrstu,
     //  we must calculate the value abcde - 1 to produce the bit values
     //  for u16_hi6, hi7, lo0, lo1 at the scope43 position.
@@ -189,7 +194,7 @@ std::unique_ptr<PabloKernel> u8u16_pablo(const std::unique_ptr<IDISA::IDISA_Buil
     p34b.createAssign(EX_FX_err, p34b.createOr(p34b.createOr(E0_err, ED_err), FX_err));
     // Two surrogate UTF-16 units are computed at the 3rd and 4th positions of 4-byte sequences.
     PabloAST * surrogate = p34b.createOr(u8scope43, u8scope44);
-    
+
     Var * p34del = nAb.createVar("p34del", zeroes);
     p34b.createAssign(p34del, p34b.createOr(u8scope32, u8scope42));
 
@@ -201,7 +206,7 @@ std::unique_ptr<PabloKernel> u8u16_pablo(const std::unique_ptr<IDISA::IDISA_Buil
     p34b.createAssign(u16_hi[2], p34b.createAnd(u8scope33, bit6a2));
     p34b.createAssign(u16_hi[3], p34b.createOr(p34b.createAnd(u8scope33, bit7a2), surrogate));
     p34b.createAssign(u16_hi[4], p34b.createOr(p34b.createAnd(u8scope33, bit2a1), surrogate));
-    
+
     //
     nAb.createIf(pfx34, p34b);
     //
@@ -219,7 +224,7 @@ std::unique_ptr<PabloKernel> u8u16_pablo(const std::unique_ptr<IDISA::IDISA_Buil
     PabloAST * scope_suffix_mismatch = nAb.createXor(u8anyscope, ccc.compileCC(re::makeCC(0x80, 0xBF), nAb));
     nAb.createAssign(error_mask, nAb.createOr(scope_suffix_mismatch, nAb.createOr(C0_C1_err, EX_FX_err)));
     nAb.createAssign(delmask, nAb.createOr(p34del, ccc.compileCC(re::makeCC(0xC0, 0xFF), nAb)));
-    
+
     // The low 3 bits of the high byte of the UTF-16 code unit as well as the high bit of the
     // low byte are only nonzero for 2, 3 and 4 byte sequences.
     nAb.createAssign(u16_hi[5], nAb.createOr(nAb.createAnd(u8lastscope, bit3a1), u8scope44));
@@ -243,11 +248,11 @@ std::unique_ptr<PabloKernel> u8u16_pablo(const std::unique_ptr<IDISA::IDISA_Buil
     main.createAssign(u16_lo[5], main.createOr(main.createAnd(last_byte, u8_bits[5]), s43_lo5));
     main.createAssign(u16_lo[6], main.createOr(main.createAnd(last_byte, u8_bits[6]), s43_lo6));
     main.createAssign(u16_lo[7], main.createOr(main.createAnd(last_byte, u8_bits[7]), s43_lo7));
-    
-    Var * output = kernel->getOutputStreamVar("u16bit");
-    Var * delmask_out = kernel->getOutputStreamVar("delMask");
-    Var * error_mask_out = kernel->getOutputStreamVar("errMask");
-    
+
+    Var * output = getOutputStreamVar("u16bit");
+    Var * delmask_out = getOutputStreamVar("delMask");
+    Var * error_mask_out = getOutputStreamVar("errMask");
+
     for (unsigned i = 0; i < 8; i++) {
         main.createAssign(main.createExtract(output, i), u16_hi[i]);
     }
@@ -256,9 +261,6 @@ std::unique_ptr<PabloKernel> u8u16_pablo(const std::unique_ptr<IDISA::IDISA_Buil
     }
     main.createAssign(main.createExtract(delmask_out, main.getInteger(0)), delmask);
     main.createAssign(main.createExtract(error_mask_out,  main.getInteger(0)), error_mask);
-
-    pablo_function_passes(kernel.get());
-    return kernel;
 }
 
 void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
@@ -303,7 +305,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     StreamSetBuffer * DelMask = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
     StreamSetBuffer * ErrorMask = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
     
-    Kernel * u8u16k = pxDriver.addKernelInstance(u8u16_pablo(iBuilder));
+    Kernel * u8u16k = pxDriver.addKernelInstance(make_unique<U8U16Kernel>(iBuilder));
     pxDriver.makeKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask, ErrorMask});
     
     // Apply a deletion algorithm to discard all but the final position of the UTF-8
@@ -396,7 +398,7 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     StreamSetBuffer * DelMask = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
     StreamSetBuffer * ErrorMask = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
     
-    Kernel * u8u16k = pxDriver.addKernelInstance(u8u16_pablo(iBuilder));
+    Kernel * u8u16k = pxDriver.addKernelInstance(make_unique<U8U16Kernel>(iBuilder));
     pxDriver.makeKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask, ErrorMask});
     
     StreamSetBuffer * U16Bits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments));

@@ -13,7 +13,6 @@
 #include <llvm/ADT/StringRef.h>
 #include <boost/container/flat_map.hpp>
 
-namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Type; }
 namespace pablo { class Integer; }
 namespace pablo { class Ones; }
@@ -45,7 +44,7 @@ public:
         return false;
     }
 
-    PabloKernel(const std::unique_ptr<IDISA::IDISA_Builder> & builder, std::string kernelName,
+    PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, std::string kernelName,
                 std::vector<Binding> stream_inputs = {},
                 std::vector<Binding> stream_outputs = {},
                 std::vector<Binding> scalar_parameters = {},
@@ -125,25 +124,23 @@ public:
 
 protected:
 
+    virtual void generatePabloMethod() = 0;
+
+    String * makeName(const llvm::StringRef & prefix) const;
+
+    Integer * getInteger(const int64_t value) const;
+
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
     // finalizing the KernelStateType.
-    void prepareKernel()  override;
+    void prepareKernel() final;
 
-    void generateDoBlockMethod() override final;
+    void generateDoBlockMethod() final;
 
     // The default method for Pablo final block processing sets the
     // EOFmark bit and then calls the standard DoBlock function.
     // This may be overridden for specialized processing.
-    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override final;
-
-    inline String * makeName(const llvm::StringRef & prefix) const {
-        return mSymbolTable->makeString(iBuilder->getContext(), prefix);
-    }
-
-    inline Integer * getInteger(const int64_t value) const {
-        return mSymbolTable->getInteger(iBuilder->getContext(), value);
-    }
+    void generateFinalBlockMethod(llvm::Value * remainingBytes) final;
 
 private:
 

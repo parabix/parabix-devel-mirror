@@ -8,8 +8,8 @@
 #include <re/printer_re.h>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
-#include <IR_Gen/idisa_builder.h>  // for IDISA_Builder
-#include <pablo/builder.hpp>  // for PabloBuilder
+#include <kernels/kernel_builder.h>
+#include <pablo/builder.hpp>
 #include <pablo/pe_count.h>
 
 using namespace kernel;
@@ -28,7 +28,7 @@ inline static std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
-ICgrepKernelBuilder::ICgrepKernelBuilder (const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, RE * const re)
+ICgrepKernelBuilder::ICgrepKernelBuilder (const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re)
 : PabloKernel(iBuilder, "",
               {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}},
               {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}},
@@ -43,10 +43,8 @@ std::string ICgrepKernelBuilder::makeSignature() {
     return mSignature;
 }
 
-void ICgrepKernelBuilder::prepareKernel() {
+void ICgrepKernelBuilder::generatePabloMethod() {
     re2pablo_compiler(this, regular_expression_passes(mRE));
-    pablo_function_passes(this);
-    PabloKernel::prepareKernel();
 }
 
 void InvertMatchesKernel::generateDoBlockMethod() {
@@ -56,13 +54,13 @@ void InvertMatchesKernel::generateDoBlockMethod() {
     storeOutputStreamBlock("nonMatches", iBuilder->getInt32(0), inverted);
 }
 
-InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<IDISA::IDISA_Builder> & builder)
+InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder)
 : BlockOrientedKernel("Invert", {Binding{builder->getStreamSetTy(1, 1), "matchedLines"}, Binding{builder->getStreamSetTy(1, 1), "lineBreaks"}}, {Binding{builder->getStreamSetTy(1, 1), "nonMatches"}}, {}, {}, {}) {
     setNoTerminateAttribute(true);    
 }
 
 
-PopcountKernel::PopcountKernel (const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
 : PabloKernel(iBuilder, "Popcount",
               {Binding{iBuilder->getStreamSetTy(1), "toCount"}},
               {},

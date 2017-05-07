@@ -4,14 +4,13 @@
  */
 
 #include "swizzle.h"
-#include <IR_Gen/idisa_builder.h>
-#include <llvm/IR/Value.h>
+#include <kernels/kernel_builder.h>
 
 using namespace llvm;
 
 namespace kernel {
 
-SwizzleGenerator::SwizzleGenerator(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned bitStreamCount, unsigned outputSets, unsigned inputSets, unsigned fieldWidth)
+SwizzleGenerator::SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned bitStreamCount, unsigned outputSets, unsigned inputSets, unsigned fieldWidth)
 : BlockOrientedKernel("swizzle" + std::to_string(fieldWidth) + ":" + std::to_string(bitStreamCount), {}, {}, {}, {}, {})
 , mBitStreamCount(bitStreamCount)
 , mFieldWidth(fieldWidth)

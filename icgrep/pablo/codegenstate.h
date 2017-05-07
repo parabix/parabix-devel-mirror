@@ -276,10 +276,6 @@ public:
 
     Phi * createPhi(llvm::Type * type);
 
-    llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
-        return mParent->getBuilder()->getStreamSetTy(NumElements, FieldWidth);
-    }
-    
     PabloBlock * getPredecessor() const;
 
     inline PabloKernel * getParent() const {

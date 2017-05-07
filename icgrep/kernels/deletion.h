@@ -24,7 +24,7 @@ namespace kernel {
 
 class DeletionKernel final : public BlockOrientedKernel {
 public:
-    DeletionKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned fw, unsigned streamCount);
+    DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount);
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
@@ -37,7 +37,7 @@ private:
 
 class DeleteByPEXTkernel final : public BlockOrientedKernel {
 public:
-    DeleteByPEXTkernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle);
+    DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle);
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
@@ -56,7 +56,7 @@ private:
     
 class SwizzledBitstreamCompressByCount final : public BlockOrientedKernel {
 public:
-    SwizzledBitstreamCompressByCount(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned bitStreamCount, unsigned fieldWidth = 64);
+    SwizzledBitstreamCompressByCount(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned bitStreamCount, unsigned fieldWidth = 64);
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:

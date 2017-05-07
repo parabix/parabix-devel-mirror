@@ -53,8 +53,7 @@ Value * KernelBuilder::getProducedItemCount(const std::string & name, Value * do
                 principalField = principleSet + Kernel::PROCESSED_ITEM_COUNT_SUFFIX;
             }
         } else {
-            Kernel::Port port; unsigned pfIndex;
-            std::tie(port, pfIndex) = mKernel->getStreamPort(refSet);
+            std::tie(port, index) = mKernel->getStreamPort(refSet);
             if (port == Kernel::Port::Input) {
                principalField = refSet + Kernel::PROCESSED_ITEM_COUNT_SUFFIX;
             } else {

@@ -7,7 +7,7 @@
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
 #include <pablo/builder.hpp>
-#include <llvm/IR/Module.h>
+#include <kernels/kernel_builder.h>
 
 using namespace cc;
 using namespace kernel;
@@ -16,7 +16,7 @@ using namespace re;
 using namespace llvm;
 
 DirectCharacterClassKernelBuilder::DirectCharacterClassKernelBuilder(
-        const std::unique_ptr<IDISA::IDISA_Builder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize)
+        const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize)
 : BlockOrientedKernel(std::move(ccSetName),
               {Binding{b->getStreamSetTy(1, 8 * codeUnitSize), "codeUnitStream"}},
               {Binding{b->getStreamSetTy(charClasses.size(), 1), "ccStream"}},
@@ -70,7 +70,7 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod() {
 }
 
 ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
-        const std::unique_ptr<IDISA::IDISA_Builder> & b, std::string ccSetName, const std::vector<CC *> & charClasses, unsigned codeUnitSize)
+        const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, const std::vector<CC *> & charClasses, unsigned codeUnitSize)
 : PabloKernel(b, ccSetName +"_kernel", {Binding{b->getStreamSetTy(codeUnitSize), "basis"}})
 , mCharClasses(charClasses) {
     for (CC * cc : mCharClasses) {
@@ -78,11 +78,10 @@ ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
     }
 }
 
-void ParabixCharacterClassKernelBuilder::prepareKernel() {
+void ParabixCharacterClassKernelBuilder::generatePabloMethod() {
     CC_Compiler ccc(this, getInput(0));
     auto & builder = ccc.getBuilder();
     for (unsigned i = 0; i < mCharClasses.size(); ++i) {
         builder.createAssign(getOutput(i), ccc.compileCC("cc", mCharClasses[i], builder));
     }
-    PabloKernel::prepareKernel();
 }

@@ -15,7 +15,7 @@
 #include <cc/cc_compiler.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
-#include <IR_Gen/idisa_builder.h>
+#include <kernels/kernel_builder.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/streamset.h>
 #include <kernels/source_kernel.h>
@@ -157,22 +157,31 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
     }
 }
 
-void buildPatternKernel(PabloKernel * const kernel, const std::vector<std::string> & patterns) {
-    PabloBuilder entry(kernel->getEntryBlock());
+class PatternKernel final: public pablo::PabloKernel {
+public:
+    PatternKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<std::string> & patterns);
+    bool isCachable() const override { return true; }
+protected:
+    void generatePabloMethod() override;
+private:
+    const std::vector<std::string> & mPatterns;
+};
 
-    Var * pat = kernel->getInputStreamVar("pat");
+PatternKernel::PatternKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<std::string> & patterns)
+: PabloKernel(b, "editd", {{b->getStreamSetTy(4), "pat"}}, {{b->getStreamSetTy(editDistance + 1), "E"}})
+, mPatterns(patterns) {
+}
 
+void PatternKernel::generatePabloMethod() {
+    PabloBuilder entry(getEntryBlock());
+    Var * const pat = getInputStreamVar("pat");
     PabloAST * basisBits[4];
-
     basisBits[0] = entry.createExtract(pat, 0, "A");
     basisBits[1] = entry.createExtract(pat, 1, "C");
     basisBits[2] = entry.createExtract(pat, 2, "T");
     basisBits[3] = entry.createExtract(pat, 3, "G");
-
-    re::Pattern_Compiler pattern_compiler(*kernel);
-    pattern_compiler.compile(patterns, entry, basisBits, editDistance, optPosition, stepSize);
-
-    pablo_function_passes(kernel);
+    re::Pattern_Compiler pattern_compiler(*this);
+    pattern_compiler.compile(mPatterns, entry, basisBits, editDistance, optPosition, stepSize);
 }
 
 std::mutex store_mutex;
@@ -216,12 +225,8 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
 
     auto MatchResults = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(idb, idb->getStreamSetTy(editDistance + 1)));
 
-    auto editdk = pxDriver.addKernelInstance(make_unique<PabloKernel>(
-        idb, "editd", std::vector<Binding>{{idb->getStreamSetTy(4), "pat"}}, std::vector<Binding>{{idb->getStreamSetTy(editDistance + 1), "E"}}
-        ));
+    auto editdk = pxDriver.addKernelInstance(make_unique<PatternKernel>(idb, patterns));
 
-    editdk->setBuilder(idb.get());
-    buildPatternKernel(reinterpret_cast<PabloKernel *>(editdk), patterns);
     pxDriver.makeKernelCall(editdk, {ChStream}, {MatchResults});
 
     auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(idb, editDistance));
@@ -234,37 +239,41 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     pxDriver.linkAndFinalize();
 }
 
-void buildPreprocessKernel(PabloKernel * const kernel) {
-    assert (kernel->getBuilder());
-    cc::CC_Compiler ccc(kernel, kernel->getInputStreamVar("basis"));
+class PreprocessKernel final: public pablo::PabloKernel {
+public:
+    PreprocessKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
+    bool isCachable() const override { return true; }
+protected:
+    void generatePabloMethod() override;
+};
 
+PreprocessKernel::PreprocessKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
+: PabloKernel(b, "ccc", {{b->getStreamSetTy(8), "basis"}}, {{b->getStreamSetTy(4), "pat"}}) {
+
+}
+
+void PreprocessKernel::generatePabloMethod() {
+    cc::CC_Compiler ccc(this, getInputStreamVar("basis"));
     PabloBuilder & pb = ccc.getBuilder();
-
     PabloAST * A = ccc.compileCC(re::makeCC(re::makeCC(0x41), re::makeCC(0x61)), pb);
     PabloAST * C = ccc.compileCC(re::makeCC(re::makeCC(0x43), re::makeCC(0x63)), pb);
     PabloAST * T = ccc.compileCC(re::makeCC(re::makeCC(0x54), re::makeCC(0x74)), pb);
     PabloAST * G = ccc.compileCC(re::makeCC(re::makeCC(0x47), re::makeCC(0x67)), pb);
-
-    Var * const pat = kernel->getOutputStreamVar("pat");
-
+    Var * const pat = getOutputStreamVar("pat");
     pb.createAssign(pb.createExtract(pat, 0), A);
     pb.createAssign(pb.createExtract(pat, 1), C);
     pb.createAssign(pb.createExtract(pat, 2), T);
     pb.createAssign(pb.createExtract(pat, 3), G);
-
-    pablo_function_passes(kernel);
 }
 
 void preprocessPipeline(ParabixDriver & pxDriver) {
 
     auto & iBuilder = pxDriver.getBuilder();
     Module * m = iBuilder->getModule();
-    Type * mBitBlockType = iBuilder->getBitBlockType();
-
 
     Type * const voidTy = iBuilder->getVoidTy();
     Type * const int32Ty = iBuilder->getInt32Ty();
-    Type * const outputType = PointerType::get(ArrayType::get(mBitBlockType, 4), 0);
+    Type * const outputType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 4), 0);
 
     Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, int32Ty, outputType, nullptr));
     main->setCallingConv(CallingConv::C);
@@ -285,16 +294,12 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 
     auto BasisBits = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(8)));
     auto s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
+
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
     auto CCResults = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputStream));
 
-    auto ccck = pxDriver.addKernelInstance(make_unique<PabloKernel>(
-        iBuilder, "ccc", std::vector<Binding>{{iBuilder->getStreamSetTy(8), "basis"}}, std::vector<Binding>{{iBuilder->getStreamSetTy(4), "pat"}}
-    ));
-
-    ccck->setBuilder(iBuilder.get());
-    buildPreprocessKernel(reinterpret_cast<PabloKernel *>(ccck));
+    auto ccck = pxDriver.addKernelInstance(make_unique<PreprocessKernel>(iBuilder));
 
     pxDriver.makeKernelCall(ccck, {BasisBits}, {CCResults});
 

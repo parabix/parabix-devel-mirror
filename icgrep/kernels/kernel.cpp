@@ -16,6 +16,7 @@
 #include <llvm/Transforms/Utils/Local.h>
 #include <kernels/streamset.h>
 #include <sstream>
+#include <kernels/kernel_builder.h>
 
 using namespace llvm;
 using namespace parabix;
@@ -52,6 +53,24 @@ unsigned Kernel::addUnnamedScalar(Type * const type) {
     const auto index = mKernelFields.size();
     mKernelFields.push_back(type);
     return index;
+}
+
+// Get the value of a scalar field for the current instance.
+llvm::Value * Kernel::getScalarFieldPtr(llvm::Value * index) const {
+    return iBuilder->CreateGEP(getInstance(), {iBuilder->getInt32(0), index});
+}
+
+llvm::Value * Kernel::getScalarFieldPtr(const std::string & fieldName) const {
+    return getScalarFieldPtr(iBuilder->getInt32(getScalarIndex(fieldName)));
+}
+
+llvm::Value * Kernel::getScalarField(const std::string & fieldName) const {
+    return iBuilder->CreateLoad(getScalarFieldPtr(fieldName), fieldName);
+}
+
+// Set the value of a scalar field for the current instance.
+void Kernel::setScalarField(const std::string & fieldName, llvm::Value * value) const {
+    iBuilder->CreateStore(value, getScalarFieldPtr(fieldName));
 }
 
 void Kernel::prepareStreamSetNameMap() {
@@ -230,10 +249,10 @@ inline void Kernel::callGenerateInitializeMethod() {
     Function::arg_iterator args = mCurrentMethod->arg_begin();
     setInstance(&*(args++));
     iBuilder->CreateStore(ConstantAggregateZero::get(mKernelStateType), getInstance());
-    for (auto binding : mScalarInputs) {
+    for (const auto & binding : mScalarInputs) {
         setScalarField(binding.name, &*(args++));
     }
-    for (auto binding : mStreamSetOutputs) {
+    for (const auto & binding : mStreamSetOutputs) {
         setConsumerLock(binding.name, &*(args++));
     }
     generateInitializeMethod();
@@ -549,14 +568,14 @@ Value * Kernel::getStreamSetBufferPtr(const std::string & name) const {
     return getScalarField(name + BUFFER_PTR_SUFFIX);
 }
 
-Argument * Kernel::getParameter(Function * const f, const std::string & name) const {
-    for (auto & arg : f->getArgumentList()) {
-        if (arg.getName().equals(name)) {
-            return &arg;
-        }
-    }
-    report_fatal_error(getName() + " does not have parameter " + name);
-}
+//Argument * Kernel::getParameter(Function * const f, const std::string & name) const {
+//    for (auto & arg : f->getArgumentList()) {
+//        if (arg.getName().equals(name)) {
+//            return &arg;
+//        }
+//    }
+//    report_fatal_error(getName() + " does not have parameter " + name);
+//}
 
 CallInst * Kernel::createDoSegmentCall(const std::vector<Value *> & args) const {
     Function * const doSegment = getDoSegmentFunction(iBuilder->getModule());
@@ -649,7 +668,6 @@ void Kernel::initializeInstance() {
         for (unsigned i = 0; i < n; ++i) {
             Kernel * const consumer = consumers[i];
             assert ("all instances must be created prior to initialization of any instance" && consumer->getInstance());
-            consumer->setBuilder(iBuilder);
             Value * const segmentNoPtr = consumer->getScalarFieldPtr(LOGICAL_SEGMENT_NO_SCALAR);
             iBuilder->CreateStore(segmentNoPtr, iBuilder->CreateGEP(consumerSegNoArray, { iBuilder->getInt32(0), iBuilder->getInt32(i) }));
         }
@@ -887,6 +905,10 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(Value * remainingItems) {
 //  The default finalBlock method simply dispatches to the doBlock routine.
 void BlockOrientedKernel::generateFinalBlockMethod(Value * /* remainingItems */) {
     CreateDoBlockMethodCall();
+}
+
+bool BlockOrientedKernel::useIndirectBr() const {
+    return iBuilder->supportsIndirectBr();
 }
 
 void BlockOrientedKernel::CreateDoBlockMethodCall() {

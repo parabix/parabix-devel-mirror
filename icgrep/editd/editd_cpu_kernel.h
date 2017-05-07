@@ -16,7 +16,7 @@ namespace kernel {
 class editdCPUKernel : public BlockOrientedKernel {
 public:
 
-    editdCPUKernel(const std::unique_ptr<IDISA::IDISA_Builder> & b, unsigned dist, unsigned pattLen);
+    editdCPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen);
     
 
 private:

@@ -23,6 +23,7 @@
 #include <pablo/pe_zeroes.h>
 #include <pablo/ps_assign.h>
 #include <pablo/pablo_kernel.h>
+#include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_os_ostream.h>
 
 #define CHECK_SAME_TYPE(A, B) \

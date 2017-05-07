@@ -11,6 +11,7 @@
 #include <vector>
 
 namespace IDISA { class IDISA_Builder; }
+namespace kernel { class KernelBuilder; }
 
 // Processing rate attributes are required for all stream set bindings for a kernel.
 // These attributes describe the number of items that are processed or produced as
@@ -136,6 +137,7 @@ public:
     void setInitialArguments(std::vector<llvm::Value *> && args) {
         mInitialArguments.swap(args);
     }
+
     llvm::Value * getInstance() const {
         return mKernelInstance;
     }
@@ -148,12 +150,12 @@ public:
         mLookAheadPositions = lookAheadPositions;
     }
 
-    IDISA::IDISA_Builder * getBuilder() const {
+    kernel::KernelBuilder * getBuilder() const {
         return iBuilder;
     }
 
-    void setBuilder(IDISA::IDISA_Builder * const builder) {
-        iBuilder = builder;
+    void setBuilder(const std::unique_ptr<kernel::KernelBuilder> & builder) {
+        iBuilder = builder.get();
     }
 
 protected:
@@ -209,7 +211,7 @@ protected:
 
 protected:
     
-    IDISA::IDISA_Builder *                  iBuilder;
+    kernel::KernelBuilder *                 iBuilder;
     llvm::Module *                          mModule;
 
     llvm::Value *                           mKernelInstance;

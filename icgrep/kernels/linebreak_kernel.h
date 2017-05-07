@@ -7,17 +7,17 @@
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
 
-namespace IDISA { class IDISA_Builder; }
+namespace kernel { class KernelBuilder; }
 
 namespace kernel {
 
 class LineBreakKernelBuilder final : public pablo::PabloKernel {
 public:
-    LineBreakKernelBuilder(const std::unique_ptr<IDISA::IDISA_Builder> & b, unsigned basisBitsCount);
+    LineBreakKernelBuilder(const std::unique_ptr<KernelBuilder> & b, unsigned basisBitsCount);
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
-    void prepareKernel() override;
+    void generatePabloMethod() override;
 };
 
 }

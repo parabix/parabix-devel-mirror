@@ -4,16 +4,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Intrinsics.h>
-#include <llvm/IR/Instructions.h>
-#include <llvm/IR/Module.h>
-#include <IR_Gen/idisa_builder.h>
-
-#include <string>
-
 #include "lz4_index_decoder.h"
+#include <kernels/kernel_builder.h>
  
 using namespace llvm;
 using namespace kernel;
@@ -713,7 +705,7 @@ void LZ4IndexDecoderKernel::generateAtBlockChecksum(BasicBlock * bb, BasicBlock 
     // No checksum, offset not advanced.  Falls through to the next block (block_size).
 }
 
-LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder)
+LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
 : BlockOrientedKernel("lz4IndexDecoder",
     // Inputs
     {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"},

@@ -9,7 +9,7 @@
 #include <llvm/IR/DerivedTypes.h>  // for FunctionType (ptr only), PointerType
 #include <llvm/IR/Function.h>      // for Function, Function::arg_iterator
 #include <llvm/IR/Module.h>
-#include <IR_Gen/idisa_builder.h>
+#include <kernels/kernel_builder.h>
 
 static const auto INIT_SUFFIX = "_Init";
 

@@ -51,7 +51,7 @@ namespace kernel {
 class SwizzleGenerator : public BlockOrientedKernel {
 public:
     
-    SwizzleGenerator(const std::unique_ptr<IDISA::IDISA_Builder> & iBuilder, unsigned bitStreamCount, unsigned outputSets = 1, unsigned inputSets = 1, unsigned fieldWidth = 64);
+    SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned bitStreamCount, unsigned outputSets = 1, unsigned inputSets = 1, unsigned fieldWidth = 64);
     
 protected:
     

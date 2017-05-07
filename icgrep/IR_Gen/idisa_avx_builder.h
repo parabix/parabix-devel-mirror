@@ -15,9 +15,9 @@ namespace IDISA {
 class IDISA_AVX_Builder : public IDISA_SSE2_Builder {
 public:
     
-    IDISA_AVX_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
-    : IDISA_Builder(module, archBitWidth, bitBlockWidth, stride)
-    , IDISA_SSE2_Builder(module, archBitWidth, bitBlockWidth, stride)
+    IDISA_AVX_Builder(llvm::LLVMContext & C, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
+    : IDISA_Builder(C, archBitWidth, bitBlockWidth, stride)
+    , IDISA_SSE2_Builder(C, archBitWidth, bitBlockWidth, stride)
     {
 
     }
@@ -33,9 +33,9 @@ public:
 class IDISA_AVX2_Builder : public IDISA_AVX_Builder {
 public:
     
-    IDISA_AVX2_Builder(llvm::Module * const module, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
-    : IDISA_Builder(module, archBitWidth, bitBlockWidth, stride)
-    , IDISA_AVX_Builder(module, archBitWidth, bitBlockWidth, stride) {
+    IDISA_AVX2_Builder(llvm::LLVMContext & C, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
+    : IDISA_Builder(C, archBitWidth, bitBlockWidth, stride)
+    , IDISA_AVX_Builder(C, archBitWidth, bitBlockWidth, stride) {
 
     }
 

@@ -201,9 +201,9 @@ public:
 //        return mPb->getStreamTy(FieldWidth);
 //    }
     
-    llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
-        return mPb->getStreamSetTy(NumElements, FieldWidth);
-    }
+//    llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
+//        return mPb->getStreamSetTy(NumElements, FieldWidth);
+//    }
     
     /// Statement Iterator Wrappers
 

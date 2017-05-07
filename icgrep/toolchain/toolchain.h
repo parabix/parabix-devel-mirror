@@ -9,16 +9,17 @@
 #include <string>
 #include <IR_Gen/FunctionTypeBuilder.h>
 #include <kernels/kernel.h>
-#include <kernels/kernel_builder.h>
 #include <kernels/streamset.h>
 
 namespace llvm { class ExecutionEngine; }
+namespace llvm { class Function; }
 namespace llvm { class Module; }
 namespace llvm { class TargetMachine; }
 namespace llvm { class formatted_raw_ostream; }
 namespace llvm { namespace cl { class OptionCategory; } }
-namespace IDISA { class IDISA_Builder; }
 namespace kernel { class Kernel; }
+namespace kernel { class KernelBuilder; }
+namespace IDISA { class IDISA_Builder; }
 
 class ParabixObjectCache;
 
@@ -66,7 +67,7 @@ public:
 
     ~ParabixDriver();
     
-    const std::unique_ptr<IDISA::IDISA_Builder> & getBuilder() { return iBuilder; }
+    const std::unique_ptr<kernel::KernelBuilder> & getBuilder();
     
     parabix::ExternalBuffer * addExternalBuffer(std::unique_ptr<parabix::ExternalBuffer> b);
     
@@ -92,22 +93,22 @@ protected:
     llvm::Function * LinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
 
 private:
-    std::unique_ptr<llvm::LLVMContext>      mContext;
-    llvm::Module * const                    mMainModule;
-    std::unique_ptr<IDISA::IDISA_Builder>   iBuilder;
-    llvm::TargetMachine *                   mTarget;
-    llvm::ExecutionEngine *                 mEngine;
-    ParabixObjectCache *                    mCache;
+    std::unique_ptr<llvm::LLVMContext>                      mContext;
+    llvm::Module * const                                    mMainModule;
+    std::unique_ptr<kernel::KernelBuilder>                  iBuilder;
+    llvm::TargetMachine *                                   mTarget;
+    llvm::ExecutionEngine *                                 mEngine;
+    ParabixObjectCache *                                    mCache;
 
-    std::vector<kernel::Kernel *>    mPipeline;
+    std::vector<kernel::Kernel *>                           mPipeline;
     // Owned kernels and buffers that will persist with this ParabixDriver instance.
-    std::vector<std::unique_ptr<kernel::Kernel>> mOwnedKernels;
-    std::vector<std::unique_ptr<parabix::StreamSetBuffer>> mOwnedBuffers;
+    std::vector<std::unique_ptr<kernel::Kernel>>            mOwnedKernels;
+    std::vector<std::unique_ptr<parabix::StreamSetBuffer>>  mOwnedBuffers;
 };
 
 template <typename ExternalFunctionType>
 llvm::Function * ParabixDriver::LinkFunction(kernel::Kernel & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const {
-    llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(iBuilder->getContext());
+    llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(*mContext.get());
     assert ("FunctionTypeBuilder did not resolve a function type." && type);
     return LinkFunction(kb.getModule(), name, type, reinterpret_cast<void *>(functionPtr));
 }

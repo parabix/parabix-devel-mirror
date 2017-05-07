@@ -745,9 +745,9 @@ Function * CBuilder::LinkFunction(llvm::StringRef name, FunctionType * type, voi
     return mDriver->LinkFunction(mMod, name, type, functionPtr);
 }
 
-CBuilder::CBuilder(Module * const module, const unsigned GeneralRegisterWidthInBits)
-: IRBuilder<>(module->getContext())
-, mMod(module)
+CBuilder::CBuilder(llvm::LLVMContext & C, const unsigned GeneralRegisterWidthInBits)
+: IRBuilder<>(C)
+, mMod(nullptr)
 , mCacheLineAlignment(64)
 , mSizeType(getIntNTy(GeneralRegisterWidthInBits))
 , mFILEtype(nullptr)
