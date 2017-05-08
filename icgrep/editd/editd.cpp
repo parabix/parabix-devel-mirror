@@ -160,7 +160,6 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
 class PatternKernel final: public pablo::PabloKernel {
 public:
     PatternKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<std::string> & patterns);
-    bool isCachable() const override { return true; }
 protected:
     void generatePabloMethod() override;
 private:
@@ -243,6 +242,7 @@ class PreprocessKernel final: public pablo::PabloKernel {
 public:
     PreprocessKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
     bool isCachable() const override { return true; }
+    bool moduleIDisSignature() const override { return true; }
 protected:
     void generatePabloMethod() override;
 };

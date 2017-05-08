@@ -44,12 +44,6 @@ public:
         return false;
     }
 
-    PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, std::string kernelName,
-                std::vector<Binding> stream_inputs = {},
-                std::vector<Binding> stream_outputs = {},
-                std::vector<Binding> scalar_parameters = {},
-                std::vector<Binding> scalar_outputs = {});
-
     virtual ~PabloKernel();
 
     PabloBlock * getEntryBlock() const {
@@ -122,13 +116,21 @@ public:
         std::free(ptr);
     }
 
-protected:
-
-    virtual void generatePabloMethod() = 0;
-
     String * makeName(const llvm::StringRef & prefix) const;
 
     Integer * getInteger(const int64_t value) const;
+
+protected:
+
+    PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, std::string kernelName,
+                std::vector<Binding> stream_inputs = {},
+                std::vector<Binding> stream_outputs = {},
+                std::vector<Binding> scalar_parameters = {},
+                std::vector<Binding> scalar_outputs = {});
+
+    virtual void generatePabloMethod() = 0;
+
+private:
 
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
