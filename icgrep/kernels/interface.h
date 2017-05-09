@@ -15,20 +15,20 @@ namespace kernel { class KernelBuilder; }
 
 // Processing rate attributes are required for all stream set bindings for a kernel.
 // These attributes describe the number of items that are processed or produced as
-// a ratio in comparison to the principal input stream set (or the principal output
-// stream set if there is no input.
+// a ratio in comparison to a reference stream set, normally the principal input stream set 
+// by default (or the principal output stream set if there is no input).
 //
 // The default ratio is FixedRatio(1) which means that there is one item processed or
-// produced for every item of the principal input or output stream.
-// FixedRatio(m, n) means that for every group of n items of the principal stream,
+// produced for every item of the reference stream.
+// FixedRatio(m, n) means that for every group of n items of the refrence stream,
 // there are m items in the output stream (rounding up).
 // 
 // Kernels which produce a variable number of items use MaxRatio(n), for a maximum
 // of n items produced or consumed per principal input or output item.  MaxRatio(m, n)
-// means there are at most m items for every n items of the principal stream.
+// means there are at most m items for every n items of the reference stream.
 //
 // RoundUpToMultiple(n) means that number of items produced is the same as the
-// number of input items, rounded up to an exact multiple of n.
+// number of reference items, rounded up to an exact multiple of n.
 // 
 
 struct ProcessingRate  {
@@ -38,10 +38,12 @@ struct ProcessingRate  {
     bool isMaxRatio() const {return mKind == ProcessingRateKind::MaxRatio;}
     bool isExact() const {return (mKind == ProcessingRateKind::FixedRatio)||(mKind == ProcessingRateKind::RoundUp)||(mKind == ProcessingRateKind::Add1) ;}
     bool isUnknownRate() const { return mKind == ProcessingRateKind::Unknown; }
-    llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * const b, llvm::Value * principalInputItems, llvm::Value * doFinal = nullptr) const;
-    llvm::Value * CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * const b, llvm::Value * outputItems, llvm::Value * doFinal) const;
-    friend ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet);
-    friend ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems, std::string && referenceStreamSet);
+    unsigned calculateRatio(unsigned referenceItems, bool doFinal = false) const;
+    unsigned calculateMaxReferenceItems(unsigned outputItems, bool doFinal = false) const;
+    llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * const b, llvm::Value * referenceItems, llvm::Value * doFinal = nullptr) const;
+    llvm::Value * CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * const b, llvm::Value * outputItems, llvm::Value * doFinal = nullptr) const;
+    friend ProcessingRate FixedRatio(unsigned strmItems, unsigned referenceItems, std::string && referenceStreamSet);
+    friend ProcessingRate MaxRatio(unsigned strmItems, unsigned referenceItems, std::string && referenceStreamSet);
     friend ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string && referenceStreamSet);
     friend ProcessingRate Add1(std::string && referenceStreamSet);
     friend ProcessingRate UnknownRate();
@@ -58,8 +60,8 @@ private:
     const std::string mReferenceStreamSet;
 }; 
 
-ProcessingRate FixedRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1, std::string && referenceStreamSet = "");
-ProcessingRate MaxRatio(unsigned strmItemsPer, unsigned perPrincipalInputItems = 1, std::string && referenceStreamSet = "");
+ProcessingRate FixedRatio(unsigned strmItems, unsigned referenceItems = 1, std::string && referenceStreamSet = "");
+ProcessingRate MaxRatio(unsigned strmItems, unsigned referenceItems = 1, std::string && referenceStreamSet = "");
 ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string &&referenceStreamSet = "");
 ProcessingRate Add1(std::string && referenceStreamSet = "");
 ProcessingRate UnknownRate();

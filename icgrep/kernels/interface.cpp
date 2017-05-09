@@ -39,6 +39,23 @@ ProcessingRate UnknownRate() {
     return ProcessingRate(ProcessingRate::ProcessingRateKind::Unknown, 0, 0, "");
 }
 
+unsigned ProcessingRate::calculateRatio(unsigned referenceItems, bool doFinal) const {
+    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
+        if (mRatioNumerator == mRatioDenominator) {
+            return referenceItems;
+        }
+        unsigned strmItems = referenceItems * mRatioNumerator;
+        return (strmItems + mRatioDenominator - 1) / mRatioDenominator;
+    }
+    if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
+        return ((referenceItems + mRatioDenominator - 1) / mRatioDenominator) * mRatioDenominator;
+    }
+    if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
+        return doFinal ? referenceItems + 1 : referenceItems;
+    }
+    report_fatal_error("Processing rate calculation attempted for variable or unknown rate.");
+}
+
 Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * const b, Value * referenceItems, Value * doFinal) const {
     if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
         if (mRatioNumerator == mRatioDenominator) {
@@ -64,7 +81,23 @@ Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * const b, V
         }
         return referenceItems;
     }
-    return nullptr;
+    report_fatal_error("Processing rate calculation attempted for variable or unknown rate.");
+}
+
+unsigned ProcessingRate::calculateMaxReferenceItems(unsigned outputItems, bool doFinal) const {
+    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio) {
+        if (mRatioNumerator == mRatioDenominator) {
+            return outputItems;
+        }
+        return (outputItems / mRatioNumerator) * mRatioDenominator;
+    }
+    if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
+        return (outputItems / mRatioDenominator) * mRatioDenominator;
+    }
+    if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
+        return doFinal ? outputItems - 1 : outputItems;
+    }
+    report_fatal_error("Inverse processing rate calculation attempted for variable or unknown rate.");
 }
 
 Value * ProcessingRate::CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * const b, Value * outputItems, Value * doFinal) const {
@@ -89,7 +122,7 @@ Value * ProcessingRate::CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder 
         }
         return b->CreateSub(outputItems, ConstantInt::get(T, 1));
     }
-    return nullptr;
+    report_fatal_error("Inverse processing rate calculation attempted for variable or unknown rate.");
 }
 
 void KernelInterface::addKernelDeclarations() {
