@@ -116,9 +116,8 @@ void KernelBuilder::setTerminationSignal() {
 }
 
 Value * KernelBuilder::getLinearlyAccessibleItems(const std::string & name, Value * fromPosition) {
-    Value * instance = getStreamSetBufferPtr(name);
     const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-    return buf->getLinearlyAccessibleItems(this, instance, fromPosition);
+    return buf->getLinearlyAccessibleItems(this, fromPosition);
 }
 
 Value * KernelBuilder::getConsumerLock(const std::string & name) {

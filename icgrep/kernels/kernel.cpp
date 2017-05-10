@@ -25,6 +25,7 @@ namespace kernel {
 
 const std::string Kernel::DO_BLOCK_SUFFIX = "_DoBlock";
 const std::string Kernel::FINAL_BLOCK_SUFFIX = "_FinalBlock";
+const std::string Kernel::MULTI_BLOCK_SUFFIX = "_MultiBlock";
 const std::string Kernel::LOGICAL_SEGMENT_NO_SCALAR = "logicalSegNo";
 const std::string Kernel::PROCESSED_ITEM_COUNT_SUFFIX = "_processedItemCount";
 const std::string Kernel::CONSUMED_ITEM_COUNT_SUFFIX = "_consumedItemCount";
@@ -394,9 +395,8 @@ void Kernel::releaseLogicalSegmentNo(Value * nextSegNo) const {
 }
 
 llvm::Value * Kernel::getLinearlyAccessibleItems(const std::string & name, llvm::Value * fromPosition) const {
-    llvm::Value * instance = getStreamSetBufferPtr(name);
     const StreamSetBuffer * const buf = getInputStreamSetBuffer(name);
-    return buf->getLinearlyAccessibleItems(iBuilder, instance, fromPosition);
+    return buf->getLinearlyAccessibleItems(iBuilder, fromPosition);
 }
 
 llvm::Value * Kernel::getConsumerLock(const std::string & name) const {
@@ -826,7 +826,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
             Value * priorBlock = iBuilder->CreateLShr(priorProduced[priorIdx], log2BlockSize);
             Value * priorOffset = iBuilder->CreateAnd(priorProduced[priorIdx], iBuilder->getSize(iBuilder->getBitBlockWidth() - 1));
             Value * instance = getStreamSetBufferPtr(mStreamSetOutputs[i].name);
-            Value * accessibleBlocks = cb->getLinearlyAccessibleBlocks(iBuilder, instance, priorBlock);
+            Value * accessibleBlocks = cb->getLinearlyAccessibleBlocks(iBuilder, priorBlock);
             Value * accessible = iBuilder->CreateSub(iBuilder->CreateShl(accessibleBlocks, log2BlockSize), priorOffset);
             Value * wraparound = iBuilder->CreateICmpULT(accessible, newlyProduced);
             iBuilder->CreateCondBr(wraparound, copyBack, done);
@@ -842,7 +842,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod() {
             BasicBlock * done = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
             Value * instance = getStreamSetBufferPtr(mStreamSetOutputs[i].name);
             Value * newlyProduced = iBuilder->CreateSub(getProducedItemCount(mStreamSetOutputs[i].name), priorProduced[priorIdx]);
-            Value * accessible = cb->getLinearlyAccessibleItems(iBuilder, instance, priorProduced[priorIdx]);
+            Value * accessible = cb->getLinearlyAccessibleItems(iBuilder, priorProduced[priorIdx]);
             Value * wraparound = iBuilder->CreateICmpULT(accessible, newlyProduced);
             iBuilder->CreateCondBr(wraparound, copyBack, done);
             iBuilder->SetInsertPoint(copyBack);
@@ -937,6 +937,367 @@ Kernel::StreamPort Kernel::getStreamPort(const std::string & name) const {
     return f->second;
 }
 
+    
+void MultiBlockKernel::generateDoSegmentMethod() {
+    
+    // First prepare the multi-block method that will be used.
+    
+    std::vector<Type *> multiBlockParmTypes;
+    multiBlockParmTypes.push_back(mKernelStateType->getPointerTo());
+    for (auto buffer : mStreamSetInputBuffers) {
+        multiBlockParmTypes.push_back(buffer->getPointerType());
+    }
+    for (auto buffer : mStreamSetOutputBuffers) {
+        multiBlockParmTypes.push_back(buffer->getPointerType());
+    }
+    FunctionType * const type = FunctionType::get(iBuilder->getVoidTy(), multiBlockParmTypes, false);
+    Function * multiBlockFunction = Function::Create(type, GlobalValue::InternalLinkage, getName() + MULTI_BLOCK_SUFFIX, iBuilder->getModule());
+    multiBlockFunction->setCallingConv(CallingConv::C);
+    multiBlockFunction->setDoesNotThrow();
+    auto args = multiBlockFunction->arg_begin();
+    args->setName("self");
+    for (auto binding : mStreamSetInputs) {
+        (++args)->setName(binding.name + "BufPtr");
+    }
+    for (auto binding : mStreamSetOutputs) {
+        (args++)->setName(binding.name + "BufPtr");
+    }
+    
+    // Now use the generateMultiBlockLogic method of the MultiBlockKernelBuilder subtype to 
+    // provide the required multi-block kernel logic.
+    auto ip = iBuilder->saveIP();
+    iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "multiBlockEntry", multiBlockFunction, 0));
+    generateMultiBlockLogic(); 
+    iBuilder->CreateRetVoid();
+    iBuilder->restoreIP(ip);
+    
+    // Now proceed with creation of the doSegment method.
+    
+    BasicBlock * const entry = iBuilder->GetInsertBlock();
+    BasicBlock * const doSegmentOuterLoop = CreateBasicBlock(getName() + "_doSegmentOuterLoop");
+    BasicBlock * const doMultiBlockCall = CreateBasicBlock(getName() + "_doMultiBlockCall");
+    BasicBlock * const finalBlockCheck = CreateBasicBlock(getName() + "_finalBlockCheck");
+    BasicBlock * const doTempBufferBlock = CreateBasicBlock(getName() + "_doTempBufferBlock");
+    BasicBlock * const segmentDone = CreateBasicBlock(getName() + "_segmentDone");
+    
+    Value * blockBaseMask = iBuilder->CreateNot(iBuilder->getSize(iBuilder->getBitBlockWidth() - 1));
+    
+    //
+    //  A. Temporary Buffer Area Determination
+    //
+    // For final block processing and for processing near the end of physical buffer
+    // boundaries, we need to allocate temporary space for processing a full block of input.
+    // Compute the size requirements to store stream set data at the declared processing
+    // rates in reference to one block of the principal input stream.  
+    // 
+
+    unsigned bitBlockWidth = iBuilder->getBitBlockWidth();
+    std::vector<Type *> tempBuffers;
+    std::vector<unsigned> itemsPerPrincipalBlock;
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        auto & rate = mStreamSetInputs[i].rate;
+        std::string refSet = mStreamSetInputs[i].rate.referenceStreamSet();
+        if (refSet.empty()) {
+            itemsPerPrincipalBlock.push_back(rate.calculateRatio(bitBlockWidth));
+        }
+        else {
+            Port port; unsigned ssIdx;
+            std::tie(port, ssIdx) = getStreamPort(mStreamSetInputs[i].name);
+            assert (port == Port::Input && ssIdx < i);
+            itemsPerPrincipalBlock.push_back(rate.calculateRatio(itemsPerPrincipalBlock[ssIdx]));
+        }
+        unsigned blocks = (itemsPerPrincipalBlock.back() + bitBlockWidth - 1)/bitBlockWidth;
+        if (blocks > 1) {
+            tempBuffers.push_back(ArrayType::get(mStreamSetInputBuffers[i]->getType(), blocks));
+        }
+        else {
+            tempBuffers.push_back(mStreamSetInputBuffers[i]->getType());
+        }
+    }
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        auto & rate = mStreamSetOutputs[i].rate;
+        std::string refSet = mStreamSetOutputs[i].rate.referenceStreamSet();
+        if (refSet.empty()) {
+            itemsPerPrincipalBlock.push_back(rate.calculateRatio(bitBlockWidth));
+        }
+        else {
+            Port port; unsigned ssIdx;
+            std::tie(port, ssIdx) = getStreamPort(mStreamSetOutputs[i].name);
+            if (port == Port::Output) ssIdx += mStreamSetInputs.size();
+            itemsPerPrincipalBlock.push_back(rate.calculateRatio(itemsPerPrincipalBlock[ssIdx]));
+        }
+        unsigned blocks = (itemsPerPrincipalBlock.back() + bitBlockWidth - 1)/bitBlockWidth;
+        if (blocks > 1) {
+            tempBuffers.push_back(ArrayType::get(mStreamSetOutputBuffers[i]->getType(), blocks));
+        }
+        else {
+            tempBuffers.push_back(mStreamSetOutputBuffers[i]->getType());
+        }
+    }
+    Type * tempParameterStructType = StructType::create(iBuilder->getContext(), tempBuffers);
+    Value * tempParameterArea = iBuilder->CreateCacheAlignedAlloca(tempParameterStructType);
+    
+    ConstantInt * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
+    Value * availablePos = mAvailableItemCount[0];
+    Value * itemsAvail = availablePos;
+    //  Make sure that corresponding data is available depending on processing rate
+    //  for all input stream sets.
+    for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
+        Value * a = mAvailableItemCount[i];
+        auto & rate = mStreamSetInputs[i].rate;
+        assert (((rate.referenceStreamSet() == "") || (rate.referenceStreamSet() == mStreamSetInputs[0].name)) && "Multiblock kernel input rate not with respect to principal stream.");
+        Value * maxItems = rate.CreateMaxReferenceItemsCalculation(iBuilder, a);
+        itemsAvail = iBuilder->CreateSelect(iBuilder->CreateICmpULT(itemsAvail, maxItems), itemsAvail, maxItems);
+    }
+    
+    Value * processed = getProcessedItemCount(mStreamSetInputs[0].name);
+    Value * itemsToDo = iBuilder->CreateSub(itemsAvail, processed);
+    Value * fullBlocksToDo = iBuilder->CreateUDiv(itemsToDo, blockSize);
+    Value * excessItems = iBuilder->CreateURem(itemsToDo, blockSize);
+    
+    //  Now we iteratively process these blocks using the doMultiBlock method.  
+    //  In each iteration, we process the maximum number of linearly accessible
+    //  blocks on the principal input, reduced to ensure that the corresponding
+    //  data is linearly available at the specified processing rates for the other inputs,
+    //  and that each of the output buffers has sufficient linearly available space
+    //  (using overflow areas, if necessary) for the maximum output that can be
+    //  produced.
+    
+    //iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(fullBlocksToDo, iBuilder->getSize(0)), doSegmentOuterLoop, finalBlockCheck);
+    iBuilder->CreateBr(doSegmentOuterLoop);
+    
+    iBuilder->SetInsertPoint(doSegmentOuterLoop);
+    PHINode * const blocksRemaining = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "blocksRemaining");
+    blocksRemaining->addIncoming(fullBlocksToDo, entry);
+    
+    
+    // For each input buffer, determine the processedItemCount, the block pointer for the
+    // buffer block containing the next item, and the number of linearly available items.
+    // 
+    std::vector<Value *> processedItemCount;
+    std::vector<Value *> inputBlockPtr;
+    std::vector<Value *> producedItemCount;
+    std::vector<Value *> outputBlockPtr;
+    
+    //  Calculate linearly available blocks for all input stream sets.
+    Value * linearlyAvailBlocks = nullptr;
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        Value * p = getProcessedItemCount(mStreamSetInputs[i].name);
+        Value * blkNo = iBuilder->CreateUDiv(p, blockSize);
+        Value * b = getInputStreamBlockPtr(mStreamSetInputs[i].name, iBuilder->getInt32(0));
+        processedItemCount.push_back(p);
+        inputBlockPtr.push_back(b);
+        auto & rate = mStreamSetInputs[i].rate;
+        Value * blocks = nullptr;
+        if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator()) && (rate.referenceStreamSet() == "")) {
+            blocks = mStreamSetInputBuffers[i]->getLinearlyAccessibleBlocks(iBuilder, blkNo);
+        }
+        else {
+            Value * linearlyAvailItems = mStreamSetInputBuffers[i]->getLinearlyAccessibleItems(iBuilder, p);
+            Value * items = rate.CreateMaxReferenceItemsCalculation(iBuilder, linearlyAvailItems);
+            blocks = iBuilder->CreateUDiv(items, blockSize);
+        }
+        if (i == 0) {
+            linearlyAvailBlocks = blocks;
+        }
+        else {
+            linearlyAvailBlocks = iBuilder->CreateSelect(iBuilder->CreateICmpULT(blocks, linearlyAvailBlocks), blocks, linearlyAvailBlocks);
+        }
+    }
+    
+    //  Now determine the linearly writeable blocks, based on available blocks reduced
+    //  by limitations of output buffer space.
+    Value * linearlyWritableBlocks = linearlyAvailBlocks;
+    
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        Value * p = getProducedItemCount(mStreamSetOutputs[i].name);
+        Value * blkNo = iBuilder->CreateUDiv(p, blockSize);
+        Value * b = getOutputStreamBlockPtr(mStreamSetOutputs[i].name, iBuilder->getInt32(0));
+        producedItemCount.push_back(p);
+        outputBlockPtr.push_back(b);
+        auto & rate = mStreamSetOutputs[i].rate;
+        Value * blocks = nullptr;
+        if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator())) {
+            blocks = mStreamSetOutputBuffers[0]->getLinearlyWritableBlocks(iBuilder, blkNo);
+        }
+        else {
+            Value * writableItems = mStreamSetOutputBuffers[0]->getLinearlyWritableItems(iBuilder, p);
+            blocks = iBuilder->CreateUDiv(writableItems, blockSize);
+        }
+        linearlyWritableBlocks = iBuilder->CreateSelect(iBuilder->CreateICmpULT(blocks, linearlyWritableBlocks), blocks, linearlyWritableBlocks);
+    }
+    Value * haveBlocks = iBuilder->CreateICmpUGT(linearlyWritableBlocks, iBuilder->getSize(0));
+    
+    iBuilder->CreateCondBr(haveBlocks, doMultiBlockCall, doTempBufferBlock);
+    
+    //  At this point we have verified the availability of one or more blocks of input data and output buffer space for all stream sets.
+    //  Now prepare the doMultiBlock call.
+    iBuilder->SetInsertPoint(doMultiBlockCall);
+    
+    Value * linearlyAvailItems = iBuilder->CreateMul(linearlyWritableBlocks, blockSize);
+    
+    std::vector<Value *> doMultiBlockArgs;
+    doMultiBlockArgs.push_back(linearlyAvailItems);
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        doMultiBlockArgs.push_back(getRawInputPointer(mStreamSetInputs[i].name, iBuilder->getInt32(0), processedItemCount[i]));
+    }
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        doMultiBlockArgs.push_back(getRawOutputPointer(mStreamSetOutputs[i].name, iBuilder->getInt32(0), producedItemCount[i]));
+    }
+        
+    iBuilder->CreateCall(multiBlockFunction, doMultiBlockArgs);
+    
+    // Do copybacks if necessary.
+    unsigned priorIdx = 0;
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        Value * log2BlockSize = iBuilder->getSize(std::log2(iBuilder->getBitBlockWidth()));
+        if (auto cb = dyn_cast<SwizzledCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
+            BasicBlock * copyBack = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
+            BasicBlock * done = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
+            Value * newlyProduced = iBuilder->CreateSub(getProducedItemCount(mStreamSetOutputs[i].name), producedItemCount[i]);
+            Value * priorBlock = iBuilder->CreateLShr(producedItemCount[i], log2BlockSize);
+            Value * priorOffset = iBuilder->CreateAnd(producedItemCount[i], iBuilder->getSize(iBuilder->getBitBlockWidth() - 1));
+            Value * instance = getStreamSetBufferPtr(mStreamSetOutputs[i].name);
+            Value * accessibleBlocks = cb->getLinearlyAccessibleBlocks(iBuilder, priorBlock);
+            Value * accessible = iBuilder->CreateSub(iBuilder->CreateShl(accessibleBlocks, log2BlockSize), priorOffset);
+            Value * wraparound = iBuilder->CreateICmpULT(accessible, newlyProduced);
+            iBuilder->CreateCondBr(wraparound, copyBack, done);
+            iBuilder->SetInsertPoint(copyBack);
+            Value * copyItems = iBuilder->CreateSub(newlyProduced, accessible);
+            cb->createCopyBack(iBuilder, instance, copyItems);
+            iBuilder->CreateBr(done);
+            iBuilder->SetInsertPoint(done);
+            priorIdx++;
+        }
+        if (auto cb = dyn_cast<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
+            BasicBlock * copyBack = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
+            BasicBlock * done = CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
+            Value * instance = getStreamSetBufferPtr(mStreamSetOutputs[i].name);
+            Value * newlyProduced = iBuilder->CreateSub(getProducedItemCount(mStreamSetOutputs[i].name), producedItemCount[i]);
+            Value * accessible = cb->getLinearlyAccessibleItems(iBuilder, producedItemCount[i]);
+            Value * wraparound = iBuilder->CreateICmpULT(accessible, newlyProduced);
+            iBuilder->CreateCondBr(wraparound, copyBack, done);
+            iBuilder->SetInsertPoint(copyBack);
+            Value * copyItems = iBuilder->CreateSub(newlyProduced, accessible);
+            cb->createCopyBack(iBuilder, instance, copyItems);
+            iBuilder->CreateBr(done);
+            iBuilder->SetInsertPoint(done);
+            priorIdx++;
+        }
+    }
+    setProcessedItemCount(mStreamSetInputs[0].name, iBuilder->CreateAdd(processed, linearlyAvailItems));
+    Value * reducedBlocksToDo = iBuilder->CreateSub(blocksRemaining, linearlyWritableBlocks);
+    Value * fullBlocksRemain = iBuilder->CreateICmpUGT(reducedBlocksToDo, iBuilder->getSize(0));
+    BasicBlock * multiBlockFinal = iBuilder->GetInsertBlock();
+    blocksRemaining->addIncoming(reducedBlocksToDo, multiBlockFinal);
+    iBuilder->CreateCondBr(fullBlocksRemain, doSegmentOuterLoop, finalBlockCheck);
+    
+    // All the full blocks of input have been processed.  If mIsFinal is true,
+    // we should process the remaining partial block (i.e., excessItems as determined at entry).
+    iBuilder->SetInsertPoint(finalBlockCheck);
+    iBuilder->CreateCondBr(mIsFinal, doTempBufferBlock, segmentDone);
+    
+    //  
+    // We use temporary buffers in 3 different cases that preclude full block processing.
+    // (a) One or more input buffers does not have a sufficient number of input items linearly available.
+    // (b) One or more output buffers does not have sufficient linearly available buffer space.
+    // (c) We have processed all the full blocks of input and only the excessItems remain.
+    // In each case we set up temporary buffers for input and output and then
+    // call the Multiblock routine.
+    //
+    iBuilder->SetInsertPoint(doTempBufferBlock);
+    PHINode * const tempBlockItems = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "tempBlockItems");
+    tempBlockItems->addIncoming(blockSize, doSegmentOuterLoop);
+    tempBlockItems->addIncoming(excessItems, finalBlockCheck);
+    
+    // Will this be the final block processing?
+    Value * doFinal = iBuilder->CreateICmpULT(tempBlockItems, blockSize);
+    
+    // Begin constructing the doMultiBlock args.
+    std::vector<Value *> tempArgs;
+    tempArgs.push_back(tempBlockItems);
+    
+    // Prepare the temporary buffer area.
+    //
+    // First zero it out.
+    Constant * const tempAreaSize = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(tempParameterStructType), iBuilder->getSizeTy(), false);
+    iBuilder->CreateMemZero(tempParameterArea, tempAreaSize);
+    
+    // For each input and output buffer, copy over necessary data starting from the last
+    // block boundary.
+    std::vector<Value *> finalItemPos;
+    finalItemPos.push_back(iBuilder->CreateAdd(processedItemCount[0], tempBlockItems));
+
+    for (unsigned i = 0; i < mStreamSetInputBuffers.size(); i++) {
+        Value * tempBufPtr = iBuilder->CreateGEP(tempParameterArea, iBuilder->getInt32(i));
+        tempBufPtr = iBuilder->CreatePointerCast(tempBufPtr, mStreamSetInputBuffers[i]->getPointerType());
+        
+        auto & rate = mStreamSetInputs[i].rate;
+        Value * blockItemPos = iBuilder->CreateAnd(processedItemCount[i], blockBaseMask);
+        
+        // The number of items to copy is determined by the processing rate requirements.
+        if (i > 1) {
+            std::string refSet = mStreamSetInputs[i].rate.referenceStreamSet();
+            if (refSet.empty()) {
+                finalItemPos.push_back(rate.CreateRatioCalculation(iBuilder, finalItemPos[0], doFinal));
+            }
+            else {
+                Port port; unsigned ssIdx;
+                std::tie(port, ssIdx) = getStreamPort(mStreamSetInputs[i].name);
+                assert (port == Port::Input && ssIdx < i);
+                finalItemPos.push_back(rate.CreateRatioCalculation(iBuilder, finalItemPos[ssIdx], doFinal));
+            }
+        }
+        Value * neededItems = iBuilder->CreateSub(finalItemPos[i], blockItemPos);
+        Value * availFromBase = mStreamSetInputBuffers[i]->getLinearlyAccessibleItems(iBuilder, blockItemPos);
+        Value * copyItems1 = iBuilder->CreateSelect(iBuilder->CreateICmpULT(neededItems, availFromBase), neededItems, availFromBase);
+        Value * copyItems2 = iBuilder->CreateSub(neededItems, copyItems1);
+        mStreamSetInputBuffers[i]->createBlockAlignedCopy(iBuilder, tempBufPtr, inputBlockPtr[i], copyItems1);
+        Value * nextBufPtr = iBuilder->CreateGEP(tempBufPtr, iBuilder->CreateUDiv(availFromBase, blockSize));
+        mStreamSetInputBuffers[i]->createBlockAlignedCopy(iBuilder, nextBufPtr, getStreamSetBufferPtr(mStreamSetInputs[i].name), copyItems2);
+        Value * itemAddress = iBuilder->CreatePtrToInt(getRawOutputPointer(mStreamSetInputs[i].name, iBuilder->getInt32(0), processedItemCount[i]), iBuilder->getSizeTy());
+        Value * baseAddress = iBuilder->CreatePtrToInt(inputBlockPtr[i], iBuilder->getSizeTy());
+        Value * tempAddress = iBuilder->CreateAdd(iBuilder->CreatePtrToInt(tempBufPtr, iBuilder->getSizeTy()), iBuilder->CreateSub(itemAddress, baseAddress));
+        tempArgs.push_back(iBuilder->CreateBitCast(tempAddress, mStreamSetInputBuffers[i]->getPointerType()));
+    }
+
+    std::vector<Value *> blockItemPos;
+    for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); i++) {
+        Value * tempBufPtr = iBuilder->CreateGEP(tempParameterArea, iBuilder->getInt32(mStreamSetInputs.size() + i));
+        tempBufPtr = iBuilder->CreatePointerCast(tempBufPtr, mStreamSetOutputBuffers[i]->getPointerType());
+        blockItemPos.push_back(iBuilder->CreateAnd(producedItemCount[i], blockBaseMask));
+        mStreamSetOutputBuffers[i]->createBlockAlignedCopy(iBuilder, tempBufPtr, outputBlockPtr[i], iBuilder->CreateSub(producedItemCount[i], blockItemPos[i]));
+        Value * itemAddress = iBuilder->CreatePtrToInt(getRawOutputPointer(mStreamSetInputs[i].name, iBuilder->getInt32(0), producedItemCount[i]), iBuilder->getSizeTy());
+        Value * baseAddress = iBuilder->CreatePtrToInt(outputBlockPtr[i], iBuilder->getSizeTy());
+        Value * tempAddress = iBuilder->CreateAdd(iBuilder->CreatePtrToInt(tempBufPtr, iBuilder->getSizeTy()), iBuilder->CreateSub(itemAddress, baseAddress));
+        tempArgs.push_back(iBuilder->CreateBitCast(tempAddress, mStreamSetOutputBuffers[i]->getPointerType()));
+    }
+
+    iBuilder->CreateCall(multiBlockFunction, tempArgs);
+
+    // Copy back data to the actual output buffers.
+    
+    for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); i++) {
+        Value * tempBufPtr = iBuilder->CreateGEP(tempParameterArea, iBuilder->getInt32(mStreamSetInputs.size() + i));
+        tempBufPtr = iBuilder->CreatePointerCast(tempBufPtr, mStreamSetOutputBuffers[i]->getPointerType());
+        Value * final_items = getProducedItemCount(mStreamSetOutputs[i].name);
+        Value * copyItems = iBuilder->CreateSub(final_items, blockItemPos[i]);
+        Value * copyItems1 = mStreamSetOutputBuffers[i]->getLinearlyWritableItems(iBuilder, blockItemPos[i]); // must be a whole number of blocks.
+        mStreamSetOutputBuffers[i]->createBlockAlignedCopy(iBuilder, outputBlockPtr[i], tempBufPtr, copyItems1);
+        Value * copyItems2 = iBuilder->CreateSelect(iBuilder->CreateICmpULT(copyItems, copyItems), iBuilder->getSize(0), iBuilder->CreateSub(copyItems, copyItems1));
+        tempBufPtr = iBuilder->CreateGEP(tempBufPtr, iBuilder->CreateUDiv(copyItems1, blockSize));
+        mStreamSetOutputBuffers[i]->createBlockAlignedCopy(iBuilder, getStreamSetBufferPtr(mStreamSetOutputs[i].name), tempBufPtr, copyItems2);
+    }
+
+    setProcessedItemCount(mStreamSetInputs[0].name, finalItemPos[0]);
+
+    //  We've dealt with the partial block processing and copied information back into the
+    //  actual buffers.  If this isn't the final block, loop back for more multiblock processing.
+    //
+    iBuilder->CreateCondBr(doFinal, segmentDone, doSegmentOuterLoop);
+    iBuilder->SetInsertPoint(segmentDone);
+}
+                                                           
 // CONSTRUCTOR
 Kernel::Kernel(std::string && kernelName,
                              std::vector<Binding> && stream_inputs,
@@ -983,4 +1344,14 @@ SegmentOrientedKernel::SegmentOrientedKernel(std::string && kernelName,
 
 }
 
+// CONSTRUCTOR
+MultiBlockKernel::MultiBlockKernel(std::string && kernelName,
+                                   std::vector<Binding> && stream_inputs,
+                                   std::vector<Binding> && stream_outputs,
+                                   std::vector<Binding> && scalar_parameters,
+                                   std::vector<Binding> && scalar_outputs,
+                                   std::vector<Binding> && internal_scalars)
+: Kernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
+    
+}
 }

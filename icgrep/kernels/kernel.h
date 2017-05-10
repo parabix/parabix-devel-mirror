@@ -39,6 +39,7 @@ protected:
 
     static const std::string DO_BLOCK_SUFFIX;
     static const std::string FINAL_BLOCK_SUFFIX;
+    static const std::string MULTI_BLOCK_SUFFIX;
     static const std::string LOGICAL_SEGMENT_NO_SCALAR;
     static const std::string PROCESSED_ITEM_COUNT_SUFFIX;
     static const std::string CONSUMED_ITEM_COUNT_SUFFIX;
@@ -382,6 +383,103 @@ private:
     llvm::PHINode *         mStrideLoopTarget;
 };
 
+/*    
+The Multi-Block Kernel Builder
+------------------------------
 
+The Multi-Block Kernel Builder is designed to simplify the programming of
+efficient kernels with possibly variable and/or nonaligned output, subject to
+exact or MaxRatio processing constraints.   The following restrictions apply.
+    
+#.  The input consists of one or more stream sets, the first of which is
+    known as the principal input stream set.  
+    
+#.  If there is more than one input stream set, the additional stream sets must
+    have a processing rate defined with respect to the input stream set of one
+    of the following types:  FixedRate, Add1 or RoundUp.    Note that stream sets
+    declared without a processing rate attribute have the FixedRate(1) attribute
+    by default and therefore satisfy this constraint.
+    
+#.  All output stream sets must be declared with processing rate attributes
+    of one of the following types:
+    *  FixedRate, Add1, Roundup, or MaxRatio with respect to the principal input stream set.
+    *  FixedRate with respect to some other output stream set.
+    
+    When using the Multi-Block Kernel Builder to program a new type of kernel,
+    the programmer must implement the generateDoMultiBlockMethod for normal
+    multi-block processing according to the requirements below, as well as
+    providing for special final block processing, if necessary.
+            
+#.  The doMultiBlockMethod will be called with the following parameters:
+    * the number of items of the principal input stream to process (itemsToDo),
+    * pointers to linear contiguous buffer areas for each of the input stream sets, and
+    * pointers to linear contiguous output buffer areas for each of the output stream sets.
+    * pointers are to the address of the first item of the first stream of the stream set.
+
+#.  The Multi-Block Kernel Builder will arrange that these input parameters may be
+    processed under the following simplifying assumptions.
+    * the number of itemsToDo will either be an exact multiple of the BlockSize,
+      or, for processing the final block, a value less than BlockSize
+    * all input buffers will be safe to access and have data available in
+      accord with their processing rates based on the given number of itemsToDo
+      of the principal input stream set; no further bounds checking is needed.
+    * all output buffers will be safe to access and have space available
+      for the given maximum output generation rates based on the given number
+      of blocksToDo of the principal input stream set; no further bounds checking
+      is needed.
+    * for final block processing, all input buffers will be extended to be safely
+      treated as containing data corresponding to a full block of the principal
+      input stream set, with the actual data in each buffer padded with null values
+      beyond the end of input.  Similarly, all output buffers will contain space
+      sufficient for the maximum output that can be generated for a full block of
+      input processing.
+    * input and output pointers will be typed to allow convenient and logical access
+      to corresponding streams based on their declared stream set type and processing rate.
+    * for any input pointer p, a GEP instruction with a single int32 index i
+      will produce a pointer to the buffer position corresponding to the ith block of the
+      principal input stream set.  
+    * for any output stream set declared with a Fixed or Add1 processing rate with respect
+      to the principal input stream set, a GEP instruction with a single int32 index i
+      will produce a pointer to the buffer position corresponding to the ith block of the
+      principal input stream set.
+                    
+#.  Upon completion of multi-block processing, the Multi-Block Kernel Builder will arrange that
+    processed and produced item counts are updated for all stream sets that have exact
+    processing rate attributes.   Programmers are responsible for updating the producedItemCount
+    of any stream set declared with a variable attribute (MaxRatio).
+                            
+#.  An important caveat is that buffer areas may change arbitrarily between
+    calls to the doMultiBlockMethod.   In no case should a kernel store a
+    buffer pointer in its internal state.   Furthermore a kernel must not make
+    any assumptions about the accessibility of stream set data outside of the
+    processing range outside of the block boundaries associated with the given itemsToDo.
+*/
+
+class MultiBlockKernel : public Kernel {
+protected:
+
+    MultiBlockKernel(std::string && kernelName,
+                     std::vector<Binding> && stream_inputs,
+                     std::vector<Binding> && stream_outputs,
+                     std::vector<Binding> && scalar_parameters,
+                     std::vector<Binding> && scalar_outputs,
+                     std::vector<Binding> && internal_scalars);
+
+    // Each multi-block kernel subtype must provide its own logic for handling
+    // doMultiBlock calls, subject to the requirements laid out above. 
+    // The generateMultiBlockLogic must be written to generate this logic, given
+    // a created but empty function.  Upon entry to generateMultiBlockLogic,
+    // the builder insertion point will be set to the entry block; upone
+    // exit the RetVoid instruction will be added to complete the method.
+    // 
+    virtual void generateMultiBlockLogic () = 0;
+
+    // Given a kernel subtype with an appropriate interface, the generateDoSegment
+    // method of the multi-block kernel builder makes all the necessary arrangements
+    // to translate doSegment calls into a minimal sequence of doMultiBlock calls.
+    void generateDoSegmentMethod() override final;
+};
+    
+    
 }
 #endif 

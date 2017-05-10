@@ -109,7 +109,7 @@ Value * StreamSetBuffer::getRawItemPointer(IDISA::IDISA_Builder * const iBuilder
     return iBuilder->CreateGEP(ptr, absolutePosition);
 }
 
-Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * /* self */, Value * fromPosition) const {
+Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * fromPosition) const {
     if (isa<ArrayType>(mType) && dyn_cast<ArrayType>(mType)->getNumElements() > 1) {
         Constant * stride = iBuilder->getSize(iBuilder->getStride());
         return iBuilder->CreateSub(stride, iBuilder->CreateURem(fromPosition, stride));
@@ -119,17 +119,17 @@ Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const
     }
 }
 
-Value * StreamSetBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * /* self */, Value * fromBlock) const {
+Value * StreamSetBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * fromBlock) const {
     Constant * bufBlocks = iBuilder->getSize(mBufferBlocks);
     return iBuilder->CreateSub(bufBlocks, iBuilder->CreateURem(fromBlock, bufBlocks));
 }
 
-Value * StreamSetBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
-    return getLinearlyAccessibleItems(iBuilder, self, fromPosition);
+Value * StreamSetBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * fromPosition) const {
+    return getLinearlyAccessibleItems(iBuilder, fromPosition);
 }
 
-Value * StreamSetBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
-    return getLinearlyAccessibleBlocks(iBuilder, self, fromBlock);
+Value * StreamSetBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * fromBlock) const {
+    return getLinearlyAccessibleBlocks(iBuilder, fromBlock);
 }
 
 Value * StreamSetBuffer::getBaseAddress(IDISA::IDISA_Builder * const /* iBuilder */, Value * self) const {
@@ -208,7 +208,7 @@ Value * SourceBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), blockIndex);
 }
 
-Value * SourceBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value *) const {
+Value * SourceBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value *) const {
     report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
 }
 
@@ -221,7 +221,7 @@ Value * ExternalBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuild
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), blockIndex);
 }
 
-Value * ExternalBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value *, Value *) const {
+Value * ExternalBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value *) const {
     report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
 }
 
@@ -244,12 +244,12 @@ Value * CircularCopybackBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * cons
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), modByBufferBlocks(iBuilder, blockIndex));
 }
 
-Value * CircularCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
-    return iBuilder->CreateAdd(getLinearlyAccessibleItems(iBuilder, self, fromPosition), iBuilder->getSize(mOverflowBlocks * iBuilder->getBitBlockWidth()));
+Value * CircularCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * fromPosition) const {
+    return iBuilder->CreateAdd(getLinearlyAccessibleItems(iBuilder, fromPosition), iBuilder->getSize(mOverflowBlocks * iBuilder->getBitBlockWidth()));
 }
 
-Value * CircularCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
-    return iBuilder->CreateAdd(getLinearlyAccessibleBlocks(iBuilder, self, fromBlock), iBuilder->getSize(mOverflowBlocks));
+Value * CircularCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * fromBlock) const {
+    return iBuilder->CreateAdd(getLinearlyAccessibleBlocks(iBuilder, fromBlock), iBuilder->getSize(mOverflowBlocks));
 }
 
 // SwizzledCopybackBuffer Buffer
@@ -301,12 +301,12 @@ Value * SwizzledCopybackBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * cons
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), modByBufferBlocks(iBuilder, blockIndex));
 }
 
-Value * SwizzledCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
-    return iBuilder->CreateAdd(getLinearlyAccessibleItems(iBuilder, self, fromPosition), iBuilder->getSize(mOverflowBlocks * iBuilder->getBitBlockWidth()));
+Value * SwizzledCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * fromPosition) const {
+    return iBuilder->CreateAdd(getLinearlyAccessibleItems(iBuilder, fromPosition), iBuilder->getSize(mOverflowBlocks * iBuilder->getBitBlockWidth()));
 }
 
-Value * SwizzledCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
-    return iBuilder->CreateAdd(getLinearlyAccessibleBlocks(iBuilder, self, fromBlock), iBuilder->getSize(mOverflowBlocks));
+Value * SwizzledCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * fromBlock) const {
+    return iBuilder->CreateAdd(getLinearlyAccessibleBlocks(iBuilder, fromBlock), iBuilder->getSize(mOverflowBlocks));
 }
 
 // Expandable Buffer
@@ -457,7 +457,7 @@ Value * ExpandableBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBui
     report_fatal_error("Expandable buffers: getStreamSetBlockPtr is not supported.");
 }
 
-Value * ExpandableBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value *) const {
+Value * ExpandableBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value *) const {
     report_fatal_error("Expandable buffers: getLinearlyAccessibleItems is not supported.");
 }
 
