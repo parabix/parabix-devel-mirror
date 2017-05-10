@@ -33,45 +33,46 @@ SwizzleGenerator::SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> 
     }
 }
 
-void SwizzleGenerator::generateDoBlockMethod() {
+void SwizzleGenerator::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
         
     // We may need a few passes depending on the swizzle factor
-    unsigned passes = std::log2(mSwizzleFactor);
-    
-    unsigned swizzleGroups = (mBitStreamCount + mSwizzleFactor - 1)/mSwizzleFactor;
-    unsigned inputStreamsPerSet = (mBitStreamCount + mInputSets - 1)/mInputSets;
-    unsigned outputStreamsPerSet = (mBitStreamCount + mOutputSets - 1)/mOutputSets;
+    const unsigned swizzleFactor = mSwizzleFactor;
+    const unsigned passes = std::log2(mSwizzleFactor);
+    const unsigned swizzleGroups = (mBitStreamCount + mSwizzleFactor - 1)/mSwizzleFactor;
+    const unsigned inputStreamsPerSet = (mBitStreamCount + mInputSets - 1)/mInputSets;
+    const unsigned outputStreamsPerSet = (mBitStreamCount + mOutputSets - 1)/mOutputSets;
+
+    Value * sourceBlocks[swizzleFactor];
+    Value * targetBlocks[swizzleFactor];
 
     for (unsigned grp = 0; grp < swizzleGroups; grp++) {
-        // First load all the data.
-        std::vector<Value *> sourceBlocks;        
-        std::vector<Value *> targetBlocks;        
-        for (unsigned i = 0; i < mSwizzleFactor; i++) {
-            unsigned streamNo = grp * mSwizzleFactor + i;
-            if (streamNo < mBitStreamCount) {
+        // First load all the data.       
+        for (unsigned i = 0; i < swizzleFactor; i++) {
+            unsigned streamNo = grp * swizzleFactor + i;
+            if (streamNo < swizzleFactor) {
                 unsigned inputSetNo = streamNo / inputStreamsPerSet;
                 unsigned j = streamNo % inputStreamsPerSet;
-                sourceBlocks.push_back(loadInputStreamBlock("inputGroup" + std::to_string(inputSetNo), iBuilder->getInt32(j)));
-            }
-            else {
+                sourceBlocks[i] = iBuilder->loadInputStreamBlock("inputGroup" + std::to_string(inputSetNo), iBuilder->getInt32(j));
+            } else {
                 // Fill in the remaining logically required streams of the last swizzle group with null values.
-                sourceBlocks.push_back(Constant::getNullValue(iBuilder->getBitBlockType()));
+                sourceBlocks[i] = Constant::getNullValue(iBuilder->getBitBlockType());
             }
         }
         // Now perform the swizzle passes.
         for (unsigned p = 0; p < passes; p++) {
-            std::vector<Value *> targetBlocks;
-            for (unsigned i = 0; i < mSwizzleFactor/2; i++) {
-                targetBlocks.push_back(iBuilder->esimd_mergel(mFieldWidth, sourceBlocks[i], sourceBlocks[i+mSwizzleFactor/2]));
-                targetBlocks.push_back(iBuilder->esimd_mergeh(mFieldWidth, sourceBlocks[i], sourceBlocks[i+mSwizzleFactor/2]));
+            for (unsigned i = 0; i < swizzleFactor / 2; i++) {
+                targetBlocks[i * 2] = iBuilder->esimd_mergel(mFieldWidth, sourceBlocks[i], sourceBlocks[i + (swizzleFactor / 2)]);
+                targetBlocks[(i * 2) + 1] = iBuilder->esimd_mergeh(mFieldWidth, sourceBlocks[i], sourceBlocks[i + (swizzleFactor / 2)]);
             }
-            sourceBlocks = targetBlocks;
+            for (unsigned i = 0; i < swizzleFactor; i++) {
+                sourceBlocks[i] = targetBlocks[i];
+            }
         }
-        for (unsigned i = 0; i < mSwizzleFactor; i++) {
-            unsigned streamNo = grp * mSwizzleFactor + i;
+        for (unsigned i = 0; i < swizzleFactor; i++) {
+            unsigned streamNo = grp * swizzleFactor + i;
             unsigned outputSetNo = streamNo / outputStreamsPerSet;
             unsigned j = streamNo % outputStreamsPerSet;
-            storeOutputStreamBlock("outputGroup" + std::to_string(outputSetNo), iBuilder->getInt32(j), iBuilder->bitCast(sourceBlocks[i]));
+            iBuilder->storeOutputStreamBlock("outputGroup" + std::to_string(outputSetNo), iBuilder->getInt32(j), iBuilder->bitCast(sourceBlocks[i]));
         }
     }
 }

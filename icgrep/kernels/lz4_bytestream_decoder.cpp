@@ -10,29 +10,29 @@
 using namespace llvm;
 using namespace kernel;
 
-Value * getInputPtr(IDISA::IDISA_Builder * const iBuilder, Value * blockStartPtr, Value * offset) {
+Value * getInputPtr(const std::unique_ptr<KernelBuilder> & iBuilder, Value * blockStartPtr, Value * offset) {
     return iBuilder->CreateGEP(
             iBuilder->CreatePointerCast(blockStartPtr, iBuilder->getInt32Ty()->getPointerTo()),
             offset
             );
 }
 
-Value * selectMin(IDISA::IDISA_Builder * const iBuilder, Value * a, Value * b) {
+Value * selectMin(const std::unique_ptr<KernelBuilder> & iBuilder, Value * a, Value * b) {
     return iBuilder->CreateSelect(iBuilder->CreateICmpULT(a, b), a, b);
 }
 
-void LZ4ByteStreamDecoderKernel::generateDoBlockMethod() {
+void LZ4ByteStreamDecoderKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     BasicBlock * entry_block = iBuilder->GetInsertBlock();
-    BasicBlock * loopBody = CreateBasicBlock("bytestream_block_loop_body");
-    BasicBlock * loopExit = CreateBasicBlock("bytestream_block_loop_exit");
+    BasicBlock * loopBody = iBuilder->CreateBasicBlock("bytestream_block_loop_body");
+    BasicBlock * loopExit = iBuilder->CreateBasicBlock("bytestream_block_loop_exit");
 
     Value * bufferSize = iBuilder->getSize(mBufferSize);
     Value * bufferSizeMask = iBuilder->CreateSub(bufferSize, iBuilder->getSize(1));
     Value * iterations = selectMin(iBuilder,
             iBuilder->getSize(iBuilder->getBitBlockWidth()),
-            iBuilder->CreateSub(getAvailableItemCount("literalIndexes"), getProcessedItemCount("literalIndexes")));
-    Value * inputBufferBasePtr = getRawInputPointer("inputStream", iBuilder->getSize(0), iBuilder->getSize(0));
-    Value * outputBufferBasePtr = getRawOutputPointer("outputStream", iBuilder->getSize(0), iBuilder->getSize(0));
+            iBuilder->CreateSub(iBuilder->getAvailableItemCount("literalIndexes"), iBuilder->getProcessedItemCount("literalIndexes")));
+    Value * inputBufferBasePtr = iBuilder->getRawInputPointer("inputStream", iBuilder->getSize(0), iBuilder->getSize(0));
+    Value * outputBufferBasePtr = iBuilder->getRawOutputPointer("outputStream", iBuilder->getSize(0), iBuilder->getSize(0));
     iBuilder->CreateBr(loopBody);
 
     iBuilder->SetInsertPoint(loopBody);
@@ -42,20 +42,20 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod() {
     // =================================================
     // Indexes extraction.
     Value * literalStartPtr = getInputPtr(iBuilder,
-            getInputStreamBlockPtr("literalIndexes", iBuilder->getSize(0)), phiInputIndex);
+            iBuilder->getInputStreamBlockPtr("literalIndexes", iBuilder->getSize(0)), phiInputIndex);
     Value * literalLengthPtr = getInputPtr(iBuilder,
-            getInputStreamBlockPtr("literalIndexes", iBuilder->getSize(1)), phiInputIndex);
+            iBuilder->getInputStreamBlockPtr("literalIndexes", iBuilder->getSize(1)), phiInputIndex);
     Value * matchOffsetPtr = getInputPtr(iBuilder,
-            getInputStreamBlockPtr("matchIndexes", iBuilder->getSize(0)), phiInputIndex);
+            iBuilder->getInputStreamBlockPtr("matchIndexes", iBuilder->getSize(0)), phiInputIndex);
     Value * matchLengthPtr = getInputPtr(iBuilder,
-            getInputStreamBlockPtr("matchIndexes", iBuilder->getSize(1)), phiInputIndex);
+            iBuilder->getInputStreamBlockPtr("matchIndexes", iBuilder->getSize(1)), phiInputIndex);
     Value * literalStart = iBuilder->CreateZExt(iBuilder->CreateLoad(literalStartPtr), iBuilder->getSizeTy());
     Value * literalLength = iBuilder->CreateZExt(iBuilder->CreateLoad(literalLengthPtr), iBuilder->getSizeTy());
     Value * matchOffset = iBuilder->CreateZExt(iBuilder->CreateLoad(matchOffsetPtr), iBuilder->getSizeTy());
     Value * matchLength = iBuilder->CreateZExt(iBuilder->CreateLoad(matchLengthPtr), iBuilder->getSizeTy());
 
 #if 0
-    Value * processedItem = iBuilder->CreateAdd(getProcessedItemCount("literalIndexes"), phiInputIndex);
+    Value * processedItem = iBuilder->CreateAdd(iBuilder->getProcessedItemCount("literalIndexes"), phiInputIndex);
     iBuilder->CallPrintInt("ProccessedItem", processedItem);
     iBuilder->CallPrintInt("LiteralStart", literalStart);
     iBuilder->CallPrintInt("LiteralLength", literalLength);
@@ -65,7 +65,7 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod() {
 
     // =================================================
     // Literals.
-    Value * outputItems = getProducedItemCount("outputStream");
+    Value * outputItems = iBuilder->getProducedItemCount("outputStream");
     Value * bufferOffset = iBuilder->CreateAnd(outputItems, bufferSizeMask);
     Value * remainingBuffer = iBuilder->CreateSub(bufferSize, bufferOffset);
     Value * copyLength1 = selectMin(iBuilder, remainingBuffer, literalLength);
@@ -93,9 +93,9 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod() {
             iBuilder->getSize(1),
             iBuilder->getSize(4)
             );
-    BasicBlock * cpyLoopCond = CreateBasicBlock("matchcopy_loop_cond");
-    BasicBlock * cpyLoopBody = CreateBasicBlock("matchcopy_loop_body");
-    BasicBlock * cpyLoopExit = CreateBasicBlock("matchcopy_loop_exit");
+    BasicBlock * cpyLoopCond = iBuilder->CreateBasicBlock("matchcopy_loop_cond");
+    BasicBlock * cpyLoopBody = iBuilder->CreateBasicBlock("matchcopy_loop_body");
+    BasicBlock * cpyLoopExit = iBuilder->CreateBasicBlock("matchcopy_loop_exit");
     iBuilder->CreateBr(cpyLoopCond);
 
     iBuilder->SetInsertPoint(cpyLoopCond);
@@ -116,8 +116,8 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod() {
     iBuilder->CallPrintIntToStderr("srcOffset", phiSrcOffset);
     iBuilder->CallPrintIntToStderr("dstOffset", phiDstOffset);
 #endif
-    BasicBlock * reachingBufferEnd_then = CreateBasicBlock("matchcopy_reaching_buf_end_then");
-    BasicBlock * reachingBufferEnd_else = CreateBasicBlock("matchcopy_reaching_buf_end_else");
+    BasicBlock * reachingBufferEnd_then = iBuilder->CreateBasicBlock("matchcopy_reaching_buf_end_then");
+    BasicBlock * reachingBufferEnd_else = iBuilder->CreateBasicBlock("matchcopy_reaching_buf_end_else");
     Value * distSrcEnd = iBuilder->CreateSub(bufferSize, phiSrcOffset);
     Value * distDstEnd = iBuilder->CreateSub(bufferSize, phiDstOffset);
     Value * minDist = selectMin(iBuilder, distSrcEnd, distDstEnd);
@@ -169,7 +169,7 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod() {
 
     iBuilder->SetInsertPoint(cpyLoopExit);
     outputItems = iBuilder->CreateAdd(outputItems, matchLength);
-    setProducedItemCount("outputStream", outputItems);
+    iBuilder->setProducedItemCount("outputStream", outputItems);
 
     Value * newInputIndex = iBuilder->CreateAdd(phiInputIndex, iBuilder->getSize(1));
     phiInputIndex->addIncoming(newInputIndex, cpyLoopExit);
@@ -181,7 +181,7 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod() {
 
     iBuilder->SetInsertPoint(loopExit);
 #ifndef NDEBUG
-    iBuilder->CallPrintInt("Decompressed bytes", getProducedItemCount("outputStream"));
+    iBuilder->CallPrintInt("Decompressed bytes", iBuilder->getProducedItemCount("outputStream"));
 #endif
 }
 

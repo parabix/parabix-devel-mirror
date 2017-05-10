@@ -51,7 +51,7 @@ const static auto CACHE_PREFIX = PARABIX_VERSION +
                           HOUR_1, HOUR_2, MINUTE_1, MINUTE_2, SECOND_1, SECOND_2,
                           '_'};
 
-bool ParabixObjectCache::loadCachedObjectFile(kernel::Kernel * const kernel) {
+bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::KernelBuilder> & idb, kernel::Kernel * const kernel) {
     if (LLVM_LIKELY(kernel->isCachable())) {
 
         Module * const module = kernel->getModule();
@@ -63,7 +63,7 @@ bool ParabixObjectCache::loadCachedObjectFile(kernel::Kernel * const kernel) {
             const auto f = mKernelSignatureMap.find(moduleId);
             if (f == mKernelSignatureMap.end()) {
                 return kernel->moduleIDisSignature();
-            } else if (kernel->moduleIDisSignature() || (kernel->makeSignature() != f->second)) {
+            } else if (kernel->moduleIDisSignature() || (kernel->makeSignature(idb) != f->second)) {
                 return false;
             }
             return true;
@@ -82,7 +82,7 @@ bool ParabixObjectCache::loadCachedObjectFile(kernel::Kernel * const kernel) {
                 const auto signatureBuffer = MemoryBuffer::getFile(objectName.c_str(), -1, false);
                 if (signatureBuffer) {
                     const StringRef loadedSig = signatureBuffer.get()->getBuffer();
-                    if (!loadedSig.equals(kernel->makeSignature())) {
+                    if (!loadedSig.equals(kernel->makeSignature(idb))) {
                         return false;
                     }
                 } else {
@@ -95,7 +95,7 @@ bool ParabixObjectCache::loadCachedObjectFile(kernel::Kernel * const kernel) {
             mCachedObjectMap.emplace(moduleId, std::move(objectBuffer.get()));
             return true;
         } else if (!kernel->moduleIDisSignature()) {
-            mKernelSignatureMap.emplace(moduleId, kernel->makeSignature());
+            mKernelSignatureMap.emplace(moduleId, kernel->makeSignature(idb));
         }
     }
     return false;

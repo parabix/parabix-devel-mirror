@@ -53,9 +53,6 @@ public:
     // Run-time access of Kernel State and parameters of methods for
     // use in implementing kernels.
 
-    // Get the index of a named scalar field within the kernel state struct.
-    llvm::ConstantInt * getScalarIndex(const std::string & name);
-
     llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex);
 
     llvm::Value * loadInputStreamBlock(const std::string & name, llvm::Value * streamIndex);
@@ -94,9 +91,17 @@ public:
 
     llvm::Value * getLinearlyAccessibleItems(const std::string & name, llvm::Value * fromPosition);
 
-    llvm::BasicBlock * CreateWaitForConsumers();
+    llvm::BasicBlock * CreateConsumerWait();
 
     llvm::Value * getStreamSetBufferPtr(const std::string & name);
+
+    llvm::CallInst * createDoSegmentCall(const std::vector<llvm::Value *> & args);
+
+    llvm::Value * getAccumulator(const std::string & accumName);
+
+    llvm::Value * getConsumerLock(const std::string & name);
+
+    void setConsumerLock(const std::string & name, llvm::Value * value);
 
     Kernel * getKernel() const {
         return mKernel;
@@ -113,11 +118,11 @@ protected:
 
     }
 
+    llvm::Value * getScalarFieldPtr(llvm::Value * instance, llvm::Value * index);
+
+    llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & fieldName);
+
 private:
-
-    llvm::Value * getConsumerLock(const std::string & name);
-
-    void setConsumerLock(const std::string & name, llvm::Value * value);
 
     llvm::Value * computeBlockIndex(llvm::Value * itemCount);
 

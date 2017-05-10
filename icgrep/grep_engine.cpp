@@ -291,7 +291,8 @@ void GrepEngine::grepCodeGen(const std::string & moduleName, std::vector<re::RE 
         kernel::MatchCount matchCountK(idb);
         pxDriver.addKernelCall(matchCountK, {MergedResults}, {});
         pxDriver.generatePipelineIR();
-        Value * matchedLineCount = matchCountK.getScalarField("matchedLineCount");
+        idb->setKernel(&matchCountK);
+        Value * matchedLineCount = idb->getScalarField("matchedLineCount");
         matchedLineCount = idb->CreateZExt(matchedLineCount, int64Ty);
         idb->CreateRet(matchedLineCount);
         pxDriver.linkAndFinalize();

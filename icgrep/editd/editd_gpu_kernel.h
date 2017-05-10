@@ -20,8 +20,8 @@ public:
     
     
 private:
-    void generateDoBlockMethod() override;
-    void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & idb) override;
+    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & idb, llvm::Value * remainingBytes) override;
     unsigned mEditDistance;
     unsigned mPatternLen;
     

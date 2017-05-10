@@ -10,14 +10,14 @@ using namespace llvm;
 
 namespace kernel {
 
-inline void ap_p2s_step(IDISA::IDISA_Builder * const iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
+inline void ap_p2s_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
     Value * t0 = iBuilder->simd_if(1, hi_mask, p0, iBuilder->simd_srli(16, p1, shift));
     Value * t1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, p0, shift), p1);
     s1 = iBuilder->esimd_mergeh(8, t1, t0);
     s0 = iBuilder->esimd_mergel(8, t1, t0);
 }
 
-inline void p2s(IDISA::IDISA_Builder * const iBuilder, Value * p[], Value * s[]) {
+inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Value * s[]) {
     Value * bit00004444[2];
     Value * bit22226666[2];
     Value * bit11115555[2];
@@ -37,9 +37,9 @@ inline void p2s(IDISA::IDISA_Builder * const iBuilder, Value * p[], Value * s[])
     }
 }
 
-void PrintableBits::generateDoBlockMethod() {
+void PrintableBits::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     // Load current block
-    Value * bitStrmVal = loadInputStreamBlock("bitStream", iBuilder->getInt32(0));
+    Value * bitStrmVal = iBuilder->loadInputStreamBlock("bitStream", iBuilder->getInt32(0));
 
     Value * bits[8];
 
@@ -80,20 +80,20 @@ void PrintableBits::generateDoBlockMethod() {
     p2s(iBuilder, bits, printableBytes);
     
     for (unsigned j = 0; j < 8; ++j) {
-        storeOutputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(j), iBuilder->bitCast(printableBytes[j]));
+        iBuilder->storeOutputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(j), iBuilder->bitCast(printableBytes[j]));
     }
 }
 
-void SelectStream::generateDoBlockMethod() {
+void SelectStream::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
     if (mStreamIndex >= mSizeInputStreamSet)
         llvm::report_fatal_error("Stream index out of bounds.\n");
     
-    Value * bitStrmVal = loadInputStreamBlock("bitStreams", iBuilder->getInt32(mStreamIndex));
+    Value * bitStrmVal = iBuilder->loadInputStreamBlock("bitStreams", iBuilder->getInt32(mStreamIndex));
 
-    storeOutputStreamBlock("bitStream", iBuilder->getInt32(0), bitStrmVal);
+    iBuilder->storeOutputStreamBlock("bitStream", iBuilder->getInt32(0), bitStrmVal);
 }
 
-void PrintStreamSet::generateDoBlockMethod() {
+void PrintStreamSet::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
 
     /*
     00110001 is the Unicode codepoint for '1' and 00101110 is the codepoint for '.'.
@@ -121,7 +121,7 @@ void PrintStreamSet::generateDoBlockMethod() {
 
         BasicBlock * entry = iBuilder->GetInsertBlock();
 
-        Value * count = getInputStreamSetCount(name);
+        Value * count = iBuilder->getInputStreamSetCount(name);
         ConstantInt * const streamLength = iBuilder->getSize(iBuilder->getBitBlockWidth() + mNameWidth + 1);
         Value * output = iBuilder->CreateAlloca(iBuilder->getInt8Ty(), streamLength);
 
@@ -134,7 +134,7 @@ void PrintStreamSet::generateDoBlockMethod() {
         if (isa<ConstantInt>(count) && cast<ConstantInt>(count)->isOne()) {
 
             // Load current block
-            Value * const input = loadInputStreamBlock(name, iBuilder->getInt32(0));
+            Value * const input = iBuilder->loadInputStreamBlock(name, iBuilder->getInt32(0));
 
             Value * bits[8];
             bits[0] = ConstantInt::getNullValue(iBuilder->getBitBlockType());
@@ -163,14 +163,14 @@ void PrintStreamSet::generateDoBlockMethod() {
 
             iBuilder->CreateStore(iBuilder->getInt8('['), iBuilder->CreateGEP(output, length));
 
-            BasicBlock * cond = CreateBasicBlock("cond");
+            BasicBlock * cond = iBuilder->CreateBasicBlock("cond");
 
-            BasicBlock * getIntLength = CreateBasicBlock("getIntLength");
+            BasicBlock * getIntLength = iBuilder->CreateBasicBlock("getIntLength");
 
-            BasicBlock * writeInt = CreateBasicBlock("writeInt");
-            BasicBlock * writeVector = CreateBasicBlock("writeVector");
+            BasicBlock * writeInt = iBuilder->CreateBasicBlock("writeInt");
+            BasicBlock * writeVector = iBuilder->CreateBasicBlock("writeVector");
 
-            BasicBlock * exit = CreateBasicBlock("exit");
+            BasicBlock * exit = iBuilder->CreateBasicBlock("exit");
 
             ConstantInt * TEN = iBuilder->getSize(10);
             ConstantInt * ONE = iBuilder->getSize(1);
@@ -216,7 +216,7 @@ void PrintStreamSet::generateDoBlockMethod() {
             iBuilder->CreateStore(iBuilder->getInt8(']'), iBuilder->CreateGEP(output, iBuilder->CreateAdd(l, iBuilder->getSize(1))));
 
             // Load current block
-            Value * const input = loadInputStreamBlock(name, i);
+            Value * const input = iBuilder->loadInputStreamBlock(name, i);
 
             Value * bits[8];
             bits[0] = ConstantInt::getNullValue(iBuilder->getBitBlockType());

@@ -19,7 +19,7 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:
     const GrepType      mGrepType;
 };

@@ -91,7 +91,7 @@ public:
        
     virtual bool isCachable() const = 0;
 
-    virtual std::string makeSignature() = 0;
+    virtual std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & idb) = 0;
 
     const std::vector<Binding> & getStreamInputs() const {
         return mStreamSetInputs;
@@ -126,15 +126,15 @@ public:
     }
 
     // Add ExternalLinkage method declarations for the kernel to a given client module.
-    void addKernelDeclarations();
+    void addKernelDeclarations(const std::unique_ptr<kernel::KernelBuilder> & idb);
 
-    virtual void linkExternalMethods() = 0;
+    virtual void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> & idb) = 0;
 
-    virtual llvm::Value * createInstance() = 0;
+    virtual llvm::Value * createInstance(const std::unique_ptr<kernel::KernelBuilder> & idb) = 0;
 
-    virtual void initializeInstance() = 0;
+    virtual void initializeInstance(const std::unique_ptr<kernel::KernelBuilder> & idb) = 0;
 
-    virtual void finalizeInstance() = 0;
+    virtual void finalizeInstance(const std::unique_ptr<kernel::KernelBuilder> & idb) = 0;
 
     void setInitialArguments(std::vector<llvm::Value *> && args) {
         mInitialArguments.swap(args);
@@ -142,6 +142,12 @@ public:
 
     llvm::Value * getInstance() const {
         return mKernelInstance;
+    }
+
+    void setInstance(llvm::Value * const instance) {
+        assert ("kernel instance cannot be null!" && instance);
+        assert ("kernel instance must point to a valid kernel state type!" && (instance->getType()->getPointerElementType() == mKernelStateType));
+        mKernelInstance = instance;
     }
 
     unsigned getLookAhead() const {
@@ -152,31 +158,7 @@ public:
         mLookAheadPositions = lookAheadPositions;
     }
 
-    kernel::KernelBuilder * getBuilder() const {
-        return iBuilder;
-    }
-
-    void setBuilder(const std::unique_ptr<kernel::KernelBuilder> & builder) {
-        iBuilder = builder.get();
-    }
-
 protected:
-
-    virtual llvm::Value * getProducedItemCount(const std::string & name, llvm::Value * doFinal = nullptr) const = 0;
-
-    virtual void setProducedItemCount(const std::string & name, llvm::Value * value) const = 0;
-
-    virtual llvm::Value * getProcessedItemCount(const std::string & name) const = 0;
-
-    virtual void setProcessedItemCount(const std::string & name, llvm::Value * value) const = 0;
-
-    virtual llvm::Value * getConsumedItemCount(const std::string & name) const = 0;
-
-    virtual void setConsumedItemCount(const std::string & name, llvm::Value * value) const = 0;
-
-    virtual llvm::Value * getTerminationSignal() const = 0;
-
-    virtual void setTerminationSignal() const = 0;
 
     llvm::Function * getInitFunction(llvm::Module * const module) const;
 
@@ -190,9 +172,8 @@ protected:
                     std::vector<Binding> && scalar_inputs,
                     std::vector<Binding> && scalar_outputs,
                     std::vector<Binding> && internal_scalars)
-    : iBuilder(nullptr)
+    : mKernelInstance(nullptr)
     , mModule(nullptr)
-    , mKernelInstance(nullptr)
     , mKernelStateType(nullptr)
     , mLookAheadPositions(0)
     , mKernelName(kernelName)
@@ -200,23 +181,14 @@ protected:
     , mStreamSetOutputs(stream_outputs)
     , mScalarInputs(scalar_inputs)
     , mScalarOutputs(scalar_outputs)
-    , mInternalScalars(internal_scalars)
-    {
+    , mInternalScalars(internal_scalars) {
 
     }
     
-    void setInstance(llvm::Value * const instance) {
-        assert ("kernel instance cannot be null!" && instance);
-        assert ("kernel instance must point to a valid kernel state type!" && (instance->getType()->getPointerElementType() == mKernelStateType));
-        mKernelInstance = instance;
-    }
-
 protected:
-    
-    kernel::KernelBuilder *                 iBuilder;
-    llvm::Module *                          mModule;
 
     llvm::Value *                           mKernelInstance;
+    llvm::Module *                          mModule;
     llvm::StructType *                      mKernelStateType;
     unsigned                                mLookAheadPositions;
     std::string                             mKernelName;

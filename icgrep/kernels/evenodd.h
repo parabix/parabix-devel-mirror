@@ -11,13 +11,11 @@ namespace llvm { class Value; }
 
 namespace kernel {
 
-class EvenOddKernel : public BlockOrientedKernel {
+class EvenOddKernel final : public BlockOrientedKernel {
 public:
     EvenOddKernel(const std::unique_ptr<kernel::KernelBuilder> & builder);
-    virtual ~EvenOddKernel() {}
 private:
-    void generateDoBlockMethod() override;
-
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
 
 }

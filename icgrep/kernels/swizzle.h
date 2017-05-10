@@ -55,7 +55,7 @@ public:
     
 protected:
     
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     
 private:
     const unsigned mBitStreamCount;

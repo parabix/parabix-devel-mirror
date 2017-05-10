@@ -14,10 +14,6 @@
 #include <llvm/IR/LegacyPassManager.h>             // for PassManager
 #include <llvm/IR/IRPrintingPasses.h>
 #include <llvm/InitializePasses.h>                 // for initializeCodeGen
-#ifndef NDEBUG
-#include <llvm/IR/Verifier.h>
-#include <boost/container/flat_set.hpp>
-#endif
 #include <llvm/PassRegistry.h>                     // for PassRegistry
 #include <llvm/Support/CodeGen.h>                  // for Level, Level::None
 #include <llvm/Support/Compiler.h>                 // for LLVM_UNLIKELY
@@ -33,6 +29,9 @@
 #include <sys/stat.h>
 #include <thread>
 #include <boost/lockfree/queue.hpp>
+#ifndef NDEBUG
+#include <llvm/IR/Verifier.h>
+#endif
 
 using namespace llvm;
 using namespace parabix;
@@ -150,7 +149,7 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     opts.MCOptions.AsmVerbose = codegen::AsmVerbose;
 
     builder.setTargetOptions(opts);
-    builder.setVerifyModules(IN_DEBUG_MODE);
+    builder.setVerifyModules(false);
     CodeGenOpt::Level optLevel = CodeGenOpt::Level::None;
     switch (codegen::OptLevel) {
         case '0': optLevel = CodeGenOpt::None; break;
@@ -203,39 +202,38 @@ kernel::Kernel * ParabixDriver::addKernelInstance(std::unique_ptr<kernel::Kernel
 void ParabixDriver::addKernelCall(kernel::Kernel & kb, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
     assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb.getModule() == nullptr));
     mPipeline.emplace_back(&kb);
-    assert (mMainModule);
-    kb.setBuilder(iBuilder);
-    kb.createKernelStub(inputs, outputs);
+    kb.createKernelStub(iBuilder, inputs, outputs);
 }
 
 void ParabixDriver::makeKernelCall(kernel::Kernel * kb, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
     assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb->getModule() == nullptr));
     mPipeline.emplace_back(kb);    
-    kb->setBuilder(iBuilder);
-    kb->createKernelStub(inputs, outputs);
+    kb->createKernelStub(iBuilder, inputs, outputs);
 }
 
 void ParabixDriver::generatePipelineIR() {
     #ifndef NDEBUG
     if (LLVM_UNLIKELY(mPipeline.empty())) {
-        report_fatal_error("Pipeline must contain at least one kernel");
+        report_fatal_error("Pipeline cannot be empty");
     } else {
-        boost::container::flat_set<kernel::Kernel *> K(mPipeline.begin(), mPipeline.end());
-        if (LLVM_UNLIKELY(K.size() != mPipeline.size())) {
-            report_fatal_error("Kernel definitions can only occur once in the pipeline");
+        for (auto i = mPipeline.begin(); i != mPipeline.end(); ++i) {
+            for (auto j = i; ++j != mPipeline.end(); ) {
+                if (LLVM_UNLIKELY(*i == *j)) {
+                    report_fatal_error("Kernel instances cannot occur twice in the pipeline");
+                }
+            }
         }
     }
     #endif
-
     // note: instantiation of all kernels must occur prior to initialization
     for (const auto & k : mPipeline) {
-        k->addKernelDeclarations();
+        k->addKernelDeclarations(iBuilder);
     }
     for (const auto & k : mPipeline) {
-        k->createInstance();
+        k->createInstance(iBuilder);
     }
     for (const auto & k : mPipeline) {
-        k->initializeInstance();
+        k->initializeInstance(iBuilder);
     }
     if (codegen::pipelineParallel) {
         generateParallelPipeline(iBuilder, mPipeline);
@@ -246,8 +244,7 @@ void ParabixDriver::generatePipelineIR() {
         generatePipelineLoop(iBuilder, mPipeline);
     }
     for (const auto & k : mPipeline) {
-        k->setBuilder(iBuilder);
-        k->finalizeInstance();
+        k->finalizeInstance(iBuilder);
     }
 }
 
@@ -259,73 +256,70 @@ Function * ParabixDriver::LinkFunction(Module * mod, llvm::StringRef name, Funct
 }
 
 void ParabixDriver::linkAndFinalize() {
-    Module * m = mMainModule;
-    #ifndef NDEBUG
+    Module * module = nullptr;
     try {
-    #endif
-    legacy::PassManager PM;
-    #ifndef NDEBUG
-    PM.add(createVerifierPass());
-    #endif
-    PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
-    PM.add(createReassociatePass());             //Reassociate expressions.
-    PM.add(createGVNPass());                     //Eliminate common subexpressions.
-    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-    PM.add(createCFGSimplificationPass());
 
-    raw_fd_ostream * IROutputStream = nullptr;
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
-        if (codegen::IROutputFilename.empty()) {
-            IROutputStream = new raw_fd_ostream(STDERR_FILENO, false, false);
-        } else {
-            std::error_code error;
-            IROutputStream = new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
+        legacy::PassManager PM;
+        #ifndef NDEBUG
+        PM.add(createVerifierPass());
+        #endif
+        PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
+        PM.add(createReassociatePass());             //Reassociate expressions.
+        PM.add(createGVNPass());                     //Eliminate common subexpressions.
+        PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
+        PM.add(createCFGSimplificationPass());
+
+        std::unique_ptr<raw_fd_ostream> IROutputStream(nullptr);
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
+            if (codegen::IROutputFilename.empty()) {
+                IROutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
+            } else {
+                std::error_code error;
+                IROutputStream.reset(new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None));
+            }
+            PM.add(createPrintModulePass(*IROutputStream));
         }
-        PM.add(createPrintModulePass(*IROutputStream));
+
+        #ifndef USE_LLVM_3_6
+        std::unique_ptr<raw_fd_ostream> ASMOutputStream(nullptr);
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowASM))) {
+            if (codegen::ASMOutputFilename.empty()) {
+                ASMOutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
+            } else {
+                std::error_code error;
+                ASMOutputStream.reset(new raw_fd_ostream(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None));
+            }
+            if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *ASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+                report_fatal_error("LLVM error: could not add emit assembly pass");
+            }
+        }
+        #endif
+
+        for (kernel::Kernel * const kernel : mPipeline) {
+            iBuilder->setKernel(kernel);
+            module = kernel->getModule();
+            bool uncachedObject = true;
+            if (mCache && mCache->loadCachedObjectFile(iBuilder, kernel)) {
+                uncachedObject = false;
+            }
+            if (uncachedObject) {
+                module->setTargetTriple(mMainModule->getTargetTriple());
+                kernel->generateKernel(iBuilder);
+                PM.run(*module);
+            }
+            mEngine->addModule(std::unique_ptr<Module>(module));
+        }
+
+        iBuilder->setKernel(nullptr);
+        module = mMainModule;
+        PM.run(*module);
+
+        mEngine->finalizeObject();
+
+    } catch (...) {
+        module->dump();
+        throw;
     }
-
-    #ifndef USE_LLVM_3_6
-    raw_fd_ostream * ASMOutputStream = nullptr;
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowASM))) {
-        if (codegen::ASMOutputFilename.empty()) {
-            ASMOutputStream = new raw_fd_ostream(STDERR_FILENO, false, false);
-        } else {
-            std::error_code error;
-            ASMOutputStream = new raw_fd_ostream(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None);
-        }
-        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *ASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
-            report_fatal_error("LLVM error: could not add emit assembly pass");
-        }
-    }
-    #endif
-
-    PM.run(*m);
-
-    for (kernel::Kernel * const k : mPipeline) {
-        m = k->getModule();
-        bool uncachedObject = true;
-        if (mCache && mCache->loadCachedObjectFile(k)) {
-            uncachedObject = false;
-        }
-        if (uncachedObject) {
-            iBuilder->setModule(m);
-            k->setBuilder(iBuilder);
-            k->generateKernel();
-            PM.run(*m);
-        }
-        mEngine->addModule(std::unique_ptr<Module>(m));
-    }    
-    mEngine->finalizeObject();
-
-    iBuilder->setModule(mMainModule);
-
-    delete IROutputStream;
-    #ifndef USE_LLVM_3_6
-    delete ASMOutputStream;
-    #endif
-    #ifndef NDEBUG
-    } catch (...) { m->dump(); throw; }
-    #endif
 }
 
 const std::unique_ptr<kernel::KernelBuilder> & ParabixDriver::getBuilder() {

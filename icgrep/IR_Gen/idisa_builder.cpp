@@ -29,10 +29,11 @@ Value * IDISA_Builder::fwCast(const unsigned fw, Value * const a) {
 }
 
 void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const value) {
-    Constant * printRegister = mMod->getFunction("PrintRegister");
+    Module * const m = getModule();
+    Constant * printRegister = m->getFunction("PrintRegister");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
         FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getBitBlockType() }, false);
-        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintRegister", mMod);
+        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintRegister", m);
         auto arg = function->arg_begin();
         std::string tmp;
         raw_string_ostream out(tmp);
@@ -41,7 +42,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
             out << " %02x";
         }
         out << '\n';
-        BasicBlock * entry = BasicBlock::Create(mMod->getContext(), "entry", function);
+        BasicBlock * entry = BasicBlock::Create(m->getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
         args.push_back(GetString(out.str().c_str()));
@@ -147,12 +148,12 @@ Value * IDISA_Builder::simd_srai(unsigned fw, Value * a, unsigned shift) {
 }
 
 Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
-    Value * cttzFunc = Intrinsic::getDeclaration(mMod, Intrinsic::cttz, fwVectorType(fw));
+    Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, fwVectorType(fw));
     return CreateCall(cttzFunc, {fwCast(fw, a), ConstantInt::get(getInt1Ty(), 0)});
 }
 
 Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
-    Value * ctpopFunc = Intrinsic::getDeclaration(mMod, Intrinsic::ctpop, fwVectorType(fw));
+    Value * ctpopFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, fwVectorType(fw));
     return CreateCall(ctpopFunc, fwCast(fw, a));
 }
 

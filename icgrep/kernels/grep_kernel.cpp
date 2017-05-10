@@ -39,7 +39,7 @@ ICgrepKernelBuilder::ICgrepKernelBuilder (const std::unique_ptr<kernel::KernelBu
     setName(sha1sum(mSignature));
 }
 
-std::string ICgrepKernelBuilder::makeSignature() {
+std::string ICgrepKernelBuilder::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
     return mSignature;
 }
 
@@ -47,11 +47,11 @@ void ICgrepKernelBuilder::generatePabloMethod() {
     re2pablo_compiler(this, regular_expression_passes(mRE));
 }
 
-void InvertMatchesKernel::generateDoBlockMethod() {
-    Value * input = loadInputStreamBlock("matchedLines", iBuilder->getInt32(0));
-    Value * lbs = loadInputStreamBlock("lineBreaks", iBuilder->getInt32(0));
+void InvertMatchesKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+    Value * input = iBuilder->loadInputStreamBlock("matchedLines", iBuilder->getInt32(0));
+    Value * lbs = iBuilder->loadInputStreamBlock("lineBreaks", iBuilder->getInt32(0));
     Value * inverted = iBuilder->CreateXor(input, lbs);
-    storeOutputStreamBlock("nonMatches", iBuilder->getInt32(0), inverted);
+    iBuilder->storeOutputStreamBlock("nonMatches", iBuilder->getInt32(0), inverted);
 }
 
 InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder)

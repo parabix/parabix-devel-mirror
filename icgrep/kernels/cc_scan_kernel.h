@@ -17,8 +17,8 @@ public:
     CCScanKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamNum);
         
 private:
-    void generateDoBlockMethod() override;
-    llvm::Function * generateScanWordRoutine(llvm::Module * m) const;
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    llvm::Function * generateScanWordRoutine(const std::unique_ptr<KernelBuilder> & iBuilder) const;
         
     unsigned mStreamNum;
     unsigned mScanwordBitWidth;

@@ -23,8 +23,6 @@ public:
 
     using Vars = std::vector<pablo::Var *>;
 
-//    CC_Compiler(pablo::PabloKernel * kernel, const unsigned encodingBits = 8, const std::string prefix = "basis");
-    
     CC_Compiler(pablo::PabloKernel * kernel, pablo::Var * basisBitSet);
     
     pablo::PabloAST * compileCC(const re::CC *cc);

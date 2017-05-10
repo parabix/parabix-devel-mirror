@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-String * SymbolGenerator::makeString(llvm::LLVMContext & C, const llvm::StringRef prefix) noexcept {
+String * SymbolGenerator::makeString(const llvm::StringRef prefix) noexcept {
     auto f = mPrefixMap.find(prefix);
     if (f == mPrefixMap.end()) {   
         char * const data = mAllocator.allocate<char>(prefix.size() + 1);
@@ -19,7 +19,7 @@ String * SymbolGenerator::makeString(llvm::LLVMContext & C, const llvm::StringRe
         data[prefix.size()] = '\0';
         llvm::StringRef name(data, prefix.size());
         mPrefixMap.insert(std::make_pair(name, 1));
-        return new (mAllocator) String(llvm::IntegerType::getInt8PtrTy(C), name, mAllocator);
+        return new (mAllocator) String(llvm::IntegerType::getInt8PtrTy(mContext), name, mAllocator);
     } else { // this string already exists; make a new string using the given prefix
 
         // TODO: check FormatInt from "https://github.com/fmtlib/fmt/blob/master/fmt/format.h" for faster integer conversion
@@ -39,15 +39,15 @@ String * SymbolGenerator::makeString(llvm::LLVMContext & C, const llvm::StringRe
             count /= 10;
         }
         *p = '_';
-        return makeString(C, llvm::StringRef(name, length));
+        return makeString(llvm::StringRef(name, length));
     }
 }
 
-Integer * SymbolGenerator::getInteger(llvm::LLVMContext & C, const IntTy value) noexcept {
+Integer * SymbolGenerator::getInteger(const IntTy value) noexcept {
     auto f = mIntegerMap.find(value);
     Integer * result;
     if (f == mIntegerMap.end()) {        
-        result = new (mAllocator) Integer(value, llvm::IntegerType::getInt64Ty(C), mAllocator);
+        result = new (mAllocator) Integer(value, llvm::IntegerType::getInt64Ty(mContext), mAllocator);
         assert (result->value() == value);
         mIntegerMap.emplace(value, result);
     } else {

@@ -15,11 +15,11 @@ MatchCount::MatchCount(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
                         {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}}, {}, {}, {Binding{iBuilder->getSizeTy(), "matchedLineCount"}}, {}) {
     }
 
-void MatchCount::generateDoBlockMethod() {
+void MatchCount::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
 
     const unsigned counterSize = iBuilder->getSizeTy()->getBitWidth();
-    Value * to_count = loadInputStreamBlock("matches", iBuilder->getInt32(0));
-    Value * count = getScalarField("matchedLineCount");
+    Value * to_count = iBuilder->loadInputStreamBlock("matches", iBuilder->getInt32(0));
+    Value * count = iBuilder->getScalarField("matchedLineCount");
     
     Value * value = nullptr;
     Value * const partial = iBuilder->simd_popcount(counterSize, to_count);
@@ -34,7 +34,7 @@ void MatchCount::generateDoBlockMethod() {
         }
     }
     value = iBuilder->CreateAdd(value, count);
-    setScalarField("matchedLineCount", value);
+    iBuilder->setScalarField("matchedLineCount", value);
 }
 
 

@@ -17,8 +17,8 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
-    void generateDoBlockMethod() override;
-    void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
 private:
     bool mAligned;
 };

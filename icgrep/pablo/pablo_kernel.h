@@ -32,6 +32,8 @@ class PabloKernel : public kernel::BlockOrientedKernel, public PabloAST {
 
 public:
 
+    using KernelBuilder = kernel::KernelBuilder;
+
     using Allocator = SlabAllocator<PabloAST *>;
 
     static inline bool classof(const PabloAST * e) {
@@ -120,6 +122,10 @@ public:
 
     Integer * getInteger(const int64_t value) const;
 
+    kernel::KernelBuilder * getBuilder() {
+        return mBuilder;
+    }
+
 protected:
 
     PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, std::string kernelName,
@@ -135,14 +141,14 @@ private:
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
     // finalizing the KernelStateType.
-    void prepareKernel() final;
+    void prepareKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) final;
 
-    void generateDoBlockMethod() final;
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) final;
 
     // The default method for Pablo final block processing sets the
     // EOFmark bit and then calls the standard DoBlock function.
     // This may be overridden for specialized processing.
-    void generateFinalBlockMethod(llvm::Value * remainingBytes) final;
+    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) final;
 
 private:
 
@@ -150,6 +156,11 @@ private:
     PabloCompiler * const           mPabloCompiler;
     SymbolGenerator *               mSymbolTable;
     PabloBlock *                    mEntryBlock;
+
+    kernel::KernelBuilder *         mBuilder;
+
+//    llvm::IntegerType * const       mSizeTy;
+//    llvm::VectorType * const        mStreamSetTy;
 
     std::vector<Var *>              mInputs;
     std::vector<Var *>              mOutputs;

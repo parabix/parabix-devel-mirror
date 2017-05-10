@@ -13,7 +13,7 @@ namespace kernel {
 
 const int PACK_LANES = 1;
 
-void s2p_step(IDISA::IDISA_Builder * const iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
+void s2p_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
     Value * t0 = nullptr;
     Value * t1 = nullptr;
     if ((iBuilder->getBitBlockWidth() == 256) && (PACK_LANES == 2)) {
@@ -29,7 +29,7 @@ void s2p_step(IDISA::IDISA_Builder * const iBuilder, Value * s0, Value * s1, Val
     p1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, t0, shift), t1);
 }
 
-void s2p(IDISA::IDISA_Builder * const iBuilder, Value * input[], Value * output[]) {
+void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value * output[]) {
     Value * bit00224466[4];
     Value * bit11335577[4];
 
@@ -56,7 +56,7 @@ void s2p(IDISA::IDISA_Builder * const iBuilder, Value * input[], Value * output[
 
 /* Alternative transposition model, but small field width packs are problematic. */
 #if 0
-void s2p_ideal(IDISA::IDISA_Builder * const iBuilder, Value * input[], Value * output[]) {
+void s2p_ideal(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value * output[]) {
     Value * hi_nybble[4];
     Value * lo_nybble[4];
     for (unsigned i = 0; i<4; i++) {
@@ -87,13 +87,11 @@ void s2p_ideal(IDISA::IDISA_Builder * const iBuilder, Value * input[], Value * o
 #endif
     
 #if 0
-void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * const iBuilder, KernelBuilder * kBuilder) {
+void generateS2P_16Kernel(const std::unique_ptr<KernelBuilder> & iBuilder, Kernel * kBuilder) {
     kBuilder->addInputStream(16, "unit_pack");
     for(unsigned i = 0; i < 16; i++) {
 	    kBuilder->addOutputStream(1);
     }
-    kBuilder->prepareFunction();
-
     Value * ptr = kBuilder->getInputStream(0);
 
     Value * lo[8];
@@ -111,17 +109,16 @@ void generateS2P_16Kernel(Module *, IDISA::IDISA_Builder * const iBuilder, Kerne
     for (unsigned j = 0; j < 16; j++) {
         iBuilder->CreateBlockAlignedStore(output[j], kBuilder->getOutputStream(j));
     }
-    kBuilder->finalize();
 }    
 #endif
     
-void S2PKernel::generateDoBlockMethod() {
+void S2PKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
         if (mAligned) {
-            bytepack[i] = loadInputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
+            bytepack[i] = iBuilder->loadInputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
         } else {
-            Value * ptr = getInputStreamPackPtr("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
+            Value * ptr = iBuilder->getInputStreamPackPtr("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
             // CreateLoad defaults to aligned here, so we need to force the alignment to 1 byte.
             bytepack[i] = iBuilder->CreateAlignedLoad(ptr, 1);
         }
@@ -129,31 +126,31 @@ void S2PKernel::generateDoBlockMethod() {
     Value * basisbits[8];
     s2p(iBuilder, bytepack, basisbits);
     for (unsigned i = 0; i < 8; ++i) {
-        storeOutputStreamBlock("basisBits", iBuilder->getInt32(i), basisbits[i]);
+        iBuilder->storeOutputStreamBlock("basisBits", iBuilder->getInt32(i), basisbits[i]);
     }
 }
 
-void S2PKernel::generateFinalBlockMethod(Value * remainingBytes) {
+void S2PKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, Value * remainingBytes) {
     /* Prepare the s2p final block function:
      assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
      if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
      */
     
-    BasicBlock * finalPartialBlock = CreateBasicBlock("partial");
-    BasicBlock * finalEmptyBlock = CreateBasicBlock("empty");
-    BasicBlock * exitBlock = CreateBasicBlock("exit");
+    BasicBlock * finalPartialBlock = iBuilder->CreateBasicBlock("partial");
+    BasicBlock * finalEmptyBlock = iBuilder->CreateBasicBlock("empty");
+    BasicBlock * exitBlock = iBuilder->CreateBasicBlock("exit");
     
     Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, iBuilder->getSize(0));
     iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
     iBuilder->SetInsertPoint(finalPartialBlock);
-    CreateDoBlockMethodCall();
+    CreateDoBlockMethodCall(iBuilder);
     
     iBuilder->CreateBr(exitBlock);
     
     iBuilder->SetInsertPoint(finalEmptyBlock);
 
     for (unsigned i = 0; i < 8; ++i) {
-        storeOutputStreamBlock("basisBits", iBuilder->getInt32(i), Constant::getNullValue(iBuilder->getBitBlockType()));
+        iBuilder->storeOutputStreamBlock("basisBits", iBuilder->getInt32(i), Constant::getNullValue(iBuilder->getBitBlockType()));
     }
 
     iBuilder->CreateBr(exitBlock);

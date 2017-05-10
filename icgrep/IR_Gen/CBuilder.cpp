@@ -17,11 +17,12 @@
 using namespace llvm;
 
 Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) {
-    Function * openFn = mMod->getFunction("open");
+    Module * const m = getModule();
+    Function * openFn = m->getFunction("open");
     if (openFn == nullptr) {
         IntegerType * int32Ty = getInt32Ty();
         PointerType * int8PtrTy = getInt8PtrTy();
-        openFn = cast<Function>(mMod->getOrInsertFunction("open",
+        openFn = cast<Function>(m->getOrInsertFunction("open",
                                                          int32Ty, int8PtrTy, int32Ty, int32Ty, nullptr));
     }
     return CreateCall(openFn, {filename, oflag, mode});
@@ -30,11 +31,12 @@ Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) 
 // ssize_t write(int fildes, const void *buf, size_t nbyte);
 Value * CBuilder::CreateWriteCall(Value * fileDescriptor, Value * buf, Value * nbyte) {
     PointerType * voidPtrTy = getVoidPtrTy();
-    Function * write = mMod->getFunction("write");
+    Module * const m = getModule();
+    Function * write = m->getFunction("write");
     if (write == nullptr) {
         IntegerType * sizeTy = getSizeTy();
         IntegerType * int32Ty = getInt32Ty();
-        write = cast<Function>(mMod->getOrInsertFunction("write",
+        write = cast<Function>(m->getOrInsertFunction("write",
                                                         AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias),
                                                         sizeTy, int32Ty, voidPtrTy, sizeTy, nullptr));
     }
@@ -44,11 +46,12 @@ Value * CBuilder::CreateWriteCall(Value * fileDescriptor, Value * buf, Value * n
 
 Value * CBuilder::CreateReadCall(Value * fileDescriptor, Value * buf, Value * nbyte) {
     PointerType * voidPtrTy = getVoidPtrTy();
-    Function * readFn = mMod->getFunction("read");
+    Module * const m = getModule();
+    Function * readFn = m->getFunction("read");
     if (readFn == nullptr) {
         IntegerType * sizeTy = getSizeTy();
         IntegerType * int32Ty = getInt32Ty();
-        readFn = cast<Function>(mMod->getOrInsertFunction("read",
+        readFn = cast<Function>(m->getOrInsertFunction("read",
                                                          AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias),
                                                          sizeTy, int32Ty, voidPtrTy, sizeTy, nullptr));
     }
@@ -57,69 +60,76 @@ Value * CBuilder::CreateReadCall(Value * fileDescriptor, Value * buf, Value * nb
 }
 
 Value * CBuilder::CreateCloseCall(Value * fileDescriptor) {
-    Function * closeFn = mMod->getFunction("close");
+    Module * const m = getModule();
+    Function * closeFn = m->getFunction("close");
     if (closeFn == nullptr) {
         IntegerType * int32Ty = getInt32Ty();
         FunctionType * fty = FunctionType::get(int32Ty, {int32Ty}, true);
-        closeFn = Function::Create(fty, Function::ExternalLinkage, "close", mMod);
+        closeFn = Function::Create(fty, Function::ExternalLinkage, "close", m);
     }
     return CreateCall(closeFn, fileDescriptor);
 }
 
 
 Value * CBuilder::CreateUnlinkCall(Value * path) {
-    Function * unlinkFunc = mMod->getFunction("unlink");
+    Module * const m = getModule();
+    Function * unlinkFunc = m->getFunction("unlink");
     if (unlinkFunc == nullptr) {
         FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, false);
-        unlinkFunc = Function::Create(fty, Function::ExternalLinkage, "unlink", mMod);
+        unlinkFunc = Function::Create(fty, Function::ExternalLinkage, "unlink", m);
         unlinkFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(unlinkFunc, path);
 }
 
 Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
-    Function * mkstempFn = mMod->getFunction("mkstemp");
+    Module * const m = getModule();
+    Function * mkstempFn = m->getFunction("mkstemp");
     if (mkstempFn == nullptr) {
-        mkstempFn = cast<Function>(mMod->getOrInsertFunction("mkstemp", getInt32Ty(), getInt8PtrTy(), nullptr));
+        mkstempFn = cast<Function>(m->getOrInsertFunction("mkstemp", getInt32Ty(), getInt8PtrTy(), nullptr));
     }
     return CreateCall(mkstempFn, ftemplate);
 }
 
 
 Value * CBuilder::CreateStrlenCall(Value * str) {
-    Function * strlenFn = mMod->getFunction("strlen");
+    Module * const m = getModule();
+    Function * strlenFn = m->getFunction("strlen");
     if (strlenFn == nullptr) {
-        strlenFn = cast<Function>(mMod->getOrInsertFunction("strlen", getSizeTy(), getInt8PtrTy(), nullptr));
+        strlenFn = cast<Function>(m->getOrInsertFunction("strlen", getSizeTy(), getInt8PtrTy(), nullptr));
     }
     return CreateCall(strlenFn, str);
 }
 
 
 Function * CBuilder::GetPrintf() {
-    Function * printf = mMod->getFunction("printf");
+    Module * const m = getModule();
+    Function * printf = m->getFunction("printf");
     if (printf == nullptr) {
         FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, true);
-        printf = Function::Create(fty, Function::ExternalLinkage, "printf", mMod);
+        printf = Function::Create(fty, Function::ExternalLinkage, "printf", m);
         printf->addAttribute(1, Attribute::NoAlias);
     }
     return printf;
 }
 
 Function * CBuilder::GetDprintf() {
-    Function * dprintf = mMod->getFunction("dprintf");
+    Module * const m = getModule();
+    Function * dprintf = m->getFunction("dprintf");
     if (dprintf == nullptr) {
         FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt32Ty(), getInt8PtrTy()}, true);
-        dprintf = Function::Create(fty, Function::ExternalLinkage, "dprintf", mMod);
+        dprintf = Function::Create(fty, Function::ExternalLinkage, "dprintf", m);
     }
     return dprintf;
 }
 
 void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
-    Constant * printRegister = mMod->getFunction("PrintInt");
+    Module * const m = getModule();
+    Constant * printRegister = m->getFunction("PrintInt");
     IntegerType * int64Ty = getInt64Ty();
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
         FunctionType *FT = FunctionType::get(getVoidTy(), { getInt8PtrTy(), int64Ty }, false);
-        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintInt", mMod);
+        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintInt", m);
         auto arg = function->arg_begin();
         std::string out = "%-40s = %" PRIx64 "\n";
         BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
@@ -148,10 +158,11 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
 }
 
 void CBuilder::CallPrintIntToStderr(const std::string & name, Value * const value) {
-    Constant * printRegister = mMod->getFunction("PrintIntToStderr");
+    Module * const m = getModule();
+    Constant * printRegister = m->getFunction("PrintIntToStderr");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
         FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getSizeTy() }, false);
-        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintIntToStderr", mMod);
+        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintIntToStderr", m);
         auto arg = function->arg_begin();
         std::string out = "%-40s = %" PRIx64 "\n";
         BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
@@ -181,10 +192,11 @@ void CBuilder::CallPrintIntToStderr(const std::string & name, Value * const valu
 }
 
 void CBuilder::CallPrintMsgToStderr(const std::string & message) {
-    Constant * printMsg = mMod->getFunction("PrintMsgToStderr");
+    Module * const m = getModule();
+    Constant * printMsg = m->getFunction("PrintMsgToStderr");
     if (LLVM_UNLIKELY(printMsg == nullptr)) {
         FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0) }, false);
-        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintMsgToStderr", mMod);
+        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintMsgToStderr", m);
         auto arg = function->arg_begin();
         std::string out = "%s\n";
         BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
@@ -218,7 +230,7 @@ Value * CBuilder::CreateMalloc(Value * size) {
     Function * malloc = m->getFunction("malloc");
     if (malloc == nullptr) {
         FunctionType * fty = FunctionType::get(voidPtrTy, {intTy}, false);
-        malloc = Function::Create(fty, Function::ExternalLinkage, "malloc", mMod);
+        malloc = Function::Create(fty, Function::ExternalLinkage, "malloc", m);
         malloc->setCallingConv(CallingConv::C);
         malloc->setDoesNotAlias(0);
     }
@@ -235,14 +247,15 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     if (LLVM_UNLIKELY((alignment & (alignment - 1)) != 0)) {
         report_fatal_error("CreateAlignedMalloc: alignment must be a power of 2");
     }
-    DataLayout DL(mMod);
+    Module * const m = getModule();
+    DataLayout DL(m);
     IntegerType * const intTy = getIntPtrTy(DL);
-    Function * aligned_malloc = mMod->getFunction("aligned_malloc" + std::to_string(alignment));
+    Function * aligned_malloc = m->getFunction("aligned_malloc" + std::to_string(alignment));
     if (LLVM_UNLIKELY(aligned_malloc == nullptr)) {
         const auto ip = saveIP();
         PointerType * const voidPtrTy = getVoidPtrTy();
         FunctionType * fty = FunctionType::get(voidPtrTy, {intTy}, false);
-        aligned_malloc = Function::Create(fty, Function::InternalLinkage, "aligned_malloc" + std::to_string(alignment), mMod);
+        aligned_malloc = Function::Create(fty, Function::InternalLinkage, "aligned_malloc" + std::to_string(alignment), m);
         aligned_malloc->setCallingConv(CallingConv::C);
         aligned_malloc->setDoesNotAlias(0);
         aligned_malloc->addFnAttr(Attribute::AlwaysInline);
@@ -287,13 +300,14 @@ Value * CBuilder::CreateFileSourceMMap(Value * fd, Value * size) {
 }
 
 Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const prot, Value * const flags, Value * const fd, Value * const offset) {
-    Function * fMMap = mMod->getFunction("mmap");
+    Module * const m = getModule();
+    Function * fMMap = m->getFunction("mmap");
     if (LLVM_UNLIKELY(fMMap == nullptr)) {
         PointerType * const voidPtrTy = getVoidPtrTy();
         IntegerType * const intTy = getInt32Ty();
         IntegerType * const sizeTy = getSizeTy();
         FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy, intTy, intTy, intTy, sizeTy}, false);
-        fMMap = Function::Create(fty, Function::ExternalLinkage, "mmap", mMod);
+        fMMap = Function::Create(fty, Function::ExternalLinkage, "mmap", m);
     }
     Value * ptr = CreateCall(fMMap, {addr, size, prot, flags, fd, offset});
     if (codegen::EnableAsserts) {
@@ -331,13 +345,14 @@ Value * CBuilder::CreateMAdvise(Value * addr, Value * length, Advice advice) {
     Triple T(mTriple);
     Value * result = nullptr;
     if (T.isOSLinux() || T.isOSDarwin()) {
+        Module * const m = getModule();
         IntegerType * const intTy = getInt32Ty();
         IntegerType * const sizeTy = getSizeTy();
         PointerType * const voidPtrTy = getVoidPtrTy();
-        Function * MAdviseFunc = mMod->getFunction("madvise");
+        Function * MAdviseFunc = m->getFunction("madvise");
         if (LLVM_UNLIKELY(MAdviseFunc == nullptr)) {
             FunctionType * fty = FunctionType::get(intTy, {voidPtrTy, sizeTy, intTy}, false);
-            MAdviseFunc = Function::Create(fty, Function::ExternalLinkage, "madvise", mMod);
+            MAdviseFunc = Function::Create(fty, Function::ExternalLinkage, "madvise", m);
         }
         addr = CreatePointerCast(addr, voidPtrTy);
         length = CreateZExtOrTrunc(length, sizeTy);
@@ -360,7 +375,8 @@ Value * CBuilder::CreateMAdvise(Value * addr, Value * length, Advice advice) {
 }
 
 Value * CBuilder::CheckMMapSuccess(Value * const addr) {
-    DataLayout DL(mMod);
+    Module * const m = getModule();
+    DataLayout DL(m);
     IntegerType * const intTy = getIntPtrTy(DL);
     return CreateICmpNE(CreatePtrToInt(addr, intTy), ConstantInt::getAllOnesValue(intTy)); // MAP_FAILED = -1
 }
@@ -373,14 +389,15 @@ Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize) {
     Triple T(mTriple);
     Value * ptr = nullptr;
     if (T.isOSLinux()) {
-        DataLayout DL(mMod);
+        Module * const m = getModule();
+        DataLayout DL(m);
         PointerType * const voidPtrTy = getVoidPtrTy();
         IntegerType * const sizeTy = getSizeTy();
         IntegerType * const intTy = getIntPtrTy(DL);
-        Function * fMRemap = mMod->getFunction("mremap");
+        Function * fMRemap = m->getFunction("mremap");
         if (LLVM_UNLIKELY(fMRemap == nullptr)) {
             FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy, sizeTy, intTy}, false);
-            fMRemap = Function::Create(fty, Function::ExternalLinkage, "mremap", mMod);
+            fMRemap = Function::Create(fty, Function::ExternalLinkage, "mremap", m);
         }
         addr = CreatePointerCast(addr, voidPtrTy);
         oldSize = CreateZExtOrTrunc(oldSize, sizeTy);
@@ -401,10 +418,11 @@ Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize) {
 Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
     IntegerType * const sizeTy = getSizeTy();
     PointerType * const voidPtrTy = getVoidPtrTy();
-    Function * munmapFunc = mMod->getFunction("munmap");
+    Module * const m = getModule();
+    Function * munmapFunc = m->getFunction("munmap");
     if (LLVM_UNLIKELY(munmapFunc == nullptr)) {
         FunctionType * const fty = FunctionType::get(sizeTy, {voidPtrTy, sizeTy}, false);
-        munmapFunc = Function::Create(fty, Function::ExternalLinkage, "munmap", mMod);
+        munmapFunc = Function::Create(fty, Function::ExternalLinkage, "munmap", m);
     }
     len = CreateZExtOrTrunc(len, sizeTy);
     if (codegen::EnableAsserts) {
@@ -426,7 +444,8 @@ void CBuilder::CreateFree(Value * const ptr) {
     Function * free = m->getFunction("free");
     if (free == nullptr) {
         FunctionType * fty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
-        free = Function::Create(fty, Function::ExternalLinkage, "free", mMod);
+        Module * const m = getModule();
+        free = Function::Create(fty, Function::ExternalLinkage, "free", m);
         free->setCallingConv(CallingConv::C);
     }
     CallInst * const ci = CreateCall(free, CreatePointerCast(ptr, voidPtrTy));
@@ -463,7 +482,8 @@ void CBuilder::CreateAlignedFree(Value * const ptr, const bool testForNullAddres
 }
 
 Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
-    DataLayout DL(getModule());
+    Module * const m = getModule();
+    DataLayout DL(m);
     IntegerType * const intTy = getIntPtrTy(DL);
     PointerType * type = cast<PointerType>(ptr->getType());
     if (size->getType() != intTy) {
@@ -473,12 +493,11 @@ Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
             size = CreateZExtOrTrunc(size, intTy);
         }
     }
-    Module * const m = getModule();
     Function * realloc = m->getFunction("realloc");
     if (realloc == nullptr) {
         PointerType * const voidPtrTy = getVoidPtrTy();
-        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, intTy}, false);
-        realloc = Function::Create(fty, Function::ExternalLinkage, "realloc", mMod);
+        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, intTy}, false);        
+        realloc = Function::Create(fty, Function::ExternalLinkage, "realloc", m);
         realloc->setCallingConv(CallingConv::C);
         realloc->setDoesNotAlias(1);
     }
@@ -516,22 +535,24 @@ PointerType * CBuilder::getFILEptrTy() {
 }
 
 Value * CBuilder::CreateFOpenCall(Value * filename, Value * mode) {
-    Function * fOpenFunc = mMod->getFunction("fopen");
+    Module * const m = getModule();
+    Function * fOpenFunc = m->getFunction("fopen");
     if (fOpenFunc == nullptr) {
         FunctionType * fty = FunctionType::get(getFILEptrTy(), {getInt8Ty()->getPointerTo(), getInt8Ty()->getPointerTo()}, false);
-        fOpenFunc = Function::Create(fty, Function::ExternalLinkage, "fopen", mMod);
+        fOpenFunc = Function::Create(fty, Function::ExternalLinkage, "fopen", m);
         fOpenFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fOpenFunc, {filename, mode});
 }
 
 Value * CBuilder::CreateFReadCall(Value * ptr, Value * size, Value * nitems, Value * stream) {
-    Function * fReadFunc = mMod->getFunction("fread");
+    Module * const m = getModule();
+    Function * fReadFunc = m->getFunction("fread");
     PointerType * const voidPtrTy = getVoidPtrTy();
     if (fReadFunc == nullptr) {
         IntegerType * const sizeTy = getSizeTy();
         FunctionType * fty = FunctionType::get(sizeTy, {voidPtrTy, sizeTy, sizeTy, getFILEptrTy()}, false);
-        fReadFunc = Function::Create(fty, Function::ExternalLinkage, "fread", mMod);
+        fReadFunc = Function::Create(fty, Function::ExternalLinkage, "fread", m);
         fReadFunc->setCallingConv(CallingConv::C);
     }
     ptr = CreatePointerCast(ptr, voidPtrTy);
@@ -539,12 +560,13 @@ Value * CBuilder::CreateFReadCall(Value * ptr, Value * size, Value * nitems, Val
 }
 
 Value * CBuilder::CreateFWriteCall(Value * ptr, Value * size, Value * nitems, Value * stream) {
-    Function * fWriteFunc = mMod->getFunction("fwrite");
+    Module * const m = getModule();
+    Function * fWriteFunc = m->getFunction("fwrite");
     PointerType * const voidPtrTy = getVoidPtrTy();
     if (fWriteFunc == nullptr) {
         IntegerType * const sizeTy = getSizeTy();
         FunctionType * fty = FunctionType::get(sizeTy, {voidPtrTy, sizeTy, sizeTy, getFILEptrTy()}, false);
-        fWriteFunc = Function::Create(fty, Function::ExternalLinkage, "fwrite", mMod);
+        fWriteFunc = Function::Create(fty, Function::ExternalLinkage, "fwrite", m);
         fWriteFunc->setCallingConv(CallingConv::C);
     }
     ptr = CreatePointerCast(ptr, voidPtrTy);
@@ -552,53 +574,58 @@ Value * CBuilder::CreateFWriteCall(Value * ptr, Value * size, Value * nitems, Va
 }
 
 Value * CBuilder::CreateFCloseCall(Value * stream) {
-    Function * fCloseFunc = mMod->getFunction("fclose");
+    Module * const m = getModule();
+    Function * fCloseFunc = m->getFunction("fclose");
     if (fCloseFunc == nullptr) {
         FunctionType * fty = FunctionType::get(getInt32Ty(), {getFILEptrTy()}, false);
-        fCloseFunc = Function::Create(fty, Function::ExternalLinkage, "fclose", mMod);
+        fCloseFunc = Function::Create(fty, Function::ExternalLinkage, "fclose", m);
         fCloseFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(fCloseFunc, {stream});
 }
 
 Value * CBuilder::CreateRenameCall(Value * oldName, Value * newName) {
-    Function * renameFunc = mMod->getFunction("rename");
+    Module * const m = getModule();
+    Function * renameFunc = m->getFunction("rename");
     if (renameFunc == nullptr) {
         FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy(), getInt8PtrTy()}, false);
-        renameFunc = Function::Create(fty, Function::ExternalLinkage, "rename", mMod);
+        renameFunc = Function::Create(fty, Function::ExternalLinkage, "rename", m);
         renameFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(renameFunc, {oldName, newName});
 }
 
 Value * CBuilder::CreateRemoveCall(Value * path) {
-    Function * removeFunc = mMod->getFunction("remove");
+    Module * const m = getModule();
+    Function * removeFunc = m->getFunction("remove");
     if (removeFunc == nullptr) {
         FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, false);
-        removeFunc = Function::Create(fty, Function::ExternalLinkage, "remove", mMod);
+        removeFunc = Function::Create(fty, Function::ExternalLinkage, "remove", m);
         removeFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(removeFunc, {path});
 }
 
 Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg) {
+    Module * const m = getModule();
     Type * const voidPtrTy = getVoidPtrTy();
-    Function * pthreadCreateFunc = mMod->getFunction("pthread_create");
+    Function * pthreadCreateFunc = m->getFunction("pthread_create");
     if (pthreadCreateFunc == nullptr) {
         Type * pthreadTy = getSizeTy();
         FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), {getVoidPtrTy()}, false);
         FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy->getPointerTo(), voidPtrTy, funVoidPtrVoidTy->getPointerTo(), voidPtrTy}, false);
-        pthreadCreateFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_create", mMod);
+        pthreadCreateFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_create", m);
         pthreadCreateFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, CreatePointerCast(arg, voidPtrTy)});
 }
 
 Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
-    Function * pthreadExitFunc = mMod->getFunction("pthread_exit");
+    Module * const m = getModule();
+    Function * pthreadExitFunc = m->getFunction("pthread_exit");
     if (pthreadExitFunc == nullptr) {
         FunctionType * fty = FunctionType::get(getVoidTy(), {getVoidPtrTy()}, false);
-        pthreadExitFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_exit", mMod);
+        pthreadExitFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_exit", m);
         pthreadExitFunc->addFnAttr(Attribute::NoReturn);
         pthreadExitFunc->setCallingConv(CallingConv::C);
     }
@@ -608,23 +635,25 @@ Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
 }
 
 Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
-    Function * pthreadJoinFunc = mMod->getFunction("pthread_join");
+    Module * const m = getModule();
+    Function * pthreadJoinFunc = m->getFunction("pthread_join");
     if (pthreadJoinFunc == nullptr) {
         Type * pthreadTy = getSizeTy();
         FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy, getVoidPtrTy()->getPointerTo()}, false);
-        pthreadJoinFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_join", mMod);
+        pthreadJoinFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_join", m);
         pthreadJoinFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
 
-void CBuilder::CreateAssert(Value * const assertion, StringRef failureMessage) {
+void CBuilder::CreateAssert(Value * const assertion, StringRef failureMessage) {    
     if (codegen::EnableAsserts) {
-        Function * function = mMod->getFunction("__assert");
+        Module * const m = getModule();
+        Function * function = m->getFunction("__assert");
         if (LLVM_UNLIKELY(function == nullptr)) {
             auto ip = saveIP();
             FunctionType * fty = FunctionType::get(getVoidTy(), { getInt1Ty(), getInt8PtrTy(), getSizeTy() }, false);
-            function = Function::Create(fty, Function::PrivateLinkage, "__assert", mMod);
+            function = Function::Create(fty, Function::PrivateLinkage, "__assert", m);
             function->setDoesNotThrow();
             function->setDoesNotAlias(2);
             BasicBlock * const entry = BasicBlock::Create(getContext(), "", function);
@@ -660,14 +689,19 @@ void CBuilder::CreateAssert(Value * const assertion, StringRef failureMessage) {
 }
 
 void CBuilder::CreateExit(const int exitCode) {
-    Function * exit = mMod->getFunction("exit");
+    Module * const m = getModule();
+    Function * exit = m->getFunction("exit");
     if (LLVM_UNLIKELY(exit == nullptr)) {
         FunctionType * fty = FunctionType::get(getVoidTy(), {getInt32Ty()}, false);
-        exit = Function::Create(fty, Function::ExternalLinkage, "exit", mMod);
+        exit = Function::Create(fty, Function::ExternalLinkage, "exit", m);
         exit->setDoesNotReturn();
         exit->setDoesNotThrow();
     }
     CreateCall(exit, getInt32(exitCode));
+}
+
+llvm::BasicBlock * CBuilder::CreateBasicBlock(std::string && name) {
+    return BasicBlock::Create(getContext(), name, GetInsertBlock()->getParent());
 }
 
 BranchInst * CBuilder::CreateLikelyCondBr(Value * Cond, BasicBlock * True, BasicBlock * False, const int probability) {
@@ -678,23 +712,18 @@ BranchInst * CBuilder::CreateLikelyCondBr(Value * Cond, BasicBlock * True, Basic
     return CreateCondBr(Cond, True, False, mdb.createBranchWeights(probability, 100 - probability));
 }
 
-inline static unsigned ceil_log2(const unsigned v) {
-    assert ("log2(0) is undefined!" && v != 0);
-    return 32 - __builtin_clz(v - 1);
-}
-
 Value * CBuilder::CreatePopcount(Value * bits) {
-    Value * ctpopFunc = Intrinsic::getDeclaration(mMod, Intrinsic::ctpop, bits->getType());
+    Value * ctpopFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, bits->getType());
     return CreateCall(ctpopFunc, bits);
 }
 
 Value * CBuilder::CreateCountForwardZeroes(Value * value) {
-    Value * cttzFunc = Intrinsic::getDeclaration(mMod, Intrinsic::cttz, value->getType());
+    Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());
     return CreateCall(cttzFunc, {value, ConstantInt::getFalse(getContext())});
 }
 
 Value * CBuilder::CreateCountReverseZeroes(Value * value) {
-    Value * ctlzFunc = Intrinsic::getDeclaration(mMod, Intrinsic::ctlz, value->getType());
+    Value * ctlzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctlz, value->getType());
     return CreateCall(ctlzFunc, {value, ConstantInt::getFalse(getContext())});
 }
 
@@ -727,7 +756,8 @@ Value * CBuilder::CreateCeilLog2(Value * value) {
 }
 
 Value * CBuilder::GetString(StringRef Str) {
-    Value * ptr = mMod->getGlobalVariable(Str, true);
+    Module * const m = getModule();
+    Value * ptr = m->getGlobalVariable(Str, true);
     if (ptr == nullptr) {
         ptr = CreateGlobalString(Str, Str);
     }
@@ -736,18 +766,18 @@ Value * CBuilder::GetString(StringRef Str) {
 }
 
 Value * CBuilder::CreateReadCycleCounter() {
-    Value * cycleCountFunc = Intrinsic::getDeclaration(mMod, Intrinsic::readcyclecounter);
+    Module * const m = getModule();
+    Value * cycleCountFunc = Intrinsic::getDeclaration(m, Intrinsic::readcyclecounter);
     return CreateCall(cycleCountFunc, std::vector<Value *>({}));
 }
 
 Function * CBuilder::LinkFunction(llvm::StringRef name, FunctionType * type, void * functionPtr) const {
     assert (mDriver);
-    return mDriver->LinkFunction(mMod, name, type, functionPtr);
+    return mDriver->LinkFunction(getModule(), name, type, functionPtr);
 }
 
 CBuilder::CBuilder(llvm::LLVMContext & C, const unsigned GeneralRegisterWidthInBits)
 : IRBuilder<>(C)
-, mMod(nullptr)
 , mCacheLineAlignment(64)
 , mSizeType(getIntNTy(GeneralRegisterWidthInBits))
 , mFILEtype(nullptr)

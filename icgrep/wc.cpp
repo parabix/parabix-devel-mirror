@@ -176,10 +176,12 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     pxDriver.generatePipelineIR();
     
-    Value * const fileSize = mmapK->getAccumulator("fileSize");
-    Value * const lineCount = wck->getAccumulator("lineCount");
-    Value * const wordCount = wck->getAccumulator("wordCount");
-    Value * const charCount = wck->getAccumulator("charCount");
+    iBuilder->setKernel(mmapK);
+    Value * const fileSize = iBuilder->getAccumulator("fileSize");
+    iBuilder->setKernel(wck);
+    Value * const lineCount = iBuilder->getAccumulator("lineCount");
+    Value * const wordCount = iBuilder->getAccumulator("wordCount");
+    Value * const charCount = iBuilder->getAccumulator("charCount");
 
     iBuilder->CreateCall(recordCounts, {lineCount, wordCount, charCount, fileSize, fileIdx});
     

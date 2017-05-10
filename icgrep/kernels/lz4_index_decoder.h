@@ -25,9 +25,8 @@ class LZ4IndexDecoderKernel : public BlockOrientedKernel {
 public:
     LZ4IndexDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 protected:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:
-    bool useIndirectBr() const override;
 
     enum State : unsigned char {
         AT_BLOCK_SIZE = 0,
@@ -67,24 +66,24 @@ private:
     llvm::Value * sState;
 
     // Helper methods.
-    llvm::Value * getWordOffset();
-    llvm::Value * getWordStartOffset();
-    llvm::Value * loadRawByte(llvm::Value * offset);
-    void setExtenderUntilOffset();
-    void loadCurrentExtender();
+    llvm::Value * getWordOffset(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    llvm::Value * getWordStartOffset(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    llvm::Value * loadRawByte(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * offset = nullptr);
+    void setExtenderUntilOffset(const std::unique_ptr<KernelBuilder> & iBuilder);
+    void loadCurrentExtender(const std::unique_ptr<KernelBuilder> & iBuilder);
 
-    void generateProduceOutput();
-    void generateBoundaryDetection(State state, llvm::BasicBlock * exit_block, bool updateExtenderWord);
+    void generateProduceOutput(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    void generateBoundaryDetection(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, State state, llvm::BasicBlock * exit_block, bool updateExtenderWord = false);
     // Generate basic blocks for each state.
-    void generateSkippingBytes(llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
-    void generateAtBlockSize(llvm::BasicBlock * bb, llvm::BasicBlock * skippingBytes, llvm::BasicBlock * exit_block);
-    void generateAtToken(llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
-    void generateExtendingLiteralLen(llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
-    void generateAtLiterals(llvm::BasicBlock * bb);
-    void generateAtFirstOffset(llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
-    void generateAtSecondOffset(llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
-    void generateExtendingMatchLen(llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
-    void generateAtBlockChecksum(llvm::BasicBlock * bb, llvm::BasicBlock * skippingBytes);
+    void generateSkippingBytes(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
+    void generateAtBlockSize(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * bb, llvm::BasicBlock * skippingBytes, llvm::BasicBlock * exit_block);
+    void generateAtToken(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
+    void generateExtendingLiteralLen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
+    void generateAtLiterals(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * bb);
+    void generateAtFirstOffset(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
+    void generateAtSecondOffset(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
+    void generateExtendingMatchLen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * bb, llvm::BasicBlock * exit_block);
+    void generateAtBlockChecksum(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * bb, llvm::BasicBlock * skippingBytes);
 };
 
 }

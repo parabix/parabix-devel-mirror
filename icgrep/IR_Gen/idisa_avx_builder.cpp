@@ -16,12 +16,12 @@ Value * IDISA_AVX_Builder::hsimd_signmask(unsigned fw, Value * a) {
     // AVX2 special cases
     if (mBitBlockWidth == 256) {
         if (fw == 64) {
-            Value * signmask_f64func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx_movmsk_pd_256);
+            Value * signmask_f64func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx_movmsk_pd_256);
             Type * bitBlock_f64type = VectorType::get(getDoubleTy(), mBitBlockWidth/64);
             Value * a_as_pd = CreateBitCast(a, bitBlock_f64type);
             return CreateCall(signmask_f64func, a_as_pd);
         } else if (fw == 32) {
-            Value * signmask_f32func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx_movmsk_ps_256);
+            Value * signmask_f32func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx_movmsk_ps_256);
             Type * bitBlock_f32type = VectorType::get(getFloatTy(), mBitBlockWidth/32);
             Value * a_as_ps = CreateBitCast(a, bitBlock_f32type);
             return CreateCall(signmask_f32func, a_as_ps);
@@ -37,7 +37,7 @@ Value * IDISA_AVX_Builder::hsimd_signmask(unsigned fw, Value * a) {
             Value * packh = CreateShuffleVector(a_as_ps, UndefValue::get(bitBlock_f32type), ConstantVector::get({indicies, 8}));
             Type * halfBlock_f32type = VectorType::get(getFloatTy(), mBitBlockWidth/64);
             Value * pack_as_ps = CreateBitCast(packh, halfBlock_f32type);
-            Value * signmask_f32func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx_movmsk_ps_256);
+            Value * signmask_f32func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx_movmsk_ps_256);
             return CreateCall(signmask_f32func, pack_as_ps);
         }
     }
@@ -95,7 +95,7 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
     
 Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     if ((fw == 128) && (mBitBlockWidth == 256)) {
-        Value * vperm2i128func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_vperm2i128);
+        Value * vperm2i128func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_vperm2i128);
         return CreateCall(vperm2i128func, {fwCast(64, a), fwCast(64, b), getInt8(0x31)});
     }
     // Otherwise use default SSE logic.
@@ -104,7 +104,7 @@ Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_AVX2_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
     if ((fw == 128) && (mBitBlockWidth == 256)) {
-        Value * vperm2i128func = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_vperm2i128);
+        Value * vperm2i128func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_vperm2i128);
         return CreateCall(vperm2i128func, {fwCast(64, a), fwCast(64, b), getInt8(0x20)});
     }
     // Otherwise use default SSE logic.
@@ -113,7 +113,7 @@ Value * IDISA_AVX2_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_AVX2_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
     if ((fw == 16)  && (lanes == 2)) {
-        Value * vpackuswbfunc = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_packuswb);
+        Value * vpackuswbfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_packuswb);
         Value * a_low = fwCast(16, simd_and(a, simd_lomask(fw)));
         Value * b_low = fwCast(16, simd_and(b, simd_lomask(fw)));
         return CreateCall(vpackuswbfunc, {a_low, b_low});
@@ -124,7 +124,7 @@ Value * IDISA_AVX2_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Va
 
 Value * IDISA_AVX2_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
     if ((fw == 16)  && (lanes == 2)) {
-        Value * vpackuswbfunc = Intrinsic::getDeclaration(mMod, Intrinsic::x86_avx2_packuswb);
+        Value * vpackuswbfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_packuswb);
         Value * a_low = simd_srli(fw, a, fw/2);
         Value * b_low = simd_srli(fw, b, fw/2);
         return CreateCall(vpackuswbfunc, {a_low, b_low});

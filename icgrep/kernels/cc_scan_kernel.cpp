@@ -13,20 +13,20 @@ using namespace llvm;
 
 namespace kernel {
 
-void CCScanKernel::generateDoBlockMethod() {
+void CCScanKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     auto savePoint = iBuilder->saveIP();
-    Function * scanWordFunction = generateScanWordRoutine(iBuilder->getModule());
+    Function * scanWordFunction = generateScanWordRoutine(iBuilder);
     iBuilder->restoreIP(savePoint);
 
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / mScanwordBitWidth;
     Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
     VectorType * scanwordVectorType =  VectorType::get(T, fieldCount);    
-    Value * blockNo = getScalarField("BlockNo");
+    Value * blockNo = iBuilder->getScalarField("BlockNo");
     Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));
     
     std::vector<Value * > matchWordVectors;
     for(unsigned d = 0; d < mStreamNum; d++) {
-        Value * matches = loadInputStreamBlock("matchResults", iBuilder->getInt32(d));
+        Value * matches = iBuilder->loadInputStreamBlock("matchResults", iBuilder->getInt32(d));
         matchWordVectors.push_back(iBuilder->CreateBitCast(matches, scanwordVectorType));
     }
     
@@ -37,12 +37,14 @@ void CCScanKernel::generateDoBlockMethod() {
         }
         scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
     }   
-    setScalarField("BlockNo", iBuilder->CreateAdd(blockNo, iBuilder->getSize(1)));
+    iBuilder->setScalarField("BlockNo", iBuilder->CreateAdd(blockNo, iBuilder->getSize(1)));
 }
 
-Function * CCScanKernel::generateScanWordRoutine(Module * m) const {
+Function * CCScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBuilder> & iBuilder) const {
 
     IntegerType * T = iBuilder->getIntNTy(mScanwordBitWidth);
+
+    Module * const m = iBuilder->getModule();
 
     Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", iBuilder->getVoidTy(), T, iBuilder->getInt32Ty(), T, nullptr));
     scanFunc->setCallingConv(CallingConv::C);

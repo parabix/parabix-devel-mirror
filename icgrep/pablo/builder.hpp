@@ -196,14 +196,6 @@ public:
     inline While * createWhile(PabloAST * condition, PabloBuilder & builder) {
         return mPb->createWhile(condition, builder.mPb);
     }
-
-//    llvm::Type * getStreamTy(const unsigned FieldWidth = 1) {
-//        return mPb->getStreamTy(FieldWidth);
-//    }
-    
-//    llvm::Type * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
-//        return mPb->getStreamSetTy(NumElements, FieldWidth);
-//    }
     
     /// Statement Iterator Wrappers
 

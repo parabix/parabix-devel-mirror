@@ -20,21 +20,21 @@ StreamsMerge::StreamsMerge(const std::unique_ptr<kernel::KernelBuilder> & iBuild
     mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamsPerSet, 1), "output"});
 }
 
-void StreamsMerge::generateDoBlockMethod() {
+void StreamsMerge::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
 
     std::vector<Value *> resultStreams;
 
     for (unsigned j = 0; j < mStreamsPerSet; j++) {
-        resultStreams.push_back(loadInputStreamBlock("inputGroup" + std::to_string(0), iBuilder->getInt32(j)));
+        resultStreams.push_back(iBuilder->loadInputStreamBlock("inputGroup" + std::to_string(0), iBuilder->getInt32(j)));
     }
 
     for (unsigned i = 1; i < mInputSets; i++) {
         for (unsigned j = 0; j < mStreamsPerSet; j++) {
-            resultStreams[j] = iBuilder->CreateOr(resultStreams[j], loadInputStreamBlock("inputGroup" + std::to_string(i), iBuilder->getInt32(j)));
+            resultStreams[j] = iBuilder->CreateOr(resultStreams[j], iBuilder->loadInputStreamBlock("inputGroup" + std::to_string(i), iBuilder->getInt32(j)));
         }
     }
     for (unsigned j = 0; j < mStreamsPerSet; j++) {
-        storeOutputStreamBlock("output", iBuilder->getInt32(j), resultStreams[j]);
+        iBuilder->storeOutputStreamBlock("output", iBuilder->getInt32(j), resultStreams[j]);
     }
 }
 

@@ -465,13 +465,14 @@ Value * ExpandableBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * cons
 SingleBlockBuffer::SingleBlockBuffer(const std::unique_ptr<kernel::KernelBuilder> &  b, Type * type)
 : StreamSetBuffer(BufferKind::BlockBuffer, type, resolveStreamSetType(b, type), 1, 0) {
     mUniqueID = "S";
-
 }
 
-SourceBuffer::SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(), b->getSizeTy(), nullptr), 0, AddressSpace) {
-    mUniqueID = "M"; // + std::to_string(bufferBlocks);
-    if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
+SourceBuffer::SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, unsigned MemoryAddressSpace, unsigned StructAddressSpace)
+: StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(MemoryAddressSpace), b->getSizeTy(), nullptr), 0, StructAddressSpace) {
+    mUniqueID = "B";
+    if (MemoryAddressSpace != 0 || StructAddressSpace != 0) {
+        mUniqueID += "@" + std::to_string(MemoryAddressSpace) + ":" + std::to_string(StructAddressSpace);
+    }
 }
 
 ExternalBuffer::ExternalBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, llvm::Value * addr, unsigned AddressSpace)

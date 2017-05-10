@@ -12,6 +12,8 @@
 #include <boost/container/flat_map.hpp>
 #include <kernels/kernel_builder.h>
 
+#include <llvm/Support/raw_ostream.h>
+
 using namespace kernel;
 using namespace parabix;
 using namespace llvm;
@@ -102,9 +104,10 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
 
         iBuilder->SetInsertPoint(segmentWait);
         const unsigned waitIdx = codegen::DebugOptionIsSet(codegen::SerializeThreads) ? (n - 1) : k;
-        kernels[waitIdx]->setBuilder(iBuilder);
-        Value * const processedSegmentCount = kernels[waitIdx]->acquireLogicalSegmentNo();
 
+        iBuilder->setKernel(kernels[waitIdx]);
+        Value * const processedSegmentCount = iBuilder->acquireLogicalSegmentNo();
+        iBuilder->setKernel(kernel);
 
         assert (processedSegmentCount->getType() == segNo->getType());
         Value * const ready = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
@@ -117,14 +120,11 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
             iBuilder->CreateCondBr(ready, completionTest, segmentWait);
 
             iBuilder->SetInsertPoint(completionTest);
-
-            kernel->setBuilder(iBuilder);
-            Value * terminationSignal = kernel->getTerminationSignal();
-
+            Value * terminationSignal = iBuilder->getTerminationSignal();
             iBuilder->CreateCondBr(terminationSignal, exitBlock, segmentLoopBody);
             iBuilder->SetInsertPoint(exitBlock);
             // Ensure that the next thread will also exit.
-            kernel->releaseLogicalSegmentNo(nextSegNo);
+            iBuilder->releaseLogicalSegmentNo(nextSegNo);
             iBuilder->CreateBr(exitThreadBlock);
         }
 
@@ -138,23 +138,21 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
             args.push_back(f->second);
         }
 
-        kernel->setBuilder(iBuilder);
-        kernel->createDoSegmentCall(args);        
+        iBuilder->setKernel(kernel);
+        iBuilder->createDoSegmentCall(args);
         if (!kernel->hasNoTerminateAttribute()) {
-            terminated = iBuilder->CreateOr(terminated, kernel->getTerminationSignal());
+            terminated = iBuilder->CreateOr(terminated, iBuilder->getTerminationSignal());
         }
 
         const auto & outputs = kernel->getStreamOutputs();
-        for (unsigned i = 0; i < outputs.size(); ++i) {
-            kernel->setBuilder(iBuilder);
-            Value * const produced = kernel->getProducedItemCount(outputs[i].name, terminated);
+        for (unsigned i = 0; i < outputs.size(); ++i) {            
+            Value * const produced = iBuilder->getProducedItemCount(outputs[i].name, terminated);
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
             assert (producedPos.count(buf) == 0);
             producedPos.emplace(buf, produced);
         }
         for (unsigned i = 0; i < inputs.size(); ++i) {
-            kernel->setBuilder(iBuilder);
-            Value * const processedItemCount = kernel->getProcessedItemCount(inputs[i].name);
+            Value * const processedItemCount = iBuilder->getProcessedItemCount(inputs[i].name);
             const StreamSetBuffer * const buf = kernel->getStreamSetInputBuffer(i);            
             auto f = consumedPos.find(buf);
             if (f == consumedPos.end()) {
@@ -164,8 +162,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
                 f->second = iBuilder->CreateSelect(lesser, processedItemCount, f->second);
             }
         }
-        kernel->setBuilder(iBuilder);
-        kernel->releaseLogicalSegmentNo(nextSegNo);
+        iBuilder->releaseLogicalSegmentNo(nextSegNo);
     }
 
     assert (segmentLoopBody);
@@ -177,8 +174,8 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         const auto & outputs = kernel->getStreamSetOutputBuffers();
         for (unsigned i = 0; i < outputs.size(); ++i) {
             if (outputs[i] == buf) {
-                kernel->setBuilder(iBuilder);
-                kernel->setConsumedItemCount(kernel->getStreamOutputs()[i].name, consumed.second);
+                iBuilder->setKernel(kernel);
+                iBuilder->setConsumedItemCount(kernel->getStreamOutput(i).name, consumed.second);
                 break;
             }
         }
@@ -222,9 +219,8 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
     }
 
     for (unsigned i = 0; i < n; ++i) {
-        auto kernel = kernels[i];
-        kernel->setBuilder(iBuilder);
-        kernel->releaseLogicalSegmentNo(iBuilder->getSize(0));
+        iBuilder->setKernel(kernels[i]);
+        iBuilder->releaseLogicalSegmentNo(iBuilder->getSize(0));
     }
 
     AllocaInst * const sharedStruct = iBuilder->CreateCacheAlignedAlloca(sharedStructType);
@@ -292,8 +288,8 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
     }
 
     for (auto & kernel : kernels) {
-        kernel->setBuilder(iBuilder);
-        kernel->releaseLogicalSegmentNo(iBuilder->getSize(0));
+        iBuilder->setKernel(kernel);
+        iBuilder->releaseLogicalSegmentNo(iBuilder->getSize(0));
     }
 
     // GENERATE THE PRODUCING AND CONSUMING KERNEL MAPS
@@ -336,6 +332,9 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
     Value * producerSegNo[n];
     for (unsigned id = 0; id < n; id++) {
         const auto & kernel = kernels[id];
+
+        iBuilder->setKernel(kernel);
+
         const auto & inputs = kernel->getStreamInputs();
 
         Function * const threadFunc = makeThreadFunction(iBuilder, "ppt:" + kernel->getName());
@@ -371,12 +370,14 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
             kernelSet.insert(list.begin(), list.end());
         }
         for (unsigned k : kernelSet) {
-            Value * consumerSegNo = kernels[k]->acquireLogicalSegmentNo();
+            iBuilder->setKernel(kernels[k]);
+            Value * consumerSegNo = iBuilder->acquireLogicalSegmentNo();
             assert (consumerSegNo->getType() == segNo->getType());
             Value * consumedSegNo = iBuilder->CreateAdd(consumerSegNo, bufferSegments);
             outputWaitCond = iBuilder->CreateAnd(outputWaitCond, iBuilder->CreateICmpULE(segNo, consumedSegNo));
         }
         kernelSet.clear();
+        iBuilder->setKernel(kernel);
         iBuilder->CreateCondBr(outputWaitCond, inputCheckBlock, outputCheckBlock);
 
         // Check whether the input buffers have enough data for this kernel to begin
@@ -387,12 +388,12 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
 
         Value * inputWaitCond = iBuilder->getTrue();
         for (unsigned k : kernelSet) {
-            Kernel * kernel = kernels[k];
-            kernel->setBuilder(iBuilder);
-            producerSegNo[k] = kernel->acquireLogicalSegmentNo();
+            iBuilder->setKernel(kernels[k]);
+            producerSegNo[k] = iBuilder->acquireLogicalSegmentNo();
             assert (producerSegNo[k]->getType() == segNo->getType());
             inputWaitCond = iBuilder->CreateAnd(inputWaitCond, iBuilder->CreateICmpULT(segNo, producerSegNo[k]));
         }
+        iBuilder->setKernel(kernel);
         iBuilder->CreateCondBr(inputWaitCond, doSegmentBlock, inputCheckBlock);
 
         // Process the segment
@@ -402,23 +403,25 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
         Value * terminated = nullptr;
         if (kernelSet.empty()) {
             // if this kernel has no input streams, the kernel itself must decide when it terminates.
-            terminated = kernel->getTerminationSignal();
+            terminated = iBuilder->getTerminationSignal();
         } else {
             // ... otherwise the kernel terminates only when it exhausts all of its input streams
             terminated = iBuilder->getTrue();
             for (unsigned k : kernelSet) {
-                terminated = iBuilder->CreateAnd(terminated, kernels[k]->getTerminationSignal());
+                iBuilder->setKernel(kernels[k]);
+                terminated = iBuilder->CreateAnd(terminated, iBuilder->getTerminationSignal());
                 terminated = iBuilder->CreateAnd(terminated, iBuilder->CreateICmpEQ(nextSegNo, producerSegNo[k]));
             }
             kernelSet.clear();
+            iBuilder->setKernel(kernel);
         }
 
         std::vector<Value *> args = {kernel->getInstance(), terminated};
         args.insert(args.end(), inputs.size(), iBuilder->CreateMul(segmentItems, segNo));
 
-        kernel->createDoSegmentCall(args);
+        iBuilder->createDoSegmentCall(args);
         segNo->addIncoming(nextSegNo, doSegmentBlock);
-        kernel->releaseLogicalSegmentNo(nextSegNo);
+        iBuilder->releaseLogicalSegmentNo(nextSegNo);
 
         iBuilder->CreateCondBr(terminated, exitThreadBlock, outputCheckBlock);
 
@@ -479,8 +482,10 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
     }
     Value * terminated = iBuilder->getFalse();
     for (unsigned k = 0; k < kernels.size(); k++) {
+
         auto & kernel = kernels[k];
 
+        iBuilder->setKernel(kernel);
         const auto & inputs = kernel->getStreamInputs();
         const auto & outputs = kernel->getStreamOutputs();
 
@@ -493,25 +498,21 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
             args.push_back(f->second);
         }
 
-        kernel->setBuilder(iBuilder);
-        kernel->createDoSegmentCall(args);
+        iBuilder->createDoSegmentCall(args);
         if (!kernel->hasNoTerminateAttribute()) {
-            Value * terminatedSignal = kernel->getTerminationSignal();
+            Value * terminatedSignal = iBuilder->getTerminationSignal();
             terminated = iBuilder->CreateOr(terminated, terminatedSignal);
-            kernel->setBuilder(iBuilder);
         }
         for (unsigned i = 0; i < outputs.size(); ++i) {
-            Value * const produced = kernel->getProducedItemCount(outputs[i].name, terminated);
+            Value * const produced = iBuilder->getProducedItemCount(outputs[i].name, terminated);
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
             assert (producedPos.count(buf) == 0);
             producedPos.emplace(buf, produced);
         }
 
         for (unsigned i = 0; i < inputs.size(); ++i) {
-            kernel->setBuilder(iBuilder);
-            Value * const processedItemCount = kernel->getProcessedItemCount(inputs[i].name);
+            Value * const processedItemCount = iBuilder->getProcessedItemCount(inputs[i].name);
             const StreamSetBuffer * const buf = kernel->getStreamSetInputBuffer(i);
-
             auto f = consumedPos.find(buf);
             if (f == consumedPos.end()) {
                 consumedPos.emplace(buf, processedItemCount);
@@ -527,10 +528,10 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
             cycleCountStart = cycleCountEnd;
         }
 
-        kernel->setBuilder(iBuilder);
-        Value * const segNo = kernel->acquireLogicalSegmentNo();
+
+        Value * const segNo = iBuilder->acquireLogicalSegmentNo();
         Value * nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
-        kernel->releaseLogicalSegmentNo(nextSegNo);
+        iBuilder->releaseLogicalSegmentNo(nextSegNo);
     }
 
     for (const auto consumed : consumedPos) {
@@ -539,8 +540,8 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
         const auto & outputs = k->getStreamSetOutputBuffers();
         for (unsigned i = 0; i < outputs.size(); ++i) {
             if (outputs[i] == buf) {
-                k->setBuilder(iBuilder);
-                k->setConsumedItemCount(k->getStreamOutputs()[i].name, consumed.second);
+                iBuilder->setKernel(k);
+                iBuilder->setConsumedItemCount(k->getStreamOutput(i).name, consumed.second);
                 break;
             }
         }
@@ -551,9 +552,15 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
     if (codegen::EnableCycleCounter) {
         for (unsigned k = 0; k < kernels.size(); k++) {
             auto & kernel = kernels[k];
+            iBuilder->setKernel(kernel);
             const auto & inputs = kernel->getStreamInputs();
             const auto & outputs = kernel->getStreamOutputs();
-            Value * items = inputs.size() > 0 ? kernel->getProcessedItemCount(inputs[0].name) : kernel->getProducedItemCount(outputs[0].name);
+            Value * items = nullptr;
+            if (inputs.empty()) {
+                items = iBuilder->getProducedItemCount(outputs[0].name);
+            } else {
+                items = iBuilder->getProcessedItemCount(outputs[0].name);
+            }
             Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
             Value * cycles = iBuilder->CreateLoad(iBuilder->CreateGEP(mCycleCounts, {iBuilder->getInt32(0), iBuilder->getInt32(k)}));
             Value * fCycles = iBuilder->CreateUIToFP(cycles, iBuilder->getDoubleTy());

@@ -17,7 +17,7 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
 
 class P2SKernelWithCompressedOutput final : public BlockOrientedKernel {
@@ -26,7 +26,7 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
 
 class P2S16Kernel final : public BlockOrientedKernel {
@@ -35,7 +35,7 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
     
 class P2S16KernelWithCompressedOutput final : public BlockOrientedKernel {
@@ -44,7 +44,7 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
     
 }

@@ -125,17 +125,17 @@ Value * ProcessingRate::CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder 
     report_fatal_error("Inverse processing rate calculation attempted for variable or unknown rate.");
 }
 
-void KernelInterface::addKernelDeclarations() {
+void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::KernelBuilder> & idb) {
 
     if (mKernelStateType == nullptr) {
         throw std::runtime_error("Kernel interface " + getName() + " not yet finalized.");
     }
 
-    Module * const module = iBuilder->getModule();
+    Module * const module = idb->getModule();
     PointerType * const selfType = mKernelStateType->getPointerTo();
-    IntegerType * const sizeTy = iBuilder->getSizeTy();
+    IntegerType * const sizeTy = idb->getSizeTy();
     PointerType * const consumerTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
-    Type * const voidTy = iBuilder->getVoidTy();
+    Type * const voidTy = idb->getVoidTy();
 
     // Create the initialization function prototype
     std::vector<Type *> initParameters = {selfType};
@@ -154,11 +154,11 @@ void KernelInterface::addKernelDeclarations() {
         (++args)->setName(binding.name);
     }
     for (auto binding : mStreamSetOutputs) {
-        (args++)->setName(binding.name + "ConsumerLocks");
+        (++args)->setName(binding.name + "ConsumerLocks");
     }
 
     // Create the doSegment function prototype.
-    std::vector<Type *> params = {selfType, iBuilder->getInt1Ty()};
+    std::vector<Type *> params = {selfType, idb->getInt1Ty()};
     params.insert(params.end(), mStreamSetInputs.size(), sizeTy);
 
     FunctionType * const doSegmentType = FunctionType::get(voidTy, params, false);
@@ -176,7 +176,7 @@ void KernelInterface::addKernelDeclarations() {
     // Create the terminate function prototype
     Type * resultType = nullptr;
     if (mScalarOutputs.empty()) {
-        resultType = iBuilder->getVoidTy();
+        resultType = idb->getVoidTy();
     } else {
         const auto n = mScalarOutputs.size();
         Type * outputType[n];
@@ -186,7 +186,7 @@ void KernelInterface::addKernelDeclarations() {
         if (n == 1) {
             resultType = outputType[0];
         } else {
-            resultType = StructType::get(iBuilder->getContext(), ArrayRef<Type *>(outputType, n));
+            resultType = StructType::get(idb->getContext(), ArrayRef<Type *>(outputType, n));
         }
     }
     FunctionType * const terminateType = FunctionType::get(resultType, {selfType}, false);
@@ -197,7 +197,7 @@ void KernelInterface::addKernelDeclarations() {
     args = terminateFunc->arg_begin();
     args->setName("self");
 
-    linkExternalMethods();
+    linkExternalMethods(idb);
 }
 
 Function * KernelInterface::getInitFunction(Module * const module) const {

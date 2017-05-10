@@ -26,12 +26,12 @@ DirectCharacterClassKernelBuilder::DirectCharacterClassKernelBuilder(
 
 }
 
-void DirectCharacterClassKernelBuilder::generateDoBlockMethod() {
+void DirectCharacterClassKernelBuilder::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     unsigned packCount = 8 * mCodeUnitSize;  
     unsigned codeUnitWidth = 8 * mCodeUnitSize;
     Value * codeUnitPack[packCount];
     for (unsigned i = 0; i < packCount; i++) {
-        codeUnitPack[i] = loadInputStreamPack("codeUnitStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
+        codeUnitPack[i] = iBuilder->loadInputStreamPack("codeUnitStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
     }
     for (unsigned j = 0; j < mCharClasses.size();  j++) {
         Value * theCCstream = iBuilder->allZeroes();
@@ -65,7 +65,7 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod() {
 
             theCCstream = iBuilder->simd_or(theCCstream, pack);
         }
-        storeOutputStreamBlock("ccStream", iBuilder->getInt32(j), theCCstream);
+        iBuilder->storeOutputStreamBlock("ccStream", iBuilder->getInt32(j), theCCstream);
     }
 }
 

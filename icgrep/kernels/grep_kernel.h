@@ -14,7 +14,7 @@ namespace kernel {
 class ICgrepKernelBuilder: public pablo::PabloKernel {
 public:
     ICgrepKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast);    
-    std::string makeSignature() override;
+    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     bool isCachable() const override { return true; }
 protected:
     void generatePabloMethod() override;
@@ -27,7 +27,7 @@ class InvertMatchesKernel : public BlockOrientedKernel {
 public:
     InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder);
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
 
 

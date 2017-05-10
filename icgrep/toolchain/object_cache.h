@@ -17,6 +17,7 @@ namespace llvm { class Module; }
 namespace llvm { class MemoryBuffer; }
 namespace llvm { class MemoryBufferRef; }
 namespace kernel { class Kernel; }
+namespace kernel { class KernelBuilder; }
 
 // The ParabixObjectCache is a two-level cache compatible with the requirements
 // of the LLVM ExecutionEngine as well as the Parabix Kernel builder infrastructure.
@@ -39,7 +40,7 @@ class ParabixObjectCache final : public llvm::ObjectCache {
 public:
     ParabixObjectCache();
     ParabixObjectCache(const std::string & dir);
-    bool loadCachedObjectFile(kernel::Kernel * const kernel);
+    bool loadCachedObjectFile(const std::unique_ptr<kernel::KernelBuilder> & idb, kernel::Kernel * const kernel);
     void notifyObjectCompiled(const llvm::Module *M, llvm::MemoryBufferRef Obj) override;
     std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module * M) override;
 protected:

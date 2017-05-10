@@ -16,10 +16,10 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
-    void linkExternalMethods() override;
-    void generateInitializeMethod() override;
-    void generateDoSegmentMethod() override;
-    void generateFinalizeMethod() override;
+    void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 protected:
     const unsigned          mSegmentBlocks;
     const unsigned          mCodeUnitWidth;
@@ -32,9 +32,9 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
-    void generateInitializeMethod() override;
-    void generateDoSegmentMethod() override;
-    void generateFinalizeMethod() override;
+    void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;
@@ -45,8 +45,8 @@ public:
     MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Type * type, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool moduleIDisSignature() const override { return true; }
 protected:
-    void generateInitializeMethod() override;
-    void generateDoSegmentMethod() override;
+    void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;

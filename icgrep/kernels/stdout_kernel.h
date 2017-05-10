@@ -11,23 +11,23 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class StdOutKernel : public SegmentOrientedKernel {
+class StdOutKernel final : public SegmentOrientedKernel {
 public:
     StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth);
 private:
-    void generateDoSegmentMethod() override final;
+    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
 private:
     const unsigned mCodeUnitWidth;
     
 };
 
 
-class FileSink : public SegmentOrientedKernel {
+class FileSink final : public SegmentOrientedKernel {
 public:  
     FileSink(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth);
 protected:
-    void generateInitializeMethod() override final;
-    void generateDoSegmentMethod() override final;
+    void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
 private:
     const unsigned mCodeUnitWidth;
     

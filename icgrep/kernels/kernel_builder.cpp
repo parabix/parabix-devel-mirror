@@ -9,12 +9,20 @@ using Value = Value;
 
 namespace kernel {
 
-Value * KernelBuilder::getScalarFieldPtr(Value * const index) {
-    return CreateGEP(mKernel->getInstance(), {getInt32(0), index});
+Value * KernelBuilder::getScalarFieldPtr(llvm::Value * instance, Value * const index) {
+    return CreateGEP(instance, {getInt32(0), index});
 }
 
-Value * KernelBuilder::getScalarFieldPtr(const std::string & fieldName) {
-    return getScalarFieldPtr(getInt32(mKernel->getScalarIndex(fieldName)));
+Value * KernelBuilder::getScalarFieldPtr(llvm::Value * instance, const std::string & fieldName) {
+    return getScalarFieldPtr(instance, getInt32(mKernel->getScalarIndex(fieldName)));
+}
+
+llvm::Value * KernelBuilder::getScalarFieldPtr(llvm::Value * index) {
+    return getScalarFieldPtr(mKernel->getInstance(), index);
+}
+
+llvm::Value *KernelBuilder:: getScalarFieldPtr(const std::string & fieldName) {
+    return getScalarFieldPtr(mKernel->getInstance(), fieldName);
 }
 
 Value * KernelBuilder::getScalarField(const std::string & fieldName) {
@@ -46,11 +54,10 @@ Value * KernelBuilder::getProducedItemCount(const std::string & name, Value * do
         const auto & refSet = rate.referenceStreamSet();
         std::string principalField;
         if (refSet.empty()) {
-            const auto & principleSet = mKernel->getStreamOutput(0).name;
             if (mKernel->getStreamInputs().empty()) {
-                principalField = principleSet + Kernel::PRODUCED_ITEM_COUNT_SUFFIX;
+                principalField = mKernel->getStreamOutput(0).name + Kernel::PRODUCED_ITEM_COUNT_SUFFIX;
             } else {
-                principalField = principleSet + Kernel::PROCESSED_ITEM_COUNT_SUFFIX;
+                principalField = mKernel->getStreamInput(0).name + Kernel::PROCESSED_ITEM_COUNT_SUFFIX;
             }
         } else {
             std::tie(port, index) = mKernel->getStreamPort(refSet);
@@ -83,11 +90,12 @@ Value * KernelBuilder::getProcessedItemCount(const std::string & name) {
 }
 
 Value * KernelBuilder::getAvailableItemCount(const std::string & name) {
-//    for (unsigned i = 0; i < mStreamSetInputs.size(); ++i) {
-//        if (mStreamSetInputs[i].name == name) {
-//            return mAvailableItemCount[i];
-//        }
-//    }
+    const auto & inputs = mKernel->getStreamInputs();
+    for (unsigned i = 0; i < inputs.size(); ++i) {
+        if (inputs[i].name == name) {
+            return mKernel->getAvailableItemCount(i);
+        }
+    }
     return nullptr;
 }
 
@@ -219,7 +227,38 @@ void KernelBuilder::setBufferedSize(const std::string & name, Value * size) {
     mKernel->getAnyStreamSetBuffer(name)->setBufferedSize(this, getStreamSetBufferPtr(name), size);
 }
 
-BasicBlock * KernelBuilder::CreateWaitForConsumers() {
+
+CallInst * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) {
+    Function * const doSegment = mKernel->getDoSegmentFunction(getModule());
+    assert (doSegment->getArgumentList().size() == args.size());
+    return CreateCall(doSegment, args);
+}
+
+Value * KernelBuilder::getAccumulator(const std::string & accumName) {
+    auto results = mKernel->mOutputScalarResult;
+    if (LLVM_UNLIKELY(results == nullptr)) {
+        report_fatal_error("Cannot get accumulator " + accumName + " until " + mKernel->getName() + " has terminated.");
+    }
+    const auto & outputs = mKernel->getScalarOutputs();
+    const auto n = outputs.size();
+    if (LLVM_UNLIKELY(n == 0)) {
+        report_fatal_error(mKernel->getName() + " has no output scalars.");
+    } else {
+        for (unsigned i = 0; i < n; ++i) {
+            const Binding & b = outputs[i];
+            if (b.name == accumName) {
+                if (n == 1) {
+                    return results;
+                } else {
+                    return CreateExtractValue(results, {i});
+                }
+            }
+        }
+        report_fatal_error(mKernel->getName() + " has no output scalar named " + accumName);
+    }
+}
+
+BasicBlock * KernelBuilder::CreateConsumerWait() {
     const auto consumers = mKernel->getStreamOutputs();
     BasicBlock * const entry = GetInsertBlock();
     if (consumers.empty()) {

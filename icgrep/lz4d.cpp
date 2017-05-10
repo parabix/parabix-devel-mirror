@@ -99,7 +99,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
     pxDriver.makeKernelCall(lz4bK, {LiteralIndexes, MatchIndexes, ByteStream}, {DecompressedByteStream});
 
     Kernel * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 8));
-    outK->setInitialArguments({iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile), iBuilder->getInt8PtrTy())});
+    outK->setInitialArguments({iBuilder->CreatePointerCast(iBuilder->GetString(outputFile), iBuilder->getInt8PtrTy())});
     pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
  
     pxDriver.generatePipelineIR();

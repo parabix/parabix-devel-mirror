@@ -19,6 +19,7 @@ namespace pablo { class PabloBlock; }
 namespace pablo { class PabloKernel; }
 namespace pablo { class Statement; }
 namespace pablo { class While; }
+namespace kernel { class KernelBuilder; }
 
 namespace pablo {
 
@@ -36,23 +37,23 @@ public:
 
 protected:
 
-    void initializeKernelData(IDISA::IDISA_Builder * const builder);
+    void initializeKernelData(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
 
-    void compile(IDISA::IDISA_Builder * const builder);
+    void compile(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
 
 private:
 
-    void examineBlock(IDISA::IDISA_Builder * const builder, const PabloBlock * const block);
+    void examineBlock(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const block);
 
-    void compileBlock(IDISA::IDISA_Builder * const builder, const PabloBlock * const block);
+    void compileBlock(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const block);
 
-    void compileStatement(IDISA::IDISA_Builder * const builder, const Statement * stmt);
+    void compileStatement(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const Statement * stmt);
 
-    void compileIf(IDISA::IDISA_Builder * const builder, const If * ifStmt);
+    void compileIf(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const If * ifStmt);
 
-    void compileWhile(IDISA::IDISA_Builder * const builder, const While * whileStmt);
+    void compileWhile(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const While * whileStmt);
 
-    llvm::Value * compileExpression(IDISA::IDISA_Builder * const builder, const PabloAST * expr, const bool ensureLoaded = true) const;
+    llvm::Value * compileExpression(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloAST * expr, const bool ensureLoaded = true) const;
 
 private:
 

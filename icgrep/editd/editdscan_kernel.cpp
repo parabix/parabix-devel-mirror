@@ -12,37 +12,38 @@ using namespace llvm;
 
 namespace kernel {
 
-void editdScanKernel::generateDoBlockMethod() {
-    auto savePoint = iBuilder->saveIP();
-    Function * scanWordFunction = generateScanWordRoutine(iBuilder->getModule());
-    iBuilder->restoreIP(savePoint);
+void editdScanKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & idb) {
+    auto savePoint = idb->saveIP();
+    Function * scanWordFunction = generateScanWordRoutine(idb);
+    idb->restoreIP(savePoint);
 
-    const unsigned fieldCount = iBuilder->getBitBlockWidth() / mScanwordBitWidth;
-    Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
+    const unsigned fieldCount = idb->getBitBlockWidth() / mScanwordBitWidth;
+    Type * T = idb->getIntNTy(mScanwordBitWidth);
     VectorType * scanwordVectorType =  VectorType::get(T, fieldCount);
-    Value * blockNo = getScalarField("BlockNo");
-    Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));
+    Value * blockNo = idb->getScalarField("BlockNo");
+    Value * scanwordPos = idb->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), idb->getBitBlockWidth()));
     
     std::vector<Value * > matchWordVectors;
     for(unsigned d = 0; d <= mEditDistance; d++) {
-        Value * matches = loadInputStreamBlock("matchResults", iBuilder->getInt32(d));
-        matchWordVectors.push_back(iBuilder->CreateBitCast(matches, scanwordVectorType));
+        Value * matches = idb->loadInputStreamBlock("matchResults", idb->getInt32(d));
+        matchWordVectors.push_back(idb->CreateBitCast(matches, scanwordVectorType));
     }
     
     for(unsigned i = 0; i < fieldCount; ++i) {
         for(unsigned d = 0; d <= mEditDistance; d++) {
-            Value * matchWord = iBuilder->CreateExtractElement(matchWordVectors[d], ConstantInt::get(T, i));
-            iBuilder->CreateCall(scanWordFunction, {matchWord, iBuilder->getInt32(d), scanwordPos});
+            Value * matchWord = idb->CreateExtractElement(matchWordVectors[d], ConstantInt::get(T, i));
+            idb->CreateCall(scanWordFunction, {matchWord, idb->getInt32(d), scanwordPos});
         }
-        scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
+        scanwordPos = idb->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
     }
 
-    setScalarField("BlockNo", iBuilder->CreateAdd(blockNo, iBuilder->getSize(1)));
+    idb->setScalarField("BlockNo", idb->CreateAdd(blockNo, idb->getSize(1)));
 }
 
-Function * editdScanKernel::generateScanWordRoutine(Module * m) const {
+Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBuilder> &iBuilder) const {
 
     IntegerType * T = iBuilder->getIntNTy(mScanwordBitWidth);
+    Module * const m = iBuilder->getModule();
 
     Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", iBuilder->getVoidTy(), T, iBuilder->getInt32Ty(), T, nullptr));
     scanFunc->setCallingConv(CallingConv::C);
@@ -56,12 +57,10 @@ Function * editdScanKernel::generateScanWordRoutine(Module * m) const {
     basePos->setName("basePos");
 
     Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_pos", iBuilder->getVoidTy(), T, iBuilder->getInt32Ty(), nullptr);
-
-    BasicBlock * entryBlock = BasicBlock::Create(m->getContext(), "entry", scanFunc, 0);
-
-    BasicBlock * matchesCondBlock = BasicBlock::Create(m->getContext(), "matchesCond", scanFunc, 0);
-    BasicBlock * matchesLoopBlock = BasicBlock::Create(m->getContext(), "matchesLoop", scanFunc, 0);
-    BasicBlock * matchesDoneBlock = BasicBlock::Create(m->getContext(), "matchesDone", scanFunc, 0);
+    BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", scanFunc, 0);
+    BasicBlock * matchesCondBlock = BasicBlock::Create(iBuilder->getContext(), "matchesCond", scanFunc, 0);
+    BasicBlock * matchesLoopBlock = BasicBlock::Create(iBuilder->getContext(), "matchesLoop", scanFunc, 0);
+    BasicBlock * matchesDoneBlock = BasicBlock::Create(iBuilder->getContext(), "matchesDone", scanFunc, 0);
 
     iBuilder->SetInsertPoint(entryBlock);
     iBuilder->CreateBr(matchesCondBlock);

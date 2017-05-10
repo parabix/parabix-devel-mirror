@@ -28,8 +28,8 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
-    void generateDoBlockMethod() override;
-    void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
 private:
     const unsigned mDeletionFieldWidth;
     const unsigned mStreamCount;
@@ -41,11 +41,11 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
-    void generateDoBlockMethod() override;
-    void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
-    void generatePEXTAndSwizzleLoop(const std::vector<llvm::Value *> & masks);
-    void generatePEXTLoop(const std::vector<llvm::Value *> & masks);
-    void generateProcessingLoop(const std::vector<llvm::Value *> & masks, llvm::Value * delMask);   
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
+    void generatePEXTAndSwizzleLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<llvm::Value *> & masks);
+    void generatePEXTLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<llvm::Value *> & masks);
+    void generateProcessingLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<llvm::Value *> & masks, llvm::Value * delMask);
 private:
     const unsigned mDelCountFieldWidth;
     const unsigned mStreamCount;
@@ -60,8 +60,8 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 protected:
-    void generateDoBlockMethod() override;
-    void generateFinalBlockMethod(llvm::Value * remainingBytes) override;   
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
 private:
     const unsigned mBitStreamCount;
     const unsigned mFieldWidth;

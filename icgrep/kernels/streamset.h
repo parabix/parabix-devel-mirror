@@ -150,7 +150,7 @@ public:
         return b->getBufferKind() == BufferKind::SourceBuffer;
     }
 
-    SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, unsigned AddressSpace = 0);
+    SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, unsigned MemoryAddressSpace = 0, unsigned StructAddressSpace = 0);
 
     void setBaseAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * addr) const override;
 

@@ -11,30 +11,27 @@ namespace llvm { class Value; }
 
 namespace kernel {
 
-class PrintableBits : public BlockOrientedKernel {
+class PrintableBits final : public BlockOrientedKernel {
 public:
     PrintableBits(const std::unique_ptr<kernel::KernelBuilder> & builder);
-    virtual ~PrintableBits() {}
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
 
-class SelectStream : public BlockOrientedKernel {
+class SelectStream final : public BlockOrientedKernel {
 public:
     SelectStream(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned streamIndex);
-    virtual ~SelectStream() {}
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     unsigned mSizeInputStreamSet;
     unsigned mStreamIndex;
 };
 
-class PrintStreamSet : public BlockOrientedKernel {
+class PrintStreamSet final : public BlockOrientedKernel {
 public:
     PrintStreamSet(const std::unique_ptr<kernel::KernelBuilder> & builder, std::vector<std::string> && names, const unsigned minWidth = 16);
-    virtual ~PrintStreamSet() {}
 private:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:
     const std::vector<std::string> mNames;
     unsigned mNameWidth;

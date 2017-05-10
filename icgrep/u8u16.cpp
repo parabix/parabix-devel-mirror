@@ -338,7 +338,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     Kernel * p2sk = pxDriver.addKernelInstance(make_unique<P2S16Kernel>(iBuilder));
     
     Kernel * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 16));
-    Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
+    Value * fName = iBuilder->CreatePointerCast(iBuilder->GetString(outputFile.c_str()), iBuilder->getInt8PtrTy());
     outK->setInitialArguments({fName});
         
     // Different choices for the output buffer depending on chosen option.
@@ -411,7 +411,7 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     Kernel * p2sk = pxDriver.addKernelInstance(make_unique<P2S16KernelWithCompressedOutput>(iBuilder));
     
     Kernel * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 16));
-    Value * fName = iBuilder->CreatePointerCast(iBuilder->CreateGlobalString(outputFile.c_str()), iBuilder->getInt8PtrTy());
+    Value * fName = iBuilder->CreatePointerCast(iBuilder->GetString(outputFile.c_str()), iBuilder->getInt8PtrTy());
     outK->setInitialArguments({fName});
     
     // Different choices for the output buffer depending on chosen option.

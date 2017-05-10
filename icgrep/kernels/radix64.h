@@ -24,7 +24,7 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 private:
-    void generateDoSegmentMethod() override;
+    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBuilder) override;
 };
 
 class radix64Kernel final : public BlockOrientedKernel {
@@ -33,9 +33,9 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 private:
-    virtual void generateDoBlockMethod() override;
-    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
-    llvm::Value* processPackData(llvm::Value* packData) const;
+    virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
+    llvm::Value* processPackData(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* packData) const;
 };
 
 class base64Kernel final : public BlockOrientedKernel {
@@ -44,9 +44,9 @@ public:
     bool isCachable() const override { return true; }
     bool moduleIDisSignature() const override { return true; }
 private:
-    virtual void generateDoBlockMethod() override;
-    virtual void generateFinalBlockMethod(llvm::Value * remainingBytes) override;
-    llvm::Value* processPackData(llvm::Value* packData) const;
+    virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
+    llvm::Value* processPackData(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* packData) const;
 };
 
 }

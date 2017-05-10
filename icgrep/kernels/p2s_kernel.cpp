@@ -14,14 +14,14 @@ using namespace parabix;
 
 namespace kernel{
 	
-void p2s_step(IDISA::IDISA_Builder * const iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
+void p2s_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
     Value * t0 = iBuilder->simd_if(1, hi_mask, p0, iBuilder->simd_srli(16, p1, shift));
     Value * t1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, p0, shift), p1);
     s1 = iBuilder->esimd_mergeh(8, t1, t0);
     s0 = iBuilder->esimd_mergel(8, t1, t0);
 }
 
-inline void p2s(IDISA::IDISA_Builder * const iBuilder, Value * p[], Value * s[]) {
+inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Value * s[]) {
     Value * bit00004444[2];
     Value * bit22226666[2];
     Value * bit11115555[2];
@@ -41,34 +41,34 @@ inline void p2s(IDISA::IDISA_Builder * const iBuilder, Value * p[], Value * s[])
     }
 }
     		
-void P2SKernel::generateDoBlockMethod() {
+void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     Value * p_bitblock[8];
     for (unsigned i = 0; i < 8; i++) {
-        p_bitblock[i] = loadInputStreamBlock("basisBits", iBuilder->getInt32(i));
+        p_bitblock[i] = iBuilder->loadInputStreamBlock("basisBits", iBuilder->getInt32(i));
     }
     Value * s_bytepack[8];
     p2s(iBuilder, p_bitblock, s_bytepack);
     for (unsigned j = 0; j < 8; ++j) {
-        storeOutputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(j), s_bytepack[j]);
+        iBuilder->storeOutputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(j), s_bytepack[j]);
     }
 }
 
-void P2SKernelWithCompressedOutput::generateDoBlockMethod() {
+void P2SKernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     IntegerType * i32 = iBuilder->getInt32Ty();
     PointerType * bitBlockPtrTy = PointerType::get(iBuilder->getBitBlockType(), 0);
 
     Value * basisBits[8];
     for (unsigned i = 0; i < 8; i++) {
-        basisBits[i] = loadInputStreamBlock("basisBits", iBuilder->getInt32(i));
+        basisBits[i] = iBuilder->loadInputStreamBlock("basisBits", iBuilder->getInt32(i));
     }
     Value * bytePack[8];
     p2s(iBuilder, basisBits, bytePack);
 
     unsigned units_per_register = iBuilder->getBitBlockWidth()/8;
-    Value * delCountBlock_ptr = getInputStreamBlockPtr("deletionCounts", iBuilder->getInt32(0));
+    Value * delCountBlock_ptr = iBuilder->getInputStreamBlockPtr("deletionCounts", iBuilder->getInt32(0));
     Value * unit_counts = iBuilder->fwCast(units_per_register, iBuilder->CreateBlockAlignedLoad(delCountBlock_ptr));
 
-    Value * output_ptr = getOutputStreamBlockPtr("byteStream", iBuilder->getInt32(0));
+    Value * output_ptr = iBuilder->getOutputStreamBlockPtr("byteStream", iBuilder->getInt32(0));
     output_ptr = iBuilder->CreatePointerCast(output_ptr, iBuilder->getInt8PtrTy());
     Value * offset = iBuilder->getInt32(0);
     for (unsigned j = 0; j < 8; ++j) {
@@ -76,33 +76,33 @@ void P2SKernelWithCompressedOutput::generateDoBlockMethod() {
         offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(j)), i32);
     }
 
-    Value * unitsGenerated = getProducedItemCount("byteStream"); // units generated to buffer
+    Value * unitsGenerated = iBuilder->getProducedItemCount("byteStream"); // units generated to buffer
     unitsGenerated = iBuilder->CreateAdd(unitsGenerated, iBuilder->CreateZExt(offset, iBuilder->getSizeTy()));
-    setProducedItemCount("byteStream", unitsGenerated);
+    iBuilder->setProducedItemCount("byteStream", unitsGenerated);
 }
 
-void P2S16Kernel::generateDoBlockMethod() {
+void P2S16Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        hi_input[j] = loadInputStreamBlock("basisBits", iBuilder->getInt32(j));
+        hi_input[j] = iBuilder->loadInputStreamBlock("basisBits", iBuilder->getInt32(j));
     }
     Value * hi_bytes[8];
     p2s(iBuilder, hi_input, hi_bytes);    
     Value * lo_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        lo_input[j] = loadInputStreamBlock("basisBits", iBuilder->getInt32(j + 8));
+        lo_input[j] = iBuilder->loadInputStreamBlock("basisBits", iBuilder->getInt32(j + 8));
     }
     Value * lo_bytes[8];
     p2s(iBuilder, lo_input, lo_bytes);   
     for (unsigned j = 0; j < 8; ++j) {
         Value * merge0 = iBuilder->bitCast(iBuilder->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
         Value * merge1 = iBuilder->bitCast(iBuilder->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
-        storeOutputStreamPack("i16Stream", iBuilder->getInt32(0), iBuilder->getInt32(2 * j), merge0);
-        storeOutputStreamPack("i16Stream", iBuilder->getInt32(0), iBuilder->getInt32(2 * j + 1), merge1);
+        iBuilder->storeOutputStreamPack("i16Stream", iBuilder->getInt32(0), iBuilder->getInt32(2 * j), merge0);
+        iBuilder->storeOutputStreamPack("i16Stream", iBuilder->getInt32(0), iBuilder->getInt32(2 * j + 1), merge1);
     }
 }
         
-void P2S16KernelWithCompressedOutput::generateDoBlockMethod() {
+void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     IntegerType * i32Ty = iBuilder->getInt32Ty();
     PointerType * int16PtrTy = iBuilder->getInt16Ty()->getPointerTo();
     PointerType * bitBlockPtrTy = iBuilder->getBitBlockType()->getPointerTo();
@@ -110,25 +110,25 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod() {
 
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        hi_input[j] = loadInputStreamBlock("basisBits", iBuilder->getInt32(j));
+        hi_input[j] = iBuilder->loadInputStreamBlock("basisBits", iBuilder->getInt32(j));
     }
     Value * hi_bytes[8];
     p2s(iBuilder, hi_input, hi_bytes);
 
     Value * lo_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        lo_input[j] = loadInputStreamBlock("basisBits", iBuilder->getInt32(j + 8));
+        lo_input[j] = iBuilder->loadInputStreamBlock("basisBits", iBuilder->getInt32(j + 8));
     }
     Value * lo_bytes[8];
     p2s(iBuilder, lo_input, lo_bytes);
 
-    Value * delCountBlock_ptr = getInputStreamBlockPtr("deletionCounts", iBuilder->getInt32(0));
+    Value * delCountBlock_ptr = iBuilder->getInputStreamBlockPtr("deletionCounts", iBuilder->getInt32(0));
     Value * unit_counts = iBuilder->fwCast(iBuilder->getBitBlockWidth() / 16, iBuilder->CreateBlockAlignedLoad(delCountBlock_ptr));
 
 
-    Value * u16_output_ptr = getOutputStreamBlockPtr("i16Stream", iBuilder->getInt32(0));
+    Value * u16_output_ptr = iBuilder->getOutputStreamBlockPtr("i16Stream", iBuilder->getInt32(0));
     u16_output_ptr = iBuilder->CreatePointerCast(u16_output_ptr, int16PtrTy);
-    Value * i16UnitsGenerated = getProducedItemCount("i16Stream"); // units generated to buffer
+    Value * i16UnitsGenerated = iBuilder->getProducedItemCount("i16Stream"); // units generated to buffer
     u16_output_ptr = iBuilder->CreateGEP(u16_output_ptr, iBuilder->CreateURem(i16UnitsGenerated, stride));
 
     Value * offset = ConstantInt::get(i32Ty, 0);
@@ -143,7 +143,7 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod() {
         offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2 * j + 1)), i32Ty);
     }    
     Value * i16UnitsFinal = iBuilder->CreateAdd(i16UnitsGenerated, iBuilder->CreateZExt(offset, iBuilder->getSizeTy()));
-    setProducedItemCount("i16Stream", i16UnitsFinal);
+    iBuilder->setProducedItemCount("i16Stream", i16UnitsFinal);
 }
 
 P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)

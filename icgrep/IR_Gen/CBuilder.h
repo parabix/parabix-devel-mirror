@@ -9,6 +9,9 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/ADT/Triple.h>
+#ifndef NDEBUG
+#include <llvm/IR/Function.h>
+#endif
 
 namespace kernels { class KernelBuilder; }
 namespace llvm { class Function; }
@@ -29,11 +32,20 @@ public:
     virtual ~CBuilder() {}
 
     llvm::Module * getModule() const {
-        return mMod;
+        #ifndef NDEBUG
+        llvm::BasicBlock * const bb = GetInsertBlock();
+        if (bb) {
+            llvm::Function * const f = bb->getParent();
+            assert ("CBuilder has an insert point that is not contained within a Function" && f);
+            assert ("CBuilder module differs from insertion point module" && (mModule == f->getParent()));
+        }
+        #endif
+        return mModule;
     }
 
-    void setModule(llvm::Module * const mod) {
-        mMod = mod;
+    void setModule(llvm::Module * module) {
+        mModule = module;
+        ClearInsertionPoint();
     }
 
     llvm::Value * CreateMalloc(llvm::Value * size);
@@ -172,6 +184,8 @@ public:
         return CreateLikelyCondBr(Cond, True, False, 100 - probability);
     }
 
+    llvm::BasicBlock * CreateBasicBlock(std::string && name);
+
     virtual bool supportsIndirectBr() const {
         return true;
     }
@@ -209,7 +223,8 @@ protected:
     }
 
 protected:
-    llvm::Module *                  mMod;
+
+    llvm::Module *                  mModule;
     unsigned                        mCacheLineAlignment;
     llvm::IntegerType *             mSizeType;
     llvm::StructType *              mFILEtype;

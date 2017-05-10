@@ -17,8 +17,8 @@ public:
     editdScanKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned dist);
         
 private:
-    void generateDoBlockMethod() override;
-    llvm::Function * generateScanWordRoutine(llvm::Module * m) const;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    llvm::Function * generateScanWordRoutine(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) const;
         
     unsigned mEditDistance;
     unsigned mScanwordBitWidth;

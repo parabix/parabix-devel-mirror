@@ -11,14 +11,10 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel {
 
 class MatchCount : public BlockOrientedKernel {
-public:
-    
-    MatchCount(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    
-protected:
-    
-    void generateDoBlockMethod() override;
-    
+public:   
+    MatchCount(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);   
+protected:    
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
 
 }

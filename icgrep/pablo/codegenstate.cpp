@@ -185,7 +185,8 @@ Subtract * PabloBlock::createSubtract(PabloAST * expr1, PabloAST * expr2) {
 
 LessThan * PabloBlock::createLessThan(PabloAST * expr1, PabloAST * expr2) {
     CHECK_SAME_TYPE(expr1, expr2);
-    return new (mAllocator) LessThan(getParent()->getBuilder()->getInt1Ty(), expr1, expr2, mAllocator);
+    Type * type = getParent()->getBuilder()->getInt1Ty();
+    return new (mAllocator) LessThan(type, expr1, expr2, mAllocator);
 }
 
 enum class AssignErrorType {

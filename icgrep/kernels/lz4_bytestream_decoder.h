@@ -17,7 +17,7 @@ class LZ4ByteStreamDecoderKernel : public BlockOrientedKernel {
 public:
     LZ4ByteStreamDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, size_t bufferSize);
 protected:
-    void generateDoBlockMethod() override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:
     size_t mBufferSize;
 };

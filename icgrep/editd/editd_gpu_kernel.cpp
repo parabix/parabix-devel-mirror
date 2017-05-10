@@ -10,7 +10,7 @@ using namespace llvm;
 
 namespace kernel {
 
-void bitblock_advance_ci_co(IDISA::IDISA_Builder * const iBuilder, Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j){
+void bitblock_advance_ci_co(const std::unique_ptr<KernelBuilder> & iBuilder, Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j){
     if (!calculated[i][j]) {
         Value * ptr = iBuilder->CreateGEP(stideCarryArr, {iBuilder->getInt32(0), iBuilder->getInt32(carryIdx)});
         Value * ci = iBuilder->CreateLoad(ptr);
@@ -21,14 +21,14 @@ void bitblock_advance_ci_co(IDISA::IDISA_Builder * const iBuilder, Value * val, 
     }
 }
 
-void editdGPUKernel::generateDoBlockMethod() {
+void editdGPUKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & idb) {
 
-    IntegerType * const int32ty = iBuilder->getInt32Ty();
-    IntegerType * const int8ty = iBuilder->getInt8Ty();
-    Value * pattLen = iBuilder->getInt32(mPatternLen + 1);
-    Value * pattPos = iBuilder->getInt32(0);
-    Value * pattBuf = getScalarField("pattStream");
-    Value * strideCarryArr = getScalarField("strideCarry");
+    IntegerType * const int32ty = idb->getInt32Ty();
+    IntegerType * const int8ty = idb->getInt8Ty();
+    Value * pattLen = idb->getInt32(mPatternLen + 1);
+    Value * pattPos = idb->getInt32(0);
+    Value * pattBuf = idb->getScalarField("pattStream");
+    Value * strideCarryArr = idb->getScalarField("strideCarry");
    
     unsigned carryIdx = 0;
 
@@ -36,47 +36,47 @@ void editdGPUKernel::generateDoBlockMethod() {
     std::vector<std::vector<Value *>> adv(mPatternLen, std::vector<Value *>(mEditDistance + 1));
     std::vector<std::vector<int>> calculated(mPatternLen, std::vector<int>(mEditDistance + 1, 0));
 
-    Module * m = iBuilder->getModule();
+    Module * m = idb->getModule();
     Function * bidFunc = cast<Function>(m->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty, nullptr));
-    Value * bid = iBuilder->CreateCall(bidFunc);
-    Value * pattStartPtr = iBuilder->CreateGEP(pattBuf, iBuilder->CreateMul(pattLen, bid));
-    Value * pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
-    Value * pattCh = iBuilder->CreateLoad(pattPtr);
-    Value * pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-    Value * pattStream = loadInputStreamBlock("CCStream", iBuilder->CreateZExt(pattIdx, int32ty));
-    pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
+    Value * bid = idb->CreateCall(bidFunc);
+    Value * pattStartPtr = idb->CreateGEP(pattBuf, idb->CreateMul(pattLen, bid));
+    Value * pattPtr = idb->CreateGEP(pattStartPtr, pattPos);
+    Value * pattCh = idb->CreateLoad(pattPtr);
+    Value * pattIdx = idb->CreateAnd(idb->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
+    Value * pattStream = idb->loadInputStreamBlock("CCStream", idb->CreateZExt(pattIdx, int32ty));
+    pattPos = idb->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
 
     e[0][0] = pattStream;
     for(unsigned j = 1; j <= mEditDistance; j++){
-        e[0][j] = iBuilder->allOnes();
+        e[0][j] = idb->allOnes();
     }
     for(unsigned i = 1; i < mPatternLen; i++){
-        pattPtr = iBuilder->CreateGEP(pattStartPtr, pattPos);
-        pattCh = iBuilder->CreateLoad(pattPtr);
-        pattIdx = iBuilder->CreateAnd(iBuilder->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
-        pattStream = loadInputStreamBlock("CCStream", iBuilder->CreateZExt(pattIdx, int32ty));
-        bitblock_advance_ci_co(iBuilder, e[i-1][0], 1, strideCarryArr, carryIdx++, adv, calculated, i-1, 0);
-        e[i][0] = iBuilder->CreateAnd(adv[i-1][0], pattStream); 
+        pattPtr = idb->CreateGEP(pattStartPtr, pattPos);
+        pattCh = idb->CreateLoad(pattPtr);
+        pattIdx = idb->CreateAnd(idb->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
+        pattStream = idb->loadInputStreamBlock("CCStream", idb->CreateZExt(pattIdx, int32ty));
+        bitblock_advance_ci_co(idb, e[i-1][0], 1, strideCarryArr, carryIdx++, adv, calculated, i-1, 0);
+        e[i][0] = idb->CreateAnd(adv[i-1][0], pattStream);
         for(unsigned j = 1; j<= mEditDistance; j++){
-            bitblock_advance_ci_co(iBuilder, e[i-1][j], 1, strideCarryArr, carryIdx++, adv, calculated, i-1, j);
-            bitblock_advance_ci_co(iBuilder, e[i-1][j-1], 1, strideCarryArr, carryIdx++, adv, calculated, i-1, j-1);
-            bitblock_advance_ci_co(iBuilder, e[i][j-1], 1, strideCarryArr, carryIdx++, adv, calculated, i, j-1);
-            Value * tmp1 = iBuilder->CreateAnd(adv[i-1][j], pattStream);
-            Value * tmp2 = iBuilder->CreateAnd(adv[i-1][j-1], iBuilder->CreateNot(pattStream));
-            Value * tmp3 = iBuilder->CreateOr(adv[i][j-1], e[i-1][j-1]);
-            e[i][j] = iBuilder->CreateOr(iBuilder->CreateOr(tmp1, tmp2), tmp3);
+            bitblock_advance_ci_co(idb, e[i-1][j], 1, strideCarryArr, carryIdx++, adv, calculated, i-1, j);
+            bitblock_advance_ci_co(idb, e[i-1][j-1], 1, strideCarryArr, carryIdx++, adv, calculated, i-1, j-1);
+            bitblock_advance_ci_co(idb, e[i][j-1], 1, strideCarryArr, carryIdx++, adv, calculated, i, j-1);
+            Value * tmp1 = idb->CreateAnd(adv[i-1][j], pattStream);
+            Value * tmp2 = idb->CreateAnd(adv[i-1][j-1], idb->CreateNot(pattStream));
+            Value * tmp3 = idb->CreateOr(adv[i][j-1], e[i-1][j-1]);
+            e[i][j] = idb->CreateOr(idb->CreateOr(tmp1, tmp2), tmp3);
         }
-        pattPos = iBuilder->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
+        pattPos = idb->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
     }
-    storeOutputStreamBlock("ResultStream", iBuilder->getInt32(0), e[mPatternLen-1][0]);
+    idb->storeOutputStreamBlock("ResultStream", idb->getInt32(0), e[mPatternLen-1][0]);
     for(unsigned j = 1; j<= mEditDistance; j++){
-        storeOutputStreamBlock("ResultStream", iBuilder->getInt32(j), iBuilder->CreateAnd(e[mPatternLen - 1][j], iBuilder->CreateNot(e[mPatternLen - 1][j - 1])));
+        idb->storeOutputStreamBlock("ResultStream", idb->getInt32(j), idb->CreateAnd(e[mPatternLen - 1][j], idb->CreateNot(e[mPatternLen - 1][j - 1])));
     }
 }
 
-void editdGPUKernel::generateFinalBlockMethod(Value * remainingBytes) {
-    setScalarField("EOFmask", iBuilder->bitblock_mask_from(remainingBytes));
-    CreateDoBlockMethodCall();
+void editdGPUKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & idb, Value * remainingBytes) {
+    idb->setScalarField("EOFmask", idb->bitblock_mask_from(remainingBytes));
+    CreateDoBlockMethodCall(idb);
 }
 
 editdGPUKernel::editdGPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen) :
