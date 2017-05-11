@@ -11,11 +11,11 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class StdOutKernel final : public SegmentOrientedKernel {
+class StdOutKernel final : public MultiBlockKernel {
 public:
     StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth);
 private:
-    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder) override;
 private:
     const unsigned mCodeUnitWidth;
     

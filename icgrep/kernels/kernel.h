@@ -370,7 +370,7 @@ protected:
     // the builder insertion point will be set to the entry block; upone
     // exit the RetVoid instruction will be added to complete the method.
     //
-    virtual void generateMultiBlockLogic() = 0;
+    virtual void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & idb) = 0;
 
 private:
 

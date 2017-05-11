@@ -18,54 +18,22 @@ namespace kernel {
 // doSegment method attempts to write the entire segment with a single write call.
 // However, if the segment spans two memory areas (e.g., because of wraparound),
 // then two write calls are made.
-void StdOutKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+void StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder) {
     PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
-
-    Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth / 8);
-    Value * processed = iBuilder->getProcessedItemCount("codeUnitBuffer");
-    Value * itemsToDo = iBuilder->CreateSub(mAvailableItemCount[0], processed);
-    // There may be two memory areas if we are at the physical end of a circular buffer.
-    const auto b  = getInputStreamSetBuffer("codeUnitBuffer");
-    Value * wraparound = nullptr;
-    if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
-        Value * accessible = iBuilder->getLinearlyAccessibleItems("codeUnitBuffer", processed);
-        wraparound = iBuilder->CreateICmpULT(accessible, itemsToDo);
-        itemsToDo = iBuilder->CreateSelect(wraparound, accessible, itemsToDo);
-    }
     
-    Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateAnd(processed, blockItems), itemBytes);
-    Value * bytePtr = iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
-    bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
+    Function::arg_iterator args = mCurrentMethod->arg_begin();
+    Value * self = &*(args++);
+    Value * itemsToDo = &*(args++);
+    Value * codeUnitBuffer = &*(args++);
 
-    iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
-
-    processed = iBuilder->CreateAdd(processed, itemsToDo);
-    iBuilder->setProcessedItemCount("codeUnitBuffer", processed);
-    
-    // Now we may process the second area (if required).
-    if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
-        BasicBlock * wrapAroundWrite = iBuilder->CreateBasicBlock("wrapAroundWrite");
-        BasicBlock * stdoutExit = iBuilder->CreateBasicBlock("stdoutExit");
-        iBuilder->CreateCondBr(wraparound, wrapAroundWrite, stdoutExit);
-        iBuilder->SetInsertPoint(wrapAroundWrite);
-        
-        // Calculate from the updated value of processed;
-        byteOffset = iBuilder->CreateMul(iBuilder->CreateAnd(processed, blockItems), itemBytes);
-        Value * bytePtr = iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
-        bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
-
-        itemsToDo = iBuilder->CreateSub(mAvailableItemCount[0], processed);
-        iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
-        processed = iBuilder->CreateAdd(processed, itemsToDo);
-        iBuilder->setProcessedItemCount("codeUnitBuffer", mAvailableItemCount[0]);
-        iBuilder->CreateBr(stdoutExit);
-        iBuilder->SetInsertPoint(stdoutExit);
-    }
+    Value * bytesToDo = mCodeUnitWidth == 8 ? itemsToDo : iBuilder->CreateMul(itemsToDo, itemBytes);
+    Value * bytePtr = iBuilder->CreatePointerCast(codeUnitBuffer, i8PtrTy);
+    iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, bytesToDo);
 }
 
 StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth)
-: SegmentOrientedKernel("stdout", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {})
+: MultiBlockKernel("stdout", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {})
 , mCodeUnitWidth(codeUnitWidth) {
     setNoTerminateAttribute(true);
 }

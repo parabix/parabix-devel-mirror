@@ -620,11 +620,12 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     multiBlockFunction->setDoesNotThrow();
     auto args = multiBlockFunction->arg_begin();
     args->setName("self");
+    (++args)->setName("itemsToDo");
     for (auto binding : mStreamSetInputs) {
         (++args)->setName(binding.name + "BufPtr");
     }
     for (auto binding : mStreamSetOutputs) {
-        (args++)->setName(binding.name + "BufPtr");
+        (++args)->setName(binding.name + "BufPtr");
     }
 
     // Now use the generateMultiBlockLogic method of the MultiBlockKernelBuilder subtype to
@@ -632,7 +633,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     auto ip = iBuilder->saveIP();
     iBuilder->SetInsertPoint(BasicBlock::Create(iBuilder->getContext(), "multiBlockEntry", multiBlockFunction, 0));
 
-    generateMultiBlockLogic();
+    generateMultiBlockLogic(kb);
 
     iBuilder->CreateRetVoid();
     iBuilder->restoreIP(ip);
@@ -800,6 +801,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     Value * linearlyAvailItems = iBuilder->CreateMul(linearlyWritableBlocks, blockSize);
 
     std::vector<Value *> doMultiBlockArgs;
+    doMultiBlockArgs.push_back(getInstance());
     doMultiBlockArgs.push_back(linearlyAvailItems);
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         doMultiBlockArgs.push_back(iBuilder->getRawInputPointer(mStreamSetInputs[i].name, iBuilder->getInt32(0), processedItemCount[i]));
@@ -878,6 +880,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     // Begin constructing the doMultiBlock args.
     std::vector<Value *> tempArgs;
+    tempArgs.push_back(getInstance());
     tempArgs.push_back(tempBlockItems);
 
     // Prepare the temporary buffer area.
@@ -1010,6 +1013,17 @@ BlockOrientedKernel::BlockOrientedKernel(std::string && kernelName,
 }
 
 // CONSTRUCTOR
+MultiBlockKernel::MultiBlockKernel(std::string && kernelName,
+                                     std::vector<Binding> && stream_inputs,
+                                     std::vector<Binding> && stream_outputs,
+                                     std::vector<Binding> && scalar_parameters,
+                                     std::vector<Binding> && scalar_outputs,
+                                             std::vector<Binding> && internal_scalars)
+: Kernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
+    
+}
+
+// CONSTRUCTOR
 SegmentOrientedKernel::SegmentOrientedKernel(std::string && kernelName,
                                              std::vector<Binding> && stream_inputs,
                                              std::vector<Binding> && stream_outputs,
@@ -1017,7 +1031,7 @@ SegmentOrientedKernel::SegmentOrientedKernel(std::string && kernelName,
                                              std::vector<Binding> && scalar_outputs,
                                              std::vector<Binding> && internal_scalars)
 : Kernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
-
+    
 }
-
+    
 }
