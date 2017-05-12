@@ -103,11 +103,11 @@ public:
 
     void setConsumerLock(const std::string & name, llvm::Value * value);
 
-    Kernel * getKernel() const {
+    const Kernel * getKernel() const {
         return mKernel;
     }
 
-    void setKernel(Kernel * const kernel) {
+    void setKernel(const Kernel * const kernel) {
         mKernel = kernel;
     }
 
@@ -127,7 +127,7 @@ private:
     llvm::Value * computeBlockIndex(llvm::Value * itemCount);
 
 protected:
-    Kernel * mKernel;
+    const Kernel * mKernel;
 };
 
 template <class SpecifiedArchitectureBuilder>

@@ -23,7 +23,8 @@
 #include <pablo/pe_zeroes.h>
 #include <pablo/ps_assign.h>
 #include <pablo/pablo_kernel.h>
-#include <kernels/kernel_builder.h>
+#include <IR_Gen/idisa_builder.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 
 #define CHECK_SAME_TYPE(A, B) \
@@ -43,12 +44,12 @@ Phi * PabloBlock::createPhi(Type * type) {
 ///
 
 Count * PabloBlock::createCount(PabloAST * expr) {
-    Type * type = getParent()->getBuilder()->getSizeTy();
+    IntegerType * const type = getParent()->getSizeTy();
     return insertAtInsertionPoint(new (mAllocator) Count(expr, makeName("count"), type, mAllocator));
 }
 
 Count * PabloBlock::createCount(PabloAST * const expr, const llvm::StringRef & prefix)  {
-    Type * type = getParent()->getBuilder()->getSizeTy();
+    IntegerType * const type = getParent()->getSizeTy();
     return insertAtInsertionPoint(new (mAllocator) Count(expr, makeName(prefix), type, mAllocator));
 }
 
@@ -62,7 +63,7 @@ Not * PabloBlock::createNot(PabloAST * expr, String * name) {
 
 Var * PabloBlock::createVar(PabloAST * name, Type * type) {
     if (type == nullptr) {
-        type = getParent()->getBuilder()->getStreamTy();
+        type = getParent()->getStreamTy();
     }
     if (LLVM_UNLIKELY(name == nullptr || !isa<String>(name))) {
         throw std::runtime_error("Var objects must have a String name");
@@ -185,8 +186,8 @@ Subtract * PabloBlock::createSubtract(PabloAST * expr1, PabloAST * expr2) {
 
 LessThan * PabloBlock::createLessThan(PabloAST * expr1, PabloAST * expr2) {
     CHECK_SAME_TYPE(expr1, expr2);
-    Type * type = getParent()->getBuilder()->getInt1Ty();
-    return new (mAllocator) LessThan(type, expr1, expr2, mAllocator);
+    IntegerType * const int1Ty = getParent()->getInt1Ty();
+    return new (mAllocator) LessThan(int1Ty, expr1, expr2, mAllocator);
 }
 
 enum class AssignErrorType {

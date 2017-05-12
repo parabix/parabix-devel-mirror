@@ -92,8 +92,8 @@ Var * PabloKernel::makeVariable(String * name, Type * const type) {
 }
 
 Zeroes * PabloKernel::getNullValue(Type * type) {
-    if (type == nullptr) {
-        type = mBuilder->getStreamTy();
+    if (LLVM_LIKELY(type == nullptr)) {
+        type = getStreamTy();
     }
     for (PabloAST * constant : mConstants) {
         if (isa<Zeroes>(constant) && constant->getType() == type) {
@@ -106,8 +106,8 @@ Zeroes * PabloKernel::getNullValue(Type * type) {
 }
 
 Ones * PabloKernel::getAllOnesValue(Type * type) {
-    if (type == nullptr) {
-        type = mBuilder->getStreamTy();
+    if (LLVM_LIKELY(type == nullptr)) {
+        type = getStreamTy();
     }
     for (PabloAST * constant : mConstants) {
         if (isa<Ones>(constant) && constant->getType() == type) {
@@ -123,18 +123,22 @@ void PabloKernel::prepareKernel(const std::unique_ptr<kernel::KernelBuilder> & i
     if (DebugOptionIsSet(DumpTrace)) {
         setName(getName() + "_DumpTrace");
     }
-    mBuilder = iBuilder.get();
-    generatePabloMethod();
-    mBuilder = nullptr;
+    mSizeTy = iBuilder->getSizeTy();
+    mStreamTy = iBuilder->getStreamTy();
+    generatePabloMethod();    
     pablo_function_passes(this);
     mPabloCompiler->initializeKernelData(iBuilder);
+    mSizeTy = nullptr;
+    mStreamTy = nullptr;
     BlockOrientedKernel::prepareKernel(iBuilder);
 }
 
 void PabloKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
-    mBuilder = iBuilder.get();
+    mSizeTy = iBuilder->getSizeTy();
+    mStreamTy = iBuilder->getStreamTy();
     mPabloCompiler->compile(iBuilder);
-    mBuilder = nullptr;
+    mSizeTy = nullptr;
+    mStreamTy = nullptr;
 }
 
 void PabloKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, Value * const remainingBytes) {
@@ -153,6 +157,10 @@ Integer * PabloKernel::getInteger(const int64_t value) const {
     return mSymbolTable->getInteger(value);
 }
 
+llvm::IntegerType * PabloKernel::getInt1Ty() const {
+    return IntegerType::getInt1Ty(getModule()->getContext());
+}
+
 PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
                          std::string kernelName,
                          std::vector<Binding> stream_inputs,
@@ -167,10 +175,8 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
 , mPabloCompiler(new PabloCompiler(this))
 , mSymbolTable(new SymbolGenerator(b->getContext(), mAllocator))
 , mEntryBlock(PabloBlock::Create(this))
-, mBuilder(nullptr)
-//, mSizeTy(b->getSizeTy())
-//, mSizeTy(b->getSizeTy())
-{
+, mSizeTy(nullptr)
+, mStreamTy(nullptr) {
     prepareStreamSetNameMap();
     for (const Binding & ss : mStreamSetInputs) {
         Var * param = new (mAllocator) Var(makeName(ss.name), ss.type, mAllocator, Var::KernelInputParameter);

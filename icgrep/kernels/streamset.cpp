@@ -91,22 +91,17 @@ inline Value * StreamSetBuffer::modByBufferBlocks(IDISA::IDISA_Builder * const i
  * The type of the pointer is i8* for fields of 8 bits or less, otherwise iN* for N-bit fields.
  */
 Value * StreamSetBuffer::getRawItemPointer(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * streamIndex, Value * absolutePosition) const {
-    Value * ptr = getBaseAddress(iBuilder, self);
-
-    if (!isa<ConstantInt>(streamIndex) || !cast<ConstantInt>(streamIndex)->isZero()) {
-        ptr = iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), streamIndex});
-    }
-    Value * relativePosition = iBuilder->CreateURem(absolutePosition, ConstantInt::get(absolutePosition->getType(), mBufferBlocks * iBuilder->getBitBlockWidth()));
+    Value * ptr = iBuilder->CreateGEP(getBaseAddress(iBuilder, self), {iBuilder->getInt32(0), streamIndex});
+    Value * relativePosition = absolutePosition;
     const auto bw = mBaseType->getArrayElementType()->getScalarSizeInBits();
     if (bw < 8) {
+        assert (bw  == 1 || bw == 2 || bw == 4);
         relativePosition = iBuilder->CreateUDiv(relativePosition, ConstantInt::get(relativePosition->getType(), 8 / bw));
         ptr = iBuilder->CreatePointerCast(ptr, iBuilder->getInt8PtrTy());
-    }
-    else {
+    } else {
         ptr = iBuilder->CreatePointerCast(ptr, iBuilder->getIntNTy(bw)->getPointerTo());
     }
-    Value * rawPointer = iBuilder->CreateGEP(ptr, relativePosition);
-    return rawPointer;
+    return iBuilder->CreateGEP(ptr, relativePosition);
 }
 
 Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * fromPosition) const {
@@ -132,7 +127,8 @@ Value * StreamSetBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const 
     return getLinearlyAccessibleBlocks(iBuilder, fromBlock);
 }
 
-Value * StreamSetBuffer::getBaseAddress(IDISA::IDISA_Builder * const /* iBuilder */, Value * self) const {
+Value * StreamSetBuffer::getBaseAddress(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
+    iBuilder->CreateAssert(self, "StreamSetBuffer base address cannot be 0");
     return self;
 }
 
@@ -199,8 +195,10 @@ void SourceBuffer::setBaseAddress(IDISA::IDISA_Builder * const iBuilder, Value *
 }
 
 Value * SourceBuffer::getBaseAddress(IDISA::IDISA_Builder * const iBuilder, Value * const self) const {
+    iBuilder->CreateAssert(self, "SourceBuffer: instance cannot be null");
     Value * const ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
     Value * const addr = iBuilder->CreateLoad(ptr);
+    iBuilder->CreateAssert(addr, "SourceBuffer: base address cannot be 0");
     return addr;
 }
 
@@ -230,6 +228,20 @@ Value * CircularBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuild
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), modByBufferBlocks(iBuilder, blockIndex));
 }
 
+Value * CircularBuffer::getRawItemPointer(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * streamIndex, Value * absolutePosition) const {
+    Value * ptr = iBuilder->CreateGEP(getBaseAddress(iBuilder, self), {iBuilder->getInt32(0), streamIndex});
+    Value * relativePosition = iBuilder->CreateURem(absolutePosition, ConstantInt::get(absolutePosition->getType(), mBufferBlocks * iBuilder->getBitBlockWidth()));
+    const auto bw = mBaseType->getArrayElementType()->getScalarSizeInBits();
+    if (bw < 8) {
+        assert (bw  == 1 || bw == 2 || bw == 4);
+        relativePosition = iBuilder->CreateUDiv(relativePosition, ConstantInt::get(relativePosition->getType(), 8 / bw));
+        ptr = iBuilder->CreatePointerCast(ptr, iBuilder->getInt8PtrTy());
+    } else {
+        ptr = iBuilder->CreatePointerCast(ptr, iBuilder->getIntNTy(bw)->getPointerTo());
+    }
+    return iBuilder->CreateGEP(ptr, relativePosition);
+}
+
 // CircularCopybackBuffer Buffer
 void CircularCopybackBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks + mOverflowBlocks));
@@ -238,10 +250,6 @@ void CircularCopybackBuffer::allocateBuffer(const std::unique_ptr<kernel::Kernel
 void CircularCopybackBuffer::createCopyBack(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * overFlowItems) const {
     Value * overFlowAreaPtr = iBuilder->CreateGEP(self, iBuilder->getSize(mBufferBlocks));
     createBlockAlignedCopy(iBuilder, self, overFlowAreaPtr, overFlowItems);
-}
-
-Value * CircularCopybackBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * blockIndex) const {
-    return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), modByBufferBlocks(iBuilder, blockIndex));
 }
 
 Value * CircularCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * fromPosition) const {
@@ -446,7 +454,10 @@ Value * ExpandableBuffer::getStreamSetCount(IDISA::IDISA_Builder * const iBuilde
 }
 
 Value * ExpandableBuffer::getBaseAddress(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
-    return iBuilder->CreateLoad(iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
+    iBuilder->CreateAssert(self, "ExpandableBuffer: instance cannot be null");
+    Value * const baseAddr = iBuilder->CreateLoad(iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
+    iBuilder->CreateAssert(self, "ExpandableBuffer: base address cannot be 0");
+    return baseAddr;
 }
 
 void ExpandableBuffer::releaseBuffer(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
@@ -468,7 +479,7 @@ SingleBlockBuffer::SingleBlockBuffer(const std::unique_ptr<kernel::KernelBuilder
 }
 
 SourceBuffer::SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, unsigned MemoryAddressSpace, unsigned StructAddressSpace)
-: StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(MemoryAddressSpace), b->getSizeTy(), nullptr), 0, StructAddressSpace) {
+: StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(MemoryAddressSpace), b->getSizeTy(), nullptr), 1, StructAddressSpace) {
     mUniqueID = "B";
     if (MemoryAddressSpace != 0 || StructAddressSpace != 0) {
         mUniqueID += "@" + std::to_string(MemoryAddressSpace) + ":" + std::to_string(StructAddressSpace);
@@ -476,7 +487,7 @@ SourceBuffer::SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Typ
 }
 
 ExternalBuffer::ExternalBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, llvm::Value * addr, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::ExternalBuffer, type, resolveStreamSetType(b, type), 0, AddressSpace) {
+: StreamSetBuffer(BufferKind::ExternalBuffer, type, resolveStreamSetType(b, type), 1, AddressSpace) {
     mUniqueID = "E";
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
     mStreamSetBufferPtr = b->CreatePointerBitCastOrAddrSpaceCast(addr, getPointerType());
@@ -488,8 +499,14 @@ CircularBuffer::CircularBuffer(const std::unique_ptr<kernel::KernelBuilder> & b,
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
 }
 
+CircularBuffer::CircularBuffer(const BufferKind k, const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t bufferBlocks, unsigned AddressSpace)
+: StreamSetBuffer(k, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace) {
+
+}
+
 CircularCopybackBuffer::CircularCopybackBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::CircularCopybackBuffer, type, resolveStreamSetType(b, type), bufferBlocks, AddressSpace), mOverflowBlocks(overflowBlocks) {
+: CircularBuffer(BufferKind::CircularCopybackBuffer, b, type, bufferBlocks, AddressSpace)
+, mOverflowBlocks(overflowBlocks) {
     mUniqueID = "CC" + std::to_string(bufferBlocks);
     if (mOverflowBlocks != 1) mUniqueID += "_" + std::to_string(mOverflowBlocks);
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
@@ -513,10 +530,10 @@ SwizzledCopybackBuffer::SwizzledCopybackBuffer(const std::unique_ptr<kernel::Ker
     }
 }
 
-inline StreamSetBuffer::StreamSetBuffer(BufferKind k, Type * baseType, Type * resolvedType, unsigned blocks, unsigned AddressSpace)
+inline StreamSetBuffer::StreamSetBuffer(BufferKind k, Type * baseType, Type * resolvedType, unsigned BufferBlocks, unsigned AddressSpace)
 : mBufferKind(k)
 , mType(resolvedType)
-, mBufferBlocks(blocks)
+, mBufferBlocks(BufferBlocks)
 , mAddressSpace(AddressSpace)
 , mStreamSetBufferPtr(nullptr)
 , mBaseType(baseType)

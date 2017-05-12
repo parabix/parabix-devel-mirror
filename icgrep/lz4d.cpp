@@ -72,7 +72,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
 
-    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments));
     StreamSetBuffer * const BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
     StreamSetBuffer * const Extenders = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
     StreamSetBuffer * const LiteralIndexes = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments));
@@ -80,7 +80,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
     StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), decompressBufBlocks));
 
     
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize));
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
 
@@ -99,7 +99,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
     pxDriver.makeKernelCall(lz4bK, {LiteralIndexes, MatchIndexes, ByteStream}, {DecompressedByteStream});
 
     Kernel * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 8));
-    outK->setInitialArguments({iBuilder->CreatePointerCast(iBuilder->GetString(outputFile), iBuilder->getInt8PtrTy())});
+    outK->setInitialArguments({iBuilder->GetString(outputFile)});
     pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
  
     pxDriver.generatePipelineIR();

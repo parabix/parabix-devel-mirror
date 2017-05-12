@@ -10,6 +10,8 @@ using Value = Value;
 namespace kernel {
 
 Value * KernelBuilder::getScalarFieldPtr(llvm::Value * instance, Value * const index) {
+    assert (instance);
+    CreateAssert(instance, "instance cannot be null!");
     return CreateGEP(instance, {getInt32(0), index});
 }
 
@@ -34,7 +36,9 @@ void KernelBuilder::setScalarField(const std::string & fieldName, Value * value)
 }
 
 Value * KernelBuilder::getStreamSetBufferPtr(const std::string & name) {
-    return getScalarField(name + Kernel::BUFFER_PTR_SUFFIX);
+    Value * const ptr = getScalarField(name + Kernel::BUFFER_PTR_SUFFIX);
+    CreateAssert(ptr, name + " cannot be null!");
+    return ptr;
 }
 
 LoadInst * KernelBuilder::acquireLogicalSegmentNo() {

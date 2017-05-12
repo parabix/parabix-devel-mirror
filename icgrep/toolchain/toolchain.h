@@ -93,6 +93,11 @@ protected:
 
     llvm::Function * LinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
 
+    void compileSingleThread();
+
+    void compileMultiThread(const unsigned threadCount);
+
+
 private:
     std::unique_ptr<llvm::LLVMContext>                      mContext;
     llvm::Module * const                                    mMainModule;

@@ -559,7 +559,7 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
             if (inputs.empty()) {
                 items = iBuilder->getProducedItemCount(outputs[0].name);
             } else {
-                items = iBuilder->getProcessedItemCount(outputs[0].name);
+                items = iBuilder->getProcessedItemCount(inputs[0].name);
             }
             Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
             Value * cycles = iBuilder->CreateLoad(iBuilder->CreateGEP(mCycleCounts, {iBuilder->getInt32(0), iBuilder->getInt32(k)}));

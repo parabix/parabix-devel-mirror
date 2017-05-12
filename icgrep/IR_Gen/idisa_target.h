@@ -6,15 +6,15 @@
 #ifndef IDISA_TARGET_H
 #define IDISA_TARGET_H
 
-#include <string>
-namespace llvm { class Module; }
+namespace llvm { class LLVMContext; }
 namespace kernel { class KernelBuilder; }
+#include <string>
 
 namespace IDISA {
     
-kernel::KernelBuilder * GetIDISA_Builder(llvm::Module * const module);
+kernel::KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C, const std::string & targetTriple);
 
-kernel::KernelBuilder * GetIDISA_GPU_Builder(llvm::Module * const module);
+kernel::KernelBuilder * GetIDISA_GPU_Builder(llvm::LLVMContext & C);
 
 }
 

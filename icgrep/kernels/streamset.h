@@ -67,7 +67,7 @@ public:
     
     virtual llvm::Value * getStreamSetCount(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const;
 
-    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
+    virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
     virtual void setBaseAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * addr, llvm::Value *) const;
 
@@ -98,7 +98,7 @@ public:
 
 protected:
 
-    StreamSetBuffer(BufferKind k, llvm::Type * baseType, llvm::Type * resolvedType, unsigned blocks, unsigned AddressSpace);
+    StreamSetBuffer(BufferKind k, llvm::Type * baseType, llvm::Type * resolvedType, unsigned BufferBlocks, unsigned AddressSpace);
 
     // Get the buffer pointer for a given block of the stream.
     virtual llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const = 0;
@@ -185,7 +185,7 @@ protected:
     llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const override;
 };
 
-class CircularBuffer final : public StreamSetBuffer {
+class CircularBuffer : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {
         return b->getBufferKind() == BufferKind::CircularBuffer;
@@ -193,8 +193,13 @@ public:
     
     CircularBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
 
+    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * streamIndex, llvm::Value * absolutePosition) const final;
+
 protected:
-    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const override;
+
+    CircularBuffer(const BufferKind kind, const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
+
+    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const final;
 };
     
 
@@ -205,7 +210,7 @@ protected:
 //  subsequent kernels.
 //  Kernels that read from a CircularCopybackBuffer must not access the overflow area.
 //
-class CircularCopybackBuffer final : public StreamSetBuffer {
+class CircularCopybackBuffer final : public CircularBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::CircularCopybackBuffer;}
     
@@ -220,8 +225,6 @@ public:
     
     llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromBlock) const override;
     
-protected:
-    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const override;
 private:
     size_t mOverflowBlocks;
 

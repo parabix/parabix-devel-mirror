@@ -36,7 +36,7 @@ ICgrepKernelBuilder::ICgrepKernelBuilder (const std::unique_ptr<kernel::KernelBu
               {})
 , mRE(re)
 , mSignature(Printer_RE::PrintRE(re)) {
-    setName(sha1sum(mSignature));
+    setName("ic" + sha1sum(mSignature));
 }
 
 std::string ICgrepKernelBuilder::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {

@@ -117,12 +117,20 @@ public:
         return mBitBlockType;
     }
 
-    llvm::VectorType * getStreamTy(const unsigned FieldWidth = 1) {
-        return llvm::VectorType::get(llvm::IntegerType::getIntNTy(getContext(), FieldWidth), 0);
+    static llvm::VectorType * getStreamTy(llvm::LLVMContext & C, const unsigned FieldWidth = 1) {
+        return llvm::VectorType::get(llvm::IntegerType::getIntNTy(C, FieldWidth), 0);
     }
 
-    inline llvm::ArrayType * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
-        return llvm::ArrayType::get(getStreamTy(FieldWidth), NumElements);
+    static llvm::ArrayType * getStreamSetTy(llvm::LLVMContext & C, const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
+        return llvm::ArrayType::get(getStreamTy(C, FieldWidth), NumElements);
+    }
+
+    llvm::VectorType * getStreamTy(const unsigned FieldWidth = 1) {
+        return getStreamTy(getContext(), FieldWidth);
+    }
+
+    llvm::ArrayType * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
+        return getStreamSetTy(getContext(), NumElements, FieldWidth);
     }
 
     void CallPrintRegister(const std::string & regName, llvm::Value * const value);

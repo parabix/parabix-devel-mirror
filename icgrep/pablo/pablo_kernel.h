@@ -122,10 +122,6 @@ public:
 
     Integer * getInteger(const int64_t value) const;
 
-    kernel::KernelBuilder * getBuilder() {
-        return mBuilder;
-    }
-
 protected:
 
     PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, std::string kernelName,
@@ -135,6 +131,16 @@ protected:
                 std::vector<Binding> scalar_outputs = {});
 
     virtual void generatePabloMethod() = 0;
+
+    llvm::IntegerType * getSizeTy() const {
+        assert (mSizeTy); return mSizeTy;
+    }
+
+    llvm::VectorType * getStreamTy() const {
+        assert (mStreamTy); return mStreamTy;
+    }
+
+    llvm::IntegerType * getInt1Ty() const;
 
 private:
 
@@ -156,12 +162,8 @@ private:
     PabloCompiler * const           mPabloCompiler;
     SymbolGenerator *               mSymbolTable;
     PabloBlock *                    mEntryBlock;
-
-    kernel::KernelBuilder *         mBuilder;
-
-//    llvm::IntegerType * const       mSizeTy;
-//    llvm::VectorType * const        mStreamSetTy;
-
+    llvm::IntegerType *             mSizeTy;
+    llvm::VectorType *              mStreamTy;
     std::vector<Var *>              mInputs;
     std::vector<Var *>              mOutputs;
     std::vector<PabloAST *>         mConstants;

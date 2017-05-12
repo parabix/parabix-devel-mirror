@@ -34,6 +34,15 @@
 using namespace llvm;
 using namespace parabix;
 
+using Kernel = kernel::Kernel;
+using KernelBuilder = kernel::KernelBuilder;
+
+#ifndef NDEBUG
+#define IN_DEBUG_MODE true
+#else
+#define IN_DEBUG_MODE false
+#endif
+
 namespace codegen {
 
 static cl::OptionCategory CodeGenOptions("Code Generation Options", "These options control code generation.");
@@ -71,11 +80,6 @@ int BufferSegments;
 int ThreadNum;
 bool EnableAsserts;
 bool EnableCycleCounter;
-#ifndef NDEBUG
-#define IN_DEBUG_MODE true
-#else
-#define IN_DEBUG_MODE false
-#endif
 
 static cl::opt<int, true> BlockSizeOption("BlockSize", cl::location(BlockSize), cl::init(0), cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 static cl::opt<int, true> SegmentSizeOption("segment-size", cl::location(SegmentSize), cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
@@ -146,9 +150,8 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     builder.setErrorStr(&errMessage);
     TargetOptions opts = InitTargetOptionsFromCodeGenFlags();
     opts.MCOptions.AsmVerbose = codegen::AsmVerbose;
-
     builder.setTargetOptions(opts);
-    builder.setVerifyModules(false);
+    builder.setVerifyModules(IN_DEBUG_MODE || codegen::DebugOptionIsSet(codegen::VerifyIR));
     CodeGenOpt::Level optLevel = CodeGenOpt::Level::None;
     switch (codegen::OptLevel) {
         case '0': optLevel = CodeGenOpt::None; break;
@@ -158,7 +161,6 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
         default: errs() << codegen::OptLevel << " is an invalid optimization level.\n";
     }
     builder.setOptLevel(optLevel);
-
     setAllFeatures(builder);
     mEngine = builder.create();
     if (mEngine == nullptr) {
@@ -177,7 +179,7 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
 
     mMainModule->setTargetTriple(mTarget->getTargetTriple().getTriple());
 
-    iBuilder.reset(IDISA::GetIDISA_Builder(mMainModule));
+    iBuilder.reset(IDISA::GetIDISA_Builder(*mContext, mMainModule->getTargetTriple()));
     iBuilder->setDriver(this);
     iBuilder->setModule(mMainModule);
 }
@@ -193,21 +195,23 @@ StreamSetBuffer * ParabixDriver::addBuffer(std::unique_ptr<StreamSetBuffer> b) {
     return mOwnedBuffers.back().get();
 }
 
-kernel::Kernel * ParabixDriver::addKernelInstance(std::unique_ptr<kernel::Kernel> kb) {
+Kernel * ParabixDriver::addKernelInstance(std::unique_ptr<Kernel> kb) {
     mOwnedKernels.emplace_back(std::move(kb));
     return mOwnedKernels.back().get();
 }
 
-void ParabixDriver::addKernelCall(kernel::Kernel & kb, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
+void ParabixDriver::addKernelCall(Kernel & kb, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
     assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb.getModule() == nullptr));
     mPipeline.emplace_back(&kb);
-    kb.createKernelStub(iBuilder, inputs, outputs);
+    kb.bindPorts(inputs, outputs);
+    kb.makeModule(iBuilder);
 }
 
-void ParabixDriver::makeKernelCall(kernel::Kernel * kb, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
+void ParabixDriver::makeKernelCall(Kernel * kb, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
     assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb->getModule() == nullptr));
     mPipeline.emplace_back(kb);    
-    kb->createKernelStub(iBuilder, inputs, outputs);
+    kb->bindPorts(inputs, outputs);
+    kb->makeModule(iBuilder);
 }
 
 void ParabixDriver::generatePipelineIR() {
@@ -255,52 +259,116 @@ Function * ParabixDriver::LinkFunction(Module * mod, llvm::StringRef name, Funct
 }
 
 void ParabixDriver::linkAndFinalize() {
-    Module * module = nullptr;
+
+//    using WorkQueue = boost::lockfree::queue<Kernel *>;
+
+    legacy::PassManager PM;
+    if (IN_DEBUG_MODE || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
+        PM.add(createVerifierPass());
+    }
+    PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
+    PM.add(createReassociatePass());             //Reassociate expressions.
+    PM.add(createGVNPass());                     //Eliminate common subexpressions.
+    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
+    PM.add(createCFGSimplificationPass());
+
+//    unsigned threadCount = std::thread::hardware_concurrency();
+
+    std::unique_ptr<raw_fd_ostream> IROutputStream(nullptr);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
+//        threadCount = 1; // If we're dumping IR, disable seperate compilation
+        if (codegen::IROutputFilename.empty()) {
+            IROutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
+        } else {
+            std::error_code error;
+            IROutputStream.reset(new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None));
+        }
+        PM.add(createPrintModulePass(*IROutputStream));
+    }
+
+    #ifndef USE_LLVM_3_6
+    std::unique_ptr<raw_fd_ostream> ASMOutputStream(nullptr);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowASM))) {
+//        threadCount = 1; // If we're dumping ASM, disable seperate compilation
+        if (codegen::ASMOutputFilename.empty()) {
+            ASMOutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
+        } else {
+            std::error_code error;
+            ASMOutputStream.reset(new raw_fd_ostream(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None));
+        }
+        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *ASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+            report_fatal_error("LLVM error: could not add emit assembly pass");
+        }
+    }
+    #endif
+
     try {
 
-        legacy::PassManager PM;
-#ifndef NDEBUG
-        PM.add(createVerifierPass());
-#else
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
-            PM.add(createVerifierPass());
-        }
-#endif
-        PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
-        PM.add(createReassociatePass());             //Reassociate expressions.
-        PM.add(createGVNPass());                     //Eliminate common subexpressions.
-        PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-        PM.add(createCFGSimplificationPass());
+//    if (threadCount > 1) {
 
-        std::unique_ptr<raw_fd_ostream> IROutputStream(nullptr);
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
-            if (codegen::IROutputFilename.empty()) {
-                IROutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
-            } else {
-                std::error_code error;
-                IROutputStream.reset(new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None));
-            }
-            PM.add(createPrintModulePass(*IROutputStream));
-        }
+//        WorkQueue Q(mPipeline.size());
+//        for (Kernel * kernel : mPipeline) {
+//            Q.unsynchronized_push(kernel); assert (kernel);
+//        }
 
-        #ifndef USE_LLVM_3_6
-        std::unique_ptr<raw_fd_ostream> ASMOutputStream(nullptr);
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowASM))) {
-            if (codegen::ASMOutputFilename.empty()) {
-                ASMOutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
-            } else {
-                std::error_code error;
-                ASMOutputStream.reset(new raw_fd_ostream(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None));
-            }
-            if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *ASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
-                report_fatal_error("LLVM error: could not add emit assembly pass");
-            }
-        }
-        #endif
+//        std::thread compilation_thread[threadCount - 1];
+//        for (unsigned i = 0; i < (threadCount - 1); ++i) {
+//            compilation_thread[i] = std::thread([&]{
 
-        for (kernel::Kernel * const kernel : mPipeline) {
+//                llvm::LLVMContext C;
+//                std::unique_ptr<KernelBuilder> kb(IDISA::GetIDISA_Builder(C, mMainModule->getTargetTriple()));
+//                kb->setDriver(this);
+
+//                Kernel * kernel = nullptr;
+//                while (Q.pop(kernel)) {
+//                    kb->setKernel(kernel);
+//                    Module * module = kernel->getModule();
+//                    bool uncachedObject = true;
+//                    if (mCache && mCache->loadCachedObjectFile(kb, kernel)) {
+//                        uncachedObject = false;
+//                    }
+//                    if (uncachedObject) {
+//                        module->setTargetTriple(mMainModule->getTargetTriple());
+//                        kernel->generateKernel(kb);
+//                        // PM.run(*module);
+//                        mEngine->generateCodeForModule(module);
+//                    }
+//                    // mEngine->addModule(std::unique_ptr<Module>(module));
+//                }
+//            });
+//        }
+
+//        // PM.run(*mMainModule);
+
+//        Kernel * kernel = nullptr;
+//        while (Q.pop(kernel)) {
+//            iBuilder->setKernel(kernel);
+//            Module * module = kernel->getModule();
+//            bool uncachedObject = true;
+//            if (mCache && mCache->loadCachedObjectFile(iBuilder, kernel)) {
+//                uncachedObject = false;
+//            }
+//            if (uncachedObject) {
+//                module->setTargetTriple(mMainModule->getTargetTriple());
+//                kernel->generateKernel(iBuilder);
+//                // PM.run(*module);
+//            }
+//            mEngine->addModule(std::unique_ptr<Module>(module));
+//            mEngine->generateCodeForModule(module);
+//        }
+
+//        for (unsigned i = 0; i < (threadCount - 1); ++i) {
+//            compilation_thread[i].join();
+//        }
+
+//        iBuilder->setKernel(nullptr);
+
+//    } else { // single threaded
+
+        for (Kernel * const kernel : mPipeline) {
+
             iBuilder->setKernel(kernel);
-            module = kernel->getModule();
+            Module * module = kernel->getModule();
             bool uncachedObject = true;
             if (mCache && mCache->loadCachedObjectFile(iBuilder, kernel)) {
                 uncachedObject = false;
@@ -311,21 +379,23 @@ void ParabixDriver::linkAndFinalize() {
                 PM.run(*module);
             }
             mEngine->addModule(std::unique_ptr<Module>(module));
+            mEngine->generateCodeForModule(module);
         }
 
         iBuilder->setKernel(nullptr);
-        module = mMainModule;
-        PM.run(*module);
+        PM.run(*mMainModule);
 
-        mEngine->finalizeObject();
+//    }
 
-    } catch (...) {
-        module->dump();
-        report_fatal_error("LLVM error: link or finalize.");
+    mEngine->finalizeObject();
+
+    } catch (const std::exception & e) {
+        report_fatal_error(e.what());
     }
+
 }
 
-const std::unique_ptr<kernel::KernelBuilder> & ParabixDriver::getBuilder() {
+const std::unique_ptr<KernelBuilder> & ParabixDriver::getBuilder() {
     return iBuilder;
 }
 
@@ -336,101 +406,3 @@ void * ParabixDriver::getPointerToMain() {
 ParabixDriver::~ParabixDriver() {
     delete mCache;
 }
-
-
-//void ParabixDriver::linkAndFinalize() {
-
-//    using KernelQueue = boost::lockfree::queue<kernel::KernelBuilder *>;
-
-//    legacy::PassManager PM;
-//    #ifndef NDEBUG
-//    PM.add(createVerifierPass());
-//    #endif
-//    PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
-//    PM.add(createReassociatePass());             //Reassociate expressions.
-//    PM.add(createGVNPass());                     //Eliminate common subexpressions.
-//    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-//    PM.add(createCFGSimplificationPass());
-
-//    raw_fd_ostream * IROutputStream = nullptr;
-//    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
-//        if (codegen::IROutputFilename.empty()) {
-//            IROutputStream = new raw_fd_ostream(STDERR_FILENO, false, false);
-//        } else {
-//            std::error_code error;
-//            IROutputStream = new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
-//        }
-//        PM.add(createPrintModulePass(*IROutputStream));
-//        codegen::Jobs = 1; // TODO: set Jobs to 1 for now; these should be updated to pipe to a temporary buffer when Jobs > 1
-//    }
-
-//    #ifndef USE_LLVM_3_6
-//    raw_fd_ostream * ASMOutputStream = nullptr;
-//    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowASM))) {
-//        if (codegen::ASMOutputFilename.empty()) {
-//            ASMOutputStream = new raw_fd_ostream(STDERR_FILENO, false, false);
-//        } else {
-//            std::error_code error;
-//            ASMOutputStream = new raw_fd_ostream(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None);
-//        }
-//        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *ASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
-//            report_fatal_error("LLVM error: could not add emit assembly pass");
-//        }
-//        codegen::Jobs = 1; // TODO: set Jobs to 1 for now; these should be updated to pipe to a temporary buffer when Jobs > 1
-//    }
-//    #endif
-
-//    KernelQueue Q(mPipeline.size() + 1);
-//    for (kernel::KernelBuilder * kb : mPipeline) {
-//        assert (kb);
-//        Q.unsynchronized_push(kb);
-//    }
-
-//    std::thread compilation_thread[codegen::Jobs];
-//    for (int i = 0; i < codegen::Jobs; ++i) {
-//        compilation_thread[i] = std::thread([&]{
-//            kernel::KernelBuilder * kb = nullptr;
-//            Module * m = nullptr;
-//            try {
-//                while (Q.pop(kb)) {
-//                    m = kb->getModule();
-//                    bool uncachedObject = true;
-//                    if (mCache && mCache->loadCachedObjectFile(kb)) {
-//                        uncachedObject = false;
-//                    }
-//                    if (uncachedObject) {
-//                        Module * const cm = iBuilder->getModule();
-//                        iBuilder->setModule(m);
-//                        kb->generateKernel();
-//                        PM.run(*m);
-//                        iBuilder->setModule(cm);
-//                    }
-//                    mEngine->addModule(std::unique_ptr<Module>(m));
-//                }
-//            } catch (...) {
-//                // clear the queue
-//                while (Q.pop(kb));
-//                // dump the result the module to the console
-//                if (m) m->dump();
-//                throw;
-//            }
-//        });
-//    }
-
-//    PM.run(*mMainModule);
-//    for (int i = 0; i < codegen::Jobs; ++i) {
-//        compilation_thread[i].join();
-//    }
-//    mEngine->finalizeObject();
-
-//    delete IROutputStream;
-//    #ifndef USE_LLVM_3_6
-//    delete ASMOutputStream;
-//    #endif
-
-//}
-
-
-//            std::unique_ptr<IDISA::IDISA_Builder> idb(IDISA::GetIDISA_Builder(kb->getModule()));
-//            idb->setDriver(this);
-//            kb->setBuilder(idb.get());

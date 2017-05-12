@@ -82,7 +82,11 @@ public:
     // Create a module stub for the kernel, populated only with its Module ID.     
     //
 
-    void createKernelStub(const std::unique_ptr<KernelBuilder> & idb, const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
+    void bindPorts(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
+
+    llvm::Module * makeModule(const std::unique_ptr<KernelBuilder> & idb);
+
+    llvm::Module * setModule(const std::unique_ptr<KernelBuilder> & idb, llvm::Module * const module);
 
     void createKernelStub(const std::unique_ptr<KernelBuilder> & idb, const StreamSetBuffers & inputs, const StreamSetBuffers & outputs, llvm::Module * const kernelModule);
 
@@ -181,6 +185,7 @@ protected:
         const auto port = getStreamPort(name);
         assert (port.first == Port::Input);
         assert (port.second < mStreamSetInputBuffers.size());
+        assert (mStreamSetInputBuffers[port.second]);
         return mStreamSetInputBuffers[port.second];
     }
 
@@ -188,6 +193,7 @@ protected:
         const auto port = getStreamPort(name);
         assert (port.first == Port::Output);
         assert (port.second < mStreamSetOutputBuffers.size());
+        assert (mStreamSetOutputBuffers[port.second]);
         return mStreamSetOutputBuffers[port.second];
     }
 
@@ -196,9 +202,11 @@ protected:
         std::tie(port, index) = getStreamPort(name);
         if (port == Port::Input) {
             assert (index < mStreamSetInputBuffers.size());
+            assert (mStreamSetInputBuffers[index]);
             return mStreamSetInputBuffers[index];
         } else {
             assert (index < mStreamSetOutputBuffers.size());
+            assert (mStreamSetOutputBuffers[index]);
             return mStreamSetOutputBuffers[index];
         }
     }
@@ -218,7 +226,6 @@ protected:
     llvm::Value *                       mIsFinal;
     std::vector<llvm::Value *>          mAvailableItemCount;
     llvm::Value *                       mOutputScalarResult;
-
 
     std::vector<llvm::Type *>           mKernelFields;
     KernelMap                           mKernelMap;
@@ -377,7 +384,7 @@ private:
     // Given a kernel subtype with an appropriate interface, the generateDoSegment
     // method of the multi-block kernel builder makes all the necessary arrangements
     // to translate doSegment calls into a minimal sequence of doMultiBlock calls.
-    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & idb) final;
+    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & kb) final;
 
 };
 
