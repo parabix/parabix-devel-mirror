@@ -23,7 +23,7 @@ void StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth / 8);
     
     Function::arg_iterator args = mCurrentMethod->arg_begin();
-    Value * self = &*(args++);
+    /* self = */ args++;
     Value * itemsToDo = &*(args++);
     Value * codeUnitBuffer = &*(args++);
 
