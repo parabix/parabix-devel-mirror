@@ -607,6 +607,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     KernelBuilder * const iBuilder = kb.get();
     auto ip = iBuilder->saveIP();
     Function * const cp = mCurrentMethod;
+    const auto saveInstance = getInstance();
     
     // First prepare the multi-block method that will be used.
 
@@ -626,6 +627,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     multiBlockFunction->setDoesNotThrow();
     auto args = multiBlockFunction->arg_begin();
     args->setName("self");
+    setInstance(&*args);
     (++args)->setName("itemsToDo");
     for (auto binding : mStreamSetInputs) {
         (++args)->setName(binding.name + "BufPtr");
@@ -644,6 +646,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     
     iBuilder->restoreIP(ip);
     mCurrentMethod = cp;
+    setInstance(saveInstance);
     
     // Now proceed with creation of the doSegment method.
 
