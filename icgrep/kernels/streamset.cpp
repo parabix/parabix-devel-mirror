@@ -96,19 +96,16 @@ Value * StreamSetBuffer::getRawItemPointer(IDISA::IDISA_Builder * const iBuilder
     if (!isa<ConstantInt>(streamIndex) || !cast<ConstantInt>(streamIndex)->isZero()) {
         ptr = iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), streamIndex});
     }
-    Value * bufferItemPosition = modByBufferBlocks(iBuilder, absolutePosition);
-    IntegerType * const ty = cast<IntegerType>(mBaseType->getArrayElementType()->getVectorElementType());
-    ptr = iBuilder->CreatePointerCast(ptr, ty->getPointerTo());
-    if (LLVM_UNLIKELY(ty->getBitWidth() < 8)) {
-        const auto bw = ty->getBitWidth();
-        if (LLVM_LIKELY((bw & (bw - 1)) == 0)) { // is power of 2
-            bufferItemPosition = iBuilder->CreateUDiv(bufferItemPosition, ConstantInt::get(absolutePosition->getType(), 8 / bw));
-        } else {
-            bufferItemPosition = iBuilder->CreateMul(bufferItemPosition, ConstantInt::get(absolutePosition->getType(), bw));
-            bufferItemPosition = iBuilder->CreateUDiv(bufferItemPosition, ConstantInt::get(absolutePosition->getType(), 8));
-        }
+    Value * relativePosition = iBuilder->CreateURem(absolutePosition, ConstantInt::get(absolutePosition->getType(), mBufferBlocks * iBuilder->getBitBlockWidth()));
+    const auto bw = mBaseType->getArrayElementType()->getScalarSizeInBits();
+    if (bw < 8) {
+        relativePosition = iBuilder->CreateUDiv(relativePosition, ConstantInt::get(relativePosition->getType(), 8 / bw));
+        ptr = iBuilder->CreatePointerCast(ptr, iBuilder->getInt8PtrTy());
     }
-    Value * rawPointer = iBuilder->CreateGEP(ptr, bufferItemPosition);
+    else {
+        ptr = iBuilder->CreatePointerCast(ptr, iBuilder->getIntNTy(bw)->getPointerTo());
+    }
+    Value * rawPointer = iBuilder->CreateGEP(ptr, relativePosition);
     return rawPointer;
 }
 
