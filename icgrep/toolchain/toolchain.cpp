@@ -29,9 +29,7 @@
 #include <sys/stat.h>
 #include <thread>
 #include <boost/lockfree/queue.hpp>
-#ifndef NDEBUG
 #include <llvm/IR/Verifier.h>
-#endif
 
 using namespace llvm;
 using namespace parabix;
@@ -42,6 +40,7 @@ static cl::OptionCategory CodeGenOptions("Code Generation Options", "These optio
 
 static cl::bits<DebugFlags>
 DebugOptions(cl::values(clEnumVal(ShowIR, "Print generated LLVM IR."),
+                        clEnumVal(VerifyIR, "Run the IR verification pass."),
 #ifndef USE_LLVM_3_6
                         clEnumVal(ShowASM, "Print assembly code."),
 #endif
@@ -260,9 +259,13 @@ void ParabixDriver::linkAndFinalize() {
     try {
 
         legacy::PassManager PM;
-        #ifndef NDEBUG
+#ifndef NDEBUG
         PM.add(createVerifierPass());
-        #endif
+#else
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
+            PM.add(createVerifierPass());
+        }
+#endif
         PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
         PM.add(createReassociatePass());             //Reassociate expressions.
         PM.add(createGVNPass());                     //Eliminate common subexpressions.
@@ -318,7 +321,7 @@ void ParabixDriver::linkAndFinalize() {
 
     } catch (...) {
         module->dump();
-        throw;
+        report_fatal_error("LLVM error: link or finalize.");
     }
 }
 

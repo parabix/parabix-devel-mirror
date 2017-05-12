@@ -29,6 +29,7 @@ const llvm::cl::OptionCategory * codegen_flags();
 // Command Parameters
 enum DebugFlags {
     ShowIR,
+    VerifyIR,
 #ifndef USE_LLVM_3_6
     ShowASM,
 #endif
