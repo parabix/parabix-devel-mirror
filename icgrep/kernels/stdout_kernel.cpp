@@ -91,7 +91,8 @@ void FileSink::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBu
     Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
     Value * bytePtr = iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
     bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
-    iBuilder->CreateWriteCall(fileDes, bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
+    Value * bytesToDo = mCodeUnitWidth == 8 ? itemsToDo : iBuilder->CreateMul(itemsToDo, itemBytes);
+    iBuilder->CreateWriteCall(fileDes, bytePtr, bytesToDo);
     
     processed = iBuilder->CreateAdd(processed, itemsToDo);
     iBuilder->setProcessedItemCount("codeUnitBuffer", processed);
@@ -108,7 +109,8 @@ void FileSink::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBu
         Value * bytePtr = iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
         bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
         itemsToDo = iBuilder->CreateSub(available, processed);
-        iBuilder->CreateWriteCall(fileDes, bytePtr, iBuilder->CreateMul(itemsToDo, itemBytes));
+        bytesToDo = mCodeUnitWidth == 8 ? itemsToDo : iBuilder->CreateMul(itemsToDo, itemBytes);
+        iBuilder->CreateWriteCall(fileDes, bytePtr, bytesToDo);
         processed = iBuilder->CreateAdd(processed, itemsToDo);
         iBuilder->setProcessedItemCount("codeUnitBuffer", available);
         iBuilder->CreateBr(checkFinal);

@@ -139,7 +139,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     const auto requiredBlocks = codegen::SegmentSize + ((blockSize + mLookAheadPositions - 1) / blockSize);
 
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        if ((mStreamSetInputBuffers[i]->getBufferBlocks() > 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
+        if ((mStreamSetInputBuffers[i]->getBufferBlocks() > 1) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
             report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
         }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
