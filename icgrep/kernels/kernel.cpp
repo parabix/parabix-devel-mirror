@@ -275,7 +275,6 @@ inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuild
 unsigned Kernel::getScalarIndex(const std::string & name) const {
     const auto f = mKernelMap.find(name);
     if (LLVM_UNLIKELY(f == mKernelMap.end())) {
-        assert (false);
         report_fatal_error(getName() + " does not contain scalar: " + name);
     }
     return f->second;
@@ -934,9 +933,14 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         Value * nextBufPtr = kb->CreateGEP(tempBufPtr, kb->CreateUDiv(availFromBase, blockSize));
         mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), nextBufPtr, kb->getStreamSetBufferPtr(mStreamSetInputs[i].name), copyItems2);
 
-        Value * itemAddress = kb->CreatePtrToInt(kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]), intAddressTy);
-        Value * baseAddress = kb->CreatePtrToInt(inputBlockPtr[i], intAddressTy);
-        Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, kb->getSizeTy()), kb->CreateSub(itemAddress, baseAddress));
+        Value * itemAddress = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
+        itemAddress = kb->CreatePtrToInt(itemAddress, intAddressTy);
+
+        Value * baseAddress = inputBlockPtr[i];
+        baseAddress = kb->CreatePtrToInt(baseAddress, intAddressTy);
+
+
+        Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, intAddressTy), kb->CreateSub(itemAddress, baseAddress));
         tempArgs.push_back(kb->CreateIntToPtr(tempAddress, mStreamSetInputBuffers[i]->getPointerType()));
     }
 
@@ -946,7 +950,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         tempBufPtr = kb->CreatePointerCast(tempBufPtr, mStreamSetOutputBuffers[i]->getPointerType());
         blockItemPos.push_back(kb->CreateAnd(producedItemCount[i], blockBaseMask));
         mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, outputBlockPtr[i], kb->CreateSub(producedItemCount[i], blockItemPos[i]));
-        Value * itemAddress = kb->CreatePtrToInt(kb->getRawOutputPointer(mStreamSetInputs[i].name, kb->getInt32(0), producedItemCount[i]), kb->getSizeTy());
+        Value * itemAddress = kb->CreatePtrToInt(kb->getRawOutputPointer(mStreamSetInputs[i].name, kb->getInt32(0), producedItemCount[i]), intAddressTy);
         Value * outputPtr = kb->getOutputStreamBlockPtr(mStreamSetOutputs[i].name, kb->getInt32(0));
         Value * baseAddress = kb->CreatePtrToInt(outputPtr, intAddressTy);
         Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, intAddressTy), kb->CreateSub(itemAddress, baseAddress));
