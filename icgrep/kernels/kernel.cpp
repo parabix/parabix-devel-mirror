@@ -853,7 +853,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             priorIdx++;
         }
     }
-    kb->setProcessedItemCount(mStreamSetInputs[0].name, kb->CreateAdd(processed, linearlyAvailItems));
+    kb->setProcessedItemCount(mStreamSetInputs[0].name, kb->CreateAdd(processedItemCount[0], linearlyAvailItems));
     Value * reducedBlocksToDo = kb->CreateSub(blocksRemaining, linearlyWritableBlocks);
     Value * fullBlocksRemain = kb->CreateICmpUGT(reducedBlocksToDo, kb->getSize(0));
     BasicBlock * multiBlockFinal = kb->GetInsertBlock();

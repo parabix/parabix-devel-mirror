@@ -21,13 +21,12 @@ private:
     
 };
 
-
-class FileSink final : public SegmentOrientedKernel {
+class FileSink final : public MultiBlockKernel {
 public:  
     FileSink(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth);
 protected:
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder) override;
 private:
     const unsigned mCodeUnitWidth;
     

@@ -66,58 +66,25 @@ void FileSink::generateInitializeMethod(const std::unique_ptr<kernel::KernelBuil
     iBuilder->SetInsertPoint(fileSinkInitExit);
 }
 
-void FileSink::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
-
-    PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
-
+void FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder) {
     BasicBlock * closeFile = iBuilder->CreateBasicBlock("closeFile");
     BasicBlock * fileOutExit = iBuilder->CreateBasicBlock("fileOutExit");
-    Constant * blockItems = iBuilder->getSize(iBuilder->getBitBlockWidth());
-    Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth/8);
-
+    
+    PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
+    Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth / 8);
     Value * fileDes = iBuilder->getScalarField("fileDes");
-    Value * available = iBuilder->getAvailableItemCount("codeUnitBuffer");
-    Value * processed = iBuilder->getProcessedItemCount("codeUnitBuffer");
-    Value * itemsToDo = iBuilder->CreateSub(available, processed);
-    // There may be two memory areas if we are at the physical end of a circular buffer.
-    const auto b  = getInputStreamSetBuffer("codeUnitBuffer");
-    Value * wraparound = nullptr;
-    if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
-        Value * accessible = iBuilder->getLinearlyAccessibleItems("codeUnitBuffer", processed);
-        wraparound = iBuilder->CreateICmpULT(accessible, itemsToDo);
-        itemsToDo = iBuilder->CreateSelect(wraparound, accessible, itemsToDo);
-    }
-    
-    Value * byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-    Value * bytePtr = iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
-    bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
-    Value * bytesToDo = mCodeUnitWidth == 8 ? itemsToDo : iBuilder->CreateMul(itemsToDo, itemBytes);
-    iBuilder->CreateWriteCall(fileDes, bytePtr, bytesToDo);
-    
-    processed = iBuilder->CreateAdd(processed, itemsToDo);
-    iBuilder->setProcessedItemCount("codeUnitBuffer", processed);
-    
-    // Now we may process the second area (if required).
-    if (isa<CircularBuffer>(b) || isa<CircularCopybackBuffer>(b)) {
-        BasicBlock * wrapAroundWrite = iBuilder->CreateBasicBlock("wrapAroundWrite");
-        BasicBlock * checkFinal = iBuilder->CreateBasicBlock("checkFinal");
-        iBuilder->CreateCondBr(wraparound, wrapAroundWrite, checkFinal);
-        iBuilder->SetInsertPoint(wrapAroundWrite);
-        
-        // Calculate from the updated value of processed;
-        byteOffset = iBuilder->CreateMul(iBuilder->CreateURem(processed, blockItems), itemBytes);
-        Value * bytePtr = iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0)), i8PtrTy);
-        bytePtr = iBuilder->CreateGEP(bytePtr, byteOffset);
-        itemsToDo = iBuilder->CreateSub(available, processed);
-        bytesToDo = mCodeUnitWidth == 8 ? itemsToDo : iBuilder->CreateMul(itemsToDo, itemBytes);
-        iBuilder->CreateWriteCall(fileDes, bytePtr, bytesToDo);
-        processed = iBuilder->CreateAdd(processed, itemsToDo);
-        iBuilder->setProcessedItemCount("codeUnitBuffer", available);
-        iBuilder->CreateBr(checkFinal);
-        iBuilder->SetInsertPoint(checkFinal);
-    }
-    iBuilder->CreateCondBr(mIsFinal, closeFile, fileOutExit);
 
+    Function::arg_iterator args = mCurrentMethod->arg_begin();
+    /* self = */ args++;
+    Value * itemsToDo = &*(args++);
+    Value * codeUnitBuffer = &*(args++);
+    
+    Value * bytesToDo = mCodeUnitWidth == 8 ? itemsToDo : iBuilder->CreateMul(itemsToDo, itemBytes);
+    Value * bytePtr = iBuilder->CreatePointerCast(codeUnitBuffer, i8PtrTy);
+    
+    iBuilder->CreateWriteCall(fileDes, bytePtr, bytesToDo);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpULT(itemsToDo, iBuilder->getSize(iBuilder->getBitBlockWidth())), closeFile, fileOutExit);
+    
     iBuilder->SetInsertPoint(closeFile);
     iBuilder->CreateCloseCall(fileDes);
     Value * newFileNamePtr = iBuilder->getScalarField("fileName");
@@ -126,12 +93,12 @@ void FileSink::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBu
     iBuilder->CreateFree(tmpFileNamePtr);
     
     iBuilder->CreateBr(fileOutExit);
-
+    
     iBuilder->SetInsertPoint(fileOutExit);
 }
 
 FileSink::FileSink(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth)
-: SegmentOrientedKernel("filesink", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {},
+: MultiBlockKernel("filesink", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {},
                 {Binding{iBuilder->getInt8PtrTy(), "fileName"}}, {}, {Binding{iBuilder->getInt8PtrTy(), "tmpFileName"}, Binding{iBuilder->getInt32Ty(), "fileDes"}})
 , mCodeUnitWidth(codeUnitWidth) {
 }
