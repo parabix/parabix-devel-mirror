@@ -21,6 +21,7 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/scanmatchgen.h>
 #include <kernels/streamset.h>
+#include <kernels/until_n.h>
 #include <kernels/kernel_builder.h>
 #include <pablo/pablo_kernel.h>
 #include <re/re_cc.h>
@@ -50,6 +51,9 @@ static cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl
 
 static cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
 static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
+
+static cl::opt<int> MaxCount("m", cl::desc("Limit the number of matches per file."), cl::cat(bGrepOutputOptions), cl::init((size_t) -1));
+static cl::alias MaxCountLong("max-count", cl::desc("Alias for -m"), cl::aliasopt(MaxCount));
 
 static re::CC * parsedCodePointSet = nullptr;
 
@@ -108,7 +112,9 @@ void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_e
         resultStrs[fileIdx] << inputFiles[fileIdx] << ':';
     }
     if (ShowLineNumbers) {
-        resultStrs[fileIdx] << lineNum << ":";
+        // Internally line numbers are counted from 0.  For display, adjust
+        // the line number so that lines are numbered from 1.
+        resultStrs[fileIdx] << lineNum+1 << ":";
     }
 
     // If the line "starts" on the LF of a CRLF, it is actually the end of the last line.
@@ -286,6 +292,13 @@ void GrepEngine::grepCodeGen(const std::string & moduleName, std::vector<re::RE 
         StreamSetBuffer * OriginalMatches = MergedResults;
         MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
         pxDriver.makeKernelCall(invertK, {OriginalMatches, LineBreakStream}, {MergedResults});
+    }
+    if (MaxCount > 0) {
+        kernel::Kernel * untilK = pxDriver.addKernelInstance(make_unique<kernel::UntilNkernel>(idb));
+        untilK->setInitialArguments({idb->getSize(MaxCount)});
+        StreamSetBuffer * AllMatches = MergedResults;
+        MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        pxDriver.makeKernelCall(untilK, {AllMatches}, {MergedResults});
     }
     if (CountOnly) {
         kernel::MatchCount matchCountK(idb);
