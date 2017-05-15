@@ -100,7 +100,7 @@ protected:
 
     StreamSetBuffer(BufferKind k, llvm::Type * baseType, llvm::Type * resolvedType, unsigned BufferBlocks, unsigned AddressSpace);
 
-    // Get the buffer pointer for a given block of the stream.
+    // Get the buffer pointer for a given block of the stream set.
     virtual llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const = 0;
 
     bool isCapacityGuaranteed(const llvm::Value * const index, const size_t capacity) const;
