@@ -872,10 +872,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     //
 
     kb->SetInsertPoint(tempBlockCheck);
-    PHINode * itemsProcessedSoFar = kb->CreatePHI(kb->getSizeTy(), 2);
-    itemsProcessedSoFar->addIncoming(processedItemCount[0], doSegmentOuterLoop);
-    itemsProcessedSoFar->addIncoming(nowProcessed, multiBlockFinal);
-    
     haveBlocks = kb->CreateICmpUGT(blocksRemaining, kb->getSize(0));
     kb->CreateCondBr(kb->CreateOr(mIsFinal, haveBlocks), doTempBufferBlock, segmentDone);
 
@@ -904,7 +900,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     // For each input and output buffer, copy over necessary data starting from the last
     // block boundary.
     std::vector<Value *> finalItemCountNeeded;
-    finalItemCountNeeded.push_back(kb->CreateAdd(itemsProcessedSoFar, tempBlockItems));
+    finalItemCountNeeded.push_back(kb->CreateAdd(processedItemCount[0], tempBlockItems));
 
     for (unsigned i = 0; i < mStreamSetInputBuffers.size(); i++) {
         Value * tempBufPtr = kb->CreateGEP(tempParameterArea, kb->getInt32(i));
