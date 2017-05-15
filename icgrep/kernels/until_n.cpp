@@ -46,7 +46,7 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     BasicBlock * scanDone = kb->CreateBasicBlock("scanDone");
     BasicBlock * notFoundYet = kb->CreateBasicBlock("notFoundYet");
     BasicBlock * findNth = kb->CreateBasicBlock("findNth");
-    BasicBlock * getNthBitPosn = kb->CreateBasicBlock("getNthBitPosn");
+    BasicBlock * getPosnAfterNth = kb->CreateBasicBlock("getPosnAfterNth");
     BasicBlock * nthPosFound = kb->CreateBasicBlock("nthPosFound");
     BasicBlock * doSegmentReturn = kb->CreateBasicBlock("doSegmentReturn");
     Constant * blockSize = kb->getSize(kb->getBitBlockWidth());
@@ -139,13 +139,13 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     // Now we have determined that the Nth bit has not been found in the entire
     // set of itemsToDo.
     
-    Value * finalPosition = kb->CreateAdd(kb->getProducedItemCount("uptoN"), itemsToDo);
-    kb->setProducedItemCount("uptoN", finalPosition);
+    Value * finalCount = kb->CreateAdd(kb->getProducedItemCount("uptoN"), itemsToDo);
+    kb->setProducedItemCount("uptoN", finalCount);
     kb->CreateBr(doSegmentReturn);
 
     //
-    // With the last input scanMask loaded, the count of bits reaches or
-    // exceeds N.  Find the exact position of the Nth bit in this pack.
+    // With the last input scanMask loaded, the count of one bits seen reaches or
+    // exceeds N.  Determine the position immediately after the Nth one bit.
     // 
     kb->SetInsertPoint(findNth);
     
@@ -157,13 +157,13 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     Value * oneMoreSeen = kb->CreateAdd(seen1, kb->getSize(1));
     seen1->addIncoming(oneMoreSeen, findNth);
     remainingBits->addIncoming(clearLowest, findNth);
-    kb->CreateCondBr(kb->CreateICmpULT(oneMoreSeen, N), findNth, getNthBitPosn);
+    kb->CreateCondBr(kb->CreateICmpULT(oneMoreSeen, N), findNth, getPosnAfterNth);
 
     //
     // We have cleared the low bits of scanMask up to and including the Nth in the stream.
-    kb->SetInsertPoint(getNthBitPosn);
+    kb->SetInsertPoint(getPosnAfterNth);
     Value * scanMaskUpToN = kb->CreateXor(scanMask, clearLowest);
-    Value * posnInPack = kb->CreateSub(ConstantInt::get(iPackTy, packSize-1), kb->CreateCountReverseZeroes(scanMaskUpToN));
+    Value * posnInPack = kb->CreateSub(ConstantInt::get(iPackTy, packSize), kb->CreateCountReverseZeroes(scanMaskUpToN));
     Value * posnInGroup = kb->CreateAdd(kb->CreateMul(nonZeroPack, kb->getSize(packSize)), posnInPack);
     Value * posnInItemsToDo = kb->CreateAdd(kb->CreateMul(blockGroupBase, blockSize), posnInGroup);
     // It is conceivable that we found a bit at a position beyond the given itemsToDo,
@@ -172,9 +172,14 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     kb->CreateCondBr(kb->CreateICmpUGE(posnInItemsToDo, itemsToDo), notFoundYet, nthPosFound);
     
     kb->SetInsertPoint(nthPosFound);
-    finalPosition = kb->CreateAdd(kb->getProcessedItemCount("bits"), posnInItemsToDo);
-    kb->setProcessedItemCount("bits", finalPosition);
-    kb->setProducedItemCount("uptoN", finalPosition);
+    finalCount = kb->CreateAdd(kb->getProcessedItemCount("bits"), posnInItemsToDo);
+    Value * finalBlock = kb->CreateUDiv(posnInItemsToDo, blockSize);
+    blk = kb->CreateBlockAlignedLoad(kb->CreateGEP(sourceBitstream, {finalBlock, kb->getInt32(0)}));
+    blk = kb->CreateAnd(blk, kb->CreateNot(kb->bitblock_mask_from(kb->CreateURem(posnInItemsToDo, blockSize))));
+    Value * outputPtr = kb->CreateGEP(uptoN_bitstream, {finalBlock, kb->getInt32(0)});
+    kb->CreateBlockAlignedStore(blk, outputPtr);
+    kb->setProcessedItemCount("bits", finalCount);
+    kb->setProducedItemCount("uptoN", finalCount);
     kb->setTerminationSignal();
     kb->CreateBr(doSegmentReturn);
     
