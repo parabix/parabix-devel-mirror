@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-class Zeroes : public PabloAST {
+class Zeroes final : public PabloAST {
     friend class PabloBlock;
     friend class PabloKernel;
 public:

@@ -85,9 +85,9 @@ public:
      
      */
     
-    const std::string & getName() const { return mKernelName; }
-
-    void setName(std::string newName) { mKernelName = newName; }
+    const std::string & getName() const {
+        return mKernelName;
+    }
        
     virtual bool isCachable() const = 0;
 
@@ -191,7 +191,7 @@ protected:
     llvm::Module *                          mModule;
     llvm::StructType *                      mKernelStateType;
     unsigned                                mLookAheadPositions;
-    std::string                             mKernelName;
+    const std::string                       mKernelName;
     std::vector<llvm::Value *>              mInitialArguments;
     std::vector<Binding>                    mStreamSetInputs;
     std::vector<Binding>                    mStreamSetOutputs;

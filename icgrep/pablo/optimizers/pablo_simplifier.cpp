@@ -544,7 +544,7 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
  ** ------------------------------------------------------------------------------------------------------------- */
 void Simplifier::deadCodeElimination(PabloBlock * const block) {
 
-   flat_map<PabloAST *, Assign *> unread;
+    flat_map<PabloAST *, Assign *> unread;
 
     Statement * stmt = block->front();
     while (stmt) {

@@ -12,7 +12,7 @@
 
 namespace pablo {
 
-class Lookahead : public Statement {
+class Lookahead final : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {

@@ -80,12 +80,15 @@ void MMapSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     // instruct the OS that it can safely drop any fully consumed pages
     Value * consumed = iBuilder->getConsumedItemCount("sourceBuffer");
-    Type * const consumedTy = consumed->getType();
+    IntegerType * const consumedTy = cast<IntegerType>(consumed->getType());
     Type * const voidPtrTy = iBuilder->getVoidPtrTy();
+
+    DataLayout DL(iBuilder->getModule());
+    IntegerType * const intAddrTy = iBuilder->getIntPtrTy(DL);
 
     // multiply the consumed count by the code unit size then mask off any partial pages
     if (mCodeUnitWidth > 8) {
-        consumed = iBuilder->CreateMul(consumed, iBuilder->getSize(mCodeUnitWidth / 8));
+        consumed = iBuilder->CreateMul(consumed, ConstantInt::get(consumedTy, mCodeUnitWidth / 8));
     }
     const auto pageSize = getpagesize();
     if (LLVM_LIKELY((pageSize & (pageSize - 1)) == 0)) {
@@ -93,21 +96,21 @@ void MMapSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     } else {
         consumed = iBuilder->CreateSub(consumed, iBuilder->CreateURem(consumed, ConstantInt::get(consumedTy, pageSize)));
     }
+
     Value * sourceBuffer = iBuilder->getBaseAddress("sourceBuffer");
-    sourceBuffer = iBuilder->CreatePtrToInt(sourceBuffer, consumedTy);
+    sourceBuffer = iBuilder->CreatePtrToInt(sourceBuffer, intAddrTy);
+    if (LLVM_UNLIKELY(intAddrTy->getBitWidth() > consumedTy->getBitWidth())) {
+        consumed = iBuilder->CreateZExt(consumed, intAddrTy);
+    } else if (LLVM_UNLIKELY(intAddrTy->getBitWidth() < consumedTy->getBitWidth())) {
+        sourceBuffer = iBuilder->CreateZExt(sourceBuffer, consumedTy);
+    }
     Value * consumedBuffer = iBuilder->CreateAdd(sourceBuffer, consumed);
-
-
-
-
     Value * readableBuffer = iBuilder->getScalarField("readableBuffer");
-    readableBuffer = iBuilder->CreatePtrToInt(readableBuffer, consumedTy);
+    readableBuffer = iBuilder->CreatePtrToInt(readableBuffer, consumedBuffer->getType());
     Value * unnecessaryBytes = iBuilder->CreateSub(consumedBuffer, readableBuffer);
 
-
-
     // avoid calling madvise unless an actual page table change could occur
-    Value * hasPagesToDrop = iBuilder->CreateICmpEQ(unnecessaryBytes, ConstantInt::getNullValue(unnecessaryBytes->getType()));
+    Value * hasPagesToDrop = iBuilder->CreateICmpEQ(unnecessaryBytes, ConstantInt::getNullValue(intAddrTy));
     iBuilder->CreateLikelyCondBr(hasPagesToDrop, processSegment, dropPages);
 
     iBuilder->SetInsertPoint(dropPages);

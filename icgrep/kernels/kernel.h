@@ -88,8 +88,6 @@ public:
 
     llvm::Module * setModule(const std::unique_ptr<KernelBuilder> & idb, llvm::Module * const module);
 
-    void createKernelStub(const std::unique_ptr<KernelBuilder> & idb, const StreamSetBuffers & inputs, const StreamSetBuffers & outputs, llvm::Module * const kernelModule);
-
     llvm::Module * getModule() const {
         return mModule;
     }

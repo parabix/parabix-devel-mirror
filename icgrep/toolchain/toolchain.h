@@ -28,6 +28,7 @@ const llvm::cl::OptionCategory * codegen_flags();
 
 // Command Parameters
 enum DebugFlags {
+    ShowUnoptimizedIR,
     ShowIR,
     VerifyIR,
 #ifndef USE_LLVM_3_6
@@ -92,11 +93,6 @@ public:
 protected:
 
     llvm::Function * LinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
-
-    void compileSingleThread();
-
-    void compileMultiThread(const unsigned threadCount);
-
 
 private:
     std::unique_ptr<llvm::LLVMContext>                      mContext;

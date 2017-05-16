@@ -124,7 +124,8 @@ public:
 
 protected:
 
-    PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, std::string kernelName,
+    PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder,
+                std::string && kernelName,
                 std::vector<Binding> stream_inputs = {},
                 std::vector<Binding> stream_outputs = {},
                 std::vector<Binding> scalar_parameters = {},

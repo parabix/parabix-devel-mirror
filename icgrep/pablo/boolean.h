@@ -5,7 +5,7 @@
 
 namespace pablo {
 
-class And : public Variadic {
+class And final : public Variadic {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -33,7 +33,7 @@ protected:
     }
 };
 
-class Or : public Variadic {
+class Or final : public Variadic {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -61,7 +61,7 @@ protected:
     }
 };
 
-class Xor : public Variadic {
+class Xor final : public Variadic {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -88,7 +88,7 @@ protected:
     }
 };
 
-class Not : public Statement {
+class Not final : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -110,7 +110,7 @@ protected:
     }
 };
 
-class Sel : public Statement {
+class Sel final : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {

@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-class Count : public Statement {
+class Count final : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {

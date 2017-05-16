@@ -12,7 +12,7 @@
 
 namespace pablo {
 
-class Advance : public Statement {
+class Advance final : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {

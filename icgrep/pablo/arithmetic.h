@@ -47,7 +47,7 @@ private:
 };
 
 #define CREATE_OPERATOR_TYPE(Name) \
-class Name : public Operator { \
+class Name final : public Operator { \
     friend class PabloBlock; \
 public: \
     static inline bool classof(const PabloAST * e) { \

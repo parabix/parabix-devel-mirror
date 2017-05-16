@@ -28,23 +28,27 @@ inline static std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
-ICgrepKernelBuilder::ICgrepKernelBuilder (const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re)
-: PabloKernel(iBuilder, "",
-              {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}},
-              {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}},
-              {},
-              {})
-, mRE(re)
-, mSignature(Printer_RE::PrintRE(re)) {
-    setName("ic" + sha1sum(mSignature));
+RegularExpressionOptimizer::RegularExpressionOptimizer(re::RE * const re_ast)
+: mRE(regular_expression_passes(re_ast))
+, mSignature(Printer_RE::PrintRE(mRE)) {
+
 }
 
-std::string ICgrepKernelBuilder::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
+ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re)
+: RegularExpressionOptimizer(re)
+, PabloKernel(iBuilder,
+              "ic" + sha1sum(mSignature),
+              {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}},
+              {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}}) {
+
+}
+
+std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
     return mSignature;
 }
 
-void ICgrepKernelBuilder::generatePabloMethod() {
-    re2pablo_compiler(this, regular_expression_passes(mRE));
+void ICGrepKernel::generatePabloMethod() {
+    re2pablo_compiler(this, mRE);
 }
 
 void InvertMatchesKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {

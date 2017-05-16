@@ -5,7 +5,7 @@
 
 namespace pablo {
 
-class Constant : public PabloAST {
+class Constant final : public PabloAST {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {

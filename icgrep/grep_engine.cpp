@@ -276,7 +276,7 @@ void GrepEngine::grepCodeGen(const std::string & moduleName, std::vector<re::RE 
 
     for(unsigned i = 0; i < n; ++i){
         StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        kernel::Kernel * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICgrepKernelBuilder>(idb, REs[i]));
+        kernel::Kernel * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, REs[i]));
         pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
         MatchResultsBufs[i] = MatchResults;
     }

@@ -114,7 +114,8 @@ public:
 protected:
 
     KernelBuilder(llvm::LLVMContext & C, unsigned registerWidth, unsigned blockWidth, unsigned stride)
-    : IDISA::IDISA_Builder(C, registerWidth, blockWidth, stride) {
+    : IDISA::IDISA_Builder(C, registerWidth, blockWidth, stride)
+    , mKernel(nullptr) {
 
     }
 

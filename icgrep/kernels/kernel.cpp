@@ -139,7 +139,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     const auto requiredBlocks = codegen::SegmentSize + ((blockSize + mLookAheadPositions - 1) / blockSize);
 
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        if ((mStreamSetInputBuffers[i]->getBufferBlocks() > 1) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
+        if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
             report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
         }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
@@ -465,10 +465,19 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
     Value * const self = getInstance();
     Function * const cp = mCurrentMethod;
     auto ip = idb->saveIP();
+    std::vector<Value *> availableItemCount(0);
 
     /// Check if the do block method is called and create the function if necessary    
     if (!idb->supportsIndirectBr()) {
-        FunctionType * const type = FunctionType::get(idb->getVoidTy(), {self->getType()}, false);
+
+        std::vector<Type *> params;
+        params.reserve(1 + mAvailableItemCount.size());
+        params.push_back(self->getType());
+        for (Value * avail : mAvailableItemCount) {
+            params.push_back(avail->getType());
+        }
+
+        FunctionType * const type = FunctionType::get(idb->getVoidTy(), params, false);
         mCurrentMethod = Function::Create(type, GlobalValue::InternalLinkage, getName() + DO_BLOCK_SUFFIX, idb->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
         mCurrentMethod->setDoesNotThrow();
@@ -476,7 +485,13 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
         auto args = mCurrentMethod->arg_begin();
         args->setName("self");
         setInstance(&*args);
-        idb->SetInsertPoint(idb->CreateBasicBlock("entry"));
+        availableItemCount.reserve(mAvailableItemCount.size());
+        while (++args != mCurrentMethod->arg_end()) {
+            availableItemCount.push_back(&*args);
+        }
+        assert (availableItemCount.size() == mAvailableItemCount.size());
+        mAvailableItemCount.swap(availableItemCount);
+        idb->SetInsertPoint(BasicBlock::Create(idb->getContext(), "entry", mCurrentMethod));
     }
 
     std::vector<Value *> priorProduced;
@@ -526,15 +541,15 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
         }
     }
 
-
-    /// Call the do block method if necessary then restore the current function state to the do segement method
     if (!idb->supportsIndirectBr()) {
+        // Restore the DoSegment function state then call the DoBlock method
         idb->CreateRetVoid();
         mDoBlockMethod = mCurrentMethod;
         idb->restoreIP(ip);
-        idb->CreateCall(mCurrentMethod, self);
         setInstance(self);
         mCurrentMethod = cp;
+        mAvailableItemCount.swap(availableItemCount);
+        CreateDoBlockMethodCall(idb);
     }
 
 }
@@ -545,9 +560,17 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(const std::unique_ptr<Ker
     Function * const cp = mCurrentMethod;
     Value * const remainingItemCount = remainingItems;
     auto ip = idb->saveIP();
+    std::vector<Value *> availableItemCount(0);
 
     if (!idb->supportsIndirectBr()) {
-        FunctionType * const type = FunctionType::get(idb->getVoidTy(), {self->getType(), idb->getSizeTy()}, false);
+        std::vector<Type *> params;
+        params.reserve(2 + mAvailableItemCount.size());
+        params.push_back(self->getType());
+        params.push_back(idb->getSizeTy());
+        for (Value * avail : mAvailableItemCount) {
+            params.push_back(avail->getType());
+        }
+        FunctionType * const type = FunctionType::get(idb->getVoidTy(), params, false);
         mCurrentMethod = Function::Create(type, GlobalValue::InternalLinkage, getName() + FINAL_BLOCK_SUFFIX, idb->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
         mCurrentMethod->setDoesNotThrow();
@@ -557,7 +580,13 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(const std::unique_ptr<Ker
         setInstance(&*args);
         remainingItems = &*(++args);
         remainingItems->setName("remainingItems");
-        idb->SetInsertPoint(idb->CreateBasicBlock("entry"));
+        availableItemCount.reserve(mAvailableItemCount.size());
+        while (++args != mCurrentMethod->arg_end()) {
+            availableItemCount.push_back(&*args);
+        }
+        assert (availableItemCount.size() == mAvailableItemCount.size());
+        mAvailableItemCount.swap(availableItemCount);
+        idb->SetInsertPoint(BasicBlock::Create(idb->getContext(), "entry", mCurrentMethod));
     }
 
     generateFinalBlockMethod(idb, remainingItems); // may be implemented by the BlockOrientedKernel subtype
@@ -567,9 +596,18 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(const std::unique_ptr<Ker
     if (!idb->supportsIndirectBr()) {
         idb->CreateRetVoid();
         idb->restoreIP(ip);
-        idb->CreateCall(mCurrentMethod, {self, remainingItemCount});
-        mCurrentMethod = cp;
         setInstance(self);
+        mAvailableItemCount.swap(availableItemCount);
+        // Restore the DoSegment function state then call the DoFinal method
+        std::vector<Value *> args;
+        args.reserve(2 + mAvailableItemCount.size());
+        args.push_back(self);
+        args.push_back(remainingItemCount);
+        for (Value * avail : mAvailableItemCount) {
+            args.push_back(avail);
+        }
+        idb->CreateCall(mCurrentMethod, args);
+        mCurrentMethod = cp;
     }
 
 }
@@ -588,7 +626,13 @@ void BlockOrientedKernel::CreateDoBlockMethodCall(const std::unique_ptr<KernelBu
         bb->moveAfter(idb->GetInsertBlock());
         idb->SetInsertPoint(bb);
     } else {
-        idb->CreateCall(mDoBlockMethod, getInstance());
+        std::vector<Value *> args;
+        args.reserve(1 + mAvailableItemCount.size());
+        args.push_back(getInstance());
+        for (Value * avail : mAvailableItemCount) {
+            args.push_back(avail);
+        }
+        idb->CreateCall(mDoBlockMethod, args);
     }
 }
 
@@ -601,7 +645,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     // First prepare the multi-block method that will be used.
 
     DataLayout DL(kb->getModule());
-    IntegerType * const intAddressTy = DL.getIntPtrType(kb->getContext());
+    IntegerType * const intAddrTy = DL.getIntPtrType(kb->getContext());
 
     std::vector<Type *> multiBlockParmTypes;
     multiBlockParmTypes.push_back(mKernelStateType->getPointerTo());
@@ -929,10 +973,10 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         Value * nextBufPtr = kb->CreateGEP(tempBufPtr, kb->CreateUDiv(copyItems1, blockSize));
         mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), nextBufPtr, kb->getStreamSetBufferPtr(mStreamSetInputs[i].name), copyItems2);
         Value * itemAddress = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
-        itemAddress = kb->CreatePtrToInt(itemAddress, intAddressTy);
+        itemAddress = kb->CreatePtrToInt(itemAddress, intAddrTy);
         Value * baseAddress = inputBlockPtr[i];
-        baseAddress = kb->CreatePtrToInt(baseAddress, intAddressTy);
-        Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, intAddressTy), kb->CreateSub(itemAddress, baseAddress));
+        baseAddress = kb->CreatePtrToInt(baseAddress, intAddrTy);
+        Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, intAddrTy), kb->CreateSub(itemAddress, baseAddress));
         tempArgs.push_back(kb->CreateIntToPtr(tempAddress, mStreamSetInputBuffers[i]->getPointerType()));
     }
 
@@ -943,10 +987,10 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         producedItemCount[i] = kb->getProducedItemCount(mStreamSetOutputs[i].name);
         blockBasePos.push_back(kb->CreateAnd(producedItemCount[i], blockBaseMask));
         mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, outputBlockPtr[i], kb->CreateSub(producedItemCount[i], blockBasePos[i]));
-        Value * itemAddress = kb->CreatePtrToInt(kb->getRawOutputPointer(mStreamSetOutputs[i].name, kb->getInt32(0), producedItemCount[i]), intAddressTy);
+        Value * itemAddress = kb->CreatePtrToInt(kb->getRawOutputPointer(mStreamSetOutputs[i].name, kb->getInt32(0), producedItemCount[i]), intAddrTy);
         Value * outputPtr = kb->getOutputStreamBlockPtr(mStreamSetOutputs[i].name, kb->getInt32(0));
-        Value * baseAddress = kb->CreatePtrToInt(outputPtr, intAddressTy);
-        Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, intAddressTy), kb->CreateSub(itemAddress, baseAddress));
+        Value * baseAddress = kb->CreatePtrToInt(outputPtr, intAddrTy);
+        Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, intAddrTy), kb->CreateSub(itemAddress, baseAddress));
         tempArgs.push_back(kb->CreateIntToPtr(tempAddress, mStreamSetOutputBuffers[i]->getPointerType()));
     }
 
@@ -993,14 +1037,24 @@ Kernel::StreamPort Kernel::getStreamPort(const std::string & name) const {
     return f->second;
 }
 
+static inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
+    if (codegen::EnableAsserts) {
+        name += "_EA";
+    }
+    return name;
+}
+
 // CONSTRUCTOR
 Kernel::Kernel(std::string && kernelName,
-                             std::vector<Binding> && stream_inputs,
-                             std::vector<Binding> && stream_outputs,
-                             std::vector<Binding> && scalar_parameters,
-                             std::vector<Binding> && scalar_outputs,
-                             std::vector<Binding> && internal_scalars)
-: KernelInterface(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
+               std::vector<Binding> && stream_inputs,
+               std::vector<Binding> && stream_outputs,
+               std::vector<Binding> && scalar_parameters,
+               std::vector<Binding> && scalar_outputs,
+               std::vector<Binding> && internal_scalars)
+: KernelInterface(std::move(annotateKernelNameWithDebugFlags(std::move(kernelName)))
+                  , std::move(stream_inputs), std::move(stream_outputs)
+                  , std::move(scalar_parameters), std::move(scalar_outputs)
+                  , std::move(internal_scalars))
 , mCurrentMethod(nullptr)
 , mNoTerminateAttribute(false)
 , mIsGenerated(false)
@@ -1030,11 +1084,11 @@ BlockOrientedKernel::BlockOrientedKernel(std::string && kernelName,
 
 // CONSTRUCTOR
 MultiBlockKernel::MultiBlockKernel(std::string && kernelName,
-                                     std::vector<Binding> && stream_inputs,
-                                     std::vector<Binding> && stream_outputs,
-                                     std::vector<Binding> && scalar_parameters,
-                                     std::vector<Binding> && scalar_outputs,
-                                             std::vector<Binding> && internal_scalars)
+                                   std::vector<Binding> && stream_inputs,
+                                   std::vector<Binding> && stream_outputs,
+                                   std::vector<Binding> && scalar_parameters,
+                                   std::vector<Binding> && scalar_outputs,
+                                   std::vector<Binding> && internal_scalars)
 : Kernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
     
 }

@@ -262,26 +262,29 @@ void SwizzledCopybackBuffer::allocateBuffer(const std::unique_ptr<kernel::Kernel
 }
 
 void SwizzledCopybackBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * itemsToCopy) const {
-    Type * size_ty = iBuilder->getSizeTy();
-    Type * i8ptr = iBuilder->getInt8PtrTy();
+    Type * int8PtrTy = iBuilder->getInt8PtrTy();
+    DataLayout DL(iBuilder->getModule());
+    IntegerType * const intAddrTy = iBuilder->getIntPtrTy(DL);
+
     Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Function * f = iBuilder->GetInsertBlock()->getParent();
     BasicBlock * wholeBlockCopy = BasicBlock::Create(iBuilder->getContext(), "wholeBlockCopy", f, 0);
     BasicBlock * partialBlockCopy = BasicBlock::Create(iBuilder->getContext(), "partialBlockCopy", f, 0);
     BasicBlock * copyDone = BasicBlock::Create(iBuilder->getContext(), "copyDone", f, 0);
-    unsigned numStreams = getType()->getArrayNumElements();
-    unsigned swizzleFactor = iBuilder->getBitBlockWidth()/mFieldWidth;
-    auto elemTy = getType()->getArrayElementType();
-    unsigned fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
+    const unsigned numStreams = getType()->getArrayNumElements();
+    const unsigned swizzleFactor = iBuilder->getBitBlockWidth()/mFieldWidth;
+    const auto elemTy = getType()->getArrayElementType();
+    const unsigned fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
     Value * blocksToCopy = iBuilder->CreateUDiv(itemsToCopy, blockSize);
     Value * partialItems = iBuilder->CreateURem(itemsToCopy, blockSize);
     Value * partialBlockTargetPtr = iBuilder->CreateGEP(targetBlockPtr, blocksToCopy);
     Value * partialBlockSourcePtr = iBuilder->CreateGEP(sourceBlockPtr, blocksToCopy);
     iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(blocksToCopy, iBuilder->getSize(0)), wholeBlockCopy, partialBlockCopy);
+
     iBuilder->SetInsertPoint(wholeBlockCopy);
-    unsigned alignment = iBuilder->getBitBlockWidth() / 8;
-    Value * copyLength = iBuilder->CreateSub(iBuilder->CreatePtrToInt(partialBlockTargetPtr, size_ty), iBuilder->CreatePtrToInt(targetBlockPtr, size_ty));
-    iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, i8ptr), iBuilder->CreateBitCast(sourceBlockPtr, i8ptr), copyLength, alignment);
+    const unsigned alignment = iBuilder->getBitBlockWidth() / 8;
+    Value * copyLength = iBuilder->CreateSub(iBuilder->CreatePtrToInt(partialBlockTargetPtr, intAddrTy), iBuilder->CreatePtrToInt(targetBlockPtr, intAddrTy));
+    iBuilder->CreateMemMove(iBuilder->CreatePointerCast(targetBlockPtr, int8PtrTy), iBuilder->CreatePointerCast(sourceBlockPtr, int8PtrTy), copyLength, alignment);
     iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(partialItems, iBuilder->getSize(0)), partialBlockCopy, copyDone);
     iBuilder->SetInsertPoint(partialBlockCopy);
     Value * copyBits = iBuilder->CreateMul(itemsToCopy, iBuilder->getSize(fieldWidth * swizzleFactor));
@@ -289,9 +292,10 @@ void SwizzledCopybackBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const
     for (unsigned strm = 0; strm < numStreams; strm += swizzleFactor) {
         Value * strmTargetPtr = iBuilder->CreateGEP(partialBlockTargetPtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
         Value * strmSourcePtr = iBuilder->CreateGEP(partialBlockSourcePtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
-        iBuilder->CreateMemMove(iBuilder->CreateBitCast(strmTargetPtr, i8ptr), iBuilder->CreateBitCast(strmSourcePtr, i8ptr), copyBytes, alignment);
+        iBuilder->CreateMemMove(iBuilder->CreatePointerCast(strmTargetPtr, int8PtrTy), iBuilder->CreatePointerCast(strmSourcePtr, int8PtrTy), copyBytes, alignment);
     }
     iBuilder->CreateBr(copyDone);
+
     iBuilder->SetInsertPoint(copyDone);
 }
 
@@ -474,7 +478,7 @@ SingleBlockBuffer::SingleBlockBuffer(const std::unique_ptr<kernel::KernelBuilder
 }
 
 SourceBuffer::SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, unsigned MemoryAddressSpace, unsigned StructAddressSpace)
-: StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(MemoryAddressSpace), b->getSizeTy(), nullptr), 1, StructAddressSpace) {
+: StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(MemoryAddressSpace), b->getSizeTy(), nullptr), 0, StructAddressSpace) {
     mUniqueID = "B";
     if (MemoryAddressSpace != 0 || StructAddressSpace != 0) {
         mUniqueID += "@" + std::to_string(MemoryAddressSpace) + ":" + std::to_string(StructAddressSpace);
@@ -482,7 +486,7 @@ SourceBuffer::SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Typ
 }
 
 ExternalBuffer::ExternalBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, llvm::Value * addr, unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::ExternalBuffer, type, resolveStreamSetType(b, type), 1, AddressSpace) {
+: StreamSetBuffer(BufferKind::ExternalBuffer, type, resolveStreamSetType(b, type), 0, AddressSpace) {
     mUniqueID = "E";
     if (AddressSpace > 0) mUniqueID += "@" + std::to_string(AddressSpace);
     mStreamSetBufferPtr = b->CreatePointerBitCastOrAddrSpaceCast(addr, getPointerType());

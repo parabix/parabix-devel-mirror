@@ -12,7 +12,6 @@
 #include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
 #include <llvm/IR/Module.h>
-// #include "llvm/Support/Debug.h"
 
 using namespace pablo;
 using namespace kernel;
@@ -120,9 +119,6 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
 }
 
 void PabloKernel::prepareKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
-    if (DebugOptionIsSet(DumpTrace)) {
-        setName(getName() + "_DumpTrace");
-    }
     mSizeTy = iBuilder->getSizeTy();
     mStreamTy = iBuilder->getStreamTy();
     generatePabloMethod();    
@@ -161,13 +157,20 @@ llvm::IntegerType * PabloKernel::getInt1Ty() const {
     return IntegerType::getInt1Ty(getModule()->getContext());
 }
 
+static inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
+    if (DebugOptionIsSet(DumpTrace)) {
+        name += "_DumpTrace";
+    }
+    return name;
+}
+
 PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
-                         std::string kernelName,
+                         std::string && kernelName,
                          std::vector<Binding> stream_inputs,
                          std::vector<Binding> stream_outputs,
                          std::vector<Binding> scalar_parameters,
                          std::vector<Binding> scalar_outputs)
-: BlockOrientedKernel(std::move(kernelName),
+: BlockOrientedKernel(std::move(annotateKernelNameWithDebugFlags(std::move(kernelName))),
                       std::move(stream_inputs), std::move(stream_outputs), 
                       std::move(scalar_parameters), std::move(scalar_outputs),
                       {Binding{b->getBitBlockType(), "EOFbit"}, Binding{b->getBitBlockType(), "EOFmask"}})

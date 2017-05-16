@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-class Assign : public Statement {
+class Assign final : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {

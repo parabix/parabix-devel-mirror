@@ -11,16 +11,20 @@ namespace IDISA { class IDISA_Builder; }
 namespace re { class RE; }
 namespace kernel {
 
-class ICgrepKernelBuilder: public pablo::PabloKernel {
+struct RegularExpressionOptimizer {
+    RegularExpressionOptimizer(re::RE * re_ast);
+protected:
+    re::RE * const  mRE;
+    std::string     mSignature;
+};
+
+class ICGrepKernel : public RegularExpressionOptimizer, public pablo::PabloKernel {
 public:
-    ICgrepKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast);    
+    ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast);
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     bool isCachable() const override { return true; }
 protected:
     void generatePabloMethod() override;
-private:
-    re::RE * const  mRE;
-    std::string     mSignature;
 };
 
 class InvertMatchesKernel : public BlockOrientedKernel {

@@ -719,7 +719,7 @@ inline static BicliqueSet && independentCliqueSets(BicliqueSet && cliques, const
     }
     cliques.erase(cliques.begin(), end);
 
-    return std::move(cliques);
+    return cliques;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -426,11 +426,13 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
     }
     len = CreateZExtOrTrunc(len, sizeTy);
     if (codegen::EnableAsserts) {
+        DataLayout DL(getModule());
+        IntegerType * const intPtrTy = getIntPtrTy(DL);
         CreateAssert(len, "CreateMUnmap: length cannot be 0");
-        Value * const addrValue = CreatePtrToInt(addr, sizeTy);
-        Value * const pageOffset = CreateURem(addrValue, getSize(getpagesize()));
-        CreateAssert(CreateICmpEQ(pageOffset, getSize(0)), "CreateMUnmap: addr must be a multiple of the page size");
-        Value * const boundCheck = CreateICmpULT(addrValue, CreateSub(ConstantInt::getAllOnesValue(sizeTy), len));
+        Value * const addrValue = CreatePtrToInt(addr, intPtrTy);
+        Value * const pageOffset = CreateURem(addrValue, ConstantInt::get(intPtrTy, getpagesize()));
+        CreateAssert(CreateICmpEQ(pageOffset, ConstantInt::getNullValue(intPtrTy)), "CreateMUnmap: addr must be a multiple of the page size");
+        Value * const boundCheck = CreateICmpULT(addrValue, CreateSub(ConstantInt::getAllOnesValue(intPtrTy), CreateZExtOrTrunc(len, intPtrTy)));
         CreateAssert(boundCheck, "CreateMUnmap: addresses in [addr, addr+len) are outside the valid address space range");
     }
     addr = CreatePointerCast(addr, voidPtrTy);

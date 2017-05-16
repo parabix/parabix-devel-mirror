@@ -50,7 +50,7 @@ protected:
     PabloAST **     mEscaped;
 };
 
-class If : public Branch {
+class If final : public Branch {
     friend class PabloBlock;
     friend class Statement;
     friend class Simplifier;
@@ -65,7 +65,7 @@ protected:
     }
 };
 
-class While : public Branch {
+class While final : public Branch {
     friend class PabloBlock;
     friend class Statement;
     friend class Simplifier;

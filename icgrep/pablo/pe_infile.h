@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-class InFile : public Statement {
+class InFile final : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -32,7 +32,7 @@ protected:
     }
 };
 
-class AtEOF : public Statement {
+class AtEOF final : public Statement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {

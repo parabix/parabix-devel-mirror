@@ -2,22 +2,11 @@
 #define PABLO_CODESINKING_HPP
 
 namespace pablo {
-
 class PabloKernel;
-class PabloBlock;
-class Statement;
-class While;
-class Variadic;
-
 class CodeMotionPass {
 public:
-    static bool optimize(PabloKernel * kernel);
-protected:
-    static void movement(PabloBlock * const block);
-    static void sink(PabloBlock * const block);
-    static void hoistLoopInvariants(While * loop);
+    static bool optimize(PabloKernel * const kernel);
 };
-
 }
 
 #endif // PABLO_CODESINKING_HPP

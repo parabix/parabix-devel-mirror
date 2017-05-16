@@ -51,7 +51,7 @@ static cl::opt<bool> Flatten("flatten-if", cl::init(false), cl::desc("Flatten al
 
 static cl::bits<PabloCompilationFlags> 
     PabloOptimizationsOptions(cl::values(clEnumVal(DisableSimplification, "Disable Pablo Simplification pass (not recommended)"),
-                                         clEnumVal(EnableCodeMotion, "Moves statements into the innermost legal If-scope and moves invariants out of While-loops."),
+                                         clEnumVal(DisableCodeMotion, "Moves statements into the innermost legal If-scope and moves invariants out of While-loops."),
 #ifdef ENABLE_MULTIPLEXING
                                          clEnumVal(EnableMultiplexing, "combine Advances whose inputs are mutual exclusive into the fewest number of advances possible (expensive)."),
                                          clEnumVal(EnableLowering, "coalesce associative functions prior to optimization passes."),
@@ -194,7 +194,7 @@ void pablo_function_passes(PabloKernel * kernel) {
     DistributionMap distribution;
     const timestamp_t optimization_start = read_cycle_counter();
 #endif
-    if (!PabloOptimizationsOptions.isSet(DisableSimplification)) {
+    if (LLVM_LIKELY(!PabloOptimizationsOptions.isSet(DisableSimplification))) {
         READ_CYCLE_COUNTER(simplification_start);
         Simplifier::optimize(kernel);
         READ_CYCLE_COUNTER(simplification_end);
@@ -229,7 +229,7 @@ void pablo_function_passes(PabloKernel * kernel) {
         READ_CYCLE_COUNTER(post_distribution_end);
     }
 #endif
-    if (PabloOptimizationsOptions.isSet(EnableCodeMotion)) {
+    if (LLVM_LIKELY(!PabloOptimizationsOptions.isSet(DisableCodeMotion))) {
         READ_CYCLE_COUNTER(sinking_start);
         CodeMotionPass::optimize(kernel);
         READ_CYCLE_COUNTER(sinking_end);
