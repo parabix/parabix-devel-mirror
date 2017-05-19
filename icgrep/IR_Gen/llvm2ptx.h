@@ -25,13 +25,6 @@ static int llvm2ptx(Module * M, std::string PTXFilename) {
   std::unique_ptr<MIRParser> MIR;
   Triple TheTriple;
 
-#ifndef NDEBUG
-  if (verifyModule(*M, &errs())) {
-    errs() << IRFilename << ": error: input module is broken!\n";
-    return 1;
-  }
-#endif
-
   TheTriple = Triple(M->getTargetTriple());
 
   if (TheTriple.getTriple().empty())
