@@ -34,6 +34,10 @@
 #include <util/aligned_allocator.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#ifdef CUDA_ENABLED
+#include <preprocess.cpp>
+#include <IR_Gen/CudaDriver.h>
+#endif
 
 using namespace parabix;
 using namespace llvm;
@@ -58,6 +62,57 @@ static cl::alias MaxCountLong("max-count", cl::desc("Alias for -m"), cl::aliasop
 static re::CC * parsedCodePointSet = nullptr;
 
 static std::vector<std::string> parsedPropertyValues;
+
+std::string IRFilename = "icgrep.ll";
+std::string PTXFilename = "icgrep.ptx";
+size_t * startPoints = nullptr;
+size_t * accumBytes = nullptr;
+
+void GrepEngine::doGrep(const std::string & fileName) const{
+#ifdef CUDA_ENABLED
+    const bool CountOnly = true;
+    boost::filesystem::path file(fileName);
+    if (exists(file)) {
+        if (is_directory(file)) {
+            return;
+        }
+    } else {
+        if (!SilenceFileErrors) {
+            std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
+            return;
+        }
+    }
+
+    const auto fileSize = file_size(file);
+    
+    if (fileSize > 0) {
+        try {
+            boost::iostreams::mapped_file_source source(fileName, fileSize, 0);
+            char * fileBuffer = const_cast<char *>(source.data());
+            
+            codegen::BlockSize = 128;
+            std::vector<size_t> LFPositions = preprocess(fileBuffer, fileSize);
+            
+            const unsigned numOfGroups = codegen::GroupNum;
+            if (posix_memalign((void**)&startPoints, 8, (numOfGroups+1)*sizeof(size_t)) ||
+                posix_memalign((void**)&accumBytes, 8, (numOfGroups+1)*sizeof(size_t))) {
+                std::cerr << "Cannot allocate memory for startPoints or accumBytes.\n";
+                exit(-1);
+            }
+
+            ulong * rslt = RunPTX(PTXFilename, fileBuffer, fileSize, CountOnly, LFPositions, startPoints, accumBytes);
+            source.close();
+        } catch (std::exception & e) {
+            if (!SilenceFileErrors) {
+                std::cerr << "Boost mmap error: " + fileName + ": " + e.what() + " Skipped.\n";
+                return;
+            }
+        }
+    } else {
+        std::cout << 0 << std::endl;
+    }
+#endif
+}
 
 uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) const {
     const int32_t fd = open(fileName.c_str(), O_RDONLY);
@@ -195,6 +250,100 @@ void insert_codepoints(const size_t lineNum, const size_t line_start, const size
 void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
     assert (line_start <= line_end);
     parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
+}
+
+void GrepEngine::grepCodeGen_nvptx(const std::string & moduleName, std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16) {
+
+    NVPTXDriver pxDriver(moduleName + ":icgrep");
+    auto & idb = pxDriver.getBuilder();
+    Module * M = idb->getModule();
+
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
+    const unsigned encodingBits = UTF_16 ? 16 : 8;
+
+    Type * const int64Ty = idb->getInt64Ty();
+    Type * const int32Ty = idb->getInt32Ty();
+    Type * const size_ty = idb->getSizeTy();
+    Type * const sizeTyPtr = PointerType::get(size_ty, 1);
+    Type * const int64tyPtr = PointerType::get(int64Ty, 1);
+    Type * const voidTy = idb->getVoidTy();
+
+    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", voidTy, int64tyPtr, sizeTyPtr, sizeTyPtr, int64tyPtr, nullptr));
+    mainFunc->setCallingConv(CallingConv::C);
+    idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+    auto args = mainFunc->arg_begin();
+
+    Value * const inputPtr = &*(args++);
+    inputPtr->setName("inputPtr");
+    Value * const startPointsPtr = &*(args++);
+    startPointsPtr->setName("startPointsPtr");
+    Value * const bufferSizesPtr = &*(args++);
+    bufferSizesPtr->setName("bufferSizesPtr");
+    Value * const outputPtr = &*(args++);
+    outputPtr->setName("outputPtr");
+
+    Function * tidFunc = M->getFunction("llvm.nvvm.read.ptx.sreg.tid.x");
+    Value * tid = idb->CreateCall(tidFunc);
+    Function * bidFunc = cast<Function>(M->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32Ty, nullptr));
+    Value * bid = idb->CreateCall(bidFunc);
+
+    Value * startPoint = idb->CreateLoad(idb->CreateGEP(startPointsPtr, bid));
+    Value * startBlock = idb->CreateUDiv(startPoint, ConstantInt::get(int64Ty, idb->getBitBlockWidth()));
+    Type * const inputStreamType = PointerType::get(ArrayType::get(ArrayType::get(idb->getBitBlockType(), 8), 1), 1);    
+    Value * inputStreamPtr = idb->CreateGEP(idb->CreateBitCast(inputPtr, inputStreamType), startBlock);
+    Value * inputStream = idb->CreateGEP(inputStreamPtr, tid);
+    Value * bufferSize = idb->CreateLoad(idb->CreateGEP(bufferSizesPtr, bid));
+
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8), 1));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(idb, inputStreamType, segmentSize));
+    sourceK->setInitialArguments({inputStream, bufferSize});
+    pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
+
+    StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize * bufferSegments));    
+    kernel::Kernel * s2pk = pxDriver.addKernelInstance(make_unique<kernel::S2PKernel>(idb));
+    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
+ 
+    StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));   
+    kernel::Kernel * linebreakK = pxDriver.addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(idb, encodingBits));
+    pxDriver.makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
+    
+    const auto n = REs.size();
+
+    std::vector<StreamSetBuffer *> MatchResultsBufs(n);
+
+    for(unsigned i = 0; i < n; ++i){
+        StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        kernel::Kernel * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, REs[i]));
+        pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
+        MatchResultsBufs[i] = MatchResults;
+    }
+    StreamSetBuffer * MergedResults = MatchResultsBufs[0];
+    if (REs.size() > 1) {
+        MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        kernel::Kernel * streamsMergeK = pxDriver.addKernelInstance(make_unique<kernel::StreamsMerge>(idb, 1, REs.size()));
+        pxDriver.makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
+    }
+
+
+    // StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+    // kernel::Kernel * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, REs[0]));
+    // pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
+
+    kernel::MatchCount matchCountK(idb);
+    pxDriver.addKernelCall(matchCountK, {MergedResults}, {});
+    pxDriver.generatePipelineIR();
+
+    idb->setKernel(&matchCountK);
+    Value * matchedLineCount = idb->getScalarField("matchedLineCount");
+    matchedLineCount = idb->CreateZExt(matchedLineCount, int64Ty);
+    
+    Value * strideBlocks = ConstantInt::get(int32Ty, idb->getStride() / idb->getBitBlockWidth());
+    Value * outputThreadPtr = idb->CreateGEP(outputPtr, idb->CreateAdd(idb->CreateMul(bid, strideBlocks), tid));
+    idb->CreateStore(matchedLineCount, outputThreadPtr);
+    idb->CreateRetVoid();
+
+    pxDriver.finalizeAndCompile(mainFunc, IRFilename, PTXFilename);
 }
 
 void GrepEngine::grepCodeGen(const std::string & moduleName, std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16, GrepSource grepSource, const GrepType grepType) {
@@ -335,6 +484,7 @@ void GrepEngine::grepCodeGen(const std::string & moduleName, std::vector<re::RE 
 
     mGrepFunction = pxDriver.getPointerToMain();
 }
+
 
 re::CC * GrepEngine::grepCodepoints() {
     parsedCodePointSet = re::makeCC();

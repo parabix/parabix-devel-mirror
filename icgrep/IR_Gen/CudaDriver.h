@@ -55,7 +55,7 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
   checkCudaErrors(cuModuleLoadDataEx(&cudaModule, ptx_str.c_str(), 0, 0, 0));
 
   // Get kernel function
-  checkCudaErrors(cuModuleGetFunction(&function, cudaModule, "GPU_Main"));
+  checkCudaErrors(cuModuleGetFunction(&function, cudaModule, "Main"));
 
   // Device data
   CUdeviceptr devBufferInput;
@@ -100,7 +100,7 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
   startPoints[i] = startPoints[i-1] + ((bufferSizes[i-1]-1)/groupSize+1)*groupSize;
    
   checkCudaErrors(cuMemAlloc(&devBufferInput, startPoints[numOfGroups]));
-  // checkCudaErrors(cuMemsetD8(devBufferInput,0,startPoints[numOfGroups]));
+  checkCudaErrors(cuMemsetD8(devBufferInput,0,startPoints[numOfGroups]));
   checkCudaErrors(cuMemAlloc(&devStartPoints, sizeof(ulong) * (numOfGroups + 1)));
   checkCudaErrors(cuMemAlloc(&devBufferSizes, sizeof(ulong) * numOfGroups));
 
@@ -130,7 +130,7 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
   // Kernel parameters
   void *KernelParams[] = { &devBufferInput, &devStartPoints, &devBufferSizes, &devBufferOutput};
 
-  // std::cout << "Launching kernel\n";
+  // std::cerr << "Launching kernel\n";
 
   CUevent start;
   CUevent stop;
@@ -143,14 +143,14 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, bool 
   checkCudaErrors(cuLaunchKernel(function, gridSizeX, gridSizeY, gridSizeZ,
                                  blockSizeX, blockSizeY, blockSizeZ,
                                  0, NULL, KernelParams, NULL));
-  // std::cout << "kernel success.\n";
+  // std::cerr << "kernel success.\n";
 
   cuEventCreate(&stop, CU_EVENT_BLOCKING_SYNC);
   cuEventRecord(stop,0);
   cuEventSynchronize(stop);
 
   cuEventElapsedTime(&elapsedTime, start, stop);
-  printf("GPU Kernel time : %f ms\n" ,elapsedTime);
+  // printf("GPU Kernel time : %f ms\n" ,elapsedTime);
 
   // Retrieve device data
   ulong * matchRslt;

@@ -4,14 +4,13 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#ifndef TOOLCHAIN_H
-#define TOOLCHAIN_H
+#ifndef NVPTXDRIVER_H
+#define NVPTXDRIVER_H
 #include <string>
 #include <IR_Gen/FunctionTypeBuilder.h>
 #include <kernels/kernel.h>
 #include <kernels/streamset.h>
 
-#include <toolchain/NVPTXDriver.h>
 namespace llvm { class ExecutionEngine; }
 namespace llvm { class Function; }
 namespace llvm { class Module; }
@@ -22,49 +21,12 @@ namespace kernel { class Kernel; }
 namespace kernel { class KernelBuilder; }
 namespace IDISA { class IDISA_Builder; }
 
-class ParabixObjectCache;
-
-namespace codegen {
-const llvm::cl::OptionCategory * codegen_flags();
-
-// Command Parameters
-enum DebugFlags {
-    ShowUnoptimizedIR,
-    ShowIR,
-    VerifyIR,
-#ifndef USE_LLVM_3_6
-    ShowASM,
-#endif
-    SerializeThreads
-};
-
-bool DebugOptionIsSet(DebugFlags flag);
-
-
-extern char OptLevel;  // set from command line
-extern int BlockSize;  // set from command line
-extern int SegmentSize;  // set from command line
-extern int BufferSegments;
-extern int ThreadNum;
-extern bool EnableAsserts;
-extern bool EnableCycleCounter;
-extern bool NVPTX;
-extern int GroupNum;
-}
-
-
-void setNVPTXOption();
-
-void AddParabixVersionPrinter();
-
-bool AVX2_available();
-
-class ParabixDriver {
+class NVPTXDriver {
     friend class CBuilder;
 public:
-    ParabixDriver(std::string && moduleName);
+    NVPTXDriver(std::string && moduleName);
 
-    ~ParabixDriver();
+    ~NVPTXDriver();
     
     const std::unique_ptr<kernel::KernelBuilder> & getBuilder();
     
@@ -83,7 +45,7 @@ public:
     template <typename ExternalFunctionType>
     llvm::Function * LinkFunction(kernel::Kernel & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const;
 
-    void linkAndFinalize();
+    void finalizeAndCompile(llvm::Function * mainFunc, std::string IRFilename, std::string PTXFilename);
     
     void * getPointerToMain();
 
@@ -97,19 +59,11 @@ private:
     std::unique_ptr<kernel::KernelBuilder>                  iBuilder;
     llvm::TargetMachine *                                   mTarget;
     llvm::ExecutionEngine *                                 mEngine;
-    ParabixObjectCache *                                    mCache;
 
     std::vector<kernel::Kernel *>                           mPipeline;
     // Owned kernels and buffers that will persist with this ParabixDriver instance.
     std::vector<std::unique_ptr<kernel::Kernel>>            mOwnedKernels;
     std::vector<std::unique_ptr<parabix::StreamSetBuffer>>  mOwnedBuffers;
 };
-
-template <typename ExternalFunctionType>
-llvm::Function * ParabixDriver::LinkFunction(kernel::Kernel & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const {
-    llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(*mContext.get());
-    assert ("FunctionTypeBuilder did not resolve a function type." && type);
-    return LinkFunction(kb.getModule(), name, type, reinterpret_cast<void *>(functionPtr));
-}
 
 #endif

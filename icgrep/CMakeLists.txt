@@ -58,7 +58,7 @@ link_directories(${Boost_LIBRARY_DIR})
 
 SET(OBJECT_CACHE_SRC toolchain/object_cache.cpp)
 
-SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/pipeline.cpp ${OBJECT_CACHE_SRC})
+SET(TOOLCHAIN_SRC toolchain/toolchain.cpp  toolchain/pipeline.cpp ${OBJECT_CACHE_SRC})
 
 SET(KERNEL_SRC kernels/kernel.cpp kernels/streamset.cpp kernels/interface.cpp kernels/kernel_builder.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp)
@@ -205,7 +205,7 @@ IF (PRINT_TIMING_INFORMATION)
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fsanitize=address -fno-omit-frame-pointer")
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer")
 
 add_test(
   NAME greptest

@@ -416,8 +416,19 @@ int main(int argc, char *argv[]) {
         total_CountOnly[0] = grepEngine.doGrep(STDIN_FILENO, 0);
 
     } else {
-
-        grepEngine.grepCodeGen(module_name, REs, CountOnly, UTF_16, GrepSource::File);
+        
+        setNVPTXOption();
+        
+        if(codegen::NVPTX){
+            grepEngine.grepCodeGen_nvptx(module_name, REs, CountOnly, UTF_16);
+            for (unsigned i = 0; i != allFiles.size(); ++i) {
+                grepEngine.doGrep(allFiles[i]);
+            }         
+            return 0;
+        }
+        else{
+            grepEngine.grepCodeGen(module_name, REs, CountOnly, UTF_16, GrepSource::File);
+        }
 
         if (FileNamesOnly && NonMatchingFileNamesOnly) {
             // Strange request: print names of all matching files and all non-matching files: i.e., all of them.

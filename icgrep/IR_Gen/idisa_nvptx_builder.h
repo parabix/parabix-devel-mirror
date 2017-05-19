@@ -15,20 +15,24 @@ namespace IDISA {
 class IDISA_NVPTX20_Builder : public IDISA_I64_Builder {
 public:
     
-    IDISA_NVPTX20_Builder(llvm::LLVMContext & C, unsigned registerWidth, unsigned vectorWidth, unsigned groupSize)
-    : IDISA_Builder(C, registerWidth, registerWidth, (vectorWidth * groupSize))
-    , IDISA_I64_Builder(C, registerWidth, registerWidth, (vectorWidth * groupSize))
-    , groupThreads(groupSize) {
+    IDISA_NVPTX20_Builder(llvm::LLVMContext & C, unsigned registerWidth, unsigned vectorWidth, unsigned stride)
+    : IDISA_Builder(C, registerWidth, registerWidth, stride)
+    , IDISA_I64_Builder(C, registerWidth, registerWidth, stride)
+    , groupThreads(stride/vectorWidth) {
+
+    }
+
+    ~IDISA_NVPTX20_Builder() {}
+    virtual std::string getBuilderUniqueName() override;
+    int getGroupThreads();
+
+    void CreateBaseFunctions() override {
         CreateGlobals();
         CreateBuiltinFunctions();
         CreateLongAdvanceFunc();
         CreateLongAddFunc();
         CreateBallotFunc();
-    }
-    
-    ~IDISA_NVPTX20_Builder() {}
-    virtual std::string getBuilderUniqueName() override;
-    int getGroupThreads();
+    };
     
     Value * bitblock_any(Value * a) override;
     std::pair<Value *, Value *> bitblock_add_with_carry(Value * a, Value * b, Value * carryin) override;

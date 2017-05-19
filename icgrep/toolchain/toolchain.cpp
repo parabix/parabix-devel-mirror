@@ -28,6 +28,7 @@
 #include <kernels/kernel.h>
 #include <sys/stat.h>
 #include <llvm/IR/Verifier.h>
+#include <toolchain/NVPTXDriver.cpp>
 //#include <toolchain/workqueue.h>
 
 
@@ -97,6 +98,21 @@ static cl::opt<bool> pipelineParallel("enable-pipeline-parallel", cl::desc("Enab
     
 static cl::opt<bool> segmentPipelineParallel("enable-segment-pipeline-parallel", cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
 
+bool NVPTX; 
+int GroupNum; 
+static cl::opt<bool> USENVPTX("NVPTX", cl::desc("Run on GPU only."), cl::init(false)); 
+static cl::opt<int, true> GroupNumOption("group-num", cl::location(GroupNum), cl::desc("NUmber of groups declared on GPU"), cl::value_desc("positive integer"), cl::init(256)); 
+
+}
+
+void setNVPTXOption(){
+    codegen::NVPTX = codegen::USENVPTX; 
+    if(codegen::NVPTX){
+#ifndef CUDA_ENABLED
+    std::cerr << "CUDA compiler is not supported.\n";
+    exit(-1);
+#endif
+    }
 }
 
 void printParabixVersion () {

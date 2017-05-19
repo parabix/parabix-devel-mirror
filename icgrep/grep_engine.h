@@ -20,7 +20,11 @@ public:
 
     void grepCodeGen(const std::string & moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
 
-    uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) const;
+    void grepCodeGen_nvptx(const std::string & moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16);
+
+    void doGrep(const std::string & fileName) const;
+
+	uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) const;
 
     uint64_t doGrep(const int32_t fileDescriptor, const uint32_t fileIdx) const;
     
