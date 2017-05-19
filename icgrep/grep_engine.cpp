@@ -63,7 +63,6 @@ static re::CC * parsedCodePointSet = nullptr;
 
 static std::vector<std::string> parsedPropertyValues;
 
-std::string IRFilename = "icgrep.ll";
 std::string PTXFilename = "icgrep.ptx";
 size_t * startPoints = nullptr;
 size_t * accumBytes = nullptr;
@@ -325,11 +324,6 @@ void GrepEngine::grepCodeGen_nvptx(const std::string & moduleName, std::vector<r
         pxDriver.makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
     }
 
-
-    // StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-    // kernel::Kernel * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, REs[0]));
-    // pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
-
     kernel::MatchCount matchCountK(idb);
     pxDriver.addKernelCall(matchCountK, {MergedResults}, {});
     pxDriver.generatePipelineIR();
@@ -343,7 +337,7 @@ void GrepEngine::grepCodeGen_nvptx(const std::string & moduleName, std::vector<r
     idb->CreateStore(matchedLineCount, outputThreadPtr);
     idb->CreateRetVoid();
 
-    pxDriver.finalizeAndCompile(mainFunc, IRFilename, PTXFilename);
+    pxDriver.finalizeAndCompile(mainFunc, PTXFilename);
 }
 
 void GrepEngine::grepCodeGen(const std::string & moduleName, std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16, GrepSource grepSource, const GrepType grepType) {

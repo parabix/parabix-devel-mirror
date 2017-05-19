@@ -45,7 +45,7 @@ public:
     template <typename ExternalFunctionType>
     llvm::Function * LinkFunction(kernel::Kernel & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const;
 
-    void finalizeAndCompile(llvm::Function * mainFunc, std::string IRFilename, std::string PTXFilename);
+    void finalizeAndCompile(llvm::Function * mainFunc, std::string PTXFilename);
     
     void * getPointerToMain();
 
