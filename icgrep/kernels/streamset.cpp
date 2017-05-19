@@ -166,13 +166,6 @@ void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuild
 
 
 
-// Single Block Buffer
-
-// For a single block buffer, the block pointer is always the buffer base pointer.
-Value * SingleBlockBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const, Value * self, Value *) const {
-    return self;
-}
-
 // Source File Buffer
 Value * SourceBuffer::getBufferedSize(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
@@ -469,12 +462,6 @@ Value * ExpandableBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBui
 
 Value * ExpandableBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value *) const {
     report_fatal_error("Expandable buffers: getLinearlyAccessibleItems is not supported.");
-}
-
-// Constructors
-SingleBlockBuffer::SingleBlockBuffer(const std::unique_ptr<kernel::KernelBuilder> &  b, Type * type)
-: StreamSetBuffer(BufferKind::BlockBuffer, type, resolveStreamSetType(b, type), 1, 0) {
-    mUniqueID = "S";
 }
 
 SourceBuffer::SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, unsigned MemoryAddressSpace, unsigned StructAddressSpace)

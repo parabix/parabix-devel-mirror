@@ -141,7 +141,10 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     auto & iBuilder = pxDriver.getBuilder();
     Module * m = iBuilder->getModule();
-    
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::ThreadNum+1;
+
+   
     Type * const int32Ty = iBuilder->getInt32Ty();
     Type * const sizeTy = iBuilder->getSizeTy();
     Type * const voidTy = iBuilder->getVoidTy();
@@ -162,7 +165,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
 
-    StreamSetBuffer * const BasisBits = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1)));
+    StreamSetBuffer * const BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
 
     Kernel * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder));
     mmapK->setInitialArguments({fileDecriptor});

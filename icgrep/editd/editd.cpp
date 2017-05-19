@@ -222,7 +222,7 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
 
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
-    auto MatchResults = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(idb, idb->getStreamSetTy(editDistance + 1)));
+    auto MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), 1));
 
     auto editdk = pxDriver.addKernelInstance(make_unique<PatternKernel>(idb, patterns));
 
@@ -292,7 +292,7 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
     mmapK->setInitialArguments({fileDescriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
-    auto BasisBits = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamSetTy(8)));
+    auto BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), 1));
     auto s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
 
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});

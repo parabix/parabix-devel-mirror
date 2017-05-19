@@ -9,7 +9,7 @@
 #include <kernels/s2p_kernel.h>                    // for S2PKernel
 #include <kernels/alignedprint.h>
 #include <kernels/kernel_builder.h>
-#include <kernels/streamset.h>                     // for SingleBlockBuffer
+#include <kernels/streamset.h>                     // for CircularBuffer
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for ExecutionEngine
 #include <llvm/IR/Function.h>                      // for Function, Function...
 #include <llvm/IR/Module.h>                        // for Module
@@ -171,7 +171,7 @@ void pipeline(ParabixDriver & pxDriver, const unsigned count) {
 
     auto matches = pxDriver.addBuffer(make_unique<ExpandableBuffer>(iBuilder, iBuilder->getStreamSetTy(count), segmentSize * bufferSegments));
 
-    auto errors = pxDriver.addBuffer(make_unique<SingleBlockBuffer>(iBuilder, iBuilder->getStreamTy()));
+    auto errors = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamTy(), segmentSize * bufferSegments));
 
     pxDriver.makeKernelCall(bm, {BasisBits}, {matches, errors});
 

@@ -20,8 +20,7 @@ class StreamSetBuffer {
 public:
 
     enum class BufferKind : unsigned {
-        BlockBuffer
-        , SourceBuffer
+        SourceBuffer
         , ExternalBuffer
         , CircularBuffer
         , CircularCopybackBuffer
@@ -130,19 +129,6 @@ protected:
     kernel::Kernel *                 mProducer;
     std::vector<kernel::Kernel *>    mConsumers;
 };   
-
-class SingleBlockBuffer final : public StreamSetBuffer {
-public:
-    static inline bool classof(const StreamSetBuffer * b) {
-        return b->getBufferKind() == BufferKind::BlockBuffer;
-    }   
-
-    SingleBlockBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type);
-
-protected:
-
-    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const override;
-};
 
 class SourceBuffer final : public StreamSetBuffer {
 public:
