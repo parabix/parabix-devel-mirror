@@ -43,6 +43,8 @@ protected:
     static const std::string TERMINATION_SIGNAL;
     static const std::string BUFFER_PTR_SUFFIX;
     static const std::string CONSUMER_SUFFIX;
+public:
+    static const std::string CYCLECOUNT_SCALAR;
 
 public:
     

@@ -93,6 +93,12 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
     StreamSetBufferMap<Value *> producedPos;
     StreamSetBufferMap<Value *> consumedPos;
 
+    Value * cycleCountStart = nullptr;
+    Value * cycleCountEnd = nullptr;
+    if (codegen::EnableCycleCounter) {
+        cycleCountStart = iBuilder->CreateReadCycleCounter();
+    }
+
     for (unsigned k = 0; k < n; ++k) {
 
         const auto & kernel = kernels[k];
@@ -162,6 +168,14 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
                 f->second = iBuilder->CreateSelect(lesser, processedItemCount, f->second);
             }
         }
+        if (codegen::EnableCycleCounter) {
+            cycleCountEnd = iBuilder->CreateReadCycleCounter();
+            //Value * counterPtr = iBuilder->CreateGEP(mCycleCounts, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
+            Value * counterPtr = iBuilder->getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR);
+            iBuilder->CreateStore(iBuilder->CreateAdd(iBuilder->CreateLoad(counterPtr), iBuilder->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
+            cycleCountStart = cycleCountEnd;
+        }
+        
         iBuilder->releaseLogicalSegmentNo(nextSegNo);
     }
 
@@ -247,6 +261,28 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         Value * threadId = iBuilder->CreateLoad(threadIdPtr[i]);
         iBuilder->CreatePThreadJoinCall(threadId, status);
     }
+    
+    if (codegen::EnableCycleCounter) {
+        for (unsigned k = 0; k < kernels.size(); k++) {
+            auto & kernel = kernels[k];
+            iBuilder->setKernel(kernel);
+            const auto & inputs = kernel->getStreamInputs();
+            const auto & outputs = kernel->getStreamOutputs();
+            Value * items = nullptr;
+            if (inputs.empty()) {
+                items = iBuilder->getProducedItemCount(outputs[0].name);
+            } else {
+                items = iBuilder->getProcessedItemCount(inputs[0].name);
+            }
+            Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
+            Value * cycles = iBuilder->CreateLoad(iBuilder->getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR));
+            Value * fCycles = iBuilder->CreateUIToFP(cycles, iBuilder->getDoubleTy());
+            std::string formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
+            Value * stringPtr = iBuilder->CreatePointerCast(iBuilder->GetString(formatString), iBuilder->getInt8PtrTy());
+            iBuilder->CreateCall(iBuilder->GetDprintf(), {iBuilder->getInt32(2), stringPtr, fItems, fCycles, iBuilder->CreateFDiv(fCycles, fItems)});
+        }
+    }
+    
 }
 
 
@@ -458,12 +494,6 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
 
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     Function * main = entryBlock->getParent();
-    Value * mCycleCounts = nullptr;
-    if (codegen::EnableCycleCounter) {
-        ArrayType * cycleCountArray = ArrayType::get(iBuilder->getInt64Ty(), kernels.size());
-        mCycleCounts = iBuilder->CreateAlloca(ArrayType::get(iBuilder->getInt64Ty(), kernels.size()));
-        iBuilder->CreateStore(Constant::getNullValue(cycleCountArray), mCycleCounts);
-    }
 
     // Create the basic blocks for the loop.
     BasicBlock * pipelineLoop = BasicBlock::Create(iBuilder->getContext(), "pipelineLoop", main);
@@ -523,11 +553,11 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
         }
         if (codegen::EnableCycleCounter) {
             cycleCountEnd = iBuilder->CreateReadCycleCounter();
-            Value * counterPtr = iBuilder->CreateGEP(mCycleCounts, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
+            //Value * counterPtr = iBuilder->CreateGEP(mCycleCounts, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
+            Value * counterPtr = iBuilder->getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR);
             iBuilder->CreateStore(iBuilder->CreateAdd(iBuilder->CreateLoad(counterPtr), iBuilder->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
             cycleCountStart = cycleCountEnd;
         }
-
 
         Value * const segNo = iBuilder->acquireLogicalSegmentNo();
         Value * nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
@@ -562,7 +592,7 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
                 items = iBuilder->getProcessedItemCount(inputs[0].name);
             }
             Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
-            Value * cycles = iBuilder->CreateLoad(iBuilder->CreateGEP(mCycleCounts, {iBuilder->getInt32(0), iBuilder->getInt32(k)}));
+            Value * cycles = iBuilder->CreateLoad(iBuilder->getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR));
             Value * fCycles = iBuilder->CreateUIToFP(cycles, iBuilder->getDoubleTy());
             std::string formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
             Value * stringPtr = iBuilder->CreatePointerCast(iBuilder->GetString(formatString), iBuilder->getInt8PtrTy());

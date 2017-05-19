@@ -33,6 +33,7 @@ const std::string Kernel::PRODUCED_ITEM_COUNT_SUFFIX = "_producedItemCount";
 const std::string Kernel::TERMINATION_SIGNAL = "terminationSignal";
 const std::string Kernel::BUFFER_PTR_SUFFIX = "_bufferPtr";
 const std::string Kernel::CONSUMER_SUFFIX = "_consumerLocks";
+const std::string Kernel::CYCLECOUNT_SCALAR = "CPUcycles";
 
 unsigned Kernel::addScalar(Type * const type, const std::string & name) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
@@ -180,6 +181,11 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
         addScalar(sizeTy, mStreamSetOutputs[i].name + CONSUMED_ITEM_COUNT_SUFFIX);
     }
 
+    // We compile in a 64-bit CPU cycle counter into every kernel.   It will remain unused
+    // in normal execution, but when codegen::EnableCycleCounter is specified, pipelines
+    // will be able to add instrumentation to cached modules without recompilation.
+    addScalar(idb->getInt64Ty(), CYCLECOUNT_SCALAR);
+    
     mKernelStateType = StructType::create(idb->getContext(), mKernelFields, getName());
 }
 
