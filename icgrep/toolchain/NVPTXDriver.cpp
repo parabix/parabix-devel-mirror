@@ -110,7 +110,7 @@ void NVPTXDriver::generatePipelineIR() {
     }
 }
 
-void NVPTXDriver::finalizeAndCompile(Function * mainFunc, std::string IRFilename, std::string PTXFilename) {
+void NVPTXDriver::finalizeAndCompile(Function * mainFunc, std::string PTXFilename) {
 
     legacy::PassManager PM;
     PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
@@ -133,14 +133,10 @@ void NVPTXDriver::finalizeAndCompile(Function * mainFunc, std::string IRFilename
 
     PM.run(*mMainModule);  
 
-    std::error_code error;
-    raw_fd_ostream out(IRFilename, error, sys::fs::OpenFlags::F_None);
-    mMainModule->print(out, nullptr);
-
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR)))
             mMainModule->dump();
 
-    llvm2ptx(IRFilename, PTXFilename);
+    llvm2ptx(mMainModule, PTXFilename);
 }
 
 const std::unique_ptr<kernel::KernelBuilder> & NVPTXDriver::getBuilder() {

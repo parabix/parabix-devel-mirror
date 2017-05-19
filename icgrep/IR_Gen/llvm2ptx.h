@@ -18,21 +18,12 @@
 #include <memory>
 using namespace llvm;
 
-static int llvm2ptx(std::string IRFilename, std::string PTXFilename) {
+static int llvm2ptx(Module * M, std::string PTXFilename) {
 
   LLVMContext Context;
-
-  // Load the module to be compiled...
   SMDiagnostic Err;
-  std::unique_ptr<Module> M;
   std::unique_ptr<MIRParser> MIR;
   Triple TheTriple;
-
-  M = parseIRFile(IRFilename, Err, Context);
-  if (!M) {
-    errs() << IRFilename << ": Cannot parse input file!\n";
-    return 1;
-  }
 
 #ifndef NDEBUG
   if (verifyModule(*M, &errs())) {
