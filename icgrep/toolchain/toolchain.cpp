@@ -109,7 +109,7 @@ void setNVPTXOption(){
     codegen::NVPTX = codegen::USENVPTX; 
     if(codegen::NVPTX){
 #ifndef CUDA_ENABLED
-    std::cerr << "CUDA compiler is not supported.\n";
+    errs() << "CUDA compiler is not supported.\n";
     exit(-1);
 #endif
     }
