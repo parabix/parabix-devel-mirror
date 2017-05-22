@@ -237,6 +237,16 @@ Value * CBuilder::CreateMalloc(Value * size) {
     return ptr;
 }
 
+#ifndef STDLIB_HAS_ALIGNED_ALLOC
+void * aligned_alloc(const size_t alignment, const size_t size) {
+    void * ptr;
+    if (LLVM_UNLIKELY(::posix_memalign(&ptr, alignment, size) != 0)) {
+        throw std::bad_alloc();
+    }
+    return ptr;
+}
+#endif
+
 Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     if (LLVM_UNLIKELY((alignment & (alignment - 1)) != 0)) {
         report_fatal_error("CreateAlignedMalloc: alignment must be a power of 2");
@@ -245,11 +255,6 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     Function * f = m->getFunction("aligned_alloc");
     IntegerType * const sizeTy = getSizeTy();
     if (LLVM_UNLIKELY(f == nullptr)) {
-//        PointerType * const voidPtrTy = getVoidPtrTy();
-//        FunctionType * const fty = FunctionType::get(voidPtrTy, {sizeTy, sizeTy}, false);
-//        f = Function::Create(fty, Function::ExternalLinkage, "aligned_alloc", m);
-//        f->setCallingConv(CallingConv::C);
-//        f->setDoesNotAlias(0);
         f = LinkFunction("aligned_alloc", &aligned_alloc);
     }
 
