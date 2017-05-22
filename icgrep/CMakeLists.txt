@@ -188,6 +188,13 @@ ENDIF()
 #Enable all warnings
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
+include(CheckFunctionExists)
+CHECK_FUNCTION_EXISTS(aligned_alloc STDLIB_HAS_ALIGNED_ALLOC)
+IF (STDLIB_HAS_ALIGNED_ALLOC)
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DSTDLIB_HAS_ALIGNED_ALLOC")
+ENDIF()
+
+
 SET(CMAKE_REQUIRED_FLAGS)
 
 # detect LLVM version and add compiler flags.

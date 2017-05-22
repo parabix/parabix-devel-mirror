@@ -242,16 +242,15 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
         report_fatal_error("CreateAlignedMalloc: alignment must be a power of 2");
     }
     Module * const m = getModule();
-    Function * aligned_malloc = m->getFunction("aligned_alloc");
+    Function * f = m->getFunction("aligned_alloc");
     IntegerType * const sizeTy = getSizeTy();
-    if (LLVM_UNLIKELY(aligned_malloc == nullptr)) {
-        PointerType * const voidPtrTy = getVoidPtrTy();
-        FunctionType * const fty = FunctionType::get(voidPtrTy, {sizeTy, sizeTy}, false);
-        aligned_malloc = Function::Create(fty, Function::ExternalLinkage, "aligned_alloc", m);
-        aligned_malloc->setCallingConv(CallingConv::C);
-        aligned_malloc->setDoesNotAlias(0);
-
-        // aligned_malloc = LinkFunction("aligned_alloc", &aligned_alloc);
+    if (LLVM_UNLIKELY(f == nullptr)) {
+//        PointerType * const voidPtrTy = getVoidPtrTy();
+//        FunctionType * const fty = FunctionType::get(voidPtrTy, {sizeTy, sizeTy}, false);
+//        f = Function::Create(fty, Function::ExternalLinkage, "aligned_alloc", m);
+//        f->setCallingConv(CallingConv::C);
+//        f->setDoesNotAlias(0);
+        f = LinkFunction("aligned_alloc", &aligned_alloc);
     }
 
     size = CreateZExtOrTrunc(size, sizeTy);
@@ -260,7 +259,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
         CreateAssert(CreateICmpEQ(CreateURem(size, align), ConstantInt::get(sizeTy, 0)),
                      "CreateAlignedMalloc: size must be an integral multiple of alignment.");
     }
-    Value * const ptr = CreateCall(aligned_malloc, {align, size});
+    Value * const ptr = CreateCall(f, {align, size});
     CreateAssert(ptr, "CreateAlignedMalloc: returned null pointer.");
     return ptr;
 }
