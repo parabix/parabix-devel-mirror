@@ -258,7 +258,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
         FunctionType * const fty = FunctionType::get(getInt32Ty(), {voidPtrTy->getPointerTo(), sizeTy, sizeTy}, false);
         f = Function::Create(fty, Function::ExternalLinkage, "posix_memalign", m);
         f->setCallingConv(CallingConv::C);
-        f->setDoesNotAlias(0);
+        f->setDoesNotAlias(1);
     }
     #endif
     size = CreateZExtOrTrunc(size, sizeTy);
