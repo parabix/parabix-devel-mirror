@@ -17,7 +17,7 @@ class ScanMatchKernel final : public BlockOrientedKernel {
 public:
     ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const GrepType grepType, const unsigned codeUnitWidth);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:

@@ -23,15 +23,15 @@
 #include <pablo/builder.hpp>                       // for PabloBuilder
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
-#include "llvm/ADT/StringRef.h"                    // for StringRef
-#include "llvm/IR/CallingConv.h"                   // for ::C
-#include "llvm/IR/DerivedTypes.h"                  // for ArrayType
-#include "llvm/IR/LLVMContext.h"                   // for LLVMContext
-#include "llvm/IR/Value.h"                         // for Value
-#include "llvm/Support/Debug.h"                    // for dbgs
+#include <llvm/ADT/StringRef.h>
+#include <llvm/IR/CallingConv.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Value.h>
+#include <llvm/Support/Debug.h>
 #include <pablo/pablo_toolchain.h>
 #include <iostream>
-
+#include <toolchain/cpudriver.h>
 #include <pablo/passes/ssapass.h>
 
 namespace llvm { class Type; }
@@ -49,7 +49,7 @@ class ParenthesisMatchingKernel final: public pablo::PabloKernel {
 public:
     ParenthesisMatchingKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned count);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

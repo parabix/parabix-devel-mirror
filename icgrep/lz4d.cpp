@@ -28,6 +28,7 @@
 #include <kernels/lz4_bytestream_decoder.h>
 
 #include <kernels/kernel_builder.h>
+#include <toolchain/cpudriver.h>
 
 #include <string>
 #include <iostream>

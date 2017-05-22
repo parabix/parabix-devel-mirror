@@ -13,12 +13,11 @@ namespace pablo { class PabloKernel; }
 namespace pablo {
 
 enum PabloDebugFlags {
-    ShowPablo, ShowOptimizedPablo, ShowUnloweredPablo, DumpTrace,
+    ShowPablo, ShowOptimizedPablo, DumpTrace,
 };
 
 enum PabloCompilationFlags {
-    DisableSimplification, DisableCodeMotion,
-    EnableMultiplexing, EnableLowering, EnablePreDistribution, EnablePostDistribution, EnablePrePassScheduling
+    DisableSimplification, DisableCodeMotion, EnableDistribution
 };
     
 const llvm::cl::OptionCategory * pablo_toolchain_flags();

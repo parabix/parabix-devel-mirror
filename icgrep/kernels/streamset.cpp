@@ -318,7 +318,8 @@ void ExpandableBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilde
     Type * const bufferType = getType()->getStructElementType(1)->getPointerElementType();
     Constant * const bufferWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(bufferType), iBuilder->getSizeTy(), false);
     Constant * const size = ConstantExpr::getMul(iBuilder->getSize(mBufferBlocks * mInitialCapacity), bufferWidth);
-    Value * const ptr = iBuilder->CreateAlignedMalloc(size, iBuilder->getCacheAlignment());
+    const auto alignment = std::max(iBuilder->getCacheAlignment(), iBuilder->getBitBlockWidth() / 8);
+    Value * const ptr = iBuilder->CreateAlignedMalloc(size, alignment);
     iBuilder->CreateMemZero(ptr, size, bufferType->getPrimitiveSizeInBits() / 8);
     Value * const streamSetPtr = iBuilder->CreateGEP(mStreamSetBufferPtr, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
     iBuilder->CreateStore(iBuilder->CreatePointerCast(ptr, bufferType->getPointerTo()), streamSetPtr);
@@ -384,7 +385,8 @@ std::pair<Value *, Value *> ExpandableBuffer::getInternalStreamBuffer(IDISA::IDI
         iBuilder->SetInsertPoint(entry);
 
         Value * size = iBuilder->CreateMul(newCapacity, iBuilder->getSize(mBufferBlocks));
-        Value * newStreamSet = iBuilder->CreatePointerCast(iBuilder->CreateAlignedMalloc(iBuilder->CreateMul(size, vectorWidth), iBuilder->getCacheAlignment()), elementType->getPointerTo());
+        const auto memAlign = std::max(iBuilder->getCacheAlignment(), iBuilder->getBitBlockWidth() / 8);
+        Value * newStreamSet = iBuilder->CreatePointerCast(iBuilder->CreateAlignedMalloc(iBuilder->CreateMul(size, vectorWidth), memAlign), elementType->getPointerTo());
         Value * const diffCapacity = iBuilder->CreateMul(iBuilder->CreateSub(newCapacity, capacity), vectorWidth);
 
         const auto alignment = elementType->getPrimitiveSizeInBits() / 8;
@@ -400,7 +402,7 @@ std::pair<Value *, Value *> ExpandableBuffer::getInternalStreamBuffer(IDISA::IDI
             iBuilder->CreateMemZero(destZeroPtr, diffCapacity, alignment);
         }
 
-        iBuilder->CreateAlignedFree(streamSet);
+        iBuilder->CreateFree(streamSet);
 
         iBuilder->CreateRet(newStreamSet);
 
@@ -453,7 +455,7 @@ Value * ExpandableBuffer::getBaseAddress(IDISA::IDISA_Builder * const iBuilder, 
 }
 
 void ExpandableBuffer::releaseBuffer(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
-    iBuilder->CreateAlignedFree(getBaseAddress(iBuilder, self));
+    iBuilder->CreateFree(getBaseAddress(iBuilder, self));
 }
 
 Value * ExpandableBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, Value *, Value *) const {

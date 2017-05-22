@@ -19,7 +19,6 @@
 #include <grep_engine.h>
 #include <fstream>
 #include <string>
-#include <boost/uuid/sha1.hpp>
 #include <toolchain/toolchain.h>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
@@ -112,7 +111,6 @@ static void icgrep_error_handler(void *UserData, const std::string &Message, boo
     #endif
 }
 
-static std::string allREs;
 static re::ModeFlagSet globalFlags = 0;
 
 std::vector<re::RE *> readExpressions() {
@@ -147,7 +145,6 @@ std::vector<re::RE *> readExpressions() {
         re::RE * re_ast = re::RE_Parser::parse(regexVector[i], globalFlags);
 #endif
         REs.push_back(re_ast);
-        allREs += regexVector[i] + "\n";
     }
 
     if (MultiGrepKernels) {
@@ -180,18 +177,6 @@ std::vector<re::RE *> readExpressions() {
     }
 
     return REs;
-}
-
-std::string sha1sum(const std::string & str) {
-    char buffer[41];    // 40 hex-digits and the terminating null
-    unsigned int digest[5];     // 160 bits in total
-
-    boost::uuids::detail::sha1 sha1;
-    sha1.process_bytes(str.c_str(), str.size());
-    sha1.get_digest(digest);
-    snprintf(buffer, sizeof(buffer), "%.8x%.8x%.8x%.8x%.8x",
-             digest[0], digest[1], digest[2], digest[3], digest[4]);
-    return std::string(buffer);
 }
 
 std::vector<size_t> total_CountOnly;
@@ -395,8 +380,6 @@ int main(int argc, char *argv[]) {
 
     const auto REs = readExpressions();
 
-    std::string module_name = "grepcode:" + sha1sum(allREs) + ":" + std::to_string(globalFlags);
-    
     if (GrepSupport) {  // Calls icgrep again on command line and passes output to grep.
         pipeIcGrepOutputToGrep(argc, argv);
         return 0;   // icgrep is called again, so we need to end this process.
@@ -409,7 +392,7 @@ int main(int argc, char *argv[]) {
 
     if (allFiles.empty()) {
 
-        grepEngine.grepCodeGen(module_name, REs, CountOnly, UTF_16, GrepSource::StdIn);
+        grepEngine.grepCodeGen(REs, CountOnly, UTF_16, GrepSource::StdIn);
         allFiles = { "-" };
         initFileResult(allFiles);
         total_CountOnly.resize(1);
@@ -420,14 +403,14 @@ int main(int argc, char *argv[]) {
         setNVPTXOption();
         
         if(codegen::NVPTX){
-            grepEngine.grepCodeGen_nvptx(module_name, REs, CountOnly, UTF_16);
+            grepEngine.grepCodeGen_nvptx(REs, CountOnly, UTF_16);
             for (unsigned i = 0; i != allFiles.size(); ++i) {
                 grepEngine.doGrep(allFiles[i]);
             }         
             return 0;
         }
         else{
-            grepEngine.grepCodeGen(module_name, REs, CountOnly, UTF_16, GrepSource::File);
+            grepEngine.grepCodeGen(REs, CountOnly, UTF_16, GrepSource::File);
         }
 
         if (FileNamesOnly && NonMatchingFileNamesOnly) {

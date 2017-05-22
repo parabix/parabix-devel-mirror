@@ -20,7 +20,7 @@ namespace IDISA {
     
 KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C, const std::string & targetTriple) {
     unsigned registerWidth = 0;
-    Triple T(targetTriple);
+    llvm::Triple T(targetTriple);
     if (T.isArch64Bit()) {
         registerWidth = 64;
     } else if (T.isArch32Bit()) {

@@ -30,7 +30,6 @@ IR_Gen/idisa_sse_builder.cpp
 IR_Gen/idisa_sse_builder.h
 IR_Gen/idisa_target.cpp
 IR_Gen/idisa_target.h
-IR_Gen/llvm2ptx.h
 IR_Gen/tracegen.h
 kernels/alignedprint.cpp
 kernels/alignedprint.h
@@ -76,6 +75,8 @@ kernels/streamset.cpp
 kernels/streamset.h
 kernels/swizzle.cpp
 kernels/swizzle.h
+kernels/until_n.cpp
+kernels/until_n.h
 pablo/analysis/pabloverifier.cpp
 pablo/analysis/pabloverifier.hpp
 pablo/optimizers/booleanreassociationpass.cpp
@@ -185,12 +186,19 @@ re/re_toolchain.cpp
 re/re_toolchain.h
 re/re_utility.cpp
 re/re_utility.h
+toolchain/cpudriver.cpp
+toolchain/cpudriver.h
+toolchain/driver.cpp
+toolchain/driver.h
+toolchain/NVPTXDriver.cpp
+toolchain/NVPTXDriver.h
 toolchain/object_cache.cpp
 toolchain/object_cache.h
 toolchain/pipeline.cpp
 toolchain/pipeline.h
 toolchain/toolchain.cpp
 toolchain/toolchain.h
+toolchain/workqueue.h
 UCD/Blocks.h
 UCD/CaseFolding_txt.cpp
 UCD/CaseFolding_txt.h
@@ -240,6 +248,7 @@ icgrep.cpp
 lz4d.cpp
 lz4FrameDecoder.cpp
 lz4FrameDecoder.h
+preprocess.cpp
 u8u16.cpp
 utf16_encoder.cpp
 utf16_encoder.h
@@ -247,4 +256,4 @@ utf8_encoder.cpp
 utf8_encoder.h
 wc.cpp
 CMakeLists.txt
-toolchain/workqueue.h
+IR_Gen/tracegen.cpp

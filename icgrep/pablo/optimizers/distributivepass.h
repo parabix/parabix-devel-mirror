@@ -1,21 +1,13 @@
-#ifndef DISTRIBUTIVEPASS_H
-#define DISTRIBUTIVEPASS_H
+#ifndef PABLO_DISTRIBUTIVEPASS_H
+#define PABLO_DISTRIBUTIVEPASS_H
 
 namespace pablo {
 
-class PabloFunction;
-class PabloBlock;
-class Variadic;
+class PabloKernel;
 
 class DistributivePass {
 public:
-    static bool optimize(PabloFunction & function);
-protected:
-    void distribute(PabloBlock * const block);
-    void distribute(Variadic * const var);
-    DistributivePass() = default;
-private:
-    bool unmodified;
+    static bool optimize(pablo::PabloKernel * const kernel);
 };
 
 }

@@ -12,6 +12,8 @@
 #include <pablo/builder.hpp>
 #include <pablo/pe_count.h>
 
+#include <llvm/Support/raw_ostream.h>
+
 using namespace kernel;
 using namespace pablo;
 using namespace re;

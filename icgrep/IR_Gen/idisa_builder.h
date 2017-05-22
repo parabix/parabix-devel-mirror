@@ -107,7 +107,7 @@ public:
     virtual llvm::Value * bitblock_mask_from(llvm::Value * pos);
     virtual llvm::Value * bitblock_set_bit(llvm::Value * pos);
 
-    virtual void CreateBaseFunctions(){};
+    virtual void CreateBaseFunctions() {}
     
     llvm::Value * simd_and(llvm::Value * a, llvm::Value * b);
     llvm::Value * simd_or(llvm::Value * a, llvm::Value * b);

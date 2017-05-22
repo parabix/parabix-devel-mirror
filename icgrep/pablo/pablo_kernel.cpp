@@ -13,7 +13,6 @@
 #include <kernels/kernel_builder.h>
 #include <llvm/IR/Module.h>
 
-using namespace pablo;
 using namespace kernel;
 using namespace parabix;
 using namespace IDISA;
@@ -28,6 +27,8 @@ inline bool isStreamType(const Type * ty) {
     }
     return false;
 }
+
+namespace pablo {
 
 Var * PabloKernel::getInputStreamVar(const std::string & name) {
     Port port; unsigned index;
@@ -208,3 +209,4 @@ PabloKernel::~PabloKernel() {
     delete mSymbolTable; 
 }
 
+}

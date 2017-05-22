@@ -221,7 +221,7 @@ void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
         Value * newArray = iBuilder->CreateAlignedMalloc(newCapacitySize, iBuilder->getCacheAlignment());
         iBuilder->CreateMemCpy(newArray, array, capacitySize, BlockWidth);
         iBuilder->CreateMemZero(iBuilder->CreateGEP(newArray, capacitySize), capacitySize, BlockWidth);
-        iBuilder->CreateAlignedFree(array);
+        iBuilder->CreateFree(array);
         newArray = iBuilder->CreatePointerCast(newArray, array->getType());
         iBuilder->CreateStore(newArray, arrayPtr);
 
@@ -234,7 +234,7 @@ void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
         Value * newSummary = iBuilder->CreateAlignedMalloc(newSummarySize, BlockWidth);
         iBuilder->CreateMemCpy(newSummary, summary, summarySize, BlockWidth);
         iBuilder->CreateMemZero(iBuilder->CreateGEP(newSummary, summarySize), iBuilder->getSize(2 * BlockWidth), BlockWidth);
-        iBuilder->CreateAlignedFree(summary);
+        iBuilder->CreateFree(summary);
 
         Value * ptr1 = iBuilder->CreateGEP(newSummary, summarySize);
         ptr1 = iBuilder->CreatePointerCast(ptr1, carryPtrTy);

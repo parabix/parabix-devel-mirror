@@ -159,7 +159,7 @@ MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 
 void ReadSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     ConstantInt * const bufferSize = iBuilder->getSize(64 * getpagesize());
-    Value * const buffer = iBuilder->CreateAlignedMalloc(bufferSize, iBuilder->getCacheAlignment());
+    Value * const buffer = iBuilder->CreateCacheAlignedMalloc(bufferSize);
     iBuilder->setScalarField("buffer", buffer);
     iBuilder->setScalarField("capacity", bufferSize);
     iBuilder->setBaseAddress("sourceBuffer", buffer);
@@ -178,7 +178,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     assert(iBuilder->getKernel() == this);
 
-    // The ReadSourceKernel begins by checking whether it needs to read another page of data
+    // Check whether we need to read another page of data
     ConstantInt * const segmentSize = iBuilder->getSize(mSegmentBlocks * iBuilder->getBitBlockWidth());
     Value * bufferedSize = iBuilder->getBufferedSize("sourceBuffer");
     Value * const produced = iBuilder->getProducedItemCount("sourceBuffer");
@@ -202,22 +202,36 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     Value * inputStream = iBuilder->getRawOutputPointer("sourceBuffer", iBuilder->getInt32(0), iBuilder->getInt32(0));
     inputStream = iBuilder->CreatePointerCast(inputStream, codeUnitPtrTy);
     Value * const originalPtr = iBuilder->CreateGEP(inputStream, produced);
+
     Value * const buffer = iBuilder->CreatePointerCast(iBuilder->getScalarField("buffer"), codeUnitPtrTy);
     Value * const capacity = iBuilder->getScalarField("capacity");
-    Value * const canAppend = iBuilder->CreateICmpULT(iBuilder->CreateGEP(originalPtr, pageSize), iBuilder->CreateGEP(buffer, capacity));
+
+    Value * L = iBuilder->CreateGEP(originalPtr, pageSize);
+
+//    iBuilder->CallPrintInt("L", L);
+
+    Value * B = iBuilder->CreateGEP(buffer, capacity);
+
+//    iBuilder->CallPrintInt("B", B);
+
+    Value * const canAppend = iBuilder->CreateICmpULT(L, B);
     iBuilder->CreateLikelyCondBr(canAppend, readData, waitOnConsumers);
 
     // First wait on any consumers to finish processing then check how much data has been consumed.
     iBuilder->SetInsertPoint(waitOnConsumers);
     iBuilder->CreateConsumerWait();
+
     // Then determine how much data has been consumed and how much needs to be copied back, noting
     // that our "unproduced" data must be block aligned.
-    const auto alignment = iBuilder->getBitBlockWidth() / 8;
-    Constant * const alignmentMask = ConstantExpr::getNeg(iBuilder->getSize(alignment));
+    const auto blockAlignment = iBuilder->getBitBlockWidth() / 8;
+    Constant * const alignmentMask = ConstantExpr::getNot(iBuilder->getSize(blockAlignment - 1));
     Value * const consumed = iBuilder->CreateAnd(iBuilder->getConsumedItemCount("sourceBuffer"), alignmentMask);
     Value * const remaining = iBuilder->CreateSub(bufferedSize, consumed);
     Value * const unconsumedPtr = iBuilder->CreateGEP(inputStream, consumed);
     Value * const consumedMajority = iBuilder->CreateICmpULT(iBuilder->CreateGEP(buffer, remaining), unconsumedPtr);
+
+//    iBuilder->CallPrintInt("consumedMajority", consumedMajority);
+
     BasicBlock * const copyBack = iBuilder->CreateBasicBlock("CopyBack");
     BasicBlock * const expandAndCopyBack = iBuilder->CreateBasicBlock("ExpandAndCopyBack");
     BasicBlock * const calculateLogicalAddress = iBuilder->CreateBasicBlock("CalculateLogicalAddress");
@@ -226,15 +240,15 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     iBuilder->CreateLikelyCondBr(consumedMajority, copyBack, expandAndCopyBack);
     iBuilder->SetInsertPoint(copyBack);
     // If so, just copy the data ...
-    iBuilder->CreateMemCpy(buffer, unconsumedPtr, remaining, alignment);
+    iBuilder->CreateMemCpy(buffer, unconsumedPtr, remaining, blockAlignment);
     iBuilder->CreateBr(calculateLogicalAddress);
     // Otherwise, allocate a buffer with twice the capacity and copy the unconsumed data back into it
     iBuilder->SetInsertPoint(expandAndCopyBack);
     Value * const expandedCapacity = iBuilder->CreateShl(capacity, 1);
-    Value * const expandedBuffer = iBuilder->CreateAlignedMalloc(expandedCapacity, iBuilder->getCacheAlignment());
+    Value * const expandedBuffer = iBuilder->CreateCacheAlignedMalloc(expandedCapacity);
     Value * const expandedPtr = iBuilder->CreatePointerCast(expandedBuffer, codeUnitPtrTy);
-    iBuilder->CreateMemCpy(expandedPtr, unconsumedPtr, remaining, alignment);
-    iBuilder->CreateAlignedFree(buffer);
+    iBuilder->CreateMemCpy(expandedPtr, unconsumedPtr, remaining, blockAlignment);
+    iBuilder->CreateFree(buffer);
     iBuilder->setScalarField("buffer", expandedBuffer);
     iBuilder->setScalarField("capacity", expandedCapacity);
     iBuilder->CreateBr(calculateLogicalAddress);
@@ -284,7 +298,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 }
 
 void ReadSourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
-    iBuilder->CreateAlignedFree(iBuilder->getScalarField("buffer"));
+    iBuilder->CreateFree(iBuilder->getScalarField("buffer"));
 }
 
 ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned blocksPerSegment, unsigned codeUnitWidth)

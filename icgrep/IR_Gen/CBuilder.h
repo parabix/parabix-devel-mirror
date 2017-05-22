@@ -21,10 +21,9 @@ namespace llvm { class PointerType; }
 namespace llvm { class Type; }
 namespace llvm { class Value; }
 
-class ParabixDriver;
+class Driver;
 
 class CBuilder : public llvm::IRBuilder<> {
-    friend class ParabixDriver;
 public:
 
     CBuilder(llvm::LLVMContext & C, const unsigned GeneralRegisterWidthInBits);
@@ -53,9 +52,7 @@ public:
     llvm::Value * CreateAlignedMalloc(llvm::Value * size, const unsigned alignment);
     
     void CreateFree(llvm::Value * const ptr);
-    
-    void CreateAlignedFree(llvm::Value * const ptr, const bool testForNullAddress = false);
-    
+
     llvm::Value * CreateRealloc(llvm::Value * ptr, llvm::Value * size);
 
     llvm::CallInst * CreateMemZero(llvm::Value * ptr, llvm::Value * size, const unsigned alignment = 1) {
@@ -66,6 +63,10 @@ public:
         llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
         instr->setAlignment(getCacheAlignment());
         return instr;
+    }
+
+    llvm::Value * CreateCacheAlignedMalloc(llvm::Value * size) {
+        return CreateAlignedMalloc(size, getCacheAlignment());
     }
 
     // stdio.h functions
@@ -187,7 +188,7 @@ public:
     llvm::BasicBlock * CreateBasicBlock(std::string && name);
 
     virtual bool supportsIndirectBr() const {
-        return true;
+        return false;
     }
 
     llvm::Value * CreatePopcount(llvm::Value * bits);
@@ -214,13 +215,13 @@ public:
     template <typename ExternalFunctionType>
     llvm::Function * LinkFunction(llvm::StringRef name, ExternalFunctionType * functionPtr) const;
 
+    void setDriver(Driver * const driver) {
+        mDriver = driver;
+    }
+
 protected:
 
     llvm::Function * LinkFunction(llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
-
-    void setDriver(ParabixDriver * driver) {
-        mDriver = driver;
-    }
 
 protected:
 
@@ -228,7 +229,7 @@ protected:
     unsigned                        mCacheLineAlignment;
     llvm::IntegerType *             mSizeType;
     llvm::StructType *              mFILEtype;
-    ParabixDriver *                 mDriver;
+    Driver *                        mDriver;
     llvm::LLVMContext               mContext;
     const std::string               mTriple;
 };

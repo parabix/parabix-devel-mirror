@@ -8,6 +8,8 @@
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Module.h>
 
+using namespace llvm;
+
 namespace IDISA {
     
 std::string IDISA_NVPTX20_Builder::getBuilderUniqueName() { return "NVPTX20_" + std::to_string(groupThreads);}
@@ -273,6 +275,14 @@ LoadInst * IDISA_NVPTX20_Builder::CreateAtomicLoadAcquire(Value * ptr) {
 }
 StoreInst * IDISA_NVPTX20_Builder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     return CreateStore(val, ptr);
+}
+
+void IDISA_NVPTX20_Builder::CreateBaseFunctions() {
+    CreateGlobals();
+    CreateBuiltinFunctions();
+    CreateLongAdvanceFunc();
+    CreateLongAddFunc();
+    CreateBallotFunc();
 }
 
     

@@ -6,6 +6,8 @@
 
 #include "idisa_sse_builder.h"
 
+using namespace llvm;
+
 namespace IDISA {
 
 std::string IDISA_SSE_Builder::getBuilderUniqueName() { return mBitBlockWidth != 128 ? "SSE_" + std::to_string(mBitBlockWidth) : "SSE";}

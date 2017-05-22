@@ -8,8 +8,6 @@
 
 #include <IR_Gen/idisa_sse_builder.h>
 
-using namespace llvm;
-
 namespace IDISA {
 
 class IDISA_AVX_Builder : public IDISA_SSE2_Builder {
@@ -24,7 +22,7 @@ public:
 
     virtual std::string getBuilderUniqueName() override;
 
-    Value * hsimd_signmask(unsigned fw, Value * a) override;
+    llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
 
     ~IDISA_AVX_Builder() {}
 
@@ -40,13 +38,13 @@ public:
     }
 
     virtual std::string getBuilderUniqueName() override;
-    Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;
-    Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;
-    Value * esimd_mergeh(unsigned fw, Value * a, Value * b) override;
-    Value * esimd_mergel(unsigned fw, Value * a, Value * b) override;
-    Value * hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) override;
-    Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) override;
-    std::pair<Value *, Value *> bitblock_add_with_carry(Value * a, Value * b, Value * carryin) override;
+    llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * esimd_mergeh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * esimd_mergel(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * hsimd_packh_in_lanes(unsigned lanes, unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin) override;
 
     ~IDISA_AVX2_Builder() {}
 };

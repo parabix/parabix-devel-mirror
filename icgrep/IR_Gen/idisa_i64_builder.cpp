@@ -6,6 +6,8 @@
 
 #include "idisa_i64_builder.h"
 
+using namespace llvm;
+
 namespace IDISA {
     
 std::string IDISA_I64_Builder::getBuilderUniqueName() { return mBitBlockWidth != 64 ? "C" + std::to_string(mBitBlockWidth) : "C";}

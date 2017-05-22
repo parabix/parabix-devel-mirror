@@ -10,8 +10,9 @@
 #include <llvm/ADT/SmallString.h>
 #include <llvm/ExecutionEngine/ObjectCache.h>
 #include <llvm/ADT/StringRef.h>
-#include <string>
 #include <boost/container/flat_map.hpp>
+#include <vector>
+#include <string>
 
 namespace llvm { class Module; }
 namespace llvm { class MemoryBuffer; }
@@ -35,20 +36,19 @@ class ParabixObjectCache final : public llvm::ObjectCache {
     using Path = llvm::SmallString<128>;
     template <typename K, typename V>
     using Map = boost::container::flat_map<K, V>;
-    using CacheEntry = std::pair<kernel::Kernel *, std::unique_ptr<llvm::MemoryBuffer>>;
-    using CacheMap = Map<llvm::Module *, CacheEntry>;
+    using ModuleCache = Map<std::string, std::unique_ptr<llvm::MemoryBuffer>>;
 public:
     ParabixObjectCache();
     ParabixObjectCache(const std::string & dir);
     bool loadCachedObjectFile(const std::unique_ptr<kernel::KernelBuilder> & idb, kernel::Kernel * const kernel);
     void notifyObjectCompiled(const llvm::Module *M, llvm::MemoryBufferRef Obj) override;
+    void cleanUpObjectCacheFiles();
     std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module * M) override;
 protected:
     static Path getDefaultPath();
 private:
-    Map<std::string, std::string>                           mKernelSignatureMap;
-    Map<std::string, std::unique_ptr<llvm::MemoryBuffer>>   mCachedObjectMap;
-    const Path                                              mCachePath;
+    ModuleCache     mCachedObject;
+    const Path      mCachePath;
 };
 
 #endif

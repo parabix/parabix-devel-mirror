@@ -22,7 +22,7 @@ class expand3_4Kernel final : public SegmentOrientedKernel {
 public:   
     expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 private:
     void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBuilder) override;
 };
@@ -31,7 +31,7 @@ class radix64Kernel final : public BlockOrientedKernel {
 public:
     radix64Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 private:
     virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
     virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
@@ -42,7 +42,7 @@ class base64Kernel final : public BlockOrientedKernel {
 public:
     base64Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 private:
     virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
     virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;

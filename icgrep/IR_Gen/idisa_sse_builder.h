@@ -9,8 +9,6 @@
 
 #include <IR_Gen/idisa_builder.h>
 
-using namespace llvm;
-
 namespace IDISA {
 
 class IDISA_SSE_Builder : public virtual IDISA_Builder {
@@ -22,7 +20,7 @@ public:
     }
 
     virtual std::string getBuilderUniqueName() override;
-    Value * hsimd_signmask(unsigned fw, Value * a) override;
+    llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
     ~IDISA_SSE_Builder() {}
 
 };
@@ -37,10 +35,10 @@ public:
     }
 
     virtual std::string getBuilderUniqueName() override;
-    Value * hsimd_signmask(unsigned fw, Value * a) override;
-    Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;
-    Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;
-    std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift) final;
+    llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
+    llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift) final;
 
     ~IDISA_SSE2_Builder() {}
 

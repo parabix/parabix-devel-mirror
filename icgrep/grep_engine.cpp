@@ -6,8 +6,6 @@
 
 #include "grep_engine.h"
 #include <llvm/IR/Module.h>
-//#include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/IR/Verifier.h>
 #include <llvm/Support/CommandLine.h>
 #include <boost/filesystem.hpp>
 #include <UCD/UnicodeNameData.h>
@@ -27,6 +25,8 @@
 #include <re/re_cc.h>
 #include <re/re_toolchain.h>
 #include <toolchain/toolchain.h>
+#include <toolchain/cpudriver.h>
+#include <toolchain/NVPTXDriver.h>
 #include <iostream>
 #include <sstream>
 #include <cc/multiplex_CCs.h>
@@ -34,6 +34,7 @@
 #include <util/aligned_allocator.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+
 #ifdef CUDA_ENABLED
 #include <preprocess.cpp>
 #include <IR_Gen/CudaDriver.h>
@@ -251,9 +252,9 @@ void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, 
     parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
 }
 
-void GrepEngine::grepCodeGen_nvptx(const std::string & moduleName, std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16) {
+void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16) {
 
-    NVPTXDriver pxDriver(moduleName + ":icgrep");
+    NVPTXDriver pxDriver("engine");
     auto & idb = pxDriver.getBuilder();
     Module * M = idb->getModule();
 
@@ -340,9 +341,9 @@ void GrepEngine::grepCodeGen_nvptx(const std::string & moduleName, std::vector<r
     pxDriver.finalizeAndCompile(mainFunc, PTXFilename);
 }
 
-void GrepEngine::grepCodeGen(const std::string & moduleName, std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16, GrepSource grepSource, const GrepType grepType) {
+void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const bool CountOnly, const bool UTF_16, GrepSource grepSource, const GrepType grepType) {
 
-    ParabixDriver pxDriver(moduleName + ":icgrep");
+    ParabixDriver pxDriver("engine");
     auto & idb = pxDriver.getBuilder();
     Module * M = idb->getModule();
 

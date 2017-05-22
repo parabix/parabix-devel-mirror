@@ -11,6 +11,7 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Support/CommandLine.h>
 #include <toolchain/toolchain.h>
+#include <toolchain/cpudriver.h>
 #include <IR_Gen/idisa_target.h>
 #include <kernels/source_kernel.h>
 #include <kernels/streamset.h>

@@ -22,6 +22,7 @@
 #include <kernels/s2p_kernel.h>
 #include <editd/editdscan_kernel.h>
 #include <editd/pattern_compiler.h>
+#include <toolchain/cpudriver.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <mutex>
@@ -242,7 +243,7 @@ class PreprocessKernel final: public pablo::PabloKernel {
 public:
     PreprocessKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

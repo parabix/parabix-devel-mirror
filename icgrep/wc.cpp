@@ -10,8 +10,8 @@
 #include <toolchain/toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include "llvm/Linker/Linker.h"
+// #include <llvm/ExecutionEngine/ExecutionEngine.h>
+// #include <llvm/Linker/Linker.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
 #include <cc/cc_compiler.h>
@@ -23,6 +23,7 @@
 #include <kernels/s2p_kernel.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
+#include <toolchain/cpudriver.h>
 #include <fcntl.h>
 
 using namespace llvm;
@@ -85,7 +86,7 @@ class WordCountKernel final: public pablo::PabloKernel {
 public:
     WordCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

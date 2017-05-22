@@ -15,7 +15,7 @@ class S2PKernel final : public BlockOrientedKernel {
 public:    
     S2PKernel(const std::unique_ptr<kernel::KernelBuilder> & b, bool aligned = true);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
     void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;

@@ -14,7 +14,7 @@ class MMapSourceKernel final : public SegmentOrientedKernel {
 public:
     MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
@@ -30,7 +30,7 @@ class ReadSourceKernel final : public SegmentOrientedKernel {
 public:
     ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
@@ -43,7 +43,7 @@ private:
 class MemorySourceKernel final : public SegmentOrientedKernel {
 public:
     MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Type * type, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;

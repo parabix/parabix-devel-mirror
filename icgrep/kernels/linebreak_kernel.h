@@ -15,7 +15,7 @@ class LineBreakKernelBuilder final : public pablo::PabloKernel {
 public:
     LineBreakKernelBuilder(const std::unique_ptr<KernelBuilder> & b, unsigned basisBitsCount);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

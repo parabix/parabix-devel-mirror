@@ -77,6 +77,9 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
     }
     Value * const segOffset = iBuilder->CreateLoad(iBuilder->CreateGEP(threadStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
 
+
+
+
     BasicBlock * segmentLoop = BasicBlock::Create(iBuilder->getContext(), "segmentLoop", threadFunc);
     iBuilder->CreateBr(segmentLoop);
 

@@ -8,12 +8,12 @@
 
 #include "interface.h"
 #include <boost/container/flat_map.hpp>
-#include <IR_Gen/idisa_builder.h>
-#include <toolchain/pipeline.h>
 #include <llvm/IR/Constants.h>
 
 namespace llvm { class Function; }
 namespace llvm { class IntegerType; }
+namespace llvm { class IndirectBrInst; }
+namespace llvm { class PHINode; }
 namespace llvm { class LoadInst; }
 namespace llvm { class Type; }
 namespace llvm { class Value; }
@@ -62,16 +62,15 @@ public:
     // mechanisms that are short, inexpensive to compute and guarantee uniqueness
     // based on the semantics of the kernel.  
     //
-    // If no other mechanism is available, the default generateKernelSignature() method
-    // uses the full LLVM IR (before optimization) of the kernel instance.
+    // If no other mechanism is available, the default makeSignature() method uses the
+    // full LLVM IR (before optimization) of the kernel instance.
     //
     // A kernel Module ID is short string that is used as a name for a particular kernel
-    // instance.  Kernel Module IDs are used to look up and retrieve cached kernel instances
-    // and so should be highly likely to uniquely identify a kernel instance.
+    // instance.  Kernel Module IDs are used to look up and retrieve cached kernel
+    // instances and so should be highly likely to uniquely identify a kernel instance.
     //
     // The ideal case is that a kernel Module ID serves as a full kernel signature thus
-    // guaranteeing uniqueness.  In this case, the moduleIDisUnique() method 
-    // should return true.
+    // guaranteeing uniqueness.  In this case, hasSignature() should return false.
     //
        
     bool isCachable() const override { return false; }
@@ -79,7 +78,7 @@ public:
     std::string makeSignature(const std::unique_ptr<KernelBuilder> & idb) override;
 
     // Can the module ID itself serve as the unique signature?
-    virtual bool moduleIDisSignature() const { return false; }
+    virtual bool hasSignature() const { return true; }
 
     // Create a module stub for the kernel, populated only with its Module ID.     
     //

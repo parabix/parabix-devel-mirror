@@ -6,6 +6,8 @@
 
 #include "idisa_avx_builder.h"
 
+using namespace llvm;
+
 namespace IDISA {
     
 std::string IDISA_AVX_Builder::getBuilderUniqueName() {

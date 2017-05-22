@@ -12,7 +12,10 @@
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <toolchain/toolchain.h>
+#include <toolchain/driver.h>
+#include <stdlib.h>
 #include <sys/mman.h>
+#include <unistd.h>
 
 using namespace llvm;
 
@@ -217,29 +220,20 @@ void CBuilder::CallPrintMsgToStderr(const std::string & message) {
 
 Value * CBuilder::CreateMalloc(Value * size) {
     Module * const m = getModule();
-    DataLayout DL(m);
-    IntegerType * const intTy = getIntPtrTy(DL);
-    if (size->getType() != intTy) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
-        } else {
-            size = CreateZExtOrTrunc(size, intTy);
-        }
-    }    
-    PointerType * const voidPtrTy = getVoidPtrTy();
+    IntegerType * const sizeTy = getSizeTy();    
     Function * malloc = m->getFunction("malloc");
     if (malloc == nullptr) {
-        FunctionType * fty = FunctionType::get(voidPtrTy, {intTy}, false);
+//        malloc = LinkFunction("malloc", &std::malloc);
+        PointerType * const voidPtrTy = getVoidPtrTy();
+        FunctionType * fty = FunctionType::get(voidPtrTy, {sizeTy}, false);
         malloc = Function::Create(fty, Function::ExternalLinkage, "malloc", m);
         malloc->setCallingConv(CallingConv::C);
         malloc->setDoesNotAlias(0);
     }
-    assert (size->getType() == intTy);
-    CallInst * ci = CreateCall(malloc, size); assert (ci);
-    ci->setTailCall();
-    ci->setCallingConv(malloc->getCallingConv());
-    Value * ptr = CreatePointerCast(ci, voidPtrTy); assert (ptr);
-    CreateAssert(ptr, "FATAL ERROR: out of memory");
+    size = CreateZExtOrTrunc(size, sizeTy);
+    CallInst * const ptr = CreateCall(malloc, size);
+    ptr->setTailCall();
+    CreateAssert(ptr, "CreateMalloc: returned null pointer");
     return ptr;
 }
 
@@ -248,31 +242,27 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
         report_fatal_error("CreateAlignedMalloc: alignment must be a power of 2");
     }
     Module * const m = getModule();
-    DataLayout DL(m);
-    IntegerType * const intTy = getIntPtrTy(DL);
-    Function * aligned_malloc = m->getFunction("aligned_malloc" + std::to_string(alignment));
+    Function * aligned_malloc = m->getFunction("aligned_alloc");
+    IntegerType * const sizeTy = getSizeTy();
     if (LLVM_UNLIKELY(aligned_malloc == nullptr)) {
-        const auto ip = saveIP();
         PointerType * const voidPtrTy = getVoidPtrTy();
-        FunctionType * fty = FunctionType::get(voidPtrTy, {intTy}, false);
-        aligned_malloc = Function::Create(fty, Function::InternalLinkage, "aligned_malloc" + std::to_string(alignment), m);
+        FunctionType * const fty = FunctionType::get(voidPtrTy, {sizeTy, sizeTy}, false);
+        aligned_malloc = Function::Create(fty, Function::ExternalLinkage, "aligned_alloc", m);
         aligned_malloc->setCallingConv(CallingConv::C);
         aligned_malloc->setDoesNotAlias(0);
-        aligned_malloc->addFnAttr(Attribute::AlwaysInline);
-        Value * size = &*aligned_malloc->arg_begin();
-        SetInsertPoint(BasicBlock::Create(getContext(), "entry", aligned_malloc));
-        const auto byteWidth = (intTy->getBitWidth() / 8);
-        Constant * const offset = ConstantInt::get(intTy, alignment + byteWidth - 1);
-        size = CreateAdd(size, offset);
-        Value * unaligned = CreatePtrToInt(CreateMalloc(size), intTy);
-        Value * aligned = CreateAnd(CreateAdd(unaligned, offset), ConstantExpr::getNot(ConstantInt::get(intTy, alignment - 1)));
-        Value * prefix = CreateIntToPtr(CreateSub(aligned, ConstantInt::get(intTy, byteWidth)), intTy->getPointerTo());
-        assert (unaligned->getType() == prefix->getType()->getPointerElementType());
-        CreateAlignedStore(unaligned, prefix, byteWidth);
-        CreateRet(CreateIntToPtr(aligned, voidPtrTy));
-        restoreIP(ip);
+
+        // aligned_malloc = LinkFunction("aligned_alloc", &aligned_alloc);
     }
-    return CreateCall(aligned_malloc, {CreateZExtOrTrunc(size, intTy)});
+
+    size = CreateZExtOrTrunc(size, sizeTy);
+    ConstantInt * const align = ConstantInt::get(sizeTy, alignment);
+    if (codegen::EnableAsserts) {
+        CreateAssert(CreateICmpEQ(CreateURem(size, align), ConstantInt::get(sizeTy, 0)),
+                     "CreateAlignedMalloc: size must be an integral multiple of alignment.");
+    }
+    Value * const ptr = CreateCall(aligned_malloc, {align, size});
+    CreateAssert(ptr, "CreateAlignedMalloc: returned null pointer.");
+    return ptr;
 }
 
 Value * CBuilder::CreateAnonymousMMap(Value * size) {
@@ -439,79 +429,43 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
     return CreateCall(munmapFunc, {addr, len});
 }
 
-void CBuilder::CreateFree(Value * const ptr) {
+void CBuilder::CreateFree(Value * ptr) {
     assert (ptr->getType()->isPointerTy());
     Module * const m = getModule();
-    PointerType * const voidPtrTy = getVoidPtrTy();
-    Function * free = m->getFunction("free");
-    if (free == nullptr) {
+    Type * const voidPtrTy =  getVoidPtrTy();
+    Function * f = m->getFunction("free");
+    if (f == nullptr) {
         FunctionType * fty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
-        Module * const m = getModule();
-        free = Function::Create(fty, Function::ExternalLinkage, "free", m);
-        free->setCallingConv(CallingConv::C);
+        f = Function::Create(fty, Function::ExternalLinkage, "free", m);
+        f->setCallingConv(CallingConv::C);
+        // f = LinkFunction("free", &std::free);
     }
-    CallInst * const ci = CreateCall(free, CreatePointerCast(ptr, voidPtrTy));
-    ci->setTailCall();
-    ci->setCallingConv(free->getCallingConv());
+    ptr = CreatePointerCast(ptr, voidPtrTy);
+    CreateCall(f, ptr)->setTailCall();
 }
 
-void CBuilder::CreateAlignedFree(Value * const ptr, const bool testForNullAddress) {
-    // WARNING: this will segfault if the value of the ptr at runtime is null but testForNullAddress was not set
-    PointerType * type = cast<PointerType>(ptr->getType());
-    BasicBlock * exit = nullptr;
-    if (testForNullAddress) {
-        LLVMContext & C = getContext();
-        BasicBlock * bb = GetInsertBlock();
-        Function * f = bb->getParent();
-        exit = BasicBlock::Create(C, "", f, bb);
-        BasicBlock * entry = BasicBlock::Create(C, "", f, exit);
-        Value * cond = CreateICmpEQ(ptr, ConstantPointerNull::get(type));
-        CreateCondBr(cond, exit, entry);
-        SetInsertPoint(entry);
-    }
-    DataLayout DL(getModule());
-    IntegerType * const intTy = getIntPtrTy(DL);
-    const auto byteWidth = (intTy->getBitWidth() / 8);
-    Value * prefix = CreatePtrToInt(ptr, intTy);
-    prefix = CreateSub(prefix, ConstantInt::get(intTy, byteWidth));
-    prefix = CreateIntToPtr(prefix, intTy->getPointerTo());
-    prefix = CreateIntToPtr(CreateAlignedLoad(prefix, byteWidth), type);
-    CreateFree(prefix);
-    if (testForNullAddress) {
-        CreateBr(exit);
-        SetInsertPoint(exit);
-    }
-}
-
-Value * CBuilder::CreateRealloc(Value * ptr, Value * size) {
+Value * CBuilder::CreateRealloc(Value * const ptr, Value * size) {
     Module * const m = getModule();
-    DataLayout DL(m);
-    IntegerType * const intTy = getIntPtrTy(DL);
-    PointerType * type = cast<PointerType>(ptr->getType());
-    if (size->getType() != intTy) {
-        if (isa<Constant>(size)) {
-            size = ConstantExpr::getIntegerCast(cast<Constant>(size), intTy, false);
-        } else {
-            size = CreateZExtOrTrunc(size, intTy);
-        }
+    IntegerType * const sizeTy = getSizeTy();
+    PointerType * const voidPtrTy = getVoidPtrTy();
+    Function * f = m->getFunction("realloc");
+    if (f == nullptr) {
+        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false);
+        f = Function::Create(fty, Function::ExternalLinkage, "realloc", m);
+        f->setCallingConv(CallingConv::C);
+        f->setDoesNotAlias(0);
+        f->setDoesNotAlias(1);
+        // f = LinkFunction("realloc", &realloc);
     }
-    Function * realloc = m->getFunction("realloc");
-    if (realloc == nullptr) {
-        PointerType * const voidPtrTy = getVoidPtrTy();
-        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, intTy}, false);        
-        realloc = Function::Create(fty, Function::ExternalLinkage, "realloc", m);
-        realloc->setCallingConv(CallingConv::C);
-        realloc->setDoesNotAlias(1);
-    }
-    assert (size->getType() == intTy);
-    CallInst * ci = CreateCall(realloc, {ptr, size});
+    Value * const addr = CreatePointerCast(ptr, voidPtrTy);
+    size = CreateZExtOrTrunc(size, sizeTy);
+    CallInst * const ci = CreateCall(f, {addr, size});
     ci->setTailCall();
-    ci->setCallingConv(realloc->getCallingConv());
-    return CreateBitOrPointerCast(ci, type);
+    return CreatePointerCast(ci, ptr->getType());
 }
 
 PointerType * CBuilder::getVoidPtrTy() const {
-    return TypeBuilder<void *, true>::get(getContext());
+    return TypeBuilder<void *, false>::get(getContext());
 }
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
@@ -775,7 +729,7 @@ Value * CBuilder::CreateReadCycleCounter() {
 
 Function * CBuilder::LinkFunction(llvm::StringRef name, FunctionType * type, void * functionPtr) const {
     assert (mDriver);
-    return mDriver->LinkFunction(getModule(), name, type, functionPtr);
+    return mDriver->addLinkFunction(getModule(), name, type, functionPtr);
 }
 
 CBuilder::CBuilder(llvm::LLVMContext & C, const unsigned GeneralRegisterWidthInBits)

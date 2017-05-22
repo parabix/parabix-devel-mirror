@@ -8,8 +8,7 @@
 #include <grep_type.h>  // for GrepType, GrepType::Normal
 #include <string>       // for string
 #include <vector>
-namespace llvm { class ExecutionEngine; }
-namespace llvm { class Module; }
+
 namespace re { class CC; }
 namespace re { class RE; }
 
@@ -18,9 +17,9 @@ public:
 
     GrepEngine();
 
-    void grepCodeGen(const std::string & moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
+    void grepCodeGen(std::vector<re::RE *> REs, bool CountOnly, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
 
-    void grepCodeGen_nvptx(const std::string & moduleName, std::vector<re::RE *> REs, bool CountOnly, bool UTF_16);
+    void grepCodeGen_nvptx(std::vector<re::RE *> REs, bool CountOnly, bool UTF_16);
 
     void doGrep(const std::string & fileName) const;
 

@@ -192,14 +192,14 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
 // Default kernel signature: generate the IR and emit as byte code.
 std::string Kernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> & idb) {
     assert ("KernelBuilder does not have a valid IDISA Builder" && idb.get());
-    if (LLVM_LIKELY(moduleIDisSignature())) {
-        return getModule()->getModuleIdentifier();
-    } else {
+    if (LLVM_UNLIKELY(hasSignature())) {
         generateKernel(idb);
         std::string signature;
         raw_string_ostream OS(signature);
         WriteBitcodeToFile(getModule(), OS);
         return signature;
+    } else {
+        return getModule()->getModuleIdentifier();
     }
 }
 

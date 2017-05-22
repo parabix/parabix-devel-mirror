@@ -26,7 +26,7 @@ class DeletionKernel final : public BlockOrientedKernel {
 public:
     DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
     void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
@@ -39,7 +39,7 @@ class DeleteByPEXTkernel final : public BlockOrientedKernel {
 public:
     DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount, bool shouldSwizzle);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
     void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
@@ -58,7 +58,7 @@ class SwizzledBitstreamCompressByCount final : public BlockOrientedKernel {
 public:
     SwizzledBitstreamCompressByCount(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned bitStreamCount, unsigned fieldWidth = 64);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
     void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;

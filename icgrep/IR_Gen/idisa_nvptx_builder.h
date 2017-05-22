@@ -8,8 +8,6 @@
 
 #include <IR_Gen/idisa_i64_builder.h>
 
-using namespace llvm;
-
 namespace IDISA {
 
 class IDISA_NVPTX20_Builder : public IDISA_I64_Builder {
@@ -23,49 +21,47 @@ public:
     }
 
     ~IDISA_NVPTX20_Builder() {}
+
     virtual std::string getBuilderUniqueName() override;
+
     int getGroupThreads();
 
-    void CreateBaseFunctions() override {
-        CreateGlobals();
-        CreateBuiltinFunctions();
-        CreateLongAdvanceFunc();
-        CreateLongAddFunc();
-        CreateBallotFunc();
-    };
+    void CreateBaseFunctions() override;
     
-    Value * bitblock_any(Value * a) override;
-    std::pair<Value *, Value *> bitblock_add_with_carry(Value * a, Value * b, Value * carryin) override;
-    virtual std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift) override;
-    Value * bitblock_mask_from(Value * pos) override;
-    Value * bitblock_set_bit(Value * pos) override;
+    llvm::Value * bitblock_any(llvm::Value * a) override;
+    std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin) override;
+    virtual std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift) override;
+    llvm::Value * bitblock_mask_from(llvm::Value * pos) override;
+    llvm::Value * bitblock_set_bit(llvm::Value * pos) override;
 
-    Value * getEOFMask(Value * remainingBytes);
+    llvm::Value * getEOFMask(llvm::Value * remainingBytes);
 
-    Value * Advance(const unsigned index, const unsigned shiftAmount, Value * const value);
-    Value * LongAdd(Value * const valA, Value * const valB, Value * carryIn);
+    llvm::Value * Advance(const unsigned index, const unsigned shiftAmount, llvm::Value * const value);
+    llvm::Value * LongAdd(llvm::Value * const valA, llvm::Value * const valB, llvm::Value * carryIn);
 
-    LoadInst * CreateAtomicLoadAcquire(Value * ptr) override;
-    StoreInst * CreateAtomicStoreRelease(Value * val, Value * ptr) override; 
+    llvm::LoadInst * CreateAtomicLoadAcquire(llvm::Value * ptr) override;
+    llvm::StoreInst * CreateAtomicStoreRelease(llvm::Value * val, llvm::Value * ptr) override;
 
     bool supportsIndirectBr() const final {
         return false;
     }
 
 private:
+
     void CreateGlobals();
     void CreateBuiltinFunctions();
     void CreateLongAdvanceFunc();
     void CreateLongAddFunc();
     void CreateBallotFunc();
 
-    int                                 groupThreads;
-    Function *                          barrierFunc;
-    Function *                          tidFunc;
-    Function *                          mLongAdvanceFunc;
-    Function *                          mLongAddFunc;
-    GlobalVariable*                     carry;
-    GlobalVariable*                     bubble;
+private:
+    int                         groupThreads;
+    llvm::Function *            barrierFunc;
+    llvm::Function *            tidFunc;
+    llvm::Function *            mLongAdvanceFunc;
+    llvm::Function *            mLongAddFunc;
+    llvm::GlobalVariable*       carry;
+    llvm::GlobalVariable*       bubble;
 };
 
 #if 0
@@ -73,7 +69,7 @@ private:
 class IDISA_NVPTX35_Builder : public IDISA_NVPTX20_Builder {
     IDISA_NVPTX35_Builder(Module * m, int groupSize) : IDISA_NVPTX30_Builder(m, groupSize) {}
     
-    std::pair<Value *, Value *> bitblock_advance(Value * a, Value * shiftin, unsigned shift) override;
+    std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift) override;
 
     ~IDISA_NVPTX35_Builder() {};
     virtual std::string getBuilderUniqueName() override;

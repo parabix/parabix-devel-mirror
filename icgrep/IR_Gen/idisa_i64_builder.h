@@ -8,8 +8,6 @@
  */
 #include <IR_Gen/idisa_builder.h>
 
-using namespace llvm;
-
 namespace IDISA {
 
 class IDISA_I64_Builder : public virtual IDISA_Builder {
@@ -22,8 +20,8 @@ public:
 
     virtual std::string getBuilderUniqueName() override;
 
-    Value * hsimd_packh(unsigned fw, Value * a, Value * b) override;
-    Value * hsimd_packl(unsigned fw, Value * a, Value * b) override;
+    llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     ~IDISA_I64_Builder() {}
 
 };

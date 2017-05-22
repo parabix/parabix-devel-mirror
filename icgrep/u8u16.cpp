@@ -23,14 +23,15 @@
 #include <kernels/kernel_builder.h>
 #include <pablo/pe_zeroes.h>
 #include <toolchain/toolchain.h>
-#include "kernels/streamset.h"                     // for CircularBuffer
-#include "llvm/ADT/StringRef.h"                    // for StringRef
-#include "llvm/IR/CallingConv.h"                   // for ::C
-#include "llvm/IR/DerivedTypes.h"                  // for ArrayType, Pointer...
-#include "llvm/IR/LLVMContext.h"                   // for LLVMContext
-#include "llvm/IR/Value.h"                         // for Value
-#include "llvm/Support/Compiler.h"                 // for LLVM_UNLIKELY
-#include <pablo/builder.hpp>                       // for PabloBuilder
+#include <toolchain/cpudriver.h>
+#include <kernels/streamset.h>
+#include <llvm/ADT/StringRef.h>
+#include <llvm/IR/CallingConv.h>
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/Value.h>
+#include <llvm/Support/Compiler.h>
+#include <pablo/builder.hpp>
 #include <boost/interprocess/anonymous_shared_memory.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <iostream>
@@ -51,7 +52,7 @@ class U8U16Kernel final: public pablo::PabloKernel {
 public:
     U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b);
     bool isCachable() const override { return true; }
-    bool moduleIDisSignature() const override { return true; }
+    bool hasSignature() const override { return false; }
     void generatePabloMethod() override;
 };
 

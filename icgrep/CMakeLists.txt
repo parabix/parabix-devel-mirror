@@ -58,7 +58,9 @@ link_directories(${Boost_LIBRARY_DIR})
 
 SET(OBJECT_CACHE_SRC toolchain/object_cache.cpp)
 
-SET(TOOLCHAIN_SRC toolchain/toolchain.cpp  toolchain/pipeline.cpp ${OBJECT_CACHE_SRC})
+SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/pipeline.cpp toolchain/driver.cpp)
+
+SET(DRIVER_SRC toolchain/cpudriver.cpp toolchain/NVPTXDriver.cpp)
 
 SET(KERNEL_SRC kernels/kernel.cpp kernels/streamset.cpp kernels/interface.cpp kernels/kernel_builder.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp)
@@ -69,13 +71,13 @@ SET(PABLO_SRC pablo/pabloAST.cpp pablo/branch.cpp pablo/codegenstate.cpp pablo/b
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_kernel.cpp pablo/pablo_compiler.cpp pablo/carry_manager.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/analysis/pabloverifier.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/passes/ssapass.cpp)
-SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp pablo/passes/flattenif.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp pablo/optimizers/distributivepass.cpp pablo/passes/flattenif.cpp)
 IF(ENABLE_MULTIPLEXING)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/booleanreassociationpass.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/schedulingprepass.cpp pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 
-add_library(CodeGen ${TOOLCHAIN_SRC} ${KERNEL_SRC} ${IDISA_SRC})
+add_library(CodeGen ${TOOLCHAIN_SRC} ${DRIVER_SRC} ${OBJECT_CACHE_SRC} ${KERNEL_SRC} ${IDISA_SRC})
 add_library(PabloADT ${PABLO_SRC})
 add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
 add_library(RegExpCompiler re/re_parser.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_parser_pcre.cpp re/re_parser_ere.cpp re/re_parser_bre.cpp re/re_parser_prosite.cpp re/re_utility.cpp)
@@ -87,7 +89,8 @@ add_custom_target(RecompileObjectCache ALL touch ${CMAKE_CURRENT_SOURCE_DIR}/${O
 add_dependencies(CodeGen RecompileObjectCache)
 
 # add the executable
-target_link_libraries (PabloADT CodeGen ${REQ_LLVM_LIBRARIES})
+target_link_libraries (CodeGen ${REQ_LLVM_LIBRARIES})
+target_link_libraries (PabloADT CodeGen)
 target_link_libraries (CCADT PabloADT)
 target_link_libraries (UCDlib RegExpADT PabloADT CCADT)
 target_link_libraries (RegExpADT PabloADT CCADT UCDlib)
@@ -205,7 +208,7 @@ IF (PRINT_TIMING_INFORMATION)
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer")
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer -fsanitize=address")
 
 add_test(
   NAME greptest
