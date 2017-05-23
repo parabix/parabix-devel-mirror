@@ -481,7 +481,7 @@ Value * CBuilder::CreateRealloc(Value * const ptr, Value * size) {
 }
 
 PointerType * CBuilder::getVoidPtrTy() const {
-    return TypeBuilder<void *, false>::get(getContext());
+    return TypeBuilder<void *, true>::get(getContext());
 }
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {

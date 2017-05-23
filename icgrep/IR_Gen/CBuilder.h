@@ -188,7 +188,7 @@ public:
     llvm::BasicBlock * CreateBasicBlock(std::string && name);
 
     virtual bool supportsIndirectBr() const {
-        return false;
+        return true;
     }
 
     llvm::Value * CreatePopcount(llvm::Value * bits);
