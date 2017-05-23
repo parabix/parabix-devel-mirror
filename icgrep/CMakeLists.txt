@@ -288,3 +288,8 @@ add_custom_target (viewer
 add_custom_target (text_viewer
   COMMAND python2 viewer.py -t
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance)
+
+add_custom_target (clear_cache
+  COMMAND rm ~/.cache/parabix/*)
+
+
