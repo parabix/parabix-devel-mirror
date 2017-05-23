@@ -49,7 +49,7 @@ void SwizzleGenerator::generateDoBlockMethod(const std::unique_ptr<kernel::Kerne
         // First load all the data.       
         for (unsigned i = 0; i < swizzleFactor; i++) {
             unsigned streamNo = grp * swizzleFactor + i;
-            if (streamNo < swizzleFactor) {
+            if (streamNo < mBitStreamCount) {
                 unsigned inputSetNo = streamNo / inputStreamsPerSet;
                 unsigned j = streamNo % inputStreamsPerSet;
                 sourceBlocks[i] = iBuilder->loadInputStreamBlock("inputGroup" + std::to_string(inputSetNo), iBuilder->getInt32(j));
