@@ -92,7 +92,7 @@ const CodeGenOpt::Level OptLevel = [](const char optLevel) {
         case '1': return CodeGenOpt::Less;
         case '2': return CodeGenOpt::Default;
         case '3': return CodeGenOpt::Aggressive;
-        default: report_fatal_error(optLevel + " is an invalid optimization level.");
+        default: report_fatal_error(std::string(1,optLevel) + " is an invalid optimization level.");
     }
 }(OptLevelOption);
 

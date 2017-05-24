@@ -37,54 +37,18 @@ using namespace llvm;
 static cl::OptionCategory LegacyGrepOptions("A. Standard Grep Options",
                                        "These are standard grep options intended for compatibility with typical grep usage.");
 
-#ifdef FUTURE
-static cl::OptionCategory RegexpOptions("Regular Expression Interpretation", "These options control regular expression interpretation");
-static cl::opt<re::RE_Syntax> RegexpSyntax(cl::desc("Regular expression syntax:"),
-    cl::values(
-        clEnumValN(re::RE_Syntax::FixedStrings, "F", "Fixed strings, separated by newlines"),
-        clEnumValN(re::RE_Syntax::BRE, "G", "Posix basic regular expression (BRE) syntax"),
-        clEnumValN(re::RE_Syntax::ERE, "E", "Posix extended regular expression (ERE) syntax"),
-        clEnumValN(re::RE_Syntax::PROSITE, "PRO", "PROSITE protein patterns syntax"),
-        clEnumValN(re::RE_Syntax::PCRE, "P", "Perl-compatible regular expression (PCRE) syntax - default"),
-               clEnumValEnd), cl::cat(LegacyGrepOptions), cl::Grouping, cl::init(re::RE_Syntax::PCRE));
-#endif
-
-static cl::opt<bool> EntireLineMatching("x", cl::desc("Require that entire lines be matched."), cl::cat(LegacyGrepOptions), cl::Grouping);
-static cl::alias  EntireLineMatchingAlias("line-regexp", cl::desc("Alias for -x"), cl::aliasopt(EntireLineMatching));
-
-static cl::opt<bool> WholeWordMatching("w", cl::desc("Require that whole words be matched."), cl::cat(LegacyGrepOptions), cl::Grouping);
-static cl::alias WholeWordMatchingAlias("word-regexp", cl::desc("Alias for -w"), cl::aliasopt(WholeWordMatching));
 
 static cl::opt<bool> UTF_16("UTF-16", cl::desc("Regular expressions over the UTF-16 representation of Unicode."), cl::cat(LegacyGrepOptions));
 static cl::OptionCategory EnhancedGrepOptions("B. Enhanced Grep Options",
                                        "These are additional options for icgrep functionality and performance.");
 
-static cl::opt<bool> FileNamesOnly("l", cl::desc("Display only the names of matching files."), cl::cat(LegacyGrepOptions), cl::Grouping);
-static cl::alias FileNamesAlias("files-with-matches", cl::desc("Alias for -l"), cl::aliasopt(FileNamesOnly));
-
-static cl::opt<bool> NonMatchingFileNamesOnly("L", cl::desc("Display only the names of nonmatching files."), cl::cat(LegacyGrepOptions), cl::Grouping);
-static cl::alias NonMatchingFileNamesAlias("files-without-match", cl::desc("Alias for -L"), cl::aliasopt(NonMatchingFileNamesOnly));
-
-
-static cl::opt<bool> CountOnly("c", cl::desc("Count and display the matching lines per file only."), cl::cat(LegacyGrepOptions), cl::Grouping);
-static cl::alias CountOnlyLong("count", cl::desc("Alias for -c"), cl::aliasopt(CountOnly));
-
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
 
-static cl::opt<bool> EnterDirectoriesRecursively("r", cl::desc("Recursively process files within directories, (but follow only top-level symlinks unless -R)."), cl::cat(LegacyGrepOptions), cl::Grouping);
-static cl::opt<bool> FollowSubdirectorySymlinks("R", cl::desc("Recursively process files within directories, following symlinks at all levels."), cl::cat(LegacyGrepOptions), cl::Grouping);
-static cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in the pattern and the file."), cl::cat(LegacyGrepOptions), cl::Grouping);
-static cl::alias CaseInsensitiveAlisas("ignore-case", cl::desc("Ignore case distinctions in the pattern and the file."), cl::aliasopt(CaseInsensitive));
-
 static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(LegacyGrepOptions));
 static cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(LegacyGrepOptions));
-static cl::opt<std::string> IRFileName("precompiled", cl::desc("Use precompiled regular expression"), cl::value_desc("LLVM IR file"), cl::init(""));
 
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(1));
-
-static cl::opt<bool> GrepSupport("gs", cl::desc("Grep support. Pipe the output of icgrep into grep. \
-         Gives you colored output + back-referencing capability."), cl::cat(EnhancedGrepOptions));
 
 static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"), cl::cat(EnhancedGrepOptions));
 static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expressions processed by each kernel."), cl::init(1));
@@ -133,17 +97,13 @@ std::vector<re::RE *> readExpressions() {
         regexVector.push_back(inputFiles[0]);
         inputFiles.erase(inputFiles.begin());
     }
-    if (CaseInsensitive) {
+    if (grep::IgnoreCaseFlag) {
         globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
     }
 
     std::vector<re::RE *> REs;
     for (unsigned i = 0; i < regexVector.size(); i++) {
-#ifdef FUTURE
-        re::RE * re_ast = re::RE_Parser::parse(regexVector[i], globalFlags, RegexpSyntax);
-#else
-        re::RE * re_ast = re::RE_Parser::parse(regexVector[i], globalFlags);
-#endif
+        re::RE * re_ast = re::RE_Parser::parse(regexVector[i], globalFlags, grep::RegexpSyntax);
         REs.push_back(re_ast);
     }
 
@@ -168,10 +128,10 @@ std::vector<re::RE *> readExpressions() {
     }
 
     for (re::RE *& re_ast : REs) {
-        if (WholeWordMatching) {
+        if (grep::WordRegexpFlag) {
             re_ast = re::makeSeq({re::makeWordBoundary(), re_ast, re::makeWordBoundary()});
         }
-        if (EntireLineMatching) {
+        if (grep::LineRegexpFlag) {
             re_ast = re::makeSeq({re::makeStart(), re_ast, re::makeEnd()});
         }
     }
@@ -179,13 +139,13 @@ std::vector<re::RE *> readExpressions() {
     return REs;
 }
 
-std::vector<size_t> total_CountOnly;
+std::vector<size_t> total_Count;
 std::mutex count_mutex;
 size_t fileCount;
 void *DoGrep(void *args)
 {
     size_t fileIdx;
-    GrepEngine * grepEngine = (GrepEngine *)args;
+    grep::GrepEngine * grepEngine = (grep::GrepEngine *)args;
 
     count_mutex.lock();
     fileIdx = fileCount;
@@ -193,7 +153,7 @@ void *DoGrep(void *args)
     count_mutex.unlock();
 
     while (fileIdx < allFiles.size()) {
-        total_CountOnly[fileIdx] = grepEngine->doGrep(allFiles[fileIdx], fileIdx);
+        total_Count[fileIdx] = grepEngine->doGrep(allFiles[fileIdx], fileIdx);
         
         count_mutex.lock();
         fileIdx = fileCount;
@@ -205,136 +165,23 @@ void *DoGrep(void *args)
 }
 
 
-// Returns true if the command line argument shouldn't be passed to icGrep or Grep.
-bool isArgUnwantedForAll(char *argument) {
-    std::vector<std::string> unwantedFlags = {"-gs"};
-    for (unsigned i = 0; i < unwantedFlags.size(); ++i){
-        if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-// Filters out the command line strings that shouldn't be passed on to Grep
-bool isArgUnwantedForGrep(char *argument) {
-#ifdef FUTURE
-    std::vector<std::string> unwantedFlags = {"-n", "-P", "-G", "-E", "-PRO"};
-#else
-    std::vector<std::string> unwantedFlags = {"-n"};
-#endif
-
-    for (unsigned i = 0; i < unwantedFlags.size(); ++i){
-        if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
-            return true;
-        }
-    }
-
-    for (unsigned i = 0; i < inputFiles.size(); ++i){    // filter out input content files.
-        if (strcmp(argument, inputFiles[i].c_str()) == 0) {
-            return true;
-        }
-    }
-
-    return false;
-}
-// Filters out the command line strings that shouldn't be passed on to IcGrep
-bool isArgUnwantedForIcGrep(char *argument) {
-    bool isUnwanted = false;
-    std::vector<std::string> unwantedFlags = {"-c"};
-
-    for (unsigned i = 0; i < unwantedFlags.size(); ++i){
-        if (strcmp(argument, unwantedFlags[i].c_str()) == 0) {
-            isUnwanted = true;
-        }
-    }
-
-    return isUnwanted;
-}
-
-/*
-* Constructs a shell command that calls icgrep and then pipes the output to grep.
-* Then executs this shell command using the "system()" function.
-* This allows the output to be colored since all output is piped to grep.
-*/ 
-void pipeIcGrepOutputToGrep(int argc, char *argv[]) {
-    std::string icGrepArguments = "";
-    std::string grepArguments = "";
-
-    // Construct the shell arguments for icgrep and grep 
-    // by filtering out the command line arguments passed into this process.
-    for (int i = 1; i < argc; i++) {
-        if (!isArgUnwantedForAll(argv[i])) {
-
-            if (!isArgUnwantedForIcGrep(argv[i])) {
-                // Wrap everything in quotes since the arguments passed into this program had them stripped by bash.
-                icGrepArguments.append("\"");       
-                icGrepArguments.append(argv[i]);
-                icGrepArguments.append("\" ");
-            }
-
-            if (!isArgUnwantedForGrep(argv[i])) {
-                grepArguments.append("\"");
-                grepArguments.append(argv[i]);
-                grepArguments.append("\" ");
-            }
-        }
-    }
-
-#ifdef FUTURE
-    switch (RegexpSyntax) {
-        case re::RE_Syntax::BRE:
-            grepArguments.append("\"-G\" ");
-            break;
-        case re::RE_Syntax::ERE:
-            grepArguments.append("\"-E\" ");
-            break;
-        case re::RE_Syntax::PROSITE:
-            grepArguments.append("\"-PRO\" ");
-            break;
-        case re::RE_Syntax::PCRE:
-            grepArguments.append("\"-P\" ");
-            break;
-        default:
-            //TODO: handle fix string
-            break;
-    }
-#endif
-
-    std::string systemCall = argv[0];
-    systemCall.append(" ");
-    systemCall.append(icGrepArguments);
-    systemCall.append(" ");
-#ifdef FUTURE
-    systemCall.append(" | grep --color=always ");
-#else
-    systemCall.append(" | grep --color=always -P ");
-#endif
-    systemCall.append(grepArguments);
-
-    const auto rc = system(systemCall.c_str());
-    if (LLVM_UNLIKELY(rc < 0)) {
-        throw std::runtime_error("Error calling grep: " + std::string(strerror(errno)));
-    }
-}
-
-
 // This is a stub, to be expanded later.
 bool excludeDirectory(boost::filesystem::path dirpath) { return dirpath.filename() == ".svn";}
 
 std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
     using namespace boost::filesystem;
-    symlink_option follow_symlink = FollowSubdirectorySymlinks ? symlink_option::recurse : symlink_option::none;
+    symlink_option follow_symlink = grep::DereferenceRecursiveFlag ? symlink_option::recurse : symlink_option::none;
     std::vector<std::string> expanded_paths;
     boost::system::error_code errc;
-    if (FollowSubdirectorySymlinks) {
-        EnterDirectoriesRecursively = true;
+    if (grep::DereferenceRecursiveFlag) {
+        grep::RecursiveFlag = true;
     }
     for (const std::string & f : inputFiles) {
 //        if (f == "-") {
 //            continue;
 //        }
         path p(f);
-        if (LLVM_UNLIKELY(EnterDirectoriesRecursively && is_directory(p))) {
+        if (LLVM_UNLIKELY(grep::RecursiveFlag && is_directory(p))) {
             if (!excludeDirectory(p)) {
                 recursive_directory_iterator di(p, follow_symlink, errc), end;
                 if (errc) {
@@ -366,78 +213,52 @@ std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
 
 
 int main(int argc, char *argv[]) {
+    
     llvm::install_fatal_error_handler(&icgrep_error_handler);
     AddParabixVersionPrinter();
 #ifndef USE_LLVM_3_6
-    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
+    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, grep::grep_regexp_flags(), grep::grep_output_flags(), re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
 #endif
     cl::ParseCommandLineOptions(argc, argv);
-#ifdef FUTURE
-    if (RegexpSyntax == re::RE_Syntax::FixedStrings) {
+    if (grep::RegexpSyntax == re::RE_Syntax::FixedStrings) {
         llvm::report_fatal_error("Sorry, FixedStrings syntax is not fully supported\n.");
     }
-#endif
 
     const auto REs = readExpressions();
 
-    if (GrepSupport) {  // Calls icgrep again on command line and passes output to grep.
-        pipeIcGrepOutputToGrep(argc, argv);
-        return 0;   // icgrep is called again, so we need to end this process.
-    }
-
-
     allFiles = getFullFileList(inputFiles);
 
-    GrepEngine grepEngine;
+    grep::GrepEngine grepEngine;
 
     if (allFiles.empty()) {
 
-        grepEngine.grepCodeGen(REs, CountOnly, UTF_16, GrepSource::StdIn);
+        grepEngine.grepCodeGen(REs, grep::Mode, UTF_16, GrepSource::StdIn);
         allFiles = { "-" };
-        initFileResult(allFiles);
-        total_CountOnly.resize(1);
-        total_CountOnly[0] = grepEngine.doGrep(STDIN_FILENO, 0);
+        grep::initFileResult(allFiles);
+        total_Count.resize(1);
+        total_Count[0] = grepEngine.doGrep(STDIN_FILENO, 0);
 
     } else {
         
         setNVPTXOption();
         
         if(codegen::NVPTX){
-            grepEngine.grepCodeGen_nvptx(REs, CountOnly, UTF_16);
+            grepEngine.grepCodeGen_nvptx(REs, grep::Mode, UTF_16);
             for (unsigned i = 0; i != allFiles.size(); ++i) {
                 grepEngine.doGrep(allFiles[i]);
             }         
             return 0;
         }
         else{
-            grepEngine.grepCodeGen(REs, CountOnly, UTF_16, GrepSource::File);
+            grepEngine.grepCodeGen(REs, grep::Mode, UTF_16, GrepSource::File);
         }
 
-        if (FileNamesOnly && NonMatchingFileNamesOnly) {
-            // Strange request: print names of all matching files and all non-matching files: i.e., all of them.
-            // (Although GNU grep prints nothing.)
-            for (auto & f : allFiles) {
-                if (boost::filesystem::exists(f)) {
-                    std::cout << f << "\n";
-                } else {
-                    std::cerr << "Error: cannot open " << f << " for processing. Skipped.\n";
-                }
-            }
-            exit(0);
-        }
-
-        if (FileNamesOnly) {
-            llvm::report_fatal_error("Sorry, -l/-files-with-matches not yet supported\n.");
-        }
-        if (NonMatchingFileNamesOnly) {
-            llvm::report_fatal_error("Sorry, -L/-files-without-match not yet supported\n.");
-        }
-        initFileResult(allFiles);
-        total_CountOnly.resize(allFiles.size());
+        grep::initFileResult(allFiles);
+        total_Count.resize(allFiles.size());
 
         if (Threads <= 1) {
             for (unsigned i = 0; i != allFiles.size(); ++i) {
-                total_CountOnly[i] = grepEngine.doGrep(allFiles[i], i);
+                total_Count[i] = grepEngine.doGrep(allFiles[i], i);
             }
         } else if (Threads > 1) {
             const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
@@ -460,7 +281,7 @@ int main(int argc, char *argv[]) {
 
     }
     
-    PrintResult(CountOnly, total_CountOnly);
+    grep::PrintResult(grep::Mode, total_Count);
     
     return 0;
 }

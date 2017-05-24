@@ -642,8 +642,8 @@ RE * RE_Parser::parsePropertyExpression() {
 
 RE * RE_Parser::parseRegexPropertyValue(const std::string & propName, const std::string& regexValue) {
     RE * propValueRe = RE_Parser::parse("^" + regexValue + "$", fModeFlagSet, mReSyntax);
-    GrepEngine engine;
-    engine.grepCodeGen({ propValueRe }, false, false, GrepSource::Internal, GrepType::PropertyValue);
+    grep::GrepEngine engine;
+    engine.grepCodeGen({ propValueRe }, grep::NormalMode, false, GrepSource::Internal, GrepType::PropertyValue);
     const auto matches = engine.grepPropertyValues(propName);
     if (matches.empty()) {
         ParseFailure("regex " + regexValue + " match no property values");
@@ -675,8 +675,8 @@ Name * RE_Parser::parseNamePatternExpression(){
     // Embed the nameRE in ";.*$nameRE" to skip the codepoint field of Uname.txt
     RE * embedded = makeSeq({mMemoizer.memoize(makeCC(0x3B)), makeRep(makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
     
-    GrepEngine engine;
-    engine.grepCodeGen({ embedded }, false, false, GrepSource::Internal, GrepType::NameExpression);
+    grep::GrepEngine engine;
+    engine.grepCodeGen({ embedded }, grep::NormalMode, false, GrepSource::Internal, GrepType::NameExpression);
     CC * codepoints = engine.grepCodepoints();
     
     if (codepoints) {

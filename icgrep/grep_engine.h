@@ -8,18 +8,42 @@
 #include <grep_type.h>  // for GrepType, GrepType::Normal
 #include <string>       // for string
 #include <vector>
+#include <re/re_parser.h>  // for 
 
 namespace re { class CC; }
 namespace re { class RE; }
+namespace llvm { namespace cl { class OptionCategory; } }
+
+namespace grep {
+
+// Regular expression syntax, interpretation and processing.
+extern re::RE_Syntax RegexpSyntax;
+extern bool IgnoreCaseFlag;
+extern bool InvertMatchFlag;
+extern bool LineRegexpFlag;
+extern bool WordRegexpFlag;
+
+// Grep input sources and interpretation
+extern bool RecursiveFlag;
+extern bool DereferenceRecursiveFlag;
+
+// Grep output modes and flags.
+enum GrepModeType {QuietMode, FilesWithMatch, FilesWithoutMatch, CountOnly, NormalMode};
+extern GrepModeType Mode;
+
+
+const llvm::cl::OptionCategory * grep_regexp_flags();
+const llvm::cl::OptionCategory * grep_input_flags();
+const llvm::cl::OptionCategory * grep_output_flags();
 
 class GrepEngine {
 public:
 
     GrepEngine();
 
-    void grepCodeGen(std::vector<re::RE *> REs, bool CountOnly, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
+    void grepCodeGen(std::vector<re::RE *> REs, GrepModeType grepMode, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
 
-    void grepCodeGen_nvptx(std::vector<re::RE *> REs, bool CountOnly, bool UTF_16);
+    void grepCodeGen_nvptx(std::vector<re::RE *> REs, GrepModeType grepMode, bool UTF_16);
 
     void doGrep(const std::string & fileName) const;
 
@@ -45,6 +69,7 @@ void setParsedCodePointSet();
 void setParsedPropertyValues();
 
 void initFileResult(std::vector<std::string> filenames);
-void PrintResult(bool CountOnly, std::vector<size_t> & total_CountOnly);
+void PrintResult(GrepModeType grepMode, std::vector<size_t> & total_CountOnly);
+}
 
 #endif

@@ -37,7 +37,6 @@ static cl::bits<RE_AlgorithmFlags>
                               clEnumVal(DisableMatchStar, "disable MatchStar optimization"), 
                               clEnumVal(DisableUnicodeMatchStar, "disable Unicode MatchStar optimization"),
                               clEnumVal(DisableUnicodeLineBreak, "disable Unicode line breaks - use LF only"),
-                              clEnumValN(InvertMatches, "v", "select non-matching lines"),
                               clEnumValEnd), 
                    cl::cat(RegexOptions));
 

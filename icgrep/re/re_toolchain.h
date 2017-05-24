@@ -19,7 +19,7 @@ enum RE_PrintFlags {
     
 enum RE_AlgorithmFlags {
     DisableLog2BoundedRepetition, DisableIfHierarchy, DisableMatchStar, DisableUnicodeMatchStar, 
-    DisableUnicodeLineBreak, InvertMatches, UsePregeneratedUnicode
+    DisableUnicodeLineBreak, UsePregeneratedUnicode
 };
     
 bool AlgorithmOptionIsSet(RE_AlgorithmFlags flag);
