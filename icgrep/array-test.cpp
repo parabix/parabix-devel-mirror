@@ -182,16 +182,10 @@ void pipeline(ParabixDriver & pxDriver, const unsigned count) {
     pxDriver.generatePipelineIR();
     iBuilder->CreateRetVoid();
 
-    pxDriver.linkAndFinalize();
+    pxDriver.finalizeObject();
 }
 
 typedef void (*MatchParens)(char * byteStream, size_t fileSize);
-
-MatchParens generateAlgorithm() {
-    ParabixDriver pxDriver("mp");
-    pipeline(pxDriver, 3);
-    return reinterpret_cast<MatchParens>(pxDriver.getPointerToMain());
-}
 
 template <typename T>
 std::ostream & operator<< (std::ostream& out, const std::vector<T>& v) {
@@ -253,9 +247,11 @@ void run(MatchParens match, const std::string & fileName) {
 
 int main(int argc, char *argv[]) {
     cl::ParseCommandLineOptions(argc, argv);
-    auto f = generateAlgorithm();
+    ParabixDriver pxDriver("mp");
+    pipeline(pxDriver, 3);
+    auto main = reinterpret_cast<MatchParens>(pxDriver.getMain());
     for (const auto & inputFile : inputFiles) {
-        run(f, inputFile);
+        run(main, inputFile);
     }
     return 0;
 }

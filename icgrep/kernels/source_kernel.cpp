@@ -92,7 +92,7 @@ void MMapSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     }
     const auto pageSize = getpagesize();
     if (LLVM_LIKELY((pageSize & (pageSize - 1)) == 0)) {
-        consumed = iBuilder->CreateAnd(consumed, ConstantExpr::getNot(ConstantInt::get(consumedTy, pageSize - 1)));
+        consumed = iBuilder->CreateAnd(consumed, ConstantExpr::getNeg(ConstantInt::get(consumedTy, pageSize)));
     } else {
         consumed = iBuilder->CreateSub(consumed, iBuilder->CreateURem(consumed, ConstantInt::get(consumedTy, pageSize)));
     }

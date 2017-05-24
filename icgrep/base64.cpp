@@ -95,17 +95,11 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
 
     iBuilder->CreateRetVoid();
 
-    pxDriver.linkAndFinalize();
+    pxDriver.finalizeObject();
 }
 
 
 typedef void (*base64FunctionType)(const uint32_t fd, char * outputBuffer);
-
-base64FunctionType base64CodeGen(void) {
-    ParabixDriver pxDriver("base64");
-    base64PipelineGen(pxDriver);
-    return reinterpret_cast<base64FunctionType>(pxDriver.getPointerToMain());
-}
 
 size_t file_size(const int fd) {
     struct stat st;
@@ -141,16 +135,17 @@ void base64(base64FunctionType fn_ptr, const std::string & fileName) {
     
 }
 
-
 int main(int argc, char *argv[]) {
     AddParabixVersionPrinter();
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&base64Options, codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
 
-    base64FunctionType fn_ptr = base64CodeGen();
+    ParabixDriver pxDriver("base64");
+    base64PipelineGen(pxDriver);
+    auto main = reinterpret_cast<base64FunctionType>(pxDriver.getMain());
 
     for (unsigned i = 0; i != inputFiles.size(); ++i) {
-        base64(fn_ptr, inputFiles[i]);
+        base64(main, inputFiles[i]);
     }
 
     return 0;

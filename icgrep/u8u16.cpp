@@ -356,7 +356,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     
     iBuilder->CreateRetVoid();
     
-    pxDriver.linkAndFinalize();
+    pxDriver.finalizeObject();
 }
 
 void u8u16PipelineGen(ParabixDriver & pxDriver) {
@@ -429,20 +429,10 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     
     iBuilder->CreateRetVoid();
 
-    pxDriver.linkAndFinalize();
+    pxDriver.finalizeObject();
 }
 
 typedef void (*u8u16FunctionType)(uint32_t fd, char * output_data);
-
-u8u16FunctionType u8u16CodeGen() {
-    ParabixDriver pxDriver("u8u16");
-    if (enableAVXdel && AVX2_available() && codegen::BlockSize==256) {
-        u8u16PipelineAVX2Gen(pxDriver);
-    } else{
-        u8u16PipelineGen(pxDriver);
-    }
-    return reinterpret_cast<u8u16FunctionType>(pxDriver.getPointerToMain());
-}
 
 size_t file_size(const int fd) {
     struct stat st;
@@ -482,7 +472,14 @@ int main(int argc, char *argv[]) {
     AddParabixVersionPrinter();
     cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&u8u16Options, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     cl::ParseCommandLineOptions(argc, argv);
-    u8u16(u8u16CodeGen(), inputFile);
+    ParabixDriver pxDriver("u8u16");
+    if (enableAVXdel && AVX2_available() && codegen::BlockSize==256) {
+        u8u16PipelineAVX2Gen(pxDriver);
+    } else {
+        u8u16PipelineGen(pxDriver);
+    }
+    auto u8u16Function = reinterpret_cast<u8u16FunctionType>(pxDriver.getMain());
+    u8u16(u8u16Function, inputFile);
     return 0;
 }
 

@@ -242,14 +242,13 @@ int main(int argc, char *argv[]) {
         
         setNVPTXOption();
         
-        if(codegen::NVPTX){
+        if (codegen::NVPTX) {
             grepEngine.grepCodeGen_nvptx(REs, grep::Mode, UTF_16);
             for (unsigned i = 0; i != allFiles.size(); ++i) {
                 grepEngine.doGrep(allFiles[i]);
-            }         
+            }
             return 0;
-        }
-        else{
+        } else {
             grepEngine.grepCodeGen(REs, grep::Mode, UTF_16, GrepSource::File);
         }
 

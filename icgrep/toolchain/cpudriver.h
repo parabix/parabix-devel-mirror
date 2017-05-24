@@ -18,9 +18,9 @@ public:
 
     void makeKernelCall(kernel::Kernel * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) override;
 
-    void linkAndFinalize();
+    void finalizeObject() override;
 
-    void * getPointerToMain();
+    void * getMain() override; // "main" exists until the driver is deleted
 
 private:
 

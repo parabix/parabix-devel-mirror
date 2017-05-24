@@ -71,25 +71,16 @@ void preprocessPipeline(ParabixDriver & pxDriver){
     iBuilder->CreateRetVoid();
 
     pxDriver.LinkFunction(*scanMatchK, "wrapped_report_pos", &wrapped_report_pos);
-    pxDriver.linkAndFinalize();
+    pxDriver.finalizeObject();
 
 }
 
 typedef void (*preprocessFunctionType)(char * byte_data, size_t filesize);
 
-preprocessFunctionType preprocessCodeGen() {
-                            
-    ParabixDriver pxDriver("preprocess");
-
-    preprocessPipeline(pxDriver);
-    
-    preprocessFunctionType main = reinterpret_cast<preprocessFunctionType>(pxDriver.getPointerToMain());
-
-    return main;
-}
-
 std::vector<size_t> preprocess(char * fileBuffer, size_t fileSize) {
-    preprocessFunctionType preprocess_ptr = preprocessCodeGen();
-    preprocess_ptr(fileBuffer, fileSize);
+    ParabixDriver pxDriver("preprocess");
+    preprocessPipeline(pxDriver);
+    auto main = reinterpret_cast<preprocessFunctionType>(pxDriver.getPointerToMain());
+    main(fileBuffer, fileSize);
     return LFPositions;
 }

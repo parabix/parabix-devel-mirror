@@ -32,3 +32,4 @@ kernel::Kernel * Driver::addKernelInstance(std::unique_ptr<kernel::Kernel> kb) {
     mOwnedKernels.emplace_back(std::move(kb));
     return mOwnedKernels.back().get();
 }
+

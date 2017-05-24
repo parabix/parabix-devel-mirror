@@ -191,14 +191,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     
     iBuilder->CreateRetVoid();
 
-    pxDriver.linkAndFinalize();
-}
-
-
-WordCountFunctionType wcCodeGen() {
-    ParabixDriver pxDriver("wc");
-    wcPipelineGen(pxDriver);
-    return reinterpret_cast<WordCountFunctionType>(pxDriver.getPointerToMain());
+    pxDriver.finalizeObject();
 }
 
 void wc(WordCountFunctionType fn_ptr, const int64_t fileIdx) {
@@ -235,7 +228,9 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    WordCountFunctionType wordCountFunctionPtr = wcCodeGen();
+    ParabixDriver pxDriver("wc");
+    wcPipelineGen(pxDriver);
+    auto wordCountFunctionPtr = reinterpret_cast<WordCountFunctionType>(pxDriver.getMain());
 
     const auto fileCount = inputFiles.size();
     lineCount.resize(fileCount);

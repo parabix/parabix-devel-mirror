@@ -136,7 +136,7 @@ Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, Fu
     return f;
 }
 
-void ParabixDriver::linkAndFinalize() {
+void ParabixDriver::finalizeObject() {
 
     legacy::PassManager PM;
     std::unique_ptr<raw_fd_ostream> IROutputStream(nullptr);
@@ -218,12 +218,12 @@ void ParabixDriver::linkAndFinalize() {
 
 }
 
-void * ParabixDriver::getPointerToMain() {
+void * ParabixDriver::getMain() {
     return mEngine->getPointerToNamedFunction("Main");
 }
 
 ParabixDriver::~ParabixDriver() {
-//    delete mEngine;
+    delete mEngine;
     delete mCache;
     delete mTarget;
 }

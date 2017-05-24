@@ -236,7 +236,7 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
 
     idb->CreateRetVoid();
 
-    pxDriver.linkAndFinalize();
+    pxDriver.finalizeObject();
 }
 
 class PreprocessKernel final: public pablo::PabloKernel {
@@ -308,25 +308,13 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 
     iBuilder->CreateRetVoid();
 
-    pxDriver.linkAndFinalize();
+    pxDriver.finalizeObject();
 }
 
 
 typedef void (*preprocessFunctionType)(const int fd, char * output_data);
 
-preprocessFunctionType preprocessCodeGen() {
-    ParabixDriver pxDriver("preprocess");
-    preprocessPipeline(pxDriver);
-    return reinterpret_cast<preprocessFunctionType>(pxDriver.getPointerToMain());
-}
-
 typedef void (*editdFunctionType)(char * byte_data, size_t filesize);
-
-editdFunctionType editdCodeGen(const std::vector<std::string> & patterns) {
-    ParabixDriver pxDriver("editd");
-    editdPipeline(pxDriver, patterns);
-    return reinterpret_cast<editdFunctionType>(pxDriver.getPointerToMain());
-}
 
 static char * chStream;
 static size_t size;
@@ -372,7 +360,10 @@ void * DoEditd(void *)
     count_mutex.unlock();
 
     while (groupIdx < pattGroups.size()){
-        editdFunctionType editd_ptr = editdCodeGen(pattGroups[groupIdx]);
+
+        ParabixDriver pxDriver("editd");
+        editdPipeline(pxDriver, pattGroups[groupIdx]);
+        auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
         editd(editd_ptr, chStream, size);
 
         count_mutex.lock();
@@ -600,7 +591,9 @@ int main(int argc, char *argv[]) {
     codegen::BlockSize = 64;
 #endif
 
-    preprocessFunctionType preprocess_ptr = preprocessCodeGen();
+    ParabixDriver pxDriver("preprocess");
+    preprocessPipeline(pxDriver);
+    auto preprocess_ptr = reinterpret_cast<preprocessFunctionType>(pxDriver.getMain());
     preprocess(preprocess_ptr);
 
 #ifdef CUDA_ENABLED
@@ -631,13 +624,19 @@ int main(int argc, char *argv[]) {
 #endif
 
     if(pattVector.size() == 1){
-        editdFunctionType editd_ptr = editdCodeGen(pattVector);
+
+        ParabixDriver pxDriver("editd");
+        editdPipeline(pxDriver, pattVector);
+        auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
         editd(editd_ptr, chStream, size);
     }
     else{
         if (Threads == 1) {
             for(unsigned i=0; i<pattGroups.size(); i++){
-                editdFunctionType editd_ptr = editdCodeGen(pattGroups[i]);
+
+                ParabixDriver pxDriver("editd");
+                editdPipeline(pxDriver, pattGroups[i]);
+                auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
                 editd(editd_ptr, chStream, size);
             }
         }

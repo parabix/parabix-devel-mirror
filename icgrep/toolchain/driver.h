@@ -39,7 +39,9 @@ public:
     template <typename ExternalFunctionType>
     llvm::Function * LinkFunction(kernel::Kernel & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const;
 
-    llvm::GenericValue getPointerToMain(llvm::Function * f, const std::vector<llvm::GenericValue> & ArgValues);
+    virtual void finalizeObject() = 0;
+
+    virtual void * getMain() = 0; // "main" exists until the driver is deleted
 
 protected:
 

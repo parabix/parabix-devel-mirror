@@ -13,6 +13,8 @@
 namespace re { class CC; }
 namespace re { class RE; }
 namespace llvm { namespace cl { class OptionCategory; } }
+class Driver;
+
 
 namespace grep {
 
@@ -41,6 +43,9 @@ public:
 
     GrepEngine();
 
+
+    ~GrepEngine();
+
     void grepCodeGen(std::vector<re::RE *> REs, GrepModeType grepMode, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
 
     void grepCodeGen_nvptx(std::vector<re::RE *> REs, GrepModeType grepMode, bool UTF_16);
@@ -59,7 +64,7 @@ public:
     
 private:
    
-    void * mGrepFunction;
+    Driver * mGrepDriver;
 };
 
 

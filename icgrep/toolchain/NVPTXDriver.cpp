@@ -194,7 +194,7 @@ static int llvm2ptx(Module * M, std::string PTXFilename) {
     return 0;
 }
 
-void NVPTXDriver::finalizeAndCompile(Function * mainFunc, std::string PTXFilename) {
+void NVPTXDriver::finalizeObject() {
 
     legacy::PassManager PM;
     PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
@@ -207,6 +207,8 @@ void NVPTXDriver::finalizeAndCompile(Function * mainFunc, std::string PTXFilenam
         iBuilder->setKernel(kb);
         kb->generateKernel(iBuilder);
     }
+
+    Function * mainFunc = mMainModule->getFunction("Main");
 
     MDNode * Node = MDNode::get(mMainModule->getContext(),
                                 {llvm::ValueAsMetadata::get(mainFunc),
@@ -221,7 +223,13 @@ void NVPTXDriver::finalizeAndCompile(Function * mainFunc, std::string PTXFilenam
         mMainModule->dump();
     }
 
+    const auto PTXFilename = mMainModule->getModuleIdentifier() + ".ptx";
+
     llvm2ptx(mMainModule, PTXFilename);
+}
+
+void * NVPTXDriver::getMain() {
+    report_fatal_error("NVPTX must be executed by calling RunPTX");
 }
 
 NVPTXDriver::~NVPTXDriver() {

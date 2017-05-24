@@ -192,6 +192,11 @@ include(CheckFunctionExists)
 CHECK_FUNCTION_EXISTS(aligned_alloc STDLIB_HAS_ALIGNED_ALLOC)
 IF (STDLIB_HAS_ALIGNED_ALLOC)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DSTDLIB_HAS_ALIGNED_ALLOC")
+ELSE()
+CHECK_FUNCTION_EXISTS(posix_memalign STDLIB_HAS_POSIX_MEMALIGN)
+IF (!STDLIB_HAS_POSIX_MEMALIGN)
+MESSAGE(FATAL_ERROR "stdlib.h does not contain either aligned_alloc or posix_memalign" )
+ENDIF()
 ENDIF()
 
 
@@ -215,7 +220,7 @@ IF (PRINT_TIMING_INFORMATION)
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer -fsanitize=address")
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address")
 
 add_test(
   NAME greptest

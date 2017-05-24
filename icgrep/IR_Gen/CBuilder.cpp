@@ -281,6 +281,42 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     return ptr;
 }
 
+
+Value * CBuilder::CreateRealloc(Value * const ptr, Value * size) {
+    Module * const m = getModule();
+    IntegerType * const sizeTy = getSizeTy();
+    PointerType * const voidPtrTy = getVoidPtrTy();
+    Function * f = m->getFunction("realloc");
+    if (f == nullptr) {
+        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false);
+        f = Function::Create(fty, Function::ExternalLinkage, "realloc", m);
+        f->setCallingConv(CallingConv::C);
+        f->setDoesNotAlias(0);
+        f->setDoesNotAlias(1);
+        // f = LinkFunction("realloc", &realloc);
+    }
+    Value * const addr = CreatePointerCast(ptr, voidPtrTy);
+    size = CreateZExtOrTrunc(size, sizeTy);
+    CallInst * const ci = CreateCall(f, {addr, size});
+    ci->setTailCall();
+    return CreatePointerCast(ci, ptr->getType());
+}
+
+void CBuilder::CreateFree(Value * ptr) {
+    assert (ptr->getType()->isPointerTy());
+    Module * const m = getModule();
+    Type * const voidPtrTy =  getVoidPtrTy();
+    Function * f = m->getFunction("free");
+    if (f == nullptr) {
+        FunctionType * fty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
+        f = Function::Create(fty, Function::ExternalLinkage, "free", m);
+        f->setCallingConv(CallingConv::C);
+        // f = LinkFunction("free", &std::free);
+    }
+    ptr = CreatePointerCast(ptr, voidPtrTy);
+    CreateCall(f, ptr)->setTailCall();
+}
+
 Value * CBuilder::CreateAnonymousMMap(Value * size) {
     PointerType * const voidPtrTy = getVoidPtrTy();
     IntegerType * const intTy = getInt32Ty();
@@ -443,41 +479,6 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
     }
     addr = CreatePointerCast(addr, voidPtrTy);
     return CreateCall(munmapFunc, {addr, len});
-}
-
-void CBuilder::CreateFree(Value * ptr) {
-    assert (ptr->getType()->isPointerTy());
-    Module * const m = getModule();
-    Type * const voidPtrTy =  getVoidPtrTy();
-    Function * f = m->getFunction("free");
-    if (f == nullptr) {
-        FunctionType * fty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
-        f = Function::Create(fty, Function::ExternalLinkage, "free", m);
-        f->setCallingConv(CallingConv::C);
-        // f = LinkFunction("free", &std::free);
-    }
-    ptr = CreatePointerCast(ptr, voidPtrTy);
-    CreateCall(f, ptr)->setTailCall();
-}
-
-Value * CBuilder::CreateRealloc(Value * const ptr, Value * size) {
-    Module * const m = getModule();
-    IntegerType * const sizeTy = getSizeTy();
-    PointerType * const voidPtrTy = getVoidPtrTy();
-    Function * f = m->getFunction("realloc");
-    if (f == nullptr) {
-        FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false);
-        f = Function::Create(fty, Function::ExternalLinkage, "realloc", m);
-        f->setCallingConv(CallingConv::C);
-        f->setDoesNotAlias(0);
-        f->setDoesNotAlias(1);
-        // f = LinkFunction("realloc", &realloc);
-    }
-    Value * const addr = CreatePointerCast(ptr, voidPtrTy);
-    size = CreateZExtOrTrunc(size, sizeTy);
-    CallInst * const ci = CreateCall(f, {addr, size});
-    ci->setTailCall();
-    return CreatePointerCast(ci, ptr->getType());
 }
 
 PointerType * CBuilder::getVoidPtrTy() const {

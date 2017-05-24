@@ -107,14 +107,14 @@ void generatePipeline(ParabixDriver & pxDriver) {
 
     iBuilder->CreateRetVoid();
  
-    pxDriver.linkAndFinalize();
+    pxDriver.finalizeObject();
 }
 
 
 MainFunctionType codeGen() {
     ParabixDriver pxDriver("lz4d");
     generatePipeline(pxDriver);
-    return reinterpret_cast<MainFunctionType>(pxDriver.getPointerToMain());
+    return reinterpret_cast<MainFunctionType>(pxDriver.getMain());
 }
 
 
@@ -148,8 +148,11 @@ int main(int argc, char *argv[]) {
     mappedFile.open(fileName, lz4Frame.getBlocksLength() + lz4Frame.getBlocksStart());
     char *fileBuffer = const_cast<char *>(mappedFile.data()) + lz4Frame.getBlocksStart();
 
-    MainFunctionType fn_ptr = codeGen();
-    fn_ptr(fileBuffer, lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
+    ParabixDriver pxDriver("lz4d");
+    generatePipeline(pxDriver);
+    auto main = reinterpret_cast<MainFunctionType>(pxDriver.getMain());
+
+    main(fileBuffer, lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
 
     mappedFile.close();
     return 0;
