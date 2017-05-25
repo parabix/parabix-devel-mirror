@@ -153,20 +153,20 @@ static cl::opt<bool, true> LineBuffered("line-buffered", cl::location(LineBuffer
 bool NormalizeLineBreaksFlag;
 static cl::opt<bool, true> NormalizeLineBreaks("normalize-line-breaks", cl::location(NormalizeLineBreaksFlag), cl::desc("Normalize line breaks to LF."), cl::cat(Output_Options));
 
-size_t AfterContextFlag;
-static cl::opt<size_t, true> AfterContext("A", cl::location(AfterContextFlag), cl::desc("Print <num> lines of context after each matching line."), cl::cat(Output_Options), cl::Grouping);
+int AfterContextFlag;
+static cl::opt<int, true> AfterContext("A", cl::location(AfterContextFlag), cl::desc("Print <num> lines of context after each matching line."), cl::cat(Output_Options), cl::Grouping, cl::Prefix);
 static cl::alias AfterContextAlias("after-context", cl::desc("Alias for -A"), cl::aliasopt(AfterContext));
 
-size_t BeforeContextFlag;
-static cl::opt<size_t, true> BeforeContext("B", cl::location(BeforeContextFlag), cl::desc("Print <num>lines of context before each matching line."), cl::cat(Output_Options), cl::Grouping);
+int BeforeContextFlag;
+static cl::opt<int, true> BeforeContext("B", cl::location(BeforeContextFlag), cl::desc("Print <num>lines of context before each matching line."), cl::cat(Output_Options), cl::Grouping, cl::Prefix);
 static cl::alias BeforeContextAlias("before-context", cl::desc("Alias for -B"), cl::aliasopt(BeforeContext));
 
-size_t ContextFlag;
-static cl::opt<size_t, true> Context("C", cl::location(ContextFlag), cl::desc("Print <num> lines of context before and after each matching line."), cl::cat(Output_Options), cl::Grouping);
+int ContextFlag;
+static cl::opt<int, true> Context("C", cl::location(ContextFlag), cl::desc("Print <num> lines of context before and after each matching line."), cl::cat(Output_Options), cl::Grouping, cl::Prefix);
 static cl::alias ContextAlias("context", cl::desc("Alias for -C"), cl::aliasopt(Context));
 
-size_t MaxCountFlag;
-static cl::opt<size_t, true> MaxCount("m", cl::location(MaxCountFlag), cl::desc("Process only the first <num> matches per file."), cl::cat(Output_Options), cl::Grouping);
+int MaxCountFlag;
+static cl::opt<int, true> MaxCount("m", cl::location(MaxCountFlag), cl::desc("Process only the first <num> matches per file."), cl::cat(Output_Options), cl::Grouping, cl::Prefix);
 static cl::alias MaxCountAlias("max-count", cl::desc("Alias for -m"), cl::aliasopt(MaxCount));
     
 std::string LabelFlag;

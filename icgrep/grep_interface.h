@@ -75,10 +75,10 @@ extern bool InitialTabFlag; // -T
 extern bool OnlyMatchingFlag; // -o
 extern bool LineBufferedFlag; // -line-buffered
 extern bool NormalizeLineBreaksFlag; // -normalize-line-breaks
-extern size_t AfterContextFlag; // -A
-extern size_t BeforeContextFlag; // -B
-extern size_t ContextFlag; // -C
-extern size_t MaxCountFlag; // -m
+extern int AfterContextFlag; // -A
+extern int BeforeContextFlag; // -B
+extern int ContextFlag; // -C
+extern int MaxCountFlag; // -m
     
 
 //
