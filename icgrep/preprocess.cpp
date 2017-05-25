@@ -80,7 +80,7 @@ typedef void (*preprocessFunctionType)(char * byte_data, size_t filesize);
 std::vector<size_t> preprocess(char * fileBuffer, size_t fileSize) {
     ParabixDriver pxDriver("preprocess");
     preprocessPipeline(pxDriver);
-    auto main = reinterpret_cast<preprocessFunctionType>(pxDriver.getPointerToMain());
+    auto main = reinterpret_cast<preprocessFunctionType>(pxDriver.getMain());
     main(fileBuffer, fileSize);
     return LFPositions;
 }
