@@ -17,6 +17,7 @@
 #include <re/re_parser.h>
 #include <re/re_utility.h>
 #include <grep_engine.h>
+#include <grep_interface.h>
 #include <fstream>
 #include <string>
 #include <toolchain/toolchain.h>
@@ -53,27 +54,6 @@ static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(
 static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"), cl::cat(EnhancedGrepOptions));
 static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expressions processed by each kernel."), cl::init(1));
 static std::vector<std::string> allFiles;
-//
-// Handler for errors reported through llvm::report_fatal_error.  Report
-// and signal error code 2 (grep convention).
-// 
-static void icgrep_error_handler(void *UserData, const std::string &Message, bool GenCrashDiag) {
-    #ifndef NDEBUG
-    throw std::runtime_error(Message);
-    #else
-    // Modified from LLVM's internal report_fatal_error logic.
-    SmallVector<char, 64> Buffer;
-    raw_svector_ostream OS(Buffer);
-    OS << "icgrep ERROR: " << Message << "\n";
-    StringRef MessageStr = OS.str();
-    ssize_t written = ::write(2, MessageStr.data(), MessageStr.size());
-    (void)written; // If something went wrong, we deliberately just give up.
-    // Run the interrupt handlers to make sure any special cleanups get done, in
-    // particular that we remove files registered with RemoveFileOnSignal.
-    llvm::sys::RunInterruptHandlers();
-    exit(2);
-    #endif
-}
 
 static re::ModeFlagSet globalFlags = 0;
 
@@ -213,17 +193,9 @@ std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
 
 
 int main(int argc, char *argv[]) {
-    
-    llvm::install_fatal_error_handler(&icgrep_error_handler);
-    AddParabixVersionPrinter();
-#ifndef USE_LLVM_3_6
-    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&LegacyGrepOptions, &EnhancedGrepOptions, grep::grep_regexp_flags(), grep::grep_output_flags(), re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
-#endif
-    cl::ParseCommandLineOptions(argc, argv);
-    if (grep::RegexpSyntax == re::RE_Syntax::FixedStrings) {
-        llvm::report_fatal_error("Sorry, FixedStrings syntax is not fully supported\n.");
-    }
 
+    grep::InitializeCommandLineInterface(argc, argv);
+    
     const auto REs = readExpressions();
 
     allFiles = getFullFileList(inputFiles);

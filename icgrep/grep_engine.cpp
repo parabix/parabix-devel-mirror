@@ -1,12 +1,12 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
 
 #include "grep_engine.h"
+#include "grep_interface.h"
 #include <llvm/IR/Module.h>
-#include <llvm/Support/CommandLine.h>
 #include <boost/filesystem.hpp>
 #include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
@@ -44,129 +44,6 @@ using namespace parabix;
 using namespace llvm;
 
 namespace grep {
-
-static cl::OptionCategory RE_Options("A. Regular Expression Interpretation", "These options control regular expression parsing and interpretation");
-
-re::RE_Syntax RegexpSyntax;
-static cl::opt<re::RE_Syntax, true> RegexpSyntaxOption(cl::desc("Regular expression syntax: (default PCRE)"),
-    cl::values(
-        clEnumValN(re::RE_Syntax::ERE, "E", "Posix extended regular expression (ERE) syntax"),
-        clEnumValN(re::RE_Syntax::FixedStrings, "F", "Fixed strings, separated by newlines"),
-        clEnumValN(re::RE_Syntax::BRE, "G", "Posix basic regular expression (BRE) syntax"),
-        clEnumValN(re::RE_Syntax::PCRE, "P", "Perl-compatible regular expression (PCRE) syntax"),
-        clEnumValN(re::RE_Syntax::ERE, "extended-regexp", "Alias for -E"),
-        clEnumValN(re::RE_Syntax::FixedStrings, "fixed-strings", "Alias for -F"),
-        clEnumValN(re::RE_Syntax::BRE, "basic-regexp", "Alias for -G"),
-        clEnumValN(re::RE_Syntax::PCRE, "perl-regexp", "Alias for -P"),
-        clEnumValN(re::RE_Syntax::PROSITE, "PROSITE", "PROSITE protein patterns syntax"),
-        clEnumValEnd), cl::cat(RE_Options), cl::Grouping, cl::location(RegexpSyntax), cl::init(re::RE_Syntax::PCRE));
-
-bool IgnoreCaseFlag;
-static cl::opt<bool, true> IgnoreCase("i", cl::desc("Ignore case distinctions in the pattern and the file (alias: -ignore-case)."), 
-                                      cl::cat(RE_Options), cl::location(IgnoreCaseFlag), cl::Grouping);
-static cl::alias IgnoreCaseAlias("ignore-case", cl::desc("Alias for -i"), cl::aliasopt(IgnoreCase), cl::NotHidden);
-
-bool InvertMatchFlag;
-static cl::opt<bool, true> InvertMatch("v", cl::desc("Invert match results: select non-matching lines (alias: -invert-match)."), 
-                                       cl::cat(RE_Options), cl::location(InvertMatchFlag), cl::Grouping);
-static cl::alias InvertMatchAlias("invert-match", cl::desc("Alias for -v"), cl::aliasopt(InvertMatch), cl::NotHidden);
-
-bool LineRegexpFlag;
-static cl::opt<bool, true> LineRegexp("x", cl::desc("Require that entire lines be matched (alias: -line-regexp)."), cl::cat(RE_Options), 
-                                      cl::location(LineRegexpFlag), cl::Grouping);
-static cl::alias LineRegexpAlias("line-regexp", cl::desc("Alias for -x"), cl::aliasopt(LineRegexp), cl::NotHidden);
-
-bool WordRegexpFlag;
-static cl::opt<bool, true> WordRegexp("w", cl::desc("Require that that whole words be matched (alias: -word-regexp)."), cl::cat(RE_Options),
-                                      cl::location(WordRegexpFlag), cl::Grouping);
-static cl::alias WordRegexpAlias("word-regexp", cl::desc("Alias for -w"), cl::aliasopt(WordRegexp), cl::NotHidden);
-
-const cl::OptionCategory * grep_regexp_flags() {
-    return &RE_Options;
-}
-
-static cl::OptionCategory GrepInputOptions("B. Input Options",
-                                             "These options control the input.");
-
-static cl::opt<bool> NullData("z", cl::desc("Use the NUL character (codepoint 00) as the line-break character for input."), cl::cat(GrepInputOptions), cl::Grouping);
-static cl::alias NullDataAlias("null-data", cl::desc("Alias for -z"), cl::aliasopt(NullData));
-
-bool RecursiveFlag;
-static cl::opt<bool, true> Recursive("r", cl::desc("Recursively process files within directories, (but follow only top-level symlinks unless -R)."), 
-                               cl::location(RecursiveFlag), cl::cat(GrepInputOptions), cl::Grouping);
-static cl::alias RecursiveAlias("recursive", cl::desc("Alias for -r"), cl::aliasopt(Recursive));
-
-bool DereferenceRecursiveFlag;
-static cl::opt<bool, true> DereferenceRecursive("R", cl::desc("Recursively process files within directories, following symlinks at all levels."),
-                                          cl::location(DereferenceRecursiveFlag), cl::cat(GrepInputOptions), cl::Grouping);
-static cl::alias DereferenceRecursiveAlias("dereference-recursive", cl::desc("Alias for -R"), cl::aliasopt(DereferenceRecursive));
-
-
-
-
-static cl::OptionCategory bGrepOutputOptions("C. Output Options",
-                                             "These options control the output.");
-
-GrepModeType Mode;
-static cl::opt<GrepModeType, true> GrepModeOption(cl::desc("Abbreviated output mode options:"),
-    cl::values(
-        clEnumValN(CountOnly, "c", "Display only the count of matching lines per file."),
-        clEnumValN(FilesWithMatch, "l", "Display only the names of files that have at least one match to the pattern."),
-        clEnumValN(FilesWithoutMatch, "L", "Display only the names of files that do not match the pattern."),
-        clEnumValN(QuietMode, "q", "Do not generate any output and ignore errors; set the return to zero status if a match is found."),
-        clEnumValN(CountOnly, "count", "Alias for -c"),
-        clEnumValN(FilesWithMatch, "files-with-match", "Alias for -l"),
-        clEnumValN(FilesWithoutMatch, "files-without-match", "Alias for -L"),
-        clEnumValN(QuietMode, "quiet", "Alias for -q"),
-        clEnumValN(QuietMode, "silent", "Alias for -q"),
-        clEnumValEnd), cl::cat(bGrepOutputOptions), cl::Grouping, cl::location(Mode), cl::init(NormalMode));
-
-
-static cl::opt<bool> SilenceFileErrors("s", cl::desc("Suppress messages for file errors."), cl::init(false),  cl::cat(bGrepOutputOptions));
-
-static cl::opt<bool> NormalizeLineBreaks("normalize-line-breaks", cl::desc("Normalize line breaks to std::endl."), cl::init(false),  cl::cat(bGrepOutputOptions));
-
-static cl::opt<bool> ShowFileNames("H", cl::desc("Show the file name with each matching line."), cl::cat(bGrepOutputOptions));
-static cl::alias ShowFileNamesLong("with-filename", cl::desc("Alias for -H"), cl::aliasopt(ShowFileNames));
-
-static cl::opt<bool> ShowLineNumbers("n", cl::desc("Show the line number with each matching line."), cl::cat(bGrepOutputOptions));
-static cl::alias ShowLineNumbersLong("line-number", cl::desc("Alias for -n"), cl::aliasopt(ShowLineNumbers));
-
-static cl::opt<int> MaxCount("m", cl::desc("Limit the number of matches per file."), cl::cat(bGrepOutputOptions), cl::init((size_t) 0), cl::Prefix);
-static cl::alias MaxCountLong("max-count", cl::desc("Alias for -m"), cl::aliasopt(MaxCount));
-
-static cl::opt<int> AfterContext("A", cl::desc("Print <num> lines of context after each matching line."), cl::cat(bGrepOutputOptions), cl::Prefix);
-static cl::alias AfterContextAlias("after-context", cl::desc("Alias for -A"), cl::aliasopt(AfterContext));
-
-static cl::opt<int> BeforeContext("B", cl::desc("Print <num>lines of context before each matching line."), cl::cat(bGrepOutputOptions), cl::Prefix);
-static cl::alias BeforeContextAlias("before-context", cl::desc("Alias for -B"), cl::aliasopt(BeforeContext));
-
-static cl::opt<int> Context("C", cl::desc("Print <num> lines of context before and after each matching line."), cl::cat(bGrepOutputOptions), cl::Prefix);
-static cl::alias ContextAlias("context", cl::desc("Alias for -C"), cl::aliasopt(Context));
-
-static cl::opt<bool> OnlyMatching("o", cl::desc("Display only the exact strings that match the pattern, with possibly multiple matches per line."), cl::cat(bGrepOutputOptions), cl::Grouping);
-static cl::alias OnlyMatchingAlias("only-matching", cl::desc("Alias for -o"), cl::aliasopt(OnlyMatching));
-
-static cl::opt<bool> Null("Z", cl::desc("Write NUL characters after filenames generated to output."), cl::cat(bGrepOutputOptions), cl::Grouping);
-static cl::alias NullAlias("null", cl::desc("Alias for -Z"), cl::aliasopt(Null));
-
-static cl::opt<bool> ByteOffset("b", cl::desc("Show the byte offset within the file for each matching line."), cl::cat(bGrepOutputOptions), cl::Grouping);
-static cl::alias ByteOffsetAlias("byte-offset", cl::desc("Alias for -b"), cl::aliasopt(ByteOffset));
-
-static cl::opt<bool> UnixByteOffsets("u", cl::desc("If byte offsets are displayed, report offsets as if all lines are terminated with a single LF."), cl::cat(bGrepOutputOptions), cl::Grouping);
-static cl::alias UnixByteOffsetsAlias("unix-byte-offsets", cl::desc("Alias for -u"), cl::aliasopt(UnixByteOffsets));
-
-static cl::opt<bool> InitialTab("T", cl::desc("Line up matched line content using an inital tab character."), cl::cat(bGrepOutputOptions), cl::Grouping);
-static cl::alias InitialTabAlias("initial-tab", cl::desc("Alias for -T"), cl::aliasopt(InitialTab));
-
-
-const cl::OptionCategory * grep_output_flags() {
-    return &bGrepOutputOptions;
-}
-
-const cl::OptionCategory * grep_input_flags() {
-    return &GrepInputOptions;
-}
 
 
 static re::CC * parsedCodePointSet = nullptr;
@@ -253,8 +130,8 @@ static std::vector<std::string> inputFiles;
 
 void initFileResult(std::vector<std::string> filenames){
     const int n = filenames.size();
-    if (n > 1) {
-        ShowFileNames = true;
+    if ((n > 1) && !NoFilenameFlag) {
+        WithFilenameFlag = true;
     }
     inputFiles = filenames;
     resultStrs = new std::stringstream[n];
@@ -274,10 +151,10 @@ void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_e
     assert (line_start <= line_end);
     assert (line_end <= filesize);
 
-    if (ShowFileNames) {
+    if (WithFilenameFlag) {
         resultStrs[fileIdx] << inputFiles[fileIdx] << ':';
     }
-    if (ShowLineNumbers) {
+    if (LineNumberFlag) {
         // Internally line numbers are counted from 0.  For display, adjust
         // the line number so that lines are numbered from 1.
         resultStrs[fileIdx] << lineNum+1 << ":";
@@ -291,12 +168,12 @@ void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_e
     if (LLVM_UNLIKELY(line_end == filesize)) {
         // The match position is at end-of-file.   We have a final unterminated line.
         resultStrs[fileIdx].write((char *)&buffer[line_start], (line_end - line_start) * sizeof(CodeUnit));
-        if (NormalizeLineBreaks) {
+        if (NormalizeLineBreaksFlag) {
             resultStrs[fileIdx] << '\n';  // terminate it
         }
     } else {
         const auto end_byte = buffer[line_end];
-        if (NormalizeLineBreaks) {
+        if (grep::NormalizeLineBreaksFlag) {
             if (LLVM_UNLIKELY(end_byte == 0x85)) {
                 // Line terminated with NEL, on the second byte.  Back up 1.
                 line_end -= 1;
@@ -334,7 +211,7 @@ void PrintResult(GrepModeType grepMode, std::vector<size_t> & total_CountOnly){
     }
     if (grepMode == CountOnly) {
         size_t total = 0;
-        if (!ShowFileNames) {
+        if (!WithFilenameFlag) {
             for (unsigned i = 0; i < inputFiles.size(); ++i) {
                 std::cout << total_CountOnly[i] << std::endl;
                 total += total_CountOnly[i];
@@ -499,7 +376,7 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
     StreamSetBuffer * ByteStream = nullptr;
     kernel::Kernel * sourceK = nullptr;
     
-    size_t MatchLimit = ((grepMode == QuietMode) | (grepMode == FilesWithMatch) | (grepMode == FilesWithoutMatch)) ? 1 : MaxCount;
+    size_t MatchLimit = ((grepMode == QuietMode) | (grepMode == FilesWithMatch) | (grepMode == FilesWithoutMatch)) ? 1 : MaxCountFlag;
 
     if (grepSource == GrepSource::Internal) {
 
@@ -573,7 +450,7 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
         mGrepDriver->makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
     }
     
-    if (InvertMatch) {
+    if (InvertMatchFlag) {
         kernel::Kernel * invertK = mGrepDriver->addKernelInstance(make_unique<kernel::InvertMatchesKernel>(idb));
         StreamSetBuffer * OriginalMatches = MergedResults;
         MergedResults = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));

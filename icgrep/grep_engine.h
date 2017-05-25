@@ -1,14 +1,15 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-#ifndef DO_GREP_H
-#define DO_GREP_H
+#ifndef GREP_ENGINE_H
+#define GREP_ENGINE_H
+#include <grep_interface.h>
 #include <grep_type.h>  // for GrepType, GrepType::Normal
 #include <string>       // for string
 #include <vector>
-#include <re/re_parser.h>  // for 
+#include <re/re_parser.h>  
 
 namespace re { class CC; }
 namespace re { class RE; }
@@ -17,26 +18,6 @@ class Driver;
 
 
 namespace grep {
-
-// Regular expression syntax, interpretation and processing.
-extern re::RE_Syntax RegexpSyntax;
-extern bool IgnoreCaseFlag;
-extern bool InvertMatchFlag;
-extern bool LineRegexpFlag;
-extern bool WordRegexpFlag;
-
-// Grep input sources and interpretation
-extern bool RecursiveFlag;
-extern bool DereferenceRecursiveFlag;
-
-// Grep output modes and flags.
-enum GrepModeType {QuietMode, FilesWithMatch, FilesWithoutMatch, CountOnly, NormalMode};
-extern GrepModeType Mode;
-
-
-const llvm::cl::OptionCategory * grep_regexp_flags();
-const llvm::cl::OptionCategory * grep_input_flags();
-const llvm::cl::OptionCategory * grep_output_flags();
 
 class GrepEngine {
 public:
