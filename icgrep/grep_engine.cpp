@@ -63,7 +63,7 @@ void GrepEngine::doGrep(const std::string & fileName) const{
             return;
         }
     } else {
-        if (!SilenceFileErrors) {
+        if (!NoMessagesFlag) {
             std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
             return;
         }
@@ -89,7 +89,7 @@ void GrepEngine::doGrep(const std::string & fileName) const{
             ulong * rslt = RunPTX(PTXFilename, fileBuffer, fileSize, CountOnly, LFPositions, startPoints, accumBytes);
             source.close();
         } catch (std::exception & e) {
-            if (!SilenceFileErrors) {
+            if (!NoMessagesFlag) {
                 std::cerr << "Boost mmap error: " + fileName + ": " + e.what() + " Skipped.\n";
                 return;
             }
