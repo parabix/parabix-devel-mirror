@@ -298,11 +298,14 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
 #.  The input consists of one or more stream sets, the first of which is
     known as the principal input stream set.
 
-#.  If there is more than one input stream set, the additional stream sets must
+#.  If there is more than one input stream set, the additional stream sets
+    are first classified as having either a derived processing rate or 
+    a variable processing rate.   Stream sets with a derived processing rate
     have a processing rate defined with respect to the input stream set of one
     of the following types:  FixedRate, Add1 or RoundUp.    Note that stream sets
     declared without a processing rate attribute have the FixedRate(1) attribute
-    by default and therefore satisfy this constraint.
+    by default and therefore satisfy this constraint.  All other processing rate
+    types are classified as variable rate.
 
 #.  All output stream sets must be declared with processing rate attributes
     of one of the following types:
@@ -316,17 +319,29 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
 
 #.  The doMultiBlockMethod will be called with the following parameters:
     * the number of items of the principal input stream to process (itemsToDo),
+    * additional items available parameters for each additional input stream set
+      that is classified as a variable rate stream set
     * pointers to linear contiguous buffer areas for each of the input stream sets, and
     * pointers to linear contiguous output buffer areas for each of the output stream sets.
-    * pointers are to the address of the first item of the first stream of the stream set.
+ 
+    Notes: 
+    * if the kernel has a Lookahead dependency declared on any input stream set, then
+      there will be two buffer pointers for that stream set, one for accessing stream set
+      items without lookahead and one for accessing the items with lookahead.   
+    * pointers are to the address of the first unprocessed item of the first stream 
+      of the stream set.
+    * the base type of each pointer is the StreamSetBlockType of that streamset
 
 #.  The Multi-Block Kernel Builder will arrange that these input parameters may be
     processed under the following simplifying assumptions.
     * the number of itemsToDo will either be an exact multiple of the BlockSize,
       or, for processing the final block, a value less than BlockSize
-    * all input buffers will be safe to access and have data available in
+    * the input buffer of the principal stream set and all input buffers of stream sets
+      with derived processing rates will be safe to access and have data available in
       accord with their processing rates based on the given number of itemsToDo
       of the principal input stream set; no further bounds checking is needed.
+    * the kernel programmer is responsible for safe access and bounds checking for any
+      input stream set classified as variable rate.
     * all output buffers will be safe to access and have space available
       for the given maximum output generation rates based on the given number
       of blocksToDo of the principal input stream set; no further bounds checking

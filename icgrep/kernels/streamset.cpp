@@ -136,6 +136,17 @@ void StreamSetBuffer::releaseBuffer(IDISA::IDISA_Builder * const /* iBuilder */,
     /* do nothing: memory is stack allocated */
 }
 
+void StreamSetBuffer::createBlockCopy(IDISA::IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * blocksToCopy) const {
+    Type * i8ptr = iBuilder->getInt8PtrTy();
+    unsigned alignment = iBuilder->getBitBlockWidth() / 8;
+    Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
+    unsigned numStreams = getType()->getArrayNumElements();
+    auto elemTy = getType()->getArrayElementType();
+    unsigned fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
+    Value * blockCopyBytes = iBuilder->CreateMul(blocksToCopy, iBuilder->getSize(iBuilder->getBitBlockWidth() * numStreams * fieldWidth/8));
+    iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, i8ptr), iBuilder->CreateBitCast(sourceBlockPtr, i8ptr), blockCopyBytes, alignment);
+}
+
 void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * itemsToCopy) const {
     Type * i8ptr = iBuilder->getInt8PtrTy();
     unsigned alignment = iBuilder->getBitBlockWidth() / 8;
