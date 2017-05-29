@@ -35,23 +35,13 @@
 
 using namespace llvm;
 
-static cl::OptionCategory LegacyGrepOptions("A. Standard Grep Options",
-                                       "These are standard grep options intended for compatibility with typical grep usage.");
-
-
-static cl::opt<bool> UTF_16("UTF-16", cl::desc("Regular expressions over the UTF-16 representation of Unicode."), cl::cat(LegacyGrepOptions));
-static cl::OptionCategory EnhancedGrepOptions("B. Enhanced Grep Options",
-                                       "These are additional options for icgrep functionality and performance.");
-
+static cl::opt<bool> UTF_16("UTF-16", cl::desc("Regular expressions over the UTF-16 representation of Unicode."));
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
 
-static cl::list<std::string> regexVector("e", cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(LegacyGrepOptions));
-static cl::opt<std::string> RegexFilename("f", cl::desc("Take regular expressions (one per line) from a file"), cl::value_desc("regex file"), cl::init(""), cl::cat(LegacyGrepOptions));
-
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(1));
 
-static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"), cl::cat(EnhancedGrepOptions));
+static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"));
 static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expressions processed by each kernel."), cl::init(1));
 static std::vector<std::string> allFiles;
 
@@ -59,12 +49,12 @@ static re::ModeFlagSet globalFlags = 0;
 
 std::vector<re::RE *> readExpressions() {
   
-    if (RegexFilename != "") {
-        std::ifstream regexFile(RegexFilename.c_str());
+    if (grep::FileFlag != "") {
+        std::ifstream regexFile(grep::FileFlag.c_str());
         std::string r;
         if (regexFile.is_open()) {
             while (std::getline(regexFile, r)) {
-                regexVector.push_back(r);
+                grep::RegexpVector.push_back(r);
             }
             regexFile.close();
         }
@@ -73,8 +63,8 @@ std::vector<re::RE *> readExpressions() {
     // if there are no regexes specified through -e or -f, the first positional argument
     // must be a regex, not an input file.
     
-    if (regexVector.size() == 0) {
-        regexVector.push_back(inputFiles[0]);
+    if (grep::RegexpVector.size() == 0) {
+        grep::RegexpVector.push_back(inputFiles[0]);
         inputFiles.erase(inputFiles.begin());
     }
     if (grep::IgnoreCaseFlag) {
@@ -82,8 +72,8 @@ std::vector<re::RE *> readExpressions() {
     }
 
     std::vector<re::RE *> REs;
-    for (unsigned i = 0; i < regexVector.size(); i++) {
-        re::RE * re_ast = re::RE_Parser::parse(regexVector[i], globalFlags, grep::RegexpSyntax);
+    for (unsigned i = 0; i < grep::RegexpVector.size(); i++) {
+        re::RE * re_ast = re::RE_Parser::parse(grep::RegexpVector[i], globalFlags, grep::RegexpSyntax);
         REs.push_back(re_ast);
     }
 
@@ -148,25 +138,40 @@ void *DoGrep(void *args)
 // This is a stub, to be expanded later.
 bool excludeDirectory(boost::filesystem::path dirpath) { return dirpath.filename() == ".svn";}
 
+// Determine whether to skip a path based on -D skip or -d skip settings.
+bool skip_path(boost::filesystem::path p) {
+    using namespace boost::filesystem;
+    switch (status(p).type()) {
+        case directory_file: return grep::DirectoriesFlag == grep::Skip;
+        case block_file:
+        case character_file:
+        case fifo_file:
+        case socket_file:
+            return grep::DevicesFlag == grep::Skip;
+        default:
+            return false;
+    }
+}
+
 std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
     using namespace boost::filesystem;
     symlink_option follow_symlink = grep::DereferenceRecursiveFlag ? symlink_option::recurse : symlink_option::none;
     std::vector<std::string> expanded_paths;
     boost::system::error_code errc;
-    if (grep::DereferenceRecursiveFlag) {
-        grep::RecursiveFlag = true;
-    }
     for (const std::string & f : inputFiles) {
-//        if (f == "-") {
-//            continue;
-//        }
+        //        if (f == "-") {
+        //            continue;
+        //        }
         path p(f);
-        if (LLVM_UNLIKELY(grep::RecursiveFlag && is_directory(p))) {
+        if (skip_path(p)) {
+            continue;
+        }
+        if (LLVM_UNLIKELY((grep::DirectoriesFlag == grep::Recurse) && is_directory(p))) {
             if (!excludeDirectory(p)) {
                 recursive_directory_iterator di(p, follow_symlink, errc), end;
                 if (errc) {
                     // If we cannot enter the directory, keep it in the list of files.
-                    expanded_paths.push_back(f); 
+                    expanded_paths.push_back(f);
                     continue;
                 }
                 while (di != end) {
@@ -176,11 +181,11 @@ std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
                             di.no_push();
                         }
                     } else {
-                        expanded_paths.push_back(e.string());
+                        if (!skip_path(e)) expanded_paths.push_back(e.string());
                     }
                     di.increment(errc);
                     if (errc) {
-                        expanded_paths.push_back(e.string()); 
+                        expanded_paths.push_back(e.string());
                     }
                 }
             }
@@ -190,7 +195,6 @@ std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
     }
     return expanded_paths;
 }
-
 
 int main(int argc, char *argv[]) {
 

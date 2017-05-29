@@ -36,20 +36,25 @@ extern bool IgnoreCaseFlag; // -i
 extern bool InvertMatchFlag; // -v
 extern bool LineRegexpFlag; // -x
 extern bool WordRegexpFlag; // -w
-    
+extern std::vector<std::string> RegexpVector; // -e
+extern std::string FileFlag; // -f
+
 /*
  *  B.  Grep input sources and interpretation.
  */
-    
-    
-// Grep input source control corresponding to -r, -R flags.
-extern bool RecursiveFlag; // -r
+
+// Use DirectoriesFlag==Recurse to test for recursive mode.
+//extern bool RecursiveFlag; 
 extern bool DereferenceRecursiveFlag; // -R
 extern bool TextFlag; // -a
 extern bool BinaryFlag; // -U
 extern bool NullDataFlag; // -z
 extern bool MmapFlag; // -mmap
-    
+extern std::string ExcludeFlag; // -exclude
+extern std::string ExcludeFromFlag; // -exclude-from
+extern std::string ExcludeDirFlag; // -exclude-dir
+extern std::string IncludeFlag; // -include
+
 /*
  *  C.  Grep output modes and options.
  */
@@ -63,6 +68,13 @@ extern GrepModeType Mode;
 
 enum ColoringType {alwaysColor, autoColor, neverColor};
 extern ColoringType ColorFlag;
+
+enum DevDirAction {Read, Skip, Recurse};
+extern DevDirAction DevicesFlag;
+extern DevDirAction DirectoriesFlag;
+    
+enum BinaryFilesMode {Binary, WithoutMatch, Text};
+extern BinaryFilesMode BinaryFilesFlag;
     
 extern bool NoMessagesFlag; // -s
 extern bool WithFilenameFlag; // -H
@@ -73,6 +85,7 @@ extern bool ByteOffsetFlag; // -b
 extern bool UnixByteOffsetsFlag; // -u
 extern bool InitialTabFlag; // -T
 extern bool OnlyMatchingFlag; // -o
+extern std::string LabelFlag; // -label
 extern bool LineBufferedFlag; // -line-buffered
 extern bool NormalizeLineBreaksFlag; // -normalize-line-breaks
 extern int AfterContextFlag; // -A
