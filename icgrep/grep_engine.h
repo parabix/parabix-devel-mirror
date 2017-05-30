@@ -27,7 +27,7 @@ public:
 
     ~GrepEngine();
 
-    void grepCodeGen(std::vector<re::RE *> REs, GrepModeType grepMode, bool UTF_16, GrepSource grepSource, GrepType grepType = GrepType::Normal);
+    void grepCodeGen(std::vector<re::RE *> REs, GrepModeType grepMode, bool UTF_16, GrepSource grepSource);
 
     void grepCodeGen_nvptx(std::vector<re::RE *> REs, GrepModeType grepMode, bool UTF_16);
 
@@ -36,26 +36,21 @@ public:
 	uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) const;
 
     uint64_t doGrep(const int32_t fileDescriptor, const uint32_t fileIdx) const;
-    
-    void doGrep(const char * buffer, const uint64_t length, const uint32_t fileIdx) const;
-
-    re::CC * grepCodepoints();
-
-    const std::vector<std::string> & grepPropertyValues(const std::string & propertyName);
-    
+        
 private:
    
     Driver * mGrepDriver;
 };
 
-
-re::CC * getParsedCodePointSet();
-void setParsedCodePointSet();
-
-void setParsedPropertyValues();
-
 void initFileResult(std::vector<std::string> filenames);
+    
 void PrintResult(GrepModeType grepMode, std::vector<size_t> & total_CountOnly);
+    
+
+re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t bufferLength);
+    
+const std::vector<std::string> & grepPropertyValues(const std::string& propertyName, re::RE * propertyValuePattern);
+
 }
 
 #endif

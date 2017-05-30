@@ -46,10 +46,6 @@ using namespace llvm;
 namespace grep {
 
 
-static re::CC * parsedCodePointSet = nullptr;
-
-static std::vector<std::string> parsedPropertyValues;
-
 size_t * startPoints = nullptr;
 size_t * accumBytes = nullptr;
 
@@ -115,13 +111,6 @@ uint64_t GrepEngine::doGrep(const int32_t fileDescriptor, const uint32_t fileIdx
     typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor, const uint32_t fileIdx);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
     return f(fileDescriptor, fileIdx);
-}
-
-void GrepEngine::doGrep(const char * buffer, const uint64_t length, const uint32_t fileIdx) const {
-    assert (mGrepDriver);
-    typedef uint64_t (*GrepFunctionType)(const char * buffer, const uint64_t length, const uint32_t fileIdx);
-    auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
-    f(buffer, length, fileIdx);
 }
 
 static int * total_count;
@@ -198,14 +187,12 @@ void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_e
     }
 }
 
-const int MatchFoundReturnCode = 0;
-const int MatchNotFoundReturnCode = 1;
 void PrintResult(GrepModeType grepMode, std::vector<size_t> & total_CountOnly){
     if (grepMode == NormalMode) {
-        int returnCode = MatchNotFoundReturnCode;
+        int returnCode = MatchNotFoundExitCode;
         for (unsigned i = 0; i < inputFiles.size(); ++i){
             std::cout << resultStrs[i].str();
-            if (!resultStrs[i].str().empty()) returnCode = MatchFoundReturnCode;
+            if (!resultStrs[i].str().empty()) returnCode = MatchFoundExitCode;
         }
         exit(returnCode);
     }
@@ -222,7 +209,7 @@ void PrintResult(GrepModeType grepMode, std::vector<size_t> & total_CountOnly){
                 total += total_CountOnly[i];
             };
         }
-        exit(total == 0 ? MatchNotFoundReturnCode : MatchFoundReturnCode);
+        exit(total == 0 ? MatchNotFoundExitCode : MatchFoundExitCode);
     }
     else if (grepMode == FilesWithMatch || grepMode == FilesWithoutMatch ) {
         size_t total = 0;
@@ -233,37 +220,13 @@ void PrintResult(GrepModeType grepMode, std::vector<size_t> & total_CountOnly){
             }
             total += total_CountOnly[i];
         }
-        exit(total == 0 ? MatchNotFoundReturnCode : MatchFoundReturnCode);
+        exit(total == 0 ? MatchNotFoundExitCode : MatchFoundExitCode);
     } else /* QuietMode */ {
         for (unsigned i = 0; i < inputFiles.size(); ++i){
-            if (total_CountOnly[i] > 0) exit(MatchFoundReturnCode);
+            if (total_CountOnly[i] > 0) exit(MatchFoundExitCode);
         }
-        exit(MatchNotFoundReturnCode);
+        exit(MatchNotFoundExitCode);
     }
-}
-
-void insert_codepoints(const size_t lineNum, const size_t line_start, const size_t line_end, const char * const buffer) {
-    assert (buffer);
-    assert (line_start <= line_end);
-    re::codepoint_t c = 0;
-    size_t line_pos = line_start;
-    while (isxdigit(buffer[line_pos])) {
-        assert (line_pos < line_end);
-        if (isdigit(buffer[line_pos])) {
-            c = (c << 4) | (buffer[line_pos] - '0');
-        }
-        else {
-            c = (c << 4) | (tolower(buffer[line_pos]) - 'a' + 10);
-        }
-        line_pos++;
-    }
-    assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.
-    parsedCodePointSet->insert(c);
-}
-
-void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
-    assert (line_start <= line_end);
-    parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
 }
 
 void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const GrepModeType grepMode, const bool UTF_16) {
@@ -357,7 +320,7 @@ void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const GrepModeType
     mGrepDriver->finalizeObject();
 }
 
-void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepMode, const bool UTF_16, GrepSource grepSource, const GrepType grepType) {
+void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepMode, const bool UTF_16, GrepSource grepSource) {
 
     assert (mGrepDriver == nullptr);
     mGrepDriver = new ParabixDriver("engine");
@@ -472,52 +435,18 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
         matchedLineCount = idb->CreateZExt(matchedLineCount, int64Ty);
         idb->CreateRet(matchedLineCount);
     } else {
-        kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, grepType, encodingBits));
+        kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::Normal, encodingBits));
         scanMatchK->setInitialArguments({fileIdx});
         mGrepDriver->makeKernelCall(scanMatchK, {MergedResults, LineBreakStream, ByteStream}, {});
-        switch (grepType) {
-            case GrepType::Normal:
-                if (UTF_16) {
-                    mGrepDriver->LinkFunction(*scanMatchK, "matcher", &wrapped_report_match<uint16_t>);
-                } else {
-                    mGrepDriver->LinkFunction(*scanMatchK, "matcher", &wrapped_report_match<uint8_t>);
-                }
-                break;
-            case GrepType::NameExpression:
-                mGrepDriver->LinkFunction(*scanMatchK, "matcher", &insert_codepoints);
-                break;
-            case GrepType::PropertyValue:
-                mGrepDriver->LinkFunction(*scanMatchK, "matcher", &insert_property_values);
-                break;
+        if (UTF_16) {
+            mGrepDriver->LinkFunction(*scanMatchK, "matcher", &wrapped_report_match<uint16_t>);
+        } else {
+            mGrepDriver->LinkFunction(*scanMatchK, "matcher", &wrapped_report_match<uint8_t>);
         }
         mGrepDriver->generatePipelineIR();
         idb->CreateRet(idb->getInt64(0));
     }
     mGrepDriver->finalizeObject();
-}
-
-re::CC * GrepEngine::grepCodepoints() {
-    parsedCodePointSet = re::makeCC();
-    char * mFileBuffer = getUnicodeNameDataPtr();
-    size_t mFileSize = getUnicodeNameDataSize();
-    doGrep(mFileBuffer, mFileSize, 0);
-    return parsedCodePointSet;
-}
-
-const std::vector<std::string> & GrepEngine::grepPropertyValues(const std::string& propertyName) {
-    enum { MaxSupportedVectorWidthInBytes = 32 };
-    AlignedAllocator<char, MaxSupportedVectorWidthInBytes> alloc;
-    parsedPropertyValues.clear();
-    const std::string & str = UCD::getPropertyValueGrepString(propertyName);
-    const auto n = str.length();
-    // NOTE: MaxSupportedVectorWidthInBytes of trailing 0s are needed to prevent the grep function from
-    // erroneously matching garbage data when loading the final partial block.
-    char * aligned = alloc.allocate(n + MaxSupportedVectorWidthInBytes, 0);
-    std::memcpy(aligned, str.data(), n);
-    std::memset(aligned + n, 0, MaxSupportedVectorWidthInBytes);
-    doGrep(aligned, n, 0);
-    alloc.deallocate(aligned, 0);
-    return parsedPropertyValues;
 }
 
 GrepEngine::GrepEngine()
@@ -529,4 +458,150 @@ GrepEngine::~GrepEngine() {
     delete mGrepDriver;
 }
 
+
+    
+static re::CC * parsedCodePointSet = nullptr;
+
+void insert_codepoints(const size_t lineNum, const size_t line_start, const size_t line_end, const char * const buffer) {
+    assert (buffer);
+    assert (line_start <= line_end);
+    re::codepoint_t c = 0;
+    size_t line_pos = line_start;
+    while (isxdigit(buffer[line_pos])) {
+        assert (line_pos < line_end);
+        if (isdigit(buffer[line_pos])) {
+            c = (c << 4) | (buffer[line_pos] - '0');
+        }
+        else {
+            c = (c << 4) | (tolower(buffer[line_pos]) - 'a' + 10);
+        }
+        line_pos++;
+    }
+    assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.
+    parsedCodePointSet->insert(c);
+}
+
+re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t bufferLength) {
+    parsedCodePointSet = re::makeCC();        
+    const unsigned segmentSize = 8;
+    
+    ParabixDriver pxDriver("codepointEngine");
+    auto & idb = pxDriver.getBuilder();
+    Module * M = idb->getModule();
+    
+    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getVoidTy(), idb->getInt8PtrTy(), idb->getSizeTy(), nullptr));
+    mainFunc->setCallingConv(CallingConv::C);
+    auto args = mainFunc->arg_begin();
+    Value * const buffer = &*(args++);
+    buffer->setName("buffer");
+    Value * length = &*(args++);
+    length->setName("length");
+    
+    idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+    
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(idb, idb->getInt8PtrTy(), segmentSize));
+    sourceK->setInitialArguments({buffer, length});
+    pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
+    
+    StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize));
+    
+    kernel::Kernel * s2pk = pxDriver.addKernelInstance(make_unique<kernel::S2PKernel>(idb));
+    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
+    
+    kernel::Kernel * linebreakK = pxDriver.addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(idb, 8));
+    StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize));
+    pxDriver.makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
+    
+    StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize));
+    kernel::Kernel * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, pattern));
+    pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
+    
+    kernel::Kernel * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::NameExpression, 8));
+    scanMatchK->setInitialArguments({idb->getInt32(0)});
+    pxDriver.makeKernelCall(scanMatchK, {MatchResults, LineBreakStream, ByteStream}, {});
+    pxDriver.LinkFunction(*scanMatchK, "matcher", &insert_codepoints);
+    pxDriver.generatePipelineIR();
+    idb->CreateRetVoid();
+    pxDriver.finalizeObject();
+    
+    typedef void (*GrepFunctionType)(const char * buffer, const size_t length);
+    auto f = reinterpret_cast<GrepFunctionType>(pxDriver.getMain());
+    f(UnicodeDataBuffer, bufferLength);
+    
+    return parsedCodePointSet;    
+}
+
+    
+static std::vector<std::string> parsedPropertyValues;
+
+void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
+    assert (line_start <= line_end);
+    parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
+}
+
+
+const std::vector<std::string> & grepPropertyValues(const std::string& propertyName, re::RE * propertyValuePattern) {
+    enum { MaxSupportedVectorWidthInBytes = 32 };
+    AlignedAllocator<char, MaxSupportedVectorWidthInBytes> alloc;
+    parsedPropertyValues.clear();
+    const std::string & str = UCD::getPropertyValueGrepString(propertyName);
+    const auto n = str.length();
+    // NOTE: MaxSupportedVectorWidthInBytes of trailing 0s are needed to prevent the grep function from
+    // erroneously matching garbage data when loading the final partial block.
+    char * aligned = alloc.allocate(n + MaxSupportedVectorWidthInBytes, 0);
+    std::memcpy(aligned, str.data(), n);
+    std::memset(aligned + n, 0, MaxSupportedVectorWidthInBytes);
+    
+    const unsigned segmentSize = 8;
+    
+    ParabixDriver pxDriver("propertyValueEngine");
+    auto & idb = pxDriver.getBuilder();
+    Module * M = idb->getModule();
+    
+    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getVoidTy(), idb->getInt8PtrTy(), idb->getSizeTy(), nullptr));
+    mainFunc->setCallingConv(CallingConv::C);
+    auto args = mainFunc->arg_begin();
+    Value * const buffer = &*(args++);
+    buffer->setName("buffer");
+    Value * length = &*(args++);
+    length->setName("length");
+    
+    idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+    
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(idb, idb->getInt8PtrTy(), segmentSize));
+    sourceK->setInitialArguments({buffer, length});
+    pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
+    
+    StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize));
+    
+    kernel::Kernel * s2pk = pxDriver.addKernelInstance(make_unique<kernel::S2PKernel>(idb));
+    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
+    
+    kernel::Kernel * linebreakK = pxDriver.addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(idb, 8));
+    StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize));
+    pxDriver.makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
+    
+    StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize));
+    kernel::Kernel * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, propertyValuePattern));
+    pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream}, {MatchResults});
+    
+    kernel::Kernel * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::PropertyValue, 8));
+    scanMatchK->setInitialArguments({idb->getInt32(0)});
+    pxDriver.makeKernelCall(scanMatchK, {MatchResults, LineBreakStream, ByteStream}, {});
+    pxDriver.LinkFunction(*scanMatchK, "matcher", &insert_property_values);
+    pxDriver.generatePipelineIR();
+    idb->CreateRetVoid();
+    pxDriver.finalizeObject();
+    
+    typedef void (*GrepFunctionType)(const char * buffer, const size_t length);
+    auto f = reinterpret_cast<GrepFunctionType>(pxDriver.getMain());
+    f(aligned, n);
+    
+    alloc.deallocate(aligned, 0);
+    return parsedPropertyValues;
+}
+
+    
 }

@@ -21,6 +21,7 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <re/printer_re.h>
+#include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
 #include <UCD/CaseFolding_txt.h>
 #include <grep_engine.h>
@@ -642,9 +643,7 @@ RE * RE_Parser::parsePropertyExpression() {
 
 RE * RE_Parser::parseRegexPropertyValue(const std::string & propName, const std::string& regexValue) {
     RE * propValueRe = RE_Parser::parse("^" + regexValue + "$", fModeFlagSet, mReSyntax);
-    grep::GrepEngine engine;
-    engine.grepCodeGen({ propValueRe }, grep::NormalMode, false, GrepSource::Internal, GrepType::PropertyValue);
-    const auto matches = engine.grepPropertyValues(propName);
+    const auto matches = grep::grepPropertyValues(propName, propValueRe);
     if (matches.empty()) {
         ParseFailure("regex " + regexValue + " match no property values");
     } else if (matches.size() == 1) {
@@ -675,9 +674,7 @@ Name * RE_Parser::parseNamePatternExpression(){
     // Embed the nameRE in ";.*$nameRE" to skip the codepoint field of Uname.txt
     RE * embedded = makeSeq({mMemoizer.memoize(makeCC(0x3B)), makeRep(makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
     
-    grep::GrepEngine engine;
-    engine.grepCodeGen({ embedded }, grep::NormalMode, false, GrepSource::Internal, GrepType::NameExpression);
-    CC * codepoints = engine.grepCodepoints();
+    CC * codepoints = grep::grepCodepoints(embedded, getUnicodeNameDataPtr(), getUnicodeNameDataSize());
     
     if (codepoints) {
         Name * const result = mMemoizer.memoize(codepoints);
