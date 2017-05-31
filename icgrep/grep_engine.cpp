@@ -34,6 +34,8 @@
 #include <util/aligned_allocator.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <mutex>
 
 #ifdef CUDA_ENABLED
 #include <preprocess.cpp>
@@ -45,9 +47,43 @@ using namespace llvm;
 
 namespace grep {
 
+static std::stringstream * resultStrs = nullptr;
+static std::vector<std::string> inputFiles;
+static std::vector<std::string> linePrefix;
+static bool grepMatchFound;
 
 size_t * startPoints = nullptr;
 size_t * accumBytes = nullptr;
+
+
+std::mutex count_mutex;
+size_t fileCount;
+
+// DoGrep thread function.
+void *DoGrepThreadFunction(void *args)
+{
+    size_t fileIdx;
+    grep::GrepEngine * grepEngine = (grep::GrepEngine *)args;
+
+    count_mutex.lock();
+    fileIdx = fileCount;
+    fileCount++;
+    count_mutex.unlock();
+
+    while (fileIdx < inputFiles.size()) {
+        size_t grepResult = grepEngine->doGrep(inputFiles[fileIdx], fileIdx);
+        
+        count_mutex.lock();
+        if (grepResult > 0) grepMatchFound = true;
+        fileIdx = fileCount;
+        fileCount++;
+        count_mutex.unlock();
+        if (QuietMode && grepMatchFound) pthread_exit(nullptr);
+    }
+
+    pthread_exit(nullptr);
+}
+
 
 
 void GrepEngine::doGrep(const std::string & fileName) const{
@@ -97,8 +133,27 @@ void GrepEngine::doGrep(const std::string & fileName) const{
 }
 
 uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) const {
+    struct stat sb;
     const int32_t fd = open(fileName.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
+        if (!NoMessagesFlag  && !(Mode == QuietMode)) {
+            if (errno == EACCES) {
+                resultStrs[fileIdx] << "icgrep: " << fileName << ": Permission denied.\n";
+            }
+            else if (errno == ENOENT) {
+                resultStrs[fileIdx] << "icgrep: " << fileName << ": No such file.\n";
+            }
+            else {
+                resultStrs[fileIdx] << "icgrep: " << fileName << ": Failed.\n";
+            }
+        }
+        return 0;
+    }
+    if (stat(fileName.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) {
+        if (!NoMessagesFlag  && !(Mode == QuietMode)) {
+            resultStrs[fileIdx] << "icgrep: " << fileName << ": Is a directory.\n";
+        }
+        close(fd);
         return 0;
     }
     const auto result = doGrep(fd, fileIdx);
@@ -110,37 +165,53 @@ uint64_t GrepEngine::doGrep(const int32_t fileDescriptor, const uint32_t fileIdx
     assert (mGrepDriver);
     typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor, const uint32_t fileIdx);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
-    return f(fileDescriptor, fileIdx);
+    
+    uint64_t grepResult = f(fileDescriptor, fileIdx);
+    if (grepResult > 0) grepMatchFound = true;
+    else if ((Mode == NormalMode) && !resultStrs[fileIdx].str().empty()) grepMatchFound = true;
+    
+    if (Mode == CountOnly) {
+        resultStrs[fileIdx] << linePrefix[fileIdx] << grepResult << "\n";
+    }
+    else if (Mode == FilesWithMatch || Mode == FilesWithoutMatch ) {
+        size_t requiredCount = Mode == FilesWithMatch ? 1 : 0;
+        if (grepResult == requiredCount) {
+            resultStrs[fileIdx] << linePrefix[fileIdx];
+        }
+    }
+    else if (Mode == QuietMode) {
+        if (grepMatchFound) exit(MatchFoundExitCode);
+    }
+    return grepResult;
 }
 
-static int * total_count;
-static std::stringstream * resultStrs = nullptr;
-static std::vector<std::string> inputFiles;
-static std::vector<std::string> linePrefix;
-
 void initFileResult(std::vector<std::string> filenames){
+    grepMatchFound = false;
     const int n = filenames.size();
     linePrefix.resize(n);
     if ((n > 1) && !NoFilenameFlag) {
         WithFilenameFlag = true;
     }
-    std::string fileSuffix;
-    if (WithFilenameFlag) {
+    std::string fileSuffix = "";
+    bool setLinePrefix = WithFilenameFlag || (Mode == FilesWithMatch) || (Mode == FilesWithoutMatch);
+    if (setLinePrefix) {
         if (NullFlag) {
             fileSuffix = std::string("\0", 1);
         }
         else if ((Mode == NormalMode) && InitialTabFlag && !(LineNumberFlag || ByteOffsetFlag)) {
             fileSuffix = "\t:";
         }
-        else {
+        else if (Mode == CountOnly) {
             fileSuffix = ":";
+        }
+        else if ((Mode == FilesWithMatch) || (Mode == FilesWithoutMatch)) {
+            fileSuffix = "\n";
         }
     }
     inputFiles = filenames;
     resultStrs = new std::stringstream[n];
-    total_count = new int[n];
     for (unsigned i = 0; i < inputFiles.size(); ++i) {
-        if (WithFilenameFlag) {
+        if (setLinePrefix) {
             if (inputFiles[i] == "-") {
                 linePrefix[i] = LabelFlag + fileSuffix;
             }
@@ -148,7 +219,6 @@ void initFileResult(std::vector<std::string> filenames){
                 linePrefix[i] = inputFiles[i] + fileSuffix;
             }
         }
-        total_count[i] = 0;
     }
 }
 
@@ -213,49 +283,12 @@ void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_e
     }
 }
 
-void PrintResult(GrepModeType grepMode, std::vector<size_t> & total_CountOnly){
-    if (grepMode == NormalMode) {
-        int returnCode = MatchNotFoundExitCode;
-        for (unsigned i = 0; i < inputFiles.size(); ++i){
-            std::cout << resultStrs[i].str();
-            if (!resultStrs[i].str().empty()) returnCode = MatchFoundExitCode;
-        }
-        exit(returnCode);
+void PrintResults(){
+    
+    for (unsigned i = 0; i < inputFiles.size(); ++i){
+        std::cout << resultStrs[i].str();
     }
-    if (grepMode == CountOnly) {
-        size_t total = 0;
-        if (!WithFilenameFlag) {
-            for (unsigned i = 0; i < inputFiles.size(); ++i) {
-                std::cout << total_CountOnly[i] << std::endl;
-                total += total_CountOnly[i];
-            }
-        } else {
-            for (unsigned i = 0; i < inputFiles.size(); ++i){
-                std::cout << linePrefix[i] << total_CountOnly[i] << std::endl;
-                total += total_CountOnly[i];
-            };
-        }
-        exit(total == 0 ? MatchNotFoundExitCode : MatchFoundExitCode);
-    }
-    else if (grepMode == FilesWithMatch || grepMode == FilesWithoutMatch ) {
-        size_t total = 0;
-        size_t requiredCount = grepMode == FilesWithMatch ? 1 : 0;
-        for (unsigned i = 0; i < inputFiles.size(); ++i) {
-            if (total_CountOnly[i] == requiredCount) {
-                std::cout << linePrefix[i];
-                if (!NullFlag) {
-                    std::cout << "\n";
-                }
-            }
-            total += total_CountOnly[i];
-        }
-        exit(total == 0 ? MatchNotFoundExitCode : MatchFoundExitCode);
-    } else /* QuietMode */ {
-        for (unsigned i = 0; i < inputFiles.size(); ++i){
-            if (total_CountOnly[i] > 0) exit(MatchFoundExitCode);
-        }
-        exit(MatchNotFoundExitCode);
-    }
+    exit(grepMatchFound ? MatchFoundExitCode : MatchNotFoundExitCode);
 }
 
 void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const GrepModeType grepMode, const bool UTF_16) {

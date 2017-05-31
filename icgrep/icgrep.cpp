@@ -23,7 +23,6 @@
 #include <toolchain/toolchain.h>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
-#include <mutex>
 #include <boost/filesystem.hpp>
 #include <iostream> // MEEE
 #ifdef PRINT_TIMING_INFORMATION
@@ -109,31 +108,6 @@ std::vector<re::RE *> readExpressions() {
     return REs;
 }
 
-std::vector<size_t> total_Count;
-std::mutex count_mutex;
-size_t fileCount;
-void *DoGrep(void *args)
-{
-    size_t fileIdx;
-    grep::GrepEngine * grepEngine = (grep::GrepEngine *)args;
-
-    count_mutex.lock();
-    fileIdx = fileCount;
-    fileCount++;
-    count_mutex.unlock();
-
-    while (fileIdx < allFiles.size()) {
-        total_Count[fileIdx] = grepEngine->doGrep(allFiles[fileIdx], fileIdx);
-        
-        count_mutex.lock();
-        fileIdx = fileCount;
-        fileCount++;
-        count_mutex.unlock();
-    }
-
-    pthread_exit(nullptr);
-}
-
 
 // This is a stub, to be expanded later.
 bool excludeDirectory(boost::filesystem::path dirpath) { return dirpath.filename() == ".svn";}
@@ -211,8 +185,7 @@ int main(int argc, char *argv[]) {
         grepEngine.grepCodeGen(REs, grep::Mode, UTF_16, GrepSource::StdIn);
         allFiles = { "-" };
         grep::initFileResult(allFiles);
-        total_Count.resize(1);
-        total_Count[0] = grepEngine.doGrep(STDIN_FILENO, 0);
+        grepEngine.doGrep(STDIN_FILENO, 0);
 
     } else {
         
@@ -229,18 +202,17 @@ int main(int argc, char *argv[]) {
         }
 
         grep::initFileResult(allFiles);
-        total_Count.resize(allFiles.size());
 
         if (Threads <= 1) {
             for (unsigned i = 0; i != allFiles.size(); ++i) {
-                total_Count[i] = grepEngine.doGrep(allFiles[i], i);
+                grepEngine.doGrep(allFiles[i], i);
             }
         } else if (Threads > 1) {
             const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
             pthread_t threads[numOfThreads];
 
             for(unsigned long i = 0; i < numOfThreads; ++i){
-                const int rc = pthread_create(&threads[i], nullptr, DoGrep, (void *)&grepEngine);
+                const int rc = pthread_create(&threads[i], nullptr, grep::DoGrepThreadFunction, (void *)&grepEngine);
                 if (rc) {
                     llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
                 }
@@ -256,7 +228,7 @@ int main(int argc, char *argv[]) {
 
     }
     
-    grep::PrintResult(grep::Mode, total_Count);
+    grep::PrintResults();
     
     return 0;
 }

@@ -286,9 +286,6 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
     if (IncludeFlag!="") {
         llvm::report_fatal_error("Sorry, -include is not yet supported.\n");
     }    
-    if (NoMessagesFlag) {
-        llvm::report_fatal_error("Sorry, -s is not yet supported.\n");
-    }
     if (ByteOffsetFlag) {
         llvm::report_fatal_error("Sorry, -b is not yet supported.\n");
     }

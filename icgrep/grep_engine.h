@@ -19,6 +19,9 @@ class Driver;
 
 namespace grep {
 
+// Thread function only.
+void *DoGrepThreadFunction(void *args);
+    
 class GrepEngine {
 public:
 
@@ -33,7 +36,7 @@ public:
 
     void doGrep(const std::string & fileName) const;
 
-	uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) const;
+    uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) const;
 
     uint64_t doGrep(const int32_t fileDescriptor, const uint32_t fileIdx) const;
         
@@ -44,7 +47,7 @@ private:
 
 void initFileResult(std::vector<std::string> filenames);
     
-void PrintResult(GrepModeType grepMode, std::vector<size_t> & total_CountOnly);
+void PrintResults();
     
 
 re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t bufferLength);
