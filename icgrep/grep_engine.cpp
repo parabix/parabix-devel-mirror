@@ -334,56 +334,28 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
     Type * const int64Ty = idb->getInt64Ty();
     Type * const int32Ty = idb->getInt32Ty();
 
-    Function * mainFunc = nullptr;
-    Value * fileIdx = nullptr;
-    StreamSetBuffer * ByteStream = nullptr;
     kernel::Kernel * sourceK = nullptr;
     
     size_t MatchLimit = ((grepMode == QuietMode) | (grepMode == FilesWithMatch) | (grepMode == FilesWithoutMatch)) ? 1 : MaxCountFlag;
 
-    if (grepSource == GrepSource::Internal) {
+    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, idb->getInt32Ty(), int32Ty, nullptr));
+    mainFunc->setCallingConv(CallingConv::C);
+    idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+    auto args = mainFunc->arg_begin();
 
-        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, idb->getInt8PtrTy(), int64Ty, int32Ty, nullptr));
-        mainFunc->setCallingConv(CallingConv::C);
-        idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
-        auto args = mainFunc->arg_begin();
+    Value * const fileDescriptor = &*(args++);
+    fileDescriptor->setName("fileDescriptor");
+    Value * fileIdx = &*(args++);
+    fileIdx->setName("fileIdx");
 
-        Value * const buffer = &*(args++);
-        buffer->setName("buffer");
+    StreamSetBuffer * ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
 
-        Value * length = &*(args++);
-        length->setName("length");
-        length = idb->CreateZExtOrTrunc(length, idb->getSizeTy());
-
-        fileIdx = &*(args++);
-        fileIdx->setName("fileIdx");
-
-        ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
-
-        sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::MemorySourceKernel>(idb, idb->getInt8PtrTy(), segmentSize));
-        sourceK->setInitialArguments({buffer, length});
-
-    } else {
-
-        mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, idb->getInt32Ty(), int32Ty, nullptr));
-        mainFunc->setCallingConv(CallingConv::C);
-        idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
-        auto args = mainFunc->arg_begin();
-
-        Value * const fileDescriptor = &*(args++);
-        fileDescriptor->setName("fileDescriptor");
-        fileIdx = &*(args++);
-        fileIdx->setName("fileIdx");
-
-        ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
-
-        if (grepSource == GrepSource::File) {
-            sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::MMapSourceKernel>(idb, segmentSize));
-            sourceK->setInitialArguments({fileDescriptor});
-        } else { // if (grepSource == GrepSource::StdIn) {
-            sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::ReadSourceKernel>(idb, segmentSize));
-            sourceK->setInitialArguments({idb->getInt32(STDIN_FILENO)});
-        }
+    if (grepSource == GrepSource::File) {
+        sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::MMapSourceKernel>(idb, segmentSize));
+        sourceK->setInitialArguments({fileDescriptor});
+    } else { // if (grepSource == GrepSource::StdIn) {
+        sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::ReadSourceKernel>(idb, segmentSize));
+        sourceK->setInitialArguments({idb->getInt32(STDIN_FILENO)});
     }
 
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
@@ -426,15 +398,7 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
         MergedResults = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
         mGrepDriver->makeKernelCall(untilK, {AllMatches}, {MergedResults});
     }
-    if (grepMode != NormalMode) {
-        kernel::Kernel * matchCountK = mGrepDriver->addKernelInstance(make_unique<kernel::MatchCount>(idb));
-        mGrepDriver->makeKernelCall(matchCountK, {MergedResults}, {});
-        mGrepDriver->generatePipelineIR();
-        idb->setKernel(matchCountK);
-        Value * matchedLineCount = idb->getScalarField("matchedLineCount");
-        matchedLineCount = idb->CreateZExt(matchedLineCount, int64Ty);
-        idb->CreateRet(matchedLineCount);
-    } else {
+    if (grepMode == NormalMode) {
         kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::Normal, encodingBits));
         scanMatchK->setInitialArguments({fileIdx});
         mGrepDriver->makeKernelCall(scanMatchK, {MergedResults, LineBreakStream, ByteStream}, {});
@@ -445,6 +409,14 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
         }
         mGrepDriver->generatePipelineIR();
         idb->CreateRet(idb->getInt64(0));
+    } else {
+        kernel::Kernel * matchCountK = mGrepDriver->addKernelInstance(make_unique<kernel::MatchCount>(idb));
+        mGrepDriver->makeKernelCall(matchCountK, {MergedResults}, {});
+        mGrepDriver->generatePipelineIR();
+        idb->setKernel(matchCountK);
+        Value * matchedLineCount = idb->getScalarField("matchedLineCount");
+        matchedLineCount = idb->CreateZExt(matchedLineCount, int64Ty);
+        idb->CreateRet(matchedLineCount);
     }
     mGrepDriver->finalizeObject();
 }
