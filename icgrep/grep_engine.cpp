@@ -201,7 +201,7 @@ void initFileResult(std::vector<std::string> filenames){
         else if ((Mode == NormalMode) && InitialTabFlag && !(LineNumberFlag || ByteOffsetFlag)) {
             fileSuffix = "\t:";
         }
-        else if (Mode == CountOnly) {
+        else if ((Mode == NormalMode) || (Mode == CountOnly)) {
             fileSuffix = ":";
         }
         else if ((Mode == FilesWithMatch) || (Mode == FilesWithoutMatch)) {
