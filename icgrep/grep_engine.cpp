@@ -116,19 +116,40 @@ uint64_t GrepEngine::doGrep(const int32_t fileDescriptor, const uint32_t fileIdx
 static int * total_count;
 static std::stringstream * resultStrs = nullptr;
 static std::vector<std::string> inputFiles;
+static std::vector<std::string> linePrefix;
 
 void initFileResult(std::vector<std::string> filenames){
     const int n = filenames.size();
+    linePrefix.resize(n);
     if ((n > 1) && !NoFilenameFlag) {
         WithFilenameFlag = true;
+    }
+    std::string fileSuffix;
+    if (WithFilenameFlag) {
+        if (NullFlag) {
+            fileSuffix = std::string("\0", 1);
+        }
+        else if ((Mode == NormalMode) && InitialTabFlag && !(LineNumberFlag || ByteOffsetFlag)) {
+            fileSuffix = "\t:";
+        }
+        else {
+            fileSuffix = ":";
+        }
     }
     inputFiles = filenames;
     resultStrs = new std::stringstream[n];
     total_count = new int[n];
-    for (unsigned i = 0; i < inputFiles.size(); ++i){
+    for (unsigned i = 0; i < inputFiles.size(); ++i) {
+        if (WithFilenameFlag) {
+            if (inputFiles[i] == "-") {
+                linePrefix[i] = LabelFlag + fileSuffix;
+            }
+            else {
+                linePrefix[i] = inputFiles[i] + fileSuffix;
+            }
+        }
         total_count[i] = 0;
     }
-
 }
 
 template<typename CodeUnit>
@@ -141,12 +162,17 @@ void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_e
     assert (line_end <= filesize);
 
     if (WithFilenameFlag) {
-        resultStrs[fileIdx] << inputFiles[fileIdx] << ':';
+        resultStrs[fileIdx] << linePrefix[fileIdx];
     }
     if (LineNumberFlag) {
         // Internally line numbers are counted from 0.  For display, adjust
         // the line number so that lines are numbered from 1.
-        resultStrs[fileIdx] << lineNum+1 << ":";
+        if (InitialTabFlag) {
+            resultStrs[fileIdx] << lineNum+1 << "\t:";
+        }
+        else {
+            resultStrs[fileIdx] << lineNum+1 << ":";
+        }
     }
 
     // If the line "starts" on the LF of a CRLF, it is actually the end of the last line.
@@ -205,7 +231,7 @@ void PrintResult(GrepModeType grepMode, std::vector<size_t> & total_CountOnly){
             }
         } else {
             for (unsigned i = 0; i < inputFiles.size(); ++i){
-                std::cout << inputFiles[i] << ':' << total_CountOnly[i] << std::endl;
+                std::cout << linePrefix[i] << total_CountOnly[i] << std::endl;
                 total += total_CountOnly[i];
             };
         }
@@ -216,7 +242,10 @@ void PrintResult(GrepModeType grepMode, std::vector<size_t> & total_CountOnly){
         size_t requiredCount = grepMode == FilesWithMatch ? 1 : 0;
         for (unsigned i = 0; i < inputFiles.size(); ++i) {
             if (total_CountOnly[i] == requiredCount) {
-                std::cout << inputFiles[i] << std::endl;
+                std::cout << linePrefix[i];
+                if (!NullFlag) {
+                    std::cout << "\n";
+                }
             }
             total += total_CountOnly[i];
         }

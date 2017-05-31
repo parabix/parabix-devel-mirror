@@ -187,7 +187,8 @@ static cl::opt<bool, true> OnlyMatchingOption("o", cl::location(OnlyMatchingFlag
 static cl::alias OnlyMatchingAlias("only-matching", cl::desc("Alias for -o"), cl::aliasopt(OnlyMatchingOption));
 
 std::string LabelFlag;
-static cl::opt<std::string, true> LabelOption("label", cl::location(LabelFlag), cl::desc("Set a label for input lines matched from stdin."), cl::cat(Output_Options));
+    static cl::opt<std::string, true> LabelOption("label", cl::location(LabelFlag), cl::init("(standard input)"),
+                                              cl::desc("Set a label for input lines matched from stdin."), cl::cat(Output_Options));
 
 bool LineBufferedFlag;
 static cl::opt<bool, true> LineBufferedOption("line-buffered", cl::location(LineBufferedFlag), cl::desc("Buffer lines to output."), cl::cat(Output_Options));
@@ -288,17 +289,11 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
     if (NoMessagesFlag) {
         llvm::report_fatal_error("Sorry, -s is not yet supported.\n");
     }
-    if (NullFlag) {
-        llvm::report_fatal_error("Sorry, -Z is not yet supported.\n");
-    }
     if (ByteOffsetFlag) {
         llvm::report_fatal_error("Sorry, -b is not yet supported.\n");
     }
     if (UnixByteOffsetsFlag) {
         llvm::report_fatal_error("Sorry, -u is not yet supported.\n");
-    }
-    if (InitialTabFlag) {
-        llvm::report_fatal_error("Sorry, -T is not yet supported.\n");
     }
     if (OnlyMatchingFlag) {
         llvm::report_fatal_error("Sorry, -o is not yet supported.\n");
@@ -314,9 +309,6 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
     }
     if (ContextFlag) {
         llvm::report_fatal_error("Sorry, -C is not yet supported.\n");
-    }
-    if (LabelFlag!="") {
-        llvm::report_fatal_error("Sorry, -label is not yet supported.\n");
     }
     if (ColorFlag!=neverColor) {
         llvm::report_fatal_error("Sorry, -color is not yet supported.\n");
