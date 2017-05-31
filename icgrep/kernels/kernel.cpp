@@ -655,7 +655,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     const unsigned outputSetCount = mStreamSetOutputs.size();
     const unsigned totalSetCount = inputSetCount + outputSetCount;
     bool isDerived[totalSetCount];
-    int itemsPerPrincipalBlock[totalSetCount];
+    unsigned itemsPerPrincipalBlock[totalSetCount];
     
     for (unsigned i = 0; i < inputSetCount; i++) {
         auto & rate = mStreamSetInputs[i].rate;

@@ -30,6 +30,7 @@ IR_Gen/idisa_sse_builder.cpp
 IR_Gen/idisa_sse_builder.h
 IR_Gen/idisa_target.cpp
 IR_Gen/idisa_target.h
+IR_Gen/tracegen.cpp
 IR_Gen/tracegen.h
 kernels/alignedprint.cpp
 kernels/alignedprint.h
@@ -242,6 +243,8 @@ array-test.cpp
 base64.cpp
 grep_engine.cpp
 grep_engine.h
+grep_interface.cpp
+grep_interface.h
 grep_type.h
 hrtime.h
 icgrep.cpp
@@ -256,4 +259,3 @@ utf8_encoder.cpp
 utf8_encoder.h
 wc.cpp
 CMakeLists.txt
-IR_Gen/tracegen.cpp

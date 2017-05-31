@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-class MatchStar final : public Statement {
+class MatchStar final : public CarryProducingStatement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -29,7 +29,7 @@ public:
     virtual ~MatchStar() {}
 protected:
     MatchStar(PabloAST * marker,  PabloAST * cc, const String * name, Allocator & allocator)
-    : Statement(ClassTypeId::MatchStar, marker->getType(), {marker, cc}, name, allocator) {
+    : CarryProducingStatement(ClassTypeId::MatchStar, marker->getType(), {marker, cc}, name, allocator) {
     }
 };
 

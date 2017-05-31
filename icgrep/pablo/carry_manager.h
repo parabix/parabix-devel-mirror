@@ -45,41 +45,43 @@ public:
   
     CarryManager() noexcept;
 
-    void initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, PabloKernel * const kernel);
+    void initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel);
 
-    void initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
+    void releaseCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel);
 
-    void finalizeCodeGen(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
+    void initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+
+    void finalizeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
     /* Entering and leaving loops. */
 
-    void enterLoopScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const scope);
+    void enterLoopScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope);
 
-    void enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::BasicBlock * const entryBlock);
+    void enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock);
 
-    void leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::BasicBlock * const exitBlock);
+    void leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const exitBlock);
 
-    void leaveLoopScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
+    void leaveLoopScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
 
     /* Entering and leaving ifs. */
 
-    void enterIfScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const scope);
+    void enterIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope);
 
-    void enterIfBody(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::BasicBlock * const entryBlock);
+    void enterIfBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock);
 
-    void leaveIfBody(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::BasicBlock * const exitBlock);
+    void leaveIfBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const exitBlock);
 
-    void leaveIfScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
+    void leaveIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
 
     /* Methods for processing individual carry-generating operations. */
     
-    llvm::Value * addCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const Statement * operation, llvm::Value * const e1, llvm::Value * const e2);
+    llvm::Value * addCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Statement * operation, llvm::Value * const e1, llvm::Value * const e2);
 
-    llvm::Value * advanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const Advance * advance, llvm::Value * const strm);
+    llvm::Value * advanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Advance * advance, llvm::Value * const strm);
  
     /* Methods for getting and setting carry summary values for If statements */
          
-    llvm::Value * generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::Value * condition);
+    llvm::Value * generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * condition);
 
 protected:
 
@@ -87,21 +89,21 @@ protected:
 
     static bool hasIterationSpecificAssignment(const PabloBlock * const scope);
 
-    llvm::StructType * analyse(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false);
+    llvm::StructType * analyse(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false);
 
     /* Entering and leaving scopes. */
-    void enterScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const scope);
-    void leaveScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
+    void enterScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope);
+    void leaveScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
     /* Methods for processing individual carry-generating operations. */
-    llvm::Value * getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
-    void setNextCarryOut(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::Value * const carryOut);
-    llvm::Value * longAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::Value * const value, const unsigned shiftAmount);
-    llvm::Value * readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::ConstantInt *index) const;
-    void writeCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::Value * const summary, llvm::ConstantInt * index) const;
+    llvm::Value * getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    void setNextCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const carryOut);
+    llvm::Value * longAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const value, const unsigned shiftAmount);
+    llvm::Value * readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::ConstantInt *index) const;
+    void writeCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const summary, llvm::ConstantInt * index) const;
 
     /* Summary handling routines */
-    void addToCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, llvm::Value * const value);
+    void addToCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const value);
 
 private:
 

@@ -206,9 +206,7 @@ void wc(WordCountFunctionType fn_ptr, const int64_t fileIdx) {
 }
 
 int main(int argc, char *argv[]) {
-    AddParabixVersionPrinter();
-    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&wcFlags, pablo_toolchain_flags(), codegen::codegen_flags()});
-    cl::ParseCommandLineOptions(argc, argv);
+    codegen::ParseCommandLineOptions(argc, argv, {&wcFlags, pablo_toolchain_flags(), codegen::codegen_flags()});
     if (wcOptions.size() == 0) {
         CountLines = true;
         CountWords = true;

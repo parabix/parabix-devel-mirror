@@ -579,9 +579,7 @@ editdFunctionType editdScanCPUCodeGen() {
 #endif
 
 int main(int argc, char *argv[]) {
-
-    cl::ParseCommandLineOptions(argc, argv);
-
+    codegen::ParseCommandLineOptions(argc, argv);
     int pattern_segs = 0;
     int total_len = 0;
 
@@ -597,7 +595,6 @@ int main(int argc, char *argv[]) {
     preprocess(preprocess_ptr);
 
 #ifdef CUDA_ENABLED
-    setNVPTXOption();
     if(codegen::NVPTX){
 
         std::ifstream t(PatternFilename);

@@ -70,10 +70,10 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     }
     mTarget = builder.selectTarget();
     if (LLVM_LIKELY(codegen::EnableObjectCache)) {
-        if (codegen::ObjectCacheDir.empty()) {
-            mCache = new ParabixObjectCache();
-        } else {
+        if (codegen::ObjectCacheDir) {
             mCache = new ParabixObjectCache(codegen::ObjectCacheDir);
+        } else {
+            mCache = new ParabixObjectCache();
         }
         mEngine->setObjectCache(mCache);
     }
@@ -116,12 +116,11 @@ void ParabixDriver::generatePipelineIR() {
     for (const auto & k : mPipeline) {
         k->initializeInstance(iBuilder);
     }
-    if (codegen::pipelineParallel) {
+    if (codegen::PipelineParallel) {
         generateParallelPipeline(iBuilder, mPipeline);
-    } else if (codegen::segmentPipelineParallel) {
+    } else if (codegen::SegmentPipelineParallel) {
         generateSegmentParallelPipeline(iBuilder, mPipeline);
     } else {
-        codegen::ThreadNum = 1;
         generatePipelineLoop(iBuilder, mPipeline);
     }
     for (const auto & k : mPipeline) {
@@ -131,8 +130,13 @@ void ParabixDriver::generatePipelineIR() {
 
 Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
     assert ("addKernelCall or makeKernelCall must be called before LinkFunction" && (mod != nullptr));
-    Function * const f = cast<Function>(mod->getOrInsertFunction(name, type));
-    mEngine->addGlobalMapping(f, functionPtr);
+    Function * f = mod->getFunction(name);
+    if (LLVM_UNLIKELY(f == nullptr)) {
+        f = Function::Create(type, Function::ExternalLinkage, name, mod);
+        mEngine->addGlobalMapping(f, functionPtr);
+    } else if (LLVM_UNLIKELY(f->getType() != type->getPointerTo())) {
+        report_fatal_error("Cannot link " + name + ": a function with a differing signature already exists with that name in " + mod->getName());
+    }
     return f;
 }
 
@@ -141,11 +145,11 @@ void ParabixDriver::finalizeObject() {
     legacy::PassManager PM;
     std::unique_ptr<raw_fd_ostream> IROutputStream(nullptr);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowUnoptimizedIR))) {
-        if (codegen::IROutputFilename.empty()) {
-            IROutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
-        } else {
+        if (codegen::IROutputFilename) {
             std::error_code error;
             IROutputStream.reset(new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None));
+        } else {
+            IROutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
         }
         PM.add(createPrintModulePass(*IROutputStream));
     }
@@ -160,11 +164,11 @@ void ParabixDriver::finalizeObject() {
     PM.add(createCFGSimplificationPass());
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
         if (LLVM_LIKELY(IROutputStream == nullptr)) {
-            if (codegen::IROutputFilename.empty()) {
-                IROutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
-            } else {
+            if (codegen::IROutputFilename) {
                 std::error_code error;
                 IROutputStream.reset(new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None));
+            } else {
+                IROutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
             }
         }
         PM.add(createPrintModulePass(*IROutputStream));
@@ -173,11 +177,11 @@ void ParabixDriver::finalizeObject() {
     #ifndef USE_LLVM_3_6
     std::unique_ptr<raw_fd_ostream> ASMOutputStream(nullptr);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowASM))) {
-        if (codegen::ASMOutputFilename.empty()) {
-            ASMOutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
-        } else {
+        if (codegen::ASMOutputFilename) {
             std::error_code error;
             ASMOutputStream.reset(new raw_fd_ostream(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None));
+        } else {
+            ASMOutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
         }
         if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *ASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
             report_fatal_error("LLVM error: could not add emit assembly pass");

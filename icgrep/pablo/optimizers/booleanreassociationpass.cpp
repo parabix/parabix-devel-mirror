@@ -336,7 +336,7 @@ void BooleanReassociationPass::processScopes(PabloBlock * const block, Character
                 stmt = stmt->getNextNode();
             }
         } else { // characterize this statement then check whether it is equivalent to any existing one.
-            PabloAST * const folded = Simplifier::fold(stmt, block);
+            PabloAST * const folded = Simplifier::triviallyFold(stmt, block);
             if (LLVM_UNLIKELY(folded != nullptr)) {
                 stmt = stmt->replaceWith(folded);
             } else {

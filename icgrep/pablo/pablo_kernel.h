@@ -157,6 +157,8 @@ private:
     // This may be overridden for specialized processing.
     void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) final;
 
+    void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) final;
+
 private:
 
     Allocator                       mAllocator;

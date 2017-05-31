@@ -7,10 +7,7 @@ enable_testing()
 set (icgrep_VERSION_MAJOR 1)
 set (icgrep_VERSION_MINOR 6)
 
-
-
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
-option(PRINT_TIMING_INFORMATION "Write compilation and execution timing information to standard error stream")
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 find_package(LLVM REQUIRED CONFIG)
 
@@ -28,6 +25,8 @@ message(STATUS "Parabix_REVISION: ${Parabix_REVISION}")
 include_directories( ${LLVM_INCLUDE_DIRS} )
 link_directories( ${LLVM_LIBRARY_DIRS} )
 add_definitions( ${LLVM_DEFINITIONS} )
+
+# include(FindCUDA) # https://cmake.org/cmake/help/v3.0/module/FindCUDA.html
 
 option(ENABLE_CUDA_COMPILE "Compiling with CUDA")
 set(CUDA_LIB "")
@@ -104,35 +103,6 @@ add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_
 add_executable(array-test array-test.cpp kernels/alignedprint.cpp)
 add_executable(lz4d lz4d.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4_index_decoder.cpp kernels/lz4_bytestream_decoder.cpp)
 
-## IWYU detects superfluous includes and when the include can be replaced with a forward declaration.
-## It can be obtained using "apt-get install iwyu" or from "github.com/include-what-you-use".
-
-#find_program(IWYU_PATH NAMES include-what-you-use iwyu)
-#if(IWYU_PATH)
-#cmake_minimum_required(VERSION 3.3 FATAL_ERROR)
-#execute_process(COMMAND ${CMAKE_CXX_COMPILER} -print-libgcc-file-name OUTPUT_VARIABLE LIBGCC_FILE)
-#get_filename_component(LIBGCC_PATH ${LIBGCC_FILE} DIRECTORY)
-#include_directories("${LIBGCC_PATH}/include")
-#set_property(TARGET CodeGen PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET PabloADT PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET RegExpADT PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET RegExpCompiler PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET CCADT PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET UCDlib PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET icgrep PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET u8u16 PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET base64 PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET wc PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET editd PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#set_property(TARGET array-test PROPERTY CXX_INCLUDE_WHAT_YOU_USE ${IWYU_PATH})
-#endif()
-
-IF (PRINT_TIMING_INFORMATION)
-    find_package(PAPI REQUIRED)
-    include_directories(${PAPI_INCLUDE_DIRS})
-    target_link_libraries(icgrep ${PAPI_LIBRARIES})
-ENDIF()
-
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u8u16 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (base64 UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
@@ -199,6 +169,15 @@ MESSAGE(FATAL_ERROR "stdlib.h does not contain either aligned_alloc or posix_mem
 ENDIF()
 ENDIF()
 
+include(CheckIncludeFileCXX)
+CHECK_INCLUDE_FILE_CXX(sanitizer/asan_interface.h HAS_ADDRESS_SANITIZER)
+
+find_package(Libunwind)
+IF (LIBUNWIND_FOUND)
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_LIBUNWIND")
+include_directories(${LIBUNWIND_INCLUDE_DIR})
+target_link_libraries(CodeGen ${LIBUNWIND_LIBRARIES})
+ENDIF()
 
 SET(CMAKE_REQUIRED_FLAGS)
 
@@ -215,12 +194,13 @@ ENDIF()
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_VERSION='\"${Parabix_REVISION}\"'")
 
-IF (PRINT_TIMING_INFORMATION)
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPRINT_TIMING_INFORMATION")
+SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
+
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+IF (HAS_ADDRESS_SANITIZER)
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DHAS_ADDRESS_SANITIZER -fsanitize=address")
 ENDIF()
 
-SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -DNDEBUG")
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address")
 
 add_test(
   NAME greptest

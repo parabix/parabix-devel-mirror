@@ -14,7 +14,7 @@ namespace IDISA {
     
 std::string IDISA_NVPTX20_Builder::getBuilderUniqueName() { return "NVPTX20_" + std::to_string(groupThreads);}
 
-int IDISA_NVPTX20_Builder::getGroupThreads(){
+unsigned IDISA_NVPTX20_Builder::getGroupThreads() const{
     return groupThreads;
 }
 
@@ -72,11 +72,11 @@ void IDISA_NVPTX20_Builder::CreateGlobals(){
     carry = new GlobalVariable(*m,
         /*Type=*/carryTy,
         /*isConstant=*/false,
-        /*Linkage=*/llvm::GlobalValue::InternalLinkage,
+        /*Linkage=*/GlobalValue::InternalLinkage,
         /*Initializer=*/0, 
         /*Name=*/"carry",
         /*InsertBefore*/nullptr,
-        /*TLMode */llvm::GlobalValue::NotThreadLocal,
+        /*TLMode */GlobalValue::NotThreadLocal,
         /*AddressSpace*/ 3,
         /*isExternallyInitialized*/false);
 
@@ -85,11 +85,11 @@ void IDISA_NVPTX20_Builder::CreateGlobals(){
     bubble = new GlobalVariable(*m,
         /*Type=*/bubbleTy,
         /*isConstant=*/false,
-        /*Linkage=*/llvm::GlobalValue::InternalLinkage,
+        /*Linkage=*/GlobalValue::InternalLinkage,
         /*Initializer=*/0, 
         /*Name=*/"bubble",
         /*InsertBefore*/nullptr,
-        /*TLMode */llvm::GlobalValue::NotThreadLocal,
+        /*TLMode */GlobalValue::NotThreadLocal,
         /*AddressSpace*/ 3,
         /*isExternallyInitialized*/false);
    
@@ -214,7 +214,7 @@ void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
   Value * bubbleOffsetPtr = nullptr;
   Value * bubbleVal = bubbleInitVal;
 
-  for (int offset=groupThreads/2; offset>0; offset=offset>>1){
+  for (unsigned offset = groupThreads/2; offset>0; offset=offset>>1){
     carryOffsetPtr = CreateGEP(carry, {getInt32(0), CreateXor(id, getInt32(offset))});
     carryVal = CreateOr(carryVal, CreateLoad(carryOffsetPtr));
     CreateStore(carryVal, carryPtr);
@@ -262,17 +262,17 @@ void IDISA_NVPTX20_Builder::CreateBallotFunc(){
                              "setp.ne.u32 %p1, $1, 0;"
                              "vote.ballot.b32  $0, %p1;}";
     FunctionType * AsmFnTy = FunctionType::get(int32ty, int32ty, false);
-    llvm::InlineAsm *IA = llvm::InlineAsm::get(AsmFnTy, AsmStream, "=r,r", true, false);
-    llvm::CallInst * result = CreateCall(IA, conv);
-    result->addAttribute(llvm::AttributeSet::FunctionIndex, llvm::Attribute::NoUnwind);
+    InlineAsm *IA = InlineAsm::get(AsmFnTy, AsmStream, "=r,r", true, false);
+    CallInst * result = CreateCall(IA, conv);
+    result->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
 
     CreateRet(result);
 }
 
 LoadInst * IDISA_NVPTX20_Builder::CreateAtomicLoadAcquire(Value * ptr) {
-    return CreateLoad(ptr);
-    
+    return CreateLoad(ptr);    
 }
+
 StoreInst * IDISA_NVPTX20_Builder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     return CreateStore(val, ptr);
 }
@@ -285,5 +285,26 @@ void IDISA_NVPTX20_Builder::CreateBaseFunctions() {
     CreateBallotFunc();
 }
 
-    
+#ifdef HAS_ADDRESS_SANITIZER
+LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Value * Ptr, const char * Name) {
+    return IRBuilder<>::CreateLoad(Ptr, Name);
+}
+
+LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Value * Ptr, const Twine & Name) {
+    return IRBuilder<>::CreateLoad(Ptr, Name);
+}
+
+LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Type * Ty, Value * Ptr, const Twine & Name) {
+    return IRBuilder<>::CreateLoad(Ty, Ptr, Name);
+}
+
+LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Value * Ptr, bool isVolatile, const Twine & Name) {
+    return IRBuilder<>::CreateLoad(Ptr, isVolatile, Name);
+}
+
+StoreInst * IDISA_NVPTX20_Builder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
+    return IRBuilder<>::CreateStore(Val, Ptr, isVolatile);
+}
+#endif
+
 }

@@ -33,8 +33,7 @@ class PabloAST {
 public:
 
     using Allocator = SlabAllocator<PabloAST *>;
-    using UserAllocator = ProxyAllocator<PabloAST *>;
-    using Users = std::vector<PabloAST *, UserAllocator>;
+    using Users = std::vector<PabloAST *, ProxyAllocator<PabloAST *>>;
     using user_iterator = Users::iterator;
     using const_user_iterator = Users::const_iterator;
 
@@ -154,10 +153,11 @@ protected:
 
     }
     bool addUser(PabloAST * const user);
+
     bool removeUser(PabloAST * const user);
-    virtual ~PabloAST() {
-        mUsers.clear();
-    }        
+
+    virtual ~PabloAST() = default;
+
 private:
     const ClassTypeId       mClassTypeId;
     llvm::Type *            mType;
@@ -225,7 +225,8 @@ public:
     inline PabloBlock * getParent() const {
         return mParent;
     }
-    virtual ~Statement() {}
+    virtual ~Statement() = default;
+
 protected:
 
     explicit Statement(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
@@ -281,6 +282,65 @@ protected:
     const String *  mName;
     PabloBlock *    mParent;
 };
+
+class CarryProducingStatement : public Statement {
+public:
+
+    static inline bool classof(const PabloAST * e) {
+        switch (e->getClassTypeId()) {
+            case PabloAST::ClassTypeId::Advance:
+            case PabloAST::ClassTypeId::ScanThru:
+            case PabloAST::ClassTypeId::AdvanceThenScanThru:
+            case PabloAST::ClassTypeId::ScanTo:
+            case PabloAST::ClassTypeId::AdvanceThenScanTo:
+            case PabloAST::ClassTypeId::MatchStar:
+                return true;
+            default: return false;
+        }
+    }
+    static inline bool classof(const CarryProducingStatement *) {
+        return true;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+
+    unsigned getCarryGroup() const {
+        return mCarryGroup;
+    }
+
+    void setCarryGroup(const unsigned carryGroup) {
+        mCarryGroup = carryGroup;
+    }
+
+    virtual ~CarryProducingStatement() = default;
+
+protected:
+
+    explicit CarryProducingStatement(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
+    : Statement(id, type, operands, name, allocator)
+    , mCarryGroup(0) {
+
+    }
+
+    explicit CarryProducingStatement(const ClassTypeId id, llvm::Type * const type, const unsigned reserved, const String * name, Allocator & allocator)
+    : Statement(id, type, reserved, name, allocator)
+    , mCarryGroup(0) {
+
+    }
+
+    template<typename iterator>
+    explicit CarryProducingStatement(const ClassTypeId id, llvm::Type * const type, iterator begin, iterator end, const String * name, Allocator & allocator)
+    : Statement(id, type, begin, end, name, allocator)
+    , mCarryGroup(0) {
+
+    }
+
+private:
+
+    unsigned mCarryGroup;
+};
+
 
 class Variadic : public Statement {
 public:
@@ -342,6 +402,8 @@ public:
     const_iterator end() const {
         return iterator(mOperand + mOperands);
     }
+
+    virtual ~Variadic() = default;
 
 protected:
     explicit Variadic(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)

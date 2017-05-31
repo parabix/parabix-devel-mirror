@@ -244,11 +244,7 @@ static void icgrep_error_handler(void *UserData, const std::string &Message, boo
 
 void InitializeCommandLineInterface(int argc, char *argv[]) {
     llvm::install_fatal_error_handler(&icgrep_error_handler);
-    AddParabixVersionPrinter();
-#ifndef USE_LLVM_3_6
-    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&RE_Options, &Input_Options, &Output_Options, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
-#endif
-    cl::ParseCommandLineOptions(argc, argv);
+    codegen::ParseCommandLineOptions(argc, argv, {&RE_Options, &Input_Options, &Output_Options, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     if (RecursiveFlag || DereferenceRecursiveFlag) {
         DirectoriesFlag = Recurse;
     }

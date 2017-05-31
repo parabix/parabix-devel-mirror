@@ -128,8 +128,6 @@ public:
 
     llvm::Value * CreateMMap(llvm::Value * const addr, llvm::Value * size, llvm::Value * const prot, llvm::Value * const flags, llvm::Value * const fd, llvm::Value * const offset);
 
-    llvm::Value * CheckMMapSuccess(llvm::Value * const addr);
-
     llvm::Value * CreateMRemap(llvm::Value * addr, llvm::Value * oldSize, llvm::Value * newSize);
 
     llvm::Value * CreateMUnmap(llvm::Value * addr, llvm::Value * size);
@@ -139,6 +137,9 @@ public:
     //  Create a call to:  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     //                    void *(*start_routine)(void*), void *arg);
     llvm::Value * CreatePThreadCreateCall(llvm::Value * thread, llvm::Value * attr, llvm::Function * start_routine, llvm::Value * arg);
+
+    //  Create a call to:  int pthread_yield(void);
+    llvm::Value * CreatePThreadYield();
     
     //  Create a call to:  void pthread_exit(void *value_ptr);
     llvm::Value * CreatePThreadExitCall(llvm::Value * value_ptr);
@@ -214,6 +215,42 @@ public:
 
     template <typename ExternalFunctionType>
     llvm::Function * LinkFunction(llvm::StringRef name, ExternalFunctionType * functionPtr) const;
+
+    #ifdef HAS_ADDRESS_SANITIZER
+    virtual llvm::LoadInst * CreateLoad(llvm::Value *Ptr, const char *Name);
+
+    virtual llvm::LoadInst * CreateLoad(llvm::Value *Ptr, const llvm::Twine &Name = "");
+
+    virtual llvm::LoadInst * CreateLoad(llvm::Type *Ty, llvm::Value *Ptr, const llvm::Twine &Name = "");
+
+    virtual llvm::LoadInst * CreateLoad(llvm::Value *Ptr, bool isVolatile, const llvm::Twine &Name = "");
+
+    virtual llvm::StoreInst * CreateStore(llvm::Value *Val, llvm::Value *Ptr, bool isVolatile = false);
+
+    llvm::LoadInst * CreateAlignedLoad(llvm::Value *Ptr, unsigned Align, const char *Name) {
+        llvm::LoadInst * LI = CreateLoad(Ptr, Name);
+        LI->setAlignment(Align);
+        return LI;
+    }
+
+    llvm::LoadInst * CreateAlignedLoad(llvm::Value *Ptr, unsigned Align, const llvm::Twine &Name = "") {
+        llvm::LoadInst * LI = CreateLoad(Ptr, Name);
+        LI->setAlignment(Align);
+        return LI;
+    }
+
+    llvm::LoadInst * CreateAlignedLoad(llvm::Value *Ptr, unsigned Align, bool isVolatile, const llvm::Twine &Name = "") {
+        llvm::LoadInst * LI = CreateLoad(Ptr, isVolatile, Name);
+        LI->setAlignment(Align);
+        return LI;
+    }
+
+    llvm::StoreInst * CreateAlignedStore(llvm::Value *Val, llvm::Value *Ptr, unsigned Align, bool isVolatile = false) {
+        llvm::StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
+        SI->setAlignment(Align);
+        return SI;
+    }
+    #endif
 
     void setDriver(Driver * const driver) {
         mDriver = driver;

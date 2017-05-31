@@ -28,238 +28,9 @@ using TypeId = PabloAST::ClassTypeId;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold
- *
- * Note: if folding alters this variadic without making any other modification to the AST, it will return null as
- * if no change was made.
  ** ------------------------------------------------------------------------------------------------------------- */
-inline PabloAST * Simplifier::fold(Variadic * var, PabloBlock * const block) {
-
-    assert (var);
-
-    bool negated = false;
-    if (LLVM_UNLIKELY(isa<Xor>(var))) {
-        for (unsigned i = 0; i != var->getNumOperands(); ++i) {
-            if (isa<Not>(var->getOperand(i))) {
-                // (A ⊕ ¬B) = (A ⊕ (B ⊕ 1)) = ¬(A ⊕ B)
-                var->setOperand(i, cast<Not>(var->getOperand(i))->getOperand(0));
-                negated = !negated;
-            }
-        }
-    }
-
-    // Ensure all operands of a reassociatiable function are consistently ordered.
-    std::sort(var->begin(), var->end());
-
-    // Apply the idempotence law to any And and Or statement and the identity law to any Xor
-    for (int i = var->getNumOperands() - 1; i > 0; --i) {
-        if (LLVM_UNLIKELY(equals(var->getOperand(i), var->getOperand(i - 1)))) {
-            var->removeOperand(i);
-            if (LLVM_UNLIKELY(isa<Xor>(var))) {
-                var->removeOperand(--i);
-            }
-        }
-    }
-
-    // Apply the annihilator and identity laws
-    for (unsigned i = 0; i != var->getNumOperands(); ) {
-        if (LLVM_UNLIKELY(isa<Zeroes>(var->getOperand(i)))) {
-            if (LLVM_UNLIKELY(isa<And>(var))) {
-                return block->createZeroes(var->getType());
-            }
-            var->removeOperand(i);
-            continue;
-        } else if (LLVM_UNLIKELY(isa<Ones>(var->getOperand(i)))) {
-            if (LLVM_UNLIKELY(isa<Or>(var))) {
-                return block->createOnes(var->getType());
-            } else if (LLVM_UNLIKELY(isa<Xor>(var))) {
-                negated = !negated;
-            }
-            var->removeOperand(i);
-            continue;
-        }
-        ++i;
-    }
-
-    PabloAST * replacement = nullptr;
-
-    if (LLVM_LIKELY(isa<And>(var) || isa<Or>(var))) {
-        // Apply an implicit distribution + identity law whenever possible
-        //    (P ∧ Q) ∨ (P ∧ ¬Q) = P ∨ (Q ∧ ¬Q) ⇔ P
-        TypeId typeId = isa<And>(var) ? TypeId::Or : TypeId::And;
-        for (unsigned i = 0; i < var->getNumOperands(); ++i) {
-            if (var->getOperand(i)->getClassTypeId() == typeId) {
-                Variadic * const Vi = cast<Variadic>(var->getOperand(i));
-                // Ensure the i-th operand is sorted incase it was altered after being folded.
-                std::sort(Vi->begin(), Vi->end());
-                for (unsigned j = 0; j < i; ++j) {
-                    assert (var->getOperand(i) == Vi);
-                    if (var->getOperand(j)->getClassTypeId() == typeId) {
-                        Variadic * const Vj = cast<Variadic>(var->getOperand(j));
-                        assert (std::is_sorted(Vj->begin(), Vj->end()));
-                        if (Vi->getNumOperands() == Vj->getNumOperands()) {
-                            // If vi and vj differ by precisely one operand, say di and dj,
-                            // and di ⇔ ¬dj, we can apply this rule.
-                            unsigned vi = 0, vj = 0;
-                            const unsigned operands = Vi->getNumOperands();
-                            unsigned di = operands - 1, dj = operands - 1;
-                            bool differsByOne = true;
-                            while (vi < operands && vj < operands) {
-                                if (Vi->getOperand(vi) < Vj->getOperand(vj)) {
-                                    if (LLVM_UNLIKELY(di != (operands - 1))) { // <- we want the branch predictor to fail only once
-                                        differsByOne = false;
-                                        break;
-                                    }
-                                    di = vi++;
-                                } else if (Vj->getOperand(vj) < Vi->getOperand(vi)) {
-                                    if (LLVM_UNLIKELY(dj != (operands - 1))) {
-                                        differsByOne = false;
-                                        break;
-                                    }
-                                    dj = vj++;
-                                } else {
-                                    ++vi;
-                                    ++vj;
-                                }
-                            }
-                            if (LLVM_UNLIKELY(differsByOne)) {
-                                assert (di < operands && dj < operands);
-                                assert ("Found an equivalent set of operations that was not deduced earlier!" && (!equals(Vi, Vj)));
-                                // test if di ⇔ ¬dj
-                                bool apply = false;
-                                if (isa<Not>(Vi->getOperand(di))) {
-                                    apply = cast<Not>(Vi->getOperand(di))->getOperand(0) == Vj->getOperand(dj);
-                                } else if (isa<Not>(Vj->getOperand(dj))) {
-                                    apply = cast<Not>(Vj->getOperand(dj))->getOperand(0) == Vi->getOperand(di);
-                                }
-                                if (LLVM_UNLIKELY(apply)) {
-                                    // Although we can apply this transformation, we have a potential problem. If P is not a "literal", we
-                                    // cannot optimize var without creating a new And/Or statement. However, the redundancy elimination
-                                    // pass will miss this new statement unless we mark "var" as its own replacement. We'll end up checking
-                                    // "var" again but termination is still guaranteed once none of the new statements can be replaced by
-                                    // prior statements in the AST.
-                                    PabloAST * expr = nullptr;
-                                    if (operands == 2) {
-                                        expr = Vi->getOperand(1 ^ di);
-                                        if (LLVM_LIKELY(var->getNumOperands() == 2)) {
-                                            return expr;
-                                        }
-                                    } else { // if (operands > 2) {
-                                        assert (operands > 2);
-                                        block->setInsertPoint(var->getPrevNode());
-                                        if (typeId == TypeId::And) {
-                                            expr = block->createAnd(var->getType(), operands - 1);
-                                        } else { // if (typeId == TypeId::Or) {
-                                            expr = block->createOr(var->getType(), operands - 1);
-                                        }
-                                        for (unsigned k = 0; k != di; ++k) {
-                                            cast<Variadic>(expr)->addOperand(Vi->getOperand(k));
-                                        }
-                                        for (unsigned k = di + 1; k < operands; ++k) {
-                                            cast<Variadic>(expr)->addOperand(Vi->getOperand(k));
-                                        }
-                                        replacement = var;
-                                    }
-                                    var->removeOperand(i);
-                                    var->removeOperand(j);
-                                    bool unique = true;
-                                    for (unsigned k = 0; k != var->getNumOperands(); ++k) {
-                                        if (LLVM_UNLIKELY(equals(var->getOperand(k), expr))) {
-                                            unique = false;
-                                            break;
-                                        }
-                                    }
-                                    if (LLVM_LIKELY(unique)) {
-                                        var->addOperand(expr);
-                                    }
-                                    i -= 2;
-                                    break; // out of for j = 0 to i - 1
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Apply the absorption law whenever possible
-        //   P ∨ (P ∧ Q) ⇔ P ∧ (P ∨ Q) ⇔ P
-        for (unsigned i = 1; i < var->getNumOperands(); ++i) {
-            PabloAST * const op = var->getOperand(i);
-            if (op->getClassTypeId() == typeId) {
-                Variadic * const vi = cast<Variadic>(op);
-                assert (std::is_sorted(vi->begin(), vi->end()));
-                for (unsigned j = 0; j < i; ++j) {
-                    assert (var->getOperand(i) == vi);
-                    if (var->getOperand(j)->getClassTypeId() == typeId) {
-                        Variadic * const vj = cast<Variadic>(var->getOperand(j));
-                        assert (std::is_sorted(vj->begin(), vj->end()));
-                        if (vi->getNumOperands() < vj->getNumOperands()) {
-                            if (LLVM_UNLIKELY(std::includes(vi->begin(), vi->end(), vj->begin(), vj->end()))) {
-                                var->removeOperand(i--);
-                                break;
-                            }
-                        } else { // if (vi->getNumOperands() >= vj->getNumOperands()) {
-                            if (LLVM_UNLIKELY(std::includes(vj->begin(), vj->end(), vi->begin(), vi->end()))) {
-                                var->removeOperand(j--);
-                                --i;
-                            }
-                        }
-                    }
-                }
-            } else { // treat the operand as a literal
-                for (unsigned j = 0; j < var->getNumOperands(); ) {
-                    if (var->getOperand(j)->getClassTypeId() == typeId) {
-                        Variadic * const vj = cast<Variadic>(var->getOperand(j));
-                        assert (std::is_sorted(vj->begin(), vj->end()));
-                        if (LLVM_UNLIKELY(std::binary_search(vj->begin(), vj->end(), op))) {
-                            var->removeOperand(j);
-                            continue;
-                        }
-                    }
-                    ++j;
-                }
-            }
-        }
-
-        // Apply the complementation law whenever possible.
-        for (unsigned i = 0; i < var->getNumOperands(); ++i) {
-            if (isa<Not>(var->getOperand(i))) {
-                const PabloAST * const negated = cast<Not>(var->getOperand(i))->getOperand(0);
-                for (unsigned j = 0; j != var->getNumOperands(); ++j) {
-                    if (LLVM_UNLIKELY(var->getOperand(j) == negated)) {
-                        if (isa<And>(var)) { // (A ∧ ¬A) ∧ B ⇔ 0 for any B
-                            return block->createZeroes(var->getType());
-                        } else { // if (isa<Or>(var)) { // (A ∨ ¬A) ∨ B ⇔ 1 for any B
-                            return block->createOnes(var->getType());
-                        }
-                    }
-                }
-            }
-        }
-
-    }
-
-    if (LLVM_UNLIKELY(var->getNumOperands() < 2)) {
-        if (LLVM_UNLIKELY(var->getNumOperands() == 0)) {
-            return block->createZeroes(var->getType());
-        }
-        replacement = var->getOperand(0);
-    }
-    if (LLVM_UNLIKELY(negated)) {
-        assert (isa<Xor>(var));
-        block->setInsertPoint(var);
-        replacement = block->createNot(replacement ? replacement : var);
-    }
-    return replacement;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief fold
- ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * Simplifier::fold(Statement * stmt, PabloBlock * const block) {
-    if (isa<Variadic>(stmt)) {
-        return fold(cast<Variadic>(stmt), block);
-    } else if (isa<Not>(stmt)) {
+PabloAST * Simplifier::triviallyFold(Statement * stmt, PabloBlock * const block) {
+    if (isa<Not>(stmt)) {
         PabloAST * value = stmt->getOperand(0);
         if (LLVM_UNLIKELY(isa<Not>(value))) {
             return cast<Not>(value)->getOperand(0); // ¬¬A ⇔ A
@@ -478,21 +249,18 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
                 }
             }
 
-            Statement * const prior = stmt->getPrevNode();
-            PabloAST * const folded = fold(stmt, block);
+            PabloAST * const folded = triviallyFold(stmt, block);
             if (folded) {
-                // If we determine we can fold this statement, go back to the original prior node of this statement.
-                // New statements may have been inserted after it.
-                stmt->replaceWith(folded, true);
-                stmt = LLVM_LIKELY(prior != nullptr) ? prior->getNextNode() : block->front();
+                stmt = stmt->replaceWith(folded);
                 continue;
             }
+
             // By recording which statements have already been seen, we can detect the redundant statements
             // as any having the same type and operands. If so, we can replace its users with the prior statement.
             // and erase this statement from the AST
             const auto f = expressions.findOrAdd(stmt);
             if (!f.second) {
-                stmt = stmt->replaceWith(f.first, true);
+                stmt = stmt->replaceWith(f.first);
                 continue;
             }
 

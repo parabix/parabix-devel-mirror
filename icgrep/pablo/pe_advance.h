@@ -12,7 +12,7 @@
 
 namespace pablo {
 
-class Advance final : public Statement {
+class Advance final : public CarryProducingStatement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -31,7 +31,7 @@ public:
     }
 protected:
     Advance(PabloAST * expr, PabloAST * shiftAmount, const String * name, Allocator & allocator)
-    : Statement(ClassTypeId::Advance, expr->getType(), {expr, shiftAmount}, name, allocator) {
+    : CarryProducingStatement(ClassTypeId::Advance, expr->getType(), {expr, shiftAmount}, name, allocator) {
         assert(llvm::isa<Integer>(shiftAmount));
     }
 };

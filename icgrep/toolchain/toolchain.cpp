@@ -30,11 +30,11 @@ DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR.")
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
                         clEnumValEnd), cl::cat(CodeGenOptions));
 
-static cl::opt<std::string> IROutputFilenameOption("dump-generated-IR-output", cl::init(""),
+static cl::opt<const char *> IROutputFilenameOption("dump-generated-IR-output", cl::init(nullptr),
                                                        cl::desc("output IR filename"), cl::cat(CodeGenOptions));
 
 #ifndef USE_LLVM_3_6
-static cl::opt<std::string> ASMOutputFilenameOption("asm-output", cl::init(""),
+static cl::opt<const char *> ASMOutputFilenameOption("asm-output", cl::init(nullptr),
                                                     cl::desc("output ASM filename"), cl::cat(CodeGenOptions));
 
 static cl::opt<bool> AsmVerbose("asm-verbose", cl::init(true),
@@ -45,88 +45,98 @@ static cl::opt<char> OptLevelOption("O", cl::desc("Optimization level. [-O0, -O1
                                     cl::cat(CodeGenOptions), cl::Prefix, cl::ZeroOrMore, cl::init('1'));
 
 
-static cl::opt<bool> EnableObjectCacheOption("enable-object-cache",
-                                             cl::init(true), cl::desc("Enable object caching"), cl::cat(CodeGenOptions));
+static cl::opt<bool, true> EnableObjectCacheOption("enable-object-cache", cl::location(EnableObjectCache), cl::init(true),
+                                                   cl::desc("Enable object caching"), cl::cat(CodeGenOptions));
 
-static cl::opt<std::string> ObjectCacheDirOption("object-cache-dir",
-                                                 cl::init(""), cl::desc("Path to the object cache diretory"), cl::cat(CodeGenOptions));
+static cl::opt<const char *> ObjectCacheDirOption("object-cache-dir", cl::init(nullptr),
+                                                 cl::desc("Path to the object cache diretory"), cl::cat(CodeGenOptions));
 
 
 static cl::opt<int, true> BlockSizeOption("BlockSize", cl::location(BlockSize), cl::init(0),
                                           cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 
 
-static cl::opt<int, true> SegmentSizeOption("segment-size", cl::location(SegmentSize),
-                                            cl::desc("Segment Size"), cl::value_desc("positive integer"), cl::init(1));
+static cl::opt<int, true> SegmentSizeOption("segment-size", cl::location(SegmentSize), cl::init(1),
+                                            cl::desc("Segment Size"), cl::value_desc("positive integer"));
 
 static cl::opt<int, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::init(1),
                                                cl::desc("Buffer Segments"), cl::value_desc("positive integer"));
 
 
-static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(2),
+static cl::opt<int> ThreadNumOption("thread-num", cl::init(2),
                                           cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
 
 
 static cl::opt<bool, true> EnableAssertsOption("ea", cl::location(EnableAsserts), cl::init(IN_DEBUG_MODE),
-                                               cl::desc("Enable Asserts"));
+                                               cl::desc("Enable Asserts"), cl::cat(CodeGenOptions));
 
 static cl::opt<bool, true> EnableCycleCountOption("ShowKernelCycles", cl::location(EnableCycleCounter), cl::init(false),
-                                                  cl::desc("Count and report CPU cycles per kernel"), cl::cat(CodeGenOptions));
+                                             cl::desc("Count and report CPU cycles per kernel"), cl::cat(CodeGenOptions));
 
-static cl::opt<bool, true> pipelineParallelOption("enable-pipeline-parallel", cl::location(pipelineParallel),
+static cl::opt<bool, true> pipelineParallelOption("enable-pipeline-parallel", cl::location(PipelineParallel), cl::init(false),
                                                   cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(CodeGenOptions));
     
-static cl::opt<bool, true> segmentPipelineParallelOption("enable-segment-pipeline-parallel", cl::location(segmentPipelineParallel),
+static cl::opt<bool, true> segmentPipelineParallelOption("enable-segment-pipeline-parallel", cl::location(SegmentPipelineParallel),
                                                          cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
 
-static cl::opt<bool> USENVPTX("NVPTX", cl::init(false),
-                              cl::desc("Run on GPU only."));
+static cl::opt<bool, true> NVPTXOption("NVPTX", cl::location(NVPTX), cl::init(false),
+                                 cl::desc("Run on GPU only."), cl::cat(CodeGenOptions));
 
 static cl::opt<int, true> GroupNumOption("group-num", cl::location(GroupNum), cl::init(256),
-                                         cl::desc("NUmber of groups declared on GPU"), cl::value_desc("positive integer"));
+                                         cl::desc("NUmber of groups declared on GPU"), cl::value_desc("positive integer"), cl::cat(CodeGenOptions));
 
+CodeGenOpt::Level OptLevel;
 
-const CodeGenOpt::Level OptLevel = [](const char optLevel) {
-    switch (optLevel) {
-        case '0': return CodeGenOpt::None;
-        case '1': return CodeGenOpt::Less;
-        case '2': return CodeGenOpt::Default;
-        case '3': return CodeGenOpt::Aggressive;
-        default: report_fatal_error(std::string(1,optLevel) + " is an invalid optimization level.");
-    }
-}(OptLevelOption);
+bool PipelineParallel;
 
-bool pipelineParallel;
-bool segmentPipelineParallel;
-const std::string ASMOutputFilename = ASMOutputFilenameOption;
-const std::string IROutputFilename = IROutputFilenameOption;
-const std::string ObjectCacheDir = ObjectCacheDirOption;
+bool SegmentPipelineParallel;
+
+const char * ASMOutputFilename;
+
+const char * IROutputFilename;
+
+const char * ObjectCacheDir;
+
 int BlockSize;
+
 int SegmentSize;
+
 int BufferSegments;
+
 int ThreadNum;
+
 bool EnableAsserts;
+
 bool EnableCycleCounter;
-const bool EnableObjectCache = EnableObjectCacheOption && (DebugOptions.getBits() == 0);
-bool NVPTX;
+
+bool EnableObjectCache;
+
+bool NVPTX = [](const bool nvptx) {
+    #ifndef CUDA_ENABLED
+    if (nvptx) {
+        report_fatal_error("CUDA compiler is not supported.");
+    }
+    #endif
+    return nvptx;
+}(NVPTXOption);
+
 int GroupNum;
 
 const llvm::Reloc::Model RelocModel = ::RelocModel;
+
 const llvm::CodeModel::Model CMModel = ::CMModel;
+
 const std::string MArch = ::MArch;
+
 const std::string RunPass = ::RunPass;
+
 const llvm::TargetMachine::CodeGenFileType FileType = ::FileType;
+
 const std::string StopAfter = ::StopAfter;
+
 const std::string StartAfter = ::StartAfter;
-#ifndef USE_LLVM_3_6
-const TargetOptions Options = [](const bool asmVerbose) {
-    TargetOptions opt = InitTargetOptionsFromCodeGenFlags();
-    opt.MCOptions.AsmVerbose = AsmVerbose;
-    return opt;
-}(AsmVerbose);
-#else
-const TargetOptions Options = InitTargetOptionsFromCodeGenFlags();
-#endif
+
+TargetOptions Options;
 
 const cl::OptionCategory * codegen_flags() {
     return &CodeGenOptions;
@@ -148,21 +158,48 @@ void setFunctionAttributes(llvm::StringRef CPU, llvm::StringRef Features, llvm::
     return ::setFunctionAttributes(CPU, Features, M);
 }
 
+std::string ProgramName;
 
+void ParseCommandLineOptions(int argc, const char * const *argv, std::initializer_list<const cl::OptionCategory *> hiding) {
+    AddParabixVersionPrinter();
+    codegen::ProgramName = argv[0];
+    #ifndef USE_LLVM_3_6
+    if (hiding.size() != 0) {
+        cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>(hiding));
+    }
+    #endif
+    cl::ParseCommandLineOptions(argc, argv);
+    if (DebugOptions.getBits()) {
+        EnableObjectCache = false;
+    }
+
+    ThreadNum = (PipelineParallel || SegmentPipelineParallel) ? 2 : 1;
+
+    ObjectCacheDir = ObjectCacheDirOption;
+    IROutputFilename = IROutputFilenameOption;
+    ObjectCacheDir = ObjectCacheDirOption;
+    Options = InitTargetOptionsFromCodeGenFlags();
+    #ifndef USE_LLVM_3_6
+    Options.MCOptions.AsmVerbose = AsmVerbose;
+    #endif
+    switch (OptLevelOption) {
+        case '0': OptLevel = CodeGenOpt::None; break;
+        case '1': OptLevel = CodeGenOpt::Less; break;
+        case '2': OptLevel = CodeGenOpt::Default; break;
+        case '3': OptLevel = CodeGenOpt::Aggressive; break;
+        default: report_fatal_error(std::string(1, OptLevelOption) + " is an invalid optimization level.");
+    }
+    #ifndef CUDA_ENABLED
+    if (NVPTX) {
+        report_fatal_error("CUDA compiler is not supported.");
+    }
+    #endif
 }
 
-void setNVPTXOption() {
-    codegen::NVPTX = codegen::USENVPTX; 
-    if (codegen::NVPTX) {
-        #ifndef CUDA_ENABLED
-        report_fatal_error("CUDA compiler is not supported.");
-        #endif
-    }
 }
 
 void printParabixVersion () {
-    raw_ostream &OS = outs();
-    OS << "Parabix (http://parabix.costar.sfu.ca/):\n  " << "Parabix revision " << PARABIX_VERSION << "\n";
+    outs() << "Parabix (http://parabix.costar.sfu.ca/):\n  " << "Parabix revision " << PARABIX_VERSION << "\n";
 }
 
 void AddParabixVersionPrinter() {

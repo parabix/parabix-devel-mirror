@@ -125,8 +125,7 @@ int main(int argc, char *argv[]) {
     sys::PrintStackTraceOnErrorSignal(argv[0]);
     llvm::PrettyStackTraceProgram X(argc, argv);
     llvm_shutdown_obj shutdown;
-    cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>{&lz4dFlags, codegen::codegen_flags()});
-    cl::ParseCommandLineOptions(argc, argv);
+    codegen::ParseCommandLineOptions(argc, argv, {&lz4dFlags, codegen::codegen_flags()});
     std::string fileName = inputFile;
     LZ4FrameDecoder lz4Frame(fileName);
     if (!lz4Frame.isValid()) {

@@ -19,8 +19,7 @@ public:
 protected:
     Simplifier() = default;
 private:
-    static PabloAST * fold(Variadic * var, PabloBlock * const block);
-    static PabloAST * fold(Statement * const stmt, PabloBlock * const block);
+    static PabloAST * triviallyFold(Statement * const stmt, PabloBlock * const block);
     static void redundancyElimination(PabloBlock * const block, ExpressionTable * et = nullptr, VariableTable * const vt = nullptr);
     static void deadCodeElimination(PabloKernel * const kernel);
     static void deadCodeElimination(PabloBlock * const block);

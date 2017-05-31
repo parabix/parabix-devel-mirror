@@ -11,7 +11,7 @@
 
 namespace pablo {
 
-class ScanThru : public Statement {
+class ScanThru : public CarryProducingStatement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -30,12 +30,12 @@ public:
     }
 protected:
     ScanThru(PabloAST * from, PabloAST * thru, const String * name, Allocator & allocator)
-    : Statement(ClassTypeId::ScanThru, from->getType(), {from, thru}, name, allocator) {
+    : CarryProducingStatement(ClassTypeId::ScanThru, from->getType(), {from, thru}, name, allocator) {
 
     }
 };
 
-class ScanTo : public Statement {
+class ScanTo : public CarryProducingStatement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -54,12 +54,12 @@ public:
     }
 protected:
     ScanTo(PabloAST * from, PabloAST * to, const String * name, Allocator & allocator)
-    : Statement(ClassTypeId::ScanTo, from->getType(), {from, to}, name, allocator) {
+    : CarryProducingStatement(ClassTypeId::ScanTo, from->getType(), {from, to}, name, allocator) {
 
     }
 };
 
-class AdvanceThenScanThru : public Statement {
+class AdvanceThenScanThru : public CarryProducingStatement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -78,12 +78,12 @@ public:
     }
 protected:
     AdvanceThenScanThru(PabloAST * from, PabloAST * thru, const String * name, Allocator & allocator)
-    : Statement(ClassTypeId::AdvanceThenScanThru, from->getType(), {from, thru}, name, allocator) {
+    : CarryProducingStatement(ClassTypeId::AdvanceThenScanThru, from->getType(), {from, thru}, name, allocator) {
 
     }
 };
 
-class AdvanceThenScanTo : public Statement {
+class AdvanceThenScanTo : public CarryProducingStatement {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -102,7 +102,7 @@ public:
     }
 protected:
     AdvanceThenScanTo(PabloAST * from, PabloAST * to, const String * name, Allocator & allocator)
-    : Statement(ClassTypeId::AdvanceThenScanTo, from->getType(), {from, to}, name, allocator) {
+    : CarryProducingStatement(ClassTypeId::AdvanceThenScanTo, from->getType(), {from, to}, name, allocator) {
 
     }
 };

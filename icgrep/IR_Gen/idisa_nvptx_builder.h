@@ -16,7 +16,13 @@ public:
     IDISA_NVPTX20_Builder(llvm::LLVMContext & C, unsigned registerWidth, unsigned vectorWidth, unsigned stride)
     : IDISA_Builder(C, registerWidth, registerWidth, stride)
     , IDISA_I64_Builder(C, registerWidth, registerWidth, stride)
-    , groupThreads(stride/vectorWidth) {
+    , groupThreads(stride/vectorWidth)
+    , barrierFunc(nullptr)
+    , tidFunc(nullptr)
+    , mLongAdvanceFunc(nullptr)
+    , mLongAddFunc(nullptr)
+    , carry(nullptr)
+    , bubble(nullptr) {
 
     }
 
@@ -24,7 +30,7 @@ public:
 
     virtual std::string getBuilderUniqueName() override;
 
-    int getGroupThreads();
+    unsigned getGroupThreads() const;
 
     void CreateBaseFunctions() override;
     
@@ -46,6 +52,18 @@ public:
         return false;
     }
 
+    #ifdef HAS_ADDRESS_SANITIZER
+    llvm::LoadInst * CreateLoad(llvm::Value *Ptr, const char *Name) override;
+
+    llvm::LoadInst * CreateLoad(llvm::Value *Ptr, const llvm::Twine &Name = "") override;
+
+    llvm::LoadInst * CreateLoad(llvm::Type *Ty, llvm::Value *Ptr, const llvm::Twine &Name = "") override;
+
+    llvm::LoadInst * CreateLoad(llvm::Value *Ptr, bool isVolatile, const llvm::Twine &Name = "") override;
+
+    llvm::StoreInst * CreateStore(llvm::Value *Val, llvm::Value *Ptr, bool isVolatile = false) override;
+    #endif
+
 private:
 
     void CreateGlobals();
@@ -55,7 +73,7 @@ private:
     void CreateBallotFunc();
 
 private:
-    int                         groupThreads;
+    const unsigned              groupThreads;
     llvm::Function *            barrierFunc;
     llvm::Function *            tidFunc;
     llvm::Function *            mLongAdvanceFunc;

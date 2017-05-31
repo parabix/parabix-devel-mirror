@@ -32,12 +32,22 @@ void StreamSetBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder
 }
 
 Value * StreamSetBuffer::getStreamBlockPtr(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * streamIndex, Value * blockIndex, const bool /* readOnly */) const {
-    iBuilder->CreateAssert(iBuilder->CreateICmpULT(streamIndex, getStreamSetCount(iBuilder, self)), "StreamSetBuffer: out-of-bounds stream access");
+    if (codegen::EnableAsserts) {
+        Value * const count = getStreamSetCount(iBuilder, self);
+        Value * const index = iBuilder->CreateZExtOrTrunc(streamIndex, count->getType());
+        Value * const cond = iBuilder->CreateICmpULT(index, count);
+        iBuilder->CreateAssert(cond, "StreamSetBuffer: out-of-bounds stream access");
+    }
     return iBuilder->CreateGEP(getStreamSetBlockPtr(iBuilder, self, blockIndex), {iBuilder->getInt32(0), streamIndex});
 }
 
 Value * StreamSetBuffer::getStreamPackPtr(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * streamIndex, Value * blockIndex, Value * packIndex, const bool /* readOnly */) const {
-    iBuilder->CreateAssert(iBuilder->CreateICmpULT(streamIndex, getStreamSetCount(iBuilder, self)), "StreamSetBuffer: out-of-bounds stream access");
+    if (codegen::EnableAsserts) {
+        Value * const count = getStreamSetCount(iBuilder, self);
+        Value * const index = iBuilder->CreateZExtOrTrunc(streamIndex, count->getType());
+        Value * const cond = iBuilder->CreateICmpULT(index, count);
+        iBuilder->CreateAssert(cond, "StreamSetBuffer: out-of-bounds stream access");
+    }
     return iBuilder->CreateGEP(getStreamSetBlockPtr(iBuilder, self, blockIndex), {iBuilder->getInt32(0), streamIndex, packIndex});
 }
 
@@ -139,7 +149,6 @@ void StreamSetBuffer::releaseBuffer(IDISA::IDISA_Builder * const /* iBuilder */,
 void StreamSetBuffer::createBlockCopy(IDISA::IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * blocksToCopy) const {
     Type * i8ptr = iBuilder->getInt8PtrTy();
     unsigned alignment = iBuilder->getBitBlockWidth() / 8;
-    Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
     unsigned numStreams = getType()->getArrayNumElements();
     auto elemTy = getType()->getArrayElementType();
     unsigned fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
@@ -148,34 +157,34 @@ void StreamSetBuffer::createBlockCopy(IDISA::IDISA_Builder * const iBuilder, Val
 }
 
 void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * itemsToCopy) const {
-    Type * i8ptr = iBuilder->getInt8PtrTy();
-    unsigned alignment = iBuilder->getBitBlockWidth() / 8;
-    Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
-    unsigned numStreams = getType()->getArrayNumElements();
-    auto elemTy = getType()->getArrayElementType();
-    unsigned fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
+    Type * const int8PtrTy = iBuilder->getInt8PtrTy();
+    const unsigned alignment = iBuilder->getBitBlockWidth() / 8;
+    Constant * const blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
+    const unsigned numStreams = getType()->getArrayNumElements();
+    const auto elemTy = getType()->getArrayElementType();
+    const auto fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
     if (numStreams == 1) {
         Value * copyBits = iBuilder->CreateMul(itemsToCopy, iBuilder->getSize(fieldWidth));
         Value * copyBytes = iBuilder->CreateLShr(iBuilder->CreateAdd(copyBits, iBuilder->getSize(7)), iBuilder->getSize(3));
-        iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, i8ptr), iBuilder->CreateBitCast(sourceBlockPtr, i8ptr), copyBytes, alignment);
-        return;
-    }
-    Value * blocksToCopy = iBuilder->CreateUDiv(itemsToCopy, blockSize);
-    Value * partialItems = iBuilder->CreateURem(itemsToCopy, blockSize);
-    Value * partialBlockTargetPtr = iBuilder->CreateGEP(targetBlockPtr, blocksToCopy);
-    Value * partialBlockSourcePtr = iBuilder->CreateGEP(sourceBlockPtr, blocksToCopy);
-    Value * blockCopyBytes = iBuilder->CreateMul(blocksToCopy, iBuilder->getSize(iBuilder->getBitBlockWidth() * numStreams * fieldWidth/8));
-    iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, i8ptr), iBuilder->CreateBitCast(sourceBlockPtr, i8ptr), blockCopyBytes, alignment);
-    Value * partialCopyBitsPerStream = iBuilder->CreateMul(partialItems, iBuilder->getSize(fieldWidth));
-    Value * partialCopyBytesPerStream = iBuilder->CreateLShr(iBuilder->CreateAdd(partialCopyBitsPerStream, iBuilder->getSize(7)), iBuilder->getSize(3));
-    for (unsigned strm = 0; strm < numStreams; strm++) {
-        Value * strmTargetPtr = iBuilder->CreateGEP(partialBlockTargetPtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
-        Value * strmSourcePtr = iBuilder->CreateGEP(partialBlockSourcePtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
-        iBuilder->CreateMemMove(iBuilder->CreateBitCast(strmTargetPtr, i8ptr), iBuilder->CreateBitCast(strmSourcePtr, i8ptr), partialCopyBytesPerStream, alignment);
+        iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, int8PtrTy), iBuilder->CreateBitCast(sourceBlockPtr, int8PtrTy), copyBytes, alignment);
+    } else {
+        Value * blocksToCopy = iBuilder->CreateUDiv(itemsToCopy, blockSize);
+        Value * partialItems = iBuilder->CreateURem(itemsToCopy, blockSize);
+        Value * partialBlockTargetPtr = iBuilder->CreateGEP(targetBlockPtr, blocksToCopy);
+        Value * partialBlockSourcePtr = iBuilder->CreateGEP(sourceBlockPtr, blocksToCopy);
+        Value * blockCopyBytes = iBuilder->CreateMul(blocksToCopy, iBuilder->getSize(iBuilder->getBitBlockWidth() * numStreams * fieldWidth/8));
+        iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, int8PtrTy), iBuilder->CreateBitCast(sourceBlockPtr, int8PtrTy), blockCopyBytes, alignment);
+        Value * partialCopyBitsPerStream = iBuilder->CreateMul(partialItems, iBuilder->getSize(fieldWidth));
+        Value * partialCopyBytesPerStream = iBuilder->CreateLShr(iBuilder->CreateAdd(partialCopyBitsPerStream, iBuilder->getSize(7)), iBuilder->getSize(3));
+        for (unsigned strm = 0; strm < numStreams; strm++) {
+            Value * strmTargetPtr = iBuilder->CreateGEP(partialBlockTargetPtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
+            Value * strmSourcePtr = iBuilder->CreateGEP(partialBlockSourcePtr, {iBuilder->getInt32(0), iBuilder->getInt32(strm)});
+            strmTargetPtr = iBuilder->CreateBitCast(strmTargetPtr, int8PtrTy);
+            strmSourcePtr = iBuilder->CreateBitCast(strmSourcePtr, int8PtrTy);
+            iBuilder->CreateMemMove(strmTargetPtr, strmSourcePtr, partialCopyBytesPerStream, alignment);
+        }
     }
 }
-
-
 
 // Source File Buffer
 Value * SourceBuffer::getBufferedSize(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
@@ -397,6 +406,7 @@ std::pair<Value *, Value *> ExpandableBuffer::getInternalStreamBuffer(IDISA::IDI
 
         Value * size = iBuilder->CreateMul(newCapacity, iBuilder->getSize(mBufferBlocks));
         const auto memAlign = std::max(iBuilder->getCacheAlignment(), iBuilder->getBitBlockWidth() / 8);
+
         Value * newStreamSet = iBuilder->CreatePointerCast(iBuilder->CreateAlignedMalloc(iBuilder->CreateMul(size, vectorWidth), memAlign), elementType->getPointerTo());
         Value * const diffCapacity = iBuilder->CreateMul(iBuilder->CreateSub(newCapacity, capacity), vectorWidth);
 

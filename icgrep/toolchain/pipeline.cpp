@@ -10,6 +10,7 @@
 #include <llvm/IR/Module.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
+#include <llvm/Support/CommandLine.h>
 #include <kernels/kernel_builder.h>
 
 #include <llvm/Support/raw_ostream.h>
@@ -18,6 +19,7 @@ using namespace kernel;
 using namespace parabix;
 using namespace llvm;
 
+// static cl::opt<bool> UseYield("yield", cl::desc("yield after waiting"), cl::init(false));
 
 template <typename Value>
 using StreamSetBufferMap = boost::container::flat_map<const StreamSetBuffer *, Value>;
@@ -104,6 +106,12 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         const auto & kernel = kernels[k];
 
         BasicBlock * const segmentWait = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Wait", threadFunc);
+
+        BasicBlock * segmentYield = segmentWait;
+//        if (UseYield) {
+//            segmentYield = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Yield", threadFunc);
+//        }
+
         iBuilder->CreateBr(segmentWait);
 
         segmentLoopBody = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Do", threadFunc);
@@ -119,11 +127,11 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         Value * const ready = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
 
         if (kernel->hasNoTerminateAttribute()) {
-            iBuilder->CreateCondBr(ready, segmentLoopBody, segmentWait);
+            iBuilder->CreateCondBr(ready, segmentLoopBody, segmentYield);
         } else { // If the kernel was terminated in a previous segment then the pipeline is done.
             BasicBlock * completionTest = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Completed", threadFunc, 0);
             BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Exit", threadFunc, 0);
-            iBuilder->CreateCondBr(ready, completionTest, segmentWait);
+            iBuilder->CreateCondBr(ready, completionTest, segmentYield);
 
             iBuilder->SetInsertPoint(completionTest);
             Value * terminationSignal = iBuilder->getTerminationSignal();
@@ -133,6 +141,13 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
             iBuilder->releaseLogicalSegmentNo(nextSegNo);
             iBuilder->CreateBr(exitThreadBlock);
         }
+
+//        if (UseYield) {
+//            // Yield the thread after waiting
+//            iBuilder->SetInsertPoint(segmentYield);
+//            iBuilder->CreatePThreadYield();
+//            iBuilder->CreateBr(segmentWait);
+//        }
 
         // Execute the kernel segment
         iBuilder->SetInsertPoint(segmentLoopBody);
@@ -170,7 +185,6 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         }
         if (codegen::EnableCycleCounter) {
             cycleCountEnd = iBuilder->CreateReadCycleCounter();
-            //Value * counterPtr = iBuilder->CreateGEP(mCycleCounts, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
             Value * counterPtr = iBuilder->getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR);
             iBuilder->CreateStore(iBuilder->CreateAdd(iBuilder->CreateLoad(counterPtr), iBuilder->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
             cycleCountStart = cycleCountEnd;

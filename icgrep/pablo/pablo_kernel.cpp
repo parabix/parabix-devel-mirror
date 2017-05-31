@@ -146,6 +146,10 @@ void PabloKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> 
     CreateDoBlockMethodCall(iBuilder);
 }
 
+void PabloKernel::generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
+    mPabloCompiler->releaseKernelData(iBuilder);
+}
+
 String * PabloKernel::makeName(const llvm::StringRef & prefix) const {
     return mSymbolTable->makeString(prefix);
 }

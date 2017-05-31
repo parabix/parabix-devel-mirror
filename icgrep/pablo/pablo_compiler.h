@@ -41,6 +41,8 @@ protected:
 
     void compile(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
 
+    void releaseKernelData(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
+
 private:
 
     void examineBlock(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const block);

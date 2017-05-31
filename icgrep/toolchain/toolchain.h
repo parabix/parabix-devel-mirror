@@ -35,24 +35,25 @@ enum DebugFlags {
 
 bool DebugOptionIsSet(const DebugFlags flag);
 
-extern bool pipelineParallel;
-extern bool segmentPipelineParallel;
+extern bool PipelineParallel;
+extern bool SegmentPipelineParallel;
 #ifndef USE_LLVM_3_6
-extern const std::string ASMOutputFilename;
+extern const char * ASMOutputFilename;
 #endif
-extern const std::string IROutputFilename;
-extern const std::string ObjectCacheDir;
-extern const llvm::CodeGenOpt::Level OptLevel;  // set from command line
+extern const char * IROutputFilename;
+extern const char * ObjectCacheDir;
+extern llvm::CodeGenOpt::Level OptLevel;  // set from command line
 extern int BlockSize;  // set from command line
 extern int SegmentSize;  // set from command line
 extern int BufferSegments;
 extern int ThreadNum;
-extern const bool EnableObjectCache;
+extern bool EnableObjectCache;
 extern bool EnableAsserts;
 extern bool EnableCycleCounter;
 extern bool NVPTX;
 extern int GroupNum;
-extern const llvm::TargetOptions Options;
+extern std::string ProgramName;
+extern llvm::TargetOptions Options;
 extern const llvm::Reloc::Model RelocModel;
 extern const llvm::CodeModel::Model CMModel;
 extern const std::string MArch;
@@ -65,10 +66,9 @@ std::string getCPUStr();
 std::string getFeaturesStr();
 void setFunctionAttributes(llvm::StringRef CPU, llvm::StringRef Features, llvm::Module &M);
 
+void ParseCommandLineOptions(int argc, const char *const *argv, std::initializer_list<const llvm::cl::OptionCategory *> hiding = {});
+
 }
-
-
-void setNVPTXOption();
 
 void AddParabixVersionPrinter();
 

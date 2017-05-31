@@ -118,7 +118,7 @@ void GrepEngine::doGrep(const std::string & fileName) const{
                 exit(-1);
             }
             const auto PTXFilename = mGrepDriver->getBuilder()->getModule()->getModuleIdentifier() + ".ptx";
-            ulong * rslt = RunPTX(PTXFilename, fileBuffer, fileSize, CountOnly, LFPositions, startPoints, accumBytes);
+            RunPTX(PTXFilename, fileBuffer, fileSize, CountOnly, LFPositions, startPoints, accumBytes);
             source.close();
         } catch (std::exception & e) {
             if (!NoMessagesFlag) {

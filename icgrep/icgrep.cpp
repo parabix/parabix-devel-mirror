@@ -188,9 +188,7 @@ int main(int argc, char *argv[]) {
         grepEngine.doGrep(STDIN_FILENO, 0);
 
     } else {
-        
-        setNVPTXOption();
-        
+               
         if (codegen::NVPTX) {
             grepEngine.grepCodeGen_nvptx(REs, grep::Mode, UTF_16);
             for (unsigned i = 0; i != allFiles.size(); ++i) {

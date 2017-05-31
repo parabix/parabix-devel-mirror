@@ -43,16 +43,7 @@ inline static unsigned ceil_udiv(const unsigned x, const unsigned y) {
 using TypeId = PabloAST::ClassTypeId;
 
 inline static bool isNonAdvanceCarryGeneratingStatement(const Statement * const stmt) {
-    switch (stmt->getClassTypeId()) {
-        case TypeId::ScanThru:
-        case TypeId::AdvanceThenScanThru:
-        case TypeId::ScanTo:
-        case TypeId::AdvanceThenScanTo:
-        case TypeId::MatchStar:
-            return true;
-        default:
-            return false;
-    }
+    return isa<CarryProducingStatement>(stmt) && !isa<Advance>(stmt);
 }
 
 #define LONG_ADVANCE_BREAKPOINT 64
@@ -60,7 +51,7 @@ inline static bool isNonAdvanceCarryGeneratingStatement(const Statement * const 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeCarryData
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, PabloKernel * const kernel) {
+void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel) {
 
     // Each scope constructs its own CarryData struct, which will be added to the final "carries" struct
     // that is added to the Kernel. The scope index will indicate which struct to access.
@@ -100,9 +91,17 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief releaseCarryData
+ ** ------------------------------------------------------------------------------------------------------------- */
+void CarryManager::releaseCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel) {
+
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeCodeGen
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder) {
+void CarryManager::initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
 
     assert(!mCarryMetadata.empty());
     mCarryInfo = &mCarryMetadata[0];
@@ -131,7 +130,7 @@ void CarryManager::initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief finalizeCodeGen
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::finalizeCodeGen(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder) {
+void CarryManager::finalizeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     if (mHasLoop) {
         iBuilder->setScalarField("selector", mNextLoopSelector);
     }
@@ -151,7 +150,7 @@ void CarryManager::finalizeCodeGen(const std::unique_ptr<kernel::KernelBuilder> 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief enterLoopScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::enterLoopScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const scope) {
+void CarryManager::enterLoopScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope) {
     assert (scope);
     assert (mHasLoop);
     ++mLoopDepth;
@@ -161,7 +160,7 @@ void CarryManager::enterLoopScope(const std::unique_ptr<kernel::KernelBuilder> &
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief enterLoopBody
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, BasicBlock * const entryBlock) {
+void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, BasicBlock * const entryBlock) {
     if (mCarryInfo->hasSummary()) {
         Type * const carryTy = iBuilder->getBitBlockType();
         PHINode * phiCarryOutSummary = iBuilder->CreatePHI(carryTy, 2, "summary");
@@ -178,6 +177,7 @@ void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
 
         assert (mCarryInfo->hasSummary());
 
+        Type * const int8PtrTy = iBuilder->getInt8PtrTy();
         Type * const carryTy = iBuilder->getBitBlockType();
         PointerType * const carryPtrTy = carryTy->getPointerTo();
 
@@ -217,12 +217,11 @@ void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
         Value * const capacitySize = iBuilder->CreateMul(capacity, carryStateWidth);
         Value * const newCapacitySize = iBuilder->CreateShl(capacitySize, 1); // x 2
 
+        Value * newArray = iBuilder->CreateRealloc(array, newCapacitySize);
 
-        Value * newArray = iBuilder->CreateAlignedMalloc(newCapacitySize, iBuilder->getCacheAlignment());
-        iBuilder->CreateMemCpy(newArray, array, capacitySize, BlockWidth);
-        iBuilder->CreateMemZero(iBuilder->CreateGEP(newArray, capacitySize), capacitySize, BlockWidth);
-        iBuilder->CreateFree(array);
-        newArray = iBuilder->CreatePointerCast(newArray, array->getType());
+        Value * const startNewArrayPtr = iBuilder->CreateGEP(iBuilder->CreatePointerCast(newArray, int8PtrTy), capacitySize);
+        iBuilder->CreateMemZero(startNewArrayPtr, capacitySize, BlockWidth);
+
         iBuilder->CreateStore(newArray, arrayPtr);
 
         Value * const log2capacity = iBuilder->CreateAdd(iBuilder->CreateCeilLog2(capacity), ONE);
@@ -231,10 +230,9 @@ void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
         Value * const newSummarySize = iBuilder->CreateShl(newLog2Capacity, Log2BlockWidth + 1); // x 2(BlockWidth)
 
         Value * const summary = iBuilder->CreateLoad(summaryPtr, false);
-        Value * newSummary = iBuilder->CreateAlignedMalloc(newSummarySize, BlockWidth);
-        iBuilder->CreateMemCpy(newSummary, summary, summarySize, BlockWidth);
-        iBuilder->CreateMemZero(iBuilder->CreateGEP(newSummary, summarySize), iBuilder->getSize(2 * BlockWidth), BlockWidth);
-        iBuilder->CreateFree(summary);
+        Value * newSummary = iBuilder->CreateRealloc(summary, newSummarySize);
+        Value * const startNewSummaryPtr = iBuilder->CreateGEP(iBuilder->CreatePointerCast(newArray, int8PtrTy), summarySize);
+        iBuilder->CreateMemZero(startNewSummaryPtr, iBuilder->getSize(2 * BlockWidth), BlockWidth);
 
         Value * ptr1 = iBuilder->CreateGEP(newSummary, summarySize);
         ptr1 = iBuilder->CreatePointerCast(ptr1, carryPtrTy);
@@ -289,7 +287,7 @@ void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief leaveLoopBody
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, BasicBlock * /* exitBlock */) {
+void CarryManager::leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, BasicBlock * /* exitBlock */) {
 
     Type * const carryTy = iBuilder->getBitBlockType();
 
@@ -399,7 +397,7 @@ void CarryManager::leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief leaveLoopScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::leaveLoopScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, BasicBlock * const /* entryBlock */, BasicBlock * const /* exitBlock */) {
+void CarryManager::leaveLoopScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, BasicBlock * const /* entryBlock */, BasicBlock * const /* exitBlock */) {
     assert (mLoopDepth > 0);
     --mLoopDepth;
     leaveScope(iBuilder);
@@ -408,7 +406,7 @@ void CarryManager::leaveLoopScope(const std::unique_ptr<kernel::KernelBuilder> &
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief enterIfScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::enterIfScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const scope) {
+void CarryManager::enterIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope) {
     ++mIfDepth;
     enterScope(iBuilder, scope);
     // We zero-initialized the nested summary value and later OR in the current summary into the escaping summary
@@ -428,7 +426,7 @@ void CarryManager::enterIfScope(const std::unique_ptr<kernel::KernelBuilder> &  
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateSummaryTest
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * CarryManager::generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, Value * condition) {
+Value * CarryManager::generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Value * condition) {
     if (LLVM_LIKELY(mCarryInfo->hasSummary())) {
         assert ("summary test was not generated" && mNextSummaryTest);
         condition = iBuilder->simd_or(condition, mNextSummaryTest);
@@ -441,14 +439,14 @@ Value * CarryManager::generateSummaryTest(const std::unique_ptr<kernel::KernelBu
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief enterIfBody
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::enterIfBody(const std::unique_ptr<kernel::KernelBuilder> &  /* iBuilder */, BasicBlock * const entryBlock) {
+void CarryManager::enterIfBody(const std::unique_ptr<kernel::KernelBuilder> & /* iBuilder */, BasicBlock * const entryBlock) {
     assert (entryBlock);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief leaveIfBody
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::leaveIfBody(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, BasicBlock * const exitBlock) {
+void CarryManager::leaveIfBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, BasicBlock * const exitBlock) {
     assert (exitBlock);
     const auto n = mCarrySummaryStack.size();
     if (LLVM_LIKELY(mCarryInfo->hasExplicitSummary())) {
@@ -462,7 +460,7 @@ void CarryManager::leaveIfBody(const std::unique_ptr<kernel::KernelBuilder> &  i
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief leaveIfScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::leaveIfScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, BasicBlock * const entryBlock, BasicBlock * const exitBlock) {
+void CarryManager::leaveIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, BasicBlock * const entryBlock, BasicBlock * const exitBlock) {
     assert (mIfDepth > 0);
     if (LLVM_LIKELY(mCarryInfo->hasSummary())) {
         const auto n = mCarrySummaryStack.size(); assert (n > 0);
@@ -486,7 +484,7 @@ void CarryManager::leaveIfScope(const std::unique_ptr<kernel::KernelBuilder> &  
 /** ------------------------------------------------------------------------------------------------------------ *
  * @brief enterScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::enterScope(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const scope) {
+void CarryManager::enterScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope) {
     assert (scope);
     // Store the state of the current frame and update the scope state
     mCarryFrameStack.emplace_back(mCurrentFrame, mCurrentFrameIndex + 1);
@@ -505,7 +503,7 @@ void CarryManager::enterScope(const std::unique_ptr<kernel::KernelBuilder> &  iB
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief leaveScope
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::leaveScope(const std::unique_ptr<kernel::KernelBuilder> &  /* iBuilder */) {
+void CarryManager::leaveScope(const std::unique_ptr<kernel::KernelBuilder> & /* iBuilder */) {
 
     // Did we use all of the packs in this carry struct?
     assert (mCurrentFrameIndex == mCurrentFrame->getType()->getPointerElementType()->getStructNumElements());
@@ -527,7 +525,7 @@ void CarryManager::leaveScope(const std::unique_ptr<kernel::KernelBuilder> &  /*
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * CarryManager::addCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const Statement * const operation, Value * const e1, Value * const e2) {
+Value * CarryManager::addCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Statement * const operation, Value * const e1, Value * const e2) {
     assert (operation && (isNonAdvanceCarryGeneratingStatement(operation)));
     Value * const carryIn = getNextCarryIn(iBuilder);
     Value * carryOut, * result;
@@ -540,7 +538,7 @@ Value * CarryManager::addCarryInCarryOut(const std::unique_ptr<kernel::KernelBui
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief advanceCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * CarryManager::advanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const Advance * const advance, Value * const value) {
+Value * CarryManager::advanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Advance * const advance, Value * const value) {
     const auto shiftAmount = advance->getAmount();
     if (LLVM_LIKELY(shiftAmount < LONG_ADVANCE_BREAKPOINT)) {
         Value * const carryIn = getNextCarryIn(iBuilder);
@@ -557,7 +555,7 @@ Value * CarryManager::advanceCarryInCarryOut(const std::unique_ptr<kernel::Kerne
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief longAdvanceCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, Value * const value, const unsigned shiftAmount) {
+inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Value * const value, const unsigned shiftAmount) {
 
     assert (mHasLongAdvance);
     assert (shiftAmount >= LONG_ADVANCE_BREAKPOINT);
@@ -637,7 +635,7 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getNextCarryIn
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * CarryManager::getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder) {
+Value * CarryManager::getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     assert (mCurrentFrameIndex < mCurrentFrame->getType()->getPointerElementType()->getStructNumElements());
     if (mLoopDepth == 0) {
         mCarryPackPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(mCurrentFrameIndex)});
@@ -656,7 +654,7 @@ Value * CarryManager::getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setNextCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::setNextCarryOut(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, Value * carryOut) {
+void CarryManager::setNextCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Value * carryOut) {
     Type * const carryTy = iBuilder->getBitBlockType();
     assert (mCurrentFrameIndex < mCurrentFrame->getType()->getPointerElementType()->getStructNumElements());
     carryOut = iBuilder->CreateBitCast(carryOut, carryTy);
@@ -678,7 +676,7 @@ void CarryManager::setNextCarryOut(const std::unique_ptr<kernel::KernelBuilder> 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief readCarryInSummary
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * CarryManager::readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, ConstantInt * index) const {
+Value * CarryManager::readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, ConstantInt * index) const {
     assert (mCarryInfo->hasSummary());
     unsigned count = 2;
     if (LLVM_UNLIKELY(mCarryInfo->hasBorrowedSummary())) {
@@ -710,7 +708,7 @@ Value * CarryManager::readCarryInSummary(const std::unique_ptr<kernel::KernelBui
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeCarryOutSummary
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void CarryManager::writeCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, Value * const summary, ConstantInt * index) const {
+inline void CarryManager::writeCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Value * const summary, ConstantInt * index) const {
     Value * ptr = nullptr;
     assert (mCarryInfo->hasExplicitSummary());
     if (mLoopDepth > 0) {
@@ -724,7 +722,7 @@ inline void CarryManager::writeCarryOutSummary(const std::unique_ptr<kernel::Ker
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addToCarryOutSummary
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void CarryManager::addToCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, Value * const value) {
+inline void CarryManager::addToCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Value * const value) {
     assert ("cannot add null summary value!" && value);    
     assert ("summary stack is empty!" && !mCarrySummaryStack.empty());
     assert (mCarryInfo->hasSummary());
@@ -747,6 +745,9 @@ unsigned CarryManager::getScopeCount(const PabloBlock * const scope, unsigned in
  * @brief hasIterationSpecificAssignment
  ** ------------------------------------------------------------------------------------------------------------- */
 bool CarryManager::hasIterationSpecificAssignment(const PabloBlock * const scope) {
+#if 0
+    return dyn_cast_or_null<While>(scope->getBranch()) != nullptr;
+#else
     if (const While * const br = dyn_cast_or_null<While>(scope->getBranch())) {
         for (const Var * var : br->getEscaped()) {
             for (const PabloAST * user : var->users()) {
@@ -770,12 +771,13 @@ bool CarryManager::hasIterationSpecificAssignment(const PabloBlock * const scope
         }
     }
     return false;
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyse
  ** ------------------------------------------------------------------------------------------------------------- */
-StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const scope, const unsigned ifDepth, const unsigned loopDepth, const bool isNestedWithinNonCarryCollapsingLoop) {
+StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope, const unsigned ifDepth, const unsigned loopDepth, const bool isNestedWithinNonCarryCollapsingLoop) {
     assert ("scope cannot be null!" && scope);
     assert (mCarryScopes == 0 ? (scope == mKernel->getEntryBlock()) : (scope != mKernel->getEntryBlock()));
     assert (mCarryScopes < mCarryMetadata.size());

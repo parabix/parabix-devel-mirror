@@ -246,7 +246,7 @@ void run(MatchParens match, const std::string & fileName) {
 }
 
 int main(int argc, char *argv[]) {
-    cl::ParseCommandLineOptions(argc, argv);
+    codegen::ParseCommandLineOptions(argc, argv);
     ParabixDriver pxDriver("mp");
     pipeline(pxDriver, 3);
     auto main = reinterpret_cast<MatchParens>(pxDriver.getMain());

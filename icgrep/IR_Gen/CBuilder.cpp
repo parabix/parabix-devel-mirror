@@ -11,13 +11,57 @@
 #include <llvm/IR/TypeBuilder.h>
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/Format.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/driver.h>
+#include <set>
+#include <thread>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <stdio.h>
+#ifdef HAS_ADDRESS_SANITIZER
+#include <sanitizer/asan_interface.h>
+#endif
+#ifdef HAVE_LIBUNWIND
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>
+#else
+using unw_word_t = uint64_t;
+#endif
 
 using namespace llvm;
+
+void __report_failure(const char * msg, const unw_word_t * trace) {
+    raw_fd_ostream out(STDERR_FILENO, false);
+    #ifdef HAVE_LIBUNWIND
+    if (trace) {
+        out.changeColor(raw_fd_ostream::WHITE, true);
+        out << "Compilation Stacktrace:\n";
+        out.resetColor();
+        while (*trace) {
+            const auto pc = *trace++;
+            out << format_hex(pc, 16) << "   ";
+            const auto len = codegen::ProgramName.length() + 32;
+            char cmd[len];
+            snprintf(cmd, len,"addr2line -fpCe %s %p", codegen::ProgramName.data(), reinterpret_cast<void *>(pc));
+            FILE * f = popen(cmd, "r");
+            if (f) {
+                char buffer[1024] = {0};
+                while(fgets(buffer, sizeof(buffer), f)) {
+                    out << buffer;
+                }
+                pclose(f);
+            }
+            ++trace;
+        }
+    }
+    #endif
+    out.changeColor(raw_fd_ostream::WHITE, true);
+    out << "Assertion `" << msg << "' failed.\n";
+    out.resetColor();
+    out.flush();
+}
 
 Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) {
     Module * const m = getModule();
@@ -73,7 +117,6 @@ Value * CBuilder::CreateCloseCall(Value * fileDescriptor) {
     return CreateCall(closeFn, fileDescriptor);
 }
 
-
 Value * CBuilder::CreateUnlinkCall(Value * path) {
     Module * const m = getModule();
     Function * unlinkFunc = m->getFunction("unlink");
@@ -94,7 +137,6 @@ Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
     return CreateCall(mkstempFn, ftemplate);
 }
 
-
 Value * CBuilder::CreateStrlenCall(Value * str) {
     Module * const m = getModule();
     Function * strlenFn = m->getFunction("strlen");
@@ -103,7 +145,6 @@ Value * CBuilder::CreateStrlenCall(Value * str) {
     }
     return CreateCall(strlenFn, str);
 }
-
 
 Function * CBuilder::GetPrintf() {
     Module * const m = getModule();
@@ -223,7 +264,6 @@ Value * CBuilder::CreateMalloc(Value * size) {
     IntegerType * const sizeTy = getSizeTy();    
     Function * f = m->getFunction("malloc");
     if (f == nullptr) {
-        // f = LinkFunction("malloc", &malloc);
         PointerType * const voidPtrTy = getVoidPtrTy();
         FunctionType * fty = FunctionType::get(voidPtrTy, {sizeTy}, false);
         f = Function::Create(fty, Function::ExternalLinkage, "malloc", m);
@@ -268,19 +308,21 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
                      "CreateAlignedMalloc: size must be an integral multiple of alignment.");
     }
     #ifdef STDLIB_HAS_ALIGNED_ALLOC
-    Value * const ptr = CreateCall(f, {align, size});
+    CallInst * const ptr = CreateCall(f, {align, size});
+    ptr->setTailCall();
     #else
     Value * ptr = CreateAlloca(voidPtrTy);
-    Value * success = CreateCall(f, {ptr, align, size});
+    CallInst * success = CreateCall(f, {ptr, align, size});
+    success->setTailCall();
     if (codegen::EnableAsserts) {
-        CreateAssert(CreateICmpEQ(success, getInt32(0)), "CreateAlignedMalloc: posix_memalign reported bad allocation");
+        CreateAssert(CreateICmpEQ(success, getInt32(0)),
+                     "CreateAlignedMalloc: posix_memalign reported bad allocation");
     }
     ptr = CreateLoad(ptr);
     #endif
     CreateAssert(ptr, "CreateAlignedMalloc: returned null pointer.");
     return ptr;
 }
-
 
 Value * CBuilder::CreateRealloc(Value * const ptr, Value * size) {
     Module * const m = getModule();
@@ -293,7 +335,6 @@ Value * CBuilder::CreateRealloc(Value * const ptr, Value * size) {
         f->setCallingConv(CallingConv::C);
         f->setDoesNotAlias(0);
         f->setDoesNotAlias(1);
-        // f = LinkFunction("realloc", &realloc);
     }
     Value * const addr = CreatePointerCast(ptr, voidPtrTy);
     size = CreateZExtOrTrunc(size, sizeTy);
@@ -311,7 +352,6 @@ void CBuilder::CreateFree(Value * ptr) {
         FunctionType * fty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
         f = Function::Create(fty, Function::ExternalLinkage, "free", m);
         f->setCallingConv(CallingConv::C);
-        // f = LinkFunction("free", &std::free);
     }
     ptr = CreatePointerCast(ptr, voidPtrTy);
     CreateCall(f, ptr)->setTailCall();
@@ -353,7 +393,10 @@ Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const pro
     }
     Value * ptr = CreateCall(fMMap, {addr, size, prot, flags, fd, offset});
     if (codegen::EnableAsserts) {
-        CreateAssert(CheckMMapSuccess(ptr), "CreateMMap: mmap failed to allocate memory");
+        DataLayout DL(m);
+        IntegerType * const intTy = getIntPtrTy(DL);
+        Value * success = CreateICmpNE(CreatePtrToInt(addr, intTy), ConstantInt::getAllOnesValue(intTy)); // MAP_FAILED = -1
+        CreateAssert(success, "CreateMMap: mmap failed to allocate memory");
     }
     return ptr;
 }
@@ -416,13 +459,6 @@ Value * CBuilder::CreateMAdvise(Value * addr, Value * length, Advice advice) {
     return result;
 }
 
-Value * CBuilder::CheckMMapSuccess(Value * const addr) {
-    Module * const m = getModule();
-    DataLayout DL(m);
-    IntegerType * const intTy = getIntPtrTy(DL);
-    return CreateICmpNE(CreatePtrToInt(addr, intTy), ConstantInt::getAllOnesValue(intTy)); // MAP_FAILED = -1
-}
-
 #ifndef MREMAP_MAYMOVE
 #define MREMAP_MAYMOVE	1
 #endif
@@ -447,7 +483,8 @@ Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize) {
         ConstantInt * const flags = ConstantInt::get(intTy, MREMAP_MAYMOVE);
         ptr = CreateCall(fMRemap, {addr, oldSize, newSize, flags});
         if (codegen::EnableAsserts) {
-            CreateAssert(CheckMMapSuccess(ptr), "CreateMRemap: mremap failed to allocate memory");
+            Value * success = CreateICmpNE(CreatePtrToInt(addr, intTy), ConstantInt::getAllOnesValue(intTy)); // MAP_FAILED = -1
+            CreateAssert(success, "CreateMRemap: mremap failed to allocate memory");
         }
     } else { // no OS mremap support
         ptr = CreateAnonymousMMap(newSize);
@@ -593,6 +630,17 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
     return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, CreatePointerCast(arg, voidPtrTy)});
 }
 
+Value * CBuilder::CreatePThreadYield() {
+    Module * const m = getModule();
+    Function * f = m->getFunction("pthread_yield");
+    if (f == nullptr) {
+        FunctionType * fty = FunctionType::get(getInt32Ty(), false);
+        f = Function::Create(fty, Function::ExternalLinkage, "pthread_yield", m);
+        f->setCallingConv(CallingConv::C);
+    }
+    return CreateCall(f);
+}
+
 Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
     Module * const m = getModule();
     Function * pthreadExitFunc = m->getFunction("pthread_exit");
@@ -611,22 +659,25 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
     Module * const m = getModule();
     Function * pthreadJoinFunc = m->getFunction("pthread_join");
     if (pthreadJoinFunc == nullptr) {
-        Type * pthreadTy = getSizeTy();
-        FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy, getVoidPtrTy()->getPointerTo()}, false);
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {getSizeTy(), getVoidPtrTy()->getPointerTo()}, false);
         pthreadJoinFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_join", m);
         pthreadJoinFunc->setCallingConv(CallingConv::C);
     }
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
 
-void CBuilder::CreateAssert(Value * const assertion, StringRef failureMessage) {    
-    if (codegen::EnableAsserts) {
+void CBuilder::CreateAssert(Value * assertion, StringRef failureMessage) {
+    if (LLVM_UNLIKELY(codegen::EnableAsserts)) {
         Module * const m = getModule();
-        Function * function = m->getFunction("__assert");
+        Function * function = m->getFunction("assert");
+        IntegerType * const int1Ty = getInt1Ty();
         if (LLVM_UNLIKELY(function == nullptr)) {
             auto ip = saveIP();
-            FunctionType * fty = FunctionType::get(getVoidTy(), { getInt1Ty(), getInt8PtrTy(), getSizeTy() }, false);
-            function = Function::Create(fty, Function::PrivateLinkage, "__assert", m);
+            PointerType * const int8PtrTy = getInt8PtrTy();
+            IntegerType * const unwWordTy = TypeBuilder<unw_word_t, false>::get(getContext());
+            PointerType * const unwWordPtrTy = unwWordTy->getPointerTo();
+            FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, unwWordPtrTy }, false);
+            function = Function::Create(fty, Function::PrivateLinkage, "assert", m);
             function->setDoesNotThrow();
             function->setDoesNotAlias(2);
             BasicBlock * const entry = BasicBlock::Create(getContext(), "", function);
@@ -634,30 +685,72 @@ void CBuilder::CreateAssert(Value * const assertion, StringRef failureMessage) {
             BasicBlock * const success = BasicBlock::Create(getContext(), "", function);
             auto arg = function->arg_begin();
             arg->setName("assertion");
-            Value * e = &*arg++;
+            Value * assertion = &*arg++;
             arg->setName("msg");
             Value * msg = &*arg++;
-            arg->setName("sz");
-            Value * sz = &*arg;
+            arg->setName("trace");
+            Value * trace = &*arg++;
             SetInsertPoint(entry);
-            CreateCondBr(e, failure, success);
-            SetInsertPoint(failure);
-            Value * len = CreateAdd(sz, getSize(21));
-            ConstantInt * _11 = getSize(11);
-            Value * bytes = CreatePointerCast(CreateMalloc(len), getInt8PtrTy());
-            CreateMemCpy(bytes, GetString("Assertion `"), _11, 1);
-            CreateMemCpy(CreateGEP(bytes, _11), msg, sz, 1);
-            CreateMemCpy(CreateGEP(bytes, CreateAdd(sz, _11)), GetString("' failed.\n"), getSize(10), 1);
-            CreateWriteCall(getInt32(2), bytes, len);
-
-
+            IRBuilder<>::CreateCondBr(assertion, success, failure);
+            IRBuilder<>::SetInsertPoint(failure);
+            IRBuilder<>::CreateCall(LinkFunction("__report_failure", __report_failure), { msg, trace });
             CreateExit(-1);
-            CreateBr(success); // necessary to satisfy the LLVM verifier. this is not actually executed.
+            IRBuilder<>::CreateBr(success); // necessary to satisfy the LLVM verifier. this is never executed.
             SetInsertPoint(success);
-            CreateRetVoid();
+            IRBuilder<>::CreateRetVoid();
             restoreIP(ip);
         }
-        CreateCall(function, {CreateICmpEQ(assertion, Constant::getNullValue(assertion->getType())), GetString(failureMessage), getSize(failureMessage.size())});
+        if (assertion->getType() != int1Ty) {
+            assertion = CreateICmpNE(assertion, Constant::getNullValue(assertion->getType()));
+        }
+        IntegerType * const unwWordTy = TypeBuilder<unw_word_t, false>::get(getContext());
+        PointerType * const unwWordPtrTy = unwWordTy->getPointerTo();
+        #ifdef HAVE_LIBUNWIND
+        std::vector<unw_word_t> stack;
+        unw_context_t context;
+        unw_cursor_t cursor;
+        // Initialize cursor to current frame for local unwinding.
+        unw_getcontext(&context);
+        unw_init_local(&cursor, &context);
+        // Unwind frames one by one, going up the frame stack.
+        stack.reserve(64);
+        while (unw_step(&cursor) > 0) {
+            unw_word_t pc;
+            unw_get_reg(&cursor, UNW_REG_IP, &pc);
+            stack.push_back(pc);
+            if (pc == 0) {
+                break;
+            }
+        }
+        GlobalVariable * global = nullptr;
+        const auto n = stack.size();
+        IntegerType * const unwTy = TypeBuilder<unw_word_t, false>::get(getContext());
+        for (GlobalVariable & gv : m->getGlobalList()) {
+            Type * const ty = gv.getValueType();
+            if (ty->isArrayTy() && ty->getArrayElementType() == unwTy && ty->getArrayNumElements() == n) {
+                const ConstantDataArray * const array = cast<ConstantDataArray>(gv.getOperand(0));
+                bool found = true;
+                for (auto i = n - 1; i != 0; --i) {
+                    if (LLVM_LIKELY(array->getElementAsInteger(i) != stack[i])) {
+                        found = false;
+                        break;
+                    }
+                }
+                if (LLVM_UNLIKELY(found)) {
+                    global = &gv;
+                    break;
+                }
+            }
+        }
+        if (LLVM_LIKELY(global == nullptr)) {
+            Constant * const initializer = ConstantDataArray::get(getContext(), stack);
+            global = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
+        }
+        Value * const trace = CreatePointerCast(global, unwWordPtrTy);
+        #else
+        Constant * const trace = ConstantPointerNull::get(unwWordPtrTy);
+        #endif
+        IRBuilder<>::CreateCall(function, {assertion, GetString(failureMessage), trace});
     }
 }
 
@@ -673,7 +766,7 @@ void CBuilder::CreateExit(const int exitCode) {
     CreateCall(exit, getInt32(exitCode));
 }
 
-llvm::BasicBlock * CBuilder::CreateBasicBlock(std::string && name) {
+BasicBlock * CBuilder::CreateBasicBlock(std::string && name) {
     return BasicBlock::Create(getContext(), name, GetInsertBlock()->getParent());
 }
 
@@ -716,7 +809,7 @@ Value * CBuilder::CreateMaskToLowestBitExclusive(Value * bits) {
     return CreateAnd(CreateSub(bits, ConstantInt::get(bits->getType(), 1)), CreateNot(bits));
 }
 
-Value * CBuilder::CreateExtractBitField(llvm::Value * bits, Value * start, Value * length) {
+Value * CBuilder::CreateExtractBitField(Value * bits, Value * start, Value * length) {
     Constant * One = ConstantInt::get(bits->getType(), 1);
     return CreateAnd(CreateLShr(bits, start), CreateSub(CreateShl(One, length), One));
 }
@@ -744,12 +837,60 @@ Value * CBuilder::CreateReadCycleCounter() {
     return CreateCall(cycleCountFunc, std::vector<Value *>({}));
 }
 
-Function * CBuilder::LinkFunction(llvm::StringRef name, FunctionType * type, void * functionPtr) const {
+Function * CBuilder::LinkFunction(StringRef name, FunctionType * type, void * functionPtr) const {
     assert (mDriver);
     return mDriver->addLinkFunction(getModule(), name, type, functionPtr);
 }
 
-CBuilder::CBuilder(llvm::LLVMContext & C, const unsigned GeneralRegisterWidthInBits)
+#ifdef HAS_ADDRESS_SANITIZER
+
+#define CHECK_ADDRESS(Ptr) \
+    if (codegen::EnableAsserts) { \
+        Module * const m = getModule(); \
+        PointerType * voidPtrTy = getVoidPtrTy(); \
+        IntegerType * sizeTy = getSizeTy(); \
+        Function * isPoisoned = m->getFunction("__asan_region_is_poisoned"); \
+        if (isPoisoned == nullptr) { \
+            auto isPoisonedTy = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false); \
+            isPoisoned = Function::Create(isPoisonedTy, Function::ExternalLinkage, "__asan_region_is_poisoned", m); \
+        } \
+        Value * const addr = CreatePointerCast(Ptr, voidPtrTy); \
+        Constant * const size = ConstantInt::get(sizeTy, Ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits()); \
+        Value * check = CreateCall(isPoisoned, { addr, size }); \
+        check = CreateICmpEQ(check, ConstantPointerNull::get(voidPtrTy)); \
+        CreateAssert(check, "Valid memory address"); \
+    }
+
+LoadInst * CBuilder::CreateLoad(Value *Ptr, const char * Name) {
+    CHECK_ADDRESS(Ptr);
+    return IRBuilder<>::CreateLoad(Ptr, Name);
+}
+
+LoadInst * CBuilder::CreateLoad(Value * Ptr, const Twine & Name) {
+    CHECK_ADDRESS(Ptr);
+    return IRBuilder<>::CreateLoad(Ptr, Name);
+}
+
+LoadInst * CBuilder::CreateLoad(Type *Ty, Value *Ptr, const Twine & Name) {
+    CHECK_ADDRESS(Ptr);
+    return IRBuilder<>::CreateLoad(Ty, Ptr, Name);
+}
+
+LoadInst * CBuilder::CreateLoad(Value *Ptr, bool isVolatile, const Twine & Name) {
+    CHECK_ADDRESS(Ptr);
+    return IRBuilder<>::CreateLoad(Ptr, isVolatile, Name);
+}
+
+StoreInst * CBuilder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
+    CHECK_ADDRESS(Ptr);
+    return IRBuilder<>::CreateStore(Val, Ptr, isVolatile);
+}
+
+#undef CHECK_ADDRESS
+
+#endif
+
+CBuilder::CBuilder(LLVMContext & C, const unsigned GeneralRegisterWidthInBits)
 : IRBuilder<>(C)
 , mCacheLineAlignment(64)
 , mSizeType(getIntNTy(GeneralRegisterWidthInBits))
