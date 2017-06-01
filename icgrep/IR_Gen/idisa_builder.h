@@ -19,7 +19,7 @@ class IDISA_Builder : public CBuilder {
 
 public:
 
-    IDISA_Builder(llvm::LLVMContext & C, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride);
+    IDISA_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride);
 
     virtual ~IDISA_Builder();
     

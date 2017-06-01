@@ -414,11 +414,10 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
 
     if (grepSource == GrepSource::File) {
         sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::MMapSourceKernel>(idb, segmentSize));
-        sourceK->setInitialArguments({fileDescriptor});
-    } else { // if (grepSource == GrepSource::StdIn) {
+    } else {
         sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::ReadSourceKernel>(idb, segmentSize));
-        sourceK->setInitialArguments({idb->getInt32(STDIN_FILENO)});
     }
+    sourceK->setInitialArguments({fileDescriptor});
 
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
     StreamSetBuffer * BasisBits = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize * bufferSegments));
@@ -518,7 +517,7 @@ void insert_codepoints(const size_t lineNum, const size_t line_start, const size
 re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t bufferLength) {
     parsedCodePointSet = re::makeCC();        
     const unsigned segmentSize = 8;
-    
+
     ParabixDriver pxDriver("codepointEngine");
     auto & idb = pxDriver.getBuilder();
     Module * M = idb->getModule();
@@ -576,21 +575,24 @@ void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, 
 
 
 const std::vector<std::string> & grepPropertyValues(const std::string& propertyName, re::RE * propertyValuePattern) {
-    enum { MaxSupportedVectorWidthInBytes = 32 };
-    AlignedAllocator<char, MaxSupportedVectorWidthInBytes> alloc;
-    parsedPropertyValues.clear();
-    const std::string & str = UCD::getPropertyValueGrepString(propertyName);
-    const auto n = str.length();
-    // NOTE: MaxSupportedVectorWidthInBytes of trailing 0s are needed to prevent the grep function from
-    // erroneously matching garbage data when loading the final partial block.
-    char * aligned = alloc.allocate(n + MaxSupportedVectorWidthInBytes, 0);
-    std::memcpy(aligned, str.data(), n);
-    std::memset(aligned + n, 0, MaxSupportedVectorWidthInBytes);
-    
-    const unsigned segmentSize = 8;
-    
     ParabixDriver pxDriver("propertyValueEngine");
+    AlignedAllocator<char, 32> alloc;
+
+    parsedPropertyValues.clear();
+
+    const std::string & str = UCD::getPropertyValueGrepString(propertyName);
+
     auto & idb = pxDriver.getBuilder();
+
+    const unsigned segmentSize = 8;
+    const auto n = str.length();
+    const auto w = idb->getBitBlockWidth() * segmentSize;
+    const auto m = w - (n % w);
+
+    char * aligned = alloc.allocate(n + m, 0);
+    std::memcpy(aligned, str.data(), n);
+    std::memset(aligned + n, 0, m);
+
     Module * M = idb->getModule();
     
     Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getVoidTy(), idb->getInt8PtrTy(), idb->getSizeTy(), nullptr));
@@ -628,7 +630,7 @@ const std::vector<std::string> & grepPropertyValues(const std::string& propertyN
     pxDriver.generatePipelineIR();
     idb->CreateRetVoid();
     pxDriver.finalizeObject();
-    
+
     typedef void (*GrepFunctionType)(const char * buffer, const size_t length);
     auto f = reinterpret_cast<GrepFunctionType>(pxDriver.getMain());
     f(aligned, n);

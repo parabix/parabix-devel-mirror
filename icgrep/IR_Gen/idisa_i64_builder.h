@@ -13,8 +13,8 @@ namespace IDISA {
 class IDISA_I64_Builder : public virtual IDISA_Builder {
 public:
   
-    IDISA_I64_Builder(llvm::LLVMContext & C, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
-    : IDISA_Builder(C, archBitWidth, bitBlockWidth, stride) {
+    IDISA_I64_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned stride)
+    : IDISA_Builder(C, bitBlockWidth, stride) {
 
     } 
 

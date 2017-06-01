@@ -113,8 +113,8 @@ public:
 
 protected:
 
-    KernelBuilder(llvm::LLVMContext & C, unsigned registerWidth, unsigned blockWidth, unsigned stride)
-    : IDISA::IDISA_Builder(C, registerWidth, blockWidth, stride)
+    KernelBuilder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
+    : IDISA::IDISA_Builder(C, vectorWidth, stride)
     , mKernel(nullptr) {
 
     }
@@ -134,10 +134,10 @@ protected:
 template <class SpecifiedArchitectureBuilder>
 class KernelBuilderImpl final : public KernelBuilder, public SpecifiedArchitectureBuilder {
 public:
-    KernelBuilderImpl(llvm::LLVMContext & C, unsigned registerWidth, unsigned blockWidth, unsigned stride)
-    : IDISA::IDISA_Builder(C, registerWidth, blockWidth, stride)
-    , KernelBuilder(C, registerWidth, blockWidth, stride)
-    , SpecifiedArchitectureBuilder(C, registerWidth, blockWidth, stride) {
+    KernelBuilderImpl(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
+    : IDISA::IDISA_Builder(C, vectorWidth, stride)
+    , KernelBuilder(C, vectorWidth, stride)
+    , SpecifiedArchitectureBuilder(C, vectorWidth, stride) {
 
     }
 };

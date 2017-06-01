@@ -80,7 +80,7 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
 
     mMainModule->setTargetTriple(mTarget->getTargetTriple().getTriple());
 
-    iBuilder.reset(IDISA::GetIDISA_Builder(*mContext, mMainModule->getTargetTriple()));
+    iBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
     iBuilder->setDriver(this);
     iBuilder->setModule(mMainModule);
 }

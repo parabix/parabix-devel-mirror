@@ -14,8 +14,8 @@ namespace IDISA {
 class IDISA_SSE_Builder : public virtual IDISA_Builder {
 public:
   
-    IDISA_SSE_Builder(llvm::LLVMContext & C, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
-    : IDISA_Builder(C, archBitWidth, bitBlockWidth, stride) {
+    IDISA_SSE_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned stride)
+    : IDISA_Builder(C, bitBlockWidth, stride) {
 
     }
 
@@ -28,9 +28,9 @@ public:
 class IDISA_SSE2_Builder : public IDISA_SSE_Builder {
 public:
   
-    IDISA_SSE2_Builder(llvm::LLVMContext & C, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
-    : IDISA_Builder(C, archBitWidth, bitBlockWidth, stride)
-    , IDISA_SSE_Builder(C, archBitWidth, bitBlockWidth, stride) {
+    IDISA_SSE2_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned stride)
+    : IDISA_Builder(C, bitBlockWidth, stride)
+    , IDISA_SSE_Builder(C, bitBlockWidth, stride) {
 
     }
 

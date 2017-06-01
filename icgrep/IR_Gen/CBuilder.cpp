@@ -23,45 +23,19 @@
 #ifdef HAS_ADDRESS_SANITIZER
 #include <sanitizer/asan_interface.h>
 #endif
-#ifdef HAVE_LIBUNWIND
+#ifdef HAS_LIBUNWIND
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
+using unw_word_t = unw_word_t;
+#elif HAS_EXECINFO
+#include <execinfo.h>
+#include <boost/integer.hpp>
+using unw_word_t = boost::uint_t<sizeof(void *) * CHAR_BIT>::exact;
 #else
 using unw_word_t = uint64_t;
 #endif
 
 using namespace llvm;
-
-void __report_failure(const char * msg, const unw_word_t * trace) {
-    raw_fd_ostream out(STDERR_FILENO, false);
-    #ifdef HAVE_LIBUNWIND
-    if (trace) {
-        out.changeColor(raw_fd_ostream::WHITE, true);
-        out << "Compilation Stacktrace:\n";
-        out.resetColor();
-        while (*trace) {
-            const auto pc = *trace++;
-            out << format_hex(pc, 16) << "   ";
-            const auto len = codegen::ProgramName.length() + 32;
-            char cmd[len];
-            snprintf(cmd, len,"addr2line -fpCe %s %p", codegen::ProgramName.data(), reinterpret_cast<void *>(pc));
-            FILE * f = popen(cmd, "r");
-            if (f) {
-                char buffer[1024] = {0};
-                while(fgets(buffer, sizeof(buffer), f)) {
-                    out << buffer;
-                }
-                pclose(f);
-            }
-            ++trace;
-        }
-    }
-    #endif
-    out.changeColor(raw_fd_ostream::WHITE, true);
-    out << "Assertion `" << msg << "' failed.\n";
-    out.resetColor();
-    out.flush();
-}
 
 Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) {
     Module * const m = getModule();
@@ -212,7 +186,7 @@ void CBuilder::CallPrintIntToStderr(const std::string & name, Value * const valu
         BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
-        args.push_back(getInt32(2));    // fd 2 (stderr)
+        args.push_back(getInt32(STDERR_FILENO));
         args.push_back(GetString(out.c_str()));
         Value * const name = &*(arg++);
         name->setName("name");
@@ -246,8 +220,8 @@ void CBuilder::CallPrintMsgToStderr(const std::string & message) {
         BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
-        args.push_back(getInt32(2));    // fd 2 (stderr)
-        args.push_back(GetString(out.c_str()));
+        args.push_back(getInt32(STDERR_FILENO));
+        args.push_back(GetString(out));
         Value * const msg = &*(arg++);
         msg->setName("msg");
         args.push_back(msg);
@@ -666,6 +640,39 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
 
+void __report_failure(const char * msg, const unw_word_t * trace, const uint32_t n) {
+    raw_fd_ostream out(STDERR_FILENO, false);
+    #if defined(HAS_LIBUNWIND) || defined(HAS_EXECINFO)
+    if (trace) {
+        SmallVector<char, 4096> tmp;
+        raw_svector_ostream trace_string(tmp);
+        for (uint32_t i = 0; i < n; ++i) {
+            const auto pc = trace[i];
+            trace_string << format_hex(pc, 16) << "   ";
+            const auto len = codegen::ProgramName.length() + 32;
+            char cmd[len];
+            snprintf(cmd, len,"addr2line -fpCe %s %p", codegen::ProgramName.data(), reinterpret_cast<void *>(pc));
+            FILE * f = popen(cmd, "r");
+            if (f) {
+                char buffer[1024] = {0};
+                while(fgets(buffer, sizeof(buffer), f)) {
+                    trace_string << buffer;
+                }
+                pclose(f);
+            }
+        }
+        out.changeColor(raw_fd_ostream::WHITE, true);
+        out << "Compilation Stacktrace:\n";
+        out.resetColor();
+        out << trace_string.str();
+    }
+    #endif
+    out.changeColor(raw_fd_ostream::WHITE, true);
+    out << "Assertion `" << msg << "' failed.\n";
+    out.resetColor();
+    out.flush();
+}
+
 void CBuilder::CreateAssert(Value * assertion, StringRef failureMessage) {
     if (LLVM_UNLIKELY(codegen::EnableAsserts)) {
         Module * const m = getModule();
@@ -676,7 +683,7 @@ void CBuilder::CreateAssert(Value * assertion, StringRef failureMessage) {
             PointerType * const int8PtrTy = getInt8PtrTy();
             IntegerType * const unwWordTy = TypeBuilder<unw_word_t, false>::get(getContext());
             PointerType * const unwWordPtrTy = unwWordTy->getPointerTo();
-            FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, unwWordPtrTy }, false);
+            FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, unwWordPtrTy, getInt32Ty() }, false);
             function = Function::Create(fty, Function::PrivateLinkage, "assert", m);
             function->setDoesNotThrow();
             function->setDoesNotAlias(2);
@@ -690,10 +697,12 @@ void CBuilder::CreateAssert(Value * assertion, StringRef failureMessage) {
             Value * msg = &*arg++;
             arg->setName("trace");
             Value * trace = &*arg++;
+            arg->setName("depth");
+            Value * depth = &*arg++;
             SetInsertPoint(entry);
             IRBuilder<>::CreateCondBr(assertion, success, failure);
             IRBuilder<>::SetInsertPoint(failure);
-            IRBuilder<>::CreateCall(LinkFunction("__report_failure", __report_failure), { msg, trace });
+            IRBuilder<>::CreateCall(LinkFunction("__report_failure", __report_failure), { msg, trace, depth });
             CreateExit(-1);
             IRBuilder<>::CreateBr(success); // necessary to satisfy the LLVM verifier. this is never executed.
             SetInsertPoint(success);
@@ -703,31 +712,39 @@ void CBuilder::CreateAssert(Value * assertion, StringRef failureMessage) {
         if (assertion->getType() != int1Ty) {
             assertion = CreateICmpNE(assertion, Constant::getNullValue(assertion->getType()));
         }
-        IntegerType * const unwWordTy = TypeBuilder<unw_word_t, false>::get(getContext());
-        PointerType * const unwWordPtrTy = unwWordTy->getPointerTo();
-        #ifdef HAVE_LIBUNWIND
-        std::vector<unw_word_t> stack;
+        SmallVector<unw_word_t, 64> stack;
+        #ifdef HAS_LIBUNWIND
         unw_context_t context;
-        unw_cursor_t cursor;
         // Initialize cursor to current frame for local unwinding.
         unw_getcontext(&context);
+        unw_cursor_t cursor;
         unw_init_local(&cursor, &context);
         // Unwind frames one by one, going up the frame stack.
-        stack.reserve(64);
         while (unw_step(&cursor) > 0) {
             unw_word_t pc;
             unw_get_reg(&cursor, UNW_REG_IP, &pc);
-            stack.push_back(pc);
             if (pc == 0) {
                 break;
             }
+            stack.push_back(pc);
         }
-        GlobalVariable * global = nullptr;
+        #elif defined(HAS_EXECINFO)
+        for (;;) {
+            const auto n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
+            if (LLVM_LIKELY(n < (int)stack.capacity())) {
+                stack.set_size(n);
+                break;
+            }
+            stack.reserve(n * 2);
+        }
+        #endif
+        IntegerType * const stackTy = TypeBuilder<unw_word_t, false>::get(getContext());
+        PointerType * const stackPtrTy = stackTy->getPointerTo();
+        GlobalVariable * ip_trace = nullptr;
         const auto n = stack.size();
-        IntegerType * const unwTy = TypeBuilder<unw_word_t, false>::get(getContext());
         for (GlobalVariable & gv : m->getGlobalList()) {
             Type * const ty = gv.getValueType();
-            if (ty->isArrayTy() && ty->getArrayElementType() == unwTy && ty->getArrayNumElements() == n) {
+            if (ty->isArrayTy() && ty->getArrayElementType() == stackTy && ty->getArrayNumElements() == n) {
                 const ConstantDataArray * const array = cast<ConstantDataArray>(gv.getOperand(0));
                 bool found = true;
                 for (auto i = n - 1; i != 0; --i) {
@@ -737,20 +754,17 @@ void CBuilder::CreateAssert(Value * assertion, StringRef failureMessage) {
                     }
                 }
                 if (LLVM_UNLIKELY(found)) {
-                    global = &gv;
+                    ip_trace = &gv;
                     break;
                 }
             }
         }
-        if (LLVM_LIKELY(global == nullptr)) {
+        if (LLVM_LIKELY(ip_trace == nullptr)) {
             Constant * const initializer = ConstantDataArray::get(getContext(), stack);
-            global = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
+            ip_trace = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
         }
-        Value * const trace = CreatePointerCast(global, unwWordPtrTy);
-        #else
-        Constant * const trace = ConstantPointerNull::get(unwWordPtrTy);
-        #endif
-        IRBuilder<>::CreateCall(function, {assertion, GetString(failureMessage), trace});
+        Value * const trace = CreatePointerCast(ip_trace, stackPtrTy);
+        IRBuilder<>::CreateCall(function, {assertion, GetString(failureMessage), trace, getInt32(n)});
     }
 }
 
@@ -846,18 +860,12 @@ Function * CBuilder::LinkFunction(StringRef name, FunctionType * type, void * fu
 
 #define CHECK_ADDRESS(Ptr) \
     if (codegen::EnableAsserts) { \
-        Module * const m = getModule(); \
-        PointerType * voidPtrTy = getVoidPtrTy(); \
-        IntegerType * sizeTy = getSizeTy(); \
-        Function * isPoisoned = m->getFunction("__asan_region_is_poisoned"); \
-        if (isPoisoned == nullptr) { \
-            auto isPoisonedTy = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false); \
-            isPoisoned = Function::Create(isPoisonedTy, Function::ExternalLinkage, "__asan_region_is_poisoned", m); \
-        } \
-        Value * const addr = CreatePointerCast(Ptr, voidPtrTy); \
-        Constant * const size = ConstantInt::get(sizeTy, Ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits()); \
+        Function * const isPoisoned = LinkFunction("__asan_region_is_poisoned", __asan_region_is_poisoned); \
+        auto arg = isPoisoned->arg_begin(); \
+        Value * const addr = CreatePointerCast(Ptr, arg->getType()); \
+        Constant * const size = ConstantInt::get((++arg)->getType(), Ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8); \
         Value * check = CreateCall(isPoisoned, { addr, size }); \
-        check = CreateICmpEQ(check, ConstantPointerNull::get(voidPtrTy)); \
+        check = CreateICmpEQ(check, ConstantPointerNull::get(cast<PointerType>(isPoisoned->getReturnType()))); \
         CreateAssert(check, "Valid memory address"); \
     }
 
@@ -890,10 +898,10 @@ StoreInst * CBuilder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
 
 #endif
 
-CBuilder::CBuilder(LLVMContext & C, const unsigned GeneralRegisterWidthInBits)
+CBuilder::CBuilder(LLVMContext & C)
 : IRBuilder<>(C)
 , mCacheLineAlignment(64)
-, mSizeType(getIntNTy(GeneralRegisterWidthInBits))
+, mSizeType(TypeBuilder<size_t, false>::get(C))
 , mFILEtype(nullptr)
 , mDriver(nullptr) {
 

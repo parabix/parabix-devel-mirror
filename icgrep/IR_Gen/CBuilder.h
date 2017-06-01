@@ -26,7 +26,7 @@ class Driver;
 class CBuilder : public llvm::IRBuilder<> {
 public:
 
-    CBuilder(llvm::LLVMContext & C, const unsigned GeneralRegisterWidthInBits);
+    CBuilder(llvm::LLVMContext & C);
     
     virtual ~CBuilder() {}
 
@@ -264,7 +264,7 @@ protected:
 
     llvm::Module *                  mModule;
     unsigned                        mCacheLineAlignment;
-    llvm::IntegerType *             mSizeType;
+    llvm::IntegerType * const       mSizeType;
     llvm::StructType *              mFILEtype;
     Driver *                        mDriver;
     llvm::LLVMContext               mContext;

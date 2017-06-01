@@ -12,7 +12,7 @@ namespace kernel { class KernelBuilder; }
 
 namespace IDISA {
     
-kernel::KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C, const std::string & targetTriple);
+kernel::KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C);
 
 kernel::KernelBuilder * GetIDISA_GPU_Builder(llvm::LLVMContext & C);
 

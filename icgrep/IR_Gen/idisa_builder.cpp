@@ -173,7 +173,6 @@ Value * IDISA_Builder::simd_bitreverse(unsigned fw, Value * a) {
                 Idxs[i + j] = getInt32(i + bytes_per_field - j - 1);
             }
         }
-        Constant * revVec = ConstantVector::get({Idxs, byte_count});
         return CreateShuffleVector(bitrev8, UndefValue::get(fwVectorType(8)), ConstantVector::get({Idxs, byte_count}));
     }
     else {
@@ -396,11 +395,11 @@ void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const p
     CreateAlignedStore(value, ptr, alignment);
 }
 
-IDISA_Builder::IDISA_Builder(llvm::LLVMContext & C, unsigned archBitWidth, unsigned bitBlockWidth, unsigned stride)
-: CBuilder(C, archBitWidth)
-, mBitBlockWidth(bitBlockWidth)
+IDISA_Builder::IDISA_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
+: CBuilder(C)
+, mBitBlockWidth(vectorWidth)
 , mStride(stride)
-, mBitBlockType(VectorType::get(IntegerType::get(C, 64), bitBlockWidth / 64))
+, mBitBlockType(VectorType::get(IntegerType::get(C, 64), vectorWidth / 64))
 , mZeroInitializer(Constant::getNullValue(mBitBlockType))
 , mOneInitializer(Constant::getAllOnesValue(mBitBlockType))
 , mPrintRegisterFunction(nullptr) {
