@@ -80,6 +80,7 @@ public:
     
     virtual llvm::Value * simd_cttz(unsigned fw, llvm::Value * a);
     virtual llvm::Value * simd_popcount(unsigned fw, llvm::Value * a);
+    virtual llvm::Value * simd_bitreverse(unsigned fw, llvm::Value * a);
     
     virtual llvm::Value * esimd_mergeh(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * esimd_mergel(unsigned fw, llvm::Value * a, llvm::Value * b);

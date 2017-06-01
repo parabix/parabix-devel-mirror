@@ -157,6 +157,33 @@ Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
     return CreateCall(ctpopFunc, fwCast(fw, a));
 }
 
+Value * IDISA_Builder::simd_bitreverse(unsigned fw, Value * a) {
+    /*  Pure sequential solution too slow!
+     Value * func = Intrinsic::getDeclaration(getModule(), Intrinsic::bitreverse, fwVectorType(fw));
+     return CreateCall(func, fwCast(fw, a));
+     */
+    if (fw > 8) {
+        // Reverse the bits of each byte and then use a byte shuffle to complete the job.
+        Value * bitrev8 = fwCast(8, simd_bitreverse(8, a));
+        const auto bytes_per_field = fw/8;
+        const auto byte_count = mBitBlockWidth / 8;
+        Constant * Idxs[byte_count];
+        for (unsigned i = 0; i < byte_count; i += bytes_per_field) {
+            for (unsigned j = 0; j < bytes_per_field; j++) {
+                Idxs[i + j] = getInt32(i + bytes_per_field - j - 1);
+            }
+        }
+        Constant * revVec = ConstantVector::get({Idxs, byte_count});
+        return CreateShuffleVector(bitrev8, UndefValue::get(fwVectorType(8)), ConstantVector::get({Idxs, byte_count}));
+    }
+    else {
+        if (fw > 2) {
+            a = simd_bitreverse(fw/2, a);
+        }
+        return simd_or(simd_srli(16, simd_and(a, simd_himask(fw)), fw/2), simd_slli(16, simd_and(a, simd_lomask(fw)), fw/2));
+    }
+}
+
 Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) {
     if (fw == 1) {
         Value * a1 = bitCast(a);
