@@ -63,9 +63,10 @@ void doMultiplexCCs(std::vector<UCD::UnicodeSet> CCs,
 
     unsigned current_exclusive_set_idx = 0;
     unsigned multiplexed_bit_count = 0;
-    boost::dynamic_bitset<> current_set;
+    boost::dynamic_bitset<> current_set(CCs.size());
     
     unsigned range_lo = 0;
+    unsigned cur_index = 1;
     for (auto & bkpt_entry : breakpoints) {
         if (current_exclusive_set_idx > 0) {  // We have a range entry to close for a pending exclusive set.
             unsigned range_hi = bkpt_entry.first - 1;
@@ -81,7 +82,9 @@ void doMultiplexCCs(std::vector<UCD::UnicodeSet> CCs,
         auto idx_iter = CC_set_to_exclusive_set_map.find(current_set);
         if (idx_iter == CC_set_to_exclusive_set_map.end()) {
             // New exclusive class; assign the next sequential integer.
-            current_exclusive_set_idx = exclusiveSetIDs.size();
+            //current_exclusive_set_idx = exclusiveSetIDs.size();
+            current_exclusive_set_idx = cur_index;
+            cur_index++;
             CC_set_to_exclusive_set_map.emplace(current_set, current_exclusive_set_idx);
             
             for (unsigned CC1 = current_set.find_first(); CC1 < CCs.size(); CC1 = current_set.find_next(CC1)) {
