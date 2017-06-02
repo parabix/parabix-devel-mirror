@@ -95,7 +95,7 @@ target_link_libraries (UCDlib RegExpADT PabloADT CCADT)
 target_link_libraries (RegExpADT PabloADT CCADT UCDlib)
 target_link_libraries (RegExpCompiler RegExpADT)
 
-add_executable(icgrep icgrep.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/match_count.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
+add_executable(icgrep icgrep.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
 add_executable(u8u16 u8u16.cpp)
 add_executable(base64 base64.cpp kernels/radix64.cpp)
 add_executable(wc wc.cpp)
