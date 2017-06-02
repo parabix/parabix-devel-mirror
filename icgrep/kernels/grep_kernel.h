@@ -38,6 +38,10 @@ private:
 class PopcountKernel : public pablo::PabloKernel {
 public:
     PopcountKernel(const std::unique_ptr<kernel::KernelBuilder> & builder);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;    
 };
 
 }

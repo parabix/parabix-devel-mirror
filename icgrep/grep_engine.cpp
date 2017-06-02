@@ -14,7 +14,6 @@
 #include <kernels/grep_kernel.h>
 #include <kernels/linebreak_kernel.h>
 #include <kernels/streams_merge.h>
-#include <kernels/match_count.h>
 #include <kernels/source_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/scanmatchgen.h>
@@ -366,12 +365,11 @@ void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const GrepModeType
         mGrepDriver->makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
     }
 
-    kernel::MatchCount matchCountK(idb);
-    mGrepDriver->addKernelCall(matchCountK, {MergedResults}, {});
+    kernel::Kernel * matchCountK = mGrepDriver->addKernelInstance(make_unique<kernel::PopcountKernel>(idb));
+    mGrepDriver->makeKernelCall(matchCountK, {MergedResults}, {});
     mGrepDriver->generatePipelineIR();
-
-    idb->setKernel(&matchCountK);
-    Value * matchedLineCount = idb->getScalarField("matchedLineCount");
+    idb->setKernel(matchCountK);
+    Value * matchedLineCount = idb->getAccumulator("countResult");
     matchedLineCount = idb->CreateZExt(matchedLineCount, int64Ty);
     
     Value * strideBlocks = ConstantInt::get(int32Ty, idb->getStride() / idb->getBitBlockWidth());
@@ -471,11 +469,11 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
         mGrepDriver->generatePipelineIR();
         idb->CreateRet(idb->getInt64(0));
     } else {
-        kernel::Kernel * matchCountK = mGrepDriver->addKernelInstance(make_unique<kernel::MatchCount>(idb));
+        kernel::Kernel * matchCountK = mGrepDriver->addKernelInstance(make_unique<kernel::PopcountKernel>(idb));
         mGrepDriver->makeKernelCall(matchCountK, {MergedResults}, {});
         mGrepDriver->generatePipelineIR();
         idb->setKernel(matchCountK);
-        Value * matchedLineCount = idb->getScalarField("matchedLineCount");
+        Value * matchedLineCount = idb->getAccumulator("countResult");
         matchedLineCount = idb->CreateZExt(matchedLineCount, int64Ty);
         idb->CreateRet(matchedLineCount);
     }

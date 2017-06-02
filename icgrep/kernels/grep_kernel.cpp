@@ -66,6 +66,14 @@ InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBui
 }
 
 
+void PopcountKernel::generatePabloMethod() {
+    auto pb = this->getEntryBlock();
+    const auto toCount = pb->createExtract(getInputStreamVar("toCount"), pb->getInteger(0));
+    pablo::Var * countResult = getOutputScalarVar("countResult");
+    pb->createAssign(countResult, pb->createCount(toCount));
+}
+
+
 PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
 : PabloKernel(iBuilder, "Popcount",
               {Binding{iBuilder->getStreamSetTy(1), "toCount"}},
@@ -73,8 +81,5 @@ PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & i
               {},
               {Binding{iBuilder->getSizeTy(), "countResult"}}) {
     
-    auto pb = this->getEntryBlock();
-    const auto toCount = pb->createExtract(getInputStreamVar("toCount"), pb->getInteger(0));
-    pablo::Var * countResult = getOutputScalarVar("countResult");
-    pb->createAssign(countResult, pb->createCount(toCount));
 }
+
