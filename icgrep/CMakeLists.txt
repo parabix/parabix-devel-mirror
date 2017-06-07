@@ -263,13 +263,17 @@ add_custom_target (base64_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
   COMMAND timeout 20 python base64test.py "${CMAKE_BINARY_DIR}/base64 -ea")
 
+add_custom_target (abc_gen
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND python abc_testgen.py)
+  
 add_custom_target (abc_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
   COMMAND timeout 200 ./run_abc "${CMAKE_BINARY_DIR}/icgrep -ea")
 
 add_custom_target (check
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-  DEPENDS icgrep abc_test)
+  DEPENDS icgrep abc_gen)
 
 add_custom_target (perf_icgrep
   COMMAND python2 perf.py icgrep
