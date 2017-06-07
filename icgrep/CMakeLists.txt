@@ -79,7 +79,7 @@ ENDIF()
 add_library(CodeGen ${TOOLCHAIN_SRC} ${DRIVER_SRC} ${OBJECT_CACHE_SRC} ${KERNEL_SRC} ${IDISA_SRC})
 add_library(PabloADT ${PABLO_SRC})
 add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
-add_library(RegExpCompiler re/re_parser.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_parser_pcre.cpp re/re_parser_ere.cpp re/re_parser_bre.cpp re/re_parser_prosite.cpp re/re_utility.cpp)
+add_library(RegExpCompiler re/re_parser.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_parser_pcre.cpp re/re_parser_ere.cpp re/re_parser_bre.cpp re/re_parser_prosite.cpp re/re_utility.cpp)
 add_library(CCADT cc/cc_compiler.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/CaseFolding_txt.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp UCD/UnicodeNameData.cpp)
 
@@ -158,28 +158,25 @@ ENDIF()
 #Enable all warnings
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
-include(CheckFunctionExists)
-CHECK_FUNCTION_EXISTS(aligned_alloc STDLIB_HAS_ALIGNED_ALLOC)
-IF (STDLIB_HAS_ALIGNED_ALLOC)
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DSTDLIB_HAS_ALIGNED_ALLOC")
-ELSE()
-CHECK_FUNCTION_EXISTS(posix_memalign STDLIB_HAS_POSIX_MEMALIGN)
-IF (!STDLIB_HAS_POSIX_MEMALIGN)
-MESSAGE(FATAL_ERROR "stdlib.h does not contain either aligned_alloc or posix_memalign" )
-ENDIF()
-ENDIF()
-
+UNSET(HAS_EXECINFO CACHE)
+UNSET(HAS_MACH_VM_TYPES CACHE)
 include(CheckIncludeFileCXX)
-find_package(Libunwind)
-IF (LIBUNWIND_FOUND)
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_LIBUNWIND")
-include_directories(${LIBUNWIND_INCLUDE_DIR})
-target_link_libraries(CodeGen ${LIBUNWIND_LIBRARIES})
+CHECK_INCLUDE_FILE_CXX(mach/vm_types.h HAS_MACH_VM_TYPES)
+IF (HAS_MACH_VM_TYPES)
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_MACH_VM_TYPES")
 ELSE()
-CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
-IF (HAS_EXECINFO)
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_EXECINFO")
-ENDIF()
+  UNSET(LIBUNWIND_FOUND CACHE)
+  find_package(Libunwind)
+  IF (LIBUNWIND_FOUND)
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_LIBUNWIND")
+    include_directories(${LIBUNWIND_INCLUDE_DIR})
+    target_link_libraries(CodeGen ${LIBUNWIND_LIBRARIES})
+  ELSE()
+    CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
+    IF (HAS_EXECINFO)
+       SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_EXECINFO")
+    ENDIF()
+  ENDIF()
 ENDIF()
 
 SET(CMAKE_REQUIRED_FLAGS)
@@ -201,66 +198,74 @@ SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -
 
 SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
-CHECK_INCLUDE_FILE_CXX(sanitizer/asan_interface.h HAS_ADDRESS_SANITIZER)
+UNSET(HAS_ADDRESS_SANITIZER)
+CHECK_INCLUDE_FILE_CXX("sanitizer/asan_interface.h" HAS_ADDRESS_SANITIZER)
 IF (HAS_ADDRESS_SANITIZER)
 SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DHAS_ADDRESS_SANITIZER -fsanitize=address")
 ENDIF()
 
-
 add_test(
   NAME greptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND python2 greptest.py ${CMAKE_BINARY_DIR}/icgrep)
+  COMMAND timeout 1000 python greptest.py ${CMAKE_BINARY_DIR}/icgrep)
 
 add_test(
   NAME proptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND python2 greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml ${CMAKE_BINARY_DIR}/icgrep)
+  COMMAND timeout 2000 python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml ${CMAKE_BINARY_DIR}/icgrep)
 
 add_test(
   NAME abc_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND ./run_abc ${CMAKE_BINARY_DIR}/icgrep)
+  COMMAND timeout 200 ./run_abc ${CMAKE_BINARY_DIR}/icgrep)
 
 add_test(
   NAME u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
-  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
+  COMMAND timeout 15 ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
 
 add_test(
   NAME lz4d_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
-  COMMAND ./run_all ${CMAKE_BINARY_DIR}/lz4d)
+  COMMAND timeout 15 ./run_all ${CMAKE_BINARY_DIR}/lz4d)
 
 add_test(
   NAME editd_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
-  COMMAND python run_all.py -e ${CMAKE_BINARY_DIR})
+  COMMAND timeout 50 python run_all.py -e ${CMAKE_BINARY_DIR})
 
 add_test(
   NAME base64_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
-  COMMAND python base64test.py ${CMAKE_BINARY_DIR}/base64)
+  COMMAND timeout 15 python base64test.py ${CMAKE_BINARY_DIR}/base64)
+
+add_custom_target (greptest
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND timeout 600 python greptest.py "${CMAKE_BINARY_DIR}/icgrep -ea")
+
+add_custom_target (proptest
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND timeout 1000 python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml "${CMAKE_BINARY_DIR}/icgrep -ea")
 
 add_custom_target (u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
-  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
+  COMMAND timeout 15 ./run_all "${CMAKE_BINARY_DIR}/u8u16 -ea -segment-size=16 -enable-segment-pipeline-parallel")
 
 add_custom_target (lz4d_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
-  COMMAND ./run_all ${CMAKE_BINARY_DIR}/lz4d)
+  COMMAND timeout 15 ./run_all "${CMAKE_BINARY_DIR}/lz4d -ea")
 
 add_custom_target (editd_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
-  COMMAND python run_all.py -e ${CMAKE_BINARY_DIR})
+  COMMAND timeout 50 python run_all.py -e ${CMAKE_BINARY_DIR})
 
 add_custom_target (base64_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
-  COMMAND python base64test.py ${CMAKE_BINARY_DIR}/base64)
+  COMMAND timeout 20 python base64test.py "${CMAKE_BINARY_DIR}/base64 -ea")
 
 add_custom_target (abc_test
-  COMMAND python2 abc_testgen.py
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA)
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND timeout 200 ./run_abc "${CMAKE_BINARY_DIR}/icgrep -ea")
 
 add_custom_target (check
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure

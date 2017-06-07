@@ -186,7 +186,7 @@ Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value *
     return buf->getStreamBlockPtr(this, getStreamSetBufferPtr(name), streamIndex, blockIndex, false);
 }
 
-void KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, Value * toStore) {
+StoreInst * KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, Value * toStore) {
     return CreateBlockAlignedStore(toStore, getOutputStreamBlockPtr(name, streamIndex));
 }
 
@@ -196,7 +196,7 @@ Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * 
     return buf->getStreamPackPtr(this, getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex, false);
 }
 
-void KernelBuilder::storeOutputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex, Value * toStore) {
+StoreInst * KernelBuilder::storeOutputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex, Value * toStore) {
     return CreateBlockAlignedStore(toStore, getOutputStreamPackPtr(name, streamIndex, packIndex));
 }
 

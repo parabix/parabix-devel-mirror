@@ -175,7 +175,7 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
                          std::vector<Binding> stream_outputs,
                          std::vector<Binding> scalar_parameters,
                          std::vector<Binding> scalar_outputs)
-: BlockOrientedKernel(std::move(annotateKernelNameWithDebugFlags(std::move(kernelName))),
+: BlockOrientedKernel(annotateKernelNameWithDebugFlags(std::move(kernelName)),
                       std::move(stream_inputs), std::move(stream_outputs), 
                       std::move(scalar_parameters), std::move(scalar_outputs),
                       {Binding{b->getBitBlockType(), "EOFbit"}, Binding{b->getBitBlockType(), "EOFmask"}})

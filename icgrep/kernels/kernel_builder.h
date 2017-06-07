@@ -65,11 +65,11 @@ public:
 
     llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex);
 
-    void storeOutputStreamBlock(const std::string & name, llvm::Value * streamIndex, llvm::Value * toStore);
+    llvm::StoreInst * storeOutputStreamBlock(const std::string & name, llvm::Value * streamIndex, llvm::Value * toStore);
 
     llvm::Value * getOutputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex);
 
-    void storeOutputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * toStore);
+    llvm::StoreInst * storeOutputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * toStore);
 
     llvm::Value * getOutputStreamSetCount(const std::string & name);
 

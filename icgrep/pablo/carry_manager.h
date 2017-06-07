@@ -47,7 +47,7 @@ public:
 
     void initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel);
 
-    void releaseCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel);
+    void releaseCarryData(const std::unique_ptr<kernel::KernelBuilder> & idb);
 
     void initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
@@ -120,7 +120,7 @@ private:
     unsigned                                        mIfDepth;
 
     bool                                            mHasLongAdvance;
-
+    bool                                            mHasNonCarryCollapsingLoops;
     bool                                            mHasLoop;
     unsigned                                        mLoopDepth;
     llvm::Value *                                   mLoopSelector;    

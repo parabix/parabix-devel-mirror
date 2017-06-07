@@ -78,7 +78,7 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     kb->SetInsertPoint(processGroups);
     PHINode * blockGroupBase = kb->CreatePHI(kb->getSizeTy(), 2);
     blockGroupBase->addIncoming(kb->getSize(0), entry);
-    Value * groupPackPtr = kb->CreatePointerCast(kb->CreateGEP(sourceBitstream, {blockGroupBase}), iPackPtrTy);
+    Value * groupPackPtr = kb->CreatePointerCast(kb->CreateGEP(sourceBitstream, blockGroupBase), iPackPtrTy);
     Value * blockGroupLimit = kb->CreateAdd(blockGroupBase, blocksPerGroup);
     blockGroupLimit = kb->CreateSelect(kb->CreateICmpULT(blockGroupLimit, blocksToDo), blockGroupLimit, blocksToDo);
     kb->CreateBr(processBlockGroup);
@@ -113,7 +113,7 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     PHINode * seenSoFarPhi = kb->CreatePHI(kb->getSizeTy(), 2);
     seenSoFarPhi->addIncoming(seenSoFar, doScan);
     Value * nonZeroPack = kb->CreateZExtOrTrunc(kb->CreateCountForwardZeroes(groupMaskPhi), kb->getSizeTy());
-    Value * scanMask = kb->CreateLoad(kb->CreateGEP(groupPackPtr, {nonZeroPack}));
+    Value * scanMask = kb->CreateLoad(kb->CreateGEP(groupPackPtr, nonZeroPack));
     Value * packCount = kb->CreateZExtOrTrunc(kb->CreatePopcount(scanMask), kb->getSizeTy());
     Value * newTotalSeen = kb->CreateAdd(packCount, seenSoFarPhi);
     Value * seenLessThanN = kb->CreateICmpULT(newTotalSeen, N);

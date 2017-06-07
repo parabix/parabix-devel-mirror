@@ -19,7 +19,6 @@
 #include <kernels/kernel_builder.h>
 #include <kernels/kernel.h>
 #include <llvm/IR/Verifier.h>
-
 #ifndef NDEBUG
 #define IN_DEBUG_MODE true
 #else
@@ -77,7 +76,6 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
         }
         mEngine->setObjectCache(mCache);
     }
-
     mMainModule->setTargetTriple(mTarget->getTargetTriple().getTriple());
 
     iBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
@@ -135,7 +133,7 @@ Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, Fu
         f = Function::Create(type, Function::ExternalLinkage, name, mod);
         mEngine->addGlobalMapping(f, functionPtr);
     } else if (LLVM_UNLIKELY(f->getType() != type->getPointerTo())) {
-        report_fatal_error("Cannot link " + name + ": a function with a differing signature already exists with that name in " + mod->getName());
+        report_fatal_error("Cannot link " + name + ": a function with a different signature already exists with that name in " + mod->getName());
     }
     return f;
 }
@@ -153,7 +151,6 @@ void ParabixDriver::finalizeObject() {
         }
         PM.add(createPrintModulePass(*IROutputStream));
     }
-
     if (IN_DEBUG_MODE || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
         PM.add(createVerifierPass());
     }
@@ -162,6 +159,7 @@ void ParabixDriver::finalizeObject() {
     PM.add(createGVNPass());                     //Eliminate common subexpressions.
     PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
     PM.add(createCFGSimplificationPass());
+
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
         if (LLVM_LIKELY(IROutputStream == nullptr)) {
             if (codegen::IROutputFilename) {
@@ -220,6 +218,10 @@ void ParabixDriver::finalizeObject() {
         report_fatal_error(e.what());
     }
 
+}
+
+bool ParabixDriver::hasExternalFunction(llvm::StringRef functionName) const {
+    return mEngine->getPointerToNamedFunction(functionName, false) != nullptr;
 }
 
 void * ParabixDriver::getMain() {

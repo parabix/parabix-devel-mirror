@@ -371,30 +371,6 @@ Value * IDISA_Builder::simd_not(Value * a) {
     return simd_xor(a, Constant::getAllOnesValue(a->getType()));
 }
 
-LoadInst * IDISA_Builder::CreateBlockAlignedLoad(Value * const ptr) {
-    const auto alignment = mBitBlockWidth / 8;
-    if (codegen::EnableAsserts) {
-        DataLayout DL(getModule());
-        IntegerType * const intPtrTy = getIntPtrTy(DL);
-        Value * alignmentOffset = CreateURem(CreatePtrToInt(ptr, intPtrTy), ConstantInt::get(intPtrTy, alignment));
-        Value * alignmentCheck = CreateICmpEQ(alignmentOffset, ConstantInt::getNullValue(intPtrTy));
-        CreateAssert(alignmentCheck, "CreateBlockAlignedLoad: pointer is unaligned");
-    }
-    return CreateAlignedLoad(ptr, alignment);
-}
-
-void IDISA_Builder::CreateBlockAlignedStore(Value * const value, Value * const ptr) {
-    const auto alignment = mBitBlockWidth / 8;
-    if (codegen::EnableAsserts) {
-        DataLayout DL(getModule());
-        IntegerType * const intPtrTy = getIntPtrTy(DL);
-        Value * alignmentOffset = CreateURem(CreatePtrToInt(ptr, intPtrTy), ConstantInt::get(intPtrTy, alignment));
-        Value * alignmentCheck = CreateICmpEQ(alignmentOffset, ConstantInt::getNullValue(intPtrTy));
-        CreateAssert(alignmentCheck, "CreateBlockAlignedStore: pointer is not aligned");
-    }
-    CreateAlignedStore(value, ptr, alignment);
-}
-
 IDISA_Builder::IDISA_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
 : CBuilder(C)
 , mBitBlockWidth(vectorWidth)

@@ -15,7 +15,8 @@
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_var.h>
 #include <kernels/kernel_builder.h>
-#include <llvm/Support/raw_ostream.h>
+#include <toolchain/toolchain.h>
+#include <array>
 
 using namespace llvm;
 
@@ -23,12 +24,12 @@ namespace pablo {
 
 inline static unsigned ceil_log2(const unsigned v) {
     assert ("log2(0) is undefined!" && v != 0);
-    return 32 - __builtin_clz(v - 1);
+    return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1);
 }
 
 inline static unsigned floor_log2(const unsigned v) {
     assert ("log2(0) is undefined!" && v != 0);
-    return 31 - __builtin_clz(v);
+    return ((sizeof(unsigned) * CHAR_BIT) - 1) - __builtin_clz(v);
 }
 
 inline static unsigned nearest_pow2(const unsigned v) {
@@ -87,15 +88,69 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
     if (mHasLongAdvance) {
         kernel->addScalar(iBuilder->getSizeTy(), "CarryBlockIndex");
     }
+}
 
+bool isDynamicallyAllocatedType(const Type * const ty) {
+    if (isa<StructType>(ty) && ty->getStructNumElements() == 3) {
+        return (ty->getStructElementType(1)->isPointerTy() && ty->getStructElementType(2)->isPointerTy() && ty->getStructElementType(0)->isIntegerTy());
+    }
+    return false;
+}
+
+bool containsDynamicallyAllocatedType(const Type * const ty) {
+    if (isa<StructType>(ty)) {
+        for (unsigned i = 0; i < ty->getStructNumElements(); ++i) {
+            if (isDynamicallyAllocatedType(ty->getStructElementType(i))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void freeDynamicallyAllocatedMemory(const std::unique_ptr<kernel::KernelBuilder> & idb, Value * const frame) {
+    StructType * const ty = cast<StructType>(frame->getType()->getPointerElementType());
+    std::array<Value *, 3> indices;
+    indices[0] = idb->getInt32(0);
+    for (unsigned i = 0; i < ty->getStructNumElements(); ++i) {
+        if (isDynamicallyAllocatedType(ty->getStructElementType(i))) {
+            indices[1] = idb->getInt32(i);
+            indices[2] = idb->getInt32(1);
+            Value * const innerFrame = idb->CreateLoad(idb->CreateGEP(frame, ArrayRef<Value*>(indices.data(), 3)));
+            if (containsDynamicallyAllocatedType(innerFrame->getType())) {
+                indices[2] = indices[0];
+                Value *  const count = idb->CreateLoad(idb->CreateGEP(frame, ArrayRef<Value*>(indices.data(), 3)));
+                BasicBlock * const entry = idb->GetInsertBlock();
+                BasicBlock * const cond = idb->CreateBasicBlock("freeCarryDataCond");
+                BasicBlock * const body = idb->CreateBasicBlock("freeCarryDataLoop");
+                BasicBlock * const exit = idb->CreateBasicBlock("freeCarryDataExit");
+                idb->CreateBr(cond);
+                idb->SetInsertPoint(cond);
+                PHINode * const index = idb->CreatePHI(count->getType(), 2);
+                index->addIncoming(ConstantInt::getNullValue(count->getType()), entry);
+                Value * test = idb->CreateICmpNE(index, count);
+                idb->CreateCondBr(test, body, exit);
+                idb->SetInsertPoint(body);
+                freeDynamicallyAllocatedMemory(idb, idb->CreateGEP(innerFrame, index));
+                index->addIncoming(idb->CreateAdd(index, ConstantInt::get(count->getType(), 1)), body);
+                idb->CreateBr(cond);
+                idb->SetInsertPoint(exit);
+            }
+            idb->CreateFree(innerFrame);
+            indices[2] = idb->getInt32(2);
+            Value *  const summary = idb->CreateLoad(idb->CreateGEP(frame, ArrayRef<Value*>(indices.data(), 3)));
+            idb->CreateFree(summary);
+        }
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief releaseCarryData
  ** ------------------------------------------------------------------------------------------------------------- */
-void CarryManager::releaseCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel) {
-
-
+void CarryManager::releaseCarryData(const std::unique_ptr<kernel::KernelBuilder> & idb) {
+    if (mHasNonCarryCollapsingLoops) {
+        freeDynamicallyAllocatedMemory(idb, idb->getScalarFieldPtr("carries"));
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -185,94 +240,70 @@ void CarryManager::enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
         PHINode * index = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
         mLoopIndicies.push_back(index);
         index->addIncoming(iBuilder->getSize(0), entryBlock);
-
         Value * capacityPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
-        Value * capacity = iBuilder->CreateLoad(capacityPtr, false, "capacity");
+        Value * capacity = iBuilder->CreateLoad(capacityPtr, "capacity");
         Constant * const ONE = ConstantInt::get(capacity->getType(), 1);
         Value * arrayPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(1)});
-        Value * array = iBuilder->CreateLoad(arrayPtr, false, "array");
-
+        Value * array = iBuilder->CreateLoad(arrayPtr, "array");
         BasicBlock * const entry = iBuilder->GetInsertBlock();
         BasicBlock * const resizeCarryState = iBuilder->CreateBasicBlock("ResizeCarryState");
         BasicBlock * const reallocExisting = iBuilder->CreateBasicBlock("ReallocExisting");
         BasicBlock * const createNew = iBuilder->CreateBasicBlock("CreateNew");
         BasicBlock * const resumeKernel = iBuilder->CreateBasicBlock("ResumeKernel");
-
-        iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpULT(index, capacity), resumeKernel, resizeCarryState);
+        iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpNE(index, capacity), resumeKernel, resizeCarryState);
 
         // RESIZE CARRY BLOCK
         iBuilder->SetInsertPoint(resizeCarryState);
-        const auto BlockWidth = carryTy->getPrimitiveSizeInBits() / 8;
+        const auto BlockWidth = iBuilder->getBitBlockWidth() / 8;
         const auto Log2BlockWidth = floor_log2(BlockWidth);
         Constant * const carryStateWidth = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(array->getType()->getPointerElementType()), iBuilder->getSizeTy(), false);
-        Value * summaryPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
-
+        Value * const summaryPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(2)});
         Value * const hasCarryState = iBuilder->CreateICmpNE(array, ConstantPointerNull::get(cast<PointerType>(array->getType())));
-
         iBuilder->CreateLikelyCondBr(hasCarryState, reallocExisting, createNew);
 
         // REALLOCATE EXISTING
         iBuilder->SetInsertPoint(reallocExisting);
-
         Value * const capacitySize = iBuilder->CreateMul(capacity, carryStateWidth);
         Value * const newCapacitySize = iBuilder->CreateShl(capacitySize, 1); // x 2
-
-        Value * newArray = iBuilder->CreateRealloc(array, newCapacitySize);
-
+        Value * const newArray = iBuilder->CreateCacheAlignedMalloc(newCapacitySize);
+        iBuilder->CreateMemCpy(newArray, array, capacitySize, iBuilder->getCacheAlignment());
+        iBuilder->CreateFree(array);
+        iBuilder->CreateStore(newArray, arrayPtr);
         Value * const startNewArrayPtr = iBuilder->CreateGEP(iBuilder->CreatePointerCast(newArray, int8PtrTy), capacitySize);
         iBuilder->CreateMemZero(startNewArrayPtr, capacitySize, BlockWidth);
-
-        iBuilder->CreateStore(newArray, arrayPtr);
-
-        Value * const log2capacity = iBuilder->CreateAdd(iBuilder->CreateCeilLog2(capacity), ONE);
-        Value * const summarySize = iBuilder->CreateShl(log2capacity, Log2BlockWidth + 1); // x 2(BlockWidth)
-        Value * const newLog2Capacity = iBuilder->CreateAdd(log2capacity, ONE);
-        Value * const newSummarySize = iBuilder->CreateShl(newLog2Capacity, Log2BlockWidth + 1); // x 2(BlockWidth)
-
-        Value * const summary = iBuilder->CreateLoad(summaryPtr, false);
-        Value * newSummary = iBuilder->CreateRealloc(summary, newSummarySize);
-        Value * const startNewSummaryPtr = iBuilder->CreateGEP(iBuilder->CreatePointerCast(newArray, int8PtrTy), summarySize);
-        iBuilder->CreateMemZero(startNewSummaryPtr, iBuilder->getSize(2 * BlockWidth), BlockWidth);
-
-        Value * ptr1 = iBuilder->CreateGEP(newSummary, summarySize);
-        ptr1 = iBuilder->CreatePointerCast(ptr1, carryPtrTy);
-
-        Value * ptr2 = iBuilder->CreateGEP(newSummary, iBuilder->CreateAdd(summarySize, iBuilder->getSize(BlockWidth)));
-        ptr2 = iBuilder->CreatePointerCast(ptr2, carryPtrTy);
-
-        newSummary = iBuilder->CreatePointerCast(newSummary, carryPtrTy);
-        iBuilder->CreateStore(newSummary, summaryPtr);
-        Value * const newCapacity = iBuilder->CreateShl(ONE, log2capacity);
-
+        Value * const newCapacity = iBuilder->CreateShl(capacity, 1);
         iBuilder->CreateStore(newCapacity, capacityPtr);
-
+        Value * const summary = iBuilder->CreateLoad(summaryPtr, false);
+        Value * const summarySize = iBuilder->CreateShl(iBuilder->CreateAdd(iBuilder->CreateCeilLog2(capacity), ONE), Log2BlockWidth + 1);
+        Constant * const additionalSpace = iBuilder->getSize(2 * BlockWidth);
+        Value * const newSummarySize = iBuilder->CreateAdd(summarySize, additionalSpace);
+        Value * const newSummary = iBuilder->CreateBlockAlignedMalloc(newSummarySize);
+        iBuilder->CreateMemCpy(newSummary, summary, summarySize, BlockWidth);
+        iBuilder->CreateFree(summary);
+        iBuilder->CreateStore(iBuilder->CreatePointerCast(newSummary, carryPtrTy), summaryPtr);
+        Value * const startNewSummaryPtr = iBuilder->CreateGEP(iBuilder->CreatePointerCast(newSummary, int8PtrTy), summarySize);
+        iBuilder->CreateMemZero(startNewSummaryPtr, additionalSpace, BlockWidth);
         iBuilder->CreateBr(resumeKernel);
 
         // CREATE NEW
         iBuilder->SetInsertPoint(createNew);
-
         Constant * const initialLog2Capacity = iBuilder->getInt64(4);
         Constant * const initialCapacity = ConstantExpr::getShl(ONE, initialLog2Capacity);
+        iBuilder->CreateStore(initialCapacity, capacityPtr);
         Constant * const initialCapacitySize = ConstantExpr::getMul(initialCapacity, carryStateWidth);
-
-        Value * initialArray = iBuilder->CreateAlignedMalloc(initialCapacitySize, iBuilder->getCacheAlignment());
+        Value * initialArray = iBuilder->CreateCacheAlignedMalloc(initialCapacitySize);
         iBuilder->CreateMemZero(initialArray, initialCapacitySize, BlockWidth);
         initialArray = iBuilder->CreatePointerCast(initialArray, array->getType());
         iBuilder->CreateStore(initialArray, arrayPtr);
-
         Constant * initialSummarySize = ConstantExpr::getShl(ConstantExpr::getAdd(initialLog2Capacity, iBuilder->getInt64(1)), iBuilder->getInt64(Log2BlockWidth + 1));
-        Value * initialSummary = iBuilder->CreateAlignedMalloc(initialSummarySize, BlockWidth);
+        Value * initialSummary = iBuilder->CreateBlockAlignedMalloc(initialSummarySize);
         iBuilder->CreateMemZero(initialSummary, initialSummarySize, BlockWidth);
         initialSummary = iBuilder->CreatePointerCast(initialSummary, carryPtrTy);
         iBuilder->CreateStore(initialSummary, summaryPtr);
-
-        iBuilder->CreateStore(initialCapacity, capacityPtr);
-
         iBuilder->CreateBr(resumeKernel);
 
         // RESUME KERNEL
         iBuilder->SetInsertPoint(resumeKernel);
-        // Load the appropriate carry stat block
         PHINode * phiArrayPtr = iBuilder->CreatePHI(array->getType(), 3);
         phiArrayPtr->addIncoming(array, entry);
         phiArrayPtr->addIncoming(initialArray, createNew);
@@ -315,7 +346,7 @@ void CarryManager::leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
 
         // NOTE: this requires that, for all loop iterations, i, and all block iterations, j, the carry in
         // summary, CI_i,j, matches the carry out summary of the prior block iteration, CO_i,j - 1.
-        // Otherwise we may end up with an incorrect result or being trapped in an infinite loop.
+        // Otherwise we will end up with an incorrect result or being trapped in an infinite loop.
 
         Value * capacityPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(0)});
         Value * capacity = iBuilder->CreateLoad(capacityPtr, false);
@@ -369,9 +400,10 @@ void CarryManager::leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
 
         iBuilder->SetInsertPoint(resume);
 
-        IntegerType * ty = IntegerType::get(iBuilder->getContext(), carryTy->getPrimitiveSizeInBits());
-        iBuilder->CreateAssert(iBuilder->CreateICmpEQ(iBuilder->CreateBitCast(finalBorrow, ty), ConstantInt::getNullValue(ty)), "finalBorrow != 0");
-        iBuilder->CreateAssert(iBuilder->CreateICmpEQ(iBuilder->CreateBitCast(finalCarry, ty), ConstantInt::getNullValue(ty)), "finalCarry != 0");
+        if (codegen::EnableAsserts) {
+            iBuilder->CreateAssertZero(iBuilder->CreateOr(finalBorrow, finalCarry),
+                                       "CarryManager: loop post-condition violated: final borrow and carry must be zero!");
+        }
 
         assert (!mLoopIndicies.empty());
         PHINode * index = mLoopIndicies.back();
@@ -777,9 +809,11 @@ bool CarryManager::hasIterationSpecificAssignment(const PabloBlock * const scope
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyse
  ** ------------------------------------------------------------------------------------------------------------- */
-StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope, const unsigned ifDepth, const unsigned loopDepth, const bool isNestedWithinNonCarryCollapsingLoop) {
+StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope,
+                                   const unsigned ifDepth, const unsigned loopDepth, const bool isNestedWithinNonCarryCollapsingLoop) {
     assert ("scope cannot be null!" && scope);
-    assert (mCarryScopes == 0 ? (scope == mKernel->getEntryBlock()) : (scope != mKernel->getEntryBlock()));
+    assert ("entry scope (and only the entry scope) must be in scope 0"
+            && (mCarryScopes == 0 ? (scope == mKernel->getEntryBlock()) : (scope != mKernel->getEntryBlock())));
     assert (mCarryScopes < mCarryMetadata.size());
     Type * const carryTy = iBuilder->getBitBlockType();
     Type * const blockTy = iBuilder->getBitBlockType();
@@ -820,7 +854,6 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
     if (LLVM_UNLIKELY(state.empty())) {
         carryState = StructType::get(iBuilder->getContext());
     } else {
-        //if (ifDepth > 0 || (nonCarryCollapsingMode | isNestedWithinNonCarryCollapsingLoop)) {
         if (dyn_cast_or_null<If>(scope->getBranch()) || nonCarryCollapsingMode || isNestedWithinNonCarryCollapsingLoop) {
             if (LLVM_LIKELY(state.size() > 1)) {
                 summaryType = CarryData::ExplicitSummary;
@@ -838,7 +871,9 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
         // If we're in a loop and cannot use collapsing carry mode, convert the carry state struct into a capacity,
         // carry state pointer, and summary pointer struct.
         if (LLVM_UNLIKELY(nonCarryCollapsingMode)) {
+            mHasNonCarryCollapsingLoops = true;
             carryState = StructType::get(iBuilder->getSizeTy(), carryState->getPointerTo(), carryTy->getPointerTo(), nullptr);
+            assert (isDynamicallyAllocatedType(carryState));
         }
         cd.setNonCollapsingCarryMode(nonCarryCollapsingMode);
     }
@@ -858,6 +893,7 @@ CarryManager::CarryManager() noexcept
 , mNextSummaryTest(nullptr)
 , mIfDepth(0)
 , mHasLongAdvance(false)
+, mHasNonCarryCollapsingLoops(false)
 , mHasLoop(false)
 , mLoopDepth(0)
 , mLoopSelector(nullptr)

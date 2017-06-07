@@ -35,7 +35,6 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <mutex>
-
 #ifdef CUDA_ENABLED
 #include <preprocess.cpp>
 #include <IR_Gen/CudaDriver.h>
@@ -82,8 +81,6 @@ void *DoGrepThreadFunction(void *args)
 
     pthread_exit(nullptr);
 }
-
-
 
 void GrepEngine::doGrep(const std::string & fileName) const{
 #ifdef CUDA_ENABLED

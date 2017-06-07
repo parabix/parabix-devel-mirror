@@ -43,19 +43,18 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::Required, cl::cat(lz4dFlags));
 static cl::opt<bool> overwriteOutput("f", cl::desc("Overwrite existing output file."), cl::init(false), cl::cat(lz4dFlags));
 
-
 typedef void (*MainFunctionType)(char * byte_data, size_t filesize, bool hasBlockChecksum);
 
 void generatePipeline(ParabixDriver & pxDriver) {
     auto & iBuilder = pxDriver.getBuilder();
     Module * M = iBuilder->getModule();
 
-    Type * const size_ty = iBuilder->getSizeTy();
-    Type * const bool_ty = iBuilder->getIntNTy(sizeof(bool) * 8);
+    Type * const sizeTy = iBuilder->getSizeTy();
+    Type * const boolTy = iBuilder->getIntNTy(sizeof(bool) * 8);
     Type * const voidTy = iBuilder->getVoidTy();
     Type * const inputType = iBuilder->getInt8PtrTy();
     
-    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputType, size_ty, bool_ty, nullptr));
+    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputType, sizeTy, boolTy, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
     Value * const inputStream = &*(args++);
@@ -69,7 +68,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     // Output buffer should be at least one whole LZ4 block (4MB) large in case of uncompressed blocks.
     // And the size (in bytes) also needs to be a power of two.
-    const unsigned decompressBufBlocks = 4U * 1024 * 1024 / codegen::BlockSize;
+    const unsigned decompressBufBlocks = (4194304U) / codegen::BlockSize;
 
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
 
@@ -110,14 +109,6 @@ void generatePipeline(ParabixDriver & pxDriver) {
     pxDriver.finalizeObject();
 }
 
-
-MainFunctionType codeGen() {
-    ParabixDriver pxDriver("lz4d");
-    generatePipeline(pxDriver);
-    return reinterpret_cast<MainFunctionType>(pxDriver.getMain());
-}
-
-
 int main(int argc, char *argv[]) {
     // This boilerplate provides convenient stack traces and clean LLVM exit
     // handling. It also initializes the built in support for convenient
@@ -146,6 +137,10 @@ int main(int argc, char *argv[]) {
     // Since mmap offset has to be multiples of pages, we can't use it to skip headers.
     mappedFile.open(fileName, lz4Frame.getBlocksLength() + lz4Frame.getBlocksStart());
     char *fileBuffer = const_cast<char *>(mappedFile.data()) + lz4Frame.getBlocksStart();
+
+    if (codegen::SegmentSize < 2) {
+        codegen::SegmentSize = 2;
+    }
 
     ParabixDriver pxDriver("lz4d");
     generatePipeline(pxDriver);

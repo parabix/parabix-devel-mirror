@@ -5,6 +5,7 @@
 #include "source_kernel.h"
 #include <kernels/kernel_builder.h>
 #include <kernels/streamset.h>
+#include <llvm/IR/Module.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
@@ -207,13 +208,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     Value * const capacity = iBuilder->getScalarField("capacity");
 
     Value * L = iBuilder->CreateGEP(originalPtr, pageSize);
-
-//    iBuilder->CallPrintInt("L", L);
-
     Value * B = iBuilder->CreateGEP(buffer, capacity);
-
-//    iBuilder->CallPrintInt("B", B);
-
     Value * const canAppend = iBuilder->CreateICmpULT(L, B);
     iBuilder->CreateLikelyCondBr(canAppend, readData, waitOnConsumers);
 
@@ -223,44 +218,46 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     // Then determine how much data has been consumed and how much needs to be copied back, noting
     // that our "unproduced" data must be block aligned.
-    const auto blockAlignment = iBuilder->getBitBlockWidth() / 8;
-    Constant * const alignmentMask = ConstantExpr::getNot(iBuilder->getSize(blockAlignment - 1));
+    const size_t blockAlignment = iBuilder->getBitBlockWidth() / 8;
+    Constant * const alignmentMask = iBuilder->getSize(-blockAlignment);
     Value * const consumed = iBuilder->CreateAnd(iBuilder->getConsumedItemCount("sourceBuffer"), alignmentMask);
     Value * const remaining = iBuilder->CreateSub(bufferedSize, consumed);
     Value * const unconsumedPtr = iBuilder->CreateGEP(inputStream, consumed);
     Value * const consumedMajority = iBuilder->CreateICmpULT(iBuilder->CreateGEP(buffer, remaining), unconsumedPtr);
 
-//    iBuilder->CallPrintInt("consumedMajority", consumedMajority);
-
     BasicBlock * const copyBack = iBuilder->CreateBasicBlock("CopyBack");
     BasicBlock * const expandAndCopyBack = iBuilder->CreateBasicBlock("ExpandAndCopyBack");
     BasicBlock * const calculateLogicalAddress = iBuilder->CreateBasicBlock("CalculateLogicalAddress");
+
     // Have we consumed enough data that we can safely copy back the unconsumed data without needing
     // a temporary buffer? (i.e., B + remaining < L + consumed)
     iBuilder->CreateLikelyCondBr(consumedMajority, copyBack, expandAndCopyBack);
     iBuilder->SetInsertPoint(copyBack);
+
     // If so, just copy the data ...
-    iBuilder->CreateMemCpy(buffer, unconsumedPtr, remaining, blockAlignment);
+    iBuilder->CreateMemCpy(buffer, unconsumedPtr, remaining, 1);
     iBuilder->CreateBr(calculateLogicalAddress);
+
     // Otherwise, allocate a buffer with twice the capacity and copy the unconsumed data back into it
     iBuilder->SetInsertPoint(expandAndCopyBack);
     Value * const expandedCapacity = iBuilder->CreateShl(capacity, 1);
-    Value * const expandedBuffer = iBuilder->CreateCacheAlignedMalloc(expandedCapacity);
-    Value * const expandedPtr = iBuilder->CreatePointerCast(expandedBuffer, codeUnitPtrTy);
-    iBuilder->CreateMemCpy(expandedPtr, unconsumedPtr, remaining, blockAlignment);
+    Value * const expandedBuffer = iBuilder->CreatePointerCast(iBuilder->CreateCacheAlignedMalloc(expandedCapacity), codeUnitPtrTy);
+    iBuilder->CreateMemCpy(expandedBuffer, unconsumedPtr, remaining, 1);
     iBuilder->CreateFree(buffer);
     iBuilder->setScalarField("buffer", expandedBuffer);
     iBuilder->setScalarField("capacity", expandedCapacity);
     iBuilder->CreateBr(calculateLogicalAddress);
+
     // Update the logical address for this buffer....
     iBuilder->SetInsertPoint(calculateLogicalAddress);
     PHINode * const baseAddress = iBuilder->CreatePHI(codeUnitPtrTy, 2);
     baseAddress->addIncoming(buffer, copyBack);
-    baseAddress->addIncoming(expandedPtr, expandAndCopyBack);
+    baseAddress->addIncoming(expandedBuffer, expandAndCopyBack);
     Value * const modifiedPtr = iBuilder->CreateGEP(baseAddress, remaining);
-    Value * const logicalAddress = iBuilder->CreateGEP(modifiedPtr, iBuilder->CreateNeg(produced));
+    Value * const logicalAddress = iBuilder->CreateGEP(modifiedPtr, iBuilder->CreateNeg(iBuilder->CreateAnd(produced, alignmentMask)));
     iBuilder->setBaseAddress("sourceBuffer", logicalAddress);
     iBuilder->CreateBr(readData);
+
     // Regardless of whether we're simply appending data or had to allocate a new buffer, read a new page
     // of data into the input source buffer. If we fail to read a full segment ...
     readData->moveAfter(calculateLogicalAddress);

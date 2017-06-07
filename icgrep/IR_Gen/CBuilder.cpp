@@ -20,19 +20,17 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdio.h>
-#ifdef HAS_ADDRESS_SANITIZER
-#include <sanitizer/asan_interface.h>
-#endif
-#ifdef HAS_LIBUNWIND
+#if defined(HAS_MACH_VM_TYPES)
+#include <mach/vm_types.h>
+extern void _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned skip);
+static_assert(sizeof(vm_address_t) == sizeof(uintptr_t), "");
+#elif defined(HAS_LIBUNWIND)
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
-using unw_word_t = unw_word_t;
-#elif HAS_EXECINFO
+static_assert(sizeof(unw_word_t) <= sizeof(uintptr_t), "");
+#elif defined(HAS_EXECINFO)
 #include <execinfo.h>
-#include <boost/integer.hpp>
-using unw_word_t = boost::uint_t<sizeof(void *) * CHAR_BIT>::exact;
-#else
-using unw_word_t = uint64_t;
+static_assert(sizeof(void *) == sizeof(uintptr_t), "");
 #endif
 
 using namespace llvm;
@@ -246,7 +244,6 @@ Value * CBuilder::CreateMalloc(Value * size) {
     }
     size = CreateZExtOrTrunc(size, sizeTy);
     CallInst * const ptr = CreateCall(f, size);
-    ptr->setTailCall();
     CreateAssert(ptr, "CreateMalloc: returned null pointer");
     return ptr;
 }
@@ -258,47 +255,55 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     Module * const m = getModule();
     IntegerType * const sizeTy = getSizeTy();
     PointerType * const voidPtrTy = getVoidPtrTy();
-    #ifdef STDLIB_HAS_ALIGNED_ALLOC
-    Function * f = m->getFunction("aligned_alloc");
-    if (LLVM_UNLIKELY(f == nullptr)) {
-        FunctionType * const fty = FunctionType::get(voidPtrTy, {sizeTy, sizeTy}, false);
-        f = Function::Create(fty, Function::ExternalLinkage, "aligned_alloc", m);
-        f->setCallingConv(CallingConv::C);
-        f->setDoesNotAlias(0);
-    }
-    #else
-    Function * f = m->getFunction("posix_memalign");
-    if (LLVM_UNLIKELY(f == nullptr)) {
-        FunctionType * const fty = FunctionType::get(getInt32Ty(), {voidPtrTy->getPointerTo(), sizeTy, sizeTy}, false);
-        f = Function::Create(fty, Function::ExternalLinkage, "posix_memalign", m);
-        f->setCallingConv(CallingConv::C);
-        f->setDoesNotAlias(1);
-    }
-    #endif
+
     size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const align = ConstantInt::get(sizeTy, alignment);
     if (codegen::EnableAsserts) {
-        CreateAssert(CreateICmpEQ(CreateURem(size, align), ConstantInt::get(sizeTy, 0)),
-                     "CreateAlignedMalloc: size must be an integral multiple of alignment.");
+        CreateAssertZero(CreateURem(size, align), "CreateAlignedMalloc: size must be an integral multiple of alignment.");
     }
-    #ifdef STDLIB_HAS_ALIGNED_ALLOC
-    CallInst * const ptr = CreateCall(f, {align, size});
-    ptr->setTailCall();
-    #else
-    Value * ptr = CreateAlloca(voidPtrTy);
-    CallInst * success = CreateCall(f, {ptr, align, size});
-    success->setTailCall();
-    if (codegen::EnableAsserts) {
-        CreateAssert(CreateICmpEQ(success, getInt32(0)),
-                     "CreateAlignedMalloc: posix_memalign reported bad allocation");
+
+    Value * ptr = nullptr;
+    if (hasAlignedAlloc()) {
+        Function * f = m->getFunction("aligned_alloc");
+        if (LLVM_UNLIKELY(f == nullptr)) {
+            FunctionType * const fty = FunctionType::get(voidPtrTy, {sizeTy, sizeTy}, false);
+            f = Function::Create(fty, Function::ExternalLinkage, "aligned_alloc", m);
+            f->setCallingConv(CallingConv::C);
+            f->setDoesNotAlias(0);
+        }
+        ptr = CreateCall(f, {align, size});
+    } else if (hasPosixMemalign()) {
+        Function * f = m->getFunction("posix_memalign");
+        if (LLVM_UNLIKELY(f == nullptr)) {
+            FunctionType * const fty = FunctionType::get(getInt32Ty(), {voidPtrTy->getPointerTo(), sizeTy, sizeTy}, false);
+            f = Function::Create(fty, Function::ExternalLinkage, "posix_memalign", m);
+            f->setCallingConv(CallingConv::C);
+            f->setDoesNotAlias(0);
+            f->setDoesNotAlias(1);
+        }
+        ptr = CreateAlloca(voidPtrTy);
+        CallInst * success = CreateCall(f, {ptr, align, size});
+        if (codegen::EnableAsserts) {
+            CreateAssertZero(success, "CreateAlignedMalloc: posix_memalign reported bad allocation");
+        }
+        ptr = CreateLoad(ptr);
+    } else {
+        report_fatal_error("stdlib.h does not contain either aligned_alloc or posix_memalign");
     }
-    ptr = CreateLoad(ptr);
-    #endif
     CreateAssert(ptr, "CreateAlignedMalloc: returned null pointer.");
     return ptr;
 }
 
-Value * CBuilder::CreateRealloc(Value * const ptr, Value * size) {
+inline bool CBuilder::hasAlignedAlloc() const {
+    return mDriver && mDriver->hasExternalFunction("aligned_alloc");
+}
+
+
+inline bool CBuilder::hasPosixMemalign() const {
+    return mDriver && mDriver->hasExternalFunction("posix_memalign");
+}
+
+Value * CBuilder::CreateRealloc(Value * const ptr, Value * const size) {
     Module * const m = getModule();
     IntegerType * const sizeTy = getSizeTy();
     PointerType * const voidPtrTy = getVoidPtrTy();
@@ -310,14 +315,12 @@ Value * CBuilder::CreateRealloc(Value * const ptr, Value * size) {
         f->setDoesNotAlias(0);
         f->setDoesNotAlias(1);
     }
-    Value * const addr = CreatePointerCast(ptr, voidPtrTy);
-    size = CreateZExtOrTrunc(size, sizeTy);
-    CallInst * const ci = CreateCall(f, {addr, size});
-    ci->setTailCall();
+    CallInst * const ci = CreateCall(f, {CreatePointerCast(ptr, voidPtrTy), CreateZExtOrTrunc(size, sizeTy)});
+
     return CreatePointerCast(ci, ptr->getType());
 }
 
-void CBuilder::CreateFree(Value * ptr) {
+void CBuilder::CreateFree(Value * const ptr) {
     assert (ptr->getType()->isPointerTy());
     Module * const m = getModule();
     Type * const voidPtrTy =  getVoidPtrTy();
@@ -327,8 +330,7 @@ void CBuilder::CreateFree(Value * ptr) {
         f = Function::Create(fty, Function::ExternalLinkage, "free", m);
         f->setCallingConv(CallingConv::C);
     }
-    ptr = CreatePointerCast(ptr, voidPtrTy);
-    CreateCall(f, ptr)->setTailCall();
+    CreateCall(f, CreatePointerCast(ptr, voidPtrTy));
 }
 
 Value * CBuilder::CreateAnonymousMMap(Value * size) {
@@ -484,7 +486,7 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
         CreateAssert(len, "CreateMUnmap: length cannot be 0");
         Value * const addrValue = CreatePtrToInt(addr, intPtrTy);
         Value * const pageOffset = CreateURem(addrValue, ConstantInt::get(intPtrTy, getpagesize()));
-        CreateAssert(CreateICmpEQ(pageOffset, ConstantInt::getNullValue(intPtrTy)), "CreateMUnmap: addr must be a multiple of the page size");
+        CreateAssertZero(pageOffset, "CreateMUnmap: addr must be a multiple of the page size");
         Value * const boundCheck = CreateICmpULT(addrValue, CreateSub(ConstantInt::getAllOnesValue(intPtrTy), CreateZExtOrTrunc(len, intPtrTy)));
         CreateAssert(boundCheck, "CreateMUnmap: addresses in [addr, addr+len) are outside the valid address space range");
     }
@@ -493,7 +495,7 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
 }
 
 PointerType * CBuilder::getVoidPtrTy() const {
-    return TypeBuilder<void *, true>::get(getContext());
+    return TypeBuilder<void *, false>::get(getContext());
 }
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
@@ -640,9 +642,8 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
 
-void __report_failure(const char * msg, const unw_word_t * trace, const uint32_t n) {
+void __report_failure(const char * msg, const uintptr_t * trace, const uint32_t n) {
     raw_fd_ostream out(STDERR_FILENO, false);
-    #if defined(HAS_LIBUNWIND) || defined(HAS_EXECINFO)
     if (trace) {
         SmallVector<char, 4096> tmp;
         raw_svector_ostream trace_string(tmp);
@@ -666,24 +667,130 @@ void __report_failure(const char * msg, const unw_word_t * trace, const uint32_t
         out.resetColor();
         out << trace_string.str();
     }
-    #endif
     out.changeColor(raw_fd_ostream::WHITE, true);
     out << "Assertion `" << msg << "' failed.\n";
     out.resetColor();
     out.flush();
+
 }
 
-void CBuilder::CreateAssert(Value * assertion, StringRef failureMessage) {
+#if defined(HAS_MACH_VM_TYPES)
+
+/*
+ * Copyright (c) 1999, 2007 Apple Inc. All rights reserved.
+ *
+ * @APPLE_LICENSE_HEADER_START@
+ *
+ * This file contains Original Code and/or Modifications of Original Code
+ * as defined in and that are subject to the Apple Public Source License
+ * Version 2.0 (the 'License'). You may not use this file except in
+ * compliance with the License. Please obtain a copy of the License at
+ * http://www.opensource.apple.com/apsl/ and read it before using this
+ * file.
+ *
+ * The Original Code and all software distributed under the License are
+ * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
+ * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
+ * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
+ * Please see the License for the specific language governing rights and
+ * limitations under the License.
+ *
+ * @APPLE_LICENSE_HEADER_END@
+ */
+
+#include <pthread.h>
+#include <mach/mach.h>
+#include <mach/vm_statistics.h>
+#include <stdlib.h>
+
+#if defined(__i386__) || defined(__x86_64__)
+#define FP_LINK_OFFSET 1
+#elif defined(__ppc__) || defined(__ppc64__)
+#define FP_LINK_OFFSET 2
+#else
+#error  ********** Unimplemented architecture
+#endif
+
+#define	INSTACK(a)	((uintptr_t)(a) >= stackbot && (uintptr_t)(a) <= stacktop)
+#if defined(__ppc__) || defined(__ppc64__) || defined(__x86_64__)
+#define	ISALIGNED(a)	((((uintptr_t)(a)) & 0xf) == 0)
+#elif defined(__i386__)
+#define	ISALIGNED(a)	((((uintptr_t)(a)) & 0xf) == 8)
+#endif
+
+__private_extern__  __attribute__((noinline))
+void
+_thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned skip)
+{
+    void *frame, *next;
+    pthread_t self = pthread_self();
+    uintptr_t stacktop = (uintptr_t)(pthread_get_stackaddr_np(self));
+    uintptr_t stackbot = stacktop - (uintptr_t)(pthread_get_stacksize_np(self));
+    
+    *nb = 0;
+    
+    /* make sure return address is never out of bounds */
+    stacktop -= (FP_LINK_OFFSET + 1) * sizeof(void *);
+    
+    /*
+     * The original implementation called the first_frame_address() function,
+     * which returned the stack frame pointer.  The problem was that in ppc,
+     * it was a leaf function, so no new stack frame was set up with
+     * optimization turned on (while a new stack frame was set up without
+     * optimization).  We now inline the code to get the stack frame pointer,
+     * so we are consistent about the stack frame.
+     */
+#if defined(__i386__) || defined(__x86_64__)
+    frame = __builtin_frame_address(0);
+#elif defined(__ppc__) || defined(__ppc64__)
+    /* __builtin_frame_address IS BROKEN IN BEAKER: RADAR #2340421 */
+    __asm__ volatile("mr %0, r1" : "=r" (frame));
+#endif
+    if(!INSTACK(frame) || !ISALIGNED(frame))
+        return;
+#if defined(__ppc__) || defined(__ppc64__)
+    /* back up the stack pointer up over the current stack frame */
+    next = *(void **)frame;
+    if(!INSTACK(next) || !ISALIGNED(next) || next <= frame)
+        return;
+    frame = next;
+#endif
+    while (skip--) {
+        next = *(void **)frame;
+        if(!INSTACK(next) || !ISALIGNED(next) || next <= frame)
+            return;
+        frame = next;
+    }
+    while (max--) {
+        buffer[*nb] = *(vm_address_t *)(((void **)frame) + FP_LINK_OFFSET);
+        (*nb)++;
+        next = *(void **)frame;
+        if(!INSTACK(next) || !ISALIGNED(next) || next <= frame)
+            return;
+        frame = next;
+    }
+}
+#endif
+
+void CBuilder::__CreateAssert(Value * const assertion, StringRef failureMessage) {
     if (LLVM_UNLIKELY(codegen::EnableAsserts)) {
         Module * const m = getModule();
+        if (LLVM_UNLIKELY(isa<ConstantInt>(assertion))) {
+            if (LLVM_UNLIKELY(cast<ConstantInt>(assertion)->isZero())) {
+                report_fatal_error(failureMessage);
+            } else {
+                return;
+            }
+        }
+        Type * const stackTy = TypeBuilder<uintptr_t, false>::get(getContext());
+        PointerType * const stackPtrTy = stackTy->getPointerTo();
+        PointerType * const int8PtrTy = getInt8PtrTy();
         Function * function = m->getFunction("assert");
-        IntegerType * const int1Ty = getInt1Ty();
         if (LLVM_UNLIKELY(function == nullptr)) {
             auto ip = saveIP();
-            PointerType * const int8PtrTy = getInt8PtrTy();
-            IntegerType * const unwWordTy = TypeBuilder<unw_word_t, false>::get(getContext());
-            PointerType * const unwWordPtrTy = unwWordTy->getPointerTo();
-            FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, unwWordPtrTy, getInt32Ty() }, false);
+            IntegerType * const int1Ty = getInt1Ty();
+            FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
             function = Function::Create(fty, Function::PrivateLinkage, "assert", m);
             function->setDoesNotThrow();
             function->setDoesNotAlias(2);
@@ -709,11 +816,22 @@ void CBuilder::CreateAssert(Value * assertion, StringRef failureMessage) {
             IRBuilder<>::CreateRetVoid();
             restoreIP(ip);
         }
-        if (assertion->getType() != int1Ty) {
-            assertion = CreateICmpNE(assertion, Constant::getNullValue(assertion->getType()));
+
+        SmallVector<uint64_t, 64> stack;
+        #if defined(HAS_MACH_VM_TYPES)
+        for (;;) {
+            unsigned int n;
+            _thread_stack_pcs(reinterpret_cast<vm_address_t *>(stack.data()), stack.capacity(), &n, 1);
+            if (LLVM_UNLIKELY(n < stack.capacity() || stack[n - 1] == 0)) {
+                while (n >= 1 && stack[n - 1] == 0) {
+                    n -= 1;
+                }
+                stack.set_size(n);
+                break;
+            }
+            stack.reserve(n * 2);
         }
-        SmallVector<unw_word_t, 64> stack;
-        #ifdef HAS_LIBUNWIND
+        #elif defined(HAS_LIBUNWIND)
         unw_context_t context;
         // Initialize cursor to current frame for local unwinding.
         unw_getcontext(&context);
@@ -726,7 +844,7 @@ void CBuilder::CreateAssert(Value * assertion, StringRef failureMessage) {
             if (pc == 0) {
                 break;
             }
-            stack.push_back(pc);
+            stack.push_back(static_cast<uint64_t>(pc));
         }
         #elif defined(HAS_EXECINFO)
         for (;;) {
@@ -738,33 +856,38 @@ void CBuilder::CreateAssert(Value * assertion, StringRef failureMessage) {
             stack.reserve(n * 2);
         }
         #endif
-        IntegerType * const stackTy = TypeBuilder<unw_word_t, false>::get(getContext());
-        PointerType * const stackPtrTy = stackTy->getPointerTo();
-        GlobalVariable * ip_trace = nullptr;
-        const auto n = stack.size();
-        for (GlobalVariable & gv : m->getGlobalList()) {
-            Type * const ty = gv.getValueType();
-            if (ty->isArrayTy() && ty->getArrayElementType() == stackTy && ty->getArrayNumElements() == n) {
-                const ConstantDataArray * const array = cast<ConstantDataArray>(gv.getOperand(0));
-                bool found = true;
-                for (auto i = n - 1; i != 0; --i) {
-                    if (LLVM_LIKELY(array->getElementAsInteger(i) != stack[i])) {
-                        found = false;
+        Value * trace = nullptr;
+        ConstantInt * depth = nullptr;
+        if (stack.empty()) {
+            trace = ConstantPointerNull::get(stackPtrTy);
+            depth = getInt32(0);
+        } else {
+            const auto n = stack.size() - 1;
+            for (GlobalVariable & gv : m->getGlobalList()) {
+                Type * const ty = gv.getValueType();
+                if (ty->isArrayTy() && ty->getArrayElementType() == stackTy && ty->getArrayNumElements() == n) {
+                    const ConstantDataArray * const array = cast<ConstantDataArray>(gv.getOperand(0));
+                    bool found = true;
+                    for (size_t i = 0; i < n; ++i) {
+                        if (LLVM_LIKELY(array->getElementAsInteger(i) != stack[i + 1])) {
+                            found = false;
+                            break;
+                        }
+                    }
+                    if (LLVM_UNLIKELY(found)) {
+                        trace = &gv;
                         break;
                     }
                 }
-                if (LLVM_UNLIKELY(found)) {
-                    ip_trace = &gv;
-                    break;
-                }
             }
+            if (LLVM_LIKELY(trace == nullptr)) {
+                Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<uint64_t>(stack.data() + 1, n));
+                trace = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
+            }
+            trace = CreatePointerCast(trace, stackPtrTy);
+            depth = getInt32(n);
         }
-        if (LLVM_LIKELY(ip_trace == nullptr)) {
-            Constant * const initializer = ConstantDataArray::get(getContext(), stack);
-            ip_trace = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
-        }
-        Value * const trace = CreatePointerCast(ip_trace, stackPtrTy);
-        IRBuilder<>::CreateCall(function, {assertion, GetString(failureMessage), trace, getInt32(n)});
+        IRBuilder<>::CreateCall(function, {assertion, GetString(failureMessage), trace, depth});
     }
 }
 
@@ -832,7 +955,7 @@ Value * CBuilder::CreateCeilLog2(Value * value) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     CreateAssert(value, "CreateCeilLog2: value cannot be zero");
     Value * m = CreateCountReverseZeroes(CreateSub(value, ConstantInt::get(ty, 1)));
-    return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m);
+    return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth()), m);
 }
 
 Value * CBuilder::GetString(StringRef Str) {
@@ -859,11 +982,19 @@ Function * CBuilder::LinkFunction(StringRef name, FunctionType * type, void * fu
 #ifdef HAS_ADDRESS_SANITIZER
 
 #define CHECK_ADDRESS(Ptr) \
-    if (codegen::EnableAsserts) { \
-        Function * const isPoisoned = LinkFunction("__asan_region_is_poisoned", __asan_region_is_poisoned); \
-        auto arg = isPoisoned->arg_begin(); \
-        Value * const addr = CreatePointerCast(Ptr, arg->getType()); \
-        Constant * const size = ConstantInt::get((++arg)->getType(), Ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8); \
+    if (LLVM_UNLIKELY(hasAddressSanitizer())) { \
+        Module * const m = getModule(); \
+        PointerType * const voidPtrTy = getVoidPtrTy(); \
+        IntegerType * const sizeTy = getSizeTy(); \
+        Function * isPoisoned = m->getFunction("__asan_region_is_poisoned"); \
+        if (LLVM_UNLIKELY(isPoisoned == nullptr)) { \
+            isPoisoned = Function::Create(FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false), Function::ExternalLinkage, "__asan_region_is_poisoned", m); \
+            isPoisoned->setCallingConv(CallingConv::C); \
+            isPoisoned->setDoesNotAlias(0); \
+            isPoisoned->setDoesNotAlias(1); \
+        } \
+        Value * const addr = CreatePointerCast(Ptr, voidPtrTy); \
+        ConstantInt * const size = ConstantInt::get(sizeTy, Ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8); \
         Value * check = CreateCall(isPoisoned, { addr, size }); \
         check = CreateICmpEQ(check, ConstantPointerNull::get(cast<PointerType>(isPoisoned->getReturnType()))); \
         CreateAssert(check, "Valid memory address"); \
@@ -897,6 +1028,58 @@ StoreInst * CBuilder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
 #undef CHECK_ADDRESS
 
 #endif
+
+inline bool CBuilder::hasAddressSanitizer() const {
+    return codegen::EnableAsserts && mDriver && mDriver->hasExternalFunction("__asan_region_is_poisoned");
+}
+
+LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const char * Name) {
+    if (codegen::EnableAsserts) {
+        DataLayout DL(getModule());
+        IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
+        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer is misaligned");
+    }
+    LoadInst * LI = CreateLoad(Ptr, Name);
+    LI->setAlignment(Align);
+    return LI;
+}
+
+LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine & Name) {
+    if (codegen::EnableAsserts) {
+        DataLayout DL(getModule());
+        IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
+        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer is misaligned");
+    }
+    LoadInst * LI = CreateLoad(Ptr, Name);
+    LI->setAlignment(Align);
+    return LI;
+}
+
+LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolatile, const Twine & Name) {
+    if (codegen::EnableAsserts) {
+        DataLayout DL(getModule());
+        IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
+        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer is misaligned");
+    }
+    LoadInst * LI = CreateLoad(Ptr, isVolatile, Name);
+    LI->setAlignment(Align);
+    return LI;
+}
+
+StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Align, bool isVolatile) {
+    if (codegen::EnableAsserts) {
+        DataLayout DL(getModule());
+        IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
+        CreateAssertZero(alignmentOffset, "CreateAlignedStore: pointer is misaligned");
+    }
+    StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
+    SI->setAlignment(Align);
+    return SI;
+}
 
 CBuilder::CBuilder(LLVMContext & C)
 : IRBuilder<>(C)

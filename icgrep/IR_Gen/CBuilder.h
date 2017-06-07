@@ -24,6 +24,7 @@ namespace llvm { class Value; }
 class Driver;
 
 class CBuilder : public llvm::IRBuilder<> {
+    using Predicate = llvm::CmpInst::Predicate;
 public:
 
     CBuilder(llvm::LLVMContext & C);
@@ -176,7 +177,19 @@ public:
 
     virtual llvm::StoreInst *  CreateAtomicStoreRelease(llvm::Value * val, llvm::Value * ptr);
 
-    void CreateAssert(llvm::Value * assertion, llvm::StringRef failureMessage);
+    void CreateAssert(llvm::Value * assertion, llvm::StringRef failureMessage) {
+        if (LLVM_UNLIKELY(assertion->getType()->isVectorTy())) {
+            assertion = CreateBitCast(assertion, llvm::IntegerType::get(getContext(), assertion->getType()->getPrimitiveSizeInBits()));
+        }
+        return __CreateAssert(CreateICmpNE(assertion, llvm::Constant::getNullValue(assertion->getType())), failureMessage);
+    }
+
+    void CreateAssertZero(llvm::Value * assertion, llvm::StringRef failureMessage) {
+        if (LLVM_UNLIKELY(assertion->getType()->isVectorTy())) {
+            assertion = CreateBitCast(assertion, llvm::IntegerType::get(getContext(), assertion->getType()->getPrimitiveSizeInBits()));
+        }
+        return __CreateAssert(CreateICmpEQ(assertion, llvm::Constant::getNullValue(assertion->getType())), failureMessage);
+    }
 
     void CreateExit(const int exitCode);
 
@@ -217,46 +230,38 @@ public:
     llvm::Function * LinkFunction(llvm::StringRef name, ExternalFunctionType * functionPtr) const;
 
     #ifdef HAS_ADDRESS_SANITIZER
-    virtual llvm::LoadInst * CreateLoad(llvm::Value *Ptr, const char *Name);
+    virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, const char * Name);
 
-    virtual llvm::LoadInst * CreateLoad(llvm::Value *Ptr, const llvm::Twine &Name = "");
+    virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, const llvm::Twine & Name = "");
 
-    virtual llvm::LoadInst * CreateLoad(llvm::Type *Ty, llvm::Value *Ptr, const llvm::Twine &Name = "");
+    virtual llvm::LoadInst * CreateLoad(llvm::Type * Ty, llvm::Value * Ptr, const llvm::Twine & Name = "");
 
-    virtual llvm::LoadInst * CreateLoad(llvm::Value *Ptr, bool isVolatile, const llvm::Twine &Name = "");
+    virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, bool isVolatile, const llvm::Twine & Name = "");
 
-    virtual llvm::StoreInst * CreateStore(llvm::Value *Val, llvm::Value *Ptr, bool isVolatile = false);
-
-    llvm::LoadInst * CreateAlignedLoad(llvm::Value *Ptr, unsigned Align, const char *Name) {
-        llvm::LoadInst * LI = CreateLoad(Ptr, Name);
-        LI->setAlignment(Align);
-        return LI;
-    }
-
-    llvm::LoadInst * CreateAlignedLoad(llvm::Value *Ptr, unsigned Align, const llvm::Twine &Name = "") {
-        llvm::LoadInst * LI = CreateLoad(Ptr, Name);
-        LI->setAlignment(Align);
-        return LI;
-    }
-
-    llvm::LoadInst * CreateAlignedLoad(llvm::Value *Ptr, unsigned Align, bool isVolatile, const llvm::Twine &Name = "") {
-        llvm::LoadInst * LI = CreateLoad(Ptr, isVolatile, Name);
-        LI->setAlignment(Align);
-        return LI;
-    }
-
-    llvm::StoreInst * CreateAlignedStore(llvm::Value *Val, llvm::Value *Ptr, unsigned Align, bool isVolatile = false) {
-        llvm::StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
-        SI->setAlignment(Align);
-        return SI;
-    }
+    virtual llvm::StoreInst * CreateStore(llvm::Value * Val, llvm::Value * Ptr, bool isVolatile = false);
     #endif
+
+    llvm::LoadInst * CreateAlignedLoad(llvm::Value * Ptr, unsigned Align, const char * Name);
+
+    llvm::LoadInst * CreateAlignedLoad(llvm::Value * Ptr, unsigned Align, const llvm::Twine & Name = "");
+
+    llvm::LoadInst * CreateAlignedLoad(llvm::Value * Ptr, unsigned Align, bool isVolatile, const llvm::Twine & Name = "");
+
+    llvm::StoreInst * CreateAlignedStore(llvm::Value * Val, llvm::Value * Ptr, unsigned Align, bool isVolatile = false);
 
     void setDriver(Driver * const driver) {
         mDriver = driver;
     }
 
 protected:
+
+    bool hasAlignedAlloc() const;
+
+    bool hasPosixMemalign() const;
+
+    bool hasAddressSanitizer() const;
+
+    void __CreateAssert(llvm::Value * assertion, llvm::StringRef failureMessage);
 
     llvm::Function * LinkFunction(llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
 
@@ -266,7 +271,7 @@ protected:
     unsigned                        mCacheLineAlignment;
     llvm::IntegerType * const       mSizeType;
     llvm::StructType *              mFILEtype;
-    Driver *                        mDriver;
+    Driver *                        mDriver;    
     llvm::LLVMContext               mContext;
     const std::string               mTriple;
 };

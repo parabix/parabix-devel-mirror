@@ -206,7 +206,7 @@ inline ParabixObjectCache::Path ParabixObjectCache::getDefaultPath() {
 }
 
 ParabixObjectCache::ParabixObjectCache()
-: mCachePath(std::move(getDefaultPath())) {
+: mCachePath(getDefaultPath()) {
 
 }
 

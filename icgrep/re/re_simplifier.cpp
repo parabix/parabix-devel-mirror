@@ -40,9 +40,9 @@ RE * RE_Simplifier::simplify(RE * re) {
         RE * expr = simplify(rep->getRE());
         re = makeRep(expr, rep->getLB(), rep->getUB());
     } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        re = makeDiff(simplify(diff->getLH()), diff->getRH());
+        re = makeDiff(simplify(diff->getLH()), simplify(diff->getRH()));
     } else if (Intersect * e = dyn_cast<Intersect>(re)) {
-        re = makeIntersect(simplify(e->getLH()), e->getRH());
+        re = makeIntersect(simplify(e->getLH()), simplify(e->getRH()));
     } 
     return re;
 }

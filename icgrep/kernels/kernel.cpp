@@ -1129,7 +1129,7 @@ Kernel::Kernel(std::string && kernelName,
                std::vector<Binding> && scalar_parameters,
                std::vector<Binding> && scalar_outputs,
                std::vector<Binding> && internal_scalars)
-: KernelInterface(std::move(annotateKernelNameWithDebugFlags(std::move(kernelName)))
+: KernelInterface(annotateKernelNameWithDebugFlags(std::move(kernelName))
                   , std::move(stream_inputs), std::move(stream_outputs)
                   , std::move(scalar_parameters), std::move(scalar_outputs)
                   , std::move(internal_scalars))

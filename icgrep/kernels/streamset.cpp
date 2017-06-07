@@ -149,9 +149,11 @@ void StreamSetBuffer::releaseBuffer(IDISA::IDISA_Builder * const /* iBuilder */,
 void StreamSetBuffer::createBlockCopy(IDISA::IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * blocksToCopy) const {
     Type * i8ptr = iBuilder->getInt8PtrTy();
     unsigned alignment = iBuilder->getBitBlockWidth() / 8;
-    unsigned numStreams = getType()->getArrayNumElements();
-    auto elemTy = getType()->getArrayElementType();
-    unsigned fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
+    uint64_t numStreams = 1;
+    if (isa<ArrayType>(mBaseType)) {
+        numStreams = mBaseType->getArrayNumElements();
+    }
+    const auto fieldWidth = mBaseType->getArrayElementType()->getScalarSizeInBits();
     Value * blockCopyBytes = iBuilder->CreateMul(blocksToCopy, iBuilder->getSize(iBuilder->getBitBlockWidth() * numStreams * fieldWidth/8));
     iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, i8ptr), iBuilder->CreateBitCast(sourceBlockPtr, i8ptr), blockCopyBytes, alignment);
 }
@@ -160,9 +162,11 @@ void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuild
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     const unsigned alignment = iBuilder->getBitBlockWidth() / 8;
     Constant * const blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
-    const unsigned numStreams = getType()->getArrayNumElements();
-    const auto elemTy = getType()->getArrayElementType();
-    const auto fieldWidth = isa<ArrayType>(elemTy) ? elemTy->getArrayNumElements() : 1;
+    uint64_t numStreams = 1;
+    if (isa<ArrayType>(mBaseType)) {
+        numStreams = mBaseType->getArrayNumElements();
+    }
+    const auto fieldWidth = mBaseType->getArrayElementType()->getScalarSizeInBits();
     if (numStreams == 1) {
         Value * copyBits = iBuilder->CreateMul(itemsToCopy, iBuilder->getSize(fieldWidth));
         Value * copyBytes = iBuilder->CreateLShr(iBuilder->CreateAdd(copyBits, iBuilder->getSize(7)), iBuilder->getSize(3));

@@ -628,7 +628,7 @@ restart_loop:   in_edge_iterator ei_begin, ei_end;
             assert (Ai.size() > 0); // cannot happen if this algorithm is working correctly
             cliques.emplace_back(std::move(Ai), std::move(*Bi));
         }
-        return std::move(cliques);
+        return cliques;
     }
 
 

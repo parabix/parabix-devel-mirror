@@ -51,7 +51,7 @@ void PabloCompiler::initializeKernelData(const std::unique_ptr<kernel::KernelBui
 
 void PabloCompiler::releaseKernelData(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder) {
     assert ("PabloCompiler does not have a IDISA iBuilder" && iBuilder);
-    mCarryManager->releaseCarryData(iBuilder, mKernel);
+    mCarryManager->releaseCarryData(iBuilder);
 }
 
 void PabloCompiler::compile(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder) {

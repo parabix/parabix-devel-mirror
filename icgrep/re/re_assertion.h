@@ -27,6 +27,8 @@ public:
     Assertion::Sense getSense() const {return mSense;}
     void setAsserted(RE * r) {mAsserted = r;}
 
+    static Assertion::Kind reverseKind(Assertion::Kind k);
+    static Assertion::Sense negateSense(Assertion::Sense s);
 
 protected:
     friend Assertion * makeAssertion(RE * asserted, Kind k, Sense s);
@@ -38,6 +40,15 @@ private:
     Kind mKind;
     Sense mSense;
 };
+
+inline Assertion::Kind Assertion::reverseKind(Assertion::Kind k) {
+    if (k == Assertion::Kind::Boundary) return k;
+    return k == Assertion::Kind::Lookahead ? Assertion::Kind::Lookbehind : Assertion::Kind::Lookahead;
+}
+
+inline Assertion::Sense Assertion::negateSense(Assertion::Sense s) {
+    return s == Assertion::Sense::Positive ? Assertion::Sense::Negative : Assertion::Sense::Positive;
+}
 
 inline Assertion * makeAssertion(RE * asserted, Assertion::Kind k, Assertion::Sense s) {
     return new Assertion(asserted, k, s);

@@ -20,6 +20,8 @@ public:
 
     void finalizeObject() override;
 
+    bool hasExternalFunction(const llvm::StringRef functionName) const override;
+
     void * getMain() override; // "main" exists until the driver is deleted
 
 private:

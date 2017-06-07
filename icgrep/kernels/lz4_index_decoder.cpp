@@ -70,25 +70,21 @@ Value * getOutputPtr(const std::unique_ptr<KernelBuilder> & iBuilder, Value * bl
  * Get the offset within the current word.
  */
 Value * LZ4IndexDecoderKernel::getWordOffset(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
-    Value * wordWidthMask = iBuilder->getInt32(wordWidth - 1);
-    return iBuilder->CreateAnd(
-            iBuilder->CreateLoad(sOffset),
-            wordWidthMask
-            );
+    Value * offset = iBuilder->CreateLoad(sOffset);
+    IntegerType * type = cast<IntegerType>(offset->getType());
+    Constant * mask = ConstantInt::get(type, wordWidth - 1);
+    return iBuilder->CreateAnd(offset, mask);
 }
-
 
 /**
  * Get the offset of the start of the current word.
  */
 Value * LZ4IndexDecoderKernel::getWordStartOffset(const std::unique_ptr<KernelBuilder> & iBuilder) {
-    Value * wordWidthMask = iBuilder->getInt32(wordWidth - 1);
-    return iBuilder->CreateAnd(
-            iBuilder->CreateLoad(sOffset),
-            iBuilder->CreateNot(wordWidthMask)
-            );
+    Value * offset = iBuilder->CreateLoad(sOffset);
+    IntegerType * type = cast<IntegerType>(offset->getType());
+    Constant * mask = ConstantExpr::getNeg(ConstantInt::get(type, wordWidth));
+    return iBuilder->CreateAnd(offset, mask);
 }
-
 
 /**
  * Load a raw byte from byteStream.
@@ -135,14 +131,12 @@ void LZ4IndexDecoderKernel::setExtenderUntilOffset(const std::unique_ptr<KernelB
  * Called when we potentially reach a new word.  Usually followed by setExtenderUntilOffset.
  */
 void LZ4IndexDecoderKernel::loadCurrentExtender(const std::unique_ptr<KernelBuilder> & iBuilder) {
-    iBuilder->CreateStore(
-            iBuilder->CreateExtractElement(extenders,
-                iBuilder->CreateLShr(
-                    iBuilder->CreateLoad(sOffset),
-                    iBuilder->getInt32(std::log2(wordWidth))
-                    )
-                ),
-            sExtender);
+    Value * offset = iBuilder->CreateLoad(sOffset);
+    IntegerType * type = cast<IntegerType>(offset->getType());
+    ConstantInt * shift = ConstantInt::get(type, std::log2(wordWidth));
+    Value * shiftedOffset = iBuilder->CreateLShr(offset, shift);
+    Value * extender = iBuilder->CreateExtractElement(extenders, shiftedOffset);
+    iBuilder->CreateStore(extender, sExtender);
 }
 
 
@@ -194,7 +188,7 @@ void LZ4IndexDecoderKernel::generateDoBlockMethod(const std::unique_ptr<KernelBu
     blockStartPos = iBuilder->CreateMul(blockNo, iBuilder->getInt32(iBuilder->getBitBlockWidth()), "blockStartPos");
     extenders = iBuilder->CreateBitCast(
             iBuilder->loadInputStreamBlock("extenders", iBuilder->getInt32(0)),
-            VectorType::get(iBuilder->getSizeTy(), iBuilder->getBitBlockWidth() / wordWidth),
+            VectorType::get(iBuilder->getSizeTy(), iBuilder->getBitBlockWidth() / iBuilder->getSizeTy()->getBitWidth()),
             "extenders");
     // Create a series of stack variables which will be promoted by mem2reg.
     sOffset = createStackVar(iBuilder, iBuilder->getInt32Ty(), "offset");
