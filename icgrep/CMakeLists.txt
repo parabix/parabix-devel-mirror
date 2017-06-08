@@ -204,64 +204,70 @@ IF (HAS_ADDRESS_SANITIZER)
 SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DHAS_ADDRESS_SANITIZER -fsanitize=address")
 ENDIF()
 
+
 add_test(
   NAME greptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND timeout 1000 python greptest.py ${CMAKE_BINARY_DIR}/icgrep)
+  COMMAND python greptest.py ${CMAKE_BINARY_DIR}/icgrep)
 
 add_test(
   NAME proptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND timeout 2000 python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml ${CMAKE_BINARY_DIR}/icgrep)
+  COMMAND python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml ${CMAKE_BINARY_DIR}/icgrep)
 
 add_test(
   NAME abc_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND timeout 200 ./run_abc ${CMAKE_BINARY_DIR}/icgrep)
+  COMMAND ./run_abc ${CMAKE_BINARY_DIR}/icgrep)
 
 add_test(
   NAME u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
-  COMMAND timeout 15 ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
+  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
 
 add_test(
   NAME lz4d_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
-  COMMAND timeout 15 ./run_all ${CMAKE_BINARY_DIR}/lz4d)
+  COMMAND ./run_all ${CMAKE_BINARY_DIR}/lz4d)
 
 add_test(
   NAME editd_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
-  COMMAND timeout 50 python run_all.py -e ${CMAKE_BINARY_DIR})
+  COMMAND python run_all.py -e ${CMAKE_BINARY_DIR})
 
 add_test(
   NAME base64_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
-  COMMAND timeout 15 python base64test.py ${CMAKE_BINARY_DIR}/base64)
+  COMMAND python base64test.py ${CMAKE_BINARY_DIR}/base64)
+
+SET_PROPERTY(TEST greptest PROPERTY TIMEOUT 200)
+SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1000)
+SET_PROPERTY(TEST abc_test u8u16_test lz4d_test editd_test base64_test PROPERTY TIMEOUT 20)
+
 
 add_custom_target (greptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND timeout 600 python greptest.py "${CMAKE_BINARY_DIR}/icgrep -ea")
+  COMMAND python greptest.py "${CMAKE_BINARY_DIR}/icgrep -ea")
 
 add_custom_target (proptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND timeout 1000 python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml "${CMAKE_BINARY_DIR}/icgrep -ea")
+  COMMAND python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml "${CMAKE_BINARY_DIR}/icgrep -ea")
 
 add_custom_target (u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
-  COMMAND timeout 15 ./run_all "${CMAKE_BINARY_DIR}/u8u16 -ea -segment-size=16 -enable-segment-pipeline-parallel")
+  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -ea -segment-size=16 -enable-segment-pipeline-parallel")
 
 add_custom_target (lz4d_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
-  COMMAND timeout 15 ./run_all "${CMAKE_BINARY_DIR}/lz4d -ea")
+  COMMAND ./run_all "${CMAKE_BINARY_DIR}/lz4d -ea")
 
 add_custom_target (editd_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
-  COMMAND timeout 50 python run_all.py -e ${CMAKE_BINARY_DIR})
+  COMMAND python run_all.py -e ${CMAKE_BINARY_DIR})
 
 add_custom_target (base64_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
-  COMMAND timeout 20 python base64test.py "${CMAKE_BINARY_DIR}/base64 -ea")
+  COMMAND python base64test.py "${CMAKE_BINARY_DIR}/base64 -ea")
 
 add_custom_target (abc_gen
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
@@ -269,7 +275,7 @@ add_custom_target (abc_gen
   
 add_custom_target (abc_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND timeout 200 ./run_abc "${CMAKE_BINARY_DIR}/icgrep -ea")
+  COMMAND ./run_abc "${CMAKE_BINARY_DIR}/icgrep -ea")
 
 add_custom_target (check
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
