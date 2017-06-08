@@ -240,9 +240,9 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
   COMMAND python base64test.py ${CMAKE_BINARY_DIR}/base64)
 
-SET_PROPERTY(TEST greptest PROPERTY TIMEOUT 200)
-SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1000)
-SET_PROPERTY(TEST abc_test u8u16_test lz4d_test editd_test base64_test PROPERTY TIMEOUT 20)
+SET_PROPERTY(TEST greptest PROPERTY TIMEOUT 400)
+SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
+SET_PROPERTY(TEST abc_test u8u16_test lz4d_test editd_test base64_test PROPERTY TIMEOUT 40)
 
 
 add_custom_target (greptest
