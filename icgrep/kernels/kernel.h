@@ -120,7 +120,7 @@ public:
     const parabix::StreamSetBuffer * getStreamSetOutputBuffer(const unsigned i) const {
         return mStreamSetOutputBuffers[i];
     }
-
+    
     virtual ~Kernel() = 0;
 
 protected:
@@ -334,8 +334,8 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
 
 #.  The Multi-Block Kernel Builder will arrange that these input parameters may be
     processed under the following simplifying assumptions.
-    * the number of itemsToDo will either be an exact multiple of the BlockSize,
-      or, for processing the final block, a value less than BlockSize
+    * the number of itemsToDo will either be an exact multiple of the kernel stride,
+      or, for processing the final block, a value less than the kernel stride
     * the input buffer of the principal stream set and all input buffers of stream sets
       with derived processing rates will be safe to access and have data available in
       accord with their processing rates based on the given number of itemsToDo
@@ -344,7 +344,7 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
       input stream set classified as variable rate.
     * all output buffers will be safe to access and have space available
       for the given maximum output generation rates based on the given number
-      of blocksToDo of the principal input stream set; no further bounds checking
+      of itemsToDo of the principal input stream set; no further bounds checking
       is needed.
     * for final block processing, all input buffers will be extended to be safely
       treated as containing data corresponding to a full block of the principal
@@ -356,11 +356,11 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
       to corresponding streams based on their declared stream set type and processing rate.
     * for any input pointer p, a GEP instruction with a single int32 index i
       will produce a pointer to the buffer position corresponding to the ith block of the
-      principal input stream set.
+      input stream set.
     * for any output stream set declared with a Fixed or Add1 processing rate with respect
       to the principal input stream set, a GEP instruction with a single int32 index i
       will produce a pointer to the buffer position corresponding to the ith block of the
-      principal input stream set.
+      stream set.
 
 #.  Upon completion of multi-block processing, the Multi-Block Kernel Builder will arrange that
     processed and produced item counts are updated for all stream sets that have exact
@@ -392,8 +392,22 @@ protected:
     // exit the RetVoid instruction will be added to complete the method.
     //
     virtual void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & idb) = 0;
+    
+    // Kernels typically perform block-at-a-time processing, but some kernels may require
+    // a different stride.   In the case of multiblock kernels, the stride attribute 
+    // determines the number of minimum number of items that will be provided to the kernel
+    // on each doMultiBlock call.
+    // 
+    
+    unsigned getKernelStride() const { return mStride;}
+        
+    void setKernelStride(unsigned stride) {mStride = stride;}
+        
+        
 
 private:
+    size_t                            mStride;
+
 
     // Given a kernel subtype with an appropriate interface, the generateDoSegment
     // method of the multi-block kernel builder makes all the necessary arrangements

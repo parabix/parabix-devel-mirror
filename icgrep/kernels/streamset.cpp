@@ -120,13 +120,13 @@ Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const
         return iBuilder->CreateSub(stride, iBuilder->CreateURem(fromPosition, stride));
     } else {
         Constant * bufSize = iBuilder->getSize(mBufferBlocks * iBuilder->getStride());
-        return iBuilder->CreateSub(bufSize, iBuilder->CreateURem(fromPosition, bufSize));
+        return iBuilder->CreateSub(bufSize, iBuilder->CreateURem(fromPosition, bufSize, "linearItems"));
     }
 }
 
 Value * StreamSetBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * fromBlock) const {
     Constant * bufBlocks = iBuilder->getSize(mBufferBlocks);
-    return iBuilder->CreateSub(bufBlocks, iBuilder->CreateURem(fromBlock, bufBlocks));
+    return iBuilder->CreateSub(bufBlocks, iBuilder->CreateURem(fromBlock, bufBlocks), "linearBlocks");
 }
 
 Value * StreamSetBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * fromPosition) const {

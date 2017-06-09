@@ -654,15 +654,21 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     const unsigned inputSetCount = mStreamSetInputs.size();
     const unsigned outputSetCount = mStreamSetOutputs.size();
     const unsigned totalSetCount = inputSetCount + outputSetCount;
-    bool isDerived[totalSetCount];
-    unsigned itemsPerPrincipalBlock[totalSetCount];
     
-    for (unsigned i = 0; i < inputSetCount; i++) {
+    unsigned itemsPerStride[totalSetCount];
+    bool isDerived[totalSetCount];
+    
+    if (mStride == 0) mStride = bitBlockWidth;
+
+    itemsPerStride[0] = mStride;
+    isDerived[0] = true;
+    
+    for (unsigned i = 1; i < inputSetCount; i++) {
         auto & rate = mStreamSetInputs[i].rate;
         std::string refSet = mStreamSetInputs[i].rate.referenceStreamSet();
         if (rate.isExact()) {
             if (refSet.empty()) {
-                itemsPerPrincipalBlock[i] = rate.calculateRatio(bitBlockWidth);
+                itemsPerStride[i] = rate.calculateRatio(itemsPerStride[0]);
                 isDerived[i] = true;
                 continue;
             }
@@ -671,7 +677,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
                 std::tie(port, ssIdx) = getStreamPort(mStreamSetInputs[i].name);
                 assert (port == Port::Input && ssIdx < i);
                 if (isDerived[ssIdx]) {
-                    itemsPerPrincipalBlock[i] = rate.calculateRatio(itemsPerPrincipalBlock[ssIdx]);
+                    itemsPerStride[i] = rate.calculateRatio(itemsPerStride[ssIdx]);
                     isDerived[i] = true;
                     continue;
                 }
@@ -686,7 +692,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         std::string refSet = rate.referenceStreamSet();
         if (rate.isExact() || rate.isMaxRatio()) {
             if (refSet.empty()) {
-                itemsPerPrincipalBlock[i] = rate.calculateRatio(bitBlockWidth);
+                itemsPerStride[i] = rate.calculateRatio(bitBlockWidth);
                 isDerived[i] = rate.isExact();
                 continue;
             }
@@ -695,7 +701,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
                 std::tie(port, ssIdx) = getStreamPort(mStreamSetOutputs[i].name);
                 if (port == Port::Output) ssIdx += inputSetCount;
                 if (isDerived[ssIdx]) {
-                    itemsPerPrincipalBlock[i] = rate.calculateRatio(itemsPerPrincipalBlock[ssIdx]);
+                    itemsPerStride[i] = rate.calculateRatio(itemsPerStride[ssIdx]);
                     isDerived[i] = rate.isExact();
                     continue;
                 }
@@ -708,18 +714,18 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     
     for (unsigned i = 0; i < totalSetCount; i++) {
         if (isDerived[i]) {
-            if (itemsPerPrincipalBlock[i] == bitBlockWidth) {
-                maxBlocksToCopy[i] = 1;
+            if (itemsPerStride[i] % bitBlockWidth == 0) {
+                maxBlocksToCopy[i] = itemsPerStride[i] / bitBlockWidth;
             }
             else {
                 // May not be block aligned, can overlap partial blocks at both ends.
-                maxBlocksToCopy[i] = itemsPerPrincipalBlock[i]/bitBlockWidth + 2;
+                maxBlocksToCopy[i] = itemsPerStride[i]/bitBlockWidth + 2;
             }
         }
         else {
-            // For variable input stream sets, we make a single block of items
-            // available, if possible, but this block could be nonaligned.
-            maxBlocksToCopy[i] = 2;
+            // For variable input stream sets, we make a single stride of items
+            // available, if possible, but this stride could be nonaligned.
+            maxBlocksToCopy[i] = mStride / bitBlockWidth + 2;
         }
     }
     auto ip = kb->saveIP();
@@ -804,7 +810,8 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     Value * tempParameterArea = kb->CreateCacheAlignedAlloca(tempParameterStructType);
 
     ConstantInt * blockSize = kb->getSize(kb->getBitBlockWidth());
-
+    ConstantInt * strideSize = kb->getSize(mStride);
+    
     Value * availablePos = mAvailableItemCount[0];
     Value * itemsAvail = availablePos;
 
@@ -821,8 +828,8 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     Value * processed = kb->getProcessedItemCount(mStreamSetInputs[0].name);
     Value * itemsToDo = kb->CreateSub(itemsAvail, processed);
-    Value * fullBlocksToDo = kb->CreateUDiv(itemsToDo, blockSize);
-    Value * excessItems = kb->CreateURem(itemsToDo, blockSize);
+    Value * fullStridesToDo = kb->CreateUDiv(itemsToDo, strideSize);
+    Value * excessItems = kb->CreateURem(itemsToDo, strideSize);
 
     //  Now we iteratively process these blocks using the doMultiBlock method.
     //  In each iteration, we process the maximum number of linearly accessible
@@ -834,8 +841,8 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     kb->CreateBr(doSegmentOuterLoop);
     kb->SetInsertPoint(doSegmentOuterLoop);
-    PHINode * const blocksRemaining = kb->CreatePHI(kb->getSizeTy(), 2, "blocksRemaining");
-    blocksRemaining->addIncoming(fullBlocksToDo, entry);
+    PHINode * const stridesRemaining = kb->CreatePHI(kb->getSizeTy(), 2, "stridesRemaining");
+    stridesRemaining->addIncoming(fullStridesToDo, entry);
 
     // For each input buffer, determine the processedItemCount, the block pointer for the
     // buffer block containing the next item, and the number of linearly available items.
@@ -848,7 +855,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     //  Now determine the linearly available blocks, based on blocks remaining reduced
     //  by limitations of linearly available input buffer space.
 
-    Value * linearlyAvailBlocks = blocksRemaining;
+    Value * linearlyAvailStrides = stridesRemaining;
     for (unsigned i = 0; i < inputSetCount; i++) {
         Value * p = kb->getProcessedItemCount(mStreamSetInputs[i].name);
         Value * blkNo = kb->CreateUDiv(p, blockSize);
@@ -857,20 +864,20 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         inputBlockPtr.push_back(b);
         if (isDerived[i]) {
             auto & rate = mStreamSetInputs[i].rate;
-            Value * blocks = nullptr;
+            Value * maxReferenceItems = nullptr;
             if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator()) && (rate.referenceStreamSet() == "")) {
-                blocks = mStreamSetInputBuffers[i]->getLinearlyAccessibleBlocks(kb.get(), blkNo);
+                maxReferenceItems = kb->CreateMul(mStreamSetInputBuffers[i]->getLinearlyAccessibleBlocks(kb.get(), blkNo), blockSize);
             } else {
                 Value * linearlyAvailItems = mStreamSetInputBuffers[i]->getLinearlyAccessibleItems(kb.get(), p);
-                Value * items = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems);
-                blocks = kb->CreateUDiv(items, blockSize);
+                maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems);
             }
-            linearlyAvailBlocks = kb->CreateSelect(kb->CreateICmpULT(blocks, linearlyAvailBlocks), blocks, linearlyAvailBlocks);
+            Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
+            linearlyAvailStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyAvailStrides), maxStrides, linearlyAvailStrides);
         }
     }
     //  Now determine the linearly writeable blocks, based on available blocks reduced
     //  by limitations of output buffer space.
-    Value * linearlyWritableBlocks = linearlyAvailBlocks;
+    Value * linearlyWritableStrides = linearlyAvailStrides;
 
     for (unsigned i = 0; i < outputSetCount; i++) {
         Value * p = kb->getProducedItemCount(mStreamSetOutputs[i].name);
@@ -880,25 +887,26 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         outputBlockPtr.push_back(b);
         if (isDerived[inputSetCount + i]) {
             auto & rate = mStreamSetOutputs[i].rate;
-            Value * blocks = nullptr;
+            Value * maxReferenceItems = nullptr;
             if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator())) {
-                blocks = mStreamSetOutputBuffers[0]->getLinearlyWritableBlocks(kb.get(), blkNo);
+                maxReferenceItems = kb->CreateMul(mStreamSetOutputBuffers[0]->getLinearlyWritableBlocks(kb.get(), blkNo), blockSize);
             } else {
                 Value * writableItems = mStreamSetOutputBuffers[0]->getLinearlyWritableItems(kb.get(), p);
-                blocks = kb->CreateUDiv(writableItems, blockSize);
+                maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), writableItems);
             }
-            linearlyWritableBlocks = kb->CreateSelect(kb->CreateICmpULT(blocks, linearlyWritableBlocks), blocks, linearlyWritableBlocks);
+            Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
+            linearlyWritableStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyWritableStrides), maxStrides, linearlyWritableStrides);
         }
     }
 
-    Value * haveBlocks = kb->CreateICmpUGT(linearlyWritableBlocks, kb->getSize(0));
-    kb->CreateCondBr(haveBlocks, doMultiBlockCall, tempBlockCheck);
+    Value * haveStrides = kb->CreateICmpUGT(linearlyWritableStrides, kb->getSize(0));
+    kb->CreateCondBr(haveStrides, doMultiBlockCall, tempBlockCheck);
 
     //  At this point we have verified the availability of one or more blocks of input data and output buffer space for all stream sets.
     //  Now prepare the doMultiBlock call.
     kb->SetInsertPoint(doMultiBlockCall);
 
-    Value * linearlyAvailItems = kb->CreateMul(linearlyWritableBlocks, blockSize);
+    Value * linearlyAvailItems = kb->CreateMul(linearlyWritableStrides, strideSize);
 
     std::vector<Value *> doMultiBlockArgs;
     doMultiBlockArgs.push_back(getInstance());
@@ -963,9 +971,9 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     Value * nowProcessed = kb->CreateAdd(processedItemCount[0], linearlyAvailItems);
     kb->setProcessedItemCount(mStreamSetInputs[0].name, nowProcessed);
-    Value * reducedBlocksToDo = kb->CreateSub(blocksRemaining, linearlyWritableBlocks);
+    Value * reducedStridesToDo = kb->CreateSub(stridesRemaining, linearlyWritableStrides);
     BasicBlock * multiBlockFinal = kb->GetInsertBlock();
-    blocksRemaining->addIncoming(reducedBlocksToDo, multiBlockFinal);
+    stridesRemaining->addIncoming(reducedStridesToDo, multiBlockFinal);
     kb->CreateBr(doSegmentOuterLoop);
     //
     // We use temporary buffers in 3 different cases that preclude full block processing.
@@ -977,12 +985,12 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     //
 
     kb->SetInsertPoint(tempBlockCheck);
-    haveBlocks = kb->CreateICmpUGT(blocksRemaining, kb->getSize(0));
-    kb->CreateCondBr(kb->CreateOr(mIsFinal, haveBlocks), doTempBufferBlock, segmentDone);
+    haveStrides = kb->CreateICmpUGT(stridesRemaining, kb->getSize(0));
+    kb->CreateCondBr(kb->CreateOr(mIsFinal, haveStrides), doTempBufferBlock, segmentDone);
 
     kb->SetInsertPoint(doTempBufferBlock);
-    Value * tempBlockItems = kb->CreateSelect(haveBlocks, blockSize, excessItems);
-    Value * doFinal = kb->CreateNot(haveBlocks);
+    Value * tempBlockItems = kb->CreateSelect(haveStrides, strideSize, excessItems);
+    Value * doFinal = kb->CreateNot(haveStrides);
 
     // Begin constructing the doMultiBlock args.
     std::vector<Value *> tempArgs;
@@ -993,7 +1001,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         if (!isDerived[i]) {
             Value * avail = kb->CreateSub(mAvailableItemCount[i], processedItemCount[i]);
-            doMultiBlockArgs.push_back(kb->CreateSelect(kb->CreateICmpULT(avail, blockSize), avail, blockSize));
+            doMultiBlockArgs.push_back(kb->CreateSelect(kb->CreateICmpULT(avail, strideSize), avail, strideSize));
         }
     }
 
@@ -1097,8 +1105,8 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     //  We've dealt with the partial block processing and copied information back into the
     //  actual buffers.  If this isn't the final block, loop back for more multiblock processing.
     //
-    blocksRemaining->addIncoming(kb->CreateSub(blocksRemaining, kb->CreateZExt(haveBlocks, kb->getSizeTy())), kb->GetInsertBlock());
-    kb->CreateCondBr(haveBlocks, doSegmentOuterLoop, segmentDone);
+    stridesRemaining->addIncoming(kb->CreateSub(stridesRemaining, kb->CreateZExt(haveStrides, kb->getSizeTy())), kb->GetInsertBlock());
+    kb->CreateCondBr(haveStrides, doSegmentOuterLoop, segmentDone);
     kb->SetInsertPoint(segmentDone);
 }
 
@@ -1167,8 +1175,8 @@ MultiBlockKernel::MultiBlockKernel(std::string && kernelName,
                                    std::vector<Binding> && scalar_parameters,
                                    std::vector<Binding> && scalar_outputs,
                                    std::vector<Binding> && internal_scalars)
-: Kernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
-    
+: Kernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
+, mStride(0) {
 }
 
 // CONSTRUCTOR

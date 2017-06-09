@@ -240,6 +240,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     // Otherwise, allocate a buffer with twice the capacity and copy the unconsumed data back into it
     iBuilder->SetInsertPoint(expandAndCopyBack);
+
     Value * const expandedCapacity = iBuilder->CreateShl(capacity, 1);
     Value * const expandedBuffer = iBuilder->CreatePointerCast(iBuilder->CreateCacheAlignedMalloc(expandedCapacity), codeUnitPtrTy);
     iBuilder->CreateMemCpy(expandedBuffer, unconsumedPtr, remaining, 1);
@@ -254,7 +255,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     baseAddress->addIncoming(buffer, copyBack);
     baseAddress->addIncoming(expandedBuffer, expandAndCopyBack);
     Value * const modifiedPtr = iBuilder->CreateGEP(baseAddress, remaining);
-    Value * const logicalAddress = iBuilder->CreateGEP(modifiedPtr, iBuilder->CreateNeg(iBuilder->CreateAnd(produced, alignmentMask)));
+    Value * const logicalAddress = iBuilder->CreateGEP(baseAddress, iBuilder->CreateNeg(consumed));
     iBuilder->setBaseAddress("sourceBuffer", logicalAddress);
     iBuilder->CreateBr(readData);
 
