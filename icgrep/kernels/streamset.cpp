@@ -73,7 +73,7 @@ inline bool StreamSetBuffer::isCapacityGuaranteed(const Value * const index, con
 }
 
 Value * StreamSetBuffer::getStreamSetCount(IDISA::IDISA_Builder * const iBuilder, Value *) const {
-    uint64_t count = 1;
+    size_t count = 1;
     if (isa<ArrayType>(mBaseType)) {
         count = mBaseType->getArrayNumElements();
     }
@@ -149,7 +149,7 @@ void StreamSetBuffer::releaseBuffer(IDISA::IDISA_Builder * const /* iBuilder */,
 void StreamSetBuffer::createBlockCopy(IDISA::IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * blocksToCopy) const {
     Type * i8ptr = iBuilder->getInt8PtrTy();
     unsigned alignment = iBuilder->getBitBlockWidth() / 8;
-    uint64_t numStreams = 1;
+    size_t numStreams = 1;
     if (isa<ArrayType>(mBaseType)) {
         numStreams = mBaseType->getArrayNumElements();
     }
@@ -162,7 +162,7 @@ void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuild
     Type * const int8PtrTy = iBuilder->getInt8PtrTy();
     const unsigned alignment = iBuilder->getBitBlockWidth() / 8;
     Constant * const blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
-    uint64_t numStreams = 1;
+    size_t numStreams = 1;
     if (isa<ArrayType>(mBaseType)) {
         numStreams = mBaseType->getArrayNumElements();
     }

@@ -20,6 +20,12 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdio.h>
+
+#if defined(__i386__)
+typedef uint32_t unw_word_t;
+#else
+typedef uint64_t unw_word_t;
+#endif
 #if defined(HAS_MACH_VM_TYPES)
 #include <mach/vm_types.h>
 extern void _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned skip);
@@ -495,7 +501,7 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
 }
 
 PointerType * CBuilder::getVoidPtrTy() const {
-    return TypeBuilder<void *, false>::get(getContext());
+    return TypeBuilder<void *, true>::get(getContext());
 }
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
@@ -817,7 +823,7 @@ void CBuilder::__CreateAssert(Value * const assertion, StringRef failureMessage)
             restoreIP(ip);
         }
 
-        SmallVector<uint64_t, 64> stack;
+        SmallVector<unw_word_t, 64> stack;
         #if defined(HAS_MACH_VM_TYPES)
         for (;;) {
             unsigned int n;
@@ -881,7 +887,7 @@ void CBuilder::__CreateAssert(Value * const assertion, StringRef failureMessage)
                 }
             }
             if (LLVM_LIKELY(trace == nullptr)) {
-                Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<uint64_t>(stack.data() + 1, n));
+                Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<unw_word_t>(stack.data() + 1, n));
                 trace = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
             }
             trace = CreatePointerCast(trace, stackPtrTy);
