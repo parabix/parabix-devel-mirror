@@ -242,8 +242,9 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     iBuilder->SetInsertPoint(expandAndCopyBack);
 
     Value * const expandedCapacity = iBuilder->CreateShl(capacity, 1);
-    Value * const expandedBuffer = iBuilder->CreatePointerCast(iBuilder->CreateCacheAlignedMalloc(expandedCapacity), codeUnitPtrTy);
-    iBuilder->CreateMemCpy(expandedBuffer, unconsumedPtr, remaining, 1);
+    Value * const expandedBuffer = iBuilder->CreateCacheAlignedMalloc(expandedCapacity);
+    Value * const expandedBufferPtr = iBuilder->CreatePointerCast(expandedBuffer, codeUnitPtrTy);
+    iBuilder->CreateMemCpy(expandedBufferPtr, unconsumedPtr, remaining, 1);
     iBuilder->CreateFree(buffer);
     iBuilder->setScalarField("buffer", expandedBuffer);
     iBuilder->setScalarField("capacity", expandedCapacity);
@@ -253,7 +254,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     iBuilder->SetInsertPoint(calculateLogicalAddress);
     PHINode * const baseAddress = iBuilder->CreatePHI(codeUnitPtrTy, 2);
     baseAddress->addIncoming(buffer, copyBack);
-    baseAddress->addIncoming(expandedBuffer, expandAndCopyBack);
+    baseAddress->addIncoming(expandedBufferPtr, expandAndCopyBack);
     Value * const modifiedPtr = iBuilder->CreateGEP(baseAddress, remaining);
     Value * const logicalAddress = iBuilder->CreateGEP(baseAddress, iBuilder->CreateNeg(consumed));
     iBuilder->setBaseAddress("sourceBuffer", logicalAddress);
