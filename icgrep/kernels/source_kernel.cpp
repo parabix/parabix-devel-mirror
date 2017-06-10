@@ -167,6 +167,7 @@ void ReadSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuil
     kb->setScalarField("capacity", kb->getSize(initialBufferSize));
     kb->setBaseAddress("sourceBuffer", buffer);
     kb->setBufferedSize("sourceBuffer", kb->getSize(0));
+    kb->setCapacity("sourceBuffer", kb->getSize(initialBufferSize));
 }
 
 void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & kb) {
@@ -260,6 +261,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     kb->CreateFree(buffer);
     kb->setScalarField("buffer", expandedBuffer);
     kb->setScalarField("capacity", expandedCapacity);
+    kb->setCapacity("sourceBuffer", expandedCapacity);
     kb->CreateBr(calculateLogicalAddress);
 
     // Update the logical address for this buffer....

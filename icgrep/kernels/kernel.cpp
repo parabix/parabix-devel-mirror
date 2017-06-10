@@ -519,7 +519,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
             Value * priorBlock = idb->CreateLShr(priorProduced[priorIdx], log2BlockSize);
             Value * priorOffset = idb->CreateAnd(priorProduced[priorIdx], idb->getSize(idb->getBitBlockWidth() - 1));
             Value * instance = idb->getStreamSetBufferPtr(mStreamSetOutputs[i].name);
-            Value * accessibleBlocks = cb->getLinearlyAccessibleBlocks(idb.get(), priorBlock);
+            Value * accessibleBlocks = idb->getLinearlyAccessibleBlocks(mStreamSetOutputs[i].name, priorBlock);
             Value * accessible = idb->CreateSub(idb->CreateShl(accessibleBlocks, log2BlockSize), priorOffset);
             Value * wraparound = idb->CreateICmpULT(accessible, newlyProduced);
             idb->CreateCondBr(wraparound, copyBack, done);
@@ -535,7 +535,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
             BasicBlock * done = idb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
             Value * instance = idb->getStreamSetBufferPtr(mStreamSetOutputs[i].name);
             Value * newlyProduced = idb->CreateSub(idb->getProducedItemCount(mStreamSetOutputs[i].name), priorProduced[priorIdx]);
-            Value * accessible = cb->getLinearlyAccessibleItems(idb.get(), priorProduced[priorIdx]);
+            Value * accessible = idb->getLinearlyAccessibleItems(mStreamSetOutputs[i].name, priorProduced[priorIdx]);
             Value * wraparound = idb->CreateICmpULT(accessible, newlyProduced);
             idb->CreateCondBr(wraparound, copyBack, done);
             idb->SetInsertPoint(copyBack);
@@ -866,9 +866,9 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             auto & rate = mStreamSetInputs[i].rate;
             Value * maxReferenceItems = nullptr;
             if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator()) && (rate.referenceStreamSet() == "")) {
-                maxReferenceItems = kb->CreateMul(mStreamSetInputBuffers[i]->getLinearlyAccessibleBlocks(kb.get(), blkNo), blockSize);
+                maxReferenceItems = kb->CreateMul(kb->getLinearlyAccessibleBlocks(mStreamSetInputs[i].name, blkNo), blockSize);
             } else {
-                Value * linearlyAvailItems = mStreamSetInputBuffers[i]->getLinearlyAccessibleItems(kb.get(), p);
+                Value * linearlyAvailItems = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, p);
                 maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems);
             }
             Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
@@ -889,9 +889,9 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             auto & rate = mStreamSetOutputs[i].rate;
             Value * maxReferenceItems = nullptr;
             if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator())) {
-                maxReferenceItems = kb->CreateMul(mStreamSetOutputBuffers[0]->getLinearlyWritableBlocks(kb.get(), blkNo), blockSize);
+                maxReferenceItems = kb->CreateMul(kb->getLinearlyWritableBlocks(mStreamSetOutputs[i].name, blkNo), blockSize);
             } else {
-                Value * writableItems = mStreamSetOutputBuffers[0]->getLinearlyWritableItems(kb.get(), p);
+                Value * writableItems = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, p);
                 maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), writableItems);
             }
             Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
@@ -914,7 +914,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         if (!isDerived[i]) {
             Value * avail = kb->CreateSub(mAvailableItemCount[i], processedItemCount[i]);
-            Value * linearlyAvail = mStreamSetInputBuffers[i]->getLinearlyAccessibleItems(kb.get(), processedItemCount[i]);
+            Value * linearlyAvail = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, processedItemCount[i]);
             doMultiBlockArgs.push_back(kb->CreateSelect(kb->CreateICmpULT(avail, linearlyAvail), avail, linearlyAvail));
         }
     }
@@ -941,7 +941,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             Value * priorBlock = kb->CreateLShr(producedItemCount[i], log2BlockSize);
             Value * priorOffset = kb->CreateAnd(producedItemCount[i], kb->getSize(kb->getBitBlockWidth() - 1));
             Value * instance = kb->getStreamSetBufferPtr(mStreamSetOutputs[i].name);
-            Value * accessibleBlocks = cb->getLinearlyAccessibleBlocks(kb.get(), priorBlock);
+            Value * accessibleBlocks = kb->getLinearlyAccessibleBlocks(mStreamSetOutputs[i].name, priorBlock);
             Value * accessible = kb->CreateSub(kb->CreateShl(accessibleBlocks, log2BlockSize), priorOffset);
             Value * wraparound = kb->CreateICmpULT(accessible, newlyProduced);
             kb->CreateCondBr(wraparound, copyBack, done);
@@ -957,7 +957,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             BasicBlock * done = kb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
             Value * instance = kb->getStreamSetBufferPtr(mStreamSetOutputs[i].name);
             Value * newlyProduced = kb->CreateSub(kb->getProducedItemCount(mStreamSetOutputs[i].name), producedItemCount[i]);
-            Value * accessible = cb->getLinearlyAccessibleItems(kb.get(), producedItemCount[i]);
+            Value * accessible = kb->getLinearlyAccessibleItems(mStreamSetOutputs[i].name, producedItemCount[i]);
             Value * wraparound = kb->CreateICmpULT(accessible, newlyProduced);
             kb->CreateCondBr(wraparound, copyBack, done);
             kb->SetInsertPoint(copyBack);
@@ -1049,7 +1049,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             Value * neededItems = kb->CreateSub(finalItemCountNeeded[i], blockBasePos);
             // Round up to exact multiple of block size.
             neededItems = kb->CreateAnd(kb->CreateAdd(neededItems, kb->getSize(bitBlockWidth - 1)), blockBaseMask);
-            Value * availFromBase = mStreamSetInputBuffers[i]->getLinearlyAccessibleItems(kb.get(), blockBasePos);
+            Value * availFromBase = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, blockBasePos);
             Value * copyItems1 = kb->CreateSelect(kb->CreateICmpULT(neededItems, availFromBase), neededItems, availFromBase);
             Value * copyItems2 = kb->CreateSub(neededItems, copyItems1);
             mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, inputPtr, copyItems1);
@@ -1090,7 +1090,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         Value * copyItems = kb->CreateSub(finalItems, blockBasePos[i]);
         // Round up to exact multiple of block size.
         copyItems = kb->CreateAnd(kb->CreateAdd(copyItems, kb->getSize(bitBlockWidth - 1)), blockBaseMask);
-        Value * writableFromBase = mStreamSetOutputBuffers[i]->getLinearlyWritableItems(kb.get(), blockBasePos[i]); // must be a whole number of blocks.
+        Value * writableFromBase = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, blockBasePos[i]); // must be a whole number of blocks.
         Value * copyItems1 = kb->CreateSelect(kb->CreateICmpULT(copyItems, writableFromBase), copyItems, writableFromBase);
         Value * copyBlocks1 = kb->CreateUDiv(copyItems1, blockSize);
         mStreamSetOutputBuffers[i]->createBlockCopy(kb.get(), outputBlockPtr[i], tempBufPtr, copyBlocks1);

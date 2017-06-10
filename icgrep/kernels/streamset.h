@@ -71,21 +71,25 @@ public:
     virtual void setBaseAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * addr, llvm::Value *) const;
 
     virtual void setBufferedSize(IDISA::IDISA_Builder * const iBuilder, llvm::Value * size, llvm::Value *) const;
-
-    virtual llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const;
-
-    // The number of items that cam be linearly accessed from a given logical stream position.
-    virtual llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromPosition) const;
     
-    virtual llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromBlock) const;
+    virtual llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const;
+    
+    virtual void setCapacity(IDISA::IDISA_Builder * const iBuilder, llvm::Value * size, llvm::Value *) const;
+    
+    virtual llvm::Value * getCapacity(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const;
+    
+    // The number of items that cam be linearly accessed from a given logical stream position.
+    virtual llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const;
+    
+    virtual llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const;
     
     void createBlockCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * blocksToCopy) const;
 
     virtual void createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy) const;
 
-    virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromPosition) const;
+    virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const;
     
-    virtual llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromBlock) const;
+    virtual llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const;
     
     virtual ~StreamSetBuffer() = 0;
 
@@ -144,11 +148,17 @@ public:
 
     void setBufferedSize(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * size) const override;
 
-    llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
+    void setCapacity(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * c) const override;
 
-    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromPosition) const override;
+    llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
+    
+    llvm::Value * getCapacity(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
+    
+    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const override;
 
 protected:
+    
+    enum class Field {BaseAddress, BufferedSize, Capacity};
 
     llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
 
@@ -167,7 +177,7 @@ public:
     // Can't allocate - raise an error. */
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
-    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromPosition) const override;
+    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const override;
 
 protected:
     llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const override;
@@ -209,9 +219,9 @@ public:
     // Generate copyback code for the given number of overflowItems.
     void createCopyBack(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * overflowItems) const;
         
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromPosition) const override;
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const override;
     
-    llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromBlock) const override;
+    llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const override;
     
 private:
     size_t mOverflowBlocks;
@@ -231,9 +241,9 @@ public:
     // Generate copyback code for the given number of overflowItems.
     void createCopyBack(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * overflowItems) const;
     
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromPosition) const override;
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const override;
     
-    llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * constiBuilder, llvm::Value * fromBlock) const override;
+    llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const override;
     
 protected:
     llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const override;
@@ -256,7 +266,7 @@ public:
 
     llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex, const bool readOnly) const override;
 
-    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * fromPosition) const override;
+    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const override;
 
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 

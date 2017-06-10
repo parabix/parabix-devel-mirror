@@ -128,8 +128,38 @@ void KernelBuilder::setTerminationSignal() {
 }
 
 Value * KernelBuilder::getLinearlyAccessibleItems(const std::string & name, Value * fromPosition) {
-    const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-    return buf->getLinearlyAccessibleItems(this, fromPosition);
+    Kernel::Port port; unsigned index;
+    std::tie(port, index) = mKernel->getStreamPort(name);
+    if (port == Kernel::Port::Input) {
+        const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
+        return buf->getLinearlyAccessibleItems(this, getStreamSetBufferPtr(name), fromPosition);
+    }
+    else {
+        const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
+        return buf->getLinearlyAccessibleItems(this, getStreamSetBufferPtr(name), fromPosition);
+    }
+}
+
+Value * KernelBuilder::getLinearlyAccessibleBlocks(const std::string & name, Value * fromBlock) {
+    Kernel::Port port; unsigned index;
+    std::tie(port, index) = mKernel->getStreamPort(name);
+    if (port == Kernel::Port::Input) {
+        const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
+        return buf->getLinearlyAccessibleBlocks(this, getStreamSetBufferPtr(name), fromBlock);
+    } else {
+        const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
+        return buf->getLinearlyAccessibleBlocks(this, getStreamSetBufferPtr(name), fromBlock);
+    }
+}
+
+Value * KernelBuilder::getLinearlyWritableItems(const std::string & name, Value * fromPosition) {
+    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
+    return buf->getLinearlyWritableItems(this, getStreamSetBufferPtr(name), fromPosition);
+}
+
+Value * KernelBuilder::getLinearlyWritableBlocks(const std::string & name, Value * fromBlock) {
+    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
+    return buf->getLinearlyWritableBlocks(this, getStreamSetBufferPtr(name), fromBlock);
 }
 
 Value * KernelBuilder::getConsumerLock(const std::string & name) {
@@ -232,6 +262,15 @@ void KernelBuilder::setBufferedSize(const std::string & name, Value * size) {
 }
 
 
+Value * KernelBuilder::getCapacity(const std::string & name) {
+    return mKernel->getAnyStreamSetBuffer(name)->getCapacity(this, getStreamSetBufferPtr(name));
+}
+
+void KernelBuilder::setCapacity(const std::string & name, Value * c) {
+    mKernel->getAnyStreamSetBuffer(name)->setCapacity(this, getStreamSetBufferPtr(name), c);
+}
+
+    
 CallInst * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) {
     Function * const doSegment = mKernel->getDoSegmentFunction(getModule());
     assert (doSegment->getArgumentList().size() == args.size());

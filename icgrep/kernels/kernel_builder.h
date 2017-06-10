@@ -84,13 +84,23 @@ public:
     void setBaseAddress(const std::string & name, llvm::Value * addr);
 
     llvm::Value * getBufferedSize(const std::string & name);
-
+    
     void setBufferedSize(const std::string & name, llvm::Value * size);
-
+    
+    llvm::Value * getCapacity(const std::string & name);
+    
+    void setCapacity(const std::string & name, llvm::Value * c);
+    
     llvm::Value * getAvailableItemCount(const std::string & name);
 
     llvm::Value * getLinearlyAccessibleItems(const std::string & name, llvm::Value * fromPosition);
-
+    
+    llvm::Value * getLinearlyAccessibleBlocks(const std::string & name, llvm::Value * fromBlock);
+    
+    llvm::Value * getLinearlyWritableItems(const std::string & name, llvm::Value * fromPosition);
+    
+    llvm::Value * getLinearlyWritableBlocks(const std::string & name, llvm::Value * fromBlock);
+    
     llvm::BasicBlock * CreateConsumerWait();
 
     llvm::Value * getStreamSetBufferPtr(const std::string & name);
