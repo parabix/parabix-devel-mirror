@@ -287,12 +287,12 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
             f->setDoesNotAlias(0);
             f->setDoesNotAlias(1);
         }
-        ptr = CreateAlloca(voidPtrTy);
-        CallInst * success = CreateCall(f, {ptr, align, size});
+        Value * handle = CreateAlloca(voidPtrTy);
+        CallInst * success = CreateCall(f, {handle, align, size});
         if (codegen::EnableAsserts) {
             CreateAssertZero(success, "CreateAlignedMalloc: posix_memalign reported bad allocation");
         }
-        ptr = CreateLoad(ptr);
+        ptr = CreateLoad(handle);
     } else {
         report_fatal_error("stdlib.h does not contain either aligned_alloc or posix_memalign");
     }
