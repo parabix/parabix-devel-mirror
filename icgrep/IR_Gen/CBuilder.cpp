@@ -850,7 +850,7 @@ void CBuilder::__CreateAssert(Value * const assertion, StringRef failureMessage)
             if (pc == 0) {
                 break;
             }
-            stack.push_back(static_cast<uint64_t>(pc));
+            stack.push_back(pc);
         }
         #elif defined(HAS_EXECINFO)
         for (;;) {
