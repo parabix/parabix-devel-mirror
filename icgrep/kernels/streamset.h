@@ -155,6 +155,9 @@ public:
     llvm::Value * getCapacity(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
     
     llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const override;
+    
+    llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const override;
+
 
 protected:
     

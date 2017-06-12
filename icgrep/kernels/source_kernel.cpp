@@ -63,11 +63,11 @@ void MMapSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuil
     PHINode * size = kb->CreatePHI(sizeTy, 2);
     size->addIncoming(pageSize, emptyFile);
     size->addIncoming(fileSize, nonEmptyFile);
-
     kb->setBaseAddress("sourceBuffer", buffer);
     kb->setBufferedSize("sourceBuffer", size);
     kb->setScalarField("readableBuffer", buffer);
     kb->setScalarField("fileSize", fileSize);
+    kb->setCapacity("sourceBuffer", fileSize);
     kb->CreateMAdvise(buffer, fileSize, CBuilder::ADVICE_WILLNEED);
 
 }
