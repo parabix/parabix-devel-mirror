@@ -56,41 +56,33 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
     fileDescriptor->setName("fileDescriptor");
     Value * const outputStream = &*(args++);
     outputStream->setName("outputStream");
-
-    //Round up to a multiple of 3.
-    const unsigned segmentSize = ((codegen::SegmentSize + 2)/3) * 3;
-    
-    const unsigned bufferSegments = codegen::BufferSegments;
-    
-    SourceBuffer ByteStream(iBuilder, iBuilder->getStreamSetTy(1, 8));
-
-    CircularBuffer Expanded3_4Out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments);
-    CircularBuffer Radix64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments);
-    CircularCopybackBuffer Base64out(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * 4/3 * bufferSegments, 1);
-    
-    MMapSourceKernel mmapK(iBuilder, segmentSize);
-    mmapK.setInitialArguments({fileDescriptor});
-    pxDriver.addKernelCall(mmapK, {}, {&ByteStream});
-    
-    expand3_4Kernel expandK(iBuilder);
-    pxDriver.addKernelCall(expandK, {&ByteStream}, {&Expanded3_4Out});
-
-    radix64Kernel radix64K(iBuilder);
-    pxDriver.addKernelCall(radix64K, {&Expanded3_4Out}, {&Radix64out});
-
-    base64Kernel base64K(iBuilder);
-    pxDriver.addKernelCall(base64K, {&Radix64out}, {&Base64out});
-    
-    StdOutKernel stdoutK(iBuilder, 8);
-    pxDriver.addKernelCall(stdoutK, {&Base64out}, {});
-    
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
-    ByteStream.allocateBuffer(iBuilder);
-    Expanded3_4Out.allocateBuffer(iBuilder);
-    Radix64out.allocateBuffer(iBuilder);
-    Base64out.allocateBuffer(iBuilder);
+    //Round up to a multiple of 3.
+    const unsigned initSegSize = ((codegen::SegmentSize + 2)/3) * 3;
+    const unsigned bufferSize = initSegSize * 4/3 * codegen::BufferSegments;
 
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+
+    Kernel * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, initSegSize));
+    mmapK->setInitialArguments({fileDescriptor});
+    pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
+    
+    StreamSetBuffer * Expanded3_4Out = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferSize));
+    Kernel * expandK = pxDriver.addKernelInstance(make_unique<expand3_4Kernel>(iBuilder));
+    pxDriver.makeKernelCall(expandK, {ByteStream}, {Expanded3_4Out});
+    
+    StreamSetBuffer * Radix64out = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferSize));
+    Kernel * radix64K = pxDriver.addKernelInstance(make_unique<radix64Kernel>(iBuilder));
+    pxDriver.makeKernelCall(radix64K, {Expanded3_4Out}, {Radix64out});
+    
+    StreamSetBuffer * Base64out = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferSize));
+    Kernel * base64K = pxDriver.addKernelInstance(make_unique<base64Kernel>(iBuilder));
+    pxDriver.makeKernelCall(base64K, {Radix64out}, {Base64out});
+    
+    Kernel * outK = pxDriver.addKernelInstance(make_unique<StdOutKernel>(iBuilder, 8));
+    pxDriver.makeKernelCall(outK, {Base64out}, {});
+    
     pxDriver.generatePipelineIR();
 
     iBuilder->CreateRetVoid();
