@@ -755,6 +755,9 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     Function * multiBlockFunction = Function::Create(type, GlobalValue::InternalLinkage, getName() + MULTI_BLOCK_SUFFIX, kb->getModule());
     multiBlockFunction->setCallingConv(CallingConv::C);
     multiBlockFunction->setDoesNotThrow();
+    mCurrentMethod = multiBlockFunction;
+    kb->SetInsertPoint(BasicBlock::Create(kb->getContext(), "multiBlockEntry", multiBlockFunction, 0));
+
     auto args = multiBlockFunction->arg_begin();
     args->setName("self");
     setInstance(&*args);
@@ -771,8 +774,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     // Now use the generateMultiBlockLogic method of the MultiBlockKernelBuilder subtype to
     // provide the required multi-block kernel logic.
-    mCurrentMethod = multiBlockFunction;
-    kb->SetInsertPoint(BasicBlock::Create(kb->getContext(), "multiBlockEntry", multiBlockFunction, 0));
     generateMultiBlockLogic(kb);
 
     kb->CreateRetVoid();
@@ -1077,14 +1078,14 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         tempArgs.push_back(kb->CreateIntToPtr(tempAddress, bufPtrType));
     }
 
-    std::vector<Value *> blockBasePos;
+    Value * outputBasePos[outputSetCount];
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); i++) {
         Value * tempBufPtr = kb->CreateGEP(tempParameterArea, kb->getInt32(mStreamSetInputs.size() + i));
         Type * bufPtrType = mStreamSetOutputBuffers[i]->getPointerType();
         tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
         producedItemCount[i] = kb->getProducedItemCount(mStreamSetOutputs[i].name);
-        blockBasePos.push_back(kb->CreateAnd(producedItemCount[i], blockBaseMask));
-        mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, outputBlockPtr[i], kb->CreateSub(producedItemCount[i], blockBasePos[i]));
+        outputBasePos[i] = kb->CreateAnd(producedItemCount[i], blockBaseMask);
+        mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, outputBlockPtr[i], kb->CreateSub(producedItemCount[i], outputBasePos[i]));
         Value * itemAddress = kb->CreatePtrToInt(kb->getRawOutputPointer(mStreamSetOutputs[i].name, kb->getInt32(0), producedItemCount[i]), intAddrTy);
         Value * outputPtr = kb->getOutputStreamBlockPtr(mStreamSetOutputs[i].name, kb->getInt32(0));
         Value * baseAddress = kb->CreatePtrToInt(outputPtr, intAddrTy);
@@ -1093,41 +1094,48 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     }
 
     kb->CreateCall(multiBlockFunction, tempArgs);
-
+    
+    //  The items have been processed and output generated to the temporary areas.
+    //  Update the processed item count (and hence all the counts derived automatically
+    //  therefrom).
+    kb->setProcessedItemCount(mStreamSetInputs[0].name, finalItemCountNeeded[0]);
+    
     // Copy back data to the actual output buffers.
-
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); i++) {
         Value * tempBufPtr = kb->CreateGEP(tempParameterArea, kb->getInt32(mStreamSetInputs.size() + i));
         tempBufPtr = kb->CreatePointerCast(tempBufPtr, mStreamSetOutputBuffers[i]->getPointerType());
-        Value * finalItems = kb->getProducedItemCount(mStreamSetOutputs[i].name);
-        Value * copyItems = kb->CreateSub(finalItems, blockBasePos[i]);
+        Value * finalOutputItems = kb->getProducedItemCount(mStreamSetOutputs[i].name);
+        Value * copyItems = kb->CreateSub(finalOutputItems, outputBasePos[i]);
         // Round up to exact multiple of block size.
         //copyItems = kb->CreateAnd(kb->CreateAdd(copyItems, kb->getSize(bitBlockWidth - 1)), blockBaseMask);
-        Value * writableFromBase = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, blockBasePos[i]); // must be a whole number of blocks.
+        Value * writableFromBase = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, outputBasePos[i]); // must be a whole number of blocks.
         Value * allWritable = kb->CreateICmpULE(copyItems, writableFromBase);
         Value * copyItems1 = kb->CreateSelect(allWritable, copyItems, writableFromBase);
         mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), outputBlockPtr[i], tempBufPtr, copyItems1);
-        BasicBlock * copyRemaining = kb->CreateBasicBlock("copyRemaining");
-        BasicBlock * copyDone = kb->CreateBasicBlock("copyDone");
-        kb->CreateCondBr(allWritable, copyDone, copyRemaining);
-        kb->SetInsertPoint(copyRemaining);
+        BasicBlock * copyBackRemaining = kb->CreateBasicBlock("copyBackRemaining");
+        BasicBlock * copyBackDone = kb->CreateBasicBlock("copyBackDone");
+        kb->CreateCondBr(allWritable, copyBackDone, copyBackRemaining);
+        kb->SetInsertPoint(copyBackRemaining);
         Value * copyItems2 = kb->CreateSub(copyItems, copyItems1);
-        Value * nextBasePos = kb->CreateAdd(blockBasePos[i], copyItems1);
+        Value * nextBasePos = kb->CreateAdd(outputBasePos[i], copyItems1);
         Type * bufPtrType = mStreamSetOutputBuffers[i]->getPointerType();
         Value * nextOutputPtr = kb->CreatePointerCast(kb->getRawOutputPointer(mStreamSetOutputs[i].name, kb->getInt32(0), nextBasePos), bufPtrType);
         tempBufPtr = kb->CreateGEP(tempBufPtr, kb->CreateUDiv(copyItems1, blockSize));
         mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), nextOutputPtr, tempBufPtr, copyItems2);
-        kb->CreateBr(copyDone);
-        kb->SetInsertPoint(copyDone);
+        kb->CreateBr(copyBackDone);
+        kb->SetInsertPoint(copyBackDone);
     }
 
-    kb->setProcessedItemCount(mStreamSetInputs[0].name, finalItemCountNeeded[0]);
 
     //  We've dealt with the partial block processing and copied information back into the
     //  actual buffers.  If this isn't the final block, loop back for more multiblock processing.
     //
     stridesRemaining->addIncoming(kb->CreateSub(stridesRemaining, kb->CreateZExt(haveStrides, kb->getSizeTy())), kb->GetInsertBlock());
-    kb->CreateCondBr(haveStrides, doSegmentOuterLoop, segmentDone);
+    BasicBlock * setTermination = kb->CreateBasicBlock("mBsetTermination");
+    kb->CreateCondBr(haveStrides, doSegmentOuterLoop, setTermination);
+    kb->SetInsertPoint(setTermination);
+    kb->setTerminationSignal();
+    kb->CreateBr(segmentDone);
     kb->SetInsertPoint(segmentDone);
 }
 
