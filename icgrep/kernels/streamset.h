@@ -39,7 +39,7 @@ public:
     llvm::Type * getType() const {
         return mType;
     }
-
+    
     llvm::Type * getBaseType() const {
         return mBaseType;
     }
@@ -56,6 +56,8 @@ public:
         return mStreamSetBufferPtr;
     }
 
+    virtual llvm::Type * getStreamSetBlockType() const;
+    
     virtual void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
     virtual void releaseBuffer(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const;
@@ -158,6 +160,7 @@ public:
     
     llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const override;
 
+    virtual llvm::Type * getStreamSetBlockType() const override;
 
 protected:
     

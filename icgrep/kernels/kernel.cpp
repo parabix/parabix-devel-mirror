@@ -799,7 +799,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     Type * tempBuffers[totalSetCount];
     for (unsigned i = 0; i < totalSetCount; i++) {
         unsigned blocks = maxBlocksToCopy[i];
-        Type * bufType = i < inputSetCount ? mStreamSetInputBuffers[i]->getType() : mStreamSetOutputBuffers[i -inputSetCount]->getType();
+        Type * bufType = i < inputSetCount ? mStreamSetInputBuffers[i]->getStreamSetBlockType() : mStreamSetOutputBuffers[i -inputSetCount]->getStreamSetBlockType();
         if (blocks > 1) {
             tempBuffers[i] = ArrayType::get(bufType, blocks);
         }

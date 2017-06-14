@@ -17,6 +17,9 @@ using namespace parabix;
 using namespace llvm;
 using namespace IDISA;
 
+
+Type * StreamSetBuffer::getStreamSetBlockType() const { return mType;}
+
 ArrayType * resolveStreamSetType(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type);
 
 StructType * resolveExpandableStreamSetType(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type);
@@ -178,7 +181,6 @@ void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuild
     if (numStreams == 1) {
         Value * copyBits = iBuilder->CreateMul(itemsToCopy, iBuilder->getSize(fieldWidth));
         Value * copyBytes = iBuilder->CreateLShr(iBuilder->CreateAdd(copyBits, iBuilder->getSize(7)), iBuilder->getSize(3));
-        
         iBuilder->CreateMemMove(iBuilder->CreateBitCast(targetBlockPtr, int8PtrTy), iBuilder->CreateBitCast(sourceBlockPtr, int8PtrTy), copyBytes, alignment);
     } else {
         Value * blocksToCopy = iBuilder->CreateUDiv(itemsToCopy, blockSize);
@@ -200,6 +202,12 @@ void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuild
 }
 
 // Source File Buffer
+
+Type * SourceBuffer::getStreamSetBlockType() const {
+    return cast<PointerType>(mType->getStructElementType(int(SourceBuffer::Field::BaseAddress)))->getElementType();
+}
+
+
 Value * SourceBuffer::getBufferedSize(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
     Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(int(SourceBuffer::Field::BufferedSize))});
     return iBuilder->CreateLoad(ptr);
