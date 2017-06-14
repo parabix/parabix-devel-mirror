@@ -29,33 +29,23 @@ namespace kernel {
 //          Then apply a further shuffle opertaion to use the remaining 3/4 of
 //          input_pack2 to produce output_pack3.
 
-// The doSegment method processes input in terms of tripleBlocks, 3 blocks of input,
-// producing 4 blocks of output.   Unless less than one tripleBlock remains, the
-// doSegment method always processes an integral number of tripleBlocks as a logical
-// segment.  Both input and output buffers are hence maintained at block boundaries,
-// with the input data completely processed for each tripleBlock.
+// The MultiBlockLogic is based on a natural stride taking 3 packs at a time.
+// In this case, the output produced is exactly 4 packs or 4 blocks, with no pending
+// data maintained in the kernel state.
 //
-// The pipeline must guarantee that the doSegment method is called with the
-// a continous buffer for the full segment (number of blocks).
+// When processing the final partial stride of data, the kernel performs full
+// triple-pack processing for each full or partial triple-pack remaining,
+// relying on the MultiBlockKernel builder to only copy the correct number
+// of bytes to the actual output stream.
 
 void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder) {
 
     BasicBlock * expand2_3entry = iBuilder->GetInsertBlock();
     BasicBlock * expand_3_4_loop = iBuilder->CreateBasicBlock("expand_3_4_loop");
-    BasicBlock * expand3_4_loop_exit = iBuilder->CreateBasicBlock("expand3_4_loop_exit");
-    BasicBlock * finalStep1 = iBuilder->CreateBasicBlock("finalStep1");
-    BasicBlock * finalStep2 = iBuilder->CreateBasicBlock("finalStep2");
-    BasicBlock * step2load = iBuilder->CreateBasicBlock("step2load");
-    BasicBlock * step2store = iBuilder->CreateBasicBlock("step2store");
-    BasicBlock * finalStep3 = iBuilder->CreateBasicBlock("finalStep3");
-    BasicBlock * step3load = iBuilder->CreateBasicBlock("step3load");
-    BasicBlock * step3store = iBuilder->CreateBasicBlock("step3store");
-    BasicBlock * step3store2 = iBuilder->CreateBasicBlock("step3store2");
-    BasicBlock * expand3_4_final = iBuilder->CreateBasicBlock("expand3_4_final");
     BasicBlock * expand3_4_exit = iBuilder->CreateBasicBlock("expand3_4_exit");
     
     // Determine the require shufflevector constants.
-    const unsigned PACK_SIZE = iBuilder->getStride()/8;
+    const unsigned PACK_SIZE = iBuilder->getBitBlockWidth()/8;
     
     // Construct a list of indexes in  the form
     // 0, 1, 2, 2, 3, 4, 5, 5, 6, 7, 8, 8, ...
@@ -75,8 +65,6 @@ void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
         expand_3_4_shuffle[j] = ConstantVector::get(Idxs);
     }
 
-    Constant * tripleBlockSize = iBuilder->getSize(getKernelStride());
-    Constant * packSize = iBuilder->getSize(PACK_SIZE);
     Constant * triplePackSize = iBuilder->getSize(3 * PACK_SIZE); // 3 packs per loop.
     UndefValue * undefPack = UndefValue::get(iBuilder->fwVectorType(8));
     
@@ -88,21 +76,14 @@ void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     Value * itemsToDo = &*(args++);
     Value * sourceStream = &*(args++);
     Value * expandedStream = &*(args);
-    Value * isFinal = iBuilder->CreateICmpULT(itemsToDo, tripleBlockSize);
 
-    // The main loop processes 3 packs of data at a time.  For doFinal
-    // processing, process all the remaining sets of 3 packs, otherwise
-    // process in multiples of 3 full blocks of data.
-    //
-    Value * excessItems = iBuilder->CreateURem(itemsToDo, triplePackSize);
-    Value * loopItemsToDo = iBuilder->CreateSub(itemsToDo, excessItems);
-
+    // The main loop processes 3 packs of data at a time.
+    
     Value * sourcePackPtr = iBuilder->CreateBitCast(sourceStream, iBuilder->getBitBlockType()->getPointerTo());
     Value * outputPackPtr = iBuilder->CreateBitCast(expandedStream, iBuilder->getBitBlockType()->getPointerTo());
 
-    Value * hasFullLoop = iBuilder->CreateICmpUGE(loopItemsToDo, triplePackSize);
-
-    iBuilder->CreateCondBr(hasFullLoop, expand_3_4_loop, expand3_4_loop_exit);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpSGT(itemsToDo, iBuilder->getSize(0)), expand_3_4_loop, expand3_4_exit);
+    
     iBuilder->SetInsertPoint(expand_3_4_loop);
     PHINode * loopInput_ptr = iBuilder->CreatePHI(sourcePackPtr->getType(), 2);
     PHINode * loopOutput_ptr = iBuilder->CreatePHI(outputPackPtr->getType(), 2);
@@ -110,7 +91,7 @@ void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 
     loopInput_ptr->addIncoming(sourcePackPtr, expand2_3entry);
     loopOutput_ptr->addIncoming(outputPackPtr, expand2_3entry);
-    loopItemsRemain->addIncoming(loopItemsToDo, expand2_3entry);
+    loopItemsRemain->addIncoming(itemsToDo, expand2_3entry);
 
 
     // Step 1 of the main loop.
@@ -143,82 +124,9 @@ void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     loopOutput_ptr->addIncoming(loopNextOutputPack, expand_3_4_loop);
     loopItemsRemain->addIncoming(remainingItems, expand_3_4_loop);
 
-    Value * continueLoop = iBuilder->CreateICmpUGE(remainingItems, triplePackSize);
-    iBuilder->CreateCondBr(continueLoop, expand_3_4_loop, expand3_4_loop_exit);
+    Value * continueLoop = iBuilder->CreateICmpSGT(remainingItems, iBuilder->getSize(0));
+    iBuilder->CreateCondBr(continueLoop, expand_3_4_loop, expand3_4_exit);
     
-    iBuilder->SetInsertPoint(expand3_4_loop_exit);
-    PHINode * loopExitInput_ptr = iBuilder->CreatePHI(sourcePackPtr->getType(), 2);
-    PHINode * loopExitOutput_ptr = iBuilder->CreatePHI(outputPackPtr->getType(), 2);
-    loopExitInput_ptr->addIncoming(sourcePackPtr, expand2_3entry);
-    loopExitOutput_ptr->addIncoming(outputPackPtr, expand2_3entry);
-    loopExitInput_ptr->addIncoming(loopNextInputPack, expand_3_4_loop);
-    loopExitOutput_ptr->addIncoming(loopNextOutputPack, expand_3_4_loop);
-
-    // Except for final segment processing, we are done.
-    iBuilder->CreateCondBr(isFinal, expand3_4_final, expand3_4_exit);
-
-    // Final segment processing.   Less than a triplePack remains.
-    iBuilder->SetInsertPoint(expand3_4_final);
-    
-    // There may be one or two remaining full packs and/or a partial pack.
-    //
-    // We have several cases depending on the number of reumaing items.  Let N = packSize
-    // (a) 0 remaining items: all done
-    // (b) 1..3N/4 remaining items:  do Step1 only, no items or pending data will remain
-    // (c) 3N/4+1 .. N remaining items:  do Step 1, do Step 2 for pending data from Step 1 only, there is no more input.
-    // (d) N+1 .. 6N/4 remaining items:  do Step 1 and Step 2, no items or pending data will remain.
-    // (e) 6N/4+1 .. 2N remaining items: do Steps 1 and 2, do Step 3 for pending data only, there is no more input.
-    // (f) 2N+1 .. 9N/4 remaining items: do Steps 1 and 2, do Step 3 up to the first write only.
-    // (g) 9N/4+1 .. 3N - 1 remaining items: do Steps 1, 2 and 3.
-    Value * condition_a = iBuilder->CreateICmpEQ(excessItems, ConstantInt::getNullValue(iBuilder->getSizeTy()));
-    iBuilder->CreateCondBr(condition_a, expand3_4_exit, finalStep1);
-    // Final Step1 processing
-    iBuilder->SetInsertPoint(finalStep1);
-    pack0 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(loopExitInput_ptr, packAlign));
-    expand0 = iBuilder->bitCast(iBuilder->CreateShuffleVector(undefPack, pack0, expand_3_4_shuffle[0]));
-    iBuilder->CreateAlignedStore(expand0, loopExitOutput_ptr, packAlign);
-    Value * condition_b = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(3 * PACK_SIZE/4));
-    iBuilder->CreateCondBr(condition_b, expand3_4_exit, finalStep2);
-    // Final Step 2 processing
-    iBuilder->SetInsertPoint(finalStep2);
-    Value * condition_c = iBuilder->CreateICmpULE(excessItems, packSize);
-    iBuilder->CreateCondBr(condition_c, step2store, step2load);
-    iBuilder->SetInsertPoint(step2load);
-    inPack1_ptr = iBuilder->CreateGEP(loopExitInput_ptr, iBuilder->getInt32(1));
-    pack1 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(inPack1_ptr, packAlign));
-    iBuilder->CreateBr(step2store);
-    iBuilder->SetInsertPoint(step2store);
-    PHINode * pack1phi = iBuilder->CreatePHI(iBuilder->fwVectorType(8), 2);
-    pack1phi->addIncoming(undefPack, finalStep2);
-    pack1phi->addIncoming(pack1, step2load);
-    outPack1_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(1));
-    expand1 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack0, pack1phi, expand_3_4_shuffle[1]));
-    iBuilder->CreateAlignedStore(expand1, outPack1_ptr, packAlign);
-    Value * condition_d = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(6 * PACK_SIZE/4));
-    iBuilder->CreateCondBr(condition_d, expand3_4_exit, finalStep3);
-    // Final Step 3
-    iBuilder->SetInsertPoint(finalStep3);
-    Value * condition_e = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(2 * PACK_SIZE));
-    iBuilder->CreateCondBr(condition_e, step3store, step3load);
-    iBuilder->SetInsertPoint(step3load);
-    inPack2_ptr = iBuilder->CreateGEP(loopExitInput_ptr, iBuilder->getInt32(2));
-    pack2 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(inPack2_ptr, packAlign));
-    iBuilder->CreateBr(step3store);
-    iBuilder->SetInsertPoint(step3store);
-    PHINode * pack2phi = iBuilder->CreatePHI(iBuilder->fwVectorType(8), 2);
-    pack2phi->addIncoming(undefPack, finalStep3);
-    pack2phi->addIncoming(pack2, step3load);
-    outPack2_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(2));
-    expand2 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack1phi, pack2phi, expand_3_4_shuffle[2]));
-    iBuilder->CreateAlignedStore(expand2, outPack2_ptr, packAlign);
-    Value * condition_f = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(9 * PACK_SIZE/4));
-    iBuilder->CreateCondBr(condition_f, expand3_4_exit, step3store2);
-    iBuilder->SetInsertPoint(step3store2);
-    outPack3_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(3));
-    expand3 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack2phi, undefPack, expand_3_4_shuffle[3]));
-    iBuilder->CreateAlignedStore(expand3, outPack3_ptr, packAlign);
-    iBuilder->CreateBr(expand3_4_exit);
-    //
     iBuilder->SetInsertPoint(expand3_4_exit);
     }
 
@@ -385,7 +293,7 @@ expand3_4Kernel::expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & 
             {Binding{iBuilder->getStreamSetTy(1, 8), "sourceStream"}},
             {Binding{iBuilder->getStreamSetTy(1, 8), "expand34Stream", FixedRatio(4,3)}},
             {}, {}, {}) {
-    setKernelStride(3 * iBuilder->getBitBlockWidth());
+    setKernelStride(3 * iBuilder->getBitBlockWidth()/8);
 }
 
 radix64Kernel::radix64Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
