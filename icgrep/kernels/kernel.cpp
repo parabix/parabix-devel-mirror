@@ -809,7 +809,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     }
     Type * tempParameterStructType = StructType::create(kb->getContext(), ArrayRef<Type *>(tempBuffers, totalSetCount), "tempBuf");
     Value * tempParameterArea = kb->CreateCacheAlignedAlloca(tempParameterStructType);
-
     ConstantInt * blockSize = kb->getSize(kb->getBitBlockWidth());
     ConstantInt * strideSize = kb->getSize(mStride);
     
@@ -1019,7 +1018,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     finalItemCountNeeded.push_back(kb->CreateAdd(processedItemCount[0], tempBlockItems));
 
     for (unsigned i = 0; i < mStreamSetInputBuffers.size(); i++) {
-        Value * tempBufPtr = kb->CreateGEP(tempParameterArea, kb->getInt32(i));
+        Value * tempBufPtr = kb->CreateGEP(tempParameterArea, {kb->getInt32(0), kb->getInt32(i)});
         Type * bufPtrType = mStreamSetInputBuffers[i]->getPointerType();
         tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
         ConstantInt * strideItems = kb->getSize(itemsPerStride[i]);
@@ -1080,7 +1079,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     Value * outputBasePos[outputSetCount];
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); i++) {
-        Value * tempBufPtr = kb->CreateGEP(tempParameterArea, kb->getInt32(mStreamSetInputs.size() + i));
+        Value * tempBufPtr = kb->CreateGEP(tempParameterArea,  {kb->getInt32(0), kb->getInt32(mStreamSetInputs.size() + i)});
         Type * bufPtrType = mStreamSetOutputBuffers[i]->getPointerType();
         tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
         producedItemCount[i] = kb->getProducedItemCount(mStreamSetOutputs[i].name);
@@ -1102,7 +1101,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     
     // Copy back data to the actual output buffers.
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); i++) {
-        Value * tempBufPtr = kb->CreateGEP(tempParameterArea, kb->getInt32(mStreamSetInputs.size() + i));
+        Value * tempBufPtr = kb->CreateGEP(tempParameterArea,  {kb->getInt32(0), kb->getInt32(mStreamSetInputs.size() + i)});
         tempBufPtr = kb->CreatePointerCast(tempBufPtr, mStreamSetOutputBuffers[i]->getPointerType());
         Value * finalOutputItems = kb->getProducedItemCount(mStreamSetOutputs[i].name);
         Value * copyItems = kb->CreateSub(finalOutputItems, outputBasePos[i]);

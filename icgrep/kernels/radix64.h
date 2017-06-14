@@ -18,13 +18,13 @@ namespace kernel {
     Each 3 bytes of the input abc produces a 4 byte output abcc.   
     This is a useful preparatory transformation in various radix-64 encodings. */
  
-class expand3_4Kernel final : public SegmentOrientedKernel {
+class expand3_4Kernel final : public MultiBlockKernel {
 public:   
     expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBuilder) override;
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder) override;
 };
 
 class radix64Kernel final : public BlockOrientedKernel {

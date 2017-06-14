@@ -38,7 +38,7 @@ namespace kernel {
 // The pipeline must guarantee that the doSegment method is called with the
 // a continous buffer for the full segment (number of blocks).
 
-void expand3_4Kernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder) {
 
     BasicBlock * expand2_3entry = iBuilder->GetInsertBlock();
     BasicBlock * expand_3_4_loop = iBuilder->CreateBasicBlock("expand_3_4_loop");
@@ -51,7 +51,6 @@ void expand3_4Kernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilde
     BasicBlock * step3load = iBuilder->CreateBasicBlock("step3load");
     BasicBlock * step3store = iBuilder->CreateBasicBlock("step3store");
     BasicBlock * step3store2 = iBuilder->CreateBasicBlock("step3store2");
-    BasicBlock * itemsDone = iBuilder->CreateBasicBlock("itemsDone");
     BasicBlock * expand3_4_final = iBuilder->CreateBasicBlock("expand3_4_final");
     BasicBlock * expand3_4_exit = iBuilder->CreateBasicBlock("expand3_4_exit");
     
@@ -76,29 +75,30 @@ void expand3_4Kernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilde
         expand_3_4_shuffle[j] = ConstantVector::get(Idxs);
     }
 
-    Constant * tripleBlockSize = iBuilder->getSize(3 * iBuilder->getStride());
+    Constant * tripleBlockSize = iBuilder->getSize(getKernelStride());
     Constant * packSize = iBuilder->getSize(PACK_SIZE);
     Constant * triplePackSize = iBuilder->getSize(3 * PACK_SIZE); // 3 packs per loop.
     UndefValue * undefPack = UndefValue::get(iBuilder->fwVectorType(8));
     
     const unsigned packAlign = iBuilder->getBitBlockWidth()/8;
 
-    Value * processed = iBuilder->getProcessedItemCount("sourceStream");
-    Value * available = iBuilder->getAvailableItemCount("sourceStream");
-    Value * itemsAvail = iBuilder->CreateSub(available, processed);
+    Function::arg_iterator args = mCurrentMethod->arg_begin();
     
-    //
+    /* self = */ args++;
+    Value * itemsToDo = &*(args++);
+    Value * sourceStream = &*(args++);
+    Value * expandedStream = &*(args);
+    Value * isFinal = iBuilder->CreateICmpULT(itemsToDo, tripleBlockSize);
+
     // The main loop processes 3 packs of data at a time.  For doFinal
     // processing, process all the remaining sets of 3 packs, otherwise
     // process in multiples of 3 full blocks of data.
     //
-    Value * loopDivisor = iBuilder->CreateSelect(getIsFinal(), triplePackSize, tripleBlockSize);
-    Value * excessItems = iBuilder->CreateURem(itemsAvail, loopDivisor);
-    Value * loopItemsToDo = iBuilder->CreateSub(itemsAvail, excessItems);
+    Value * excessItems = iBuilder->CreateURem(itemsToDo, triplePackSize);
+    Value * loopItemsToDo = iBuilder->CreateSub(itemsToDo, excessItems);
 
-    // A block is made up of 8 packs.  Get the pointer to the first pack (changes the type of the pointer only).
-    Value * sourcePackPtr = iBuilder->getInputStreamPackPtr("sourceStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
-    Value * outputPackPtr = iBuilder->getOutputStreamPackPtr("expandedStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
+    Value * sourcePackPtr = iBuilder->CreateBitCast(sourceStream, iBuilder->getBitBlockType()->getPointerTo());
+    Value * outputPackPtr = iBuilder->CreateBitCast(expandedStream, iBuilder->getBitBlockType()->getPointerTo());
 
     Value * hasFullLoop = iBuilder->CreateICmpUGE(loopItemsToDo, triplePackSize);
 
@@ -111,6 +111,7 @@ void expand3_4Kernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilde
     loopInput_ptr->addIncoming(sourcePackPtr, expand2_3entry);
     loopOutput_ptr->addIncoming(outputPackPtr, expand2_3entry);
     loopItemsRemain->addIncoming(loopItemsToDo, expand2_3entry);
+
 
     // Step 1 of the main loop.
     Value * pack0 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(loopInput_ptr, packAlign));
@@ -153,13 +154,8 @@ void expand3_4Kernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilde
     loopExitInput_ptr->addIncoming(loopNextInputPack, expand_3_4_loop);
     loopExitOutput_ptr->addIncoming(loopNextOutputPack, expand_3_4_loop);
 
-    // Update the processed items count based on the loopItemsToDo value.
-    processed = iBuilder->CreateAdd(processed, loopItemsToDo);
-    iBuilder->setProcessedItemCount("sourceStream", processed);
-
-
     // Except for final segment processing, we are done.
-    iBuilder->CreateCondBr(getIsFinal(), expand3_4_final, expand3_4_exit);
+    iBuilder->CreateCondBr(isFinal, expand3_4_final, expand3_4_exit);
 
     // Final segment processing.   Less than a triplePack remains.
     iBuilder->SetInsertPoint(expand3_4_final);
@@ -175,14 +171,14 @@ void expand3_4Kernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilde
     // (f) 2N+1 .. 9N/4 remaining items: do Steps 1 and 2, do Step 3 up to the first write only.
     // (g) 9N/4+1 .. 3N - 1 remaining items: do Steps 1, 2 and 3.
     Value * condition_a = iBuilder->CreateICmpEQ(excessItems, ConstantInt::getNullValue(iBuilder->getSizeTy()));
-    iBuilder->CreateCondBr(condition_a, itemsDone, finalStep1);
+    iBuilder->CreateCondBr(condition_a, expand3_4_exit, finalStep1);
     // Final Step1 processing
     iBuilder->SetInsertPoint(finalStep1);
     pack0 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(loopExitInput_ptr, packAlign));
     expand0 = iBuilder->bitCast(iBuilder->CreateShuffleVector(undefPack, pack0, expand_3_4_shuffle[0]));
     iBuilder->CreateAlignedStore(expand0, loopExitOutput_ptr, packAlign);
     Value * condition_b = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(3 * PACK_SIZE/4));
-    iBuilder->CreateCondBr(condition_b, itemsDone, finalStep2);
+    iBuilder->CreateCondBr(condition_b, expand3_4_exit, finalStep2);
     // Final Step 2 processing
     iBuilder->SetInsertPoint(finalStep2);
     Value * condition_c = iBuilder->CreateICmpULE(excessItems, packSize);
@@ -199,7 +195,7 @@ void expand3_4Kernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilde
     expand1 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack0, pack1phi, expand_3_4_shuffle[1]));
     iBuilder->CreateAlignedStore(expand1, outPack1_ptr, packAlign);
     Value * condition_d = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(6 * PACK_SIZE/4));
-    iBuilder->CreateCondBr(condition_d, itemsDone, finalStep3);
+    iBuilder->CreateCondBr(condition_d, expand3_4_exit, finalStep3);
     // Final Step 3
     iBuilder->SetInsertPoint(finalStep3);
     Value * condition_e = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(2 * PACK_SIZE));
@@ -216,21 +212,15 @@ void expand3_4Kernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilde
     expand2 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack1phi, pack2phi, expand_3_4_shuffle[2]));
     iBuilder->CreateAlignedStore(expand2, outPack2_ptr, packAlign);
     Value * condition_f = iBuilder->CreateICmpULE(excessItems, iBuilder->getSize(9 * PACK_SIZE/4));
-    iBuilder->CreateCondBr(condition_f, itemsDone, step3store2);
+    iBuilder->CreateCondBr(condition_f, expand3_4_exit, step3store2);
     iBuilder->SetInsertPoint(step3store2);
     outPack3_ptr = iBuilder->CreateGEP(loopExitOutput_ptr, iBuilder->getInt32(3));
     expand3 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack2phi, undefPack, expand_3_4_shuffle[3]));
     iBuilder->CreateAlignedStore(expand3, outPack3_ptr, packAlign);
-    iBuilder->CreateBr(itemsDone);
-    //
-    iBuilder->SetInsertPoint(itemsDone);
-    processed = iBuilder->CreateAdd(processed, excessItems);
-    iBuilder->setProcessedItemCount("sourceStream", processed);
-
-    
     iBuilder->CreateBr(expand3_4_exit);
+    //
     iBuilder->SetInsertPoint(expand3_4_exit);
-}
+    }
 
 
 // Radix 64 determination, converting 3 bytes to 4 6-bit values.
@@ -391,10 +381,11 @@ void base64Kernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder>
 }
 
 expand3_4Kernel::expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
-: SegmentOrientedKernel("expand3_4",
+: MultiBlockKernel("expand3_4",
             {Binding{iBuilder->getStreamSetTy(1, 8), "sourceStream"}},
-            {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream", FixedRatio(4,3)}},
+            {Binding{iBuilder->getStreamSetTy(1, 8), "expand34Stream", FixedRatio(4,3)}},
             {}, {}, {}) {
+    setKernelStride(3 * iBuilder->getBitBlockWidth());
 }
 
 radix64Kernel::radix64Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
