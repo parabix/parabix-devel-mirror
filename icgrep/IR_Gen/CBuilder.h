@@ -179,16 +179,16 @@ public:
 
     void CreateAssert(llvm::Value * assertion, llvm::StringRef failureMessage) {
         if (LLVM_UNLIKELY(assertion->getType()->isVectorTy())) {
-            assertion = CreateBitCast(assertion, llvm::IntegerType::get(getContext(), assertion->getType()->getPrimitiveSizeInBits()));
+            assertion = CreateBitCast(assertion, getIntNTy(assertion->getType()->getPrimitiveSizeInBits()));
         }
-        return __CreateAssert(CreateICmpNE(assertion, llvm::Constant::getNullValue(assertion->getType())), failureMessage);
+        return __CreateAssert(CreateIsNotNull(assertion), failureMessage);
     }
 
     void CreateAssertZero(llvm::Value * assertion, llvm::StringRef failureMessage) {
         if (LLVM_UNLIKELY(assertion->getType()->isVectorTy())) {
-            assertion = CreateBitCast(assertion, llvm::IntegerType::get(getContext(), assertion->getType()->getPrimitiveSizeInBits()));
+            assertion = CreateBitCast(assertion, getIntNTy(assertion->getType()->getPrimitiveSizeInBits()));
         }
-        return __CreateAssert(CreateICmpEQ(assertion, llvm::Constant::getNullValue(assertion->getType())), failureMessage);
+        return __CreateAssert(CreateIsNull(assertion), failureMessage);
     }
 
     void CreateExit(const int exitCode);

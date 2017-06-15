@@ -17,7 +17,7 @@ enum PabloDebugFlags {
 };
 
 enum PabloCompilationFlags {
-    DisableSimplification, DisableCodeMotion, EnableDistribution
+    DisableSimplification, DisableCodeMotion, EnableDistribution, EnableSchedulingPrePass
 };
     
 const llvm::cl::OptionCategory * pablo_toolchain_flags();

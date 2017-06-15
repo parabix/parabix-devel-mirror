@@ -9,6 +9,7 @@ set (icgrep_VERSION_MINOR 6)
 
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
+option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
 find_package(LLVM REQUIRED CONFIG)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in: ${LLVM_DIR}")
@@ -57,23 +58,29 @@ link_directories(${Boost_LIBRARY_DIR})
 
 SET(OBJECT_CACHE_SRC toolchain/object_cache.cpp)
 
-SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/pipeline.cpp toolchain/driver.cpp)
+SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/pipeline.cpp)
 
-SET(DRIVER_SRC toolchain/cpudriver.cpp toolchain/NVPTXDriver.cpp)
+SET(DRIVER_SRC toolchain/driver.cpp toolchain/cpudriver.cpp toolchain/NVPTXDriver.cpp)
 
 SET(KERNEL_SRC kernels/kernel.cpp kernels/streamset.cpp kernels/interface.cpp kernels/kernel_builder.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp)
 
-SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp IR_Gen/idisa_nvptx_builder.cpp IR_Gen/idisa_target.cpp)
+SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp IR_Gen/idisa_nvptx_builder.cpp)
+SET(IDISA_SRC ${IDISA_SRC} IR_Gen/idisa_target.cpp)
 
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/branch.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp)
-SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_kernel.cpp pablo/pablo_compiler.cpp pablo/carry_manager.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_kernel.cpp pablo/pablo_compiler.cpp)
+IF (CARRYPACK_MANAGER)
+SET(PABLO_SRC ${PABLO_SRC} pablo/carrypack_manager.cpp)
+ELSE()
+SET(PABLO_SRC ${PABLO_SRC} pablo/carry_manager.cpp)
+ENDIF()
 SET(PABLO_SRC ${PABLO_SRC} pablo/analysis/pabloverifier.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/passes/ssapass.cpp)
-SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp pablo/optimizers/distributivepass.cpp pablo/passes/flattenif.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_simplifier.cpp pablo/optimizers/codemotionpass.cpp pablo/optimizers/distributivepass.cpp pablo/optimizers/schedulingprepass.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/passes/flattenif.cpp)
 IF(ENABLE_MULTIPLEXING)
-SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/booleanreassociationpass.cpp)
-SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/schedulingprepass.cpp pablo/optimizers/pablo_automultiplexing.cpp)
+SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 
 add_library(CodeGen ${TOOLCHAIN_SRC} ${DRIVER_SRC} ${OBJECT_CACHE_SRC} ${KERNEL_SRC} ${IDISA_SRC})
@@ -177,6 +184,10 @@ ELSE()
        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_EXECINFO")
     ENDIF()
   ENDIF()
+ENDIF()
+
+IF (CARRYPACK_MANAGER)
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_CARRYPACK_MANAGER")
 ENDIF()
 
 SET(CMAKE_REQUIRED_FLAGS)

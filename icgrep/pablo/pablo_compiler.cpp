@@ -23,7 +23,11 @@
 #include <pablo/pe_ones.h>
 #include <pablo/pe_var.h>
 #include <pablo/ps_assign.h>
+#ifdef USE_CARRYPACK_MANAGER
+#include <pablo/carrypack_manager.h>
+#else
 #include <pablo/carry_manager.h>
+#endif
 #include <kernels/kernel_builder.h>
 #include <kernels/streamset.h>
 #include <llvm/IR/Module.h>

@@ -890,10 +890,11 @@ private:
 bool DistributivePass::optimize(PabloKernel * const kernel) {
     #ifdef NDEBUG
     report_fatal_error("DistributivePass is unsupported");
-    #endif
+    #else
     PassContainer C;
     C.run(kernel);
     return true;
+    #endif
 }
 
 }

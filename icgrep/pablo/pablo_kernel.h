@@ -29,6 +29,7 @@ class PabloKernel : public kernel::BlockOrientedKernel, public PabloAST {
     friend class PabloCompiler;
     friend class PabloBlock;
     friend class CarryManager;
+    friend class CarryPackManager;
 
 public:
 

@@ -154,11 +154,13 @@ void ParabixDriver::finalizeObject() {
     if (IN_DEBUG_MODE || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
         PM.add(createVerifierPass());
     }
-    PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
-    PM.add(createReassociatePass());             //Reassociate expressions.
-    PM.add(createGVNPass());                     //Eliminate common subexpressions.
-    PM.add(createInstructionCombiningPass());    //Simple peephole optimizations and bit-twiddling.
-    PM.add(createCFGSimplificationPass());
+    PM.add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
+    PM.add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
+    PM.add(createEarlyCSEPass());                   // Simple common subexpression elimination pass
+    PM.add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.
+    PM.add(createReassociatePass());                // Canonicalizes commutative expressions
+    PM.add(createGVNPass());                        // Global value numbering redundant expression elimination pass
+    PM.add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
         if (LLVM_LIKELY(IROutputStream == nullptr)) {

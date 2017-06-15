@@ -259,3 +259,5 @@ utf8_encoder.cpp
 utf8_encoder.h
 wc.cpp
 CMakeLists.txt
+pablo/carrypack_manager.cpp
+pablo/carrypack_manager.h

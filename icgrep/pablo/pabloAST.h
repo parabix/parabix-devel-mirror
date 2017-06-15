@@ -168,7 +168,15 @@ bool equals(const PabloAST * const expr1, const PabloAST * const expr2);
 
 bool dominates(const PabloAST * const expr1, const PabloAST * const expr2);
 
+inline bool strictly_dominates(const PabloAST * const expr1, const PabloAST * const expr2) {
+    return (expr1 != expr2) && dominates(expr1, expr2);
+}
+
 bool postdominates(const PabloAST * const expr1, const PabloAST * const expr2);
+
+inline bool strictly_postdominates(const PabloAST * const expr1, const PabloAST * const expr2) {
+    return (expr1 != expr2) && postdominates(expr1, expr2);
+}
 
 class StatementList;
 
@@ -313,32 +321,44 @@ public:
         mCarryGroup = carryGroup;
     }
 
+    unsigned getCarryWidth() const {
+        return mCarryWidth;
+    }
+
+    void setCarryWidth(const unsigned carryWidth) {
+        mCarryWidth = carryWidth;
+    }
+
     virtual ~CarryProducingStatement() = default;
 
 protected:
 
     explicit CarryProducingStatement(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
     : Statement(id, type, operands, name, allocator)
-    , mCarryGroup(0) {
+    , mCarryGroup(0)
+    , mCarryWidth(0) {
 
     }
 
     explicit CarryProducingStatement(const ClassTypeId id, llvm::Type * const type, const unsigned reserved, const String * name, Allocator & allocator)
     : Statement(id, type, reserved, name, allocator)
-    , mCarryGroup(0) {
+    , mCarryGroup(0)
+    , mCarryWidth(0) {
 
     }
 
     template<typename iterator>
     explicit CarryProducingStatement(const ClassTypeId id, llvm::Type * const type, iterator begin, iterator end, const String * name, Allocator & allocator)
     : Statement(id, type, begin, end, name, allocator)
-    , mCarryGroup(0) {
+    , mCarryGroup(0)
+    , mCarryWidth(0) {
 
     }
 
 private:
 
     unsigned mCarryGroup;
+    unsigned mCarryWidth;
 };
 
 

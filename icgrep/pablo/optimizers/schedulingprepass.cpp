@@ -1,129 +1,145 @@
 #include "schedulingprepass.h"
+
+#include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
-#include <boost/circular_buffer.hpp>
-#include <boost/container/flat_set.hpp>
-#include <boost/container/flat_map.hpp>
+#include <pablo/ps_assign.h>
+#include <pablo/pe_var.h>
+#include <pablo/branch.h>
 #ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
+#include <boost/container/flat_set.hpp>
 #include <boost/graph/adjacency_list.hpp>
-#include <unordered_map>
+#include <random>
 
-#include <pablo/printer_pablos.h>
-#include <iostream>
 
+#include <llvm/Support/raw_ostream.h>
+
+
+
+
+using namespace llvm;
 using namespace boost;
 using namespace boost::container;
 
 namespace pablo {
 
-using DependencyGraph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS, std::vector<PabloAST *>>;
-using Vertex = DependencyGraph::vertex_descriptor;
+using IndexPair = std::pair<unsigned, Statement *>;
+using Graph = boost::adjacency_list<boost::hash_setS, boost::vecS, boost::bidirectionalS>;
+using Vertex = Graph::vertex_descriptor;
 using Map = std::unordered_map<const PabloAST *, Vertex>;
-using ReadyPair = std::pair<unsigned, Vertex>;
-using ReadySet = std::vector<ReadyPair>;
+using ReadyPair = std::pair<Vertex, size_t>;
 
-using weight_t = unsigned;
-using TypeId = PabloAST::ClassTypeId;
-using LiveSet = flat_set<Vertex>;
+struct SchedulingPrePassContainer {
 
-void schedule(PabloBlock * const block);
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief printGraph
- ** ------------------------------------------------------------------------------------------------------------- */
-template <typename DependencyGraph>
-static void printGraph(const DependencyGraph & G, const std::vector<unsigned> & ordering, const std::string name, raw_ostream & out) {
-    out << "*******************************************\n";
-    out << "digraph " << name << " {\n";
-    for (auto u : make_iterator_range(vertices(G))) {
-        if (G[u].empty()) {
-            continue;
-        }
-        out << "v" << u << " [label=\"" << ordering[u] << " : ";
-        bool newLine = false;
-        for (PabloAST * expr : G[u]) {
-            if (newLine) {
-                out << '\n';
+    void run(PabloBlock * const block) {
+        // traverse to the inner-most branch first
+        for (Statement * stmt : *block) {
+            if (isa<Branch>(stmt)) {
+                run(cast<Branch>(stmt)->getBody());
             }
-            newLine = true;
-            if (isa<Statement>(expr)) {
-                PabloPrinter::print(cast<Statement>(expr), out);
+        }
+        // starting with the inner-most scope(s) first, attempt to schedule the statements to
+        // minimize the number of simulaneously live variables.
+        schedule(block);
+    }
+
+protected:
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief schedule
+     ** ------------------------------------------------------------------------------------------------------------- */
+    void schedule(PabloBlock * const block) {
+        build_data_dependency_dag(block);
+        initialize_process();
+        initialize_probabilities();
+
+        unsigned count = 0;
+        std::vector<size_t> W;
+        W.reserve(num_vertices(G));
+        for (;;) {
+            ready_sort();
+            const auto u = choose_ready(++count);
+            queue_to_ready(u);
+            if (LLVM_UNLIKELY(R.empty())) {
+                break;
+            }
+            update_liveness(u);
+            W.push_back(get_live_weight());
+        }
+
+        const auto m = W.size() / 2;
+        std::nth_element(W.begin(), W.begin() + m, W.end());
+
+        errs() << "median_live_weight: " << W[m] << "\n";
+
+
+
+//        std::sort(I.begin(), I.end(), [](const IndexPair & A, const IndexPair & B){
+//            return std::get<0>(A) < std::get<0>(B);
+//        });
+
+//        block->setInsertPoint(nullptr);
+//        for (const auto & p : I) {
+//            Statement * stmt = std::get<1>(p);
+//            assert (std::get<0>(p) > 0);
+//            assert (stmt->getParent() == block);
+//            block->insert(stmt);
+//        }
+//        assert (block->getInsertPoint() == block->back());
+
+        I.clear();
+        G.clear();
+        L.clear();
+    }
+
+    void build_data_dependency_dag(PabloBlock * const block) {
+        assert (M.empty());
+        for (Statement * stmt : *block) {
+            const auto u = find(stmt);
+            if (isa<Assign>(stmt)) {
+                addDominatedUsers(u, cast<Assign>(stmt), block);
+            } else if (isa<Branch>(stmt)) {
+                addEscapedUsers(u, cast<Branch>(stmt), block);
             } else {
-                PabloPrinter::print(expr, out);
+                addUsers(u, stmt, block);
             }
         }
-        out << "\"];\n";
-    }
-    for (auto e : make_iterator_range(edges(G))) {
-        out << "v" << source(e, G) << " -> v" << target(e, G);
-        out << ";\n";
+        M.clear();
     }
 
-    out << "}\n\n";
-    out.flush();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief resolveNestedUsages
- ** ------------------------------------------------------------------------------------------------------------- */
-static void resolveNestedUsages(Statement * const root, PabloAST * const expr, DependencyGraph & G, Map & M, PabloBlock * const block) {
-    for (PabloAST * use : expr->users()) {
-        if (LLVM_LIKELY(isa<Statement>(use))) {
-            const PabloBlock * scope = cast<Statement>(use)->getParent();
-            if (scope != block) {
-                for (PabloBlock * prior = scope->getPredecessor(); prior; scope = prior, prior = prior->getPredecessor()) {
-                    if (prior == block) {
-                        assert (scope->getBranch());
-                        auto v = M.find(scope->getBranch());
-                        assert (v != M.end());
-                        auto u = M.find(root);
-                        assert (u != M.end());
-                        if (u->second != v->second) {
-                            add_edge(u->second, v->second, G);
-                        }
-                        break;
-                    }
+    void addUsers(const Vertex u, Statement * const stmt, PabloBlock * const block) {
+        for (PabloAST * use : stmt->users()) {
+            if (LLVM_LIKELY(isa<Statement>(use))) {
+                Statement * user = cast<Statement>(use);
+                while (user->getParent() != block) {
+                    PabloBlock * const parent = user->getParent();
+                    assert (parent);
+                    user = parent->getBranch();
+                    assert (user);
                 }
+                assert (strictly_dominates(stmt, user));
+                add_edge(u, find(user), G);
             }
         }
     }
-}
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief resolveNestedUsages
- ** ------------------------------------------------------------------------------------------------------------- */
-static void computeDependencyGraph(DependencyGraph & G, PabloBlock * const block) {
-    Map M;
-    // Construct a use-def graph G representing the current scope block
-    for (Statement * stmt : *block) {
-        if (LLVM_UNLIKELY(isa<If>(stmt) || isa<While>(stmt))) {
-            schedule(isa<If>(stmt) ? cast<If>(stmt)->getBody() : cast<While>(stmt)->getBody());
-        }
-        const auto u = add_vertex({stmt}, G);
-        M.insert(std::make_pair(stmt, u));
-        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-            const PabloAST * const op = stmt->getOperand(i);
-            if (LLVM_LIKELY(isa<Statement>(op))) {
-                const PabloBlock * scope = cast<Statement>(op)->getParent();
-                // Was this instruction computed by this block?
-                if (scope == block) {
-                    auto v = M.find(op);
-                    assert (v != M.end());
-                    assert (v->second != u);
-                    add_edge(v->second, u, G);
-                } else if (isa<Assign>(op)) {
-                    // if this statement isn't an Assign or Next node, it cannot come from a nested scope
-                    // unless the function is invalid.
-                    for (PabloBlock * prior = scope->getPredecessor(); prior; scope = prior, prior = prior->getPredecessor()) {
-                        // Was this instruction computed by a nested block?
-                        if (prior == block) {
-                            assert (scope->getBranch());
-                            auto v = M.find(scope->getBranch());
-                            assert (v != M.end());
-                            if (v->second != u) {
-                                add_edge(v->second, u, G);
+    void addEscapedUsers(const Vertex u, Branch * const br, PabloBlock * const block) {
+        for (Var * var : br->getEscaped()) {
+            for (PabloAST * use : var->users()) {
+                if (LLVM_LIKELY(isa<Statement>(use))) {
+                    Statement * user = cast<Statement>(use);
+                    for (;;) {
+                        if (user->getParent() == block) {
+                            if (LLVM_LIKELY(isa<Assign>(user) ? dominates(br, user) : (br != user))) {
+                                add_edge(u, find(user), G);
                             }
+                            break;
+                        }
+                        PabloBlock * const parent = user->getParent();
+                        assert (parent);
+                        user = parent->getBranch();
+                        if (LLVM_UNLIKELY(user == nullptr)) {
                             break;
                         }
                     }
@@ -131,179 +147,239 @@ static void computeDependencyGraph(DependencyGraph & G, PabloBlock * const block
             }
         }
     }
-    // Do a second pass to ensure that we've accounted for any nested usage of an If or While statement
-    for (Statement * stmt : *block) {
-        if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
-            for (Var * var : cast<Branch>(stmt)->getEscaped()) {
-                resolveNestedUsages(stmt, var, G, M, block);
-            }
-        } else {
-            resolveNestedUsages(stmt, stmt, G, M, block);
-        }
-    }
-    // Contract the graph
-    for (;;) {
-        bool done = true;
-        for (const Vertex u : make_iterator_range(vertices(G))) {
-            if (out_degree(u, G) == 1) {
-                const Vertex v = target(*(out_edges(u, G).first), G);
-                G[v].insert(G[v].begin(), G[u].begin(), G[u].end());
-                for (auto e : make_iterator_range(in_edges(u, G))) {
-                    add_edge(source(e, G), v, G);
-                }
-                G[u].clear();
-                clear_vertex(u, G);
-                done = false;
-            }
-        }
-        if (done) {
-            break;
-        }
-    }
 
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief computeGraphOrdering
- ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<weight_t> computeGraphOrdering(const DependencyGraph & G) {
-    // Determine the bottom-up ordering of G
-    std::vector<weight_t> ordering(num_vertices(G));
-    circular_buffer<Vertex> Q(num_vertices(G));
-    for (const Vertex u : make_iterator_range(vertices(G))) {
-        if (out_degree(u, G) == 0 && G[u].size() > 0) {
-            ordering[u] = 1;
-            Q.push_back(u);
-        }
-    }
-    while (!Q.empty()) {
-        const Vertex u = Q.front();
-        Q.pop_front();
-        assert (ordering[u] > 0);
-        for (const auto ei : make_iterator_range(in_edges(u, G))) {
-            const Vertex v = source(ei, G);
-            if (ordering[v] == 0) {
-                weight_t weight = 0;
-                bool ready = true;
-                for (const auto ej : make_iterator_range(out_edges(v, G))) {
-                    const Vertex w = target(ej, G);
-                    const weight_t t = ordering[w];
-                    if (t == 0) {
-                        ready = false;
+    void addDominatedUsers(const Vertex u, Assign * const assignment, PabloBlock * const block) {
+        for (PabloAST * use : assignment->getVariable()->users()) {
+            if (LLVM_LIKELY(isa<Statement>(use))) {
+                Statement * user = cast<Statement>(use);
+                for (;;) {
+                    if (user->getParent() == block) {
+                        if (user != assignment) {
+                            const auto v = find(user);
+                            if (strictly_dominates(assignment, user)) {
+                                add_edge(u, v, G);
+                            } else {
+                                assert (strictly_dominates(user, assignment));
+                                // although there is not actually a dependency here, a prior value
+                                // must be read by statement v prior to assignment u
+                                add_edge(v, u, G);
+                            }
+                        }
                         break;
                     }
-                    weight = std::max(weight, t);
-                }
-                if (ready) {
-                    assert (weight < std::numeric_limits<unsigned>::max());
-                    assert (weight > 0);
-                    ordering[v] = weight + 1;
-                    Q.push_back(v);
+                    PabloBlock * const parent = user->getParent();
+                    assert (parent);
+                    user = parent->getBranch();
+                    if (LLVM_UNLIKELY(user == nullptr)) {
+                        break;
+                    }
                 }
             }
         }
     }
-    return ordering;
-}
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief schedule
- ** ------------------------------------------------------------------------------------------------------------- */
-void schedule(PabloBlock * const block) {
-    DependencyGraph G;
-    computeDependencyGraph(G, block);
-    std::vector<weight_t> ordering = computeGraphOrdering(G);
+    void printGraph(const std::string name, raw_ostream & out) {
+        out << "\ndigraph " << name << " {\n";
+        for (auto u : make_iterator_range(vertices(G))) {
+            out << "v" << u << " [label=\"" << u << " : ";
+            std::get<1>(I[u])->print(out);
+            out << "  " << std::get<0>(I[u]) << "\"];\n";
+        }
+        for (auto e : make_iterator_range(edges(G))) {
+            out << "v" << source(e, G) << " -> v" << target(e, G) << ";\n";
+        }
+        out << "}\n\n";
+        out.flush();
+    }
 
-//    raw_os_ostream out(std::cerr);
-//    printGraph(G, ordering, "G", out);
+    void initialize_process() {
+        assert ("Ready set was not cleared prior to initializing!" && R.empty());
+        std::vector<Vertex> Q;
+        Q.reserve(64);
+        for (auto u : make_iterator_range(vertices(G))) {
+            if (out_degree(u, G) == 0) {
+                Q.push_back(u);
+            } else if (in_degree(u, G) == 0) {
+                R.push_back(u);
+            }
+        }
 
-    // Compute the initial ready set
-    ReadySet readySet;
-    for (const Vertex u : make_iterator_range(vertices(G))) {
-        if (in_degree(u, G) == 0 && G[u].size() > 0) {
-            readySet.emplace_back(ordering[u], u);
+        // perform a transitive reduction of G to remove the unnecessary dependency analysis work
+        // within the genetic algorithm search process
+
+        const auto n = num_vertices(G);
+
+        std::vector<flat_set<Vertex>> reachability(n);
+        flat_set<Vertex> pending;
+
+        for (;;) {
+            const auto u = Q.back();
+            Q.pop_back();
+
+            flat_set<Vertex> & D = reachability[u];
+
+            assert (D.empty());
+
+            // initially we do not immediately consider any adjacent vertices reachable
+            for (auto e : make_iterator_range(out_edges(u, G))) {
+                const auto v = target(e, G);
+                const auto & R = reachability[v];
+                assert (R.count(v) == 0);
+                D.insert(R.begin(), R.end());
+            }
+
+            // so that if one of our outgoing targets is already reachable, we can remove it.
+            remove_out_edge_if(u, [&D, this](Graph::edge_descriptor e) {
+
+                // TODO: if we remove this edge, add the liveness weight of statement u to the
+                // target since the "liveness" of u is transitively implied.
+
+                return D.count(target(e, G)) != 0;
+            }, G);
+
+            // afterwards we insert any remaining outgoing targets to finalize our reachable set
+            for (auto e : make_iterator_range(out_edges(u, G))) {
+                D.insert(target(e, G));
+            }
+
+            // add any incoming source to our pending set
+            for (auto e : make_iterator_range(in_edges(u, G))) {
+                pending.insert(source(e, G));
+            }
+
+            // so that when we exhaust the queue, we can repopulate it with the next 'layer' of the graph
+            if (LLVM_UNLIKELY(Q.empty())) {
+                if (LLVM_UNLIKELY(pending.empty())) {
+                    break;
+                }
+                for (auto v : pending) {
+                    bool ready = true;
+                    for (auto e : make_iterator_range(out_edges(v, G))) {
+                        const auto w = target(e, G);
+                        if (LLVM_UNLIKELY(out_degree(w, G) != 0 && reachability[w].empty())) {
+                            ready = false;
+                            break;
+                        }
+                    }
+                    if (ready) {
+                        Q.push_back(v);
+                    }
+                }
+                pending.clear();
+                assert (!Q.empty());
+            }
+
         }
     }
 
-    struct {
-        bool operator()(const ReadyPair a, const ReadyPair b) {
-            return std::get<0>(a) > std::get<0>(b);
-        }
-    } readyComparator;
+    void initialize_probabilities() {
+        std::random_device rd;
+        std::default_random_engine rand(rd());
+        std::uniform_int_distribution<size_t> dist(std::numeric_limits<size_t>::min(), std::numeric_limits<size_t>::max());
+        const auto n = num_vertices(G);
+        P.resize(n);
+        std::generate_n(P.begin(), n, [&dist, &rand](){ return dist(rand); });
+    }
 
-    std::sort(readySet.begin(), readySet.end(), readyComparator);
+    void ready_sort() {
+        std::sort(R.begin(), R.end(), [this](const Vertex u, const Vertex v){ return P[u] < P[v]; });
+    }
 
-    block->setInsertPoint(nullptr);
+    Vertex choose_ready(const unsigned index) {
+        assert (!R.empty());
+        const auto u = R.back();
+        assert (std::get<0>(I[u]) == 0);
+        std::get<0>(I[u]) = index;
+        R.pop_back();
+        return u;
+    }
 
-    // Rewrite the AST
-    while (!readySet.empty()) {
-        DependencyGraph::degree_size_type killed = 0;
-        auto chosen = readySet.begin();
-        for (auto ri = readySet.begin(); ri != readySet.end(); ++ri) {
-            DependencyGraph::degree_size_type kills = 0;
-            for (auto e : make_iterator_range(in_edges(ri->first, G))) {
-                if (out_degree(source(e, G), G) == 1) {
-                    ++kills;
+    void update_liveness(const Vertex u) {
+        // determine which statements were killed (i.e., u was its last unscheduled user) or
+        // killable (i.e., u is the penultimate unscheduled user)
+        for (auto ei : make_iterator_range(in_edges(u, G))) {
+            const auto v = source(ei, G);
+            const auto f = L.find(v);
+            if (f != L.end()) {
+                bool killed = true;
+                for (auto ej : make_iterator_range(out_edges(v, G))) {
+                    if (std::get<0>(I[target(ej, G)]) == 0) {
+                        killed = false;
+                        break;
+                    }
+                }
+                if (killed) {
+                    L.erase(f);
                 }
             }
-            if (kills > killed) {
-                chosen = ri;
-                killed = kills;
-            }
         }
+        L.insert_unique(u);
+    }
 
-        Vertex u; unsigned weight;
-        std::tie(weight, u) = *chosen;
-        readySet.erase(chosen);
-        clear_in_edges(u, G);
+    size_t get_live_weight() {
+        return L.size();
+    }
 
-        assert ("Error: SchedulingPrePass is attempting to reschedule a statement!" && (weight > 0));
-
-        // insert the statement then mark it as written ...
-        for (PabloAST * expr : G[u]) {
-            block->insert(cast<Statement>(expr));
-        }
-
-        ordering[u] = 0;
-        // Now check whether any new instructions are ready
+    void queue_to_ready(const Vertex u) {
+        // determine which statements are now ready (i.e., u was its last unscheduled input)
         for (auto ei : make_iterator_range(out_edges(u, G))) {
-            bool ready = true;
             const auto v = target(ei, G);
+            bool ready = true;
             for (auto ej : make_iterator_range(in_edges(v, G))) {
-                if (ordering[source(ej, G)]) {
+                if (std::get<0>(I[source(ej, G)]) == 0) {
                     ready = false;
                     break;
                 }
             }
             if (ready) {
-                auto entry = std::make_pair(ordering[v], v);
-                auto position = std::lower_bound(readySet.begin(), readySet.end(), entry, readyComparator);
-                readySet.insert(position, entry);
-                assert (std::is_sorted(readySet.cbegin(), readySet.cend(), readyComparator));
+                R.push_back(v);
             }
         }
     }
 
-}
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief schedule
- ** ------------------------------------------------------------------------------------------------------------- */
-void schedule(PabloFunction & function) {
-    schedule(function.getEntryBlock());
-}
+
+private:
+
+    Vertex find(Statement * expr) {
+        const auto f = M.find(expr);
+        if (f == M.end()) {
+            const auto u = add_vertex(G);
+            assert (u == I.size());
+            I.emplace_back(0, expr);
+            M.emplace(expr, u);
+            return u;
+        } else {
+            return f->second;
+        }
+    }
+
+private:
+
+    std::vector<Vertex> R;      // ready
+    flat_set<Vertex> L;         // live variables
+    std::vector<IndexPair> I;   // index
+    std::vector<size_t> P;
+
+    Graph G;
+    Map M;
+};
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
-bool SchedulingPrePass::optimize(PabloFunction & function) {
-    schedule(function);
+bool SchedulingPrePass::optimize(PabloKernel * const kernel) {
+//    #ifdef NDEBUG
+//    report_fatal_error("DistributivePass is unsupported");
+//    #else
+    SchedulingPrePassContainer S;
+    S.run(kernel->getEntryBlock());
     #ifndef NDEBUG
-    PabloVerifier::verify(function, "post-scheduling-prepass");
+    PabloVerifier::verify(kernel, "post-scheduling-prepass");
     #endif
     return true;
-
+//    #endif
 }
 
 

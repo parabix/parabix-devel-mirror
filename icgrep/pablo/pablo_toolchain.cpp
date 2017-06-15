@@ -9,6 +9,7 @@
 #include <pablo/optimizers/pablo_simplifier.hpp>
 #include <pablo/optimizers/codemotionpass.h>
 #include <pablo/optimizers/distributivepass.h>
+#include <pablo/optimizers/schedulingprepass.h>
 #include <pablo/passes/flattenif.hpp>
 #include <pablo/analysis/pabloverifier.hpp>
 #include <pablo/printer_pablos.h>
@@ -39,7 +40,9 @@ static cl::opt<bool> Flatten("flatten-if", cl::init(false), cl::desc("Flatten al
 static cl::bits<PabloCompilationFlags> 
     PabloOptimizationsOptions(cl::values(clEnumVal(DisableSimplification, "Disable Pablo Simplification pass (not recommended)"),
                                          clEnumVal(DisableCodeMotion, "Moves statements into the innermost legal If-scope and moves invariants out of While-loops."),
-                                         clEnumVal(EnableDistribution, "apply distribution law optimization."),
+                                         clEnumVal(EnableDistribution, "Apply distribution law optimization."),
+
+                                         clEnumVal(EnableSchedulingPrePass, "Pablo Statement Scheduling Pre-Pass"),
                                          clEnumValEnd), cl::cat(PabloOptions));
 
 bool DebugOptionIsSet(PabloDebugFlags flag) {return DebugOptions.isSet(flag);}
@@ -69,6 +72,9 @@ void pablo_function_passes(PabloKernel * kernel) {
     }
     if (PabloOptimizationsOptions.isSet(EnableDistribution)) {
         DistributivePass::optimize(kernel);
+    }
+    if (PabloOptimizationsOptions.isSet(EnableSchedulingPrePass)) {
+        SchedulingPrePass::optimize(kernel);
     }
     if (DebugOptions.isSet(ShowOptimizedPablo)) {
         if (PabloOutputFilename.empty()) {

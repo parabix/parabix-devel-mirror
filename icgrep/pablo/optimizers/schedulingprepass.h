@@ -3,13 +3,11 @@
 
 namespace pablo {
 
-class PabloFunction;
+class PabloKernel;
 
 class SchedulingPrePass {
 public:
-    static bool optimize(PabloFunction & function);
-protected:
-    SchedulingPrePass() = default;
+    static bool optimize(PabloKernel * kernel);
 };
 
 }
