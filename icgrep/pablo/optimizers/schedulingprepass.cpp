@@ -11,7 +11,7 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <random>
-
+#include <unordered_map>
 
 #include <llvm/Support/raw_ostream.h>
 
@@ -313,7 +313,7 @@ protected:
                 }
             }
         }
-        L.insert_unique(u);
+        L.insert(u);
     }
 
     size_t get_live_weight() {
@@ -370,16 +370,14 @@ private:
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool SchedulingPrePass::optimize(PabloKernel * const kernel) {
-//    #ifdef NDEBUG
-//    report_fatal_error("DistributivePass is unsupported");
-//    #else
+    #ifdef NDEBUG
+    report_fatal_error("DistributivePass is unsupported");
+    #else
     SchedulingPrePassContainer S;
     S.run(kernel->getEntryBlock());
-    #ifndef NDEBUG
     PabloVerifier::verify(kernel, "post-scheduling-prepass");
-    #endif
     return true;
-//    #endif
+    #endif
 }
 
 
