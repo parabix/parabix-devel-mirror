@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -7,6 +7,8 @@
 #include "re_rep.h"
 #include "re_assertion.h"
 #include "re_seq.h"
+#include "re_alt.h"
+#include "re_nullable.h"
 #include <llvm/Support/Casting.h>
 
 using namespace llvm;
@@ -21,20 +23,43 @@ inline int ubCombine(const int h1, const int h2) {
         return h1 * h2;
     }
 }
-
-RE * makeRep(RE * re, const int lb, const int ub) {
+    
+RE * makeRep(RE * re, int lb, const int ub) {
+    if (RE_Nullable::isNullable(re)) {
+        if (ub == 1) {
+            return re;
+        }
+        lb = 0;
+    }
     if (Rep * rep = dyn_cast<Rep>(re)) {
-        if (rep->getUB() == Rep::UNBOUNDED_REP && ((lb > 0) || (rep->getLB() <= 1))) {
-            return new Rep(rep->getRE(), rep->getLB() * lb, Rep::UNBOUNDED_REP);
+        int l = rep->getLB();
+        int u = rep->getUB();
+        if (u == Rep::UNBOUNDED_REP) {
+            if (l == 0) {
+                /*  R{0,}{lb, ub} = R{0,} */
+                return rep;
+            } else if (l == 1) {
+                /*  R{1,}{lb, ub} = R{lb,} */
+                return new Rep(rep->getRE(), lb, Rep::UNBOUNDED_REP);
+            } else if (lb == 0) {
+                /*  R{l,}{0, ub} = R{l,}? */
+                return new Rep(rep, 0, 1);
+            } else {
+                /* R{l,}{lb, ub} = R{l * lb,} */
+                return new Rep(rep->getRE(), l * lb, Rep::UNBOUNDED_REP);
+            }
         }
-        else if ((rep->getUB() == Rep::UNBOUNDED_REP) && (lb == 0)) {
-            return new Rep(rep, 0, 1);
-        }
-        else if (lb == ub) {
-            return new Rep(rep->getRE(), lb * rep->getLB(), ub * rep->getUB());
-        }
-        else if ((rep->getUB() * lb) >= (rep->getLB() * (lb + 1) - 1)) {
-            return new Rep(rep->getRE(), rep->getUB() * lb, ubCombine(rep->getUB(), ub));
+        else if (u > l) {
+            // Calculate the smallest number of repetitions n such that n * u + 1 >= (n + 1) * l
+            int n = (u - 2)/(u-l);
+            if (lb >= n) {
+                return new Rep(rep->getRE(), l * lb, ubCombine(u, ub));
+            }
+            if ((ub == Rep::UNBOUNDED_REP) || (ub >= n)) {
+                RE * r1 = new Rep(rep->getRE(), n * l, ubCombine(u, ub));
+                RE * r2 = new Rep(rep, lb, n - 1);
+                return makeAlt({r1, r2});
+            }
         }
     }
     else if (isa<Assertion>(re)) {

@@ -475,6 +475,8 @@ abcdefghijklmno</datafile>
 <grepcase regexp="[a-z]{5,15}" datafile="bounded_charclass" grepcount="22"/>
 <grepcase regexp="=[a-z]{7,}" datafile="bounded_charclass" grepcount="20"/>
 <grepcase regexp="=[a-z]{5,15};" datafile="bounded_charclass" grepcount="11"/>
+<grepcase regexp="=(?:[a-z]{3,5}){2,};" datafile="bounded_charclass" grepcount="21"/>
+<grepcase regexp="=(?:[a-z]{4,5}){2,};" datafile="bounded_charclass" grepcount="18"/>
 <grepcase regexp="(([wxy]{2}){3}){2}" datafile="bounded_charclass" grepcount="3"/>
 <grepcase regexp="(([wxy]{2}?){3}?){2}?" datafile="bounded_charclass" grepcount="3"/>
 <grepcase regexp="=([a-z][c-z])*;" datafile="bounded_charclass" grepcount="12"/>
