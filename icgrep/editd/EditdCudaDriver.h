@@ -50,7 +50,7 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
 
   checkCudaErrors(cuCtxCreate(&context, 0, device));
   checkCudaErrors(cuModuleLoadDataEx(&cudaModule, ptx_str.c_str(), 0, 0, 0));
-  checkCudaErrors(cuModuleGetFunction(&function, cudaModule, "GPU_Main"));
+  checkCudaErrors(cuModuleGetFunction(&function, cudaModule, "Main"));
 
   CUfunction  mergefunction;
   CUmodule    mergeModule;
@@ -63,7 +63,7 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
   std::string mergePTX((std::istreambuf_iterator<char>(f_merge)), std::istreambuf_iterator<char>());
 
   checkCudaErrors(cuModuleLoadDataEx(&mergeModule, mergePTX.c_str(), 0, 0, 0));
-  checkCudaErrors(cuModuleGetFunction(&mergefunction, mergeModule, "mergeResult"));
+  checkCudaErrors(cuModuleGetFunction(&mergefunction, mergeModule, "Main"));
 
 
   // Device data
@@ -79,6 +79,7 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
   int outputSize = sizeof(ulong) * GROUPTHREADS * strides * (dist + 1) * GROUPBLOCKS;
 
   checkCudaErrors(cuMemAlloc(&devBufferInput, bufferSize));
+  // checkCudaErrors(cuMemsetD8(devBufferInput, 0, bufferSize));
   checkCudaErrors(cuMemAlloc(&devInputSize, sizeof(ulong)));
   checkCudaErrors(cuMemAlloc(&devPatterns, patternLen));
   checkCudaErrors(cuMemAlloc(&devBufferOutput, outputSize));

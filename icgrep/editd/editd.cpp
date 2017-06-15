@@ -27,6 +27,7 @@
 #include <fcntl.h>
 #include <mutex>
 #ifdef CUDA_ENABLED
+#include <toolchain/NVPTXDriver.h>
 #include <editd/EditdCudaDriver.h>
 #include <editd/editd_gpu_kernel.h>
 #endif
@@ -52,7 +53,6 @@ using namespace kernel;
 using namespace pablo;
 using namespace parabix;
 
-const static std::string IRFilename = "editd.ll";
 const static std::string PTXFilename = "editd.ptx";
 
 struct matchPosition
@@ -381,12 +381,11 @@ void * DoEditd(void *)
 #define GROUPBLOCKS 64
 
 void editdGPUCodeGen(unsigned patternLen){
-    LLVMContext TheContext;
-    Module * M = new Module("editd-gpu", TheContext);
-    IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_GPU_Builder(M->getContext());
-    M->setDataLayout("e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v32:32:32-v64:64:64-v128:128:128-n16:32:64");
-    M->setTargetTriple("nvptx64-nvidia-cuda");
-    unsigned addrSpace = 1;
+    NVPTXDriver pxDriver("editd");
+    auto & iBuilder = pxDriver.getBuilder();
+    Module * M = iBuilder->getModule();
+
+    const unsigned segmentSize = codegen::SegmentSize;
 
     Type * const mBitBlockType = iBuilder->getBitBlockType();
     Type * const inputSizeTy = PointerType::get(iBuilder->getSizeTy(), 1);
@@ -397,16 +396,7 @@ void editdGPUCodeGen(unsigned patternLen){
     Type * const outputTy = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 1);
     Type * const stridesTy = PointerType::get(int32ty, 1);
 
-    ExternalFileBuffer CCStream(iBuilder, iBuilder->getStreamSetTy(4), addrSpace);
-    ExternalFileBuffer ResultStream(iBuilder, iBuilder->getStreamSetTy( editDistance+1, 1), addrSpace);
-
-    MMapSourceKernel mmapK(iBuilder);
-    mmapK.generateKernel({}, {&CCStream});
-
-    kernel::editdGPUKernel editdk(iBuilder, editDistance, patternLen);
-    editdk.generateKernel({&CCStream}, {&ResultStream});
-
-    Function * const main = cast<Function>(M->getOrInsertFunction("GPU_Main", voidTy, inputTy, inputSizeTy, patternPtrTy, outputTy, stridesTy, nullptr));
+    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputTy, inputSizeTy, patternPtrTy, outputTy, stridesTy, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -425,47 +415,43 @@ void editdGPUCodeGen(unsigned patternLen){
 
     Function * tidFunc = M->getFunction("llvm.nvvm.read.ptx.sreg.tid.x");
     Value * tid = iBuilder->CreateCall(tidFunc);
-    Value * inputThreadPtr = iBuilder->CreateGEP(inputStream, tid);
-
     Function * bidFunc = cast<Function>(M->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty, nullptr));
     Value * bid = iBuilder->CreateCall(bidFunc);
+
+    Value * inputThreadPtr = iBuilder->CreateGEP(inputStream, tid);
     Value * strides = iBuilder->CreateLoad(stridesPtr);
     Value * outputBlocks = iBuilder->CreateMul(strides, ConstantInt::get(int32ty, GROUPTHREADS));
     Value * resultStreamPtr = iBuilder->CreateGEP(resultStream, iBuilder->CreateAdd(iBuilder->CreateMul(bid, outputBlocks), tid));
-
     Value * inputSize = iBuilder->CreateLoad(inputSizePtr);
-    CCStream.setStreamSetBuffer(inputThreadPtr);
-    ResultStream.setStreamSetBuffer(resultStreamPtr);
-    mmapK.setInitialArguments({inputSize});
 
+    StreamSetBuffer * CCStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(4), 1));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, inputTy, segmentSize));
+    sourceK->setInitialArguments({inputThreadPtr, inputSize});
+    pxDriver.makeKernelCall(sourceK, {}, {CCStream});
+
+    ExternalBuffer * ResultStream = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1), resultStreamPtr, 1));   
+    kernel::Kernel * editdk = pxDriver.addKernelInstance(make_unique<kernel::editdGPUKernel>(iBuilder, editDistance, patternLen));
+      
     const unsigned numOfCarries = patternLen * (editDistance + 1) * 4;
     Type * strideCarryTy = ArrayType::get(mBitBlockType, numOfCarries);
     Value * strideCarry = iBuilder->CreateAlloca(strideCarryTy);
     iBuilder->CreateStore(Constant::getNullValue(strideCarryTy), strideCarry);
 
-    editdk.setInitialArguments({pattStream, strideCarry});
+    editdk->setInitialArguments({pattStream, strideCarry});
+    pxDriver.makeKernelCall(editdk, {CCStream}, {ResultStream});
 
-    generatePipelineLoop(iBuilder, {&mmapK, &editdk});
+    pxDriver.generatePipelineIR();
 
     iBuilder->CreateRetVoid();
 
-    MDNode * Node = MDNode::get(M->getContext(),
-                                {llvm::ValueAsMetadata::get(main),
-                                 MDString::get(M->getContext(), "kernel"),
-                                 ConstantAsMetadata::get(ConstantInt::get(iBuilder->getInt32Ty(), 1))});
-    NamedMDNode *NMD = M->getOrInsertNamedMetadata("nvvm.annotations");
-    NMD->addOperand(Node);
-
-    Compile2PTX(M, IRFilename, PTXFilename);
+    pxDriver.finalizeObject();
 
 }
 
 void mergeGPUCodeGen(){
-        LLVMContext TheContext;
-    Module * M = new Module("editd-gpu", TheContext);
-    IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_GPU_Builder(M->getContext());
-    M->setDataLayout("e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v32:32:32-v64:64:64-v128:128:128-n16:32:64");
-    M->setTargetTriple("nvptx64-nvidia-cuda");
+    NVPTXDriver pxDriver("merge");
+    auto & iBuilder = pxDriver.getBuilder();
+    Module * M = iBuilder->getModule();
 
     Type * const mBitBlockType = iBuilder->getBitBlockType();
     Type * const int32ty = iBuilder->getInt32Ty();
@@ -473,7 +459,7 @@ void mergeGPUCodeGen(){
     Type * const resultTy = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 1);
     Type * const stridesTy = PointerType::get(int32ty, 1);
 
-    Function * const main = cast<Function>(M->getOrInsertFunction("mergeResult", voidTy, resultTy, stridesTy, nullptr));
+    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, resultTy, stridesTy, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
 
@@ -491,9 +477,9 @@ void mergeGPUCodeGen(){
 
     Function * tidFunc = M->getFunction("llvm.nvvm.read.ptx.sreg.tid.x");
     Value * tid = iBuilder->CreateCall(tidFunc);
-
     Function * bidFunc = cast<Function>(M->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty, nullptr));
     Value * bid = iBuilder->CreateCall(bidFunc);
+
     Value * strides = iBuilder->CreateLoad(stridesPtr);
     Value * strideBlocks = ConstantInt::get(int32ty, iBuilder->getStride() / iBuilder->getBitBlockWidth());
     Value * outputBlocks = iBuilder->CreateMul(strides, strideBlocks);
@@ -520,60 +506,49 @@ void mergeGPUCodeGen(){
     iBuilder->SetInsertPoint(stridesDone);
     iBuilder->CreateRetVoid();
 
-    MDNode * Node = MDNode::get(M->getContext(),
-                                {llvm::ValueAsMetadata::get(main),
-                                 MDString::get(M->getContext(), "kernel"),
-                                 ConstantAsMetadata::get(ConstantInt::get(iBuilder->getInt32Ty(), 1))});
-    NamedMDNode *NMD = M->getOrInsertNamedMetadata("nvvm.annotations");
-    NMD->addOperand(Node);
-
-    Compile2PTX(M, "merge.ll", "merge.ptx");
+    pxDriver.finalizeObject();
 
 }
 
 editdFunctionType editdScanCPUCodeGen() {
 
-    LLVMContext TheContext;
-    Module * M = new Module("editd", TheContext);
-    IDISA::IDISA_Builder * iBuilder = IDISA::GetIDISA_Builder(M);
-    ExecutionEngine * editdEngine = nullptr;
+    ParabixDriver pxDriver("scan");
+    auto & iBuilder = pxDriver.getBuilder();
+    Module * M = iBuilder->getModule();
+
+    const unsigned segmentSize = codegen::SegmentSize;
 
     Type * mBitBlockType = iBuilder->getBitBlockType();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = Type::getVoidTy(M->getContext());
     Type * const inputType = PointerType::get(ArrayType::get(mBitBlockType, editDistance+1), 0);
 
-    ExternalFileBuffer MatchResults(iBuilder, iBuilder->getStreamSetTy( editDistance+1, 1));
-
-    MMapSourceKernel mmapK(iBuilder);
-    mmapK.generateKernel({}, {&MatchResults});
-
-    kernel::editdScanKernel editdScanK(iBuilder, editDistance);
-    editdScanK.generateKernel({&MatchResults}, {});
-
-    Function * const main = cast<Function>(M->getOrInsertFunction("CPU_Main", voidTy, inputType, size_ty, nullptr));
+    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputType, size_ty, nullptr));
     main->setCallingConv(CallingConv::C);
+    iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
     Function::arg_iterator args = main->arg_begin();
-
     Value * const inputStream = &*(args++);
     inputStream->setName("input");
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
 
-    iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main,0));
 
-    MatchResults.setStreamSetBuffer(inputStream);
-    mmapK.setInitialArguments({fileSize});
+    StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1)));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, inputType, segmentSize));
+    sourceK->setInitialArguments({inputStream, fileSize});
+    pxDriver.makeKernelCall(sourceK, {}, {MatchResults});
 
-    generatePipelineLoop(iBuilder, {&mmapK, &editdScanK});
-
+    auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(iBuilder, editDistance));
+    pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
+        
+    pxDriver.generatePipelineIR();
     iBuilder->CreateRetVoid();
 
-    editdEngine = JIT_to_ExecutionEngine(M);
+    pxDriver.LinkFunction(*editdScanK, "wrapped_report_pos", &wrapped_report_pos);
+    pxDriver.finalizeObject();
 
-    editdEngine->finalizeObject();
+    return reinterpret_cast<editdFunctionType>(pxDriver.getMain());
 
-    return reinterpret_cast<editdFunctionType>(editdEngine->getPointerToFunction(main));
 }
 
 #endif
