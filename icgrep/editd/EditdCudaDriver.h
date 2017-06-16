@@ -132,7 +132,12 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
   printf("Elapsed time : %f ms\n" ,elapsedTime);
 
   // Retrieve device data
-  ulong * matchRslt = (ulong *) malloc(outputSize/GROUPBLOCKS);
+  ulong * matchRslt;
+  if (posix_memalign((void**)&matchRslt, 32, outputSize/GROUPBLOCKS)) {
+    std::cerr << "Cannot allocate memory for output.\n";
+    exit(-1);
+  }
+  
   checkCudaErrors(cuMemcpyDtoH(matchRslt, devBufferOutput, outputSize/GROUPBLOCKS));
 
   // Clean-up

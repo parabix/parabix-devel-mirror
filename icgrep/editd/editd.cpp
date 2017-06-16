@@ -26,10 +26,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <mutex>
-#ifdef CUDA_ENABLED
+
 #include <toolchain/NVPTXDriver.h>
-#include <editd/EditdCudaDriver.h>
 #include <editd/editd_gpu_kernel.h>
+#ifdef CUDA_ENABLED
+#include <editd/EditdCudaDriver.h>
 #endif
 
 using namespace llvm;
@@ -375,8 +376,6 @@ void * DoEditd(void *)
     pthread_exit(NULL);
 }
 
-#ifdef CUDA_ENABLED
-
 #define GROUPTHREADS 64
 #define GROUPBLOCKS 64
 
@@ -510,9 +509,8 @@ void mergeGPUCodeGen(){
 
 }
 
-editdFunctionType editdScanCPUCodeGen() {
-
-    ParabixDriver pxDriver("scan");
+editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
+   
     auto & iBuilder = pxDriver.getBuilder();
     Module * M = iBuilder->getModule();
 
@@ -551,8 +549,6 @@ editdFunctionType editdScanCPUCodeGen() {
 
 }
 
-#endif
-
 int main(int argc, char *argv[]) {
     codegen::ParseCommandLineOptions(argc, argv);
     int pattern_segs = 0;
@@ -580,13 +576,11 @@ int main(int argc, char *argv[]) {
         std::string patterns((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
 
         editdGPUCodeGen(patterns.length()/GROUPTHREADS - 1);
-
         mergeGPUCodeGen();
-
         ulong * rslt = RunPTX(PTXFilename, chStream, size, patterns.c_str(), patterns.length(), editDistance);
 
-        editdFunctionType editd_ptr = editdScanCPUCodeGen();
-
+        ParabixDriver scanDriver("scan");
+        editdFunctionType editd_ptr = editdScanCPUCodeGen(scanDriver);
         editd(editd_ptr, (char*)rslt, size);
 
         run_second_filter(pattern_segs, total_len, 0.15);
