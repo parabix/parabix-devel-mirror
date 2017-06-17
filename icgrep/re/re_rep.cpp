@@ -34,7 +34,10 @@ RE * makeRep(RE * re, int lb, const int ub) {
     if (Rep * rep = dyn_cast<Rep>(re)) {
         int l = rep->getLB();
         int u = rep->getUB();
-        if (u == Rep::UNBOUNDED_REP) {
+        if (lb == ub) {
+            return new Rep(rep->getRE(), l * lb, ubCombine(u, ub));
+        }
+        else if (u == Rep::UNBOUNDED_REP) {
             if (l == 0) {
                 /*  R{0,}{lb, ub} = R{0,} */
                 return rep;
@@ -57,7 +60,7 @@ RE * makeRep(RE * re, int lb, const int ub) {
             }
             if ((ub == Rep::UNBOUNDED_REP) || (ub >= n)) {
                 RE * r1 = new Rep(rep->getRE(), n * l, ubCombine(u, ub));
-                RE * r2 = new Rep(rep, lb, n - 1);
+                RE * r2 = makeRep(rep, lb, n - 1);  // makeRep recursive simplifies.
                 return makeAlt({r1, r2});
             }
         }

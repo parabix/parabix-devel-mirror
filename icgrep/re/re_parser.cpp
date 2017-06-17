@@ -308,48 +308,60 @@ RE * RE_Parser::parse_group() {
     return group_expr;
 }
 
+// TODO: Set ENABLE_EXTENDED_QUANTIFIERS false for ERE, BRE
+#define ENABLE_EXTENDED_QUANTIFIERS true
+    
+// Extend a RE item with one or more quantifiers
 RE * RE_Parser::extend_item(RE * re) {
-    if (LLVM_LIKELY(mCursor.more())) {
-        int lb = 0, ub = 0;
-        bool hasRep = true;
-        switch (*mCursor) {
-            case '*':
-                lb = 0;
-                ub = Rep::UNBOUNDED_REP;
-                break;
-            case '?':
-                lb = 0;
-                ub = 1;
-                break;
-            case '+':
-                lb = 1;
-                ub = Rep::UNBOUNDED_REP;
-                break;
-            case '{':
-                std::tie(lb, ub) = parse_range_bound();
-                break;
-            default:
-                hasRep = false;
-        }
-        if (hasRep) {
-            if (lb > MAX_REPETITION_LOWER_BOUND || ub > MAX_REPETITION_UPPER_BOUND) {
-                ParseFailure("Bounded repetition exceeds icgrep implementation limit");
-            }
+    if (LLVM_UNLIKELY(!(mCursor.more()))) return re;
+    int lb = 0, ub = 0;
+    switch (*mCursor) {
+        case '*':
+            lb = 0;
+            ub = Rep::UNBOUNDED_REP;
+            break;
+        case '?':
+            lb = 0;
+            ub = 1;
+            break;
+        case '+':
+            lb = 1;
+            ub = Rep::UNBOUNDED_REP;
+            break;
+        case '{':
+            std::tie(lb, ub) = parse_range_bound();
             if ((ub != Rep::UNBOUNDED_REP) && (lb > ub)) {
                 ParseFailure("Lower bound cannot exceed upper bound in bounded repetition");
             }
-            ++mCursor;
-            if (*mCursor == '?') { // Non-greedy qualifier
-                // Greedy vs. non-greedy makes no difference for icgrep.
-                ++mCursor;
-            } else if (*mCursor == '+') {
-                ++mCursor;
-                ParseFailure("Possessive repetition is not supported in icgrep 1.0");
-            }
-            re = makeRep(re, lb, ub);
-        }
+            break;
+        default:
+            // No quantifiers
+            return re;
     }
-    return re;
+    ++mCursor;
+    if (ENABLE_EXTENDED_QUANTIFIERS) {
+        if (LLVM_UNLIKELY(!(mCursor.more()))) return makeRep(re, lb, ub);;
+        if (*mCursor == '?') { // Non-greedy qualifier
+            // Greedy vs. non-greedy makes no difference for icgrep.
+            ++mCursor;
+            re = makeRep(re, lb, ub);
+        } else if (*mCursor == '+') {
+            ++mCursor;
+            if (ub == Rep::UNBOUNDED_REP) {
+                re = makeSeq({makeRep(re, lb, ub), makeNegativeLookAheadAssertion(re)});
+            } else if (lb == ub) {
+                re = makeRep(re, ub, ub);
+            } else /* if (lb < ub) */{
+                re = makeAlt({makeSeq({makeRep(re, lb, ub-1), makeNegativeLookAheadAssertion(re)}), makeRep(re, ub, ub)});
+            }
+        } else {
+            re = makeRep(re, lb, ub);
+        } 
+    } else {
+        re = makeRep(re, lb, ub);
+    }
+    // The quantified expression may be extended with a further quantifier, e,g., [a-z]{6,7}{2,3}
+    return extend_item(re);
 }
 
 std::pair<int, int> RE_Parser::parse_range_bound() {
