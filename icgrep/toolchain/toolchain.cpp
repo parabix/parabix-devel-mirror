@@ -63,7 +63,7 @@ static cl::opt<int, true> BufferSegmentsOption("buffer-segments", cl::location(B
                                                cl::desc("Buffer Segments"), cl::value_desc("positive integer"));
 
 
-static cl::opt<int> ThreadNumOption("thread-num", cl::init(2),
+static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(2),
                                           cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
 
 
@@ -172,8 +172,6 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
     if (DebugOptions.getBits()) {
         EnableObjectCache = false;
     }
-
-    ThreadNum = (PipelineParallel || SegmentPipelineParallel) ? 2 : 1;
 
     ObjectCacheDir = ObjectCacheDirOption;
     IROutputFilename = IROutputFilenameOption;
