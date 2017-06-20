@@ -7,7 +7,6 @@
 #include <algorithm>
 #include "regexGen.h"
 #include "stringGen.h"
-#include <boost/program_options.hpp>
 #include "pugixml/src/pugixml.hpp"
 #include "icgrep-test/icgrep-test.h"
 
