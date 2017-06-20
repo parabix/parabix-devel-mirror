@@ -5,7 +5,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <iostream>
 #include <algorithm>
-#include "regexgen.h"
+#include "regexGen.h"
 #include "stringGen.h"
 #include <boost/program_options.hpp>
 #include "pugixml/src/pugixml.hpp"

@@ -1,5 +1,5 @@
-#ifndef REGEX_H
-#define REGEX_H
+#ifndef REGEXGEN_H
+#define REGEXGEN_H
  
 #include <vector>
 #include <string>

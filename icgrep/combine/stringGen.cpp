@@ -89,7 +89,7 @@ vector<string> getDiff(vector<string> v1, vector<string> v2)
 std::vector<string> getAllCodepoints(){
 	std::vector<string> cpSet;
 	unsigned int max = 0x10FFFF;
-	for (auto cp = 0; cp < max; ++cp){
+	for (unsigned cp = 0; cp < max; ++cp){
 		if (cp < 0xD800 || cp > 0xDFFF) {
 			std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
     		std::string u8str = converter.to_bytes(cp);
