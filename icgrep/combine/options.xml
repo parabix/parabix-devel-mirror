@@ -1,0 +1,170 @@
+<Parameters>
+  <Parameter id="0" name="any">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="1" name="posix">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="2" name="boundary">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="3" name="notBoundary">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="4" name="word_begin">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="5" name="word_end">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="6" name="wordC">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="7" name="notWordC">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="8" name="whitespace">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="9" name="notWhitespace">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="10" name="tab">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="11" name="property">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="12" name="notproperty">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="13" name="nameProperty">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="14" name="digit">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="15" name="notDigit">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="16" name="\q">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="17" name="\Q">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="18" name="\x">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="19" name="look_ahead">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="20" name="nlook_ahead">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="21" name="look_behind">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="22" name="nlook_behind">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="23" name="grapheme_cluster">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="24" name="unicodeC">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="25" name="backref">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="26" name="zeroOrOne">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="27" name="zeroOrMore">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="28" name="zeroOrMore_nested">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="29" name="oneOrMore">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="30" name="oneOrMore_nested">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="31" name="repeat_n" type="2">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="32" name="repeat_n_nested">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="33" name="repeat_nm">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="34" name="repeat_nm_nested">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="35" name="repeat_n_more">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="36" name="repeat_n_more_nested">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="37" name="repeat_m_less">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="38" name="repeat_m_less_nested">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="39" name="join">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="40" name="list">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="41" name="nList">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="42" name="range">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="43" name="start">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="44" name="end">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="45" name="-l">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="46" name="-L">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="47" name="-w">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="48" name="-utf_16">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="49" name="-c">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="50" name="-i">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="51" name="-e">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="52" name="-f">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="53" name="-x">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="54" name="-t">
+    <Switch>on</Switch>
+  </Parameter>
+  <Parameter id="55" name="syntax">
+    <Switch>on</Switch>
+  </Parameter>
+</Parameters>
