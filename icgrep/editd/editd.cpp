@@ -45,7 +45,7 @@ static cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in 
 static cl::opt<int> editDistance("edit-dist", cl::desc("Edit Distance Value"), cl::init(2));
 static cl::opt<int> optPosition("opt-pos", cl::desc("Optimize position"), cl::init(8));
 static cl::opt<int> stepSize("step-size", cl::desc("Step Size"), cl::init(3));
-static cl::opt<int> prefixLen("prefix", cl::desc("Prefix length"), cl::init(4));
+static cl::opt<int> prefixLen("prefix", cl::desc("Prefix length"), cl::init(3));
 static cl::opt<bool> ShowPositions("display", cl::desc("Display the match positions."), cl::init(false));
 
 static cl::opt<int> Threads("threads", cl::desc("Total number of threads."), cl::init(1));
@@ -162,6 +162,8 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
 class PatternKernel final: public pablo::PabloKernel {
 public:
     PatternKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<std::string> & patterns);
+    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    bool isCachable() const override { return true;}
 protected:
     void generatePabloMethod() override;
 private:
@@ -169,8 +171,12 @@ private:
 };
 
 PatternKernel::PatternKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<std::string> & patterns)
-: PabloKernel(b, "editd", {{b->getStreamSetTy(4), "pat"}}, {{b->getStreamSetTy(editDistance + 1), "E"}})
+: PabloKernel(b, std::string(patterns[0]), {{b->getStreamSetTy(4), "pat"}}, {{b->getStreamSetTy(editDistance + 1), "E"}})
 , mPatterns(patterns) {
+}
+
+std::string PatternKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
+    return getName();
 }
 
 void PatternKernel::generatePabloMethod() {
