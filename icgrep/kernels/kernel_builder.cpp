@@ -53,26 +53,17 @@ Value * KernelBuilder::getProducedItemCount(const std::string & name, Value * do
     Kernel::Port port; unsigned index;
     std::tie(port, index) = mKernel->getStreamPort(name);
     assert (port == Kernel::Port::Output);
-    const auto rate = mKernel->getStreamOutput(index).rate;
-    if (rate.isExact()) {
-        const auto & refSet = rate.referenceStreamSet();
-        std::string principalField;
-        if (refSet.empty()) {
-            if (mKernel->getStreamInputs().empty()) {
-                principalField = mKernel->getStreamOutput(0).name + Kernel::PRODUCED_ITEM_COUNT_SUFFIX;
-            } else {
-                principalField = mKernel->getStreamInput(0).name + Kernel::PROCESSED_ITEM_COUNT_SUFFIX;
-            }
+    const auto & rate = mKernel->getStreamOutput(index).rate;
+    const auto & refSet = rate.referenceStreamSet();
+    if ((refSet != name) && rate.isExact()) {
+        Value * principalCount;
+        std::tie(port, index) = mKernel->getStreamPort(refSet);
+        if (port == Kernel::Port::Input) {
+            principalCount = getProcessedItemCount(refSet);
         } else {
-            std::tie(port, index) = mKernel->getStreamPort(refSet);
-            if (port == Kernel::Port::Input) {
-               principalField = refSet + Kernel::PROCESSED_ITEM_COUNT_SUFFIX;
-            } else {
-               principalField = refSet + Kernel::PRODUCED_ITEM_COUNT_SUFFIX;
-            }
+            principalCount = getProducedItemCount(refSet);
         }
-        Value * const principleCount = getScalarField(principalField);
-        return rate.CreateRatioCalculation(this, principleCount, doFinal);
+        return rate.CreateRatioCalculation(this, principalCount, doFinal);
     }
     return getScalarField(name + Kernel::PRODUCED_ITEM_COUNT_SUFFIX);
 }
@@ -82,13 +73,10 @@ Value * KernelBuilder::getProcessedItemCount(const std::string & name) {
     std::tie(port, index) = mKernel->getStreamPort(name);
     assert (port == Kernel::Port::Input);
     const auto & rate = mKernel->getStreamInput(index).rate;
-    if (rate.isExact()) {
-        std::string refSet = rate.referenceStreamSet();
-        if (refSet.empty()) {
-            refSet = mKernel->getStreamInput(0).name;
-        }
-        Value * const principleCount = getScalarField(refSet + Kernel::PROCESSED_ITEM_COUNT_SUFFIX);
-        return rate.CreateRatioCalculation(this, principleCount);
+    const auto & refSet = rate.referenceStreamSet();
+    if ((refSet != name) && rate.isExact()) {
+        Value * const principalCount = getProcessedItemCount(refSet);
+        return rate.CreateRatioCalculation(this, principalCount);
     }
     return getScalarField(name + Kernel::PROCESSED_ITEM_COUNT_SUFFIX);
 }

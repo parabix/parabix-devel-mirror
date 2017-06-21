@@ -11,6 +11,7 @@
 #include <vector>
 
 namespace IDISA { class IDISA_Builder; }
+namespace kernel { class Kernel; }
 namespace kernel { class KernelBuilder; }
 
 // Processing rate attributes are required for all stream set bindings for a kernel.
@@ -32,6 +33,7 @@ namespace kernel { class KernelBuilder; }
 // 
 
 struct ProcessingRate  {
+    friend class kernel::Kernel;
     enum class ProcessingRateKind : uint8_t { FixedRatio, RoundUp, Add1, MaxRatio, Unknown };
     ProcessingRateKind getKind() const {return mKind;}
     bool isFixedRatio() const {return mKind == ProcessingRateKind::FixedRatio;}
@@ -53,11 +55,12 @@ struct ProcessingRate  {
 protected:
     ProcessingRate(ProcessingRateKind k, unsigned numerator, unsigned denominator, std::string && referenceStreamSet)
     : mKind(k), mRatioNumerator(numerator), mRatioDenominator(denominator), mReferenceStreamSet(referenceStreamSet) {}
+    void setReferenceStreamSet(const std::string & s) {mReferenceStreamSet = s;}
 private:
     const ProcessingRateKind mKind;
     const uint16_t mRatioNumerator;
     const uint16_t mRatioDenominator;
-    const std::string mReferenceStreamSet;
+    std::string mReferenceStreamSet;
 }; 
 
 ProcessingRate FixedRatio(unsigned strmItems, unsigned referenceItems = 1, std::string && referenceStreamSet = "");
@@ -71,7 +74,7 @@ struct Binding {
     : type(type), name(name), rate(r) { }
     llvm::Type * const        type;
     const std::string         name;
-    const ProcessingRate      rate;
+    ProcessingRate      rate;
 };
 
 class KernelInterface {

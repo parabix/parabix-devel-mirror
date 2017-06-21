@@ -17,6 +17,7 @@
 #include <kernels/streamset.h>
 #include <sstream>
 #include <kernels/kernel_builder.h>
+#include <llvm/Support/Debug.h>
 
 using namespace llvm;
 using namespace parabix;
@@ -140,6 +141,10 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     const auto requiredBlocks = codegen::SegmentSize + ((blockSize + mLookAheadPositions - 1) / blockSize);
 
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        // Default reference stream set is the principal input stream set.
+        if (mStreamSetInputs[i].rate.referenceStreamSet() == "") {
+            mStreamSetInputs[i].rate.setReferenceStreamSet(mStreamSetInputs[0].name);
+        }
         if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
             report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
         }
@@ -151,6 +156,17 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
 
     IntegerType * const sizeTy = idb->getSizeTy();
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        // Default reference stream set is the principal input stream set for the principal output stream set.
+        // Default reference stream set is the principal output stream set for other output stream sets.
+        if (mStreamSetOutputs[i].rate.referenceStreamSet() == "") {
+            if ((mStreamSetInputs.size() > 0) && (i == 0)) {
+                mStreamSetOutputs[i].rate.setReferenceStreamSet(mStreamSetInputs[0].name);
+            }
+            else {
+                mStreamSetOutputs[i].rate.setReferenceStreamSet(mStreamSetOutputs[0].name);
+            }
+
+        }
         mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
         if ((mStreamSetInputs.empty() && (i == 0)) || !mStreamSetOutputs[i].rate.isExact()) {
             addScalar(sizeTy, mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
@@ -662,56 +678,39 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     itemsPerStride[0] = mStride;
     isDerived[0] = true;
-    
     for (unsigned i = 1; i < inputSetCount; i++) {
         auto & rate = mStreamSetInputs[i].rate;
         std::string refSet = mStreamSetInputs[i].rate.referenceStreamSet();
         if (rate.isExact()) {
-            if (refSet.empty()) {
-                itemsPerStride[i] = rate.calculateRatio(itemsPerStride[0]);
+            Port port; unsigned ssIdx;
+            std::tie(port, ssIdx) = getStreamPort(refSet);
+            assert (port == Port::Input && ssIdx < i);
+            if ((ssIdx == 0) || isDerived[ssIdx]) {
+                itemsPerStride[i] = rate.calculateRatio(itemsPerStride[ssIdx]);
                 isDerived[i] = true;
                 continue;
-            }
-            else {
-                Port port; unsigned ssIdx;
-                std::tie(port, ssIdx) = getStreamPort(mStreamSetInputs[i].name);
-                assert (port == Port::Input && ssIdx < i);
-                if (isDerived[ssIdx]) {
-                    itemsPerStride[i] = rate.calculateRatio(itemsPerStride[ssIdx]);
-                    isDerived[i] = true;
-                    continue;
-                }
             }
         }
         isDerived[i] = false;
     }
-    
     for (auto & ss : mStreamSetOutputs) {
         unsigned i = inputSetCount;
         auto & rate = ss.rate;
         std::string refSet = rate.referenceStreamSet();
         if (rate.isExact() || rate.isMaxRatio()) {
-            if (refSet.empty()) {
-                itemsPerStride[i] = rate.calculateRatio(bitBlockWidth);
+            Port port; unsigned ssIdx;
+            std::tie(port, ssIdx) = getStreamPort(refSet);
+            if (port == Port::Output) ssIdx += inputSetCount;
+            if ((ssIdx == 0) || isDerived[ssIdx]) {
+                itemsPerStride[i] = rate.calculateRatio(itemsPerStride[ssIdx]);
                 isDerived[i] = rate.isExact();
                 continue;
-            }
-            else {
-                Port port; unsigned ssIdx;
-                std::tie(port, ssIdx) = getStreamPort(mStreamSetOutputs[i].name);
-                if (port == Port::Output) ssIdx += inputSetCount;
-                if (isDerived[ssIdx]) {
-                    itemsPerStride[i] = rate.calculateRatio(itemsPerStride[ssIdx]);
-                    isDerived[i] = rate.isExact();
-                    continue;
-                }
             }
         }
         isDerived[i] = false;
         i++;
     }
     int maxBlocksToCopy[totalSetCount];
-    
     for (unsigned i = 0; i < totalSetCount; i++) {
         if (isDerived[i]) {
             if (itemsPerStride[i] % bitBlockWidth == 0) {
@@ -729,7 +728,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         }
     }
     auto ip = kb->saveIP();
-    
     Function * const cp = mCurrentMethod;
     const auto saveInstance = getInstance();
 
@@ -792,7 +790,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     BasicBlock * const segmentDone = kb->CreateBasicBlock(getName() + "_segmentDone");
 
     Value * blockBaseMask = kb->CreateNot(kb->getSize(kb->getBitBlockWidth() - 1));
-
     //
     // Define and allocate the temporary buffer area.
     //
@@ -816,14 +813,14 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     Value * itemsAvail = availablePos;
 
     //  Make sure that corresponding data is available depending on processing rate
-    //  for all input stream sets.
-
+    //  for all derived input stream sets.
     for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
         Value * a = mAvailableItemCount[i];
         auto & rate = mStreamSetInputs[i].rate;
-        assert (((rate.referenceStreamSet().empty()) || (rate.referenceStreamSet() == mStreamSetInputs[0].name)) && "Multiblock kernel input rate not with respect to principal stream.");
-        Value * maxItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), a);
-        itemsAvail = kb->CreateSelect(kb->CreateICmpULT(itemsAvail, maxItems), itemsAvail, maxItems);
+        if (isDerived[i]) {
+            Value * maxItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), a);
+            itemsAvail = kb->CreateSelect(kb->CreateICmpULT(itemsAvail, maxItems), itemsAvail, maxItems);
+        }
     }
 
     Value * processed = kb->getProcessedItemCount(mStreamSetInputs[0].name);
@@ -856,7 +853,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     //  by limitations of linearly available input buffer space.
 
     Value * linearlyAvailStrides = stridesRemaining;
-
     for (unsigned i = 0; i < inputSetCount; i++) {
         Value * p = kb->getProcessedItemCount(mStreamSetInputs[i].name);
         Value * blkNo = kb->CreateUDiv(p, blockSize);
@@ -866,7 +862,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         if (isDerived[i]) {
             auto & rate = mStreamSetInputs[i].rate;
             Value * maxReferenceItems = nullptr;
-            if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator()) && (rate.referenceStreamSet() == "")) {
+            if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator())) {
                 maxReferenceItems = kb->CreateMul(kb->getLinearlyAccessibleBlocks(mStreamSetInputs[i].name, blkNo), blockSize);
 
             } else {
@@ -880,7 +876,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     //  Now determine the linearly writeable blocks, based on available blocks reduced
     //  by limitations of output buffer space.
     Value * linearlyWritableStrides = linearlyAvailStrides;
-
     for (unsigned i = 0; i < outputSetCount; i++) {
         Value * p = kb->getProducedItemCount(mStreamSetOutputs[i].name);
         Value * blkNo = kb->CreateUDiv(p, blockSize);
@@ -900,7 +895,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             linearlyWritableStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyWritableStrides), maxStrides, linearlyWritableStrides);
         }
     }
-
     Value * haveStrides = kb->CreateICmpUGT(linearlyWritableStrides, kb->getSize(0));
     kb->CreateCondBr(haveStrides, doMultiBlockCall, tempBlockCheck);
 
@@ -998,7 +992,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     std::vector<Value *> tempArgs;
     tempArgs.push_back(getInstance());
     tempArgs.push_back(tempBlockItems);
-    
     // For non-derived inputs, add the available items.
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         if (!isDerived[i]) {
@@ -1006,7 +999,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             doMultiBlockArgs.push_back(kb->CreateSelect(kb->CreateICmpULT(avail, strideSize), avail, strideSize));
         }
     }
-
     // Prepare the temporary buffer area.
     //
     // First zero it out.
@@ -1014,69 +1006,64 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     kb->CreateMemZero(tempParameterArea, tempAreaSize);
     // For each input and output buffer, copy over necessary data starting from the last
     // block boundary.
-    std::vector<Value *> finalItemCountNeeded;
-    finalItemCountNeeded.push_back(kb->CreateAdd(processedItemCount[0], tempBlockItems));
+    Value * finalItemCountNeeded[inputSetCount];
+    finalItemCountNeeded[0] = kb->CreateAdd(processedItemCount[0], tempBlockItems);
 
     for (unsigned i = 0; i < mStreamSetInputBuffers.size(); i++) {
-        Value * tempBufPtr = kb->CreateGEP(tempParameterArea, {kb->getInt32(0), kb->getInt32(i)});
         Type * bufPtrType = mStreamSetInputBuffers[i]->getPointerType();
-        tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
-        ConstantInt * strideItems = kb->getSize(itemsPerStride[i]);
-        Value * strideBasePos = kb->CreateSub(processedItemCount[i], kb->CreateURem(processedItemCount[i], strideItems));
-        Value * blockBasePos = (itemsPerStride[i] % bitBlockWidth == 0) ? strideBasePos : kb->CreateAnd(strideBasePos, blockBaseMask);
+        if (isDerived[i]) {
+            Value * tempBufPtr = kb->CreateGEP(tempParameterArea, {kb->getInt32(0), kb->getInt32(i)});
+            tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
+            ConstantInt * strideItems = kb->getSize(itemsPerStride[i]);
+            Value * strideBasePos = kb->CreateSub(processedItemCount[i], kb->CreateURem(processedItemCount[i], strideItems));
+            Value * blockBasePos = (itemsPerStride[i] % bitBlockWidth == 0) ? strideBasePos : kb->CreateAnd(strideBasePos, blockBaseMask);
 
-        // The number of items to copy is determined by the processing rate requirements.
-        if (i > 1) {
-            auto & rate = mStreamSetInputs[i].rate;
-            std::string refSet = mStreamSetInputs[i].rate.referenceStreamSet();
-            if (refSet.empty()) {
-                finalItemCountNeeded.push_back(rate.CreateRatioCalculation(kb.get(), finalItemCountNeeded[0], doFinal));
-            }
-            else if (isDerived[i]) {
+            // The number of items to copy is determined by the processing rate requirements.
+            if (i > 1) {
+                auto & rate = mStreamSetInputs[i].rate;
+                std::string refSet = mStreamSetInputs[i].rate.referenceStreamSet();
                 Port port; unsigned ssIdx;
                 std::tie(port, ssIdx) = getStreamPort(mStreamSetInputs[i].name);
-                assert (port == Port::Input && ssIdx < i);
-                finalItemCountNeeded.push_back(rate.CreateRatioCalculation(kb.get(), finalItemCountNeeded[ssIdx], doFinal));
+                finalItemCountNeeded[i] = rate.CreateRatioCalculation(kb.get(), finalItemCountNeeded[ssIdx], doFinal);
+            }
+            
+            Value * inputPtr = kb->CreatePointerCast(kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), blockBasePos), bufPtrType);
+            
+            if (maxBlocksToCopy[i] == 1) {
+                // copy one block
+                mStreamSetInputBuffers[i]->createBlockCopy(kb.get(), tempBufPtr, inputPtr, kb->getSize(1));
             }
             else {
-                // Ensure that there is up to a full stride of items, if available.
-                Value * avail = kb->CreateSub(mAvailableItemCount[i], processedItemCount[i]);
-                finalItemCountNeeded.push_back(kb->CreateSelect(kb->CreateICmpULT(avail, strideItems), avail, strideItems));
+                Value * neededItems = kb->CreateSub(finalItemCountNeeded[i], blockBasePos);
+                Value * availFromBase = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, blockBasePos);
+                Value * allAvail = kb->CreateICmpULE(neededItems, availFromBase);
+                Value * copyItems1 = kb->CreateSelect(allAvail, neededItems, availFromBase);
+                mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, inputPtr, copyItems1);
+                BasicBlock * copyRemaining = kb->CreateBasicBlock("copyRemaining");
+                BasicBlock * copyDone = kb->CreateBasicBlock("copyDone");
+                kb->CreateCondBr(allAvail, copyDone, copyRemaining);
+                kb->SetInsertPoint(copyRemaining);
+                Value * copyItems2 = kb->CreateSub(neededItems, copyItems1);
+                Value * nextBasePos = kb->CreateAdd(blockBasePos, copyItems1);
+                Value * nextInputPtr = kb->CreatePointerCast(kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), nextBasePos), bufPtrType);
+                Value * nextBufPtr = kb->CreateGEP(tempBufPtr, kb->CreateUDiv(copyItems1, blockSize));
+                mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), nextBufPtr, nextInputPtr, copyItems2);
+                kb->CreateBr(copyDone);
+                kb->SetInsertPoint(copyDone);
             }
-        }
-        
-        Value * inputPtr = kb->CreatePointerCast(kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), blockBasePos), bufPtrType);
-        
-        if (maxBlocksToCopy[i] == 1) {
-            // copy one block
-            mStreamSetInputBuffers[i]->createBlockCopy(kb.get(), tempBufPtr, inputPtr, kb->getSize(1));
+            Value * itemAddress = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
+            itemAddress = kb->CreatePtrToInt(itemAddress, intAddrTy);
+            Value * baseAddress = inputBlockPtr[i];
+            baseAddress = kb->CreatePtrToInt(baseAddress, intAddrTy);
+            Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, intAddrTy), kb->CreateSub(itemAddress, baseAddress));
+            tempArgs.push_back(kb->CreateIntToPtr(tempAddress, bufPtrType));
         }
         else {
-            Value * neededItems = kb->CreateSub(finalItemCountNeeded[i], blockBasePos);
-            Value * availFromBase = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, blockBasePos);
-            Value * allAvail = kb->CreateICmpULE(neededItems, availFromBase);
-            Value * copyItems1 = kb->CreateSelect(allAvail, neededItems, availFromBase);
-            mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, inputPtr, copyItems1);
-            BasicBlock * copyRemaining = kb->CreateBasicBlock("copyRemaining");
-            BasicBlock * copyDone = kb->CreateBasicBlock("copyDone");
-            kb->CreateCondBr(allAvail, copyDone, copyRemaining);
-            kb->SetInsertPoint(copyRemaining);
-            Value * copyItems2 = kb->CreateSub(neededItems, copyItems1);
-            Value * nextBasePos = kb->CreateAdd(blockBasePos, copyItems1);
-            Value * nextInputPtr = kb->CreatePointerCast(kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), nextBasePos), bufPtrType);
-            Value * nextBufPtr = kb->CreateGEP(tempBufPtr, kb->CreateUDiv(copyItems1, blockSize));
-            mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), nextBufPtr, nextInputPtr, copyItems2);
-            kb->CreateBr(copyDone);
-            kb->SetInsertPoint(copyDone);
+            Value * bufPtr = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
+            bufPtr = kb->CreatePointerCast(bufPtr, mStreamSetInputBuffers[i]->getPointerType());
+            tempArgs.push_back(bufPtr);            
         }
-        Value * itemAddress = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
-        itemAddress = kb->CreatePtrToInt(itemAddress, intAddrTy);
-        Value * baseAddress = inputBlockPtr[i];
-        baseAddress = kb->CreatePtrToInt(baseAddress, intAddrTy);
-        Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, intAddrTy), kb->CreateSub(itemAddress, baseAddress));
-        tempArgs.push_back(kb->CreateIntToPtr(tempAddress, bufPtrType));
     }
-
     Value * outputBasePos[outputSetCount];
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); i++) {
         Value * tempBufPtr = kb->CreateGEP(tempParameterArea,  {kb->getInt32(0), kb->getInt32(mStreamSetInputs.size() + i)});
