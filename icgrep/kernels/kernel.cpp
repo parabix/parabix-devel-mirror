@@ -1023,7 +1023,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
                 auto & rate = mStreamSetInputs[i].rate;
                 std::string refSet = mStreamSetInputs[i].rate.referenceStreamSet();
                 Port port; unsigned ssIdx;
-                std::tie(port, ssIdx) = getStreamPort(mStreamSetInputs[i].name);
+                std::tie(port, ssIdx) = getStreamPort(refSet);
                 finalItemCountNeeded[i] = rate.CreateRatioCalculation(kb.get(), finalItemCountNeeded[ssIdx], doFinal);
             }
             
