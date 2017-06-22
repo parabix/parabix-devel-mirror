@@ -14,7 +14,7 @@ namespace io = boost::iostreams;
 
 IcgrepTest::IcgrepTest(){}
 
-void resetBash(string fileName){
+void IcgrepTest::resetBash(string fileName){
 	ofstream file;
 	file.open(fileName);
 	file << "#!/bin/bash\n\n";
@@ -22,20 +22,20 @@ void resetBash(string fileName){
 	file.close();
 }
 
-void clearDir(string dir){
+void IcgrepTest::clearDir(string dir){
 	namespace fs=boost::filesystem;
   	fs::path path_to_remove(dir);
   	for (fs::directory_iterator end_dir_it, it(path_to_remove); it!=end_dir_it; ++it) {
    		fs::remove_all(it->path());
   	}
 }
-void writeToBash(string fileName, string value){
+void IcgrepTest::writeToBash(string fileName, string value){
 	ofstream file;
 	file.open(fileName, ios::app);
 	file << value << endl;
 	file.close();
 }
-void writetoFile(string content, string dir, int fileNo){
+void IcgrepTest::writetoFile(string content, string dir, int fileNo){
 	string fileName = dir + to_string(fileNo);
 	ofstream file;
 	file.open(fileName);
@@ -59,11 +59,11 @@ void IcgrepTest::prepare(){
 	remove("..//icgrep/combine/icgrep-test/pcre/pcre-result");
 }
 
-bool hasFlag(string flag, std::vector<string> flags){
+bool IcgrepTest::hasFlag(string flag, std::vector<string> flags){
 	return (std::find(flags.begin(), flags.end(), flag) != flags.end()) ? true : false;
 }
 
-std::vector<string> removeFlag(string flag, std::vector<string> flags){
+std::vector<string> IcgrepTest::removeFlag(string flag, std::vector<string> flags){
 	flags.erase(std::remove(flags.begin(), flags.end(), flag), flags.end());
 	return flags;
 }

@@ -18,8 +18,6 @@
 
 using namespace std;
 
-
-
 class CC {
 	std::vector<string> ccList;
 	std::vector<string> usedCC;

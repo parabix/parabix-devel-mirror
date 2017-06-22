@@ -3,6 +3,7 @@
 #include <fstream>
 #include <boost/algorithm/string/classification.hpp> 
 #include <boost/algorithm/string/split.hpp>
+#include <boost/filesystem.hpp>
 #include <iostream>
 #include <algorithm>
 #include "regexGen.h"
@@ -10,26 +11,20 @@
 #include "pugixml/src/pugixml.hpp"
 #include "icgrep-test/icgrep-test.h"
 
-
-
-
 using namespace std;
-using testcase = pair<string, vector<string>>;
-
-
-
-void writeREtoFile(string re, string dir, int fileNo){
-	string fileName = dir + to_string(fileNo);
-	FILE * file;
-	file = fopen(fileName.c_str(), "w");
-	fprintf(file, "%s", re.c_str());
-	fclose(file);
-}
 
 std::vector<string> vectorizeLine(string line){
 	std::vector<string> elements;
 	boost::split(elements, line, boost::is_any_of(","), boost::token_compress_on);
 	return elements;
+}
+
+void clearDir(string path){
+	namespace fs = boost::filesystem;
+  	fs::path path_to_remove(path);
+	for (fs::directory_iterator end_dir_it, it(path_to_remove); it!=end_dir_it; ++it) {
+		fs::remove_all(it->path());
+	}
 }
 
 std::vector<string> setOptions(std::vector<string> header, string xml){
@@ -67,8 +62,10 @@ int main (int argc, char *argv[]) {
     }
 	else {
 		IcgrepTest ictest;
-		system("exec rm -r ../icgrep/combine/regs/*");
-		system("exec rm -r ../icgrep/combine/files/*");
+
+		clearDir("../icgrep/combine/regs");
+		clearDir("../icgrep/combine/files");
+
 		ictest.prepare();
 
 		string csv = (argc > 1)? argv[1] : "../icgrep/combine/icGrep-output.csv";
@@ -85,7 +82,6 @@ int main (int argc, char *argv[]) {
 		getline(file, line);
 		vector<string> header = setOptions(vectorizeLine(line), xml);
 		int rownum = 1;
-		std::vector<testcase> Testcases;
 		while(getline(file, line)){
 			row = vectorizeLine(line);
 
