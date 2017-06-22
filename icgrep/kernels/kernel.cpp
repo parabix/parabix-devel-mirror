@@ -996,7 +996,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         if (!isDerived[i]) {
             Value * avail = kb->CreateSub(mAvailableItemCount[i], processedItemCount[i]);
-            doMultiBlockArgs.push_back(kb->CreateSelect(kb->CreateICmpULT(avail, strideSize), avail, strideSize));
+            tempArgs.push_back(kb->CreateSelect(kb->CreateICmpULT(avail, strideSize), avail, strideSize));
         }
     }
     // Prepare the temporary buffer area.
