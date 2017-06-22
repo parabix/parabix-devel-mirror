@@ -5,10 +5,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <cassert>
+#include <toolchain/toolchain.h>
 #include "cuda.h"
 
 #define GROUPTHREADS 64
-#define GROUPBLOCKS 64
 
 void checkCudaErrors(CUresult err) {
   assert(err == CUDA_SUCCESS);
@@ -73,10 +73,11 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
   CUdeviceptr devBufferOutput;
   CUdeviceptr devStrides;
 
+  const unsigned numOfGroups = codegen::GroupNum;
   int strideSize = GROUPTHREADS * sizeof(ulong) * 4;
   int strides = filesize/(strideSize * 2) + 1;
   int bufferSize = strides * strideSize;
-  int outputSize = sizeof(ulong) * GROUPTHREADS * strides * (dist + 1) * GROUPBLOCKS;
+  int outputSize = sizeof(ulong) * GROUPTHREADS * strides * (dist + 1) * numOfGroups;
 
   checkCudaErrors(cuMemAlloc(&devBufferInput, bufferSize));
   // checkCudaErrors(cuMemsetD8(devBufferInput, 0, bufferSize));
@@ -95,7 +96,7 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
   unsigned blockSizeX = GROUPTHREADS;
   unsigned blockSizeY = 1;
   unsigned blockSizeZ = 1;
-  unsigned gridSizeX  = GROUPBLOCKS;
+  unsigned gridSizeX  = numOfGroups;
   unsigned gridSizeY  = 1;
   unsigned gridSizeZ  = 1;
 
@@ -133,12 +134,12 @@ ulong * RunPTX(std::string PTXFilename, char * fileBuffer, ulong filesize, const
 
   // Retrieve device data
   ulong * matchRslt;
-  if (posix_memalign((void**)&matchRslt, 32, outputSize/GROUPBLOCKS)) {
+  if (posix_memalign((void**)&matchRslt, 32, outputSize/numOfGroups)) {
     std::cerr << "Cannot allocate memory for output.\n";
     exit(-1);
   }
   
-  checkCudaErrors(cuMemcpyDtoH(matchRslt, devBufferOutput, outputSize/GROUPBLOCKS));
+  checkCudaErrors(cuMemcpyDtoH(matchRslt, devBufferOutput, outputSize/numOfGroups));
 
   // Clean-up
   checkCudaErrors(cuMemFree(devBufferInput));

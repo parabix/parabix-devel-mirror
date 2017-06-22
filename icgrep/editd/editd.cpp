@@ -148,6 +148,7 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
             }
             pattFile.close();
         }
+        codegen::GroupNum = pattVector.size();
     }
 
     // if there are no regexes specified through -e or -f, the first positional argument
@@ -383,7 +384,6 @@ void * DoEditd(void *)
 }
 
 #define GROUPTHREADS 64
-#define GROUPBLOCKS 64
 
 void editdGPUCodeGen(unsigned patternLen){
     NVPTXDriver pxDriver("editd");
@@ -500,7 +500,7 @@ void mergeGPUCodeGen(){
     iBuilder->SetInsertPoint(strideLoopBody);
     Value * myResultStreamPtr = iBuilder->CreateGEP(resultStreamPtr, {iBuilder->CreateMul(strideBlocks, strideNo)});
     Value * myResultStream = iBuilder->CreateLoad(iBuilder->CreateGEP(myResultStreamPtr, {iBuilder->getInt32(0), bid}));
-    for (unsigned i=1; i<GROUPBLOCKS; i++){
+    for (int i=1; i<codegen::GroupNum; i++){
         Value * nextStreamPtr = iBuilder->CreateGEP(myResultStreamPtr, {iBuilder->CreateMul(outputBlocks, iBuilder->getInt32(i)), bid});
         myResultStream = iBuilder->CreateOr(myResultStream, iBuilder->CreateLoad(nextStreamPtr));
     }
@@ -581,7 +581,7 @@ int main(int argc, char *argv[]) {
         }
         std::string patterns((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
 
-        editdGPUCodeGen(patterns.length()/GROUPTHREADS - 1);
+        editdGPUCodeGen(patterns.length()/codegen::GroupNum - 1);
         mergeGPUCodeGen();
         ulong * rslt = RunPTX(PTXFilename, chStream, size, patterns.c_str(), patterns.length(), editDistance);
 
