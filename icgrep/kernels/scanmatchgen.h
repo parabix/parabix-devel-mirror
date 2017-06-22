@@ -13,16 +13,15 @@ namespace llvm { class Module; }
 
 namespace kernel {
     
-class ScanMatchKernel final : public BlockOrientedKernel {
+class ScanMatchKernel : public MultiBlockKernel {
 public:
-    ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const GrepType grepType, const unsigned codeUnitWidth);
+	ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const GrepType grepType, const unsigned codeUnitWidth);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
-protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:
-    const GrepType      mGrepType;
+	void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+	const GrepType      mGrepType;
 };
-}
 
+}
 #endif // SCANMATCHGEN_H

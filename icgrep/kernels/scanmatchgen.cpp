@@ -30,10 +30,11 @@ inline std::string getGrepTypeId(const GrepType grepType) {
     }
 }
 
-void ScanMatchKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
+void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder) {
 
     Module * const m = iBuilder->getModule();
     BasicBlock * const entryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * const initialBlock = iBuilder->CreateBasicBlock("initialBlock");
     BasicBlock * const scanWordIteration = iBuilder->CreateBasicBlock("ScanWordIteration");
     BasicBlock * const matches_test_block = iBuilder->CreateBasicBlock("matches_test_block");
     BasicBlock * const processMatchesEntry = iBuilder->CreateBasicBlock("process_matches_loop");
@@ -43,30 +44,50 @@ void ScanMatchKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder>
     BasicBlock * const remaining_breaks_block = iBuilder->CreateBasicBlock("remaining_breaks_block");
     BasicBlock * const return_block = iBuilder->CreateBasicBlock("return_block");
     BasicBlock * const scanWordExit = iBuilder->CreateBasicBlock("ScanWordExit");
+    BasicBlock * const blocksExit = iBuilder->CreateBasicBlock("blocksExit");
     IntegerType * const sizeTy = iBuilder->getSizeTy();
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / sizeTy->getBitWidth();
     VectorType * const scanwordVectorType =  VectorType::get(sizeTy, fieldCount);
+    Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
+    Constant * blockSizeLess1 = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
+
+    Function::arg_iterator args = mCurrentMethod->arg_begin();
+    /* self = */ args++;
+    Value * itemsToDo = &*(args++);
+    Value * inputStreamAvail = &*(args++);
+    Value * match_result = &*(args++);
+    Value * line_break = &*(args++);
+    Value * input_stream = &*(args);
+
+    Value * blocksToDo = iBuilder->CreateUDiv(iBuilder->CreateAdd(itemsToDo, blockSizeLess1), blockSize);
+    
+    Value * match_result_ptr = iBuilder->CreateBitCast(match_result, scanwordVectorType->getPointerTo());
+    Value * line_break_ptr = iBuilder->CreateBitCast(line_break, scanwordVectorType->getPointerTo());
+
+    iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(blocksToDo, iBuilder->getSize(0)), initialBlock, blocksExit);
+
+    iBuilder->SetInsertPoint(initialBlock);
+    PHINode * const blockBase = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
+    blockBase->addIncoming(iBuilder->getSize(0), entryBlock);
     Value * const blockNo = iBuilder->getScalarField("BlockNo");
     Value * const scanwordPos = iBuilder->CreateShl(blockNo, floor_log2(iBuilder->getBitBlockWidth()));
     Value * const lastRecordStart = iBuilder->getProcessedItemCount("InputStream");
     Value * const lastRecordNum = iBuilder->getScalarField("LineNum");
-
-    Value * const matches = iBuilder->CreateBitCast(iBuilder->loadInputStreamBlock("matchResult", iBuilder->getInt32(0)), scanwordVectorType);
-    Value * const linebreaks = iBuilder->CreateBitCast(iBuilder->loadInputStreamBlock("lineBreak", iBuilder->getInt32(0)), scanwordVectorType);
-
     iBuilder->CreateBr(scanWordIteration);
 
     iBuilder->SetInsertPoint(scanWordIteration);
 
         // while (phiIndex < words per stride)
         PHINode * const phiIndex = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2, "index");
-        phiIndex->addIncoming(iBuilder->getInt32(0), entryBlock);
+        phiIndex->addIncoming(iBuilder->getInt32(0), initialBlock);
         PHINode * const phiScanwordPos = iBuilder->CreatePHI(scanwordPos->getType(), 2, "pos");
-        phiScanwordPos->addIncoming(scanwordPos, entryBlock);
+        phiScanwordPos->addIncoming(scanwordPos, initialBlock);
         PHINode * const phiLineStart = iBuilder->CreatePHI(lastRecordStart->getType(), 2, "recordstart");
-        phiLineStart->addIncoming(lastRecordStart, entryBlock);
+        phiLineStart->addIncoming(lastRecordStart, initialBlock);
         PHINode * const phiLineNum = iBuilder->CreatePHI(lastRecordNum->getType(), 2, "recordnum");
-        phiLineNum->addIncoming(lastRecordNum, entryBlock);
+        phiLineNum->addIncoming(lastRecordNum, initialBlock);
+        Value * const matches = iBuilder->CreateLoad(iBuilder->CreateGEP(match_result_ptr, blockBase));
+        Value * const linebreaks = iBuilder->CreateLoad(iBuilder->CreateGEP(line_break_ptr, blockBase));
         Value * const matchWord = iBuilder->CreateExtractElement(matches, phiIndex);
         Value * const recordBreaks = iBuilder->CreateExtractElement(linebreaks, phiIndex);
 
@@ -127,15 +148,15 @@ void ScanMatchKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder>
             Value * matchRecordEnd = iBuilder->CreateAdd(phiScanwordPos, iBuilder->CreateCountForwardZeroes(phiMatchWord));
 
             Function * const matcher = m->getFunction("matcher"); assert (matcher);
-            auto args = matcher->arg_begin();
-            Value * const mrn = iBuilder->CreateZExtOrTrunc(matchRecordNum, args->getType());
-            Value * const mrs = iBuilder->CreateZExtOrTrunc(matchRecordStart, (++args)->getType());
-            Value * const mre = iBuilder->CreateZExtOrTrunc(matchRecordEnd, (++args)->getType());
+            auto args_matcher = matcher->arg_begin();
+            Value * const mrn = iBuilder->CreateZExtOrTrunc(matchRecordNum, args_matcher->getType());
+            Value * const mrs = iBuilder->CreateZExtOrTrunc(matchRecordStart, (++args_matcher)->getType());
+            Value * const mre = iBuilder->CreateZExtOrTrunc(matchRecordEnd, (++args_matcher)->getType());
             Value * const inputStream = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
-            Value * const is = iBuilder->CreatePointerCast(inputStream, (++args)->getType());
+            Value * const is = iBuilder->CreatePointerCast(inputStream, (++args_matcher)->getType());
             if (mGrepType == GrepType::Normal) {
-                Value * const sz = iBuilder->CreateZExtOrTrunc(iBuilder->getBufferedSize("InputStream"), (++args)->getType());
-                Value * const fi = iBuilder->CreateZExtOrTrunc(iBuilder->getScalarField("FileIdx"), (++args)->getType());
+                Value * const sz = iBuilder->CreateZExtOrTrunc(iBuilder->getBufferedSize("InputStream"), (++args_matcher)->getType());
+                Value * const fi = iBuilder->CreateZExtOrTrunc(iBuilder->getScalarField("FileIdx"), (++args_matcher)->getType());
                 iBuilder->CreateCall(matcher, {mrn, mrs, mre, is, sz, fi});
             } else {
                 iBuilder->CreateCall(matcher, {mrn, mrs, mre, is});
@@ -186,10 +207,15 @@ void ScanMatchKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder>
     iBuilder->setScalarField("BlockNo", iBuilder->CreateAdd(blockNo, ConstantInt::get(blockNo->getType(), 1)));
     iBuilder->setScalarField("LineNum", phiFinalRecordNum);
     iBuilder->setProcessedItemCount("InputStream", phiFinalRecordStart);
+    Value * blockBaseNext = iBuilder->CreateAdd(blockBase, ConstantInt::get(iBuilder->getSizeTy(), 1));
+    blockBase->addIncoming(blockBaseNext, scanWordExit);
+    iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpNE(blockBaseNext, blocksToDo), initialBlock, blocksExit);
+
+    iBuilder->SetInsertPoint(blocksExit);
 }
 
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, GrepType grepType, const unsigned codeUnitWidth)
-: BlockOrientedKernel("scanMatch" + getGrepTypeId(grepType) + std::to_string(codeUnitWidth),
+: MultiBlockKernel("scanMatch" + getGrepTypeId(grepType) + std::to_string(codeUnitWidth),
     {Binding{b->getStreamSetTy(1, 1), "matchResult"}, Binding{b->getStreamSetTy(1, 1), "lineBreak"}, Binding{b->getStreamSetTy(1, 8), "InputStream", UnknownRate()}},
     {},
     {Binding{b->getInt32Ty(), "FileIdx"}},
