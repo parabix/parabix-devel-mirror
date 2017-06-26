@@ -493,16 +493,15 @@ std::string RegexGen::parseRE(std::vector<string> header, std::vector<string> ro
 					fullRE.push_back(re);
 				}
 				else if (header[colnum] == "repeat_nm" ){
-					std::vector<int> randoms;
 					int r1 = rand() % 200;
 					int r2 = rand() % 200;
-					while (r1 == 0 && r2 == 0){
+					while ((r1 == 0) && (r2 == 0)){
 						r2 = rand() % 200;
 					}
-					randoms.push_back(r1);
-					randoms.push_back(r2);
-					sort(randoms.begin(), randoms.end());
-					re = getRep(cc, randoms[0], randoms[1]);
+					if (r1 > r2) {
+						std::swap(r1, r2);
+					}
+					re = getRep(cc, r1, r2);
 					// std::string nestDepth = row[colnum+1];
 					// int depth = std::stoi(nestDepth);
 					// while(depth>0){
