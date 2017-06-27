@@ -20,6 +20,9 @@ void IcgrepTest::resetBash(string fileName){
 	file << "#!/bin/bash\n\n";
 	file << "echo \"Starting bash file: " << fileName << "\"\n";
 	file.close();
+	//give permission.
+	string cmd = "chmod +x " + fileName;
+	system(cmd.c_str());
 }
 
 void IcgrepTest::clearDir(string dir){
@@ -84,8 +87,8 @@ void IcgrepTest::buildTest(string re, vector<string> flags, re::RE_Syntax syntax
 		string icgrepResult = "../icgrep/combine/icgrep-test/grep/icgrep-result";
 		string grepResult = "../icgrep/combine/icgrep-test/grep/grep-result";
 
-		writeToBash(icgrepScript, "echo \"" + re + "\" >> " + icgrepResult);
-		writeToBash(grepScript, "echo \"" + re + "\" >> " + grepResult);
+		writeToBash(icgrepScript, "echo \"" + re + "\" | tee -a " + icgrepResult);
+		writeToBash(grepScript, "echo \"" + re + "\" | tee -a " + grepResult);
 
 		if (hasFlag("-f", flags)){
 			flags = removeFlag("-f", flags);
@@ -132,8 +135,8 @@ void IcgrepTest::buildTest(string re, vector<string> flags, re::RE_Syntax syntax
 		string grepResult = "../icgrep/combine/icgrep-test/grep/grep-result";
 		vector<string> gflags;
 
-		writeToBash(icgrepScript, "echo \"" + re + "\" >> " + icgrepResult);
-		writeToBash(grepScript, "echo \"" + re + "\" >> " + grepResult);
+		writeToBash(icgrepScript, "echo \"" + re + "\" | tee -a " + icgrepResult);
+		writeToBash(grepScript, "echo \"" + re + "\" | tee -a " + grepResult);
 
 	 	if (hasFlag("-f", flags)){
 	 		flags = removeFlag("-f", flags);
@@ -255,6 +258,6 @@ void IcgrepTest::getResult(){
 	compareResults("..//icgrep/combine/icgrep-test/grep/icgrep-result", "..//icgrep/combine/icgrep-test/grep/grep-result", "GNU grep");
     compareResults("..//icgrep/combine/icgrep-test/pcre/icgrep-result", "..//icgrep/combine/icgrep-test/pcre/pcre-result", "PCRE grep");
 
-    cout << "Done\n";
+    cout << "End of test\n";
 }
 

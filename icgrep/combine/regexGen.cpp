@@ -522,12 +522,6 @@ std::string RegexGen::parseRE(std::vector<string> header, std::vector<string> ro
 					if (!re.empty())
 					fullRE.push_back(re);
 				}
-				else if (header[colnum] == "repeat_m_less" ){
-					random = rand() % 200 + 1;
-					re = getRep(cc, 0, random);
-					if (!re.empty())
-					fullRE.push_back(re);
-				}
 				else if (header[colnum] == "backref"){
 					bref = true;
 				}
