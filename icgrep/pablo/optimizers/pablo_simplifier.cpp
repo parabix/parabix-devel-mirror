@@ -12,6 +12,7 @@
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_var.h>
+#include <boost/container/flat_set.hpp>
 #ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
@@ -29,7 +30,7 @@ using TypeId = PabloAST::ClassTypeId;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * Simplifier::triviallyFold(Statement * stmt, PabloBlock * const block) {
+PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
     if (isa<Not>(stmt)) {
         PabloAST * value = stmt->getOperand(0);
         if (LLVM_UNLIKELY(isa<Not>(value))) {
@@ -99,35 +100,9 @@ PabloAST * Simplifier::triviallyFold(Statement * stmt, PabloBlock * const block)
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief discardNestedIfBlock
- *
- * If this inner block is composed of only Boolean logic and Assign statements and there are fewer than 3
- * statements, just add the statements in the inner block to the current block
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool discardNestedIfBlock(const PabloBlock * const block) {
-    unsigned computations = 0;
-    for (const Statement * stmt : *block) {
-        switch (stmt->getClassTypeId()) {
-            case TypeId::And:
-            case TypeId::Or:
-            case TypeId::Xor:
-                if (++computations > 3) {
-                    return false;
-                }
-            case TypeId::Not:
-            case TypeId::Assign:
-                break;
-            default:
-                return false;
-        }
-    }
-    return true;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief VariableTable
  ** ------------------------------------------------------------------------------------------------------------- */
-struct Simplifier::VariableTable {
+struct VariableTable {
 
     VariableTable(VariableTable * predecessor = nullptr)
     : mPredecessor(predecessor) {
@@ -152,10 +127,65 @@ struct Simplifier::VariableTable {
         assert (get(var) == value);
     }
 
+    bool isNonZero(const PabloAST * const var) const {
+        if (mNonZero.count(var) != 0) {
+            return true;
+        } else if (mPredecessor) {
+            return mPredecessor->isNonZero(var);
+        }
+        return false;
+    }
+
+    void addNonZero(const PabloAST * const var) {
+        mNonZero.insert(var);
+    }
+
 private:
     VariableTable * const mPredecessor;
     flat_map<PabloAST *, PabloAST *> mMap;
+    flat_set<const PabloAST *> mNonZero;
 };
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isTrivial
+ *
+ * If this inner block is composed of only Boolean logic and Assign statements and there are fewer than 3
+ * statements, just add the statements in the inner block to the current block
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool isTrivial(const PabloBlock * const block) {
+    unsigned computations = 0;
+    for (const Statement * stmt : *block) {
+        switch (stmt->getClassTypeId()) {
+            case TypeId::And:
+            case TypeId::Or:
+            case TypeId::Xor:
+                if (++computations > 3) {
+                    return false;
+                }
+            case TypeId::Not:
+            case TypeId::Assign:
+                break;
+            default:
+                return false;
+        }
+    }
+    return true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief flatten
+ ** ------------------------------------------------------------------------------------------------------------- */
+Statement * flatten(Branch * const br) {
+    Statement * stmt = br;
+    Statement * nested = br->getBody()->front();
+    while (nested) {
+        Statement * next = nested->removeFromParent();
+        nested->insertAfter(stmt);
+        stmt = nested;
+        nested = next;
+    }
+    return br->eraseFromParent();
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief redundancyElimination
@@ -163,15 +193,19 @@ private:
  * Note: Do not recursively delete statements in this function. The ExpressionTable could use deleted statements
  * as replacements. Let the DCE remove the unnecessary statements with the finalized Def-Use information.
  ** ------------------------------------------------------------------------------------------------------------- */
-void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable * const et, VariableTable * const vt) {
+void redundancyElimination(PabloBlock * const block, ExpressionTable * const et, VariableTable * const vt) {
     VariableTable variables(vt);
 
     // When processing a While body, we cannot use its initial value from the outer
     // body since the Var will likely be assigned a different value in the current
     // body that should be used on the subsequent iteration of the loop.
-    if (While * br = dyn_cast_or_null<While>(block->getBranch())) {
-        for (Var * var : br->getEscaped()) {
-            variables.put(var, var);
+    if (Branch * br = block->getBranch()) {
+        assert ("block has a branch but the expression and variable tables were not supplied" && et && vt);
+        variables.addNonZero(br->getCondition());
+        if (LLVM_UNLIKELY(isa<While>(br))) {
+            for (Var * var : cast<While>(br)->getEscaped()) {
+                variables.put(var, var);
+            }
         }
     }
 
@@ -219,21 +253,23 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
                 continue;
             }
 
+            if (LLVM_LIKELY(isa<If>(br))) {
+                if (LLVM_UNLIKELY(variables.isNonZero(br->getCondition()))) {
+                    stmt = flatten(br);
+                    continue;
+                }
+            }
+
             // Process the Branch body
             redundancyElimination(br->getBody(), &expressions, &variables);
 
-            // Check whether this If branch has enough operations nested within it to
-            // be worth the cost of the branch.
-            if (LLVM_UNLIKELY(isa<If>(br) && discardNestedIfBlock(br->getBody()))) {
-                Statement * nested = br->getBody()->front();
-                while (nested) {
-                    Statement * next = nested->removeFromParent();
-                    nested->insertAfter(stmt);
-                    stmt = nested;
-                    nested = next;
+            if (LLVM_LIKELY(isa<If>(br))) {
+                // Check whether the cost of testing the condition and taking the branch with
+                // 100% correct prediction rate exceeds the cost of the body itself
+                if (LLVM_UNLIKELY(isTrivial(br->getBody()))) {
+                    stmt = flatten(br);
+                    continue;
                 }
-                stmt = br->eraseFromParent();
-                continue;
             }
 
         } else {
@@ -264,6 +300,23 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
                 continue;
             }
 
+            // Check whether this statement is trivially non-zero and if so, add it to our set of non-zero variables.
+            // This will allow us to flatten an If scope if its branch is always taken.
+            if (isa<Or>(stmt)) {
+                for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
+                    if (LLVM_UNLIKELY(variables.isNonZero(stmt->getOperand(i)))) {
+                        variables.addNonZero(stmt);
+                        break;
+                    }
+                }
+            } else if (isa<Advance>(stmt)) {
+                const Advance * const adv = cast<Advance>(stmt);
+                if (LLVM_LIKELY(adv->getAmount() < 32)) {
+                    if (LLVM_UNLIKELY(variables.isNonZero(adv->getExpression()))) {
+                        variables.addNonZero(adv);
+                    }
+                }
+            }
         }
 
         stmt = stmt->getNextNode();
@@ -272,7 +325,7 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
     // If this block has a branch statement leading into it, we can verify whether an escaped value
     // was updated within this block and update the preceeding block's variable state appropriately.
 
-    if (Branch * const br = block->getBranch()) { assert (vt);
+    if (Branch * const br = block->getBranch()) {
 
         // When removing identical escaped values, we have to consider that the identical Vars could
         // be assigned new differing values later in the outer body. Thus instead of replacing them
@@ -310,7 +363,7 @@ void Simplifier::redundancyElimination(PabloBlock * const block, ExpressionTable
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
  ** ------------------------------------------------------------------------------------------------------------- */
-void Simplifier::deadCodeElimination(PabloBlock * const block) {
+void deadCodeElimination(PabloBlock * const block) {
 
     flat_map<PabloAST *, Assign *> unread;
 
@@ -354,7 +407,7 @@ void Simplifier::deadCodeElimination(PabloBlock * const block) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
  ** ------------------------------------------------------------------------------------------------------------- */
-void Simplifier::deadCodeElimination(PabloKernel * kernel) {
+void deadCodeElimination(PabloKernel * kernel) {
 
     deadCodeElimination(kernel->getEntryBlock());
 
@@ -386,7 +439,7 @@ void Simplifier::deadCodeElimination(PabloKernel * kernel) {
  *
  * Find and replace any Pablo operations with a less expensive equivalent operation whenever possible.
  ** ------------------------------------------------------------------------------------------------------------- */
-void Simplifier::strengthReduction(PabloBlock * const block) {
+void strengthReduction(PabloBlock * const block) {
 
     Statement * stmt = block->front();
     while (stmt) {
@@ -454,7 +507,7 @@ void Simplifier::strengthReduction(PabloBlock * const block) {
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool Simplifier::optimize(PabloKernel * kernel) {
-    redundancyElimination(kernel->getEntryBlock());
+    redundancyElimination(kernel->getEntryBlock(), nullptr, nullptr);
     strengthReduction(kernel->getEntryBlock());
     deadCodeElimination(kernel);
     #ifndef NDEBUG
