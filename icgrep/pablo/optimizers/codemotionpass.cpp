@@ -202,6 +202,7 @@ struct CodeMotionPassContainer {
                 for (Var * var : cast<Branch>(stmt)->getEscaped()) {
                     mLoopVariants.insert(var);
                 }
+                stmt = stmt->getNextNode();
             } else {
                 bool invariant = true;
                 for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
