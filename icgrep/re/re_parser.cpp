@@ -143,7 +143,10 @@ RE * RE_Parser::parse_seq_with_intersect(RE* reToBeIntersected) {
 
 RE * RE_Parser::parse_next_item() {
     RE * re = nullptr;
-    if (mCursor.more()) {        
+    if (fModeFlagSet & IGNORE_SPACE_MODE_FLAG) {
+        while (*mCursor == ' ') mCursor++;
+    }
+    if (mCursor.more()) {
         switch (*mCursor) {
             case '(':
                 ++mCursor;
@@ -250,9 +253,9 @@ RE * RE_Parser::parse_group() {
                     switch (*mCursor) {
                         case 'i': modeBit = CASE_INSENSITIVE_MODE_FLAG; break;
                         case 'g': modeBit = GRAPHEME_CLUSTER_MODE; break;
-                        //case 'm': modeBit = MULTILINE_MODE_FLAG; break;
+                        case 'm': modeBit = MULTILINE_MODE_FLAG; break;
                         //case 's': modeBit = DOTALL_MODE_FLAG; break;
-                        //case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
+                        case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
                         //case 'd': modeBit = UNIX_LINES_MODE_FLAG; break;
                         default: ParseFailure("Unsupported mode flag.");
                     }
