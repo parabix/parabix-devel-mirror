@@ -496,6 +496,7 @@ abcdefghijklmno</datafile>
 <grepcase regexp="=[0-9a-z]{200,1000};" datafile="bounded_charclass" grepcount="3"/>
 <grepcase regexp="=[0-9]{500,1000};" datafile="bounded_charclass" grepcount="1"/>
 <grepcase regexp="=0123[0-9]{496,996};" datafile="bounded_charclass" grepcount="1"/>
+<grepcase regexp="=([a-f].{0,2})+;" datafile="bounded_charclass" grepcount="6"/>
 
 
 <grepcase regexp="^D[zabcdefoy]g" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="7"/>
