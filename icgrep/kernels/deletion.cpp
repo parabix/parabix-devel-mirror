@@ -47,6 +47,299 @@ inline Value * partial_sum_popcount(const std::unique_ptr<KernelBuilder> & iBuil
     return field;
 }
 
+SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount, unsigned PEXT_width)
+: BlockOrientedKernel("PEXTdel" + std::to_string(fw) + "_" + std::to_string(streamCount),
+                  {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"}, Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
+                  {}, {}, {}, {})
+, mDelCountFieldWidth(fw)
+, mStreamCount(streamCount)
+, mSwizzleFactor(iBuilder->getBitBlockWidth() / PEXT_width)
+// add mSwizzleFactor - 1 to mStreamCount before dividing by mSwizzleFactor
+// to prevent rounding errors.
+, mSwizzleSetCount((mStreamCount + mSwizzleFactor - 1)/mSwizzleFactor)
+, mPEXTWidth(PEXT_width)
+{
+    assert((mDelCountFieldWidth > 0) && ((mDelCountFieldWidth & (mDelCountFieldWidth - 1)) == 0)
+        && "mDelCountFieldWidth must be a power of 2");
+    assert(mSwizzleFactor > 1 && "mDelCountFieldWidth must be less than the block width");
+    assert((mPEXTWidth == 64 || mPEXTWidth == 32) && "PEXT width must be 32 or 64");
+    
+    mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle0", MaxRatio(1)});
+    addScalar(iBuilder->getBitBlockType(), "pendingSwizzleData0");
+    for (unsigned i = 1; i < mSwizzleSetCount; i++) {
+        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1),
+            "outputSwizzle" + std::to_string(i), FixedRatio(1, 1, "outputSwizzle0")});
+        addScalar(iBuilder->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
+    }
+    addScalar(iBuilder->getSizeTy(), "pendingOffset");
+}
+
+void SwizzledDeleteByPEXTkernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+    // We use delMask to apply the same PEXT delete operation to each stream in the input stream set
+    Value * delMask = iBuilder->loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0));
+    const auto masks = get_PEXT_masks(iBuilder, delMask);
+    generateProcessingLoop(iBuilder, masks, delMask);
+}
+
+void SwizzledDeleteByPEXTkernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder, Value * remainingBytes) {
+    IntegerType * vecTy = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
+    Value * remaining = iBuilder->CreateZExt(remainingBytes, vecTy);
+    Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
+    Value * delMask = iBuilder->CreateOr(EOF_del, iBuilder->loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0)));
+    const auto masks = get_PEXT_masks(iBuilder, delMask);
+    generateProcessingLoop(iBuilder, masks, delMask);
+    Constant * blockOffsetMask = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
+    Constant * outputIndexShift = iBuilder->getSize(std::log2(mDelCountFieldWidth));
+    
+    Value * outputProduced = iBuilder->getProducedItemCount("outputSwizzle0"); // All output groups have the same count.
+    Value * producedOffset = iBuilder->CreateAnd(outputProduced, blockOffsetMask);
+    Value * outputIndex = iBuilder->CreateLShr(producedOffset, outputIndexShift);
+    Value * pendingOffset = iBuilder->getScalarField("pendingOffset");
+
+    // Write the pending data.
+    for (unsigned i = 0; i < mSwizzleSetCount; i++) {
+        Value * pendingData = iBuilder->getScalarField("pendingSwizzleData" + std::to_string(i));
+        Value * outputStreamPtr = iBuilder->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), iBuilder->getInt32(0));
+        iBuilder->CreateBlockAlignedStore(pendingData, iBuilder->CreateGEP(outputStreamPtr, outputIndex));
+    }
+    iBuilder->setProducedItemCount("outputSwizzle0", iBuilder->CreateAdd(pendingOffset, outputProduced));
+}
+
+std::vector<Value *> SwizzledDeleteByPEXTkernel::get_PEXT_masks(const std::unique_ptr<KernelBuilder> & iBuilder, Value * del_mask) {
+    // Del mask marks locations of bits we want to delete with 1 bits. Delete marked bits by extracting only the bits not marked in this way.
+    // Apply the PEXT operation mPEXTWidth bits at a time (e.g. if block is 256 bits and mPEXTWidth is 64, apply 4 PEXT ops to full process block.
+    Value * m = iBuilder->fwCast(mPEXTWidth, iBuilder->simd_not(del_mask)); 
+    std::vector<Value *> masks;
+    for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/mPEXTWidth; i++) {
+        masks.push_back(iBuilder->CreateExtractElement(m, i));
+    }
+    return masks;
+}
+
+void SwizzledDeleteByPEXTkernel::generateProcessingLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<Value *> & masks,
+                                                Value * delMask) {
+    Value * delCount = iBuilder->simd_popcount(mDelCountFieldWidth, iBuilder->simd_not(delMask)); // delMask marks the positions we want to extract
+    std::vector<Value *> counts;
+    for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/ mPEXTWidth; i++) {
+    	// Store the deletion counts for each PEXT field
+        counts.push_back(iBuilder->CreateExtractElement(delCount, i)); // Extract field i from SIMD register delCount
+    }
+
+    generatePEXTAndSwizzleLoop(iBuilder, masks, counts);
+}
+
+/*
+What this function does in pseudo code:
+for (mSwizzleFactor)
+	create a swizzle set containing mSwizzleFactor blocks
+	apply PEXT to each block in the swizzle set
+	store the swizzleSet in PEXTedSwizzleSets vector
+	
+for (each swizzle row i)
+	for (each swizzle set j)
+		processes row i in swizzle set j
+		store output in pendingData[j]
+*/
+void SwizzledDeleteByPEXTkernel::generatePEXTAndSwizzleLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<Value *> & masks,
+                                                    std::vector<Value *> counts) {
+    // For each of the k swizzle sets required to apply PEXT to all input streams
+    std::vector<std::vector<Value *>> PEXTedSwizzleSets;
+    for (unsigned j = 0; j < mSwizzleSetCount; ++j) {
+    // Group input blocks together into input swizzle set. Input set should contain mSwizzleSetCount blocks (e.g. for U8U16 16/4=4).
+    // Each block belongs to a different input stream.
+        std::vector<Value *> input;
+        unsigned streamSelectionIndex = j * mSwizzleFactor;
+        for (unsigned i = streamSelectionIndex; i < (streamSelectionIndex + mSwizzleFactor); ++i) {
+	    	// Check if i > mStreamCount. If it is, add null streams until we get mSwizzleSetCount streams in the input vector
+            if ( i >= mStreamCount) {
+				input.push_back(iBuilder->allZeroes());
+            } else {
+                input.push_back(iBuilder->loadInputStreamBlock("inputStreamSet", iBuilder->getInt32(i)));
+            }
+        }
+        // each partiallyCompressedSwizzleSet is obtained by applying PEXT to each of the blocks in input
+        PEXTedSwizzleSets.push_back(apply_PEXT_deletion_with_swizzle(iBuilder, masks, input));
+    }
+ 	// Compress the PEXTedSwizzleSets
+    // Output is written and committed to the output buffer one swizzle at a time.
+    Constant * blockOffsetMask = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
+    Constant * outputIndexShift = iBuilder->getSize(std::log2(mDelCountFieldWidth));
+    
+    Value * outputProduced = iBuilder->getProducedItemCount("outputSwizzle0"); // All output groups have the same count.
+    Value * producedOffset = iBuilder->CreateAnd(outputProduced, blockOffsetMask);
+    Value * outputIndex = iBuilder->CreateLShr(producedOffset, outputIndexShift);
+
+    // There may be pending data in the kernel state, for up to mDelCountFieldWidth-1 bits per stream.
+    Value * pendingOffset = iBuilder->getScalarField("pendingOffset");
+    // There is a separate vector of pending data for each swizzle group.
+    std::vector<Value *> pendingData;
+    std::vector<Value *> outputStreamPtr;
+
+    for (unsigned i = 0; i < mSwizzleSetCount; i++) {
+        pendingData.push_back(iBuilder->getScalarField("pendingSwizzleData" + std::to_string(i)));
+        outputStreamPtr.push_back(iBuilder->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), iBuilder->getInt32(0)));
+    }
+
+    // For each row i
+    for (unsigned i = 0; i < mSwizzleFactor; i++) {
+        // Generate code for each of the mSwizzleFactor fields making up a block.
+        // We load the count for the field and process all swizzle groups accordingly.
+        Value * newItemCount = counts[i];
+        //iBuilder->CallPrintInt("NeW ITeM COUNT!", newItemCount); //TODO remove
+        Value * pendingSpace = iBuilder->CreateSub(iBuilder->getSize(mDelCountFieldWidth), pendingOffset);
+        Value * pendingSpaceFilled = iBuilder->CreateICmpUGE(newItemCount, pendingSpace);
+        
+        // Data from the ith swizzle pack of each group is processed
+        // according to the same newItemCount, pendingSpace, ...
+        for (unsigned j = 0; j < mSwizzleSetCount; j++) {
+            Value * newItems = PEXTedSwizzleSets[j][i];
+            //iBuilder->CallPrintRegister("NeW ITeMS!", newItems); //TODO remove
+            // Combine as many of the new items as possible into the pending group.
+            Value * combinedGroup = iBuilder->CreateOr(pendingData[j], iBuilder->CreateShl(newItems, iBuilder->simd_fill(mDelCountFieldWidth,
+                pendingOffset)));
+	    //iBuilder->CallPrintRegister("ComBineDGROUP", combinedGroup);
+            // To avoid an unpredictable branch, always store the combined group, whether full or not.             
+            iBuilder->CreateBlockAlignedStore(combinedGroup, iBuilder->CreateGEP(outputStreamPtr[j], outputIndex));
+            
+            // Any items in excess of the space available in the current pending group overflow for the next group.
+            Value * overFlowGroup = iBuilder->CreateLShr(newItems, iBuilder->simd_fill(mDelCountFieldWidth, pendingSpace));
+            // If we filled the space, then the overflow group becomes the new pending group and the index is updated.
+            pendingData[j] = iBuilder->CreateSelect(pendingSpaceFilled, overFlowGroup, combinedGroup);
+        }
+        outputIndex = iBuilder->CreateSelect(pendingSpaceFilled, iBuilder->CreateAdd(outputIndex, iBuilder->getSize(1)), outputIndex);
+        pendingOffset = iBuilder->CreateAnd(iBuilder->CreateAdd(newItemCount, pendingOffset), iBuilder->getSize(mDelCountFieldWidth-1));
+    }
+    
+    iBuilder->setScalarField("pendingOffset", pendingOffset);
+    //iBuilder->CallPrintInt("pendingOffset", pendingOffset);
+    
+    Value * newlyProduced = iBuilder->CreateSub(iBuilder->CreateShl(outputIndex, outputIndexShift), producedOffset);
+    Value * produced = iBuilder->CreateAdd(outputProduced, newlyProduced);
+    for (unsigned j = 0; j < mSwizzleSetCount; j++) {
+        iBuilder->setScalarField("pendingSwizzleData" + std::to_string(j), pendingData[j]);
+        //iBuilder->CallPrintRegister("pendingData[j]", pendingData[j]);
+    }
+    iBuilder->setProducedItemCount("outputSwizzle0", produced);
+}
+
+/*
+Apply PEXT deletion to the blocks in strms and swizzle the result.
+
+Q: Why is it advantageous to swizzle the PEXTed streams?
+
+A: PEXT doesn't compress streams, if the input to a PEXT operation is 64 bits wide, the output is also 64 bits wide.
+
+Example:
+Input:     11101101
+PEXT mask: 11110000
+Output:    00001110
+
+PEXT selects the bits we tell it to and stores them at contiguous lower-order bits. Higher-order bits are
+cleared. This has implications if we're working with multiple streams.
+
+For example, say we've applied PEXT on the following 4 streams using this deletion mask (inverse of PEXT mask): 00000011 00011111 00111111 00000111
+(I think this diagram is backwards, PEXTed bits should be stored in lower-order bits, not higher.)
+Stream 1:   abcdef00 ghi00000 jk000000 lmnop000
+Stream 2:   qrstuv00 wxy00000 z1000000 23456000
+Stream 3:   ABCDEF00 GHI00000 JK000000 LMNOP000
+Stream 4:   QRSTUV00 WZY00000 Z1000000 23456000
+
+If we wanted to compress each stream to remove the sequences of 0s, it's tricky. The first 32 bits of each stream
+should be compress by 2 bits, the second 32 bits by 5, etc. If we swizzle the streams with a swizzle factor of 4 we have a much easier
+time:
+
+The swizzled output using a field width of 8 produces the following swizzles (swizzle factor = block width / pext field width = 4).
+
+Swizzle 1:  abcdef00 qrstuv00 ABCDEF00 QRSTUV00
+Swizzle 2:  ghi00000 wxy00000 GHI00000 WZY00000
+Swizzle 3:  jk000000 z1000000 JK000000 Z1000000
+Swizzle 4:  lmnop000 23456000 LMNOP000 23456000
+
+Now we can compress each 32-bit segment of swizzle 1 by 2, each 32 bit segment of swizzle 2 by 4, etc. Once we've completed the 
+compression, we unswizzle to restore the 4 streams. The streams are now fully compressed!
+
+Args:
+    strms: the vector of blocks to apply PEXT operations to. strms[i] is the block associated with the ith input stream.
+    masks: the PEXT deletion masks to apply to each block in strms (input mask is broken into PEXT width pieces, apply pieces 
+        sequentially to PEXT a full block.)
+
+Returns:
+    output (vector of Value*): Swizzled, PEXTed version of strms. See example above.
+*/
+std::vector<Value *> SwizzledDeleteByPEXTkernel::apply_PEXT_deletion_with_swizzle(const std::unique_ptr<KernelBuilder> & iBuilder, 
+                                                             const std::vector<Value *> & masks, std::vector<Value *> strms) {
+    Value * PEXT_func = nullptr;
+    if (mPEXTWidth == 64) {
+        PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_64);
+    } else if (mPEXTWidth == 32) {
+        PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_32);
+    }
+    
+    std::vector<Value *> output;     
+    for (unsigned i = 0; i < strms.size(); i++) {
+        Value * v = iBuilder->fwCast(mPEXTWidth, strms[i]);
+        output.push_back(Constant::getNullValue(v->getType())); 
+    }
+
+    // For each of the input streams
+    for (unsigned j = 0; j < strms.size(); j++) {
+        Value * v = iBuilder->fwCast(mPEXTWidth, strms[j]); // load stream j
+        // Process the stream's block mPEXTWidth bits at a time (a PEXT operation can't do more than 64 bits at a time)
+        for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/mPEXTWidth; i++) {
+            Value * field = iBuilder->CreateExtractElement(v, i); // Load from block j at index i (load mPEXTWidth bits)
+            Value * PEXTed_field = iBuilder->CreateCall(PEXT_func, {field, masks[i]}); // Apply PEXT deletion to the segment we just loaded
+            /*
+             We loaded from input at index i within stream j's block. We store result in ouput within stream i's block at position j. This swizzles the output blocks.
+             E.g.:
+
+               *i*
+            *j* a b c d strms[0]
+                e f g h 
+                i j k l
+                m n o p
+
+             Apply pext deletion at each position, then swizzle results:
+               *j*
+            *i* a` e` i` m` output[0]
+                b` f` j` n`
+                c` g` k` o`  
+                d` i` l` p`          
+            */    
+            output[i] = iBuilder->CreateInsertElement(output[i], PEXTed_field, j); 
+            /*
+            numCompressedBits = 0
+
+            for (each swizzleField position j)
+                for (each input swizzle i)
+                    get PEXTed_field
+                    Shift PEXTed_field left by "numCompressedBits" (in output[i])
+                    OR PEXTed_field into output[i] (output[i] is output swizzle buffer for input swizzle i)
+                numCompressedBits += popcount(mask[i])
+            */
+        }
+    }
+    
+    return output;
+}
+
+Value * SwizzledDeleteByPEXTkernel::apply_PEXT_deletion(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<Value *> & masks, Value * strm) {
+    Value * PEXT_func = nullptr;
+    if (mPEXTWidth == 64) {
+        PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_64);
+    } else if (mPEXTWidth == 32) {
+        PEXT_func = Intrinsic::getDeclaration(iBuilder->getModule(), Intrinsic::x86_bmi_pext_32);
+    }
+       
+    Value * v = iBuilder->fwCast(mPEXTWidth, strm);
+    Value * output = Constant::getNullValue(v->getType());
+    for (unsigned i = 0; i < iBuilder->getBitBlockWidth()/mPEXTWidth; i++) {
+        Value * field = iBuilder->CreateExtractElement(v, i);
+        Value * compressed = iBuilder->CreateCall(PEXT_func, {field, masks[i]});
+        output = iBuilder->CreateInsertElement(output, compressed, i);
+    }
+    return output;
+}
+
 // Apply deletion to a set of stream_count input streams to produce a set of output streams.
 // Kernel inputs: stream_count data streams plus one del_mask stream
 // Outputs: the deleted streams, plus a partial sum popcount
@@ -308,6 +601,7 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
     // We load the count for the field and process all swizzle groups accordingly.
     for (unsigned i = 0; i < mSwizzleFactor; i++) {
         Value * newItemCount = iBuilder->CreateLoad(iBuilder->CreateGEP(countStreamPtr, iBuilder->getInt32(i)));
+	iBuilder->CallPrintInt("newItemCount", newItemCount);
         Value * pendingSpace = iBuilder->CreateSub(iBuilder->getSize(mFieldWidth), pendingOffset);
         Value * pendingSpaceFilled = iBuilder->CreateICmpUGE(newItemCount, pendingSpace);
         
@@ -315,8 +609,10 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
         // according to the same newItemCount, pendingSpace, ...
         for (unsigned j = 0; j < mSwizzleSetCount; j++) {
             Value * newItems = iBuilder->loadInputStreamBlock("inputSwizzle" + std::to_string(j), iBuilder->getInt32(i));
+	    iBuilder->CallPrintRegister("newItems", newItems);
             // Combine as many of the new items as possible into the pending group.
             Value * combinedGroup = iBuilder->CreateOr(pendingData[j], iBuilder->CreateShl(newItems, iBuilder->simd_fill(mFieldWidth, pendingOffset)));
+	    //iBuilder->CallPrintRegister("combinedGroup", combinedGroup);
             // To avoid an unpredictable branch, always store the combined group, whether full or not.
                 
             iBuilder->CreateBlockAlignedStore(combinedGroup, iBuilder->CreateGEP(outputStreamPtr[j], outputIndex));
@@ -329,11 +625,15 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
         pendingOffset = iBuilder->CreateAnd(iBuilder->CreateAdd(newItemCount, pendingOffset), iBuilder->getSize(mFieldWidth-1));
     }
     iBuilder->setScalarField("pendingOffset", pendingOffset);
+    iBuilder->CallPrintInt("pendingOffset", pendingOffset);
+
     
     Value * newlyProduced = iBuilder->CreateSub(iBuilder->CreateShl(outputIndex, outputIndexShift), producedOffset);
     Value * produced = iBuilder->CreateAdd(outputProduced, newlyProduced);
     for (unsigned j = 0; j < mSwizzleSetCount; j++) {
         iBuilder->setScalarField("pendingSwizzleData" + std::to_string(j), pendingData[j]);
+        //iBuilder->CallPrintRegister("pendingData[j]", pendingData[j]);
+
     }
     iBuilder->setProducedItemCount("outputSwizzle0", produced);
 }

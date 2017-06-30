@@ -22,6 +22,35 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
+/*
+Input: a set of bitstreams
+Output: swizzles containing the input bitstreams with the specified bits deleted
+*/
+class SwizzledDeleteByPEXTkernel final : public BlockOrientedKernel {
+public:
+    SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount, unsigned PEXT_width = 64);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
+    std::vector<llvm::Value *> get_PEXT_masks(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * del_mask);
+    void generateProcessingLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<llvm::Value *> & masks, 
+                                llvm::Value * delMask);
+    void generatePEXTAndSwizzleLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<llvm::Value *> & masks, std::vector<llvm::Value *> counts);
+    std::vector<llvm::Value *> apply_PEXT_deletion_with_swizzle(const std::unique_ptr<KernelBuilder> & iBuilder, 
+                                                                const std::vector<llvm::Value *> & masks, std::vector<llvm::Value *> strms);
+    llvm::Value * apply_PEXT_deletion(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<llvm::Value *> & masks,
+                                      llvm::Value * strm);
+private:
+    const unsigned mDelCountFieldWidth;
+    const unsigned mStreamCount;
+    const unsigned mSwizzleFactor;
+    const unsigned mSwizzleSetCount;
+    const unsigned mPEXTWidth;
+    static constexpr const char* mOutputSwizzleNameBase = "outputStreamSet";
+};
+
 class DeletionKernel final : public BlockOrientedKernel {
 public:
     DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount);

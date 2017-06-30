@@ -11,7 +11,7 @@
 #include <kernels/source_kernel.h>
 #include <kernels/p2s_kernel.h>                    // for P2S16KernelWithCom...
 #include <kernels/s2p_kernel.h>                    // for S2PKernel
-#include <kernels/stdout_kernel.h>                 // for StdOutKernel
+#include <kernels/stdout_kernel.h>                 // for StdOutKernel_
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for ExecutionEngine
 #include <llvm/IR/Function.h>                      // for Function, Function...
 #include <llvm/IR/Module.h>                        // for Module
@@ -309,27 +309,17 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     Kernel * u8u16k = pxDriver.addKernelInstance(make_unique<U8U16Kernel>(iBuilder));
     pxDriver.makeKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask, ErrorMask});
     
-    // Apply a deletion algorithm to discard all but the final position of the UTF-8
-    // sequences for each UTF-16 code unit. Swizzle the results.
-    StreamSetBuffer * SwizzleFields0 = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments));
-    StreamSetBuffer * SwizzleFields1 = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments));
-    StreamSetBuffer * SwizzleFields2 = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments));
-    StreamSetBuffer * SwizzleFields3 = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * bufferSegments));
-    StreamSetBuffer * DeletionCounts = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments));
-    
-    Kernel * delK = pxDriver.addKernelInstance(make_unique<DeleteByPEXTkernel>(iBuilder, 64, 16, true));
-    pxDriver.makeKernelCall(delK, {U8u16Bits, DelMask}, {SwizzleFields0, SwizzleFields1, SwizzleFields2, SwizzleFields3, DeletionCounts});
-    
-    //  Produce fully compressed swizzled UTF-16 bit streams
+    // Allocate space for fully compressed swizzled UTF-16 bit streams
     StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer(make_unique<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1));
     StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer(make_unique<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1));
     StreamSetBuffer * u16Swizzle2 = pxDriver.addBuffer(make_unique<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1));
     StreamSetBuffer * u16Swizzle3 = pxDriver.addBuffer(make_unique<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1));
     
-    Kernel * compressK = pxDriver.addKernelInstance(make_unique<SwizzledBitstreamCompressByCount>(iBuilder, 16));
-    pxDriver.makeKernelCall(compressK, {DeletionCounts, SwizzleFields0, SwizzleFields1, SwizzleFields2, SwizzleFields3},
-                           {u16Swizzle0, u16Swizzle1, u16Swizzle2, u16Swizzle3});
-    
+    // Apply a deletion algorithm to discard all but the final position of the UTF-8
+    // sequences (bit streams) for each UTF-16 code unit. Also compresses and swizzles the result.
+    Kernel * delK = pxDriver.addKernelInstance(make_unique<SwizzledDeleteByPEXTkernel>(iBuilder, 64, 16));
+    pxDriver.makeKernelCall(delK, {U8u16Bits, DelMask}, {u16Swizzle0, u16Swizzle1, u16Swizzle2, u16Swizzle3});
+
     // Produce unswizzled UTF-16 bit streams
     StreamSetBuffer * u16bits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments));
     
@@ -482,3 +472,4 @@ int main(int argc, char *argv[]) {
 }
 
                        
+
