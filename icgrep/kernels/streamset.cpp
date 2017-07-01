@@ -576,6 +576,103 @@ SwizzledCopybackBuffer::SwizzledCopybackBuffer(const std::unique_ptr<kernel::Ker
     }
 }
 
+Type * DynamicBuffer::getStreamSetBlockType() const {
+    return cast<PointerType>(mType->getStructElementType(int(DynamicBuffer::Field::BaseAddress)))->getElementType();
+}
+
+
+
+
+Value * DynamicBuffer::getBaseAddress(IDISA::IDISA_Builder * const b, Value * const handle) const {
+    b->CreateAssert(handle, "DynamicBuffer: instance cannot be null");
+    Value * const p = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))});
+    Value * const addr = b->CreateLoad(p);
+    b->CreateAssert(addr, "DynamicBuffer: base address cannot be 0");
+    return addr;
+}
+
+Value * DynamicBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const b, Value * handle, Value * blockIndex) const {
+    Value * const wkgBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::WorkingBlocks))}));
+    return b->CreateGEP(getBaseAddress(b, handle), b->CreateURem(blockIndex, wkgBlocks));
+}
+
+Value * DynamicBuffer::getRawItemPointer(IDISA::IDISA_Builder * const b, Value * handle, Value * streamIndex, Value * absolutePosition) const {
+    Value * absBlock = b->CreateUDiv(absolutePosition, b->getSize(b->getBitBlockWidth()));
+    Value * blockPos = b->CreateURem(absolutePosition, b->getSize(b->getBitBlockWidth()));
+    Value * blockPtr = b->CreateGEP(getStreamSetBlockPtr(b, handle, absBlock), {b->getInt32(0), streamIndex});
+    const auto bw = mBaseType->getArrayElementType()->getScalarSizeInBits();
+    if (bw < 8) {
+        assert (bw  == 1 || bw == 2 || bw == 4);
+        blockPos = b->CreateUDiv(blockPos, ConstantInt::get(blockPos->getType(), 8 / bw));
+        blockPtr = b->CreatePointerCast(blockPtr, b->getInt8PtrTy());
+    } else {
+        blockPtr = b->CreatePointerCast(blockPtr, b->getIntNTy(bw)->getPointerTo());
+    }
+    return b->CreateGEP(blockPtr, blockPos);
+}
+
+Value * DynamicBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * handle, Value * fromPosition) const {
+    Constant * blockSize = b->getSize(b->getBitBlockWidth());
+    if (isa<ArrayType>(mType) && dyn_cast<ArrayType>(mType)->getNumElements() > 1) {
+        return b->CreateSub(blockSize, b->CreateURem(fromPosition, blockSize));
+    } else {
+        Value * const bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::WorkingBlocks))}));
+        Value * bufSize = b->CreateMul(bufBlocks, blockSize);
+        return b->CreateSub(bufSize, b->CreateURem(fromPosition, bufSize, "linearItems"));
+    }
+}
+
+Value * DynamicBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const b, Value * handle, Value * fromBlock) const {
+    Value * const bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::WorkingBlocks))}));
+    return b->CreateSub(bufBlocks, b->CreateURem(fromBlock, bufBlocks), "linearBlocks");
+}
+
+void DynamicBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) {
+    Value * handle = b->CreateCacheAlignedAlloca(getType());
+    size_t numStreams = 1;
+    if (isa<ArrayType>(mBaseType)) {
+        numStreams = mBaseType->getArrayNumElements();
+    }
+    const auto fieldWidth = mBaseType->getArrayElementType()->getScalarSizeInBits();
+    Value * bufSize = b->getSize((mBufferBlocks + mOverflowBlocks) * b->getBitBlockWidth() * numStreams * fieldWidth/8);
+    Value * bufBasePtrField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))});
+    Value * bufPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(bufSize), bufBasePtrField->getType()->getPointerElementType());
+    b->CreateStore(bufPtr, bufBasePtrField);
+    b->CreateStore(bufSize, b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::AllocatedCapacity))}));
+    b->CreateStore(b->getSize(mBufferBlocks), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::WorkingBlocks))}));
+    b->CreateStore(b->getSize(-1), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::Length))}));
+    b->CreateStore(b->getSize(0), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::ProducedPosition))}));
+    b->CreateStore(b->getSize(0), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::ConsumedPosition))}));
+    mStreamSetBufferPtr = handle;
+}
+
+void DynamicBuffer::releaseBuffer(IDISA::IDISA_Builder * const b, Value * handle) const {
+    /* Free the dynamically allocated buffer, but not the stack-allocated buffer struct. */
+    b->CreateFree(b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))})));
+}
+
+
+DynamicBuffer::DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t initialCapacity, size_t overflow, unsigned swizzle, unsigned addrSpace)
+: StreamSetBuffer(BufferKind::DynamicBuffer, type, 
+                  StructType::get(resolveStreamSetType(b, type)->getPointerTo(addrSpace), 
+                                  b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), nullptr), 
+                  initialCapacity, addrSpace)
+, mSwizzleFactor(swizzle)
+, mOverflowBlocks(overflow)
+{
+    mUniqueID = "DB";
+    if (swizzle != 1) {
+        mUniqueID += "s" + std::to_string(swizzle);
+    }
+        if (overflow != 0) {
+        mUniqueID += "o" + std::to_string(overflow);
+    }
+    if (addrSpace != 0) {
+        mUniqueID += "@" + std::to_string(addrSpace);
+    }
+}
+
+
 inline StreamSetBuffer::StreamSetBuffer(BufferKind k, Type * baseType, Type * resolvedType, unsigned BufferBlocks, unsigned AddressSpace)
 : mBufferKind(k)
 , mType(resolvedType)

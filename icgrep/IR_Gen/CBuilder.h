@@ -47,7 +47,15 @@ public:
         mModule = module;
         ClearInsertionPoint();
     }
+    
+    // UDiv and URem with optimization for division by power-of-2 constants
+    llvm::Value * CreateUDiv(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
+    llvm::Value * CreateURem(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
 
+    // Division with rounding up to the ceiling
+    // Equivalent to CreateUDiv(CreateAdd(number, CreateSub(divisor, ConstantInt::get(divisor->getType(), 1))), divisor)
+    llvm::Value * CreateUDivCeil(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
+        
     llvm::Value * CreateMalloc(llvm::Value * size);
 
     llvm::Value * CreateAlignedMalloc(llvm::Value * size, const unsigned alignment);

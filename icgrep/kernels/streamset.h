@@ -26,6 +26,7 @@ public:
         , CircularCopybackBuffer
         , SwizzledCopybackBuffer
         , ExpandableBuffer
+        , DynamicBuffer
     };
 
     BufferKind getBufferKind() const {
@@ -295,6 +296,50 @@ private:
     const uint64_t  mInitialCapacity;
 
 };
+    
+// Dynamically allocated circular buffers: TODO: add copyback, swizzle support, dynamic allocation, producer, consumer, length
+class DynamicBuffer: public StreamSetBuffer {
+public:
+    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::DynamicBuffer;}
+    
+    DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t initialCapacity, size_t overflowBlocks = 0, unsigned swizzleFactor = 1, unsigned addrSpace = 0);
+    
+    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition) const override;
+    
+    llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const override;
+
+    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+
+    void releaseBuffer(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+
+    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * streamIndex, llvm::Value * absolutePosition) const override;
+
+    llvm::Type * getStreamSetBlockType() const override;
+    
+protected:
+    llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+    
+    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * blockIndex) const override;
+    
+private:
+    /* Static data */
+    unsigned   mSwizzleFactor;     /* Number of streams swizzled together per block.  Must be a small power of 2. Default: 1. */
+    size_t     mOverflowBlocks;    /* Number of data blocks of additional space at the end of the buffer for writing only. */
+    
+    /* Dynamic data fields stored in the buffer struct */
+    
+    enum class Field {BaseAddress, AllocatedCapacity, WorkingBlocks, Length, ProducedPosition, ConsumedPosition, FieldCount};
+    
+    /* BaseAddress - the physical base address of the memory area for stream set data.
+     WorkingBlocks - the physical size of the buffer for use in reading and writing data.
+     AllocatedCapacity - physical size available for expansion in place
+     Length - actual final length of stream set or -1 for unknown
+     ProducedPosition - the total number of items ever generated and stored in the buffer
+     ConsumedPosition - the number of buffer items that are known to have been fully processed by all users
+     */
+    
+};
+
 
 }
 #endif // STREAMSET_H
