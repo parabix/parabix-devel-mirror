@@ -148,7 +148,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
         if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
             report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
         }
-        mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getPointerType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
+        mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
         if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
             addScalar(idb->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
         }
@@ -167,7 +167,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
             }
 
         }
-        mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getPointerType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
+        mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
         if ((mStreamSetInputs.empty() && (i == 0)) || !mStreamSetOutputs[i].rate.isExact()) {
             addScalar(sizeTy, mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
         }
@@ -329,7 +329,7 @@ void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & idb) {
     }
     for (unsigned i = 0; i < mStreamSetInputBuffers.size(); ++i) {
         assert (mStreamSetInputBuffers[i]);
-        Value * arg = mStreamSetInputBuffers[i]->getStreamSetBasePtr();
+        Value * arg = mStreamSetInputBuffers[i]->getStreamSetHandle();
         if (LLVM_UNLIKELY(arg == nullptr)) {
             report_fatal_error(getName() + ": input stream set " + std::to_string(i)
                                + " was not allocated prior to calling createInstance()");
@@ -339,7 +339,7 @@ void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & idb) {
     assert (mStreamSetInputs.size() == mStreamSetInputBuffers.size());
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
         assert (mStreamSetOutputBuffers[i]);
-        Value * arg = mStreamSetOutputBuffers[i]->getStreamSetBasePtr();
+        Value * arg = mStreamSetOutputBuffers[i]->getStreamSetHandle();
         if (LLVM_UNLIKELY(arg == nullptr)) {
             report_fatal_error(getName() + ": output stream set " + std::to_string(i)
                                + " was not allocated prior to calling createInstance()");

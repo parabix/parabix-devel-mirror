@@ -9,6 +9,8 @@
 #include <kernels/kernel.h>
 #include <kernels/kernel_builder.h>
 #include <toolchain/toolchain.h>
+#include <llvm/Support/Debug.h>
+#include <llvm/Support/Format.h>
 
 namespace llvm { class Constant; }
 namespace llvm { class Function; }
@@ -576,13 +578,6 @@ SwizzledCopybackBuffer::SwizzledCopybackBuffer(const std::unique_ptr<kernel::Ker
     }
 }
 
-Type * DynamicBuffer::getStreamSetBlockType() const {
-    return cast<PointerType>(mType->getStructElementType(int(DynamicBuffer::Field::BaseAddress)))->getElementType();
-}
-
-
-
-
 Value * DynamicBuffer::getBaseAddress(IDISA::IDISA_Builder * const b, Value * const handle) const {
     b->CreateAssert(handle, "DynamicBuffer: instance cannot be null");
     Value * const p = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))});
@@ -628,7 +623,7 @@ Value * DynamicBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const 
 }
 
 void DynamicBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) {
-    Value * handle = b->CreateCacheAlignedAlloca(getType());
+    Value * handle = b->CreateCacheAlignedAlloca(mBufferStructType);
     size_t numStreams = 1;
     if (isa<ArrayType>(mBaseType)) {
         numStreams = mBaseType->getArrayNumElements();
@@ -653,10 +648,9 @@ void DynamicBuffer::releaseBuffer(IDISA::IDISA_Builder * const b, Value * handle
 
 
 DynamicBuffer::DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t initialCapacity, size_t overflow, unsigned swizzle, unsigned addrSpace)
-: StreamSetBuffer(BufferKind::DynamicBuffer, type, 
-                  StructType::get(resolveStreamSetType(b, type)->getPointerTo(addrSpace), 
-                                  b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), nullptr), 
-                  initialCapacity, addrSpace)
+: StreamSetBuffer(BufferKind::DynamicBuffer, type, resolveStreamSetType(b, type), initialCapacity, addrSpace)
+, mBufferStructType(StructType::get(resolveStreamSetType(b, type)->getPointerTo(addrSpace), 
+                                    b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), nullptr))
 , mSwizzleFactor(swizzle)
 , mOverflowBlocks(overflow)
 {

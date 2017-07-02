@@ -53,7 +53,7 @@ public:
         return mBufferBlocks;
     }
 
-    llvm::Value * getStreamSetBasePtr() const {
+    llvm::Value * getStreamSetHandle() const {
         return mStreamSetBufferPtr;
     }
 
@@ -314,8 +314,6 @@ public:
 
     llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * streamIndex, llvm::Value * absolutePosition) const override;
 
-    llvm::Type * getStreamSetBlockType() const override;
-    
 protected:
     llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
     
@@ -323,6 +321,7 @@ protected:
     
 private:
     /* Static data */
+    llvm::Type * mBufferStructType;      /* The type of the buffer struct. */
     unsigned   mSwizzleFactor;     /* Number of streams swizzled together per block.  Must be a small power of 2. Default: 1. */
     size_t     mOverflowBlocks;    /* Number of data blocks of additional space at the end of the buffer for writing only. */
     
