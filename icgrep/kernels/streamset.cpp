@@ -630,6 +630,7 @@ void DynamicBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> 
     }
     const auto fieldWidth = mBaseType->getArrayElementType()->getScalarSizeInBits();
     Value * bufSize = b->getSize((mBufferBlocks + mOverflowBlocks) * b->getBitBlockWidth() * numStreams * fieldWidth/8);
+    bufSize = b->CreateRoundUp(bufSize, b->getSize(b->getCacheAlignment()));
     Value * bufBasePtrField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))});
     Value * bufPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(bufSize), bufBasePtrField->getType()->getPointerElementType());
     b->CreateStore(bufPtr, bufBasePtrField);

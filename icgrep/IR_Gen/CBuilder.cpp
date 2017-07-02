@@ -77,7 +77,9 @@ Value * CBuilder::CreateUDivCeil(Value * number, Value * divisor, const Twine &N
     return CreateUDiv(CreateAdd(number, CreateSub(divisor, ConstantInt::get(divisor->getType(), 1))), divisor, Name);
 }
 
-
+Value * CBuilder::CreateRoundUp(Value * number, Value * divisor, const Twine &Name) {
+    return CreateMul(CreateUDivCeil(number, divisor), divisor, Name);
+}
 
 Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) {
     Module * const m = getModule();
