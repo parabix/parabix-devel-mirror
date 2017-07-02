@@ -41,8 +41,10 @@ public:
 
     virtual bool hasExternalFunction(const llvm::StringRef functionName) const = 0;
 
+    void deallocateBuffers();
+    
     virtual void finalizeObject() = 0;
-
+    
     virtual void * getMain() = 0; // "main" exists until the driver is deleted
 
 protected:

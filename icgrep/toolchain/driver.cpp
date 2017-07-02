@@ -33,3 +33,8 @@ kernel::Kernel * Driver::addKernelInstance(std::unique_ptr<kernel::Kernel> kb) {
     return mOwnedKernels.back().get();
 }
 
+void Driver::deallocateBuffers() {
+    for (auto &b : mOwnedBuffers) {
+        b->releaseBuffer(iBuilder);
+    }
+}

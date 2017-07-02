@@ -155,7 +155,7 @@ Value * StreamSetBuffer::getBaseAddress(IDISA::IDISA_Builder * const iBuilder, V
     return self;
 }
 
-void StreamSetBuffer::releaseBuffer(IDISA::IDISA_Builder * const /* iBuilder */, Value * /* self */) const {
+void StreamSetBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & /* kb */) const {
     /* do nothing: memory is stack allocated */
 }
 
@@ -514,8 +514,8 @@ Value * ExpandableBuffer::getBaseAddress(IDISA::IDISA_Builder * const iBuilder, 
     return baseAddr;
 }
 
-void ExpandableBuffer::releaseBuffer(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
-    iBuilder->CreateFree(getBaseAddress(iBuilder, self));
+void ExpandableBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) const {
+    b->CreateFree(getBaseAddress(b.get(), mStreamSetBufferPtr));
 }
 
 Value * ExpandableBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, Value *, Value *) const {
@@ -642,9 +642,9 @@ void DynamicBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> 
     mStreamSetBufferPtr = handle;
 }
 
-void DynamicBuffer::releaseBuffer(IDISA::IDISA_Builder * const b, Value * handle) const {
+void DynamicBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) const {
     /* Free the dynamically allocated buffer, but not the stack-allocated buffer struct. */
-    b->CreateFree(b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))})));
+    b->CreateFree(b->CreateLoad(b->CreateGEP(mStreamSetBufferPtr, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))})));
 }
 
 

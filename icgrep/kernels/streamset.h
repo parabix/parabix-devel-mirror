@@ -59,9 +59,9 @@ public:
 
     virtual llvm::Type * getStreamSetBlockType() const;
     
-    virtual void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb);
 
-    virtual void releaseBuffer(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const;
+    virtual void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const;
 
     virtual llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, const bool readOnly) const;
 
@@ -279,7 +279,7 @@ public:
 
     llvm::Value * getStreamSetCount(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
 
-    void releaseBuffer(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
+    void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 
 protected:
 
@@ -310,7 +310,7 @@ public:
 
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 
-    void releaseBuffer(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+    void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 
     llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * streamIndex, llvm::Value * absolutePosition) const override;
 
