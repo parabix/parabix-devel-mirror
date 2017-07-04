@@ -110,15 +110,6 @@ bool resolvePropertyDefinition(Name * const property) {
             Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
             property->setDefinition(makeDiff(makeAny(), unassigned));
             return true;
-        }
-        // Now compatibility properties of UTR #18 Annex C
-        else if (value == "graph") {
-            Name * space = makeName("space", Name::Type::UnicodeProperty);
-            Name * ctrl = makeName("control", Name::Type::UnicodeProperty);
-            Name * surr = makeName("surrogate", Name::Type::UnicodeProperty);
-            Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
-            property->setDefinition(makeDiff(makeAny(), makeAlt({space, ctrl, surr, unassigned})));
-            return true;
         } else if (value == "GCB" || value == "NonGCB"){
             generateGraphemeClusterBoundaryRule(property);
             return true;
@@ -277,7 +268,14 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                 Name * conn = makeName("connectorpunctuation", Name::Type::UnicodeProperty);
                 Name * join = makeName("joincontrol", Name::Type::UnicodeProperty);
                 return resolveUnicodeSet(alnum) + resolveUnicodeSet(mark) + resolveUnicodeSet(conn) + resolveUnicodeSet(join);
+            } else if (value == "graph") {
+                Name * space = makeName("space", Name::Type::UnicodeProperty);
+                Name * ctrl = makeName("control", Name::Type::UnicodeProperty);
+                Name * surr = makeName("surrogate", Name::Type::UnicodeProperty);
+                Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
+                return ~(resolveUnicodeSet(space) + resolveUnicodeSet(ctrl) + resolveUnicodeSet(surr) + resolveUnicodeSet(unassigned));
             }
+
 
         }
     }
