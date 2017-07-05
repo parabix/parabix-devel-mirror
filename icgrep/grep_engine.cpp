@@ -93,7 +93,7 @@ bool GrepEngine::matchesNeedToBeMovedToEOL() const {
     return true;
 }
     
-void GrepEngine::doGrep(const std::string & fileName) const{
+void GrepEngine::doGrep(const std::string & fileName, std::string & PTXFilename) const{
 #ifdef CUDA_ENABLED
     const bool CountOnly = true;
     boost::filesystem::path file(fileName);
@@ -124,7 +124,8 @@ void GrepEngine::doGrep(const std::string & fileName) const{
                 std::cerr << "Cannot allocate memory for startPoints or accumBytes.\n";
                 exit(-1);
             }
-            const auto PTXFilename = mGrepDriver->getBuilder()->getModule()->getModuleIdentifier() + ".ptx";
+            if(PTXFilename=="")
+                PTXFilename = mGrepDriver->getBuilder()->getModule()->getModuleIdentifier() + ".ptx";
             RunPTX(PTXFilename, fileBuffer, fileSize, CountOnly, LFPositions, startPoints, accumBytes);
             source.close();
         } catch (std::exception & e) {

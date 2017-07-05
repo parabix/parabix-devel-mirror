@@ -34,7 +34,7 @@ public:
 
     void grepCodeGen_nvptx(std::vector<re::RE *> REs, GrepModeType grepMode, bool UTF_16);
 
-    void doGrep(const std::string & fileName) const;
+    void doGrep(const std::string & fileName, std::string & PTXFilename) const;
     
     bool matchesNeedToBeMovedToEOL() const;
 
