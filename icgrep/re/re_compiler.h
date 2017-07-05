@@ -62,10 +62,7 @@ public:
     RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler);
     void initializeRequiredStreams(const unsigned encodingBits, pablo::Var * linebreak);
     void compileUnicodeNames(RE *& re);
-    void finalizeMatchResult(MarkerType match_result);
-    MarkerType compile(RE * re) {
-        return compile(re, mPB);
-    }
+    void compile(RE * re); 
 
     static LLVM_ATTRIBUTE_NORETURN void UnsupportedRE(std::string errmsg);
     

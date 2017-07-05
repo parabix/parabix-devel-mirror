@@ -197,17 +197,16 @@ void RE_Compiler::compileUnicodeNames(RE *& re) {
     re = resolveUnicodeProperties(re);
 }
 
-void RE_Compiler::finalizeMatchResult(MarkerType match_result) {
-    PabloAST * match_follow = mPB.createMatchStar(markerVar(match_result), mAny);
-    PabloAST * matches = mPB.createAnd(match_follow, mLineBreak, "matchedLine3s");
+void RE_Compiler::compile(RE * re) {
+    MarkerType match_results = compile(re, mPB);
     Var * const output = mKernel->getOutputStreamVar("matches");
-    mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), matches);
+    mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), markerVar(match_results));
 }
-
+    
 MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
     return process(re, makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createOnes()), pb);
 }
-
+    
 MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
     if (isa<Name>(re)) {
         return compileName(cast<Name>(re), marker, pb);

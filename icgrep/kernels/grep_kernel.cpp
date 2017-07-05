@@ -10,7 +10,9 @@
 #include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
 #include <pablo/builder.hpp>
+#include <pablo/boolean.h>
 #include <pablo/pe_count.h>
+#include <pablo/pe_matchstar.h>
 
 #include <llvm/Support/raw_ostream.h>
 
@@ -53,6 +55,25 @@ void ICGrepKernel::generatePabloMethod() {
     re2pablo_compiler(this, mRE);
 }
 
+void MatchedLinesKernel::generatePabloMethod() {
+    auto pb = this->getEntryBlock();
+    PabloAST * matchResults = pb->createExtract(getInputStreamVar("matchResults"), pb->getInteger(0));
+    PabloAST * lineBreaks = pb->createExtract(getInputStreamVar("lineBreaks"), pb->getInteger(0));
+    PabloAST * notLB = pb->createNot(lineBreaks);
+    PabloAST * match_follow = pb->createMatchStar(matchResults, notLB);
+    Var * const matchedLines = getOutputStreamVar("matchedLines");
+    pb->createAssign(pb->createExtract(matchedLines, pb->getInteger(0)), pb->createAnd(match_follow, lineBreaks));
+}
+
+MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
+: PabloKernel(iBuilder, "MatchedLines",
+              {Binding{iBuilder->getStreamSetTy(1), "matchResults"}, Binding{iBuilder->getStreamSetTy(1), "lineBreaks"}},
+              {Binding{iBuilder->getStreamSetTy(1), "matchedLines"}},
+              {},
+              {}) {
+}
+
+
 void InvertMatchesKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     Value * input = iBuilder->loadInputStreamBlock("matchedLines", iBuilder->getInt32(0));
     Value * lbs = iBuilder->loadInputStreamBlock("lineBreaks", iBuilder->getInt32(0));
@@ -73,13 +94,11 @@ void PopcountKernel::generatePabloMethod() {
     pb->createAssign(countResult, pb->createCount(toCount));
 }
 
-
 PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
 : PabloKernel(iBuilder, "Popcount",
               {Binding{iBuilder->getStreamSetTy(1), "toCount"}},
               {},
               {},
               {Binding{iBuilder->getSizeTy(), "countResult"}}) {
-    
 }
 

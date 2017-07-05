@@ -27,13 +27,21 @@ protected:
     void generatePabloMethod() override;
 };
 
+class MatchedLinesKernel : public pablo::PabloKernel {
+public:
+    MatchedLinesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;    
+};
+
 class InvertMatchesKernel : public BlockOrientedKernel {
 public:
     InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder);
 private:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
-
 
 class PopcountKernel : public pablo::PabloKernel {
 public:
@@ -43,6 +51,6 @@ public:
 protected:
     void generatePabloMethod() override;    
 };
-
+    
 }
 #endif
