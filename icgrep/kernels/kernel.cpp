@@ -693,9 +693,8 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         }
         isDerived[i] = false;
     }
-    for (auto & ss : mStreamSetOutputs) {
-        unsigned i = inputSetCount;
-        auto & rate = ss.rate;
+    for (unsigned i = inputSetCount; i < totalSetCount; i++) {
+        auto & rate = mStreamSetOutputs[i-inputSetCount].rate;
         std::string refSet = rate.referenceStreamSet();
         if (rate.isExact() || rate.isMaxRatio()) {
             Port port; unsigned ssIdx;
@@ -708,7 +707,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             }
         }
         isDerived[i] = false;
-        i++;
     }
     int maxBlocksToCopy[totalSetCount];
     for (unsigned i = 0; i < totalSetCount; i++) {
