@@ -41,7 +41,7 @@ std::unique_ptr<T> make_unique(Args&&... args) {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
 
-RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags, RE_Syntax syntax) {
+RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags, RE_Syntax syntax, bool ByteMode) {
     std::unique_ptr<RE_Parser> parser = nullptr;
     switch (syntax) {
         case RE_Syntax::PCRE:
@@ -61,6 +61,7 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
             ParseFailure("Unsupported RE syntax!");
             break;
     }
+    parser->fByteMode = ByteMode;
     parser->fModeFlagSet = initialFlags;
     parser->fNested = false;
     parser->fGraphemeBoundaryPending = false;
@@ -73,7 +74,8 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
 }
 
 RE_Parser::RE_Parser(const std::string & regular_expression)
-: fModeFlagSet(0)
+: fByteMode(false)
+, fModeFlagSet(0)
 , fNested(false)
 , fGraphemeBoundaryPending(false)
 , fSupportNonCaptureGroup(false)
@@ -163,14 +165,14 @@ RE * RE_Parser::parse_next_item() {
                 ParseFailure("Need something to repeat before *, +, ? or {.");
             case ']':
                 if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-                    return createCC(parse_utf8_codepoint());
+                    return createCC(parse_literal_codepoint());
                 }
                 ParseFailure("Use  \\] for literal ].");
             case '}':
                 if (fNested) {
                     break;  //  a recursive invocation for a regexp in \N{...}
                 } else if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-                    return createCC(parse_utf8_codepoint());
+                    return createCC(parse_literal_codepoint());
                 }
                 ParseFailure("Use \\} for literal }.");
             case '[':
@@ -187,7 +189,7 @@ RE * RE_Parser::parse_next_item() {
                 ++mCursor;
                 return parse_escaped();
             default:
-                re = createCC(parse_utf8_codepoint());
+                re = createCC(parse_literal_codepoint());
                 if ((fModeFlagSet & ModeFlagType::GRAPHEME_CLUSTER_MODE) != 0) {
                     fGraphemeBoundaryPending = true;
                 }
@@ -533,6 +535,13 @@ RE * RE_Parser::parseEscapedSet() {
     
 void InvalidUTF8Encoding() {
     RE_Parser::ParseFailure("Invalid UTF-8 encoding!");
+}
+
+codepoint_t RE_Parser::parse_literal_codepoint() {
+    if (fByteMode) {
+       return static_cast<uint8_t>(*mCursor++);
+    }
+    else return parse_utf8_codepoint();
 }
 
 codepoint_t RE_Parser::parse_utf8_codepoint() {
@@ -908,7 +917,7 @@ RE * RE_Parser::parse_charset() {
                 }
                 break;
             case emptyOperator:
-                lastCodepointItem = parse_utf8_codepoint();
+                lastCodepointItem = parse_literal_codepoint();
                 insert(cc, lastCodepointItem);
                 lastItemKind = CodepointItem;
                 break;
@@ -923,7 +932,7 @@ codepoint_t RE_Parser::parse_codepoint() {
         mCursor++;
         return parse_escaped_codepoint();
     } else {
-        return parse_utf8_codepoint();
+        return parse_literal_codepoint();
     }
 }
 
@@ -1001,8 +1010,8 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
         default:
             // Escaped letters should be reserved for special functions.
             if (((*mCursor >= 'A') && (*mCursor <= 'Z')) || ((*mCursor >= 'a') && (*mCursor <= 'z'))){
-                //Escape unknow letter will be parse as normal letter
-                return parse_utf8_codepoint();
+                //Escape unknown letter will be parse as normal letter
+                return parse_literal_codepoint();
                 //ParseFailure("Undefined or unsupported escape sequence");
             }
             else if ((*mCursor < 0x20) || (*mCursor >= 0x7F))

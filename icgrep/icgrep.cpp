@@ -40,6 +40,8 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input
 
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(1));
 
+static cl::opt<bool> ByteMode("enable-byte-mode", cl::desc("Process regular expressions in byte mode"));
+
 static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"));
 static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expressions processed by each kernel."), cl::init(1));
 
@@ -74,7 +76,7 @@ std::vector<re::RE *> readExpressions() {
 
     std::vector<re::RE *> REs;
     for (unsigned i = 0; i < grep::RegexpVector.size(); i++) {
-        re::RE * re_ast = re::RE_Parser::parse(grep::RegexpVector[i], globalFlags, grep::RegexpSyntax);
+        re::RE * re_ast = re::RE_Parser::parse(grep::RegexpVector[i], globalFlags, grep::RegexpSyntax, ByteMode);
         REs.push_back(re_ast);
     }
 

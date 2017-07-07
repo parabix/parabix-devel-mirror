@@ -39,7 +39,7 @@ public:
 
     static LLVM_ATTRIBUTE_NORETURN void ParseFailure(std::string errmsg);
 
-    static RE * parse(const std::string &input_string, ModeFlagSet initialFlags, RE_Syntax syntax = RE_Syntax::PCRE);
+    static RE * parse(const std::string &input_string, ModeFlagSet initialFlags, RE_Syntax syntax = RE_Syntax::PCRE, bool ByteMode = false);
 
 protected:
 
@@ -135,6 +135,8 @@ protected:
 
     virtual RE * parseEscapedSet();
 
+    codepoint_t parse_literal_codepoint();
+    
     codepoint_t parse_utf8_codepoint();
 
     virtual RE * parsePropertyExpression();
@@ -179,7 +181,7 @@ protected:
     bool isCharAhead(char c);
 
 protected:
-
+    bool                        fByteMode;
     ModeFlagSet                 fModeFlagSet;
     bool                        fNested;
     bool                        fGraphemeBoundaryPending;
