@@ -121,6 +121,16 @@ public:
         return mStreamSetOutputBuffers[i];
     }
     
+    // Kernels typically perform block-at-a-time processing, but some kernels may require
+    // a different stride.   In the case of multiblock kernels, the stride attribute 
+    // determines the number of minimum number of items that will be provided to the kernel
+    // on each doMultiBlock call.
+    // 
+    
+    unsigned getKernelStride() const { return mStride;}
+    
+    void setKernelStride(unsigned stride) {mStride = stride;}
+    
     virtual ~Kernel() = 0;
 
 protected:
@@ -137,7 +147,6 @@ protected:
     // Kernel builder subtypes define their logic of kernel construction
     // in terms of 3 virtual methods for
     // (a) preparing the Kernel state data structure
-    // (b) defining the logic of the doBlock function, and
     // (c) defining the logic of the finalBlock function.
     //
     // Note: the kernel state data structure must only be finalized after
@@ -151,6 +160,8 @@ protected:
     unsigned getScalarIndex(const std::string & name) const;
 
     void prepareStreamSetNameMap();
+    
+    void processingRateAnalysis();
 
     void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> &) override { }
 
@@ -231,6 +242,9 @@ protected:
     StreamMap                           mStreamMap;
     StreamSetBuffers                    mStreamSetInputBuffers;
     StreamSetBuffers                    mStreamSetOutputBuffers;
+    unsigned                            mStride;
+    std::vector<unsigned>               mItemsPerStride;
+    std::vector<unsigned>               mIsDerived;
 
 };
 
@@ -393,22 +407,7 @@ protected:
     //
     virtual void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & idb) = 0;
     
-    // Kernels typically perform block-at-a-time processing, but some kernels may require
-    // a different stride.   In the case of multiblock kernels, the stride attribute 
-    // determines the number of minimum number of items that will be provided to the kernel
-    // on each doMultiBlock call.
-    // 
-    
-    unsigned getKernelStride() const { return mStride;}
-        
-    void setKernelStride(unsigned stride) {mStride = stride;}
-        
-        
-
 private:
-    size_t                            mStride;
-
-
     // Given a kernel subtype with an appropriate interface, the generateDoSegment
     // method of the multi-block kernel builder makes all the necessary arrangements
     // to translate doSegment calls into a minimal sequence of doMultiBlock calls.

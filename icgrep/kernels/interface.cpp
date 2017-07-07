@@ -32,11 +32,11 @@ ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string && reference
 }
 
 ProcessingRate Add1(std::string && referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Add1, 0, 0, std::move(referenceStreamSet));
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Add1, 0, 1, std::move(referenceStreamSet));
 }
 
 ProcessingRate UnknownRate() {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Unknown, 0, 0, "");
+    return ProcessingRate(ProcessingRate::ProcessingRateKind::Unknown, 0, 1, "");
 }
 
 unsigned ProcessingRate::calculateRatio(unsigned referenceItems, bool doFinal) const {
