@@ -1182,7 +1182,8 @@ Kernel::Kernel(std::string && kernelName,
 , mNoTerminateAttribute(false)
 , mIsGenerated(false)
 , mIsFinal(nullptr)
-, mOutputScalarResult(nullptr) {
+, mOutputScalarResult(nullptr)
+, mStride(0) {
 
 }
 
