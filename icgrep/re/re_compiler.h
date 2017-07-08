@@ -22,6 +22,7 @@ namespace re { class Intersect; }
 namespace re { class Name; }
 namespace re { class RE; }
 namespace re { class Rep; }
+namespace re { class CC; }
 
 //namespace UCD {
 //class UnicodeSet;
@@ -94,6 +95,7 @@ private:
 
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileName(Name * name, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType compileCC(CC * cc, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileSeq(Seq * seq, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileSeqTail(Seq::iterator current, const Seq::iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileAlt(Alt * alt, MarkerType marker, pablo::PabloBuilder & pb);
@@ -104,9 +106,9 @@ private:
     pablo::PabloAST * consecutive_matches(pablo::PabloAST * repeated,  int length, int repeat_count, pablo::PabloBuilder & pb);
     pablo::PabloAST * reachable(pablo::PabloAST * repeated,  int length, int repeat_count, pablo::PabloBuilder & pb);
     static bool isFixedLength(RE * regexp);
-    MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, int ifGroupSize, pablo::PabloBuilder & pb);
     MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, int ifGroupSize,  pablo::PabloBuilder & pb);
     RE * resolveUnicodeProperties(RE * re);
 
     MarkerType compileName(Name * name, pablo::PabloBuilder & pb);
