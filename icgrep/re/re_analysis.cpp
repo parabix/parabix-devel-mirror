@@ -34,6 +34,8 @@ bool isByteLength(const RE * re) {
         return isByteLength(diff->getLH()) && isByteLength(diff->getRH());
     } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         return isByteLength(e->getLH()) && isByteLength(e->getRH());
+    } else if (isa<CC>(re)) {
+        return cast<CC>(re) < makeCC(0, 0x7F);
     } else if (const Name * n = dyn_cast<Name>(re)) {
         if (n->getType() == Name::Type::Byte) {
             return true;
@@ -64,6 +66,8 @@ bool isUnicodeUnitLength(const RE * re) {
     } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         return isUnicodeUnitLength(e->getLH()) && isUnicodeUnitLength(e->getRH());
     } else if (isa<Any>(re)) {
+        return true;
+    } else if (isa<CC>(re)) {
         return true;
     } else if (const Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
@@ -125,6 +129,8 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
         const auto r1 = getUnicodeUnitLengthRange(i->getLH());
         const auto r2 = getUnicodeUnitLengthRange(i->getRH());
         return std::make_pair(std::min(r1.first, r2.first), std::max(r1.second, r2.second));
+    } else if (isa<CC>(re)) {
+        return std::make_pair(1, 1);
     } else if (const Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
         switch (n->getType()) {
@@ -167,6 +173,8 @@ int minMatchLength(RE * re) {
     } else if (Intersect * e = dyn_cast<Intersect>(re)) {
         return std::min(minMatchLength(e->getLH()), minMatchLength(e->getRH()));
     } else if (isa<Any>(re)) {
+        return 1;
+    } else if (isa<CC>(re)) {
         return 1;
     } else if (const Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
