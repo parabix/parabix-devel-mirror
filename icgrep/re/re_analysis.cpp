@@ -35,7 +35,7 @@ bool isByteLength(const RE * re) {
     } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         return isByteLength(e->getLH()) && isByteLength(e->getRH());
     } else if (isa<CC>(re)) {
-        return cast<CC>(re) < makeCC(0, 0x7F);
+        return cast<CC>(re)->max_codepoint() <= 0x7F;
     } else if (const Name * n = dyn_cast<Name>(re)) {
         if (n->getType() == Name::Type::Byte) {
             return true;
