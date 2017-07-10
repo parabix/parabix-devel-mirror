@@ -155,9 +155,15 @@ RE * RE_Parser::parse_next_item() {
                 return parse_group();
             case '^':
                 ++mCursor;
+                if ((fModeFlagSet & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
+                    return makeNegativeLookBehindAssertion(makeByte(makeCC(makeCC(0, '\n'-1), makeCC('\n'+1, 0xFF))));
+                }
                 return makeStart();
             case '$':
                 ++mCursor;
+                if ((fModeFlagSet & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
+                    return makeLookAheadAssertion(makeCC('\n'));
+                }
                 return makeEnd();
             case '|': case ')':
                 break;
@@ -258,7 +264,7 @@ RE * RE_Parser::parse_group() {
                         case 'm': modeBit = MULTILINE_MODE_FLAG; break;
                         //case 's': modeBit = DOTALL_MODE_FLAG; break;
                         case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
-                        //case 'd': modeBit = UNIX_LINES_MODE_FLAG; break;
+                        case 'd': modeBit = UNIX_LINES_MODE_FLAG; break;
                         default: ParseFailure("Unsupported mode flag.");
                     }
                     ++mCursor;
@@ -411,6 +417,13 @@ RE * RE_Parser::parse_escaped() {
     
     if (isSetEscapeChar(*mCursor)) {
         return parseEscapedSet();
+    }
+    else if ((*mCursor == 'x') || (*mCursor == 'o') || (*mCursor == '0')) {
+        codepoint_t cp = parse_escaped_codepoint();
+        if ((cp >= 0x80) && (cp <= 0xFF)) {
+            return makeByte(makeCC(cp));
+        }
+        else return createCC(cp);
     }
     else if (isdigit(*mCursor)) {
         mCursor++;
@@ -770,6 +783,7 @@ RE * RE_Parser::parse_charset() {
 
     codepoint_t lastCodepointItem = 0;
     bool havePendingOperation = false;
+    bool possibleByteCodeEscape = false;  // set to true when \x, \o or \0 hex or octal escapes seen.
     CharsetOperatorKind pendingOperationKind = intersectOp;
     RE * pendingOperand = nullptr;
 
@@ -830,7 +844,12 @@ RE * RE_Parser::parse_charset() {
                     ParseFailure("Set operator has no right operand.");
                 }
                 if (!cc->empty()) {
-                    subexprs.push_back(mMemoizer.memoize(cc));
+                    if (possibleByteCodeEscape && (cc->max_codepoint() <= 0xFF) && subexprs.empty() && !havePendingOperation) {
+                        subexprs.push_back(makeByte(cc));
+                    }
+                    else {
+                        subexprs.push_back(mMemoizer.memoize(cc));
+                    }
                 }
                 RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
                 if (havePendingOperation) {
@@ -892,7 +911,13 @@ RE * RE_Parser::parse_charset() {
                 if (lastItemKind != CodepointItem) {
                     ParseFailure("Range operator - has illegal left operand.");
                 }
-                insert_range(cc, lastCodepointItem, parse_codepoint());
+                if (*mCursor == '\\') {
+                    mCursor++;
+                    if ((*mCursor == 'x') || (*mCursor == 'o') || (*mCursor == '0')) possibleByteCodeEscape = true;
+                    insert_range(cc, lastCodepointItem, parse_escaped_codepoint());
+                } else {
+                    insert_range(cc, lastCodepointItem, parse_literal_codepoint());
+                }
                 lastItemKind = RangeItem;
                 break;
             case hyphenChar:
@@ -911,6 +936,7 @@ RE * RE_Parser::parse_charset() {
                     lastItemKind = SetItem;
                 }
                 else {
+                    if ((*mCursor == 'x') || (*mCursor == 'o') || (*mCursor == '0')) possibleByteCodeEscape = true;
                     lastCodepointItem = parse_escaped_codepoint();
                     insert(cc, lastCodepointItem);
                     lastItemKind = CodepointItem;
@@ -926,15 +952,6 @@ RE * RE_Parser::parse_charset() {
     ParseFailure("Set expression not properly terminated.");
 }
 
-
-codepoint_t RE_Parser::parse_codepoint() {
-    if (*mCursor == '\\') {
-        mCursor++;
-        return parse_escaped_codepoint();
-    } else {
-        return parse_literal_codepoint();
-    }
-}
 
 // A backslash escape was found, and various special cases (back reference,
 // quoting with \Q, \E, sets (\p, \P, \d, \D, \w, \W, \s, \S, \b, \B), grapheme

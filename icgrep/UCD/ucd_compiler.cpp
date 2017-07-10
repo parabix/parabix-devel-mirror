@@ -522,6 +522,9 @@ PabloAST * UCDCompiler::generateWithoutIfHierarchy(const UnicodeSet * set, Pablo
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void UCDCompiler::addTargets(PabloBuilder & entry, const NameMap & names) {
     for (const auto t : names) {
+        if (t.first->getType() == Name::Type::Byte) {
+            continue;
+        }
         if (LLVM_LIKELY(isa<CC>(t.first->getDefinition()))) {
             mTargetMap.emplace(cast<CC>(t.first->getDefinition()), t.second ? t.second : entry.createZeroes());
         } else {

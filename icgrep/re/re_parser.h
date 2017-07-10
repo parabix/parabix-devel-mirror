@@ -24,8 +24,8 @@ enum ModeFlagType : unsigned {
     CASE_INSENSITIVE_MODE_FLAG = 1,
     MULTILINE_MODE_FLAG = 2,      // not currently implemented
     DOTALL_MODE_FLAG = 4,         // not currently implemented
-    IGNORE_SPACE_MODE_FLAG = 8,   // not currently implemented
-    UNIX_LINES_MODE_FLAG = 16,    // not currently implemented
+    IGNORE_SPACE_MODE_FLAG = 8,
+    UNIX_LINES_MODE_FLAG = 16,
     GRAPHEME_CLUSTER_MODE = 32
 };
 
