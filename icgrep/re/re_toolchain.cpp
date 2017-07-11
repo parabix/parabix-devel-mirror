@@ -92,10 +92,8 @@ RE * regular_expression_passes(RE * re_ast)  {
     
 void re2pablo_compiler(PabloKernel * kernel, RE * re_ast) {
     Var * const basis = kernel->getInputStreamVar("basis");
-    Var * const linebreak = kernel->getInputStreamVar("linebreak");
     cc::CC_Compiler cc_compiler(kernel, basis);
     re::RE_Compiler re_compiler(kernel, cc_compiler);
-    re_compiler.initializeRequiredStreams(basis->getType()->getArrayNumElements(), linebreak);
     re_compiler.compileUnicodeNames(re_ast);
     re_compiler.compile(re_ast);
 }

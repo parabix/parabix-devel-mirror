@@ -61,7 +61,6 @@ class RE_Compiler {
 public:
 
     RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler);
-    void initializeRequiredStreams(const unsigned encodingBits, pablo::Var * linebreak);
     void compileUnicodeNames(RE *& re);
     void compile(RE * re); 
 
@@ -89,8 +88,6 @@ private:
         boost::container::flat_map<const Name *, MarkerType> mMap;
     };
 
-    void initializeRequiredStreams_utf8(pablo::Var * linebreak);
-    void initializeRequiredStreams_utf16(pablo::Var * linebreak);
     MarkerType compile(RE * re, pablo::PabloBuilder & cg);
 
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);

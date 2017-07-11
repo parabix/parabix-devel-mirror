@@ -40,132 +40,6 @@ using namespace llvm;
 
 namespace re {
 
-void RE_Compiler::initializeRequiredStreams(const unsigned encodingBits, Var * linebreak) {
-    if (encodingBits == 8) {
-        RE_Compiler::initializeRequiredStreams_utf8(linebreak);
-    } else if (encodingBits == 16) {
-        RE_Compiler::initializeRequiredStreams_utf16(linebreak);
-    }
-}
-
-void RE_Compiler::initializeRequiredStreams_utf16(Var * linebreak) {
-    PabloAST * LF = mCCCompiler.compileCC("LF", makeCC(0x000A), mPB);
-    PabloAST * CR = mCCCompiler.compileCC("CR", makeCC(0x000D), mPB);
-    PabloAST * cr1 = mPB.createAdvance(CR, 1, "cr1");
-    mCRLF = mPB.createAnd(cr1, LF, "crlf");
-
-    PabloAST * hi_surrogate = mCCCompiler.compileCC(makeCC(0xD800, 0xDBFF));
-    //PabloAST * lo_surrogate = mCCCompiler.compileCC(makeCC(0xDC00, 0xDFFF));
-    PabloAST * u16hi_hi_surrogate = mCCCompiler.compileCC(makeCC(0xD800, 0xDB00));    //u16hi_hi_surrogate = [\xD8-\xDB]
-    PabloAST * u16hi_lo_surrogate = mCCCompiler.compileCC(makeCC(0xDC00, 0xDF00));    //u16hi_lo_surrogate = [\xDC-\xDF]
-
-    PabloAST * invalidTemp = mPB.createAdvance(u16hi_hi_surrogate, 1, "InvalidTemp");
-    PabloAST * u16invalid = mPB.createXor(invalidTemp, u16hi_lo_surrogate, "u16invalid");
-    // errors.Unicode=pablo.Advance(u16hi_hi_surrogate) ^ u16hi_lo_surrogate
-    PabloAST * u16valid = mPB.createNot(u16invalid, "u16valid");
-
-    PabloAST * u16single_temp = mPB.createOr(mCCCompiler.compileCC(makeCC(0x0000, 0xD7FF)), mCCCompiler.compileCC(makeCC(0xE000, 0xFFFF)));
-    PabloAST * u16single = mPB.createAnd(u16single_temp, mPB.createNot(u16invalid));
-    
-    mNonFinal = mPB.createAnd(hi_surrogate, u16valid, "nonfinal");
-    mFinal = mPB.createNot(mPB.createOr(mNonFinal, u16invalid), "final");
-    mInitial = mPB.createOr(u16single, hi_surrogate, "initial");
-    
-    mLineBreak = mPB.createExtract(linebreak, mPB.getInteger(0));
-    mAny = mPB.createNot(mLineBreak, "any");
-}
-
-void RE_Compiler::initializeRequiredStreams_utf8(Var * linebreak) {
-    PabloAST * LF = mCCCompiler.compileCC("LF", makeCC(0x0A), mPB);
-    PabloAST * CR = mCCCompiler.compileCC(makeCC(0x0D));
-
-    Zeroes * const zero = mPB.createZeroes();
-    Var * crlf = mPB.createVar("crlf", zero);
-    PabloBuilder crb = PabloBuilder::Create(mPB);
-    PabloAST * cr1 = crb.createAdvance(CR, 1, "cr1");
-    crb.createAssign(crlf, crb.createAnd(cr1, LF));
-    mPB.createIf(CR, crb);
-
-    mCRLF = crlf;
-
-    Var * u8invalid = mPB.createVar("u8invalid", zero);
-    Var * valid_pfx = mPB.createVar("valid_pfx", zero);
-    Var * nonFinal = mPB.createVar("nonfinal", zero);
-
-    PabloAST * u8pfx = mCCCompiler.compileCC(makeCC(0xC0, 0xFF));
-    PabloBuilder it = PabloBuilder::Create(mPB);
-    mPB.createIf(u8pfx, it);
-
-    mNonFinal = nonFinal;
-
-    PabloAST * u8pfx2 = mCCCompiler.compileCC(makeCC(0xC2, 0xDF), it);
-    PabloAST * u8pfx3 = mCCCompiler.compileCC(makeCC(0xE0, 0xEF), it);
-    PabloAST * u8pfx4 = mCCCompiler.compileCC(makeCC(0xF0, 0xF4), it);
-    PabloAST * u8suffix = mCCCompiler.compileCC("u8suffix", makeCC(0x80, 0xBF), it);
-
-    //
-    // Two-byte sequences
-    Var * u8scope22 = it.createVar("u8scope22", zero);
-    PabloBuilder it2 = PabloBuilder::Create(it);
-    it2.createAssign(u8scope22, it2.createAdvance(u8pfx2, 1));
-    it.createIf(u8pfx2, it2);
-
-    //
-    // Three-byte sequences
-    Var * u8scope32 = it.createVar("u8scope32", zero);
-    Var * u8scope3X = it.createVar("u8scope3X", zero);
-    Var * EX_invalid = it.createVar("EX_invalid", zero);
-    PabloBuilder it3 = PabloBuilder::Create(it);
-    it.createIf(u8pfx3, it3);
-    it3.createAssign(u8scope32, it3.createAdvance(u8pfx3, 1));
-    PabloAST * u8scope33 = it3.createAdvance(u8pfx3, 2);
-    it3.createAssign(u8scope3X, it3.createOr(u8scope32, u8scope33));
-    PabloAST * E0_invalid = it3.createAnd(it3.createAdvance(mCCCompiler.compileCC(makeCC(0xE0), it3), 1), mCCCompiler.compileCC(makeCC(0x80, 0x9F), it3));
-    PabloAST * ED_invalid = it3.createAnd(it3.createAdvance(mCCCompiler.compileCC(makeCC(0xED), it3), 1), mCCCompiler.compileCC(makeCC(0xA0, 0xBF), it3));
-    it3.createAssign(EX_invalid, it3.createOr(E0_invalid, ED_invalid));
-
-    //
-    // Four-byte sequences
-    Var * u8scope4nonfinal = it.createVar("u8scope4nonfinal", zero);
-    Var * u8scope4X = it.createVar("u8scope4X", zero);
-    Var * FX_invalid = it.createVar("FX_invalid", zero);
-    PabloBuilder it4 = PabloBuilder::Create(it);
-    it.createIf(u8pfx4, it4);
-    PabloAST * u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
-    PabloAST * u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
-    PabloAST * u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
-    it4.createAssign(u8scope4nonfinal, it4.createOr(u8scope42, u8scope43));
-    it4.createAssign(u8scope4X, it4.createOr(u8scope4nonfinal, u8scope44));
-    PabloAST * F0_invalid = it4.createAnd(it4.createAdvance(mCCCompiler.compileCC(makeCC(0xF0), it4), 1), mCCCompiler.compileCC(makeCC(0x80, 0x8F), it4));
-    PabloAST * F4_invalid = it4.createAnd(it4.createAdvance(mCCCompiler.compileCC(makeCC(0xF4), it4), 1), mCCCompiler.compileCC(makeCC(0x90, 0xBF), it4));
-    it4.createAssign(FX_invalid, it4.createOr(F0_invalid, F4_invalid));
-
-    //
-    // Invalid cases
-    PabloAST * anyscope = it.createOr(u8scope22, it.createOr(u8scope3X, u8scope4X));
-    PabloAST * legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
-    //  Any scope that does not have a suffix byte, and any suffix byte that is not in
-    //  a scope is a mismatch, i.e., invalid UTF-8.
-    PabloAST * mismatch = it.createXor(anyscope, u8suffix);
-    //
-    PabloAST * EF_invalid = it.createOr(EX_invalid, FX_invalid);
-    PabloAST * pfx_invalid = it.createXor(u8pfx, legalpfx);
-    it.createAssign(u8invalid, it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
-    PabloAST * u8valid = it.createNot(u8invalid, "u8valid");
-    //
-    //
-
-    it.createAssign(valid_pfx, it.createAnd(u8pfx, u8valid));
-    it.createAssign(mNonFinal, it.createAnd(it.createOr(it.createOr(u8pfx, u8scope32), u8scope4nonfinal), u8valid));
-
-
-    PabloAST * u8single = mPB.createAnd(mCCCompiler.compileCC(makeCC(0x00, 0x7F)), mPB.createNot(u8invalid));
-    mInitial = mPB.createOr(u8single, valid_pfx, "initial");
-    mFinal = mPB.createNot(mPB.createOr(mNonFinal, u8invalid), "final");
-    mLineBreak = mPB.createExtract(linebreak, mPB.getInteger(0));
-    mAny = mPB.createNot(mLineBreak, "any");
-}
-
 
 RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     Name * ZeroWidth = nullptr;
@@ -646,7 +520,14 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 , mStarDepth(0)
 , mPB(ccCompiler.getBuilder())
 , mCompiledName(&mBaseMap) {
-
+    Var * const linebreak = mKernel->getInputStreamVar("linebreak");
+    mLineBreak = mPB.createExtract(linebreak, mPB.getInteger(0));
+    mAny = mPB.createNot(mLineBreak, "any");
+    Var * const required = mKernel->getInputStreamVar("required");
+    mInitial = mPB.createExtract(required, mPB.getInteger(0));
+    mNonFinal = mPB.createExtract(required, mPB.getInteger(1));
+    mFinal = mPB.createExtract(required, mPB.getInteger(2));
+    mCRLF = mPB.createExtract(required, mPB.getInteger(3));
 }
 
 } // end of namespace re

@@ -18,6 +18,27 @@ protected:
     std::string     mSignature;
 };
 
+
+    
+class RequiredStreams_UTF8 : public pablo::PabloKernel {
+public:
+    RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
+class RequiredStreams_UTF16 : public pablo::PabloKernel {
+public:
+    RequiredStreams_UTF16(const std::unique_ptr<kernel::KernelBuilder> & kb);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
+
 class ICGrepKernel : public RegularExpressionOptimizer, public pablo::PabloKernel {
 public:
     ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast);
