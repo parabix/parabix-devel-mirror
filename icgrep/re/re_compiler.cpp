@@ -73,8 +73,10 @@ void RE_Compiler::compileUnicodeNames(RE *& re) {
 
 void RE_Compiler::compile(RE * re) {
     MarkerType match_results = compile(re, mPB);
+    PabloAST * match_post = markerVar(AdvanceMarker(match_results, MarkerPosition::FinalPostPositionUnit, mPB));
     Var * const output = mKernel->getOutputStreamVar("matches");
-    mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), markerVar(match_results));
+    
+    mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), match_post);
 }
     
 MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {

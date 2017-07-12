@@ -574,8 +574,8 @@ A plain line.
 <datafile id = "EmptyFile"/>
 <grepcase regexp="ab" datafile="EmptyFile" grepcount="0"/> 
 <datafile id = "LineBreaking">CRLF1&#13;&#10;CRLF2&#13;&#10;CRLF3&#13;&#10;
-LS1&#x2028;LS2&#x2028;LS3&#x2028;PS1&#x2029;PS2&#x2029;PS3&#x2029;
-PS4&#x2029;CRLF4&#13;&#10;LS4&#x2028;LS5&#x2028;CRLF5&#13;&#10;LS6&#x2028;
+LS1&#x2028;LS2&#x2028;LS3&#x2028;PS1&#x2029;PS2&#x2029;PS3&#x2029;&#x2003;
+PS4&#x2029;CRLF4&#13;&#10;LS4&#x2028;LS5&#x2028;CRLF5&#13;&#10;LS6&#x2028;&#x2003;
 Unterminated</datafile>
 
 <grepcase regexp="^.*$" datafile="LineBreaking" grepcount="19"/>
@@ -585,6 +585,7 @@ Unterminated</datafile>
 <grepcase regexp="^CRLF.$" datafile="LineBreaking" grepcount="5"/>
 <grepcase regexp="LS[0-9]*" datafile="LineBreaking" grepcount="6"/>
 <grepcase regexp="PS" datafile="LineBreaking" grepcount="4"/>
+<grepcase regexp="\S" datafile="LineBreaking" grepcount="16"/>
  
 <grepcase regexp="[a-z]{20}" datafile="4KiB-onepage" grepcount="77"/>
 <grepcase regexp="[a-z]{15}" datafile="4KiB-onepage" grepcount="78"/>
