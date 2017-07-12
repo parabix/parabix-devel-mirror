@@ -31,6 +31,7 @@ const cl::OptionCategory * pablo_toolchain_flags() {
 static cl::bits<PabloDebugFlags> 
 DebugOptions(cl::values(clEnumVal(ShowPablo, "Print generated Pablo code"),
                         clEnumVal(ShowOptimizedPablo, "Print optimizeed Pablo code"),
+                        clEnumVal(VerifyPablo, "Run the Pablo verifier"),
                         clEnumVal(DumpTrace, "Generate dynamic traces of executed Pablo assignments."),
                         clEnumValEnd), cl::cat(PabloOptions));
     
@@ -56,9 +57,13 @@ void pablo_function_passes(PabloKernel * kernel) {
         PabloPrinter::print(kernel, errs());
     }
 
-    #ifndef NDEBUG
-    PabloVerifier::verify(kernel, "creation");
-    #endif
+#ifdef NDEBUG
+    if (DebugOptions.isSet(VerifyPablo)) {
+#endif
+        PabloVerifier::verify(kernel, "creation");
+#ifdef NDEBUG
+    }
+#endif
 
     // Scan through the pablo code and perform DCE and CSE
     if (LLVM_LIKELY(!PabloOptimizationsOptions.isSet(DisableSimplification))) {

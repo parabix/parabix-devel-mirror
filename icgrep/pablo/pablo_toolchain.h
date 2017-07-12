@@ -13,7 +13,7 @@ namespace pablo { class PabloKernel; }
 namespace pablo {
 
 enum PabloDebugFlags {
-    ShowPablo, ShowOptimizedPablo, DumpTrace,
+    ShowPablo, ShowOptimizedPablo, VerifyPablo, DumpTrace,
 };
 
 enum PabloCompilationFlags {
