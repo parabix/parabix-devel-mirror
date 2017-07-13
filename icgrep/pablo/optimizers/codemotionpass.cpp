@@ -176,18 +176,6 @@ struct CodeMotionPassContainer {
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief doCodeSinking
-     ** ------------------------------------------------------------------------------------------------------------- */
-    void doCodeSinking(PabloBlock * const block) {
-        Statement * stmt = block->back(); // note: reverse AST traversal
-        while (stmt) {
-            Statement * const prevNode = stmt->getPrevNode();
-            sinkIfAcceptableTarget(stmt, block);
-            stmt = prevNode;
-        }
-    }
-
-    /** ------------------------------------------------------------------------------------------------------------- *
      * @brief hoistLoopInvariants
      ** ------------------------------------------------------------------------------------------------------------- */
     void hoistLoopInvariants(Branch * const loop) {
@@ -229,17 +217,31 @@ struct CodeMotionPassContainer {
      * @brief doCodeMovement
      ** ------------------------------------------------------------------------------------------------------------- */
     void doCodeMovement(PabloBlock * const block) {
-        doCodeSinking(block);
-        for (Statement * stmt : *block) {
-            if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
-                doCodeMovement(cast<Branch>(stmt)->getBody());
-                if (isa<While>(stmt)) {
-                    // TODO: if we analyzed the probability of this loop being executed once, twice, or many times, we could
-                    // determine whether hoisting will helpful or harmful to the expected run time.
-                    hoistLoopInvariants(cast<While>(stmt));
-                }
+
+        std::vector<Branch *> branches;
+
+        Statement * stmt = block->back(); // note: reverse AST traversal
+        while (stmt) {
+            Statement * const prevNode = stmt->getPrevNode();
+            sinkIfAcceptableTarget(stmt, block);
+            if (isa<Branch>(stmt)) {
+                branches.push_back(cast<Branch>(stmt));
             }
+            stmt = prevNode;
         }
+
+        while (!branches.empty()) {
+            Branch * const br = branches.back();
+            branches.pop_back();
+            doCodeMovement(br->getBody());
+            if (isa<While>(br)) {
+                // TODO: if we analyzed the probability of this loop being executed once, twice, or many times, we could
+                // determine whether hoisting will helpful or harmful to the expected run time.
+                hoistLoopInvariants(br);
+            }
+
+        }
+
     }
 
 private:
