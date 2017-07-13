@@ -21,6 +21,7 @@
 #include <re/re_intersect.h>        // for Intersect
 #include <re/re_name.h>             // for Name, Name::Type, Name::Type::Zer...
 #include <re/re_name_resolve.h>     // for resolveNames
+#include <re/re_name_gather.h>      // for gatherNames
 #include <re/re_rep.h>              // for Rep, Rep::::UNBOUNDED_REP
 #include <re/re_seq.h>              // for Seq
 #include <re/re_start.h>
@@ -45,7 +46,8 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     Name * ZeroWidth = nullptr;
     mCompiledName = &mBaseMap;
 
-    auto nameMap = resolveNames(re, ZeroWidth);
+    re = resolveNames(re);
+    auto nameMap = gatherNames(re, ZeroWidth);
     if (LLVM_LIKELY(nameMap.size() > 0)) {
         UCD::UCDCompiler ucdCompiler(mCCCompiler);
         if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {

@@ -14,8 +14,6 @@
 #include <boost/container/flat_set.hpp>
 #include <sstream>
 
-using NameMap = UCD::UCDCompiler::NameMap;
-
 using namespace boost::container;
 using namespace llvm;
 
@@ -39,12 +37,9 @@ struct NameResolver {
                     name->setDefinition(resolve(name->getDefinition()));
                 } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty || name->getType() == Name::Type::ZeroWidth)) {
                     if (UCD::resolvePropertyDefinition(name)) {
-                        if (name->getType() == Name::Type::ZeroWidth) {
-                            mZeroWidth = name;
-                        }
                         name->setDefinition(resolve(name->getDefinition()));
                     } else {
-                        name->setDefinition(makeCC(UCD::resolveUnicodeSet(name)));
+                        name->setDefinition(makeCC(std::move(UCD::resolveUnicodeSet(name))));
                     }
                 } else {
                     throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
@@ -112,59 +107,17 @@ struct NameResolver {
         return re;
     }
 
-    void gather(RE * re) {
-        assert ("RE object cannot be null!" && re);
-        if (isa<Name>(re)) {
-            if (mVisited.insert(cast<Name>(re)).second) {
-                if (isa<CC>(cast<Name>(re)->getDefinition())) {
-                    mNameMap.emplace(cast<Name>(re), nullptr);
-                } else {
-                    gather(cast<Name>(re)->getDefinition());
-                }
-            }
-        } else if (isa<Seq>(re)) {
-            for (RE * item : *cast<Seq>(re)) {
-                gather(item);
-            }
-        } else if (isa<Alt>(re)) {
-            for (RE * item : *cast<Alt>(re)) {
-                gather(item);
-            }
-        } else if (isa<Rep>(re)) {
-            gather(cast<Rep>(re)->getRE());
-        } else if (isa<Assertion>(re)) {
-            gather(cast<Assertion>(re)->getAsserted());
-        } else if (isa<Diff>(re)) {
-            gather(cast<Diff>(re)->getLH());
-            gather(cast<Diff>(re)->getRH());
-        } else if (isa<Intersect>(re)) {
-            gather(cast<Intersect>(re)->getLH());
-            gather(cast<Intersect>(re)->getRH());
-        }
-    }
-
-    NameResolver(NameMap & nameMap, Name *& zeroWidth)
-    : mZeroWidth(zeroWidth)
-    , mNameMap(nameMap) {
+    NameResolver() {
 
     }
 
 private:
-
-    Name *&                 mZeroWidth;
-    NameMap &               mNameMap;
     Memoizer                mMemoizer;
-    flat_set<Name *>        mVisited;
-
 };
     
-NameMap resolveNames(RE *& re, Name *& zeroWidth) {
-    NameMap nameMap;
-    NameResolver nameResolver(nameMap, zeroWidth);
-    re = nameResolver.resolve(re);
-    nameResolver.gather(re);
-    return nameMap;
-    
+RE * resolveNames(RE *& re) {
+    NameResolver nameResolver;
+    return nameResolver.resolve(re);    
 }
 
 }

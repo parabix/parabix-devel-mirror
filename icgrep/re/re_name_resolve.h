@@ -8,7 +8,7 @@ namespace re {
     class RE;
     class Name;
 
-    UCD::UCDCompiler::NameMap resolveNames(RE * &re, Name * &zerowidth);
+    RE * resolveNames(RE * &re);
 
 }
 #endif
