@@ -102,14 +102,14 @@ target_link_libraries (UCDlib RegExpADT PabloADT CCADT)
 target_link_libraries (RegExpADT PabloADT CCADT UCDlib)
 target_link_libraries (RegExpCompiler RegExpADT)
 
-add_executable(icgrep icgrep.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
+add_executable(icgrep icgrep.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
 add_executable(u8u16 u8u16.cpp)
 add_executable(base64 base64.cpp kernels/radix64.cpp)
 add_executable(wc wc.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp)
 add_executable(array-test array-test.cpp kernels/alignedprint.cpp)
 add_executable(lz4d lz4d.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4_index_decoder.cpp kernels/lz4_bytestream_decoder.cpp)
-add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/icgrep-test/icgrep-test.cpp combine/pugixml/src/pugixml.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
+add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/icgrep-test/icgrep-test.cpp combine/pugixml/src/pugixml.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
 
 
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
