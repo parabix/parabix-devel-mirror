@@ -28,6 +28,7 @@
 #include <boost/functional/hash.hpp>
 
 #include <set>
+#include <unordered_set>
 #include <random>
 
 #ifndef NDEBUG
@@ -37,7 +38,6 @@
 #include <boost/graph/strong_components.hpp>
 #include <llvm/Support/raw_ostream.h>
 #include <pablo/printer_pablos.h>
-#include <llvm/Support/CommandLine.h>
 
 // #define PRINT_DEBUG
 
@@ -289,11 +289,9 @@ protected:
 
                 // Does the vertex have a value and, if so, does value dominate this statement?
                 // If not, we need to regenerate it.
-                for (bool first_cycle = true;;) {
+                for (;;) {
                     if (ei == ei_end) {
-                        assert (first_cycle);
                         ei = ei_begin;
-                        first_cycle = false;
                     }
                     if (G[*ei] == i) {
                         break;
@@ -417,7 +415,7 @@ protected:
                         break;
 
                     default:
-                        llvm_unreachable("cannot regenerate this non-associtive statement!");
+                        llvm_unreachable("cannot regenerate this non-associative statement!");
                 }
 
             } else {
