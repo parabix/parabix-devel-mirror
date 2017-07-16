@@ -155,7 +155,6 @@ void RE_Local::follow(RE * re, std::map<UCD::UnicodeSet*, UCD::UnicodeSet*> &fol
         } else {
             throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
         }
-    //F(e· e′) = F(e) ∪ F(e′) ∪ S(e)P(e′);
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         RE * re_first = *(seq->begin());
         std::vector<RE *> list;
@@ -182,7 +181,6 @@ void RE_Local::follow(RE * re, std::map<UCD::UnicodeSet*, UCD::UnicodeSet*> &fol
             follow(*ai, follow_map);
         }
         return;
-    //F(e*) = F(e) ∪ S(e)P(e);
     } else if (Rep * rep = dyn_cast<Rep>(re)) {
         follow(rep->getRE(), follow_map);
         auto e1 = final(rep->getRE());
