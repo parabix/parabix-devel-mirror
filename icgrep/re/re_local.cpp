@@ -245,8 +245,6 @@ RE * RE_Local::collect_UnicodeSets_helper(RE * re, std::vector<UCD::UnicodeSet> 
         collect_UnicodeSets_helper(cast<Intersect>(re)->getRH(), UnicodeSets);
     } else if (isa<Any>(re)) {
         UnicodeSets.push_back(UCD::UnicodeSet(0x00, 0x10FFFF));
-    } else if (isa<Any>(re)) {
-        UnicodeSets.push_back(UCD::UnicodeSet(0x00, 0x10FFFF));
     }
     return re;
 }
