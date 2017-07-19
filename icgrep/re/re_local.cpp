@@ -163,8 +163,6 @@ void RE_Local::follow(RE * re, std::map<UCD::UnicodeSet*, UCD::UnicodeSet*> &fol
             list.push_back(*i);
         }
         RE * re_follow = makeSeq(list.begin(), list.end());
-        follow(re_first, follow_map);
-        follow(re_follow, follow_map);
         auto e1 = final(re_first);
         auto e2 = first(re_follow);
         if (e1 && e2) {
@@ -175,6 +173,8 @@ void RE_Local::follow(RE * re, std::map<UCD::UnicodeSet*, UCD::UnicodeSet*> &fol
                 follow_map.insert(std::pair<UCD::UnicodeSet*, UCD::UnicodeSet*>(e1, e2));
             }
         }
+        follow(re_first, follow_map);
+        follow(re_follow, follow_map);
         return;
     } else if (Alt * alt = dyn_cast<Alt>(re)) {
         for (auto ai = alt->begin(); ai != alt->end(); ++ai) {
