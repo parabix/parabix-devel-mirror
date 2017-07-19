@@ -82,7 +82,7 @@ void *DoGrepThreadFunction(void *args)
     pthread_exit(nullptr);
 }
 
-bool GrepEngine::matchesNeedToBeMovedToEOL() const {
+bool matchesNeedToBeMovedToEOL() {
     if ((Mode == QuietMode) | (Mode == FilesWithMatch) | (Mode == FilesWithoutMatch)) {
         return false;
     }
@@ -299,6 +299,69 @@ void PrintResults(){
     exit(grepMatchFound ? MatchFoundExitCode : MatchNotFoundExitCode);
 }
 
+    
+std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver, std::vector<re::RE *> REs, const GrepModeType grepMode, unsigned encodingBits, StreamSetBuffer * ByteStream) {
+    auto & idb = grepDriver->getBuilder();
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
+    size_t MatchLimit = ((grepMode == QuietMode) | (grepMode == FilesWithMatch) | (grepMode == FilesWithoutMatch)) ? 1 : MaxCountFlag;
+    
+
+    StreamSetBuffer * BasisBits = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(encodingBits, 1), segmentSize * bufferSegments));
+    kernel::Kernel * s2pk = grepDriver->addKernelInstance(make_unique<kernel::S2PKernel>(idb));
+    grepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
+    
+    StreamSetBuffer * LineBreakStream = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+    kernel::Kernel * linebreakK = grepDriver->addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(idb, encodingBits));
+    grepDriver->makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
+    
+    kernel::Kernel * requiredStreamsK = grepDriver->addKernelInstance(make_unique<kernel::RequiredStreams_UTF8>(idb));
+    StreamSetBuffer * RequiredStreams = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(4, 1), segmentSize * bufferSegments));
+    grepDriver->makeKernelCall(requiredStreamsK, {BasisBits}, {RequiredStreams});
+    
+    const auto n = REs.size();
+    
+    std::vector<StreamSetBuffer *> MatchResultsBufs(n);
+    
+    for(unsigned i = 0; i < n; ++i){
+        StreamSetBuffer * MatchResults = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        kernel::Kernel * icgrepK = grepDriver->addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, REs[i]));
+        grepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, RequiredStreams}, {MatchResults});
+        MatchResultsBufs[i] = MatchResults;
+    }
+    StreamSetBuffer * MergedResults = MatchResultsBufs[0];
+    if (REs.size() > 1) {
+        MergedResults = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        kernel::Kernel * streamsMergeK = grepDriver->addKernelInstance(make_unique<kernel::StreamsMerge>(idb, 1, REs.size()));
+        grepDriver->makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
+    }
+    StreamSetBuffer * Matches = MergedResults;
+    
+    if (matchesNeedToBeMovedToEOL()) {
+        StreamSetBuffer * OriginalMatches = Matches;
+        kernel::Kernel * matchedLinesK = grepDriver->addKernelInstance(make_unique<kernel::MatchedLinesKernel>(idb));
+        Matches = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        grepDriver->makeKernelCall(matchedLinesK, {OriginalMatches, LineBreakStream}, {Matches});
+    }
+    
+    if (InvertMatchFlag) {
+        kernel::Kernel * invertK = grepDriver->addKernelInstance(make_unique<kernel::InvertMatchesKernel>(idb));
+        StreamSetBuffer * OriginalMatches = Matches;
+        Matches = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        grepDriver->makeKernelCall(invertK, {OriginalMatches, LineBreakStream}, {Matches});
+    }
+    if (MatchLimit > 0) {
+        kernel::Kernel * untilK = grepDriver->addKernelInstance(make_unique<kernel::UntilNkernel>(idb));
+        untilK->setInitialArguments({idb->getSize(MatchLimit)});
+        StreamSetBuffer * AllMatches = Matches;
+        Matches = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
+        grepDriver->makeKernelCall(untilK, {AllMatches}, {Matches});
+    }
+    return std::pair<StreamSetBuffer *, StreamSetBuffer *>(LineBreakStream, Matches);
+}
+
+
+    
 void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const GrepModeType grepMode, const bool UTF_16) {
 
     assert (mGrepDriver == nullptr);
@@ -308,7 +371,6 @@ void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const GrepModeType
     Module * M = idb->getModule();
 
     const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = UTF_16 ? 16 : 8;
 
     Type * const int64Ty = idb->getInt64Ty();
@@ -318,8 +380,6 @@ void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const GrepModeType
     Type * const int64tyPtr = PointerType::get(int64Ty, 1);
     Type * const voidTy = idb->getVoidTy();
     
-    size_t MatchLimit = ((grepMode == QuietMode) | (grepMode == FilesWithMatch) | (grepMode == FilesWithoutMatch)) ? 1 : MaxCountFlag;
-
     Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", voidTy, int64tyPtr, sizeTyPtr, sizeTyPtr, int64tyPtr, nullptr));
     mainFunc->setCallingConv(CallingConv::C);
     idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
@@ -351,56 +411,7 @@ void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const GrepModeType
     sourceK->setInitialArguments({inputStream, bufferSize});
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
 
-    StreamSetBuffer * BasisBits = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize * bufferSegments));
-    kernel::Kernel * s2pk = mGrepDriver->addKernelInstance(make_unique<kernel::S2PKernel>(idb));
-    mGrepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
- 
-    StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-    kernel::Kernel * linebreakK = mGrepDriver->addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(idb, encodingBits));
-    mGrepDriver->makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
-    
-    kernel::Kernel * requiredStreamsK = mGrepDriver->addKernelInstance(make_unique<kernel::RequiredStreams_UTF8>(idb));
-    StreamSetBuffer * RequiredStreams = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(4, 1), segmentSize));
-    mGrepDriver->makeKernelCall(requiredStreamsK, {BasisBits}, {RequiredStreams});
-    
-    const auto n = REs.size();
-
-    std::vector<StreamSetBuffer *> MatchResultsBufs(n);
-
-    for(unsigned i = 0; i < n; ++i){
-        StreamSetBuffer * MatchResults = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, REs[i]));
-        mGrepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, RequiredStreams}, {MatchResults});
-        MatchResultsBufs[i] = MatchResults;
-    }
-    StreamSetBuffer * MergedResults = MatchResultsBufs[0];
-    if (REs.size() > 1) {
-        MergedResults = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        kernel::Kernel * streamsMergeK = mGrepDriver->addKernelInstance(make_unique<kernel::StreamsMerge>(idb, 1, REs.size()));
-        mGrepDriver->makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
-    }
-    StreamSetBuffer * Matches = MergedResults;
-
-    if (matchesNeedToBeMovedToEOL()) {
-        StreamSetBuffer * OriginalMatches = Matches;
-        kernel::Kernel * matchedLinesK = mGrepDriver->addKernelInstance(make_unique<kernel::MatchedLinesKernel>(idb));
-        Matches = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        mGrepDriver->makeKernelCall(matchedLinesK, {OriginalMatches, LineBreakStream}, {Matches});
-    }
-    
-    if (InvertMatchFlag) {
-        kernel::Kernel * invertK = mGrepDriver->addKernelInstance(make_unique<kernel::InvertMatchesKernel>(idb));
-        StreamSetBuffer * OriginalMatches = Matches;
-        Matches = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        mGrepDriver->makeKernelCall(invertK, {OriginalMatches, LineBreakStream}, {Matches});
-    }
-    if (MatchLimit > 0) {
-        kernel::Kernel * untilK = mGrepDriver->addKernelInstance(make_unique<kernel::UntilNkernel>(idb));
-        untilK->setInitialArguments({idb->getSize(MatchLimit)});
-        StreamSetBuffer * AllMatches = Matches;
-        Matches = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        mGrepDriver->makeKernelCall(untilK, {AllMatches}, {Matches});
-    }
+    StreamSetBuffer * Matches = std::get<1>(grepPipeline(mGrepDriver, REs, grepMode, encodingBits, ByteStream));
     
     kernel::Kernel * matchCountK = mGrepDriver->addKernelInstance(make_unique<kernel::PopcountKernel>(idb));
     mGrepDriver->makeKernelCall(matchCountK, {Matches}, {});
@@ -425,7 +436,6 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
     Module * M = idb->getModule();
 
     const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = UTF_16 ? 16 : 8;
 
     Type * const int64Ty = idb->getInt64Ty();
@@ -433,8 +443,6 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
 
     kernel::Kernel * sourceK = nullptr;
     
-    size_t MatchLimit = ((grepMode == QuietMode) | (grepMode == FilesWithMatch) | (grepMode == FilesWithoutMatch)) ? 1 : MaxCountFlag;
-
     Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, idb->getInt32Ty(), int32Ty, nullptr));
     mainFunc->setCallingConv(CallingConv::C);
     idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
@@ -455,57 +463,11 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
     sourceK->setInitialArguments({fileDescriptor});
 
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
-    StreamSetBuffer * BasisBits = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize * bufferSegments));
     
-    kernel::Kernel * s2pk = mGrepDriver->addKernelInstance(make_unique<kernel::S2PKernel>(idb));
-    mGrepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
+    StreamSetBuffer * LineBreakStream;
+    StreamSetBuffer * Matches;
+    std::tie(LineBreakStream, Matches) = grepPipeline(mGrepDriver, REs, grepMode, encodingBits, ByteStream);
     
-    kernel::Kernel * linebreakK = mGrepDriver->addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(idb, encodingBits));
-    StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-    mGrepDriver->makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
-    
-    kernel::Kernel * requiredStreamsK = mGrepDriver->addKernelInstance(make_unique<kernel::RequiredStreams_UTF8>(idb));
-    StreamSetBuffer * RequiredStreams = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(4, 1), segmentSize));
-    mGrepDriver->makeKernelCall(requiredStreamsK, {BasisBits}, {RequiredStreams});
-    
-    const auto n = REs.size();
-
-    std::vector<StreamSetBuffer *> MatchResultsBufs(n);
-
-    for(unsigned i = 0; i < n; ++i){
-        StreamSetBuffer * MatchResults = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, REs[i]));
-        mGrepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, RequiredStreams}, {MatchResults});
-        MatchResultsBufs[i] = MatchResults;
-    }
-    StreamSetBuffer * MergedResults = MatchResultsBufs[0];
-    if (REs.size() > 1) {
-        MergedResults = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        kernel::Kernel * streamsMergeK = mGrepDriver->addKernelInstance(make_unique<kernel::StreamsMerge>(idb, 1, REs.size()));
-        mGrepDriver->makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
-    }
-    StreamSetBuffer * Matches = MergedResults;
-    
-    if (matchesNeedToBeMovedToEOL()) {
-        StreamSetBuffer * OriginalMatches = Matches;
-        kernel::Kernel * matchedLinesK = mGrepDriver->addKernelInstance(make_unique<kernel::MatchedLinesKernel>(idb));
-        Matches = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        mGrepDriver->makeKernelCall(matchedLinesK, {OriginalMatches, LineBreakStream}, {Matches});
-    }
-    
-    if (InvertMatchFlag) {
-        kernel::Kernel * invertK = mGrepDriver->addKernelInstance(make_unique<kernel::InvertMatchesKernel>(idb));
-        StreamSetBuffer * OriginalMatches = Matches;
-        Matches = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        mGrepDriver->makeKernelCall(invertK, {OriginalMatches, LineBreakStream}, {Matches});
-    }
-    if (MatchLimit > 0) {
-        kernel::Kernel * untilK = mGrepDriver->addKernelInstance(make_unique<kernel::UntilNkernel>(idb));
-        untilK->setInitialArguments({idb->getSize(MatchLimit)});
-        StreamSetBuffer * AllMatches = Matches;
-        Matches = mGrepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        mGrepDriver->makeKernelCall(untilK, {AllMatches}, {Matches});
-    }
     if (grepMode == NormalMode) {
         kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::Normal, encodingBits));
         scanMatchK->setInitialArguments({fileIdx});

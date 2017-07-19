@@ -36,8 +36,6 @@ public:
 
     void doGrep(const std::string & fileName, std::string & PTXFilename) const;
     
-    bool matchesNeedToBeMovedToEOL() const;
-
     uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) const;
 
     uint64_t doGrep(const int32_t fileDescriptor, const uint32_t fileIdx) const;
