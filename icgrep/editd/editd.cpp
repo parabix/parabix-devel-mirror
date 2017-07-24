@@ -284,6 +284,9 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
     Type * const int32Ty = iBuilder->getInt32Ty();
     Type * const outputType = PointerType::get(ArrayType::get(iBuilder->getBitBlockType(), 4), 0);
 
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::BufferSegments;
+
     Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, int32Ty, outputType, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
@@ -301,15 +304,12 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
     mmapK->setInitialArguments({fileDescriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
-    auto BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), 1));
+    auto BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments));
     auto s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
-
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
     auto CCResults = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputStream));
-
     auto ccck = pxDriver.addKernelInstance(make_unique<PreprocessKernel>(iBuilder));
-
     pxDriver.makeKernelCall(ccck, {BasisBits}, {CCResults});
 
     pxDriver.generatePipelineIR();
