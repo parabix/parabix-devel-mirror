@@ -16,7 +16,6 @@ namespace kernel {
 class CharClassesKernel : public pablo::PabloKernel {
 public:
     CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<UCD::UnicodeSet> multiplexedCCs);
-    bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
