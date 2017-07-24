@@ -182,7 +182,6 @@ void RE_Local::follow(RE * re, std::map<UCD::UnicodeSet*, UCD::UnicodeSet*> &fol
         }
         return;
     } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        follow(rep->getRE(), follow_map);
         auto e1 = final(rep->getRE());
         auto e2 = first(rep->getRE());
         if (e1 && e2) {
@@ -193,6 +192,7 @@ void RE_Local::follow(RE * re, std::map<UCD::UnicodeSet*, UCD::UnicodeSet*> &fol
                 follow_map.insert(std::pair<UCD::UnicodeSet*, UCD::UnicodeSet*>(e1, e2));
             }
         }
+        follow(rep->getRE(), follow_map);
         return;
     }
     return;
