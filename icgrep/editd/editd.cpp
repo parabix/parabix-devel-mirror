@@ -215,6 +215,9 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
 
     idb->LinkFunction("wrapped_report_pos", &wrapped_report_pos);
 
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::BufferSegments;
+
     Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, sizeTy, nullptr));
     main->setCallingConv(CallingConv::C);
     auto args = main->arg_begin();
@@ -225,16 +228,12 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     auto ChStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(4)));
-
     auto mmapK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(idb, inputType));
     mmapK->setInitialArguments({inputStream, fileSize});
-
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
-    auto MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), 1));
-
+    auto MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments));
     auto editdk = pxDriver.addKernelInstance(make_unique<PatternKernel>(idb, patterns));
-
     pxDriver.makeKernelCall(editdk, {ChStream}, {MatchResults});
 
     auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(idb, editDistance));
