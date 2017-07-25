@@ -21,6 +21,7 @@
 #include <kernels/source_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <editd/editdscan_kernel.h>
+#include <kernels/streams_merge.h>
 #include <editd/pattern_compiler.h>
 #include <toolchain/cpudriver.h>
 #include <sys/stat.h>
@@ -49,6 +50,8 @@ static cl::opt<int> prefixLen("prefix", cl::desc("Prefix length"), cl::init(3));
 static cl::opt<bool> ShowPositions("display", cl::desc("Display the match positions."), cl::init(false));
 
 static cl::opt<int> Threads("threads", cl::desc("Total number of threads."), cl::init(1));
+
+static cl::opt<bool> MultiEditdKernels("enable-multieditd-kernels", cl::desc("Construct multiple editd kernels in one pipeline."));
 
 using namespace kernel;
 using namespace pablo;
@@ -238,6 +241,61 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
 
     auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(idb, editDistance));
     pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
+
+    pxDriver.generatePipelineIR();
+
+    idb->CreateRetVoid();
+
+    pxDriver.finalizeObject();
+}
+
+
+void multiEditdPipeline(ParabixDriver & pxDriver) {
+
+    auto & idb = pxDriver.getBuilder();
+    Module * const m = idb->getModule();
+    Type * const sizeTy = idb->getSizeTy();
+    Type * const voidTy = idb->getVoidTy();
+    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(idb->getBitBlockType(), 8), 1), 0);
+
+    idb->LinkFunction("wrapped_report_pos", &wrapped_report_pos);
+
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::BufferSegments;
+
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, sizeTy, nullptr));
+    main->setCallingConv(CallingConv::C);
+    auto args = main->arg_begin();
+    Value * const inputStream = &*(args++);
+    inputStream->setName("input");
+    Value * const fileSize = &*(args++);
+    fileSize->setName("fileSize");
+    idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
+
+    auto ChStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(4)));
+    auto mmapK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(idb, inputType));
+    mmapK->setInitialArguments({inputStream, fileSize});
+    pxDriver.makeKernelCall(mmapK, {}, {ChStream});
+
+    const auto n = pattGroups.size();
+    
+    std::vector<StreamSetBuffer *> MatchResultsBufs(n);
+    
+    for(unsigned i = 0; i < n; ++i){
+        auto MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments));
+        auto editdk = pxDriver.addKernelInstance(make_unique<PatternKernel>(idb, pattGroups[i]));
+        pxDriver.makeKernelCall(editdk, {ChStream}, {MatchResults});
+        MatchResultsBufs[i] = MatchResults;
+    }
+    StreamSetBuffer * MergedResults = MatchResultsBufs[0];
+    if (n > 1) {
+        MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments));
+        kernel::Kernel * streamsMergeK = pxDriver.addKernelInstance(make_unique<kernel::StreamsMerge>(idb, editDistance + 1, n));
+        pxDriver.makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
+    }
+
+    auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(idb, editDistance));
+    pxDriver.makeKernelCall(editdScanK, {MergedResults}, {});
 
     pxDriver.generatePipelineIR();
 
@@ -603,12 +661,20 @@ int main(int argc, char *argv[]) {
     }
     else{
         if (Threads == 1) {
-            for(unsigned i=0; i<pattGroups.size(); i++){
-
+            if (MultiEditdKernels) {
                 ParabixDriver pxDriver("editd");
-                editdPipeline(pxDriver, pattGroups[i]);
+                multiEditdPipeline(pxDriver);
                 auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
                 editd(editd_ptr, chStream, size);
+            }
+            else{               
+                for(unsigned i=0; i<pattGroups.size(); i++){
+
+                    ParabixDriver pxDriver("editd");
+                    editdPipeline(pxDriver, pattGroups[i]);
+                    auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
+                    editd(editd_ptr, chStream, size);
+                }
             }
         }
         else{
