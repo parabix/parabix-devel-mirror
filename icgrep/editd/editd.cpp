@@ -231,7 +231,7 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     auto ChStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(4)));
-    auto mmapK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(idb, inputType));
+    auto mmapK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(idb, inputType, segmentSize));
     mmapK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
@@ -273,7 +273,7 @@ void multiEditdPipeline(ParabixDriver & pxDriver) {
     idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     auto ChStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(4)));
-    auto mmapK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(idb, inputType));
+    auto mmapK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(idb, inputType, segmentSize));
     mmapK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
@@ -357,7 +357,7 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 
     auto ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
 
-    auto mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, 1));
+    auto mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, segmentSize));
     mmapK->setInitialArguments({fileDescriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
