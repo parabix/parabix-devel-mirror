@@ -9,10 +9,14 @@
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
 
+#include <pablo/printer_pablos.h>
+#include <llvm/Support/raw_ostream.h>
+
 using namespace cc;
 using namespace re;
 using namespace pablo;
 using namespace llvm;
+using namespace boost::container;
 
 namespace UCD {
 
@@ -159,12 +163,25 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
         generateSubRanges(lo_codepoint(rg), hi_codepoint(rg), builder);
     }
 
+    for (auto & f : mTargetValue) {
+        const auto v = mTarget.find(f.first);
+        assert (v != mTarget.end());
+        PabloAST * value = f.second;
+        if (!isa<Zeroes>(value)) {
+            if (LLVM_LIKELY(builder.getParent() != nullptr)) {
+                value = builder.createOr(v->second, value);
+            }
+            builder.createAssign(v->second, value);
+            f.second = builder.createZeroes();
+        }
+    }
+
     const auto outer = outerRanges(enclosed);
     const auto inner = innerRanges(enclosed);
-    for (const auto range : outer) {
 
-        TargetVector intersectingTargets;
-        TargetVector nonIntersectingTargets;
+    Values nonIntersectingTargets;
+
+    for (const auto range : outer) {
 
         // Split our current target list into two sets: the intersecting and non-intersecting ones. Any non-
         // intersecting set will be removed from the current map to eliminate the possibility of it being
@@ -172,46 +189,23 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
         // that we know what the original target value was going into this range block so tha we can OR the
         // inner value with the outer value.
 
-        for (auto ti = mTargetMap.begin(); ti != mTargetMap.end(); ) {            
-            if (ti->first->intersects(range.first, range.second)) {
-                intersectingTargets.emplace_back(ti->first, ti->second);
-                ++ti;
+        for (auto f = mTargetValue.begin(); f != mTargetValue.end(); ) {
+            if (f->first->intersects(range.first, range.second)) {
+                ++f;
             } else {
-                nonIntersectingTargets.emplace_back(ti->first, ti->second);
-                ti = mTargetMap.erase(ti);
+                nonIntersectingTargets.push_back(*f);
+                f = mTargetValue.erase(f);
             }
         }
-        if (mTargetMap.size() > 0) {
-
+        if (mTargetValue.size() > 0) {
             PabloBuilder inner_block = PabloBuilder::Create(builder);
-
+            builder.createIf(ifTestCompiler(range.first, range.second, builder), inner_block);
             generateRange(inner, range.first, range.second, inner_block);
-
-            for (auto ti = intersectingTargets.begin(); ti != intersectingTargets.end(); ) {
-                auto f = mTargetMap.find(ti->first);
-                assert (f != mTargetMap.end());
-                if (LLVM_UNLIKELY(isa<Zeroes>(f->second))) {
-                    ti = intersectingTargets.erase(ti);
-                    continue;
-                }
-                Var * m = builder.createVar("m", builder.createZeroes());
-                inner_block.createAssign(m, f->second);
-                f->second = m;
-                ++ti;
-            }
-            // If this range is empty, just skip creating the if block
-            if (intersectingTargets.size() > 0) {
-                builder.createIf(ifTestCompiler(range.first, range.second, builder), inner_block);
-                for (const auto ti : intersectingTargets) {
-                    auto f = mTargetMap.find(ti.first);
-                    assert (f != mTargetMap.end());
-                    f->second = builder.createOr(ti.second, f->second);
-                }
-            }
         }
-        for (const Target t : nonIntersectingTargets) {
-            mTargetMap.emplace(t.first, t.second);
+        for (auto t : nonIntersectingTargets) {
+            mTargetValue.insert(t);
         }
+        nonIntersectingTargets.clear();
     }
 }
 
@@ -219,7 +213,7 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
  * @brief generateSubRanges
  ** ------------------------------------------------------------------------------------------------------------- */
 void UCDCompiler::generateSubRanges(const codepoint_t lo, const codepoint_t hi, PabloBuilder & builder) {
-    for (auto & t : mTargetMap) {
+    for (auto & t : mTargetValue) {
         const auto range = rangeIntersect(*t.first, lo, hi);
         PabloAST * target = t.second;
         // Divide by UTF-8 length, separating out E0, ED, F0 and F4 ranges
@@ -484,75 +478,58 @@ UCDCompiler::RangeList UCDCompiler::innerRanges(const RangeList & list) {
  * @brief generateWithDefaultIfHierarchy
  ** ------------------------------------------------------------------------------------------------------------- */
 void UCDCompiler::generateWithDefaultIfHierarchy(NameMap & names, PabloBuilder & entry) {
-    addTargets(entry, names);
+    makeTargets(entry, names);
     generateRange(defaultIfHierachy, entry);
-    updateNames(names, entry);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateWithDefaultIfHierarchy
- ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * UCDCompiler::generateWithDefaultIfHierarchy(const UnicodeSet * set, PabloBuilder & entry) {
-    // mTargetMap.insert(std::make_pair<const UnicodeSet *, PabloAST *>(set, PabloBlock::createZeroes()));
-    mTargetMap.emplace(set, entry.createZeroes());
-    generateRange(defaultIfHierachy, entry);
-    return mTargetMap.begin()->second;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateWithoutIfHierarchy
  ** ------------------------------------------------------------------------------------------------------------- */
 void UCDCompiler::generateWithoutIfHierarchy(NameMap & names, PabloBuilder & entry) {
-    addTargets(entry, names);
+    makeTargets(entry, names);
     generateRange(noIfHierachy, entry);
-    updateNames(names, entry);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateWithoutIfHierarchy
- ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * UCDCompiler::generateWithoutIfHierarchy(const UnicodeSet * set, PabloBuilder & entry) {
-    mTargetMap.emplace(set, entry.createZeroes());
-    generateRange(noIfHierachy, entry);
-    return mTargetMap.begin()->second;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addTargets
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void UCDCompiler::addTargets(PabloBuilder & entry, const NameMap & names) {
-    for (const auto t : names) {
-        if (t.first->getType() == Name::Type::Byte) {
-            continue;
-        }
-        if (LLVM_LIKELY(isa<CC>(t.first->getDefinition()))) {
-            mTargetMap.emplace(cast<CC>(t.first->getDefinition()), t.second ? t.second : entry.createZeroes());
-        } else {
-            throw std::runtime_error(t.first->getName() + " is not defined by a CC!");
-        }
-    }
-    assert (mTargetMap.size() > 0);
-}
+inline void UCDCompiler::makeTargets(PabloBuilder & entry, NameMap & names) {
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief updateNames
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void UCDCompiler::updateNames(NameMap & names, PabloBuilder & entry) {
+    mTargetValue.clear();
+    mTarget.clear();
+
+    struct Comparator {
+        inline bool operator() (const CC * lh, const CC * rh) const{
+            return *lh < *rh;
+        }
+    } ec;
+
+    flat_map<CC *, Var *, Comparator> CCs(ec);
+
+    Zeroes * const zeroes = entry.createZeroes();
+
     for (auto & t : names) {
-        auto f = mTargetMap.find(cast<CC>(t.first->getDefinition()));
-        if (f != mTargetMap.end()) {
-            std::string name = t.first->getName();
-            if (Statement * result = dyn_cast<Statement>(f->second)) {
-                result->setName(entry.makeName(name));
-                t.second = result;
-            } else {
-                Var * var = entry.createVar(name);
-                entry.createAssign(var, f->second);
+        Name * const name = t.first;
+        if (name->getType() == Name::Type::Byte) {
+            continue;
+        }        
+        CC * const cc = dyn_cast<CC>(name->getDefinition());
+        if (cc) {            
+            const auto f = CCs.find(cc);
+            if (LLVM_LIKELY(f == CCs.end())) {
+                PabloAST * const value = t.second ? t.second : zeroes;
+                mTargetValue.emplace(cc, value);
+                Var * const var = entry.createVar(name->getName(), value);
+                mTarget.emplace(cc, var);
+                CCs.emplace(cc, var);
                 t.second = var;
+            } else {
+                t.second = f->second;
             }
+        } else {
+            report_fatal_error(name->getName() + " is not defined by a CC!");
         }
     }
-    mTargetMap.clear();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

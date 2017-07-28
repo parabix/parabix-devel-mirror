@@ -16,6 +16,7 @@ namespace re {
 namespace pablo {
     class PabloBuilder;
     class PabloAST;
+    class Var;
 }
 
 namespace UCD {
@@ -29,9 +30,10 @@ class UCDCompiler {
     using PabloAST = pablo::PabloAST;
     using codepoint_t = re::codepoint_t;
     using RangeList = std::vector<re::interval_t>;
-    using TargetMap = boost::container::flat_map<const UnicodeSet *, PabloAST *>;
-    using Target = std::pair<const UnicodeSet *, PabloAST *>;
-    using TargetVector = std::vector<Target>;
+
+    using TargetMap = boost::container::flat_map<const UnicodeSet *, pablo::Var *>;
+    using ValueMap = boost::container::flat_map<const UnicodeSet *, PabloAST *>;
+    using Values = std::vector<std::pair<ValueMap::key_type, ValueMap::mapped_type>>;
 
     static const RangeList defaultIfHierachy;
     static const RangeList noIfHierachy;
@@ -45,10 +47,6 @@ public:
     void generateWithDefaultIfHierarchy(NameMap & names, PabloBuilder & entry);
 
     void generateWithoutIfHierarchy(NameMap & names, PabloBuilder & entry);
-
-    PabloAST * generateWithDefaultIfHierarchy(const UnicodeSet * set, PabloBuilder & entry);
-
-    PabloAST * generateWithoutIfHierarchy(const UnicodeSet * set, PabloBuilder & entry);
 
 protected:
 
@@ -79,14 +77,13 @@ protected:
 
     static RangeList innerRanges(const RangeList & list);
 
-    void addTargets(PabloBuilder & entry, const NameMap & names);
-
-    void updateNames(NameMap & names, PabloBuilder & entry);
+    void makeTargets(PabloBuilder & entry, NameMap & names);
 
 private:
     cc::CC_Compiler &       mCharacterClassCompiler;
     PabloAST *              mSuffixVar;
-    TargetMap               mTargetMap;
+    TargetMap               mTarget;
+    ValueMap                mTargetValue;
 };
 
 }
