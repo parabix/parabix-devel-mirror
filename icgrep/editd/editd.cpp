@@ -72,18 +72,6 @@ void run_second_filter(int total_len, int pattern_segs, float errRate){
 
     if(matchList.empty()) return;
 
-    //remove the duplicates
-    bool cleared = true;
-    while(cleared){
-        cleared = false;
-        for (unsigned i=0; i<matchList.size()-1; i++){
-            if(matchList[i].pos == matchList[i+1].pos && matchList[i].dist == matchList[i+1].dist){
-                matchList.erase(matchList.begin() + i);
-                cleared = true;
-            }
-        }
-    }
-
     //Sort match position
     bool exchanged = true;
     while(exchanged){
@@ -97,6 +85,18 @@ void run_second_filter(int total_len, int pattern_segs, float errRate){
                 matchList[i+1].pos = tmp_pos;
                 matchList[i+1].dist = tmp_dist;
                 exchanged = true;
+            }
+        }
+    }
+
+    //remove the duplicates
+    bool cleared = true;
+    while(cleared){
+        cleared = false;
+        for (unsigned i=0; i<matchList.size()-1; i++){
+            if(matchList[i].pos == matchList[i+1].pos && matchList[i].dist == matchList[i+1].dist){
+                matchList.erase(matchList.begin() + i);
+                cleared = true;
             }
         }
     }
@@ -163,6 +163,14 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
     }
 }
 
+
+std::string createName(const std::vector<std::string> & patterns) {
+    std::string name = "";
+    for(unsigned i=0; i<patterns.size(); i++)
+        name += patterns[i];
+    return name;
+}
+
 class PatternKernel final: public pablo::PabloKernel {
 public:
     PatternKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<std::string> & patterns);
@@ -175,8 +183,8 @@ private:
 };
 
 PatternKernel::PatternKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<std::string> & patterns)
-: PabloKernel(b, std::string(patterns[0]), {{b->getStreamSetTy(4), "pat"}}, {{b->getStreamSetTy(editDistance + 1), "E"}})
-, mPatterns(patterns) {
+: PabloKernel(b, createName(patterns), {{b->getStreamSetTy(4), "pat"}}, {{b->getStreamSetTy(editDistance + 1), "E"}})
+, mPatterns(patterns) {  
 }
 
 std::string PatternKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
