@@ -168,7 +168,7 @@ std::string createName(const std::vector<std::string> & patterns) {
     std::string name = "";
     for(unsigned i=0; i<patterns.size(); i++)
         name += patterns[i];
-    return name;
+    return name + std::to_string(editDistance);
 }
 
 class PatternKernel final: public pablo::PabloKernel {
@@ -666,6 +666,7 @@ int main(int argc, char *argv[]) {
         editdPipeline(pxDriver, pattVector);
         auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
         editd(editd_ptr, chStream, size);
+        std::cout << "total matches is " << matchList.size() << std::endl;
     }
     else{
         if (Threads == 1) {
