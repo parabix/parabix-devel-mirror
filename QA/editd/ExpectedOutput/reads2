@@ -2,6 +2,6 @@ pos: 92525, dist:2
 pos: 28100, dist:2
 pos: 28101, dist:2
 pos: 16281, dist:2
-pattern_segs = 1216, total_len = 64
+pattern_segs = 64, total_len = 1216
 total candidate from the first filter is 4
 total candidate from the second filter is 0
