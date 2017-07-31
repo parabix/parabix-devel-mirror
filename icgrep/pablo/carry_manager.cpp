@@ -9,6 +9,7 @@
 #include <pablo/codegenstate.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/DerivedTypes.h>
+#include <llvm/Transforms/Utils/Local.h>
 #include <pablo/branch.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_scanthru.h>
@@ -22,19 +23,41 @@ using namespace llvm;
 
 namespace pablo {
 
+inline static bool is_power_2(const unsigned n) {
+    return (n && ((n & (n - 1)) == 0));
+}
+
 inline static unsigned ceil_log2(const unsigned v) {
     assert ("log2(0) is undefined!" && v != 0);
-    return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1);
+    return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1U);
 }
 
 inline static unsigned floor_log2(const unsigned v) {
     assert ("log2(0) is undefined!" && v != 0);
-    return ((sizeof(unsigned) * CHAR_BIT) - 1) - __builtin_clz(v);
+    return ((sizeof(unsigned) * CHAR_BIT) - 1U) - __builtin_clz(v);
 }
 
 inline static unsigned nearest_pow2(const unsigned v) {
-    assert(v > 0 && v < (UINT32_MAX / 2));
-    return (v < 2) ? 1 : (1 << ceil_log2(v));
+    assert (v > 0 && v < (UINT32_MAX / 2));
+    return (v < 2) ? 1 : (1U << ceil_log2(v));
+}
+
+inline static unsigned nearest_multiple(const unsigned n, const unsigned m) {
+    assert (is_power_2(m));
+    const unsigned r = (n + m - 1U) & -m;
+    assert (r >= n);
+    return r;
+}
+
+inline static bool is_multiple_of(const unsigned n, const unsigned m) {
+    return nearest_multiple(n, m) == n;
+}
+
+inline static unsigned udiv(const unsigned x, const unsigned y) {
+    assert (is_power_2(y));
+    const unsigned z = x >> floor_log2(y);
+    assert (z == (x / y));
+    return z;
 }
 
 inline static unsigned ceil_udiv(const unsigned x, const unsigned y) {
@@ -380,6 +403,7 @@ void CarryManager::leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
         Value * const carryIn = iBuilder->CreateBlockAlignedLoad(carryInPtr);
         Value * const nextCarryIn = iBuilder->CreateXor(carryIn, borrow);
         Value * const nextSummary = iBuilder->CreateOr(carryInSummary, nextCarryIn);
+
         iBuilder->CreateBlockAlignedStore(nextCarryIn, carryInPtr);
         carryInSummary->addIncoming(nextSummary, update);
         Value * finalBorrow = iBuilder->CreateAnd(iBuilder->CreateNot(carryIn), borrow);
@@ -390,6 +414,7 @@ void CarryManager::leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
         Value * const carryOutPtr = iBuilder->CreateGEP(summary, carryOutOffset);
         Value * const carryOut = iBuilder->CreateBlockAlignedLoad(carryOutPtr);
         Value * const nextCarryOut = iBuilder->CreateXor(carryOut, carry);
+
         iBuilder->CreateBlockAlignedStore(nextCarryOut, carryOutPtr);
         Value * finalCarry = iBuilder->CreateAnd(carryOut, carry);
         carry->addIncoming(finalCarry, update);
@@ -592,58 +617,107 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
     assert (mHasLongAdvance);
     assert (shiftAmount >= LONG_ADVANCE_BREAKPOINT);
 
-    Type * const streamTy = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
+    const auto blockWidth = iBuilder->getBitBlockWidth();
+    Type * const streamTy = iBuilder->getIntNTy(blockWidth);
+
+    Value * indices[3];
+
+    indices[0] = iBuilder->getInt32(0);
 
     if (mIfDepth > 0) {
-        if (shiftAmount > iBuilder->getBitBlockWidth()) {
-            const auto frameIndex = mCurrentFrameIndex++;
+        if (shiftAmount > blockWidth) {
+
             Value * carry = iBuilder->CreateZExt(iBuilder->bitblock_any(value), streamTy);
-            const unsigned summarySize = ceil_udiv(shiftAmount, iBuilder->getBitBlockWidth() * iBuilder->getBitBlockWidth());
-            for (unsigned i = 0;;++i) {
-                Value * const ptr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(frameIndex), iBuilder->getInt32(i)});
+            const auto summaryBlocks = ceil_udiv(shiftAmount, blockWidth);
+            const auto summarySize = ceil_udiv(summaryBlocks, blockWidth);
+            VectorType * const bitBlockTy = iBuilder->getBitBlockType();
+            IntegerType * const laneTy = cast<IntegerType>(bitBlockTy->getVectorElementType());
+            const auto laneWidth = laneTy->getIntegerBitWidth();
+
+            assert (summarySize > 0);
+            assert (is_power_2(laneWidth));
+
+            indices[1] = iBuilder->getInt32(mCurrentFrameIndex++);
+
+            for (unsigned i = 1;;++i) {
+
+                assert (i <= summarySize);
+
+                indices[2] = iBuilder->getInt32(i - 1);
+
+                Value * const ptr = iBuilder->CreateGEP(mCurrentFrame, indices);
                 Value * const prior = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(ptr), streamTy);
-                Value * const stream = iBuilder->CreateBitCast(iBuilder->CreateOr(iBuilder->CreateShl(prior, 1), carry), iBuilder->getBitBlockType());
+
+                Value * advanced = nullptr;
+                if (LLVM_LIKELY(summaryBlocks < laneWidth)) {
+                    advanced = iBuilder->CreateOr(iBuilder->CreateShl(prior, 1), carry);
+                    carry = iBuilder->CreateLShr(prior, summaryBlocks - 1);
+                } else {
+                    std::tie(advanced, carry) = iBuilder->bitblock_advance(prior, carry, 1);
+                }
+                Value * stream = iBuilder->CreateBitCast(advanced, bitBlockTy);
                 if (LLVM_LIKELY(i == summarySize)) {
-                    Value * const maskedStream = iBuilder->CreateAnd(stream, iBuilder->bitblock_mask_from(iBuilder->getInt32(summarySize % iBuilder->getBitBlockWidth())));
-                    addToCarryOutSummary(iBuilder, maskedStream);
-                    iBuilder->CreateBlockAlignedStore(maskedStream, ptr);
+                    const auto n = bitBlockTy->getVectorNumElements();
+                    Constant * mask[n];                                        
+                    const auto m = udiv(summaryBlocks, laneWidth);
+                    if (m) {
+                        std::fill_n(mask, m, ConstantInt::getAllOnesValue(laneTy));
+                    }
+                    mask[m] = ConstantInt::get(laneTy, (1UL << (summaryBlocks & (laneWidth - 1))) - 1UL);
+                    if (n > m) {
+                        std::fill_n(mask + m + 1, n - m, UndefValue::get(laneTy));
+                    }
+                    stream = iBuilder->CreateAnd(stream, ConstantVector::get(ArrayRef<Constant *>(mask, n)));
+
+                    addToCarryOutSummary(iBuilder, stream);
+                    iBuilder->CreateBlockAlignedStore(stream, ptr);
+                    RecursivelyDeleteTriviallyDeadInstructions(carry);
                     break;
                 }
                 addToCarryOutSummary(iBuilder, stream);
                 iBuilder->CreateBlockAlignedStore(stream, ptr);
-                carry = iBuilder->CreateLShr(prior, iBuilder->getBitBlockWidth() - 1);
             }
+
         } else if (LLVM_LIKELY(mCarryInfo->hasExplicitSummary())) {
             addToCarryOutSummary(iBuilder, value);
         }
     }
-    const auto frameIndex = mCurrentFrameIndex++;
+
+    indices[1] = iBuilder->getInt32(mCurrentFrameIndex++);
+
     // special case using a single buffer entry and the carry_out value.
-    if (LLVM_LIKELY((shiftAmount < iBuilder->getBitBlockWidth()) && (mLoopDepth == 0))) {
-        Value * const buffer = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(frameIndex), iBuilder->getInt32(0)});
+    if (LLVM_LIKELY((shiftAmount < blockWidth) && (mLoopDepth == 0))) {
+
+        indices[2] = indices[0]; // iBuilder->getInt32(0)
+        assert (cast<ConstantInt>(indices[2])->isNullValue());
+
+        Value * const buffer = iBuilder->CreateGEP(mCurrentFrame, indices);
         assert (buffer->getType()->getPointerElementType() == iBuilder->getBitBlockType());
         Value * carryIn = iBuilder->CreateBlockAlignedLoad(buffer);
+
         iBuilder->CreateBlockAlignedStore(value, buffer);
         /* Very special case - no combine */
-        if (LLVM_UNLIKELY(shiftAmount == iBuilder->getBitBlockWidth())) {
+        if (LLVM_UNLIKELY(shiftAmount == blockWidth)) {
             return iBuilder->CreateBitCast(carryIn, iBuilder->getBitBlockType());
         }
-        Value* block0_shr = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryIn, streamTy), iBuilder->getBitBlockWidth() - shiftAmount);
+        Value* block0_shr = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryIn, streamTy), blockWidth - shiftAmount);
         Value* block1_shl = iBuilder->CreateShl(iBuilder->CreateBitCast(value, streamTy), shiftAmount);
         return iBuilder->CreateBitCast(iBuilder->CreateOr(block1_shl, block0_shr), iBuilder->getBitBlockType());
     } else { //
-        const unsigned blockShift = shiftAmount % iBuilder->getBitBlockWidth();
-        const unsigned blocks = ceil_udiv(shiftAmount, iBuilder->getBitBlockWidth());
+        const unsigned blockShift = shiftAmount & (blockWidth - 1);
+        const unsigned summaryBlocks = ceil_udiv(shiftAmount, blockWidth);
+
         // Create a mask to implement circular buffer indexing
-        Value * indexMask = iBuilder->getSize(nearest_pow2(blocks + ((mLoopDepth != 0) ? 1 : 0)) - 1);
+        Value * indexMask = iBuilder->getSize(nearest_pow2(summaryBlocks) - 1);
         Value * blockIndex = iBuilder->getScalarField("CarryBlockIndex");
-        Value * carryIndex0 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(blocks));
-        Value * loadIndex0 = iBuilder->CreateAnd(carryIndex0, indexMask);
-        Value * const carryInPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(frameIndex), loadIndex0});
+
+        Value * carryIndex0 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(summaryBlocks));
+        indices[2] = iBuilder->CreateAnd(carryIndex0, indexMask);
+        Value * const carryInPtr = iBuilder->CreateGEP(mCurrentFrame, indices);
         Value * carryIn = iBuilder->CreateBlockAlignedLoad(carryInPtr);
 
-        Value * storeIndex = iBuilder->CreateAnd(blockIndex, indexMask);
-        Value * const carryOutPtr = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(frameIndex), storeIndex});
+        indices[2] = iBuilder->CreateAnd(blockIndex, indexMask);
+        Value * const carryOutPtr = iBuilder->CreateGEP(mCurrentFrame, indices);
         assert (carryIn->getType() == iBuilder->getBitBlockType());
 
         // If the long advance is an exact multiple of BitBlockWidth, we simply return the oldest
@@ -652,14 +726,17 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
             iBuilder->CreateBlockAlignedStore(value, carryOutPtr);
             return carryIn;
         } else { // Otherwise we need to combine data from the two oldest blocks.
-            Value * carryIndex1 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(blocks - 1));
-            Value * loadIndex1 = iBuilder->CreateAnd(carryIndex1, indexMask);
-            Value * const carryInPtr2 = iBuilder->CreateGEP(mCurrentFrame, {iBuilder->getInt32(0), iBuilder->getInt32(frameIndex), loadIndex1});
-            Value * carry_block1 = iBuilder->CreateBlockAlignedLoad(carryInPtr2);
-            Value * block0_shr = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryIn, streamTy), iBuilder->getBitBlockWidth() - blockShift);
-            Value * block1_shl = iBuilder->CreateShl(iBuilder->CreateBitCast(carry_block1, streamTy), blockShift);
+            Value * const carryIndex1 = iBuilder->CreateSub(blockIndex, iBuilder->getSize(summaryBlocks - 1));
+            indices[2] = iBuilder->CreateAnd(carryIndex1, indexMask);
+
+            Value * const carryInPtr2 = iBuilder->CreateGEP(mCurrentFrame, indices);
+            Value * const carryIn2 = iBuilder->CreateBlockAlignedLoad(carryInPtr2);
+
             iBuilder->CreateBlockAlignedStore(value, carryOutPtr);
-            return iBuilder->CreateBitCast(iBuilder->CreateOr(block1_shl, block0_shr), iBuilder->getBitBlockType());
+
+            Value * const b0 = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryIn, streamTy), blockWidth - blockShift);
+            Value * const b1 = iBuilder->CreateShl(iBuilder->CreateBitCast(carryIn2, streamTy), blockShift);
+            return iBuilder->CreateBitCast(iBuilder->CreateOr(b1, b0), iBuilder->getBitBlockType());
         }
     }
 }
@@ -716,6 +793,7 @@ Value * CarryManager::readCarryInSummary(const std::unique_ptr<kernel::KernelBui
         count = 1;
         while (frameTy->isStructTy()) {
             ++count;
+            assert (frameTy->getStructNumElements() > 0);
             frameTy = frameTy->getStructElementType(0);
         }
     }
@@ -806,6 +884,27 @@ bool CarryManager::hasIterationSpecificAssignment(const PabloBlock * const scope
 #endif
 }
 
+static bool hasNonEmptyCarryStruct(const Type * const frameTy) {
+    if (frameTy->isStructTy()) {
+        for (unsigned i = 0; i < frameTy->getStructNumElements(); ++i) {
+            if (hasNonEmptyCarryStruct(frameTy->getStructElementType(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return true;
+}
+
+static bool hasNonEmptyCarryStruct(const std::vector<Type *> & state) {
+    for (const Type * const frameTy : state) {
+        if (hasNonEmptyCarryStruct(frameTy)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief analyse
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -828,12 +927,13 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
             const auto amount = cast<Advance>(stmt)->getAmount();
             Type * type = carryPackType;
             if (LLVM_UNLIKELY(amount >= LONG_ADVANCE_BREAKPOINT)) {
-                const unsigned blocks = ceil_udiv(amount, iBuilder->getBitBlockWidth());
+                const auto blockWidth = iBuilder->getBitBlockWidth();
+                const auto blocks = ceil_udiv(amount, blockWidth);
                 type = ArrayType::get(blockTy, nearest_pow2(blocks + ((loopDepth != 0) ? 1 : 0)));
-                if (LLVM_UNLIKELY(ifDepth > 0 && amount > iBuilder->getBitBlockWidth())) {
+                if (LLVM_UNLIKELY(ifDepth > 0 && blocks != 1)) {
+                    const auto summarySize = ceil_udiv(blocks, blockWidth);
                     // 1 bit will mark the presense of any bit in each block.
-                    Type * carryType = ArrayType::get(blockTy, ceil_udiv(amount, std::pow(iBuilder->getBitBlockWidth(), 2)));
-                    state.push_back(carryType);
+                    state.push_back(ArrayType::get(blockTy, summarySize));
                 }
                 mHasLongAdvance = true;                
             }
@@ -854,18 +954,21 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
     if (LLVM_UNLIKELY(state.empty())) {
         carryState = StructType::get(iBuilder->getContext());
     } else {
-        if (dyn_cast_or_null<If>(scope->getBranch()) || nonCarryCollapsingMode || isNestedWithinNonCarryCollapsingLoop) {
-            if (LLVM_LIKELY(state.size() > 1)) {
-                summaryType = CarryData::ExplicitSummary;
-                // NOTE: summaries are stored differently depending whether we're entering an If or While branch. With an If branch, they
-                // preceed the carry state data and with a While loop they succeed it. This is to help cache prefectching performance.
-                state.insert(isa<If>(scope->getBranch()) ? state.begin() : state.end(), carryPackType);
-            } else {
-                summaryType = CarryData::ImplicitSummary;
-                if (state[0]->isStructTy()) {
-                    summaryType = CarryData::BorrowedSummary;
+        // do we have a summary or a sequence of nested empty structs?
+        if (hasNonEmptyCarryStruct(state)) {
+            if (dyn_cast_or_null<If>(scope->getBranch()) || nonCarryCollapsingMode || isNestedWithinNonCarryCollapsingLoop) {
+                if (LLVM_LIKELY(state.size() > 1)) {
+                    summaryType = CarryData::ExplicitSummary;
+                    // NOTE: summaries are stored differently depending whether we're entering an If or While branch. With an If branch, they
+                    // preceed the carry state data and with a While loop they succeed it. This is to help cache prefectching performance.
+                    state.insert(isa<If>(scope->getBranch()) ? state.begin() : state.end(), carryPackType);
+                } else {
+                    summaryType = CarryData::ImplicitSummary;
+                    if (hasNonEmptyCarryStruct(state[0])) {
+                        summaryType = CarryData::BorrowedSummary;
+                    }
                 }
-            }            
+            }
         }
         carryState = StructType::get(iBuilder->getContext(), state);
         // If we're in a loop and cannot use collapsing carry mode, convert the carry state struct into a capacity,
