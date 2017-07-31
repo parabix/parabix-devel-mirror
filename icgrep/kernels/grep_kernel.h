@@ -41,7 +41,7 @@ protected:
 
 class ICGrepKernel : public RegularExpressionOptimizer, public pablo::PabloKernel {
 public:
-    ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast);
+    ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast, bool cc = false, unsigned cc_size = 0);
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     bool isCachable() const override { return true; }
 protected:

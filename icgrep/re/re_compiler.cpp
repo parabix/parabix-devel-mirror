@@ -41,26 +41,11 @@ using namespace llvm;
 
 namespace re {
 
-
 RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     Name * ZeroWidth = nullptr;
     mCompiledName = &mBaseMap;
 
-    re = resolveNames(re);
     auto nameMap = gatherNames(re, ZeroWidth);
-    if (LLVM_LIKELY(nameMap.size() > 0)) {
-        UCD::UCDCompiler ucdCompiler(mCCCompiler);
-        if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {
-            ucdCompiler.generateWithoutIfHierarchy(nameMap, mPB);
-        } else {
-            ucdCompiler.generateWithDefaultIfHierarchy(nameMap, mPB);
-        }
-        for (auto t : nameMap) {
-            if (t.second) {
-                mCompiledName->add(t.first, makeMarker(MarkerPosition::FinalMatchUnit, mPB.createAnd(t.second, mAny)));
-            }
-        }
-    }
 
     // Now precompile any grapheme segmentation rules
     if (ZeroWidth) {
@@ -129,7 +114,7 @@ MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb)
     } else {
         nextPos = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
     }
-    return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(markerVar(marker), pb.createAnd(mCCCompiler.compileCC(cc), mFinal)));
+    return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(markerVar(marker), pb.createAnd(mCCCompiler.compileCC(cc), mAny)));
 }
 
 inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, PabloBuilder & pb) {

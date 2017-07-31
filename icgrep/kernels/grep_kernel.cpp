@@ -176,12 +176,11 @@ RequiredStreams_UTF16::RequiredStreams_UTF16(const std::unique_ptr<kernel::Kerne
 }
 
 
-
-ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re)
+ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re, bool cc, unsigned cc_size)
 : RegularExpressionOptimizer(re)
 , PabloKernel(iBuilder,
               "ic" + sha1sum(mSignature),
-              {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}, Binding{iBuilder->getStreamSetTy(4, 1), "required"}},
+              {Binding{iBuilder->getStreamSetTy(cc ? cc_size : 8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}, Binding{iBuilder->getStreamSetTy(4, 1), "required"}},
               {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}}) {
 
 }
