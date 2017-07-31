@@ -27,6 +27,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <mutex>
+#include <boost/uuid/sha1.hpp>
 
 #include <toolchain/NVPTXDriver.h>
 #include <editd/editd_gpu_kernel.h>
@@ -44,7 +45,7 @@ static cl::opt<std::string> PatternFilename("f", cl::desc("Take patterns (one pe
 static cl::opt<bool> CaseInsensitive("i", cl::desc("Ignore case distinctions in the pattern and the file."));
 
 static cl::opt<int> editDistance("edit-dist", cl::desc("Edit Distance Value"), cl::init(2));
-static cl::opt<int> optPosition("opt-pos", cl::desc("Optimize position"), cl::init(8));
+static cl::opt<int> optPosition("opt-pos", cl::desc("Optimize position"), cl::init(0));
 static cl::opt<int> stepSize("step-size", cl::desc("Step Size"), cl::init(3));
 static cl::opt<int> prefixLen("prefix", cl::desc("Prefix length"), cl::init(3));
 static cl::opt<bool> ShowPositions("display", cl::desc("Display the match positions."), cl::init(false));
@@ -68,7 +69,7 @@ struct matchPosition
 std::vector<struct matchPosition> matchList;
 std::vector<std::vector<std::string>> pattGroups;
 
-void run_second_filter(int total_len, int pattern_segs, float errRate){
+void run_second_filter(int pattern_segs, int total_len, float errRate){
 
     if(matchList.empty()) return;
 
@@ -163,6 +164,16 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
     }
 }
 
+inline static std::string sha1sum(const std::string & str) {
+    char buffer[41];    // 40 hex-digits and the terminating null
+    uint32_t digest[5]; // 160 bits in total
+    boost::uuids::detail::sha1 sha1;
+    sha1.process_bytes(str.c_str(), str.size());
+    sha1.get_digest(digest);
+    snprintf(buffer, sizeof(buffer), "%.8x%.8x%.8x%.8x%.8x",
+             digest[0], digest[1], digest[2], digest[3], digest[4]);
+    return std::string(buffer);
+}
 
 std::string createName(const std::vector<std::string> & patterns) {
     std::string name = "";
@@ -183,7 +194,7 @@ private:
 };
 
 PatternKernel::PatternKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<std::string> & patterns)
-: PabloKernel(b, createName(patterns), {{b->getStreamSetTy(4), "pat"}}, {{b->getStreamSetTy(editDistance + 1), "E"}})
+: PabloKernel(b, sha1sum(createName(patterns)), {{b->getStreamSetTy(4), "pat"}}, {{b->getStreamSetTy(editDistance + 1), "E"}})
 , mPatterns(patterns) {  
 }
 
@@ -200,6 +211,7 @@ void PatternKernel::generatePabloMethod() {
     basisBits[2] = entry.createExtract(pat, 2, "T");
     basisBits[3] = entry.createExtract(pat, 3, "G");
     re::Pattern_Compiler pattern_compiler(*this);
+    if (optPosition == 0) optPosition = editDistance + 6;
     pattern_compiler.compile(mPatterns, entry, basisBits, editDistance, optPosition, stepSize);
 }
 
