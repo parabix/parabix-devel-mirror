@@ -92,6 +92,8 @@ public:
         return mKernelName;
     }
        
+    void setName(std::string newName) { mKernelName = newName; }
+
     virtual bool isCachable() const = 0;
 
     virtual std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & idb) = 0;
@@ -194,7 +196,7 @@ protected:
     llvm::Module *                          mModule;
     llvm::StructType *                      mKernelStateType;
     unsigned                                mLookAheadPositions;
-    const std::string                       mKernelName;
+    std::string                             mKernelName;
     std::vector<llvm::Value *>              mInitialArguments;
     std::vector<Binding>                    mStreamSetInputs;
     std::vector<Binding>                    mStreamSetOutputs;
