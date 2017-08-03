@@ -45,6 +45,8 @@ Function * makeThreadFunction(const std::unique_ptr<kernel::KernelBuilder> & b, 
  ** ------------------------------------------------------------------------------------------------------------- */
 void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<Kernel *> & kernels) {
 
+    assert (codegen::BufferSegments >= codegen::ThreadNum);
+
     const unsigned n = kernels.size();
     Module * const m = iBuilder->getModule();
     IntegerType * const sizeTy = iBuilder->getSizeTy();
