@@ -44,9 +44,7 @@ namespace re {
 RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     Name * ZeroWidth = nullptr;
     mCompiledName = &mBaseMap;
-
-    auto nameMap = gatherNames(re, ZeroWidth);
-
+    gatherNames(re, ZeroWidth);
     // Now precompile any grapheme segmentation rules
     if (ZeroWidth) {
         mCompiledName->add(ZeroWidth, compileName(ZeroWidth, mPB));
@@ -351,9 +349,12 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
     }
     Var * m = pb.createVar("m", pb.createZeroes());
     PabloBuilder nested = PabloBuilder::Create(pb);
+    NameMap nestedMap(mCompiledName);
+    mCompiledName = &nestedMap;
     MarkerType m1 = processLowerBound(repeated, lb - group, marker, ifGroupSize * 2, nested);
     nested.createAssign(m, markerVar(m1));
     pb.createIf(markerVar(marker), nested);
+    mCompiledName = nestedMap.getParent();
     return makeMarker(m1.pos, m);
 }
     
@@ -386,9 +387,12 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
     }
     Var * m1a = pb.createVar("m", pb.createZeroes());
     PabloBuilder nested = PabloBuilder::Create(pb);
+    NameMap nestedMap(mCompiledName);
+    mCompiledName = &nestedMap;
     MarkerType m1 = processBoundedRep(repeated, ub - group, marker, ifGroupSize * 2, nested);
     nested.createAssign(m1a, markerVar(m1));
     pb.createIf(markerVar(marker), nested);
+    mCompiledName = nestedMap.getParent();
     return makeMarker(m1.pos, m1a);
 }
 
@@ -435,6 +439,8 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         Var * whileAccum = pb.createVar("accum", base);
         mWhileTest = pb.createZeroes();
         PabloBuilder wb = PabloBuilder::Create(pb);
+        NameMap nestedMap(mCompiledName);
+        mCompiledName = &nestedMap;
         mStarDepth++;
         MarkerType result = process(repeated, makeMarker(MarkerPosition::FinalPostPositionUnit, whilePending), wb);
         result = AdvanceMarker(result, MarkerPosition::FinalPostPositionUnit, wb);
@@ -444,6 +450,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         wb.createAssign(whileTest, wb.createOr(mWhileTest, whilePending));
         pb.createWhile(whileTest, wb);
         mStarDepth--;
+        mCompiledName = nestedMap.getParent();
         return makeMarker(markerPos(result), whileAccum);
     }
 }
