@@ -19,6 +19,7 @@
 #include <pablo/builder.hpp>
 
 #include <pablo/optimizers/pablo_simplifier.hpp>
+#include <pablo/analysis/pabloverifier.hpp>
 
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
@@ -31,13 +32,16 @@
 #include <set>
 #include <unordered_set>
 
+#include <boost/graph/strong_components.hpp>
+#include <llvm/Support/raw_ostream.h>
+#include <pablo/printer_pablos.h>
+
 using namespace boost;
 using namespace boost::container;
 using namespace llvm;
+using namespace pablo;
 
-namespace pablo {
-
-using TypeId = pablo::PabloAST::ClassTypeId;
+using TypeId = PabloAST::ClassTypeId;
 
 enum class State {
     Dead
@@ -47,16 +51,46 @@ enum class State {
 
 using UsageTime = size_t;
 
-using VertexData = std::tuple<pablo::PabloAST *, TypeId, State, UsageTime>;
+using VertexData = std::tuple<PabloAST *, TypeId, State, UsageTime>;
 
 using OperandIndex = unsigned;
 
-using Graph = adjacency_list<vecS, vecS, bidirectionalS, VertexData, OperandIndex>;
-using Vertex = Graph::vertex_descriptor;
-using in_edge_iterator = graph_traits<Graph>::in_edge_iterator;
-using out_edge_iterator = graph_traits<Graph>::out_edge_iterator;
+struct svecS{};
 
-using DistributionGraph = adjacency_list<hash_setS, vecS, bidirectionalS, Vertex>;
+namespace boost {
+
+    template<class T>
+    struct __sorted_edge_vector : public std::vector<T> {
+        using iterator = typename std::vector<T>::iterator;
+        void push_back(const T & item) {
+            std::vector<T>::insert(std::upper_bound(std::vector<T>::begin(), std::vector<T>::end(), item), item);
+        }
+    };
+
+    template <class ValueType> struct container_gen<svecS, ValueType> {
+        typedef __sorted_edge_vector<ValueType> type;
+    };
+
+    template <> struct parallel_edge_traits<svecS> {
+        typedef allow_parallel_edge_tag type;
+    };
+
+    template<class T> graph_detail::vector_tag container_category(const __sorted_edge_vector<T>&) {
+        return graph_detail::vector_tag();
+    }
+
+    template <class T> graph_detail::unstable_tag iterator_stability(const __sorted_edge_vector<T>&) {
+        return graph_detail::unstable_tag();
+    }
+}
+
+namespace pablo {
+
+using Graph = adjacency_list<svecS, vecS, bidirectionalS, VertexData, OperandIndex, vecS>;
+using Vertex = Graph::vertex_descriptor;
+using Edge = Graph::edge_descriptor;
+using InEdgeIterator = graph_traits<Graph>::in_edge_iterator;
+using DistributionGraph = adjacency_list<setS, vecS, bidirectionalS, Vertex>;
 using DistributionVertex = DistributionGraph::vertex_descriptor;
 
 using Sequence = std::vector<Vertex>;
@@ -65,7 +99,7 @@ using BicliqueSet = std::vector<Biclique>;
 using DistributionSet = std::tuple<Sequence, Sequence, Sequence>;
 using DistributionSets = std::vector<DistributionSet>;
 
-using IndependentSetGraph = adjacency_list<hash_setS, vecS, undirectedS, unsigned>;
+using IndependentSetGraph = adjacency_list<vecS, vecS, undirectedS, size_t>;
 
 struct PassContainer {
 
@@ -101,6 +135,12 @@ struct PassContainer {
         return false;
     }
 
+    PassContainer()
+    : reprocessGraph(false)
+    , V{0, IdentityHash(G), IdentityComparator(G)} {
+
+    }
+
 protected:
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -121,61 +161,55 @@ protected:
      * The goal here is to rewrite the AST with the minimal amount of perturbation to the sequence of instructions
      * themselves. The exception is that associative instructions are regenerated w.r.t. their sequence in the AST
      ** ------------------------------------------------------------------------------------------------------------- */
-    size_t rewriteAST(PabloBlock * entry, size_t count = 0) {
+    size_t rewriteAST(PabloBlock * const entry, size_t count = 0) {
 
-        for (Statement * stmt : *entry) {
+        Statement * stmt = entry->front();
+
+        while (stmt) {
 
             const Vertex u = findVertex(stmt);
-            const auto typeId = getType(u);
 
-            // There are two main reasons to ignore a statement: (1) it's dead or regenerable and thus not of interest,
+            // There are two reasons to ignore a statement: (1) it's dead or regenerable and thus not of interest,
             // and (2), the value in G strictly dominates the statement. Typically, if two expressions are equivalent,
-            // they're in disjoint nested scopes. When neither dominates the other, this algorithm updates G as it
-            // processes the statements. However, if one dominates the other, G must refer to the dominating statement
-            // to avoid producing an illegal AST.
+            // they're in disjoint nested scopes. When this occurs, they're merged into a single vertex in G to avoid
+            // redundant computations but must still be written individually in the AST. Sometimes equivalent statements
+            // are found during optimization. If one such statement dominates the other, G must refer to the dominating
+            // statement to avoid producing an illegal AST.
 
-            if (LLVM_LIKELY(isDead(u) || isRegenerable(typeId)) || LLVM_UNLIKELY(strictly_dominates(getValue(u), stmt))) {
+            if (LLVM_LIKELY(isDead(u) || isRegenerable(getType(u)))) {
+                stmt = stmt->eraseFromParent(false);
+                continue;
+            } else if (LLVM_UNLIKELY(isModified(u) && strictly_dominates(getValue(u), stmt))) {
+                stmt = stmt->replaceWith(getValue(u));
                 continue;
             }
 
             assert (isLive(u));
-            assert (stmt->getClassTypeId() == typeId);
+            assert (stmt->getClassTypeId() == getType(u));
             assert (hasValidOperandIndicies(u));
             assert (in_degree(u, G) == stmt->getNumOperands());
 
-            in_edge_iterator ei_begin, ei_end;
-            std::tie(ei_begin, ei_end) = in_edges(u, G);
-            auto ei = ei_begin;
+            // Suppose we take a subgraph of G that contains every operand we'd have to regenerate to execute this
+            // statement? We could apply local optimizations to the subgraph with respect to the last usage time of
+            // each non-regenerated value and minimize the pairwise difference in last usage time, taking into account
+            // that we can use negations of variables when they've been used more recently.
 
-            // For each associative operand, find the vertex that describes the operand in G
-            for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
+            // This could take incorporate rematerialization by determining whether it is cheaper / possible to
+            // recompute a value with what is already given but the Simplifer Pass could undo these changes if it
+            // recognizes a duplicate value in scope.
 
-                // Does the vertex have a value and, if so, does value dominate this statement?
-                // If not, we need to regenerate it.
-                for (;;) {
-                    if (ei == ei_end) {
-                        ei = ei_begin;
-                    }
-                    if (G[*ei] == i) {
-                        break;
-                    }
-                    ++ei;
-                }
-
-                entry->setInsertPoint(stmt->getPrevNode());
-
-                stmt->setOperand(i, regenerateIfNecessary(stmt, entry, source(*ei, G), count));
+            entry->setInsertPoint(stmt->getPrevNode());
+            for (const auto e : make_iterator_range(in_edges(u, G))) {
+                stmt->setOperand(G[e], regenerateIfNecessary(stmt, entry, source(e, G), count));
             }
-
-            if (LLVM_UNLIKELY(typeId == TypeId::Assign)) {
-                setLastUsageTime(findVertex(stmt->getOperand(0)), ++count);
-            }
-            setLastUsageTime(u, ++count);
             setValue(u, stmt);
+            setLastUsageTime(u, ++count);
 
             if (isa<Branch>(stmt)) {
                 count = rewriteAST(cast<Branch>(stmt)->getBody(), count);
             }
+
+            stmt = stmt->getNextNode();
         }
 
         return count;
@@ -186,29 +220,34 @@ protected:
      *
      * Does vertex (u) have a value and, if so, does value dominate the statement? If not, regenerate it.
      ** ------------------------------------------------------------------------------------------------------------- */
-    PabloAST * regenerateIfNecessary(Statement * const stmt, PabloBlock * const entry, const Vertex u, size_t & count) {
-
+    PabloAST * regenerateIfNecessary(Statement * const ip, PabloBlock * const entry, const Vertex u, size_t & count) {
         assert (isLive(u));
+        PabloAST * value = getValue(u);
+        if (!dominates(value, ip)) {
 
-        const TypeId typeId = getType(u);
+            assert (isRegenerable(getType(u)));
 
-        PabloAST * value = isModified(u) ? nullptr : getValue(u);
-        if (LLVM_LIKELY(!dominates(value, stmt))) {
+            // if the outdegree of this vertex > 1, try setting the insertion point to a dominating position?
 
-            assert (isRegenerable(typeId));
-
-            for (auto e : make_iterator_range(in_edges(u, G))) {
-                const auto v = source(e, G);
-                regenerateIfNecessary(stmt, entry, v, count);
-                assert (getValue(v));
-                assert (dominates(getValue(v), stmt));
+            for (const auto e : make_iterator_range(in_edges(u, G))) {
+                regenerateIfNecessary(ip, entry, source(e, G), count);
             }
 
-            if (LLVM_LIKELY(isAssociative(typeId))) {
+            const auto n = in_degree(u, G);
 
-                const auto n = in_degree(u, G);
+            if (LLVM_UNLIKELY(n == 0)) {
+                const TypeId typeId = getType(u);
+                assert (isConstant(typeId));
+                if (typeId == TypeId::Zeroes) {
+                    value = entry->createZeroes();
+                } else {
+                    value = entry->createOnes();
+                }
+            } else if (LLVM_LIKELY(n != 1)) {
 
-                assert (n >= 2);
+                const TypeId typeId = getType(u);
+
+                assert (isAssociative(typeId));
 
                 // Suppose we try to minimize the pairwise difference in last usage time,
                 // taking into account that we can use negations of variables when they've
@@ -219,16 +258,21 @@ protected:
                 unsigned i = 0;
                 for (auto e : make_iterator_range(in_edges(u, G))) {
                     input[i++] = source(e, G);
+                    assert (getLastUsageTime(source(e, G)) > 0);
                 }
 
                 std::sort(input, input + n, [this](const Vertex u, const Vertex v) {
                     return getLastUsageTime(u) < getLastUsageTime(v);
                 });
 
+//                for (unsigned i = 0; i < n; ++i) {
+//                    setLastUsageTime(input[i], ++count);
+//                }
+
                 PabloBuilder builder(entry);
                 value = getValue(input[0]);
                 for (unsigned i = 1; i < n; ++i) {
-                    PabloAST * const op = getValue(input[i]);
+                    PabloAST * const op = getValue(input[i]);                    
                     switch (typeId) {
                         case TypeId::And:
                             value = builder.createAnd(value, op);
@@ -243,47 +287,170 @@ protected:
                             llvm_unreachable("impossible!");
                     }
                 }
-
-            } else if (typeId == TypeId::Not) {
-                assert (in_degree(u, G) == 1);
-                value = entry->createNot(getValue(first_source(in_edges(u, G))));
             } else {
-                assert (isConstant(typeId));
-                assert (in_degree(u, G) == 0);
-                if (typeId == TypeId::Zeroes) {
-                    value = entry->createZeroes();
-                } else {
-                    value = entry->createOnes();
-                }
+                value = entry->createNot(getValue(getNegatedLiteral(u)));
             }
-
+            assert (value);
             setValue(u, value);
             setUnmodified(u);
-        }
-
-        // negations inherit the last usage time from their operand
-        if (LLVM_UNLIKELY(typeId == TypeId::Not)) {
-            setLastUsageTime(u, getLastUsageTime(first_source(in_edges(u, G))));
-        } else {
             setLastUsageTime(u, ++count);
-        }
+        }        
         return value;
     }
 
 protected:
 
     /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief printGraph
+     ** ------------------------------------------------------------------------------------------------------------- */
+    void printGraph(const std::string & name, llvm::raw_ostream & out, std::vector<Vertex> restricted = {}) {
+
+        const auto n = num_vertices(G);
+        std::vector<unsigned> c(n);
+        const auto components = strong_components(G, make_iterator_property_map(c.begin(), get(vertex_index, G), c[0]));
+
+        std::vector<bool> show(n, false);
+        if (LLVM_LIKELY(restricted.empty() && n == components)) {
+            for (const auto u : make_iterator_range(vertices(G))) {
+                show[u] = isLive(u);
+            }
+        } else {
+            std::queue<Vertex> Q;
+            for (const auto m : restricted) {
+                if (m < n && isLive(m)) {
+                    show[m] = true;
+                    assert (Q.empty());
+                    Q.push(m);
+                    for (;;) {
+                        const auto u = Q.front();
+                        Q.pop();
+                        for (auto e : make_iterator_range(in_edges(u, G))) {
+                            const auto v = source(e, G);
+                            if (show[v] || !isLive(v)) {
+                                continue;
+                            }
+                            show[v] = true;
+                            Q.push(v);
+                        }
+                        if (Q.empty()) {
+                            break;
+                        }
+                    }
+                    for (auto e : make_iterator_range(out_edges(m, G))) {
+                        const auto v = target(e, G);
+                        show[v] = isLive(v) ? true : show[v];
+                    }
+                }
+            }
+        }
+
+        out << "digraph " << name << " {\n";
+        for (auto u : make_iterator_range(vertices(G))) {
+
+            if (show[u]) {
+
+                out << "v" << u << " [label=\"" << u << ": ";
+                TypeId typeId;
+                PabloAST * expr;
+                State state;
+
+                std::tie(expr, typeId, state, std::ignore) = G[u];
+
+                bool space = true;
+
+                switch (typeId) {
+                    case TypeId::And:
+                        out << "(∧)";
+                        break;
+                    case TypeId::Or:
+                        out << "(∨)";
+                        break;
+                    case TypeId::Xor:
+                        out << "(⊕)";
+                        break;
+                    case TypeId::Not:
+                        out << "(¬)";
+                        break;
+                    case TypeId::Zeroes:
+                        out << "(⊥)";
+                        break;
+                    case TypeId::Ones:
+                        out << "(⊤)";
+                    default:
+                        space = false;
+                        break;
+                }
+                if (expr) {
+                    if (space) {
+                        out << ' ';
+                    }
+                    expr->print(out);
+                }
+
+                out << "\"";
+                if (!hasValidOperandIndicies(u)) {
+                    out << " color=red style=bold";
+                } else if (!(isImmutable(typeId) || out_degree(u, G) > 0)) {
+                    out << " color=orange style=bold";
+                } else if (isRegenerable(typeId)) {
+                    out << " color=blue";
+                    if (state == State::Modified) {
+                        out << " style=dashed";
+                    }
+                }
+                out << "];\n";
+            }
+        }
+        for (auto e : make_iterator_range(edges(G))) {
+            const auto s = source(e, G);
+            const auto t = target(e, G);
+            if (show[s] && show[t]) {
+                const auto cyclic = (c[s] == c[t]);
+                const auto nonAssoc = !isAssociative(getType(t));
+                out << "v" << s << " -> v" << t;
+                if (cyclic || nonAssoc) {
+                    out << " [";
+                    if (nonAssoc) {
+                        out << " label=\"" << G[e] << "\"";
+                    }
+                    if (cyclic) {
+                        out << " color=red";
+                    }
+                    out << "]";
+                }
+                out << ";\n";
+            }
+        }
+
+        out << "}\n\n";
+        out.flush();
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
      * @brief simplifyGraph
      ** ------------------------------------------------------------------------------------------------------------- */
     bool simplifyGraph() {
         bool modified = false;
-repeat: getReverseTopologicalOrdering();
-        compactGraph();
-        if (applyDistributivityLaw()) {
-            modified = true;
-            goto repeat;
+        errs() << "=================================================================\n";
+        printGraph("S", errs());
+        V.reserve(num_vertices(G));
+        for (;;) {
+            V.clear();
+            getReverseTopologicalOrdering();
+            if (compactGraph()) {
+                continue;
+            }
+            if (applyDistributivityLaw()) {
+                modified = true;
+                continue;
+            }
+            break;
         }
-        factorizeGraph();
+        if (modified) {
+            factorizeGraph();
+            errs() << "-----------------------------------------------------------------\n";
+            printGraph("F", errs());
+        }
         return modified;
     }
 
@@ -324,101 +491,36 @@ repeat: getReverseTopologicalOrdering();
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief compactGraph
      ** ------------------------------------------------------------------------------------------------------------- */
-    void compactGraph() {
-
-        auto IdentityHash = [this](const Vertex u) {
-            using value_of = std::underlying_type<TypeId>::type;
-            const auto n = in_degree(u, G);
-            Vertex operands[n];
-            unsigned i = 0;
-            for (auto e : make_iterator_range(in_edges(u, G))) {
-                operands[i++] = source(e, G);
-            }
-            std::sort(operands, operands + n);
-            size_t h = 0;
-            boost::hash_combine(h, static_cast<value_of>(getType(u)));
-            for (unsigned j = 0; j < n; ++j) {
-                boost::hash_combine(h, operands[j]);
-            }
-            return h;
-        };
-
-        auto IdentityComparator = [this](const Vertex u, const Vertex v) {
-            const auto typeId = getType(u);
-            if (LLVM_LIKELY(typeId == getType(v))) {
-                const unsigned n = in_degree(u, G);
-                if (LLVM_UNLIKELY(n == 0)) {
-                    assert (isConstant(typeId) && in_degree(v, G) == 0);
-                    return true;
-                }
-                if (in_degree(v, G) == n) {
-                    Vertex adjA[n];
-                    Vertex adjB[n];
-                    auto ei = std::get<0>(in_edges(u, G));
-                    auto ej = std::get<0>(in_edges(v, G));
-                    // if this is an associative op, order doesn't matter
-                    if (isAssociative(typeId)) {
-                        for (unsigned i = 0; i < n; ++i, ++ei, ++ej) {
-                            adjA[i] = source(*ei, G);
-                            adjB[i] = source(*ej, G);
-                        }
-                        std::sort(adjA, adjA + n);
-                        std::sort(adjB, adjB + n);
-                    } else { // otherwise consider the order indicated by the edges
-                        for (unsigned i = 0; i < n; ++i, ++ei, ++ej) {
-                            adjA[G[*ei]] = source(*ei, G);
-                            adjB[G[*ej]] = source(*ej, G);
-                        }
-                    }
-                    for (unsigned i = 0; i < n; ++i) {
-                        if (adjA[i] != adjB[i]) {
-                            return false;
-                        }
-                    }
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        using IdentitySet = std::unordered_set<Vertex, decltype(IdentityHash), decltype(IdentityComparator)>;
-
-        IdentitySet V{0, IdentityHash, IdentityComparator};
-        V.reserve(num_vertices(G));
-
+    bool compactGraph() {
+        reprocessGraph = false;
         for (const auto u : boost::adaptors::reverse(ordering)) {
-
-            assert (isLive(u));
-
-            const auto typeId = getType(u);
-            if (LLVM_UNLIKELY(isImmutable(typeId))) {
-                continue;
-            }
-
-            assert (hasValidOperandIndicies(u));
-
-            assert (out_degree(u, G) > 0);
-
-            if (LLVM_UNLIKELY(isConstant(typeId))) {
-                if (processConstant(u, typeId)) {
+            if (LLVM_LIKELY(isLive(u))) {
+                const auto typeId = getType(u);
+                if (LLVM_UNLIKELY(isImmutable(typeId))) {
                     continue;
                 }
-            } else if (isAssociative(typeId)) {
-                if (processAssociative(u, typeId)) {
+                assert (hasValidOperandIndicies(u));
+                if (LLVM_UNLIKELY(out_degree(u, G) == 0)) {
+                    removeVertex(u);
                     continue;
                 }
-            } else if (typeId == TypeId::Not) {
-                if (processNegation(u, typeId)) {
-                    continue;
+                if (LLVM_UNLIKELY(isConstant(typeId))) {
+                    if (processConstant(u, typeId)) {
+                        continue;
+                    }
+                } else if (isAssociative(typeId)) {
+                    if (processAssociative(u, typeId)) {
+                        continue;
+                    }
+                } else if (typeId == TypeId::Not) {
+                    if (processNegation(u)) {
+                        continue;
+                    }
                 }
-            }
-
-            // check whether this vertex is a duplicate
-            auto f = V.insert(u);
-            if (LLVM_UNLIKELY(!f.second)) {
-                remapVertex(u, *f.first);              
+                consolidate(u);
             }
         }
+        return reprocessGraph;
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -438,80 +540,123 @@ repeat: getReverseTopologicalOrdering();
             // An associative operation with only one element is always equivalent to the element
             const auto v = first_source(in_edges(u, G));
             for (const auto e : make_iterator_range(out_edges(u, G))) {
-                addEdge(v, target(e, G), G[e]);
+                addEdge(v, target(e, G), G[e]);                
             }
             removeVertex(u);
             return true;
         } else {
             // Take the transitive closure of these arcs to reveal the underlying equations
-            Vertex removed[out_degree(u, G)];
-            unsigned n = 0;
-            for (auto ei : make_iterator_range(out_edges(u, G))) {
-                const auto v = target(ei, G);
-                if (typeId == getType(v)) {
-                    assert(hasValidOperandIndicies(v));
-                    for (auto ej : make_iterator_range(in_edges(u, G))) {
-                        addEdge(source(ej, G), v, G[ei]);
-                    }
-                    setModified(v);
-                    removed[n++] = v;
-                }
-            }
-            for (unsigned i = 0; i < n; ++i) {
-                const auto v = removed[i];
-                assert (edge(u, v, G).second);
-                remove_edge(u, v, G);
-                assert(hasValidOperandIndicies(v));
-            }
-            if (LLVM_UNLIKELY(out_degree(u, G) == 0)) {
-                removeVertex(u);
+            if (transitiveClosure(u, typeId)) {
                 return true;
             }
             if (LLVM_UNLIKELY(typeId == TypeId::Xor)) {
-                // Canonicalize xor operations: (A ⊕ ¬B) = (A ⊕ B ⊕ 1)
-                Vertex negation[in_degree(u, G)];
-                unsigned count = 0;
-                for (const auto e : make_iterator_range(in_edges(u, G))) {
-                    const auto v = source(e, G);
-                    if (LLVM_UNLIKELY(getType(v) == TypeId::Not)) {
-                        negation[count++] = v;
-                    }
+                canonicalizeXor(u);
+            } else { // is distributive
+                applyDeMorganExpansion(u, typeId);
+                if (LLVM_UNLIKELY(applyAbsorbtionComplementLaw(u, typeId))) {
+                    return true;
                 }
-                if (LLVM_UNLIKELY(count != 0)) {
-                    for (unsigned i = 0; i < count; ++i) {
-                        const auto v = negation[i];
-                        assert (edge(v, u, G).second);
-                        remove_edge(v, u, G);
-                        addEdge(first_source(in_edges(v, G)), u);
-                    }
-                    if ((count & 1) != 0) {
-                        addEdge(makeVertex(TypeId::Ones), u);
-                    }
-                    setModified(u);
-                    assert(hasValidOperandIndicies(u));
-                }
-            } else { // perform De Morgan's law expansion
-                applyDeMorgans(u, typeId);
-                return applyAbsorbtionComplementLaw(u, typeId);
             }
         }
         return false;
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief transitiveClosure
+     ** ------------------------------------------------------------------------------------------------------------- */
+    bool transitiveClosure(const Vertex u, const TypeId typeId) {
+        // Take the transitive closure of these arcs to reveal the underlying equations
+
+        assert (isLive(u));
+        assert (getType(u) == typeId);
+        assert (isAssociative(typeId));
+
+        Vertex removed[out_degree(u, G)];
+        unsigned n = 0;
+        for (auto ei : make_iterator_range(out_edges(u, G))) {
+            const auto v = target(ei, G);
+            if (getType(v) == typeId) {
+                assert(hasValidOperandIndicies(v));
+                for (auto ej : make_iterator_range(in_edges(u, G))) {
+                    addEdge(source(ej, G), v);
+                }
+                setModified(v);
+                removed[n++] = v;
+            }
+        }
+        for (unsigned i = 0; i < n; ++i) {
+            const auto v = removed[i];
+            assert (edge(u, v, G).second);
+            remove_edge(u, v, G);
+            assert(hasValidOperandIndicies(v));
+        }
+        if (out_degree(u, G) == 0) {
+            removeVertex(u);
+            return true;
+        }
+        return false;
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief canonicalizeXor
+     *
+     * (A ⊕ ¬B) = (A ⊕ B ⊕ 1) = ¬(A ⊕ B)
+     ** ------------------------------------------------------------------------------------------------------------- */
+    void canonicalizeXor(const Vertex u) {
+
+        assert (isLive(u));
+        assert (getType(u) == TypeId::Xor);
+
+        const auto l = in_degree(u, G);
+        Vertex negation[l];
+        unsigned n = 0, m = 0;
+        for (const auto e : make_iterator_range(in_edges(u, G))) {
+            const auto v = source(e, G);
+            const auto typeId = getType(v);
+            if (LLVM_UNLIKELY(typeId == TypeId::Not)) {
+                negation[n++] = v;
+            } else if (LLVM_UNLIKELY(typeId == TypeId::Ones)) {
+                negation[l - ++m] = v;
+            }
+        }
+        if (LLVM_UNLIKELY(n != 0 || m != 0)) {
+            for (unsigned i = 0; i < n; ++i) {
+                const auto v = negation[i];
+                assert (edge(v, u, G).second);
+                remove_edge(v, u, G);
+                addEdge(first_source(in_edges(v, G)), u);
+            }
+            for (unsigned i = 0; i < m; ++i) {
+                const auto v = negation[(l - 1) - i];
+                assert (edge(v, u, G).second);
+                remove_edge(v, u, G);
+            }
+            if (((n + m) & 1) != 0) {
+                const auto x = makeVertex(TypeId::Not);
+                for (const auto e : make_iterator_range(out_edges(u, G))) {
+                    add_edge(x, target(e, G), G[e], G);
+                }
+                clear_out_edges(u, G);
+                add_edge(u, x, 0, G);
+            }
+            setModified(u);
+            assert(hasValidOperandIndicies(u));
+        }
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
      * @brief processNegation
      ** ------------------------------------------------------------------------------------------------------------- */
-    bool processNegation(const Vertex u, const TypeId typeId) {
+    bool processNegation(const Vertex u) {
 
         assert (isLive(u));
         assert ("negation must have one input!" && in_degree(u, G) == 1);
-        assert (getType(u) == typeId);
-        assert (typeId == TypeId::Not);
+        assert (getType(u) == TypeId::Not);
 
         const auto v = first_source(in_edges(u, G));
         const auto negatedTypeId = getType(v);
         if (LLVM_UNLIKELY(negatedTypeId == TypeId::Not)) { // ¬¬A = A
-            const auto w = first_source(in_edges(v, G));
+            const auto w = getNegatedLiteral(v);
             for (const auto e : make_iterator_range(out_edges(u, G))) {
                 const auto v = target(e, G);
                 addEdge(w, v, G[e]);
@@ -519,24 +664,14 @@ repeat: getReverseTopologicalOrdering();
             }
             removeVertex(u);
             return true;
-        } else if (LLVM_UNLIKELY(negatedTypeId == TypeId::Xor)) {
-            // Canonicalize xor operations: ¬(A ⊕ B) = (A ⊕ B ⊕ 1)
-            setModified(u);
-            setType(u, TypeId::Xor);
-            clear_in_edges(u, G);
-            for (const auto e : make_iterator_range(in_edges(v, G))) {
-                add_edge(source(e, G), u, 0, G);
-            }
-            addEdge(makeVertex(TypeId::Ones), u);
-            assert(hasValidOperandIndicies(u));
         }
         return false;
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief applyDeMorgans
+     * @brief applyDeMorganExpansion
      ** ------------------------------------------------------------------------------------------------------------- */
-    void applyDeMorgans(const Vertex u, const TypeId typeId) {
+    bool applyDeMorganExpansion(const Vertex u, const TypeId typeId) {
 
         assert (isLive(u));
         assert (in_degree(u, G) > 0);
@@ -548,8 +683,7 @@ repeat: getReverseTopologicalOrdering();
         for (const auto e : make_iterator_range(in_edges(u, G))) {
             const auto v = source(e, G);
             if (LLVM_UNLIKELY(getType(v) == TypeId::Not)) {
-                const auto w = first_source(in_edges(v, G));
-                if (LLVM_UNLIKELY(getType(w) == oppositeTypeId(typeId))) {
+                if (LLVM_UNLIKELY(isDistributive(getType(getNegatedLiteral(v))))) {
                     A[n++] = v;
                 }
             }
@@ -561,20 +695,216 @@ repeat: getReverseTopologicalOrdering();
                 assert (edge(v, u, G).second);
                 assert (getType(v) == TypeId::Not);
                 remove_edge(v, u, G);
-                // NOTE: we cannot remove v even if this was its last edge since
-                // it must be in our duplicate check map
-                const auto w = first_source(in_edges(v, G));
-                assert (getType(w) == oppositeTypeId(typeId));
+                const auto w = getNegatedLiteral(v);
+                auto x = u;
+                const auto innerTypeId = oppositeTypeId(getType(w));
+                if (innerTypeId != typeId) {
+                    x = makeVertex(innerTypeId);
+                    add_edge(x, u, 0, G);
+                }
                 for (const auto e : make_iterator_range(in_edges(w, G))) {
-                    const auto x = makeVertex(TypeId::Not);
-                    add_edge(source(e, G), x, 0, G);
-                    addEdge(x, u);
+                    addEdge(getNegationOf(source(e, G)), x);
                 }
             }
             setModified(u);
+            reprocessGraph = true;
             assert(hasValidOperandIndicies(u));
+            return true;
+        }
+        return false;
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief applyXorTransformation
+     *
+     * (A ∧ ¬B ∧ C) ∨ (¬A ∧ B ∧ D) ⇔ (A ⊕ B) ∧ ((A ∧ C) ∨ (B ∧ D))
+     *
+     * (A ∨ ¬B ∨ C) ∧ (¬A ∨ B ∨ D) ⇔ ¬(A ⊕ B) ∨ ((A ∨ C) ∧ (B ∨ D))
+     ** ------------------------------------------------------------------------------------------------------------- */
+    bool applyXorTransformation() {
+        reprocessGraph = false;
+        for (const auto u : ordering) {
+            const auto typeId = getType(u);
+            if (isDistributive(typeId)) {
+                if (LLVM_LIKELY(in_degree(u, G) > 1)) {
+                    while (LLVM_UNLIKELY(applyXorTransformation(u, typeId)));
+                }
+            }
+        }
+        return reprocessGraph;
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief applyXorTransformation
+     *
+     * (A ∧ ¬B ∧ C) ∨ (¬A ∧ B ∧ D) ⇔ (A ⊕ B) ∧ ((A ∧ C) ∨ (B ∧ D))
+     *
+     * (A ∨ ¬B ∨ C) ∧ (¬A ∨ B ∨ D) ⇔ ¬(A ⊕ B) ∨ ((A ∨ C) ∧ (B ∨ D))
+     ** ------------------------------------------------------------------------------------------------------------- */
+    bool applyXorTransformation(const Vertex u, const TypeId typeId) {
+
+        if (in_degree(u, G) != 2) {
+            return false;
         }
 
+        unsigned clauses = 0;
+        unsigned count = 0;
+        assert (getType(u) == typeId);
+        const TypeId innerTypeId = oppositeTypeId(typeId);
+        assert (in_degree(u, G) > 1);
+
+        for (const auto e : make_iterator_range(in_edges(u, G))) {
+            const auto v = source(e, G);
+            if (isXorCandidate(v, innerTypeId)) {
+                ++clauses;
+                count += in_degree(v, G);
+            }
+        }
+
+        if (clauses > 1) {
+            unsigned B[clauses + 1];
+            Vertex C[clauses];
+            Vertex V[count];
+
+            unsigned i = 0, j = 0;
+
+            for (const auto e : make_iterator_range(in_edges(u, G))) {
+                const auto v = source(e, G);
+                if (isXorCandidate(v, innerTypeId)) {
+                    B[i] = j;
+                    C[i] = v;
+                    for (const auto e : make_iterator_range(in_edges(v, G))) {
+                        V[j++] = source(e, G);
+                    }
+                    // We know no clause contains {A, A}, {A, ¬A} or {¬¬A} for any A.
+                    std::sort(V + B[i++], V + j, [this](const Vertex u, const Vertex v){
+                        return removeNegation(u) < removeNegation(v);
+                    });
+                }
+            }
+            B[clauses] = j;
+
+            for (unsigned i = 0; i < (clauses - 1); ++i) {
+                for (unsigned j = (i + 1); j < clauses; ++j) {
+                    bool first = true;
+                    unsigned ei = B[i], ej = B[j], ek = 0;
+                    while (ei < B[i + 1] && ej < B[j + 1]) {
+                        if (V[ei] == V[ej]) {
+                            ++ei, ++ej;
+                        } else {
+                            if (LLVM_UNLIKELY(isNegationOf(V[ei], V[ej]))) {
+                                if (LLVM_LIKELY(first)) {
+                                    ek = ei;
+                                    first = false;
+                                    ++ei, ++ej;
+                                    continue;
+                                } else {
+                                    const auto x = V[ek];
+                                    const auto v = C[i];
+                                    const auto y = V[ej];
+                                    const auto w = C[j];
+
+                                    reprocessGraph = true;
+
+                                    assert (edge(x, v, G).second);
+                                    remove_edge(x, v, G);
+                                    assert (edge(y, w, G).second);
+                                    remove_edge(y, w, G);
+
+                                    const auto a = makeVertex(typeId);
+                                    add_edge(v, a, 0, G);
+                                    add_edge(w, a, 0, G);
+
+                                    const auto z = makeVertex(TypeId::Xor);
+                                    add_edge(x, z, 0, G);
+                                    add_edge(y, z, 0, G);
+
+                                    auto b = z;
+                                    if (LLVM_UNLIKELY(typeId == TypeId::And)) {
+                                        b = getNegationOf(z);
+                                    }
+                                    canonicalizeXor(z);
+                                    if (LLVM_UNLIKELY(b != z)) {
+                                        processNegation(b);
+                                    }
+
+                                    if (in_degree(u, G) == 2) {
+                                        clear_in_edges(u, G);
+                                        setType(u, innerTypeId);
+                                        add_edge(a, u, 0, G);
+                                        add_edge(b, u, 0, G);
+                                        return false;
+                                    } else {
+                                        assert (edge(v, u, G).second);
+                                        remove_edge(v, u, G);
+                                        assert (edge(w, u, G).second);
+                                        remove_edge(w, u, G);
+                                        const auto c = makeVertex(innerTypeId);
+                                        add_edge(a, c, 0, G);
+                                        add_edge(b, c, 0, G);
+                                        add_edge(c, u, 0, G);
+                                        assert (in_degree(u, G) > 1);
+                                        return true;
+                                    }
+                                }
+                            }
+                            if (removeNegation(V[ei]) < removeNegation(V[ej])) {
+                                ++ei;
+                            } else {
+                                ++ej;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    bool isXorCandidate(const Vertex u, const TypeId typeId) const {
+        assert (isAssociative(typeId));
+        return (getType(u) == typeId) && (out_degree(u, G) == 1) && (in_degree(u, G) > 1);
+    }
+
+    bool isNegationOf(const Vertex u, const Vertex v) const {
+        const auto t = (getType(u) == TypeId::Not);
+        if (t ^ (getType(v) == TypeId::Not)) {
+            if (t) {
+                return getNegatedLiteral(u) == v;
+            } else { // if (getType(y) == TypeId::Not) {
+                return u == getNegatedLiteral(v);
+            }
+        }
+        return false;
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief getNegationOf
+     ** ------------------------------------------------------------------------------------------------------------- */
+    Vertex getNegationOf(const Vertex u) {
+        if (getType(u) == TypeId::Not) {
+            return getNegatedLiteral(u);
+        } else {
+            for (const auto e : make_iterator_range(out_edges(u, G))) {
+                const auto v = target(e, G);
+                if (getType(v) == TypeId::Not) {
+                    return v;
+                }
+            }
+            const auto v = makeVertex(TypeId::Not);
+            add_edge(u, v, 0, G);
+            return v;
+        }
+    }
+
+    Vertex getNegatedLiteral(const Vertex u) const {
+        assert (getType(u) == TypeId::Not);
+        assert (in_degree(u, G) == 1);
+        return first_source(in_edges(u, G));
+    }
+
+    Vertex removeNegation(const Vertex u) const {
+        return getType(u) == TypeId::Not ? getNegatedLiteral(u) : u;
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -594,7 +924,7 @@ repeat: getReverseTopologicalOrdering();
             assert (isLive(v));
             const auto innerTypeId = getType(v);
             if (innerTypeId == TypeId::Not) {
-                const auto w = first_source(in_edges(v, G));
+                const auto w = getNegatedLiteral(v);
                 assert (isLive(w));
                 for (const auto ej : make_iterator_range(in_edges(u, G))) {
                     if (LLVM_UNLIKELY(source(ej, G) == w)) {
@@ -612,6 +942,7 @@ repeat: getReverseTopologicalOrdering();
 
         if (n) {
             setModified(u);
+            reprocessGraph = true;
             for (;;) {
                 const auto v = A[--n];
                 assert (edge(v, u, G).second);
@@ -716,8 +1047,6 @@ repeat: getReverseTopologicalOrdering();
             const auto v = modification[--m];
             setModified(v);
             clear_in_edges(v, G);
-            // We could recursively call "processConstant" but this could cause a stack overflow
-            // in a pathological case. Instead rely on the fact v will be processed eventually.
         }
 
         if (LLVM_UNLIKELY(out_degree(u, G) == 0)) {
@@ -727,7 +1056,6 @@ repeat: getReverseTopologicalOrdering();
 
         return false;
     }
-
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief applyDistributivityLaw
@@ -759,6 +1087,7 @@ repeat: getReverseTopologicalOrdering();
             const auto & outer = std::get<0>(lower);
             const auto upperSet = obtainDistributableSources(std::get<1>(lower));
             for (const auto & upper : upperSet) {
+
                 const auto & inner = std::get<0>(upper);
                 const auto & sources = std::get<1>(upper);
 
@@ -766,8 +1095,8 @@ repeat: getReverseTopologicalOrdering();
                 const auto innerTypeId = oppositeTypeId(outerTypeId);
 
                 // Update G to match the desired change
-                const auto x = makeVertex(outerTypeId);
-                const auto y = makeVertex(innerTypeId);
+                auto x = makeVertex(outerTypeId);
+                auto y = makeVertex(innerTypeId);
 
                 for (const Vertex i : sources) {
                     const auto u = Gd[i];
@@ -777,9 +1106,9 @@ repeat: getReverseTopologicalOrdering();
                         assert (getType(v) == innerTypeId);
                         remove_edge(u, v, G);
                     }
-                    addEdge(u, y);
+                    add_edge(u, y, 0, G);
                 }
-
+                y = consolidate(y);
                 for (const auto i : inner) {
                     const auto u = Gd[i];
                     assert (getType(u) == innerTypeId);
@@ -789,18 +1118,16 @@ repeat: getReverseTopologicalOrdering();
                         assert (getType(v) == outerTypeId);
                         remove_edge(u, v, G);
                     }
-                    addEdge(u, x);
+                    add_edge(u, x, 0, G);
                 }
-
+                x = consolidate(x);
                 addEdge(x, y);
-
                 for (const Vertex i : outer) {
                     const auto u = Gd[i];
                     assert (getType(u) == outerTypeId);
                     setModified(u);
                     addEdge(y, u);
                 }
-
                 modified = true;
             }
         }
@@ -823,6 +1150,7 @@ repeat: getReverseTopologicalOrdering();
                 const auto outerTypeId = getType(u);
                 if (isDistributive(outerTypeId)) {
                     const auto n = in_degree(u, G);
+                    if (n < 2) continue;
                     assert (n > 1);
                     const auto innerTypeId = oppositeTypeId(getType(u));
                     Vertex D[n];
@@ -907,94 +1235,176 @@ repeat: getReverseTopologicalOrdering();
      ** ------------------------------------------------------------------------------------------------------------- */
     void factorizeGraph() {
 
-        Sequence groups[3];
+        Sequence associative;
         for (const auto u : make_iterator_range(vertices(G))) {
-            if (isLive(u)) {
-                switch (getType(u)) {
-                    case TypeId::And:
-                        groups[0].push_back(u); break;
-                    case TypeId::Or:
-                        groups[1].push_back(u); break;
-                    case TypeId::Xor:
-                        groups[2].push_back(u); break;
-                    default: break;
-                }
+            if (isLive(u) && isAssociative(getType(u))) {
+                associative.push_back(u);
             }
         }
 
-        const TypeId op[3] = { TypeId::And, TypeId::Or, TypeId::Xor };
+        // Although we risk losing better combinations by greedily taking the larger factorings,
+        // choosing only those of minSize or greater first can significantly reduce the running
+        // time of this optimization.
 
-        for (unsigned i = 0; i < 3; ++i) {
+        Sequence group[3];
 
-            // Although we risk losing better combinations by greedily taking the larger factorings,
-            // choosing only those of minSize or greater first can significantly reduce the running
-            // time of this optimization.
+        const TypeId typeCode[3] = { TypeId::And, TypeId::Or, TypeId::Xor };
 
-            for (unsigned minSize = 64; minSize >= 2; minSize /= 2)  {
+        for (;;) {
 
-                for (;;) {
+            auto factors = makeIndependent(enumerateBicliques(associative, G, 2, 2), 1);
+            if (factors.empty()) {
+                break;
+            }
 
-                    auto factors = makeIndependent(enumerateBicliques(groups[i], G, 2, minSize), 1);
-                    if (factors.empty()) {
-                        break;
-                    }
+            bool unchanged = true;
 
-                    for (auto & factor : factors) {
-                        const auto & sources = std::get<1>(factor);
-                        assert (sources.size() > 1);
-                        auto & targets = std::get<0>(factor);
-                        assert (targets.size() > 1);
+            for (auto & factor : factors) {
+                const auto & sources = std::get<1>(factor);
+                assert (sources.size() > 1);
+                auto & targets = std::get<0>(factor);
+                assert (targets.size() > 1);
 
-                        // Check whether one of the targets is the factorization
-                        Vertex x = 0;
-                        bool create = true;
-                        for (auto j = targets.begin(); j != targets.end(); ) {
-                            assert (hasValidOperandIndicies(*j));
-                            if (in_degree(*j, G) == sources.size()) {
-                                if (LLVM_LIKELY(create)) {
-                                    x = *j;
-                                    create = false;
-                                } else {
-                                    for (auto e : make_iterator_range(out_edges(*j, G))) {
-                                        addEdge(x, target(e, G), G[e]);
-                                    }
-                                    removeVertex(*j);
-                                }
-                                j = targets.erase(j);
-                            } else {
-                                ++j;
+                for (unsigned k = 0; k < 3; ++k) {
+                    assert (group[k].empty());
+                }
+
+                // Group the target sets and check whether any target is the factorization
+                Vertex t[3];
+                bool create[3] = { true, true, true };
+                for (const auto u : targets) {
+                    assert (hasValidOperandIndicies(u));
+                    const auto k = factorGroup(getType(u));
+                    if (LLVM_UNLIKELY(in_degree(u, G) == sources.size())) {
+                        if (LLVM_LIKELY(create[k])) {
+                            t[k] = u;
+                            create[k] = false;
+                        } else {
+                            for (auto e : make_iterator_range(out_edges(u, G))) {
+                                addEdge(t[k], target(e, G), G[e]);
                             }
+                            removeVertex(u);
                         }
-                        if (create) {
-                            x = makeVertex(op[i]);
-                            groups[i].push_back(x);
-                            for (auto u : sources) {
-                                add_edge(u, x, 0, G);
-                            }
-                            assert (hasValidOperandIndicies(x));
-                        }
-
-                        // Remove the biclique between the source and target vertices
-                        for (auto u : sources) {
-                            for (auto v : targets) {
-                                assert (getType(v) == op[i]);
-                                assert (edge(u, v, G).second);
-                                boost::remove_edge(u, v, G);
-                            }
-                        }
-
-                        // ... and replace it with the factorization
-                        for (auto v : targets) {
-                            assert (getType(v) == op[i]);
-                            addEdge(x, v);
-                            setModified(v);
-                            assert(hasValidOperandIndicies(v));
-                        }
+                    } else {
+                        group[k].push_back(u);
                     }
                 }
+
+                for (unsigned k = 0; k < 3; ++k) {
+                    if (LLVM_LIKELY(group[k].empty())) {
+                        continue;
+                    }
+                    if (LLVM_LIKELY(create[k])) {
+                        t[k] = makeVertex(typeCode[k]);
+                        for (auto u : sources) {
+                            add_edge(u, t[k], 0, G);
+                        }
+                        associative.push_back(t[k]);
+                    }
+                    assert (hasValidOperandIndicies(t[k]));
+                    // Remove the biclique between the source and target vertices
+                    for (auto u : sources) {
+                        for (auto v : group[k]) {
+                            assert (getType(v) == typeCode[k]);
+                            assert (edge(u, v, G).second);
+                            boost::remove_edge(u, v, G);
+                        }
+                    }
+                    // ... and replace it with the factorization
+                    for (auto v : group[k]) {
+                        assert (getType(v) == typeCode[k]);
+                        addEdge(t[k], v);
+                        setModified(v);
+                        assert(hasValidOperandIndicies(v));
+                    }
+                    group[k].clear();
+                    unchanged = false;
+                }
             }
+
+            if (unchanged) {
+                break;
+            }
+        }
+
+//        #ifndef NDEBUG
+//        for (const auto u : make_iterator_range(vertices(G))) {
+//            if (LLVM_LIKELY(isLive(u))) {
+//                const auto typeId = getType(u);
+//                if (isAssociative(typeId)) {
+//                    if (in_degree(u, G) != 2) {
+//                        bool atMostOneSourceVertexCanHaveAnOutDegreeOverOne = true;
+//                        for (auto e : make_iterator_range(in_edges(u, G))) {
+//                            if (out_degree(source(e, G), G) != 1) {
+//                                assert (atMostOneSourceVertexCanHaveAnOutDegreeOverOne);
+//                                atMostOneSourceVertexCanHaveAnOutDegreeOverOne = false;
+//                            }
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//        #endif
+
+    }
+
+    unsigned factorGroup(const TypeId typeId) {
+        switch (typeId) {
+            case TypeId::And:
+                return 0; break;
+            case TypeId::Or:
+                return 1; break;
+            case TypeId::Xor:
+                return 2; break;
+            default: llvm_unreachable("impossible");
         }
     }
+
+//    /** ------------------------------------------------------------------------------------------------------------- *
+//     * @brief applyDeMorganContraction
+//     ** ------------------------------------------------------------------------------------------------------------- */
+//    bool applyDeMorganContraction(const Vertex u, const TypeId typeId) {
+
+//        assert (isLive(u));
+//        assert (in_degree(u, G) > 0);
+//        assert (getType(u) == typeId);
+//        assert (isDistributive(typeId));
+
+//        Vertex T[in_degree(u, G)];
+//        unsigned n = 0;
+//        for (const auto e : make_iterator_range(in_edges(u, G))) {
+//            const auto v = source(e, G);
+//            if (getType(v) == TypeId::Not) {
+//                T[n++] = v;
+//            }
+//        }
+//        if (LLVM_UNLIKELY(n > 1)) {
+//            const auto oppositeType = oppositeTypeId(typeId);
+//            Vertex x = makeVertex(oppositeType);
+//            for (unsigned i = 0; i < n; ++i) {
+//                const auto v = T[i];
+//                const auto w = first_source(in_edges(v, G));
+//                add_edge(w, x, 0, G);
+//                remove_edge(v, u, G);
+//            }
+//            x = consolidate(x);
+//            if (in_degree(u, G) == 0) {
+//                setType(u, TypeId::Not);
+//                add_edge(x, u, 0, G);
+//                processNegation(u);
+//                return true;
+//            } else {
+//                Vertex y = makeVertex(TypeId::Not);
+//                add_edge(x, y, 0, G);
+//                y = consolidate(y);
+//                add_edge(y, u, 0, G);
+//                processNegation(y);
+//            }
+//            return processAssociative(x, oppositeType);
+//        }
+//        return false;
+//    }
+
 
 private:
 
@@ -1028,8 +1438,9 @@ private:
                         }
                     }
                     if (B.size() >= minimumSizeB) {
-                        std::sort(B.begin(), B.end());
-                        assert(std::unique(B.begin(), B.end()) == B.end());
+                        // std::sort(B.begin(), B.end());
+                        assert (std::is_sorted(B.begin(), B.end()));
+                        assert (std::unique(B.begin(), B.end()) == B.end());
                         B1.insert(std::move(B));
                     }
                 }
@@ -1090,8 +1501,9 @@ private:
                     for (auto e : make_iterator_range(out_edges(u, G))) {
                         T.push_back(target(e, G));
                     }
-                    std::sort(T.begin(), T.end());
-                    assert(std::unique(T.begin(), T.end()) == T.end());
+                    // std::sort(T.begin(), T.end());
+                    assert (std::is_sorted(T.begin(), T.end()));
+                    assert (std::unique(T.begin(), T.end()) == T.end());
                     Aj.clear();
                     Aj.reserve(std::min(Ai.size(), T.size()));
                     std::set_intersection(Ai.begin(), Ai.end(), T.begin(), T.end(), std::back_inserter(Aj));
@@ -1117,52 +1529,54 @@ private:
     BicliqueSet && makeIndependent(BicliqueSet && S, const unsigned independentSide) {
 
         const auto l = S.size();
-        IndependentSetGraph I(l);
-
         assert (independentSide < 2);
+        if (LLVM_LIKELY(l > 1)) {
 
-        // Initialize our weights
-        for (unsigned i = 0; i != l; ++i) {
-            I[i] = std::get<0>(S[i]).size() * std::get<1>(S[i]).size();
-        }
+            IndependentSetGraph I(l);
 
-        // Determine our constraints
-        for (unsigned i = 0; i != l; ++i) {
-            const auto & Si = (independentSide == 0) ? std::get<0>(S[i]) : std::get<1>(S[i]);
-            for (unsigned j = i + 1; j != l; ++j) {
-                const auto & Sj = (independentSide == 0) ? std::get<0>(S[j]) : std::get<1>(S[j]);
-                if (intersects(Si, Sj)) {
-                    boost::add_edge(i, j, I);
-                }
-            }
-        }
-
-        // Use the greedy algorithm to choose our independent set
-        Sequence selected;
-        for (;;) {
-            unsigned w = 0;
-            Vertex u = 0;
+            // Initialize our weights
             for (unsigned i = 0; i != l; ++i) {
-                if (I[i] > w) {
-                    w = I[i];
-                    u = i;
+                I[i] = std::get<0>(S[i]).size() * std::get<1>(S[i]).size();
+            }
+
+            // Determine our constraints
+            for (unsigned i = 0; i != l; ++i) {
+                const auto & Si = (independentSide == 0) ? std::get<0>(S[i]) : std::get<1>(S[i]);
+                for (unsigned j = i + 1; j != l; ++j) {
+                    const auto & Sj = (independentSide == 0) ? std::get<0>(S[j]) : std::get<1>(S[j]);
+                    if (intersects(Si, Sj)) {
+                        boost::add_edge(i, j, I);
+                    }
                 }
             }
-            if (LLVM_UNLIKELY(w == 0)) break;
-            selected.push_back(u);
-            I[u] = 0;
-            for (auto v : make_iterator_range(adjacent_vertices(u, I))) {
-                I[v] = 0;
-            }
-        }
 
-        // Sort the selected list and then remove the unselected cliques
-        std::sort(selected.begin(), selected.end(), std::greater<Vertex>());
-        auto end = S.end();
-        for (const unsigned offset : selected) {
-            end = S.erase(S.begin() + offset + 1, end) - 1;
+            // Use the greedy algorithm to choose our independent set
+            Sequence selected;
+            for (;;) {
+                Vertex u = 0;
+                auto w = I[0];
+                for (unsigned i = 1; i != l; ++i) {
+                    if (I[i] > w) {
+                        w = I[i];
+                        u = i;
+                    }
+                }
+                if (LLVM_UNLIKELY(w == 0)) break;
+                selected.push_back(u);
+                I[u] = 0;
+                for (auto v : make_iterator_range(adjacent_vertices(u, I))) {
+                    I[v] = 0;
+                }
+            }
+
+            // Sort the selected list and then remove the unselected cliques
+            std::sort(selected.begin(), selected.end(), std::greater<Vertex>());
+            auto end = S.end();
+            for (const unsigned offset : selected) {
+                end = S.erase(S.begin() + offset + 1, end) - 1;
+            }
+            S.erase(S.begin(), end);
         }
-        S.erase(S.begin(), end);
 
         return std::move(S);
     }
@@ -1171,6 +1585,7 @@ private:
      * @brief makeVertex
      ** ------------------------------------------------------------------------------------------------------------- */
     Vertex makeVertex(const TypeId typeId, PabloAST * const expr = nullptr) {
+        reprocessGraph = true;
         return add_vertex(std::make_tuple(expr, typeId, expr ? State::Live : State::Modified, 0), G);
     }
 
@@ -1213,8 +1628,27 @@ private:
             add_edge(v, w, 1, G);
             M.emplace(stmt, w);
             return w;
+//        } else if (LLVM_UNLIKELY(typeId == TypeId::Xor)) {
+//            assert (stmt->getNumOperands() == 2);
+//            const auto a = addExpression(stmt->getOperand(0));
+//            const auto b = addExpression(stmt->getOperand(1));
+//            const auto c = makeVertex(TypeId::Not);
+//            add_edge(b, c, 0, G);
+//            const auto d = makeVertex(TypeId::Not);
+//            add_edge(a, d, 0, G);
+//            const auto u = makeVertex(TypeId::And);
+//            add_edge(a, u, 0, G);
+//            add_edge(c, u, 1, G);
+//            const auto v = makeVertex(TypeId::And);
+//            add_edge(b, v, 0, G);
+//            add_edge(d, v, 1, G);
+//            const auto w = makeVertex(TypeId::Or);
+//            add_edge(u, w, 0, G);
+//            add_edge(v, w, 1, G);
+//            M.emplace(stmt, w);
+//            return w;
         } else {
-            const auto u = makeVertex(typeId, stmt);
+            const auto u = makeVertex(typeId, isRegenerable(typeId) ? nullptr : stmt);
             for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
                 PabloAST * const op = stmt->getOperand(i);
                 if (LLVM_UNLIKELY(isa<String>(op))) {
@@ -1236,9 +1670,7 @@ private:
         if (isAssociative(typeId)) {
             for (const auto e : make_iterator_range(out_edges(u, G))) {
                 if (LLVM_UNLIKELY(target(e, G) == v)) {
-                    if (LLVM_LIKELY(isDistributive(typeId))) {
-                        G[e] = std::max(G[e], index);
-                    } else {
+                    if (LLVM_UNLIKELY(typeId == TypeId::Xor)) {
                         remove_edge(e, G);
                     }
                     return false;
@@ -1249,7 +1681,6 @@ private:
         return true;
     }
 
-    #ifndef NDEBUG
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief hasValidOperandIndicies
      ** ------------------------------------------------------------------------------------------------------------- */
@@ -1336,31 +1767,54 @@ private:
     static bool isNullary(const TypeId typeId) {
         return isConstant(typeId) || isLiteral(typeId);
     }
-    #endif
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief removeVertex
      ** ------------------------------------------------------------------------------------------------------------- */
     void removeVertex(const Vertex u) { assert (isLive(u));
         setDead(u);
+        Vertex D[in_degree(u, G)];
+        unsigned n = 0;
+        for (const auto e : make_iterator_range(in_edges(u, G))) {
+            const auto v = source(e, G);
+            if (LLVM_UNLIKELY(out_degree(v, G) == 1)) {
+                D[n++] = v;
+            }
+        }
+        while (LLVM_UNLIKELY(n != 0)) {
+            removeVertex(D[--n]);
+        }
         clear_vertex(u, G);
+        reprocessGraph = true;
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
-     * @brief remapVertex
+     * @brief consolidate
      ** ------------------------------------------------------------------------------------------------------------- */
-    void remapVertex(const Vertex u, const Vertex v) { assert (u != v);
+    Vertex consolidate(const Vertex u) {
+        assert (isLive(u));
+        assert (hasValidOperandIndicies(u));
+        const auto f = V.insert(u);
+        if (LLVM_UNLIKELY(f.second)) {            
+            return u;
+        }
+        const auto v = *f.first;
+        assert (u != v);
+        assert (isLive(v));
         const PabloAST * expr = getValue(u);
         if (expr) {
+            assert (!isRegenerable(getType(u)));
             auto f = M.find(expr);
             assert (f != M.end() && f->second == u);
             f->second = v;
             setValue(v, nullptr);
+            setModified(v);
         }
         for (const auto e : make_iterator_range(out_edges(u, G))) {
             addEdge(v, target(e, G), G[e]);
         }
         removeVertex(u);
+        return v;
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -1413,9 +1867,13 @@ private:
         return false;
     }
 
-    TypeId getType(const Vertex u) const {
+    static TypeId getType(const Vertex u, const Graph & G) {
         assert (u < num_vertices(G));
         return std::get<1>(G[u]);
+    }
+
+    TypeId getType(const Vertex u) const {
+        return getType(u, G);
     }
 
     void setType(const Vertex u, const TypeId typeId) {
@@ -1423,9 +1881,13 @@ private:
         std::get<1>(G[u]) = typeId;
     }
 
-    PabloAST * getValue(const Vertex u) const {
+    static PabloAST * getValue(const Vertex u, const Graph & G) {
         assert (u < num_vertices(G));
         return std::get<0>(G[u]);
+    }
+
+    PabloAST * getValue(const Vertex u) const {
+        return getValue(u, G);
     }
 
     void setValue(const Vertex u, PabloAST * const value) {
@@ -1454,7 +1916,6 @@ private:
     }
 
     void setModified(const Vertex u) {
-        assert(!isImmutable(getType(u)));
         setState(u, State::Modified);
     }
 
@@ -1475,6 +1936,12 @@ private:
 
     void setLastUsageTime(const Vertex u, const UsageTime time) {
         assert (u < num_vertices(G));
+
+//        errs() << "   " << u << " ";
+//        PabloPrinter::print(getValue(u), errs());
+//        errs() << " @ " << time << "\n";
+
+
         std::get<3>(G[u]) = time;
     }
 
@@ -1538,14 +2005,97 @@ private:
         return (typeId == TypeId::And) ? TypeId::Or : TypeId::And;
     }
 
-    Vertex first_source(const std::pair<in_edge_iterator, in_edge_iterator> & e) const {
+    Vertex first_source(const std::pair<InEdgeIterator, InEdgeIterator> & e) const {
         return source(*std::get<0>(e), G);
     }
 
 private:
 
+    struct IdentityHash {
+        size_t operator()(const Vertex u) const {
+            using value_of = std::underlying_type<TypeId>::type;
+//            InEdgeIterator begin, end;
+//            std::tie(begin, end) = in_edges(u, G);
+//            assert (std::is_sorted(begin, end));
+            const auto n = in_degree(u, G);
+            Vertex operands[n];
+            unsigned i = 0;
+            for (auto e : make_iterator_range(in_edges(u, G))) {
+                operands[i++] = source(e, G);
+            }
+            std::sort(operands, operands + n);
+            size_t h = 0;
+            boost::hash_combine(h, static_cast<value_of>(PassContainer::getType(u, G)));
+            for (unsigned j = 0; j < n; ++j) {
+                boost::hash_combine(h, operands[j]);
+            }
+//            for (auto e : make_iterator_range(in_edges(u, G))) {
+//                boost::hash_combine(h, source(e, G));
+//            }
+            return h;
+        }
+        IdentityHash (const Graph & g) : G(g) { }
+    private:
+        const Graph & G;
+    };
+
+    struct IdentityComparator {
+        bool operator()(const Vertex u, const Vertex v) const {
+            const auto typeId = getType(u, G);
+            if (LLVM_LIKELY(typeId == getType(v, G))) {
+                const unsigned n = in_degree(u, G);
+                if (LLVM_UNLIKELY(n == 0)) {
+                    assert (isNullary(typeId) && in_degree(v, G) == 0);
+                    if (LLVM_UNLIKELY(isLiteral(typeId))) {
+                        assert (getValue(u, G) && getValue(v, G));
+                        return getValue(u, G) == getValue(v, G);
+                    }
+                    return true;
+                }
+                if (in_degree(v, G) == n) {
+                    Vertex adjA[n];
+                    Vertex adjB[n];
+                    auto ei = std::get<0>(in_edges(u, G));
+                    auto ej = std::get<0>(in_edges(v, G));
+                    // if this is an associative op, order doesn't matter
+                    if (isAssociative(typeId)) {
+                        for (unsigned i = 0; i < n; ++i, ++ei, ++ej) {
+                            adjA[i] = source(*ei, G);
+                            adjB[i] = source(*ej, G);
+                        }
+                        assert(std::is_sorted(adjA, adjA + n));
+                        assert(std::is_sorted(adjB, adjB + n));
+                    } else { // otherwise consider the order indicated by the edges
+                        for (unsigned i = 0; i < n; ++i, ++ei, ++ej) {
+                            adjA[G[*ei]] = source(*ei, G);
+                            adjB[G[*ej]] = source(*ej, G);
+                        }
+                    }
+                    for (unsigned i = 0; i < n; ++i) {
+                        if (adjA[i] != adjB[i]) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+        IdentityComparator (const Graph & g) : G(g) { }
+    private:
+        const Graph & G;
+    };
+
+    using IdentitySet = std::unordered_set<Vertex, IdentityHash, IdentityComparator>;
+
+private:
+
+    bool reprocessGraph;
+
     Graph G;
     flat_map<const pablo::PabloAST *, Vertex> M;
+
+    IdentitySet V;
 
     DistributionGraph Gd;
     flat_map<Vertex, DistributionVertex> Md;
@@ -1563,7 +2113,19 @@ bool DistributivePass::optimize(PabloKernel * const kernel) {
     #ifndef NDEBUG
     PabloVerifier::verify(kernel, "post-distributive-pass");
     #endif
+
+//    errs() << "-----------------------------------------------\n"
+//              "BEFORE SIMPLIFICATION:\n"
+//              "-----------------------------------------------\n";
+//    PabloPrinter::print(kernel, errs());
+
     Simplifier::optimize(kernel);
+
+//    errs() << "-----------------------------------------------\n"
+//              "AFTER SIMPLIFICATION:\n"
+//              "-----------------------------------------------\n";
+//    PabloPrinter::print(kernel, errs());
+
     return true;
 }
 
