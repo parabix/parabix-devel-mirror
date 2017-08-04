@@ -755,9 +755,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     // First prepare the multi-block method that will be used.
 
-    DataLayout DL(kb->getModule());
-    IntegerType * const intAddrTy = DL.getIntPtrType(kb->getContext());
-
     std::vector<Type *> multiBlockParmTypes;
     multiBlockParmTypes.push_back(mKernelStateType->getPointerTo());
     multiBlockParmTypes.push_back(kb->getSizeTy());
@@ -937,14 +934,12 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         }
     }
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        //Value * bufPtr = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
-        //bufPtr = kb->CreatePointerCast(bufPtr, mStreamSetInputBuffers[i]->getPointerType());
-        doMultiBlockArgs.push_back(inputBlockPtr[i]);
+        Value * bufPtr = kb->CreatePointerCast(inputBlockPtr[i], mStreamSetInputBuffers[i]->getPointerType());
+        doMultiBlockArgs.push_back(bufPtr);
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        //Value * bufPtr = kb->getRawOutputPointer(mStreamSetOutputs[i].name, kb->getInt32(0), producedItemCount[i]);
-        //bufPtr = kb->CreatePointerCast(bufPtr, mStreamSetOutputBuffers[i]->getPointerType());
-        doMultiBlockArgs.push_back(outputBlockPtr[i]);
+        Value * bufPtr = kb->CreatePointerCast(outputBlockPtr[i], mStreamSetOutputBuffers[i]->getPointerType());
+        doMultiBlockArgs.push_back(bufPtr);
     }
 
     kb->CreateCall(multiBlockFunction, doMultiBlockArgs);

@@ -337,6 +337,8 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
       that is classified as a variable rate stream set
     * pointers to linear contiguous buffer areas for each of the input stream sets, and
     * pointers to linear contiguous output buffer areas for each of the output stream sets.
+    * in each pointers are to the beginning of the block corresponding to the 
+      processedItemCount or producedItemCount of the given stream set.
  
     Notes: 
     * if the kernel has a Lookahead dependency declared on any input stream set, then
