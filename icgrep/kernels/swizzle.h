@@ -31,17 +31,17 @@ namespace IDISA { class IDISA_Builder; }
 // sets must be a multiple of the swizzle factor size.
 
 // For example: consider the following 4 streams (32 bits each)
-// Stream 1:   abcdef00 ghi00000 jk000000 lmnop000
-// Stream 2:   qrstuv00 wxy00000 z1000000 23456000
-// Stream 3:   ABCDEF00 GHI00000 JK000000 LMNOP000
-// Stream 4:   QRSTUV00 WZY00000 Z1000000 23456000
+// Stream 1:   000pomnl 000000kj 00000ihg 00fedcba
+// Stream 2:   00065432 0000001z 00000yxw 00vutsrq
+// Stream 3:   000POMNL 000000KJ 00000IHG 00FEDCBA
+// Stream 4:   00065432 0000001Z 00000YXW 00VUTSRQ
 //
 // The swizzled output using a field width of 8 produces the following swizzles.
 //
-// Swizzle 1:  abcdef00 qrstuv00 ABCDEF00 QRSTUV00
-// Swizzle 2:  ghi00000 wxy00000 GHI00000 WZY00000
-// Swizzle 3:  jk000000 z1000000 JK000000 Z1000000
-// Swizzle 4:  lmnop000 23456000 LMNOP000 23456000
+// Swizzle 1:  00VUTSRQ 00FEDCBA 00vutsrq 00fedcba
+// Swizzle 2:  00000YXW 00000IHG 00000yxw 00000ihg
+// Swizzle 3:  0000001Z 000000KJ 0000001z 000000kj
+// Swizzle 4:  00065432 000POMNL 00065432 000pomnl
 //
 // Now it might be convenient to compress all fields of swizzle 1 by 2, all fields of swizzle 2 by 5
 // and so on.

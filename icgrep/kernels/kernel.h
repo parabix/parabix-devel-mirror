@@ -342,8 +342,8 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
     * if the kernel has a Lookahead dependency declared on any input stream set, then
       there will be two buffer pointers for that stream set, one for accessing stream set
       items without lookahead and one for accessing the items with lookahead.   
-    * pointers are to the address of the first unprocessed item of the first stream 
-      of the stream set.
+    * pointers are to the beginning of the block corresponding to the
+      processedItemCount or producedItemCount of the given stream set.
     * the base type of each pointer is the StreamSetBlockType of that streamset
 
 #.  The Multi-Block Kernel Builder will arrange that these input parameters may be
@@ -370,11 +370,11 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
       to corresponding streams based on their declared stream set type and processing rate.
     * for any input pointer p, a GEP instruction with a single int32 index i
       will produce a pointer to the buffer position corresponding to the ith block of the
-      input stream set.
+      input stream set, relative to the initial block based on the processedItemCount.
     * for any output stream set declared with a Fixed or Add1 processing rate with respect
       to the principal input stream set, a GEP instruction with a single int32 index i
       will produce a pointer to the buffer position corresponding to the ith block of the
-      stream set.
+      stream set, relative to the initial block based on the producedItemCount.
 
 #.  Upon completion of multi-block processing, the Multi-Block Kernel Builder will arrange that
     processed and produced item counts are updated for all stream sets that have exact

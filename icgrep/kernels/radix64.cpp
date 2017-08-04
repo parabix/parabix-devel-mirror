@@ -78,9 +78,14 @@ void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     Value * expandedStream = &*(args);
 
     // The main loop processes 3 packs of data at a time.
+    // The initial pack offsets may be nonzero.
     
     Value * sourcePackPtr = iBuilder->CreateBitCast(sourceStream, iBuilder->getBitBlockType()->getPointerTo());
+    Value * offset = iBuilder->CreateURem(iBuilder->getProcessedItemCount("sourceStream"), iBuilder->getSize(iBuilder->getBitBlockWidth()));
+    sourcePackPtr = iBuilder->CreateGEP(sourcePackPtr, iBuilder->CreateUDiv(offset, iBuilder->getSize(PACK_SIZE)));
     Value * outputPackPtr = iBuilder->CreateBitCast(expandedStream, iBuilder->getBitBlockType()->getPointerTo());
+    offset = iBuilder->CreateURem(iBuilder->getProducedItemCount("expand34Stream"), iBuilder->getSize(iBuilder->getBitBlockWidth()));
+    outputPackPtr = iBuilder->CreateGEP(outputPackPtr, iBuilder->CreateUDiv(offset, iBuilder->getSize(PACK_SIZE)));
 
     iBuilder->CreateCondBr(iBuilder->CreateICmpSGT(itemsToDo, iBuilder->getSize(0)), expand_3_4_loop, expand3_4_exit);
     

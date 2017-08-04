@@ -937,14 +937,14 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         }
     }
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * bufPtr = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
-        bufPtr = kb->CreatePointerCast(bufPtr, mStreamSetInputBuffers[i]->getPointerType());
-        doMultiBlockArgs.push_back(bufPtr);
+        //Value * bufPtr = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
+        //bufPtr = kb->CreatePointerCast(bufPtr, mStreamSetInputBuffers[i]->getPointerType());
+        doMultiBlockArgs.push_back(inputBlockPtr[i]);
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * bufPtr = kb->getRawOutputPointer(mStreamSetOutputs[i].name, kb->getInt32(0), producedItemCount[i]);
-        bufPtr = kb->CreatePointerCast(bufPtr, mStreamSetOutputBuffers[i]->getPointerType());
-        doMultiBlockArgs.push_back(bufPtr);
+        //Value * bufPtr = kb->getRawOutputPointer(mStreamSetOutputs[i].name, kb->getInt32(0), producedItemCount[i]);
+        //bufPtr = kb->CreatePointerCast(bufPtr, mStreamSetOutputBuffers[i]->getPointerType());
+        doMultiBlockArgs.push_back(outputBlockPtr[i]);
     }
 
     kb->CreateCall(multiBlockFunction, doMultiBlockArgs);
@@ -1073,12 +1073,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
                 kb->CreateBr(copyDone);
                 kb->SetInsertPoint(copyDone);
             }
-            Value * itemAddress = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
-            itemAddress = kb->CreatePtrToInt(itemAddress, intAddrTy);
-            Value * baseAddress = inputBlockPtr[i];
-            baseAddress = kb->CreatePtrToInt(baseAddress, intAddrTy);
-            Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, intAddrTy), kb->CreateSub(itemAddress, baseAddress));
-            tempArgs.push_back(kb->CreateIntToPtr(tempAddress, bufPtrType));
+            tempArgs.push_back(tempBufPtr);
         }
         else {
             Value * bufPtr = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
@@ -1094,11 +1089,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         producedItemCount[i] = kb->getProducedItemCount(mStreamSetOutputs[i].name);
         outputBasePos[i] = kb->CreateAnd(producedItemCount[i], blockBaseMask);
         mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, outputBlockPtr[i], kb->CreateSub(producedItemCount[i], outputBasePos[i]));
-        Value * itemAddress = kb->CreatePtrToInt(kb->getRawOutputPointer(mStreamSetOutputs[i].name, kb->getInt32(0), producedItemCount[i]), intAddrTy);
-        Value * outputPtr = kb->getOutputStreamBlockPtr(mStreamSetOutputs[i].name, kb->getInt32(0));
-        Value * baseAddress = kb->CreatePtrToInt(outputPtr, intAddrTy);
-        Value * tempAddress = kb->CreateAdd(kb->CreatePtrToInt(tempBufPtr, intAddrTy), kb->CreateSub(itemAddress, baseAddress));
-        tempArgs.push_back(kb->CreateIntToPtr(tempAddress, bufPtrType));
+        tempArgs.push_back(tempBufPtr);
     }
 
     kb->CreateCall(multiBlockFunction, tempArgs);
