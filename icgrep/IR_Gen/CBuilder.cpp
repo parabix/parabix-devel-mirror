@@ -294,6 +294,18 @@ Value * CBuilder::CreateMalloc(Value * size) {
     return ptr;
 }
 
+llvm::Value * CBuilder::CreateCacheAlignedMalloc(llvm::Value * size) {
+    const auto alignment = getCacheAlignment();
+    if (LLVM_LIKELY(isa<Constant>(size))) {
+        Constant * const align = ConstantInt::get(size->getType(), alignment, false);
+        Constant * offset = ConstantExpr::getURem(cast<Constant>(size), align);
+        if (!offset->isNullValue()) {
+            size = ConstantExpr::getAdd(cast<Constant>(size), ConstantExpr::getSub(align, offset));
+        }
+    }
+    return CreateAlignedMalloc(size, alignment);
+}
+
 Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     if (LLVM_UNLIKELY((alignment & (alignment - 1)) != 0)) {
         report_fatal_error("CreateAlignedMalloc: alignment must be a power of 2");
@@ -307,7 +319,6 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     if (codegen::EnableAsserts) {
         CreateAssertZero(CreateURem(size, align), "CreateAlignedMalloc: size must be an integral multiple of alignment.");
     }
-
     Value * ptr = nullptr;
     if (hasAlignedAlloc()) {
         Function * f = m->getFunction("aligned_alloc");
@@ -362,7 +373,6 @@ Value * CBuilder::CreateRealloc(Value * const ptr, Value * const size) {
         f->setDoesNotAlias(1);
     }
     CallInst * const ci = CreateCall(f, {CreatePointerCast(ptr, voidPtrTy), CreateZExtOrTrunc(size, sizeTy)});
-
     return CreatePointerCast(ci, ptr->getType());
 }
 

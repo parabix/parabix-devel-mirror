@@ -264,7 +264,7 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
 
     pxDriver.generatePipelineIR();
-
+    pxDriver.deallocateBuffers();
     idb->CreateRetVoid();
 
     pxDriver.finalizeObject();
@@ -336,7 +336,7 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
     pxDriver.makeKernelCall(ccck, {BasisBits}, {CCResults});
 
     pxDriver.generatePipelineIR();
-
+    pxDriver.deallocateBuffers();
     iBuilder->CreateRetVoid();
 
     pxDriver.finalizeObject();
@@ -397,7 +397,7 @@ void multiEditdPipeline(ParabixDriver & pxDriver) {
     pxDriver.makeKernelCall(editdScanK, {MergedResults}, {});
 
     pxDriver.generatePipelineIR();
-
+    pxDriver.deallocateBuffers();
     idb->CreateRetVoid();
 
     pxDriver.finalizeObject();
@@ -531,7 +531,7 @@ void editdGPUCodeGen(unsigned patternLen){
     pxDriver.makeKernelCall(editdk, {CCStream}, {ResultStream});
 
     pxDriver.generatePipelineIR();
-
+    pxDriver.deallocateBuffers();
     iBuilder->CreateRetVoid();
 
     pxDriver.finalizeObject();
@@ -631,6 +631,7 @@ editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
     pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
         
     pxDriver.generatePipelineIR();
+    pxDriver.deallocateBuffers();
     iBuilder->CreateRetVoid();
 
     pxDriver.LinkFunction(*editdScanK, "wrapped_report_pos", &wrapped_report_pos);

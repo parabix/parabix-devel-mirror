@@ -188,7 +188,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     Value * const charCount = iBuilder->getAccumulator("charCount");
 
     iBuilder->CreateCall(recordCounts, {lineCount, wordCount, charCount, fileSize, fileIdx});
-    
+    pxDriver.deallocateBuffers();
     iBuilder->CreateRetVoid();
 
     pxDriver.finalizeObject();

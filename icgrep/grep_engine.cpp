@@ -446,6 +446,7 @@ void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const GrepModeType
     Value * strideBlocks = ConstantInt::get(int32Ty, idb->getStride() / idb->getBitBlockWidth());
     Value * outputThreadPtr = idb->CreateGEP(outputPtr, idb->CreateAdd(idb->CreateMul(bid, strideBlocks), tid));
     idb->CreateStore(matchedLineCount, outputThreadPtr);
+    mGrepDriver->deallocateBuffers();
     idb->CreateRetVoid();
 
     mGrepDriver->finalizeObject();
@@ -598,6 +599,7 @@ re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t buffe
     pxDriver.makeKernelCall(scanMatchK, {MatchedLines, LineBreakStream, ByteStream}, {});
     pxDriver.LinkFunction(*scanMatchK, "matcher", &insert_codepoints);
     pxDriver.generatePipelineIR();
+    pxDriver.deallocateBuffers();
     idb->CreateRetVoid();
     pxDriver.finalizeObject();
     
@@ -679,6 +681,7 @@ const std::vector<std::string> & grepPropertyValues(const std::string& propertyN
     pxDriver.makeKernelCall(scanMatchK, {MatchedLines, LineBreakStream, ByteStream}, {});
     pxDriver.LinkFunction(*scanMatchK, "matcher", &insert_property_values);
     pxDriver.generatePipelineIR();
+    pxDriver.deallocateBuffers();
     idb->CreateRetVoid();
     pxDriver.finalizeObject();
 

@@ -344,6 +344,8 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     
     pxDriver.generatePipelineIR();
     
+    pxDriver.deallocateBuffers();
+
     iBuilder->CreateRetVoid();
     
     pxDriver.finalizeObject();
@@ -417,6 +419,8 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     
     pxDriver.generatePipelineIR();
     
+    pxDriver.deallocateBuffers();
+
     iBuilder->CreateRetVoid();
 
     pxDriver.finalizeObject();

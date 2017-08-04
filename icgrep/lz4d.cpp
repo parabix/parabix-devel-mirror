@@ -104,6 +104,8 @@ void generatePipeline(ParabixDriver & pxDriver) {
  
     pxDriver.generatePipelineIR();
 
+    pxDriver.deallocateBuffers();
+
     iBuilder->CreateRetVoid();
  
     pxDriver.finalizeObject();

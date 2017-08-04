@@ -45,14 +45,14 @@ Function * makeThreadFunction(const std::unique_ptr<kernel::KernelBuilder> & b, 
  ** ------------------------------------------------------------------------------------------------------------- */
 void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<Kernel *> & kernels) {
 
-    assert (codegen::BufferSegments >= codegen::ThreadNum);
-
     const unsigned n = kernels.size();
     Module * const m = iBuilder->getModule();
     IntegerType * const sizeTy = iBuilder->getSizeTy();
     PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
     Constant * nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
     std::vector<Type *> structTypes;
+
+    codegen::BufferSegments = std::max(codegen::BufferSegments, codegen::ThreadNum);
 
     Value * instance[n];
     for (unsigned i = 0; i < n; ++i) {

@@ -29,10 +29,22 @@ StructType * resolveExpandableStreamSetType(const std::unique_ptr<kernel::Kernel
 void StreamSetBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     if (LLVM_LIKELY(mStreamSetBufferPtr == nullptr)) {
         Type * const ty = getType();
-        mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(ty, iBuilder->getSize(mBufferBlocks));
+        if (mAddressSpace == 0) {
+            Constant * size = ConstantExpr::getSizeOf(ty);
+            size = ConstantExpr::getMul(size, ConstantInt::get(size->getType(), mBufferBlocks));
+            mStreamSetBufferPtr = iBuilder->CreatePointerCast(iBuilder->CreateCacheAlignedMalloc(size), ty->getPointerTo());
+        } else {
+            mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(ty, iBuilder->getSize(mBufferBlocks));
+        }
         iBuilder->CreateAlignedStore(Constant::getNullValue(ty), mStreamSetBufferPtr, iBuilder->getCacheAlignment());
     } else {
         report_fatal_error("StreamSetBuffer::allocateBuffer() was called twice on the same stream set");
+    }
+}
+
+void StreamSetBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) const {
+    if (mAddressSpace == 0) {
+        iBuilder->CreateFree(mStreamSetBufferPtr);
     }
 }
 
@@ -155,10 +167,6 @@ Value * StreamSetBuffer::getBaseAddress(IDISA::IDISA_Builder * const iBuilder, V
     return self;
 }
 
-void StreamSetBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & /* kb */) const {
-    /* do nothing: memory is stack allocated */
-}
-
 void StreamSetBuffer::createBlockCopy(IDISA::IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * blocksToCopy) const {
     Type * i8ptr = iBuilder->getInt8PtrTy();
     unsigned alignment = iBuilder->getBitBlockWidth() / 8;
@@ -256,17 +264,34 @@ Value * SourceBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const i
     return iBuilder->CreateSub(iBuilder->CreateUDiv(getCapacity(iBuilder, self), iBuilder->getSize(iBuilder->getBitBlockWidth())), fromBlock);
 }
 
+void SourceBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
+    if (LLVM_LIKELY(mStreamSetBufferPtr == nullptr)) {
+        Type * const ty = getType();
+        mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(ty, iBuilder->getSize(mBufferBlocks));
+        iBuilder->CreateAlignedStore(Constant::getNullValue(ty), mStreamSetBufferPtr, iBuilder->getCacheAlignment());
+    } else {
+        report_fatal_error("StreamSetBuffer::allocateBuffer() was called twice on the same stream set");
+    }
+}
+
+void SourceBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) const {
+
+}
 
 // External File Buffer
 void ExternalBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> &) {
     report_fatal_error("External buffers cannot be allocated.");
 }
 
+void ExternalBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> &) const {
+
+}
+
 Value * ExternalBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * blockIndex) const {
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), blockIndex);
 }
 
-Value * ExternalBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value *) const {
+Value * ExternalBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const, Value *, Value *) const {
     report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
 }
 
@@ -291,7 +316,10 @@ Value * CircularBuffer::getRawItemPointer(IDISA::IDISA_Builder * const iBuilder,
 
 // CircularCopybackBuffer Buffer
 void CircularCopybackBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
-    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks + mOverflowBlocks));
+    Type * const ty = getType();
+    Constant * size = ConstantExpr::getSizeOf(ty);
+    size = ConstantExpr::getMul(size, ConstantInt::get(size->getType(), mBufferBlocks + mOverflowBlocks));
+    mStreamSetBufferPtr = iBuilder->CreatePointerCast(iBuilder->CreateCacheAlignedMalloc(size), ty->getPointerTo());
 }
 
 void CircularCopybackBuffer::createCopyBack(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * overFlowItems) const {
@@ -310,7 +338,10 @@ Value * CircularCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder *
 // SwizzledCopybackBuffer Buffer
 
 void SwizzledCopybackBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
-    mStreamSetBufferPtr = iBuilder->CreateCacheAlignedAlloca(getType(), iBuilder->getSize(mBufferBlocks + mOverflowBlocks));
+    Type * const ty = getType();
+    Constant * size = ConstantExpr::getSizeOf(ty);
+    size = ConstantExpr::getMul(size, ConstantInt::get(size->getType(), mBufferBlocks + mOverflowBlocks));
+    mStreamSetBufferPtr = iBuilder->CreatePointerCast(iBuilder->CreateCacheAlignedMalloc(size), ty->getPointerTo());
 }
 
 void SwizzledCopybackBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, Value * targetBlockPtr, Value * sourceBlockPtr, Value * itemsToCopy) const {
@@ -606,19 +637,20 @@ Value * DynamicBuffer::getRawItemPointer(IDISA::IDISA_Builder * const b, Value *
     return b->CreateGEP(blockPtr, blockPos);
 }
 
+
 Value * DynamicBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * handle, Value * fromPosition) const {
     Constant * blockSize = b->getSize(b->getBitBlockWidth());
     if (isa<ArrayType>(mType) && dyn_cast<ArrayType>(mType)->getNumElements() > 1) {
         return b->CreateSub(blockSize, b->CreateURem(fromPosition, blockSize));
     } else {
-        Value * const bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::WorkingBlocks))}));
+        Value * const bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::WorkingBlocks))}));
         Value * bufSize = b->CreateMul(bufBlocks, blockSize);
         return b->CreateSub(bufSize, b->CreateURem(fromPosition, bufSize, "linearItems"));
     }
 }
 
 Value * DynamicBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const b, Value * handle, Value * fromBlock) const {
-    Value * const bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::WorkingBlocks))}));
+    Value * const bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::WorkingBlocks))}));
     return b->CreateSub(bufBlocks, b->CreateURem(fromBlock, bufBlocks), "linearBlocks");
 }
 
@@ -631,20 +663,20 @@ void DynamicBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> 
     const auto fieldWidth = mBaseType->getArrayElementType()->getScalarSizeInBits();
     Value * bufSize = b->getSize((mBufferBlocks + mOverflowBlocks) * b->getBitBlockWidth() * numStreams * fieldWidth/8);
     bufSize = b->CreateRoundUp(bufSize, b->getSize(b->getCacheAlignment()));
-    Value * bufBasePtrField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))});
+    Value * bufBasePtrField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::BaseAddress))});
     Value * bufPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(bufSize), bufBasePtrField->getType()->getPointerElementType());
     b->CreateStore(bufPtr, bufBasePtrField);
-    b->CreateStore(bufSize, b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::AllocatedCapacity))}));
-    b->CreateStore(b->getSize(mBufferBlocks), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::WorkingBlocks))}));
-    b->CreateStore(b->getSize(-1), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::Length))}));
-    b->CreateStore(b->getSize(0), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::ProducedPosition))}));
-    b->CreateStore(b->getSize(0), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::ConsumedPosition))}));
+    b->CreateStore(bufSize, b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::AllocatedCapacity))}));
+    b->CreateStore(b->getSize(mBufferBlocks), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::WorkingBlocks))}));
+    b->CreateStore(b->getSize(-1), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::Length))}));
+    b->CreateStore(b->getSize(0), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::ProducedPosition))}));
+    b->CreateStore(b->getSize(0), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::ConsumedPosition))}));
     mStreamSetBufferPtr = handle;
 }
 
 void DynamicBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) const {
     /* Free the dynamically allocated buffer, but not the stack-allocated buffer struct. */
-    b->CreateFree(b->CreateLoad(b->CreateGEP(mStreamSetBufferPtr, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))})));
+    b->CreateFree(b->CreateLoad(b->CreateGEP(mStreamSetBufferPtr, {b->getInt32(0), b->getInt32(int(Field::BaseAddress))})));
 }
 
 

@@ -161,7 +161,11 @@ public:
     
     llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const override;
 
-    virtual llvm::Type * getStreamSetBlockType() const override;
+    llvm::Type * getStreamSetBlockType() const override;
+
+    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) override;
+
+    void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 
 protected:
     
@@ -181,10 +185,11 @@ public:
 
     ExternalBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, llvm::Value * addr, unsigned AddressSpace = 0);
 
-    // Can't allocate - raise an error. */
+    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const override;
+
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
-    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const override;
+    void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 
 protected:
     llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const override;
@@ -220,8 +225,6 @@ public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::CircularCopybackBuffer;}
     
     CircularCopybackBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace = 0);
-
-    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     
     // Generate copyback code for the given number of overflowItems.
     void createCopyBack(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * overflowItems) const;
@@ -229,7 +232,9 @@ public:
     llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const override;
     
     llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const override;
-    
+
+    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+
 private:
     size_t mOverflowBlocks;
 
@@ -240,9 +245,7 @@ public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::SwizzledCopybackBuffer;}
     
     SwizzledCopybackBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned fieldwidth = 64, unsigned AddressSpace = 0);
-    
-    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-    
+       
     void createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy) const override;
 
     // Generate copyback code for the given number of overflowItems.
@@ -252,6 +255,8 @@ public:
     
     llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock) const override;
     
+    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+
 protected:
     llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const override;
 private:
@@ -275,9 +280,9 @@ public:
 
     llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition) const override;
 
-    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-
     llvm::Value * getStreamSetCount(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
+
+    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
     void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 

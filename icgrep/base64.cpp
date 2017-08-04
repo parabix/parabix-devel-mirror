@@ -84,7 +84,7 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
     pxDriver.makeKernelCall(outK, {Base64out}, {});
     
     pxDriver.generatePipelineIR();
-
+    pxDriver.deallocateBuffers();
     iBuilder->CreateRetVoid();
 
     pxDriver.finalizeObject();

@@ -77,9 +77,7 @@ public:
         return instr;
     }
 
-    llvm::Value * CreateCacheAlignedMalloc(llvm::Value * size) {
-        return CreateAlignedMalloc(size, getCacheAlignment());
-    }
+    llvm::Value * CreateCacheAlignedMalloc(llvm::Value * size);
 
     // stdio.h functions
     //
