@@ -1036,7 +1036,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             Value * blockBasePos = (mItemsPerStride[i] % bitBlockWidth == 0) ? strideBasePos : kb->CreateAnd(strideBasePos, blockBaseMask);
 
             // The number of items to copy is determined by the processing rate requirements.
-            if (i > 1) {
+            if (i >= 1) {
                 auto & rate = mStreamSetInputs[i].rate;
                 std::string refSet = mStreamSetInputs[i].rate.referenceStreamSet();
                 Port port; unsigned ssIdx;
