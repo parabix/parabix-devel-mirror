@@ -79,14 +79,12 @@ void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 
     // The main loop processes 3 packs of data at a time.
     // The initial pack offsets may be nonzero.
-    
-    Value * sourcePackPtr = iBuilder->CreateBitCast(sourceStream, iBuilder->getBitBlockType()->getPointerTo());
+    sourceStream = iBuilder->CreatePointerCast(sourceStream, iBuilder->getInt8PtrTy());
+    expandedStream = iBuilder->CreatePointerCast(expandedStream, iBuilder->getInt8PtrTy());
     Value * offset = iBuilder->CreateURem(iBuilder->getProcessedItemCount("sourceStream"), iBuilder->getSize(iBuilder->getBitBlockWidth()));
-    sourcePackPtr = iBuilder->CreateGEP(sourcePackPtr, iBuilder->CreateUDiv(offset, iBuilder->getSize(PACK_SIZE)));
-    Value * outputPackPtr = iBuilder->CreateBitCast(expandedStream, iBuilder->getBitBlockType()->getPointerTo());
+    Value * sourcePackPtr = iBuilder->CreatePointerCast(iBuilder->CreateGEP(sourceStream, offset), iBuilder->getBitBlockType()->getPointerTo());
     offset = iBuilder->CreateURem(iBuilder->getProducedItemCount("expand34Stream"), iBuilder->getSize(iBuilder->getBitBlockWidth()));
-    outputPackPtr = iBuilder->CreateGEP(outputPackPtr, iBuilder->CreateUDiv(offset, iBuilder->getSize(PACK_SIZE)));
-
+    Value * outputPackPtr = iBuilder->CreatePointerCast(iBuilder->CreateGEP(expandedStream, offset), iBuilder->getBitBlockType()->getPointerTo());
     iBuilder->CreateCondBr(iBuilder->CreateICmpSGT(itemsToDo, iBuilder->getSize(0)), expand_3_4_loop, expand3_4_exit);
     
     iBuilder->SetInsertPoint(expand_3_4_loop);

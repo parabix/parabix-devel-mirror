@@ -337,10 +337,8 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
       that is classified as a variable rate stream set
     * pointers to linear contiguous buffer areas for each of the input stream sets, and
     * pointers to linear contiguous output buffer areas for each of the output stream sets.
-    * in each pointers are to the beginning of the block corresponding to the 
-      processedItemCount or producedItemCount of the given stream set.
- 
-    Notes: 
+
+    Notes:
     * if the kernel has a Lookahead dependency declared on any input stream set, then
       there will be two buffer pointers for that stream set, one for accessing stream set
       items without lookahead and one for accessing the items with lookahead.   
@@ -355,9 +353,13 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
     * the input buffer of the principal stream set and all input buffers of stream sets
       with derived processing rates will be safe to access and have data available in
       accord with their processing rates based on the given number of itemsToDo
-      of the principal input stream set; no further bounds checking is needed.
+      of the principal input stream set; no further bounds checking is needed.  
+    * input buffers of stream sets with MaxRatio attributes will be safe to access,
+      but will only have valid data as specified by the available items parameter for
+      that stream set.
     * the kernel programmer is responsible for safe access and bounds checking for any
-      input stream set classified as variable rate.
+      input stream set classified as Unknown rate.   No temporary buffers are used
+      for such stream sets.
     * all output buffers will be safe to access and have space available
       for the given maximum output generation rates based on the given number
       of itemsToDo of the principal input stream set; no further bounds checking
@@ -380,8 +382,8 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
 
 #.  Upon completion of multi-block processing, the Multi-Block Kernel Builder will arrange that
     processed and produced item counts are updated for all stream sets that have exact
-    processing rate attributes.   Programmers are responsible for updating the producedItemCount
-    of any stream set declared with a variable attribute (MaxRatio).
+    processing rate attributes.   Programmers are responsible for updating the counts
+    of any stream set declared with a variable attribute (MaxRatio or Unknown).
 
 #.  An important caveat is that buffer areas may change arbitrarily between
     calls to the doMultiBlockMethod.   In no case should a kernel store a

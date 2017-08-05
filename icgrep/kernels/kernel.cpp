@@ -229,7 +229,7 @@ void Kernel::processingRateAnalysis() {
         }
         else {
             mIsDerived[i] = false;
-            mItemsPerStride[i] = mStride;
+            mItemsPerStride[i] = 0;  // For unknown input rate, no items will be copied to temp buffers.
         }
     }
     
@@ -260,7 +260,7 @@ void Kernel::processingRateAnalysis() {
         }
         else {
             mIsDerived[i] = false;
-            mItemsPerStride[i] = mStride;
+            mItemsPerStride[i] = 0;  // For unknown output rate, no items will be copied to temp buffers.
         }
     }
 }
@@ -1028,7 +1028,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     for (unsigned i = 0; i < mStreamSetInputBuffers.size(); i++) {
         Type * bufPtrType = mStreamSetInputBuffers[i]->getPointerType();
-        if ((i == 0) || mIsDerived[i]) {
+        if (mItemsPerStride[i] != 0) {
             Value * tempBufPtr = kb->CreateGEP(tempParameterArea, {kb->getInt32(0), kb->getInt32(i)});
             tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
             ConstantInt * strideItems = kb->getSize(mItemsPerStride[i]);
@@ -1071,7 +1071,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             tempArgs.push_back(tempBufPtr);
         }
         else {
-            Value * bufPtr = kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), processedItemCount[i]);
+            Value * bufPtr = kb->getInputStreamBlockPtr(mStreamSetInputs[i].name, kb->getInt32(0));
             bufPtr = kb->CreatePointerCast(bufPtr, mStreamSetInputBuffers[i]->getPointerType());
             tempArgs.push_back(bufPtr);            
         }
