@@ -26,7 +26,6 @@ void editdCPUKernel::bitblock_advance_ci_co(const std::unique_ptr<kernel::Kernel
 }
 
 void editdCPUKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & idb) {
-    auto savePoint = idb->saveIP();
 
     Type * const int32ty = idb->getInt32Ty();
     Type * const int8ty = idb->getInt8Ty();
@@ -40,8 +39,7 @@ void editdCPUKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelB
     std::vector<std::vector<Value *>> adv(mPatternLen, std::vector<Value *>(mEditDistance + 1));
     std::vector<std::vector<int>> calculated(mPatternLen, std::vector<int>(mEditDistance + 1, 0));
     Value * pattPos = idb->getInt32(0);
-    Value * pattPtr = idb->CreateGEP(pattStartPtr, pattPos);
-    Value * pattCh = idb->CreateLoad(pattPtr);
+    Value * pattCh = idb->CreateLoad(idb->CreateGEP(pattStartPtr, pattPos));
     Value * pattIdx = idb->CreateAnd(idb->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
     Value * pattStream = idb->loadInputStreamBlock("CCStream", idb->CreateZExt(pattIdx, int32ty));
     pattPos = idb->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
@@ -52,8 +50,7 @@ void editdCPUKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelB
     }
 
     for(unsigned i = 1; i < mPatternLen; i++){
-        pattPtr = idb->CreateGEP(pattStartPtr, pattPos);
-        pattCh = idb->CreateLoad(pattPtr);
+        pattCh = idb->CreateLoad(idb->CreateGEP(pattStartPtr, pattPos));
         pattIdx = idb->CreateAnd(idb->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
         Value * pattStream = idb->loadInputStreamBlock("CCStream", idb->CreateZExt(pattIdx, int32ty));
 
@@ -76,9 +73,6 @@ void editdCPUKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelB
     for(unsigned j = 1; j<= mEditDistance; j++){
         idb->storeOutputStreamBlock("ResultStream", idb->getInt32(j), idb->CreateAnd(e[mPatternLen-1][j], idb->CreateNot(e[mPatternLen-1][j-1])));
     }
-       
-    idb->CreateRetVoid();
-    idb->restoreIP(savePoint);
 }
 
 void editdCPUKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & idb, Value * remainingBytes) {
