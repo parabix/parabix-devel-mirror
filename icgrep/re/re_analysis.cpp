@@ -193,5 +193,71 @@ int minMatchLength(RE * re) {
     return 0; // otherwise
 }
 
+//If a regular expression contains unit and not byteLength bounded repetition type, we select a different pipeline to utilize the log2 technique.
+bool unitBoundedRep(const RE * re) {
+    if (const Alt * alt = dyn_cast<Alt>(re)) {
+        for (const RE * re : *alt) {
+            if (unitBoundedRep(re)) {
+                return true;
+            }
+        }
+        return false;
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+	for (const RE * re : *seq) {
+	    if (unitBoundedRep(re)) {
+		return true;
+	    }
+	}
+        return false;
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
+	if (rep->getLB() == 0 && rep->getUB() == Rep::UNBOUNDED_REP) {
+	    return false;
+	} else {
+	    return (!isByteLength(rep->getRE()) && isUnicodeUnitLength(rep->getRE()));
+	}
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
+        return unitBoundedRep(diff->getLH()) || unitBoundedRep(diff->getRH());
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
+        return unitBoundedRep(e->getLH()) || unitBoundedRep(e->getRH());
+    } else if (const Name * n = dyn_cast<Name>(re)) {
+	if (n->getType() == Name::Type::Capture || n->getType() == Name::Type::Reference) {
+            return unitBoundedRep(n->getDefinition());
+        }
+        return false;
+    }
+    return false; // otherwise
+  
+}
+
+//Cases that not include bounded repetition, assertion, start and end type can suit for local language compile pipeline. 
+bool isTypeForLocal(const RE * re) {
+    if (const Alt * alt = dyn_cast<Alt>(re)) {
+        for (const RE * re : *alt) {
+            if (!isTypeForLocal(re)) {
+                return false;
+            }
+        }
+        return true;
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+    for (const RE * re : *seq) {
+        if (!isTypeForLocal(re)) {
+            return false;
+        }
+    }
+        return true;
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
+        if (rep->getLB() != 0 || rep->getUB() != Rep::UNBOUNDED_REP) {
+            return false;
+        } 
+        return true;
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
+        return isTypeForLocal(diff->getLH()) && isTypeForLocal(diff->getRH());
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
+        return isTypeForLocal(e->getLH()) && isTypeForLocal(e->getRH());
+    } else if (isa<Start>(re) || isa<End>(re) || isa<Assertion>(re)) {
+        return false;
+    }
+    return true; // otherwise
+}
 
 }

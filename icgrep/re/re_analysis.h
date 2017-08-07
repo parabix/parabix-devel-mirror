@@ -14,6 +14,10 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re);
 
 int minMatchLength(RE * re);
 
+bool unitBoundedRep(const RE * re);
+
+bool isTypeForLocal(const RE * re);
+
 }
 
 #endif // RE_ANALYSIS_H
