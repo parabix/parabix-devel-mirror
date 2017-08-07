@@ -29,6 +29,7 @@
 #include <fcntl.h>
 #include <mutex>
 #include <boost/uuid/sha1.hpp>
+#include <editd/editd_cpu_kernel.h>
 
 #include <toolchain/NVPTXDriver.h>
 #include <editd/editd_gpu_kernel.h>
@@ -49,11 +50,13 @@ static cl::opt<int> editDistance("edit-dist", cl::desc("Edit Distance Value"), c
 static cl::opt<int> optPosition("opt-pos", cl::desc("Optimize position"), cl::init(0));
 static cl::opt<int> stepSize("step-size", cl::desc("Step Size"), cl::init(3));
 static cl::opt<int> prefixLen("prefix", cl::desc("Prefix length"), cl::init(3));
+static cl::opt<int> groupSize("groupPatterns", cl::desc("Number of pattern segments per group."), cl::init(1));
 static cl::opt<bool> ShowPositions("display", cl::desc("Display the match positions."), cl::init(false));
 
 static cl::opt<int> Threads("threads", cl::desc("Total number of threads."), cl::init(1));
 
 static cl::opt<bool> MultiEditdKernels("enable-multieditd-kernels", cl::desc("Construct multiple editd kernels in one pipeline."));
+static cl::opt<bool> EditdIndexPatternKernels("enable-index-kernels", cl::desc("Use pattern index method."));
 
 using namespace kernel;
 using namespace pablo;
@@ -153,7 +156,7 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
             }
             pattFile.close();
         }
-        codegen::GroupNum = pattVector.size();
+        codegen::GroupNum = pattVector.size()/groupSize;
     }
 
     // if there are no regexes specified through -e or -f, the first positional argument
@@ -403,11 +406,65 @@ void multiEditdPipeline(ParabixDriver & pxDriver) {
     pxDriver.finalizeObject();
 }
 
+
+void editdIndexPatternPipeline(ParabixDriver & pxDriver, unsigned patternLen) {
+
+    auto & idb = pxDriver.getBuilder();
+    Module * const m = idb->getModule();
+    Type * const sizeTy = idb->getSizeTy();
+    Type * const voidTy = idb->getVoidTy();
+    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(idb->getBitBlockType(), 8), 1), 0);
+    Type * const patternPtrTy = PointerType::get(idb->getInt8Ty(), 0);
+
+    idb->LinkFunction("wrapped_report_pos", &wrapped_report_pos);
+
+    const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
+
+    Function * const main = cast<Function>(m->getOrInsertFunction("Main", voidTy, inputType, sizeTy, patternPtrTy, nullptr));
+    main->setCallingConv(CallingConv::C);
+    auto args = main->arg_begin();
+    Value * const inputStream = &*(args++);
+    inputStream->setName("input");
+    Value * const fileSize = &*(args++);
+    fileSize->setName("fileSize");
+    Value * const pattStream = &*(args++);
+    pattStream->setName("pattStream");
+    idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
+
+    auto ChStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(4)));
+    auto mmapK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(idb, inputType, segmentSize));
+    mmapK->setInitialArguments({inputStream, fileSize});
+    pxDriver.makeKernelCall(mmapK, {}, {ChStream});
+
+    auto MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments));
+    auto editdk = pxDriver.addKernelInstance(make_unique<kernel::editdCPUKernel>(idb, editDistance, patternLen, groupSize));
+
+    const unsigned numOfCarries = patternLen * (editDistance + 1) * 4 * groupSize;
+    Type * strideCarryTy = ArrayType::get(idb->getBitBlockType(), numOfCarries);
+    Value * strideCarry = idb->CreateAlloca(strideCarryTy);
+    idb->CreateStore(Constant::getNullValue(strideCarryTy), strideCarry);
+
+    editdk->setInitialArguments({pattStream, strideCarry});
+    pxDriver.makeKernelCall(editdk, {ChStream}, {MatchResults});
+
+    auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(idb, editDistance));
+    pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
+
+    pxDriver.generatePipelineIR();
+
+    idb->CreateRetVoid();
+
+    pxDriver.finalizeObject();
+}
+
 typedef void (*preprocessFunctionType)(const int fd, char * output_data);
 
 typedef void (*editdFunctionType)(char * byte_data, size_t filesize);
 
 typedef void (*multiEditdFunctionType)(const int fd);
+
+typedef void (*editdIndexFunctionType)(char * byte_data, size_t filesize, const char * pattern);
 
 static char * chStream;
 static size_t size;
@@ -468,8 +525,6 @@ void * DoEditd(void *)
     pthread_exit(NULL);
 }
 
-#define GROUPTHREADS 64
-
 void editdGPUCodeGen(unsigned patternLen){
     NVPTXDriver pxDriver("editd");
     auto & iBuilder = pxDriver.getBuilder();
@@ -510,7 +565,7 @@ void editdGPUCodeGen(unsigned patternLen){
 
     Value * inputThreadPtr = iBuilder->CreateGEP(inputStream, tid);
     Value * strides = iBuilder->CreateLoad(stridesPtr);
-    Value * outputBlocks = iBuilder->CreateMul(strides, ConstantInt::get(int32ty, GROUPTHREADS));
+    Value * outputBlocks = iBuilder->CreateMul(strides, ConstantInt::get(int32ty, iBuilder->getStride() / iBuilder->getBitBlockWidth()));
     Value * resultStreamPtr = iBuilder->CreateGEP(resultStream, iBuilder->CreateAdd(iBuilder->CreateMul(bid, outputBlocks), tid));
     Value * inputSize = iBuilder->CreateLoad(inputSizePtr);
 
@@ -520,9 +575,9 @@ void editdGPUCodeGen(unsigned patternLen){
     pxDriver.makeKernelCall(sourceK, {}, {CCStream});
 
     ExternalBuffer * ResultStream = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1), resultStreamPtr, 1));   
-    kernel::Kernel * editdk = pxDriver.addKernelInstance(make_unique<kernel::editdGPUKernel>(iBuilder, editDistance, patternLen));
+    kernel::Kernel * editdk = pxDriver.addKernelInstance(make_unique<kernel::editdGPUKernel>(iBuilder, editDistance, patternLen, groupSize));
       
-    const unsigned numOfCarries = patternLen * (editDistance + 1) * 4;
+    const unsigned numOfCarries = patternLen * (editDistance + 1) * 4 * groupSize;
     Type * strideCarryTy = ArrayType::get(mBitBlockType, numOfCarries);
     Value * strideCarry = iBuilder->CreateAlloca(strideCarryTy);
     iBuilder->CreateStore(Constant::getNullValue(strideCarryTy), strideCarry);
@@ -606,6 +661,7 @@ editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
     Module * M = iBuilder->getModule();
 
     const unsigned segmentSize = codegen::SegmentSize;
+    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
 
     Type * mBitBlockType = iBuilder->getBitBlockType();
     Type * const size_ty = iBuilder->getSizeTy();
@@ -621,9 +677,8 @@ editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
 
-
     StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1)));
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, inputType, segmentSize));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, inputType, segmentSize * bufferSegments));
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {MatchResults});
 
@@ -666,7 +721,8 @@ int main(int argc, char *argv[]) {
     }
 
 #ifdef CUDA_ENABLED
-    codegen::BlockSize = 64;
+    if (codegen::NVPTX)
+        codegen::BlockSize = 64;
 #endif
 
     ParabixDriver pxDriver("preprocess");
@@ -684,7 +740,7 @@ int main(int argc, char *argv[]) {
         }
         std::string patterns((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
 
-        editdGPUCodeGen(patterns.length()/codegen::GroupNum - 1);
+        editdGPUCodeGen(pattVector[0].length());
         mergeGPUCodeGen();
         ulong * rslt = RunPTX(PTXFilename, chStream, size, patterns.c_str(), patterns.length(), editDistance);
 
@@ -707,13 +763,28 @@ int main(int argc, char *argv[]) {
         std::cout << "total matches is " << matchList.size() << std::endl;
     }
     else{
-        if (Threads == 1) {     
-            for(unsigned i=0; i<pattGroups.size(); i++){
-
+        if (Threads == 1) { 
+            if (EditdIndexPatternKernels) {
                 ParabixDriver pxDriver("editd");
-                editdPipeline(pxDriver, pattGroups[i]);
-                auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
-                editd(editd_ptr, chStream, size);
+                editdIndexPatternPipeline(pxDriver, pattVector[0].length());
+                auto editd_ptr = reinterpret_cast<editdIndexFunctionType>(pxDriver.getMain());
+
+                for(unsigned i=0; i<pattVector.size(); i+=groupSize){
+                    std::string pattern = "";
+                    for (int j=0; j<groupSize; j++){
+                        pattern += pattVector[i+j];
+                    }
+                    editd_ptr(chStream, size, pattern.c_str());
+                }
+            }
+            else {
+                for(unsigned i=0; i<pattGroups.size(); i++){
+
+                    ParabixDriver pxDriver("editd");
+                    editdPipeline(pxDriver, pattGroups[i]);
+                    auto editd_ptr = reinterpret_cast<editdFunctionType>(pxDriver.getMain());
+                    editd(editd_ptr, chStream, size);
+                }
             }
         }
         else{
