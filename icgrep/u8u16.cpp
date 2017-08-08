@@ -43,7 +43,7 @@ using namespace llvm;
 
 static cl::OptionCategory u8u16Options("u8u16 Options", "Transcoding control options.");
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(u8u16Options));
-static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"),  cl::Required, cl::cat(u8u16Options));
+static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::cat(u8u16Options));
 static cl::opt<bool> enableAVXdel("enable-AVX-deletion", cl::desc("Enable AVX2 deletion algorithms."), cl::cat(u8u16Options));
 static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
 static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
@@ -402,11 +402,16 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     pxDriver.makeKernelCall(delK, {U8u16Bits, DelMask}, {U16Bits, DeletionCounts});
     
     Kernel * p2sk = pxDriver.addKernelInstance(make_unique<P2S16KernelWithCompressedOutput>(iBuilder));
-    
-    Kernel * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 16));
-    Value * fName = iBuilder->CreatePointerCast(iBuilder->GetString(outputFile.c_str()), iBuilder->getInt8PtrTy());
-    outK->setInitialArguments({fName});
-    
+  
+    Kernel * outK = nullptr;
+    if (outputFile=="") {
+        outK = pxDriver.addKernelInstance(make_unique<StdOutKernel>(iBuilder, 16));
+    }
+    else {
+        outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 16));
+        Value * fName = iBuilder->CreatePointerCast(iBuilder->GetString(outputFile.c_str()), iBuilder->getInt8PtrTy());
+        outK->setInitialArguments({fName});
+    }
     // Different choices for the output buffer depending on chosen option.
     StreamSetBuffer * U16out = nullptr;
     if (mMapBuffering || memAlignBuffering) {
