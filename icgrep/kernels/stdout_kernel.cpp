@@ -83,7 +83,7 @@ void FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iB
     Value * bytePtr = iBuilder->CreatePointerCast(codeUnitBuffer, i8PtrTy);
     
     iBuilder->CreateWriteCall(fileDes, bytePtr, bytesToDo);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpULT(itemsToDo, iBuilder->getSize(iBuilder->getBitBlockWidth())), closeFile, fileOutExit);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpULT(itemsToDo, iBuilder->getSize(getKernelStride())), closeFile, fileOutExit);
     
     iBuilder->SetInsertPoint(closeFile);
     iBuilder->CreateCloseCall(fileDes);
