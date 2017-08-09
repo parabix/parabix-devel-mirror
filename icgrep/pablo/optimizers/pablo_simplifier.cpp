@@ -202,10 +202,8 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
     if (Branch * br = block->getBranch()) {
         assert ("block has a branch but the expression and variable tables were not supplied" && et && vt);
         variables.addNonZero(br->getCondition());
-        if (LLVM_UNLIKELY(isa<While>(br))) {
-            for (Var * var : cast<While>(br)->getEscaped()) {
-                variables.put(var, var);
-            }
+        for (Var * var : br->getEscaped()) {
+            variables.put(var, var);
         }
     }
 
@@ -254,7 +252,7 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
             }
 
             if (LLVM_LIKELY(isa<If>(br))) {
-                if (LLVM_UNLIKELY(variables.isNonZero(br->getCondition()))) {
+                if (LLVM_UNLIKELY(variables.isNonZero(cond))) {
                     stmt = flatten(br);
                     continue;
                 }
