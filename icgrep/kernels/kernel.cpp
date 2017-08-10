@@ -1055,16 +1055,21 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
                 Value * availFromBase = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, blockBasePos);
                 Value * allAvail = kb->CreateICmpULE(neededItems, availFromBase);
                 Value * copyItems1 = kb->CreateSelect(allAvail, neededItems, availFromBase);
-                mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, inputPtr, copyItems1);
+                //mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, inputPtr, copyItems1);
+                Value * copyBlocks1 = kb->CreateUDivCeil(copyItems1, blockSize);
+                mStreamSetInputBuffers[i]->createBlockCopy(kb.get(), tempBufPtr, inputPtr, copyBlocks1);
                 BasicBlock * copyRemaining = kb->CreateBasicBlock("copyRemaining");
                 BasicBlock * copyDone = kb->CreateBasicBlock("copyDone");
                 kb->CreateCondBr(allAvail, copyDone, copyRemaining);
                 kb->SetInsertPoint(copyRemaining);
                 Value * copyItems2 = kb->CreateSub(neededItems, copyItems1);
-                Value * nextBasePos = kb->CreateAdd(blockBasePos, copyItems1);
+                Value * copyBlocks2 = kb->CreateUDivCeil(copyItems2, blockSize);
+                //Value * nextBasePos = kb->CreateAdd(blockBasePos, copyItems1);
+                Value * nextBasePos = kb->CreateAdd(blockBasePos, kb->CreateMul(copyBlocks2, blockSize));
                 Value * nextInputPtr = kb->CreatePointerCast(kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), nextBasePos), bufPtrType);
                 Value * nextBufPtr = kb->CreateGEP(tempBufPtr, kb->CreateUDiv(copyItems1, blockSize));
-                mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), nextBufPtr, nextInputPtr, copyItems2);
+                //mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), nextBufPtr, nextInputPtr, copyItems2);
+                mStreamSetInputBuffers[i]->createBlockCopy(kb.get(), nextBufPtr, nextInputPtr, copyBlocks2);
                 kb->CreateBr(copyDone);
                 kb->SetInsertPoint(copyDone);
             }
@@ -1083,7 +1088,9 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
         producedItemCount[i] = kb->getProducedItemCount(mStreamSetOutputs[i].name);
         outputBasePos[i] = kb->CreateAnd(producedItemCount[i], blockBaseMask);
-        mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, outputBlockPtr[i], kb->CreateSub(producedItemCount[i], outputBasePos[i]));
+        //mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, outputBlockPtr[i], kb->CreateSub(producedItemCount[i], outputBasePos[i]));
+        Value * copyBlocks = kb->CreateUDivCeil(kb->CreateSub(producedItemCount[i], outputBasePos[i]), blockSize);
+        mStreamSetOutputBuffers[i]->createBlockCopy(kb.get(), tempBufPtr, outputBlockPtr[i], copyBlocks);
         tempArgs.push_back(tempBufPtr);
     }
 
@@ -1105,7 +1112,9 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         Value * writableFromBase = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, outputBasePos[i]); // must be a whole number of blocks.
         Value * allWritable = kb->CreateICmpULE(copyItems, writableFromBase);
         Value * copyItems1 = kb->CreateSelect(allWritable, copyItems, writableFromBase);
-        mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), outputBlockPtr[i], tempBufPtr, copyItems1);
+        //mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), outputBlockPtr[i], tempBufPtr, copyItems1);
+        Value * copyBlocks1 = kb->CreateUDivCeil(copyItems1, blockSize);
+        mStreamSetOutputBuffers[i]->createBlockCopy(kb.get(), outputBlockPtr[i], tempBufPtr, copyBlocks1);
         BasicBlock * copyBackRemaining = kb->CreateBasicBlock("copyBackRemaining");
         BasicBlock * copyBackDone = kb->CreateBasicBlock("copyBackDone");
         kb->CreateCondBr(allWritable, copyBackDone, copyBackRemaining);
@@ -1115,7 +1124,9 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         Type * bufPtrType = mStreamSetOutputBuffers[i]->getPointerType();
         Value * nextOutputPtr = kb->CreatePointerCast(kb->getRawOutputPointer(mStreamSetOutputs[i].name, kb->getInt32(0), nextBasePos), bufPtrType);
         tempBufPtr = kb->CreateGEP(tempBufPtr, kb->CreateUDiv(copyItems1, blockSize));
-        mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), nextOutputPtr, tempBufPtr, copyItems2);
+        //mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), nextOutputPtr, tempBufPtr, copyItems2);
+        Value * copyBlocks2 = kb->CreateUDivCeil(copyItems2, blockSize);
+        mStreamSetOutputBuffers[i]->createBlockCopy(kb.get(), nextOutputPtr, tempBufPtr, copyBlocks2);
         kb->CreateBr(copyBackDone);
         kb->SetInsertPoint(copyBackDone);
     }

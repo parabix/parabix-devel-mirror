@@ -1342,7 +1342,8 @@ private:
                     }
                 }
             } else if (requiredOperands(typeId) == n) {
-                bool used[n] = { false };
+                bool used[n];
+                std::fill_n(used, n, false);
                 for (auto e : make_iterator_range(in_edges(u, G))) {
                     const auto i = G[e];
                     if (LLVM_UNLIKELY(i >= n)) {
