@@ -878,19 +878,18 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         Value * b = kb->getInputStreamBlockPtr(mStreamSetInputs[i].name, kb->getInt32(0));
         processedItemCount.push_back(p);
         inputBlockPtr.push_back(b);
-        if (mIsDerived[i]) {
-            auto & rate = mStreamSetInputs[i].rate;
-            Value * maxReferenceItems = nullptr;
-            if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator())) {
-                maxReferenceItems = kb->CreateMul(kb->getLinearlyAccessibleBlocks(mStreamSetInputs[i].name, blkNo), blockSize);
+        auto & rate = mStreamSetInputs[i].rate;
+        if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
+        Value * maxReferenceItems = nullptr;
+        if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator())) {
+            maxReferenceItems = kb->CreateMul(kb->getLinearlyAccessibleBlocks(mStreamSetInputs[i].name, blkNo), blockSize);
 
-            } else {
-                Value * linearlyAvailItems = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, p);
-                maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems);
-            }
-            Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
-            linearlyAvailStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyAvailStrides), maxStrides, linearlyAvailStrides);
+        } else {
+            Value * linearlyAvailItems = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, p);
+            maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems);
         }
+        Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
+        linearlyAvailStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyAvailStrides), maxStrides, linearlyAvailStrides);
     }
     //  Now determine the linearly writeable blocks, based on available blocks reduced
     //  by limitations of output buffer space.
@@ -901,18 +900,17 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         Value * b = kb->getOutputStreamBlockPtr(mStreamSetOutputs[i].name, kb->getInt32(0));
         producedItemCount.push_back(p);
         outputBlockPtr.push_back(b);
-        if (mIsDerived[inputSetCount + i]) {
-            auto & rate = mStreamSetOutputs[i].rate;
-            Value * maxReferenceItems = nullptr;
-            if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator())) {
-                maxReferenceItems = kb->CreateMul(kb->getLinearlyWritableBlocks(mStreamSetOutputs[i].name, blkNo), blockSize);
-            } else {
-                Value * writableItems = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, p);
-                maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), writableItems);
-            }
-            Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
-            linearlyWritableStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyWritableStrides), maxStrides, linearlyWritableStrides);
+        auto & rate = mStreamSetOutputs[i].rate;
+        if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
+        Value * maxReferenceItems = nullptr;
+        if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator())) {
+            maxReferenceItems = kb->CreateMul(kb->getLinearlyWritableBlocks(mStreamSetOutputs[i].name, blkNo), blockSize);
+        } else {
+            Value * writableItems = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, p);
+            maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), writableItems);
         }
+        Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
+        linearlyWritableStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyWritableStrides), maxStrides, linearlyWritableStrides);
     }
     Value * haveStrides = kb->CreateICmpUGT(linearlyWritableStrides, kb->getSize(0));
     kb->CreateCondBr(haveStrides, doMultiBlockCall, tempBlockCheck);
