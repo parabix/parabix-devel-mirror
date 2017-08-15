@@ -654,6 +654,13 @@ Value * DynamicBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const 
     return b->CreateSub(bufBlocks, b->CreateURem(fromBlock, bufBlocks), "linearBlocks");
 }
 
+Value * DynamicBuffer::getBufferedSize(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
+    Value * ptr = iBuilder->CreateGEP(self, {iBuilder->getInt32(0), iBuilder->getInt32(int(Field::WorkingBlocks))});
+    return iBuilder->CreateMul(iBuilder->CreateLoad(ptr), iBuilder->getSize(iBuilder->getBitBlockWidth()));
+}
+
+
+
 void DynamicBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) {
     Value * handle = b->CreateCacheAlignedAlloca(mBufferStructType);
     size_t numStreams = 1;
@@ -664,8 +671,10 @@ void DynamicBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> 
     Value * bufSize = b->getSize((mBufferBlocks + mOverflowBlocks) * b->getBitBlockWidth() * numStreams * fieldWidth/8);
     bufSize = b->CreateRoundUp(bufSize, b->getSize(b->getCacheAlignment()));
     Value * bufBasePtrField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::BaseAddress))});
-    Value * bufPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(bufSize), bufBasePtrField->getType()->getPointerElementType());
+    Type * bufPtrType = bufBasePtrField->getType()->getPointerElementType();
+    Value * bufPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(bufSize), bufPtrType);
     b->CreateStore(bufPtr, bufBasePtrField);
+    b->CreateStore(ConstantPointerNull::getNullValue(bufPtrType), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::PriorBaseAddress))}));
     b->CreateStore(bufSize, b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::AllocatedCapacity))}));
     b->CreateStore(b->getSize(mBufferBlocks), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::WorkingBlocks))}));
     b->CreateStore(b->getSize(-1), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::Length))}));
@@ -675,14 +684,83 @@ void DynamicBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> 
 }
 
 void DynamicBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) const {
+    Value * handle = mStreamSetBufferPtr;
     /* Free the dynamically allocated buffer, but not the stack-allocated buffer struct. */
-    b->CreateFree(b->CreateLoad(b->CreateGEP(mStreamSetBufferPtr, {b->getInt32(0), b->getInt32(int(Field::BaseAddress))})));
+    Value * bufBasePtrField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))});
+    Type * bufPtrType = bufBasePtrField->getType()->getPointerElementType();
+    Value * priorBasePtrField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::PriorBaseAddress))});
+    BasicBlock * freePrior = b->CreateBasicBlock("freePrior");
+    BasicBlock * freeCurrent = b->CreateBasicBlock("freeCurrent");
+    Value * priorBuf = b->CreateLoad(priorBasePtrField);
+    Value * priorBufIsNonNull = b->CreateICmpNE(priorBuf, ConstantPointerNull::get(cast<PointerType>(bufPtrType)));
+    b->CreateCondBr(priorBufIsNonNull, freePrior, freeCurrent);
+    b->SetInsertPoint(freePrior);
+    b->CreateFree(priorBuf);
+    b->CreateBr(freeCurrent);
+    b->SetInsertPoint(freeCurrent);
+    b->CreateFree(b->CreateLoad(bufBasePtrField));
 }
 
+//
+//  Simple capacity doubling.  Use the circular buffer property: duplicating buffer data
+//  ensures that we have correct data.   TODO: consider optimizing based on actual
+//  consumer and producer positions.
+//
+void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * handle) {
+    size_t numStreams = 1;
+    if (isa<ArrayType>(mBaseType)) {
+        numStreams = mBaseType->getArrayNumElements();
+    }
+    const auto fieldWidth = mBaseType->getArrayElementType()->getScalarSizeInBits();
+    Constant * blockBytes = b->getSize(b->getBitBlockWidth() * numStreams * fieldWidth/8);
+    Value * bufBasePtrField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::BaseAddress))});
+    Type * bufPtrType = bufBasePtrField->getType()->getPointerElementType();
+    Value * priorBasePtrField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::PriorBaseAddress))});
+    Value * workingBlocksField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::WorkingBlocks))});
+    Value * capacityField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::AllocatedCapacity))});
+    
+    Value * oldBufPtr = b->CreateLoad(bufBasePtrField);
+    Value * const currentWorkingBlocks = b->CreateLoad(workingBlocksField);
+    Value * workingBytes = b->CreateMul(currentWorkingBlocks, blockBytes);
+    Value * const curAllocated = b->CreateLoad(capacityField);
+    Value * neededCapacity = b->CreateAdd(workingBytes, workingBytes);
+    if (mOverflowBlocks > 0) {
+        Constant * overflowBytes = b->getSize(mOverflowBlocks * b->getBitBlockWidth() * numStreams * fieldWidth/8);
+        neededCapacity = b->CreateAdd(neededCapacity, overflowBytes);
+    }
+    neededCapacity = b->CreateRoundUp(neededCapacity, b->getSize(b->getCacheAlignment()));
+    BasicBlock * doubleEntry = b->GetInsertBlock();
+    BasicBlock * doRealloc = b->CreateBasicBlock("doRealloc");
+    BasicBlock * doCopy2 = b->CreateBasicBlock("doCopy2");
+    b->CreateCondBr(b->CreateICmpULT(curAllocated, neededCapacity), doRealloc, doCopy2);
+    b->SetInsertPoint(doRealloc);
+    // If there is a non-null priorBasePtr, free it.
+    Value * priorBuf = b->CreateLoad(priorBasePtrField);
+    Value * priorBufIsNonNull = b->CreateICmpNE(priorBuf, ConstantPointerNull::get(cast<PointerType>(bufPtrType)));
+    BasicBlock * deallocatePrior = b->CreateBasicBlock("deallocatePrior");
+    BasicBlock * allocateNew = b->CreateBasicBlock("allocateNew");
+    b->CreateCondBr(priorBufIsNonNull, deallocatePrior, allocateNew);
+    b->SetInsertPoint(deallocatePrior);
+    b->CreateFree(priorBuf);
+    b->CreateBr(allocateNew);
+    b->SetInsertPoint(allocateNew);
+    b->CreateStore(oldBufPtr, priorBasePtrField);
+    Value * newBufPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(neededCapacity), bufPtrType);
+    b->CreateStore(newBufPtr, bufBasePtrField);
+    createBlockCopy(b, newBufPtr, oldBufPtr, currentWorkingBlocks);
+    b->CreateStore(neededCapacity, capacityField);
+    b->CreateBr(doCopy2);
+    b->SetInsertPoint(doCopy2);
+    PHINode * bufPtr = b->CreatePHI(oldBufPtr->getType(), 2);
+    bufPtr->addIncoming(oldBufPtr, doubleEntry);
+    bufPtr->addIncoming(newBufPtr, doRealloc);
+    createBlockCopy(b, b->CreateGEP(bufPtr, currentWorkingBlocks), bufPtr, currentWorkingBlocks);
+    b->CreateStore(b->CreateAdd(currentWorkingBlocks, currentWorkingBlocks), workingBlocksField);
+}
 
 DynamicBuffer::DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t initialCapacity, size_t overflow, unsigned swizzle, unsigned addrSpace)
 : StreamSetBuffer(BufferKind::DynamicBuffer, type, resolveStreamSetType(b, type), initialCapacity, addrSpace)
-, mBufferStructType(StructType::get(resolveStreamSetType(b, type)->getPointerTo(addrSpace), 
+, mBufferStructType(StructType::get(resolveStreamSetType(b, type)->getPointerTo(addrSpace), resolveStreamSetType(b, type)->getPointerTo(addrSpace),
                                     b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), nullptr))
 , mSwizzleFactor(swizzle)
 , mOverflowBlocks(overflow)

@@ -318,11 +318,17 @@ public:
     void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 
     llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * streamIndex, llvm::Value * absolutePosition) const override;
+    
+    llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
+    
+    void doubleCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle);
+
 
 protected:
     llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
     
     llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * blockIndex) const override;
+
     
 private:
     /* Static data */
@@ -332,9 +338,12 @@ private:
     
     /* Dynamic data fields stored in the buffer struct */
     
-    enum class Field {BaseAddress, AllocatedCapacity, WorkingBlocks, Length, ProducedPosition, ConsumedPosition, FieldCount};
+    enum class Field {BaseAddress, PriorBaseAddress, AllocatedCapacity, WorkingBlocks, Length, ProducedPosition, ConsumedPosition, FieldCount};
     
     /* BaseAddress - the physical base address of the memory area for stream set data.
+     PriorBaseAddress - the physical base address of the previous memory area for stream set data
+     (the immediately prior memory area is preserved in case any users in other threads
+     are accessing it).
      WorkingBlocks - the physical size of the buffer for use in reading and writing data.
      AllocatedCapacity - physical size available for expansion in place
      Length - actual final length of stream set or -1 for unknown
