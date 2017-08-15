@@ -85,7 +85,7 @@ Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * const b, V
 }
 
 unsigned ProcessingRate::calculateMaxReferenceItems(unsigned outputItems, bool doFinal) const {
-    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio) {
+    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
         if (mRatioNumerator == mRatioDenominator) {
             return outputItems;
         }
@@ -97,11 +97,11 @@ unsigned ProcessingRate::calculateMaxReferenceItems(unsigned outputItems, bool d
     if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
         return doFinal ? outputItems - 1 : outputItems;
     }
-    report_fatal_error("Inverse processing rate calculation attempted for variable or unknown rate.");
+    report_fatal_error("Inverse processing rate calculation attempted for unknown rate.");
 }
 
 Value * ProcessingRate::CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * const b, Value * outputItems, Value * doFinal) const {
-    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio) {
+    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
         if (mRatioNumerator == mRatioDenominator) {
             return outputItems;
         }
@@ -122,7 +122,7 @@ Value * ProcessingRate::CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder 
         }
         return b->CreateSub(outputItems, ConstantInt::get(T, 1));
     }
-    report_fatal_error("Inverse processing rate calculation attempted for variable or unknown rate.");
+    report_fatal_error("Inverse processing rate calculation attempted for unknown rate.");
 }
 
 void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::KernelBuilder> & idb) {

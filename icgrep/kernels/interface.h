@@ -41,6 +41,7 @@ struct ProcessingRate  {
     bool isExact() const {return (mKind == ProcessingRateKind::FixedRatio)||(mKind == ProcessingRateKind::RoundUp)||(mKind == ProcessingRateKind::Add1) ;}
     bool isUnknownRate() const { return mKind == ProcessingRateKind::Unknown; }
     unsigned calculateRatio(unsigned referenceItems, bool doFinal = false) const;
+    // Calculate the max number of reference items that can be processed without exceeding/exhausting outputItems
     unsigned calculateMaxReferenceItems(unsigned outputItems, bool doFinal = false) const;
     llvm::Value * CreateRatioCalculation(IDISA::IDISA_Builder * const b, llvm::Value * referenceItems, llvm::Value * doFinal = nullptr) const;
     llvm::Value * CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * const b, llvm::Value * outputItems, llvm::Value * doFinal = nullptr) const;
