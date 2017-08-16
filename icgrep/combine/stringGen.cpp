@@ -22,7 +22,7 @@
 #include <functional>
 #include <locale>
 #include <codecvt>
-#include <stdlib.h>     /* srand, rand */
+#include <stdlib.h>
 #include <time.h> 
 #include <UCD/resolve_properties.h>
 #include <UCD/unicode_set.h>
@@ -33,7 +33,6 @@ using namespace std;
 using namespace re;
 using namespace llvm;
 
-std::vector<std::string> StringGenerator::references;
 
 const std::vector<std::string> split(const std::string &s, char delim) {
     std::vector<std::string> elems;
@@ -46,15 +45,6 @@ const std::vector<std::string> split(const std::string &s, char delim) {
     return elems;
 }
 
-// void printVec(std::vector<string> v){
-// 	bool notFirst = false;
-// 	for (auto s : v){
-// 		if (notFirst){
-// 			cout << ",";
-// 		}
-// 		cout << s;
-// 	}
-// }
 vector<string> appendRtoL(std::vector<string> LHS, std::vector<string> RHS){
 	std::copy(RHS.begin(), RHS.end(), std::back_inserter(LHS));
 	return LHS;
@@ -152,6 +142,10 @@ std::vector<std::string> StringGenerator::generate(RE * re) {
 		 		retVec = generate(re_name->getDefinition()); 
 		 		break;
 		 	case Name::Type::UnicodeProperty: {
+                if (re_name->getName() == "whitespace"){
+                    retVec.push_back(" ");
+                    break;
+                }
 	 			UCD::UnicodeSet ucs = UCD::resolveUnicodeSet(re_name);
 		 		for (auto i : ucs){
 		 			for (auto cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++){
@@ -172,12 +166,17 @@ std::vector<std::string> StringGenerator::generate(RE * re) {
     		}
 		 	case Name::Type::Reference:
 		 	{
-		 		for (unsigned i = 1; i<10; i++){
-		 			string ref = "\\" + to_string(i);
+                bool found = false;
+		 		for (unsigned i = 0; i < references.size(); i++){
+		 			string ref = "\\" + to_string(i+1);
 		 			if (ref == re_name->getName()){
-		 				retVec.push_back(references[i-1]);
+		 				retVec.push_back(references[i]);
+                        found = true;
 		 			}
 		 		}
+                if (!found){
+                    cerr << "reference not found\n";
+                }
 		 		break;
 		 	}
 		 	default: 
@@ -186,18 +185,23 @@ std::vector<std::string> StringGenerator::generate(RE * re) {
     } else if (Assertion * a = dyn_cast<Assertion>(re)) {
     	//Do Nothing
     } else if (Diff* diff = dyn_cast<Diff>(re)) {
+
         std::vector<string> set = getDiff(generate(diff->getLH()), generate(diff->getRH()));
         retVec = appendRtoL(retVec, set);
+
     } else if (Intersect* x = dyn_cast<Intersect>(re)) {
+
         std::vector<string> set = getIntersect(generate(x->getLH()), generate(x->getRH()));
         retVec = appendRtoL(retVec, set);
+
     } else if (Rep* re_rep = dyn_cast<Rep>(re)) {
+
     	int lb = re_rep->getLB();
     	int ub = (re_rep->getUB() == Rep::UNBOUNDED_REP) ? lb + 100 : re_rep->getUB();
     	string ret = "";
     	
     	int range = (ub - lb) + 1;
-    	int random = (lb == 0 && ub != 0)? rand() % ub : rand() % range + lb;
+    	int random = (lb == 0)? rand() % ub : rand() % range + lb;
     	
     	std::vector<string> set = generate(re_rep->getRE());
         for (auto i =0; i<random; ++i){
@@ -206,27 +210,23 @@ std::vector<std::string> StringGenerator::generate(RE * re) {
         	ret += set[random2];
         }
         retVec.push_back(ret);
+
     } else if (Seq* re_seq = dyn_cast<Seq>(re)) {
-        bool comma = false;
+
         for (RE * re : *re_seq) {
-            if (comma) {
-                // retVec.push_back(",");
-            }
             std::vector<string> set = generate(re);
-            // printVec(set);
+            
             if (!set.empty()){
 	            int random = rand() % set.size();
 	            retVec.push_back(set[random]);
         	}
-            comma = true;
-
         }
     } else if (isa<Start>(re) || isa<End>(re)) {
 		retVec.push_back("");
     } else if (isa<Any>(re)) {
         retVec = getAllCodepoints();
     } else {
-        retVec.push_back("???");
+        cerr << "RE type not recognised\n";
     }
     return retVec;
 }

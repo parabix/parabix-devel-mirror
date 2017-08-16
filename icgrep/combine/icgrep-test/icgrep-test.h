@@ -15,6 +15,7 @@ public:
 	IcgrepTest();	
 
 private:
+	void backup();
 	void resetBash(std::string fileName);
 	void clearDir(std::string dir);
 	void writeToBash(std::string fileName, std::string value);

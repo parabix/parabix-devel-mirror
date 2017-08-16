@@ -5,6 +5,7 @@
 #include <vector>
 #include <fstream>
 #include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include <iostream>
 #include <algorithm>
 
@@ -27,9 +28,7 @@ public:
 		ccList = reGen.parseCC(header, row);
 
 	}
-
 	std::string getCC(){
-
 		int random;
 		std::string cc;
 		if (!ccList.empty()){
@@ -39,33 +38,15 @@ public:
 			usedCC.push_back(cc);
 			return cc;
 		}
-		else {
+		else if (!usedCC.empty()){
 			random = rand() % usedCC.size();
 			cc = usedCC[random];
 			return cc;
 		}
-	}
-	std::string changeCC(std::string cc){
-		std::string newCC;
-		int random;
-		if (!ccList.empty()){
-			random = rand() % ccList.size();
-			newCC = ccList[random];
-			ccList.erase(ccList.begin()+random);
-			usedCC.push_back(newCC);
-		}
-		else {
-			random = rand() % usedCC.size();
-			newCC = usedCC[random];
-		}
-		ccList.push_back(cc);
-		return newCC;
+		else return "n";
 	}
 	std::vector<string> getRemainingCC(){
 		return ccList;
-	}
-	bool isEmpty(){
-		return ccList.empty();
 	}
 };
 
@@ -131,23 +112,28 @@ string RegexGen::getAny(){
 	return ".";
 }
 string RegexGen::getPosix(string value){
-	return "[[:" + value + ":]]";
+	if (syntax == re::RE_Syntax::PCRE){
+		return "[[:" + value + ":]]";
+	}
+	else {
+		return "p";
+	}
 }
 std::string RegexGen::getUnicode(){
-	if (syntax == re::RE_Syntax::ERE) {
-		std::vector<string> ucd;
+	if (syntax == re::RE_Syntax::BRE) {
+		return "u";
+	}
+	else {
+		int random = rand() % 30712;
 		ifstream file;
 		file.open("../icgrep/combine/Unicode.txt");
 		string line;
-		while(getline(file, line)){
-			ucd.push_back(line);
+		for (int i = 0; i <= random ; i++){
+			if (!getline(file, line)) {
+				cerr << "Error in extracting Unicode codepoints!\n";
+			}
 		}
-		file.close();
-		int random = rand() % ucd.size();
-		return "\\u" + ucd[random];
-	}
-	else {
-		return "u";
+		return "\\u" + line;
 	}
 }
 std::string RegexGen::getList(){
@@ -155,8 +141,7 @@ std::string RegexGen::getList(){
 		return "l";
 	}
 	else {
-		const char *l[] = {"[abc]","[XYZ]","[123]","[হ্যালো]"};
-		std::vector<string> lists (l, l + sizeof(l) / sizeof(l[0]));
+		std::vector<string> lists = {"[abc]","[XYZ]","[123]","[হ্যালো]"};
 		int random = rand() % lists.size();
 		return lists[random];
 	}
@@ -190,25 +175,37 @@ std::string RegexGen::getPropertyValue(){
 	int random = rand() % property.size();
 	return property[random];
 }
+std::string RegexGen::getCharacterName(){
+	int random = rand() % 30547;
+	ifstream file;
+	file.open("../icgrep/combine/UnicodeNames.txt");
+	string line;
+	for (int i = 0; i <= random ; i++){
+		if (!getline(file, line)) {
+			cerr << "Error in extracting Unicode property names!\n";
+		}
+	}
+	return line;
+}
 std::string RegexGen::getProperty(){
-	if (syntax == re::RE_Syntax::BRE) {
-		return "p";
+	if (syntax == re::RE_Syntax::PCRE) {
+		return "\\p{" + getPropertyValue() + "}" ;
 	}
 	else {
-		return "\\p{" + getPropertyValue() + "}" ;
+		return "p";
 	}
 }
 std::string RegexGen::getNotProperty(){
-	if (syntax == re::RE_Syntax::BRE) {
-		return "P";
+	if (syntax == re::RE_Syntax::PCRE) {
+		return "\\P{" + getPropertyValue() + "}" ;
 	}
 	else {
-		return "\\P{" + getPropertyValue() + "}" ;
+		return "P";
 	}
 }
 std::string RegexGen::getName(){
-	if (syntax == re::RE_Syntax::ERE) {
-		return "\\N{" + getPropertyValue() + "}" ;
+	if (syntax == re::RE_Syntax::PCRE) {
+		return "\\N{" + getCharacterName() + "}" ;
 	}
 	else {
 		return "N";
@@ -242,6 +239,9 @@ string RegexGen::getRep(string cc, int rep){
 	}
 }
 string RegexGen::getRep(string cc, int lb, int ub){
+	if (lb > ub) {
+		std::swap(lb, ub);
+	}
 	if (syntax == re::RE_Syntax::BRE) {
 		return cc + "\\{" + to_string(lb) + ',' + to_string(ub) + "\\}";
 	}
@@ -276,53 +276,88 @@ string RegexGen::getBackRef(string cc){
 }
 string RegexGen::getAssertionCoating(string cc){
 	if (cc.find("\\p{") == 0
-		|| cc.find("\\P{") == 0
-		|| cc.find("\\N{") == 0){
+		|| cc.find("\\N{") == 0
+		|| cc.find("\\u") == 0){
 		re::RE * re_ast = re::RE_Parser::parse(cc, 0);
 		StringGenerator strGen;
 		std::vector<string> set = strGen.generate(re_ast);
-		int random = rand() % set.size();
-		return set[random];
+		if (!set.empty()){
+			int random = rand() % set.size();
+			return set[random];
+		}
+		else return cc;
 	}
-	else {
-		return cc;
-	}
+	return cc;
 }
 
 string RegexGen::getNegativeAssertionCoating(string cc){
-	re::RE * re_ast = re::RE_Parser::parse(cc, 0);
-	StringGenerator strGen;
-	std::vector<string> set = strGen.generate(re::makeDiff(re::makeAny(),re_ast));
-	int random = rand() % set.size();
-	return set[random];
+	if (cc == "\\s"){
+		return "\\S";
+	}
+	else if (cc == "\\S"){
+		return "\\s";
+	}
+	else if (cc == "\\t"){
+		return "\\S";
+	}
+	else if (cc == "\\w"){
+		return "\\W";
+	}
+	else if (cc == "\\W"){
+		return "\\w";
+	}
+	else if (cc == "\\d"){
+		return "\\D";
+	}
+	else if (cc == "\\D"){
+		return "\\d";
+	}
+	else if (cc.find("\\p") == 0){
+		return "\\P" + cc.substr(2);
+	}
+	else {
+		
+		re::RE * re_ast = re::RE_Parser::parse(cc, 0);
+		StringGenerator strGen;
+		std::vector<string> set = strGen.generate(re::makeDiff(re::makeAny(),re_ast));
+		if (!set.empty()){
+			int random = rand() % set.size();
+			return set[random];
+		}
+		else {
+			cerr << "No compliment for " << cc << "to coat the assertion!\n";
+			return cc;
+		}
+	}
 }
+
 string RegexGen::getLookAhead(string cc){
 	if (syntax == re::RE_Syntax::PCRE) {
 		std::string tail = getAssertionCoating(cc);
 		return "(?=" + cc + ")" + tail;
 	}
-	return "";
+	return "la";
 }
 string RegexGen::getNegativeLookAhead(string cc){
 	if (syntax == re::RE_Syntax::PCRE) {
 		std::string tail = getNegativeAssertionCoating(cc);
 		return "(?!" + cc + ")" + tail;
 	}
-	return "";
+	return "nla";
 }
 string RegexGen::getLookBehind(string cc){
 	if (syntax == re::RE_Syntax::PCRE) {
 		std::string front = getAssertionCoating(cc);
 		return front + "(?<=" + cc + ")";
 	}
-	return "";
+	return "lb";
 }
 string RegexGen::getNegativeLookBehind(string cc){
 	if (syntax == re::RE_Syntax::PCRE) {
 		std::string front = getNegativeAssertionCoating(cc);
 		return front + "(?<!" + cc + ")";
 	}
-	return "";
+	return "nlb";
 }
 
 
@@ -362,7 +397,6 @@ std::vector<string> RegexGen::parseCC(std::vector<string> header, std::vector<st
 	for(auto col : row){
 		if (col != "false"){
 			string cc;
-
 			if (header[colnum] == "wordC") {
 				cc = getWord();
 				ccList.push_back(getWord());
@@ -412,11 +446,10 @@ std::vector<string> RegexGen::parseCC(std::vector<string> header, std::vector<st
 				ccList.push_back(getRange());
 			}
 			else if (header[colnum] == "posix"){
-				// if (col != "off"){
-				// 	c = getPosix(col);
-				// 	if (!c.empty())
-				// 	ccList.push_back(getPosix(col));
-				// }
+				if (col != "off"){
+					cc = getPosix(col);
+					ccList.push_back(getPosix(col));
+				}
 			}
 			else if (header[colnum] == "property") {
 				cc = getProperty();
@@ -448,8 +481,7 @@ std::string RegexGen::parseRE(std::vector<string> header, std::vector<string> ro
 	int colnum = 0;
 	std::string re;
 	for (auto col : row){
-		if (col != "false" && !ccHandler.isEmpty()){
-			
+		if (col != "false"){
 			string cc;
 			if (usesCC(header[colnum])){
 
@@ -497,9 +529,6 @@ std::string RegexGen::parseRE(std::vector<string> header, std::vector<string> ro
 					int r2 = rand() % 200;
 					while ((r1 == 0) && (r2 == 0)){
 						r2 = rand() % 200;
-					}
-					if (r1 > r2) {
-						std::swap(r1, r2);
 					}
 					re = getRep(cc, r1, r2);
 					// std::string nestDepth = row[colnum+1];
@@ -594,7 +623,7 @@ std::string RegexGen::parseRE(std::vector<string> header, std::vector<string> ro
 	}
 	if(!fullRE.empty()){
 
-		if (bref){
+		if (bref && !fullRE.empty()){
 			random = rand() % fullRE.size();
 			fullRE[random] = getBackRef(fullRE[random]);
 			std::copy (assertions.begin(), assertions.end(), std::back_inserter(fullRE));
@@ -618,13 +647,23 @@ std::vector<string> RegexGen::parseFlags(std::vector<string> header, std::vector
 	int colnum = 0;
 	for (auto col : row){
 		if (col != "false"){
-			if (header[colnum] == "-c"
-				|| header[colnum] == "-i"
+			if (//header[colnum] == "-c"
+				header[colnum] == "-i"
 				// || header[colnum] == "-w"
 				// || header[colnum] == "-x"
 				|| header[colnum] == "-e"
 				|| header[colnum] == "-f"){
 				flags.push_back(header[colnum]);
+			}
+			else if (header[colnum] == "-t"){
+				if (col != "off"){
+					flags.push_back("-t=" + col);
+				}
+			}
+			else if (header[colnum] == "-BlockSize"){
+				if (col != "off"){
+					flags.push_back("-BlockSize=" + col);
+				}
 			}
 			else if (header[colnum] == "syntax"){
 				flags.push_back(col);
@@ -632,6 +671,7 @@ std::vector<string> RegexGen::parseFlags(std::vector<string> header, std::vector
 		}
 		colnum++;
 	}
+	flags.push_back("-c");
 	return flags;
 }
 

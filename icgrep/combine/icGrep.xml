@@ -17,7 +17,7 @@
         <value>lower</value>
         <value>upper</value>
         <value>print</value>
-        <value>punc</value>
+        <value>punct</value>
         <value>xdigit</value>
         <value>graph</value>
         <value>blank</value>
@@ -509,6 +509,7 @@
     </Parameter>
     <Parameter id="54" name="-t" type="0">
       <values>
+        <value>off</value>
         <value>1</value>
         <value>2</value>
         <value>3</value>
@@ -518,7 +519,19 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="55" name="syntax" type="0">
+    <Parameter id="55" name="-BlockSize" type="0">
+      <values>
+        <value>off</value>
+        <value>64</value>
+        <value>128</value>
+        <value>256</value>
+        <value>512</value>
+      </values>
+      <basechoices>
+        <basechoice />
+      </basechoices>
+    </Parameter>
+    <Parameter id="56" name="syntax" type="0">
       <values>
         <value>-E</value>
         <value>-G</value>

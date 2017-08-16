@@ -19,14 +19,6 @@ std::vector<string> vectorizeLine(string line){
 	return elements;
 }
 
-void clearDir(string path){
-	namespace fs = boost::filesystem;
-  	fs::path path_to_remove(path);
-	for (fs::directory_iterator end_dir_it, it(path_to_remove); it!=end_dir_it; ++it) {
-		fs::remove_all(it->path());
-	}
-}
-
 std::vector<string> setOptions(std::vector<string> header, string xml){
 	if (!xml.empty()){
 		std::vector<string> options;
@@ -59,12 +51,10 @@ int main (int argc, char *argv[]) {
 	if (argc > 3) {
 		cout << "incorrect arguments!\n";
     	cout<< "usage: " << argv[0] << " <combinatorial csv file name> <options xml file name>\n";
+    	return 0;
     }
 	else {
 		IcgrepTest ictest;
-
-		clearDir("../icgrep/combine/regs");
-		clearDir("../icgrep/combine/files");
 
 		ictest.prepare();
 
@@ -74,7 +64,8 @@ int main (int argc, char *argv[]) {
 		ifstream file;
 		file.open(csv);
 		if (!file.is_open()){
-			cout<<"Could not open input file\n";
+			cerr << "Could not open input file\n";
+			return 0;
 		}
 
 		string line;
@@ -84,7 +75,6 @@ int main (int argc, char *argv[]) {
 		int rownum = 1;
 		while(getline(file, line)){
 			row = vectorizeLine(line);
-
 			RegexGen reGen(header, row);
 			ictest.buildTest(reGen.RE, reGen.flags, reGen.syntax, rownum);
 			++rownum;
@@ -94,5 +84,5 @@ int main (int argc, char *argv[]) {
 		file.close();
 		
 	}
-
+	return 0;
 }

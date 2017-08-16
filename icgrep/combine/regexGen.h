@@ -46,6 +46,7 @@ private:
 	string getNList();
 	string getRange();
 	string getPropertyValue();
+	std::string getCharacterName();
 	string getProperty();
 	string getNotProperty();
 	string getName();
