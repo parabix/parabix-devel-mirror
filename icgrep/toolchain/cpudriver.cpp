@@ -34,7 +34,9 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
 : Driver(std::move(moduleName))
 , mTarget(nullptr)
 , mEngine(nullptr)
-, mCache(nullptr) {
+, mCache(nullptr)
+, mIROutputStream(nullptr)
+, mASMOutputStream(nullptr) {
 
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
@@ -141,15 +143,16 @@ Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, Fu
 void ParabixDriver::finalizeObject() {
 
     legacy::PassManager PM;
-    std::unique_ptr<raw_fd_ostream> IROutputStream(nullptr);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowUnoptimizedIR))) {
-        if (codegen::IROutputFilename) {
-            std::error_code error;
-            IROutputStream.reset(new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None));
-        } else {
-            IROutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
+        if (LLVM_LIKELY(mIROutputStream == nullptr)) {
+            if (codegen::IROutputFilename) {
+                std::error_code error;
+                mIROutputStream = new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
+            } else {
+                mIROutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
+            }
         }
-        PM.add(createPrintModulePass(*IROutputStream));
+        PM.add(createPrintModulePass(*mIROutputStream));
     }
     if (IN_DEBUG_MODE || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
         PM.add(createVerifierPass());
@@ -163,27 +166,26 @@ void ParabixDriver::finalizeObject() {
     PM.add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
-        if (LLVM_LIKELY(IROutputStream == nullptr)) {
+        if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (codegen::IROutputFilename) {
                 std::error_code error;
-                IROutputStream.reset(new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None));
+                mIROutputStream = new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
             } else {
-                IROutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
+                mIROutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
             }
         }
-        PM.add(createPrintModulePass(*IROutputStream));
+        PM.add(createPrintModulePass(*mIROutputStream));
     }
 
     #ifndef USE_LLVM_3_6
-    std::unique_ptr<raw_fd_ostream> ASMOutputStream(nullptr);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowASM))) {
         if (codegen::ASMOutputFilename) {
             std::error_code error;
-            ASMOutputStream.reset(new raw_fd_ostream(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None));
+            mASMOutputStream = new raw_fd_ostream(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None);
         } else {
-            ASMOutputStream.reset(new raw_fd_ostream(STDERR_FILENO, false, false));
+            mASMOutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
         }
-        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *ASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
             report_fatal_error("LLVM error: could not add emit assembly pass");
         }
     }
@@ -234,4 +236,6 @@ ParabixDriver::~ParabixDriver() {
     delete mEngine;
     delete mCache;
     delete mTarget;
+    delete mIROutputStream;
+    delete mASMOutputStream;
 }

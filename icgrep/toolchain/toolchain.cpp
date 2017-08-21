@@ -30,11 +30,11 @@ DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR.")
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
                         clEnumValEnd), cl::cat(CodeGenOptions));
 
-static cl::opt<const char *> IROutputFilenameOption("dump-generated-IR-output", cl::init(nullptr),
+static cl::opt<std::string> IROutputFilenameOption("dump-generated-IR-output", cl::init(""),
                                                        cl::desc("output IR filename"), cl::cat(CodeGenOptions));
 
 #ifndef USE_LLVM_3_6
-static cl::opt<const char *> ASMOutputFilenameOption("asm-output", cl::init(nullptr),
+static cl::opt<std::string> ASMOutputFilenameOption("asm-output", cl::init(""),
                                                     cl::desc("output ASM filename"), cl::cat(CodeGenOptions));
 
 static cl::opt<bool> AsmVerbose("asm-verbose", cl::init(true),
@@ -48,7 +48,7 @@ static cl::opt<char> OptLevelOption("O", cl::desc("Optimization level. [-O0, -O1
 static cl::opt<bool, true> EnableObjectCacheOption("enable-object-cache", cl::location(EnableObjectCache), cl::init(true),
                                                    cl::desc("Enable object caching"), cl::cat(CodeGenOptions));
 
-static cl::opt<const char *> ObjectCacheDirOption("object-cache-dir", cl::init(nullptr),
+static cl::opt<std::string> ObjectCacheDirOption("object-cache-dir", cl::init(""),
                                                  cl::desc("Path to the object cache diretory"), cl::cat(CodeGenOptions));
 
 
@@ -172,10 +172,9 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
     if (DebugOptions.getBits()) {
         EnableObjectCache = false;
     }
-
-    ObjectCacheDir = ObjectCacheDirOption;
-    IROutputFilename = IROutputFilenameOption;
-    ObjectCacheDir = ObjectCacheDirOption;
+    ObjectCacheDir = ObjectCacheDirOption.empty() ? nullptr : ObjectCacheDirOption.data();
+    IROutputFilename = IROutputFilenameOption.empty() ? nullptr : IROutputFilenameOption.data();
+    ASMOutputFilename = ASMOutputFilenameOption.empty() ? nullptr : ASMOutputFilenameOption.data();
     Options = InitTargetOptionsFromCodeGenFlags();
     #ifndef USE_LLVM_3_6
     Options.MCOptions.AsmVerbose = AsmVerbose;
