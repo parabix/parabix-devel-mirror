@@ -25,9 +25,10 @@ class KernelBuilder;
 
 class Kernel : public KernelInterface {
     friend class KernelBuilder;
+public:
+    enum class Port { Input, Output };
 protected:
     using KernelMap = boost::container::flat_map<std::string, unsigned>;
-    enum class Port { Input, Output };
     using StreamPort = std::pair<Port, unsigned>;
     using StreamMap = boost::container::flat_map<std::string, StreamPort>;
     using StreamSetBuffers = std::vector<parabix::StreamSetBuffer *>;
@@ -85,6 +86,8 @@ public:
 
     void bindPorts(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
 
+    StreamPort getStreamPort(const std::string & name) const;
+    
     llvm::Module * makeModule(const std::unique_ptr<KernelBuilder> & idb);
 
     llvm::Module * setModule(const std::unique_ptr<KernelBuilder> & idb, llvm::Module * const module);
@@ -188,8 +191,6 @@ protected:
     void callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & idb);
 
     void callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & idb);
-
-    StreamPort getStreamPort(const std::string & name) const;
 
     const parabix::StreamSetBuffer * getInputStreamSetBuffer(const std::string & name) const {
         const auto port = getStreamPort(name);
@@ -419,6 +420,11 @@ private:
 
 };
 
+void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & kb,
+                                 std::vector<llvm::Value *> inputAvailable,
+                                 llvm::Value * doFinal);
+    
+    
 
 }
 #endif 

@@ -146,7 +146,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
 
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
-            report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
+            //report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
         }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
         if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
@@ -1221,5 +1221,58 @@ SegmentOrientedKernel::SegmentOrientedKernel(std::string && kernelName,
 : Kernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
     
 }
+  
     
+void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & kb,
+                                 std::vector<Value *> inputAvailable,
+                                 Value * doFinal) {
+    auto kernel = kb->getKernel();
+    const unsigned inputSetCount = inputAvailable.size();
+    if (inputSetCount == 0) return;  //  Cannot calculate buffer items expected from input.
+    auto & outputs = kernel->getStreamSetOutputBuffers();
+    const unsigned outputSetCount = outputs.size();
+
+    Constant * blockSize = kb->getSize(kb->getBitBlockWidth());
+    Value * newlyAvailInputItems[inputSetCount];
+    Value * requiredOutputBufferSpace[outputSetCount];
+    for (unsigned i = 0; i < inputSetCount; i++) {
+        Value * processed = kb->getProcessedItemCount(kernel->getStreamInput(i).name);
+        newlyAvailInputItems[i] = kb->CreateSub(inputAvailable[i], processed);
+    }
+    //kb->GetInsertBlock()->dump();
+    for (unsigned i = 0; i < outputSetCount; i++) {
+        requiredOutputBufferSpace[i] = nullptr;
+        auto & rate = kernel->getStreamOutput(i).rate;
+        if (rate.isUnknownRate()) continue;  // No calculations possible.
+        Kernel::Port port; unsigned ssIdx;
+        std::tie(port, ssIdx) = kernel->getStreamPort(rate.referenceStreamSet());
+        if (port == Kernel::Port::Output) {
+            requiredOutputBufferSpace[i] = rate.CreateRatioCalculation(kb.get(), requiredOutputBufferSpace[ssIdx], doFinal);
+        }
+        else {
+            requiredOutputBufferSpace[i] = rate.CreateRatioCalculation(kb.get(), newlyAvailInputItems[ssIdx], doFinal);
+        }
+        if (auto db = dyn_cast<DynamicBuffer>(outputs[i])) {
+            Value * handle = db->getStreamSetHandle();
+            // This buffer can be expanded.
+            Value * producedBlock = kb->CreateUDivCeil(kb->getProducedItemCount(kernel->getStreamOutput(i).name), blockSize);
+            Value * consumedBlock = kb->CreateUDiv(kb->getConsumedItemCount(kernel->getStreamOutput(i).name), blockSize);
+            Value * blocksInUse = kb->CreateSub(producedBlock, consumedBlock);
+            Value * blocksRequired = kb->CreateAdd(blocksInUse, kb->CreateUDivCeil(requiredOutputBufferSpace[i], blockSize));
+            Value * spaceRequired = kb->CreateMul(blocksRequired, blockSize);
+            Value * expansionNeeded = kb->CreateICmpUGT(spaceRequired, db->getBufferedSize(kb.get(), handle));
+            BasicBlock * doExpand = kb->CreateBasicBlock("doExpand");
+            BasicBlock * bufferReady = kb->CreateBasicBlock("bufferReady");
+            kb->CreateCondBr(expansionNeeded, doExpand, bufferReady);
+            kb->SetInsertPoint(doExpand);
+            db->doubleCapacity(kb.get(), handle);
+            // Ensure that capacity is sufficient by successive doubling, if necessary.
+            expansionNeeded = kb->CreateICmpUGT(spaceRequired, db->getBufferedSize(kb.get(), handle));
+            kb->CreateCondBr(expansionNeeded, doExpand, bufferReady);
+            kb->SetInsertPoint(bufferReady);
+        }
+    }
+
+}
+
 }

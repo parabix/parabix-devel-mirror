@@ -535,14 +535,18 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
         const auto & inputs = kernel->getStreamInputs();
         const auto & outputs = kernel->getStreamOutputs();
 
+        std::vector<Value *> inputAvail;
         std::vector<Value *> args = {kernel->getInstance(), terminated};
+        
         for (unsigned i = 0; i < inputs.size(); ++i) {
             const auto f = producedPos.find(kernel->getStreamSetInputBuffer(i));
             if (LLVM_UNLIKELY(f == producedPos.end())) {
                 report_fatal_error(kernel->getName() + " uses stream set " + inputs[i].name + " prior to its definition");
             }
+            inputAvail.push_back(f->second);
             args.push_back(f->second);
         }
+        applyOutputBufferExpansions(iBuilder, inputAvail, terminated);
 
         iBuilder->createDoSegmentCall(args);
         if (!kernel->hasNoTerminateAttribute()) {

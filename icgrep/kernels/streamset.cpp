@@ -695,6 +695,7 @@ void DynamicBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> &
     Value * priorBufIsNonNull = b->CreateICmpNE(priorBuf, ConstantPointerNull::get(cast<PointerType>(bufPtrType)));
     b->CreateCondBr(priorBufIsNonNull, freePrior, freeCurrent);
     b->SetInsertPoint(freePrior);
+    //b->CallPrintInt("releasing: ", priorBuf);
     b->CreateFree(priorBuf);
     b->CreateBr(freeCurrent);
     b->SetInsertPoint(freeCurrent);
@@ -721,6 +722,7 @@ void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * handl
     
     Value * oldBufPtr = b->CreateLoad(bufBasePtrField);
     Value * const currentWorkingBlocks = b->CreateLoad(workingBlocksField);
+    //b->CallPrintInt("currentWorkingBlocks: ", currentWorkingBlocks);
     Value * workingBytes = b->CreateMul(currentWorkingBlocks, blockBytes);
     Value * const curAllocated = b->CreateLoad(capacityField);
     Value * neededCapacity = b->CreateAdd(workingBytes, workingBytes);
@@ -741,11 +743,15 @@ void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * handl
     BasicBlock * allocateNew = b->CreateBasicBlock("allocateNew");
     b->CreateCondBr(priorBufIsNonNull, deallocatePrior, allocateNew);
     b->SetInsertPoint(deallocatePrior);
+    //b->CallPrintInt("deallocating: ", priorBuf);
     b->CreateFree(priorBuf);
     b->CreateBr(allocateNew);
     b->SetInsertPoint(allocateNew);
     b->CreateStore(oldBufPtr, priorBasePtrField);
     Value * newBufPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(neededCapacity), bufPtrType);
+    //b->CallPrintInt("allocated: ", newBufPtr);
+    //b->CallPrintInt("allocated capacity: ", neededCapacity);
+
     b->CreateStore(newBufPtr, bufBasePtrField);
     createBlockCopy(b, newBufPtr, oldBufPtr, currentWorkingBlocks);
     b->CreateStore(neededCapacity, capacityField);
@@ -753,7 +759,7 @@ void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * handl
     b->SetInsertPoint(doCopy2);
     PHINode * bufPtr = b->CreatePHI(oldBufPtr->getType(), 2);
     bufPtr->addIncoming(oldBufPtr, doubleEntry);
-    bufPtr->addIncoming(newBufPtr, doRealloc);
+    bufPtr->addIncoming(newBufPtr, allocateNew);
     createBlockCopy(b, b->CreateGEP(bufPtr, currentWorkingBlocks), bufPtr, currentWorkingBlocks);
     b->CreateStore(b->CreateAdd(currentWorkingBlocks, currentWorkingBlocks), workingBlocksField);
 }
