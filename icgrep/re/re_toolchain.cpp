@@ -11,7 +11,9 @@
 #include <re/re_nullable.h>            // for RE_Nullable
 #include <re/re_star_normal.h>         // for RE_Star_Normal
 #include <re/re_simplifier.h>          // for RE_Simplifier
+#include <re/re_local.h>
 #include <re/printer_re.h>
+#include <re/re_analysis.h>
 #include <iostream>
 
 using namespace pablo;
@@ -92,8 +94,9 @@ RE * regular_expression_passes(RE * re_ast)  {
     
 void re2pablo_compiler(PabloKernel * kernel, RE * re_ast) {
     Var * const basis = kernel->getInputStreamVar("basis");
+    bool local = RE_Local::isLocalLanguage(re_ast) && isTypeForLocal(re_ast);
     cc::CC_Compiler cc_compiler(kernel, basis);
-    re::RE_Compiler re_compiler(kernel, cc_compiler);
+    re::RE_Compiler re_compiler(kernel, cc_compiler, local);
     re_compiler.compileUnicodeNames(re_ast);
     re_compiler.compile(re_ast);
 }
