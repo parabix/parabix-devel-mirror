@@ -30,7 +30,8 @@ enum DebugFlags {
 #ifndef USE_LLVM_3_6
     ShowASM,
 #endif
-    SerializeThreads
+    SerializeThreads,
+    TraceDynamicBuffers
 };
 
 bool DebugOptionIsSet(const DebugFlags flag);

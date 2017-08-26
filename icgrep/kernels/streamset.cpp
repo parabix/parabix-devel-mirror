@@ -139,27 +139,39 @@ Value * StreamSetBuffer::getRawItemPointer(IDISA::IDISA_Builder * const iBuilder
     return iBuilder->CreateGEP(ptr, relativePosition);
 }
 
-Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
+Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition, bool reverse) const {
     if (isa<ArrayType>(mType) && dyn_cast<ArrayType>(mType)->getNumElements() > 1) {
         Constant * stride = iBuilder->getSize(iBuilder->getStride());
-        return iBuilder->CreateSub(stride, iBuilder->CreateURem(fromPosition, stride));
+        Value * strideRem = iBuilder->CreateURem(fromPosition, stride);
+        if (reverse) {
+            return iBuilder->CreateSelect(iBuilder->CreateICmpEQ(strideRem, iBuilder->getSize(0)), stride, strideRem);
+        }
+        else return iBuilder->CreateSub(stride, strideRem);
     } else {
         Constant * bufSize = iBuilder->getSize(mBufferBlocks * iBuilder->getStride());
-        return iBuilder->CreateSub(bufSize, iBuilder->CreateURem(fromPosition, bufSize, "linearItems"));
+        Value * bufRem = iBuilder->CreateURem(fromPosition, bufSize);
+        if (reverse) {
+            return iBuilder->CreateSelect(iBuilder->CreateICmpEQ(bufRem, iBuilder->getSize(0)), bufSize, bufRem);
+        }
+        else return iBuilder->CreateSub(bufSize, bufRem, "linearItems");
     }
 }
 
-Value * StreamSetBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
+Value * StreamSetBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock, bool reverse) const {
     Constant * bufBlocks = iBuilder->getSize(mBufferBlocks);
-    return iBuilder->CreateSub(bufBlocks, iBuilder->CreateURem(fromBlock, bufBlocks), "linearBlocks");
+    Value * bufRem = iBuilder->CreateURem(fromBlock, bufBlocks);
+    if (reverse) {
+        return iBuilder->CreateSelect(iBuilder->CreateICmpEQ(bufRem, iBuilder->getSize(0)), bufBlocks, bufRem);
+    }
+    else return iBuilder->CreateSub(bufBlocks, bufRem, "linearBlocks");
 }
 
-Value * StreamSetBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
-    return getLinearlyAccessibleItems(iBuilder, self, fromPosition);
+Value * StreamSetBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition, bool reverse) const {
+    return getLinearlyAccessibleItems(iBuilder, self, fromPosition, reverse);
 }
 
-Value * StreamSetBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
-    return getLinearlyAccessibleBlocks(iBuilder, self, fromBlock);
+Value * StreamSetBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock, bool reverse) const {
+    return getLinearlyAccessibleBlocks(iBuilder, self, fromBlock, reverse);
 }
 
 Value * StreamSetBuffer::getBaseAddress(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
@@ -256,11 +268,13 @@ Value * SourceBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), blockIndex);
 }
 
-Value * SourceBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
+Value * SourceBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition, bool reverse) const {
+    if (reverse) report_fatal_error("SourceBuffer cannot be accessed in reverse");
     return iBuilder->CreateSub(getCapacity(iBuilder, self), fromPosition);
 }
 
-Value * SourceBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
+Value * SourceBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock, bool reverse) const {
+    if (reverse) report_fatal_error("SourceBuffer cannot be accessed in reverse");
     return iBuilder->CreateSub(iBuilder->CreateUDiv(getCapacity(iBuilder, self), iBuilder->getSize(iBuilder->getBitBlockWidth())), fromBlock);
 }
 
@@ -291,7 +305,7 @@ Value * ExternalBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuild
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), blockIndex);
 }
 
-Value * ExternalBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const, Value *, Value *) const {
+Value * ExternalBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const, Value *, Value *, bool reverse) const {
     report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
 }
 
@@ -327,12 +341,16 @@ void CircularCopybackBuffer::createCopyBack(IDISA::IDISA_Builder * const iBuilde
     createBlockAlignedCopy(iBuilder, self, overFlowAreaPtr, overFlowItems);
 }
 
-Value * CircularCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
-    return iBuilder->CreateAdd(getLinearlyAccessibleItems(iBuilder, self, fromPosition), iBuilder->getSize(mOverflowBlocks * iBuilder->getBitBlockWidth()));
+Value * CircularCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition, bool reverse) const {
+    Value * accessibleItems = getLinearlyAccessibleItems(iBuilder, self, fromPosition, reverse);
+    if (reverse) return accessibleItems;
+    return iBuilder->CreateAdd(accessibleItems, iBuilder->getSize(mOverflowBlocks * iBuilder->getBitBlockWidth()));
 }
 
-Value * CircularCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
-    return iBuilder->CreateAdd(getLinearlyAccessibleBlocks(iBuilder, self, fromBlock), iBuilder->getSize(mOverflowBlocks));
+Value * CircularCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock, bool reverse) const {
+    Value * accessibleBlocks = getLinearlyAccessibleBlocks(iBuilder, self, fromBlock);
+    if (reverse) return accessibleBlocks;
+    return iBuilder->CreateAdd(accessibleBlocks, iBuilder->getSize(mOverflowBlocks));
 }
 
 // SwizzledCopybackBuffer Buffer
@@ -391,12 +409,16 @@ Value * SwizzledCopybackBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * cons
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), modByBufferBlocks(iBuilder, blockIndex));
 }
 
-Value * SwizzledCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition) const {
-    return iBuilder->CreateAdd(getLinearlyAccessibleItems(iBuilder, self, fromPosition), iBuilder->getSize(mOverflowBlocks * iBuilder->getBitBlockWidth()));
+Value * SwizzledCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition, bool reverse) const {
+    Value * accessibleItems = getLinearlyAccessibleItems(iBuilder, self, fromPosition, reverse);
+    if (reverse) return accessibleItems;
+    return iBuilder->CreateAdd(accessibleItems, iBuilder->getSize(mOverflowBlocks * iBuilder->getBitBlockWidth()));
 }
 
-Value * SwizzledCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock) const {
-    return iBuilder->CreateAdd(getLinearlyAccessibleBlocks(iBuilder, self, fromBlock), iBuilder->getSize(mOverflowBlocks));
+Value * SwizzledCopybackBuffer::getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock, bool reverse) const {
+    Value * accessibleBlocks = getLinearlyAccessibleBlocks(iBuilder, self, fromBlock);
+    if (reverse) return accessibleBlocks;
+    return iBuilder->CreateAdd(accessibleBlocks, iBuilder->getSize(mOverflowBlocks));
 }
 
 // Expandable Buffer
@@ -553,7 +575,7 @@ Value * ExpandableBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBui
     report_fatal_error("Expandable buffers: getStreamSetBlockPtr is not supported.");
 }
 
-Value * ExpandableBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value *) const {
+Value * ExpandableBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value *, bool reverse) const {
     report_fatal_error("Expandable buffers: getLinearlyAccessibleItems is not supported.");
 }
 
@@ -638,20 +660,32 @@ Value * DynamicBuffer::getRawItemPointer(IDISA::IDISA_Builder * const b, Value *
 }
 
 
-Value * DynamicBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * handle, Value * fromPosition) const {
+Value * DynamicBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * handle, Value * fromPosition, bool reverse) const {
     Constant * blockSize = b->getSize(b->getBitBlockWidth());
     if (isa<ArrayType>(mType) && dyn_cast<ArrayType>(mType)->getNumElements() > 1) {
-        return b->CreateSub(blockSize, b->CreateURem(fromPosition, blockSize));
+        Value * blockRem = b->CreateURem(fromPosition, blockSize);
+        if (reverse) {
+            return b->CreateSelect(b->CreateICmpEQ(blockRem, b->getSize(0)), blockSize, blockRem);
+        }
+        else return b->CreateSub(blockSize, blockRem);
     } else {
         Value * const bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::WorkingBlocks))}));
         Value * bufSize = b->CreateMul(bufBlocks, blockSize);
-        return b->CreateSub(bufSize, b->CreateURem(fromPosition, bufSize, "linearItems"));
+        Value * bufRem = b->CreateURem(fromPosition, bufSize);
+        if (reverse) {
+            return b->CreateSelect(b->CreateICmpEQ(bufRem, b->getSize(0)), bufSize, bufRem);
+        }
+        else return b->CreateSub(bufSize, bufRem, "linearItems");
     }
 }
 
-Value * DynamicBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const b, Value * handle, Value * fromBlock) const {
+Value * DynamicBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const b, Value * handle, Value * fromBlock, bool reverse) const {
     Value * const bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::WorkingBlocks))}));
-    return b->CreateSub(bufBlocks, b->CreateURem(fromBlock, bufBlocks), "linearBlocks");
+    Value * bufRem = b->CreateURem(fromBlock, bufBlocks);
+    if (reverse) {
+        return b->CreateSelect(b->CreateICmpEQ(bufRem, b->getSize(0)), bufBlocks, bufRem);
+    }
+    else return b->CreateSub(bufBlocks, bufRem, "linearBlocks");
 }
 
 Value * DynamicBuffer::getBufferedSize(IDISA::IDISA_Builder * const iBuilder, Value * self) const {
@@ -673,6 +707,10 @@ void DynamicBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> 
     Value * bufBasePtrField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::BaseAddress))});
     Type * bufPtrType = bufBasePtrField->getType()->getPointerElementType();
     Value * bufPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(bufSize), bufPtrType);
+    if (codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers)) {
+        b->CallPrintInt("allocated: ", bufPtr);
+        b->CallPrintInt("allocated capacity: ", bufSize);
+    }
     b->CreateStore(bufPtr, bufBasePtrField);
     b->CreateStore(ConstantPointerNull::getNullValue(bufPtrType), b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::PriorBaseAddress))}));
     b->CreateStore(bufSize, b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::AllocatedCapacity))}));
@@ -695,7 +733,9 @@ void DynamicBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> &
     Value * priorBufIsNonNull = b->CreateICmpNE(priorBuf, ConstantPointerNull::get(cast<PointerType>(bufPtrType)));
     b->CreateCondBr(priorBufIsNonNull, freePrior, freeCurrent);
     b->SetInsertPoint(freePrior);
-    //b->CallPrintInt("releasing: ", priorBuf);
+    if (codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers)) {
+        b->CallPrintInt("releasing: ", priorBuf);
+    }
     b->CreateFree(priorBuf);
     b->CreateBr(freeCurrent);
     b->SetInsertPoint(freeCurrent);
@@ -721,8 +761,7 @@ void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * handl
     Value * capacityField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::AllocatedCapacity))});
     
     Value * oldBufPtr = b->CreateLoad(bufBasePtrField);
-    Value * const currentWorkingBlocks = b->CreateLoad(workingBlocksField);
-    //b->CallPrintInt("currentWorkingBlocks: ", currentWorkingBlocks);
+    Value * currentWorkingBlocks = b->CreateLoad(workingBlocksField);
     Value * workingBytes = b->CreateMul(currentWorkingBlocks, blockBytes);
     Value * const curAllocated = b->CreateLoad(capacityField);
     Value * neededCapacity = b->CreateAdd(workingBytes, workingBytes);
@@ -743,15 +782,18 @@ void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * handl
     BasicBlock * allocateNew = b->CreateBasicBlock("allocateNew");
     b->CreateCondBr(priorBufIsNonNull, deallocatePrior, allocateNew);
     b->SetInsertPoint(deallocatePrior);
-    //b->CallPrintInt("deallocating: ", priorBuf);
+    if (codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers)) {
+        b->CallPrintInt("deallocating: ", priorBuf);
+    }
     b->CreateFree(priorBuf);
     b->CreateBr(allocateNew);
     b->SetInsertPoint(allocateNew);
     b->CreateStore(oldBufPtr, priorBasePtrField);
     Value * newBufPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(neededCapacity), bufPtrType);
-    //b->CallPrintInt("allocated: ", newBufPtr);
-    //b->CallPrintInt("allocated capacity: ", neededCapacity);
-
+    if (codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers)) {
+        b->CallPrintInt("re-allocated: ", newBufPtr);
+        b->CallPrintInt("allocated capacity: ", neededCapacity);
+    }
     b->CreateStore(newBufPtr, bufBasePtrField);
     createBlockCopy(b, newBufPtr, oldBufPtr, currentWorkingBlocks);
     b->CreateStore(neededCapacity, capacityField);
@@ -761,7 +803,11 @@ void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * handl
     bufPtr->addIncoming(oldBufPtr, doubleEntry);
     bufPtr->addIncoming(newBufPtr, allocateNew);
     createBlockCopy(b, b->CreateGEP(bufPtr, currentWorkingBlocks), bufPtr, currentWorkingBlocks);
-    b->CreateStore(b->CreateAdd(currentWorkingBlocks, currentWorkingBlocks), workingBlocksField);
+    currentWorkingBlocks = b->CreateAdd(currentWorkingBlocks, currentWorkingBlocks);
+    if (codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers)) {
+        b->CallPrintInt("currentWorkingBlocks: ", currentWorkingBlocks);
+    }
+    b->CreateStore(currentWorkingBlocks, workingBlocksField);
 }
 
 DynamicBuffer::DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t initialCapacity, size_t overflow, unsigned swizzle, unsigned addrSpace)

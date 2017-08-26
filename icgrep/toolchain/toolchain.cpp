@@ -28,6 +28,7 @@ DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR.")
                         clEnumVal(ShowASM, "Print assembly code."),
 #endif
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
+                        clEnumVal(TraceDynamicBuffers, "Show dynamic buffer allocations and deallocations."),
                         clEnumValEnd), cl::cat(CodeGenOptions));
 
 static cl::opt<std::string> IROutputFilenameOption("dump-generated-IR-output", cl::init(""),
