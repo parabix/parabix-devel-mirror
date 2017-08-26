@@ -10,8 +10,8 @@ class RE;
 
 class RE_Local {
 public:
-	static UCD::UnicodeSet* first(RE * re);
-	static UCD::UnicodeSet* final(RE * re);
+    static CC * first(RE * re);
+    static CC * final(RE * re);
 	static void follow(RE * re, std::map<UCD::UnicodeSet*, UCD::UnicodeSet*> &follow_map);
 	static bool isLocalLanguage(RE * re);
 private:

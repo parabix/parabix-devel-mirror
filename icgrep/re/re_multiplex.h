@@ -8,9 +8,9 @@ namespace re {
     class RE;
     class Name;
 
-    RE * multiplex(RE * re, std::vector<UCD::UnicodeSet> UnicodeSets,
-                    std::vector<std::vector<unsigned>> exclusiveSetIDs,
-                    std::vector<UCD::UnicodeSet> multiplexedCCs);
+    RE * multiplex(RE * const re, const std::vector<UCD::UnicodeSet> & UnicodeSets,
+                    const std::vector<std::vector<unsigned>> & exclusiveSetIDs,
+                    const std::vector<UCD::UnicodeSet> & multiplexedCCs);
 
 }
 #endif

@@ -11,6 +11,7 @@
 #include <re/re_analysis.h>
 #include <UCD/resolve_properties.h>
 #include <boost/container/flat_set.hpp>
+#include <boost/range/adaptor/reversed.hpp>
 #include <map>
 
 using namespace boost::container;
@@ -18,131 +19,94 @@ using namespace llvm;
 
 namespace re {
   
-UCD::UnicodeSet* RE_Local::first(RE * re) {
+inline void combine(CC *& a, CC * b) {
+    if (a && b) {
+        a = makeCC(a, b);
+    } else if (b) {
+        a = b;
+    }
+}
+
+CC * RE_Local::first(RE * re) {
     if (Name * name = dyn_cast<Name>(re)) {
         if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
-            if (CC * cc = dyn_cast<CC>(name->getDefinition())) {
-                UCD::UnicodeSet * sets = cast<UCD::UnicodeSet>(cc);
-                return sets;
-            } else {
-                return first(name->getDefinition());
-            }
+            return first(name->getDefinition());
         } else {
             throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
         }
     } else if (CC * cc = dyn_cast<CC>(re)) {
-        UCD::UnicodeSet * sets = cast<UCD::UnicodeSet>(cc);
-        return sets;
+        return cc;
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        UCD::UnicodeSet * UnicodeSets = new UCD::UnicodeSet();
-        UCD::UnicodeSet UnicodeSets_seq = UCD::UnicodeSet();
-        for (auto si = seq->begin(); si != seq->end(); ++si) {
-            if (isNullable(*si) && first(*si) != nullptr) {
-                UnicodeSets_seq = UnicodeSets_seq + *(first(*si));
-            } else if (isNullable(*si) && first(*si) == nullptr) {
-                continue;
-            } else if (!isNullable(*si) && first(*si) != nullptr){
-                UnicodeSets_seq = UnicodeSets_seq + *(first(*si));
-                break;
-            } else {
+        CC * cc = nullptr;
+        for (auto & si : *seq) {
+            combine(cc, first(si));
+            if (!isNullable(si)) {
                 break;
             }
         }
-        *UnicodeSets = UnicodeSets_seq;
-        return UnicodeSets_seq.empty() ? nullptr : UnicodeSets;
+        return cc;
     } else if (Alt * alt = dyn_cast<Alt>(re)) {
-        UCD::UnicodeSet * UnicodeSets = new UCD::UnicodeSet();
-        UCD::UnicodeSet UnicodeSets_alt = UCD::UnicodeSet();
-        for (auto ai = alt->begin(); ai != alt->end(); ++ai) {
-            if (first(*ai) != nullptr) {
-                UnicodeSets_alt = UnicodeSets_alt + *(first(*ai));
-            }
+        CC * cc = nullptr;
+        for (auto & ai : *alt) {
+            combine(cc, first(ai));
         }
-        *UnicodeSets = UnicodeSets_alt;
-        return UnicodeSets_alt.empty() ? nullptr : UnicodeSets;
+        return cc;
     } else if (Rep * rep = dyn_cast<Rep>(re)) {
         return first(rep->getRE());
     } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        UCD::UnicodeSet * UnicodeSets = new UCD::UnicodeSet();
-        UCD::UnicodeSet UnicodeSets_diff = UCD::UnicodeSet();
-        if (first(diff->getLH()) && first(diff->getRH())) {
-            UnicodeSets_diff = *(first(diff->getLH())) - *(first(diff->getRH()));
+        if (CC * lh = first(diff->getLH())) {
+            if (CC * rh = first(diff->getRH())) {
+                return subtractCC(lh, rh);
+            }
         }
-        *UnicodeSets = UnicodeSets_diff;
-        return UnicodeSets;
     } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
-        UCD::UnicodeSet * UnicodeSets = new UCD::UnicodeSet();
-        UCD::UnicodeSet UnicodeSets_inter = UCD::UnicodeSet();
-        if (first(ix->getLH()) && first(ix->getRH())) {
-            UnicodeSets_inter = *(first(ix->getLH())) & *(first(ix->getRH()));
+        if (CC * lh = first(ix->getLH())) {
+            if (CC * rh = first(ix->getRH())) {
+                return intersectCC(lh, rh);
+            }
         }
-        *UnicodeSets = UnicodeSets_inter;
-        return UnicodeSets;
     }
     return nullptr;
-
 }
 
-UCD::UnicodeSet* RE_Local::final(RE * re) {
+CC * RE_Local::final(RE * re) {
     if (Name * name = dyn_cast<Name>(re)) {
         if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
-            if (CC * cc = dyn_cast<CC>(name->getDefinition())) {
-                UCD::UnicodeSet * sets = cast<UCD::UnicodeSet>(cc);
-                return sets;
-            } else {
-                return final(name->getDefinition());
-            }
+            return final(name->getDefinition());
         } else {
             throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
         }
     } else if (CC * cc = dyn_cast<CC>(re)) {
-        UCD::UnicodeSet * sets = cast<UCD::UnicodeSet>(cc);
-        return sets;
+        return cc;
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        UCD::UnicodeSet * UnicodeSets = new UCD::UnicodeSet();
-        UCD::UnicodeSet UnicodeSets_seq = UCD::UnicodeSet();
-        for (auto si = seq->rbegin(); si != seq->rend(); ++si) {
-            if (isNullable(*si) && final(*si) != nullptr) {
-                UnicodeSets_seq = UnicodeSets_seq + *(final(*si));
-            } else if (isNullable(*si) && final(*si) == nullptr) {
-                continue;
-            } else if (!isNullable(*si) && final(*si) != nullptr){
-                UnicodeSets_seq = UnicodeSets_seq + *(final(*si));
-                break;
-            } else {
+        CC * cc = nullptr;
+        for (auto & si : boost::adaptors::reverse(*seq)) {
+            combine(cc, first(si));
+            if (!isNullable(si)) {
                 break;
             }
         }
-        *UnicodeSets = UnicodeSets_seq;
-        return UnicodeSets_seq.empty() ? nullptr : UnicodeSets;
+        return cc;
     } else if (Alt * alt = dyn_cast<Alt>(re)) {
-        UCD::UnicodeSet * UnicodeSets = new UCD::UnicodeSet();
-        UCD::UnicodeSet UnicodeSets_alt = UCD::UnicodeSet();
-        for (auto ai = alt->begin(); ai != alt->end(); ++ai) {
-            if (final(*ai) != nullptr) {
-                UnicodeSets_alt = UnicodeSets_alt + *(final(*ai));
-            }
+        CC * cc = nullptr;
+        for (auto & ai : *alt) {
+            combine(cc, final(ai));
         }
-        *UnicodeSets = UnicodeSets_alt;
-        return UnicodeSets_alt.empty() ? nullptr : UnicodeSets;
+        return cc;
     } else if (Rep * rep = dyn_cast<Rep>(re)) {
         return final(rep->getRE());
     } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        UCD::UnicodeSet * UnicodeSets = new UCD::UnicodeSet();
-        UCD::UnicodeSet UnicodeSets_diff = UCD::UnicodeSet();
-        if (final(diff->getLH()) && final(diff->getRH())) {
-            UnicodeSets_diff = *(final(diff->getLH())) - *(final(diff->getRH()));
+        if (CC * lh = final(diff->getLH())) {
+            if (CC * rh = final(diff->getRH())) {
+                return subtractCC(lh, rh);
+            }
         }
-        *UnicodeSets = UnicodeSets_diff;
-        return UnicodeSets;
     } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
-        UCD::UnicodeSet * UnicodeSets = new UCD::UnicodeSet();
-        UCD::UnicodeSet UnicodeSets_inter = UCD::UnicodeSet();
-        if (final(ix->getLH()) && final(ix->getRH())) {
-            UnicodeSets_inter = *(final(ix->getLH())) & *(final(ix->getRH()));
+        if (CC * lh = final(ix->getLH())) {
+            if (CC * rh = final(ix->getRH())) {
+                return intersectCC(lh, rh);
+            }
         }
-        *UnicodeSets = UnicodeSets_inter;
-        return UnicodeSets;
     }
     return nullptr;
 
