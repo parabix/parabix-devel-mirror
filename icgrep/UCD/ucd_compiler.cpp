@@ -514,8 +514,9 @@ inline void UCDCompiler::makeTargets(PabloBuilder & entry, NameMap & names) {
             continue;
         }        
         CC * const cc = dyn_cast<CC>(name->getDefinition());
-        if (cc) {            
+        if (cc) {
             const auto f = CCs.find(cc);
+            // This check may not be needed. Memoization ought to detect duplicate classes earlier.
             if (LLVM_LIKELY(f == CCs.end())) {
                 PabloAST * const value = t.second ? t.second : zeroes;
                 mTargetValue.emplace(cc, value);

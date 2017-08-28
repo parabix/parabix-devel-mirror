@@ -151,6 +151,26 @@ UnicodeSet::interval_t UnicodeSet::back() const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief print
+ ** ------------------------------------------------------------------------------------------------------------- */
+void UnicodeSet::print(llvm::raw_ostream & out) const {
+    if (LLVM_UNLIKELY(empty())) {
+        out << "()";
+    } else {
+        char joiner = '(';
+        for (auto r : *this) {
+            out << joiner << std::get<0>(r);
+            if (std::get<0>(r) != std::get<1>(r)) {
+                out << '-' << std::get<1>(r);
+            }
+            joiner = ',';
+        }
+        out << ')';
+
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief dump
  ** ------------------------------------------------------------------------------------------------------------- */
 void UnicodeSet::dump(llvm::raw_ostream & out) const {
@@ -326,32 +346,27 @@ UnicodeSet UnicodeSet::operator^(const UnicodeSet & other) const {
             append_run(i1.type() == i2.type() ? Empty : Full, n, runs);
             i1 += n;
             i2 += n;
-        }
-        else if (i1.type() == Empty) {
+        } else if (i1.type() == Empty) {
             for (unsigned i = 0; i < n; ++i, ++i2) {
                 append_quad(i2.quad(), quads, runs);
             }
             i1 += n;
-        }
-        else if (i2.type() == Empty) {
+        } else if (i2.type() == Empty) {
             for (unsigned i = 0; i < n; ++i, ++i1) {
                 append_quad(i1.quad(), quads, runs);
             }
             i2 += n;
-        }
-        else if (i1.type() == Full) {
+        } else if (i1.type() == Full) {
             for (unsigned i = 0; i < n; ++i, ++i2) {
                 append_quad(FULL_QUAD_MASK ^ i2.quad(), quads, runs);
             }
             i1 += n;
-        }
-        else if (i2.type() == Empty) {
+        } else if (i2.type() == Full) {
             for (unsigned i = 0; i < n; ++i, ++i1) {
                 append_quad(FULL_QUAD_MASK ^ i1.quad(), quads, runs);
             }
             i2 += n;
-        }
-        else {
+        } else {
             for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
                 append_quad(i1.quad() ^ i2.quad(), quads, runs);
             }

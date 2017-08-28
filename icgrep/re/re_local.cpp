@@ -112,7 +112,7 @@ CC * RE_Local::final(RE * re) {
 
 }
 
-void RE_Local::follow(RE * re, std::map<UCD::UnicodeSet*, UCD::UnicodeSet*> &follow_map) {
+void RE_Local::follow(RE * re, std::map<CC *, CC*> &follow_map) {
     if (Name * name = dyn_cast<Name>(re)) {
         if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
             return follow(name->getDefinition(), follow_map);
@@ -121,45 +121,36 @@ void RE_Local::follow(RE * re, std::map<UCD::UnicodeSet*, UCD::UnicodeSet*> &fol
         }
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         RE * re_first = *(seq->begin());
-        std::vector<RE *> list;
-        list.reserve(seq->size());
-        for (auto i = seq->begin() + 1; i != seq->end(); i++) {
-            list.push_back(*i);
-        }
-        RE * re_follow = makeSeq(list.begin(), list.end());
+        RE * re_follow = makeSeq(seq->begin() + 1, seq->end());
         auto e1 = final(re_first);
         auto e2 = first(re_follow);
         if (e1 && e2) {
             auto e = follow_map.find(e1);
             if (e != follow_map.end()) {
-                *(e->second) = *(e->second) + *e2;
+                e->second = makeCC(e->second, e2);
             } else {
-                follow_map.insert(std::pair<UCD::UnicodeSet*, UCD::UnicodeSet*>(e1, e2));
+                follow_map.emplace(e1, e2);
             }
         }
         follow(re_first, follow_map);
         follow(re_follow, follow_map);
-        return;
     } else if (Alt * alt = dyn_cast<Alt>(re)) {
         for (auto ai = alt->begin(); ai != alt->end(); ++ai) {
             follow(*ai, follow_map);
         }
-        return;
     } else if (Rep * rep = dyn_cast<Rep>(re)) {
         auto e1 = final(rep->getRE());
         auto e2 = first(rep->getRE());
         if (e1 && e2) {
             auto e = follow_map.find(e1);
             if (e != follow_map.end()) {
-                *(e->second) = *(e->second) + *e2;
+                e->second = makeCC(e->second, e2);
             } else {
-                follow_map.insert(std::pair<UCD::UnicodeSet*, UCD::UnicodeSet*>(e1, e2));
+                follow_map.emplace(e1, e2);
             }
         }
         follow(rep->getRE(), follow_map);
-        return;
     }
-    return;
 }
 
 bool RE_Local::isLocalLanguage(RE * re) {

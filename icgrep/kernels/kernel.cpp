@@ -190,9 +190,11 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     // in normal execution, but when codegen::EnableCycleCounter is specified, pipelines
     // will be able to add instrumentation to cached modules without recompilation.
     addScalar(idb->getInt64Ty(), CYCLECOUNT_SCALAR);
-    
-    mKernelStateType = StructType::create(idb->getContext(), mKernelFields, getName());
-    
+    // NOTE: StructType::create always creates a new type even if an identical one exists.
+    mKernelStateType = getModule()->getTypeByName(getName());
+    if (LLVM_LIKELY(mKernelStateType == nullptr)) {
+        mKernelStateType = StructType::create(idb->getContext(), mKernelFields, getName());
+    }
     processingRateAnalysis();
 }
     
@@ -1159,6 +1161,7 @@ static inline std::string annotateKernelNameWithDebugFlags(std::string && name) 
     if (codegen::EnableAsserts) {
         name += "_EA";
     }
+    name += "_O" + std::to_string((int)codegen::OptLevel);
     return name;
 }
 

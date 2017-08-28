@@ -9,7 +9,8 @@
 #include <grep_type.h>  // for GrepType, GrepType::Normal
 #include <string>       // for string
 #include <vector>
-#include <re/re_parser.h>  
+#include <re/re_parser.h>
+#include <re/re_multiplex.h>
 
 namespace re { class CC; }
 namespace re { class RE; }

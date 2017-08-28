@@ -62,7 +62,7 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
 
     //Round up to a multiple of 3.
     const unsigned initSegSize = ((codegen::SegmentSize + 2)/3) * 3;
-    const unsigned bufferSize = initSegSize * 4/3 * codegen::BufferSegments;
+    const unsigned bufferSize = (4 * initSegSize * codegen::BufferSegments) / 3;
 
     StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
 

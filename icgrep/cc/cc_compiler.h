@@ -37,7 +37,7 @@ public:
 
     pablo::PabloBuilder & getBuilder();
 
-    const std::vector<pablo::PabloAST *> & getBasisBits() {
+    const std::vector<pablo::PabloAST *> & getBasisBits() const {
         return mBasisBit;
     }
 

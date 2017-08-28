@@ -100,6 +100,8 @@ public:
         return iterator(mRuns.cend(), mQuads.cend(), 0x110000);
     }
 
+    bool empty() const;
+
     bool contains(const codepoint_t codepoint) const;
 
     bool intersects(const codepoint_t lo, const codepoint_t hi) const;
@@ -108,13 +110,13 @@ public:
 
     void insert_range(const codepoint_t lo, const codepoint_t hi);
 
-    bool empty() const;
-
     size_type size() const;
 
     interval_t front() const;
 
     interval_t back() const;
+
+    void print(llvm::raw_ostream & out) const;
 
     void dump(llvm::raw_ostream & out) const;
 

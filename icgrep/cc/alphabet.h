@@ -25,15 +25,15 @@ public:
     Alphabet(std::string alphabetName, UCD::codepoint_t maxChar) :
         mAlphabetName(alphabetName), mCharSet(UCD::UnicodeSet(0, maxChar)) {}
         
-    std::string getName() { return mAlphabetName;}
+    const std::string & getName() const { return mAlphabetName;}
     
-    UCD::UnicodeSet getSet() { return mCharSet;}
+    const UCD::UnicodeSet & getSet() const { return mCharSet;}
     
     //  The Unicode codepoint of the nth character (the character whose alphabet code is n).
-    virtual UCD::codepoint_t toUnicode(unsigned n);
+    virtual UCD::codepoint_t toUnicode(const unsigned n) const;
     
     //  The ordinal position of the character whose Unicode codepoint value is ucp.
-    virtual unsigned fromUnicode(UCD::codepoint_t ucp);
+    virtual unsigned fromUnicode(const UCD::codepoint_t ucp) const;
 
 protected:
     std::string mAlphabetName;
@@ -58,8 +58,8 @@ Alphabet ISO_Latin1("ISO_Latin1", 0xFF);
 template <class uint_t> class ExtendedASCII : public Alphabet {
 public:
     ExtendedASCII(std::string alphabetName, const uint_t (& extendedTable)[128]);
-    UCD::codepoint_t  toUnicode(unsigned n) override;
-    unsigned fromUnicode(UCD::codepoint_t ucp) override;
+    UCD::codepoint_t toUnicode(const unsigned n) const final;
+    unsigned fromUnicode(const UCD::codepoint_t ucp) const final;
 private:
     const uint_t (& mExtendedCharacterTable)[128];
 };

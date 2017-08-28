@@ -12,6 +12,7 @@
 #include <pablo/builder.hpp>
 #include <pablo/pablo_kernel.h>
 
+
 using namespace re;
 using namespace pablo;
 using namespace llvm;
@@ -32,19 +33,17 @@ namespace cc {
 //    }
     
     
-    CC_Compiler::CC_Compiler(pablo::PabloKernel * kernel, pablo::Var * basisBits)
-    : mBuilder(kernel->getEntryBlock())
-    , mEncodingBits(basisBits->getType()->getArrayNumElements())
-    , mBasisBit(mEncodingBits) {
-        for (unsigned i = 0; i != mEncodingBits; i++) {
-            mBasisBit[i] = mBuilder.createExtract(basisBits, mBuilder.getInteger(i)); assert (mBasisBit[i]);
-        }
-        mEncodingMask = (static_cast<unsigned>(1) << mEncodingBits) - static_cast<unsigned>(1);
+CC_Compiler::CC_Compiler(pablo::PabloKernel * kernel, pablo::Var * basisBits)
+: mBuilder(kernel->getEntryBlock())
+, mEncodingBits(basisBits->getType()->getArrayNumElements())
+, mBasisBit(mEncodingBits) {
+    for (unsigned i = 0; i != mEncodingBits; i++) {
+        mBasisBit[i] = mBuilder.createExtract(basisBits, mBuilder.getInteger(i)); assert (mBasisBit[i]);
     }
-    
-    
+    mEncodingMask = (static_cast<unsigned>(1) << mEncodingBits) - static_cast<unsigned>(1);
+}
 
-PabloAST * CC_Compiler::compileCC(const std::string & canonicalName, const CC *cc, PabloBlock & block) {
+PabloAST * CC_Compiler::compileCC(const std::string & canonicalName, const CC *cc, PabloBlock & block) {    
     PabloAST * const var = charset_expr(cc, block);
     if (LLVM_LIKELY(isa<Statement>(var))) {
         cast<Statement>(var)->setName(block.makeName(canonicalName));
@@ -154,9 +153,10 @@ PabloAST * CC_Compiler::make_range(const codepoint_t n1, const codepoint_t n2, P
 
     for (codepoint_t diff_bits = n1 ^ n2; diff_bits; diff_count++, diff_bits >>= 1);
 
-    if ((n2 < n1) || (diff_count > mEncodingBits))
-    {
-        throw std::runtime_error("Bad Range: [" + std::to_string(n1) + "," + std::to_string(n2) + "]");
+    if ((n2 < n1) || (diff_count > mEncodingBits)) {
+        throw std::runtime_error("Bad Range: [" + std::to_string(n1) + "," +
+                                 std::to_string(n2) + "] for " +
+                                 std::to_string(mEncodingBits) + "-bit encoding");
     }
 
     const codepoint_t mask0 = (static_cast<codepoint_t>(1) << diff_count) - 1;

@@ -1,15 +1,3 @@
 .
 ../boost/include/
 ../libllvm/include/
-pablo
-kernels
-UCD
-editd
-IR_Gen
-util
-re
-toolchain
-pablo/passes
-pablo/analysis
-cc
-pablo/optimizers

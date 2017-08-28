@@ -32,7 +32,7 @@ static cl::bits<PabloDebugFlags>
 DebugOptions(cl::values(clEnumVal(ShowPablo, "Print generated Pablo code"),
                         clEnumVal(ShowOptimizedPablo, "Print optimizeed Pablo code"),
                         clEnumVal(VerifyPablo, "Run the Pablo verifier"),
-                        clEnumVal(DumpTrace, "Generate dynamic traces of executed Pablo assignments."),
+                        clEnumVal(DumpTrace, "Generate dynamic traces of executed Pablo assignments."),                        
                         clEnumValEnd), cl::cat(PabloOptions));
     
 static cl::opt<std::string> PabloOutputFilename("print-pablo-output", cl::init(""), cl::desc("output Pablo filename"), cl::cat(PabloOptions));
@@ -41,13 +41,14 @@ static cl::opt<bool> Flatten("flatten-if", cl::init(false), cl::desc("Flatten al
 static cl::bits<PabloCompilationFlags> 
     PabloOptimizationsOptions(cl::values(clEnumVal(DisableSimplification, "Disable Pablo Simplification pass (not recommended)"),
                                          clEnumVal(DisableCodeMotion, "Moves statements into the innermost legal If-scope and moves invariants out of While-loops."),
-                                         clEnumVal(EnableDistribution, "Apply distribution law optimization."),
-
+                                         clEnumVal(EnableDistribution, "Apply distribution law optimization."),                                         
                                          clEnumVal(EnableSchedulingPrePass, "Pablo Statement Scheduling Pre-Pass"),
+                                         clEnumVal(EnableProfiling, "Profile branch statistics."),
                                          clEnumValEnd), cl::cat(PabloOptions));
 
-bool DebugOptionIsSet(PabloDebugFlags flag) {return DebugOptions.isSet(flag);}
+bool DebugOptionIsSet(const PabloDebugFlags flag) {return DebugOptions.isSet(flag);}
     
+bool CompileOptionIsSet(const PabloCompilationFlags flag) {return PabloOptimizationsOptions.isSet(flag);}
 
 void pablo_function_passes(PabloKernel * kernel) {
 
@@ -66,17 +67,17 @@ void pablo_function_passes(PabloKernel * kernel) {
 #endif
 
     // Scan through the pablo code and perform DCE and CSE
-    if (LLVM_LIKELY(!PabloOptimizationsOptions.isSet(DisableSimplification))) {
-        Simplifier::optimize(kernel);
-    }
     if (Flatten){
         FlattenIf::transform(kernel);
     }
-    if (LLVM_LIKELY(!PabloOptimizationsOptions.isSet(DisableCodeMotion))) {
-        CodeMotionPass::optimize(kernel);
+    if (LLVM_LIKELY(!PabloOptimizationsOptions.isSet(DisableSimplification))) {
+        Simplifier::optimize(kernel);
     }
     if (PabloOptimizationsOptions.isSet(EnableDistribution)) {
         DistributivePass::optimize(kernel);
+    }
+    if (LLVM_LIKELY(!PabloOptimizationsOptions.isSet(DisableCodeMotion))) {
+        CodeMotionPass::optimize(kernel);
     }
     if (PabloOptimizationsOptions.isSet(EnableSchedulingPrePass)) {
         SchedulingPrePass::optimize(kernel);

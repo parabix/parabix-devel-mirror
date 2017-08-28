@@ -71,17 +71,18 @@ MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
 }
     
 MarkerType RE_Compiler::compile_local(RE * re, MarkerType marker, PabloBuilder & pb) {
-    UCD::UnicodeSet* first = RE_Local::first(re);
-    PabloAST * pablo_first = mCCCompiler.compileCC(makeCC(std::move(*first)));
-    UCD::UnicodeSet* final = RE_Local::final(re);
-    PabloAST * pablo_final = mCCCompiler.compileCC(makeCC(std::move(*final)));
-    std::map<UCD::UnicodeSet*, UCD::UnicodeSet*> follow_map;
-    RE_Local::follow(re, follow_map);
+    CC * first = RE_Local::first(re);
+    CC * final = RE_Local::final(re);
 
     if (first == nullptr || final == nullptr) {
         mLocal = false;
         return process(re, marker, pb);
     }
+
+    PabloAST * pablo_first = mCCCompiler.compileCC(first);
+    PabloAST * pablo_final = mCCCompiler.compileCC(final);
+    std::map<CC*, CC*> follow_map;
+    RE_Local::follow(re, follow_map);
 
     PabloAST * pablo_follow = pb.createZeroes();
     for (auto i = follow_map.begin(); i != follow_map.end(); i++) {

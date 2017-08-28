@@ -16,6 +16,7 @@
 #include <cc/cc_compiler.h>
 #include <re/re_name.h>
 #include <llvm/Support/raw_ostream.h>
+#include <boost/uuid/sha1.hpp>
 
 using NameMap = UCD::UCDCompiler::NameMap;
 
@@ -26,24 +27,63 @@ using namespace re;
 using namespace llvm;
 using namespace UCD;
 
-CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<UCD::UnicodeSet> multiplexedCCs)
-: PabloKernel(iBuilder,
-              "cc",
-              {Binding{iBuilder->getStreamSetTy(8), "basis"}},
-              {Binding{iBuilder->getStreamSetTy(multiplexedCCs.size(), 1), "charclasses"}}) 
-, mMultiplexedCCs(multiplexedCCs) {
+inline static std::string sha1sum(const std::string & str) {
+    char buffer[41];    // 40 hex-digits and the terminating null
+    uint32_t digest[5]; // 160 bits in total
+    boost::uuids::detail::sha1 sha1;
+    sha1.process_bytes(str.c_str(), str.size());
+    sha1.get_digest(digest);
+    snprintf(buffer, sizeof(buffer), "%.8x%.8x%.8x%.8x%.8x",
+             digest[0], digest[1], digest[2], digest[3], digest[4]);
+    return std::string(buffer);
+}
 
+inline std::string signature(const std::vector<UCD::UnicodeSet> & ccs) {
+    if (LLVM_UNLIKELY(ccs.empty())) {
+        return "[]";
+    } else {
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        char joiner = '[';
+        for (const auto & set : ccs) {
+            out << joiner;
+            set.print(out);
+            joiner = ',';
+        }
+        out << ']';
+        return out.str();
+    }
+}
+
+CharClassesSignature::CharClassesSignature(const std::vector<UCD::UnicodeSet> & ccs)
+: mSignature(signature(ccs)) {
+
+}
+
+
+CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<UnicodeSet> && ccs)
+: CharClassesSignature(ccs)
+, PabloKernel(iBuilder,
+              "cc" + sha1sum(mSignature),
+              {Binding{iBuilder->getStreamSetTy(8), "basis"}},
+              {Binding{iBuilder->getStreamSetTy(ccs.size(), 1), "charclasses"}})
+, mCCs(std::move(ccs)) {
+
+}
+
+std::string CharClassesKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
+    return mSignature;
 }
 
 void CharClassesKernel::generatePabloMethod() {
     CC_Compiler ccc(this, getInput(0));
     auto & pb = ccc.getBuilder();
-    unsigned n = mMultiplexedCCs.size();
+    unsigned n = mCCs.size();
 
     NameMap nameMap;
     std::vector<Name *> names;
     for (unsigned i = 0; i < n; i++) {
-        Name * name = re::makeName("cc" + std::to_string(i), makeCC(std::move(mMultiplexedCCs[i])));
+        Name * name = re::makeName("cc" + std::to_string(i), makeCC(std::move(mCCs[i])));
         nameMap.emplace(name, nullptr);
         names.push_back(name);
     }
@@ -55,7 +95,7 @@ void CharClassesKernel::generatePabloMethod() {
         ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     }
 
-    // The first UnicodeSet in the vector multiplexedCCs represents the last bit of the character class basis bit streams.
+    // The first UnicodeSet in the vector ccs represents the last bit of the character class basis bit streams.
     std::reverse(names.begin(), names.end());
     for (unsigned i = 0; i < names.size(); i++) {
         auto t = nameMap.find(names[i]); 
@@ -67,7 +107,7 @@ void CharClassesKernel::generatePabloMethod() {
                 pb.createAssign(r, t->second);
             }
         } else {
-          throw std::runtime_error("Can't compile character classes.");
+            throw std::runtime_error("Can't compile character classes.");
         }
     }
 }

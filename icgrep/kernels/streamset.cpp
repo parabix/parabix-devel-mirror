@@ -810,10 +810,15 @@ void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * handl
     b->CreateStore(currentWorkingBlocks, workingBlocksField);
 }
 
+inline StructType * getDynamicBufferStructType(const std::unique_ptr<kernel::KernelBuilder> & b, Type * baseType, const unsigned addrSpace) {
+    IntegerType * sizeTy = b->getSizeTy();
+    PointerType * typePtr = baseType->getPointerTo(addrSpace);
+    return StructType::get(typePtr, typePtr, sizeTy, sizeTy, sizeTy, sizeTy, sizeTy, nullptr);
+}
+
 DynamicBuffer::DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t initialCapacity, size_t overflow, unsigned swizzle, unsigned addrSpace)
 : StreamSetBuffer(BufferKind::DynamicBuffer, type, resolveStreamSetType(b, type), initialCapacity, addrSpace)
-, mBufferStructType(StructType::get(resolveStreamSetType(b, type)->getPointerTo(addrSpace), resolveStreamSetType(b, type)->getPointerTo(addrSpace),
-                                    b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), b->getSizeTy(), nullptr))
+, mBufferStructType(getDynamicBufferStructType(b, mType, addrSpace))
 , mSwizzleFactor(swizzle)
 , mOverflowBlocks(overflow)
 {

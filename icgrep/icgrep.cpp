@@ -96,11 +96,11 @@ std::vector<re::RE *> readExpressions() {
         }
         REs.swap(groups);
     } else if (REs.size() > 1) {
-        re::RE * re_ast = re::makeAlt(REs.begin(), REs.end());
-        REs.assign({re_ast});
+        REs.assign({re::makeAlt(REs.begin(), REs.end())});
     }
 
     for (re::RE *& re_ast : REs) {
+        assert (re_ast);
         if (grep::WordRegexpFlag) {
             re_ast = re::makeSeq({re::makeWordBoundary(), re_ast, re::makeWordBoundary()});
         }

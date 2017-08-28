@@ -8,8 +8,10 @@
 #define PABLO_COMPILER_H
 
 #include <unordered_map>
+#include <vector>
 #include <memory>
 namespace IDISA { class IDISA_Builder; }
+namespace llvm { class BasicBlock; }
 namespace llvm { class Function; }
 namespace llvm { class Value; }
 namespace pablo { class CarryManager; }
@@ -37,25 +39,27 @@ public:
 
 protected:
 
-    void initializeKernelData(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
+    void initializeKernelData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
-    void compile(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
+    void compile(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
-    void releaseKernelData(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder);
+    void releaseKernelData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
 private:
 
-    void examineBlock(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const block);
+    void examineBlock(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const block);
 
-    void compileBlock(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const block);
+    void compileBlock(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const block);
 
-    void compileStatement(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const Statement * stmt);
+    void compileStatement(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Statement * stmt);
 
-    void compileIf(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const If * ifStmt);
+    void compileIf(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const If * ifStmt);
 
-    void compileWhile(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const While * whileStmt);
+    void compileWhile(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const While * whileStmt);
 
-    llvm::Value * compileExpression(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloAST * expr, const bool ensureLoaded = true) const;
+    void addBranchCounter(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+
+    llvm::Value * compileExpression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloAST * expr, const bool ensureLoaded = true) const;
 
 private:
 
@@ -63,7 +67,8 @@ private:
     CarryManager * const            mCarryManager;
     TranslationMap                  mMarker;
     TranslationMap                  mAccumulator;
-
+    unsigned                        mBranchCount;
+    std::vector<llvm::BasicBlock *> mBasicBlock;
 };
 
 }

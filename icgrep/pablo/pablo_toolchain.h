@@ -17,12 +17,14 @@ enum PabloDebugFlags {
 };
 
 enum PabloCompilationFlags {
-    DisableSimplification, DisableCodeMotion, EnableDistribution, EnableSchedulingPrePass
+    DisableSimplification, DisableCodeMotion, EnableDistribution, EnableSchedulingPrePass, EnableProfiling
 };
     
 const llvm::cl::OptionCategory * pablo_toolchain_flags();
 
-bool DebugOptionIsSet(PabloDebugFlags flag);
+bool DebugOptionIsSet(const PabloDebugFlags flag);
+
+bool CompileOptionIsSet(const PabloCompilationFlags flag);
 
 void pablo_function_passes(PabloKernel * kernel);
 

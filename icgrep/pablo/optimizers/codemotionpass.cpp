@@ -9,6 +9,9 @@
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
 
+#include <llvm/Support/raw_ostream.h>
+#include <pablo/printer_pablos.h>
+
 using namespace llvm;
 
 namespace pablo {
@@ -182,35 +185,49 @@ struct CodeMotionPassContainer {
         assert (mLoopVariants.empty());
         for (Var * variant : loop->getEscaped()) {
             mLoopVariants.insert(variant);
+            mLoopInvariants.insert(variant);
         }
+        mLoopInvariants.erase(loop->getCondition());
+
         Statement * outerNode = loop->getPrevNode();
         Statement * stmt = loop->getBody()->front();
         while (stmt) {
             if (isa<Branch>(stmt)) {
                 for (Var * var : cast<Branch>(stmt)->getEscaped()) {
                     mLoopVariants.insert(var);
+                    mLoopInvariants.erase(var);
                 }
                 stmt = stmt->getNextNode();
             } else {
                 bool invariant = true;
-                for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                    if (mLoopVariants.count(stmt->getOperand(i)) != 0) {
+                if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
+                    if (mLoopVariants.count(cast<Assign>(stmt)->getValue()) != 0) {
                         invariant = false;
-                        break;
+                    }
+                } else {
+                    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                        const PabloAST * const op = stmt->getOperand(i);
+                        if (mLoopVariants.count(op) != 0) {
+                            if (isa<Var>(op)) {
+                                mLoopInvariants.erase(op);
+                            }
+                            invariant = false;
+                        }
                     }
                 }
-                if (LLVM_UNLIKELY(invariant)) {
-                    Statement * next = stmt->getNextNode();
+
+                Statement * const next = stmt->getNextNode();
+                if (LLVM_UNLIKELY(invariant)) {                    
                     stmt->insertAfter(outerNode);
-                    outerNode = stmt;
-                    stmt = next;
+                    outerNode = stmt;                    
                 } else {
                     mLoopVariants.insert(stmt);
-                    stmt = stmt->getNextNode();
                 }
+                stmt = next;
             }
         }
         mLoopVariants.clear();
+        assert (mLoopInvariants.empty());
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -248,6 +265,7 @@ private:
     ScopeSet        mScopes;
     UserSet         mUsers;
     LoopVariants    mLoopVariants;
+    LoopVariants    mLoopInvariants;
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -13,6 +13,11 @@
 #include <kernels/kernel_builder.h>
 #include <llvm/IR/Module.h>
 
+#include <pablo/branch.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <llvm/Support/raw_ostream.h>
+
 using namespace kernel;
 using namespace parabix;
 using namespace IDISA;
@@ -148,6 +153,67 @@ void PabloKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> 
 
 void PabloKernel::generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     mPabloCompiler->releaseKernelData(iBuilder);
+
+    if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {
+
+
+        Value * fd = iBuilder->CreateOpenCall(iBuilder->GetString("./" + getName() + ".profile"),
+                                              iBuilder->getInt32(O_WRONLY | O_CREAT | O_TRUNC),
+                                              iBuilder->getInt32(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH));
+
+        Function * dprintf = iBuilder->GetDprintf();
+
+
+
+        Value * profile = iBuilder->getScalarFieldPtr("profile");
+
+
+        unsigned branchCount = 0;
+
+        for (const auto bb : mPabloCompiler->mBasicBlock) {
+
+            std::string tmp;
+            raw_string_ostream str(tmp);
+            str << "%lu\t";
+            str << bb->getName();
+            str << "\n";
+
+            Value * taken = iBuilder->CreateLoad(iBuilder->CreateGEP(profile, {iBuilder->getInt32(0), iBuilder->getInt32(branchCount++)}));
+            iBuilder->CreateCall(dprintf, {fd, iBuilder->GetString(str.str()), taken});
+
+        }
+
+//        Value * base = iBuilder->CreateLoad(iBuilder->CreateGEP(profile, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
+//        base = iBuilder->CreateUIToFP(base, iBuilder->getDoubleTy());
+
+//        unsigned branchCount = 0;
+//        std::function<void (const PabloBlock *)> writeProfile = [&](const PabloBlock * const scope) {
+//            for (const Statement * stmt : *scope) {
+//                if (isa<Branch>(stmt)) {
+
+//                    ++branchCount;
+
+//                    std::string tmp;
+//                    raw_string_ostream str(tmp);
+//                    str << "%3.3f\t";
+//                    str << mPabloCompiler->getBranchEntry(branchCount)->getName();
+//                    str << "\n";
+
+//                    Value * branches = iBuilder->CreateLoad(iBuilder->CreateGEP(profile, {iBuilder->getInt32(0), iBuilder->getInt32(branchCount)}));
+//                    branches = iBuilder->CreateUIToFP(branches, iBuilder->getDoubleTy());
+//                    Value * prob = iBuilder->CreateFDiv(branches, base);
+//                    iBuilder->CreateCall(dprintf, {fd, iBuilder->GetString(str.str()), prob});
+
+//                    writeProfile(cast<Branch>(stmt)->getBody());
+
+//                }
+//            }
+//        };
+
+//        writeProfile(getEntryBlock());
+        iBuilder->CreateCloseCall(fd);
+    }
+
 }
 
 String * PabloKernel::makeName(const llvm::StringRef & prefix) const {
@@ -162,11 +228,14 @@ llvm::IntegerType * PabloKernel::getInt1Ty() const {
     return IntegerType::getInt1Ty(getModule()->getContext());
 }
 
-static inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
+static inline std::string && annotateKernelNameWithDebugFlags(std::string && name) {
     if (DebugOptionIsSet(DumpTrace)) {
         name += "_DumpTrace";
     }
-    return name;
+    if (CompileOptionIsSet(EnableProfiling)) {
+        name += "_BranchProfiling";
+    }
+    return std::move(name);
 }
 
 PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,

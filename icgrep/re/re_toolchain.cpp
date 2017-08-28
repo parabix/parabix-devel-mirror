@@ -15,6 +15,7 @@
 #include <re/printer_re.h>
 #include <re/re_analysis.h>
 #include <iostream>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace pablo;
 using namespace llvm;

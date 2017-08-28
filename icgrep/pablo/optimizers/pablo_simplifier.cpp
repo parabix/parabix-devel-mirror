@@ -12,12 +12,10 @@
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_var.h>
-#include <boost/container/flat_set.hpp>
 #ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
-#include <llvm/Support/raw_ostream.h>
-
+#include <boost/container/flat_set.hpp>
 
 using namespace boost;
 using namespace boost::container;
@@ -27,10 +25,240 @@ namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
 
+using ScopeMap = flat_map<PabloBlock *, unsigned>;
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief VariableTable
+ ** ------------------------------------------------------------------------------------------------------------- */
+struct VariableTable {
+
+    VariableTable(VariableTable * predecessor = nullptr)
+    : mPredecessor(predecessor) {
+
+    }
+
+    PabloAST * get(PabloAST * const var) const {
+        const auto f = mMap.find(var);
+        if (f == mMap.end()) {
+            return (mPredecessor) ? mPredecessor->get(var) : nullptr;
+        }
+        return f->second;
+    }
+
+    void put(PabloAST * const var, PabloAST * value) {
+        const auto f = mMap.find(var);
+        if (LLVM_LIKELY(f == mMap.end())) {
+            mMap.emplace(var, value);
+        } else {
+            f->second = value;
+        }
+        assert (get(var) == value);
+    }
+
+private:
+    VariableTable * const mPredecessor;
+    flat_map<PabloAST *, PabloAST *> mMap;
+};
+
+struct PassContainer {
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief run
+ ** ------------------------------------------------------------------------------------------------------------- */
+void run(PabloKernel * const kernel) {
+    redundancyElimination(kernel->getEntryBlock(), nullptr, nullptr);
+    strengthReduction(kernel->getEntryBlock());
+    deadCodeElimination(kernel->getEntryBlock());
+}
+
+protected:
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief redundancyElimination
+ *
+ * Note: Do not recursively delete statements in this function. The ExpressionTable could use deleted statements
+ * as replacements. Let the DCE remove the unnecessary statements with the finalized Def-Use information.
+ ** ------------------------------------------------------------------------------------------------------------- */
+void redundancyElimination(PabloBlock * const block, ExpressionTable * const et, VariableTable * const vt) {
+    ExpressionTable expressions(et);
+    VariableTable variables(vt);
+
+    if (Branch * br = block->getBranch()) {
+        assert ("block has a branch but the expression and variable tables were not supplied" && et && vt);
+        for (Var * var : br->getEscaped()) {
+            variables.put(var, var);
+        }
+    }
+
+    mInScope.push_back(block);
+
+    const auto baseNonZeroEntries = mNonZero.size();
+    Statement * stmt = block->front();
+    while (stmt) {
+
+        if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
+            Assign * const assign = cast<Assign>(stmt);
+            PabloAST * const var = assign->getVariable();
+            PabloAST * value = assign->getValue();
+            if (LLVM_UNLIKELY(var == value)) {
+                stmt = stmt->eraseFromParent();
+                continue;
+            }
+            while (LLVM_UNLIKELY(isa<Var>(value))) {
+                PabloAST * next = variables.get(cast<Var>(value));
+                if (LLVM_LIKELY(next == nullptr || next == value)) {
+                    break;
+                }
+                value = next;
+                assign->setValue(value);
+            }
+            if (LLVM_UNLIKELY(variables.get(var) == value)) {
+                stmt = stmt->eraseFromParent();
+                continue;
+            }
+            variables.put(var, value);
+
+        } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+
+            Branch * const br = cast<Branch>(stmt);
+            PabloAST * cond = br->getCondition();
+            if (isa<Var>(cond)) {
+                PabloAST * const value = variables.get(cast<Var>(cond));
+                if (value) {
+                    cond = value;
+                    if (isa<If>(br)) {
+                        br->setCondition(cond);
+                    }
+                }
+            }
+
+            // Test whether we can ever take this branch
+            if (LLVM_UNLIKELY(isa<Zeroes>(cond))) {
+                stmt = stmt->eraseFromParent();
+                continue;
+            }
+
+            // If we're guaranteed to take this branch, flatten it.
+            if (LLVM_LIKELY(isa<If>(br)) && LLVM_UNLIKELY(isNonZero(cond))) {
+                stmt = flatten(br);
+                continue;
+            }
+
+            // Mark the cond as non-zero prior to processing the inner scope.
+            mNonZero.push_back(cond);
+            // Process the Branch body
+            redundancyElimination(br->getBody(), &expressions, &variables);
+            assert (mNonZero.back() == cond);
+            mNonZero.pop_back();
+
+            if (LLVM_LIKELY(isa<If>(br))) {
+                // Check whether the cost of testing the condition and taking the branch with
+                // 100% correct prediction rate exceeds the cost of the body itself
+                if (LLVM_UNLIKELY(isTrivial(br->getBody()))) {
+                    stmt = flatten(br);
+                    continue;
+                }
+            }
+
+        } else {
+
+            // demote any uses of any Var whose value is in scope
+            for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
+                PabloAST * op = stmt->getOperand(i);
+                if (LLVM_UNLIKELY(isa<Var>(op))) {
+                    PabloAST * const value = variables.get(cast<Var>(op));
+                    if (value && value != op) {
+                        stmt->setOperand(i, value);
+                    }
+                }
+            }
+
+            PabloAST * const folded = triviallyFold(stmt, block);
+            if (folded) {
+                Statement * const prior = stmt->getPrevNode();
+                stmt->replaceWith(folded);
+                stmt = prior ? prior->getNextNode() : block->front();
+                continue;
+            }
+
+            // By recording which statements have already been seen, we can detect the redundant statements
+            // as any having the same type and operands. If so, we can replace its users with the prior statement.
+            // and erase this statement from the AST
+            const auto f = expressions.findOrAdd(stmt);
+            if (!f.second) {
+                stmt = stmt->replaceWith(f.first);
+                continue;
+            }
+
+            // Attempt to extend our set of trivially non-zero statements.
+            if (isa<Or>(stmt)) {
+                for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
+                    if (LLVM_UNLIKELY(isNonZero(stmt->getOperand(i)))) {
+                        mNonZero.push_back(stmt);
+                        break;
+                    }
+                }
+            } else if (isa<Advance>(stmt)) {
+                const Advance * const adv = cast<Advance>(stmt);
+                if (LLVM_LIKELY(adv->getAmount() < (adv->getType()->getPrimitiveSizeInBits() / 2))) {
+                    if (LLVM_UNLIKELY(isNonZero(adv->getExpression()))) {
+                        mNonZero.push_back(adv);
+                    }
+                }
+            }
+        }
+
+        stmt = stmt->getNextNode();
+    }
+
+    // Erase any local non-zero entries that were discovered while processing this scope
+    mNonZero.erase(mNonZero.begin() + baseNonZeroEntries, mNonZero.end());
+
+    assert (mInScope.back() == block);
+    mInScope.pop_back();
+
+    // If this block has a branch statement leading into it, we can verify whether an escaped value
+    // was updated within this block and update the preceeding block's variable state appropriately.
+
+    Branch * const br = block->getBranch();
+    if (LLVM_LIKELY(br != nullptr)) {
+
+        // When removing identical escaped values, we have to consider that the identical Vars could
+        // be assigned new differing values later in the outer body. Thus instead of replacing them
+        // directly, we map future uses of the duplicate Var to the initial one. The DCE pass will
+        // later mark any Assign statement as dead if the Var is never read.
+
+        const auto escaped = br->getEscaped();
+        const auto n = escaped.size();
+        PabloAST * variable[n];
+        PabloAST * incoming[n];
+        PabloAST * outgoing[n];
+        for (unsigned i = 0; i < n; ++i) {
+            variable[i] = escaped[i];
+            incoming[i] = vt->get(variable[i]);
+            outgoing[i] = variables.get(variable[i]);
+            if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
+                variable[i] = incoming[i];
+            } else {
+                for (unsigned j = 0; j < i; ++j) {
+                    if (LLVM_UNLIKELY((outgoing[j] == outgoing[i]) && (incoming[j] == incoming[i]))) {
+                        variable[i] = variable[j];
+                        break;
+                    }
+                }
+            }
+            vt->put(escaped[i], variable[i]);
+        }
+
+    }
+
+}
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
+static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
     if (isa<Not>(stmt)) {
         PabloAST * value = stmt->getOperand(0);
         if (LLVM_UNLIKELY(isa<Not>(value))) {
@@ -40,11 +268,7 @@ PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
         }  else if (LLVM_UNLIKELY(isa<Ones>(value))) {
             return block->createZeroes(stmt->getType()); // ¬1 ⇔ 0
         }
-    } else if (isa<Advance>(stmt)) {
-        if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(0)))) {
-            return block->createZeroes(stmt->getType());
-        }
-    } else if (isa<Add>(stmt) || isa<Subtract>(stmt)) {
+    } else if (LLVM_UNLIKELY(isa<Add>(stmt) || isa<Subtract>(stmt))) {
        if (LLVM_UNLIKELY(isa<Integer>(stmt->getOperand(0)) && isa<Integer>(stmt->getOperand(1)))) {
            const Integer * const int0 = cast<Integer>(stmt->getOperand(0));
            const Integer * const int1 = cast<Integer>(stmt->getOperand(1));
@@ -56,6 +280,83 @@ PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
            }
            return block->getInteger(result);
        }
+    } else if (LLVM_UNLIKELY(isa<Variadic>(stmt))) {
+
+        std::sort(cast<Variadic>(stmt)->begin(), cast<Variadic>(stmt)->end());
+
+        for (unsigned i = 1; i < stmt->getNumOperands(); ) {
+            if (LLVM_UNLIKELY(stmt->getOperand(i - 1) == stmt->getOperand(i))) {
+                if (LLVM_UNLIKELY(isa<Xor>(stmt))) {
+                    if (LLVM_LIKELY(stmt->getNumOperands() == 2)) {
+                        return block->createZeroes(stmt->getType());
+                    } else {
+                        cast<Variadic>(stmt)->removeOperand(i);
+                        cast<Variadic>(stmt)->removeOperand(i - 1);
+                        continue;
+                    }
+                } else {
+                    if (LLVM_LIKELY(stmt->getNumOperands() == 2)) {
+                        return stmt->getOperand(1 - i);
+                    } else {
+                        cast<Variadic>(stmt)->removeOperand(i);
+                        continue;
+                    }
+                }
+            }
+            ++i;
+        }
+
+        if (LLVM_UNLIKELY(stmt->getNumOperands() < 2)) {
+            if (LLVM_LIKELY(stmt->getNumOperands() == 1)) {
+                return stmt->getOperand(0);
+            } else {
+                return block->createZeroes(stmt->getType());
+            }
+        }
+
+        if (LLVM_UNLIKELY(isa<Xor>(stmt))) {
+            bool negated = false;
+            PabloAST * expr = nullptr;
+            for (unsigned i = 0; i < stmt->getNumOperands(); ) {
+                const PabloAST * const op = stmt->getOperand(i);
+                if (isa<Not>(op)) {
+                    negated ^= true;
+                    stmt->setOperand(i, cast<Not>(op)->getExpr());
+                } else if (LLVM_UNLIKELY(isa<Zeroes>(op) || isa<Ones>(op))) {
+                    negated ^= isa<Ones>(op);
+                    if (LLVM_LIKELY(stmt->getNumOperands() == 2)) {
+                        expr = stmt->getOperand(1 - i);
+                        break;
+                    } else {
+                        cast<Variadic>(stmt)->removeOperand(i);
+                        continue;
+                    }
+                }
+                ++i;
+            }
+            if (LLVM_UNLIKELY(negated)) {
+                block->setInsertPoint(stmt);
+                expr = block->createNot(expr ? expr : stmt);
+            }
+            return expr;
+        } else { // if (isa<And>(stmt) || isa<Or>(stmt))
+            for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
+                const PabloAST * const op = stmt->getOperand(i);
+                if (LLVM_UNLIKELY(isa<Zeroes>(op) || isa<Ones>(op))) {
+                    if (isa<And>(stmt) ^ isa<Zeroes>(op)) {
+                        if (LLVM_LIKELY(stmt->getNumOperands() == 2)) {
+                            return stmt->getOperand(1 - i);
+                        } else {
+                            cast<Variadic>(stmt)->removeOperand(i);
+                            continue;
+                        }
+                    } else {
+                        return stmt->getOperand(i);
+                    }
+                }
+                ++i;
+            }
+        }
     } else {
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
             if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(i)))) {
@@ -67,6 +368,7 @@ PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
                             case 1: return block->createAnd(block->createNot(stmt->getOperand(0)), stmt->getOperand(2));
                             case 2: return block->createAnd(stmt->getOperand(0), stmt->getOperand(1));
                         }
+                    case TypeId::Advance:
                     case TypeId::ScanThru:
                     case TypeId::MatchStar:
                         return stmt->getOperand(0);
@@ -100,59 +402,12 @@ PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief VariableTable
- ** ------------------------------------------------------------------------------------------------------------- */
-struct VariableTable {
-
-    VariableTable(VariableTable * predecessor = nullptr)
-    : mPredecessor(predecessor) {
-
-    }
-
-    PabloAST * get(PabloAST * const var) const {
-        const auto f = mMap.find(var);
-        if (f == mMap.end()) {
-            return (mPredecessor) ? mPredecessor->get(var) : nullptr;
-        }
-        return f->second;
-    }
-
-    void put(PabloAST * const var, PabloAST * value) {
-        const auto f = mMap.find(var);
-        if (LLVM_LIKELY(f == mMap.end())) {
-            mMap.emplace(var, value);
-        } else {
-            f->second = value;
-        }
-        assert (get(var) == value);
-    }
-
-    bool isNonZero(const PabloAST * const var) const {
-        if (mNonZero.count(var) != 0) {
-            return true;
-        } else if (mPredecessor) {
-            return mPredecessor->isNonZero(var);
-        }
-        return false;
-    }
-
-    void addNonZero(const PabloAST * const var) {
-        mNonZero.insert(var);
-    }
-
-private:
-    VariableTable * const mPredecessor;
-    flat_map<PabloAST *, PabloAST *> mMap;
-    flat_set<const PabloAST *> mNonZero;
-};
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isTrivial
  *
  * If this inner block is composed of only Boolean logic and Assign statements and there are fewer than 3
  * statements, just add the statements in the inner block to the current block
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isTrivial(const PabloBlock * const block) {
+static bool isTrivial(const PabloBlock * const block) {
     unsigned computations = 0;
     for (const Statement * stmt : *block) {
         switch (stmt->getClassTypeId()) {
@@ -175,7 +430,7 @@ inline bool isTrivial(const PabloBlock * const block) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief flatten
  ** ------------------------------------------------------------------------------------------------------------- */
-Statement * flatten(Branch * const br) {
+static Statement * flatten(Branch * const br) {
     Statement * stmt = br;
     Statement * nested = br->getBody()->front();
     while (nested) {
@@ -188,248 +443,10 @@ Statement * flatten(Branch * const br) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief redundancyElimination
- *
- * Note: Do not recursively delete statements in this function. The ExpressionTable could use deleted statements
- * as replacements. Let the DCE remove the unnecessary statements with the finalized Def-Use information.
+ * @brief isNonZero
  ** ------------------------------------------------------------------------------------------------------------- */
-void redundancyElimination(PabloBlock * const block, ExpressionTable * const et, VariableTable * const vt) {
-    VariableTable variables(vt);
-
-    // When processing a While body, we cannot use its initial value from the outer
-    // body since the Var will likely be assigned a different value in the current
-    // body that should be used on the subsequent iteration of the loop.
-    if (Branch * br = block->getBranch()) {
-        assert ("block has a branch but the expression and variable tables were not supplied" && et && vt);
-        variables.addNonZero(br->getCondition());
-        for (Var * var : br->getEscaped()) {
-            variables.put(var, var);
-        }
-    }
-
-    ExpressionTable expressions(et);
-
-    Statement * stmt = block->front();
-    while (stmt) {
-
-        if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
-            Assign * const assign = cast<Assign>(stmt);
-            PabloAST * const var = assign->getVariable();
-            PabloAST * value = assign->getValue();
-            while (LLVM_UNLIKELY(isa<Var>(value))) {
-                PabloAST * next = variables.get(cast<Var>(value));
-                if (LLVM_LIKELY(next == nullptr || next == value)) {
-                    break;
-                }
-                value = next;
-                assign->setValue(value);
-            }
-            if (LLVM_UNLIKELY(variables.get(var) == value)) {
-                stmt = stmt->eraseFromParent();
-                continue;
-            }
-            variables.put(var, value);
-        } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
-
-            Branch * const br = cast<Branch>(stmt);
-
-            // Test whether we can ever take this branch
-            PabloAST * cond = br->getCondition();
-            if (isa<Var>(cond)) {
-                PabloAST * const value = variables.get(cast<Var>(cond));
-                if (value) {
-                    cond = value;
-                    // TODO: verify this works for a nested If node within a While body.
-                    if (isa<If>(br)) {
-                        br->setCondition(cond);
-                    }
-                }
-            }
-
-            if (LLVM_UNLIKELY(isa<Zeroes>(cond))) {
-                stmt = stmt->eraseFromParent();
-                continue;
-            }
-
-            if (LLVM_LIKELY(isa<If>(br))) {
-                if (LLVM_UNLIKELY(variables.isNonZero(cond))) {
-                    stmt = flatten(br);
-                    continue;
-                }
-            }
-
-            // Process the Branch body
-            redundancyElimination(br->getBody(), &expressions, &variables);
-
-            if (LLVM_LIKELY(isa<If>(br))) {
-                // Check whether the cost of testing the condition and taking the branch with
-                // 100% correct prediction rate exceeds the cost of the body itself
-                if (LLVM_UNLIKELY(isTrivial(br->getBody()))) {
-                    stmt = flatten(br);
-                    continue;
-                }
-            }
-
-        } else {
-
-            // demote any uses of a Var whose value is in scope
-            for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
-                PabloAST * op = stmt->getOperand(i);
-                if (LLVM_UNLIKELY(isa<Var>(op))) {
-                    PabloAST * const value = variables.get(cast<Var>(op));
-                    if (value && value != op) {
-                        stmt->setOperand(i, value);
-                    }
-                }
-            }
-
-            PabloAST * const folded = triviallyFold(stmt, block);
-            if (folded) {
-                stmt = stmt->replaceWith(folded);
-                continue;
-            }
-
-            // By recording which statements have already been seen, we can detect the redundant statements
-            // as any having the same type and operands. If so, we can replace its users with the prior statement.
-            // and erase this statement from the AST
-            const auto f = expressions.findOrAdd(stmt);
-            if (!f.second) {
-                stmt = stmt->replaceWith(f.first);
-                continue;
-            }
-
-            // Check whether this statement is trivially non-zero and if so, add it to our set of non-zero variables.
-            // This will allow us to flatten an If scope if its branch is always taken.
-            if (isa<Or>(stmt)) {
-                for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
-                    if (LLVM_UNLIKELY(variables.isNonZero(stmt->getOperand(i)))) {
-                        variables.addNonZero(stmt);
-                        break;
-                    }
-                }
-            } else if (isa<Advance>(stmt)) {
-                const Advance * const adv = cast<Advance>(stmt);
-                if (LLVM_LIKELY(adv->getAmount() < 32)) {
-                    if (LLVM_UNLIKELY(variables.isNonZero(adv->getExpression()))) {
-                        variables.addNonZero(adv);
-                    }
-                }
-            }
-        }
-
-        stmt = stmt->getNextNode();
-    }
-
-    // If this block has a branch statement leading into it, we can verify whether an escaped value
-    // was updated within this block and update the preceeding block's variable state appropriately.
-
-    if (Branch * const br = block->getBranch()) {
-
-        // When removing identical escaped values, we have to consider that the identical Vars could
-        // be assigned new differing values later in the outer body. Thus instead of replacing them
-        // directly, we map future uses of the duplicate Var to the initial one. The DCE pass will
-        // later mark any Assign statement as dead if the Var is never read.
-
-        /// TODO: this doesn't properly optimize the loop control variable(s) yet.
-
-        const auto escaped = br->getEscaped();
-        const auto n = escaped.size();
-        PabloAST * variable[n];
-        PabloAST * incoming[n];
-        PabloAST * outgoing[n];
-
-        for (unsigned i = 0; i < escaped.size(); ++i) {
-            PabloAST * var = escaped[i];
-            incoming[i] = vt->get(var);
-            outgoing[i] = variables.get(var);
-            if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
-                var = incoming[i];
-            } else {
-                for (size_t j = 0; j != i; ++j) {
-                    if ((outgoing[j] == outgoing[i]) && (incoming[j] == incoming[i])) {
-                        var = variable[j];
-                        break;
-                    }
-                }
-            }
-            variable[i] = var;
-            vt->put(escaped[i], var);
-        }
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief deadCodeElimination
- ** ------------------------------------------------------------------------------------------------------------- */
-void deadCodeElimination(PabloBlock * const block) {
-
-    flat_map<PabloAST *, Assign *> unread;
-
-    Statement * stmt = block->front();
-    while (stmt) {
-        if (unread.size() != 0) {
-            for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
-                PabloAST * const op = stmt->getOperand(i);
-                if (LLVM_UNLIKELY(isa<Var>(op))) {
-                    unread.erase(op);
-                }
-            }
-        }
-        if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
-            Branch * const br = cast<Branch>(stmt);
-            deadCodeElimination(br->getBody());
-            if (LLVM_UNLIKELY(br->getEscaped().empty())) {
-                stmt = stmt->eraseFromParent(true);
-                continue;
-            }
-        } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
-            // An Assign statement is locally dead whenever its variable is not read
-            // before being reassigned a value.
-            PabloAST * var = cast<Assign>(stmt)->getVariable();
-            auto f = unread.find(var);
-            if (f != unread.end()) {
-                auto prior = f->second;
-                prior->eraseFromParent(true);
-                f->second = cast<Assign>(stmt);
-            } else {
-                unread.emplace(var, cast<Assign>(stmt));
-            }
-        } else if (LLVM_UNLIKELY(stmt->getNumUses() == 0)) {
-            stmt = stmt->eraseFromParent(true);
-            continue;
-        }
-        stmt = stmt->getNextNode();
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief deadCodeElimination
- ** ------------------------------------------------------------------------------------------------------------- */
-void deadCodeElimination(PabloKernel * kernel) {
-
-    deadCodeElimination(kernel->getEntryBlock());
-
-    for (unsigned i = 0; i < kernel->getNumOfVariables(); ++i) {
-        Var * var = kernel->getVariable(i);
-        bool unused = true;
-        for (PabloAST * user : var->users()) {
-            if (isa<Assign>(user)) {
-                if (cast<Assign>(user)->getValue() == var) {
-                    unused = false;
-                    break;
-                }
-            } else {
-                unused = false;
-                break;
-            }
-        }
-        if (LLVM_UNLIKELY(unused)) {
-            for (PabloAST * user : var->users()) {
-                cast<Assign>(user)->eraseFromParent(true);
-            }
-        }
-    }
-
+bool isNonZero(const PabloAST * const expr) const {
+    return isa<Ones>(expr) || std::find(mNonZero.begin(), mNonZero.end(), expr) != mNonZero.end();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -502,12 +519,43 @@ void strengthReduction(PabloBlock * const block) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief deadCodeElimination
+ ** ------------------------------------------------------------------------------------------------------------- */
+void deadCodeElimination(PabloBlock * const block) {
+
+    flat_set<PabloAST *> written;
+
+    for (Statement * stmt = block->back(), * prior; stmt; stmt = prior) {
+        prior = stmt->getPrevNode();
+        if (LLVM_UNLIKELY(stmt->getNumUses() == 0)) {
+            if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+                written.clear();
+                deadCodeElimination(cast<Branch>(stmt)->getBody());
+            } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
+                // An Assign statement is locally dead whenever its variable is not read
+                // before being reassigned a value.
+                PabloAST * var = cast<Assign>(stmt)->getVariable();
+                if (LLVM_UNLIKELY(!written.insert(var).second)) {
+                    stmt->eraseFromParent();
+                }
+            } else {
+                stmt->eraseFromParent();
+            }
+        }
+    }
+}
+
+std::vector<const PabloAST *>       mNonZero;
+std::vector<const PabloBlock *>     mInScope;
+
+};
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool Simplifier::optimize(PabloKernel * kernel) {
-    redundancyElimination(kernel->getEntryBlock(), nullptr, nullptr);
-    strengthReduction(kernel->getEntryBlock());
-    deadCodeElimination(kernel);
+    PassContainer pc;
+    pc.run(kernel);
     #ifndef NDEBUG
     PabloVerifier::verify(kernel, "post-simplification");
     #endif

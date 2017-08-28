@@ -34,8 +34,8 @@ void IcgrepTest::backup(){
         throw std::runtime_error("Cannot create destination directory " + dst.string());
     }
 
-	for (const auto& dirEnt : fs::recursive_directory_iterator{src}) 
-	{
+	for (const auto& dirEnt : fs::recursive_directory_iterator{src})
+    {
         const auto& path = dirEnt.path();
         auto relativePathStr = path.string();
         boost::replace_first(relativePathStr, src.string(), "");

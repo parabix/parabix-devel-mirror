@@ -39,36 +39,44 @@ namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
 
-inline static unsigned getAlignment(const Value * const ptr) {
-    return ptr->getType()->getPrimitiveSizeInBits() / 8;
+inline static unsigned getAlignment(const Value * const type) {
+    return type->getType()->getPrimitiveSizeInBits() / 8;
 }
 
 inline static unsigned getPointerElementAlignment(const Value * const ptr) {
     return ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
 }
 
-void PabloCompiler::initializeKernelData(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder) {
+void PabloCompiler::initializeKernelData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     assert ("PabloCompiler does not have a IDISA iBuilder" && iBuilder);
+    mBranchCount = 0;
     examineBlock(iBuilder, mKernel->getEntryBlock());
     mCarryManager->initializeCarryData(iBuilder, mKernel);
+    if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {
+        const auto count = (mBranchCount * 2) + 1;
+        mKernel->addScalar(ArrayType::get(mKernel->getSizeTy(), count), "profile");
+        mBasicBlock.reserve(count);
+    }
 }
 
-void PabloCompiler::releaseKernelData(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder) {
+void PabloCompiler::releaseKernelData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     assert ("PabloCompiler does not have a IDISA iBuilder" && iBuilder);
     mCarryManager->releaseCarryData(iBuilder);
 }
 
-void PabloCompiler::compile(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder) {
+void PabloCompiler::compile(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     assert ("PabloCompiler does not have a IDISA iBuilder" && iBuilder);
     mCarryManager->initializeCodeGen(iBuilder);
     PabloBlock * const entryBlock = mKernel->getEntryBlock(); assert (entryBlock);
     mMarker.emplace(entryBlock->createZeroes(), iBuilder->allZeroes());
     mMarker.emplace(entryBlock->createOnes(), iBuilder->allOnes());
+    mBranchCount = 0;
+    addBranchCounter(iBuilder);
     compileBlock(iBuilder, entryBlock);
     mCarryManager->finalizeCodeGen(iBuilder);
 }
 
-void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const block) {
+void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const block) {
     for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
@@ -77,6 +85,7 @@ void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & 
                 mKernel->setLookAhead(la->getAmount());
             }
         } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+            ++mBranchCount;
             examineBlock(iBuilder, cast<Branch>(stmt)->getBody());
         } else if (LLVM_UNLIKELY(isa<Count>(stmt))) {
             mAccumulator.insert(std::make_pair(stmt, iBuilder->getInt32(mKernel->addUnnamedScalar(stmt->getType()))));
@@ -84,13 +93,26 @@ void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & 
     }    
 }
 
-inline void PabloCompiler::compileBlock(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloBlock * const block) {
+void PabloCompiler::addBranchCounter(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
+    if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {        
+        Value * ptr = iBuilder->getScalarFieldPtr("profile");
+        assert (mBasicBlock.size() < ptr->getType()->getPointerElementType()->getArrayNumElements());
+        ptr = iBuilder->CreateGEP(ptr, {iBuilder->getInt32(0), iBuilder->getInt32(mBasicBlock.size())});
+        const auto alignment = getPointerElementAlignment(ptr);
+        Value * value = iBuilder->CreateAlignedLoad(ptr, alignment, false, "branchCounter");
+        value = iBuilder->CreateAdd(value, ConstantInt::get(cast<IntegerType>(value->getType()), 1));
+        iBuilder->CreateAlignedStore(value, ptr, alignment);
+        mBasicBlock.push_back(iBuilder->GetInsertBlock());
+    }
+}
+
+inline void PabloCompiler::compileBlock(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const block) {
     for (const Statement * statement : *block) {
         compileStatement(iBuilder, statement);
     }
 }
 
-void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const If * const ifStatement) {
+void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const If * const ifStatement) {
     //
     //  The If-ElseZero stmt:
     //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
@@ -110,8 +132,9 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> &  iB
     //
 
     BasicBlock * const ifEntryBlock = iBuilder->GetInsertBlock();
-    BasicBlock * const ifBodyBlock = iBuilder->CreateBasicBlock("if.body");
-    BasicBlock * const ifEndBlock = iBuilder->CreateBasicBlock("if.end");
+    ++mBranchCount;
+    BasicBlock * const ifBodyBlock = iBuilder->CreateBasicBlock("if.body_" + std::to_string(mBranchCount));
+    BasicBlock * const ifEndBlock = iBuilder->CreateBasicBlock("if.end_" + std::to_string(mBranchCount));
     
     std::vector<std::pair<const Var *, Value *>> incoming;
 
@@ -155,6 +178,8 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> &  iB
     iBuilder->SetInsertPoint(ifBodyBlock);
 
     mCarryManager->enterIfBody(iBuilder, ifEntryBlock);
+
+    addBranchCounter(iBuilder);
 
     compileBlock(iBuilder, ifBody);
 
@@ -208,10 +233,12 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> &  iB
         phi->addIncoming(incoming, ifEntryBlock);
         phi->addIncoming(outgoing, ifExitBlock);
         f->second = phi;
-    }    
+    }
+
+    addBranchCounter(iBuilder);
 }
 
-void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const While * const whileStatement) {
+void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const While * const whileStatement) {
 
     const PabloBlock * const whileBody = whileStatement->getBody();
 
@@ -242,7 +269,9 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
 
     mCarryManager->enterLoopScope(iBuilder, whileBody);
 
-    BasicBlock * whileBodyBlock = iBuilder->CreateBasicBlock("while.body");
+    BasicBlock * whileBodyBlock = iBuilder->CreateBasicBlock("while.body_" + std::to_string(mBranchCount));
+    BasicBlock * whileEndBlock = iBuilder->CreateBasicBlock("while.end_" + std::to_string(mBranchCount));
+    ++mBranchCount;
 
     iBuilder->CreateBr(whileBodyBlock);
 
@@ -286,6 +315,8 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
 #endif
 
     mCarryManager->enterLoopBody(iBuilder, whileEntryBlock);
+
+    addBranchCounter(iBuilder);
 
     compileBlock(iBuilder, whileBody);
 
@@ -337,8 +368,6 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
         incomingPhi->addIncoming(outgoingValue, whileExitBlock);
     }
 
-    BasicBlock * whileEndBlock = iBuilder->CreateBasicBlock("while.end");
-
     // Terminate the while loop body with a conditional branch back.
     Value * condition = compileExpression(iBuilder, whileStatement->getCondition());
     if (condition->getType() == iBuilder->getBitBlockType()) {
@@ -347,13 +376,16 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
 
     iBuilder->CreateCondBr(condition, whileBodyBlock, whileEndBlock);
 
+    whileEndBlock->moveAfter(whileExitBlock);
+
     iBuilder->SetInsertPoint(whileEndBlock);
 
     mCarryManager->leaveLoopScope(iBuilder, whileEntryBlock, whileExitBlock);
 
+    addBranchCounter(iBuilder);
 }
 
-void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const Statement * const stmt) {
+void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Statement * const stmt) {
 
     if (LLVM_UNLIKELY(isa<If>(stmt))) {
         compileIf(iBuilder, cast<If>(stmt));
@@ -586,7 +618,7 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
     }
 }
 
-Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBuilder> &  iBuilder, const PabloAST * expr, const bool ensureLoaded) const {
+Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloAST * expr, const bool ensureLoaded) const {
     if (LLVM_UNLIKELY(isa<Ones>(expr))) {
         return iBuilder->allOnes();
     } else if (LLVM_UNLIKELY(isa<Zeroes>(expr))) {
@@ -653,7 +685,8 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
 
 PabloCompiler::PabloCompiler(PabloKernel * const kernel)
 : mKernel(kernel)
-, mCarryManager(new CarryManager) {
+, mCarryManager(new CarryManager)
+, mBranchCount(0) {
     assert ("PabloKernel cannot be null!" && kernel);
 }
 

@@ -204,12 +204,13 @@ protected:
 
             entry->setInsertPoint(stmt->getPrevNode());
             for (const auto e : make_iterator_range(in_edges(u, G))) {
-                stmt->setOperand(G[e], regenerateIfNecessary(stmt, entry, source(e, G), count));
+                const auto v = source(e, G);
+                stmt->setOperand(G[e], regenerateIfNecessary(stmt, entry, v, count));
+                setLastUsageTime(v, ++count);
             }
             setValue(u, stmt);
             setLastUsageTime(u, ++count);
-
-            if (isa<Branch>(stmt)) {
+            if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
                 count = rewriteAST(cast<Branch>(stmt)->getBody(), count);
             }
 
@@ -298,9 +299,8 @@ protected:
             }
             assert (value);
             setUnmodified(u);
-            setValue(u, value);
-            setLastUsageTime(u, ++count);
-        }
+            setValue(u, value);            
+        }        
         return value;
     }
 
@@ -324,6 +324,132 @@ repeat: getReverseTopologicalOrdering();
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
+     * @brief printGraph
+     ** ------------------------------------------------------------------------------------------------------------- */
+    void printGraph(const std::string & name, llvm::raw_ostream & out, std::vector<Vertex> restricted = {}) {
+
+        const auto n = num_vertices(G);
+        std::vector<unsigned> c(n);
+        const auto components = strong_components(G, make_iterator_property_map(c.begin(), get(vertex_index, G), c[0]));
+
+        std::vector<bool> show(n, false);
+        if (LLVM_LIKELY(restricted.empty() && n == components)) {
+            for (const auto u : make_iterator_range(vertices(G))) {
+                show[u] = isLive(u);
+            }
+        } else {
+            std::queue<Vertex> Q;
+            for (const auto m : restricted) {
+                if (m < n && isLive(m)) {
+                    show[m] = true;
+                    assert (Q.empty());
+                    Q.push(m);
+                    for (;;) {
+                        const auto u = Q.front();
+                        Q.pop();
+                        for (auto e : make_iterator_range(in_edges(u, G))) {
+                            const auto v = source(e, G);
+                            if (show[v] || !isLive(v)) {
+                                continue;
+                            }
+                            show[v] = true;
+                            Q.push(v);
+                        }
+                        if (Q.empty()) {
+                            break;
+                        }
+                    }
+                    for (auto e : make_iterator_range(out_edges(m, G))) {
+                        const auto v = target(e, G);
+                        show[v] = isLive(v) ? true : show[v];
+                    }
+                }
+            }
+        }
+
+        out << "digraph " << name << " {\n";
+        for (auto u : make_iterator_range(vertices(G))) {
+
+            if (show[u]) {
+
+                out << "v" << u << " [label=\"" << u << ": ";
+                TypeId typeId;
+                PabloAST * expr;
+                State state;
+
+                std::tie(expr, typeId, state, std::ignore) = G[u];
+
+                bool space = true;
+
+                switch (typeId) {
+                    case TypeId::And:
+                        out << "(∧)";
+                        break;
+                    case TypeId::Or:
+                        out << "(∨)";
+                        break;
+                    case TypeId::Xor:
+                        out << "(⊕)";
+                        break;
+                    case TypeId::Not:
+                        out << "(¬)";
+                        break;
+                    case TypeId::Zeroes:
+                        out << "(⊥)";
+                        break;
+                    case TypeId::Ones:
+                        out << "(⊤)";
+                    default:
+                        space = false;
+                        break;
+                }
+                if (expr) {
+                    if (space) {
+                        out << ' ';
+                    }
+                    expr->print(out);
+                }
+
+                out << "\"";
+                if (!hasValidOperandIndicies(u, false)) {
+                    out << " color=red style=bold";
+                } else if (!(isImmutable(typeId) || out_degree(u, G) > 0)) {
+                    out << " color=orange style=bold";
+                } else if (isRegenerable(typeId)) {
+                    out << " color=blue";
+                    if (state == State::Modified) {
+                        out << " style=dashed";
+                    }
+                }
+                out << "];\n";
+            }
+        }
+        for (auto e : make_iterator_range(edges(G))) {
+            const auto s = source(e, G);
+            const auto t = target(e, G);
+            if (show[s] && show[t]) {
+                const auto cyclic = (c[s] == c[t]);
+                const auto nonAssoc = !isAssociative(getType(t));
+                out << "v" << s << " -> v" << t;
+                if (cyclic || nonAssoc) {
+                    out << " [";
+                    if (nonAssoc) {
+                        out << " label=\"" << G[e] << "\"";
+                    }
+                    if (cyclic) {
+                        out << " color=red";
+                    }
+                    out << "]";
+                }
+                out << ";\n";
+            }
+        }
+
+        out << "}\n\n";
+        out.flush();
+    }
+
+    /** ------------------------------------------------------------------------------------------------------------- *
      * @brief getReverseTopologicalOrdering
      ** ------------------------------------------------------------------------------------------------------------- */
     void getReverseTopologicalOrdering() {
@@ -331,7 +457,7 @@ repeat: getReverseTopologicalOrdering();
         struct PrePassInserter {
             PrePassInserter & operator=(const Vertex u) {
                 if (LLVM_LIKELY(self.isLive(u))) {
-                    assert(self.hasValidOperandIndicies(u));
+                    assert (self.hasValidOperandIndicies(u));
                     if (LLVM_UNLIKELY(isImmutable(self.getType(u)))) {
                         /* do nothing */
                     } else if (LLVM_LIKELY(out_degree(u, self.G) != 0)) {
@@ -352,7 +478,6 @@ repeat: getReverseTopologicalOrdering();
             PassContainer & self;
         };
 
-
         ordering.clear();
         ordering.reserve(num_vertices(G));
         topological_sort(G, PrePassInserter(*this));
@@ -369,7 +494,6 @@ repeat: getReverseTopologicalOrdering();
         for (const auto u : boost::adaptors::reverse(ordering)) {
 
             const auto typeId = getType(u);
-
             assert (isLive(u));
             assert (!isImmutable(typeId));
             assert (hasValidOperandIndicies(u));

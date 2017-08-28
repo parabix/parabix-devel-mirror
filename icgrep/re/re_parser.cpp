@@ -31,6 +31,7 @@
 #include <iostream>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
@@ -42,6 +43,7 @@ std::unique_ptr<T> make_unique(Args&&... args) {
 }
 
 RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags, RE_Syntax syntax, bool ByteMode) {
+
     std::unique_ptr<RE_Parser> parser = nullptr;
     switch (syntax) {
         case RE_Syntax::PCRE:
