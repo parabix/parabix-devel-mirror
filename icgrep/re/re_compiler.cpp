@@ -91,10 +91,10 @@ MarkerType RE_Compiler::compile_local(RE * re, MarkerType marker, PabloBuilder &
         PabloAST * pablo_one = pb.createAnd(mCCCompiler.compileCC(one), mAny);
         PabloAST * pablo_two = pb.createAnd(mCCCompiler.compileCC(two), mAny);
         PabloAST * one1 = pb.createAdvance(pablo_one, 1, "one1");
-        PabloAST * follow = pb.createAnd(one1, pablo_two);
+        PabloAST * follow = pb.createAnd(pb.createScanThru(pb.createAnd(mInitial, one1), mNonFinal), pablo_two);
         pablo_follow = pb.createOr(pablo_follow, follow);
     }
-    PabloAST * result = pb.createAnd(pb.createMatchStar(pb.createAdvance(pablo_first, 1), pablo_follow), pb.createAdvance(pablo_final, 1));
+    PabloAST * result = pb.createAnd(pb.createMatchStar(pb.createAdvance(pablo_first, 1), pb.createOr(pablo_follow, mNonFinal)), pb.createAdvance(pablo_final, 1));
     return makeMarker(MarkerPosition::FinalPostPositionUnit, result);
 }
 
