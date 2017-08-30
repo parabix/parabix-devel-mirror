@@ -216,9 +216,9 @@ public:
 
     llvm::Value * CreatePopcount(llvm::Value * bits);
 
-    llvm::Value * CreateCountForwardZeroes(llvm::Value * value);
+    llvm::Value * CreateCountForwardZeroes(llvm::Value * value, const bool isZeroUndefined = false);
 
-    llvm::Value * CreateCountReverseZeroes(llvm::Value * value);
+    llvm::Value * CreateCountReverseZeroes(llvm::Value * value, const bool isZeroUndefined = false);
     
     // Useful bit manipulation operations  
     llvm::Value * CreateResetLowestBit(llvm::Value * bits);   

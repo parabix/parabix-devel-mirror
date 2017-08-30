@@ -985,16 +985,20 @@ Value * CBuilder::CreatePopcount(Value * bits) {
     return CreateCall(ctpopFunc, bits);
 }
 
-Value * CBuilder::CreateCountForwardZeroes(Value * value) {
-    CreateAssert(value, "CreateCountForwardZeroes: value cannot be zero!");
+Value * CBuilder::CreateCountForwardZeroes(Value * value, const bool isZeroUndefined) {
+    if (isZeroUndefined) {
+        CreateAssert(value, "CreateCountForwardZeroes: value cannot be zero!");
+    }
     Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());
-    return CreateCall(cttzFunc, {value, ConstantInt::getFalse(getContext())});
+    return CreateCall(cttzFunc, {value, getInt1(isZeroUndefined)});
 }
 
-Value * CBuilder::CreateCountReverseZeroes(Value * value) {
-    CreateAssert(value, "CreateCountReverseZeroes: value cannot be zero!");
+Value * CBuilder::CreateCountReverseZeroes(Value * value, const bool isZeroUndefined) {
+    if (isZeroUndefined) {
+        CreateAssert(value, "CreateCountReverseZeroes: value cannot be zero!");
+    }
     Value * ctlzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctlz, value->getType());
-    return CreateCall(ctlzFunc, {value, ConstantInt::getFalse(getContext())});
+    return CreateCall(ctlzFunc, {value, getInt1(isZeroUndefined)});
 }
 
 Value * CBuilder::CreateResetLowestBit(Value * bits) {
