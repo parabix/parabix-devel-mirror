@@ -1023,8 +1023,9 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     kb->CreateMemZero(tempParameterArea, tempAreaSize);
     // For each input and output buffer, copy over necessary data starting from the last
     // block boundary.
+    Value * itemCountNeeded[inputSetCount];
+    itemCountNeeded[0] = tempBlockItems;
     Value * finalItemCountNeeded[inputSetCount];
-    finalItemCountNeeded[0] = kb->CreateAdd(processedItemCount[0], tempBlockItems);
 
     for (unsigned i = 0; i < mStreamSetInputBuffers.size(); i++) {
         Type * bufPtrType = mStreamSetInputBuffers[i]->getPointerType();
@@ -1041,9 +1042,10 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
                 std::string refSet = mStreamSetInputs[i].rate.referenceStreamSet();
                 Port port; unsigned ssIdx;
                 std::tie(port, ssIdx) = getStreamPort(refSet);
-                finalItemCountNeeded[i] = rate.CreateRatioCalculation(kb.get(), finalItemCountNeeded[ssIdx], doFinal);
+                itemCountNeeded[i] = rate.CreateRatioCalculation(kb.get(), itemCountNeeded[ssIdx], doFinal);
             }
-            
+            finalItemCountNeeded[i] = kb->CreateAdd(itemCountNeeded[i], processedItemCount[i]);
+
             Value * inputPtr = kb->CreatePointerCast(kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), blockBasePos), bufPtrType);
             
             if (maxBlocksToCopy[i] == 1) {
