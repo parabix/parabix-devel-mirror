@@ -238,7 +238,7 @@ public:
     template <typename ExternalFunctionType>
     llvm::Function * LinkFunction(llvm::StringRef name, ExternalFunctionType * functionPtr) const;
 
-    #ifdef HAS_ADDRESS_SANITIZER
+
     virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, const char * Name);
 
     virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, const llvm::Twine & Name = "");
@@ -248,7 +248,6 @@ public:
     virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, bool isVolatile, const llvm::Twine & Name = "");
 
     virtual llvm::StoreInst * CreateStore(llvm::Value * Val, llvm::Value * Ptr, bool isVolatile = false);
-    #endif
 
     llvm::LoadInst * CreateAlignedLoad(llvm::Value * Ptr, unsigned Align, const char * Name);
 
@@ -257,6 +256,11 @@ public:
     llvm::LoadInst * CreateAlignedLoad(llvm::Value * Ptr, unsigned Align, bool isVolatile, const llvm::Twine & Name = "");
 
     llvm::StoreInst * CreateAlignedStore(llvm::Value * Val, llvm::Value * Ptr, unsigned Align, bool isVolatile = false);
+
+    llvm::CallInst * CreateMemMove(llvm::Value *Dst, llvm::Value *Src, llvm::Value *Size, unsigned Align,
+                            bool isVolatile = false, llvm::MDNode *TBAATag = nullptr,
+                            llvm::MDNode *ScopeTag = nullptr,
+                            llvm::MDNode *NoAliasTag = nullptr);
 
     void setDriver(Driver * const driver) {
         mDriver = driver;

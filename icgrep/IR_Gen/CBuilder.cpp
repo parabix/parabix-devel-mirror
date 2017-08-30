@@ -42,38 +42,47 @@ static_assert(sizeof(void *) == sizeof(uintptr_t), "");
 using namespace llvm;
 
 
-Value * CBuilder::CreateURem(Value * number, Value * divisor, const Twine &Name) {
+Value * CBuilder::CreateURem(Value * number, Value * divisor, const Twine &Name) {    
     if (ConstantInt * c = dyn_cast<ConstantInt>(divisor)) {
-        uint64_t d = c->getZExtValue();
+        const auto d = c->getZExtValue();
         if ((d & (d - 1)) == 0) { // is a power of 2 or 0
-            if (d > 0) return CreateAnd(number, ConstantInt::get(divisor->getType(), d - 1), Name);
+            if (d > 0) {
+                return CreateAnd(number, ConstantInt::get(divisor->getType(), d - 1), Name);
+            }
         }
     }
+    CreateAssert(divisor, "CreateURem divisor cannot be 0!");
     return Insert(BinaryOperator::CreateURem(number, divisor), Name);
 }
 
-Value * CBuilder::CreateUDiv(Value * number, Value * divisor, const Twine &Name) {
+Value * CBuilder::CreateUDiv(Value * number, Value * divisor, const Twine &Name) {    
     if (ConstantInt * c = dyn_cast<ConstantInt>(divisor)) {
-        uint64_t d = c->getZExtValue();
+        const auto d = c->getZExtValue();
         if ((d & (d - 1)) == 0) { // is a power of 2 or 0
-            if (d > 1) return CreateLShr(number, ConstantInt::get(divisor->getType(), std::log2(d)), Name);
-            else if (d == 1) return number;
+            if (d > 1) {
+                return CreateLShr(number, ConstantInt::get(divisor->getType(), std::log2(d)), Name);
+            } else if (d == 1) {
+                return number;
+            }
         }
     }
+    CreateAssert(divisor, "CreateUDiv divisor cannot be 0!");
     return Insert(BinaryOperator::CreateUDiv(number, divisor), Name);
 }
 
-Value * CBuilder::CreateUDivCeil(Value * number, Value * divisor, const Twine &Name) {
+Value * CBuilder::CreateUDivCeil(Value * number, Value * divisor, const Twine &Name) {    
     if (ConstantInt * c = dyn_cast<ConstantInt>(divisor)) {
-        uint64_t d = c->getZExtValue();
+        const auto d = c->getZExtValue();
         if ((d & (d - 1)) == 0) { // is a power of 2 or 0
             if (d > 1) {
                 Value * n = CreateAdd(number, ConstantInt::get(divisor->getType(), d - 1));
                 return CreateLShr(n, ConstantInt::get(divisor->getType(), std::log2(d)), Name);
+            } else if (d == 1) {
+                return number;
             }
-            else if (d == 1) return number;
         }
     }
+    CreateAssert(divisor, "CreateUDivCeil divisor cannot be 0!");
     return CreateUDiv(CreateAdd(number, CreateSub(divisor, ConstantInt::get(divisor->getType(), 1))), divisor, Name);
 }
 
@@ -294,7 +303,7 @@ Value * CBuilder::CreateMalloc(Value * size) {
     return ptr;
 }
 
-llvm::Value * CBuilder::CreateCacheAlignedMalloc(llvm::Value * size) {
+Value * CBuilder::CreateCacheAlignedMalloc(Value * size) {
     const auto alignment = getCacheAlignment();
     if (LLVM_LIKELY(isa<Constant>(size))) {
         Constant * const align = ConstantInt::get(size->getType(), alignment, false);
@@ -977,11 +986,13 @@ Value * CBuilder::CreatePopcount(Value * bits) {
 }
 
 Value * CBuilder::CreateCountForwardZeroes(Value * value) {
+    CreateAssert(value, "CreateCountForwardZeroes: value cannot be zero!");
     Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());
     return CreateCall(cttzFunc, {value, ConstantInt::getFalse(getContext())});
 }
 
 Value * CBuilder::CreateCountReverseZeroes(Value * value) {
+    CreateAssert(value, "CreateCountReverseZeroes: value cannot be zero!");
     Value * ctlzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctlz, value->getType());
     return CreateCall(ctlzFunc, {value, ConstantInt::getFalse(getContext())});
 }
@@ -1009,7 +1020,6 @@ Value * CBuilder::CreateExtractBitField(Value * bits, Value * start, Value * len
 
 Value * CBuilder::CreateCeilLog2(Value * value) {
     IntegerType * ty = cast<IntegerType>(value->getType());
-    CreateAssert(value, "CreateCeilLog2: value cannot be zero");
     Value * m = CreateCountReverseZeroes(CreateSub(value, ConstantInt::get(ty, 1)));
     return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth()), m);
 }
@@ -1035,55 +1045,64 @@ Function * CBuilder::LinkFunction(StringRef name, FunctionType * type, void * fu
     return mDriver->addLinkFunction(getModule(), name, type, functionPtr);
 }
 
-#ifdef HAS_ADDRESS_SANITIZER
+#define CONCAT(a__, b__) a__##b__
+#define STRINGIFY(a__) #a__
 
-#define CHECK_ADDRESS(Ptr) \
-    if (LLVM_UNLIKELY(hasAddressSanitizer())) { \
-        Module * const m = getModule(); \
-        PointerType * const voidPtrTy = getVoidPtrTy(); \
-        IntegerType * const sizeTy = getSizeTy(); \
-        Function * isPoisoned = m->getFunction("__asan_region_is_poisoned"); \
-        if (LLVM_UNLIKELY(isPoisoned == nullptr)) { \
-            isPoisoned = Function::Create(FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false), Function::ExternalLinkage, "__asan_region_is_poisoned", m); \
-            isPoisoned->setCallingConv(CallingConv::C); \
-            isPoisoned->setDoesNotAlias(0); \
-            isPoisoned->setDoesNotAlias(1); \
-        } \
-        Value * const addr = CreatePointerCast(Ptr, voidPtrTy); \
-        ConstantInt * const size = ConstantInt::get(sizeTy, Ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8); \
-        Value * check = CreateCall(isPoisoned, { addr, size }); \
-        check = CreateICmpEQ(check, ConstantPointerNull::get(cast<PointerType>(isPoisoned->getReturnType()))); \
-        CreateAssert(check, "Valid memory address"); \
+#ifdef HAS_ADDRESS_SANITIZER
+#define CHECK_ADDRESS_SANITIZER(Ptr, Name) \
+if (LLVM_UNLIKELY(hasAddressSanitizer())) { \
+    Module * const m = getModule(); \
+    PointerType * const voidPtrTy = getVoidPtrTy(); \
+    IntegerType * const sizeTy = getSizeTy(); \
+    Function * isPoisoned = m->getFunction("__asan_region_is_poisoned"); \
+    if (LLVM_UNLIKELY(isPoisoned == nullptr)) { \
+        isPoisoned = Function::Create(FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false), Function::ExternalLinkage, "__asan_region_is_poisoned", m); \
+        isPoisoned->setCallingConv(CallingConv::C); \
+        isPoisoned->setDoesNotAlias(0); \
+        isPoisoned->setDoesNotAlias(1); \
+    } \
+    Value * const addr = CreatePointerCast(Ptr, voidPtrTy); \
+    ConstantInt * const size = ConstantInt::get(sizeTy, Ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8); \
+    Value * check = CreateCall(isPoisoned, { addr, size }); \
+    check = CreateICmpEQ(check, ConstantPointerNull::get(cast<PointerType>(isPoisoned->getReturnType()))); \
+    CreateAssert(check, STRINGIFY(CONCAT(Name, ": invalid memory address"))); \
+}
+#else
+#define CHECK_ADDRESS_SANITIZER(Ptr, Name)
+#endif
+
+#define CHECK_ADDRESS(Ptr, Name) \
+    if (codegen::EnableAsserts) { \
+        CreateAssert(Ptr, STRINGIFY(CONCAT(Name, ": null pointer address"))); \
+        CHECK_ADDRESS_SANITIZER(Ptr, Name) \
     }
 
 LoadInst * CBuilder::CreateLoad(Value *Ptr, const char * Name) {
-    CHECK_ADDRESS(Ptr);
+    CHECK_ADDRESS(Ptr, "CreateLoad");
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
 
 LoadInst * CBuilder::CreateLoad(Value * Ptr, const Twine & Name) {
-    CHECK_ADDRESS(Ptr);
+    CHECK_ADDRESS(Ptr, "CreateLoad");
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
 
 LoadInst * CBuilder::CreateLoad(Type *Ty, Value *Ptr, const Twine & Name) {
-    CHECK_ADDRESS(Ptr);
+    CHECK_ADDRESS(Ptr, "CreateLoad");
     return IRBuilder<>::CreateLoad(Ty, Ptr, Name);
 }
 
 LoadInst * CBuilder::CreateLoad(Value *Ptr, bool isVolatile, const Twine & Name) {
-    CHECK_ADDRESS(Ptr);
+    CHECK_ADDRESS(Ptr, "CreateLoad");
     return IRBuilder<>::CreateLoad(Ptr, isVolatile, Name);
 }
 
 StoreInst * CBuilder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
-    CHECK_ADDRESS(Ptr);
+    CHECK_ADDRESS(Ptr, "CreateStore");
     return IRBuilder<>::CreateStore(Val, Ptr, isVolatile);
 }
 
 #undef CHECK_ADDRESS
-
-#endif
 
 inline bool CBuilder::hasAddressSanitizer() const {
     return codegen::EnableAsserts && mDriver && mDriver->hasExternalFunction("__asan_region_is_poisoned");
@@ -1135,6 +1154,21 @@ StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Alig
     StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
     SI->setAlignment(Align);
     return SI;
+}
+
+CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsigned Align, bool isVolatile, MDNode *TBAATag, MDNode *ScopeTag, MDNode *NoAliasTag) {
+    if (codegen::EnableAsserts) {
+        DataLayout DL(getModule());
+        IntegerType * const intPtrTy = DL.getIntPtrType(getContext());
+        Value * intDst = CreatePtrToInt(Dst, intPtrTy);
+        Value * intSrc = CreatePtrToInt(Src, intPtrTy);
+        if (Align > 1) {
+            ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+            CreateAssertZero(CreateURem(intDst, align), "CreateMemMove: Dst pointer is misaligned");
+            CreateAssertZero(CreateURem(intSrc, align), "CreateMemMove: Src pointer is misaligned");
+        }
+    }
+    return IRBuilder<>::CreateMemMove(Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
 }
 
 CBuilder::CBuilder(LLVMContext & C)
