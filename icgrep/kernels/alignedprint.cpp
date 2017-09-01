@@ -93,9 +93,7 @@ void SelectStream::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &i
     iBuilder->storeOutputStreamBlock("bitStream", iBuilder->getInt32(0), bitStrmVal);
 }
 
-void ExpandStream::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
-    if (mSizeOutputStreamSet <= mSizeInputStreamSet)
-        llvm::report_fatal_error("Stream Expanding fails.\n");
+void ExpandOrSelectStreams::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
 
     for (unsigned i = 0; i < mSizeOutputStreamSet; i++) {
         if (i < mSizeInputStreamSet) {
@@ -280,8 +278,8 @@ SelectStream::SelectStream(const std::unique_ptr<kernel::KernelBuilder> & builde
 
 }
 
-ExpandStream::ExpandStream(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet)
-: BlockOrientedKernel("ExpandStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(sizeOutputStreamSet), "outputbitStreams"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mSizeOutputStreamSet(sizeOutputStreamSet) {
+ExpandOrSelectStreams::ExpandOrSelectStreams(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet)
+: BlockOrientedKernel("ExpandOrSelectStreams", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(sizeOutputStreamSet), "outputbitStreams"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mSizeOutputStreamSet(sizeOutputStreamSet) {
     setNoTerminateAttribute(true);
 
 }

@@ -27,9 +27,9 @@ private:
     unsigned mStreamIndex;
 };
 
-class ExpandStream final : public BlockOrientedKernel {
+class ExpandOrSelectStreams final : public BlockOrientedKernel {
 public:
-    ExpandStream(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet);
+    ExpandOrSelectStreams(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet);
 private:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     unsigned mSizeInputStreamSet;
