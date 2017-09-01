@@ -97,8 +97,8 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     //PabloAST * u8valid = it.createNot(u8invalid, "u8valid");
     it.createAssign(error_mask, u8invalid);
     
-    it.createAssign(delmask, it.createOr(it.createOr(del3, del4), ccc.compileCC(re::makeCC(0xC0, 0xFF), it)));
-    it.createAssign(neg_delmask, it.createNot(delmask));
+    it.createAssign(delmask, it.createInFile(it.createOr(it.createOr(del3, del4), ccc.compileCC(re::makeCC(0xC0, 0xFF), it))));
+    it.createAssign(neg_delmask, it.createInFile(it.createNot(delmask)));
     
     Var * delmask_out = this->getOutputStreamVar("delMask");
     Var * neg_delmask_out = this->getOutputStreamVar("neg_delMask");

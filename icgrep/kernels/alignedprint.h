@@ -27,6 +27,15 @@ private:
     unsigned mStreamIndex;
 };
 
+class ExpandStream final : public BlockOrientedKernel {
+public:
+    ExpandStream(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet);
+private:
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    unsigned mSizeInputStreamSet;
+    unsigned mSizeOutputStreamSet;
+};
+
 class PrintStreamSet final : public BlockOrientedKernel {
 public:
     PrintStreamSet(const std::unique_ptr<kernel::KernelBuilder> & builder, std::vector<std::string> && names, const unsigned minWidth = 16);
