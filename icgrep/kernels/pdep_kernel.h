@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 #ifndef PDEP_KERNEL_H
@@ -12,20 +12,23 @@ namespace IDISA { class IDISA_Builder; }
 What this kernel does:
 
 Given a swizzled input stream set and a PDEP marker stream, apply a PDEP operation to each of the input streams in
-the input stream set. The PDEPed result streams are returned in a swizzled output stream set.
+the input stream set. The PDEPed result streams are returned in a swizzled output stream set. 
+
+The length of the input stream set (in bits) must be greater than or equal to the total popcount of the PDEP marker
+stream, otherwise the PDEP operation will run out of source bits before the entire PDEP stream has been processed.
 
 How it works:
 
 You should know how the PDEP operation works before continuing (Wikipedia has a pretty good explanation.)
 
-The swizzled configuration of the input streams mean that the first blockWidth/mSwizzleFactor bits of each input
+The swizzled configuration of the input streams mean that the first blockWidth/mSwizzleFactor bits of each (unswizzled) input
 stream are contained in the first BitBlock of the first input StreamSetBlock. The second BitBlock contains the next 
 blockWidth/mSwizzleFactor bits for each input stream, and so on. The key observation underpinning the action of the PDEP kernel is that we apply the PDEP operation
-using blockWidth/mSwizzleFactor bits of an input stream as the source bits. Since the first swizzle contains blockWidth/mSwizzleFactor
+using blockWidth/mSwizzleFactor bits of an input stream as the source bits. Since the first BitBlock (i.e. swizzle) contains blockWidth/mSwizzleFactor
 bits from each of the input streams, we can begin processing the input streams in the input stream set by applying the first blockWidth/mSwizzleFactor
 bits of the PDEP marker stream to each of the swizzle fields in the first BitBlock.
 
-We can continue using the first blockWidth/mSwizzleFactor bits of each input stream until we have completely consumed it. This occurs
+We continue using the first blockWidth/mSwizzleFactor bits of each input stream until we have completely consumed them. This occurs
 when the combined popcount of the PDEP masks we've used up to this point > blockWidth/mSwizzleFactor. Once we've exhausted the first
 BitBlock (i.e. swizzle), we move on to the next one. This pattern continues until we've consumed
 the entire PDEP marker stream. Note that it's possible for the kernel to consume the entire PDEP marker
@@ -62,22 +65,20 @@ Value * next_swizzle_idx = kb->CreateUDiv(kb->CreateURem(kb->CreateAdd(pdepWidth
 */
 
 namespace kernel {
-class PDEPkernel final : public BlockOrientedKernel {
+class PDEPkernel : public MultiBlockKernel {
 public:
-    PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsigned streamCount, unsigned PDEP_width = 64);
+    PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsigned streamCount, unsigned swizzleFactor, unsigned PDEP_width = 64);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
     const unsigned mSwizzleFactor;
     const unsigned mPDEPWidth;
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) override;
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb) override;
     std::vector<llvm::Value *> get_PDEP_masks(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * PDEP_ms_blk,
                                               const unsigned mask_width);
     std::vector<llvm::Value *> get_block_popcounts(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * blk,
-                                                  const unsigned field_width);
-
+                                                   const unsigned field_width);
 };   
 }
     
 #endif
-
