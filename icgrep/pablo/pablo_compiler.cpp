@@ -606,9 +606,6 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
         mMarker[expr] = value;
         if (DebugOptionIsSet(DumpTrace)) {
             const String & name = isa<Var>(expr) ? cast<Var>(expr)->getName() : cast<Statement>(expr)->getName();
-            if (value->getType()->isPointerTy()) {
-                value = iBuilder->CreateLoad(value);
-            }
             if (value->getType()->isVectorTy()) {
                 iBuilder->CallPrintRegister(name.str(), value);
             } else if (value->getType()->isIntegerTy()) {
