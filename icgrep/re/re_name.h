@@ -126,14 +126,14 @@ inline bool Name::operator < (const CC & other) const {
     if (mDefinition && llvm::isa<CC>(mDefinition)) {
         return *llvm::cast<CC>(mDefinition) < other;
     }
-    return false;
+    return RE::ClassTypeId::Name < RE::ClassTypeId::CC;
 }
 
 inline bool Name::operator > (const CC & other) const {
     if (mDefinition && llvm::isa<CC>(mDefinition)) {
         return other < *llvm::cast<CC>(mDefinition);
     }
-    return true;
+    return RE::ClassTypeId::CC < RE::ClassTypeId::Name;
 }
 
 inline Name * makeName(const std::string & name, const Name::Type type) {

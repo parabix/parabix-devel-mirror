@@ -17,6 +17,7 @@
 namespace llvm { class Module; }
 namespace llvm { class MemoryBuffer; }
 namespace llvm { class MemoryBufferRef; }
+namespace llvm { class LLVMContext; }
 namespace kernel { class Kernel; }
 namespace kernel { class KernelBuilder; }
 
@@ -36,19 +37,19 @@ class ParabixObjectCache final : public llvm::ObjectCache {
     using Path = llvm::SmallString<128>;
     template <typename K, typename V>
     using Map = boost::container::flat_map<K, V>;
-    using ModuleCache = Map<std::string, std::unique_ptr<llvm::MemoryBuffer>>;
+    using ModuleCache = Map<std::string, std::pair<llvm::Module *, std::unique_ptr<llvm::MemoryBuffer>>>;
 public:
     ParabixObjectCache();
-    ParabixObjectCache(const std::string & dir);
+    ParabixObjectCache(const std::string dir);
     bool loadCachedObjectFile(const std::unique_ptr<kernel::KernelBuilder> & idb, kernel::Kernel * const kernel);
-    void notifyObjectCompiled(const llvm::Module *M, llvm::MemoryBufferRef Obj) override;
+    void notifyObjectCompiled(const llvm::Module * M, llvm::MemoryBufferRef Obj) override;
     void cleanUpObjectCacheFiles();
     std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module * M) override;
 protected:
     static Path getDefaultPath();
 private:
-    ModuleCache     mCachedObject;
-    const Path      mCachePath;
+    ModuleCache         mCachedObject;
+    const Path          mCachePath;
 };
 
 #endif

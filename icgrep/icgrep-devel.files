@@ -290,3 +290,7 @@ utf8_encoder.cpp
 utf8_encoder.h
 wc.cpp
 CMakeLists.txt
+segtok.cpp
+re/re_minimizer.h
+re/re_minimizer.cpp
+re/re_memoizer.cpp

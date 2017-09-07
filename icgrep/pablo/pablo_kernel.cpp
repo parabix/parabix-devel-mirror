@@ -124,15 +124,14 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
     return value;
 }
 
-void PabloKernel::prepareKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
+void PabloKernel::addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     mSizeTy = iBuilder->getSizeTy();
     mStreamTy = iBuilder->getStreamTy();
     generatePabloMethod();    
     pablo_function_passes(this);
     mPabloCompiler->initializeKernelData(iBuilder);
     mSizeTy = nullptr;
-    mStreamTy = nullptr;
-    BlockOrientedKernel::prepareKernel(iBuilder);
+    mStreamTy = nullptr;   
 }
 
 void PabloKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {

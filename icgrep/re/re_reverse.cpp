@@ -55,8 +55,9 @@ RE * reverse_helper(RE * re, std::map<std::string, Name *> & captureMap) {
         return makeStart();
     } else if (Name * n = dyn_cast<Name>(re)) {
         switch (n->getType()) {
-            case Name::Type::Byte:  return makeName(cast<CC>(n->getDefinition()));
-            case Name::Type::Unicode:  return makeName(cast<CC>(n->getDefinition()));
+            case Name::Type::Byte:
+            case Name::Type::Unicode:
+                return makeName(cast<CC>(n->getDefinition()));
             case Name::Type::UnicodeProperty:
                 return makeName(n->getNamespace(), n->getName(), Name::Type::UnicodeProperty);
             case Name::Type::ZeroWidth:

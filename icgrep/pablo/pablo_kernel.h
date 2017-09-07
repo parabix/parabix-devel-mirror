@@ -30,6 +30,7 @@ class PabloKernel : public kernel::BlockOrientedKernel, public PabloAST {
     friend class PabloBlock;
     friend class CarryManager;
     friend class CarryPackManager;
+    friend class ParabixObjectCache;
 
 public:
 
@@ -123,6 +124,10 @@ public:
 
     Integer * getInteger(const int64_t value) const;
 
+    llvm::StructType * getCarryDataTy() const {
+        return mCarryDataTy;
+    }
+
 protected:
 
     PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder,
@@ -144,12 +149,16 @@ protected:
 
     llvm::IntegerType * getInt1Ty() const;
 
-private:
+    void setCarryDataTy(llvm::StructType * const carryDataTy) {
+        mCarryDataTy = carryDataTy;
+    }
 
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
     // finalizing the KernelStateType.
-    void prepareKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) final;
+    void addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) final;
+
+private:
 
     void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) final;
 
@@ -168,6 +177,7 @@ private:
     PabloBlock *                    mEntryBlock;
     llvm::IntegerType *             mSizeTy;
     llvm::VectorType *              mStreamTy;
+    llvm::StructType *              mCarryDataTy;
     std::vector<Var *>              mInputs;
     std::vector<Var *>              mOutputs;
     std::vector<PabloAST *>         mConstants;

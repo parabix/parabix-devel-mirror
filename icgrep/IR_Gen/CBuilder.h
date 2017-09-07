@@ -257,10 +257,32 @@ public:
 
     llvm::StoreInst * CreateAlignedStore(llvm::Value * Val, llvm::Value * Ptr, unsigned Align, bool isVolatile = false);
 
+    llvm::CallInst * CreateMemMove(llvm::Value *Dst, llvm::Value *Src, uint64_t Size, unsigned Align,
+                            bool isVolatile = false, llvm::MDNode *TBAATag = nullptr,
+                            llvm::MDNode *ScopeTag = nullptr,
+                            llvm::MDNode *NoAliasTag = nullptr) {
+        return CreateMemMove(Dst, Src, getInt64(Size), Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
+    }
+
     llvm::CallInst * CreateMemMove(llvm::Value *Dst, llvm::Value *Src, llvm::Value *Size, unsigned Align,
                             bool isVolatile = false, llvm::MDNode *TBAATag = nullptr,
                             llvm::MDNode *ScopeTag = nullptr,
                             llvm::MDNode *NoAliasTag = nullptr);
+
+    llvm::CallInst * CreateMemCpy(llvm::Value *Dst, llvm::Value *Src, uint64_t Size, unsigned Align,
+                           bool isVolatile = false, llvm::MDNode *TBAATag = nullptr,
+                           llvm::MDNode *TBAAStructTag = nullptr,
+                           llvm::MDNode *ScopeTag = nullptr,
+                           llvm::MDNode *NoAliasTag = nullptr) {
+        return CreateMemCpy(Dst, Src, getInt64(Size), Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
+    }
+
+    llvm::CallInst * CreateMemCpy(llvm::Value *Dst, llvm::Value *Src, llvm::Value *Size, unsigned Align,
+                           bool isVolatile = false, llvm::MDNode *TBAATag = nullptr,
+                           llvm::MDNode *TBAAStructTag = nullptr,
+                           llvm::MDNode *ScopeTag = nullptr,
+                           llvm::MDNode *NoAliasTag = nullptr);
+
 
     void setDriver(Driver * const driver) {
         mDriver = driver;

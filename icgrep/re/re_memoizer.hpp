@@ -1,5 +1,5 @@
-#ifndef RE_NAMEDICTIONARY_H
-#define RE_NAMEDICTIONARY_H
+#ifndef RE_MEMOIZER_H
+#define RE_MEMOIZER_H
 
 #include <re/re_name.h>
 #include <set>
@@ -7,34 +7,29 @@
 namespace re {
 
 struct MemoizerComparator {
-    inline bool operator() (const RE * lh, const RE * rh) const{
-        if (LLVM_LIKELY(llvm::isa<Name>(lh) && llvm::isa<Name>(rh))) {
-            return *llvm::cast<Name>(lh) < *llvm::cast<Name>(rh);
-        } else if (llvm::isa<Name>(lh)) {
-            return *llvm::cast<Name>(lh) < *llvm::cast<CC>(rh);
-        }
-        return *llvm::cast<Name>(rh) > *llvm::cast<CC>(lh);
-    }
+    bool operator() (const RE * lh, const RE * rh) const;
 };
 
 struct Memoizer : public std::set<RE *, MemoizerComparator> {
 
-    inline Name * memoize(CC * cc) {
+    RE * memoize(RE * const re) {
+        return *(insert(re).first);
+    }
+
+    Name * memoize(Name * const name) {
+        return llvm::cast<Name>(memoize(llvm::cast<RE>(name)));
+    }
+
+    Name * memoize(CC * const cc) {
         auto f = find(cc);
         if (f != end()) {
             return llvm::cast<Name>(*f);
         } else {
-            Name * name = makeName(cc);
-            insert(name);
-            return name;
+            return memoize(makeName(cc));
         }
-    }
-
-    inline Name * memoize(Name * name) {
-        return llvm::cast<Name>(*insert(name).first);
     }
 };
 
 }
 
-#endif // RE_NAMEDICTIONARY_H
+#endif // RE_MEMOIZER_H

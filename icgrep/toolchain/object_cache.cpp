@@ -12,6 +12,9 @@
 #include <fcntl.h>
 #include <boost/filesystem.hpp>
 #include <boost/range/iterator_range.hpp>
+#include <boost/container/flat_set.hpp>
+#include <llvm/Bitcode/ReaderWriter.h>
+#include <llvm/IR/Verifier.h>
 #include <ctime>
 
 using namespace llvm;
@@ -58,7 +61,7 @@ const static auto CACHEABLE = "cacheable";
 
 const static auto SIGNATURE = "signature";
 
-const static boost::uintmax_t CACHE_SIZE_LIMIT = 5 * 1024 * 1024;
+const static boost::uintmax_t CACHE_SIZE_LIMIT = 50 * 1024 * 1024;
 
 const MDString * getSignature(const llvm::Module * const M) {
     NamedMDNode * const sig = M->getNamedMetadata(SIGNATURE);
@@ -72,11 +75,14 @@ const MDString * getSignature(const llvm::Module * const M) {
 
 bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::KernelBuilder> & idb, kernel::Kernel * const kernel) {
     if (LLVM_LIKELY(kernel->isCachable())) {
-        Module * const module = kernel->getModule();
-        assert ("kernel module cannot be null!" && module);
-        const auto moduleId = module->getModuleIdentifier();
+        assert (kernel->getModule() == nullptr);
+        const auto moduleId = kernel->getCacheName(idb);
+
         // Have we already seen this module before?
-        if (LLVM_UNLIKELY(mCachedObject.count(moduleId) != 0)) {
+        const auto f = mCachedObject.find(moduleId);
+        if (LLVM_UNLIKELY(f != mCachedObject.end())) {
+            Module * const m = f->second.first; assert (m);
+            kernel->setModule(m);
             return true;
         }
 
@@ -93,28 +99,45 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
                 const auto signatureBuffer = MemoryBuffer::getFile(objectName.c_str(), -1, false);
                 if (signatureBuffer) {
                     const StringRef loadedSig = signatureBuffer.get()->getBuffer();
-                    if (!loadedSig.equals(kernel->makeSignature(idb))) {
-                        return false;
+                    if (LLVM_UNLIKELY(!loadedSig.equals(kernel->makeSignature(idb)))) {
+                        goto invalid;
                     }
                 } else {
                     report_fatal_error("signature file expected but not found: " + moduleId);
-                    return false;
+                }                
+            }
+            sys::path::replace_extension(objectName, ".kernel");
+            auto kernelBuffer = MemoryBuffer::getFile(objectName.c_str(), -1, false);
+            if (*kernelBuffer) {
+                //MemoryBuffer * kb = kernelBuffer.get().release();
+                //auto loadedFile = parseBitcodeFile(kb->getMemBufferRef(), mContext);
+                auto loadedFile = getLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
+                if (*loadedFile) {
+                    Module * const m = loadedFile.get().release(); assert (m);
+                    // defaults to <path>/<moduleId>.kernel
+                    m->setModuleIdentifier(moduleId);
+                    kernel->setModule(m);
+                    kernel->prepareCachedKernel(idb);                    
+                    mCachedObject.emplace(moduleId, std::make_pair(m, std::move(objectBuffer.get())));
+                    // update the modified time of the object file
+                    sys::path::replace_extension(objectName, ".o");
+                    boost::filesystem::last_write_time(objectName.c_str(), time(0));
+                    return true;
                 }
             }
-            // update the modified time of the file then add it to our cache
-            boost::filesystem::last_write_time(objectName.c_str(), time(0));
-            mCachedObject.emplace(moduleId, std::move(objectBuffer.get()));
-            return true;
-        } else {
-            // mark this module as cachable
-            module->getOrInsertNamedMetadata(CACHEABLE);
-            // if this module has a signature, add it to the metadata
-            if (kernel->hasSignature()) {
-                NamedMDNode * const md = module->getOrInsertNamedMetadata(SIGNATURE);
-                assert (md->getNumOperands() == 0);
-                MDString * const sig = MDString::get(module->getContext(), kernel->makeSignature(idb));               
-                md->addOperand(MDNode::get(module->getContext(), {sig}));
-            }
+        }
+
+invalid:
+
+        Module * const module = kernel->setModule(new Module(moduleId, idb->getContext()));
+        // mark this module as cachable
+        module->getOrInsertNamedMetadata(CACHEABLE);
+        // if this module has a signature, add it to the metadata
+        if (kernel->hasSignature()) {
+            NamedMDNode * const md = module->getOrInsertNamedMetadata(SIGNATURE);
+            assert (md->getNumOperands() == 0);
+            MDString * const sig = MDString::get(module->getContext(), kernel->makeSignature(idb));
+            md->addOperand(MDNode::get(module->getContext(), {sig}));
         }
     }
     return false;
@@ -123,7 +146,7 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
 // A new module has been compiled. If it is cacheable and no conflicting module
 // exists, write it out.
 void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef Obj) {
-    if (M->getNamedMetadata(CACHEABLE)) {
+    if (LLVM_LIKELY(M->getNamedMetadata(CACHEABLE))) {
         const auto moduleId = M->getModuleIdentifier();
         Path objectName(mCachePath);
         sys::path::append(objectName, CACHE_PREFIX);
@@ -134,12 +157,13 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
             sys::fs::create_directories(Twine(mCachePath));
         }
 
+        // Write the object code
         std::error_code EC;
-        raw_fd_ostream outfile(objectName, EC, sys::fs::F_None);
-        outfile.write(Obj.getBufferStart(), Obj.getBufferSize());
-        outfile.close();
+        raw_fd_ostream objFile(objectName, EC, sys::fs::F_None);
+        objFile.write(Obj.getBufferStart(), Obj.getBufferSize());
+        objFile.close();
 
-        // If this module has a signature, write it.
+        // then the signature (if one exists)
         const MDString * const sig = getSignature(M);
         if (sig) {
             sys::path::replace_extension(objectName, ".sig");
@@ -147,6 +171,19 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
             sigfile << sig->getString();
             sigfile.close();
         }
+
+        // and finally kernel prototype header.
+        std::unique_ptr<Module> header(new Module(M->getModuleIdentifier(), M->getContext()));
+        for (const Function & f : M->getFunctionList()) {
+            if (f.hasExternalLinkage() && !f.empty()) {
+                Function::Create(f.getFunctionType(), Function::ExternalLinkage, f.getName(), header.get());
+            }
+        }
+
+        sys::path::replace_extension(objectName, ".kernel");
+        raw_fd_ostream kernelFile(objectName.str(), EC, sys::fs::F_None);
+        WriteBitcodeToFile(header.get(), kernelFile, false, false);
+        kernelFile.close();
     }
 }
 
@@ -177,6 +214,8 @@ void ParabixObjectCache::cleanUpObjectCacheFiles() {
                     remove(objectPath);
                     objectPath.replace_extension("sig");
                     remove(objectPath);
+                    objectPath.replace_extension("kernel");
+                    remove(objectPath);
                 }
             }
         }
@@ -184,13 +223,12 @@ void ParabixObjectCache::cleanUpObjectCacheFiles() {
 }
 
 std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * module) {
-    const auto moduleId = module->getModuleIdentifier();
-    const auto f = mCachedObject.find(moduleId);
+    const auto f = mCachedObject.find(module->getModuleIdentifier());
     if (f == mCachedObject.end()) {
         return nullptr;
     }
     // Return a copy of the buffer, for MCJIT to modify, if necessary.
-    return MemoryBuffer::getMemBufferCopy(f->second.get()->getBuffer());
+    return MemoryBuffer::getMemBufferCopy(f->second.second.get()->getBuffer());
 }
 
 inline ParabixObjectCache::Path ParabixObjectCache::getDefaultPath() {
@@ -210,7 +248,7 @@ ParabixObjectCache::ParabixObjectCache()
 
 }
 
-ParabixObjectCache::ParabixObjectCache(const std::string & dir)
+ParabixObjectCache::ParabixObjectCache(const std::string dir)
 : mCachePath(dir) {
 
 }

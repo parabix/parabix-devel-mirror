@@ -148,7 +148,9 @@ RE * RE_Parser::parse_seq_with_intersect(RE* reToBeIntersected) {
 RE * RE_Parser::parse_next_item() {
     RE * re = nullptr;
     if (fModeFlagSet & IGNORE_SPACE_MODE_FLAG) {
-        while (*mCursor == ' ') mCursor++;
+        while (mCursor.more() && *mCursor == ' ') {
+            ++mCursor;
+        }
     }
     if (mCursor.more()) {
         switch (*mCursor) {
@@ -189,7 +191,7 @@ RE * RE_Parser::parse_next_item() {
                 if ((fModeFlagSet & ModeFlagType::GRAPHEME_CLUSTER_MODE) != 0) {
                     re = makeSeq({re, makeZeroWidth("GCB")});
                 }
-                return re;
+                break;
             case '.': // the 'any' metacharacter
                 mCursor++;
                 return makeAny();
@@ -201,10 +203,9 @@ RE * RE_Parser::parse_next_item() {
                 if ((fModeFlagSet & ModeFlagType::GRAPHEME_CLUSTER_MODE) != 0) {
                     fGraphemeBoundaryPending = true;
                 }
-                return re;
         }
     }
-    return nullptr;
+    return re;
 }
 
 

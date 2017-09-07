@@ -209,16 +209,14 @@ void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
 
   CreateCall(barrierFunc);
 
-  Value * carryOffsetPtr = nullptr;
   Value * carryVal = carryInitVal;
-  Value * bubbleOffsetPtr = nullptr;
   Value * bubbleVal = bubbleInitVal;
 
   for (unsigned offset = groupThreads/2; offset>0; offset=offset>>1){
-    carryOffsetPtr = CreateGEP(carry, {getInt32(0), CreateXor(id, getInt32(offset))});
+    Value * carryOffsetPtr = CreateGEP(carry, {getInt32(0), CreateXor(id, getInt32(offset))});
     carryVal = CreateOr(carryVal, CreateLoad(carryOffsetPtr));
     CreateStore(carryVal, carryPtr);
-    bubbleOffsetPtr = CreateGEP(bubble, {getInt32(0), CreateXor(id, getInt32(offset))});
+    Value * bubbleOffsetPtr = CreateGEP(bubble, {getInt32(0), CreateXor(id, getInt32(offset))});
     bubbleVal = CreateOr(bubbleVal, CreateLoad(bubbleOffsetPtr));
     CreateStore(bubbleVal, bubblePtr);
     CreateCall(barrierFunc);

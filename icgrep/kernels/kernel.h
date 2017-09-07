@@ -87,10 +87,10 @@ public:
     void bindPorts(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
 
     StreamPort getStreamPort(const std::string & name) const;
-    
-    llvm::Module * makeModule(const std::unique_ptr<KernelBuilder> & idb);
 
-    llvm::Module * setModule(const std::unique_ptr<KernelBuilder> & idb, llvm::Module * const module);
+    llvm::Module * setModule(llvm::Module * const module);
+
+    llvm::Module * makeModule(const std::unique_ptr<kernel::KernelBuilder> & idb);
 
     llvm::Module * getModule() const {
         return mModule;
@@ -136,7 +136,15 @@ public:
     
     virtual ~Kernel() = 0;
 
+    void prepareKernel(const std::unique_ptr<KernelBuilder> & idb);
+
+    void prepareCachedKernel(const std::unique_ptr<KernelBuilder> & idb);
+
+    std::string getCacheName(const std::unique_ptr<KernelBuilder> & idb) const;
+
 protected:
+
+    virtual void addInternalKernelProperties(const std::unique_ptr<KernelBuilder> & idb) { }
 
     // Constructor
     Kernel(std::string && kernelName,
@@ -167,8 +175,6 @@ protected:
     void processingRateAnalysis();
 
     void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> &) override { }
-
-    virtual void prepareKernel(const std::unique_ptr<KernelBuilder> & idb);
 
     virtual void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) { }
     

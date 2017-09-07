@@ -33,6 +33,7 @@ private:
     llvm::TargetMachine *                                   mTarget;
     llvm::ExecutionEngine *                                 mEngine;
     ParabixObjectCache *                                    mCache;
+    std::vector<kernel::Kernel *>                           mUncachedKernel;
     // NOTE: when printing the IR/ASM, we cannot assume they're completely finished after finalizeObject is executed. Instead we store a
     // pointer and delete them once the driver (and any processing) is complete. This prevents us from reclaiming the memory early but
     // also avoids a potential segmentation fault when writing large files.

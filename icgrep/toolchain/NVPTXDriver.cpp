@@ -53,7 +53,7 @@ void NVPTXDriver::makeKernelCall(kernel::Kernel * kb, const std::vector<parabix:
     assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb->getModule() == nullptr));
     mPipeline.emplace_back(kb);
     kb->bindPorts(inputs, outputs);
-    kb->setModule(iBuilder, mMainModule);
+    kb->setModule(mMainModule);
 }
 
 void NVPTXDriver::generatePipelineIR() {

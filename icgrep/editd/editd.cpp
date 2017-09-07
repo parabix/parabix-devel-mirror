@@ -684,12 +684,11 @@ editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
 
     auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(iBuilder, editDistance));
     pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
-        
+    pxDriver.LinkFunction(*editdScanK, "wrapped_report_pos", &wrapped_report_pos);
     pxDriver.generatePipelineIR();
     pxDriver.deallocateBuffers();
     iBuilder->CreateRetVoid();
 
-    pxDriver.LinkFunction(*editdScanK, "wrapped_report_pos", &wrapped_report_pos);
     pxDriver.finalizeObject();
 
     return reinterpret_cast<editdFunctionType>(pxDriver.getMain());

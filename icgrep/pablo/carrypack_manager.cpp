@@ -126,11 +126,9 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
     mCarryMetadata.resize(getScopeCount(mCurrentScope));
     mCarryGroup.resize(assignDefaultCarryGroups(kernel->getEntryBlock()));
 
-    Type * const carryStateTy = analyse(iBuilder, kernel->getEntryBlock());
+    kernel->setCarryDataTy(analyse(iBuilder, mCurrentScope));
 
-    kernel->addScalar(carryStateTy, "carries");
-
-//    iBuilder->CallPrintInt("carry state size:", ConstantExpr::getSizeOf(carryStateTy));
+    kernel->addScalar(kernel->getCarryDataTy(), "carries");
 
     if (mHasLoop) {
         kernel->addScalar(iBuilder->getInt32Ty(), "selector");

@@ -200,7 +200,7 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
     IntegerType * int64Ty = getInt64Ty();
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
         FunctionType *FT = FunctionType::get(getVoidTy(), { getInt8PtrTy(), int64Ty }, false);
-        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintInt", m);
+        Function * function = Function::Create(FT, Function::ExternalLinkage, "PrintInt", m);
         auto arg = function->arg_begin();
         std::string out = "%-40s = %" PRIx64 "\n";
         BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
@@ -560,7 +560,7 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
 }
 
 PointerType * CBuilder::getVoidPtrTy() const {
-    return TypeBuilder<void *, true>::get(getContext());
+    return TypeBuilder<void *, false>::get(getContext());
 }
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
@@ -1049,9 +1049,6 @@ Function * CBuilder::LinkFunction(StringRef name, FunctionType * type, void * fu
     return mDriver->addLinkFunction(getModule(), name, type, functionPtr);
 }
 
-#define CONCAT(a__, b__) a__##b__
-#define STRINGIFY(a__) #a__
-
 #ifdef HAS_ADDRESS_SANITIZER
 #define CHECK_ADDRESS_SANITIZER(Ptr, Name) \
 if (LLVM_UNLIKELY(hasAddressSanitizer())) { \
@@ -1069,7 +1066,7 @@ if (LLVM_UNLIKELY(hasAddressSanitizer())) { \
     ConstantInt * const size = ConstantInt::get(sizeTy, Ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8); \
     Value * check = CreateCall(isPoisoned, { addr, size }); \
     check = CreateICmpEQ(check, ConstantPointerNull::get(cast<PointerType>(isPoisoned->getReturnType()))); \
-    CreateAssert(check, STRINGIFY(CONCAT(Name, ": invalid memory address"))); \
+    CreateAssert(check, Name ": invalid memory address"); \
 }
 #else
 #define CHECK_ADDRESS_SANITIZER(Ptr, Name)
@@ -1077,7 +1074,7 @@ if (LLVM_UNLIKELY(hasAddressSanitizer())) { \
 
 #define CHECK_ADDRESS(Ptr, Name) \
     if (codegen::EnableAsserts) { \
-        CreateAssert(Ptr, STRINGIFY(CONCAT(Name, ": null pointer address"))); \
+        CreateAssert(Ptr, Name ": null pointer address"); \
         CHECK_ADDRESS_SANITIZER(Ptr, Name) \
     }
 
@@ -1160,12 +1157,15 @@ StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Alig
     return SI;
 }
 
-CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsigned Align, bool isVolatile, MDNode *TBAATag, MDNode *ScopeTag, MDNode *NoAliasTag) {
+CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsigned Align, bool isVolatile,
+                                   MDNode *TBAATag, MDNode *ScopeTag, MDNode *NoAliasTag) {
     if (codegen::EnableAsserts) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = DL.getIntPtrType(getContext());
         Value * intDst = CreatePtrToInt(Dst, intPtrTy);
         Value * intSrc = CreatePtrToInt(Src, intPtrTy);
+        // If the call to this intrinisic has an alignment value that is not 0 or 1, then the caller
+        // guarantees that both the source and destination pointers are aligned to that boundary.
         if (Align > 1) {
             ConstantInt * align = ConstantInt::get(intPtrTy, Align);
             CreateAssertZero(CreateURem(intDst, align), "CreateMemMove: Dst pointer is misaligned");
@@ -1173,6 +1173,28 @@ CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsign
         }
     }
     return IRBuilder<>::CreateMemMove(Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
+}
+
+llvm::CallInst * CBuilder::CreateMemCpy(llvm::Value *Dst, llvm::Value *Src, llvm::Value *Size, unsigned Align, bool isVolatile,
+                                        llvm::MDNode *TBAATag, llvm::MDNode *TBAAStructTag, llvm::MDNode *ScopeTag, llvm::MDNode *NoAliasTag) {
+    if (codegen::EnableAsserts) {
+        DataLayout DL(getModule());
+        IntegerType * const intPtrTy = DL.getIntPtrType(getContext());
+        Value * intDst = CreatePtrToInt(Dst, intPtrTy);
+        Value * intSrc = CreatePtrToInt(Src, intPtrTy);
+        // If the call to this intrinisic has an alignment value that is not 0 or 1, then the caller
+        // guarantees that both the source and destination pointers are aligned to that boundary.
+        if (Align > 1) {
+            ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+            CreateAssertZero(CreateURem(intDst, align), "CreateMemCpy: Dst pointer is misaligned");
+            CreateAssertZero(CreateURem(intSrc, align), "CreateMemCpy: Src pointer is misaligned");
+        }
+        Value * intSize = CreateZExtOrTrunc(Size, intSrc->getType());
+        Value * nonOverlapping = CreateOr(CreateICmpULT(CreateAdd(intSrc, intSize), intDst),
+                                          CreateICmpULT(CreateAdd(intDst, intSize), intSrc));
+        CreateAssert(nonOverlapping, "CreateMemCpy: overlapping ranges is undefined");
+    }
+    return IRBuilder<>::CreateMemCpy(Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
 }
 
 CBuilder::CBuilder(LLVMContext & C)

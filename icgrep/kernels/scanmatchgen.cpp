@@ -54,10 +54,10 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     Function::arg_iterator args = mCurrentMethod->arg_begin();
     /* self = */ args++;
     Value * itemsToDo = &*(args++);
-    Value * inputStreamAvail = &*(args++);
+    /* inputStreamAvail = */ args++;
     Value * match_result = &*(args++);
     Value * line_break = &*(args++);
-    Value * input_stream = &*(args);
+    /* input_stream = */ args++;
 
     Value * blocksToDo = iBuilder->CreateUDiv(iBuilder->CreateAdd(itemsToDo, blockSizeLess1), blockSize);
     

@@ -69,7 +69,7 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     if (mEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
-    mTarget = builder.selectTarget();
+    mTarget = builder.selectTarget();    
     if (LLVM_LIKELY(codegen::EnableObjectCache)) {
         if (codegen::ObjectCacheDir) {
             mCache = new ParabixObjectCache(codegen::ObjectCacheDir);
@@ -79,33 +79,42 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
         mEngine->setObjectCache(mCache);
     }
     mMainModule->setTargetTriple(mTarget->getTargetTriple().getTriple());
-
     iBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
     iBuilder->setDriver(this);
     iBuilder->setModule(mMainModule);
 }
 
-void ParabixDriver::makeKernelCall(Kernel * kb, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
-    assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb->getModule() == nullptr));
-    mPipeline.emplace_back(kb);
-    kb->bindPorts(inputs, outputs);
-    kb->makeModule(iBuilder);
+void ParabixDriver::makeKernelCall(Kernel * kernel, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
+    assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kernel->getModule() == nullptr));
+    mPipeline.emplace_back(kernel);
+    kernel->bindPorts(inputs, outputs);
+    if (!mCache || !mCache->loadCachedObjectFile(iBuilder, kernel)) {
+        mUncachedKernel.push_back(kernel);
+    }
+    if (kernel->getModule() == nullptr) {
+        kernel->makeModule(iBuilder);
+    }
+    assert (kernel->getModule());
 }
 
 void ParabixDriver::generatePipelineIR() {
-    #ifndef NDEBUG
+
     if (LLVM_UNLIKELY(mPipeline.empty())) {
         report_fatal_error("Pipeline cannot be empty");
     } else {
         for (auto i = mPipeline.begin(); i != mPipeline.end(); ++i) {
             for (auto j = i; ++j != mPipeline.end(); ) {
                 if (LLVM_UNLIKELY(*i == *j)) {
-                    report_fatal_error("Kernel instances cannot occur twice in the pipeline");
+                    report_fatal_error("Kernel " + (*i)->getName() + " occurs twice in the pipeline");
                 }
             }
         }
     }
-    #endif
+
+    for (Kernel * const kernel : mUncachedKernel) {
+        kernel->prepareKernel(iBuilder);
+    }
+
     // note: instantiation of all kernels must occur prior to initialization
     for (const auto & k : mPipeline) {
         k->addKernelDeclarations(iBuilder);
@@ -129,11 +138,13 @@ void ParabixDriver::generatePipelineIR() {
 }
 
 Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
-    assert ("addKernelCall or makeKernelCall must be called before LinkFunction" && (mod != nullptr));
+    if (LLVM_UNLIKELY(mod == nullptr)) {
+        report_fatal_error("addLinkFunction(" + name + ") cannot be called until after addKernelCall or makeKernelCall");
+    }
     Function * f = mod->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
         f = Function::Create(type, Function::ExternalLinkage, name, mod);
-        mEngine->addGlobalMapping(f, functionPtr);
+        mEngine->updateGlobalMapping(f, functionPtr);
     } else if (LLVM_UNLIKELY(f->getType() != type->getPointerTo())) {
         report_fatal_error("Cannot link " + name + ": a function with a different signature already exists with that name in " + mod->getName());
     }
@@ -192,34 +203,27 @@ void ParabixDriver::finalizeObject() {
     #endif
 
     Module * module = nullptr;
-
     try {
-
-        for (Kernel * const kernel : mPipeline) {
+        for (Kernel * const kernel : mUncachedKernel) {
             iBuilder->setKernel(kernel);
-            module = kernel->getModule();
-            assert (module != mMainModule);
-            bool uncachedObject = true;
-            if (mCache && mCache->loadCachedObjectFile(iBuilder, kernel)) {
-                uncachedObject = false;
-            }
-            if (uncachedObject) {
-                module->setTargetTriple(mMainModule->getTargetTriple());
-                kernel->generateKernel(iBuilder);
-                PM.run(*module);
-            }
-            mEngine->addModule(std::unique_ptr<Module>(module));
+            kernel->generateKernel(iBuilder);
+            module = kernel->getModule(); assert (module);
+            module->setTargetTriple(mMainModule->getTargetTriple());
+            PM.run(*module);
         }
-
-        iBuilder->setKernel(nullptr);
         module = mMainModule;
+        iBuilder->setKernel(nullptr);
         PM.run(*mMainModule);
+        for (Kernel * const kernel : mPipeline) {
+            if (LLVM_UNLIKELY(kernel->getModule() == nullptr)) {
+                report_fatal_error(kernel->getName() + " was neither loaded from cache nor generated prior to finalizeObject");
+            }
+            mEngine->addModule(std::unique_ptr<Module>(kernel->getModule()));
+        }
         mEngine->finalizeObject();
-
         if (mCache) mCache->cleanUpObjectCacheFiles();
-
     } catch (const std::exception & e) {
-        report_fatal_error(e.what());
+        report_fatal_error(module->getName() + ": " + e.what());
     }
 
 }

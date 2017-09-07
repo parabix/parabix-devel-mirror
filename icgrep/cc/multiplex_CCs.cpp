@@ -43,7 +43,7 @@ std::map<UCD::codepoint_t, boost::dynamic_bitset<>> computeBreakpoints(std::vect
 }
 
 
-void doMultiplexCCs(std::vector<UCD::UnicodeSet> CCs,
+void doMultiplexCCs(const std::vector<UCD::UnicodeSet> & CCs,
                     std::vector<std::vector<unsigned>> & exclusiveSetIDs,
                     std::vector<UCD::UnicodeSet> & multiplexedCCs) {
     

@@ -25,12 +25,12 @@ public:
         , End
         , Intersect
         , Name
-        , Permute
+        // , Permute
         , Rep
         , Seq
         , Start
-        , SymDiff
-        , Union
+        // , SymDiff
+        // , Union
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
@@ -51,6 +51,13 @@ protected:
 
 class Vector : public RE, public std::vector<RE*, RE::VectorAllocator> {
 public:
+    static inline bool classof(const RE * re) {
+        const auto typeId = re->getClassTypeId();
+        return typeId == ClassTypeId::Alt || typeId == ClassTypeId::Seq;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
     virtual ~Vector() {}
 protected:
     inline Vector(const ClassTypeId id)

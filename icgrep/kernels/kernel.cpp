@@ -110,9 +110,8 @@ void Kernel::bindPorts(const StreamSetBuffers & inputs, const StreamSetBuffers &
     mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
 }
 
-Module * Kernel::makeModule(const std::unique_ptr<KernelBuilder> & idb) {
-    assert (mModule == nullptr);
-    std::stringstream cacheName;   
+std::string Kernel::getCacheName(const std::unique_ptr<KernelBuilder> & idb) const {
+    std::stringstream cacheName;
     cacheName << getName() << '_' << idb->getBuilderUniqueName();
     for (const StreamSetBuffer * b: mStreamSetInputBuffers) {
         cacheName <<  ':' <<  b->getUniqueID();
@@ -120,16 +119,18 @@ Module * Kernel::makeModule(const std::unique_ptr<KernelBuilder> & idb) {
     for (const StreamSetBuffer * b: mStreamSetOutputBuffers) {
         cacheName <<  ':' <<  b->getUniqueID();
     }
-    mModule = new Module(cacheName.str(), idb->getContext());
-    prepareKernel(idb);
+    return cacheName.str();
+}
+
+Module * Kernel::setModule(Module * const module) {
+    assert (mModule == nullptr || mModule == module);
+    assert (module != nullptr);
+    mModule = module;
     return mModule;
 }
 
-Module * Kernel::setModule(const std::unique_ptr<KernelBuilder> & idb, llvm::Module * const module) {
-    assert (mModule == nullptr);
-    mModule = module;
-    prepareKernel(idb);
-    return mModule;
+Module * Kernel::makeModule(const std::unique_ptr<kernel::KernelBuilder> & idb) {
+    return setModule(new Module(getCacheName(idb), idb->getContext()));
 }
 
 void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
@@ -144,17 +145,18 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     }
     const auto requiredBlocks = codegen::SegmentSize + ((blockSize + mLookAheadPositions - 1) / blockSize);
 
+    IntegerType * const sizeTy = idb->getSizeTy();
+
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
         if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
             //report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
         }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
         if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
-            addScalar(idb->getSizeTy(), mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
+            addScalar(sizeTy, mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
         }
     }
 
-    IntegerType * const sizeTy = idb->getSizeTy();
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
         if ((mStreamSetInputs.empty() && (i == 0)) || !mStreamSetOutputs[i].rate.isExact()) {
@@ -190,14 +192,82 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     // in normal execution, but when codegen::EnableCycleCounter is specified, pipelines
     // will be able to add instrumentation to cached modules without recompilation.
     addScalar(idb->getInt64Ty(), CYCLECOUNT_SCALAR);
+    addInternalKernelProperties(idb);
     // NOTE: StructType::create always creates a new type even if an identical one exists.
-    mKernelStateType = getModule()->getTypeByName(getName());
+    if (LLVM_UNLIKELY(mModule == nullptr)) {
+        setModule(new Module(getCacheName(idb), idb->getContext()));
+    }
+    mKernelStateType = mModule->getTypeByName(getName());
     if (LLVM_LIKELY(mKernelStateType == nullptr)) {
         mKernelStateType = StructType::create(idb->getContext(), mKernelFields, getName());
     }
     processingRateAnalysis();
 }
-    
+
+void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & idb) {
+
+    assert ("KernelBuilder does not have a valid IDISA Builder" && idb);
+    if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
+        report_fatal_error("Cannot prepare kernel after kernel state finalized");
+    }
+    assert (getModule());
+    const auto blockSize = idb->getBitBlockWidth();
+    if (mStride == 0) {
+        // Set the default kernel stride.
+        mStride = blockSize;
+    }
+    const auto requiredBlocks = codegen::SegmentSize + ((blockSize + mLookAheadPositions - 1) / blockSize);
+
+    IntegerType * const sizeTy = idb->getSizeTy();
+    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+        if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
+            //report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
+        }
+        mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
+        if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
+            addScalar(sizeTy, mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
+        }
+    }
+
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
+        if ((mStreamSetInputs.empty() && (i == 0)) || !mStreamSetOutputs[i].rate.isExact()) {
+            addScalar(sizeTy, mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
+        }
+    }
+    for (const auto & binding : mScalarInputs) {
+        addScalar(binding.type, binding.name);
+    }
+    for (const auto & binding : mScalarOutputs) {
+        addScalar(binding.type, binding.name);
+    }
+    if (mStreamMap.empty()) {
+        prepareStreamSetNameMap();
+    }
+    for (const auto & binding : mInternalScalars) {
+        addScalar(binding.type, binding.name);
+    }
+
+    Type * const consumerSetTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        addScalar(consumerSetTy, mStreamSetOutputs[i].name + CONSUMER_SUFFIX);
+    }
+
+    addScalar(sizeTy, LOGICAL_SEGMENT_NO_SCALAR);
+    addScalar(idb->getInt1Ty(), TERMINATION_SIGNAL);
+
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        addScalar(sizeTy, mStreamSetOutputs[i].name + CONSUMED_ITEM_COUNT_SUFFIX);
+    }
+
+    // We compile in a 64-bit CPU cycle counter into every kernel.   It will remain unused
+    // in normal execution, but when codegen::EnableCycleCounter is specified, pipelines
+    // will be able to add instrumentation to cached modules without recompilation.
+    addScalar(idb->getInt64Ty(), CYCLECOUNT_SCALAR);
+    mKernelStateType = getModule()->getTypeByName(getName());
+    assert (mKernelStateType);
+    processingRateAnalysis();
+}
     
 void Kernel::processingRateAnalysis() {
     
@@ -289,13 +359,13 @@ void Kernel::generateKernel(const std::unique_ptr<kernel::KernelBuilder> & idb) 
     if (!mIsGenerated) {
         const auto m = idb->getModule();
         const auto ip = idb->saveIP();
-        const auto saveInstance = getInstance();
+        // const auto saveInstance = getInstance();
         idb->setModule(mModule);
         addKernelDeclarations(idb);
         callGenerateInitializeMethod(idb);
         callGenerateDoSegmentMethod(idb);
         callGenerateFinalizeMethod(idb);
-        setInstance(saveInstance);
+        // setInstance(saveInstance);
         idb->setModule(m);
         idb->restoreIP(ip);
         mIsGenerated = true;
@@ -811,22 +881,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     BasicBlock * const segmentDone = kb->CreateBasicBlock(getName() + "_segmentDone");
 
     Value * blockBaseMask = kb->CreateNot(kb->getSize(kb->getBitBlockWidth() - 1));
-    //
-    // Define and allocate the temporary buffer area.
-    //
-    Type * tempBuffers[totalSetCount];
-    for (unsigned i = 0; i < totalSetCount; i++) {
-        unsigned blocks = maxBlocksToCopy[i];
-        Type * bufType = i < inputSetCount ? mStreamSetInputBuffers[i]->getStreamSetBlockType() : mStreamSetOutputBuffers[i -inputSetCount]->getStreamSetBlockType();
-        if (blocks > 1) {
-            tempBuffers[i] = ArrayType::get(bufType, blocks);
-        }
-        else {
-            tempBuffers[i] = bufType;
-        }
-    }
-    Type * tempParameterStructType = StructType::create(kb->getContext(), ArrayRef<Type *>(tempBuffers, totalSetCount), "tempBuf");
-    Value * tempParameterArea = kb->CreateCacheAlignedAlloca(tempParameterStructType);
     ConstantInt * blockSize = kb->getSize(kb->getBitBlockWidth());
     ConstantInt * strideSize = kb->getSize(mStride);
     
@@ -865,21 +919,22 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     // For each input buffer, determine the processedItemCount, the block pointer for the
     // buffer block containing the next item, and the number of linearly available items.
 
-    std::vector<Value *> processedItemCount;
-    std::vector<Value *> inputBlockPtr;
+    Value * processedItemCount[inputSetCount];
+    Value * inputBlockPtr[inputSetCount];
     std::vector<Value *> producedItemCount;
     std::vector<Value *> outputBlockPtr;
 
     //  Now determine the linearly available blocks, based on blocks remaining reduced
     //  by limitations of linearly available input buffer space.
-
     Value * linearlyAvailStrides = stridesRemaining;
     for (unsigned i = 0; i < inputSetCount; i++) {
         Value * p = kb->getProcessedItemCount(mStreamSetInputs[i].name);
         Value * blkNo = kb->CreateUDiv(p, blockSize);
         Value * b = kb->getInputStreamBlockPtr(mStreamSetInputs[i].name, kb->getInt32(0));
-        processedItemCount.push_back(p);
-        inputBlockPtr.push_back(b);
+        // processedItemCount.push_back(p);
+        processedItemCount[i] = p;
+        // inputBlockPtr.push_back(b);
+        inputBlockPtr[i] = b;
         auto & rate = mStreamSetInputs[i].rate;
         if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
         Value * maxReferenceItems = nullptr;
@@ -893,6 +948,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
         linearlyAvailStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyAvailStrides), maxStrides, linearlyAvailStrides);
     }
+
     //  Now determine the linearly writeable blocks, based on available blocks reduced
     //  by limitations of output buffer space.
     Value * linearlyWritableStrides = linearlyAvailStrides;
@@ -914,8 +970,8 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
         linearlyWritableStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyWritableStrides), maxStrides, linearlyWritableStrides);
     }
-    Value * haveStrides = kb->CreateICmpUGT(linearlyWritableStrides, kb->getSize(0));
-    kb->CreateCondBr(haveStrides, doMultiBlockCall, tempBlockCheck);
+    Value * const haveFullStrides = kb->CreateICmpUGT(linearlyWritableStrides, kb->getSize(0));
+    kb->CreateCondBr(haveFullStrides, doMultiBlockCall, tempBlockCheck);
 
     //  At this point we have verified the availability of one or more blocks of input data and output buffer space for all stream sets.
     //  Now prepare the doMultiBlock call.
@@ -943,11 +999,12 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     }
 
     kb->CreateCall(multiBlockFunction, doMultiBlockArgs);
+
     // Do copybacks if necessary.
     unsigned priorIdx = 0;
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * log2BlockSize = kb->getSize(std::log2(kb->getBitBlockWidth()));
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {        
         if (auto cb = dyn_cast<SwizzledCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
+            Value * log2BlockSize = kb->getSize(std::log2(kb->getBitBlockWidth()));
             BasicBlock * copyBack = kb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
             BasicBlock * done = kb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
             Value * newlyProduced = kb->CreateSub(kb->getProducedItemCount(mStreamSetOutputs[i].name), producedItemCount[i]);
@@ -985,9 +1042,10 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     Value * nowProcessed = kb->CreateAdd(processedItemCount[0], linearlyAvailItems);
     kb->setProcessedItemCount(mStreamSetInputs[0].name, nowProcessed);
     Value * reducedStridesToDo = kb->CreateSub(stridesRemaining, linearlyWritableStrides);
-    BasicBlock * multiBlockFinal = kb->GetInsertBlock();
-    stridesRemaining->addIncoming(reducedStridesToDo, multiBlockFinal);
+    stridesRemaining->addIncoming(reducedStridesToDo, kb->GetInsertBlock());
     kb->CreateBr(doSegmentOuterLoop);
+
+
     //
     // We use temporary buffers in 3 different cases that preclude full block processing.
     // (a) One or more input buffers does not have a sufficient number of input items linearly available.
@@ -998,7 +1056,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     //
 
     kb->SetInsertPoint(tempBlockCheck);
-    haveStrides = kb->CreateICmpUGT(stridesRemaining, kb->getSize(0));
+    Value * const haveStrides = kb->CreateICmpUGT(stridesRemaining, kb->getSize(0));
     kb->CreateCondBr(kb->CreateOr(mIsFinal, haveStrides), doTempBufferBlock, segmentDone);
 
     kb->SetInsertPoint(doTempBufferBlock);
@@ -1016,25 +1074,38 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             tempArgs.push_back(kb->CreateSelect(kb->CreateICmpULT(avail, strideSize), avail, strideSize));
         }
     }
-    // Prepare the temporary buffer area.
     //
-    // First zero it out.
-    Constant * const tempAreaSize = ConstantExpr::getIntegerCast(ConstantExpr::getSizeOf(tempParameterStructType), kb->getSizeTy(), false);
-    kb->CreateMemZero(tempParameterArea, tempAreaSize);
-    // For each input and output buffer, copy over necessary data starting from the last
-    // block boundary.
+    // Define and allocate the temporary buffer area.
+    //
+    Type * tempBuffers[totalSetCount];
+    for (unsigned i = 0; i < inputSetCount; ++i) {
+        Type * bufType = mStreamSetInputBuffers[i]->getStreamSetBlockType();
+        tempBuffers[i] = ArrayType::get(bufType, maxBlocksToCopy[i]);
+    }
+    for (unsigned i = 0; i < outputSetCount; i++) {
+        Type * bufType = mStreamSetOutputBuffers[i]->getStreamSetBlockType();
+        tempBuffers[i + inputSetCount] = ArrayType::get(bufType, maxBlocksToCopy[i + inputSetCount]);
+    }
+    Type * tempParameterStructType = StructType::create(kb->getContext(), ArrayRef<Type *>(tempBuffers, totalSetCount), "tempBuf");
+    // Prepare the temporary buffer area.
+    Value * tempParameterArea = kb->CreateCacheAlignedAlloca(tempParameterStructType);
+    kb->CreateMemZero(tempParameterArea, ConstantExpr::getSizeOf(tempParameterStructType));
+    // For each input and output buffer, copy over necessary data starting from the last block boundary.
     Value * itemCountNeeded[inputSetCount];
     itemCountNeeded[0] = tempBlockItems;
     Value * finalItemCountNeeded[inputSetCount];
 
-    for (unsigned i = 0; i < mStreamSetInputBuffers.size(); i++) {
+    for (unsigned i = 0; i < inputSetCount; i++) {
         Type * bufPtrType = mStreamSetInputBuffers[i]->getPointerType();
         if (mItemsPerStride[i] != 0) {
             Value * tempBufPtr = kb->CreateGEP(tempParameterArea, {kb->getInt32(0), kb->getInt32(i)});
             tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
             ConstantInt * strideItems = kb->getSize(mItemsPerStride[i]);
             Value * strideBasePos = kb->CreateSub(processedItemCount[i], kb->CreateURem(processedItemCount[i], strideItems));
-            Value * blockBasePos = (mItemsPerStride[i] % bitBlockWidth == 0) ? strideBasePos : kb->CreateAnd(strideBasePos, blockBaseMask);
+            Value * blockBasePos = strideBasePos;
+            if (mItemsPerStride[i] & (bitBlockWidth - 1)) {
+                blockBasePos = kb->CreateAnd(strideBasePos, blockBaseMask);
+            }
 
             // The number of items to copy is determined by the processing rate requirements.
             if (i >= 1) {
@@ -1076,16 +1147,15 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
                 kb->SetInsertPoint(copyDone);
             }
             tempArgs.push_back(tempBufPtr);
-        }
-        else {
+        } else {
             Value * bufPtr = kb->getInputStreamBlockPtr(mStreamSetInputs[i].name, kb->getInt32(0));
             bufPtr = kb->CreatePointerCast(bufPtr, mStreamSetInputBuffers[i]->getPointerType());
             tempArgs.push_back(bufPtr);            
         }
     }
     Value * outputBasePos[outputSetCount];
-    for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); i++) {
-        Value * tempBufPtr = kb->CreateGEP(tempParameterArea,  {kb->getInt32(0), kb->getInt32(mStreamSetInputs.size() + i)});
+    for (unsigned i = 0; i < outputSetCount; i++) {
+        Value * tempBufPtr = kb->CreateGEP(tempParameterArea,  {kb->getInt32(0), kb->getInt32(inputSetCount + i)});
         Type * bufPtrType = mStreamSetOutputBuffers[i]->getPointerType();
         tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
         producedItemCount[i] = kb->getProducedItemCount(mStreamSetOutputs[i].name);
@@ -1132,7 +1202,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         kb->CreateBr(copyBackDone);
         kb->SetInsertPoint(copyBackDone);
     }
-
 
     //  We've dealt with the partial block processing and copied information back into the
     //  actual buffers.  If this isn't the final block, loop back for more multiblock processing.
