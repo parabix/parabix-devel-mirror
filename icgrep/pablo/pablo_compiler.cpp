@@ -520,9 +520,9 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             Value * EOFbit = iBuilder->getScalarField("EOFbit");
             value = iBuilder->simd_and(compileExpression(iBuilder, e->getExpr()), EOFbit);
         } else if (const Count * c = dyn_cast<Count>(stmt)) {
-        Value * EOFbit = iBuilder->getScalarField("EOFbit");
-        Value * EOFmask = iBuilder->getScalarField("EOFmask");
-        Value * const to_count = iBuilder->simd_and(iBuilder->simd_or(iBuilder->simd_not(EOFmask), EOFbit), compileExpression(iBuilder, c->getExpr()));
+            Value * EOFbit = iBuilder->getScalarField("EOFbit");
+            Value * EOFmask = iBuilder->getScalarField("EOFmask");
+            Value * const to_count = iBuilder->simd_and(iBuilder->simd_or(iBuilder->simd_not(EOFmask), EOFbit), compileExpression(iBuilder, c->getExpr()));
             const unsigned counterSize = iBuilder->getSizeTy()->getBitWidth();
             const auto f = mAccumulator.find(c);
             if (LLVM_UNLIKELY(f == mAccumulator.end())) {
@@ -530,19 +530,14 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             }
             Value * ptr = iBuilder->getScalarFieldPtr(f->second);
             const auto alignment = getPointerElementAlignment(ptr);
-            Value * count = iBuilder->CreateAlignedLoad(ptr, alignment, c->getName() + "_accumulator");
-            Value * const partial = iBuilder->simd_popcount(counterSize, to_count);
-            if (LLVM_UNLIKELY(counterSize <= 1)) {
-                value = partial;
-            } else {
-                value = iBuilder->mvmd_extract(counterSize, partial, 0);
-                const auto fields = (iBuilder->getBitBlockWidth() / counterSize);
-                for (unsigned i = 1; i < fields; ++i) {
-                    Value * temp = iBuilder->mvmd_extract(counterSize, partial, i);
-                    value = iBuilder->CreateAdd(value, temp);
-                }
+            Value * countSoFar = iBuilder->CreateAlignedLoad(ptr, alignment, c->getName() + "_accumulator");
+            auto fields = (iBuilder->getBitBlockWidth() / counterSize);
+            Value * fieldCounts = iBuilder->simd_popcount(counterSize, to_count);
+            while (fields > 1) {
+                fields = fields/2;
+                fieldCounts = iBuilder->CreateAdd(fieldCounts, iBuilder->mvmd_srli(counterSize, fieldCounts, fields));
             }
-            value = iBuilder->CreateAdd(value, count);
+            value = iBuilder->CreateAdd(iBuilder->mvmd_extract(counterSize, fieldCounts, 0), countSoFar, "countSoFar");
             iBuilder->CreateAlignedStore(value, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             Var * var = nullptr;
