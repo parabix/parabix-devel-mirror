@@ -8,7 +8,7 @@ namespace re {
     class RE;
     class Name;
 
-    void collect_UnicodeSets(RE * re, std::vector<UCD::UnicodeSet> &UnicodeSets);
+    std::vector<UCD::UnicodeSet> collect_UnicodeSets(RE * re);
 
 }
 #endif

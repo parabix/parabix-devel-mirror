@@ -328,9 +328,8 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver
     std::vector<std::vector<UCD::UnicodeSet>> charclasses;
 
     for (unsigned i = 0; i < n; i++) {
-        std::vector<UCD::UnicodeSet> UnicodeSets;
         REs[i] = resolveNames(REs[i]);
-        re::collect_UnicodeSets(REs[i], UnicodeSets);
+        std::vector<UCD::UnicodeSet> UnicodeSets = re::collect_UnicodeSets(REs[i]);
         std::vector<std::vector<unsigned>> exclusiveSetIDs;
         std::vector<UCD::UnicodeSet> multiplexedCCs;
         doMultiplexCCs(UnicodeSets, exclusiveSetIDs, multiplexedCCs);

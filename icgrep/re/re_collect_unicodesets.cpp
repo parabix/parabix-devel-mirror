@@ -1,5 +1,8 @@
 #include "re_collect_unicodesets.h"
 #include <re/re_name.h>
+#include <re/re_any.h>
+#include <re/re_start.h>
+#include <re/re_end.h>
 #include <re/re_alt.h>
 #include <re/re_cc.h>
 #include <re/re_seq.h>
@@ -20,18 +23,21 @@ using namespace boost::container;
 using namespace llvm;
 
 namespace re {
+    
+class SetCollector {
+public:
+    void collect_UnicodeSets(RE * re, std::vector<UCD::UnicodeSet> & UnicodeSets);
+private:
+    flat_set<Name *>        mVisited;
+};
 
-flat_set<Name *>        mVisited;
-
-void collect_UnicodeSets(RE * re, std::vector<UCD::UnicodeSet> & UnicodeSets) {
+void SetCollector::collect_UnicodeSets(RE * re, std::vector<UCD::UnicodeSet> & UnicodeSets) {
     assert ("RE object cannot be null!" && re);
-    if (isa<Name>(re)) {
+    if (CC * cc = dyn_cast<CC>(re)) {
+        UnicodeSets.push_back(* cast<UCD::UnicodeSet>(cc));
+    } else if (isa<Name>(re)) {
         if (mVisited.insert(cast<Name>(re)).second) {
-            if (CC * cc = dyn_cast<CC>(cast<Name>(re)->getDefinition())) {
-                UnicodeSets.push_back(* cast<UCD::UnicodeSet>(cc));
-            } else {
-                collect_UnicodeSets(cast<Name>(re)->getDefinition(), UnicodeSets);
-            }
+            collect_UnicodeSets(cast<Name>(re)->getDefinition(), UnicodeSets);
         }
     } else if (isa<Seq>(re)) {
         for (RE * item : *cast<Seq>(re)) {
@@ -51,7 +57,20 @@ void collect_UnicodeSets(RE * re, std::vector<UCD::UnicodeSet> & UnicodeSets) {
     } else if (isa<Intersect>(re)) {
         collect_UnicodeSets(cast<Intersect>(re)->getLH(), UnicodeSets);
         collect_UnicodeSets(cast<Intersect>(re)->getRH(), UnicodeSets);
+    } else if (isa<Any>(re)) {
+        UnicodeSets.push_back(UCD::UnicodeSet(0x00, 0x10FFFF));
+    } else if (isa<Start>(re)) {
+        // LineBreak set handled globally
+    } else if (isa<End>(re)) {
+        // LineBreak set handled globally
     }
+}
+    
+std::vector<UCD::UnicodeSet> collect_UnicodeSets(RE * re) {
+    SetCollector collector;
+    std::vector<UCD::UnicodeSet> UnicodeSets;
+    collector.collect_UnicodeSets(re, UnicodeSets);
+    return UnicodeSets;
 }
 
 }
