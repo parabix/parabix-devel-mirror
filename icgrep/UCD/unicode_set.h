@@ -105,7 +105,9 @@ public:
     bool contains(const codepoint_t codepoint) const;
 
     bool intersects(const codepoint_t lo, const codepoint_t hi) const;
-
+    
+    bool intersects(const UnicodeSet & other) const;
+    
     void insert(const codepoint_t cp);
 
     void insert_range(const codepoint_t lo, const codepoint_t hi);

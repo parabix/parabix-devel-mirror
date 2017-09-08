@@ -154,54 +154,39 @@ void RE_Local::follow(RE * re, std::map<CC *, CC*> &follow_map) {
 }
 
 bool RE_Local::isLocalLanguage(RE * re) {
-    std::vector<UCD::UnicodeSet> UnicodeSets;
-    collect_UnicodeSets_helper(re, UnicodeSets);
-    if (UnicodeSets.size() == 0) return false;
-    for (unsigned i = 0; i < UnicodeSets.size(); i++) {
-        for (unsigned j = i + 1; j < UnicodeSets.size(); j++) {
-            for (const UCD::UnicodeSet::interval_t & range : UnicodeSets[i]) {
-                auto lo = re::lo_codepoint(range);
-                auto hi = re::hi_codepoint(range);
-                if (UnicodeSets[j].intersects(lo, hi)) {
-                    return false;
-                }
-            }
-        }
-    }
-    return true;
+    UCD::UnicodeSet seen = UCD::UnicodeSet();
+    return isLocalLanguage_helper(re, seen);
 }
 
-
-RE * RE_Local::collect_UnicodeSets_helper(RE * re, std::vector<UCD::UnicodeSet> & UnicodeSets) {
+bool RE_Local::isLocalLanguage_helper(const RE * re, UCD::UnicodeSet & codepoints_seen) {
     assert ("RE object cannot be null!" && re);
-    if (isa<Name>(re)) {
-        if (CC * cc = dyn_cast<CC>(cast<Name>(re)->getDefinition())) {
-            UnicodeSets.push_back(* cast<UCD::UnicodeSet>(cc));
-        } else {
-            collect_UnicodeSets_helper(cast<Name>(re)->getDefinition(), UnicodeSets);
+    if (isa<Any>(re)) {
+        bool no_intersect = codepoints_seen.empty();
+        codepoints_seen = UCD::UnicodeSet(0x00, 0x10FFFF);
+        return no_intersect;
+    } else if (const CC * cc = dyn_cast<CC>(re)) {
+        bool has_intersect = cast<UCD::UnicodeSet>(cc)->intersects(codepoints_seen);
+        codepoints_seen = codepoints_seen + *cast<UCD::UnicodeSet>(cc);
+        return !has_intersect;
+    } else if (const Name * n = dyn_cast<Name>(re)) {
+        return isLocalLanguage_helper(n->getDefinition(), codepoints_seen);
+    } else if (const Seq * re_seq = dyn_cast<const Seq>(re)) {
+        for (const RE * item : *re_seq) {
+            if (!isLocalLanguage_helper(item, codepoints_seen)) return false;
         }
-    } else if (isa<Seq>(re)) {
-        for (RE * item : *cast<Seq>(re)) {
-            collect_UnicodeSets_helper(item, UnicodeSets);
+        return true;
+    } else if (const Alt * re_alt = dyn_cast<const Alt>(re)) {
+        for (RE * item : *re_alt) {
+            if (!isLocalLanguage_helper(item, codepoints_seen)) return false;
         }
-    } else if (isa<Alt>(re)) {
-        for (RE * item : *cast<Alt>(re)) {
-            collect_UnicodeSets_helper(item, UnicodeSets);
-        }
-    } else if (isa<Rep>(re)) {
-        collect_UnicodeSets_helper(cast<Rep>(re)->getRE(), UnicodeSets);
-    } else if (isa<Assertion>(re)) {
-        collect_UnicodeSets_helper(cast<Assertion>(re)->getAsserted(), UnicodeSets);
-    } else if (isa<Diff>(re)) {
-        collect_UnicodeSets_helper(cast<Diff>(re)->getLH(), UnicodeSets);
-        collect_UnicodeSets_helper(cast<Diff>(re)->getRH(), UnicodeSets);
-    } else if (isa<Intersect>(re)) {
-        collect_UnicodeSets_helper(cast<Intersect>(re)->getLH(), UnicodeSets);
-        collect_UnicodeSets_helper(cast<Intersect>(re)->getRH(), UnicodeSets);
-    } else if (isa<Any>(re)) {
-        UnicodeSets.push_back(UCD::UnicodeSet(0x00, 0x10FFFF));
+        return true;
+    } else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
+        if (re_rep->getUB() > 1) return false;
+        return isLocalLanguage_helper(re_rep->getRE(), codepoints_seen);
+    } else {
+        // A local language cannot contain Intersects, Differences, Assertions, Start, End.
+        return false;
     }
-    return re;
 }
 
 bool RE_Local::isNullable(const RE * re) {

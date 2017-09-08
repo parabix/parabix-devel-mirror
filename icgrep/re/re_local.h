@@ -15,7 +15,7 @@ public:
     static void follow(RE * re, std::map<CC*, CC*> &follow_map);
 	static bool isLocalLanguage(RE * re);
 private:
-	static RE * collect_UnicodeSets_helper(RE * re, std::vector<UCD::UnicodeSet> & UnicodeSets);
+	static bool isLocalLanguage_helper(const RE * re, UCD::UnicodeSet & seen);
 	static bool isNullable(const RE * re);
 };
 
