@@ -200,7 +200,7 @@ void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
     IntegerType * int64Ty = getInt64Ty();
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
         FunctionType *FT = FunctionType::get(getVoidTy(), { getInt8PtrTy(), int64Ty }, false);
-        Function * function = Function::Create(FT, Function::ExternalLinkage, "PrintInt", m);
+        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintInt", m);
         auto arg = function->arg_begin();
         std::string out = "%-40s = %" PRIx64 "\n";
         BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
@@ -560,7 +560,7 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
 }
 
 PointerType * CBuilder::getVoidPtrTy() const {
-    return TypeBuilder<void *, false>::get(getContext());
+    return TypeBuilder<void *, true>::get(getContext());
 }
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
@@ -663,7 +663,7 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
     Function * pthreadCreateFunc = m->getFunction("pthread_create");
     if (pthreadCreateFunc == nullptr) {
         Type * pthreadTy = getSizeTy();
-        FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), {getVoidPtrTy()}, false);
+        FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
         FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy->getPointerTo(), voidPtrTy, funVoidPtrVoidTy->getPointerTo(), voidPtrTy}, false);
         pthreadCreateFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_create", m);
         pthreadCreateFunc->setCallingConv(CallingConv::C);
@@ -1078,7 +1078,7 @@ if (LLVM_UNLIKELY(hasAddressSanitizer())) { \
         CHECK_ADDRESS_SANITIZER(Ptr, Name) \
     }
 
-LoadInst * CBuilder::CreateLoad(Value *Ptr, const char * Name) {
+LoadInst * CBuilder::CreateLoad(Value *Ptr, const char * Name) {    
     CHECK_ADDRESS(Ptr, "CreateLoad");
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
@@ -1099,6 +1099,7 @@ LoadInst * CBuilder::CreateLoad(Value *Ptr, bool isVolatile, const Twine & Name)
 }
 
 StoreInst * CBuilder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
+    assert (Val->getType()->getPointerTo() == Ptr->getType());
     CHECK_ADDRESS(Ptr, "CreateStore");
     return IRBuilder<>::CreateStore(Val, Ptr, isVolatile);
 }
@@ -1175,8 +1176,8 @@ CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsign
     return IRBuilder<>::CreateMemMove(Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
 }
 
-llvm::CallInst * CBuilder::CreateMemCpy(llvm::Value *Dst, llvm::Value *Src, llvm::Value *Size, unsigned Align, bool isVolatile,
-                                        llvm::MDNode *TBAATag, llvm::MDNode *TBAAStructTag, llvm::MDNode *ScopeTag, llvm::MDNode *NoAliasTag) {
+CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned Align, bool isVolatile,
+                                  MDNode *TBAATag, MDNode *TBAAStructTag, MDNode *ScopeTag, MDNode *NoAliasTag) {
     if (codegen::EnableAsserts) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = DL.getIntPtrType(getContext());

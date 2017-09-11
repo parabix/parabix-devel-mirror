@@ -63,9 +63,10 @@ void MMapSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuil
     PHINode * size = kb->CreatePHI(sizeTy, 2);
     size->addIncoming(pageSize, emptyFile);
     size->addIncoming(fileSize, nonEmptyFile);
-    kb->setBaseAddress("sourceBuffer", buffer);
+    Value * bufferPtr = kb->CreatePointerCast(buffer, kb->getInt8PtrTy());
+    kb->setBaseAddress("sourceBuffer", bufferPtr);
     kb->setBufferedSize("sourceBuffer", size);
-    kb->setScalarField("readableBuffer", buffer);
+    kb->setScalarField("readableBuffer", bufferPtr);
     kb->setScalarField("fileSize", fileSize);
     kb->setCapacity("sourceBuffer", fileSize);
     kb->CreateMAdvise(buffer, fileSize, CBuilder::ADVICE_WILLNEED);
@@ -82,7 +83,7 @@ void MMapSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     // instruct the OS that it can safely drop any fully consumed pages
     Value * consumed = kb->getConsumedItemCount("sourceBuffer");
     IntegerType * const consumedTy = cast<IntegerType>(consumed->getType());
-    Type * const voidPtrTy = kb->getVoidPtrTy();
+    Type * const int8PtrTy = kb->getInt8PtrTy();
 
     DataLayout DL(kb->getModule());
     IntegerType * const intAddrTy = kb->getIntPtrTy(DL);
@@ -115,8 +116,8 @@ void MMapSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     kb->CreateLikelyCondBr(hasPagesToDrop, processSegment, dropPages);
 
     kb->SetInsertPoint(dropPages);
-    kb->CreateMAdvise(kb->CreateIntToPtr(readableBuffer, voidPtrTy), unnecessaryBytes, CBuilder::ADVICE_DONTNEED);
-    readableBuffer = kb->CreateIntToPtr(kb->CreateAdd(readableBuffer, unnecessaryBytes), voidPtrTy);
+    kb->CreateMAdvise(kb->CreateIntToPtr(readableBuffer, int8PtrTy), unnecessaryBytes, CBuilder::ADVICE_DONTNEED);
+    readableBuffer = kb->CreateIntToPtr(kb->CreateAdd(readableBuffer, unnecessaryBytes), int8PtrTy);
     kb->setScalarField("readableBuffer", readableBuffer);
     kb->CreateBr(processSegment);
 
@@ -149,7 +150,7 @@ MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 {},
 {Binding{kb->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
 {Binding{kb->getInt32Ty(), "fileDescriptor"}},
-{Binding{kb->getSizeTy(), "fileSize"}}, {Binding{kb->getVoidPtrTy(), "readableBuffer"}})
+{Binding{kb->getSizeTy(), "fileSize"}}, {Binding{kb->getInt8PtrTy(), "readableBuffer"}})
 , mSegmentBlocks(blocksPerSegment)
 , mCodeUnitWidth(codeUnitWidth)
 , mFileSizeFunction(nullptr) {
@@ -343,7 +344,7 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 /// MEMORY SOURCE KERNEL
 
 void MemorySourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & kb) {
-    kb->setBaseAddress("sourceBuffer", kb->CreatePointerCast(kb->getScalarField("fileSource"), kb->getVoidPtrTy()));
+    kb->setBaseAddress("sourceBuffer", kb->CreatePointerCast(kb->getScalarField("fileSource"), kb->getInt8Ty()));
     kb->setBufferedSize("sourceBuffer", kb->getScalarField("fileSize"));
     kb->setCapacity("sourceBuffer", kb->getScalarField("fileSize"));
 }
