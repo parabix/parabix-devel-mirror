@@ -344,7 +344,7 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 /// MEMORY SOURCE KERNEL
 
 void MemorySourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & kb) {
-    kb->setBaseAddress("sourceBuffer", kb->CreatePointerCast(kb->getScalarField("fileSource"), kb->getInt8Ty()));
+    kb->setBaseAddress("sourceBuffer", kb->CreatePointerCast(kb->getScalarField("fileSource"), kb->getVoidPtrTy()));
     kb->setBufferedSize("sourceBuffer", kb->getScalarField("fileSize"));
     kb->setCapacity("sourceBuffer", kb->getScalarField("fileSize"));
 }

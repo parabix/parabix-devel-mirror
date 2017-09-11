@@ -488,8 +488,6 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
         throw std::runtime_error(std::to_string(hi) + " exceeds maximum code point.");
     }
 
-    //this->dump(llvm::errs()); llvm::errs() << " + [" << lo << ',' << hi << "]\n"; llvm::errs().flush();
-
     // Create a temporary run and quad set for the given range
     std::vector<run_t> runs;
     std::vector<bitquad_t> quads;
@@ -500,14 +498,13 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
     auto ri = mRuns.cbegin();
     auto qi = mQuads.cbegin();
 
-    length_t length = 0;
+    codepoint_t length = 0;
     run_type_t type = Empty;
 
-    // Advance past any full runs prior to the lo_index
+    // Advance past any runs prior to the lo_index
     for (;;) {
         assert (ri != mRuns.cend());
-        std::tie(type, length) = *ri;
-        //llvm::errs() << std::distance(mRuns.cbegin(), ri) << ") type=" << (int)(type) << ", length=" << length << ", lo_index=" << lo_index << ", hi_index=" << hi_index << "\n"; llvm::errs().flush();
+        std::tie(type, length) = *ri;       
         if (lo_index < length) {
             break;
         }
@@ -520,12 +517,10 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
         ++ri;
     }
 
-    //llvm::errs() << "* " << std::distance(mRuns.cbegin(), ri) << ") type=" << (int)(type) << ", length=" << length << ", lo_index=" << lo_index << ", hi_index=" << hi_index << "\n"; llvm::errs().flush();
-
     // Now record the runs and any quads prior to lo_index
     runs.assign(mRuns.cbegin(), ri++);
     if (lo_index) {
-        runs.push_back(std::make_pair(type, lo_index));
+        runs.emplace_back(type, lo_index);
         if (type == Mixed) {
             assert (static_cast<codepoint_t>(std::distance(qi, mQuads.cend())) >= lo_index);
             qi += lo_index;
@@ -554,8 +549,6 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
     }
     --length;
 
-    //llvm::errs() << "* " << std::distance(mRuns.cbegin(), ri) << ") type=" << (int)(type) << ", length=" << length << ", lo_index=" << lo_index << ", hi_index=" << hi_index << "\n"; llvm::errs().flush();
-
     // Now check if we need to write out any Full blocks between the lo and hi code points; adjust our position
     // in the original quad to suit.
     if (hi_index) {
@@ -568,13 +561,12 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
                 qi += length;
             }
             std::tie(type, length) = *ri++;
-            //llvm::errs() << std::distance(mRuns.cbegin(), ri) << ") type=" << (int)(type) << ", length=" << length << ", lo_index=" << lo_index << ", hi_index=" << hi_index << "\n"; llvm::errs().flush();
             if (hi_index < length) {
                 break;
             }
             hi_index -= length;
-        }
-
+            length = 0;
+        }        
         // Write out the hi_quad value
         if (LLVM_UNLIKELY(type == Full)) {
             append_run(Full, 1, runs);
@@ -588,21 +580,15 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi)  {
         }
     }
 
-    //llvm::errs() << "* " << std::distance(mRuns.cbegin(), ri) << ") type=" << (int)(type) << ", length=" << length << ", lo_index=" << lo_index << ", hi_index=" << hi_index << "\n";
-
-    //llvm::errs() << "* remaining=" << std::distance(ri, mRuns.cend()) << "\n";
-
-    //llvm::errs().flush();
-
     // And append any remaining values from the original data
+    assert (length >= hi_index);
     append_run(type, length - hi_index, runs);
     assert ("We wrote all the runs but still have remaining quads?" && (ri != mRuns.cend() || qi == mQuads.cend()));
     runs.insert(runs.end(), ri, mRuns.cend());
     quads.insert(quads.end(), qi, mQuads.cend());
     assert (verify(runs, quads));
-
     mRuns.assign(runs.cbegin(), runs.cend());
-    mQuads.assign(quads.cbegin(), quads.cend());
+    mQuads.assign(quads.cbegin(), quads.cend());    
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

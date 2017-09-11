@@ -97,6 +97,7 @@ inline RE * Name::getDefinition() const {
 }
 
 inline void Name::setDefinition(RE * definition) {
+    assert (definition != nullptr);
     assert (definition != this);
     mDefinition = definition;
 }
