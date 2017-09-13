@@ -1039,12 +1039,18 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         }
     }
 
-    Value * nowProcessed = kb->CreateAdd(processedItemCount[0], linearlyAvailItems);
-    kb->setProcessedItemCount(mStreamSetInputs[0].name, nowProcessed);
     Value * reducedStridesToDo = kb->CreateSub(stridesRemaining, linearlyWritableStrides);
     stridesRemaining->addIncoming(reducedStridesToDo, kb->GetInsertBlock());
-    kb->CreateBr(doSegmentOuterLoop);
-
+    if (mIsDerived[0]) {
+        Value * nowProcessed = kb->CreateAdd(processedItemCount[0], linearlyAvailItems);
+        kb->setProcessedItemCount(mStreamSetInputs[0].name, nowProcessed);
+        kb->CreateBr(doSegmentOuterLoop);
+    }
+    else {
+        Value * nowProcessed = kb->getProcessedItemCount(mStreamSetInputs[0].name);
+        Value * allAvailableItemsProcessed = kb->CreateICmpUGE(kb->CreateSub(nowProcessed, processedItemCount[0]), linearlyAvailItems);
+        kb->CreateCondBr(allAvailableItemsProcessed, doSegmentOuterLoop, segmentDone);
+    }
 
     //
     // We use temporary buffers in 3 different cases that preclude full block processing.
@@ -1171,7 +1177,9 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     //  The items have been processed and output generated to the temporary areas.
     //  Update the processed item count (and hence all the counts derived automatically
     //  therefrom).
-    kb->setProcessedItemCount(mStreamSetInputs[0].name, finalItemCountNeeded[0]);
+    if (mIsDerived[0]) {
+        kb->setProcessedItemCount(mStreamSetInputs[0].name, finalItemCountNeeded[0]);
+    }
     
     // Copy back data to the actual output buffers.
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); i++) {
@@ -1206,9 +1214,20 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     //  We've dealt with the partial block processing and copied information back into the
     //  actual buffers.  If this isn't the final block, loop back for more multiblock processing.
     //
-    stridesRemaining->addIncoming(kb->CreateSub(stridesRemaining, kb->CreateZExt(haveStrides, kb->getSizeTy())), kb->GetInsertBlock());
     BasicBlock * setTermination = kb->CreateBasicBlock("mBsetTermination");
-    kb->CreateCondBr(haveStrides, doSegmentOuterLoop, setTermination);
+    if (mIsDerived[0]) {
+        stridesRemaining->addIncoming(kb->CreateSub(stridesRemaining, kb->CreateZExt(haveStrides, kb->getSizeTy())), kb->GetInsertBlock());
+        kb->CreateCondBr(haveStrides, doSegmentOuterLoop, setTermination);
+    }
+    else {
+        Value * nowProcessed = kb->getProcessedItemCount(mStreamSetInputs[0].name);
+        Value * allAvailableItemsProcessed = kb->CreateICmpEQ(kb->CreateSub(nowProcessed, processedItemCount[0]), finalItemCountNeeded[0]);
+        BasicBlock * checkTermination = kb->CreateBasicBlock("checkTermination");
+        kb->CreateCondBr(allAvailableItemsProcessed, checkTermination, segmentDone);
+        kb->SetInsertPoint(checkTermination);
+        stridesRemaining->addIncoming(kb->CreateSub(stridesRemaining, kb->CreateZExt(haveStrides, kb->getSizeTy())), kb->GetInsertBlock());
+        kb->CreateCondBr(haveStrides, doSegmentOuterLoop, setTermination);
+    }    
     kb->SetInsertPoint(setTermination);
     kb->setTerminationSignal();
     kb->CreateBr(segmentDone);
