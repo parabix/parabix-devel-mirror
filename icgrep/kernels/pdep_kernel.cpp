@@ -34,10 +34,9 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     args++; //self
     Value * itemsToDo = &*(args++); // Since PDEP marker stream is a bit stream, this is the number of PDEP marker bits to process
     // Get pointer to start of the StreamSetBlock containing unprocessed input items.
-    Value * sourceItemsAvail = args++; 
+    Value * sourceItemsAvail =  &*(args++); 
     Value * PDEPStrmPtr = &*(args++);
     Value * inputSwizzlesPtr = &*(args++);
-
     // Get pointer to start of the output StreamSetBlock we're currently writing to
     Value * outputStreamPtr = &*(args);
     
@@ -75,16 +74,15 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     Value * updatedProcessedBits = updatedProcessedBitsPhi;
     Value * updatedSourceItems = sourceItemsRemaining;
     Value * PDEP_ms_blk = kb->CreateBlockAlignedLoad(kb->CreateGEP(PDEPStrmPtr, {blockOffsetPhi, kb->getInt32(0)}));
-    kb->CallPrintRegister("PDEP_ms_blk", PDEP_ms_blk);
 
     const auto PDEP_masks = get_PDEP_masks(kb, PDEP_ms_blk, mPDEPWidth);    
     const auto mask_popcounts = get_block_popcounts(kb, PDEP_ms_blk, mPDEPWidth);
     
     Value * total_count = mask_popcounts[0];
     for (unsigned j = 1; j < mask_popcounts.size(); j++) {
-        total_count = kb->CreateAdd(mask_popcounts[j]);
+        total_count = kb->CreateAdd(total_count, mask_popcounts[j]);
     }
-    kb->CreateCondBr(kb->CreateUGE(total_count, sourceItemsRemaining), processBlock, terminate);
+    kb->CreateCondBr(kb->CreateICmpULE(total_count, sourceItemsRemaining), processBlock, terminate);
     kb->SetInsertPoint(processBlock);
 
     // For each mask extracted from the PDEP marker block
@@ -122,7 +120,6 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
 
         // Store the result
         kb->CreateBlockAlignedStore(result_swizzle, kb->CreateGEP(outputStreamPtr, {blockOffsetPhi, kb->getSize(i)}));
-                                    kb->CallPrintRegister("result_swizzle", result_swizzle);
         updatedProcessedBits = kb->CreateAdd(updatedProcessedBits, mask_popcounts[i]);
         updatedSourceItems = kb->CreateSub(updatedSourceItems, mask_popcounts[i]);
     }
@@ -134,8 +131,9 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     kb->CreateBr(checkLoopCond);
 
     kb->SetInsertPoint(terminate);
-    
-    kb->setProcessedItemCount("PDEPmarkerStream", updatedProcessedBitsPhi);    
+    Value * itemsDone = kb->CreateMul(blockOffsetPhi, blockWidth);
+    itemsDone = kb->CreateSelect(kb->CreateICmpULT(itemsToDo, itemsDone), itemsToDo, itemsDone);
+    kb->setProcessedItemCount("PDEPmarkerStream", kb->CreateAdd(itemsDone, processedSourceBits));    
     kb->setProcessedItemCount("sourceStreamSet", updatedProcessedBitsPhi);    
 }
 
