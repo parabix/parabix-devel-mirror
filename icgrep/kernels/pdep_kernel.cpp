@@ -133,7 +133,7 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     kb->SetInsertPoint(terminate);
     Value * itemsDone = kb->CreateMul(blockOffsetPhi, blockWidth);
     itemsDone = kb->CreateSelect(kb->CreateICmpULT(itemsToDo, itemsDone), itemsToDo, itemsDone);
-    kb->setProcessedItemCount("PDEPmarkerStream", kb->CreateAdd(itemsDone, processedSourceBits));    
+    kb->setProcessedItemCount("PDEPmarkerStream", kb->CreateAdd(itemsDone, kb->getProcessedItemCount("PDEPmarkerStream")));
     kb->setProcessedItemCount("sourceStreamSet", updatedProcessedBitsPhi);    
 }
 

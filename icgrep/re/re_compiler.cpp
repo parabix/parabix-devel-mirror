@@ -160,7 +160,14 @@ MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb)
 }
 
 inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, PabloBuilder & pb) {
-    if (isUnicodeUnitLength(name)) {
+    const std::string nameString = name->getName();
+    if (nameString == ".") {
+        return compileAny(marker, pb);
+    } else if (nameString == "^"){
+        return compileStart(marker, pb);
+    } else if (nameString == "$"){
+        return compileEnd(marker, pb);
+    } else if (isUnicodeUnitLength(name)) {
         MarkerType nameMarker = compileName(name, pb);
         MarkerType nextPos;
         if (markerPos(marker) == MarkerPosition::FinalPostPositionUnit) {
@@ -175,8 +182,7 @@ inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, Pablo
         MarkerType zero = compile(zerowidth, pb);
         AlignMarkers(marker, zero, pb);
         PabloAST * ze = markerVar(zero);
-        const std::string value = name->getName();
-        if (value == "NonGCB") {
+        if (nameString == "NonGCB") {
             ze = pb.createNot(ze);
         }
         return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), ze, "zerowidth"));

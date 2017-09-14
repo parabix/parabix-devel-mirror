@@ -901,7 +901,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     Value * processed = kb->getProcessedItemCount(mStreamSetInputs[0].name);
     Value * itemsToDo = kb->CreateSub(itemsAvail, processed);
     Value * fullStridesToDo = kb->CreateUDiv(itemsToDo, strideSize);
-    Value * excessItems = kb->CreateURem(itemsToDo, strideSize);
 
     //  Now we iteratively process these blocks using the doMultiBlock method.
     //  In each iteration, we process the maximum number of linearly accessible
@@ -937,14 +936,8 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         inputBlockPtr[i] = b;
         auto & rate = mStreamSetInputs[i].rate;
         if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
-        Value * maxReferenceItems = nullptr;
-        if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator())) {
-            maxReferenceItems = kb->CreateMul(kb->getLinearlyAccessibleBlocks(mStreamSetInputs[i].name, blkNo), blockSize);
-
-        } else {
-            Value * linearlyAvailItems = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, p);
-            maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems);
-        }
+        Value * linearlyAvailItems = kb->CreateMul(kb->getLinearlyAccessibleBlocks(mStreamSetInputs[i].name, blkNo), blockSize);
+        Value * maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems);
         Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
         linearlyAvailStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyAvailStrides), maxStrides, linearlyAvailStrides);
     }
@@ -960,13 +953,8 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         outputBlockPtr.push_back(b);
         auto & rate = mStreamSetOutputs[i].rate;
         if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
-        Value * maxReferenceItems = nullptr;
-        if ((rate.isFixedRatio()) && (rate.getRatioNumerator() == rate.getRatioDenominator())) {
-            maxReferenceItems = kb->CreateMul(kb->getLinearlyWritableBlocks(mStreamSetOutputs[i].name, blkNo), blockSize);
-        } else {
-            Value * writableItems = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, p);
-            maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), writableItems);
-        }
+        Value * writableItems = kb->CreateMul(kb->getLinearlyWritableBlocks(mStreamSetOutputs[i].name, blkNo), blockSize);
+        Value * maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), writableItems);
         Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
         linearlyWritableStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyWritableStrides), maxStrides, linearlyWritableStrides);
     }
@@ -1039,17 +1027,21 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         }
     }
 
-    Value * reducedStridesToDo = kb->CreateSub(stridesRemaining, linearlyWritableStrides);
-    stridesRemaining->addIncoming(reducedStridesToDo, kb->GetInsertBlock());
     if (mIsDerived[0]) {
+        Value * reducedStridesToDo = kb->CreateSub(stridesRemaining, linearlyWritableStrides);
+        stridesRemaining->addIncoming(reducedStridesToDo, kb->GetInsertBlock());
         Value * nowProcessed = kb->CreateAdd(processedItemCount[0], linearlyAvailItems);
         kb->setProcessedItemCount(mStreamSetInputs[0].name, nowProcessed);
         kb->CreateBr(doSegmentOuterLoop);
     }
     else {
+        // Processed item count updated by the kernel itself.
         Value * nowProcessed = kb->getProcessedItemCount(mStreamSetInputs[0].name);
-        Value * allAvailableItemsProcessed = kb->CreateICmpUGE(kb->CreateSub(nowProcessed, processedItemCount[0]), linearlyAvailItems);
-        kb->CreateCondBr(allAvailableItemsProcessed, doSegmentOuterLoop, segmentDone);
+        Value * remainingItemsToDo = kb->CreateSub(itemsAvail, nowProcessed);
+        Value * reducedStridesToDo = kb->CreateUDiv(remainingItemsToDo, nowProcessed);
+        stridesRemaining->addIncoming(reducedStridesToDo, kb->GetInsertBlock());
+        // If we didn't make progress, we have gone as far as we can in this segment.
+        kb->CreateCondBr(kb->CreateICmpUGT(nowProcessed, processedItemCount[0]), doSegmentOuterLoop, segmentDone);
     }
 
     //
@@ -1066,6 +1058,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     kb->CreateCondBr(kb->CreateOr(mIsFinal, haveStrides), doTempBufferBlock, segmentDone);
 
     kb->SetInsertPoint(doTempBufferBlock);
+    Value * excessItems = kb->CreateSub(itemsAvail, kb->getProcessedItemCount(mStreamSetInputs[0].name));
     Value * tempBlockItems = kb->CreateSelect(haveStrides, strideSize, excessItems);
     Value * doFinal = kb->CreateNot(haveStrides);
 
@@ -1221,11 +1214,10 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     }
     else {
         Value * nowProcessed = kb->getProcessedItemCount(mStreamSetInputs[0].name);
-        Value * allAvailableItemsProcessed = kb->CreateICmpEQ(kb->CreateSub(nowProcessed, processedItemCount[0]), finalItemCountNeeded[0]);
-        BasicBlock * checkTermination = kb->CreateBasicBlock("checkTermination");
-        kb->CreateCondBr(allAvailableItemsProcessed, checkTermination, segmentDone);
-        kb->SetInsertPoint(checkTermination);
-        stridesRemaining->addIncoming(kb->CreateSub(stridesRemaining, kb->CreateZExt(haveStrides, kb->getSizeTy())), kb->GetInsertBlock());
+        Value * remainingItemsToDo = kb->CreateSub(itemsAvail, nowProcessed);
+        Value * reducedStridesToDo = kb->CreateUDiv(remainingItemsToDo, nowProcessed);
+        stridesRemaining->addIncoming(reducedStridesToDo, kb->GetInsertBlock());
+        Value * haveStrides = kb->CreateICmpUGT(reducedStridesToDo, kb->getSize(0));
         kb->CreateCondBr(haveStrides, doSegmentOuterLoop, setTermination);
     }    
     kb->SetInsertPoint(setTermination);
