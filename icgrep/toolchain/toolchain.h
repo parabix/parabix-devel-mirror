@@ -31,6 +31,7 @@ enum DebugFlags {
     ShowASM,
 #endif
     SerializeThreads,
+    TraceCounts,
     TraceDynamicBuffers
 };
 

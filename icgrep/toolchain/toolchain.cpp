@@ -28,6 +28,7 @@ DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR.")
                         clEnumVal(ShowASM, "Print assembly code."),
 #endif
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
+                        clEnumVal(TraceCounts, "Show kernel processed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Show dynamic buffer allocations and deallocations."),
                         clEnumValEnd), cl::cat(CodeGenOptions));
 

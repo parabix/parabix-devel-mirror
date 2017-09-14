@@ -1,4 +1,5 @@
 #include "kernel_builder.h"
+#include <toolchain/toolchain.h>
 #include <kernels/kernel.h>
 #include <kernels/streamset.h>
 
@@ -97,14 +98,23 @@ Value * KernelBuilder::getConsumedItemCount(const std::string & name) {
 
 void KernelBuilder::setProducedItemCount(const std::string & name, Value * value) {
     setScalarField(name + Kernel::PRODUCED_ITEM_COUNT_SUFFIX, value);
+    if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
+        CallPrintIntToStderr(mKernel->getName() + ": " + name + "_producedItemCount", value);
+    }
 }
 
 void KernelBuilder::setProcessedItemCount(const std::string & name, Value * value) {
     setScalarField(name + Kernel::PROCESSED_ITEM_COUNT_SUFFIX, value);
+    if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
+        CallPrintIntToStderr(mKernel->getName() + ": " + name + "_processedItemCount", value);
+    }
 }
 
 void KernelBuilder::setConsumedItemCount(const std::string & name, Value * value) {
     setScalarField(name + Kernel::CONSUMED_ITEM_COUNT_SUFFIX, value);
+    if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
+        CallPrintIntToStderr(mKernel->getName() + ": " + name + "_consumedItemCount", value);
+    }
 }
 
 Value * KernelBuilder::getTerminationSignal() {
@@ -113,6 +123,9 @@ Value * KernelBuilder::getTerminationSignal() {
 
 void KernelBuilder::setTerminationSignal() {
     setScalarField(Kernel::TERMINATION_SIGNAL, getTrue());
+    if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
+        CallPrintIntToStderr(mKernel->getName() + ": setTerminationSignal", getTrue());
+    }
 }
 
 Value * KernelBuilder::getLinearlyAccessibleItems(const std::string & name, Value * fromPosition) {
