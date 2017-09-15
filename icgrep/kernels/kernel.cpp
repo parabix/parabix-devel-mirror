@@ -931,7 +931,6 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         linearlyAvailItems[i] = kb->CreateSelect(kb->CreateICmpULT(avail, linearlyAvail), avail, linearlyAvail);
         auto & rate = mStreamSetInputs[i].rate;
         if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
-        linearlyAvailItems[i] = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, processedItemCount[i]);
         Value * maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems[i]);
         Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
         linearlyAvailStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyAvailStrides), maxStrides, linearlyAvailStrides);
