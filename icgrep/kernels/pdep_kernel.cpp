@@ -39,7 +39,7 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     Value * inputSwizzlesPtr = &*(args++);
     // Get pointer to start of the output StreamSetBlock we're currently writing to
     Value * outputStreamPtr = &*(args);
-    
+
     Constant * blockWidth = kb->getSize(kb->getBitBlockWidth());
     Value * blocksToDo = kb->CreateUDivCeil(itemsToDo, blockWidth); // 1 if this is the final block
     Value * processedSourceBits = kb->getProcessedItemCount("sourceStreamSet");
@@ -133,7 +133,7 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     kb->SetInsertPoint(terminate);
     Value * itemsDone = kb->CreateMul(blockOffsetPhi, blockWidth);
     itemsDone = kb->CreateSelect(kb->CreateICmpULT(itemsToDo, itemsDone), itemsToDo, itemsDone);
-    kb->setProcessedItemCount("PDEPmarkerStream", kb->CreateAdd(itemsDone, kb->getProcessedItemCount("PDEPmarkerStream")));
+    kb->setProcessedItemCount("PDEPmarkerStream", kb->CreateAdd(itemsDone, kb->getProcessedItemCount("PDEPmarkerStream")));    
     kb->setProcessedItemCount("sourceStreamSet", updatedProcessedBitsPhi);    
 }
 

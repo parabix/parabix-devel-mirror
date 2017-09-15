@@ -313,6 +313,8 @@ public:
     
     llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const override;
 
+    virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const;
+    
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 
     void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;

@@ -920,40 +920,35 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
 
     Value * processedItemCount[inputSetCount];
     Value * inputBlockPtr[inputSetCount];
-    std::vector<Value *> producedItemCount;
-    std::vector<Value *> outputBlockPtr;
+    Value * linearlyAvailItems[inputSetCount];
 
-    //  Now determine the linearly available blocks, based on blocks remaining reduced
-    //  by limitations of linearly available input buffer space.
     Value * linearlyAvailStrides = stridesRemaining;
     for (unsigned i = 0; i < inputSetCount; i++) {
-        Value * p = kb->getProcessedItemCount(mStreamSetInputs[i].name);
-        Value * blkNo = kb->CreateUDiv(p, blockSize);
-        Value * b = kb->getInputStreamBlockPtr(mStreamSetInputs[i].name, kb->getInt32(0));
-        // processedItemCount.push_back(p);
-        processedItemCount[i] = p;
-        // inputBlockPtr.push_back(b);
-        inputBlockPtr[i] = b;
+        processedItemCount[i] = kb->getProcessedItemCount(mStreamSetInputs[i].name);
+        inputBlockPtr[i] = kb->getInputStreamBlockPtr(mStreamSetInputs[i].name, kb->getInt32(0));
+        Value * avail = kb->CreateSub(mAvailableItemCount[i], processedItemCount[i]);
+        Value * linearlyAvail = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, processedItemCount[i]);
+        linearlyAvailItems[i] = kb->CreateSelect(kb->CreateICmpULT(avail, linearlyAvail), avail, linearlyAvail);
         auto & rate = mStreamSetInputs[i].rate;
         if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
-        Value * linearlyAvailItems = kb->CreateMul(kb->getLinearlyAccessibleBlocks(mStreamSetInputs[i].name, blkNo), blockSize);
-        Value * maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems);
+        linearlyAvailItems[i] = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, processedItemCount[i]);
+        Value * maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems[i]);
         Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
         linearlyAvailStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyAvailStrides), maxStrides, linearlyAvailStrides);
     }
 
+    Value * producedItemCount[outputSetCount];
+    Value * outputBlockPtr[outputSetCount];
     //  Now determine the linearly writeable blocks, based on available blocks reduced
     //  by limitations of output buffer space.
     Value * linearlyWritableStrides = linearlyAvailStrides;
     for (unsigned i = 0; i < outputSetCount; i++) {
-        Value * p = kb->getProducedItemCount(mStreamSetOutputs[i].name);
-        Value * blkNo = kb->CreateUDiv(p, blockSize);
-        Value * b = kb->getOutputStreamBlockPtr(mStreamSetOutputs[i].name, kb->getInt32(0));
-        producedItemCount.push_back(p);
-        outputBlockPtr.push_back(b);
+        producedItemCount[i] = kb->getProducedItemCount(mStreamSetOutputs[i].name);
+        outputBlockPtr[i] = kb->getOutputStreamBlockPtr(mStreamSetOutputs[i].name, kb->getInt32(0));
+        
         auto & rate = mStreamSetOutputs[i].rate;
         if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
-        Value * writableItems = kb->CreateMul(kb->getLinearlyWritableBlocks(mStreamSetOutputs[i].name, blkNo), blockSize);
+        Value * writableItems = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, producedItemCount[i]);
         Value * maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), writableItems);
         Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
         linearlyWritableStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyWritableStrides), maxStrides, linearlyWritableStrides);
@@ -965,16 +960,14 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     //  Now prepare the doMultiBlock call.
     kb->SetInsertPoint(doMultiBlockCall);
 
-    Value * linearlyAvailItems = kb->CreateMul(linearlyWritableStrides, strideSize);
+    Value * principalItemsToDo = kb->CreateMul(linearlyWritableStrides, strideSize);
 
     std::vector<Value *> doMultiBlockArgs;
     doMultiBlockArgs.push_back(getInstance());
-    doMultiBlockArgs.push_back(linearlyAvailItems);
+    doMultiBlockArgs.push_back(principalItemsToDo);
     for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
         if (!mIsDerived[i]) {
-            Value * avail = kb->CreateSub(mAvailableItemCount[i], processedItemCount[i]);
-            Value * linearlyAvail = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, processedItemCount[i]);
-            doMultiBlockArgs.push_back(kb->CreateSelect(kb->CreateICmpULT(avail, linearlyAvail), avail, linearlyAvail));
+            doMultiBlockArgs.push_back(linearlyAvailItems[i]);
         }
     }
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
@@ -1030,7 +1023,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     if (mIsDerived[0]) {
         Value * reducedStridesToDo = kb->CreateSub(stridesRemaining, linearlyWritableStrides);
         stridesRemaining->addIncoming(reducedStridesToDo, kb->GetInsertBlock());
-        Value * nowProcessed = kb->CreateAdd(processedItemCount[0], linearlyAvailItems);
+        Value * nowProcessed = kb->CreateAdd(processedItemCount[0], principalItemsToDo);
         kb->setProcessedItemCount(mStreamSetInputs[0].name, nowProcessed);
         kb->CreateBr(doSegmentOuterLoop);
     }
