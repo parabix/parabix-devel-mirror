@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2016-7 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
@@ -337,6 +337,7 @@ void Kernel::processingRateAnalysis() {
     }
 }
 
+    
 
 // Default kernel signature: generate the IR and emit as byte code.
 std::string Kernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> & idb) {
@@ -651,7 +652,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
 
     std::vector<Value *> priorProduced;
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        if (isa<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]) || isa<SwizzledCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
+        if (mStreamSetOutputBuffers[i]->supportsCopyBack())  {
             priorProduced.push_back(idb->getProducedItemCount(mStreamSetOutputs[i].name));
         }
     }
@@ -660,38 +661,10 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
 
     unsigned priorIdx = 0;
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * log2BlockSize = idb->getSize(std::log2(idb->getBitBlockWidth()));
-        if (SwizzledCopybackBuffer * const cb = dyn_cast<SwizzledCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
-            BasicBlock * copyBack = idb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
-            BasicBlock * done = idb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
-            Value * newlyProduced = idb->CreateSub(idb->getProducedItemCount(mStreamSetOutputs[i].name), priorProduced[priorIdx]);
-            Value * priorBlock = idb->CreateLShr(priorProduced[priorIdx], log2BlockSize);
-            Value * priorOffset = idb->CreateAnd(priorProduced[priorIdx], idb->getSize(idb->getBitBlockWidth() - 1));
-            Value * instance = idb->getStreamSetBufferPtr(mStreamSetOutputs[i].name);
-            Value * accessibleBlocks = idb->getLinearlyAccessibleBlocks(mStreamSetOutputs[i].name, priorBlock);
-            Value * accessible = idb->CreateSub(idb->CreateShl(accessibleBlocks, log2BlockSize), priorOffset);
-            Value * wraparound = idb->CreateICmpULT(accessible, newlyProduced);
-            idb->CreateCondBr(wraparound, copyBack, done);
-            idb->SetInsertPoint(copyBack);
-            Value * copyItems = idb->CreateSub(newlyProduced, accessible);
-            cb->createCopyBack(idb.get(), instance, copyItems);
-            idb->CreateBr(done);
-            idb->SetInsertPoint(done);
-            priorIdx++;
-        }
-        if (CircularCopybackBuffer * const cb = dyn_cast<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
-            BasicBlock * copyBack = idb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
-            BasicBlock * done = idb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
-            Value * instance = idb->getStreamSetBufferPtr(mStreamSetOutputs[i].name);
-            Value * newlyProduced = idb->CreateSub(idb->getProducedItemCount(mStreamSetOutputs[i].name), priorProduced[priorIdx]);
-            Value * accessible = idb->getLinearlyAccessibleItems(mStreamSetOutputs[i].name, priorProduced[priorIdx]);
-            Value * wraparound = idb->CreateICmpULT(accessible, newlyProduced);
-            idb->CreateCondBr(wraparound, copyBack, done);
-            idb->SetInsertPoint(copyBack);
-            Value * copyItems = idb->CreateSub(newlyProduced, accessible);
-            cb->createCopyBack(idb.get(), instance, copyItems);
-            idb->CreateBr(done);
-            idb->SetInsertPoint(done);
+        if (mStreamSetOutputBuffers[i]->supportsCopyBack()) {
+            Value * newProduced = idb->getProducedItemCount(mStreamSetOutputs[i].name);
+            Value * handle = idb->getStreamSetBufferPtr(mStreamSetOutputs[i].name);
+            mStreamSetOutputBuffers[i]->genCopyBackLogic(idb.get(), handle, priorProduced[priorIdx], newProduced, mStreamSetOutputs[i].name);
             priorIdx++;
         }
     }
@@ -981,41 +954,11 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
     kb->CreateCall(multiBlockFunction, doMultiBlockArgs);
 
     // Do copybacks if necessary.
-    unsigned priorIdx = 0;
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {        
-        if (auto cb = dyn_cast<SwizzledCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
-            Value * log2BlockSize = kb->getSize(std::log2(kb->getBitBlockWidth()));
-            BasicBlock * copyBack = kb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
-            BasicBlock * done = kb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
-            Value * newlyProduced = kb->CreateSub(kb->getProducedItemCount(mStreamSetOutputs[i].name), producedItemCount[i]);
-            Value * priorBlock = kb->CreateLShr(producedItemCount[i], log2BlockSize);
-            Value * priorOffset = kb->CreateAnd(producedItemCount[i], kb->getSize(kb->getBitBlockWidth() - 1));
-            Value * instance = kb->getStreamSetBufferPtr(mStreamSetOutputs[i].name);
-            Value * accessibleBlocks = kb->getLinearlyAccessibleBlocks(mStreamSetOutputs[i].name, priorBlock);
-            Value * accessible = kb->CreateSub(kb->CreateShl(accessibleBlocks, log2BlockSize), priorOffset);
-            Value * wraparound = kb->CreateICmpULT(accessible, newlyProduced);
-            kb->CreateCondBr(wraparound, copyBack, done);
-            kb->SetInsertPoint(copyBack);
-            Value * copyItems = kb->CreateSub(newlyProduced, accessible);
-            cb->createCopyBack(kb.get(), instance, copyItems);
-            kb->CreateBr(done);
-            kb->SetInsertPoint(done);
-            priorIdx++;
-        }
-        if (auto cb = dyn_cast<CircularCopybackBuffer>(mStreamSetOutputBuffers[i]))  {
-            BasicBlock * copyBack = kb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBack");
-            BasicBlock * done = kb->CreateBasicBlock(mStreamSetOutputs[i].name + "_copyBackDone");
-            Value * instance = kb->getStreamSetBufferPtr(mStreamSetOutputs[i].name);
-            Value * newlyProduced = kb->CreateSub(kb->getProducedItemCount(mStreamSetOutputs[i].name), producedItemCount[i]);
-            Value * accessible = kb->getLinearlyAccessibleItems(mStreamSetOutputs[i].name, producedItemCount[i]);
-            Value * wraparound = kb->CreateICmpULT(accessible, newlyProduced);
-            kb->CreateCondBr(wraparound, copyBack, done);
-            kb->SetInsertPoint(copyBack);
-            Value * copyItems = kb->CreateSub(newlyProduced, accessible);
-            cb->createCopyBack(kb.get(), instance, copyItems);
-            kb->CreateBr(done);
-            kb->SetInsertPoint(done);
-            priorIdx++;
+    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
+        if (mStreamSetOutputBuffers[i]->supportsCopyBack()) {
+            Value * newProduced = kb->getProducedItemCount(mStreamSetOutputs[i].name);
+            Value * handle = mStreamSetOutputBuffers[i]->getStreamSetHandle();
+            mStreamSetOutputBuffers[i]->genCopyBackLogic(kb.get(), handle, producedItemCount[i], newProduced, mStreamSetOutputs[i].name);
         }
     }
 

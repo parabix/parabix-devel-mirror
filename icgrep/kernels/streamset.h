@@ -56,7 +56,7 @@ public:
     llvm::Value * getStreamSetHandle() const {
         return mStreamSetBufferPtr;
     }
-
+    
     virtual llvm::Type * getStreamSetBlockType() const;
     
     virtual void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb);
@@ -93,6 +93,11 @@ public:
     virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const;
     
     virtual llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const;
+    
+    virtual bool supportsCopyBack() const {
+        return false;  // Overridden to return true by buffer types that support copyback.
+    }
+    virtual void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string);
     
     virtual ~StreamSetBuffer() = 0;
 
@@ -226,15 +231,19 @@ public:
     
     CircularCopybackBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace = 0);
     
-    // Generate copyback code for the given number of overflowItems.
-    void createCopyBack(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * overflowItems) const;
-        
     llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
     
     llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const override;
 
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
+    bool supportsCopyBack() const override {
+        return mOverflowBlocks > 0;  
+    }
+    
+    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) override;
+    
+    
 private:
     size_t mOverflowBlocks;
 
@@ -248,14 +257,17 @@ public:
        
     void createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy) const override;
 
-    // Generate copyback code for the given number of overflowItems.
-    void createCopyBack(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * overflowItems) const;
-    
     llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
     
     llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const override;
     
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+
+    bool supportsCopyBack() const override {
+        return mOverflowBlocks > 0;  
+    }
+    
+    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) override;
 
 protected:
     llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const override;
@@ -313,7 +325,7 @@ public:
     
     llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const override;
 
-    virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const;
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
     
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 
@@ -325,6 +337,11 @@ public:
     
     void doubleCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle);
 
+    bool supportsCopyBack() const override {
+        return mOverflowBlocks > 0;  
+    }
+        
+    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) override;
 
 protected:
     llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
