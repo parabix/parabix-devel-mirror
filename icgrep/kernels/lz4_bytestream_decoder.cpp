@@ -6,6 +6,7 @@
 
 #include "lz4_bytestream_decoder.h"
 #include <kernels/kernel_builder.h>
+#include "lz4_helper.h"
 
 using namespace llvm;
 using namespace kernel;
@@ -15,10 +16,6 @@ Value * getInputPtr(const std::unique_ptr<KernelBuilder> & iBuilder, Value * blo
             iBuilder->CreatePointerCast(blockStartPtr, iBuilder->getInt32Ty()->getPointerTo()),
             offset
             );
-}
-
-Value * selectMin(const std::unique_ptr<KernelBuilder> & iBuilder, Value * a, Value * b) {
-    return iBuilder->CreateSelect(iBuilder->CreateICmpULT(a, b), a, b);
 }
 
 void LZ4ByteStreamDecoderKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
@@ -77,8 +74,7 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod(const std::unique_ptr<Ker
     iBuilder->CreateMemCpy(
             outputBufferBasePtr,
             iBuilder->CreateGEP(inputBufferBasePtr, iBuilder->CreateAdd(literalStart, copyLength1)),
-            iBuilder->CreateSub(literalLength, copyLength1), 1); // Buffer start is aligned.
-    // NOTE: Test case reported non-8-byte alignment
+            iBuilder->CreateSub(literalLength, copyLength1), 8);        // Buffer start is aligned.
     outputItems = iBuilder->CreateAdd(outputItems, literalLength);
 
     // =================================================
