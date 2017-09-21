@@ -105,8 +105,16 @@ public:
         return mStreamSetInputs[i];
     }
 
+    unsigned getNumOfStreamInputs() const {
+        return mStreamSetInputs.size();
+    }
+
     const std::vector<Binding> & getStreamOutputs() const {
         return mStreamSetOutputs;
+    }
+
+    unsigned getNumOfStreamOutputs() const {
+        return mStreamSetOutputs.size();
     }
 
     const Binding & getStreamOutput(const unsigned i) const {
@@ -154,12 +162,14 @@ public:
         mKernelInstance = instance;
     }
 
-    unsigned getLookAhead() const {
-        return mLookAheadPositions;
+    unsigned getLookAhead(const unsigned i) const {
+        assert (i < mStreamSetInputLookahead.size());
+        return mStreamSetInputLookahead[i];
     }
 
-    void setLookAhead(const unsigned lookAheadPositions) {
-        mLookAheadPositions = lookAheadPositions;
+    void setLookAhead(const unsigned i, const unsigned lookAheadPositions) {
+        assert (i < mStreamSetInputLookahead.size());
+        mStreamSetInputLookahead[i] = lookAheadPositions;
     }
 
 protected:
@@ -179,9 +189,9 @@ protected:
     : mKernelInstance(nullptr)
     , mModule(nullptr)
     , mKernelStateType(nullptr)
-    , mLookAheadPositions(0)
     , mKernelName(kernelName)
     , mStreamSetInputs(stream_inputs)
+    , mStreamSetInputLookahead(mStreamSetInputs.size(), 0)
     , mStreamSetOutputs(stream_outputs)
     , mScalarInputs(scalar_inputs)
     , mScalarOutputs(scalar_outputs)
@@ -194,10 +204,10 @@ protected:
     llvm::Value *                           mKernelInstance;
     llvm::Module *                          mModule;
     llvm::StructType *                      mKernelStateType;
-    unsigned                                mLookAheadPositions;
     const std::string                       mKernelName;
     std::vector<llvm::Value *>              mInitialArguments;
     std::vector<Binding>                    mStreamSetInputs;
+    std::vector<unsigned>                   mStreamSetInputLookahead;
     std::vector<Binding>                    mStreamSetOutputs;
     std::vector<Binding>                    mScalarInputs;
     std::vector<Binding>                    mScalarOutputs;

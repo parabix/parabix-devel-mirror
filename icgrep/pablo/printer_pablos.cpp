@@ -101,7 +101,7 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             out << ", " << std::to_string(adv->getAmount()) << ")";
         } else if (const Lookahead * adv = dyn_cast<Lookahead>(stmt)) {
             out << " = pablo.Lookahead(";
-            print(adv->getExpr(), out);
+            print(adv->getExpression(), out);
             out << ", " << std::to_string(adv->getAmount()) << ")";
         } else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt)) {
             out << " = pablo.MatchStar(";

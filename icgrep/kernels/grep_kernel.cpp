@@ -176,11 +176,14 @@ RequiredStreams_UTF16::RequiredStreams_UTF16(const std::unique_ptr<kernel::Kerne
 }
 
 
-ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re, bool cc, unsigned cc_size)
+ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re, unsigned numOfCharacterClasses)
 : RegularExpressionOptimizer(re)
 , PabloKernel(iBuilder,
               "ic" + sha1sum(mSignature),
-              {Binding{iBuilder->getStreamSetTy(cc ? cc_size : 8), "basis"}, Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"}, Binding{iBuilder->getStreamSetTy(4, 1), "required"}},
+              {Binding{iBuilder->getStreamSetTy(numOfCharacterClasses), "basis"},
+               Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"},
+               Binding{iBuilder->getStreamSetTy(4, 1), "required"}},
+
               {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}}) {
 
 }
@@ -190,7 +193,10 @@ std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuil
 }
 
 void ICGrepKernel::generatePabloMethod() {
-    re2pablo_compiler(this, mRE);
+    PabloAST * const match_post = re2pablo_compiler(this, mRE);
+    PabloBlock * const pb = getEntryBlock();
+    Var * const output = getOutputStreamVar("matches");
+    pb->createAssign(pb->createExtract(output, pb->getInteger(0)), match_post);
 }
 
 void MatchedLinesKernel::generatePabloMethod() {

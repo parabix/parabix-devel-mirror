@@ -325,16 +325,14 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver
     
     const auto n = REs.size();
     
-    std::vector<std::vector<UCD::UnicodeSet>> charclasses;
+    std::vector<std::vector<UCD::UnicodeSet>> charclasses(n);
 
     for (unsigned i = 0; i < n; i++) {
-        REs[i] = resolveNames(REs[i]);
+        REs[i] = re::resolveNames(REs[i]);
         std::vector<UCD::UnicodeSet> UnicodeSets = re::collect_UnicodeSets(REs[i]);
         std::vector<std::vector<unsigned>> exclusiveSetIDs;
-        std::vector<UCD::UnicodeSet> multiplexedCCs;
-        doMultiplexCCs(UnicodeSets, exclusiveSetIDs, multiplexedCCs);
+        doMultiplexCCs(UnicodeSets, exclusiveSetIDs, charclasses[i]);
         REs[i] = multiplex(REs[i], UnicodeSets, exclusiveSetIDs);
-        charclasses.push_back(multiplexedCCs);
     } 
 
     std::vector<StreamSetBuffer *> MatchResultsBufs(n);
@@ -345,7 +343,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver
         kernel::Kernel * ccK = grepDriver->addKernelInstance(make_unique<kernel::CharClassesKernel>(idb, std::move(charclasses[i])));
         grepDriver->makeKernelCall(ccK, {BasisBits}, {CharClasses});
         StreamSetBuffer * MatchResults = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-        kernel::Kernel * icgrepK = grepDriver->addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, REs[i], true, numOfCharacterClasses));
+        kernel::Kernel * icgrepK = grepDriver->addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, REs[i], numOfCharacterClasses));
         grepDriver->makeKernelCall(icgrepK, {CharClasses, LineBreakStream, RequiredStreams}, {MatchResults});
         MatchResultsBufs[i] = MatchResults;
     }

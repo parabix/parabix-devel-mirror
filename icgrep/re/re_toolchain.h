@@ -6,9 +6,9 @@
 
 #ifndef RE_TOOLCHAIN_H
 #define RE_TOOLCHAIN_H
-
+#include <llvm/Support/Compiler.h>
 namespace llvm { namespace cl { class OptionCategory; } }
-namespace pablo { class PabloKernel; }
+namespace pablo { class PabloKernel; class PabloAST; }
 namespace re { class RE; }
 
 namespace re {
@@ -28,9 +28,9 @@ extern int IfInsertionGap;
 
 const llvm::cl::OptionCategory * re_toolchain_flags();
 
-RE * regular_expression_passes(RE * re_ast);
+RE * regular_expression_passes(RE * re_ast) LLVM_ATTRIBUTE_UNUSED_RESULT;
 
-void re2pablo_compiler(pablo::PabloKernel * kernel, RE * re_ast);
+pablo::PabloAST * re2pablo_compiler(pablo::PabloKernel * kernel, RE * re_ast) LLVM_ATTRIBUTE_UNUSED_RESULT;
     
 }
 #endif

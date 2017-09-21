@@ -29,7 +29,7 @@ static inline CC * extractCC(RE * re) {
 }
 
 struct NameResolver {
-    RE * resolve(RE * re) {
+    RE * resolve(RE * re) LLVM_ATTRIBUTE_UNUSED_RESULT {
         if (Name * name = dyn_cast<Name>(re)) {
             auto f = mMemoizer.find(name);
             if (f == mMemoizer.end()) {
@@ -55,26 +55,26 @@ struct NameResolver {
             CC * unionCC = nullptr;
             std::stringstream name;
             for (auto ai = alt->begin(); ai != alt->end(); ) {
-                RE * re = resolve(*ai);
-                if (CC * cc = extractCC(re)) {
+                RE * item = resolve(*ai);
+                if (CC * cc = extractCC(item)) {
                     if (unionCC == nullptr) {
                         unionCC = cc;
                     } else {
                         unionCC = makeCC(unionCC, cc);
                         name << '+';
                     }
-                    if (LLVM_LIKELY(isa<Name>(re))) {
-                        Name * n = cast<Name>(re);
+                    if (LLVM_LIKELY(isa<Name>(item))) {
+                        Name * n = cast<Name>(item);
                         if (n->hasNamespace()) {
                             name << n->getNamespace() << ':';
                         }
                         name << n->getName();
-                    } else if (isa<CC>(re)) {
-                        name << cast<CC>(re)->canonicalName(UnicodeClass);
+                    } else if (isa<CC>(item)) {
+                        name << cast<CC>(item)->canonicalName(UnicodeClass);
                     }
                     ai = alt->erase(ai);
                 } else {
-                    *ai++ = re;
+                    *ai++ = item;
                 }
             }
             if (unionCC) {
@@ -107,15 +107,11 @@ struct NameResolver {
         return re;
     }
 
-    NameResolver() {
-
-    }
-
 private:
     Memoizer                mMemoizer;
 };
     
-RE * resolveNames(RE *& re) {
+RE * resolveNames(RE * re) {
     NameResolver nameResolver;
     return nameResolver.resolve(re);    
 }

@@ -136,26 +136,30 @@ Module * Kernel::makeModule(const std::unique_ptr<kernel::KernelBuilder> & idb) 
 void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     assert ("KernelBuilder does not have a valid IDISA Builder" && idb);
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        report_fatal_error("Cannot prepare kernel after kernel state finalized");
+        report_fatal_error(getName() + ": cannot prepare kernel after kernel state finalized");
     }
     const auto blockSize = idb->getBitBlockWidth();
     if (mStride == 0) {
         // Set the default kernel stride.
         mStride = blockSize;
     }
-    const auto requiredBlocks = codegen::SegmentSize + ((blockSize + mLookAheadPositions - 1) / blockSize);
-
     IntegerType * const sizeTy = idb->getSizeTy();
 
+    assert (mStreamSetInputs.size() == mStreamSetInputBuffers.size());
+//    assert (mStreamSetInputs.size() == mStreamSetInputLookahead.size());
+
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
-            //report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
-        }
+//        const auto requiredBlocks = codegen::SegmentSize + ((mStreamSetInputLookahead[i] + blockSize - 1) / blockSize);
+//        if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
+//            report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
+//        }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
         if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
             addScalar(sizeTy, mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
         }
     }
+
+    assert (mStreamSetOutputs.size() == mStreamSetOutputBuffers.size());
 
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
@@ -200,6 +204,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     mKernelStateType = mModule->getTypeByName(getName());
     if (LLVM_LIKELY(mKernelStateType == nullptr)) {
         mKernelStateType = StructType::create(idb->getContext(), mKernelFields, getName());
+        assert (mKernelStateType);
     }
     processingRateAnalysis();
 }
@@ -208,7 +213,7 @@ void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & idb) {
 
     assert ("KernelBuilder does not have a valid IDISA Builder" && idb);
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        report_fatal_error("Cannot prepare kernel after kernel state finalized");
+        report_fatal_error(getName() + ": cannot prepare kernel after kernel state finalized");
     }
     assert (getModule());
     const auto blockSize = idb->getBitBlockWidth();
@@ -216,18 +221,23 @@ void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & idb) {
         // Set the default kernel stride.
         mStride = blockSize;
     }
-    const auto requiredBlocks = codegen::SegmentSize + ((blockSize + mLookAheadPositions - 1) / blockSize);
-
     IntegerType * const sizeTy = idb->getSizeTy();
+
+    assert (mStreamSetInputs.size() == mStreamSetInputBuffers.size());
+//    assert (mStreamSetInputs.size() == mStreamSetInputLookahead.size());
+
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
-            //report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
-        }
+//        const auto requiredBlocks = codegen::SegmentSize + ((mStreamSetInputLookahead[i] + blockSize - 1) / blockSize);
+//        if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
+//            report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
+//        }
         mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
         if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
             addScalar(sizeTy, mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
         }
     }
+
+    assert (mStreamSetOutputs.size() == mStreamSetOutputBuffers.size());
 
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
@@ -247,25 +257,24 @@ void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & idb) {
     for (const auto & binding : mInternalScalars) {
         addScalar(binding.type, binding.name);
     }
-
     Type * const consumerSetTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         addScalar(consumerSetTy, mStreamSetOutputs[i].name + CONSUMER_SUFFIX);
     }
-
     addScalar(sizeTy, LOGICAL_SEGMENT_NO_SCALAR);
     addScalar(idb->getInt1Ty(), TERMINATION_SIGNAL);
-
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         addScalar(sizeTy, mStreamSetOutputs[i].name + CONSUMED_ITEM_COUNT_SUFFIX);
     }
-
     // We compile in a 64-bit CPU cycle counter into every kernel.   It will remain unused
     // in normal execution, but when codegen::EnableCycleCounter is specified, pipelines
     // will be able to add instrumentation to cached modules without recompilation.
     addScalar(idb->getInt64Ty(), CYCLECOUNT_SCALAR);
+
     mKernelStateType = getModule()->getTypeByName(getName());
-    assert (mKernelStateType);
+    if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
+        report_fatal_error("Kernel " + getName() + " definition could not be found in the cache object");
+    }
     processingRateAnalysis();
 }
     
@@ -1261,17 +1270,17 @@ void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & kb,
     }
     //kb->GetInsertBlock()->dump();
     for (unsigned i = 0; i < outputSetCount; i++) {
-        requiredOutputBufferSpace[i] = nullptr;
-        auto & rate = kernel->getStreamOutput(i).rate;
+        const auto & rate = kernel->getStreamOutput(i).rate;
         if (rate.isUnknownRate()) continue;  // No calculations possible.
         Kernel::Port port; unsigned ssIdx;
         std::tie(port, ssIdx) = kernel->getStreamPort(rate.referenceStreamSet());
+        Value * base = nullptr;
         if (port == Kernel::Port::Output) {
-            requiredOutputBufferSpace[i] = rate.CreateRatioCalculation(kb.get(), requiredOutputBufferSpace[ssIdx], doFinal);
+            base = requiredOutputBufferSpace[ssIdx]; assert (base);
+        } else {
+            base = newlyAvailInputItems[ssIdx]; assert (base);
         }
-        else {
-            requiredOutputBufferSpace[i] = rate.CreateRatioCalculation(kb.get(), newlyAvailInputItems[ssIdx], doFinal);
-        }
+        requiredOutputBufferSpace[i] = rate.CreateRatioCalculation(kb.get(), base, doFinal);
         if (auto db = dyn_cast<DynamicBuffer>(outputs[i])) {
             Value * handle = db->getStreamSetHandle();
             // This buffer can be expanded.

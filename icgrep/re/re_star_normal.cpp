@@ -55,7 +55,6 @@ RE * RE_Star_Normal::star_normal(RE * re) {
 }
 
 RE * RE_Star_Normal::helper(RE * re) {
-
     if (Alt * alt = dyn_cast<Alt>(re)) {
         std::vector<RE *> list;
         list.reserve(alt->size());
@@ -64,18 +63,15 @@ RE * RE_Star_Normal::helper(RE * re) {
         }
         re = makeAlt(list.begin(), list.end());
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        RE * re_first = *(seq->begin());
-        std::vector<RE *> list;
-        list.reserve(seq->size());
-        for (auto i = seq->begin() + 1; i != seq->end(); i++) {
-            list.push_back(*i);
-        }
-        RE * re_follow = makeSeq(list.begin(), list.end());
-        if (!isNullable(re_first) && !isNullable(re_follow)) {
+        RE * const re_first = *(seq->begin());
+        RE * const re_follow = makeSeq(seq->begin() + 1, seq->end());
+        const auto isFirstNullable = isNullable(re_first);
+        const auto isFollowNullable = isNullable(re_follow);
+        if (LLVM_LIKELY(!isFirstNullable && !isFollowNullable)) {
             re = makeSeq({star_normal(re_first), star_normal(re_follow)});
-        } else if (!isNullable(re_first) && isNullable(re_follow)) {
+        } else if (!isFirstNullable && isFollowNullable) {
             re = makeSeq({helper(re_first), star_normal(re_follow)});
-        } else if (isNullable(re_first) && !isNullable(re_follow)) {
+        } else if (isFirstNullable && !isFollowNullable) {
             re = makeSeq({star_normal(re_first), helper(re_follow)});
         } else {
             re = makeAlt({helper(re_first), helper(re_follow)});
@@ -83,10 +79,10 @@ RE * RE_Star_Normal::helper(RE * re) {
     } else if (Assertion * a = dyn_cast<Assertion>(re)) {
         re = makeAssertion(helper(a->getAsserted()), a->getKind(), a->getSense());
     } else if (Rep * rep = dyn_cast<Rep>(re)) {
+        RE * const expr = helper(rep->getRE());
         if (rep->getLB() == 0 && rep->getUB() == Rep::UNBOUNDED_REP) {
-            re = helper(rep->getRE());
+            re = expr;
         } else {
-            RE * expr = helper(rep->getRE());
             re = makeRep(expr, rep->getLB(), rep->getUB());
         }
     } else if (Diff * diff = dyn_cast<Diff>(re)) {

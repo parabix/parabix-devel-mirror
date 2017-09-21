@@ -19,6 +19,7 @@
 #include <kernels/kernel_builder.h>
 #include <kernels/kernel.h>
 #include <llvm/IR/Verifier.h>
+
 #ifndef NDEBUG
 #define IN_DEBUG_MODE true
 #else
@@ -98,18 +99,6 @@ void ParabixDriver::makeKernelCall(Kernel * kernel, const std::vector<StreamSetB
 }
 
 void ParabixDriver::generatePipelineIR() {
-
-    if (LLVM_UNLIKELY(mPipeline.empty())) {
-        report_fatal_error("Pipeline cannot be empty");
-    } else {
-        for (auto i = mPipeline.begin(); i != mPipeline.end(); ++i) {
-            for (auto j = i; ++j != mPipeline.end(); ) {
-                if (LLVM_UNLIKELY(*i == *j)) {
-                    report_fatal_error("Kernel " + (*i)->getName() + " occurs twice in the pipeline");
-                }
-            }
-        }
-    }
 
     for (Kernel * const kernel : mUncachedKernel) {
         kernel->prepareKernel(iBuilder);

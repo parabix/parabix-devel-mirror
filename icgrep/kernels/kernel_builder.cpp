@@ -131,26 +131,34 @@ void KernelBuilder::setTerminationSignal() {
 Value * KernelBuilder::getLinearlyAccessibleItems(const std::string & name, Value * fromPosition) {
     Kernel::Port port; unsigned index;
     std::tie(port, index) = mKernel->getStreamPort(name);
+    const StreamSetBuffer * buf = nullptr;
     if (port == Kernel::Port::Input) {
-        const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-        return buf->getLinearlyAccessibleItems(this, getStreamSetBufferPtr(name), fromPosition);
+        buf = mKernel->getInputStreamSetBuffer(name);
+        const auto lookAhead = mKernel->getLookAhead(index);
+        if (LLVM_UNLIKELY(lookAhead != 0)) {
+            fromPosition = CreateAdd(ConstantInt::get(fromPosition->getType(), lookAhead), fromPosition);
+        }
+    } else {
+        buf = mKernel->getOutputStreamSetBuffer(name);
     }
-    else {
-        const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-        return buf->getLinearlyAccessibleItems(this, getStreamSetBufferPtr(name), fromPosition);
-    }
+    return buf->getLinearlyAccessibleItems(this, getStreamSetBufferPtr(name), fromPosition);
 }
 
 Value * KernelBuilder::getLinearlyAccessibleBlocks(const std::string & name, Value * fromBlock) {
     Kernel::Port port; unsigned index;
     std::tie(port, index) = mKernel->getStreamPort(name);
+    const StreamSetBuffer * buf = nullptr;
     if (port == Kernel::Port::Input) {
-        const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-        return buf->getLinearlyAccessibleBlocks(this, getStreamSetBufferPtr(name), fromBlock);
+        buf = mKernel->getInputStreamSetBuffer(name);
+        const auto lookAhead = mKernel->getLookAhead(index);
+        if (LLVM_UNLIKELY(lookAhead != 0)) {
+            const auto blocksAhead = (lookAhead + getBitBlockWidth() - 1) / getBitBlockWidth();
+            fromBlock = CreateAdd(ConstantInt::get(fromBlock->getType(), blocksAhead), fromBlock);
+        }
     } else {
-        const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-        return buf->getLinearlyAccessibleBlocks(this, getStreamSetBufferPtr(name), fromBlock);
+        buf = mKernel->getOutputStreamSetBuffer(name);
     }
+    return buf->getLinearlyAccessibleBlocks(this, getStreamSetBufferPtr(name), fromBlock);
 }
 
 Value * KernelBuilder::getLinearlyWritableItems(const std::string & name, Value * fromPosition) {

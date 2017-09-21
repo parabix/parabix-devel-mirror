@@ -54,16 +54,12 @@ RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
     return re;
 }
 
-void RE_Compiler::compileUnicodeNames(RE *& re) {
-    re = resolveUnicodeProperties(re);
+RE * RE_Compiler::compileUnicodeNames(RE * re) {
+    return resolveUnicodeProperties(re);
 }
 
-void RE_Compiler::compile(RE * re) {
-    MarkerType match_results = compile(re, mPB);
-    PabloAST * match_post = markerVar(AdvanceMarker(match_results, MarkerPosition::FinalPostPositionUnit, mPB));
-    Var * const output = mKernel->getOutputStreamVar("matches");
-    
-    mPB.createAssign(mPB.createExtract(output, mPB.getInteger(0)), match_post);
+PabloAST * RE_Compiler::compile(RE * re) {
+    return markerVar(AdvanceMarker(compile(re, mPB), MarkerPosition::FinalPostPositionUnit, mPB));
 }
     
 MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
@@ -94,7 +90,9 @@ MarkerType RE_Compiler::compile_local(RE * re, MarkerType marker, PabloBuilder &
         PabloAST * follow = pb.createAnd(pb.createScanThru(pb.createAnd(mInitial, one1), mNonFinal), pablo_two);
         pablo_follow = pb.createOr(pablo_follow, follow);
     }
-    PabloAST * result = pb.createAnd(pb.createMatchStar(pb.createAdvance(pablo_first, 1), pb.createOr(pablo_follow, mNonFinal)), pb.createAdvance(pablo_final, 1));
+    PabloAST * result = pb.createAnd(pb.createMatchStar(pb.createAdvance(pablo_first, 1),
+                                                        pb.createOr(pablo_follow, mNonFinal)),
+                                     pb.createAdvance(pablo_final, 1));
     return makeMarker(MarkerPosition::FinalPostPositionUnit, result);
 }
 
@@ -109,8 +107,9 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
             return compileDiff(cast<Diff>(re), marker, pb);
         } else if (isa<Intersect>(re)) {
             return compileIntersect(cast<Intersect>(re), marker, pb);
+        } else {
+            UnsupportedRE("RE Compiler for local language failed to process " + Printer_RE::PrintRE(re));
         }
-        UnsupportedRE("RE Compiler for local language failed to process " + Printer_RE::PrintRE(re));
     } else {
         if (isa<Name>(re)) {
             return compileName(cast<Name>(re), marker, pb);
@@ -135,8 +134,9 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
         } else if (isa<CC>(re)) {
             // CCs may be passed through the toolchain directly to the compiler.
             return compileCC(cast<CC>(re), marker, pb);
+        } else {
+            UnsupportedRE("RE Compiler failed to process " + Printer_RE::PrintRE(re));
         }
-        UnsupportedRE("RE Compiler failed to process " + Printer_RE::PrintRE(re));
     }
 }
 

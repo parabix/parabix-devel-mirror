@@ -10,6 +10,7 @@
 #include "re_alt.h"
 #include "re_nullable.h"
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/ErrorHandling.h>
 
 using namespace llvm;
 
@@ -25,12 +26,18 @@ inline int ubCombine(const int h1, const int h2) {
 }
     
 RE * makeRep(RE * re, int lb, const int ub) {
+    if (LLVM_UNLIKELY(lb == Rep::UNBOUNDED_REP)) {
+        report_fatal_error("repetition lower bound must be finite!");
+    }
+    if (LLVM_UNLIKELY(ub != Rep::UNBOUNDED_REP && ub < lb)) {
+        report_fatal_error("lower bound cannot exceed upper bound");
+    }
     if (RE_Nullable::isNullable(re)) {
         if (ub == 1) {
             return re;
         }
         lb = 0;
-    }
+    }    
     if (Rep * rep = dyn_cast<Rep>(re)) {
         int l = rep->getLB();
         int u = rep->getUB();

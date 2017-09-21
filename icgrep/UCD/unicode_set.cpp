@@ -647,8 +647,6 @@ bool UnicodeSet::intersects(const codepoint_t lo, const codepoint_t hi) const {
  * Return true if this UnicodeSet has a non-empty intersection with other_set
  ** ------------------------------------------------------------------------------------------------------------- */
 bool UnicodeSet::intersects(const UnicodeSet & other) const {
-    std::vector<run_t> runs;
-    std::vector<bitquad_t> quads;
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {

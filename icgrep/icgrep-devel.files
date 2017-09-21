@@ -294,3 +294,4 @@ segtok.cpp
 re/re_minimizer.h
 re/re_minimizer.cpp
 re/re_memoizer.cpp
+hashtag-counting.cpp

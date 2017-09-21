@@ -84,7 +84,7 @@ Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * const b, V
     report_fatal_error("Processing rate calculation attempted for variable or unknown rate.");
 }
 
-unsigned ProcessingRate::calculateMaxReferenceItems(unsigned outputItems, bool doFinal) const {
+unsigned ProcessingRate::calculateMaxReferenceItems(const unsigned outputItems, const bool doFinal) const {
     if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
         if (mRatioNumerator == mRatioDenominator) {
             return outputItems;
@@ -95,7 +95,7 @@ unsigned ProcessingRate::calculateMaxReferenceItems(unsigned outputItems, bool d
         return (outputItems / mRatioDenominator) * mRatioDenominator;
     }
     if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
-        return doFinal ? outputItems - 1 : outputItems;
+        return outputItems - (doFinal ? 1 : 0);
     }
     report_fatal_error("Inverse processing rate calculation attempted for unknown rate.");
 }

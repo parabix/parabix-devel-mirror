@@ -57,20 +57,6 @@ void NVPTXDriver::makeKernelCall(kernel::Kernel * kb, const std::vector<parabix:
 }
 
 void NVPTXDriver::generatePipelineIR() {
-    #ifndef NDEBUG
-    if (LLVM_UNLIKELY(mPipeline.empty())) {
-        report_fatal_error("Pipeline cannot be empty");
-    } else {
-        for (auto i = mPipeline.begin(); i != mPipeline.end(); ++i) {
-            for (auto j = i; ++j != mPipeline.end(); ) {
-                if (LLVM_UNLIKELY(*i == *j)) {
-                    report_fatal_error("Kernel instances cannot occur twice in the pipeline");
-                }
-            }
-        }
-    }
-    #endif
-
     // note: instantiation of all kernels must occur prior to initialization
     for (const auto & k : mPipeline) {
         k->addKernelDeclarations(iBuilder);

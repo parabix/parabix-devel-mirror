@@ -23,7 +23,7 @@ public:
     }
     virtual ~Lookahead() {
     }
-    inline PabloAST * getExpr() const {
+    inline PabloAST * getExpression() const {
         return getOperand(0);
     }
     inline int64_t getAmount() const {

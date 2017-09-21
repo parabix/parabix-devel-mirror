@@ -9,6 +9,7 @@
 #include <pablo/branch.h>
 #include <pablo/ps_assign.h>
 #include <pablo/pe_advance.h>
+#include <pablo/pe_lookahead.h>
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_var.h>
@@ -268,22 +269,8 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
         }  else if (LLVM_UNLIKELY(isa<Ones>(value))) {
             return block->createZeroes(stmt->getType()); // ¬1 ⇔ 0
         }
-    } else if (LLVM_UNLIKELY(isa<Add>(stmt) || isa<Subtract>(stmt))) {
-       if (LLVM_UNLIKELY(isa<Integer>(stmt->getOperand(0)) && isa<Integer>(stmt->getOperand(1)))) {
-           const Integer * const int0 = cast<Integer>(stmt->getOperand(0));
-           const Integer * const int1 = cast<Integer>(stmt->getOperand(1));
-           Integer::IntTy result = 0;
-           if (isa<Add>(stmt)) {
-               result = int0->value() + int1->value();
-           } else {
-               result = int0->value() - int1->value();
-           }
-           return block->getInteger(result);
-       }
-    } else if (LLVM_UNLIKELY(isa<Variadic>(stmt))) {
-
+    } else if (isa<Variadic>(stmt)) {
         std::sort(cast<Variadic>(stmt)->begin(), cast<Variadic>(stmt)->end());
-
         for (unsigned i = 1; i < stmt->getNumOperands(); ) {
             if (LLVM_UNLIKELY(stmt->getOperand(i - 1) == stmt->getOperand(i))) {
                 if (LLVM_UNLIKELY(isa<Xor>(stmt))) {
@@ -305,7 +292,6 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
             }
             ++i;
         }
-
         if (LLVM_UNLIKELY(stmt->getNumOperands() < 2)) {
             if (LLVM_LIKELY(stmt->getNumOperands() == 1)) {
                 return stmt->getOperand(0);
@@ -313,7 +299,6 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
                 return block->createZeroes(stmt->getType());
             }
         }
-
         if (LLVM_UNLIKELY(isa<Xor>(stmt))) {
             bool negated = false;
             PabloAST * expr = nullptr;
@@ -336,7 +321,7 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
             }
             if (LLVM_UNLIKELY(negated)) {
                 block->setInsertPoint(stmt);
-                expr = block->createNot(expr ? expr : stmt);
+                expr = triviallyFold(block->createNot(expr ? expr : stmt), block);
             }
             return expr;
         } else { // if (isa<And>(stmt) || isa<Or>(stmt))
@@ -357,46 +342,70 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
                 ++i;
             }
         }
-    } else {
-        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-            if (LLVM_UNLIKELY(isa<Zeroes>(stmt->getOperand(i)))) {
-                switch (stmt->getClassTypeId()) {
-                    case TypeId::Sel:
-                        block->setInsertPoint(stmt->getPrevNode());
-                        switch (i) {
-                            case 0: return stmt->getOperand(2);
-                            case 1: return block->createAnd(block->createNot(stmt->getOperand(0)), stmt->getOperand(2));
-                            case 2: return block->createAnd(stmt->getOperand(0), stmt->getOperand(1));
-                        }
-                    case TypeId::Advance:
-                    case TypeId::ScanThru:
-                    case TypeId::MatchStar:
-                        return stmt->getOperand(0);
-                    default: break;
-                }
-            } else if (LLVM_UNLIKELY(isa<Ones>(stmt->getOperand(i)))) {
-                switch (stmt->getClassTypeId()) {
-                    case TypeId::Sel:
-                        block->setInsertPoint(stmt->getPrevNode());
-                        switch (i) {
-                            case 0: return stmt->getOperand(1);
-                            case 1: return block->createOr(stmt->getOperand(0), stmt->getOperand(2));
-                            case 2: return block->createOr(block->createNot(stmt->getOperand(0)), stmt->getOperand(1));
-                        }
-                    case TypeId::ScanThru:
-                        if (LLVM_UNLIKELY(i == 1)) {
-                            return block->createZeroes(stmt->getType());
-                        }
-                        break;
-                    case TypeId::MatchStar:
-                        if (LLVM_UNLIKELY(i == 0)) {
-                            return block->createOnes(stmt->getType());
-                        }
-                        break;
-                    default: break;
-                }
-            }
-        }        
+    } else if (isa<Advance>(stmt)) {
+        Advance * const adv = cast<Advance>(stmt);
+        if (LLVM_UNLIKELY(isa<Zeroes>(adv->getExpression()) || adv->getAmount() == 0)) {
+            return adv->getExpression();
+        }
+    } else if (isa<ScanThru>(stmt)) {
+        ScanThru * const st = cast<ScanThru>(stmt);
+        if (LLVM_UNLIKELY(isa<Zeroes>(st->getScanFrom()) || isa<Zeroes>(st->getScanThru()))) {
+            return st->getScanFrom();
+        } else if (LLVM_UNLIKELY(isa<Ones>(st->getScanThru()))) {
+            block->setInsertPoint(stmt->getPrevNode());
+            return block->createZeroes(stmt->getType());
+        }
+    } else if (isa<MatchStar>(stmt)) {
+        MatchStar * const mstar = cast<MatchStar>(stmt);
+        if (LLVM_UNLIKELY(isa<Zeroes>(mstar->getMarker()) || isa<Zeroes>(mstar->getCharClass()))) {
+            return mstar->getMarker();
+        } else if (LLVM_UNLIKELY(isa<Ones>(mstar->getMarker()))) {
+            block->setInsertPoint(stmt->getPrevNode());
+            return block->createOnes(stmt->getType());
+        }
+    } else if (isa<Lookahead>(stmt)) {
+        Lookahead * const la = cast<Lookahead>(stmt);
+        if (LLVM_UNLIKELY(isa<Zeroes>(la->getExpression()) || la->getAmount() == 0)) {
+            return la->getExpression();
+        }
+    } else if (LLVM_UNLIKELY(isa<Sel>(stmt))) {
+        Sel * const sel = cast<Sel>(stmt);
+        if (LLVM_UNLIKELY(isa<Zeroes>(sel->getCondition()))) {
+            return sel->getFalseExpr();
+        }
+        if (LLVM_UNLIKELY(isa<Ones>(sel->getCondition()))) {
+            return sel->getTrueExpr();
+        }
+        if (LLVM_UNLIKELY(isa<Zeroes>(sel->getTrueExpr()))) {
+            block->setInsertPoint(stmt->getPrevNode());
+            PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block);
+            return triviallyFold(block->createAnd(sel->getFalseExpr(), negCond), block);
+        }
+        if (LLVM_UNLIKELY(isa<Ones>(sel->getTrueExpr()))) {
+            block->setInsertPoint(stmt->getPrevNode());
+            return triviallyFold(block->createOr(sel->getCondition(), sel->getFalseExpr()), block);
+        }
+        if (LLVM_UNLIKELY(isa<Zeroes>(sel->getFalseExpr()))) {
+            block->setInsertPoint(stmt->getPrevNode());
+            return triviallyFold(block->createAnd(sel->getCondition(), sel->getTrueExpr()), block);
+        }
+        if (LLVM_UNLIKELY(isa<Ones>(sel->getFalseExpr()))) {
+            block->setInsertPoint(stmt->getPrevNode());
+            PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block);
+            return triviallyFold(block->createOr(sel->getTrueExpr(), negCond), block);
+        }
+    } else if (LLVM_UNLIKELY(isa<Add>(stmt) || isa<Subtract>(stmt))) {
+       if (LLVM_UNLIKELY(isa<Integer>(stmt->getOperand(0)) && isa<Integer>(stmt->getOperand(1)))) {
+           const Integer * const int0 = cast<Integer>(stmt->getOperand(0));
+           const Integer * const int1 = cast<Integer>(stmt->getOperand(1));
+           Integer::IntTy result = 0;
+           if (isa<Add>(stmt)) {
+               result = int0->value() + int1->value();
+           } else {
+               result = int0->value() - int1->value();
+           }
+           return block->getInteger(result);
+       }
     }
     return nullptr;
 }

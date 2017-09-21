@@ -28,13 +28,13 @@ StreamSetBuffer * Driver::addBuffer(std::unique_ptr<StreamSetBuffer> b) {
     return mOwnedBuffers.back().get();
 }
 
-kernel::Kernel * Driver::addKernelInstance(std::unique_ptr<kernel::Kernel> kb) {
+kernel::Kernel * Driver::addKernelInstance(std::unique_ptr<Kernel> kb) {
     mOwnedKernels.emplace_back(std::move(kb));
     return mOwnedKernels.back().get();
 }
 
 void Driver::deallocateBuffers() {
-    for (auto &b : mOwnedBuffers) {
+    for (const auto & b : mOwnedBuffers) {
         b->releaseBuffer(iBuilder);
     }
 }

@@ -8,7 +8,7 @@ namespace re {
     class RE;
     class Name;
 
-    RE * resolveNames(RE * &re);
+    RE * resolveNames(RE * re) LLVM_ATTRIBUTE_UNUSED_RESULT;
 
 }
 #endif

@@ -80,9 +80,24 @@ void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & 
     for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
-            //assert ((isa<Var>(la->getExpr()) || isa<Extract>(la->getExpr())));
-            if (LLVM_LIKELY(la->getAmount() > mKernel->getLookAhead())) {
-                mKernel->setLookAhead(la->getAmount());
+            PabloAST * input = la->getExpression();
+            if (LLVM_UNLIKELY(isa<Extract>(input))) {
+                input = cast<Extract>(input)->getArray();
+            }
+            bool notFound = true;
+            if (LLVM_LIKELY(isa<Var>(input))) {
+                for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
+                    if (input == mKernel->getInput(i)) {
+                        if (LLVM_LIKELY(mKernel->getLookAhead(i) < la->getAmount())) {
+                            mKernel->setLookAhead(i, la->getAmount());
+                        }
+                        notFound = false;
+                        break;
+                    }
+                }
+            }
+            if (LLVM_UNLIKELY(notFound)) {
+                report_fatal_error("Lookahead " + stmt->getName() + " can only be performed on an input streamset");
             }
         } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
             ++mBranchCount;
@@ -541,32 +556,10 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             iBuilder->CreateAlignedStore(value, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             Var * var = nullptr;
-            PabloAST * stream = l->getExpr();
+            PabloAST * stream = l->getExpression();
             Value * index = iBuilder->getInt32(0);
             if (LLVM_UNLIKELY(isa<Extract>(stream))) {
-                var = dyn_cast<Var>(cast<Extract>(stream)->getArray());
-                index = compileExpression(iBuilder, cast<Extract>(stream)->getIndex());
-                if (!var->isKernelParameter() || var->isReadNone()) {
-                    std::string tmp;
-                    raw_string_ostream out(tmp);
-                    out << "Lookahead operation cannot be applied to ";
-                    stmt->print(out);
-                    out << " - not an input stream";
-                    report_fatal_error(out.str());
-                }
-            }
-            if (LLVM_LIKELY(isa<Var>(stream))) {
-                var = cast<Var>(stream);
-                if (!var->isKernelParameter() || var->isReadNone()) {
-                    std::string tmp;
-                    raw_string_ostream out(tmp);
-                    out << "Lookahead operation cannot be applied to ";
-                    stmt->print(out);
-                    out << ": ";
-                    var->print(out);
-                    out << " is not an input stream";
-                    report_fatal_error(out.str());
-                }
+                var = cast<Var>(cast<Extract>(stream)->getArray());
             }
             const auto bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
             const auto block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());

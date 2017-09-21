@@ -83,6 +83,7 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
         if (LLVM_UNLIKELY(f != mCachedObject.end())) {
             Module * const m = f->second.first; assert (m);
             kernel->setModule(m);
+            kernel->prepareCachedKernel(idb);
             return true;
         }
 

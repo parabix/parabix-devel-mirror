@@ -10,8 +10,6 @@
 #include <toolchain/toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
-// #include <llvm/ExecutionEngine/ExecutionEngine.h>
-// #include <llvm/Linker/Linker.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
 #include <cc/cc_compiler.h>
