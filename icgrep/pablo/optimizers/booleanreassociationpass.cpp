@@ -1305,7 +1305,7 @@ bool BooleanReassociationPass::rewriteAST(Graph & G) {
 
     using line_t = long long int;
 
-    enum : line_t { MAX_INT = std::numeric_limits<line_t>::max() };
+    const auto MAX_INT = std::numeric_limits<line_t>::max();
 
     // errs() << "---------------------------------------------------------\n";
 

@@ -460,10 +460,11 @@ public:
 
         iterator(Statement* base): mCurrent(base) {}
 
-        iterator(const iterator& other): mCurrent(other.mCurrent) {}
+        iterator(const iterator & other): mCurrent(other.mCurrent) {}
 
-        const iterator& operator=(const iterator& other) {
-            mCurrent = other.mCurrent; return other;
+        iterator & operator=(const iterator & other) {
+            mCurrent = other.mCurrent;
+            return *this;
         }
 
         inline iterator& operator++() {
@@ -472,17 +473,17 @@ public:
             return *this;
         }
 
-        iterator  operator++(int) {
+        iterator operator++(int) {
             iterator tmp(*this);
             ++(*this);
             return tmp;
         }
 
-        bool operator==(const iterator& other) const {
+        bool operator==(const iterator & other) const {
             return  mCurrent == other.mCurrent;
         }
 
-        bool operator!=(const iterator& other) const {
+        bool operator!=(const iterator & other) const {
             return  mCurrent != other.mCurrent;
         }
 
@@ -499,7 +500,10 @@ public:
         const_iterator(): mCurrent(nullptr) {}
         const_iterator(const Statement* base): mCurrent(base) {}
         const_iterator(const const_iterator& other): mCurrent(other.mCurrent) {}
-        const const_iterator& operator=(const const_iterator& other) {mCurrent = other.mCurrent; return other;}
+        const_iterator& operator=(const const_iterator & other) {
+            mCurrent = other.mCurrent;
+            return *this;
+        }
 
         inline const_iterator& operator++() {
             assert (mCurrent);
@@ -536,8 +540,9 @@ public:
 
         reverse_iterator(const reverse_iterator& other): mCurrent(other.mCurrent) {}
 
-        const reverse_iterator& operator=(const reverse_iterator& other) {
-            mCurrent = other.mCurrent; return other;
+        reverse_iterator & operator=(const reverse_iterator & other) {
+            mCurrent = other.mCurrent;
+            return *this;
         }
 
         inline reverse_iterator& operator++() {
@@ -572,8 +577,12 @@ public:
     public:
         const_reverse_iterator(): mCurrent(nullptr) {}
         const_reverse_iterator(const Statement* base): mCurrent(base) {}
-        const_reverse_iterator(const const_reverse_iterator& other): mCurrent(other.mCurrent) {}
-        const const_reverse_iterator& operator=(const const_reverse_iterator& other) {mCurrent = other.mCurrent; return other;}
+        const_reverse_iterator(const const_reverse_iterator & other): mCurrent(other.mCurrent) {}
+
+        const_reverse_iterator& operator=(const const_reverse_iterator & other) {
+            mCurrent = other.mCurrent;
+            return *this;
+        }
 
         inline const_reverse_iterator& operator++() {
             assert (mCurrent);
@@ -685,7 +694,7 @@ public:
         return mInsertionPoint;
     }
 
-    bool contains(Statement * const statement);
+    bool contains(const Statement * const statement) const;
 
 protected:
 

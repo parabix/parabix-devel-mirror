@@ -132,15 +132,16 @@ Value * KernelBuilder::getLinearlyAccessibleItems(const std::string & name, Valu
     Kernel::Port port; unsigned index;
     std::tie(port, index) = mKernel->getStreamPort(name);
     const StreamSetBuffer * buf = nullptr;
-    if (port == Kernel::Port::Input) {
-        buf = mKernel->getInputStreamSetBuffer(name);
+    if (port == Kernel::Port::Input) {        
         const auto lookAhead = mKernel->getLookAhead(index);
         if (LLVM_UNLIKELY(lookAhead != 0)) {
             fromPosition = CreateAdd(ConstantInt::get(fromPosition->getType(), lookAhead), fromPosition);
         }
+        buf = mKernel->getInputStreamSetBuffer(name);
     } else {
         buf = mKernel->getOutputStreamSetBuffer(name);
     }
+    assert (buf);
     return buf->getLinearlyAccessibleItems(this, getStreamSetBufferPtr(name), fromPosition);
 }
 
@@ -148,16 +149,17 @@ Value * KernelBuilder::getLinearlyAccessibleBlocks(const std::string & name, Val
     Kernel::Port port; unsigned index;
     std::tie(port, index) = mKernel->getStreamPort(name);
     const StreamSetBuffer * buf = nullptr;
-    if (port == Kernel::Port::Input) {
-        buf = mKernel->getInputStreamSetBuffer(name);
+    if (port == Kernel::Port::Input) {        
         const auto lookAhead = mKernel->getLookAhead(index);
         if (LLVM_UNLIKELY(lookAhead != 0)) {
             const auto blocksAhead = (lookAhead + getBitBlockWidth() - 1) / getBitBlockWidth();
             fromBlock = CreateAdd(ConstantInt::get(fromBlock->getType(), blocksAhead), fromBlock);
         }
+        buf = mKernel->getInputStreamSetBuffer(name);
     } else {
         buf = mKernel->getOutputStreamSetBuffer(name);
     }
+    assert (buf);
     return buf->getLinearlyAccessibleBlocks(this, getStreamSetBufferPtr(name), fromBlock);
 }
 

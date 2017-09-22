@@ -350,8 +350,8 @@ PabloAST * Variadic::removeOperand(const unsigned index) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief contains
  ** ------------------------------------------------------------------------------------------------------------- */
-bool StatementList::contains(Statement * const statement) {
-    for (Statement * stmt : *this) {
+bool StatementList::contains(const Statement * const statement) const {
+    for (const Statement * stmt : *this) {
         if (statement == stmt) {
             return true;
         }

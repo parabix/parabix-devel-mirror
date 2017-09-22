@@ -139,7 +139,7 @@ Value * StreamSetBuffer::getRawItemPointer(IDISA::IDISA_Builder * const iBuilder
     return iBuilder->CreateGEP(ptr, relativePosition);
 }
 
-Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition, bool reverse, const unsigned lookAhead) const {
+Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition, bool reverse) const {
     Constant * bufSize = iBuilder->getSize(mBufferBlocks * iBuilder->getStride());
     Value * bufRem = iBuilder->CreateURem(fromPosition, bufSize);
     if (reverse) {
@@ -148,7 +148,7 @@ Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const
     else return iBuilder->CreateSub(bufSize, bufRem, "linearItems");
 }
 
-Value * StreamSetBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock, bool reverse, const unsigned lookAhead) const {
+Value * StreamSetBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock, bool reverse) const {
     Constant * bufBlocks = iBuilder->getSize(mBufferBlocks);
     Value * bufRem = iBuilder->CreateURem(fromBlock, bufBlocks);
     if (reverse) {
@@ -263,12 +263,12 @@ Value * SourceBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), blockIndex);
 }
 
-Value * SourceBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition, bool reverse, const unsigned lookAhead) const {
+Value * SourceBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromPosition, bool reverse) const {
     if (reverse) report_fatal_error("SourceBuffer cannot be accessed in reverse");
     return iBuilder->CreateSub(getCapacity(iBuilder, self), fromPosition);
 }
 
-Value * SourceBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock, bool reverse, const unsigned lookAhead) const {
+Value * SourceBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * fromBlock, bool reverse) const {
     if (reverse) report_fatal_error("SourceBuffer cannot be accessed in reverse");
     return iBuilder->CreateSub(iBuilder->CreateUDiv(getCapacity(iBuilder, self), iBuilder->getSize(iBuilder->getBitBlockWidth())), fromBlock);
 }
@@ -300,7 +300,7 @@ Value * ExternalBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuild
     return iBuilder->CreateGEP(getBaseAddress(iBuilder, self), blockIndex);
 }
 
-Value * ExternalBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const, Value *, Value *, bool, const unsigned) const {
+Value * ExternalBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const, Value *, Value *, bool) const {
     report_fatal_error("External buffers: getLinearlyAccessibleItems is not supported.");
 }
 
@@ -590,7 +590,7 @@ Value * ExpandableBuffer::getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBui
     report_fatal_error("Expandable buffers: getStreamSetBlockPtr is not supported.");
 }
 
-Value * ExpandableBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const, Value *, Value *, bool, const unsigned) const {
+Value * ExpandableBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const, Value *, Value *, bool) const {
     report_fatal_error("Expandable buffers: getLinearlyAccessibleItems is not supported.");
 }
 
@@ -681,7 +681,7 @@ Value * DynamicBuffer::getRawItemPointer(IDISA::IDISA_Builder * const b, Value *
 }
 
 
-Value * DynamicBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * handle, Value * fromPosition, bool reverse, const unsigned lookAhead) const {
+Value * DynamicBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * handle, Value * fromPosition, bool reverse) const {
     Constant * blockSize = b->getSize(b->getBitBlockWidth());
     Value * const bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::WorkingBlocks))}));
     Value * bufSize = b->CreateMul(bufBlocks, blockSize);
@@ -698,7 +698,7 @@ Value * DynamicBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, 
     return b->CreateAdd(accessibleItems, b->getSize(mOverflowBlocks * b->getBitBlockWidth()));
 }
 
-Value * DynamicBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const b, Value * handle, Value * fromBlock, bool reverse, const unsigned lookAhead) const {
+Value * DynamicBuffer::getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const b, Value * handle, Value * fromBlock, bool reverse) const {
     Value * const bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::WorkingBlocks))}));
     Value * bufRem = b->CreateURem(fromBlock, bufBlocks);
     if (reverse) {

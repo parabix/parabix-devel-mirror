@@ -555,21 +555,22 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             value = iBuilder->CreateAdd(iBuilder->mvmd_extract(counterSize, fieldCounts, 0), countSoFar, "countSoFar");
             iBuilder->CreateAlignedStore(value, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
-            Var * var = nullptr;
             PabloAST * stream = l->getExpression();
-            Value * index = iBuilder->getInt32(0);
+            Value * index = nullptr;
             if (LLVM_UNLIKELY(isa<Extract>(stream))) {
-                var = cast<Var>(cast<Extract>(stream)->getArray());
+                stream = cast<Extract>(stream)->getArray();
+                index = compileExpression(iBuilder, cast<Extract>(stream)->getIndex());
+            } else {
+                index = iBuilder->getInt32(0);
             }
             const auto bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
             const auto block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
-
-            Value * ptr = iBuilder->getAdjustedInputStreamBlockPtr(iBuilder->getSize(block_shift), var->getName(), index);
+            Value * ptr = iBuilder->getAdjustedInputStreamBlockPtr(iBuilder->getSize(block_shift), cast<Var>(stream)->getName(), index);
             Value * lookAhead = iBuilder->CreateBlockAlignedLoad(ptr);
             if (bit_shift == 0) {  // Simple case with no intra-block shifting.
                 value = lookAhead;
             } else { // Need to form shift result from two adjacent blocks.
-                Value * ptr = iBuilder->getAdjustedInputStreamBlockPtr(iBuilder->getSize(block_shift + 1), var->getName(), index);
+                Value * ptr = iBuilder->getAdjustedInputStreamBlockPtr(iBuilder->getSize(block_shift + 1), cast<Var>(stream)->getName(), index);
                 Value * lookAhead1 = iBuilder->CreateBlockAlignedLoad(ptr);
                 if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
                     value = iBuilder->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));
