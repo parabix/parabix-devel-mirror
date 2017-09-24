@@ -82,10 +82,14 @@ const std::string & EnumeratedPropertyObject::GetPropertyValueGrepString() {
     if (LLVM_LIKELY(mPropertyValueGrepString.empty())) {
         std::stringstream buffer;
         for (unsigned i = 0; i != property_value_full_names.size(); i++) {
-            buffer << canonicalize_value_name(property_value_full_names[i]) + "\n";
+            buffer << property_value_full_names[i] + "\n";
         }
         for (unsigned i = 0; i != property_value_enum_names.size(); i++) {
-            buffer << canonicalize_value_name(property_value_enum_names[i]) + "\n";
+            if (property_value_enum_names[i] == property_value_full_names[i]) continue;
+            buffer << property_value_enum_names[i] + "\n";
+        }
+        for (auto & a : property_value_aliases) {
+            buffer << a.first + "\n";
         }
         mPropertyValueGrepString = buffer.str();
     }

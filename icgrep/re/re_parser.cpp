@@ -675,7 +675,7 @@ RE * RE_Parser::parsePropertyExpression() {
                 current = (++mCursor).pos();
             }
             ++mCursor;
-            return parseRegexPropertyValue(canonicalize(start, prop_end), canonicalize(val_start, current));
+            return parseRegexPropertyValue(canonicalize(start, prop_end), std::string(val_start, current));
         }
     }
     return createName(canonicalize(start, mCursor.pos()));
