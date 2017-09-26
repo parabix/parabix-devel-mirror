@@ -52,7 +52,7 @@ protected:
     friend CC * intersectCC(const CC * a, const CC * b);
 
     inline CC()
-    : RE(ClassTypeId::CC) {
+    : RE(ClassTypeId::CC), UnicodeSet() {
 
     }
 

@@ -2,7 +2,7 @@
 #define RE_ANALYSIS_H
 
 #include <utility>
-namespace re { class RE; }
+namespace re { class RE; class Name;}
 
 namespace re {
 
@@ -17,6 +17,8 @@ int minMatchLength(RE * re);
 bool unitBoundedRep(const RE * re);
 
 bool isTypeForLocal(const RE * re);
+    
+void UndefinedNameError (const Name * n);
 
 }
 

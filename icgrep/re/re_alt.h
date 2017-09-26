@@ -61,7 +61,7 @@ inline Alt * makeAlt() {
 template<typename iterator>
 RE * makeAlt(iterator begin, iterator end) {
     if (LLVM_UNLIKELY(std::distance(begin, end) == 0)) {
-        throw std::runtime_error("Alt objects cannot be empty!");
+        return makeAlt();
     } else if (std::distance(begin, end) == 1) {
         return *begin;
     } else {

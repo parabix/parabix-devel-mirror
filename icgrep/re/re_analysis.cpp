@@ -10,9 +10,10 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
-#include <iostream>
+#include <re/re_nullable.h>
 #include <re/printer_re.h>
 #include <limits.h>
+#include <llvm/Support/ErrorHandling.h>
 
 using namespace llvm;
 
@@ -192,7 +193,7 @@ int minMatchLength(RE * re) {
     }
     return 0; // otherwise
 }
-
+    
 //If a regular expression contains unit and not byteLength bounded repetition type, we select a different pipeline to utilize the log2 technique.
 bool unitBoundedRep(const RE * re) {
     if (const Alt * alt = dyn_cast<Alt>(re)) {
@@ -260,4 +261,7 @@ bool isTypeForLocal(const RE * re) {
     return true; // otherwise
 }
 
+void UndefinedNameError(const Name * n) {
+    report_fatal_error("Error: Undefined name in regular expression: \"" + n->getName() + "\".");
+}
 }

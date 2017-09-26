@@ -32,7 +32,7 @@ CC * RE_Local::first(RE * re) {
         if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
             return first(name->getDefinition());
         } else {
-            throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
+            UndefinedNameError(name);
         }
     } else if (CC * cc = dyn_cast<CC>(re)) {
         return cc;
@@ -74,7 +74,7 @@ CC * RE_Local::final(RE * re) {
         if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
             return final(name->getDefinition());
         } else {
-            throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
+            UndefinedNameError(name);
         }
     } else if (CC * cc = dyn_cast<CC>(re)) {
         return cc;
@@ -117,7 +117,7 @@ void RE_Local::follow(RE * re, std::map<CC *, CC*> &follow_map) {
         if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
             return follow(name->getDefinition(), follow_map);
         } else {
-            throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
+            UndefinedNameError(name);
         }
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         RE * re_first = *(seq->begin());
