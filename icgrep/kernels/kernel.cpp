@@ -909,8 +909,7 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
         processedItemCount[i] = kb->getProcessedItemCount(mStreamSetInputs[i].name);
         inputBlockPtr[i] = kb->getInputStreamBlockPtr(mStreamSetInputs[i].name, kb->getInt32(0));
         Value * avail = kb->CreateSub(mAvailableItemCount[i], processedItemCount[i]);
-        Value * linearlyAvail = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, processedItemCount[i]);
-        linearlyAvailItems[i] = kb->CreateSelect(kb->CreateICmpULT(avail, linearlyAvail), avail, linearlyAvail);
+        linearlyAvailItems[i] = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, processedItemCount[i], avail);
         auto & rate = mStreamSetInputs[i].rate;
         if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
         Value * maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems[i]);
@@ -1068,10 +1067,8 @@ void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuild
             }
             else {
                 Value * neededItems = kb->CreateSub(finalItemCountNeeded[i], blockBasePos);
-                Value * availFromBase = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, blockBasePos);
-                Value * allAvail = kb->CreateICmpULE(neededItems, availFromBase);
-                Value * copyItems1 = kb->CreateSelect(allAvail, neededItems, availFromBase);
-                //mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, inputPtr, copyItems1);
+                Value * copyItems1 = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, blockBasePos, neededItems);
+                Value * allAvail = kb->CreateICmpEQ(neededItems, copyItems1);
                 Value * copyBlocks1 = kb->CreateUDivCeil(copyItems1, blockSize);
                 mStreamSetInputBuffers[i]->createBlockCopy(kb.get(), tempBufPtr, inputPtr, copyBlocks1);
                 BasicBlock * copyRemaining = kb->CreateBasicBlock("copyRemaining");

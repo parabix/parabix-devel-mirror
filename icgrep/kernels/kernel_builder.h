@@ -93,13 +93,9 @@ public:
     
     llvm::Value * getAvailableItemCount(const std::string & name);
 
-    llvm::Value * getLinearlyAccessibleItems(const std::string & name, llvm::Value * fromPosition);
+    llvm::Value * getLinearlyAccessibleItems(const std::string & name, llvm::Value * fromPos, llvm::Value * avail, bool reverse = false);
     
-    llvm::Value * getLinearlyAccessibleBlocks(const std::string & name, llvm::Value * fromBlock);
-    
-    llvm::Value * getLinearlyWritableItems(const std::string & name, llvm::Value * fromPosition);
-    
-    llvm::Value * getLinearlyWritableBlocks(const std::string & name, llvm::Value * fromBlock);
+    llvm::Value * getLinearlyWritableItems(const std::string & name, llvm::Value * fromPos, bool reverse = false);
     
     llvm::BasicBlock * CreateConsumerWait();
 

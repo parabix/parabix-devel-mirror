@@ -82,17 +82,13 @@ public:
     virtual llvm::Value * getCapacity(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const;
     
     // The number of items that cam be linearly accessed from a given logical stream position.
-    virtual llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const;
-    
-    virtual llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const;
+    virtual llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPos, llvm::Value * avail, bool reverse = false) const;
     
     void createBlockCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * blocksToCopy) const;
 
     virtual void createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy) const;
 
     virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const;
-    
-    virtual llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const;
     
     virtual bool supportsCopyBack() const {
         return false;  // Overridden to return true by buffer types that support copyback.
@@ -162,9 +158,9 @@ public:
     
     llvm::Value * getCapacity(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
     
-    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
-    
-    llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const override;
+    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
+
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
 
     llvm::Type * getStreamSetBlockType() const override;
 
@@ -190,8 +186,8 @@ public:
 
     ExternalBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, llvm::Value * addr, unsigned AddressSpace = 0);
 
-    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
-
+    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
+    
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
     void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
@@ -233,8 +229,6 @@ public:
     
     llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
     
-    llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const override;
-
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
     bool supportsCopyBack() const override {
@@ -258,8 +252,6 @@ public:
     void createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy) const override;
 
     llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
-    
-    llvm::Value * getLinearlyWritableBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const override;
     
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
@@ -290,8 +282,8 @@ public:
 
     llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex, const bool readOnly) const override;
 
-    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
-
+    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
+    
     llvm::Value * getStreamSetCount(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
 
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
@@ -321,10 +313,8 @@ public:
     
     DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t initialCapacity, size_t overflowBlocks = 0, unsigned swizzleFactor = 1, unsigned addrSpace = 0);
     
-    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, bool reverse = false) const override;
+    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
     
-    llvm::Value * getLinearlyAccessibleBlocks(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromBlock, bool reverse = false) const override;
-
     llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
     
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
