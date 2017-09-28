@@ -5,6 +5,7 @@
  */
 
 #include <toolchain/toolchain.h>
+#include <UCD/PropertyObjectTable.h>
 #include <llvm/CodeGen/CommandFlags.h>
 #include <llvm/Support/raw_ostream.h>
 
@@ -198,6 +199,7 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
 }
 
 void printParabixVersion () {
+    outs() << "Unicode version " << UCD::UnicodeVersion << "\n";
     outs() << "Parabix (http://parabix.costar.sfu.ca/):\n  " << "Parabix revision " << PARABIX_VERSION << "\n";
 }
 

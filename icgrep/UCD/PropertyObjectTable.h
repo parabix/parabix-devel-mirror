@@ -34,6 +34,7 @@
 #include "WordBreakProperty.h"
 
 namespace UCD {
+   const std::string UnicodeVersion = "9.0.0";
 
   const std::array<PropertyObject *, 118> property_object_table = {{
     new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
