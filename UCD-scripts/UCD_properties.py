@@ -9,7 +9,7 @@
 # Licensed under Open Software License 3.0.
 #
 #
-import re, string, os.path, cformat
+import re, string, os.path, cformat, UCD_config
 from unicode_set import *
 from UCD_parser import *
 
@@ -207,6 +207,7 @@ class UCD_generator():
         cformat.write_imports(f, ['"PropertyObjects.h"', '"PropertyAliases.h"', '<array>'])
         cformat.write_imports(f, ['"%s.h"' % fname for fname in self.property_data_headers])
         f.write("\nnamespace UCD {\n")
+        f.write("   const std::string UnicodeVersion = \"%s\";\n" % UCD_config.version)
         objlist = []
         for p in self.property_enum_name_list:
             k = self.property_kind_map[p]
@@ -226,6 +227,8 @@ class UCD_generator():
 
 
 def UCD_main():
+    setVersionfromReadMe_txt()
+    
     ucd = UCD_generator()
 
     # First parse all property names and their aliases

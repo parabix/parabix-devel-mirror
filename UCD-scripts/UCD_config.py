@@ -8,3 +8,5 @@
 UCD_src_dir = "UCD9.0"
 
 UCD_output_dir = "generated"
+
+version = "Unknown"

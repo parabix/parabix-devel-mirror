@@ -11,6 +11,17 @@ import re, string, os.path
 import UCD_config
 from unicode_set import *
 
+version_regexp = re.compile(".*Version\s+([0-9.]*)\s+of the Unicode Standard.*")
+
+def setVersionfromReadMe_txt():
+    f = open(UCD_config.UCD_src_dir + "/" + 'ReadMe.txt')
+    lines = f.readlines()
+    for t in lines:
+        m = version_regexp.match(t)
+        if m: 
+            UCD_config.version = m.group(1)
+            print "Version %s" % m.group(1)
+
 trivial_name_char_re = re.compile('[-_\s]')
 def canonicalize(property_string):
     return trivial_name_char_re.sub('', property_string.lower())
@@ -287,4 +298,22 @@ def parse_UnicodeData_txt():
       (uc, lc, tc) = (m.group(13), m.group(14), m.group(15))
       data_records.append((cp, name, gc, ccc, bidic, decomp, decval, digitval, numval, bidim, uc, lc, tc))
    return data_records
+
+#  Parse a decomposition mapping field in one of two forms:
+#  (a) compatibility mappings:  "<" decomp_type:[A-Za-z]* ">" {codepoint}
+#  (b) canonical mappings:  {codepoint}  
+compatibility_regexp = re.compile("^<([^>]*)>\s*([0-9A-F ]*)$")
+codepoints_regexp = re.compile("^[0-9A-F]{4,6}(?: +[0-9A-F]{4,6})*$")
+def parse_decomposition(s):
+    m = compatibility_regexp.match(s)
+    if m: 
+        decomp_type = m.group(1)
+        mapping = m.group(2)
+    else:
+        decomp_type = "Canonical"
+        mapping = s
+    m = codepoints_regexp.match(mapping)
+    if not m: raise Exception("Bad codepoint string syntax in parse_decomposition: %s" % mapping)
+    cps = [int(x, 16) for x in mapping.split(" ")]
+    return (decomp_type, cps)
 
