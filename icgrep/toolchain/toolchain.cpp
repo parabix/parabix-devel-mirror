@@ -5,7 +5,12 @@
  */
 
 #include <toolchain/toolchain.h>
-#include <UCD/PropertyObjectTable.h>
+
+// TODO: We cannot include PropertyObjectTable.h without creating a circular dependency in the
+// CMake file. Modify the UCD generator to produce a config file with the UnicodeVersion property
+// that does not (directly or indirectly) include PropertyObjects.h or UnicodeSet.h.
+
+// #include <UCD/PropertyObjectTable.h>
 #include <llvm/CodeGen/CommandFlags.h>
 #include <llvm/Support/raw_ostream.h>
 
@@ -199,7 +204,8 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
 }
 
 void printParabixVersion () {
-    outs() << "Unicode version " << UCD::UnicodeVersion << "\n";
+    // outs() << "Unicode version " << UCD::UnicodeVersion << "\n";
+    outs() << "Unicode version " << "9.0.0" << "\n";
     outs() << "Parabix (http://parabix.costar.sfu.ca/):\n  " << "Parabix revision " << PARABIX_VERSION << "\n";
 }
 
