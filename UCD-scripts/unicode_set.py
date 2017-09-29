@@ -27,7 +27,7 @@ default_log2_quad_bits = 5
 log2_quad_bits = default_log2_quad_bits
 quad_bits = 1 << log2_quad_bits
 mod_quad_bit_mask = quad_bits - 1
-UnicodeQuadCount = 0x110000 / quad_bits #  2**log2_quad_bits codepoints per quad
+UnicodeQuadCount = int(0x110000 / quad_bits) #  2**log2_quad_bits codepoints per quad
 FullQuadMask = (1<<(quad_bits)) - 1
 run_bytes = 4
 
@@ -61,7 +61,7 @@ class UCset:
 
    # printing
    def showC(self, indent = 4):
-      hex_specifier =  "%%#0%ix" % (quad_bits/4 + 2)
+      hex_specifier =  "%%#0%ix" % (int(quad_bits/4) + 2)
       runtype = {-1:"Full", 0:"Empty", 1: "Mixed"}
       formatted_runs = ['{%s, %i}' % (runtype[r[0]], r[1]) for r in self.runs]
       formatted_quads = [hex_specifier % q for q in self.quads]
@@ -74,7 +74,7 @@ class UCset:
       return setrep
 
    def bytes(self):
-       return (len(self.runs) * run_bytes) + (len(self.quads) * quad_bits/8)
+       return (len(self.runs) * run_bytes) + (len(self.quads) * int(quad_bits/8))
 
 
 #
@@ -153,7 +153,7 @@ class Uset_Iterator:
 
 
 def uset_member(s, codepoint):
-   quad_no = codepoint / quad_bits
+   quad_no = int(codepoint / quad_bits)
    quad_val = 1 << (codepoint & mod_quad_bit_mask)
    it = Uset_Iterator(s)    
    it.advance(quad_no)
@@ -414,6 +414,6 @@ def parse_UCD_file(fname, vname):
     lines = f.readlines()
     f.close()
     s = parse_UCD_set(lines)
-    print s.showC(vname)
+    print(s.showC(vname))
 
 

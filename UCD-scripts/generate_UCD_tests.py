@@ -179,12 +179,12 @@ class UCD_test_generator():
 def UCD_main():
     ucd = UCD_test_generator()
     ucd.load_all()
-    print "<greptest>"
+    print("<greptest>")
     for t in ucd.generate_level_1_property_terms(1, ['sc', 'gc']):
-        print t
+        print(t)
     for p in ucd.generate_random_property_expressions(True):
-        print p
-    print "</greptest>"
+        print(p)
+    print("</greptest>")
 
 if __name__ == "__main__":
     UCD_main()

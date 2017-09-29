@@ -46,6 +46,7 @@ class UCD_generator():
         self.supported_props = []
         self.property_data_headers = []
         self.missing_specs = {}
+        self.binary_properties = {}
 
     def load_property_name_info(self):
         (self.property_enum_name_list, self.full_name_map, self.property_lookup_map, self.property_kind_map) = parse_PropertyAlias_txt()
@@ -77,7 +78,7 @@ class UCD_generator():
         f.write(EnumeratedProperty_template % ('Binary', enum_text, enum_names, full_name_text, binary_map_text))
         #
         for p in self.property_enum_name_list:
-           if self.property_value_list.has_key(p):
+           if p in self.property_value_list:
               if not self.property_kind_map[p] == 'Binary':
                   enum_text = cformat.multiline_fill(self.property_value_list[p], ',', 12)
                   enum_names = cformat.multiline_fill(['"%s"' % s for s in self.property_value_list[p]], ',', 12)
@@ -98,15 +99,14 @@ class UCD_generator():
         f.write("}\n")
         cformat.close_header_file(f)
 
-  
     def generate_property_value_file(self, filename_root, property_code):
-        canon_map = self.property_value_lookup_map[property_code]
-        if self.missing_specs.has_key(property_code):
-            default_value = canon_map[canonicalize(self.missing_specs[property_code])]
-        else: default_value = None
         vlist = self.property_value_list[property_code]
         canon_map = self.property_value_lookup_map[property_code]
-        (prop_values, value_map) = parse_UCD_enumerated_property_map(property_code, vlist, canon_map, filename_root + '.txt', default_value)
+        (prop_values, value_map) = parse_UCD_enumerated_property_map(property_code, vlist, canon_map, filename_root + '.txt')
+        canon_map = self.property_value_lookup_map[property_code]
+        if property_code in self.missing_specs:
+            default_value = canon_map[canonicalize(self.missing_specs[property_code])]
+            value_map = add_Default_Values(value_map, 0, 0x10FFFF, default_value)
         independent_prop_values = len(prop_values)
         for v in vlist:
             if not v in prop_values:
@@ -115,12 +115,6 @@ class UCD_generator():
                 prop_values.append(v)
         # 
         self.property_value_list[property_code] = prop_values
-        basename = os.path.basename(filename_root)
-        f = cformat.open_header_file_for_write(os.path.basename(filename_root))
-        cformat.write_imports(f, ['"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
-        f.write("\nnamespace UCD {\n")
-        f.write("  namespace %s_ns {\n" % property_code.upper())
-        f.write("    const unsigned independent_prop_values = %s;\n" % independent_prop_values)
         if property_code == 'gc':
             # special logic for derived categories
             value_map['LC'] = union_of_all([value_map[v] for v in ['Lu', 'Ll', 'Lt']])
@@ -131,13 +125,19 @@ class UCD_generator():
             value_map['S'] = union_of_all([value_map[v] for v in ['Sm', 'Sc', 'Sk', 'So']])
             value_map['Z'] = union_of_all([value_map[v] for v in ['Zs', 'Zl', 'Zp']])
             value_map['C'] = union_of_all([value_map[v] for v in ['Cc', 'Cf', 'Cs', 'Co', 'Cn']])
+        basename = os.path.basename(filename_root)
+        f = cformat.open_header_file_for_write(os.path.basename(filename_root))
+        cformat.write_imports(f, ['"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        f.write("\nnamespace UCD {\n")
+        f.write("  namespace %s_ns {\n" % property_code.upper())
+        f.write("    const unsigned independent_prop_values = %s;\n" % independent_prop_values)
         for v in prop_values:
             f.write("    /** Code Point Ranges for %s\n    " % v)
-            f.write(cformat.multiline_fill(['[%s, %s]' % (lo, hi) for (lo, hi) in uset_to_range_list(value_map[v])], ',', 4))
+            f.write(cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(value_map[v])], ',', 4))
             f.write("**/\n")
             f.write("    const UnicodeSet %s_Set \n" % v.lower())
             f.write(value_map[v].showC(8) + ";\n")
-        print "%s: %s bytes" % (basename, sum([value_map[v].bytes() for v in value_map.keys()]))
+        print("%s: %s bytes" % (basename, sum([value_map[v].bytes() for v in value_map.keys()])))
         set_list = ['&%s_Set' % v.lower() for v in prop_values]
         f.write("    static EnumeratedPropertyObject property_object\n")
         f.write("        {%s,\n" % property_code)
@@ -175,7 +175,7 @@ class UCD_generator():
         f.write(cformat.multiline_fill(set_list, ',', 8))
         f.write("\n        }};\n    }\n}\n")
         cformat.close_header_file(f)
-        print "%s: %s bytes" % (basename, sum([value_map[v].bytes() for v in value_map.keys()]))
+        print("%s: %s bytes" % (basename, sum([value_map[v].bytes() for v in value_map.keys()])))
         self.supported_props.append(property_code)
         self.property_data_headers.append(basename)
 
@@ -198,8 +198,9 @@ class UCD_generator():
             f.write("        static BinaryPropertyObject property_object{%s, codepoint_set};\n    }\n" % p)
         f.write("}\n\n")
         cformat.close_header_file(f)
-        print "%s: %s bytes" % (basename, sum([prop_map[p].bytes() for p in prop_map.keys()]))
+        print("%s: %s bytes" % (basename, sum([prop_map[p].bytes() for p in prop_map.keys()])))
         self.supported_props += props
+        for p in prop_map.keys(): self.binary_properties[p] = prop_map[p]
         self.property_data_headers.append(basename)
 
     def generate_PropertyObjectTable_h(self):
@@ -283,9 +284,6 @@ def UCD_main():
     # Hangul Syllable Type
     ucd.generate_property_value_file('HangulSyllableType', 'hst')
     #
-    # Bidi_Class
-    ucd.generate_property_value_file('extracted/DerivedBidiClass', 'bc')
-    #
     # Bidi Mirroroing from DerivedCoreProperties.txt
     ucd.generate_binary_properties_file('extracted/DerivedBinaryProperties')
     #
@@ -305,6 +303,9 @@ def UCD_main():
     #
     # Binary normalization properties.
     ucd.generate_binary_properties_file('DerivedNormalizationProps')
+    #
+    # Bidi_Class
+    ucd.generate_property_value_file('extracted/DerivedBidiClass', 'bc')
 
     #
     # Jamo Short Name - AAARGH - property value for 110B is an empty string!!!!!  - Not in PropertyValueAliases.txt

@@ -20,7 +20,7 @@ def setVersionfromReadMe_txt():
         m = version_regexp.match(t)
         if m: 
             UCD_config.version = m.group(1)
-            print "Version %s" % m.group(1)
+            print("Version %s" % m.group(1))
 
 trivial_name_char_re = re.compile('[-_\s]')
 def canonicalize(property_string):
@@ -100,15 +100,15 @@ def parse_PropertyValueAlias_txt(property_lookup_map):
             if m:
                 if m.group(1) != '0000' or m.group(2) != '10FFFF': raise Exception("Bad missing spec: " + s)
                 cname = canonicalize(m.group(3))
-                if not property_lookup_map.has_key(cname): raise Exception("Bad missing property: " + s)
+                if not cname in property_lookup_map: raise Exception("Bad missing property: " + s)
                 missing_specs[property_lookup_map[cname]] = m.group(4)
             continue  # skip comment and blank lines
         m = UCD_property_value_alias_regexp.match(t)
         if not m: raise Exception("Unknown property value alias syntax: %s" % t)
         prop_code = canonicalize(m.group(1))
-        if not property_lookup_map.has_key(prop_code): raise Exception("Property code: '%s' is unknown" % prop_code)
+        if not prop_code in property_lookup_map: raise Exception("Property code: '%s' is unknown" % prop_code)
         else: prop_code = property_lookup_map[prop_code]
-        if not property_value_list.has_key(prop_code):
+        if not prop_code in property_value_list:
             property_value_list[prop_code] = []
             property_value_enum_integer[prop_code] = {}
             property_value_full_name_map[prop_code] = {}
@@ -176,31 +176,27 @@ UCD_range_name_regexp = re.compile("^([0-9A-F]{4,6})[.][.]([0-9A-F]{4,6})\s*;\s*
 # returning the list of independent property values found, as well as the value map.
 # Ensure that the default value for the property is first in the list of property values,
 # and that all codepoints not explicitly identified in the file are mapped to this default.
-def parse_UCD_enumerated_property_map(property_code, vlist, canon_map, mapfile, default_value = None):
+def parse_UCD_enumerated_property_map(property_code, vlist, canon_map, mapfile):
     value_map = {}
     for v in vlist: value_map[v] = empty_uset()
-    if default_value == None:
-        name_list_order = []
-    else:
-        # Default value must always be first in the final enumeration order.
-        name_list_order = [default_value]
+    name_list_order = []
+    default_specs = []
     f = open(UCD_config.UCD_src_dir + "/" + mapfile)
     lines = f.readlines()
     for t in lines:
         if UCD_skip.match(t):
             m = UCD_missing_regexp1.match(t)
             if m:
-                if default_value != None:
-                    raise Exception("Default value already specified, extraneous @missing spec: %s" % t)
                 (missing_lo, missing_hi, default_value) = (int(m.group(1), 16), int(m.group(2), 16), m.group(3))
                 default_value = canonicalize(default_value)
-                if not canon_map.has_key(default_value):  raise Exception("Unknown default property value name '%s'" % default_value)
+                if not default_value in canon_map:  raise Exception("Unknown default property value name '%s'" % default_value)
                 if missing_lo != 0 or missing_hi != 0x10FFFF: raise Exception("Unexpected missing data range '%x, %x'" % (missing_lo, missing_hi))
                 default_value = canon_map[default_value]
                 #print "Property %s: setting default_value  %s" % (property_code, default_value)
                 # Default value must always be first in the final enumeration order.
                 if default_value in name_list_order: name_list_order.remove(default_value)
                 name_list_order = [default_value] + name_list_order
+                default_specs.append((missing_lo, missing_hi, default_value))
             continue  # skip comment and blank lines
         m = UCD_point_name_regexp.match(t)
         if m:
@@ -212,19 +208,25 @@ def parse_UCD_enumerated_property_map(property_code, vlist, canon_map, mapfile, 
             (cp_lo, cp_hi, name) = (int(m.group(1), 16), int(m.group(2), 16), m.group(3))
             newset = range_uset(cp_lo, cp_hi)
         cname = canonicalize(name)
-        if not canon_map.has_key(cname):  raise Exception("Unknown property or property value name '%s'" % cname)
+        if not cname in canon_map:  raise Exception("Unknown property or property value name '%s'" % cname)
         name = canon_map[cname]
         if not name in name_list_order:
             name_list_order.append(name)
         value_map[name] = uset_union(value_map[name], newset)
+    for (default_lo, default_hi, default_val) in default_specs:
+        value_map = add_Default_Values(value_map, default_lo, default_hi, default_val)
+    return (name_list_order, value_map)
+
+def add_Default_Values(value_map, default_lo, default_hi, default_val):
+    default_region = range_uset(default_lo, default_hi)
     explicitly_defined_cps = empty_uset()
     for k in value_map.keys(): explicitly_defined_cps = uset_union(explicitly_defined_cps, value_map[k])
-    need_default_value = uset_complement(explicitly_defined_cps)
-    if default_value != None:
-        value_map[default_value] = uset_union(value_map[default_value], need_default_value)
-    elif uset_popcount(need_default_value) > 0:
-        print "Warning no default value, but %i codepoints not specified" % uset_popcount(need_default_value)
-    return (name_list_order, value_map)
+    need_default_value = uset_difference(default_region, explicitly_defined_cps)
+    if default_val in value_map:
+        value_map[default_val] = uset_union(value_map[default_val], need_default_value)
+    else:
+        value_map[default_val] = need_default_value
+    return value_map
 
 def parse_ScriptExtensions_txt(scripts, canon_map):
     filename_root = 'ScriptExtensions'
@@ -238,14 +240,14 @@ def parse_ScriptExtensions_txt(scripts, canon_map):
         for scx in scx_items:
             # sc = canonical_property_value_map[canonicalize(scx)]
             sc = scx
-            if value_map.has_key(sc):
+            if sc in value_map:
                 value_map[sc] = uset_union(value_map[sc], scx_set_map[scx_list])
             else: value_map[sc] = scx_set_map[scx_list]
         explicitly_defined_set = uset_union(explicitly_defined_set, scx_set_map[scx_list])
     for v in scripts:
-        if value_map.has_key(v):
+        if v in value_map:
             value_map[v] = uset_union(value_map[v], uset_difference(script_map[v], explicitly_defined_set))
-        elif script_map.has_key(v):
+        elif v in script_map:
             value_map[v] = script_map[v]
         else: value_map[v] = empty_uset()
     return (scripts, value_map)
@@ -270,10 +272,10 @@ def parse_UCD_codepoint_name_map(mapfile, canon_map = None):
             newset = range_uset(cp_lo, cp_hi)
         if not canon_map == None:
             cname = canonicalize(name)
-            if not canon_map.has_key(cname):
+            if not cname in canon_map:
                 raise Exception("Unknown property or property value name '%s'" % cname)
             name = canon_map[cname]
-        if not value_map.has_key(name):
+        if not name in value_map:
             value_map[name] = newset
             name_list_order.append(name)
         else: value_map[name] = uset_union(value_map[name], newset)

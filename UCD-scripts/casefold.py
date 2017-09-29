@@ -41,13 +41,13 @@ def parse_CaseFolding_txt():
       fold_type[codepoint] = fold_t
       fold_val = m.group(3)
       if fold_t == 'T': 
-         print "Skipping Turkic entry"
+         print("Skipping Turkic entry")
          continue  # skip Turkic
       if fold_t == 'F':
           fold_val = [int(x, 16) for x in fold_val.split(" ")]
       else:
           fold_val = int(fold_val, 16)
-      if fold_value.has_key(codepoint): fold_value[codepoint].append(fold_val)
+      if codepoint in fold_value: fold_value[codepoint].append(fold_val)
       else: fold_value[codepoint] = [fold_val]
    return (fold_type, fold_value)
 
@@ -81,9 +81,9 @@ def simple_CaseClosure_map(fold_map):
       folds = fold_map[k]
       for v in folds:
         if not isinstance(v, int): continue # skip nonsimple case folds
-        if not cl_map.has_key(v): cl_map[v] = [k]
+        if not v in cl_map: cl_map[v] = [k]
         else: cl_map[v].append(k)
-        if not cl_map.has_key(k): cl_map[k] = [v]
+        if not k in cl_map: cl_map[k] = [v]
         else: cl_map[k].append(v)
    newEntries = True
    while newEntries:
@@ -123,7 +123,7 @@ def caseFoldRangeMap(casemap):
          new_open = []
          projected = []
          for (cp0, offset) in open_entries:
-            even_odd_offset_group = (abs(cp - cp0)/ abs(offset)) & 1
+            even_odd_offset_group = int(abs(cp - cp0)/ abs(offset)) & 1
             if even_odd_offset_group == 0: 
                projected_foldcp = cp + offset
             else: projected_foldcp = cp - offset
