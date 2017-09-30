@@ -163,7 +163,7 @@ class UCD_generator():
         f.write("    namespace SCX_ns {\n")
         for v in self.property_value_list['sc']:
             f.write("        /** Code Point Ranges for %s\n        " % v)
-            f.write(cformat.multiline_fill(['[%s, %s]' % (lo, hi) for (lo, hi) in uset_to_range_list(value_map[v])], ',', 8))
+            f.write(cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(value_map[v])], ',', 8))
             f.write("**/\n")
             f.write("        const UnicodeSet %s_Ext \n" % v.lower())
             f.write(value_map[v].showC(12) + ";\n")
@@ -179,6 +179,16 @@ class UCD_generator():
         self.supported_props.append(property_code)
         self.property_data_headers.append(basename)
 
+
+    def emit_binary_property(self, f, property_code, property_set):
+        f.write("    namespace %s_ns {\n" % property_code.upper())
+        f.write("        /** Code Point Ranges for %s\n        " % property_code)
+        f.write(cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(property_set)], ',', 8))
+        f.write("**/\n")
+        f.write("        const UnicodeSet codepoint_set \n")
+        f.write(property_set.showC(12) + ";\n")
+        f.write("        static BinaryPropertyObject property_object{%s, codepoint_set};\n    }\n" % property_code)
+
     def generate_binary_properties_file(self, filename_root):
         (props, prop_map) = parse_UCD_codepoint_name_map(filename_root + '.txt', self.property_lookup_map)
         basename = os.path.basename(filename_root)
@@ -186,16 +196,7 @@ class UCD_generator():
         cformat.write_imports(f, ['"PropertyAliases.h"', '"unicode_set.h"', "<vector>"])
         f.write("\nnamespace UCD {\n")
         for p in sorted(props):
-            # f.write("  namespace %s_ns {\n    const UnicodeSet codepoint_set \n" % p.upper())
-            # f.write(prop_map[p].showC(12) + ";\n")
-            # f.write("    static BinaryPropertyObject property_object{%s, codepoint_set};\n  }\n" % p)
-            f.write("    namespace %s_ns {\n" % p.upper())
-            f.write("        /** Code Point Ranges for %s\n        " % p)
-            f.write(cformat.multiline_fill(['[%s, %s]' % (lo, hi) for (lo, hi) in uset_to_range_list(prop_map[p])], ',', 8))
-            f.write("**/\n")
-            f.write("        const UnicodeSet codepoint_set \n")
-            f.write(prop_map[p].showC(12) + ";\n")
-            f.write("        static BinaryPropertyObject property_object{%s, codepoint_set};\n    }\n" % p)
+            self.emit_binary_property(f, p, prop_map[p])
         f.write("}\n\n")
         cformat.close_header_file(f)
         print("%s: %s bytes" % (basename, sum([prop_map[p].bytes() for p in prop_map.keys()])))
@@ -203,12 +204,25 @@ class UCD_generator():
         for p in prop_map.keys(): self.binary_properties[p] = prop_map[p]
         self.property_data_headers.append(basename)
 
+    def generate_binary_property_file(self, filename_root, property_code):
+        prop_map = parse_UCD_codepoint_set(filename_root + '.txt')
+        basename = os.path.basename(filename_root)
+        f = cformat.open_header_file_for_write(basename)
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"unicode_set.h"', "<vector>"])
+        f.write("\nnamespace UCD {\n")
+        self.emit_binary_property(f, property_code, prop_map)
+        f.write("}\n\n")
+        cformat.close_header_file(f)
+        print("%s: %s bytes" % (basename, prop_map.bytes()))
+        self.supported_props += [property_code]
+        self.binary_properties[property_code] = prop_map
+        self.property_data_headers.append(basename)
+
     def generate_PropertyObjectTable_h(self):
         f = cformat.open_header_file_for_write('PropertyObjectTable')
         cformat.write_imports(f, ['"PropertyObjects.h"', '"PropertyAliases.h"', '<array>'])
         cformat.write_imports(f, ['"%s.h"' % fname for fname in self.property_data_headers])
         f.write("\nnamespace UCD {\n")
-        f.write("   const std::string UnicodeVersion = \"%s\";\n" % UCD_config.version)
         objlist = []
         for p in self.property_enum_name_list:
             k = self.property_kind_map[p]
@@ -225,11 +239,17 @@ class UCD_generator():
         f.write(",\n    ".join(objlist) + '  }};\n}\n')
         cformat.close_header_file(f)
 
+    def generate_UCD_Config_h(self):
+        setVersionfromReadMe_txt()
+        f = cformat.open_header_file_for_write('UCD_Config')
+        f.write("\nnamespace UCD {\n")
+        f.write("   const std::string UnicodeVersion = \"%s\";\n" % UCD_config.version)
+        f.write("}\n")
+        cformat.close_header_file(f)
+
 
 
 def UCD_main():
-    setVersionfromReadMe_txt()
-    
     ucd = UCD_generator()
 
     # First parse all property names and their aliases
@@ -307,6 +327,12 @@ def UCD_main():
     # Bidi_Class
     ucd.generate_property_value_file('extracted/DerivedBidiClass', 'bc')
 
+    # Indic properties
+    ucd.generate_property_value_file('IndicPositionalCategory', 'InPC')
+    ucd.generate_property_value_file('IndicSyllabicCategory', 'InSC')
+
+    ucd.generate_binary_property_file('CompositionExclusions', 'CE')
+
     #
     # Jamo Short Name - AAARGH - property value for 110B is an empty string!!!!!  - Not in PropertyValueAliases.txt
     # ucd.generate_property_value_file('Jamo', 'jsn')
@@ -316,6 +342,8 @@ def UCD_main():
     ucd.generate_PropertyValueAliases_h()
 
     ucd.generate_PropertyObjectTable_h()
+
+    ucd.generate_UCD_Config_h()
 
 if __name__ == "__main__":
   UCD_main()

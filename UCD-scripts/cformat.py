@@ -3,7 +3,7 @@ import UCD_config
 header_template = r"""#ifndef %s
 #define %s
 /*
- *  Copyright (c) 2016 International Characters, Inc.
+ *  Copyright (c) 2017 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *

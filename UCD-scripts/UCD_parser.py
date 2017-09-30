@@ -281,25 +281,65 @@ def parse_UCD_codepoint_name_map(mapfile, canon_map = None):
         else: value_map[name] = uset_union(value_map[name], newset)
     return (name_list_order, value_map)
 
+# Format 4: simple codepoint sets
+
+UCD_point_only_regexp = re.compile("^([0-9A-F]{4,6})\s*(?:[#]|$)")
+UCD_range_only_regexp = re.compile("^([0-9A-F]{4,6})[.][.]([0-9A-F]{4,6})(?:[#]|$)")
+
+def parse_UCD_codepoint_set(setfile):
+    cp_set = empty_uset()
+    f = open(UCD_config.UCD_src_dir + "/" + setfile)
+    lines = f.readlines()
+    for t in lines:
+        if UCD_skip.match(t):
+            continue  # skip comment and blank lines
+        m = UCD_point_only_regexp.match(t)
+        if m:
+            codepoint = int(m.group(1), 16)
+            newset = singleton_uset(codepoint)
+        else:
+            m = UCD_range_only_regexp.match(t)
+            if not m: raise Exception("Unknown syntax: %s" % t)
+            (cp_lo, cp_hi) = (int(m.group(1), 16), int(m.group(2), 16))
+            newset = range_uset(cp_lo, cp_hi)
+        cp_set = uset_union(cp_set, newset)
+    return cp_set
+
 
 UnicodeData_txt_regexp = re.compile("^([0-9A-F]{4,6});([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);(.*)$")
 
+NonNameRange_regexp = re.compile("<([^>]*)>")
+NameRange_regexp = re.compile("<([^,]*), (First|Last)>")
+
 def parse_UnicodeData_txt():
-   data_records = []
-   f = open(UCD_config.UCD_src_dir + "/UnicodeData.txt")
-   lines = f.readlines()
-   for t in lines:
-      if UCD_skip.match(t):
-        continue  # skip comment and blank lines
-      m = UnicodeData_txt_regexp.match(t)
-      if not m: raise Exception("Unknown syntax: %s" % t)
-      (cp, name, gc) = (m.group(1), m.group(2), m.group(3))
-      (ccc, bidic, decomp, bidim) = (m.group(4), m.group(5), m.group(6), m.group(10))
-      (decval, digitval, numval) = (m.group(7), m.group(8), m.group(9))
-      # Unicode 1 name and ISO comment are obolete 
-      (uc, lc, tc) = (m.group(13), m.group(14), m.group(15))
-      data_records.append((cp, name, gc, ccc, bidic, decomp, decval, digitval, numval, bidim, uc, lc, tc))
-   return data_records
+    data_records = []
+    range_records = []
+    name_range_starts = {}
+    f = open(UCD_config.UCD_src_dir + "/UnicodeData.txt")
+    lines = f.readlines()
+    for t in lines:
+        if UCD_skip.match(t):
+            continue  # skip comment and blank lines
+        m = UnicodeData_txt_regexp.match(t)
+        if not m: raise Exception("Unknown syntax: %s" % t)
+        (cp, name, gc) = (m.group(1), m.group(2), m.group(3))
+        (ccc, bidic, decomp, bidim) = (m.group(4), m.group(5), m.group(6), m.group(10))
+        (decval, digitval, numval) = (m.group(7), m.group(8), m.group(9))
+        # Unicode 1 name and ISO comment are obolete 
+        (uc, lc, tc) = (m.group(13), m.group(14), m.group(15))
+        nonNameMatch = NonNameRange_regexp.match(name)
+        if nonNameMatch:
+            rangeMatch = NameRange_regexp.match(name)
+            if rangeMatch:
+                rangeName = rangeMatch.group(1)
+                print(rangeName, rangeMatch.group(2))
+                if rangeMatch.group(2) == 'First': name_range_starts[rangeName] = cp
+                if rangeMatch.group(2) == 'Last': 
+                    if not rangeName in name_range_starts: raise Exception("UnicodeData range end encountered without prior range start: %s" % t)
+                    range_records.append((name_range_starts[rangeName], cp, rangeName, gc, ccc, bidic, decomp, decval, digitval, numval, bidim, uc, lc, tc))
+            continue
+        data_records.append((cp, name, gc, ccc, bidic, decomp, decval, digitval, numval, bidim, uc, lc, tc))
+    return (data_records, range_records)
 
 #  Parse a decomposition mapping field in one of two forms:
 #  (a) compatibility mappings:  "<" decomp_type:[A-Za-z]* ">" {codepoint}
