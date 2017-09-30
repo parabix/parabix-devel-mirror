@@ -1,7 +1,7 @@
 #ifndef BLOCKS_H
 #define BLOCKS_H
 /*
- *  Copyright (c) 2016 International Characters, Inc.
+ *  Copyright (c) 2017 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -16,17 +16,17 @@ namespace UCD {
   namespace BLK_ns {
     const unsigned independent_prop_values = 274;
     /** Code Point Ranges for NB
-    [2144, 2207], [7312, 7359], [12256, 12271], [66048, 66175],
-    [66528, 66559], [66928, 67071], [67456, 67583], [67760, 67807],
-    [67904, 67967], [68256, 68287], [68528, 68607], [68688, 68735],
-    [68864, 69215], [69248, 69631], [70224, 70271], [70528, 70655],
-    [70880, 71039], [71376, 71423], [71488, 71839], [71936, 72383],
-    [72448, 72703], [72896, 73727], [75088, 77823], [78896, 82943],
-    [83584, 92159], [92784, 92879], [93072, 93951], [94112, 94175],
-    [101120, 110591], [110848, 113663], [113840, 118783], [119376, 119551],
-    [119680, 119807], [121520, 122879], [122928, 124927], [125152, 125183],
-    [125280, 126463], [126720, 126975], [129536, 131071], [173792, 173823],
-    [183984, 194559], [195104, 917503], [917632, 917759], [918000, 983039]**/
+    [0860, 089f], [1c90, 1cbf], [2fe0, 2fef], [10200, 1027f],
+    [103e0, 103ff], [10570, 105ff], [10780, 107ff], [108b0, 108df],
+    [10940, 1097f], [10aa0, 10abf], [10bb0, 10bff], [10c50, 10c7f],
+    [10d00, 10e5f], [10e80, 10fff], [11250, 1127f], [11380, 113ff],
+    [114e0, 1157f], [116d0, 116ff], [11740, 1189f], [11900, 11abf],
+    [11b00, 11bff], [11cc0, 11fff], [12550, 12fff], [13430, 143ff],
+    [14680, 167ff], [16a70, 16acf], [16b90, 16eff], [16fa0, 16fdf],
+    [18b00, 1afff], [1b100, 1bbff], [1bcb0, 1cfff], [1d250, 1d2ff],
+    [1d380, 1d3ff], [1dab0, 1dfff], [1e030, 1e7ff], [1e8e0, 1e8ff],
+    [1e960, 1edff], [1ef00, 1efff], [1fa00, 1ffff], [2a6e0, 2a6ff],
+    [2ceb0, 2f7ff], [2fa20, dffff], [e0080, e00ff], [e01f0, effff]**/
     const UnicodeSet nb_Set 
         {{{Empty, 67}, {Full, 2}, {Empty, 159}, {Mixed, 1}, {Full, 1},
           {Empty, 153}, {Mixed, 1}, {Empty, 1680}, {Full, 4}, {Empty, 11},
@@ -55,1367 +55,1367 @@ namespace UCD {
           0xffff0000, 0x0000ffff, 0xffff0000, 0xffff0000, 0xffff0000,
           0xffff0000, 0xffff0000, 0xffff0000, 0xffff0000}};
     /** Code Point Ranges for ASCII
-    [0, 127]**/
+    [0000, 007f]**/
     const UnicodeSet ascii_Set 
         {{{Full, 4}, {Empty, 34812}},
          {}};
     /** Code Point Ranges for Latin_1_Sup
-    [128, 255]**/
+    [0080, 00ff]**/
     const UnicodeSet latin_1_sup_Set 
         {{{Empty, 4}, {Full, 4}, {Empty, 34808}},
          {}};
     /** Code Point Ranges for Latin_Ext_A
-    [256, 383]**/
+    [0100, 017f]**/
     const UnicodeSet latin_ext_a_Set 
         {{{Empty, 8}, {Full, 4}, {Empty, 34804}},
          {}};
     /** Code Point Ranges for Latin_Ext_B
-    [384, 591]**/
+    [0180, 024f]**/
     const UnicodeSet latin_ext_b_Set 
         {{{Empty, 12}, {Full, 6}, {Mixed, 1}, {Empty, 34797}},
          {0x0000ffff}};
     /** Code Point Ranges for IPA_Ext
-    [592, 687]**/
+    [0250, 02af]**/
     const UnicodeSet ipa_ext_Set 
         {{{Empty, 18}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 34794}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Modifier_Letters
-    [688, 767]**/
+    [02b0, 02ff]**/
     const UnicodeSet modifier_letters_Set 
         {{{Empty, 21}, {Mixed, 1}, {Full, 2}, {Empty, 34792}},
          {0xffff0000}};
     /** Code Point Ranges for Diacriticals
-    [768, 879]**/
+    [0300, 036f]**/
     const UnicodeSet diacriticals_Set 
         {{{Empty, 24}, {Full, 3}, {Mixed, 1}, {Empty, 34788}},
          {0x0000ffff}};
     /** Code Point Ranges for Greek
-    [880, 1023]**/
+    [0370, 03ff]**/
     const UnicodeSet greek_Set 
         {{{Empty, 27}, {Mixed, 1}, {Full, 4}, {Empty, 34784}},
          {0xffff0000}};
     /** Code Point Ranges for Cyrillic
-    [1024, 1279]**/
+    [0400, 04ff]**/
     const UnicodeSet cyrillic_Set 
         {{{Empty, 32}, {Full, 8}, {Empty, 34776}},
          {}};
     /** Code Point Ranges for Cyrillic_Sup
-    [1280, 1327]**/
+    [0500, 052f]**/
     const UnicodeSet cyrillic_sup_Set 
         {{{Empty, 40}, {Full, 1}, {Mixed, 1}, {Empty, 34774}},
          {0x0000ffff}};
     /** Code Point Ranges for Armenian
-    [1328, 1423]**/
+    [0530, 058f]**/
     const UnicodeSet armenian_Set 
         {{{Empty, 41}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 34771}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Hebrew
-    [1424, 1535]**/
+    [0590, 05ff]**/
     const UnicodeSet hebrew_Set 
         {{{Empty, 44}, {Mixed, 1}, {Full, 3}, {Empty, 34768}},
          {0xffff0000}};
     /** Code Point Ranges for Arabic
-    [1536, 1791]**/
+    [0600, 06ff]**/
     const UnicodeSet arabic_Set 
         {{{Empty, 48}, {Full, 8}, {Empty, 34760}},
          {}};
     /** Code Point Ranges for Syriac
-    [1792, 1871]**/
+    [0700, 074f]**/
     const UnicodeSet syriac_Set 
         {{{Empty, 56}, {Full, 2}, {Mixed, 1}, {Empty, 34757}},
          {0x0000ffff}};
     /** Code Point Ranges for Arabic_Sup
-    [1872, 1919]**/
+    [0750, 077f]**/
     const UnicodeSet arabic_sup_Set 
         {{{Empty, 58}, {Mixed, 1}, {Full, 1}, {Empty, 34756}},
          {0xffff0000}};
     /** Code Point Ranges for Thaana
-    [1920, 1983]**/
+    [0780, 07bf]**/
     const UnicodeSet thaana_Set 
         {{{Empty, 60}, {Full, 2}, {Empty, 34754}},
          {}};
     /** Code Point Ranges for NKo
-    [1984, 2047]**/
+    [07c0, 07ff]**/
     const UnicodeSet nko_Set 
         {{{Empty, 62}, {Full, 2}, {Empty, 34752}},
          {}};
     /** Code Point Ranges for Samaritan
-    [2048, 2111]**/
+    [0800, 083f]**/
     const UnicodeSet samaritan_Set 
         {{{Empty, 64}, {Full, 2}, {Empty, 34750}},
          {}};
     /** Code Point Ranges for Mandaic
-    [2112, 2143]**/
+    [0840, 085f]**/
     const UnicodeSet mandaic_Set 
         {{{Empty, 66}, {Full, 1}, {Empty, 34749}},
          {}};
     /** Code Point Ranges for Arabic_Ext_A
-    [2208, 2303]**/
+    [08a0, 08ff]**/
     const UnicodeSet arabic_ext_a_Set 
         {{{Empty, 69}, {Full, 3}, {Empty, 34744}},
          {}};
     /** Code Point Ranges for Devanagari
-    [2304, 2431]**/
+    [0900, 097f]**/
     const UnicodeSet devanagari_Set 
         {{{Empty, 72}, {Full, 4}, {Empty, 34740}},
          {}};
     /** Code Point Ranges for Bengali
-    [2432, 2559]**/
+    [0980, 09ff]**/
     const UnicodeSet bengali_Set 
         {{{Empty, 76}, {Full, 4}, {Empty, 34736}},
          {}};
     /** Code Point Ranges for Gurmukhi
-    [2560, 2687]**/
+    [0a00, 0a7f]**/
     const UnicodeSet gurmukhi_Set 
         {{{Empty, 80}, {Full, 4}, {Empty, 34732}},
          {}};
     /** Code Point Ranges for Gujarati
-    [2688, 2815]**/
+    [0a80, 0aff]**/
     const UnicodeSet gujarati_Set 
         {{{Empty, 84}, {Full, 4}, {Empty, 34728}},
          {}};
     /** Code Point Ranges for Oriya
-    [2816, 2943]**/
+    [0b00, 0b7f]**/
     const UnicodeSet oriya_Set 
         {{{Empty, 88}, {Full, 4}, {Empty, 34724}},
          {}};
     /** Code Point Ranges for Tamil
-    [2944, 3071]**/
+    [0b80, 0bff]**/
     const UnicodeSet tamil_Set 
         {{{Empty, 92}, {Full, 4}, {Empty, 34720}},
          {}};
     /** Code Point Ranges for Telugu
-    [3072, 3199]**/
+    [0c00, 0c7f]**/
     const UnicodeSet telugu_Set 
         {{{Empty, 96}, {Full, 4}, {Empty, 34716}},
          {}};
     /** Code Point Ranges for Kannada
-    [3200, 3327]**/
+    [0c80, 0cff]**/
     const UnicodeSet kannada_Set 
         {{{Empty, 100}, {Full, 4}, {Empty, 34712}},
          {}};
     /** Code Point Ranges for Malayalam
-    [3328, 3455]**/
+    [0d00, 0d7f]**/
     const UnicodeSet malayalam_Set 
         {{{Empty, 104}, {Full, 4}, {Empty, 34708}},
          {}};
     /** Code Point Ranges for Sinhala
-    [3456, 3583]**/
+    [0d80, 0dff]**/
     const UnicodeSet sinhala_Set 
         {{{Empty, 108}, {Full, 4}, {Empty, 34704}},
          {}};
     /** Code Point Ranges for Thai
-    [3584, 3711]**/
+    [0e00, 0e7f]**/
     const UnicodeSet thai_Set 
         {{{Empty, 112}, {Full, 4}, {Empty, 34700}},
          {}};
     /** Code Point Ranges for Lao
-    [3712, 3839]**/
+    [0e80, 0eff]**/
     const UnicodeSet lao_Set 
         {{{Empty, 116}, {Full, 4}, {Empty, 34696}},
          {}};
     /** Code Point Ranges for Tibetan
-    [3840, 4095]**/
+    [0f00, 0fff]**/
     const UnicodeSet tibetan_Set 
         {{{Empty, 120}, {Full, 8}, {Empty, 34688}},
          {}};
     /** Code Point Ranges for Myanmar
-    [4096, 4255]**/
+    [1000, 109f]**/
     const UnicodeSet myanmar_Set 
         {{{Empty, 128}, {Full, 5}, {Empty, 34683}},
          {}};
     /** Code Point Ranges for Georgian
-    [4256, 4351]**/
+    [10a0, 10ff]**/
     const UnicodeSet georgian_Set 
         {{{Empty, 133}, {Full, 3}, {Empty, 34680}},
          {}};
     /** Code Point Ranges for Jamo
-    [4352, 4607]**/
+    [1100, 11ff]**/
     const UnicodeSet jamo_Set 
         {{{Empty, 136}, {Full, 8}, {Empty, 34672}},
          {}};
     /** Code Point Ranges for Ethiopic
-    [4608, 4991]**/
+    [1200, 137f]**/
     const UnicodeSet ethiopic_Set 
         {{{Empty, 144}, {Full, 12}, {Empty, 34660}},
          {}};
     /** Code Point Ranges for Ethiopic_Sup
-    [4992, 5023]**/
+    [1380, 139f]**/
     const UnicodeSet ethiopic_sup_Set 
         {{{Empty, 156}, {Full, 1}, {Empty, 34659}},
          {}};
     /** Code Point Ranges for Cherokee
-    [5024, 5119]**/
+    [13a0, 13ff]**/
     const UnicodeSet cherokee_Set 
         {{{Empty, 157}, {Full, 3}, {Empty, 34656}},
          {}};
     /** Code Point Ranges for UCAS
-    [5120, 5759]**/
+    [1400, 167f]**/
     const UnicodeSet ucas_Set 
         {{{Empty, 160}, {Full, 20}, {Empty, 34636}},
          {}};
     /** Code Point Ranges for Ogham
-    [5760, 5791]**/
+    [1680, 169f]**/
     const UnicodeSet ogham_Set 
         {{{Empty, 180}, {Full, 1}, {Empty, 34635}},
          {}};
     /** Code Point Ranges for Runic
-    [5792, 5887]**/
+    [16a0, 16ff]**/
     const UnicodeSet runic_Set 
         {{{Empty, 181}, {Full, 3}, {Empty, 34632}},
          {}};
     /** Code Point Ranges for Tagalog
-    [5888, 5919]**/
+    [1700, 171f]**/
     const UnicodeSet tagalog_Set 
         {{{Empty, 184}, {Full, 1}, {Empty, 34631}},
          {}};
     /** Code Point Ranges for Hanunoo
-    [5920, 5951]**/
+    [1720, 173f]**/
     const UnicodeSet hanunoo_Set 
         {{{Empty, 185}, {Full, 1}, {Empty, 34630}},
          {}};
     /** Code Point Ranges for Buhid
-    [5952, 5983]**/
+    [1740, 175f]**/
     const UnicodeSet buhid_Set 
         {{{Empty, 186}, {Full, 1}, {Empty, 34629}},
          {}};
     /** Code Point Ranges for Tagbanwa
-    [5984, 6015]**/
+    [1760, 177f]**/
     const UnicodeSet tagbanwa_Set 
         {{{Empty, 187}, {Full, 1}, {Empty, 34628}},
          {}};
     /** Code Point Ranges for Khmer
-    [6016, 6143]**/
+    [1780, 17ff]**/
     const UnicodeSet khmer_Set 
         {{{Empty, 188}, {Full, 4}, {Empty, 34624}},
          {}};
     /** Code Point Ranges for Mongolian
-    [6144, 6319]**/
+    [1800, 18af]**/
     const UnicodeSet mongolian_Set 
         {{{Empty, 192}, {Full, 5}, {Mixed, 1}, {Empty, 34618}},
          {0x0000ffff}};
     /** Code Point Ranges for UCAS_Ext
-    [6320, 6399]**/
+    [18b0, 18ff]**/
     const UnicodeSet ucas_ext_Set 
         {{{Empty, 197}, {Mixed, 1}, {Full, 2}, {Empty, 34616}},
          {0xffff0000}};
     /** Code Point Ranges for Limbu
-    [6400, 6479]**/
+    [1900, 194f]**/
     const UnicodeSet limbu_Set 
         {{{Empty, 200}, {Full, 2}, {Mixed, 1}, {Empty, 34613}},
          {0x0000ffff}};
     /** Code Point Ranges for Tai_Le
-    [6480, 6527]**/
+    [1950, 197f]**/
     const UnicodeSet tai_le_Set 
         {{{Empty, 202}, {Mixed, 1}, {Full, 1}, {Empty, 34612}},
          {0xffff0000}};
     /** Code Point Ranges for New_Tai_Lue
-    [6528, 6623]**/
+    [1980, 19df]**/
     const UnicodeSet new_tai_lue_Set 
         {{{Empty, 204}, {Full, 3}, {Empty, 34609}},
          {}};
     /** Code Point Ranges for Khmer_Symbols
-    [6624, 6655]**/
+    [19e0, 19ff]**/
     const UnicodeSet khmer_symbols_Set 
         {{{Empty, 207}, {Full, 1}, {Empty, 34608}},
          {}};
     /** Code Point Ranges for Buginese
-    [6656, 6687]**/
+    [1a00, 1a1f]**/
     const UnicodeSet buginese_Set 
         {{{Empty, 208}, {Full, 1}, {Empty, 34607}},
          {}};
     /** Code Point Ranges for Tai_Tham
-    [6688, 6831]**/
+    [1a20, 1aaf]**/
     const UnicodeSet tai_tham_Set 
         {{{Empty, 209}, {Full, 4}, {Mixed, 1}, {Empty, 34602}},
          {0x0000ffff}};
     /** Code Point Ranges for Diacriticals_Ext
-    [6832, 6911]**/
+    [1ab0, 1aff]**/
     const UnicodeSet diacriticals_ext_Set 
         {{{Empty, 213}, {Mixed, 1}, {Full, 2}, {Empty, 34600}},
          {0xffff0000}};
     /** Code Point Ranges for Balinese
-    [6912, 7039]**/
+    [1b00, 1b7f]**/
     const UnicodeSet balinese_Set 
         {{{Empty, 216}, {Full, 4}, {Empty, 34596}},
          {}};
     /** Code Point Ranges for Sundanese
-    [7040, 7103]**/
+    [1b80, 1bbf]**/
     const UnicodeSet sundanese_Set 
         {{{Empty, 220}, {Full, 2}, {Empty, 34594}},
          {}};
     /** Code Point Ranges for Batak
-    [7104, 7167]**/
+    [1bc0, 1bff]**/
     const UnicodeSet batak_Set 
         {{{Empty, 222}, {Full, 2}, {Empty, 34592}},
          {}};
     /** Code Point Ranges for Lepcha
-    [7168, 7247]**/
+    [1c00, 1c4f]**/
     const UnicodeSet lepcha_Set 
         {{{Empty, 224}, {Full, 2}, {Mixed, 1}, {Empty, 34589}},
          {0x0000ffff}};
     /** Code Point Ranges for Ol_Chiki
-    [7248, 7295]**/
+    [1c50, 1c7f]**/
     const UnicodeSet ol_chiki_Set 
         {{{Empty, 226}, {Mixed, 1}, {Full, 1}, {Empty, 34588}},
          {0xffff0000}};
     /** Code Point Ranges for Cyrillic_Ext_C
-    [7296, 7311]**/
+    [1c80, 1c8f]**/
     const UnicodeSet cyrillic_ext_c_Set 
         {{{Empty, 228}, {Mixed, 1}, {Empty, 34587}},
          {0x0000ffff}};
     /** Code Point Ranges for Sundanese_Sup
-    [7360, 7375]**/
+    [1cc0, 1ccf]**/
     const UnicodeSet sundanese_sup_Set 
         {{{Empty, 230}, {Mixed, 1}, {Empty, 34585}},
          {0x0000ffff}};
     /** Code Point Ranges for Vedic_Ext
-    [7376, 7423]**/
+    [1cd0, 1cff]**/
     const UnicodeSet vedic_ext_Set 
         {{{Empty, 230}, {Mixed, 1}, {Full, 1}, {Empty, 34584}},
          {0xffff0000}};
     /** Code Point Ranges for Phonetic_Ext
-    [7424, 7551]**/
+    [1d00, 1d7f]**/
     const UnicodeSet phonetic_ext_Set 
         {{{Empty, 232}, {Full, 4}, {Empty, 34580}},
          {}};
     /** Code Point Ranges for Phonetic_Ext_Sup
-    [7552, 7615]**/
+    [1d80, 1dbf]**/
     const UnicodeSet phonetic_ext_sup_Set 
         {{{Empty, 236}, {Full, 2}, {Empty, 34578}},
          {}};
     /** Code Point Ranges for Diacriticals_Sup
-    [7616, 7679]**/
+    [1dc0, 1dff]**/
     const UnicodeSet diacriticals_sup_Set 
         {{{Empty, 238}, {Full, 2}, {Empty, 34576}},
          {}};
     /** Code Point Ranges for Latin_Ext_Additional
-    [7680, 7935]**/
+    [1e00, 1eff]**/
     const UnicodeSet latin_ext_additional_Set 
         {{{Empty, 240}, {Full, 8}, {Empty, 34568}},
          {}};
     /** Code Point Ranges for Greek_Ext
-    [7936, 8191]**/
+    [1f00, 1fff]**/
     const UnicodeSet greek_ext_Set 
         {{{Empty, 248}, {Full, 8}, {Empty, 34560}},
          {}};
     /** Code Point Ranges for Punctuation
-    [8192, 8303]**/
+    [2000, 206f]**/
     const UnicodeSet punctuation_Set 
         {{{Empty, 256}, {Full, 3}, {Mixed, 1}, {Empty, 34556}},
          {0x0000ffff}};
     /** Code Point Ranges for Super_And_Sub
-    [8304, 8351]**/
+    [2070, 209f]**/
     const UnicodeSet super_and_sub_Set 
         {{{Empty, 259}, {Mixed, 1}, {Full, 1}, {Empty, 34555}},
          {0xffff0000}};
     /** Code Point Ranges for Currency_Symbols
-    [8352, 8399]**/
+    [20a0, 20cf]**/
     const UnicodeSet currency_symbols_Set 
         {{{Empty, 261}, {Full, 1}, {Mixed, 1}, {Empty, 34553}},
          {0x0000ffff}};
     /** Code Point Ranges for Diacriticals_For_Symbols
-    [8400, 8447]**/
+    [20d0, 20ff]**/
     const UnicodeSet diacriticals_for_symbols_Set 
         {{{Empty, 262}, {Mixed, 1}, {Full, 1}, {Empty, 34552}},
          {0xffff0000}};
     /** Code Point Ranges for Letterlike_Symbols
-    [8448, 8527]**/
+    [2100, 214f]**/
     const UnicodeSet letterlike_symbols_Set 
         {{{Empty, 264}, {Full, 2}, {Mixed, 1}, {Empty, 34549}},
          {0x0000ffff}};
     /** Code Point Ranges for Number_Forms
-    [8528, 8591]**/
+    [2150, 218f]**/
     const UnicodeSet number_forms_Set 
         {{{Empty, 266}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 34547}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Arrows
-    [8592, 8703]**/
+    [2190, 21ff]**/
     const UnicodeSet arrows_Set 
         {{{Empty, 268}, {Mixed, 1}, {Full, 3}, {Empty, 34544}},
          {0xffff0000}};
     /** Code Point Ranges for Math_Operators
-    [8704, 8959]**/
+    [2200, 22ff]**/
     const UnicodeSet math_operators_Set 
         {{{Empty, 272}, {Full, 8}, {Empty, 34536}},
          {}};
     /** Code Point Ranges for Misc_Technical
-    [8960, 9215]**/
+    [2300, 23ff]**/
     const UnicodeSet misc_technical_Set 
         {{{Empty, 280}, {Full, 8}, {Empty, 34528}},
          {}};
     /** Code Point Ranges for Control_Pictures
-    [9216, 9279]**/
+    [2400, 243f]**/
     const UnicodeSet control_pictures_Set 
         {{{Empty, 288}, {Full, 2}, {Empty, 34526}},
          {}};
     /** Code Point Ranges for OCR
-    [9280, 9311]**/
+    [2440, 245f]**/
     const UnicodeSet ocr_Set 
         {{{Empty, 290}, {Full, 1}, {Empty, 34525}},
          {}};
     /** Code Point Ranges for Enclosed_Alphanum
-    [9312, 9471]**/
+    [2460, 24ff]**/
     const UnicodeSet enclosed_alphanum_Set 
         {{{Empty, 291}, {Full, 5}, {Empty, 34520}},
          {}};
     /** Code Point Ranges for Box_Drawing
-    [9472, 9599]**/
+    [2500, 257f]**/
     const UnicodeSet box_drawing_Set 
         {{{Empty, 296}, {Full, 4}, {Empty, 34516}},
          {}};
     /** Code Point Ranges for Block_Elements
-    [9600, 9631]**/
+    [2580, 259f]**/
     const UnicodeSet block_elements_Set 
         {{{Empty, 300}, {Full, 1}, {Empty, 34515}},
          {}};
     /** Code Point Ranges for Geometric_Shapes
-    [9632, 9727]**/
+    [25a0, 25ff]**/
     const UnicodeSet geometric_shapes_Set 
         {{{Empty, 301}, {Full, 3}, {Empty, 34512}},
          {}};
     /** Code Point Ranges for Misc_Symbols
-    [9728, 9983]**/
+    [2600, 26ff]**/
     const UnicodeSet misc_symbols_Set 
         {{{Empty, 304}, {Full, 8}, {Empty, 34504}},
          {}};
     /** Code Point Ranges for Dingbats
-    [9984, 10175]**/
+    [2700, 27bf]**/
     const UnicodeSet dingbats_Set 
         {{{Empty, 312}, {Full, 6}, {Empty, 34498}},
          {}};
     /** Code Point Ranges for Misc_Math_Symbols_A
-    [10176, 10223]**/
+    [27c0, 27ef]**/
     const UnicodeSet misc_math_symbols_a_Set 
         {{{Empty, 318}, {Full, 1}, {Mixed, 1}, {Empty, 34496}},
          {0x0000ffff}};
     /** Code Point Ranges for Sup_Arrows_A
-    [10224, 10239]**/
+    [27f0, 27ff]**/
     const UnicodeSet sup_arrows_a_Set 
         {{{Empty, 319}, {Mixed, 1}, {Empty, 34496}},
          {0xffff0000}};
     /** Code Point Ranges for Braille
-    [10240, 10495]**/
+    [2800, 28ff]**/
     const UnicodeSet braille_Set 
         {{{Empty, 320}, {Full, 8}, {Empty, 34488}},
          {}};
     /** Code Point Ranges for Sup_Arrows_B
-    [10496, 10623]**/
+    [2900, 297f]**/
     const UnicodeSet sup_arrows_b_Set 
         {{{Empty, 328}, {Full, 4}, {Empty, 34484}},
          {}};
     /** Code Point Ranges for Misc_Math_Symbols_B
-    [10624, 10751]**/
+    [2980, 29ff]**/
     const UnicodeSet misc_math_symbols_b_Set 
         {{{Empty, 332}, {Full, 4}, {Empty, 34480}},
          {}};
     /** Code Point Ranges for Sup_Math_Operators
-    [10752, 11007]**/
+    [2a00, 2aff]**/
     const UnicodeSet sup_math_operators_Set 
         {{{Empty, 336}, {Full, 8}, {Empty, 34472}},
          {}};
     /** Code Point Ranges for Misc_Arrows
-    [11008, 11263]**/
+    [2b00, 2bff]**/
     const UnicodeSet misc_arrows_Set 
         {{{Empty, 344}, {Full, 8}, {Empty, 34464}},
          {}};
     /** Code Point Ranges for Glagolitic
-    [11264, 11359]**/
+    [2c00, 2c5f]**/
     const UnicodeSet glagolitic_Set 
         {{{Empty, 352}, {Full, 3}, {Empty, 34461}},
          {}};
     /** Code Point Ranges for Latin_Ext_C
-    [11360, 11391]**/
+    [2c60, 2c7f]**/
     const UnicodeSet latin_ext_c_Set 
         {{{Empty, 355}, {Full, 1}, {Empty, 34460}},
          {}};
     /** Code Point Ranges for Coptic
-    [11392, 11519]**/
+    [2c80, 2cff]**/
     const UnicodeSet coptic_Set 
         {{{Empty, 356}, {Full, 4}, {Empty, 34456}},
          {}};
     /** Code Point Ranges for Georgian_Sup
-    [11520, 11567]**/
+    [2d00, 2d2f]**/
     const UnicodeSet georgian_sup_Set 
         {{{Empty, 360}, {Full, 1}, {Mixed, 1}, {Empty, 34454}},
          {0x0000ffff}};
     /** Code Point Ranges for Tifinagh
-    [11568, 11647]**/
+    [2d30, 2d7f]**/
     const UnicodeSet tifinagh_Set 
         {{{Empty, 361}, {Mixed, 1}, {Full, 2}, {Empty, 34452}},
          {0xffff0000}};
     /** Code Point Ranges for Ethiopic_Ext
-    [11648, 11743]**/
+    [2d80, 2ddf]**/
     const UnicodeSet ethiopic_ext_Set 
         {{{Empty, 364}, {Full, 3}, {Empty, 34449}},
          {}};
     /** Code Point Ranges for Cyrillic_Ext_A
-    [11744, 11775]**/
+    [2de0, 2dff]**/
     const UnicodeSet cyrillic_ext_a_Set 
         {{{Empty, 367}, {Full, 1}, {Empty, 34448}},
          {}};
     /** Code Point Ranges for Sup_Punctuation
-    [11776, 11903]**/
+    [2e00, 2e7f]**/
     const UnicodeSet sup_punctuation_Set 
         {{{Empty, 368}, {Full, 4}, {Empty, 34444}},
          {}};
     /** Code Point Ranges for CJK_Radicals_Sup
-    [11904, 12031]**/
+    [2e80, 2eff]**/
     const UnicodeSet cjk_radicals_sup_Set 
         {{{Empty, 372}, {Full, 4}, {Empty, 34440}},
          {}};
     /** Code Point Ranges for Kangxi
-    [12032, 12255]**/
+    [2f00, 2fdf]**/
     const UnicodeSet kangxi_Set 
         {{{Empty, 376}, {Full, 7}, {Empty, 34433}},
          {}};
     /** Code Point Ranges for IDC
-    [12272, 12287]**/
+    [2ff0, 2fff]**/
     const UnicodeSet idc_Set 
         {{{Empty, 383}, {Mixed, 1}, {Empty, 34432}},
          {0xffff0000}};
     /** Code Point Ranges for CJK_Symbols
-    [12288, 12351]**/
+    [3000, 303f]**/
     const UnicodeSet cjk_symbols_Set 
         {{{Empty, 384}, {Full, 2}, {Empty, 34430}},
          {}};
     /** Code Point Ranges for Hiragana
-    [12352, 12447]**/
+    [3040, 309f]**/
     const UnicodeSet hiragana_Set 
         {{{Empty, 386}, {Full, 3}, {Empty, 34427}},
          {}};
     /** Code Point Ranges for Katakana
-    [12448, 12543]**/
+    [30a0, 30ff]**/
     const UnicodeSet katakana_Set 
         {{{Empty, 389}, {Full, 3}, {Empty, 34424}},
          {}};
     /** Code Point Ranges for Bopomofo
-    [12544, 12591]**/
+    [3100, 312f]**/
     const UnicodeSet bopomofo_Set 
         {{{Empty, 392}, {Full, 1}, {Mixed, 1}, {Empty, 34422}},
          {0x0000ffff}};
     /** Code Point Ranges for Compat_Jamo
-    [12592, 12687]**/
+    [3130, 318f]**/
     const UnicodeSet compat_jamo_Set 
         {{{Empty, 393}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 34419}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Kanbun
-    [12688, 12703]**/
+    [3190, 319f]**/
     const UnicodeSet kanbun_Set 
         {{{Empty, 396}, {Mixed, 1}, {Empty, 34419}},
          {0xffff0000}};
     /** Code Point Ranges for Bopomofo_Ext
-    [12704, 12735]**/
+    [31a0, 31bf]**/
     const UnicodeSet bopomofo_ext_Set 
         {{{Empty, 397}, {Full, 1}, {Empty, 34418}},
          {}};
     /** Code Point Ranges for CJK_Strokes
-    [12736, 12783]**/
+    [31c0, 31ef]**/
     const UnicodeSet cjk_strokes_Set 
         {{{Empty, 398}, {Full, 1}, {Mixed, 1}, {Empty, 34416}},
          {0x0000ffff}};
     /** Code Point Ranges for Katakana_Ext
-    [12784, 12799]**/
+    [31f0, 31ff]**/
     const UnicodeSet katakana_ext_Set 
         {{{Empty, 399}, {Mixed, 1}, {Empty, 34416}},
          {0xffff0000}};
     /** Code Point Ranges for Enclosed_CJK
-    [12800, 13055]**/
+    [3200, 32ff]**/
     const UnicodeSet enclosed_cjk_Set 
         {{{Empty, 400}, {Full, 8}, {Empty, 34408}},
          {}};
     /** Code Point Ranges for CJK_Compat
-    [13056, 13311]**/
+    [3300, 33ff]**/
     const UnicodeSet cjk_compat_Set 
         {{{Empty, 408}, {Full, 8}, {Empty, 34400}},
          {}};
     /** Code Point Ranges for CJK_Ext_A
-    [13312, 19903]**/
+    [3400, 4dbf]**/
     const UnicodeSet cjk_ext_a_Set 
         {{{Empty, 416}, {Full, 206}, {Empty, 34194}},
          {}};
     /** Code Point Ranges for Yijing
-    [19904, 19967]**/
+    [4dc0, 4dff]**/
     const UnicodeSet yijing_Set 
         {{{Empty, 622}, {Full, 2}, {Empty, 34192}},
          {}};
     /** Code Point Ranges for CJK
-    [19968, 40959]**/
+    [4e00, 9fff]**/
     const UnicodeSet cjk_Set 
         {{{Empty, 624}, {Full, 656}, {Empty, 33536}},
          {}};
     /** Code Point Ranges for Yi_Syllables
-    [40960, 42127]**/
+    [a000, a48f]**/
     const UnicodeSet yi_syllables_Set 
         {{{Empty, 1280}, {Full, 36}, {Mixed, 1}, {Empty, 33499}},
          {0x0000ffff}};
     /** Code Point Ranges for Yi_Radicals
-    [42128, 42191]**/
+    [a490, a4cf]**/
     const UnicodeSet yi_radicals_Set 
         {{{Empty, 1316}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 33497}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Lisu
-    [42192, 42239]**/
+    [a4d0, a4ff]**/
     const UnicodeSet lisu_Set 
         {{{Empty, 1318}, {Mixed, 1}, {Full, 1}, {Empty, 33496}},
          {0xffff0000}};
     /** Code Point Ranges for Vai
-    [42240, 42559]**/
+    [a500, a63f]**/
     const UnicodeSet vai_Set 
         {{{Empty, 1320}, {Full, 10}, {Empty, 33486}},
          {}};
     /** Code Point Ranges for Cyrillic_Ext_B
-    [42560, 42655]**/
+    [a640, a69f]**/
     const UnicodeSet cyrillic_ext_b_Set 
         {{{Empty, 1330}, {Full, 3}, {Empty, 33483}},
          {}};
     /** Code Point Ranges for Bamum
-    [42656, 42751]**/
+    [a6a0, a6ff]**/
     const UnicodeSet bamum_Set 
         {{{Empty, 1333}, {Full, 3}, {Empty, 33480}},
          {}};
     /** Code Point Ranges for Modifier_Tone_Letters
-    [42752, 42783]**/
+    [a700, a71f]**/
     const UnicodeSet modifier_tone_letters_Set 
         {{{Empty, 1336}, {Full, 1}, {Empty, 33479}},
          {}};
     /** Code Point Ranges for Latin_Ext_D
-    [42784, 43007]**/
+    [a720, a7ff]**/
     const UnicodeSet latin_ext_d_Set 
         {{{Empty, 1337}, {Full, 7}, {Empty, 33472}},
          {}};
     /** Code Point Ranges for Syloti_Nagri
-    [43008, 43055]**/
+    [a800, a82f]**/
     const UnicodeSet syloti_nagri_Set 
         {{{Empty, 1344}, {Full, 1}, {Mixed, 1}, {Empty, 33470}},
          {0x0000ffff}};
     /** Code Point Ranges for Indic_Number_Forms
-    [43056, 43071]**/
+    [a830, a83f]**/
     const UnicodeSet indic_number_forms_Set 
         {{{Empty, 1345}, {Mixed, 1}, {Empty, 33470}},
          {0xffff0000}};
     /** Code Point Ranges for Phags_Pa
-    [43072, 43135]**/
+    [a840, a87f]**/
     const UnicodeSet phags_pa_Set 
         {{{Empty, 1346}, {Full, 2}, {Empty, 33468}},
          {}};
     /** Code Point Ranges for Saurashtra
-    [43136, 43231]**/
+    [a880, a8df]**/
     const UnicodeSet saurashtra_Set 
         {{{Empty, 1348}, {Full, 3}, {Empty, 33465}},
          {}};
     /** Code Point Ranges for Devanagari_Ext
-    [43232, 43263]**/
+    [a8e0, a8ff]**/
     const UnicodeSet devanagari_ext_Set 
         {{{Empty, 1351}, {Full, 1}, {Empty, 33464}},
          {}};
     /** Code Point Ranges for Kayah_Li
-    [43264, 43311]**/
+    [a900, a92f]**/
     const UnicodeSet kayah_li_Set 
         {{{Empty, 1352}, {Full, 1}, {Mixed, 1}, {Empty, 33462}},
          {0x0000ffff}};
     /** Code Point Ranges for Rejang
-    [43312, 43359]**/
+    [a930, a95f]**/
     const UnicodeSet rejang_Set 
         {{{Empty, 1353}, {Mixed, 1}, {Full, 1}, {Empty, 33461}},
          {0xffff0000}};
     /** Code Point Ranges for Jamo_Ext_A
-    [43360, 43391]**/
+    [a960, a97f]**/
     const UnicodeSet jamo_ext_a_Set 
         {{{Empty, 1355}, {Full, 1}, {Empty, 33460}},
          {}};
     /** Code Point Ranges for Javanese
-    [43392, 43487]**/
+    [a980, a9df]**/
     const UnicodeSet javanese_Set 
         {{{Empty, 1356}, {Full, 3}, {Empty, 33457}},
          {}};
     /** Code Point Ranges for Myanmar_Ext_B
-    [43488, 43519]**/
+    [a9e0, a9ff]**/
     const UnicodeSet myanmar_ext_b_Set 
         {{{Empty, 1359}, {Full, 1}, {Empty, 33456}},
          {}};
     /** Code Point Ranges for Cham
-    [43520, 43615]**/
+    [aa00, aa5f]**/
     const UnicodeSet cham_Set 
         {{{Empty, 1360}, {Full, 3}, {Empty, 33453}},
          {}};
     /** Code Point Ranges for Myanmar_Ext_A
-    [43616, 43647]**/
+    [aa60, aa7f]**/
     const UnicodeSet myanmar_ext_a_Set 
         {{{Empty, 1363}, {Full, 1}, {Empty, 33452}},
          {}};
     /** Code Point Ranges for Tai_Viet
-    [43648, 43743]**/
+    [aa80, aadf]**/
     const UnicodeSet tai_viet_Set 
         {{{Empty, 1364}, {Full, 3}, {Empty, 33449}},
          {}};
     /** Code Point Ranges for Meetei_Mayek_Ext
-    [43744, 43775]**/
+    [aae0, aaff]**/
     const UnicodeSet meetei_mayek_ext_Set 
         {{{Empty, 1367}, {Full, 1}, {Empty, 33448}},
          {}};
     /** Code Point Ranges for Ethiopic_Ext_A
-    [43776, 43823]**/
+    [ab00, ab2f]**/
     const UnicodeSet ethiopic_ext_a_Set 
         {{{Empty, 1368}, {Full, 1}, {Mixed, 1}, {Empty, 33446}},
          {0x0000ffff}};
     /** Code Point Ranges for Latin_Ext_E
-    [43824, 43887]**/
+    [ab30, ab6f]**/
     const UnicodeSet latin_ext_e_Set 
         {{{Empty, 1369}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 33444}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Cherokee_Sup
-    [43888, 43967]**/
+    [ab70, abbf]**/
     const UnicodeSet cherokee_sup_Set 
         {{{Empty, 1371}, {Mixed, 1}, {Full, 2}, {Empty, 33442}},
          {0xffff0000}};
     /** Code Point Ranges for Meetei_Mayek
-    [43968, 44031]**/
+    [abc0, abff]**/
     const UnicodeSet meetei_mayek_Set 
         {{{Empty, 1374}, {Full, 2}, {Empty, 33440}},
          {}};
     /** Code Point Ranges for Hangul
-    [44032, 55215]**/
+    [ac00, d7af]**/
     const UnicodeSet hangul_Set 
         {{{Empty, 1376}, {Full, 349}, {Mixed, 1}, {Empty, 33090}},
          {0x0000ffff}};
     /** Code Point Ranges for Jamo_Ext_B
-    [55216, 55295]**/
+    [d7b0, d7ff]**/
     const UnicodeSet jamo_ext_b_Set 
         {{{Empty, 1725}, {Mixed, 1}, {Full, 2}, {Empty, 33088}},
          {0xffff0000}};
     /** Code Point Ranges for High_Surrogates
-    [55296, 56191]**/
+    [d800, db7f]**/
     const UnicodeSet high_surrogates_Set 
         {{{Empty, 1728}, {Full, 28}, {Empty, 33060}},
          {}};
     /** Code Point Ranges for High_PU_Surrogates
-    [56192, 56319]**/
+    [db80, dbff]**/
     const UnicodeSet high_pu_surrogates_Set 
         {{{Empty, 1756}, {Full, 4}, {Empty, 33056}},
          {}};
     /** Code Point Ranges for Low_Surrogates
-    [56320, 57343]**/
+    [dc00, dfff]**/
     const UnicodeSet low_surrogates_Set 
         {{{Empty, 1760}, {Full, 32}, {Empty, 33024}},
          {}};
     /** Code Point Ranges for PUA
-    [57344, 63743]**/
+    [e000, f8ff]**/
     const UnicodeSet pua_Set 
         {{{Empty, 1792}, {Full, 200}, {Empty, 32824}},
          {}};
     /** Code Point Ranges for CJK_Compat_Ideographs
-    [63744, 64255]**/
+    [f900, faff]**/
     const UnicodeSet cjk_compat_ideographs_Set 
         {{{Empty, 1992}, {Full, 16}, {Empty, 32808}},
          {}};
     /** Code Point Ranges for Alphabetic_PF
-    [64256, 64335]**/
+    [fb00, fb4f]**/
     const UnicodeSet alphabetic_pf_Set 
         {{{Empty, 2008}, {Full, 2}, {Mixed, 1}, {Empty, 32805}},
          {0x0000ffff}};
     /** Code Point Ranges for Arabic_PF_A
-    [64336, 65023]**/
+    [fb50, fdff]**/
     const UnicodeSet arabic_pf_a_Set 
         {{{Empty, 2010}, {Mixed, 1}, {Full, 21}, {Empty, 32784}},
          {0xffff0000}};
     /** Code Point Ranges for VS
-    [65024, 65039]**/
+    [fe00, fe0f]**/
     const UnicodeSet vs_Set 
         {{{Empty, 2032}, {Mixed, 1}, {Empty, 32783}},
          {0x0000ffff}};
     /** Code Point Ranges for Vertical_Forms
-    [65040, 65055]**/
+    [fe10, fe1f]**/
     const UnicodeSet vertical_forms_Set 
         {{{Empty, 2032}, {Mixed, 1}, {Empty, 32783}},
          {0xffff0000}};
     /** Code Point Ranges for Half_Marks
-    [65056, 65071]**/
+    [fe20, fe2f]**/
     const UnicodeSet half_marks_Set 
         {{{Empty, 2033}, {Mixed, 1}, {Empty, 32782}},
          {0x0000ffff}};
     /** Code Point Ranges for CJK_Compat_Forms
-    [65072, 65103]**/
+    [fe30, fe4f]**/
     const UnicodeSet cjk_compat_forms_Set 
         {{{Empty, 2033}, {Mixed, 2}, {Empty, 32781}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Small_Forms
-    [65104, 65135]**/
+    [fe50, fe6f]**/
     const UnicodeSet small_forms_Set 
         {{{Empty, 2034}, {Mixed, 2}, {Empty, 32780}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Arabic_PF_B
-    [65136, 65279]**/
+    [fe70, feff]**/
     const UnicodeSet arabic_pf_b_Set 
         {{{Empty, 2035}, {Mixed, 1}, {Full, 4}, {Empty, 32776}},
          {0xffff0000}};
     /** Code Point Ranges for Half_And_Full_Forms
-    [65280, 65519]**/
+    [ff00, ffef]**/
     const UnicodeSet half_and_full_forms_Set 
         {{{Empty, 2040}, {Full, 7}, {Mixed, 1}, {Empty, 32768}},
          {0x0000ffff}};
     /** Code Point Ranges for Specials
-    [65520, 65535]**/
+    [fff0, ffff]**/
     const UnicodeSet specials_Set 
         {{{Empty, 2047}, {Mixed, 1}, {Empty, 32768}},
          {0xffff0000}};
     /** Code Point Ranges for Linear_B_Syllabary
-    [65536, 65663]**/
+    [10000, 1007f]**/
     const UnicodeSet linear_b_syllabary_Set 
         {{{Empty, 2048}, {Full, 4}, {Empty, 32764}},
          {}};
     /** Code Point Ranges for Linear_B_Ideograms
-    [65664, 65791]**/
+    [10080, 100ff]**/
     const UnicodeSet linear_b_ideograms_Set 
         {{{Empty, 2052}, {Full, 4}, {Empty, 32760}},
          {}};
     /** Code Point Ranges for Aegean_Numbers
-    [65792, 65855]**/
+    [10100, 1013f]**/
     const UnicodeSet aegean_numbers_Set 
         {{{Empty, 2056}, {Full, 2}, {Empty, 32758}},
          {}};
     /** Code Point Ranges for Ancient_Greek_Numbers
-    [65856, 65935]**/
+    [10140, 1018f]**/
     const UnicodeSet ancient_greek_numbers_Set 
         {{{Empty, 2058}, {Full, 2}, {Mixed, 1}, {Empty, 32755}},
          {0x0000ffff}};
     /** Code Point Ranges for Ancient_Symbols
-    [65936, 65999]**/
+    [10190, 101cf]**/
     const UnicodeSet ancient_symbols_Set 
         {{{Empty, 2060}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32753}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Phaistos
-    [66000, 66047]**/
+    [101d0, 101ff]**/
     const UnicodeSet phaistos_Set 
         {{{Empty, 2062}, {Mixed, 1}, {Full, 1}, {Empty, 32752}},
          {0xffff0000}};
     /** Code Point Ranges for Lycian
-    [66176, 66207]**/
+    [10280, 1029f]**/
     const UnicodeSet lycian_Set 
         {{{Empty, 2068}, {Full, 1}, {Empty, 32747}},
          {}};
     /** Code Point Ranges for Carian
-    [66208, 66271]**/
+    [102a0, 102df]**/
     const UnicodeSet carian_Set 
         {{{Empty, 2069}, {Full, 2}, {Empty, 32745}},
          {}};
     /** Code Point Ranges for Coptic_Epact_Numbers
-    [66272, 66303]**/
+    [102e0, 102ff]**/
     const UnicodeSet coptic_epact_numbers_Set 
         {{{Empty, 2071}, {Full, 1}, {Empty, 32744}},
          {}};
     /** Code Point Ranges for Old_Italic
-    [66304, 66351]**/
+    [10300, 1032f]**/
     const UnicodeSet old_italic_Set 
         {{{Empty, 2072}, {Full, 1}, {Mixed, 1}, {Empty, 32742}},
          {0x0000ffff}};
     /** Code Point Ranges for Gothic
-    [66352, 66383]**/
+    [10330, 1034f]**/
     const UnicodeSet gothic_Set 
         {{{Empty, 2073}, {Mixed, 2}, {Empty, 32741}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Old_Permic
-    [66384, 66431]**/
+    [10350, 1037f]**/
     const UnicodeSet old_permic_Set 
         {{{Empty, 2074}, {Mixed, 1}, {Full, 1}, {Empty, 32740}},
          {0xffff0000}};
     /** Code Point Ranges for Ugaritic
-    [66432, 66463]**/
+    [10380, 1039f]**/
     const UnicodeSet ugaritic_Set 
         {{{Empty, 2076}, {Full, 1}, {Empty, 32739}},
          {}};
     /** Code Point Ranges for Old_Persian
-    [66464, 66527]**/
+    [103a0, 103df]**/
     const UnicodeSet old_persian_Set 
         {{{Empty, 2077}, {Full, 2}, {Empty, 32737}},
          {}};
     /** Code Point Ranges for Deseret
-    [66560, 66639]**/
+    [10400, 1044f]**/
     const UnicodeSet deseret_Set 
         {{{Empty, 2080}, {Full, 2}, {Mixed, 1}, {Empty, 32733}},
          {0x0000ffff}};
     /** Code Point Ranges for Shavian
-    [66640, 66687]**/
+    [10450, 1047f]**/
     const UnicodeSet shavian_Set 
         {{{Empty, 2082}, {Mixed, 1}, {Full, 1}, {Empty, 32732}},
          {0xffff0000}};
     /** Code Point Ranges for Osmanya
-    [66688, 66735]**/
+    [10480, 104af]**/
     const UnicodeSet osmanya_Set 
         {{{Empty, 2084}, {Full, 1}, {Mixed, 1}, {Empty, 32730}},
          {0x0000ffff}};
     /** Code Point Ranges for Osage
-    [66736, 66815]**/
+    [104b0, 104ff]**/
     const UnicodeSet osage_Set 
         {{{Empty, 2085}, {Mixed, 1}, {Full, 2}, {Empty, 32728}},
          {0xffff0000}};
     /** Code Point Ranges for Elbasan
-    [66816, 66863]**/
+    [10500, 1052f]**/
     const UnicodeSet elbasan_Set 
         {{{Empty, 2088}, {Full, 1}, {Mixed, 1}, {Empty, 32726}},
          {0x0000ffff}};
     /** Code Point Ranges for Caucasian_Albanian
-    [66864, 66927]**/
+    [10530, 1056f]**/
     const UnicodeSet caucasian_albanian_Set 
         {{{Empty, 2089}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 32724}},
          {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Linear_A
-    [67072, 67455]**/
+    [10600, 1077f]**/
     const UnicodeSet linear_a_Set 
         {{{Empty, 2096}, {Full, 12}, {Empty, 32708}},
          {}};
     /** Code Point Ranges for Cypriot_Syllabary
-    [67584, 67647]**/
+    [10800, 1083f]**/
     const UnicodeSet cypriot_syllabary_Set 
         {{{Empty, 2112}, {Full, 2}, {Empty, 32702}},
          {}};
     /** Code Point Ranges for Imperial_Aramaic
-    [67648, 67679]**/
+    [10840, 1085f]**/
     const UnicodeSet imperial_aramaic_Set 
         {{{Empty, 2114}, {Full, 1}, {Empty, 32701}},
          {}};
     /** Code Point Ranges for Palmyrene
-    [67680, 67711]**/
+    [10860, 1087f]**/
     const UnicodeSet palmyrene_Set 
         {{{Empty, 2115}, {Full, 1}, {Empty, 32700}},
          {}};
     /** Code Point Ranges for Nabataean
-    [67712, 67759]**/
+    [10880, 108af]**/
     const UnicodeSet nabataean_Set 
         {{{Empty, 2116}, {Full, 1}, {Mixed, 1}, {Empty, 32698}},
          {0x0000ffff}};
     /** Code Point Ranges for Hatran
-    [67808, 67839]**/
+    [108e0, 108ff]**/
     const UnicodeSet hatran_Set 
         {{{Empty, 2119}, {Full, 1}, {Empty, 32696}},
          {}};
     /** Code Point Ranges for Phoenician
-    [67840, 67871]**/
+    [10900, 1091f]**/
     const UnicodeSet phoenician_Set 
         {{{Empty, 2120}, {Full, 1}, {Empty, 32695}},
          {}};
     /** Code Point Ranges for Lydian
-    [67872, 67903]**/
+    [10920, 1093f]**/
     const UnicodeSet lydian_Set 
         {{{Empty, 2121}, {Full, 1}, {Empty, 32694}},
          {}};
     /** Code Point Ranges for Meroitic_Hieroglyphs
-    [67968, 67999]**/
+    [10980, 1099f]**/
     const UnicodeSet meroitic_hieroglyphs_Set 
         {{{Empty, 2124}, {Full, 1}, {Empty, 32691}},
          {}};
     /** Code Point Ranges for Meroitic_Cursive
-    [68000, 68095]**/
+    [109a0, 109ff]**/
     const UnicodeSet meroitic_cursive_Set 
         {{{Empty, 2125}, {Full, 3}, {Empty, 32688}},
          {}};
     /** Code Point Ranges for Kharoshthi
-    [68096, 68191]**/
+    [10a00, 10a5f]**/
     const UnicodeSet kharoshthi_Set 
         {{{Empty, 2128}, {Full, 3}, {Empty, 32685}},
          {}};
     /** Code Point Ranges for Old_South_Arabian
-    [68192, 68223]**/
+    [10a60, 10a7f]**/
     const UnicodeSet old_south_arabian_Set 
         {{{Empty, 2131}, {Full, 1}, {Empty, 32684}},
          {}};
     /** Code Point Ranges for Old_North_Arabian
-    [68224, 68255]**/
+    [10a80, 10a9f]**/
     const UnicodeSet old_north_arabian_Set 
         {{{Empty, 2132}, {Full, 1}, {Empty, 32683}},
          {}};
     /** Code Point Ranges for Manichaean
-    [68288, 68351]**/
+    [10ac0, 10aff]**/
     const UnicodeSet manichaean_Set 
         {{{Empty, 2134}, {Full, 2}, {Empty, 32680}},
          {}};
     /** Code Point Ranges for Avestan
-    [68352, 68415]**/
+    [10b00, 10b3f]**/
     const UnicodeSet avestan_Set 
         {{{Empty, 2136}, {Full, 2}, {Empty, 32678}},
          {}};
     /** Code Point Ranges for Inscriptional_Parthian
-    [68416, 68447]**/
+    [10b40, 10b5f]**/
     const UnicodeSet inscriptional_parthian_Set 
         {{{Empty, 2138}, {Full, 1}, {Empty, 32677}},
          {}};
     /** Code Point Ranges for Inscriptional_Pahlavi
-    [68448, 68479]**/
+    [10b60, 10b7f]**/
     const UnicodeSet inscriptional_pahlavi_Set 
         {{{Empty, 2139}, {Full, 1}, {Empty, 32676}},
          {}};
     /** Code Point Ranges for Psalter_Pahlavi
-    [68480, 68527]**/
+    [10b80, 10baf]**/
     const UnicodeSet psalter_pahlavi_Set 
         {{{Empty, 2140}, {Full, 1}, {Mixed, 1}, {Empty, 32674}},
          {0x0000ffff}};
     /** Code Point Ranges for Old_Turkic
-    [68608, 68687]**/
+    [10c00, 10c4f]**/
     const UnicodeSet old_turkic_Set 
         {{{Empty, 2144}, {Full, 2}, {Mixed, 1}, {Empty, 32669}},
          {0x0000ffff}};
     /** Code Point Ranges for Old_Hungarian
-    [68736, 68863]**/
+    [10c80, 10cff]**/
     const UnicodeSet old_hungarian_Set 
         {{{Empty, 2148}, {Full, 4}, {Empty, 32664}},
          {}};
     /** Code Point Ranges for Rumi
-    [69216, 69247]**/
+    [10e60, 10e7f]**/
     const UnicodeSet rumi_Set 
         {{{Empty, 2163}, {Full, 1}, {Empty, 32652}},
          {}};
     /** Code Point Ranges for Brahmi
-    [69632, 69759]**/
+    [11000, 1107f]**/
     const UnicodeSet brahmi_Set 
         {{{Empty, 2176}, {Full, 4}, {Empty, 32636}},
          {}};
     /** Code Point Ranges for Kaithi
-    [69760, 69839]**/
+    [11080, 110cf]**/
     const UnicodeSet kaithi_Set 
         {{{Empty, 2180}, {Full, 2}, {Mixed, 1}, {Empty, 32633}},
          {0x0000ffff}};
     /** Code Point Ranges for Sora_Sompeng
-    [69840, 69887]**/
+    [110d0, 110ff]**/
     const UnicodeSet sora_sompeng_Set 
         {{{Empty, 2182}, {Mixed, 1}, {Full, 1}, {Empty, 32632}},
          {0xffff0000}};
     /** Code Point Ranges for Chakma
-    [69888, 69967]**/
+    [11100, 1114f]**/
     const UnicodeSet chakma_Set 
         {{{Empty, 2184}, {Full, 2}, {Mixed, 1}, {Empty, 32629}},
          {0x0000ffff}};
     /** Code Point Ranges for Mahajani
-    [69968, 70015]**/
+    [11150, 1117f]**/
     const UnicodeSet mahajani_Set 
         {{{Empty, 2186}, {Mixed, 1}, {Full, 1}, {Empty, 32628}},
          {0xffff0000}};
     /** Code Point Ranges for Sharada
-    [70016, 70111]**/
+    [11180, 111df]**/
     const UnicodeSet sharada_Set 
         {{{Empty, 2188}, {Full, 3}, {Empty, 32625}},
          {}};
     /** Code Point Ranges for Sinhala_Archaic_Numbers
-    [70112, 70143]**/
+    [111e0, 111ff]**/
     const UnicodeSet sinhala_archaic_numbers_Set 
         {{{Empty, 2191}, {Full, 1}, {Empty, 32624}},
          {}};
     /** Code Point Ranges for Khojki
-    [70144, 70223]**/
+    [11200, 1124f]**/
     const UnicodeSet khojki_Set 
         {{{Empty, 2192}, {Full, 2}, {Mixed, 1}, {Empty, 32621}},
          {0x0000ffff}};
     /** Code Point Ranges for Multani
-    [70272, 70319]**/
+    [11280, 112af]**/
     const UnicodeSet multani_Set 
         {{{Empty, 2196}, {Full, 1}, {Mixed, 1}, {Empty, 32618}},
          {0x0000ffff}};
     /** Code Point Ranges for Khudawadi
-    [70320, 70399]**/
+    [112b0, 112ff]**/
     const UnicodeSet khudawadi_Set 
         {{{Empty, 2197}, {Mixed, 1}, {Full, 2}, {Empty, 32616}},
          {0xffff0000}};
     /** Code Point Ranges for Grantha
-    [70400, 70527]**/
+    [11300, 1137f]**/
     const UnicodeSet grantha_Set 
         {{{Empty, 2200}, {Full, 4}, {Empty, 32612}},
          {}};
     /** Code Point Ranges for Newa
-    [70656, 70783]**/
+    [11400, 1147f]**/
     const UnicodeSet newa_Set 
         {{{Empty, 2208}, {Full, 4}, {Empty, 32604}},
          {}};
     /** Code Point Ranges for Tirhuta
-    [70784, 70879]**/
+    [11480, 114df]**/
     const UnicodeSet tirhuta_Set 
         {{{Empty, 2212}, {Full, 3}, {Empty, 32601}},
          {}};
     /** Code Point Ranges for Siddham
-    [71040, 71167]**/
+    [11580, 115ff]**/
     const UnicodeSet siddham_Set 
         {{{Empty, 2220}, {Full, 4}, {Empty, 32592}},
          {}};
     /** Code Point Ranges for Modi
-    [71168, 71263]**/
+    [11600, 1165f]**/
     const UnicodeSet modi_Set 
         {{{Empty, 2224}, {Full, 3}, {Empty, 32589}},
          {}};
     /** Code Point Ranges for Mongolian_Sup
-    [71264, 71295]**/
+    [11660, 1167f]**/
     const UnicodeSet mongolian_sup_Set 
         {{{Empty, 2227}, {Full, 1}, {Empty, 32588}},
          {}};
     /** Code Point Ranges for Takri
-    [71296, 71375]**/
+    [11680, 116cf]**/
     const UnicodeSet takri_Set 
         {{{Empty, 2228}, {Full, 2}, {Mixed, 1}, {Empty, 32585}},
          {0x0000ffff}};
     /** Code Point Ranges for Ahom
-    [71424, 71487]**/
+    [11700, 1173f]**/
     const UnicodeSet ahom_Set 
         {{{Empty, 2232}, {Full, 2}, {Empty, 32582}},
          {}};
     /** Code Point Ranges for Warang_Citi
-    [71840, 71935]**/
+    [118a0, 118ff]**/
     const UnicodeSet warang_citi_Set 
         {{{Empty, 2245}, {Full, 3}, {Empty, 32568}},
          {}};
     /** Code Point Ranges for Pau_Cin_Hau
-    [72384, 72447]**/
+    [11ac0, 11aff]**/
     const UnicodeSet pau_cin_hau_Set 
         {{{Empty, 2262}, {Full, 2}, {Empty, 32552}},
          {}};
     /** Code Point Ranges for Bhaiksuki
-    [72704, 72815]**/
+    [11c00, 11c6f]**/
     const UnicodeSet bhaiksuki_Set 
         {{{Empty, 2272}, {Full, 3}, {Mixed, 1}, {Empty, 32540}},
          {0x0000ffff}};
     /** Code Point Ranges for Marchen
-    [72816, 72895]**/
+    [11c70, 11cbf]**/
     const UnicodeSet marchen_Set 
         {{{Empty, 2275}, {Mixed, 1}, {Full, 2}, {Empty, 32538}},
          {0xffff0000}};
     /** Code Point Ranges for Cuneiform
-    [73728, 74751]**/
+    [12000, 123ff]**/
     const UnicodeSet cuneiform_Set 
         {{{Empty, 2304}, {Full, 32}, {Empty, 32480}},
          {}};
     /** Code Point Ranges for Cuneiform_Numbers
-    [74752, 74879]**/
+    [12400, 1247f]**/
     const UnicodeSet cuneiform_numbers_Set 
         {{{Empty, 2336}, {Full, 4}, {Empty, 32476}},
          {}};
     /** Code Point Ranges for Early_Dynastic_Cuneiform
-    [74880, 75087]**/
+    [12480, 1254f]**/
     const UnicodeSet early_dynastic_cuneiform_Set 
         {{{Empty, 2340}, {Full, 6}, {Mixed, 1}, {Empty, 32469}},
          {0x0000ffff}};
     /** Code Point Ranges for Egyptian_Hieroglyphs
-    [77824, 78895]**/
+    [13000, 1342f]**/
     const UnicodeSet egyptian_hieroglyphs_Set 
         {{{Empty, 2432}, {Full, 33}, {Mixed, 1}, {Empty, 32350}},
          {0x0000ffff}};
     /** Code Point Ranges for Anatolian_Hieroglyphs
-    [82944, 83583]**/
+    [14400, 1467f]**/
     const UnicodeSet anatolian_hieroglyphs_Set 
         {{{Empty, 2592}, {Full, 20}, {Empty, 32204}},
          {}};
     /** Code Point Ranges for Bamum_Sup
-    [92160, 92735]**/
+    [16800, 16a3f]**/
     const UnicodeSet bamum_sup_Set 
         {{{Empty, 2880}, {Full, 18}, {Empty, 31918}},
          {}};
     /** Code Point Ranges for Mro
-    [92736, 92783]**/
+    [16a40, 16a6f]**/
     const UnicodeSet mro_Set 
         {{{Empty, 2898}, {Full, 1}, {Mixed, 1}, {Empty, 31916}},
          {0x0000ffff}};
     /** Code Point Ranges for Bassa_Vah
-    [92880, 92927]**/
+    [16ad0, 16aff]**/
     const UnicodeSet bassa_vah_Set 
         {{{Empty, 2902}, {Mixed, 1}, {Full, 1}, {Empty, 31912}},
          {0xffff0000}};
     /** Code Point Ranges for Pahawh_Hmong
-    [92928, 93071]**/
+    [16b00, 16b8f]**/
     const UnicodeSet pahawh_hmong_Set 
         {{{Empty, 2904}, {Full, 4}, {Mixed, 1}, {Empty, 31907}},
          {0x0000ffff}};
     /** Code Point Ranges for Miao
-    [93952, 94111]**/
+    [16f00, 16f9f]**/
     const UnicodeSet miao_Set 
         {{{Empty, 2936}, {Full, 5}, {Empty, 31875}},
          {}};
     /** Code Point Ranges for Ideographic_Symbols
-    [94176, 94207]**/
+    [16fe0, 16fff]**/
     const UnicodeSet ideographic_symbols_Set 
         {{{Empty, 2943}, {Full, 1}, {Empty, 31872}},
          {}};
     /** Code Point Ranges for Tangut
-    [94208, 100351]**/
+    [17000, 187ff]**/
     const UnicodeSet tangut_Set 
         {{{Empty, 2944}, {Full, 192}, {Empty, 31680}},
          {}};
     /** Code Point Ranges for Tangut_Components
-    [100352, 101119]**/
+    [18800, 18aff]**/
     const UnicodeSet tangut_components_Set 
         {{{Empty, 3136}, {Full, 24}, {Empty, 31656}},
          {}};
     /** Code Point Ranges for Kana_Sup
-    [110592, 110847]**/
+    [1b000, 1b0ff]**/
     const UnicodeSet kana_sup_Set 
         {{{Empty, 3456}, {Full, 8}, {Empty, 31352}},
          {}};
     /** Code Point Ranges for Duployan
-    [113664, 113823]**/
+    [1bc00, 1bc9f]**/
     const UnicodeSet duployan_Set 
         {{{Empty, 3552}, {Full, 5}, {Empty, 31259}},
          {}};
     /** Code Point Ranges for Shorthand_Format_Controls
-    [113824, 113839]**/
+    [1bca0, 1bcaf]**/
     const UnicodeSet shorthand_format_controls_Set 
         {{{Empty, 3557}, {Mixed, 1}, {Empty, 31258}},
          {0x0000ffff}};
     /** Code Point Ranges for Byzantine_Music
-    [118784, 119039]**/
+    [1d000, 1d0ff]**/
     const UnicodeSet byzantine_music_Set 
         {{{Empty, 3712}, {Full, 8}, {Empty, 31096}},
          {}};
     /** Code Point Ranges for Music
-    [119040, 119295]**/
+    [1d100, 1d1ff]**/
     const UnicodeSet music_Set 
         {{{Empty, 3720}, {Full, 8}, {Empty, 31088}},
          {}};
     /** Code Point Ranges for Ancient_Greek_Music
-    [119296, 119375]**/
+    [1d200, 1d24f]**/
     const UnicodeSet ancient_greek_music_Set 
         {{{Empty, 3728}, {Full, 2}, {Mixed, 1}, {Empty, 31085}},
          {0x0000ffff}};
     /** Code Point Ranges for Tai_Xuan_Jing
-    [119552, 119647]**/
+    [1d300, 1d35f]**/
     const UnicodeSet tai_xuan_jing_Set 
         {{{Empty, 3736}, {Full, 3}, {Empty, 31077}},
          {}};
     /** Code Point Ranges for Counting_Rod
-    [119648, 119679]**/
+    [1d360, 1d37f]**/
     const UnicodeSet counting_rod_Set 
         {{{Empty, 3739}, {Full, 1}, {Empty, 31076}},
          {}};
     /** Code Point Ranges for Math_Alphanum
-    [119808, 120831]**/
+    [1d400, 1d7ff]**/
     const UnicodeSet math_alphanum_Set 
         {{{Empty, 3744}, {Full, 32}, {Empty, 31040}},
          {}};
     /** Code Point Ranges for Sutton_SignWriting
-    [120832, 121519]**/
+    [1d800, 1daaf]**/
     const UnicodeSet sutton_signwriting_Set 
         {{{Empty, 3776}, {Full, 21}, {Mixed, 1}, {Empty, 31018}},
          {0x0000ffff}};
     /** Code Point Ranges for Glagolitic_Sup
-    [122880, 122927]**/
+    [1e000, 1e02f]**/
     const UnicodeSet glagolitic_sup_Set 
         {{{Empty, 3840}, {Full, 1}, {Mixed, 1}, {Empty, 30974}},
          {0x0000ffff}};
     /** Code Point Ranges for Mende_Kikakui
-    [124928, 125151]**/
+    [1e800, 1e8df]**/
     const UnicodeSet mende_kikakui_Set 
         {{{Empty, 3904}, {Full, 7}, {Empty, 30905}},
          {}};
     /** Code Point Ranges for Adlam
-    [125184, 125279]**/
+    [1e900, 1e95f]**/
     const UnicodeSet adlam_Set 
         {{{Empty, 3912}, {Full, 3}, {Empty, 30901}},
          {}};
     /** Code Point Ranges for Arabic_Math
-    [126464, 126719]**/
+    [1ee00, 1eeff]**/
     const UnicodeSet arabic_math_Set 
         {{{Empty, 3952}, {Full, 8}, {Empty, 30856}},
          {}};
     /** Code Point Ranges for Mahjong
-    [126976, 127023]**/
+    [1f000, 1f02f]**/
     const UnicodeSet mahjong_Set 
         {{{Empty, 3968}, {Full, 1}, {Mixed, 1}, {Empty, 30846}},
          {0x0000ffff}};
     /** Code Point Ranges for Domino
-    [127024, 127135]**/
+    [1f030, 1f09f]**/
     const UnicodeSet domino_Set 
         {{{Empty, 3969}, {Mixed, 1}, {Full, 3}, {Empty, 30843}},
          {0xffff0000}};
     /** Code Point Ranges for Playing_Cards
-    [127136, 127231]**/
+    [1f0a0, 1f0ff]**/
     const UnicodeSet playing_cards_Set 
         {{{Empty, 3973}, {Full, 3}, {Empty, 30840}},
          {}};
     /** Code Point Ranges for Enclosed_Alphanum_Sup
-    [127232, 127487]**/
+    [1f100, 1f1ff]**/
     const UnicodeSet enclosed_alphanum_sup_Set 
         {{{Empty, 3976}, {Full, 8}, {Empty, 30832}},
          {}};
     /** Code Point Ranges for Enclosed_Ideographic_Sup
-    [127488, 127743]**/
+    [1f200, 1f2ff]**/
     const UnicodeSet enclosed_ideographic_sup_Set 
         {{{Empty, 3984}, {Full, 8}, {Empty, 30824}},
          {}};
     /** Code Point Ranges for Misc_Pictographs
-    [127744, 128511]**/
+    [1f300, 1f5ff]**/
     const UnicodeSet misc_pictographs_Set 
         {{{Empty, 3992}, {Full, 24}, {Empty, 30800}},
          {}};
     /** Code Point Ranges for Emoticons
-    [128512, 128591]**/
+    [1f600, 1f64f]**/
     const UnicodeSet emoticons_Set 
         {{{Empty, 4016}, {Full, 2}, {Mixed, 1}, {Empty, 30797}},
          {0x0000ffff}};
     /** Code Point Ranges for Ornamental_Dingbats
-    [128592, 128639]**/
+    [1f650, 1f67f]**/
     const UnicodeSet ornamental_dingbats_Set 
         {{{Empty, 4018}, {Mixed, 1}, {Full, 1}, {Empty, 30796}},
          {0xffff0000}};
     /** Code Point Ranges for Transport_And_Map
-    [128640, 128767]**/
+    [1f680, 1f6ff]**/
     const UnicodeSet transport_and_map_Set 
         {{{Empty, 4020}, {Full, 4}, {Empty, 30792}},
          {}};
     /** Code Point Ranges for Alchemical
-    [128768, 128895]**/
+    [1f700, 1f77f]**/
     const UnicodeSet alchemical_Set 
         {{{Empty, 4024}, {Full, 4}, {Empty, 30788}},
          {}};
     /** Code Point Ranges for Geometric_Shapes_Ext
-    [128896, 129023]**/
+    [1f780, 1f7ff]**/
     const UnicodeSet geometric_shapes_ext_Set 
         {{{Empty, 4028}, {Full, 4}, {Empty, 30784}},
          {}};
     /** Code Point Ranges for Sup_Arrows_C
-    [129024, 129279]**/
+    [1f800, 1f8ff]**/
     const UnicodeSet sup_arrows_c_Set 
         {{{Empty, 4032}, {Full, 8}, {Empty, 30776}},
          {}};
     /** Code Point Ranges for Sup_Symbols_And_Pictographs
-    [129280, 129535]**/
+    [1f900, 1f9ff]**/
     const UnicodeSet sup_symbols_and_pictographs_Set 
         {{{Empty, 4040}, {Full, 8}, {Empty, 30768}},
          {}};
     /** Code Point Ranges for CJK_Ext_B
-    [131072, 173791]**/
+    [20000, 2a6df]**/
     const UnicodeSet cjk_ext_b_Set 
         {{{Empty, 4096}, {Full, 1335}, {Empty, 29385}},
          {}};
     /** Code Point Ranges for CJK_Ext_C
-    [173824, 177983]**/
+    [2a700, 2b73f]**/
     const UnicodeSet cjk_ext_c_Set 
         {{{Empty, 5432}, {Full, 130}, {Empty, 29254}},
          {}};
     /** Code Point Ranges for CJK_Ext_D
-    [177984, 178207]**/
+    [2b740, 2b81f]**/
     const UnicodeSet cjk_ext_d_Set 
         {{{Empty, 5562}, {Full, 7}, {Empty, 29247}},
          {}};
     /** Code Point Ranges for CJK_Ext_E
-    [178208, 183983]**/
+    [2b820, 2ceaf]**/
     const UnicodeSet cjk_ext_e_Set 
         {{{Empty, 5569}, {Full, 180}, {Mixed, 1}, {Empty, 29066}},
          {0x0000ffff}};
     /** Code Point Ranges for CJK_Compat_Ideographs_Sup
-    [194560, 195103]**/
+    [2f800, 2fa1f]**/
     const UnicodeSet cjk_compat_ideographs_sup_Set 
         {{{Empty, 6080}, {Full, 17}, {Empty, 28719}},
          {}};
     /** Code Point Ranges for Tags
-    [917504, 917631]**/
+    [e0000, e007f]**/
     const UnicodeSet tags_Set 
         {{{Empty, 28672}, {Full, 4}, {Empty, 6140}},
          {}};
     /** Code Point Ranges for VS_Sup
-    [917760, 917999]**/
+    [e0100, e01ef]**/
     const UnicodeSet vs_sup_Set 
         {{{Empty, 28680}, {Full, 7}, {Mixed, 1}, {Empty, 6128}},
          {0x0000ffff}};
     /** Code Point Ranges for Sup_PUA_A
-    [983040, 1048575]**/
+    [f0000, fffff]**/
     const UnicodeSet sup_pua_a_Set 
         {{{Empty, 30720}, {Full, 2048}, {Empty, 2048}},
          {}};
     /** Code Point Ranges for Sup_PUA_B
-    [1048576, 1114111]**/
+    [100000, 10ffff]**/
     const UnicodeSet sup_pua_b_Set 
         {{{Empty, 32768}, {Full, 2048}},
          {}};

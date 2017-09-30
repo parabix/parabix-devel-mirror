@@ -1,7 +1,7 @@
 #ifndef PROPERTYOBJECTTABLE_H
 #define PROPERTYOBJECTTABLE_H
 /*
- *  Copyright (c) 2016 International Characters, Inc.
+ *  Copyright (c) 2017 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -12,6 +12,7 @@
 #include "PropertyObjects.h"
 #include <array>
 #include "Blocks.h"
+#include "CompositionExclusions.h"
 #include "DerivedAge.h"
 #include "DerivedBidiClass.h"
 #include "DerivedBinaryProperties.h"
@@ -26,6 +27,8 @@
 #include "EastAsianWidth.h"
 #include "GraphemeBreakProperty.h"
 #include "HangulSyllableType.h"
+#include "IndicPositionalCategory.h"
+#include "IndicSyllabicCategory.h"
 #include "LineBreak.h"
 #include "PropList.h"
 #include "ScriptExtensions.h"
@@ -34,7 +37,6 @@
 #include "WordBreakProperty.h"
 
 namespace UCD {
-   const std::string UnicodeVersion = "9.0.0";
 
   const std::array<PropertyObject *, 118> property_object_table = {{
     new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
@@ -83,8 +85,8 @@ namespace UCD {
     &GC_ns::property_object,
     &GCB_ns::property_object,
     &HST_ns::property_object,
-    new UnsupportedPropertyObject(InPC, PropertyObject::ClassTypeId::EnumeratedProperty),
-    new UnsupportedPropertyObject(InSC, PropertyObject::ClassTypeId::EnumeratedProperty),
+    &INPC_ns::property_object,
+    &INSC_ns::property_object,
     &JG_ns::property_object,
     &JT_ns::property_object,
     &LB_ns::property_object,
@@ -100,7 +102,7 @@ namespace UCD {
     &BIDI_C_ns::property_object,
     &BIDI_M_ns::property_object,
     &CASED_ns::property_object,
-    new UnsupportedPropertyObject(CE, PropertyObject::ClassTypeId::BinaryProperty),
+    &CE_ns::property_object,
     &CI_ns::property_object,
     &COMP_EX_ns::property_object,
     &CWCF_ns::property_object,

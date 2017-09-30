@@ -1,7 +1,7 @@
 #ifndef PROPERTYVALUEALIASES_H
 #define PROPERTYVALUEALIASES_H
 /*
- *  Copyright (c) 2016 International Characters, Inc.
+ *  Copyright (c) 2017 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -634,62 +634,60 @@ namespace UCD {
 
     namespace INPC_ns {
         enum value_t {
-            Bottom, Bottom_And_Right, Left, Left_And_Right, NA, Overstruck,
-            Right, Top, Top_And_Bottom, Top_And_Bottom_And_Right,
-            Top_And_Left, Top_And_Left_And_Right, Top_And_Right,
-            Visual_Order_Left};
+            NA, Right, Left, Visual_Order_Left, Left_And_Right, Top, Bottom,
+            Top_And_Bottom, Top_And_Right, Top_And_Left,
+            Top_And_Left_And_Right, Bottom_And_Right,
+            Top_And_Bottom_And_Right, Overstruck};
         const static std::vector<std::string> enum_names = {
-            "Bottom", "Bottom_And_Right", "Left", "Left_And_Right", "NA",
-            "Overstruck", "Right", "Top", "Top_And_Bottom",
-            "Top_And_Bottom_And_Right", "Top_And_Left",
-            "Top_And_Left_And_Right", "Top_And_Right", "Visual_Order_Left"};
+            "NA", "Right", "Left", "Visual_Order_Left", "Left_And_Right",
+            "Top", "Bottom", "Top_And_Bottom", "Top_And_Right",
+            "Top_And_Left", "Top_And_Left_And_Right", "Bottom_And_Right",
+            "Top_And_Bottom_And_Right", "Overstruck"};
         const static std::vector<std::string> value_names = {
-            "Bottom", "Bottom_And_Right", "Left", "Left_And_Right", "NA",
-            "Overstruck", "Right", "Top", "Top_And_Bottom",
-            "Top_And_Bottom_And_Right", "Top_And_Left",
-            "Top_And_Left_And_Right", "Top_And_Right", "Visual_Order_Left"};
+            "NA", "Right", "Left", "Visual_Order_Left", "Left_And_Right",
+            "Top", "Bottom", "Top_And_Bottom", "Top_And_Right",
+            "Top_And_Left", "Top_And_Left_And_Right", "Bottom_And_Right",
+            "Top_And_Bottom_And_Right", "Overstruck"};
         static std::unordered_map<std::string, int> aliases_only_map {{
             }};
     }
 
     namespace INSC_ns {
         enum value_t {
-            Avagraha, Bindu, Brahmi_Joining_Number, Cantillation_Mark,
-            Consonant, Consonant_Dead, Consonant_Final,
-            Consonant_Head_Letter, Consonant_Killer, Consonant_Medial,
-            Consonant_Placeholder, Consonant_Preceding_Repha,
-            Consonant_Prefixed, Consonant_Subjoined,
-            Consonant_Succeeding_Repha, Consonant_With_Stacker,
-            Gemination_Mark, Invisible_Stacker, Joiner, Modifying_Letter,
-            Non_Joiner, Nukta, Number, Number_Joiner, Other, Pure_Killer,
-            Register_Shifter, Syllable_Modifier, Tone_Letter, Tone_Mark,
-            Virama, Visarga, Vowel, Vowel_Dependent, Vowel_Independent};
+            Other, Bindu, Visarga, Avagraha, Nukta, Virama, Pure_Killer,
+            Invisible_Stacker, Vowel_Independent, Vowel_Dependent, Vowel,
+            Consonant_Placeholder, Consonant, Consonant_Dead,
+            Consonant_With_Stacker, Consonant_Prefixed,
+            Consonant_Preceding_Repha, Consonant_Succeeding_Repha,
+            Consonant_Subjoined, Consonant_Medial, Consonant_Final,
+            Consonant_Head_Letter, Modifying_Letter, Tone_Letter, Tone_Mark,
+            Gemination_Mark, Cantillation_Mark, Register_Shifter,
+            Syllable_Modifier, Consonant_Killer, Non_Joiner, Joiner,
+            Number_Joiner, Number, Brahmi_Joining_Number};
         const static std::vector<std::string> enum_names = {
-            "Avagraha", "Bindu", "Brahmi_Joining_Number",
-            "Cantillation_Mark", "Consonant", "Consonant_Dead",
-            "Consonant_Final", "Consonant_Head_Letter", "Consonant_Killer",
-            "Consonant_Medial", "Consonant_Placeholder",
-            "Consonant_Preceding_Repha", "Consonant_Prefixed",
-            "Consonant_Subjoined", "Consonant_Succeeding_Repha",
-            "Consonant_With_Stacker", "Gemination_Mark",
-            "Invisible_Stacker", "Joiner", "Modifying_Letter", "Non_Joiner",
-            "Nukta", "Number", "Number_Joiner", "Other", "Pure_Killer",
-            "Register_Shifter", "Syllable_Modifier", "Tone_Letter",
-            "Tone_Mark", "Virama", "Visarga", "Vowel", "Vowel_Dependent",
-            "Vowel_Independent"};
+            "Other", "Bindu", "Visarga", "Avagraha", "Nukta", "Virama",
+            "Pure_Killer", "Invisible_Stacker", "Vowel_Independent",
+            "Vowel_Dependent", "Vowel", "Consonant_Placeholder",
+            "Consonant", "Consonant_Dead", "Consonant_With_Stacker",
+            "Consonant_Prefixed", "Consonant_Preceding_Repha",
+            "Consonant_Succeeding_Repha", "Consonant_Subjoined",
+            "Consonant_Medial", "Consonant_Final", "Consonant_Head_Letter",
+            "Modifying_Letter", "Tone_Letter", "Tone_Mark",
+            "Gemination_Mark", "Cantillation_Mark", "Register_Shifter",
+            "Syllable_Modifier", "Consonant_Killer", "Non_Joiner", "Joiner",
+            "Number_Joiner", "Number", "Brahmi_Joining_Number"};
         const static std::vector<std::string> value_names = {
-            "Avagraha", "Bindu", "Brahmi_Joining_Number",
-            "Cantillation_Mark", "Consonant", "Consonant_Dead",
-            "Consonant_Final", "Consonant_Head_Letter", "Consonant_Killer",
-            "Consonant_Medial", "Consonant_Placeholder",
-            "Consonant_Preceding_Repha", "Consonant_Prefixed",
-            "Consonant_Subjoined", "Consonant_Succeeding_Repha",
-            "Consonant_With_Stacker", "Gemination_Mark",
-            "Invisible_Stacker", "Joiner", "Modifying_Letter", "Non_Joiner",
-            "Nukta", "Number", "Number_Joiner", "Other", "Pure_Killer",
-            "Register_Shifter", "Syllable_Modifier", "Tone_Letter",
-            "Tone_Mark", "Virama", "Visarga", "Vowel", "Vowel_Dependent",
-            "Vowel_Independent"};
+            "Other", "Bindu", "Visarga", "Avagraha", "Nukta", "Virama",
+            "Pure_Killer", "Invisible_Stacker", "Vowel_Independent",
+            "Vowel_Dependent", "Vowel", "Consonant_Placeholder",
+            "Consonant", "Consonant_Dead", "Consonant_With_Stacker",
+            "Consonant_Prefixed", "Consonant_Preceding_Repha",
+            "Consonant_Succeeding_Repha", "Consonant_Subjoined",
+            "Consonant_Medial", "Consonant_Final", "Consonant_Head_Letter",
+            "Modifying_Letter", "Tone_Letter", "Tone_Mark",
+            "Gemination_Mark", "Cantillation_Mark", "Register_Shifter",
+            "Syllable_Modifier", "Consonant_Killer", "Non_Joiner", "Joiner",
+            "Number_Joiner", "Number", "Brahmi_Joining_Number"};
         static std::unordered_map<std::string, int> aliases_only_map {{
             }};
     }
