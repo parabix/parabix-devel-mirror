@@ -9,8 +9,9 @@
  */
 
 #include "PropertyAliases.h"
+#include "PropertyObjects.h"
+#include "PropertyValueAliases.h"
 #include "unicode_set.h"
-#include <vector>
 
 namespace UCD {
     namespace BIDI_M_ns {

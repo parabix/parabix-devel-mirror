@@ -9,8 +9,9 @@
  */
 
 #include "PropertyAliases.h"
+#include "PropertyObjects.h"
+#include "PropertyValueAliases.h"
 #include "unicode_set.h"
-#include <vector>
 
 namespace UCD {
     namespace CE_ns {
@@ -37,6 +38,5 @@ namespace UCD {
         static BinaryPropertyObject property_object{CE, codepoint_set};
     }
 }
-
 
 #endif

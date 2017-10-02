@@ -26,97 +26,6 @@ namespace UCD {
             {"false", N}, {"true", Y}}};
     }
 
-    namespace JSN_ns {
-        enum value_t {
-            A, AE, B, BB, BS, C, D, DD, E, EO, EU, G, GG, GS, H, I, J, JJ,
-            K, L, LB, LG, LH, LM, LP, LS, LT, M, N, NG, NH, NJ, O, OE, P, R,
-            S, SS, T, U, WA, WAE, WE, WEO, WI, YA, YAE, YE, YEO, YI, YO, YU};
-        const static std::vector<std::string> enum_names = {
-            "A", "AE", "B", "BB", "BS", "C", "D", "DD", "E", "EO", "EU",
-            "G", "GG", "GS", "H", "I", "J", "JJ", "K", "L", "LB", "LG",
-            "LH", "LM", "LP", "LS", "LT", "M", "N", "NG", "NH", "NJ", "O",
-            "OE", "P", "R", "S", "SS", "T", "U", "WA", "WAE", "WE", "WEO",
-            "WI", "YA", "YAE", "YE", "YEO", "YI", "YO", "YU"};
-        const static std::vector<std::string> value_names = {
-            "A", "AE", "B", "BB", "BS", "C", "D", "DD", "E", "EO", "EU",
-            "G", "GG", "GS", "H", "I", "J", "JJ", "K", "L", "LB", "LG",
-            "LH", "LM", "LP", "LS", "LT", "M", "N", "NG", "NH", "NJ", "O",
-            "OE", "P", "R", "S", "SS", "T", "U", "WA", "WAE", "WE", "WEO",
-            "WI", "YA", "YAE", "YE", "YEO", "YI", "YO", "YU"};
-        static std::unordered_map<std::string, int> aliases_only_map {{
-            }};
-    }
-
-    namespace SCX_ns {
-        enum value_t {
-            Adlm, Aghb, Ahom, Arab, Armi, Armn, Avst, Bali, Bamu, Bass,
-            Batk, Beng, Bhks, Bopo, Brah, Brai, Bugi, Buhd, Cakm, Cans,
-            Cari, Cham, Cher, Copt, Cprt, Cyrl, Deva, Dsrt, Dupl, Egyp,
-            Elba, Ethi, Geor, Glag, Goth, Gran, Grek, Gujr, Guru, Hang,
-            Hani, Hano, Hatr, Hebr, Hira, Hluw, Hmng, Hrkt, Hung, Ital,
-            Java, Kali, Kana, Khar, Khmr, Khoj, Knda, Kthi, Lana, Laoo,
-            Latn, Lepc, Limb, Lina, Linb, Lisu, Lyci, Lydi, Mahj, Mand,
-            Mani, Marc, Mend, Merc, Mero, Mlym, Modi, Mong, Mroo, Mtei,
-            Mult, Mymr, Narb, Nbat, Newa, Nkoo, Ogam, Olck, Orkh, Orya,
-            Osge, Osma, Palm, Pauc, Perm, Phag, Phli, Phlp, Phnx, Plrd,
-            Prti, Rjng, Runr, Samr, Sarb, Saur, Sgnw, Shaw, Shrd, Sidd,
-            Sind, Sinh, Sora, Sund, Sylo, Syrc, Tagb, Takr, Tale, Talu,
-            Taml, Tang, Tavt, Telu, Tfng, Tglg, Thaa, Thai, Tibt, Tirh,
-            Ugar, Vaii, Wara, Xpeo, Xsux, Yiii, Zinh, Zyyy, Zzzz};
-        const static std::vector<std::string> enum_names = {
-            "Adlm", "Aghb", "Ahom", "Arab", "Armi", "Armn", "Avst", "Bali",
-            "Bamu", "Bass", "Batk", "Beng", "Bhks", "Bopo", "Brah", "Brai",
-            "Bugi", "Buhd", "Cakm", "Cans", "Cari", "Cham", "Cher", "Copt",
-            "Cprt", "Cyrl", "Deva", "Dsrt", "Dupl", "Egyp", "Elba", "Ethi",
-            "Geor", "Glag", "Goth", "Gran", "Grek", "Gujr", "Guru", "Hang",
-            "Hani", "Hano", "Hatr", "Hebr", "Hira", "Hluw", "Hmng", "Hrkt",
-            "Hung", "Ital", "Java", "Kali", "Kana", "Khar", "Khmr", "Khoj",
-            "Knda", "Kthi", "Lana", "Laoo", "Latn", "Lepc", "Limb", "Lina",
-            "Linb", "Lisu", "Lyci", "Lydi", "Mahj", "Mand", "Mani", "Marc",
-            "Mend", "Merc", "Mero", "Mlym", "Modi", "Mong", "Mroo", "Mtei",
-            "Mult", "Mymr", "Narb", "Nbat", "Newa", "Nkoo", "Ogam", "Olck",
-            "Orkh", "Orya", "Osge", "Osma", "Palm", "Pauc", "Perm", "Phag",
-            "Phli", "Phlp", "Phnx", "Plrd", "Prti", "Rjng", "Runr", "Samr",
-            "Sarb", "Saur", "Sgnw", "Shaw", "Shrd", "Sidd", "Sind", "Sinh",
-            "Sora", "Sund", "Sylo", "Syrc", "Tagb", "Takr", "Tale", "Talu",
-            "Taml", "Tang", "Tavt", "Telu", "Tfng", "Tglg", "Thaa", "Thai",
-            "Tibt", "Tirh", "Ugar", "Vaii", "Wara", "Xpeo", "Xsux", "Yiii",
-            "Zinh", "Zyyy", "Zzzz"};
-        const static std::vector<std::string> value_names = {
-            "Adlam", "Caucasian_Albanian", "Ahom", "Arabic",
-            "Imperial_Aramaic", "Armenian", "Avestan", "Balinese", "Bamum",
-            "Bassa_Vah", "Batak", "Bengali", "Bhaiksuki", "Bopomofo",
-            "Brahmi", "Braille", "Buginese", "Buhid", "Chakma",
-            "Canadian_Aboriginal", "Carian", "Cham", "Cherokee", "Coptic",
-            "Cypriot", "Cyrillic", "Devanagari", "Deseret", "Duployan",
-            "Egyptian_Hieroglyphs", "Elbasan", "Ethiopic", "Georgian",
-            "Glagolitic", "Gothic", "Grantha", "Greek", "Gujarati",
-            "Gurmukhi", "Hangul", "Han", "Hanunoo", "Hatran", "Hebrew",
-            "Hiragana", "Anatolian_Hieroglyphs", "Pahawh_Hmong",
-            "Katakana_Or_Hiragana", "Old_Hungarian", "Old_Italic",
-            "Javanese", "Kayah_Li", "Katakana", "Kharoshthi", "Khmer",
-            "Khojki", "Kannada", "Kaithi", "Tai_Tham", "Lao", "Latin",
-            "Lepcha", "Limbu", "Linear_A", "Linear_B", "Lisu", "Lycian",
-            "Lydian", "Mahajani", "Mandaic", "Manichaean", "Marchen",
-            "Mende_Kikakui", "Meroitic_Cursive", "Meroitic_Hieroglyphs",
-            "Malayalam", "Modi", "Mongolian", "Mro", "Meetei_Mayek",
-            "Multani", "Myanmar", "Old_North_Arabian", "Nabataean", "Newa",
-            "Nko", "Ogham", "Ol_Chiki", "Old_Turkic", "Oriya", "Osage",
-            "Osmanya", "Palmyrene", "Pau_Cin_Hau", "Old_Permic", "Phags_Pa",
-            "Inscriptional_Pahlavi", "Psalter_Pahlavi", "Phoenician",
-            "Miao", "Inscriptional_Parthian", "Rejang", "Runic",
-            "Samaritan", "Old_South_Arabian", "Saurashtra", "SignWriting",
-            "Shavian", "Sharada", "Siddham", "Khudawadi", "Sinhala",
-            "Sora_Sompeng", "Sundanese", "Syloti_Nagri", "Syriac",
-            "Tagbanwa", "Takri", "Tai_Le", "New_Tai_Lue", "Tamil", "Tangut",
-            "Tai_Viet", "Telugu", "Tifinagh", "Tagalog", "Thaana", "Thai",
-            "Tibetan", "Tirhuta", "Ugaritic", "Vai", "Warang_Citi",
-            "Old_Persian", "Cuneiform", "Yi", "Inherited", "Common",
-            "Unknown"};
-        static std::unordered_map<std::string, int> aliases_only_map {{
-            {"qaac", SCX_ns::Copt}, {"qaai", SCX_ns::Zinh}}};
-    }
-
     namespace AGE_ns {
         enum value_t {
             Unassigned, V1_1, V2_0, V2_1, V3_0, V3_1, V3_2, V4_0, V4_1,
@@ -497,7 +406,7 @@ namespace UCD {
             AL, A, AR, DB, DA, IS, CCC133, ATBL
         };
         const uint16_t enum_val[] = {
-          0, 1, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+              0, 1, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
             22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 84,
             91, 103, 107, 118, 122, 129, 130, 132, 202, 214, 216, 218, 220,
             222, 224, 226, 228, 230, 232, 233, 234, 240, 133, 200};
@@ -798,44 +707,44 @@ namespace UCD {
 
     namespace NFC_QC_ns {
         enum value_t {
-            M, N, Y};
+            Y, N, M};
         const static std::vector<std::string> enum_names = {
-            "M", "N", "Y"};
+            "Y", "N", "M"};
         const static std::vector<std::string> value_names = {
-            "Maybe", "No", "Yes"};
+            "Yes", "No", "Maybe"};
         static std::unordered_map<std::string, int> aliases_only_map {{
             }};
     }
 
     namespace NFD_QC_ns {
         enum value_t {
-            N, Y};
+            Y, N};
         const static std::vector<std::string> enum_names = {
-            "N", "Y"};
+            "Y", "N"};
         const static std::vector<std::string> value_names = {
-            "No", "Yes"};
+            "Yes", "No"};
         static std::unordered_map<std::string, int> aliases_only_map {{
             }};
     }
 
     namespace NFKC_QC_ns {
         enum value_t {
-            M, N, Y};
+            Y, N, M};
         const static std::vector<std::string> enum_names = {
-            "M", "N", "Y"};
+            "Y", "N", "M"};
         const static std::vector<std::string> value_names = {
-            "Maybe", "No", "Yes"};
+            "Yes", "No", "Maybe"};
         static std::unordered_map<std::string, int> aliases_only_map {{
             }};
     }
 
     namespace NFKD_QC_ns {
         enum value_t {
-            N, Y};
+            Y, N};
         const static std::vector<std::string> enum_names = {
-            "N", "Y"};
+            "Y", "N"};
         const static std::vector<std::string> value_names = {
-            "No", "Yes"};
+            "Yes", "No"};
         static std::unordered_map<std::string, int> aliases_only_map {{
             }};
     }
