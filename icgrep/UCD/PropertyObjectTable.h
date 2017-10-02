@@ -11,6 +11,7 @@
 #include "PropertyAliases.h"
 #include "PropertyObjects.h"
 #include <array>
+#include "BidiBrackets.h"
 #include "Blocks.h"
 #include "CompositionExclusions.h"
 #include "DerivedAge.h"
@@ -78,7 +79,7 @@ namespace UCD {
     &BLK_ns::property_object,
     &SC_ns::property_object,
     &BC_ns::property_object,
-    new UnsupportedPropertyObject(bpt, PropertyObject::ClassTypeId::EnumeratedProperty),
+    &BPT_ns::property_object,
     &CCC_ns::property_object,
     &DT_ns::property_object,
     &EA_ns::property_object,

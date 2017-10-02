@@ -231,6 +231,22 @@ def parse_property_data(property_object, pfile):
                 property_object.addDataRecord(cp_lo, cp_hi, fields[0])
     property_object.finalizeProperty()
 
+def parse_multicolumn_property_data(pfile, property_object_map, property_lookup_map, prop_code_list):
+    f = open(UCD_config.UCD_src_dir + "/" + pfile)
+    props = []
+    lines = f.readlines()
+    for t in lines:
+        if UCD_skip.match(t):
+            continue
+        else:
+            (cp_lo, cp_hi, fields) = parse_data_record(t)
+            if len(fields) != len(prop_code_list): raise Exception("Mutlicolumn field count mismatch, expecting %i: " % len(prop_code_list) + t)
+            for i in range(len(fields)):
+                if fields[i] != '':
+                    property_object_map[prop_code_list[i]].addDataRecord(cp_lo, cp_hi, fields[i])
+    for p in prop_code_list:
+        property_object_map[p].finalizeProperty()
+
 def parse_ScriptExtensions_txt(script_property_object):
     filename_root = 'ScriptExtensions'
     parse_property_data(script_property_object, filename_root + '.txt')

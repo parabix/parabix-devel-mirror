@@ -199,6 +199,21 @@ class UCD_generator():
         cformat.close_header_file(f)
         self.property_data_headers.append(basename)
 
+    def generate_multicolumn_properties_file(self, filename_root, prop_code_list):
+        props = parse_multicolumn_property_data(filename_root + '.txt', self.property_object_map, self.property_lookup_map, prop_code_list)
+        #(props, prop_map) = parse_UCD_codepoint_name_map(filename_root + '.txt', self.property_lookup_map)
+        basename = os.path.basename(filename_root)
+        f = cformat.open_header_file_for_write(basename)
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        f.write("\nnamespace UCD {\n")
+        for p in prop_code_list:
+            self.emit_property(f, p)
+            property_object = self.property_object_map[p]
+            if isinstance(property_object, BinaryPropertyObject) or isinstance(property_object, EnumeratedPropertyObject): self.supported_props.append(p)
+        f.write("}\n\n")
+        cformat.close_header_file(f)
+        self.property_data_headers.append(basename)
+
     def generate_ScriptExtensions_h(self):
         filename_root = 'ScriptExtensions'
         property_code = 'scx'
@@ -337,6 +352,7 @@ def UCD_main():
     #
     # Bidi_Class
     ucd.generate_property_value_file('extracted/DerivedBidiClass', 'bc')
+    ucd.generate_multicolumn_properties_file('BidiBrackets', ['bpb', 'bpt'])
 
     # Indic properties
     ucd.generate_property_value_file('IndicPositionalCategory', 'InPC')

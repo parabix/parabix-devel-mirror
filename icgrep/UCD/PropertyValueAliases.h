@@ -387,11 +387,11 @@ namespace UCD {
 
     namespace BPT_ns {
         enum value_t {
-            c, n, o};
+            n, o, c};
         const static std::vector<std::string> enum_names = {
-            "c", "n", "o"};
+            "n", "o", "c"};
         const static std::vector<std::string> value_names = {
-            "Close", "None", "Open"};
+            "None", "Open", "Close"};
         static std::unordered_map<std::string, int> aliases_only_map {{
             }};
     }
