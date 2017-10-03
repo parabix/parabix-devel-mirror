@@ -75,6 +75,71 @@ def parse_PropertyAlias_txt():
         property_object_map[property_code].setAliases(prop_aliases)
     return (property_enum_name_list, property_object_map)
 
+
+#
+#  Property Default Value Specifications
+#
+#  THe UCD uses special comment lines ("@missing specifications") to declare default 
+#  values for properties.   Examples showing the two common formats are:
+#  (1)  Blocks.txt                    # @missing: 0000..10FFFF; No_Block
+#  (2)  PropertyValueAliases.txt      # @missing: 0000..10FFFF; Case_Folding; <code point>
+#  The general format gives a range of codepoints (generally 0000..10FFFF),
+#  an optional property name (if the file containing the specification defines
+#  many different properties), and the default value.
+#
+#  There are some important default values for different property types:
+#  <codepoint>:  This is a default value for certain String properties,
+#                indicating the default for a codepoint under the given property
+#                is to map to itself.
+#  <none>:       This is a default for certain String properties indicating that
+#                the default value for a code point is the empty string.
+#  <script>:     The default value for the ScriptExtnesions property is the
+#                value of the Script property.
+#  NaN           The default value for numeric property is the NaN (not a number) value.
+#
+
+#  Given a line known to contain such a @missing specification, 
+#  parse_missing_spec(data_line) returns a (cp_lo, cp_hi, fields) triple.
+#  Generally, cp_lo = 0 and cp_hi = 0x10FFFF
+#  The list of fields contains one or two entries: an optional
+#  property name and the default value specified for the range.
+#  @missing specifications generally omit the property name when
+#  the file being processed is defined for a single property only.
+#
+UCD_missing_check = re.compile("^#\s*@missing:.*")
+UCD_missing_regexp = re.compile("^#\s*@missing:\s*([0-9A-F]{4,6})[.][.]([0-9A-F]{4,6})\s*;\s*([^#]*)(?:#|$)")
+
+def parse_missing_spec(data_line):
+    m = UCD_missing_regexp.match(data_line)
+    if not m: raise Exception("UCD missing spec parsing error: " + data_line)
+    cp_lo = int(m.group(1), 16)
+    cp_hi = int(m.group(2), 16)
+    # We may have to restructure in the event that missing specs do not cover the full Unicode range.
+    if cp_lo != 0 or cp_hi != 0x10FFFF: raise Exception("Unexpected range error in missing spec: " + data_line)
+    field_data = m.group(3)
+    fields = field_data.split(';')
+    fields = [f.lstrip().rstrip() for f in fields]
+    return (cp_lo, cp_hi, fields)
+
+#
+#  Missing specifications and other types of UCD data records often produce
+#  a list of one or two fields which indicate a property and a value.
+#
+#  parse_property_and_value(fields, property_lookup_map) checks that 
+#  first of the given fields is indeed a property identifier identified
+#  in the given lookup map, and returns a pair consisting of the 
+#  unique property code for the property, plus a corresponding value
+#  (or None, if only one field was given).
+#  
+def parse_property_and_value(fields, property_lookup_map):
+    if len(fields) > 2: raise Exception("Too many fields")
+    if len(fields) == 0: raise Exception("Expecting at least 1 field")
+    canon = canonicalize(fields[0])
+    if not canon in property_lookup_map: raise Exception("Unexpected name: " + name_str)
+    pcode = property_lookup_map[canon]
+    if len(fields) == 1: return (pcode, None)
+    else: return (pcode, fields[1])
+
 #
 #  UCD Property File Format 2: property value aliases
 #  PropertyValueAliases.txt
@@ -91,6 +156,7 @@ def parse_PropertyAlias_txt():
 #  (4) @missing lines provide default value information, primarily for some
 #      non-enumerated types
 
+
 def initializePropertyValues(property_object_map, property_lookup_map):
     UCD_property_value_missing_regexp = re.compile("^#\s*@missing:\s*([0-9A-F]{4,6})[.][.]([0-9A-F]{4,6})\s*;\s*([-A-Za-z_0-9.]+)\s*;\s*([-A-Za-z_0-9.<> ]+)\s*([^#]*)")
     UCD_property_value_alias_regexp = re.compile("^([-A-Za-z_0-9.]+)\s*;\s*([-A-Za-z_0-9.]+)\s*;\s*([-A-Za-z_0-9.]+)([^#]*)")
@@ -99,12 +165,10 @@ def initializePropertyValues(property_object_map, property_lookup_map):
     lines = f.readlines()
     for t in lines:
         if UCD_skip.match(t):
-            m = UCD_property_value_missing_regexp.match(t)
-            if m:
-                if m.group(1) != '0000' or m.group(2) != '10FFFF': raise Exception("Bad missing spec: " + s)
-                cname = canonicalize(m.group(3))
-                if not cname in property_lookup_map: raise Exception("Bad missing property: " + s)
-                property_object_map[property_lookup_map[cname]].setDefaultValue(m.group(4))
+            if UCD_missing_check.match(t):
+                (cp_lo, cp_hi, fields) = parse_missing_spec(t)
+                (property_code, default_value) = parse_property_and_value(fields, property_lookup_map)
+                property_object_map[property_code].setDefaultValue(default_value)
             continue  # skip comment and blank lines
         m = UCD_property_value_alias_regexp.match(t)
         if not m: raise Exception("Unknown property value alias syntax: %s" % t)
@@ -146,6 +210,15 @@ def initializePropertyValues(property_object_map, property_lookup_map):
 UCD_point_regexp = re.compile("^([0-9A-F]{4,6})([^0-9A-F.#][^#]*)(?:#|$)")
 UCD_range_regexp = re.compile("^([0-9A-F]{4,6})[.][.]([0-9A-F]{4,6})([^#]*)(?:#|$)")
 
+#
+# parse_data_record is a generic parser for most of the UCD data files.
+# Given a data_line beginning with a codepoint or codepoint range,
+# this function returns a (cp_lo, cp_hi, fields) triple givnig the
+# low and high codepoints of the range (these values may be equal in
+# the case of a single codepoint), as well as a list of fields.
+# The semicolon separators are removed as well as leading or trailing
+# whitespace for each field value.
+
 def parse_data_record(data_line):
     m = UCD_point_regexp.match(data_line)
     if m:
@@ -168,27 +241,11 @@ def parse_data_record(data_line):
     fields = [f.lstrip().rstrip() for f in fields]
     return (cp_lo, cp_hi, fields)
 
-UCD_missing_regexp = re.compile("^#\s*@missing:\s*([0-9A-F]{4,6})[.][.]([0-9A-F]{4,6})\s*;\s*([^#]*)(?:#|$)")
 
-def parse_missing_spec(data_line):
-    m = UCD_missing_regexp.match(data_line)
-    if not m: raise Exception("UCD missing spec parsing error: " + data_line)
-    cp_lo = int(m.group(1), 16)
-    cp_hi = int(m.group(2), 16)
-    field_data = m.group(3)
-    fields = field_data.split(';')
-    fields = [f.lstrip().rstrip() for f in fields]
-    return (cp_lo, cp_hi, fields)
-
-def parse_property_and_value(fields, property_lookup_map):
-    if len(fields) > 2: raise Exception("Too many fields")
-    if len(fields) == 0: raise Exception("Expecting at least 1 field")
-    canon = canonicalize(fields[0])
-    if not canon in property_lookup_map: raise Exception("Unexpected name: " + name_str)
-    pcode = property_lookup_map[canon]
-    if len(fields) == 1: return (pcode, None)
-    else: return (pcode, fields[1])
-
+#  parse_multisection_property_data parses such a file and populates
+#  the property objects for each property through successive calls to
+#  the corresponding addDataRecord method.
+#
 def parse_multisection_property_data(pfile, property_object_map, property_lookup_map):
     f = open(UCD_config.UCD_src_dir + "/" + pfile)
     props = []
@@ -213,6 +270,13 @@ def parse_multisection_property_data(pfile, property_object_map, property_lookup
         property_object_map[p].finalizeProperty()
     return props
 
+
+#
+#   Some UCD files are defined for a single property.   
+#   parse_property_data deals with such a file, given the property
+#   object to populate and the file root.
+#
+
 def parse_property_data(property_object, pfile):
     f = open(UCD_config.UCD_src_dir + "/" + pfile)
     lines = f.readlines()
@@ -231,6 +295,14 @@ def parse_property_data(property_object, pfile):
                 property_object.addDataRecord(cp_lo, cp_hi, fields[0])
     property_object.finalizeProperty()
 
+
+#
+#   Some UCD files are organized to support multiple properties with one
+#   property per column.
+#   parse_multicolumn_property_data deals with such files given a list of
+#   property codes.
+#
+
 def parse_multicolumn_property_data(pfile, property_object_map, property_lookup_map, prop_code_list):
     f = open(UCD_config.UCD_src_dir + "/" + pfile)
     props = []
@@ -247,16 +319,26 @@ def parse_multicolumn_property_data(pfile, property_object_map, property_lookup_
     for p in prop_code_list:
         property_object_map[p].finalizeProperty()
 
-def parse_ScriptExtensions_txt(script_property_object):
-    filename_root = 'ScriptExtensions'
-    parse_property_data(script_property_object, filename_root + '.txt')
-
 UnicodeData_txt_regexp = re.compile("^([0-9A-F]{4,6});([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);(.*)$")
 
-NonNameRange_regexp = re.compile("<([^>]*)>")
+NonName_regexp = re.compile("<([^>]*)>")
 NameRange_regexp = re.compile("<([^,]*), (First|Last)>")
 
-def parse_UnicodeData_txt():
+#  Parse a decomposition mapping field in one of two forms:
+#  (a) compatibility mappings:  "<" decomp_type:[A-Za-z]* ">" {codepoint}
+#  (b) canonical mappings:  {codepoint}  
+compatibility_regexp = re.compile("^<([^>]*)>\s*([0-9A-F ]*)$")
+def parse_decomposition(s):
+    m = compatibility_regexp.match(s)
+    if m: 
+        decomp_type = m.group(1)
+        mapping = m.group(2)
+    else:
+        decomp_type = "Canonical"
+        mapping = s
+    return (decomp_type, mapping)
+
+def parse_UnicodeData_txt(property_object_map):
     data_records = []
     range_records = []
     name_range_starts = {}
@@ -267,40 +349,36 @@ def parse_UnicodeData_txt():
             continue  # skip comment and blank lines
         m = UnicodeData_txt_regexp.match(t)
         if not m: raise Exception("Unknown syntax: %s" % t)
-        (cp, name, gc) = (m.group(1), m.group(2), m.group(3))
+        (cp, name, gc) = (int(m.group(1), 16), m.group(2), m.group(3))
         (ccc, bidic, decomp, bidim) = (m.group(4), m.group(5), m.group(6), m.group(10))
         (decval, digitval, numval) = (m.group(7), m.group(8), m.group(9))
         # Unicode 1 name and ISO comment are obolete 
         (uc, lc, tc) = (m.group(13), m.group(14), m.group(15))
-        nonNameMatch = NonNameRange_regexp.match(name)
-        if nonNameMatch:
-            rangeMatch = NameRange_regexp.match(name)
-            if rangeMatch:
-                rangeName = rangeMatch.group(1)
-                print(rangeName, rangeMatch.group(2))
-                if rangeMatch.group(2) == 'First': name_range_starts[rangeName] = cp
-                if rangeMatch.group(2) == 'Last': 
-                    if not rangeName in name_range_starts: raise Exception("UnicodeData range end encountered without prior range start: %s" % t)
-                    range_records.append((name_range_starts[rangeName], cp, rangeName, gc, ccc, bidic, decomp, decval, digitval, numval, bidim, uc, lc, tc))
+        rangeMatch = NameRange_regexp.match(name)
+        if rangeMatch:
+            rangeName = rangeMatch.group(1)
+            print(rangeName, rangeMatch.group(2))
+            if rangeMatch.group(2) == 'First': name_range_starts[rangeName] = cp
+            if rangeMatch.group(2) == 'Last': 
+                if not rangeName in name_range_starts: raise Exception("UnicodeData range end encountered without prior range start: %s" % t)
+                range_records.append((name_range_starts[rangeName], cp, rangeName, gc, ccc, bidic, decomp, decval, digitval, numval, bidim, uc, lc, tc))
             continue
-        data_records.append((cp, name, gc, ccc, bidic, decomp, decval, digitval, numval, bidim, uc, lc, tc))
-    return (data_records, range_records)
-
-#  Parse a decomposition mapping field in one of two forms:
-#  (a) compatibility mappings:  "<" decomp_type:[A-Za-z]* ">" {codepoint}
-#  (b) canonical mappings:  {codepoint}  
-compatibility_regexp = re.compile("^<([^>]*)>\s*([0-9A-F ]*)$")
-codepoints_regexp = re.compile("^[0-9A-F]{4,6}(?: +[0-9A-F]{4,6})*$")
-def parse_decomposition(s):
-    m = compatibility_regexp.match(s)
-    if m: 
-        decomp_type = m.group(1)
-        mapping = m.group(2)
-    else:
-        decomp_type = "Canonical"
-        mapping = s
-    m = codepoints_regexp.match(mapping)
-    if not m: raise Exception("Bad codepoint string syntax in parse_decomposition: %s" % mapping)
-    cps = [int(x, 16) for x in mapping.split(" ")]
-    return (decomp_type, cps)
+        if not NonName_regexp.match(name):
+            property_object_map['na'].addDataRecord(cp, cp, name)
+        if not decomp == '':
+            (decomp_type, mapping) = parse_decomposition(decomp)
+            property_object_map['dm'].addDataRecord(cp, cp, mapping)
+        if not uc == '':
+            property_object_map['suc'].addDataRecord(cp, cp, uc)
+            if tc == '':
+                property_object_map['stc'].addDataRecord(cp, cp, uc)
+        if not lc == '':
+            property_object_map['slc'].addDataRecord(cp, cp, lc)
+        if not tc == '':
+            property_object_map['stc'].addDataRecord(cp, cp, tc)
+    property_object_map['na'].finalizeProperty()
+    property_object_map['dm'].finalizeProperty()
+    property_object_map['slc'].finalizeProperty()
+    property_object_map['suc'].finalizeProperty()
+    property_object_map['stc'].finalizeProperty()
 

@@ -117,28 +117,6 @@ class EnumeratedPropertyObject(PropertyObject):
         self.value_map[enum_code] = uset_union(self.value_map[enum_code], range_uset(cp_lo, cp_hi))
         if not enum_code in self.name_list_order: self.name_list_order.append(enum_code)
 
-    def emit():
-        f.write("\nnamespace UCD {\n")
-        f.write("  namespace %s_ns {\n" % self.property_code.upper())
-        #f.write("    const unsigned independent_prop_values = %s;\n" % self.independent_prop_values)
-        for v in self.property_values:
-            f.write("    /** Code Point Ranges for %s\n    " % v)
-            f.write(cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(value_map[v])], ',', 4))
-            f.write("**/\n")
-            f.write("    const UnicodeSet %s_Set \n" % v.lower())
-            f.write(self.value_map[v].showC(8) + ";\n")
-        print("%s: %s bytes" % (basename, sum([self.value_map[v].bytes() for v in self.value_map.keys()])))
-        set_list = ['&%s_Set' % v.lower() for v in self.property_values]
-        f.write("    static EnumeratedPropertyObject property_object\n")
-        f.write("        {%s,\n" % self.property_code)
-        f.write("         %s_ns::independent_prop_values,\n" % self.property_code.upper())
-        f.write("         %s_ns::enum_names,\n" % self.property_code.upper())
-        f.write("         %s_ns::value_names,\n" % self.property_code.upper())
-        f.write("         %s_ns::aliases_only_map,\n" % self.property_code.upper())
-        f.write("         {")
-        f.write(cformat.multiline_fill(set_list, ',', 8))
-        f.write("\n         }};\n    }\n}\n")
-
 class BinaryPropertyObject(PropertyObject):
     def __init__(self):
         PropertyObject.__init__(self)
@@ -196,11 +174,14 @@ class ExtensionPropertyObject(PropertyObject):
             else:
                 self.value_map[k] = uset_union(self.value_map[k], base_set)
 
+codepoint_String_regexp = re.compile("^[A-F0-9]{4,6}(?: [A-F0-9]{4,6})*$")
 class StringPropertyObject(PropertyObject):
     def __init__(self):
         PropertyObject.__init__(self)
-        self.str_value_map = {}
-
+        self.cp_value_map = {}
+        self.null_str_set = empty_uset()
+        self.reflexive_set = empty_uset()
+        
     def getPropertyKind(self): 
         if self.property_code in ['scf', 'slc', 'suc', 'stc']: 
             return "Codepoint"
@@ -208,13 +189,30 @@ class StringPropertyObject(PropertyObject):
             return "String"
 
     def addDataRecord(self, cp_lo, cp_hi, stringValue):
-        if not self.property_code in ['na', 'JSN', 'na1', 'isc'] and stringValue != '':
-            s = ""
-            for cp in [int(x, 16) for x in stringValue.split(' ')]: 
-                s+= chr(cp)
-            stringValue = s
-        for cp in range(cp_lo, cp_hi+1):
-            self.str_value_map[cp] = stringValue
+        if stringValue == '':
+            self.null_str_set = uset_union(self.null_str_set, range_uset(cp_lo, cp_hi))
+        else:
+            if codepoint_String_regexp.match(stringValue):
+                s = ""
+                for cp in [int(x, 16) for x in stringValue.split(' ')]:
+                    s += chr(cp)
+                stringValue = s
+            for cp in range(cp_lo, cp_hi+1):
+                if len(stringValue) == 1 and ord(stringValue[0]) == cp:
+                    print("Found reflexive entry for %s: %s" % (self.property_code, stringValue))
+                    self.reflexive_set = uset_union(self.reflexive_set, singleton_uset(ord(stringValue[0])))
+                else:
+                    self.cp_value_map[cp] = stringValue
+
+    def finalizeProperty(self):
+        explicitly_defined_cps = empty_uset()
+        for cp in self.cp_value_map.keys():
+            explicitly_defined_cps = uset_union(explicitly_defined_cps, singleton_uset(cp))
+        # set <script> default
+        if self.default_value == "<code point>":
+            self.reflexive_set = uset_union(self.reflexive_set, uset_complement(uset_union(explicitly_defined_cps, self.null_str_set)))
+        else:
+            self.null_str_set = uset_union(self.null_str_set, uset_complement(uset_union(explicitly_defined_cps, self.reflexive_set)))
 
 def getPropertyLookupMap(property_object_map):
     property_lookup_map = {}
