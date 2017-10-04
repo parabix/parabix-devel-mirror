@@ -12,6 +12,7 @@
 #include "PropertyObjects.h"
 #include <array>
 #include "BidiBrackets.h"
+#include "BidiMirroring.h"
 #include "Blocks.h"
 #include "CompositionExclusions.h"
 #include "DerivedAge.h"
@@ -57,7 +58,7 @@ namespace UCD {
     &SUC_ns::property_object,
     new UnsupportedPropertyObject(tc, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(uc, PropertyObject::ClassTypeId::StringProperty),
-    new UnsupportedPropertyObject(bmg, PropertyObject::ClassTypeId::StringProperty),
+    &BMG_ns::property_object,
     &BPB_ns::property_object,
     new UnsupportedPropertyObject(cjkIICore, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkIRG_GSource, PropertyObject::ClassTypeId::StringProperty),

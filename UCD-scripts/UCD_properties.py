@@ -197,6 +197,8 @@ class UCD_generator():
             print("%s: %s bytes" % (property_object.getPropertyFullName(), sum([property_object.value_map[v].bytes() for v in property_object.value_map.keys()])))
         elif isinstance(property_object, StringPropertyObject):
             emit_string_property(f, property_code, property_object.null_str_set, property_object.reflexive_set, property_object.cp_value_map)
+        else: return
+        self.supported_props.append(property_code)
 
     def generate_property_value_file(self, filename_root, property_code):
         property_object = self.property_object_map[property_code]
@@ -208,7 +210,6 @@ class UCD_generator():
         self.emit_property(f, property_code)
         f.write("}\n")
         cformat.close_header_file(f)
-        if isinstance(property_object, BinaryPropertyObject) or isinstance(property_object, EnumeratedPropertyObject): self.supported_props.append(property_code)
         self.property_data_headers.append(basename)
 
     def generate_multisection_properties_file(self, filename_root):
@@ -221,7 +222,6 @@ class UCD_generator():
         for p in sorted(props):
             self.emit_property(f, p)
             property_object = self.property_object_map[p]
-            if isinstance(property_object, BinaryPropertyObject) or isinstance(property_object, EnumeratedPropertyObject): self.supported_props.append(p)
         f.write("}\n\n")
         cformat.close_header_file(f)
         self.property_data_headers.append(basename)
@@ -394,9 +394,10 @@ def UCD_main():
     # Normalization properties.
     ucd.generate_multisection_properties_file('DerivedNormalizationProps')
     #
-    # Bidi_Class
+    # Bidirectional properties
     ucd.generate_property_value_file('extracted/DerivedBidiClass', 'bc')
     ucd.generate_multicolumn_properties_file('BidiBrackets', ['bpb', 'bpt'])
+    ucd.generate_property_value_file('BidiMirroring', 'bmg')
 
     # Indic properties
     ucd.generate_property_value_file('IndicPositionalCategory', 'InPC')
