@@ -655,7 +655,7 @@ RE * RE_Parser::parsePropertyExpression() {
                 }
                 ++mCursor;
             }
-            return createName(canonicalize(start, prop_end), canonicalize(val_start, mCursor.pos()));
+            return createName(canonicalize(start, prop_end), std::string(val_start, mCursor.pos()));
         } else {
             // property-value is another regex
             auto previous = val_start;

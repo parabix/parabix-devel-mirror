@@ -14,6 +14,182 @@
 #include "unicode_set.h"
 
 namespace UCD {
+    namespace BPB_ns {
+        /** Code Point Ranges for bpb mapping to <none>
+        [0000, 0027], [002a, 005a], [005c, 005c], [005e, 007a],
+        [007c, 007c], [007e, 0f39], [0f3e, 169a], [169d, 2044],
+        [2047, 207c], [207f, 208c], [208f, 2307], [230c, 2328],
+        [232b, 2767], [2776, 27c4], [27c7, 27e5], [27f0, 2982],
+        [2999, 29d7], [29dc, 29fb], [29fe, 2e21], [2e2a, 3007],
+        [3012, 3013], [301c, fe58], [fe5f, ff07], [ff0a, ff3a],
+        [ff3c, ff3c], [ff3e, ff5a], [ff5c, ff5c], [ff5e, ff5e],
+        [ff61, ff61], [ff64, 10ffff]**/
+
+        const UnicodeSet null_codepoint_set
+                    {{{Full, 1}, {Mixed, 3}, {Full, 117}, {Mixed, 1}, {Full, 58},
+              {Mixed, 1}, {Full, 77}, {Mixed, 3}, {Full, 19}, {Mixed, 2},
+              {Full, 33}, {Mixed, 1}, {Full, 2}, {Mixed, 2}, {Full, 12},
+              {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 33}, {Mixed, 1},
+              {Full, 14}, {Mixed, 1}, {Full, 1649}, {Mixed, 1}, {Full, 5},
+              {Mixed, 4}, {Full, 32772}},
+             {0xfffffcff, 0xd7ffffff, 0xd7ffffff, 0xc3ffffff, 0xe7ffffff,
+              0xffffff9f, 0x9fffffff, 0xffff9fff, 0xfffff0ff, 0xfffff9ff,
+              0xffc000ff, 0xffffff9f, 0xffff003f, 0xfe000007, 0xf0ffffff,
+              0xcfffffff, 0xfffffc03, 0xf00c00ff, 0x81ffffff, 0xfffffcff,
+              0xd7ffffff, 0x57ffffff, 0xfffffff2}};
+
+        /** Code Point Ranges for bpb mapping to <codepoint>
+        **/
+        const UnicodeSet reflexive_set
+                    {{{Empty, 34816}},
+             {}};
+
+        const unsigned buffer_length = 468;
+        const static char __attribute__ ((aligned (32))) string_buffer[512] = u8R"__()
+(
+]
+[
+}
+{
+༻
+༺
+༽
+༼
+᚜
+᚛
+⁆
+⁅
+⁾
+⁽
+₎
+₍
+⌉
+⌈
+⌋
+⌊
+〉
+〈
+❩
+❨
+❫
+❪
+❭
+❬
+❯
+❮
+❱
+❰
+❳
+❲
+❵
+❴
+⟆
+⟅
+⟧
+⟦
+⟩
+⟨
+⟫
+⟪
+⟭
+⟬
+⟯
+⟮
+⦄
+⦃
+⦆
+⦅
+⦈
+⦇
+⦊
+⦉
+⦌
+⦋
+⦐
+⦏
+⦎
+⦍
+⦒
+⦑
+⦔
+⦓
+⦖
+⦕
+⦘
+⦗
+⧙
+⧘
+⧛
+⧚
+⧽
+⧼
+⸣
+⸢
+⸥
+⸤
+⸧
+⸦
+⸩
+⸨
+〉
+〈
+》
+《
+」
+「
+』
+『
+】
+【
+〕
+〔
+〗
+〖
+〙
+〘
+〛
+〚
+﹚
+﹙
+﹜
+﹛
+﹞
+﹝
+）
+（
+］
+［
+｝
+｛
+｠
+｟
+｣
+｢
+)__";
+
+        const static std::vector<codepoint_t> defined_cps = {
+        0x0028, 0x0029, 0x005b, 0x005d, 0x007b, 0x007d, 0x0f3a, 0x0f3b,
+        0x0f3c, 0x0f3d, 0x169b, 0x169c, 0x2045, 0x2046, 0x207d, 0x207e,
+        0x208d, 0x208e, 0x2308, 0x2309, 0x230a, 0x230b, 0x2329, 0x232a,
+        0x2768, 0x2769, 0x276a, 0x276b, 0x276c, 0x276d, 0x276e, 0x276f,
+        0x2770, 0x2771, 0x2772, 0x2773, 0x2774, 0x2775, 0x27c5, 0x27c6,
+        0x27e6, 0x27e7, 0x27e8, 0x27e9, 0x27ea, 0x27eb, 0x27ec, 0x27ed,
+        0x27ee, 0x27ef, 0x2983, 0x2984, 0x2985, 0x2986, 0x2987, 0x2988,
+        0x2989, 0x298a, 0x298b, 0x298c, 0x298d, 0x298e, 0x298f, 0x2990,
+        0x2991, 0x2992, 0x2993, 0x2994, 0x2995, 0x2996, 0x2997, 0x2998,
+        0x29d8, 0x29d9, 0x29da, 0x29db, 0x29fc, 0x29fd, 0x2e22, 0x2e23,
+        0x2e24, 0x2e25, 0x2e26, 0x2e27, 0x2e28, 0x2e29, 0x3008, 0x3009,
+        0x300a, 0x300b, 0x300c, 0x300d, 0x300e, 0x300f, 0x3010, 0x3011,
+        0x3014, 0x3015, 0x3016, 0x3017, 0x3018, 0x3019, 0x301a, 0x301b,
+        0xfe59, 0xfe5a, 0xfe5b, 0xfe5c, 0xfe5d, 0xfe5e, 0xff08, 0xff09,
+        0xff3b, 0xff3d, 0xff5b, 0xff5d, 0xff5f, 0xff60, 0xff62, 0xff63};
+        static StringPropertyObject property_object(bpb, 
+                                                    null_codepoint_set, 
+                                                    reflexive_set, 
+                                                    static_cast<const char *>(string_buffer), 
+                                                    buffer_length, 
+                                                    defined_cps);
+    }
   namespace BPT_ns {
     const unsigned independent_prop_values = 3;
     /** Code Point Ranges for n

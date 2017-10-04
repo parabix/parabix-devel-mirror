@@ -52,6 +52,10 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         }
     } else if (const Name* re_name = dyn_cast<const Name>(re)) {
         retVal = "Name \"";
+        if (re_name->hasNamespace()) {
+            retVal += re_name->getNamespace();
+            retVal += ":";
+        }
         retVal += re_name->getName();
         retVal += "\" ";
         if (re_name->getType() == Name::Type::Capture) {

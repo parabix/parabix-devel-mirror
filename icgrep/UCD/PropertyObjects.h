@@ -40,6 +40,7 @@ public:
         return the_property;
     }
     PropertyObject(property_t p, ClassTypeId k) : the_property(p), the_kind(k) {}
+    virtual const UnicodeSet GetCodepointSet(const std::string &);
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
     virtual const std::string & GetPropertyValueGrepString();
     property_t the_property;
@@ -59,7 +60,7 @@ public:
     : PropertyObject(p, ClassTypeId::UnsupportedProperty) {
 
     }
-    UnicodeSet GetCodepointSet(const std::string &);
+    const UnicodeSet GetCodepointSet(const std::string &) override;
     UnicodeSet GetCodepointSet(const int);
 };
 
@@ -90,7 +91,7 @@ public:
 
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
     virtual const std::string & GetPropertyValueGrepString();
-    const UnicodeSet & GetCodepointSet(const std::string & value_spec);
+    const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
     std::vector<UnicodeSet> & GetEnumerationBasisSets();
     const std::string & GetValueEnumName(const int property_enum_val) const {return property_value_enum_names[property_enum_val]; }
@@ -140,7 +141,7 @@ public:
 
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
     virtual const std::string & GetPropertyValueGrepString();
-    const UnicodeSet & GetCodepointSet(const std::string & value_spec);
+    const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
 
 private:
@@ -163,7 +164,7 @@ public:
     , mY(s) {
 
     }
-    const UnicodeSet & GetCodepointSet(const std::string & value_spec);
+    const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val);
     virtual const std::string & GetPropertyValueGrepString();
 private:
@@ -173,6 +174,34 @@ private:
     std::string mPropertyValueGrepString;
 };
 
+class StringPropertyObject : public PropertyObject {
+public:
+    static inline bool classof(const PropertyObject * p) {
+        return p->getClassTypeId() == ClassTypeId::StringProperty;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    StringPropertyObject(UCD::property_t p, UnicodeSet nullSet, UnicodeSet mapsToSelf, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> & cps)
+    : PropertyObject(p, ClassTypeId::StringProperty)
+    , mNullCodepointSet(nullSet)
+    , mSelfCodepointSet(mapsToSelf)
+    , mStringBuffer(string_buffer)
+    , mBufSize(bufsize)
+    , mExplicitCps(cps)
+    {
+
+    }
+    const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
+
+private:
+    UnicodeSet mNullCodepointSet;  // codepoints for which the property value is the null string.
+    UnicodeSet mSelfCodepointSet;  // codepoints for which the property value is the codepoint itself.
+    const char * mStringBuffer;  // buffer holding all string values for other codepoints, in sorted order. 
+    unsigned mBufSize;
+    const std::vector<UCD::codepoint_t> & mExplicitCps;
+
+};
 }
 
 #endif

@@ -11,6 +11,9 @@
 #include <algorithm>
 #include <assert.h>
 #include <sstream>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/ErrorHandling.h>
+#include <uchar.h>
 
 using namespace llvm;
 
@@ -29,24 +32,24 @@ std::string canonicalize_value_name(const std::string & prop_or_val) {
 }
 
 int PropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
-    throw std::runtime_error("Property " + value_spec + " unsupported.");
+    llvm::report_fatal_error("Property " + value_spec + " unsupported.");
 }
 const std::string & PropertyObject::GetPropertyValueGrepString() {
-    throw std::runtime_error("Property Value Grep String unsupported.");
+    llvm::report_fatal_error("Property Value Grep String unsupported.");
 }
 
-UnicodeSet UnsupportedPropertyObject::GetCodepointSet(const std::string &) {
-    throw std::runtime_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
+const UnicodeSet UnsupportedPropertyObject::GetCodepointSet(const std::string &) {
+    llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
 }
 
 UnicodeSet UnsupportedPropertyObject::GetCodepointSet(const int) {
-    throw std::runtime_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
+    llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
 }
 
-const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
+const UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
     const int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val < 0) {
-        throw std::runtime_error("Enumerated Property " + UCD::property_full_name[the_property] + ": unknown value: " + value_spec);
+        llvm::report_fatal_error("Enumerated Property " + UCD::property_full_name[the_property] + ": unknown value: " + value_spec);
     }
     return GetCodepointSet(property_enum_val);
 }
@@ -108,7 +111,7 @@ int EnumeratedPropertyObject::GetPropertyValueEnumCode(const std::string & value
         }
         uninitialized = false;
     }
-    const auto valit = property_value_aliases.find(value_spec);
+    const auto valit = property_value_aliases.find(canonicalize_value_name(value_spec));
     if (valit == property_value_aliases.end())
         return -1;
     return valit->second;
@@ -118,20 +121,20 @@ PropertyObject::iterator ExtensionPropertyObject::begin() const {
     if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[base_property])) {
         return obj->begin();
     }
-    throw std::runtime_error("Iterators unsupported for this type of PropertyObject.");
+    llvm::report_fatal_error("Iterators unsupported for this type of PropertyObject.");
 }
 
 PropertyObject::iterator ExtensionPropertyObject::end() const {
     if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[base_property])) {
         return obj->end();
     }
-    throw std::runtime_error("Iterators unsupported for this type of PropertyObject.");
+    llvm::report_fatal_error("Iterators unsupported for this type of PropertyObject.");
 }
 
-const UnicodeSet & ExtensionPropertyObject::GetCodepointSet(const std::string & value_spec) {
+const UnicodeSet ExtensionPropertyObject::GetCodepointSet(const std::string & value_spec) {
     int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val == -1) {
-        throw std::runtime_error("Extension Property " + UCD::property_full_name[the_property] +  ": unknown value: " + value_spec);
+        llvm::report_fatal_error("Extension Property " + UCD::property_full_name[the_property] +  ": unknown value: " + value_spec);
     }
     return GetCodepointSet(property_enum_val);
 }
@@ -149,12 +152,12 @@ const std::string & ExtensionPropertyObject::GetPropertyValueGrepString() {
     return property_object_table[base_property]->GetPropertyValueGrepString();
 }
 
-const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const std::string & value_spec) {
+const UnicodeSet BinaryPropertyObject::GetCodepointSet(const std::string & value_spec) {
     int property_enum_val = Binary_ns::Y;
     if (value_spec.length() != 0) {
-        auto valit = Binary_ns::aliases_only_map.find(value_spec);
+        auto valit = Binary_ns::aliases_only_map.find(canonicalize_value_name(value_spec));
         if (valit == Binary_ns::aliases_only_map.end()) {
-            throw std::runtime_error("Binary Property " + UCD::property_full_name[the_property] +  ": bad value: " + value_spec);
+            llvm::report_fatal_error("Binary Property " + UCD::property_full_name[the_property] +  ": bad value: " + value_spec);
         }
         property_enum_val = valit->second;
     }
@@ -181,6 +184,38 @@ const std::string & BinaryPropertyObject::GetPropertyValueGrepString() {
         mPropertyValueGrepString = buffer.str();
     }
     return mPropertyValueGrepString;
+}
+    
+
+
+const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value_spec) {
+    if (value_spec == "") return mNullCodepointSet;
+    else {
+        UnicodeSet result_set;
+        unsigned val_bytes = value_spec.length();
+        const char * value_str = value_spec.c_str();
+        std::mbstate_t state{};
+        char32_t c32;
+        size_t cvtcode = mbrtoc32(&c32, value_str, val_bytes, &state);
+        if (cvtcode == val_bytes) {
+            // A single Unicode character.  Check the reflexive set.
+            if (mSelfCodepointSet.contains(static_cast<codepoint_t>(c32))) {
+                result_set.insert(static_cast<codepoint_t>(c32));
+            }
+        }
+        const char * search_str = mStringBuffer;
+        unsigned buffer_line = 0;
+        while (buffer_line < mExplicitCps.size()) {
+            const char * eol = strchr(search_str, '\n');
+            unsigned len = eol - search_str;
+            if ((len == val_bytes) && (memcmp(search_str, value_str, len) == 0)) {
+                result_set.insert(mExplicitCps[buffer_line]);
+            }
+            buffer_line++;
+            search_str = eol+1;
+        }
+        return result_set;
+    }
 }
 
 }

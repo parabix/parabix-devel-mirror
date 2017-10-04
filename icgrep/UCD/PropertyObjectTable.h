@@ -35,6 +35,7 @@
 #include "ScriptExtensions.h"
 #include "Scripts.h"
 #include "SentenceBreakProperty.h"
+#include "UnicodeData.h"
 #include "WordBreakProperty.h"
 
 namespace UCD {
@@ -46,18 +47,18 @@ namespace UCD {
     new UnsupportedPropertyObject(nv, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cf, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkCompatibilityVariant, PropertyObject::ClassTypeId::StringProperty),
-    new UnsupportedPropertyObject(dm, PropertyObject::ClassTypeId::StringProperty),
-    new UnsupportedPropertyObject(FC_NFKC, PropertyObject::ClassTypeId::StringProperty),
+    &DM_ns::property_object,
+    &FC_NFKC_ns::property_object,
     new UnsupportedPropertyObject(lc, PropertyObject::ClassTypeId::StringProperty),
-    new UnsupportedPropertyObject(NFKC_CF, PropertyObject::ClassTypeId::StringProperty),
+    &NFKC_CF_ns::property_object,
     new UnsupportedPropertyObject(scf, PropertyObject::ClassTypeId::CodepointProperty),
-    new UnsupportedPropertyObject(slc, PropertyObject::ClassTypeId::CodepointProperty),
-    new UnsupportedPropertyObject(stc, PropertyObject::ClassTypeId::CodepointProperty),
-    new UnsupportedPropertyObject(suc, PropertyObject::ClassTypeId::CodepointProperty),
+    &SLC_ns::property_object,
+    &STC_ns::property_object,
+    &SUC_ns::property_object,
     new UnsupportedPropertyObject(tc, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(uc, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(bmg, PropertyObject::ClassTypeId::StringProperty),
-    new UnsupportedPropertyObject(bpb, PropertyObject::ClassTypeId::StringProperty),
+    &BPB_ns::property_object,
     new UnsupportedPropertyObject(cjkIICore, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkIRG_GSource, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkIRG_HSource, PropertyObject::ClassTypeId::StringProperty),
@@ -71,7 +72,7 @@ namespace UCD {
     new UnsupportedPropertyObject(cjkRSUnicode, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(isc, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(JSN, PropertyObject::ClassTypeId::StringProperty),
-    new UnsupportedPropertyObject(na, PropertyObject::ClassTypeId::StringProperty),
+    &NA_ns::property_object,
     new UnsupportedPropertyObject(na1, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(Name_Alias, PropertyObject::ClassTypeId::StringProperty),
     &SCX_ns::property_object,

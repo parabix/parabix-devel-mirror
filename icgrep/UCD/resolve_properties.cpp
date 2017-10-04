@@ -203,7 +203,7 @@ const std::string & getPropertyValueGrepString(const std::string & prop) {
 UnicodeSet resolveUnicodeSet(Name * const name) {
     if (name->getType() == Name::Type::UnicodeProperty) {
         std::string prop = name->getNamespace();
-        std::string value = canonicalize_value_name(name->getName());
+        std::string value = name->getName();
         if (prop.length() > 0) {
             prop = canonicalize_value_name(prop);
             auto propit = alias_map.find(prop);
@@ -211,17 +211,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                 UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
             }
             auto theprop = propit->second;
-            if (EnumeratedPropertyObject * p = dyn_cast<EnumeratedPropertyObject>(property_object_table[theprop])){
-                return p->GetCodepointSet(value);
-            }
-            else if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(property_object_table[theprop])){
-                auto valit = Binary_ns::aliases_only_map.find(value);
-                if (valit == Binary_ns::aliases_only_map.end()) {
-                    UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
-                }
-                return p->GetCodepointSet(value);
-            }           
-            UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
+            return property_object_table[theprop]->GetCodepointSet(value);
         }
         else {
             // No namespace (property) name.   Try as a general category.
