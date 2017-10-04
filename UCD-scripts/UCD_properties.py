@@ -405,8 +405,7 @@ def UCD_main():
 
     ucd.generate_property_value_file('CompositionExclusions', 'CE')
     #
-    # Jamo Short Name - AAARGH - property value for 110B is an empty string!!!!!  - Not in PropertyValueAliases.txt
-    # ucd.generate_property_value_file('Jamo', 'jsn')
+    ucd.generate_property_value_file('Jamo', 'JSN')
     #
     # 
     #

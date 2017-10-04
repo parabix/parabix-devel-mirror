@@ -31,6 +31,7 @@
 #include "HangulSyllableType.h"
 #include "IndicPositionalCategory.h"
 #include "IndicSyllabicCategory.h"
+#include "Jamo.h"
 #include "LineBreak.h"
 #include "PropList.h"
 #include "ScriptExtensions.h"
@@ -72,7 +73,7 @@ namespace UCD {
     new UnsupportedPropertyObject(cjkIRG_VSource, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkRSUnicode, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(isc, PropertyObject::ClassTypeId::StringProperty),
-    new UnsupportedPropertyObject(JSN, PropertyObject::ClassTypeId::StringProperty),
+    &JSN_ns::property_object,
     &NA_ns::property_object,
     new UnsupportedPropertyObject(na1, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(Name_Alias, PropertyObject::ClassTypeId::StringProperty),
