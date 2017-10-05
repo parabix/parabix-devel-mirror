@@ -41,7 +41,6 @@ public:
     }
     PropertyObject(property_t p, ClassTypeId k) : the_property(p), the_kind(k) {}
     virtual const UnicodeSet GetCodepointSet(const std::string &);
-    virtual int GetPropertyValueEnumCode(const std::string & value_spec);
     virtual const std::string & GetPropertyValueGrepString();
     property_t the_property;
     ClassTypeId the_kind;
@@ -60,8 +59,6 @@ public:
     : PropertyObject(p, ClassTypeId::UnsupportedProperty) {
 
     }
-    const UnicodeSet GetCodepointSet(const std::string &) override;
-    UnicodeSet GetCodepointSet(const int);
 };
 
 class EnumeratedPropertyObject : public PropertyObject {
@@ -90,7 +87,7 @@ public:
     }
 
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
-    virtual const std::string & GetPropertyValueGrepString();
+    const std::string & GetPropertyValueGrepString() override;
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
     std::vector<UnicodeSet> & GetEnumerationBasisSets();
@@ -139,8 +136,8 @@ public:
 
     iterator end() const;
 
-    virtual int GetPropertyValueEnumCode(const std::string & value_spec);
-    virtual const std::string & GetPropertyValueGrepString();
+    int GetPropertyValueEnumCode(const std::string & value_spec);
+    const std::string & GetPropertyValueGrepString() override;
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
 
@@ -166,7 +163,7 @@ public:
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val);
-    virtual const std::string & GetPropertyValueGrepString();
+    const std::string & GetPropertyValueGrepString() override;
 private:
     bool mNoUninitialized;
     UnicodeSet mY;

@@ -23,10 +23,6 @@ using namespace UCD;
 using namespace re;
 using namespace llvm;
 
-inline int GetPropertyValueEnumCode(const UCD::property_t type, const std::string & value) {
-    return property_object_table[type]->GetPropertyValueEnumCode(value);
-}
-
 namespace UCD {
     
 void UnicodePropertyExpressionError(std::string errmsg) {
@@ -118,73 +114,6 @@ bool resolvePropertyDefinition(Name * const property) {
     return false;
 }
 
-std::string resolvePropertyFunction(Name * const property) {
-    const std::string value = property->getName();
-    std::string functionName;
-    if (property->hasNamespace()) {
-        auto propit = alias_map.find(property->getNamespace());
-        if (propit == alias_map.end()) {
-            UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead");
-        }
-        auto theprop = propit->second;
-        if (EnumeratedPropertyObject * p = dyn_cast<EnumeratedPropertyObject>(property_object_table[theprop])){
-            int valcode = p->GetPropertyValueEnumCode(value);
-            if (valcode < 0) {
-                UnicodePropertyExpressionError("Erroneous property value '" + value + "' for " + property_full_name[theprop] + " property");
-            }
-            functionName = "__get_" + property_enum_name[theprop] + "_" + p->GetValueEnumName(valcode);
-        }
-        else if (theprop == scx) {
-            // Script extension property identified
-            int valcode = GetPropertyValueEnumCode(sc, value);
-            if (valcode < 0) {
-                UnicodePropertyExpressionError("Erroneous property value for script_extension property");
-            }
-            functionName = "__get_scx_" + SC_ns::enum_names[valcode];
-        }
-        else if (isa<BinaryPropertyObject>(property_object_table[theprop])){
-            auto valit = Binary_ns::aliases_only_map.find(value);
-            if (valit == Binary_ns::aliases_only_map.end()) {
-                UnicodePropertyExpressionError("Erroneous property value for binary property " + property_full_name[theprop]);
-            }
-            if (valit->second == Binary_ns::Y) {
-                functionName = "__get_" + property_enum_name[theprop] + "_Y";
-            } else {
-                UnicodePropertyExpressionError("Unexpected property value for binary property " + property_full_name[theprop]);
-            }
-        }
-        else {
-            UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
-        }
-    } else { // No namespace (property) name.
-        // Try as a general category, script or binary property.
-        int valcode;
-        if ((valcode = GetPropertyValueEnumCode(gc, value)) >= 0) {
-            functionName = "__get_gc_" + GC_ns::enum_names[valcode];
-        }
-        else if ((valcode = GetPropertyValueEnumCode(sc, value)) >= 0) {
-            functionName = "__get_sc_" + SC_ns::enum_names[valcode];
-        }
-        else { // Try as a binary property.
-            auto propit = alias_map.find(value);
-            if (propit != alias_map.end()) {
-                auto theprop = propit->second;
-                if (isa<BinaryPropertyObject>(property_object_table[theprop])) {
-                    functionName = "__get_" + property_enum_name[theprop] + "_Y";
-                }
-                else {
-                    UnicodePropertyExpressionError("Error: property " + property_full_name[theprop] + " specified without a value");
-                }
-            }
-            else {
-                UnicodePropertyExpressionError("Expected a general category, script or binary property name but '" + value + "' was found instead");
-            }
-        }
-    }
-    assert (functionName.length() > 0);
-    return functionName;
-}
-
 const std::string & getPropertyValueGrepString(const std::string & prop) {
     auto propit = alias_map.find(canonicalize_value_name(prop));
     if (propit == alias_map.end()) {
@@ -215,13 +144,15 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
         }
         else {
             // No namespace (property) name.   Try as a general category.
-            int valcode = GetPropertyValueEnumCode(gc, value);
+            const auto & gcobj = cast<EnumeratedPropertyObject>(property_object_table[gc]);
+            int valcode = gcobj->GetPropertyValueEnumCode(value);
             if (valcode >= 0) {
-                return cast<EnumeratedPropertyObject>(property_object_table[gc])->GetCodepointSet(valcode);
+                return gcobj->GetCodepointSet(valcode);
             }
-            valcode = GetPropertyValueEnumCode(sc, value);
+            const auto & scObj = cast<EnumeratedPropertyObject>(property_object_table[sc]);
+            valcode = scObj->GetPropertyValueEnumCode(value);
             if (valcode >= 0) {
-                return cast<EnumeratedPropertyObject>(property_object_table[sc])->GetCodepointSet(valcode);
+                return scObj->GetCodepointSet(valcode);
             }
             // Try as a binary property.
             auto propit = alias_map.find(value);

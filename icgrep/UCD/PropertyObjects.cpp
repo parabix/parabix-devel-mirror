@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters, Inc.
+ *  Copyright (c) 2017 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -13,8 +13,6 @@
 #include <sstream>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
-#include <uchar.h>
-
 using namespace llvm;
 
 namespace UCD {
@@ -31,18 +29,11 @@ std::string canonicalize_value_name(const std::string & prop_or_val) {
     return s.str();
 }
 
-int PropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
-    llvm::report_fatal_error("Property " + value_spec + " unsupported.");
-}
 const std::string & PropertyObject::GetPropertyValueGrepString() {
     llvm::report_fatal_error("Property Value Grep String unsupported.");
 }
 
-const UnicodeSet UnsupportedPropertyObject::GetCodepointSet(const std::string &) {
-    llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
-}
-
-UnicodeSet UnsupportedPropertyObject::GetCodepointSet(const int) {
+const UnicodeSet PropertyObject::GetCodepointSet(const std::string &) {
     llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
 }
 
@@ -145,7 +136,7 @@ const UnicodeSet & ExtensionPropertyObject::GetCodepointSet(const int property_e
 }
 
 int ExtensionPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
-    return property_object_table[base_property]->GetPropertyValueEnumCode(value_spec);
+    return cast<EnumeratedPropertyObject>(property_object_table[base_property])->GetPropertyValueEnumCode(value_spec);
 }
 
 const std::string & ExtensionPropertyObject::GetPropertyValueGrepString() {
@@ -186,23 +177,36 @@ const std::string & BinaryPropertyObject::GetPropertyValueGrepString() {
     return mPropertyValueGrepString;
 }
     
-
-
+const unsigned firstCodepointLengthAndVal(const std::string & s, codepoint_t & cp) {
+    size_t lgth = s.length();
+    if (lgth == 0) return 0;
+    unsigned char s0 = s[0];
+    cp = static_cast<codepoint_t>(s0);
+    if (s0 < 0x80) return 1;
+    if (lgth == 1) return 0;  // invalid UTF-8
+    cp = ((cp & 0x1F) << 6) | (s[1] & 0x3F);
+    if ((s0 >= 0xC2) && (s0 <= 0xDF)) return 2;
+    if (lgth == 2) return 0;  // invalid UTF-8
+    cp = ((cp & 0x3FFF) << 6) | (s[2] & 0x3F);
+    if ((s0 >= 0xE0) && (s0 <= 0xEF)) return 3;
+    if (lgth == 3) return 0;  // invalid UTF-8
+    cp = ((cp & 0x7FFF) << 6) | (s[3] & 0x3F);
+    if ((s0 >= 0xF0) && (s0 <= 0xF4)) return 4;
+    return 0;
+}
+    
 const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value_spec) {
     if (value_spec == "") return mNullCodepointSet;
     else {
         UnicodeSet result_set;
         unsigned val_bytes = value_spec.length();
-        const char * value_str = value_spec.c_str();
-        std::mbstate_t state{};
-        char32_t c32;
-        size_t cvtcode = mbrtoc32(&c32, value_str, val_bytes, &state);
-        if (cvtcode == val_bytes) {
-            // A single Unicode character.  Check the reflexive set.
-            if (mSelfCodepointSet.contains(static_cast<codepoint_t>(c32))) {
-                result_set.insert(static_cast<codepoint_t>(c32));
+        codepoint_t cp;
+        if (val_bytes == firstCodepointLengthAndVal(value_spec, cp)) {
+            if (mSelfCodepointSet.contains(cp)) {
+                result_set.insert(cp);
             }
         }
+        const char * value_str = value_spec.c_str();
         const char * search_str = mStringBuffer;
         unsigned buffer_line = 0;
         while (buffer_line < mExplicitCps.size()) {
