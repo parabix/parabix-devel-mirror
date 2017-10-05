@@ -195,6 +195,27 @@ const unsigned firstCodepointLengthAndVal(const std::string & s, codepoint_t & c
     return 0;
 }
     
+const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & value_spec) {
+    if (value_spec == "NaN") return mNaNCodepointSet;
+    else {
+        UnicodeSet result_set;
+        unsigned val_bytes = value_spec.length();
+        const char * value_str = value_spec.c_str();
+        const char * search_str = mStringBuffer;
+        unsigned buffer_line = 0;
+        while (buffer_line < mExplicitCps.size()) {
+            const char * eol = strchr(search_str, '\n');
+            unsigned len = eol - search_str;
+            if ((len == val_bytes) && (memcmp(search_str, value_str, len) == 0)) {
+                result_set.insert(mExplicitCps[buffer_line]);
+            }
+            buffer_line++;
+            search_str = eol+1;
+        }
+        return result_set;
+    }
+}
+
 const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value_spec) {
     if (value_spec == "") return mNullCodepointSet;
     else {

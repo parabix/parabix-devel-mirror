@@ -47,7 +47,7 @@ namespace UCD {
     new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
-    new UnsupportedPropertyObject(nv, PropertyObject::ClassTypeId::NumericProperty),
+    &NV_ns::property_object,
     new UnsupportedPropertyObject(cf, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkCompatibilityVariant, PropertyObject::ClassTypeId::StringProperty),
     &DM_ns::property_object,

@@ -379,6 +379,13 @@ def parse_UnicodeData_txt(property_object_map):
             property_object_map['slc'].addDataRecord(cp, cp, slc)
         if not stc == '':
             property_object_map['stc'].addDataRecord(cp, cp, stc)
+        if not decval == '':
+            property_object_map['nv'].addDataRecord(cp, cp, decval)
+        if not digitval == '':
+            property_object_map['nv'].addDataRecord(cp, cp, digitval)
+        if not numval == '':
+            property_object_map['nv'].addDataRecord(cp, cp, numval)
+
     property_object_map['na'].finalizeProperty()
     property_object_map['na1'].finalizeProperty()
     property_object_map['isc'].finalizeProperty()
@@ -386,6 +393,7 @@ def parse_UnicodeData_txt(property_object_map):
     property_object_map['slc'].finalizeProperty()
     property_object_map['suc'].finalizeProperty()
     property_object_map['stc'].finalizeProperty()
+    property_object_map['nv'].finalizeProperty()
 
 def parse_SpecialCasing_txt(property_object_map):
     data_records = []

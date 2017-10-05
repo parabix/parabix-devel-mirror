@@ -84,6 +84,42 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
     explicitly_defined_cps = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
     ))
 
+def emit_numeric_property(f, property_code, NaN_set, cp_value_map):
+    s = string.Template(r"""    namespace ${prop_enum_up}_ns {
+        /** Code Point Ranges for ${prop_enum} mapping to NaN
+        ${NaN_set_ranges}**/
+
+        const UnicodeSet NaN_set
+        ${NaN_set_value};
+
+       const unsigned buffer_length = ${buffer_length};
+        const static char __attribute__ ((aligned (32))) string_buffer[${allocation_length}] = u8R"__(${string_buffer})__";
+
+        const static std::vector<codepoint_t> defined_cps = {
+        ${explicitly_defined_cps}};
+        static NumericPropertyObject property_object(${prop_enum}, 
+                                                    NaN_set, 
+                                                    static_cast<const char *>(string_buffer), 
+                                                    buffer_length, 
+                                                    defined_cps);
+    }
+""")
+    cps = sorted(cp_value_map.keys())
+    string_buffer = ""
+    for cp in cps: 
+        string_buffer += cp_value_map[cp] + "\n"
+    buffer_length = len(string_buffer.encode("utf-8"))
+    f.write(s.substitute(prop_enum = property_code,
+    prop_enum_up = property_code.upper(),
+    string_buffer = string_buffer,
+    buffer_length = buffer_length,
+    allocation_length = (buffer_length + 255) & -256,
+    NaN_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(NaN_set)], ',', 8),
+    NaN_set_value = NaN_set.showC(12),
+    explicitly_defined_cp_count = len(cps),
+    explicitly_defined_cps = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
+    ))
+
 
 def emit_binary_property(f, property_code, property_set):
     f.write("    namespace %s_ns {\n" % property_code.upper())
@@ -202,9 +238,13 @@ class UCD_generator():
             print("%s: %s bytes" % (property_object.getPropertyFullName(), sum([property_object.value_map[v].bytes() for v in property_object.value_map.keys()])))
         elif isinstance(property_object, StringPropertyObject):
             emit_string_property(f, property_code, property_object.null_str_set, property_object.reflexive_set, property_object.cp_value_map)
+        elif isinstance(property_object, NumericPropertyObject):
+            emit_numeric_property(f, property_code, property_object.NaN_set, property_object.cp_value_map)
         elif isinstance(property_object, ObsoletePropertyObject):
             emit_Obsolete_property(f, property_code)
-        else: return
+        else: 
+            print("%s: unsupported property.")
+            return
         self.supported_props.append(property_code)
 
     def generate_property_value_file(self, filename_root, property_code):
@@ -252,7 +292,7 @@ class UCD_generator():
         parse_UnicodeData_txt(self.property_object_map)
         f = cformat.open_header_file_for_write(basename)
         cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
-        prop_code_list = ['na', 'dm', 'suc', 'slc', 'stc', 'na1', 'isc']
+        prop_code_list = ['na', 'dm', 'suc', 'slc', 'stc', 'na1', 'isc', 'nv']
         f.write("\nnamespace UCD {\n")
         for p in prop_code_list:
             self.emit_property(f, p)

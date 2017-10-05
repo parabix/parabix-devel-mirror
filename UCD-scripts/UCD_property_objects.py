@@ -132,9 +132,6 @@ class BinaryPropertyObject(PropertyObject):
 
     def getPropertyKind(self): return "Binary"
 
-    def setID(self, prop_code, long_name):
-        PropertyObject.setID(self, prop_code, long_name)
-
     def addDataRecord(self, cp_lo, cp_hi, v):
         if v==None or v in self.property_value_lookup_map[v] == 'Y':
             self.value_map['Y'] = uset_union(self.value_map['Y'], range_uset(cp_lo, cp_hi))
@@ -146,8 +143,25 @@ class BinaryPropertyObject(PropertyObject):
 class NumericPropertyObject(PropertyObject):
     def __init__(self):
         PropertyObject.__init__(self)
+        self.cp_value_map = {}
+        self.NaN_set = empty_uset()
 
     def getPropertyKind(self): return "Numeric"
+
+    def addDataRecord(self, cp_lo, cp_hi, stringValue):
+        if stringValue == '':
+            self.NaN_set = uset_union(self.NaN_set, range_uset(cp_lo, cp_hi))
+        else:
+            for cp in range(cp_lo, cp_hi+1):
+                self.cp_value_map[cp] = stringValue
+
+    def finalizeProperty(self):
+        explicitly_defined_cps = empty_uset()
+        for cp in self.cp_value_map.keys():
+            explicitly_defined_cps = uset_union(explicitly_defined_cps, singleton_uset(cp))
+        # set NaN default
+        self.NaN_set = uset_union(self.NaN_set, uset_complement(explicitly_defined_cps))
+
 
 class ExtensionPropertyObject(PropertyObject):
     def __init__(self):

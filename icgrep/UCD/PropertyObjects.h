@@ -192,10 +192,22 @@ public:
         return false;
     }
     
-    NumericPropertyObject(property_t p, ClassTypeId)
-    : PropertyObject(p, ClassTypeId::NumericProperty) {
+    NumericPropertyObject(UCD::property_t p, UnicodeSet NaN_Set, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> & cps)
+    : PropertyObject(p, ClassTypeId::NumericProperty)
+    , mNaNCodepointSet(NaN_Set)
+    , mStringBuffer(string_buffer)
+    , mBufSize(bufsize)
+    , mExplicitCps(cps)
+    {
         
     }
+    const UnicodeSet GetCodepointSet(const std::string & numeric_spec) override;
+
+private:
+    UnicodeSet mNaNCodepointSet;  // codepoints for which the property value is NaN (not a number).
+    const char * mStringBuffer;  // buffer holding all string values for other codepoints, in sorted order. 
+    unsigned mBufSize;
+    const std::vector<UCD::codepoint_t> & mExplicitCps;
 };
 
 class ObsoletePropertyObject : public PropertyObject {
