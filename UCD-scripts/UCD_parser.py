@@ -314,12 +314,13 @@ def parse_multicolumn_property_data(pfile, property_object_map, property_lookup_
             continue
         else:
             (cp_lo, cp_hi, fields) = parse_data_record(t)
-            if len(fields) != len(prop_code_list): raise Exception("Mutlicolumn field count mismatch, expecting %i: " % len(prop_code_list) + t)
+            if len(fields) != len(prop_code_list): raise Exception("Multicolumn field count mismatch, expecting %i: " % len(prop_code_list) + t)
             for i in range(len(fields)):
-                if fields[i] != '':
+                if fields[i] != '' and prop_code_list[i] in property_object_map:
                     property_object_map[prop_code_list[i]].addDataRecord(cp_lo, cp_hi, fields[i])
     for p in prop_code_list:
-        property_object_map[p].finalizeProperty()
+        if prop_code_list[i] in property_object_map: 
+            property_object_map[p].finalizeProperty()
 
 UnicodeData_txt_regexp = re.compile("^([0-9A-F]{4,6});([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);([^;]*);(.*)$")
 

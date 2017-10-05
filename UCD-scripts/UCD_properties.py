@@ -281,8 +281,7 @@ class UCD_generator():
         cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
         f.write("\nnamespace UCD {\n")
         for p in prop_code_list:
-            self.emit_property(f, p)
-            property_object = self.property_object_map[p]
+            if p in self.property_object_map: self.emit_property(f, p)
         f.write("}\n\n")
         cformat.close_header_file(f)
         self.property_data_headers.append(basename)
@@ -388,6 +387,8 @@ def UCD_main():
     
     ucd.generate_SpecialCasing_h()
     
+    ucd.generate_multicolumn_properties_file('NameAliases', ['Name_Alias', 'Alias_Kind'])
+
     #
     # The Age property
     ucd.generate_property_value_file('DerivedAge', 'age')

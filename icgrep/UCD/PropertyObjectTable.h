@@ -33,6 +33,7 @@
 #include "IndicSyllabicCategory.h"
 #include "Jamo.h"
 #include "LineBreak.h"
+#include "NameAliases.h"
 #include "PropList.h"
 #include "ScriptExtensions.h"
 #include "Scripts.h"
@@ -77,7 +78,7 @@ namespace UCD {
     &JSN_ns::property_object,
     &NA_ns::property_object,
     &NA1_ns::property_object,
-    new UnsupportedPropertyObject(Name_Alias, PropertyObject::ClassTypeId::StringProperty),
+    &NAME_ALIAS_ns::property_object,
     &SCX_ns::property_object,
     &AGE_ns::property_object,
     &BLK_ns::property_object,
