@@ -37,6 +37,7 @@
 #include "ScriptExtensions.h"
 #include "Scripts.h"
 #include "SentenceBreakProperty.h"
+#include "SpecialCasing.h"
 #include "UnicodeData.h"
 #include "WordBreakProperty.h"
 
@@ -51,14 +52,14 @@ namespace UCD {
     new UnsupportedPropertyObject(cjkCompatibilityVariant, PropertyObject::ClassTypeId::StringProperty),
     &DM_ns::property_object,
     &FC_NFKC_ns::property_object,
-    new UnsupportedPropertyObject(lc, PropertyObject::ClassTypeId::StringProperty),
+    &LC_ns::property_object,
     &NFKC_CF_ns::property_object,
     new UnsupportedPropertyObject(scf, PropertyObject::ClassTypeId::StringProperty),
     &SLC_ns::property_object,
     &STC_ns::property_object,
     &SUC_ns::property_object,
-    new UnsupportedPropertyObject(tc, PropertyObject::ClassTypeId::StringProperty),
-    new UnsupportedPropertyObject(uc, PropertyObject::ClassTypeId::StringProperty),
+    &TC_ns::property_object,
+    &UC_ns::property_object,
     &BMG_ns::property_object,
     &BPB_ns::property_object,
     new UnsupportedPropertyObject(cjkIICore, PropertyObject::ClassTypeId::StringProperty),

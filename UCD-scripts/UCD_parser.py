@@ -387,3 +387,24 @@ def parse_UnicodeData_txt(property_object_map):
     property_object_map['suc'].finalizeProperty()
     property_object_map['stc'].finalizeProperty()
 
+def parse_SpecialCasing_txt(property_object_map):
+    data_records = []
+    f = open(UCD_config.UCD_src_dir + "/SpecialCasing.txt")
+    lines = f.readlines()
+    for t in lines:
+        if UCD_skip.match(t):
+            continue  # skip comment and blank lines
+        (cp, cp_hi, fields) = parse_data_record(t)
+        if len(fields) != 4: continue   #  Ignore context-dependent casing
+        if fields[3] != '': continue
+        (lc, uc, tc) = (fields[0], fields[1], fields[2])
+        if not uc == '':
+            property_object_map['uc'].addDataRecord(cp, cp, uc)
+        if not lc == '':
+            property_object_map['lc'].addDataRecord(cp, cp, lc)
+        if not tc == '':
+            property_object_map['tc'].addDataRecord(cp, cp, tc)
+    property_object_map['lc'].finalizeProperty()
+    property_object_map['uc'].finalizeProperty()
+    property_object_map['tc'].finalizeProperty()
+

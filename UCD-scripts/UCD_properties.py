@@ -243,7 +243,6 @@ class UCD_generator():
         for p in prop_code_list:
             self.emit_property(f, p)
             property_object = self.property_object_map[p]
-            if isinstance(property_object, BinaryPropertyObject) or isinstance(property_object, EnumeratedPropertyObject): self.supported_props.append(p)
         f.write("}\n\n")
         cformat.close_header_file(f)
         self.property_data_headers.append(basename)
@@ -258,7 +257,19 @@ class UCD_generator():
         for p in prop_code_list:
             self.emit_property(f, p)
             property_object = self.property_object_map[p]
-            self.supported_props.append(p)
+        f.write("}\n\n")
+        cformat.close_header_file(f)
+        self.property_data_headers.append(basename)
+
+    def generate_SpecialCasing_h(self):
+        basename = 'SpecialCasing'
+        parse_SpecialCasing_txt(self.property_object_map)
+        f = cformat.open_header_file_for_write(basename)
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        f.write("\nnamespace UCD {\n")
+        for p in ['lc', 'uc', 'tc']:
+            self.emit_property(f, p)
+            property_object = self.property_object_map[p]
         f.write("}\n\n")
         cformat.close_header_file(f)
         self.property_data_headers.append(basename)
@@ -334,6 +345,9 @@ def UCD_main():
     ucd.load_property_value_info()
 
     ucd.generate_UnicodeData_h()
+    
+    ucd.generate_SpecialCasing_h()
+    
     #
     # The Age property
     ucd.generate_property_value_file('DerivedAge', 'age')
