@@ -46614,6 +46614,12 @@ S
                                                     buffer_length, 
                                                     defined_cps);
     }
+    namespace NA1_ns {
+        static ObsoletePropertyObject property_object(na1);
+    }
+    namespace ISC_ns {
+        static ObsoletePropertyObject property_object(isc);
+    }
 }
 
 

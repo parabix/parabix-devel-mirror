@@ -40,9 +40,6 @@ EnumeratedProperty_template = r"""
     }
 """
 
-CodepointProperties = ['scf', 'slc', 'suc', 'stc']
-
-
 def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map):
     s = string.Template(r"""    namespace ${prop_enum_up}_ns {
         /** Code Point Ranges for ${prop_enum} mapping to <none>
@@ -116,6 +113,14 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
     f.write("         {")
     f.write(cformat.multiline_fill(set_list, ',', 8))
     f.write("\n         }};\n    }\n")
+
+def emit_Obsolete_property(f, property_code):
+    s = string.Template(r"""    namespace ${prop_enum_up}_ns {
+        static ObsoletePropertyObject property_object(${prop_enum});
+    }
+""")
+    f.write(s.substitute(prop_enum = property_code, prop_enum_up = property_code.upper()))
+
 
 class UCD_generator():
     def __init__(self):
@@ -197,6 +202,8 @@ class UCD_generator():
             print("%s: %s bytes" % (property_object.getPropertyFullName(), sum([property_object.value_map[v].bytes() for v in property_object.value_map.keys()])))
         elif isinstance(property_object, StringPropertyObject):
             emit_string_property(f, property_code, property_object.null_str_set, property_object.reflexive_set, property_object.cp_value_map)
+        elif isinstance(property_object, ObsoletePropertyObject):
+            emit_Obsolete_property(f, property_code)
         else: return
         self.supported_props.append(property_code)
 
@@ -246,7 +253,7 @@ class UCD_generator():
         parse_UnicodeData_txt(self.property_object_map)
         f = cformat.open_header_file_for_write(basename)
         cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
-        prop_code_list = ['na', 'dm', 'suc', 'slc', 'stc']
+        prop_code_list = ['na', 'dm', 'suc', 'slc', 'stc', 'na1', 'isc']
         f.write("\nnamespace UCD {\n")
         for p in prop_code_list:
             self.emit_property(f, p)
@@ -297,11 +304,6 @@ class UCD_generator():
             k = self.property_object_map[p].getPropertyKind()
             if p in self.supported_props:
                 objlist.append("&%s_ns::property_object" % p.upper())
-            elif k == 'String':
-                if p in CodepointProperties:
-                    objlist.append("new UnsupportedPropertyObject(%s, PropertyObject::ClassTypeId::CodepointProperty)" % p)
-                else:
-                    objlist.append("new UnsupportedPropertyObject(%s, PropertyObject::ClassTypeId::StringProperty)" % p)
             else:
                 objlist.append("new UnsupportedPropertyObject(%s, PropertyObject::ClassTypeId::%sProperty)" % (p, k))
         f.write("\n  const std::array<PropertyObject *, %i> property_object_table = {{\n    " % len(objlist))

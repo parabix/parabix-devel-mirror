@@ -222,4 +222,13 @@ const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value
     }
 }
 
+const std::string & ObsoletePropertyObject::GetPropertyValueGrepString() {
+    llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
+}
+
+const UnicodeSet ObsoletePropertyObject::GetCodepointSet(const std::string &) {
+    llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
+}
+
+
 }

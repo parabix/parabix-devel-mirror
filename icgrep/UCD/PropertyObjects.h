@@ -21,15 +21,13 @@ std::string canonicalize_value_name(const std::string & prop_or_val);
 class PropertyObject {
 public:
     enum class ClassTypeId : unsigned {
-        NumericProperty
-        , CodepointProperty
-        , StringProperty
-        , MiscellaneousProperty
-        , EnumeratedProperty
-        , ExtensionProperty
-        , CatalogProperty
-        , BinaryProperty
-        , UnsupportedProperty
+        BinaryProperty,
+        EnumeratedProperty,
+        ExtensionProperty,
+        NumericProperty,
+        StringProperty,
+        ObsoleteProperty,
+        UnsupportedProperty
     };
 
     using iterator = const std::vector<std::string>::const_iterator;
@@ -46,19 +44,29 @@ public:
     ClassTypeId the_kind;
 };
 
-class UnsupportedPropertyObject : public PropertyObject {
+class BinaryPropertyObject : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
-        return p->getClassTypeId() == ClassTypeId::UnsupportedProperty;
+        return p->getClassTypeId() == ClassTypeId::BinaryProperty;
     }
     static inline bool classof(const void *) {
         return false;
     }
-
-    UnsupportedPropertyObject(property_t p, ClassTypeId)
-    : PropertyObject(p, ClassTypeId::UnsupportedProperty) {
-
+    
+    BinaryPropertyObject(UCD::property_t p, UnicodeSet s)
+    : PropertyObject(p, ClassTypeId::BinaryProperty)
+    , mNoUninitialized(true)
+    , mY(s) {
+        
     }
+    const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
+    const UnicodeSet & GetCodepointSet(const int property_enum_val);
+    const std::string & GetPropertyValueGrepString() override;
+private:
+    bool mNoUninitialized;
+    UnicodeSet mY;
+    UnicodeSet mN;
+    std::string mPropertyValueGrepString;
 };
 
 class EnumeratedPropertyObject : public PropertyObject {
@@ -146,31 +154,6 @@ private:
     const std::vector<const UnicodeSet *> property_value_sets;
 };
 
-class BinaryPropertyObject : public PropertyObject {
-public:
-    static inline bool classof(const PropertyObject * p) {
-        return p->getClassTypeId() == ClassTypeId::BinaryProperty;
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
-
-    BinaryPropertyObject(UCD::property_t p, UnicodeSet s)
-    : PropertyObject(p, ClassTypeId::BinaryProperty)
-    , mNoUninitialized(true)
-    , mY(s) {
-
-    }
-    const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
-    const UnicodeSet & GetCodepointSet(const int property_enum_val);
-    const std::string & GetPropertyValueGrepString() override;
-private:
-    bool mNoUninitialized;
-    UnicodeSet mY;
-    UnicodeSet mN;
-    std::string mPropertyValueGrepString;
-};
-
 class StringPropertyObject : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
@@ -198,6 +181,51 @@ private:
     unsigned mBufSize;
     const std::vector<UCD::codepoint_t> & mExplicitCps;
 
+};
+    
+class NumericPropertyObject : public PropertyObject {
+public:
+    static inline bool classof(const PropertyObject * p) {
+        return p->getClassTypeId() == ClassTypeId::NumericProperty;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    
+    NumericPropertyObject(property_t p, ClassTypeId)
+    : PropertyObject(p, ClassTypeId::NumericProperty) {
+        
+    }
+};
+
+class ObsoletePropertyObject : public PropertyObject {
+public:
+    static inline bool classof(const PropertyObject * p) {
+        return p->getClassTypeId() == ClassTypeId::ObsoleteProperty;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    
+    ObsoletePropertyObject(property_t p)
+    : PropertyObject(p, ClassTypeId::ObsoleteProperty) {}
+    
+    const std::string & GetPropertyValueGrepString() override;
+    const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
+
+};
+
+class UnsupportedPropertyObject : public PropertyObject {
+public:
+    static inline bool classof(const PropertyObject * p) {
+        return p->getClassTypeId() == ClassTypeId::UnsupportedProperty;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    
+    UnsupportedPropertyObject(property_t p, ClassTypeId)
+    : PropertyObject(p, ClassTypeId::UnsupportedProperty) {}
 };
 }
 

@@ -1910,46 +1910,7 @@ namespace UCD {
         static BinaryPropertyObject property_object{Gr_Ext, codepoint_set};
     }
     namespace GR_LINK_ns {
-        /** Code Point Ranges for Gr_Link
-        [094d, 094d], [09cd, 09cd], [0a4d, 0a4d], [0acd, 0acd],
-        [0b4d, 0b4d], [0bcd, 0bcd], [0c4d, 0c4d], [0ccd, 0ccd],
-        [0d4d, 0d4d], [0dca, 0dca], [0e3a, 0e3a], [0f84, 0f84],
-        [1039, 103a], [1714, 1714], [1734, 1734], [17d2, 17d2],
-        [1a60, 1a60], [1b44, 1b44], [1baa, 1bab], [1bf2, 1bf3],
-        [2d7f, 2d7f], [a806, a806], [a8c4, a8c4], [a953, a953],
-        [a9c0, a9c0], [aaf6, aaf6], [abed, abed], [10a3f, 10a3f],
-        [11046, 11046], [1107f, 1107f], [110b9, 110b9], [11133, 11134],
-        [111c0, 111c0], [11235, 11235], [112ea, 112ea], [1134d, 1134d],
-        [11442, 11442], [114c2, 114c2], [115bf, 115bf], [1163f, 1163f],
-        [116b6, 116b6], [1172b, 1172b], [11c3f, 11c3f]**/
-        const UnicodeSet codepoint_set 
-            {{{Empty, 74}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
-              {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-              {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3},
-              {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-              {Empty, 2}, {Mixed, 1}, {Empty, 10}, {Mixed, 1}, {Empty, 4},
-              {Mixed, 1}, {Empty, 54}, {Mixed, 2}, {Empty, 4}, {Mixed, 1},
-              {Empty, 20}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 2},
-              {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 139}, {Mixed, 1},
-              {Empty, 980}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 3},
-              {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 8}, {Mixed, 1},
-              {Empty, 7}, {Mixed, 1}, {Empty, 753}, {Mixed, 1}, {Empty, 48},
-              {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-              {Empty, 4}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 5},
-              {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 7}, {Mixed, 1},
-              {Empty, 3}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 3},
-              {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-              {Empty, 39}, {Mixed, 1}, {Empty, 32542}},
-             {0x00002000, 0x00002000, 0x00002000, 0x00002000, 0x00002000,
-              0x00002000, 0x00002000, 0x00002000, 0x00002000, 0x00000400,
-              0x04000000, 0x00000010, 0x06000000, 0x00100000, 0x00100000,
-              0x00040000, 0x00000001, 0x00000010, 0x00000c00, 0x000c0000,
-              0x80000000, 0x00000040, 0x00000010, 0x00080000, 0x00000001,
-              0x00400000, 0x00002000, 0x80000000, 0x00000040, 0x80000000,
-              0x02000000, 0x00180000, 0x00000001, 0x00200000, 0x00000400,
-              0x00002000, 0x00000004, 0x00000004, 0x80000000, 0x80000000,
-              0x00400000, 0x00000800, 0x80000000}};
-        static BinaryPropertyObject property_object{Gr_Link, codepoint_set};
+        static ObsoletePropertyObject property_object(Gr_Link);
     }
     namespace IDC_ns {
         /** Code Point Ranges for IDC

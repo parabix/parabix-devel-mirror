@@ -40,6 +40,9 @@ UCD_skip = re.compile("^#.*$|^\s*$")
 UCD_property_section_regexp = re.compile("^#\s*([-A-Za-z_0-9]+)\s*Properties\s*$")
 UCD_property_alias_regexp = re.compile("^([-A-Za-z_0-9]+)\s*;\s*([-A-Za-z_0-9]+)([^#]*)")
 
+# Section 2.3.3 of UAX $44 
+Obsolete_Properties = ["na1", "Gr_Link", "Hyphen", "isc", "XO_NFC", "XO_NFD", "XO_NFKC", "XO_NFKD" ,"FC_NFKC"]
+
 def parse_PropertyAlias_txt():
     property_object_map = {}
     property_enum_name_list = []
@@ -54,7 +57,9 @@ def parse_PropertyAlias_txt():
         if not m: raise Exception("Unknown property alias syntax: %s" % t)
         (property_code, prop_preferred_full_name, prop_extra) = (m.group(1), m.group(2), m.group(3))
         property_enum_name_list.append(property_code)
-        if property_kind == "Binary":
+        if property_code in Obsolete_Properties:
+            property_object_map[property_code] = ObsoletePropertyObject()
+        elif property_kind == "Binary":
             property_object_map[property_code] = BinaryPropertyObject()
         elif property_kind == "Enumerated":
             property_object_map[property_code] = EnumeratedPropertyObject()
@@ -262,10 +267,7 @@ def parse_multisection_property_data(pfile, property_object_map, property_lookup
             (cp_lo, cp_hi, fields) = parse_data_record(t)
             (prop_code, v) = parse_property_and_value(fields, property_lookup_map)
             if not prop_code in props: props.append(prop_code)
-            if v == None:  # binary property
-                property_object_map[prop_code].addDataRecord(cp_lo, cp_hi)
-            else:
-                property_object_map[prop_code].addDataRecord(cp_lo, cp_hi, v)
+            property_object_map[prop_code].addDataRecord(cp_lo, cp_hi, v)
     for p in props:
         property_object_map[p].finalizeProperty()
     return props
@@ -290,7 +292,7 @@ def parse_property_data(property_object, pfile):
         else:
             (cp_lo, cp_hi, fields) = parse_data_record(t)
             if isinstance(property_object, BinaryPropertyObject) and len(fields) == 0:
-                property_object.addDataRecord(cp_lo, cp_hi)
+                property_object.addDataRecord(cp_lo, cp_hi, None)
             else:
                 property_object.addDataRecord(cp_lo, cp_hi, fields[0])
     property_object.finalizeProperty()
@@ -352,8 +354,8 @@ def parse_UnicodeData_txt(property_object_map):
         (cp, name, gc) = (int(m.group(1), 16), m.group(2), m.group(3))
         (ccc, bidic, decomp, bidim) = (m.group(4), m.group(5), m.group(6), m.group(10))
         (decval, digitval, numval) = (m.group(7), m.group(8), m.group(9))
-        # Unicode 1 name and ISO comment are obolete 
-        (uc, lc, tc) = (m.group(13), m.group(14), m.group(15))
+        (na1, isc) = (m.group(10), m.group(11))
+        (suc, slc, stc) = (m.group(13), m.group(14), m.group(15))
         rangeMatch = NameRange_regexp.match(name)
         if rangeMatch:
             rangeName = rangeMatch.group(1)
@@ -361,22 +363,25 @@ def parse_UnicodeData_txt(property_object_map):
             if rangeMatch.group(2) == 'First': name_range_starts[rangeName] = cp
             if rangeMatch.group(2) == 'Last': 
                 if not rangeName in name_range_starts: raise Exception("UnicodeData range end encountered without prior range start: %s" % t)
-                range_records.append((name_range_starts[rangeName], cp, rangeName, gc, ccc, bidic, decomp, decval, digitval, numval, bidim, uc, lc, tc))
-            continue
+                range_records.append((name_range_starts[rangeName], cp, rangeName, gc))
         if not NonName_regexp.match(name):
             property_object_map['na'].addDataRecord(cp, cp, name)
         if not decomp == '':
             (decomp_type, mapping) = parse_decomposition(decomp)
             property_object_map['dm'].addDataRecord(cp, cp, mapping)
-        if not uc == '':
-            property_object_map['suc'].addDataRecord(cp, cp, uc)
-            if tc == '':
+        if not na1 == '':
+            property_object_map['na1'].addDataRecord(cp, cp, na1)
+        if not suc == '':
+            property_object_map['suc'].addDataRecord(cp, cp, suc)
+            if stc == '':
                 property_object_map['stc'].addDataRecord(cp, cp, uc)
-        if not lc == '':
-            property_object_map['slc'].addDataRecord(cp, cp, lc)
-        if not tc == '':
-            property_object_map['stc'].addDataRecord(cp, cp, tc)
+        if not slc == '':
+            property_object_map['slc'].addDataRecord(cp, cp, slc)
+        if not stc == '':
+            property_object_map['stc'].addDataRecord(cp, cp, stc)
     property_object_map['na'].finalizeProperty()
+    property_object_map['na1'].finalizeProperty()
+    property_object_map['isc'].finalizeProperty()
     property_object_map['dm'].finalizeProperty()
     property_object_map['slc'].finalizeProperty()
     property_object_map['suc'].finalizeProperty()

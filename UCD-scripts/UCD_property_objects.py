@@ -31,6 +31,8 @@ class PropertyObject():
         if self.default_value != None and self.default_value != default:
             raise Exception("Conflicting default specification")
         self.default_value = default
+    def addDataRecord(self, cp_lo, cp_hi, v):
+        pass
     def finalizeProperty(self):
         pass
     def getPropertyCode(self):
@@ -133,8 +135,11 @@ class BinaryPropertyObject(PropertyObject):
     def setID(self, prop_code, long_name):
         PropertyObject.setID(self, prop_code, long_name)
 
-    def addDataRecord(self, cp_lo, cp_hi):
-        self.value_map['Y'] = uset_union(self.value_map['Y'], range_uset(cp_lo, cp_hi))
+    def addDataRecord(self, cp_lo, cp_hi, v):
+        if v==None or v in self.property_value_lookup_map[v] == 'Y':
+            self.value_map['Y'] = uset_union(self.value_map['Y'], range_uset(cp_lo, cp_hi))
+        else: 
+            self.value_map['Y'] = uset_difference(self.value_map['Y'], range_uset(cp_lo, cp_hi))
 
 
 
@@ -183,10 +188,7 @@ class StringPropertyObject(PropertyObject):
         self.reflexive_set = empty_uset()
         
     def getPropertyKind(self): 
-        if self.property_code in ['scf', 'slc', 'suc', 'stc']: 
-            return "Codepoint"
-        else: 
-            return "String"
+        return "String"
 
     def addDataRecord(self, cp_lo, cp_hi, stringValue):
         if stringValue == '':
@@ -213,6 +215,13 @@ class StringPropertyObject(PropertyObject):
             self.reflexive_set = uset_union(self.reflexive_set, uset_complement(uset_union(explicitly_defined_cps, self.null_str_set)))
         else:
             self.null_str_set = uset_union(self.null_str_set, uset_complement(uset_union(explicitly_defined_cps, self.reflexive_set)))
+
+class ObsoletePropertyObject(PropertyObject):
+    def __init__(self):
+        PropertyObject.__init__(self)
+
+    def getPropertyKind(self): return "Obsolete"
+
 
 def getPropertyLookupMap(property_object_map):
     property_lookup_map = {}

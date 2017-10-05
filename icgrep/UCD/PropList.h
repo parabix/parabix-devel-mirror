@@ -209,19 +209,7 @@ namespace UCD {
         static BinaryPropertyObject property_object{Hex, codepoint_set};
     }
     namespace HYPHEN_ns {
-        /** Code Point Ranges for Hyphen
-        [002d, 002d], [00ad, 00ad], [058a, 058a], [1806, 1806],
-        [2010, 2011], [2e17, 2e17], [30fb, 30fb], [fe63, fe63],
-        [ff0d, ff0d], [ff65, ff65]**/
-        const UnicodeSet codepoint_set 
-            {{{Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 38},
-              {Mixed, 1}, {Empty, 147}, {Mixed, 1}, {Empty, 63}, {Mixed, 1},
-              {Empty, 111}, {Mixed, 1}, {Empty, 22}, {Mixed, 1},
-              {Empty, 1643}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 2},
-              {Mixed, 1}, {Empty, 32772}},
-             {0x00002000, 0x00002000, 0x00000400, 0x00000040, 0x00030000,
-              0x00800000, 0x08000000, 0x00000008, 0x00002000, 0x00000020}};
-        static BinaryPropertyObject property_object{Hyphen, codepoint_set};
+        static ObsoletePropertyObject property_object(Hyphen);
     }
     namespace IDSB_ns {
         /** Code Point Ranges for IDSB
