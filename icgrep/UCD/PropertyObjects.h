@@ -219,10 +219,10 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    StringOverridePropertyObject(UCD::property_t p, PropertyObject & baseObj, UnicodeSet overridden, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> & cps)
+    StringOverridePropertyObject(UCD::property_t p, PropertyObject & baseObj, UnicodeSet explicitly_defined, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> & cps)
     : PropertyObject(p, ClassTypeId::StringOverrideProperty)
     , mBaseObject(baseObj)
-    , mOverriddenSet(overridden)
+    , mOverriddenSet(explicitly_defined)
     , mStringBuffer(string_buffer)
     , mBufSize(bufsize)
     , mExplicitCps(cps)

@@ -12,7 +12,7 @@
 import re, string, cformat
 import UCD_config
 from unicode_set import *
-from UCD_parser import parse_CaseFolding_txt
+from UCD_parser import parse_PropertyAlias_txt, parse_CaseFolding_txt
 
 def simple_CaseFolding_BitSets(fold_map):
    BitDiffSet = {}
@@ -39,8 +39,8 @@ def simple_CaseFolding_BitSets(fold_map):
 
 def simple_CaseClosure_map(fold_data):
    simpleFoldMap = {}
-   for k in fold_data['S'].keys(): simpleFoldMap[k] = fold_data['S'][k]
-   for k in fold_data['C'].keys(): simpleFoldMap[k] = fold_data['C'][k]
+   for k in fold_data['S'].keys(): simpleFoldMap[k] = int(fold_data['S'][k], 16)
+   for k in fold_data['C'].keys(): simpleFoldMap[k] = int(fold_data['C'][k], 16)
    cl_map = {}
    for k in simpleFoldMap.keys():
       v = simpleFoldMap[k]
@@ -150,13 +150,16 @@ inline void caseInsensitiveInsert(re::CC * cc, const re::codepoint_t cp) {
 """
 
 def genCaseFolding_txt_h():
-   fold_data = parse_CaseFolding_txt()
-   cm = simple_CaseClosure_map(fold_data)
-   f = cformat.open_header_file_for_write('CaseFolding_txt', 'casefold.py')
-   cformat.write_imports(f, ["<vector>", '"re/re_cc.h"'])
-   f.write(foldDeclarations)
-   f.write(genFoldEntryData(cm))
-   cformat.close_header_file(f)
+    (property_enum_name_list, property_object_map) = parse_PropertyAlias_txt()
+    fold_data = parse_CaseFolding_txt(property_object_map)
+    cm = simple_CaseClosure_map(fold_data)
+    f = cformat.open_header_file_for_write('CaseFolding_txt', 'casefold.py')
+    cformat.write_imports(f, ["<vector>", '"re/re_cc.h"'])
+    f.write(foldDeclarations)
+    f.write(genFoldEntryData(cm))
+    #emit_property(f, 'scf')
+    #emit_property(f, 'cf')
+    cformat.close_header_file(f)
 
 if __name__ == "__main__":
    genCaseFolding_txt_h()

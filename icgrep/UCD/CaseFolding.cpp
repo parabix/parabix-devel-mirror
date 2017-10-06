@@ -5,7 +5,7 @@
  *
  */
 
-#include "CaseFolding_txt.h"
+#include "CaseFolding.h"
 #include <algorithm>
 
 using namespace re;

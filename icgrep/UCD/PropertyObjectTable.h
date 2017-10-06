@@ -14,6 +14,7 @@
 #include "BidiBrackets.h"
 #include "BidiMirroring.h"
 #include "Blocks.h"
+#include "CaseFolding.h"
 #include "CompositionExclusions.h"
 #include "DerivedAge.h"
 #include "DerivedBidiClass.h"
@@ -49,13 +50,13 @@ namespace UCD {
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
     &NV_ns::property_object,
-    new UnsupportedPropertyObject(cf, PropertyObject::ClassTypeId::StringOverrideProperty),
+    &CF_ns::property_object,
     new UnsupportedPropertyObject(cjkCompatibilityVariant, PropertyObject::ClassTypeId::StringProperty),
     &DM_ns::property_object,
     &FC_NFKC_ns::property_object,
     &LC_ns::property_object,
     &NFKC_CF_ns::property_object,
-    new UnsupportedPropertyObject(scf, PropertyObject::ClassTypeId::StringProperty),
+    &SCF_ns::property_object,
     &SLC_ns::property_object,
     &STC_ns::property_object,
     &SUC_ns::property_object,

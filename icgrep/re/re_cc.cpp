@@ -6,7 +6,7 @@
 
 #include "re_cc.h"
 #include <llvm/Support/Compiler.h>
-#include <UCD/CaseFolding_txt.h>
+#include <UCD/CaseFolding.h>
 #include <sstream>
 
 namespace re {

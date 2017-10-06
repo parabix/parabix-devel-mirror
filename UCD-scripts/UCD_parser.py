@@ -426,7 +426,7 @@ def parse_SpecialCasing_txt(property_object_map):
 # The FullCaseFold property is the set F+C 
 # There may be multiple entries per codepoint
 
-def parse_CaseFolding_txt():
+def parse_CaseFolding_txt(property_object_map):
     fold_map = {}
     f = open(UCD_config.UCD_src_dir + "/" + 'CaseFolding.txt')
     lines = f.readlines()
@@ -437,9 +437,12 @@ def parse_CaseFolding_txt():
         if not fold_type in fold_map: fold_map[fold_type] = {} 
         if fold_type == 'S' or fold_type == 'C':
             # fold value is guaranteed to be a single codepoint
-            fold_val = int(fold_val, 16)
+            property_object_map['scf'].addDataRecord(cp, cp, fold_val)
         else:
-            fold_val = [int(x, 16) for x in fold_val.split(" ")]
+            if fold_type == 'F':
+                property_object_map['cf'].addDataRecord(cp, cp, fold_val)
         fold_map[fold_type][cp] = fold_val
+    property_object_map['scf'].finalizeProperty()
+    property_object_map['cf'].finalizeProperty()
     return fold_map
 

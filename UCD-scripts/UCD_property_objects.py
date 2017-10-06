@@ -248,7 +248,7 @@ class StringOverridePropertyObject(PropertyObject):
             stringValue = s
         else: 
             raise Exception("Expecting codepoint string, but got " + stringValue)
-        self.cp_value_map[cp] = stringValue
+        for cp in range(cp_lo, cp_hi+1): self.cp_value_map[cp] = stringValue
 
     def finalizeProperty(self):
         explicitly_defined_cps = empty_uset()

@@ -23,7 +23,7 @@
 #include <re/printer_re.h>
 #include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
-#include <UCD/CaseFolding_txt.h>
+#include <UCD/CaseFolding.h>
 #include <grep_engine.h>
 #include <sstream>
 #include <string>
