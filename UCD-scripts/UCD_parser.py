@@ -359,7 +359,7 @@ def parse_UnicodeData_txt(property_object_map):
         (ccc, bidic, decomp, bidim) = (m.group(4), m.group(5), m.group(6), m.group(10))
         (decval, digitval, numval) = (m.group(7), m.group(8), m.group(9))
         (na1, isc) = (m.group(10), m.group(11))
-        (suc, slc, stc) = (m.group(13), m.group(14), m.group(15))
+        (upper, lower, title) = (m.group(13), m.group(14), m.group(15))
         rangeMatch = NameRange_regexp.match(name)
         if rangeMatch:
             rangeName = rangeMatch.group(1)
@@ -375,14 +375,14 @@ def parse_UnicodeData_txt(property_object_map):
             property_object_map['dm'].addDataRecord(cp, cp, mapping)
         if not na1 == '':
             property_object_map['na1'].addDataRecord(cp, cp, na1)
-        if not suc == '':
-            property_object_map['suc'].addDataRecord(cp, cp, suc)
-            if stc == '':
-                property_object_map['stc'].addDataRecord(cp, cp, uc)
-        if not slc == '':
-            property_object_map['slc'].addDataRecord(cp, cp, slc)
-        if not stc == '':
-            property_object_map['stc'].addDataRecord(cp, cp, stc)
+        if not upper == '':
+            property_object_map['suc'].addDataRecord(cp, cp, upper)
+        if not lower == '':
+            property_object_map['slc'].addDataRecord(cp, cp, lower)
+        if not title == '':
+            property_object_map['stc'].addDataRecord(cp, cp, title)
+        elif not upper == '':
+            property_object_map['stc'].addDataRecord(cp, cp, upper)
         if not decval == '':
             property_object_map['nv'].addDataRecord(cp, cp, decval)
         if not digitval == '':
@@ -408,16 +408,16 @@ def parse_SpecialCasing_txt(property_object_map):
         (cp, cp_hi, fields) = parse_data_record(t)
         if len(fields) != 4: continue   #  Ignore context-dependent casing
         if fields[3] != '': continue
-        (lc, uc, tc) = (fields[0], fields[1], fields[2])
-        if not uc == '':
-            property_object_map['uc'].addDataRecord(cp, cp, uc)
-        if not lc == '':
-            property_object_map['lc'].addDataRecord(cp, cp, lc)
-        if not tc == '':
-            property_object_map['tc'].addDataRecord(cp, cp, tc)
+        (lower, title, upper) = (fields[0], fields[1], fields[2])
+        if not lower == '':
+            property_object_map['lc'].addDataRecord(cp, cp, lower)
+        if not title == '':
+            property_object_map['tc'].addDataRecord(cp, cp, title)
+        if not upper == '':
+            property_object_map['uc'].addDataRecord(cp, cp, upper)
     property_object_map['lc'].finalizeProperty()
-    property_object_map['uc'].finalizeProperty()
     property_object_map['tc'].finalizeProperty()
+    property_object_map['uc'].finalizeProperty()
 
 
 # CaseFolding.txt has four types of fold entries:
