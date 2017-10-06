@@ -49,7 +49,7 @@ namespace UCD {
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
     &NV_ns::property_object,
-    new UnsupportedPropertyObject(cf, PropertyObject::ClassTypeId::StringProperty),
+    new UnsupportedPropertyObject(cf, PropertyObject::ClassTypeId::StringOverrideProperty),
     new UnsupportedPropertyObject(cjkCompatibilityVariant, PropertyObject::ClassTypeId::StringProperty),
     &DM_ns::property_object,
     &FC_NFKC_ns::property_object,

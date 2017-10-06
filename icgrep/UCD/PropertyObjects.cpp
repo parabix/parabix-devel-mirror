@@ -243,6 +243,26 @@ const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value
     }
 }
 
+const UnicodeSet StringOverridePropertyObject::GetCodepointSet(const std::string & value_spec) {
+    // First step: get the codepoints from the base object and then remove any overridden ones.
+    UnicodeSet result_set = mBaseObject.GetCodepointSet(value_spec) - mOverriddenSet;
+    // Now search for additional entries.
+    unsigned val_bytes = value_spec.length();
+    const char * value_str = value_spec.c_str();
+    const char * search_str = mStringBuffer;
+    unsigned buffer_line = 0;
+    while (buffer_line < mExplicitCps.size()) {
+        const char * eol = strchr(search_str, '\n');
+        unsigned len = eol - search_str;
+        if ((len == val_bytes) && (memcmp(search_str, value_str, len) == 0)) {
+            result_set.insert(mExplicitCps[buffer_line]);
+        }
+        buffer_line++;
+        search_str = eol+1;
+    }
+    return result_set;
+}
+    
 const std::string & ObsoletePropertyObject::GetPropertyValueGrepString() {
     llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
 }

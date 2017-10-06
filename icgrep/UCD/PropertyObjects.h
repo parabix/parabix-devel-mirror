@@ -26,6 +26,7 @@ public:
         ExtensionProperty,
         NumericProperty,
         StringProperty,
+        StringOverrideProperty,
         ObsoleteProperty,
         UnsupportedProperty
     };
@@ -154,6 +155,33 @@ private:
     const std::vector<const UnicodeSet *> property_value_sets;
 };
 
+class NumericPropertyObject : public PropertyObject {
+public:
+    static inline bool classof(const PropertyObject * p) {
+        return p->getClassTypeId() == ClassTypeId::NumericProperty;
+    }
+    static inline bool classof(const void *) {
+        return false;
+    }
+    
+    NumericPropertyObject(UCD::property_t p, UnicodeSet NaN_Set, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> & cps)
+    : PropertyObject(p, ClassTypeId::NumericProperty)
+    , mNaNCodepointSet(NaN_Set)
+    , mStringBuffer(string_buffer)
+    , mBufSize(bufsize)
+    , mExplicitCps(cps)
+    {
+        
+    }
+    const UnicodeSet GetCodepointSet(const std::string & numeric_spec) override;
+    
+private:
+    UnicodeSet mNaNCodepointSet;  // codepoints for which the property value is NaN (not a number).
+    const char * mStringBuffer;  // buffer holding all string values for other codepoints, in sorted order. 
+    unsigned mBufSize;
+    const std::vector<UCD::codepoint_t> & mExplicitCps;
+};
+
 class StringPropertyObject : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
@@ -183,33 +211,35 @@ private:
 
 };
     
-class NumericPropertyObject : public PropertyObject {
+class StringOverridePropertyObject : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
-        return p->getClassTypeId() == ClassTypeId::NumericProperty;
+        return p->getClassTypeId() == ClassTypeId::StringOverrideProperty;
     }
     static inline bool classof(const void *) {
         return false;
     }
-    
-    NumericPropertyObject(UCD::property_t p, UnicodeSet NaN_Set, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> & cps)
-    : PropertyObject(p, ClassTypeId::NumericProperty)
-    , mNaNCodepointSet(NaN_Set)
+    StringOverridePropertyObject(UCD::property_t p, PropertyObject & baseObj, UnicodeSet overridden, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> & cps)
+    : PropertyObject(p, ClassTypeId::StringOverrideProperty)
+    , mBaseObject(baseObj)
+    , mOverriddenSet(overridden)
     , mStringBuffer(string_buffer)
     , mBufSize(bufsize)
     , mExplicitCps(cps)
     {
         
     }
-    const UnicodeSet GetCodepointSet(const std::string & numeric_spec) override;
-
+    const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
+    
 private:
-    UnicodeSet mNaNCodepointSet;  // codepoints for which the property value is NaN (not a number).
-    const char * mStringBuffer;  // buffer holding all string values for other codepoints, in sorted order. 
+    PropertyObject & mBaseObject;  // the base object that provides default values for this property unless overridden.
+    UnicodeSet mOverriddenSet;   // codepoints for which the baseObject value is overridden.
+    const char * mStringBuffer;  // buffer holding all string values for overridden codepoints, in sorted order. 
     unsigned mBufSize;
     const std::vector<UCD::codepoint_t> & mExplicitCps;
+    
 };
-
+    
 class ObsoletePropertyObject : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {

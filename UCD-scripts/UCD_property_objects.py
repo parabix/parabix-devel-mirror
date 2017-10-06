@@ -230,6 +230,32 @@ class StringPropertyObject(PropertyObject):
         else:
             self.null_str_set = uset_union(self.null_str_set, uset_complement(uset_union(explicitly_defined_cps, self.reflexive_set)))
 
+class StringOverridePropertyObject(PropertyObject):
+    def __init__(self, overridden_code):
+        PropertyObject.__init__(self)
+        self.cp_value_map = {}
+        self.overridden_code = overridden_code
+        self.overridden_set = empty_uset()
+        
+    def getPropertyKind(self): 
+        return "StringOverride"
+
+    def addDataRecord(self, cp_lo, cp_hi, stringValue):
+        if codepoint_String_regexp.match(stringValue):
+            s = ""
+            for cp in [int(x, 16) for x in stringValue.split(' ')]:
+                s += chr(cp)
+            stringValue = s
+        else: 
+            raise Exception("Expecting codepoint string, but got " + stringValue)
+        self.cp_value_map[cp] = stringValue
+
+    def finalizeProperty(self):
+        explicitly_defined_cps = empty_uset()
+        for cp in self.cp_value_map.keys():
+            explicitly_defined_cps = uset_union(explicitly_defined_cps, singleton_uset(cp))
+        self.overridden_set = explicitly_defined_cps
+
 class ObsoletePropertyObject(PropertyObject):
     def __init__(self):
         PropertyObject.__init__(self)

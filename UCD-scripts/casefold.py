@@ -12,45 +12,7 @@
 import re, string, cformat
 import UCD_config
 from unicode_set import *
-
-
-
-#
-#  Processing files of the UCD
-#
-#  General format for skippable comments, blank lines
-UCD_skip = re.compile("^#.*$|^\s*$")
-
-#
-#  UCD Property File Format 4: property aliases
-#  PropertyAliases.txt
-#
-UCD_case_fold_regexp = re.compile("^([0-9A-F]{4,6})\s*;\s*([CSFT]);\s*((?:[-A-Za-z0-9_]+\s+)*[-A-Za-z0-9_]+)\s*(?:[;#]|$)")
-
-def parse_CaseFolding_txt():
-   fold_type = {}
-   fold_value = {}
-   f = open(UCD_config.UCD_src_dir + "/" + 'CaseFolding.txt')
-   lines = f.readlines()
-   for t in lines:
-      if UCD_skip.match(t): continue  # skip comment and blank lines
-      m = UCD_case_fold_regexp.match(t)
-      if not m: raise Exception("Unknown case fold syntax: %s" % t)
-      codepoint = int(m.group(1), 16)
-      fold_t = m.group(2)
-      fold_type[codepoint] = fold_t
-      fold_val = m.group(3)
-      if fold_t == 'T': 
-         print("Skipping Turkic entry")
-         continue  # skip Turkic
-      if fold_t == 'F':
-          fold_val = [int(x, 16) for x in fold_val.split(" ")]
-      else:
-          fold_val = int(fold_val, 16)
-      if codepoint in fold_value: fold_value[codepoint].append(fold_val)
-      else: fold_value[codepoint] = [fold_val]
-   return (fold_type, fold_value)
-
+from UCD_parser import parse_CaseFolding_txt
 
 def simple_CaseFolding_BitSets(fold_map):
    BitDiffSet = {}
@@ -75,16 +37,17 @@ def simple_CaseFolding_BitSets(fold_map):
          diff_bits >>= 1
    return BitDiffSet
 
-def simple_CaseClosure_map(fold_map):
+def simple_CaseClosure_map(fold_data):
+   simpleFoldMap = {}
+   for k in fold_data['S'].keys(): simpleFoldMap[k] = fold_data['S'][k]
+   for k in fold_data['C'].keys(): simpleFoldMap[k] = fold_data['C'][k]
    cl_map = {}
-   for k in fold_map.keys():
-      folds = fold_map[k]
-      for v in folds:
-        if not isinstance(v, int): continue # skip nonsimple case folds
-        if not v in cl_map: cl_map[v] = [k]
-        else: cl_map[v].append(k)
-        if not k in cl_map: cl_map[k] = [v]
-        else: cl_map[k].append(v)
+   for k in simpleFoldMap.keys():
+      v = simpleFoldMap[k]
+      if not v in cl_map: cl_map[v] = [k]
+      else: cl_map[v].append(k)
+      if not k in cl_map: cl_map[k] = [v]
+      else: cl_map[k].append(v)
    newEntries = True
    while newEntries:
       newEntries = False
@@ -187,8 +150,8 @@ inline void caseInsensitiveInsert(re::CC * cc, const re::codepoint_t cp) {
 """
 
 def genCaseFolding_txt_h():
-   (ft, fv) = parse_CaseFolding_txt()
-   cm = simple_CaseClosure_map(fv)
+   fold_data = parse_CaseFolding_txt()
+   cm = simple_CaseClosure_map(fold_data)
    f = cformat.open_header_file_for_write('CaseFolding_txt', 'casefold.py')
    cformat.write_imports(f, ["<vector>", '"re/re_cc.h"'])
    f.write(foldDeclarations)

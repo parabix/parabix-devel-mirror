@@ -84,6 +84,44 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
     explicitly_defined_cps = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
     ))
 
+def emit_string_override_property(f, property_code, overridden_code, override_set, cp_value_map):
+    s = string.Template(r"""    namespace ${prop_enum_up}_ns {
+        /** Code Point Ranges for ${prop_enum} overriding values from ${overridden}
+        ${overridden_set_ranges}**/
+
+        const UnicodeSet overridden_set
+        ${overridden_set_value};
+
+        const unsigned buffer_length = ${buffer_length};
+        const static char __attribute__ ((aligned (32))) string_buffer[${allocation_length}] = u8R"__(${string_buffer})__";
+
+        const static std::vector<codepoint_t> defined_cps = {
+        ${explicitly_defined_cps}};
+        static StringOverridePropertyObject property_object(${prop_enum}, 
+                                                    ${overridden}_ns::property_object, 
+                                                    overridden_set, 
+                                                    static_cast<const char *>(string_buffer), 
+                                                    buffer_length, 
+                                                    defined_cps);
+    }
+""")
+    cps = sorted(cp_value_map.keys())
+    string_buffer = ""
+    for cp in cps: 
+        string_buffer += cp_value_map[cp] + "\n"
+    buffer_length = len(string_buffer.encode("utf-8"))
+    f.write(s.substitute(prop_enum = property_code,
+    prop_enum_up = property_code.upper(),
+    overridden = overridden_code.upper(),
+    string_buffer = string_buffer,
+    buffer_length = buffer_length,
+    allocation_length = (buffer_length + 255) & -256,
+    overridden_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(override_set)], ',', 8),
+    overridden_set_value = override_set.showC(12),
+    explicitly_defined_cp_count = len(cps),
+    explicitly_defined_cps = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
+    ))
+
 def emit_numeric_property(f, property_code, NaN_set, cp_value_map):
     s = string.Template(r"""    namespace ${prop_enum_up}_ns {
         /** Code Point Ranges for ${prop_enum} mapping to NaN
@@ -238,6 +276,8 @@ class UCD_generator():
             print("%s: %s bytes" % (property_object.getPropertyFullName(), sum([property_object.value_map[v].bytes() for v in property_object.value_map.keys()])))
         elif isinstance(property_object, StringPropertyObject):
             emit_string_property(f, property_code, property_object.null_str_set, property_object.reflexive_set, property_object.cp_value_map)
+        elif isinstance(property_object, StringOverridePropertyObject):
+            emit_string_override_property(f, property_code, property_object.overridden_code, property_object.overridden_set, property_object.cp_value_map)
         elif isinstance(property_object, NumericPropertyObject):
             emit_numeric_property(f, property_code, property_object.NaN_set, property_object.cp_value_map)
         elif isinstance(property_object, ObsoletePropertyObject):
@@ -304,7 +344,7 @@ class UCD_generator():
         basename = 'SpecialCasing'
         parse_SpecialCasing_txt(self.property_object_map)
         f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"UnicodeData.h"', '"unicode_set.h"'])
         f.write("\nnamespace UCD {\n")
         for p in ['lc', 'uc', 'tc']:
             self.emit_property(f, p)

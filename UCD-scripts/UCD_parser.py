@@ -66,7 +66,10 @@ def parse_PropertyAlias_txt():
         elif property_kind == "Catalog":   # Age, Block, Script 
             property_object_map[property_code] = EnumeratedPropertyObject()
         elif property_kind == "String":
-            property_object_map[property_code] = StringPropertyObject()
+            if property_code in ["uc", "lc", "tc", "cf"]:
+                property_object_map[property_code] = StringOverridePropertyObject("s" + property_code)
+            else:
+                property_object_map[property_code] = StringPropertyObject()
         elif property_kind == "Numeric":
             property_object_map[property_code] = NumericPropertyObject()
         else:  # Miscellaneous properties
@@ -397,7 +400,6 @@ def parse_UnicodeData_txt(property_object_map):
     property_object_map['nv'].finalizeProperty()
 
 def parse_SpecialCasing_txt(property_object_map):
-    data_records = []
     f = open(UCD_config.UCD_src_dir + "/SpecialCasing.txt")
     lines = f.readlines()
     for t in lines:
@@ -416,4 +418,28 @@ def parse_SpecialCasing_txt(property_object_map):
     property_object_map['lc'].finalizeProperty()
     property_object_map['uc'].finalizeProperty()
     property_object_map['tc'].finalizeProperty()
+
+
+# CaseFolding.txt has four types of fold entries:
+# S, C, F, T:  Simple, Common, Full and Turkic.  
+# The SimpleCaseFold property is the set of mappings S+C,
+# The FullCaseFold property is the set F+C 
+# There may be multiple entries per codepoint
+
+def parse_CaseFolding_txt():
+    fold_map = {}
+    f = open(UCD_config.UCD_src_dir + "/" + 'CaseFolding.txt')
+    lines = f.readlines()
+    for t in lines:
+        if UCD_skip.match(t): continue  # skip comment and blank lines
+        (cp, cp_hi, fields) = parse_data_record(t)
+        (fold_type, fold_val) = (fields[0], fields[1])
+        if not fold_type in fold_map: fold_map[fold_type] = {} 
+        if fold_type == 'S' or fold_type == 'C':
+            # fold value is guaranteed to be a single codepoint
+            fold_val = int(fold_val, 16)
+        else:
+            fold_val = [int(x, 16) for x in fold_val.split(" ")]
+        fold_map[fold_type][cp] = fold_val
+    return fold_map
 
