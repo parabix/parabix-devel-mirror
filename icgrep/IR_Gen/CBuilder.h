@@ -174,8 +174,10 @@ public:
         return llvm::ConstantInt::get(getSizeTy(), value);
     }
     
+    llvm::IntegerType * getIntAddrTy() const;
+    
     llvm::PointerType * getVoidPtrTy() const;
-
+    
     llvm::PointerType * getFILEptrTy();
     
     inline unsigned getCacheAlignment() const {
