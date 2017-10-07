@@ -545,8 +545,40 @@ void insert_codepoints(const size_t lineNum, const size_t line_start, const size
     parsedCodePointSet->insert(c);
 }
 
+class CodepointAccumulator : public kernel::MatchAccumulator {
+public:
+    
+    CodepointAccumulator(const char * searchBuffer) : mSearchBuffer(searchBuffer), mParsedCodePointSet(re::makeCC()) {}
+    
+    void accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) override;
+    re::CC * getCodePoints() {return mParsedCodePointSet;}
+private:
+    const char * mSearchBuffer;
+    re::CC * mParsedCodePointSet;
+};
+    
+void CodepointAccumulator::accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) {
+    assert (line_start <= line_end);
+    re::codepoint_t c = 0;
+    size_t line_pos = line_start;
+    while (isxdigit(mSearchBuffer[line_pos])) {
+        assert (line_pos < line_end);
+        if (isdigit(mSearchBuffer[line_pos])) {
+            c = (c << 4) | (mSearchBuffer[line_pos] - '0');
+        }
+        else {
+            c = (c << 4) | (tolower(mSearchBuffer[line_pos]) - 'a' + 10);
+        }
+        line_pos++;
+    }
+    assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.
+    mParsedCodePointSet->insert(c);    
+}
+
+
+    
 re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t bufferLength) {
-    parsedCodePointSet = re::makeCC();        
+    //parsedCodePointSet = re::makeCC();        
     const unsigned segmentSize = 8;
 
     ParabixDriver pxDriver("codepointEngine");
@@ -589,10 +621,11 @@ re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t buffe
     kernel::Kernel * matchedLinesK = pxDriver.addKernelInstance(make_unique<kernel::MatchedLinesKernel>(idb));
     pxDriver.makeKernelCall(matchedLinesK, {MatchResults, LineBreakStream}, {MatchedLines});
     
-    kernel::Kernel * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::NameExpression, 8));
-    scanMatchK->setInitialArguments({idb->getInt32(0)});
+    kernel::Kernel * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::CallBack, 8));
+    CodepointAccumulator accum(UnicodeDataBuffer);
+    intptr_t accum_addr = (intptr_t) &accum;
+    scanMatchK->setInitialArguments({ConstantInt::get(idb->getIntAddrTy(), accum_addr)});
     pxDriver.makeKernelCall(scanMatchK, {MatchedLines, LineBreakStream, ByteStream}, {});
-    pxDriver.LinkFunction(*scanMatchK, "matcher", &insert_codepoints);
     pxDriver.generatePipelineIR();
     pxDriver.deallocateBuffers();
     idb->CreateRetVoid();
@@ -602,7 +635,8 @@ re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t buffe
     auto f = reinterpret_cast<GrepFunctionType>(pxDriver.getMain());
     f(UnicodeDataBuffer, bufferLength);
     
-    return parsedCodePointSet;    
+    //return parsedCodePointSet;
+    return accum.getCodePoints();
 }
 
     
@@ -613,6 +647,7 @@ void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, 
     parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
 }
 
+    
 
 const std::vector<std::string> & grepPropertyValues(const std::string& propertyName, re::RE * propertyValuePattern) {
     ParabixDriver pxDriver("propertyValueEngine");

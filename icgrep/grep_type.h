@@ -11,6 +11,7 @@ enum class GrepType {
     Normal
     , NameExpression
     , PropertyValue
+    , CallBack
 };
 
 enum class GrepSource {
