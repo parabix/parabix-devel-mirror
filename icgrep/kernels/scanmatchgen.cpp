@@ -9,6 +9,7 @@
 #include <kernels/kernel_builder.h>
 #include <IR_Gen/FunctionTypeBuilder.h>
 #include <llvm/Support/raw_ostream.h>
+#include <grep_engine.h>
 
 using namespace llvm;
 
@@ -34,11 +35,6 @@ inline std::string getGrepTypeId(const GrepType grepType) {
     }
 }
     
-void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, size_t line_start, size_t line_end) {
-    reinterpret_cast<MatchAccumulator *>(accum_addr)->accumulate_match(lineNum, line_start, line_end);
-}
-
-
 void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder) {
 
     Module * const m = iBuilder->getModule();
@@ -157,7 +153,8 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
             phiRecordStart->addIncoming(matchRecordStart, loop_final_block);
             Value * matchRecordEnd = iBuilder->CreateAdd(phiScanwordPos, iBuilder->CreateCountForwardZeroes(phiMatchWord));
             if (mGrepType == GrepType::CallBack) {
-                Function * dispatcher = iBuilder->LinkFunction<void (intptr_t, size_t, size_t, size_t)>("accumulate_match_wrapper", & accumulate_match_wrapper);
+                Function * dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
+                //Function * dispatcher = iBuilder->LinkFunction<void (intptr_t, size_t, size_t, size_t)>("accumulate_match_wrapper", & grep::accumulate_match_wrapper);
                 Value * accumulator = iBuilder->getScalarField("accumulator_address");
                 iBuilder->CreateCall(dispatcher, {accumulator, matchRecordNum, matchRecordStart, matchRecordEnd});
             }

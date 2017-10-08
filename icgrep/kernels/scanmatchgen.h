@@ -14,13 +14,6 @@ namespace llvm { class Module; }
 namespace kernel {
     
 
-class MatchAccumulator {
-public:
-    MatchAccumulator() {};
-    virtual void accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) = 0;
-};
-
-    
 class ScanMatchKernel : public MultiBlockKernel {
 public:
 	ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const GrepType grepType, const unsigned codeUnitWidth);

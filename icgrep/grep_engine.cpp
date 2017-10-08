@@ -522,63 +522,15 @@ GrepEngine::~GrepEngine() {
     delete mGrepDriver;
 }
 
-
     
-static re::CC * parsedCodePointSet = nullptr;
-
-void insert_codepoints(const size_t lineNum, const size_t line_start, const size_t line_end, const char * const buffer) {
-    assert (buffer);
-    assert (line_start <= line_end);
-    re::codepoint_t c = 0;
-    size_t line_pos = line_start;
-    while (isxdigit(buffer[line_pos])) {
-        assert (line_pos < line_end);
-        if (isdigit(buffer[line_pos])) {
-            c = (c << 4) | (buffer[line_pos] - '0');
-        }
-        else {
-            c = (c << 4) | (tolower(buffer[line_pos]) - 'a' + 10);
-        }
-        line_pos++;
-    }
-    assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.
-    parsedCodePointSet->insert(c);
+void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, size_t line_start, size_t line_end) {
+    reinterpret_cast<MatchAccumulator *>(accum_addr)->accumulate_match(lineNum, line_start, line_end);
 }
 
-class CodepointAccumulator : public kernel::MatchAccumulator {
-public:
     
-    CodepointAccumulator(const char * searchBuffer) : mSearchBuffer(searchBuffer), mParsedCodePointSet(re::makeCC()) {}
-    
-    void accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) override;
-    re::CC * getCodePoints() {return mParsedCodePointSet;}
-private:
-    const char * mSearchBuffer;
-    re::CC * mParsedCodePointSet;
-};
-    
-void CodepointAccumulator::accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) {
-    assert (line_start <= line_end);
-    re::codepoint_t c = 0;
-    size_t line_pos = line_start;
-    while (isxdigit(mSearchBuffer[line_pos])) {
-        assert (line_pos < line_end);
-        if (isdigit(mSearchBuffer[line_pos])) {
-            c = (c << 4) | (mSearchBuffer[line_pos] - '0');
-        }
-        else {
-            c = (c << 4) | (tolower(mSearchBuffer[line_pos]) - 'a' + 10);
-        }
-        line_pos++;
-    }
-    assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.
-    mParsedCodePointSet->insert(c);    
-}
 
 
-    
-re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t bufferLength) {
-    //parsedCodePointSet = re::makeCC();        
+void grepBuffer(re::RE * pattern, char * UnicodeDataBuffer, size_t bufferLength, MatchAccumulator * accum) {
     const unsigned segmentSize = 8;
 
     ParabixDriver pxDriver("codepointEngine");
@@ -622,10 +574,9 @@ re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t buffe
     pxDriver.makeKernelCall(matchedLinesK, {MatchResults, LineBreakStream}, {MatchedLines});
     
     kernel::Kernel * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::CallBack, 8));
-    CodepointAccumulator accum(UnicodeDataBuffer);
-    intptr_t accum_addr = (intptr_t) &accum;
-    scanMatchK->setInitialArguments({ConstantInt::get(idb->getIntAddrTy(), accum_addr)});
+    scanMatchK->setInitialArguments({ConstantInt::get(idb->getIntAddrTy(), reinterpret_cast<intptr_t>(accum))});
     pxDriver.makeKernelCall(scanMatchK, {MatchedLines, LineBreakStream, ByteStream}, {});
+    pxDriver.LinkFunction(*scanMatchK, "accumulate_match_wrapper", &accumulate_match_wrapper);
     pxDriver.generatePipelineIR();
     pxDriver.deallocateBuffers();
     idb->CreateRetVoid();
@@ -634,24 +585,67 @@ re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t buffe
     typedef void (*GrepFunctionType)(const char * buffer, const size_t length);
     auto f = reinterpret_cast<GrepFunctionType>(pxDriver.getMain());
     f(UnicodeDataBuffer, bufferLength);
+}
+
+class CodepointAccumulator : public MatchAccumulator {
+public:
     
-    //return parsedCodePointSet;
+    CodepointAccumulator(const char * searchBuffer) : mSearchBuffer(searchBuffer), mParsedCodePointSet(re::makeCC()) {}
+    
+    void accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) override;
+    re::CC * getCodePoints() {return mParsedCodePointSet;}
+private:
+    const char * mSearchBuffer;
+    re::CC * mParsedCodePointSet;
+};
+
+void CodepointAccumulator::accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) {
+    assert (line_start <= line_end);
+    re::codepoint_t c = 0;
+    size_t line_pos = line_start;
+    while (isxdigit(mSearchBuffer[line_pos])) {
+        assert (line_pos < line_end);
+        if (isdigit(mSearchBuffer[line_pos])) {
+            c = (c << 4) | (mSearchBuffer[line_pos] - '0');
+        }
+        else {
+            c = (c << 4) | (tolower(mSearchBuffer[line_pos]) - 'a' + 10);
+        }
+        line_pos++;
+    }
+    assert(((line_pos - line_start) >= 4) && ((line_pos - line_start) <= 6)); // UCD format 4 to 6 hex digits.
+    mParsedCodePointSet->insert(c);
+}
+re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t bufferLength) {
+    
+    CodepointAccumulator accum(UnicodeDataBuffer);
+    
+    grepBuffer(pattern, UnicodeDataBuffer, bufferLength, & accum);
     return accum.getCodePoints();
 }
 
-    
-static std::vector<std::string> parsedPropertyValues;
 
-void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, const char * buffer) {
+class PropertyValueAccumulator : public MatchAccumulator {
+public:
+    
+    PropertyValueAccumulator(const char * searchBuffer, std::vector<std::string> & accumulatedPropertyValues)
+       : mSearchBuffer(searchBuffer), mParsedPropertyValueSet(accumulatedPropertyValues) {}
+    
+    void accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) override;
+private:
+    const char * mSearchBuffer;
+    std::vector<std::string> & mParsedPropertyValueSet;
+};
+void PropertyValueAccumulator::accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) {
     assert (line_start <= line_end);
-    parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
+    mParsedPropertyValueSet.emplace_back(mSearchBuffer + line_start, mSearchBuffer + line_end);
 }
 
-const std::vector<std::string> & grepPropertyValues(const std::string& propertyName, re::RE * propertyValuePattern) {
+
+const std::vector<std::string> grepPropertyValues(const std::string& propertyName, re::RE * propertyValuePattern) {
     ParabixDriver pxDriver("propertyValueEngine");
     AlignedAllocator<char, 32> alloc;
-
-    parsedPropertyValues.clear();
+    std::vector<std::string> accumulatedValues;
 
     const std::string & str = UCD::getPropertyValueGrepString(propertyName);
 
@@ -666,60 +660,9 @@ const std::vector<std::string> & grepPropertyValues(const std::string& propertyN
     std::memcpy(aligned, str.data(), n);
     std::memset(aligned + n, 0, m);
 
-    Module * M = idb->getModule();
-    
-    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getVoidTy(), idb->getInt8PtrTy(), idb->getSizeTy(), nullptr));
-    mainFunc->setCallingConv(CallingConv::C);
-    auto args = mainFunc->arg_begin();
-    Value * const buffer = &*(args++);
-    buffer->setName("buffer");
-    Value * length = &*(args++);
-    length->setName("length");
-    
-    idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
-    
-    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(idb, idb->getInt8PtrTy(), segmentSize));
-    sourceK->setInitialArguments({buffer, length});
-    pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
-    
-    StreamSetBuffer * BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize));
-    
-    kernel::Kernel * s2pk = pxDriver.addKernelInstance(make_unique<kernel::S2PKernel>(idb));
-    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
-    
-    kernel::Kernel * linebreakK = pxDriver.addKernelInstance(make_unique<kernel::LineBreakKernelBuilder>(idb, 8));
-    StreamSetBuffer * LineBreakStream = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize));
-    pxDriver.makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
-    
-    kernel::Kernel * requiredStreamsK = pxDriver.addKernelInstance(make_unique<kernel::RequiredStreams_UTF8>(idb));
-    StreamSetBuffer * RequiredStreams = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(4, 1), segmentSize));
-    pxDriver.makeKernelCall(requiredStreamsK, {BasisBits}, {RequiredStreams});
-    
-    StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize));
-    kernel::Kernel * icgrepK = pxDriver.addKernelInstance(make_unique<kernel::ICGrepKernel>(idb, propertyValuePattern));
-    pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream, RequiredStreams}, {MatchResults});
-
-    StreamSetBuffer * MatchedLines = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize));
-    kernel::Kernel * matchedLinesK = pxDriver.addKernelInstance(make_unique<kernel::MatchedLinesKernel>(idb));
-    pxDriver.makeKernelCall(matchedLinesK, {MatchResults, LineBreakStream}, {MatchedLines});
-
-    kernel::Kernel * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::PropertyValue, 8));
-    scanMatchK->setInitialArguments({idb->getInt32(0)});
-    pxDriver.makeKernelCall(scanMatchK, {MatchedLines, LineBreakStream, ByteStream}, {});
-    pxDriver.LinkFunction(*scanMatchK, "matcher", &insert_property_values);
-    pxDriver.generatePipelineIR();
-    pxDriver.deallocateBuffers();
-    idb->CreateRetVoid();
-    pxDriver.finalizeObject();
-
-    typedef void (*GrepFunctionType)(const char * buffer, const size_t length);
-    auto f = reinterpret_cast<GrepFunctionType>(pxDriver.getMain());
-    f(aligned, n);
-    
+    PropertyValueAccumulator accum(aligned, accumulatedValues);
+    grepBuffer(propertyValuePattern, aligned, n, & accum);
     alloc.deallocate(aligned, 0);
-    return parsedPropertyValues;
+    return accumulatedValues;
 }
-
-    
 }

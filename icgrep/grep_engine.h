@@ -23,6 +23,16 @@ namespace grep {
 // Thread function only.
 void *DoGrepThreadFunction(void *args);
     
+    
+class MatchAccumulator {
+public:
+    MatchAccumulator() {};
+    virtual void accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) = 0;
+};
+
+void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, size_t line_start, size_t line_end);
+    
+
 class GrepEngine {
 public:
 
@@ -50,10 +60,11 @@ void initFileResult(std::vector<std::string> filenames);
     
 void PrintResults();
     
+//void grepBuffer(re::RE * pattern, const char * buffer, size_t bufferLength, MatchAccumulator * accum);
 
 re::CC * grepCodepoints(re::RE * pattern, char * UnicodeDataBuffer, size_t bufferLength);
     
-const std::vector<std::string> & grepPropertyValues(const std::string& propertyName, re::RE * propertyValuePattern);
+const std::vector<std::string> grepPropertyValues(const std::string& propertyName, re::RE * propertyValuePattern);
 
 }
 
