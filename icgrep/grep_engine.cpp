@@ -647,8 +647,6 @@ void insert_property_values(size_t lineNum, size_t line_start, size_t line_end, 
     parsedPropertyValues.emplace_back(buffer + line_start, buffer + line_end);
 }
 
-    
-
 const std::vector<std::string> & grepPropertyValues(const std::string& propertyName, re::RE * propertyValuePattern) {
     ParabixDriver pxDriver("propertyValueEngine");
     AlignedAllocator<char, 32> alloc;
