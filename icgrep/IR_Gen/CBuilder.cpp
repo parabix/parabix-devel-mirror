@@ -560,8 +560,7 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
 }
 
 IntegerType * CBuilder::getIntAddrTy() const {
-    DataLayout DL(getModule());
-    return DL.getIntPtrType(getContext());
+    return TypeBuilder<intptr_t, false>::get(getContext());
 }
 
 PointerType * CBuilder::getVoidPtrTy() const {
