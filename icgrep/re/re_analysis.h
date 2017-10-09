@@ -2,9 +2,18 @@
 #define RE_ANALYSIS_H
 
 #include <utility>
-namespace re { class RE; class Name;}
+namespace re { class RE; class Name; class CC;}
 
 namespace re {
+
+// Does the RE match the empty string, considering that ^ and $ each
+// do match an empty string.
+bool matchesEmptyString(const RE * re);
+
+//  Determine the set of all codepoints cp such that the given RE
+//  matches a string consisting of a single Unicode character whose
+//  codepoint value is cp.
+const CC * matchableCodepoints(const RE * re);
 
 bool isByteLength(const RE * re);
     

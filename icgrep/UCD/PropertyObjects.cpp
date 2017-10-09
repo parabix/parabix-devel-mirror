@@ -15,7 +15,7 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <toolchain/grep_pipeline.h>
 #include <util/aligned_allocator.h>
-#include <re/re_nullable.h>
+#include <re/re_analysis.h>
 using namespace llvm;
 
 namespace UCD {
@@ -292,7 +292,7 @@ const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & valu
 
 const UnicodeSet NumericPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
     UnicodeSet matched;
-    llvm::report_fatal_error("NumericPropertyObject NaN matching issue!");
+    // TODO:  Should we allow matches to NaN???
     SetByLineNumberAccumulator accum(mExplicitCps);
     grepBuffer(pattern, mStringBuffer, mBufSize, & accum);
     return matched + accum.getAccumulatedSet();
@@ -327,11 +327,10 @@ const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value
 }
 
 const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
-    UnicodeSet matched;
-    if (re::RE_Nullable::isNullable(pattern)) {
+    UnicodeSet matched = *cast<UnicodeSet>(matchableCodepoints(pattern)) & mSelfCodepointSet;
+    if (re::matchesEmptyString(pattern)) {
         matched = matched + mNullCodepointSet;
     }
-    //llvm::report_fatal_error("StringPropertyObject reflexive set issue!");
     SetByLineNumberAccumulator accum(mExplicitCps);
     grepBuffer(pattern, mStringBuffer, mBufSize, & accum);
     return matched + accum.getAccumulatedSet();
