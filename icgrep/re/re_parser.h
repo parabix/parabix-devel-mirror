@@ -20,7 +20,7 @@ enum CharsetOperatorKind
     {intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};
 
 enum ModeFlagType : unsigned {
-    NONE = 0,
+    DEFAULT_MODE = 0,
     CASE_INSENSITIVE_MODE_FLAG = 1,
     MULTILINE_MODE_FLAG = 2,      // not currently implemented
     DOTALL_MODE_FLAG = 4,         // not currently implemented
@@ -140,7 +140,6 @@ protected:
     codepoint_t parse_utf8_codepoint();
 
     virtual RE * parsePropertyExpression();
-    RE * parseRegexPropertyValue(const std::string& propName, const std::string& regexValue);
 
     Name * parseNamePatternExpression();
 

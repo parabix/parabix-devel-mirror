@@ -21,7 +21,6 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <re/printer_re.h>
-#include <UCD/UnicodeNameData.h>
 #include <UCD/resolve_properties.h>
 #include <UCD/CaseFolding.h>
 #include <grep_engine.h>
@@ -675,53 +674,30 @@ RE * RE_Parser::parsePropertyExpression() {
                 current = (++mCursor).pos();
             }
             ++mCursor;
-            return parseRegexPropertyValue(canonicalize(start, prop_end), std::string(val_start, current));
+            //return parseRegexPropertyValue(canonicalize(start, prop_end), std::string(val_start, current));
+            return createName(canonicalize(start, prop_end), std::string(val_start-1, current));
         }
     }
     return createName(canonicalize(start, mCursor.pos()));
 }
 
-RE * RE_Parser::parseRegexPropertyValue(const std::string & propName, const std::string& regexValue) {
-    RE * propValueRe = RE_Parser::parse("^" + regexValue + "$", fModeFlagSet, mReSyntax);
-    const auto matches = grep::grepPropertyValues(propName, propValueRe);
-    if (matches.empty()) {
-        ParseFailure("regex " + regexValue + " match no property values");
-    } else if (matches.size() == 1) {
-        return createName(propName, matches.front());
-    } else {
-        std::vector<re::RE *> alt;
-        for (auto value : matches) {
-            alt.push_back(createName(propName, value));
-        }
-        return makeAlt(alt.begin(), alt.end());
-    }
-}
-
 Name * RE_Parser::parseNamePatternExpression(){
 
-    ModeFlagSet outerFlags = fModeFlagSet;
-    fModeFlagSet = 1;
-
-    bool outerNested = fNested;
-    fNested = true;
-
-    RE * nameRE = parse_RE();
-
-    // Reset outer parsing state.
-    fModeFlagSet = outerFlags;
-    fNested = outerNested;
-
-    // Embed the nameRE in ";.*$nameRE" to skip the codepoint field of Uname.txt
-    RE * embedded = makeSeq({mMemoizer.memoize(makeCC(0x3B)), makeRep(makeAny(), 0, Rep::UNBOUNDED_REP), nameRE});
-    
-    CC * codepoints = grep::grepCodepoints(embedded, getUnicodeNameDataPtr(), getUnicodeNameDataSize());
-    
-    if (codepoints) {
-        Name * const result = mMemoizer.memoize(codepoints);
-        assert (*cast<CC>(result->getDefinition()) == *codepoints);
-        return result;
+    const auto start = mCursor.pos();
+    while (mCursor.more()) {
+        if (*mCursor == '\\') {
+            ++mCursor;
+            if (!mCursor.more()) {
+                break;
+            }
+        }
+        else if (*mCursor == '}') {
+            break;
+        }
+        ++mCursor;
     }
-    return nullptr;
+    std::string nameRegexp = "/(?i)" + std::string(start, mCursor.pos());
+    return createName("na", nameRegexp);
 }
 
 bool RE_Parser::isUnsupportChartsetOperator(char c) {

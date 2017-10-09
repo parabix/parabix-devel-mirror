@@ -13,6 +13,9 @@
 #include <sstream>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <toolchain/grep_pipeline.h>
+#include <util/aligned_allocator.h>
+#include <re/re_nullable.h>
 using namespace llvm;
 
 namespace UCD {
@@ -37,12 +40,61 @@ const UnicodeSet PropertyObject::GetCodepointSet(const std::string &) {
     llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
 }
 
+const UnicodeSet PropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
+    llvm::report_fatal_error("GetCodepointSetMatchingPattern unsupported");
+}
+    
 const UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
     const int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val < 0) {
         llvm::report_fatal_error("Enumerated Property " + UCD::property_full_name[the_property] + ": unknown value: " + value_spec);
     }
     return GetCodepointSet(property_enum_val);
+}
+
+class PropertyValueAccumulator : public grep::MatchAccumulator {
+public:
+    
+    PropertyValueAccumulator(const char * searchBuffer, std::vector<std::string> & accumulatedPropertyValues)
+    : mSearchBuffer(searchBuffer), mParsedPropertyValueSet(accumulatedPropertyValues) {}
+    
+    void accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) override;
+private:
+    const char * mSearchBuffer;
+    std::vector<std::string> & mParsedPropertyValueSet;
+};
+void PropertyValueAccumulator::accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) {
+    assert (line_start <= line_end);
+    mParsedPropertyValueSet.emplace_back(mSearchBuffer + line_start, mSearchBuffer + line_end);
+}
+
+    const UnicodeSet EnumeratedPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
+    
+    
+        AlignedAllocator<char, 32> alloc;
+        std::vector<std::string> accumulatedValues;
+        
+        const std::string & str = GetPropertyValueGrepString();
+        
+        const unsigned segmentSize = 8;
+        const auto n = str.length();
+        const auto w = 256 * segmentSize;
+        const auto m = w - (n % w);
+        
+        char * aligned = alloc.allocate(n + m, 0);
+        std::memcpy(aligned, str.data(), n);
+        std::memset(aligned + n, 0, m);
+        
+        PropertyValueAccumulator accum(aligned, accumulatedValues);
+        grepBuffer(pattern, aligned, n, & accum);
+        alloc.deallocate(aligned, 0);
+        
+        UnicodeSet a;
+        for (auto v : accumulatedValues) {
+            int e = GetPropertyValueEnumCode(v);
+            a = a + GetCodepointSet(e);
+        }
+        return a;
 }
 
 const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const int property_enum_val) const {
@@ -166,6 +218,10 @@ const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum
     return mN;
 }
 
+const UnicodeSet BinaryPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
+    llvm::report_fatal_error("Enumerated Property GetCodepointSetMatchingPattern not yet implemented");
+}
+    
 const std::string & BinaryPropertyObject::GetPropertyValueGrepString() {
     if (mPropertyValueGrepString.empty()) {
         std::stringstream buffer;
@@ -195,6 +251,24 @@ const unsigned firstCodepointLengthAndVal(const std::string & s, codepoint_t & c
     return 0;
 }
     
+class SetByLineNumberAccumulator : public grep::MatchAccumulator {
+public:
+    
+    SetByLineNumberAccumulator(const std::vector<UCD::codepoint_t> & cps)
+    : mCodepointTableByLineNum(cps) {}
+    
+    void accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) override;
+    UnicodeSet getAccumulatedSet() { return mAccumSet; }
+private:
+    const std::vector<UCD::codepoint_t> & mCodepointTableByLineNum;
+    UnicodeSet mAccumSet;
+};
+void SetByLineNumberAccumulator::accumulate_match(const size_t lineNum, size_t line_start, size_t line_end) {
+    assert (line_start <= line_end);
+    mAccumSet.insert(mCodepointTableByLineNum[lineNum]);
+}
+
+
 const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & value_spec) {
     if (value_spec == "NaN") return mNaNCodepointSet;
     else {
@@ -215,6 +289,15 @@ const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & valu
         return result_set;
     }
 }
+
+const UnicodeSet NumericPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
+    UnicodeSet matched;
+    llvm::report_fatal_error("NumericPropertyObject NaN matching issue!");
+    SetByLineNumberAccumulator accum(mExplicitCps);
+    grepBuffer(pattern, mStringBuffer, mBufSize, & accum);
+    return matched + accum.getAccumulatedSet();
+}
+
 
 const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value_spec) {
     if (value_spec == "") return mNullCodepointSet;
@@ -243,6 +326,17 @@ const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value
     }
 }
 
+const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
+    UnicodeSet matched;
+    if (re::RE_Nullable::isNullable(pattern)) {
+        matched = matched + mNullCodepointSet;
+    }
+    //llvm::report_fatal_error("StringPropertyObject reflexive set issue!");
+    SetByLineNumberAccumulator accum(mExplicitCps);
+    grepBuffer(pattern, mStringBuffer, mBufSize, & accum);
+    return matched + accum.getAccumulatedSet();
+}
+    
 const UnicodeSet StringOverridePropertyObject::GetCodepointSet(const std::string & value_spec) {
     // First step: get the codepoints from the base object and then remove any overridden ones.
     UnicodeSet result_set = mBaseObject.GetCodepointSet(value_spec) - mOverriddenSet;
@@ -263,6 +357,15 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSet(const std::string
     return result_set;
 }
     
+    
+const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
+    UnicodeSet base_set = mBaseObject.GetCodepointSetMatchingPattern(pattern) - mOverriddenSet;
+    SetByLineNumberAccumulator accum(mExplicitCps);
+    grepBuffer(pattern, mStringBuffer, mBufSize, & accum);
+    return base_set + accum.getAccumulatedSet();
+}
+
+
 const std::string & ObsoletePropertyObject::GetPropertyValueGrepString() {
     llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
 }

@@ -13,6 +13,7 @@
 #include <re/re_cc.h> 
 #include <re/re_seq.h> 
 #include <re/re_assertion.h>
+#include <re/re_parser.h>
 #include "UCD/PropertyAliases.h"
 #include "UCD/PropertyObjects.h"
 #include "UCD/PropertyObjectTable.h"
@@ -140,7 +141,14 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                 UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
             }
             auto theprop = propit->second;
-            return property_object_table[theprop]->GetCodepointSet(value);
+            if ((value.length() > 0) && (value[0] == '/')) {
+                // resolve a regular expression
+                re::RE * propValueRe = RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE);
+                return property_object_table[theprop]->GetCodepointSetMatchingPattern(propValueRe);
+            }
+            else {
+                return property_object_table[theprop]->GetCodepointSet(value);
+            }
         }
         else {
             // No namespace (property) name.   Try as a general category.

@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+namespace re {class RE;}
 
 namespace UCD {
 
@@ -39,7 +40,9 @@ public:
         return the_property;
     }
     PropertyObject(property_t p, ClassTypeId k) : the_property(p), the_kind(k) {}
-    virtual const UnicodeSet GetCodepointSet(const std::string &);
+    virtual const UnicodeSet GetCodepointSet(const std::string & prop_value_string);
+    virtual const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern);
+
     virtual const std::string & GetPropertyValueGrepString();
     property_t the_property;
     ClassTypeId the_kind;
@@ -60,7 +63,8 @@ public:
     , mY(s) {
         
     }
-    const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
+    const UnicodeSet GetCodepointSet(const std::string & prop_value_string) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val);
     const std::string & GetPropertyValueGrepString() override;
 private:
@@ -98,6 +102,7 @@ public:
     virtual int GetPropertyValueEnumCode(const std::string & value_spec);
     const std::string & GetPropertyValueGrepString() override;
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
     std::vector<UnicodeSet> & GetEnumerationBasisSets();
     const std::string & GetValueEnumName(const int property_enum_val) const {return property_value_enum_names[property_enum_val]; }
@@ -174,7 +179,8 @@ public:
         
     }
     const UnicodeSet GetCodepointSet(const std::string & numeric_spec) override;
-    
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+
 private:
     UnicodeSet mNaNCodepointSet;  // codepoints for which the property value is NaN (not a number).
     const char * mStringBuffer;  // buffer holding all string values for other codepoints, in sorted order. 
@@ -201,6 +207,7 @@ public:
 
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
 
 private:
     UnicodeSet mNullCodepointSet;  // codepoints for which the property value is the null string.
@@ -230,7 +237,8 @@ public:
         
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
-    
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
+
 private:
     PropertyObject & mBaseObject;  // the base object that provides default values for this property unless overridden.
     UnicodeSet mOverriddenSet;   // codepoints for which the baseObject value is overridden.

@@ -289,43 +289,6 @@ namespace re{
             }
             ++mCursor;
         }
-        if (*mCursor == '=') {
-            // We have a property-name = value expression
-            const auto prop_end = mCursor.pos();
-            mCursor++;
-            auto val_start = mCursor.pos();
-            if (*val_start != '\\' || !isCharAhead('/')) {
-                // property-value is normal string
-                while (mCursor.more()) {
-                    if (isEscapedCharAhead('}') || *mCursor == ':') {
-                        break;
-                    }
-                    ++mCursor;
-                }
-                return createName(canonicalize(start, prop_end), canonicalize(val_start, mCursor.pos()));
-            } else {
-                // property-value is another regex
-                ++mCursor;
-                auto previous = val_start;
-                auto current = (++mCursor).pos();
-                val_start = current;
-
-                while (true) {
-                    if (*current == '/' && *previous == '\\') {
-                        break;
-                    }
-
-                    if (!mCursor.more()) {
-                        ParseFailure("Malformed property expression");
-                    }
-
-                    previous = current;
-                    current = (++mCursor).pos();
-                }
-                ++mCursor;
-                return parseRegexPropertyValue(canonicalize(start, prop_end), canonicalize(val_start, previous));
-            }
-        }
         return createName(canonicalize(start, mCursor.pos()));
     }
 
