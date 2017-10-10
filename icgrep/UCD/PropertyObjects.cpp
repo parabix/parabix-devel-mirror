@@ -51,6 +51,11 @@ const UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & v
     }
     return GetCodepointSet(property_enum_val);
 }
+    
+const UnicodeSet PropertyObject::GetReflexiveSet() {
+    return UnicodeSet();
+}
+
 
 class PropertyValueAccumulator : public grep::MatchAccumulator {
 public:
@@ -336,6 +341,10 @@ const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * p
     return matched + accum.getAccumulatedSet();
 }
     
+const UnicodeSet StringPropertyObject::GetReflexiveSet() {
+    return mSelfCodepointSet;
+}
+
 const UnicodeSet StringOverridePropertyObject::GetCodepointSet(const std::string & value_spec) {
     // First step: get the codepoints from the base object and then remove any overridden ones.
     UnicodeSet result_set = mBaseObject.GetCodepointSet(value_spec) - mOverriddenSet;
@@ -362,6 +371,10 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re
     SetByLineNumberAccumulator accum(mExplicitCps);
     grepBuffer(pattern, mStringBuffer, mBufSize, & accum);
     return base_set + accum.getAccumulatedSet();
+}
+
+const UnicodeSet StringOverridePropertyObject::GetReflexiveSet() {
+    return mBaseObject.GetReflexiveSet() - mOverriddenSet;
 }
 
 

@@ -140,14 +140,33 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             if (propit == alias_map.end()) {
                 UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
             }
-            auto theprop = propit->second;
+            auto propObj = property_object_table[propit->second];
             if ((value.length() > 0) && (value[0] == '/')) {
                 // resolve a regular expression
                 re::RE * propValueRe = RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE);
-                return property_object_table[theprop]->GetCodepointSetMatchingPattern(propValueRe);
+                return propObj->GetCodepointSetMatchingPattern(propValueRe);
+            }
+            if ((value.length() > 0) && (value[0] == '@')) {
+                // resolve a @property@ or @identity@ expression.
+                std::string otherProp = canonicalize_value_name(value.substr(1));
+                if (otherProp == "identity") {
+                    return propObj->GetReflexiveSet();
+                }
+                auto propit = alias_map.find(prop);
+                if (propit == alias_map.end()) {
+                    UnicodePropertyExpressionError("Expected a property name, but '" + value.substr(1) + "' found instead");
+                }
+                auto propObj2 = property_object_table[propit->second];
+                if (isa<BinaryPropertyObject>(propObj) && isa<BinaryPropertyObject>(propObj2)) {
+                    return ~(cast<BinaryPropertyObject>(propObj)->GetCodepointSet(UCD::Binary_ns::Y) ^
+                             cast<BinaryPropertyObject>(propObj2)->GetCodepointSet(UCD::Binary_ns::Y));
+                }
+                else {
+                    UnicodePropertyExpressionError("unsupported");
+                }
             }
             else {
-                return property_object_table[theprop]->GetCodepointSet(value);
+                return propObj->GetCodepointSet(value);
             }
         }
         else {
