@@ -155,6 +155,7 @@ public:
     const std::string & GetPropertyValueGrepString() override;
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
+    const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
 
 private:
     const property_t base_property;

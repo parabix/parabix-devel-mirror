@@ -73,33 +73,33 @@ void PropertyValueAccumulator::accumulate_match(const size_t lineNum, size_t lin
     mParsedPropertyValueSet.emplace_back(mSearchBuffer + line_start, mSearchBuffer + line_end);
 }
 
-    const UnicodeSet EnumeratedPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
+const UnicodeSet EnumeratedPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
+
+
+    AlignedAllocator<char, 32> alloc;
+    std::vector<std::string> accumulatedValues;
     
+    const std::string & str = GetPropertyValueGrepString();
     
-        AlignedAllocator<char, 32> alloc;
-        std::vector<std::string> accumulatedValues;
-        
-        const std::string & str = GetPropertyValueGrepString();
-        
-        const unsigned segmentSize = 8;
-        const auto n = str.length();
-        const auto w = 256 * segmentSize;
-        const auto m = w - (n % w);
-        
-        char * aligned = alloc.allocate(n + m, 0);
-        std::memcpy(aligned, str.data(), n);
-        std::memset(aligned + n, 0, m);
-        
-        PropertyValueAccumulator accum(aligned, accumulatedValues);
-        grepBuffer(pattern, aligned, n, & accum);
-        alloc.deallocate(aligned, 0);
-        
-        UnicodeSet a;
-        for (auto v : accumulatedValues) {
-            int e = GetPropertyValueEnumCode(v);
-            a = a + GetCodepointSet(e);
-        }
-        return a;
+    const unsigned segmentSize = 8;
+    const auto n = str.length();
+    const auto w = 256 * segmentSize;
+    const auto m = w - (n % w);
+    
+    char * aligned = alloc.allocate(n + m, 0);
+    std::memcpy(aligned, str.data(), n);
+    std::memset(aligned + n, 0, m);
+    
+    PropertyValueAccumulator accum(aligned, accumulatedValues);
+    grepBuffer(pattern, aligned, n, & accum);
+    alloc.deallocate(aligned, 0);
+    
+    UnicodeSet a;
+    for (auto v : accumulatedValues) {
+        int e = GetPropertyValueEnumCode(v);
+        a = a + GetCodepointSet(e);
+    }
+    return a;
 }
 
 const UnicodeSet & EnumeratedPropertyObject::GetCodepointSet(const int property_enum_val) const {
@@ -195,6 +195,36 @@ const UnicodeSet & ExtensionPropertyObject::GetCodepointSet(const int property_e
 int ExtensionPropertyObject::GetPropertyValueEnumCode(const std::string & value_spec) {
     return cast<EnumeratedPropertyObject>(property_object_table[base_property])->GetPropertyValueEnumCode(value_spec);
 }
+    
+const UnicodeSet ExtensionPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
+    AlignedAllocator<char, 32> alloc;
+    std::vector<std::string> accumulatedValues;
+    
+    EnumeratedPropertyObject * baseObj = cast<EnumeratedPropertyObject>(property_object_table[base_property]);
+    
+    const std::string & str = baseObj->GetPropertyValueGrepString();
+    
+    const unsigned segmentSize = 8;
+    const auto n = str.length();
+    const auto w = 256 * segmentSize;
+    const auto m = w - (n % w);
+    
+    char * aligned = alloc.allocate(n + m, 0);
+    std::memcpy(aligned, str.data(), n);
+    std::memset(aligned + n, 0, m);
+    
+    PropertyValueAccumulator accum(aligned, accumulatedValues);
+    grepBuffer(pattern, aligned, n, & accum);
+    alloc.deallocate(aligned, 0);
+    
+    UnicodeSet a;
+    for (auto v : accumulatedValues) {
+        int e = baseObj->GetPropertyValueEnumCode(v);
+        a = a + GetCodepointSet(e);
+    }
+    return a;
+}
+
 
 const std::string & ExtensionPropertyObject::GetPropertyValueGrepString() {
     return property_object_table[base_property]->GetPropertyValueGrepString();
