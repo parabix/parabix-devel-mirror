@@ -46716,7 +46716,7 @@ S
               0xfffc0000, 0x00003fff, 0xffff007f, 0xfc00ffff, 0xffffe000,
               0xfffeffff}};
 
-       const unsigned buffer_length = 3924;
+       const unsigned buffer_length = 3928;
         const static char __attribute__ ((aligned (32))) string_buffer[4096] = u8R"__(0
 1
 2
@@ -48217,6 +48217,7 @@ S
 0
 0
 9
+NaN
 )__";
 
         const static std::vector<codepoint_t> defined_cps = {

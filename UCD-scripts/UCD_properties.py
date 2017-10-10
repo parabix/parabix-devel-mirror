@@ -146,6 +146,7 @@ def emit_numeric_property(f, property_code, NaN_set, cp_value_map):
     string_buffer = ""
     for cp in cps: 
         string_buffer += cp_value_map[cp] + "\n"
+    string_buffer += "NaN\n"  # This inserts the standard default value for strings as the last entry
     buffer_length = len(string_buffer.encode("utf-8"))
     f.write(s.substitute(prop_enum = property_code,
     prop_enum_up = property_code.upper(),
