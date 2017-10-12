@@ -15,19 +15,21 @@
 
 namespace UCD {
   namespace JG_ns {
-    const unsigned independent_prop_values = 89;
+    const unsigned independent_prop_values = 100;
     /** Code Point Ranges for No_Joining_Group
     [0000, 061f], [0621, 0621], [0640, 0640], [064b, 066d], [0670, 0670],
     [0674, 0674], [06d4, 06d4], [06d6, 06ed], [06f0, 06f9], [06fd, 06fe],
-    [0700, 070f], [0711, 0711], [0730, 074c], [0780, 089f], [08ad, 08ad],
-    [08b5, 08b5], [08be, 10abf], [10ac6, 10ac6], [10ac8, 10ac8],
-    [10acb, 10acc], [10ae2, 10ae3], [10ae5, 10aea], [10af0, 10ffff]**/
+    [0700, 070f], [0711, 0711], [0730, 074c], [0780, 085f], [086b, 089f],
+    [08ad, 08ad], [08b5, 08b5], [08be, 10abf], [10ac6, 10ac6],
+    [10ac8, 10ac8], [10acb, 10acc], [10ae2, 10ae3], [10ae5, 10aea],
+    [10af0, 10ffff]**/
     const UnicodeSet no_joining_group_Set 
         {{{Full, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 5}, {Empty, 1},
-          {Full, 9}, {Mixed, 1}, {Full, 2064}, {Mixed, 2}, {Full, 32680}},
+          {Full, 7}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 2064},
+          {Mixed, 2}, {Full, 32680}},
          {0x00000002, 0xfffff801, 0x00113fff, 0xffd00000, 0x63ff3fff,
-          0x0002ffff, 0xffff0000, 0x00001fff, 0xc0202000, 0x00001940,
-          0xffff07ec}};
+          0x0002ffff, 0xffff0000, 0x00001fff, 0xfffff800, 0xc0202000,
+          0x00001940, 0xffff07ec}};
     /** Code Point Ranges for Ain
     [0639, 063a], [06a0, 06a0], [06fc, 06fc], [075d, 075f], [08b3, 08b3]**/
     const UnicodeSet ain_Set 
@@ -502,6 +504,61 @@ namespace UCD {
     const UnicodeSet african_noon_Set 
         {{{Empty, 69}, {Mixed, 1}, {Empty, 34746}},
          {0x20000000}};
+    /** Code Point Ranges for Malayalam_Nga
+    [0860, 0860]**/
+    const UnicodeSet malayalam_nga_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000001}};
+    /** Code Point Ranges for Malayalam_Ja
+    [0861, 0861]**/
+    const UnicodeSet malayalam_ja_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000002}};
+    /** Code Point Ranges for Malayalam_Nya
+    [0862, 0862]**/
+    const UnicodeSet malayalam_nya_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000004}};
+    /** Code Point Ranges for Malayalam_Tta
+    [0863, 0863]**/
+    const UnicodeSet malayalam_tta_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000008}};
+    /** Code Point Ranges for Malayalam_Nna
+    [0864, 0864]**/
+    const UnicodeSet malayalam_nna_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000010}};
+    /** Code Point Ranges for Malayalam_Nnna
+    [0865, 0865]**/
+    const UnicodeSet malayalam_nnna_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000020}};
+    /** Code Point Ranges for Malayalam_Bha
+    [0866, 0866]**/
+    const UnicodeSet malayalam_bha_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000040}};
+    /** Code Point Ranges for Malayalam_Ra
+    [0867, 0867]**/
+    const UnicodeSet malayalam_ra_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000080}};
+    /** Code Point Ranges for Malayalam_Lla
+    [0868, 0868]**/
+    const UnicodeSet malayalam_lla_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000100}};
+    /** Code Point Ranges for Malayalam_Llla
+    [0869, 0869]**/
+    const UnicodeSet malayalam_llla_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000200}};
+    /** Code Point Ranges for Malayalam_Ssa
+    [086a, 086a]**/
+    const UnicodeSet malayalam_ssa_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x00000400}};
     static EnumeratedPropertyObject property_object
         {jg,
          JG_ns::independent_prop_values,
@@ -531,7 +588,11 @@ namespace UCD {
         &manichaean_taw_Set, &manichaean_ten_Set, &manichaean_teth_Set,
         &manichaean_thamedh_Set, &manichaean_twenty_Set,
         &manichaean_waw_Set, &manichaean_yodh_Set, &manichaean_zayin_Set,
-        &african_feh_Set, &african_qaf_Set, &african_noon_Set
+        &african_feh_Set, &african_qaf_Set, &african_noon_Set,
+        &malayalam_nga_Set, &malayalam_ja_Set, &malayalam_nya_Set,
+        &malayalam_tta_Set, &malayalam_nna_Set, &malayalam_nnna_Set,
+        &malayalam_bha_Set, &malayalam_ra_Set, &malayalam_lla_Set,
+        &malayalam_llla_Set, &malayalam_ssa_Set
          }};
     }
 }

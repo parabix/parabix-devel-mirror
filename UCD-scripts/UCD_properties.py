@@ -598,6 +598,9 @@ def UCD_main():
     # Word Break property
     ucd.generate_property_value_file('auxiliary/WordBreakProperty', 'WB')
     #
+    # Vertical orientation property
+    ucd.generate_property_value_file('VerticalOrientation', 'vo')
+
     # East Asian Width - can use either source
     ucd.generate_property_value_file('EastAsianWidth', 'ea')
     #ucd.generate_property_value_file('extracted/DerivedEastAsianWidth', 'ea')

@@ -41,11 +41,12 @@
 #include "SentenceBreakProperty.h"
 #include "SpecialCasing.h"
 #include "UnicodeData.h"
+#include "VerticalOrientation.h"
 #include "WordBreakProperty.h"
 
 namespace UCD {
 
-  const std::array<PropertyObject *, 118> property_object_table = {{
+  const std::array<PropertyObject *, 120> property_object_table = {{
     new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
@@ -103,6 +104,7 @@ namespace UCD {
     &NFKD_QC_ns::property_object,
     &NT_ns::property_object,
     &SB_ns::property_object,
+    &VO_ns::property_object,
     &WB_ns::property_object,
     &AHEX_ns::property_object,
     &ALPHA_ns::property_object,
@@ -151,6 +153,7 @@ namespace UCD {
     &PCM_ns::property_object,
     &QMARK_ns::property_object,
     &RADICAL_ns::property_object,
+    &RI_ns::property_object,
     &SD_ns::property_object,
     &STERM_ns::property_object,
     &TERM_ns::property_object,

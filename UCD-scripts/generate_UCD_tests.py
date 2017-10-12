@@ -23,40 +23,41 @@ class UCD_test_generator():
         self.all_good_set = uset_difference(self.all_good_set, range_uset(0x2028,0x2029))
 
     def load_property_name_info(self):
-        (self.property_enum_name_list, self.full_name_map, self.property_lookup_map, self.property_kind_map) = parse_PropertyAlias_txt()
+        (self.property_enum_name_list, self.property_object_map) = parse_PropertyAlias_txt()
+        self.property_lookup_map = getPropertyLookupMap(self.property_object_map)
+        self.full_name_map = {}
+        for p in self.property_enum_name_list:
+            self.full_name_map[p] = self.property_object_map[p].getPropertyFullName()
 
     def load_property_value_info(self):
-        (self.property_value_list, self.property_value_enum_integer, self.property_value_full_name_map, self.property_value_lookup_map, self.missing_specs) = parse_PropertyValueAlias_txt(self.property_lookup_map)
+        initializePropertyValues(self.property_object_map, self.property_lookup_map)
 
-    def load_enumerated_property_data(self, filename_root, property_code):
-        vlist = self.property_value_list[property_code]
-        canon_map = self.property_value_lookup_map[property_code]
-        (prop_values, value_map) = parse_UCD_enumerated_property_map(property_code, vlist, canon_map, filename_root + '.txt')
-        self.enum_value_map[property_code] = value_map
+    def load_property_value_file(self, filename_root, property_code):
+        property_object = self.property_object_map[property_code]
+        parse_property_data(self.property_object_map[property_code], filename_root + '.txt')
 
     def load_ScriptExtensions_data(self):
-        filename_root = 'ScriptExtensions'
         property_code = 'scx'
-        vlist = self.property_value_list['sc']
-        (prop_values, value_map) = parse_ScriptExtensions_txt(vlist, self.property_value_lookup_map['sc'])
-        self.enum_value_map['scx'] = value_map
+        extension_object = self.property_object_map['scx']
+        extension_object.setBaseProperty(self.property_object_map['sc'])
+        parse_property_data(extension_object, 'ScriptExtensions.txt')
        
-    def load_binary_properties_data(self, filename_root):
-        (props, prop_map) = parse_UCD_codepoint_name_map(filename_root + '.txt', self.property_lookup_map)
-        for p in props:
-            self.binary_value_map[p] = prop_map[p]
+    def load_multisection_properties_file(self, filename_root):
+        props = parse_multisection_property_data(filename_root + '.txt', self.property_object_map, self.property_lookup_map)
+        for p in sorted(props):
+            property_object = self.property_object_map[p]
 
     def load_others(self):
         self.others = ['Alphabetic', 'Uppercase', 'Lowercase', 'White_Space', 'Noncharacter_Code_Point', 'Default_Ignorable_Code_Point', 'ANY', 'ASCII', 'ASSIGNED']
         self.binary_value_map['ANY'] = range_uset(0, 0x10FFFF)
         self.binary_value_map['ASCII'] = range_uset(0, 0x7F)
-        self.binary_value_map['ASSIGNED'] = uset_complement(self.enum_value_map['gc']['Cn'])      
-        self.binary_value_map['White_Space'] = self.binary_value_map['WSpace']
-        self.binary_value_map['Uppercase'] = self.binary_value_map['Upper']
-        self.binary_value_map['Lowercase'] = self.binary_value_map['Lower']
-        self.binary_value_map['Alphabetic'] = self.binary_value_map['Alpha']
-        self.binary_value_map['Noncharacter_Code_Point'] = self.binary_value_map['NChar']
-        self.binary_value_map['Default_Ignorable_Code_Point'] = self.binary_value_map['DI']
+        self.binary_value_map['ASSIGNED'] = uset_complement(self.property_object_map['gc'].value_map['Cn'])      
+        self.binary_value_map['White_Space'] = self.property_object_map['WSpace'].value_map['Y']
+        self.binary_value_map['Uppercase'] = self.property_object_map['Upper'].value_map['Y']
+        self.binary_value_map['Lowercase'] = self.property_object_map['Lower'].value_map['Y']
+        self.binary_value_map['Alphabetic'] = self.property_object_map['Alpha'].value_map['Y']
+        self.binary_value_map['Noncharacter_Code_Point'] = self.property_object_map['NChar'].value_map['Y']
+        self.binary_value_map['Default_Ignorable_Code_Point'] = self.property_object_map['DI'].value_map['Y']
 
     def load_all(self):
         # First parse all property names and their aliases
@@ -66,21 +67,21 @@ class UCD_test_generator():
         self.load_property_value_info()
         #
         # The Block property
-        self.load_enumerated_property_data('Blocks', 'blk')
+        self.load_property_value_file('Blocks', 'blk')
         #
         # Scripts
-        self.load_enumerated_property_data('Scripts', 'sc')
+        self.load_property_value_file('Scripts', 'sc')
         #
         # Script Extensions
         self.load_ScriptExtensions_data()
         #
         # General Category
-        self.load_enumerated_property_data('extracted/DerivedGeneralCategory', 'gc')
+        self.load_property_value_file('extracted/DerivedGeneralCategory', 'gc')
         #
         # Core Properties
-        self.load_binary_properties_data('DerivedCoreProperties')
+        self.load_multisection_properties_file('DerivedCoreProperties')
         #
-        self.load_binary_properties_data('PropList')
+        self.load_multisection_properties_file('PropList')
         self.load_others()
 
     def generate_level_1_property_terms(self, negated_per_10 = 5, propgroups=['others', 'sc', 'scx', 'gc']):
@@ -95,26 +96,28 @@ class UCD_test_generator():
                     lbl = 'P'
                 terms.append(template % (lbl, p, uset_popcount(uset_intersection(self.all_good_set, s))))
         if 'gc' in propgroups:
-            for v in self.property_value_list['gc']:
-                s = self.enum_value_map['gc'][v]
+            obj = self.property_object_map['gc']
+            for v in obj.name_list_order:
+                s = obj.value_map[v]
                 lbl = 'p'
                 if randint(1,10) <= negated_per_10:
                     s = uset_complement(s)
                     lbl = 'P'
                 terms.append(template % (lbl, v, uset_popcount(uset_intersection(self.all_good_set, s))))
         if 'sc' in propgroups:
-            for v in self.property_value_list['sc']:
-                s = self.enum_value_map['sc'][v]
-                vname = self.property_value_full_name_map['sc'][v]
+            obj = self.property_object_map['sc']
+            for v in obj.name_list_order:
+                s = obj.value_map[v]
+                vname = obj.property_value_full_name_map[v]
                 lbl = 'p'
                 if randint(1,10) <= negated_per_10:
                     s = uset_complement(s)
                     lbl = 'P'
                 terms.append(template % (lbl, vname, uset_popcount(uset_intersection(self.all_good_set, s))))
         if 'scx' in propgroups:
-            for v in self.property_value_list['sc']:
-                s = self.enum_value_map['scx'][v]
-                vname = self.property_value_full_name_map['sc'][v]
+            for v in self.property_object_map['sc'].name_list_order:
+                s = self.property_object_map['scx'][v]
+                vname = self.property_object_map['sc'].property_value_full_name_map[v]
                 lbl = 'p'
                 if randint(1,10) <= negated_per_10:
                     s = uset_complement(s)
@@ -126,16 +129,16 @@ class UCD_test_generator():
         (p1, t1) = a1
         (p2, t2) = a2
         op = randint(0,2)
-        s1 = self.enum_value_map[p1][t1]
+        s1 = self.property_object_map[p1].value_map[t1]
         if p2 == 'others':
             s2 = self.binary_value_map[t2]
-        else: s2 = self.enum_value_map[p2][t2]
+        else: s2 = self.property_object_map[p2].value_map[t2]
         if op == 0: s3 = uset_intersection(s1, s2)
         elif op == 1: s3 = uset_difference(s1, s2)
         elif op == 2: s3 = uset_union(s1, s2)
         s3 = uset_intersection(s3, self.all_good_set)
-        if p1 == 'sc' or p1 == 'scx': t1 = self.property_value_full_name_map['sc'][t1]
-        if p2 == 'sc' or p2 == 'scx': t2 = self.property_value_full_name_map['sc'][t2]
+        if p1 == 'sc' or p1 == 'scx': t1 = self.property_object_map['sc'].property_value_full_name_map[t1]
+        if p2 == 'sc' or p2 == 'scx': t2 = self.property_object_map['sc'].property_value_full_name_map[t2]
         if p1 == 'scx': t1 = 'scx=' + t1
         if p2 == 'scx': t2 = 'scx=' + t2
         v1 = "\\p{%s}" % (t1)
@@ -151,8 +154,8 @@ class UCD_test_generator():
             return r"""<grepcase regexp="^[%s%s]$" datafile="All_good" grepcount="%i"/>""" % (v1, v2, uset_popcount(s3))
 
     def generate_random_property_expressions(self, useLookbehindAssertions = False):
-        gc = self.property_value_list['gc']
-        sc = self.property_value_list['sc']
+        gc = self.property_object_map['gc'].name_list_order
+        sc = self.property_object_map['sc'].name_list_order
         others = ['Alphabetic', 'Uppercase', 'Lowercase', 'White_Space', 'Noncharacter_Code_Point', 'Default_Ignorable_Code_Point', 'ANY', 'ASCII', 'ASSIGNED']
         exprs = []
         for p in gc:

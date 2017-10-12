@@ -15,46 +15,50 @@
 
 namespace UCD {
   namespace BLK_ns {
-    const unsigned independent_prop_values = 274;
+    const unsigned independent_prop_values = 281;
     /** Code Point Ranges for NB
-    [0860, 089f], [1c90, 1cbf], [2fe0, 2fef], [10200, 1027f],
+    [0870, 089f], [1c90, 1cbf], [2fe0, 2fef], [10200, 1027f],
     [103e0, 103ff], [10570, 105ff], [10780, 107ff], [108b0, 108df],
     [10940, 1097f], [10aa0, 10abf], [10bb0, 10bff], [10c50, 10c7f],
     [10d00, 10e5f], [10e80, 10fff], [11250, 1127f], [11380, 113ff],
-    [114e0, 1157f], [116d0, 116ff], [11740, 1189f], [11900, 11abf],
-    [11b00, 11bff], [11cc0, 11fff], [12550, 12fff], [13430, 143ff],
-    [14680, 167ff], [16a70, 16acf], [16b90, 16eff], [16fa0, 16fdf],
-    [18b00, 1afff], [1b100, 1bbff], [1bcb0, 1cfff], [1d250, 1d2ff],
-    [1d380, 1d3ff], [1dab0, 1dfff], [1e030, 1e7ff], [1e8e0, 1e8ff],
-    [1e960, 1edff], [1ef00, 1efff], [1fa00, 1ffff], [2a6e0, 2a6ff],
-    [2ceb0, 2f7ff], [2fa20, dffff], [e0080, e00ff], [e01f0, effff]**/
+    [114e0, 1157f], [116d0, 116ff], [11740, 1189f], [11900, 119ff],
+    [11ab0, 11abf], [11b00, 11bff], [11cc0, 11cff], [11d60, 11fff],
+    [12550, 12fff], [13430, 143ff], [14680, 167ff], [16a70, 16acf],
+    [16b90, 16eff], [16fa0, 16fdf], [18b00, 1afff], [1b130, 1b16f],
+    [1b300, 1bbff], [1bcb0, 1cfff], [1d250, 1d2ff], [1d380, 1d3ff],
+    [1dab0, 1dfff], [1e030, 1e7ff], [1e8e0, 1e8ff], [1e960, 1edff],
+    [1ef00, 1efff], [1fa00, 1ffff], [2a6e0, 2a6ff], [2ebf0, 2f7ff],
+    [2fa20, dffff], [e0080, e00ff], [e01f0, effff]**/
     const UnicodeSet nb_Set 
-        {{{Empty, 67}, {Full, 2}, {Empty, 159}, {Mixed, 1}, {Full, 1},
-          {Empty, 153}, {Mixed, 1}, {Empty, 1680}, {Full, 4}, {Empty, 11},
-          {Full, 1}, {Empty, 11}, {Mixed, 1}, {Full, 4}, {Empty, 12},
-          {Full, 4}, {Empty, 5}, {Mixed, 1}, {Full, 1}, {Empty, 3},
-          {Full, 2}, {Empty, 9}, {Full, 1}, {Empty, 7}, {Mixed, 1},
-          {Full, 2}, {Empty, 2}, {Mixed, 1}, {Full, 1}, {Empty, 4},
-          {Full, 11}, {Empty, 1}, {Full, 12}, {Empty, 18}, {Mixed, 1},
-          {Full, 1}, {Empty, 8}, {Full, 4}, {Empty, 7}, {Full, 5},
-          {Empty, 10}, {Mixed, 1}, {Full, 1}, {Empty, 2}, {Full, 11},
-          {Empty, 3}, {Full, 14}, {Empty, 2}, {Full, 8}, {Empty, 6},
-          {Full, 26}, {Empty, 42}, {Mixed, 1}, {Full, 85}, {Empty, 33},
+        {{{Empty, 67}, {Mixed, 1}, {Full, 1}, {Empty, 159}, {Mixed, 1},
+          {Full, 1}, {Empty, 153}, {Mixed, 1}, {Empty, 1680}, {Full, 4},
+          {Empty, 11}, {Full, 1}, {Empty, 11}, {Mixed, 1}, {Full, 4},
+          {Empty, 12}, {Full, 4}, {Empty, 5}, {Mixed, 1}, {Full, 1},
+          {Empty, 3}, {Full, 2}, {Empty, 9}, {Full, 1}, {Empty, 7},
+          {Mixed, 1}, {Full, 2}, {Empty, 2}, {Mixed, 1}, {Full, 1},
+          {Empty, 4}, {Full, 11}, {Empty, 1}, {Full, 12}, {Empty, 18},
+          {Mixed, 1}, {Full, 1}, {Empty, 8}, {Full, 4}, {Empty, 7},
+          {Full, 5}, {Empty, 10}, {Mixed, 1}, {Full, 1}, {Empty, 2},
+          {Full, 11}, {Empty, 3}, {Full, 8}, {Empty, 5}, {Mixed, 1},
+          {Empty, 2}, {Full, 8}, {Empty, 6}, {Full, 2}, {Empty, 3},
+          {Full, 21}, {Empty, 42}, {Mixed, 1}, {Full, 85}, {Empty, 33},
           {Mixed, 1}, {Full, 126}, {Empty, 20}, {Full, 268}, {Empty, 19},
           {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 5}, {Mixed, 1},
           {Full, 27}, {Empty, 5}, {Full, 2}, {Empty, 217}, {Full, 296},
-          {Empty, 8}, {Full, 88}, {Empty, 5}, {Mixed, 1}, {Full, 154},
-          {Empty, 18}, {Mixed, 1}, {Full, 5}, {Empty, 4}, {Full, 4},
-          {Empty, 53}, {Mixed, 1}, {Full, 42}, {Empty, 1}, {Mixed, 1},
-          {Full, 62}, {Empty, 7}, {Full, 1}, {Empty, 3}, {Full, 37},
-          {Empty, 8}, {Full, 8}, {Empty, 80}, {Full, 48}, {Empty, 1335},
-          {Full, 1}, {Empty, 317}, {Mixed, 1}, {Full, 330}, {Empty, 17},
-          {Full, 22575}, {Empty, 4}, {Full, 4}, {Empty, 7}, {Mixed, 1},
-          {Full, 2032}, {Empty, 4096}},
-         {0xffff0000, 0x0000ffff, 0xffff0000, 0xffff0000, 0xffff0000,
+          {Empty, 9}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 12},
+          {Full, 72}, {Empty, 5}, {Mixed, 1}, {Full, 154}, {Empty, 18},
+          {Mixed, 1}, {Full, 5}, {Empty, 4}, {Full, 4}, {Empty, 53},
+          {Mixed, 1}, {Full, 42}, {Empty, 1}, {Mixed, 1}, {Full, 62},
+          {Empty, 7}, {Full, 1}, {Empty, 3}, {Full, 37}, {Empty, 8},
+          {Full, 8}, {Empty, 80}, {Full, 48}, {Empty, 1335}, {Full, 1},
+          {Empty, 551}, {Mixed, 1}, {Full, 96}, {Empty, 17}, {Full, 22575},
+          {Empty, 4}, {Full, 4}, {Empty, 7}, {Mixed, 1}, {Full, 2032},
+          {Empty, 4096}},
+         {0xffff0000, 0xffff0000, 0x0000ffff, 0xffff0000, 0xffff0000,
           0xffff0000, 0xffff0000, 0xffff0000, 0xffff0000, 0xffff0000,
+          0xffff0000, 0xffff0000, 0xffff0000, 0x0000ffff, 0xffff0000,
           0xffff0000, 0x0000ffff, 0xffff0000, 0xffff0000, 0xffff0000,
-          0xffff0000, 0xffff0000, 0xffff0000, 0xffff0000}};
+          0xffff0000, 0xffff0000, 0xffff0000}};
     /** Code Point Ranges for ASCII
     [0000, 007f]**/
     const UnicodeSet ascii_Set 
@@ -150,6 +154,11 @@ namespace UCD {
     const UnicodeSet mandaic_Set 
         {{{Empty, 66}, {Full, 1}, {Empty, 34749}},
          {}};
+    /** Code Point Ranges for Syriac_Sup
+    [0860, 086f]**/
+    const UnicodeSet syriac_sup_Set 
+        {{{Empty, 67}, {Mixed, 1}, {Empty, 34748}},
+         {0x0000ffff}};
     /** Code Point Ranges for Arabic_Ext_A
     [08a0, 08ff]**/
     const UnicodeSet arabic_ext_a_Set 
@@ -1160,6 +1169,16 @@ namespace UCD {
     const UnicodeSet warang_citi_Set 
         {{{Empty, 2245}, {Full, 3}, {Empty, 32568}},
          {}};
+    /** Code Point Ranges for Zanabazar_Square
+    [11a00, 11a4f]**/
+    const UnicodeSet zanabazar_square_Set 
+        {{{Empty, 2256}, {Full, 2}, {Mixed, 1}, {Empty, 32557}},
+         {0x0000ffff}};
+    /** Code Point Ranges for Soyombo
+    [11a50, 11aaf]**/
+    const UnicodeSet soyombo_Set 
+        {{{Empty, 2258}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 32554}},
+         {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for Pau_Cin_Hau
     [11ac0, 11aff]**/
     const UnicodeSet pau_cin_hau_Set 
@@ -1175,6 +1194,11 @@ namespace UCD {
     const UnicodeSet marchen_Set 
         {{{Empty, 2275}, {Mixed, 1}, {Full, 2}, {Empty, 32538}},
          {0xffff0000}};
+    /** Code Point Ranges for Masaram_Gondi
+    [11d00, 11d5f]**/
+    const UnicodeSet masaram_gondi_Set 
+        {{{Empty, 2280}, {Full, 3}, {Empty, 32533}},
+         {}};
     /** Code Point Ranges for Cuneiform
     [12000, 123ff]**/
     const UnicodeSet cuneiform_Set 
@@ -1245,6 +1269,16 @@ namespace UCD {
     const UnicodeSet kana_sup_Set 
         {{{Empty, 3456}, {Full, 8}, {Empty, 31352}},
          {}};
+    /** Code Point Ranges for Kana_Ext_A
+    [1b100, 1b12f]**/
+    const UnicodeSet kana_ext_a_Set 
+        {{{Empty, 3464}, {Full, 1}, {Mixed, 1}, {Empty, 31350}},
+         {0x0000ffff}};
+    /** Code Point Ranges for Nushu
+    [1b170, 1b2ff]**/
+    const UnicodeSet nushu_Set 
+        {{{Empty, 3467}, {Mixed, 1}, {Full, 12}, {Empty, 31336}},
+         {0xffff0000}};
     /** Code Point Ranges for Duployan
     [1bc00, 1bc9f]**/
     const UnicodeSet duployan_Set 
@@ -1395,6 +1429,12 @@ namespace UCD {
     const UnicodeSet cjk_ext_e_Set 
         {{{Empty, 5569}, {Full, 180}, {Mixed, 1}, {Empty, 29066}},
          {0x0000ffff}};
+    /** Code Point Ranges for CJK_Ext_F
+    [2ceb0, 2ebef]**/
+    const UnicodeSet cjk_ext_f_Set 
+        {{{Empty, 5749}, {Mixed, 1}, {Full, 233}, {Mixed, 1},
+          {Empty, 28832}},
+         {0xffff0000, 0x0000ffff}};
     /** Code Point Ranges for CJK_Compat_Ideographs_Sup
     [2f800, 2fa1f]**/
     const UnicodeSet cjk_compat_ideographs_sup_Set 
@@ -1431,19 +1471,20 @@ namespace UCD {
         &diacriticals_Set, &greek_Set, &cyrillic_Set, &cyrillic_sup_Set,
         &armenian_Set, &hebrew_Set, &arabic_Set, &syriac_Set,
         &arabic_sup_Set, &thaana_Set, &nko_Set, &samaritan_Set,
-        &mandaic_Set, &arabic_ext_a_Set, &devanagari_Set, &bengali_Set,
-        &gurmukhi_Set, &gujarati_Set, &oriya_Set, &tamil_Set, &telugu_Set,
-        &kannada_Set, &malayalam_Set, &sinhala_Set, &thai_Set, &lao_Set,
-        &tibetan_Set, &myanmar_Set, &georgian_Set, &jamo_Set, &ethiopic_Set,
-        &ethiopic_sup_Set, &cherokee_Set, &ucas_Set, &ogham_Set, &runic_Set,
-        &tagalog_Set, &hanunoo_Set, &buhid_Set, &tagbanwa_Set, &khmer_Set,
-        &mongolian_Set, &ucas_ext_Set, &limbu_Set, &tai_le_Set,
-        &new_tai_lue_Set, &khmer_symbols_Set, &buginese_Set, &tai_tham_Set,
-        &diacriticals_ext_Set, &balinese_Set, &sundanese_Set, &batak_Set,
-        &lepcha_Set, &ol_chiki_Set, &cyrillic_ext_c_Set, &sundanese_sup_Set,
-        &vedic_ext_Set, &phonetic_ext_Set, &phonetic_ext_sup_Set,
-        &diacriticals_sup_Set, &latin_ext_additional_Set, &greek_ext_Set,
-        &punctuation_Set, &super_and_sub_Set, &currency_symbols_Set,
+        &mandaic_Set, &syriac_sup_Set, &arabic_ext_a_Set, &devanagari_Set,
+        &bengali_Set, &gurmukhi_Set, &gujarati_Set, &oriya_Set, &tamil_Set,
+        &telugu_Set, &kannada_Set, &malayalam_Set, &sinhala_Set, &thai_Set,
+        &lao_Set, &tibetan_Set, &myanmar_Set, &georgian_Set, &jamo_Set,
+        &ethiopic_Set, &ethiopic_sup_Set, &cherokee_Set, &ucas_Set,
+        &ogham_Set, &runic_Set, &tagalog_Set, &hanunoo_Set, &buhid_Set,
+        &tagbanwa_Set, &khmer_Set, &mongolian_Set, &ucas_ext_Set,
+        &limbu_Set, &tai_le_Set, &new_tai_lue_Set, &khmer_symbols_Set,
+        &buginese_Set, &tai_tham_Set, &diacriticals_ext_Set, &balinese_Set,
+        &sundanese_Set, &batak_Set, &lepcha_Set, &ol_chiki_Set,
+        &cyrillic_ext_c_Set, &sundanese_sup_Set, &vedic_ext_Set,
+        &phonetic_ext_Set, &phonetic_ext_sup_Set, &diacriticals_sup_Set,
+        &latin_ext_additional_Set, &greek_ext_Set, &punctuation_Set,
+        &super_and_sub_Set, &currency_symbols_Set,
         &diacriticals_for_symbols_Set, &letterlike_symbols_Set,
         &number_forms_Set, &arrows_Set, &math_operators_Set,
         &misc_technical_Set, &control_pictures_Set, &ocr_Set,
@@ -1488,24 +1529,26 @@ namespace UCD {
         &sinhala_archaic_numbers_Set, &khojki_Set, &multani_Set,
         &khudawadi_Set, &grantha_Set, &newa_Set, &tirhuta_Set, &siddham_Set,
         &modi_Set, &mongolian_sup_Set, &takri_Set, &ahom_Set,
-        &warang_citi_Set, &pau_cin_hau_Set, &bhaiksuki_Set, &marchen_Set,
+        &warang_citi_Set, &zanabazar_square_Set, &soyombo_Set,
+        &pau_cin_hau_Set, &bhaiksuki_Set, &marchen_Set, &masaram_gondi_Set,
         &cuneiform_Set, &cuneiform_numbers_Set,
         &early_dynastic_cuneiform_Set, &egyptian_hieroglyphs_Set,
         &anatolian_hieroglyphs_Set, &bamum_sup_Set, &mro_Set,
         &bassa_vah_Set, &pahawh_hmong_Set, &miao_Set,
         &ideographic_symbols_Set, &tangut_Set, &tangut_components_Set,
-        &kana_sup_Set, &duployan_Set, &shorthand_format_controls_Set,
-        &byzantine_music_Set, &music_Set, &ancient_greek_music_Set,
-        &tai_xuan_jing_Set, &counting_rod_Set, &math_alphanum_Set,
-        &sutton_signwriting_Set, &glagolitic_sup_Set, &mende_kikakui_Set,
-        &adlam_Set, &arabic_math_Set, &mahjong_Set, &domino_Set,
-        &playing_cards_Set, &enclosed_alphanum_sup_Set,
+        &kana_sup_Set, &kana_ext_a_Set, &nushu_Set, &duployan_Set,
+        &shorthand_format_controls_Set, &byzantine_music_Set, &music_Set,
+        &ancient_greek_music_Set, &tai_xuan_jing_Set, &counting_rod_Set,
+        &math_alphanum_Set, &sutton_signwriting_Set, &glagolitic_sup_Set,
+        &mende_kikakui_Set, &adlam_Set, &arabic_math_Set, &mahjong_Set,
+        &domino_Set, &playing_cards_Set, &enclosed_alphanum_sup_Set,
         &enclosed_ideographic_sup_Set, &misc_pictographs_Set,
         &emoticons_Set, &ornamental_dingbats_Set, &transport_and_map_Set,
         &alchemical_Set, &geometric_shapes_ext_Set, &sup_arrows_c_Set,
         &sup_symbols_and_pictographs_Set, &cjk_ext_b_Set, &cjk_ext_c_Set,
-        &cjk_ext_d_Set, &cjk_ext_e_Set, &cjk_compat_ideographs_sup_Set,
-        &tags_Set, &vs_sup_Set, &sup_pua_a_Set, &sup_pua_b_Set
+        &cjk_ext_d_Set, &cjk_ext_e_Set, &cjk_ext_f_Set,
+        &cjk_compat_ideographs_sup_Set, &tags_Set, &vs_sup_Set,
+        &sup_pua_a_Set, &sup_pua_b_Set
          }};
     }
 }

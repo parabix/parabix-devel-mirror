@@ -10,7 +10,7 @@
 
 
 namespace UCD {
-   const std::string UnicodeVersion = "9.0.0";
+   const std::string UnicodeVersion = "10.0.0";
 }
 
 #endif
