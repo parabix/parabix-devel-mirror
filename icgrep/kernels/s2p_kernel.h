@@ -8,7 +8,7 @@
 #include "kernel.h"  // for KernelBuilder
 namespace IDISA { class IDISA_Builder; }  // lines 14-14
 namespace llvm { class Value; }
-#define S2P_MULTIBLOCK
+//#define S2P_MULTIBLOCK
 namespace kernel {
 #ifdef S2P_MULTIBLOCK
     class S2PKernel final : public MultiBlockKernel {
