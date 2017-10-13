@@ -111,7 +111,47 @@ void generateS2P_16Kernel(const std::unique_ptr<KernelBuilder> & iBuilder, Kerne
     }
 }    
 #endif
+#ifdef S2P_MULTIBLOCK
+
+void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb) {
+    BasicBlock * entry = kb->GetInsertBlock();
+    BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
+    BasicBlock * s2pDone = kb->CreateBasicBlock("s2pDone");
     
+    Function::arg_iterator args = mCurrentMethod->arg_begin();
+    args++; //self
+    Value * itemsToDo = &*(args++);
+    // Get pointer to start of the StreamSetBlock containing unprocessed input items.
+    Value * byteStreamPtr = &*(args++);
+    Value * basisBitsPtr = &*(args++);
+    
+    Constant * blockWidth = kb->getSize(kb->getBitBlockWidth());
+    Value * blocksToDo = kb->CreateUDivCeil(itemsToDo, blockWidth); // 1 if this is the final block
+    
+    kb->CreateBr(processBlock);
+    
+    kb->SetInsertPoint(processBlock);
+    PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
+    blockOffsetPhi->addIncoming(kb->getSize(0), entry);
+
+    Value * bytePackPtr = kb->CreateGEP(byteStreamPtr, {blockOffsetPhi, kb->getInt32(0), kb->getInt32(0)});
+    Value * basisBlockPtr = kb->CreateGEP(basisBitsPtr, blockOffsetPhi);
+    Value * bytepack[8];
+    for (unsigned i = 0; i < 8; i++) {
+        bytepack[i] = kb->CreateBlockAlignedLoad(kb->CreateGEP(bytePackPtr, kb->getInt32(i)));
+    }
+    Value * basisbits[8];
+    s2p(kb, bytepack, basisbits);
+    for (unsigned basis_idx = 0; basis_idx < 8; ++basis_idx) {
+        kb->CreateBlockAlignedStore(basisbits[basis_idx], kb->CreateGEP(basisBlockPtr, {kb->getSize(0), kb->getInt32(basis_idx)}));
+    }
+    Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
+    Value * moreToDo = kb->CreateICmpULT(blockOffsetPhi, blocksToDo);
+    blockOffsetPhi->addIncoming(nextBlk, processBlock);
+    kb->CreateCondBr(moreToDo, processBlock, s2pDone);
+    kb->SetInsertPoint(s2pDone);
+}
+#else
 void S2PKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
@@ -131,11 +171,10 @@ void S2PKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBu
 }
 
 void S2PKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, Value * remainingBytes) {
-    /* Prepare the s2p final block function:
-     assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
-     if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
-     */
-    
+    // Prepare the s2p final block function:
+    // assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
+    //  if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
+ 
     BasicBlock * finalPartialBlock = iBuilder->CreateBasicBlock("partial");
     BasicBlock * finalEmptyBlock = iBuilder->CreateBasicBlock("empty");
     BasicBlock * exitBlock = iBuilder->CreateBasicBlock("exit");
@@ -157,9 +196,14 @@ void S2PKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & 
     
     iBuilder->SetInsertPoint(exitBlock);
 }
+#endif
 
 S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, bool aligned)
-: BlockOrientedKernel(aligned ? "s2p" : "s2p_unaligned",
+#ifdef S2P_MULTIBLOCK
+    : MultiBlockKernel(aligned ? "s2p" : "s2p_unaligned",
+#else
+	: BlockOrientedKernel(aligned ? "s2p" : "s2p_unaligned",
+#endif
     {Binding{b->getStreamSetTy(1, 8), "byteStream"}}, {Binding{b->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
   mAligned(aligned) {
     setNoTerminateAttribute(true);
