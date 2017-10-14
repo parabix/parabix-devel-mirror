@@ -14,6 +14,8 @@
 #include <re/re_seq.h> 
 #include <re/re_assertion.h>
 #include <re/re_parser.h>
+#include <re/re_name_resolve.h>
+#include <re/re_compiler.h>
 #include "UCD/PropertyAliases.h"
 #include "UCD/PropertyObjects.h"
 #include "UCD/PropertyObjectTable.h"
@@ -143,7 +145,8 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             auto propObj = property_object_table[propit->second];
             if ((value.length() > 0) && (value[0] == '/')) {
                 // resolve a regular expression
-                re::RE * propValueRe = RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE);
+                re::RE * propValueRe = RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE, false);
+                propValueRe = re::resolveNames(propValueRe);  // Recursive name resolution may be required.
                 return propObj->GetCodepointSetMatchingPattern(propValueRe);
             }
             if ((value.length() > 0) && (value[0] == '@')) {
