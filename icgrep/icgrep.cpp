@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2014-7 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -34,8 +34,6 @@
 
 using namespace llvm;
 
-static cl::opt<bool> UTF_16("UTF-16", cl::desc("Regular expressions over the UTF-16 representation of Unicode."));
-
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
 
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(1));
@@ -44,8 +42,6 @@ static cl::opt<bool> ByteMode("enable-byte-mode", cl::desc("Process regular expr
 
 static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"));
 static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expressions processed by each kernel."), cl::init(1));
-
-static cl::opt<std::string> PTXFile("ptx", cl::desc("compiled PTX file."), cl::init(""));
 
 static std::vector<std::string> allFiles;
 static re::ModeFlagSet globalFlags = 0;
@@ -181,28 +177,22 @@ int main(int argc, char *argv[]) {
     const auto REs = readExpressions();
 
     allFiles = getFullFileList(inputFiles);
+    if ((allFiles.size() > 1) && !grep::NoFilenameFlag) {
+        grep::WithFilenameFlag = true;
+    }
 
     grep::GrepEngine grepEngine;
 
     if (allFiles.empty()) {
 
-        grepEngine.grepCodeGen(REs, grep::Mode, UTF_16, GrepSource::StdIn);
+        grepEngine.grepCodeGen(REs, grep::Mode, GrepSource::StdIn);
         allFiles = { "-" };
         grep::initFileResult(allFiles);
         grepEngine.doGrep(STDIN_FILENO, 0);
 
     } else {
                
-        if (codegen::NVPTX) {
-            if(PTXFile=="")
-                grepEngine.grepCodeGen_nvptx(REs, grep::Mode, UTF_16);
-            for (unsigned i = 0; i != allFiles.size(); ++i) {
-                grepEngine.doGrep(allFiles[i], PTXFile);
-            }
-            return 0;
-        } else {
-            grepEngine.grepCodeGen(REs, grep::Mode, UTF_16, GrepSource::File);
-        }
+        grepEngine.grepCodeGen(REs, grep::Mode, GrepSource::File);
 
         grep::initFileResult(allFiles);
 

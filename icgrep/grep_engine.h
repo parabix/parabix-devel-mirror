@@ -31,9 +31,7 @@ public:
 
     ~GrepEngine();
 
-    void grepCodeGen(std::vector<re::RE *> REs, GrepModeType grepMode, bool UTF_16, GrepSource grepSource);
-
-    void grepCodeGen_nvptx(std::vector<re::RE *> REs, GrepModeType grepMode, bool UTF_16);
+    void grepCodeGen(std::vector<re::RE *> REs, GrepModeType grepMode, GrepSource grepSource);
 
     void doGrep(const std::string & fileName, std::string & PTXFilename) const;
     

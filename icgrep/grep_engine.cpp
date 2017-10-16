@@ -38,10 +38,6 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <mutex>
-#ifdef CUDA_ENABLED
-#include <preprocess.cpp>
-#include <IR_Gen/CudaDriver.h>
-#endif
 
 using namespace parabix;
 using namespace llvm;
@@ -96,53 +92,6 @@ bool matchesNeedToBeMovedToEOL() {
     return true;
 }
     
-void GrepEngine::doGrep(const std::string & fileName, std::string & PTXFilename) const{
-#ifdef CUDA_ENABLED
-    const bool CountOnly = true;
-    boost::filesystem::path file(fileName);
-    if (exists(file)) {
-        if (is_directory(file)) {
-            return;
-        }
-    } else {
-        if (!NoMessagesFlag) {
-            std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
-            return;
-        }
-    }
-
-    const auto fileSize = file_size(file);
-    
-    if (fileSize > 0) {
-        try {
-            boost::iostreams::mapped_file_source source(fileName, fileSize, 0);
-            char * fileBuffer = const_cast<char *>(source.data());
-            
-            codegen::BlockSize = 128;
-            std::vector<size_t> LFPositions = preprocess(fileBuffer, fileSize);
-            
-            const unsigned numOfGroups = codegen::GroupNum;
-            if (posix_memalign((void**)&startPoints, 8, (numOfGroups+1)*sizeof(size_t)) ||
-                posix_memalign((void**)&accumBytes, 8, (numOfGroups+1)*sizeof(size_t))) {
-                std::cerr << "Cannot allocate memory for startPoints or accumBytes.\n";
-                exit(-1);
-            }
-            if(PTXFilename=="")
-                PTXFilename = mGrepDriver->getBuilder()->getModule()->getModuleIdentifier() + ".ptx";
-            RunPTX(PTXFilename, fileBuffer, fileSize, CountOnly, LFPositions, startPoints, accumBytes);
-            source.close();
-        } catch (std::exception & e) {
-            if (!NoMessagesFlag) {
-                std::cerr << "Boost mmap error: " + fileName + ": " + e.what() + " Skipped.\n";
-                return;
-            }
-        }
-    } else {
-        std::cout << 0 << std::endl;
-    }
-#endif
-}
-
 uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) const {
     struct stat sb;
     const int32_t fd = open(fileName.c_str(), O_RDONLY);
@@ -377,76 +326,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver
     return std::pair<StreamSetBuffer *, StreamSetBuffer *>(LineBreakStream, Matches);
 }
 
-
-    
-void GrepEngine::grepCodeGen_nvptx(std::vector<re::RE *> REs, const GrepModeType grepMode, const bool UTF_16) {
-
-    assert (mGrepDriver == nullptr);
-
-    mGrepDriver = new NVPTXDriver("engine");
-    auto & idb = mGrepDriver->getBuilder();
-    Module * M = idb->getModule();
-
-    const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned encodingBits = UTF_16 ? 16 : 8;
-
-    Type * const int64Ty = idb->getInt64Ty();
-    Type * const int32Ty = idb->getInt32Ty();
-    Type * const size_ty = idb->getSizeTy();
-    Type * const sizeTyPtr = PointerType::get(size_ty, 1);
-    Type * const int64tyPtr = PointerType::get(int64Ty, 1);
-    Type * const voidTy = idb->getVoidTy();
-    
-    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", voidTy, int64tyPtr, sizeTyPtr, sizeTyPtr, int64tyPtr, nullptr));
-    mainFunc->setCallingConv(CallingConv::C);
-    idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
-    auto args = mainFunc->arg_begin();
-
-    Value * const inputPtr = &*(args++);
-    inputPtr->setName("inputPtr");
-    Value * const startPointsPtr = &*(args++);
-    startPointsPtr->setName("startPointsPtr");
-    Value * const bufferSizesPtr = &*(args++);
-    bufferSizesPtr->setName("bufferSizesPtr");
-    Value * const outputPtr = &*(args++);
-    outputPtr->setName("outputPtr");
-
-    Function * tidFunc = M->getFunction("llvm.nvvm.read.ptx.sreg.tid.x");
-    Value * tid = idb->CreateCall(tidFunc);
-    Function * bidFunc = cast<Function>(M->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32Ty, nullptr));
-    Value * bid = idb->CreateCall(bidFunc);
-
-    Value * startPoint = idb->CreateLoad(idb->CreateGEP(startPointsPtr, bid));
-    Value * startBlock = idb->CreateUDiv(startPoint, ConstantInt::get(int64Ty, idb->getBitBlockWidth()));
-    Type * const inputStreamType = PointerType::get(ArrayType::get(ArrayType::get(idb->getBitBlockType(), 8), 1), 1);    
-    Value * inputStreamPtr = idb->CreateGEP(idb->CreateBitCast(inputPtr, inputStreamType), startBlock);
-    Value * inputStream = idb->CreateGEP(inputStreamPtr, tid);
-    Value * bufferSize = idb->CreateLoad(idb->CreateGEP(bufferSizesPtr, bid));
-
-    StreamSetBuffer * ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8), 1));
-    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::MemorySourceKernel>(idb, inputStreamType, segmentSize));
-    sourceK->setInitialArguments({inputStream, bufferSize});
-    mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
-
-    StreamSetBuffer * Matches = std::get<1>(grepPipeline(mGrepDriver, REs, grepMode, encodingBits, ByteStream));
-    
-    kernel::Kernel * matchCountK = mGrepDriver->addKernelInstance(make_unique<kernel::PopcountKernel>(idb));
-    mGrepDriver->makeKernelCall(matchCountK, {Matches}, {});
-    mGrepDriver->generatePipelineIR();
-    idb->setKernel(matchCountK);
-    Value * matchedLineCount = idb->getAccumulator("countResult");
-    matchedLineCount = idb->CreateZExt(matchedLineCount, int64Ty);
-    
-    Value * strideBlocks = ConstantInt::get(int32Ty, idb->getStride() / idb->getBitBlockWidth());
-    Value * outputThreadPtr = idb->CreateGEP(outputPtr, idb->CreateAdd(idb->CreateMul(bid, strideBlocks), tid));
-    idb->CreateStore(matchedLineCount, outputThreadPtr);
-    mGrepDriver->deallocateBuffers();
-    idb->CreateRetVoid();
-
-    mGrepDriver->finalizeObject();
-}
-
-void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepMode, const bool UTF_16, GrepSource grepSource) {
+void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepMode, GrepSource grepSource) {
 
     assert (mGrepDriver == nullptr);
     mGrepDriver = new ParabixDriver("engine");
@@ -454,7 +334,7 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
     Module * M = idb->getModule();
 
     const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned encodingBits = UTF_16 ? 16 : 8;
+    const unsigned encodingBits = 8;
 
     Type * const int64Ty = idb->getInt64Ty();
     Type * const int32Ty = idb->getInt32Ty();
@@ -490,11 +370,7 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
         kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::Normal, encodingBits));
         scanMatchK->setInitialArguments({fileIdx});
         mGrepDriver->makeKernelCall(scanMatchK, {Matches, LineBreakStream, ByteStream}, {});
-        if (UTF_16) {
-            mGrepDriver->LinkFunction(*scanMatchK, "matcher", &wrapped_report_match<uint16_t>);
-        } else {
-            mGrepDriver->LinkFunction(*scanMatchK, "matcher", &wrapped_report_match<uint8_t>);
-        }
+        mGrepDriver->LinkFunction(*scanMatchK, "matcher", &wrapped_report_match<uint8_t>);
         mGrepDriver->generatePipelineIR();
         mGrepDriver->deallocateBuffers();
 
