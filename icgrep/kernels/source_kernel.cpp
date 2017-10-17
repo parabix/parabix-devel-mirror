@@ -330,7 +330,7 @@ void ReadSourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilde
 }
 
 ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsigned blocksPerSegment, unsigned codeUnitWidth)
-: SegmentOrientedKernel("read_source"
+: SegmentOrientedKernel("read_source"  + std::to_string(blocksPerSegment) + "@" + std::to_string(codeUnitWidth)
 , {}
 , {Binding{kb->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}
 , {Binding{kb->getInt32Ty(), "fileDescriptor"}}
@@ -341,6 +341,73 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 
 }
 
+// Hybrid MMap/Read source kernel
+    
+FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsigned blocksPerSegment, unsigned codeUnitWidth)
+: SegmentOrientedKernel("FD_source" + std::to_string(blocksPerSegment) + "@" + std::to_string(codeUnitWidth)
+, {}
+, {Binding{kb->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}
+, {Binding{kb->getInt32Ty(), "fileDescriptor"}}
+, {}
+, {Binding{IntegerType::get(kb->getContext(), codeUnitWidth)->getPointerTo(), "buffer"}, Binding{kb->getSizeTy(), "capacity"},
+    Binding{kb->getSizeTy(), "fileSize"}, Binding{kb->getInt8PtrTy(), "readableBuffer"}})
+, mSegmentBlocks(blocksPerSegment)
+, mCodeUnitWidth(codeUnitWidth)
+, mFileSizeFunction(nullptr) {
+    
+}
+
+void FDSourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & kb) {
+    BasicBlock * finalizeRead = kb->CreateBasicBlock("finalizeRead");
+    BasicBlock * finalizeMMap = kb->CreateBasicBlock("finalizeMMap");
+    BasicBlock * finalizeDone = kb->CreateBasicBlock("finalizeDone");
+    // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic, otherwise use mmap logic.
+    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(0)), finalizeRead, finalizeMMap);
+    kb->SetInsertPoint(finalizeRead);
+    reinterpret_cast<ReadSourceKernel *>(this)->ReadSourceKernel::generateFinalizeMethod(kb);
+    kb->CreateBr(finalizeDone);
+    kb->SetInsertPoint(finalizeMMap);
+    reinterpret_cast<MMapSourceKernel *>(this)->MMapSourceKernel::generateFinalizeMethod(kb);
+    kb->CreateBr(finalizeDone);
+    kb->SetInsertPoint(finalizeDone);
+}
+
+void FDSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & kb) {
+    BasicBlock * initializeRead = kb->CreateBasicBlock("initializeRead");
+    BasicBlock * initializeMMap = kb->CreateBasicBlock("initializeMMap");
+    BasicBlock * initializeDone = kb->CreateBasicBlock("initializeDone");
+    // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic, otherwise use MMap logic.
+    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(0)), initializeRead, initializeMMap);
+    kb->SetInsertPoint(initializeRead);
+    reinterpret_cast<ReadSourceKernel *>(this)->ReadSourceKernel::generateInitializeMethod(kb);
+    kb->CreateBr(initializeDone);
+    kb->SetInsertPoint(initializeMMap);
+    reinterpret_cast<MMapSourceKernel *>(this)->MMapSourceKernel::generateInitializeMethod(kb);
+    kb->CreateBr(initializeDone);
+    kb->SetInsertPoint(initializeDone);
+}
+
+void FDSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & kb) {
+    BasicBlock * DoSegmentRead = kb->CreateBasicBlock("DoSegmentRead");
+    BasicBlock * DoSegmentMMap = kb->CreateBasicBlock("DoSegmentMMap");
+    BasicBlock * DoSegmentDone = kb->CreateBasicBlock("DoSegmentDone");
+    // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic, otherwise use MMap logic.
+    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(0)), DoSegmentRead, DoSegmentMMap);
+    kb->SetInsertPoint(DoSegmentRead);
+    reinterpret_cast<ReadSourceKernel *>(this)->ReadSourceKernel::generateDoSegmentMethod(kb);
+    kb->CreateBr(DoSegmentDone);
+    kb->SetInsertPoint(DoSegmentMMap);
+    reinterpret_cast<MMapSourceKernel *>(this)->MMapSourceKernel::generateDoSegmentMethod(kb);
+    kb->CreateBr(DoSegmentDone);
+    kb->SetInsertPoint(DoSegmentDone);
+}
+
+
+void FDSourceKernel::linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> & kb) {
+    mFileSizeFunction = kb->LinkFunction("file_size", &file_size);
+}
+    
+    
 /// MEMORY SOURCE KERNEL
 
 void MemorySourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & kb) {

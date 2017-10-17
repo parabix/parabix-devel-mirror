@@ -93,6 +93,9 @@ bool matchesNeedToBeMovedToEOL() {
 }
     
 uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) const {
+    if (fileName == "-") {
+        return doGrep(STDIN_FILENO, fileIdx);
+    }
     struct stat sb;
     const int32_t fd = open(fileName.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
@@ -122,7 +125,6 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx
 }
 
 uint64_t GrepEngine::doGrep(const int32_t fileDescriptor, const uint32_t fileIdx) const {
-    assert (mGrepDriver);
     typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor, const uint32_t fileIdx);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
     
@@ -326,7 +328,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver
     return std::pair<StreamSetBuffer *, StreamSetBuffer *>(LineBreakStream, Matches);
 }
 
-void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepMode, GrepSource grepSource) {
+void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepMode) {
 
     assert (mGrepDriver == nullptr);
     mGrepDriver = new ParabixDriver("engine");
@@ -339,8 +341,6 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
     Type * const int64Ty = idb->getInt64Ty();
     Type * const int32Ty = idb->getInt32Ty();
 
-    kernel::Kernel * sourceK = nullptr;
-    
     Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, idb->getInt32Ty(), int32Ty, nullptr));
     mainFunc->setCallingConv(CallingConv::C);
     idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
@@ -352,14 +352,8 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
     fileIdx->setName("fileIdx");
 
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
-
-    if (grepSource == GrepSource::File) {
-        sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::MMapSourceKernel>(idb, segmentSize));
-    } else {
-        sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::ReadSourceKernel>(idb, segmentSize));
-    }
+    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::FDSourceKernel>(idb, segmentSize));
     sourceK->setInitialArguments({fileDescriptor});
-
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
     
     StreamSetBuffer * LineBreakStream;

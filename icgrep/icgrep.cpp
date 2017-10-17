@@ -177,49 +177,43 @@ int main(int argc, char *argv[]) {
     const auto REs = readExpressions();
 
     allFiles = getFullFileList(inputFiles);
-    if ((allFiles.size() > 1) && !grep::NoFilenameFlag) {
+    if (allFiles.empty()) {
+        allFiles = { "-" };
+    }
+    else if ((allFiles.size() > 1) && !grep::NoFilenameFlag) {
         grep::WithFilenameFlag = true;
     }
 
     grep::GrepEngine grepEngine;
 
-    if (allFiles.empty()) {
-
-        grepEngine.grepCodeGen(REs, grep::Mode, GrepSource::StdIn);
-        allFiles = { "-" };
-        grep::initFileResult(allFiles);
-        grepEngine.doGrep(STDIN_FILENO, 0);
-
-    } else {
                
-        grepEngine.grepCodeGen(REs, grep::Mode, GrepSource::File);
+    grepEngine.grepCodeGen(REs, grep::Mode);
 
-        grep::initFileResult(allFiles);
+    grep::initFileResult(allFiles);
 
-        if (Threads <= 1) {
-            for (unsigned i = 0; i != allFiles.size(); ++i) {
-                grepEngine.doGrep(allFiles[i], i);
-            }
-        } else if (Threads > 1) {
-            const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
-            pthread_t threads[numOfThreads];
+    if (Threads <= 1) {
+        for (unsigned i = 0; i != allFiles.size(); ++i) {
+            grepEngine.doGrep(allFiles[i], i);
+        }
+    } else if (Threads > 1) {
+        const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
+        pthread_t threads[numOfThreads];
 
-            for(unsigned long i = 0; i < numOfThreads; ++i){
-                const int rc = pthread_create(&threads[i], nullptr, grep::DoGrepThreadFunction, (void *)&grepEngine);
-                if (rc) {
-                    llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
-                }
-            }
-            for(unsigned i = 0; i < numOfThreads; ++i) {
-                void * status = nullptr;
-                const int rc = pthread_join(threads[i], &status);
-                if (rc) {
-                    llvm::report_fatal_error("Failed to join thread: code " + std::to_string(rc));
-                }
+        for(unsigned long i = 0; i < numOfThreads; ++i){
+            const int rc = pthread_create(&threads[i], nullptr, grep::DoGrepThreadFunction, (void *)&grepEngine);
+            if (rc) {
+                llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
             }
         }
-
+        for(unsigned i = 0; i < numOfThreads; ++i) {
+            void * status = nullptr;
+            const int rc = pthread_join(threads[i], &status);
+            if (rc) {
+                llvm::report_fatal_error("Failed to join thread: code " + std::to_string(rc));
+            }
+        }
     }
+
     
     grep::PrintResults();
     
