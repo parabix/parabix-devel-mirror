@@ -26,10 +26,12 @@ using namespace parabix;
 using namespace llvm;
 
 namespace grep {
-
-    
-void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, size_t line_start, size_t line_end) {
+void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end) {
     reinterpret_cast<MatchAccumulator *>(accum_addr)->accumulate_match(lineNum, line_start, line_end);
+}
+
+void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
+    reinterpret_cast<MatchAccumulator *>(accum_addr)->finalize_match(buffer_end);
 }
 
 void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLength, MatchAccumulator * accum) {
@@ -79,6 +81,7 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     scanMatchK->setInitialArguments({ConstantInt::get(idb->getIntAddrTy(), reinterpret_cast<intptr_t>(accum))});
     pxDriver.makeKernelCall(scanMatchK, {MatchedLines, LineBreakStream, ByteStream}, {});
     pxDriver.LinkFunction(*scanMatchK, "accumulate_match_wrapper", &accumulate_match_wrapper);
+    pxDriver.LinkFunction(*scanMatchK, "finalize_match_wrapper", &finalize_match_wrapper);
     pxDriver.generatePipelineIR();
     pxDriver.deallocateBuffers();
     idb->CreateRetVoid();

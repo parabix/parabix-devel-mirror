@@ -362,7 +362,7 @@ void FDSourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder>
     BasicBlock * finalizeMMap = kb->CreateBasicBlock("finalizeMMap");
     BasicBlock * finalizeDone = kb->CreateBasicBlock("finalizeDone");
     // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic, otherwise use mmap logic.
-    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(0)), finalizeRead, finalizeMMap);
+    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(STDIN_FILENO)), finalizeRead, finalizeMMap);
     kb->SetInsertPoint(finalizeRead);
     reinterpret_cast<ReadSourceKernel *>(this)->ReadSourceKernel::generateFinalizeMethod(kb);
     kb->CreateBr(finalizeDone);
@@ -377,7 +377,7 @@ void FDSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilde
     BasicBlock * initializeMMap = kb->CreateBasicBlock("initializeMMap");
     BasicBlock * initializeDone = kb->CreateBasicBlock("initializeDone");
     // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic, otherwise use MMap logic.
-    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(0)), initializeRead, initializeMMap);
+    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(STDIN_FILENO)), initializeRead, initializeMMap);
     kb->SetInsertPoint(initializeRead);
     reinterpret_cast<ReadSourceKernel *>(this)->ReadSourceKernel::generateInitializeMethod(kb);
     kb->CreateBr(initializeDone);
@@ -392,7 +392,7 @@ void FDSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder
     BasicBlock * DoSegmentMMap = kb->CreateBasicBlock("DoSegmentMMap");
     BasicBlock * DoSegmentDone = kb->CreateBasicBlock("DoSegmentDone");
     // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic, otherwise use MMap logic.
-    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(0)), DoSegmentRead, DoSegmentMMap);
+    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(STDIN_FILENO)), DoSegmentRead, DoSegmentMMap);
     kb->SetInsertPoint(DoSegmentRead);
     reinterpret_cast<ReadSourceKernel *>(this)->ReadSourceKernel::generateDoSegmentMethod(kb);
     kb->CreateBr(DoSegmentDone);

@@ -51,11 +51,12 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     BasicBlock * const return_block = iBuilder->CreateBasicBlock("return_block");
     BasicBlock * const scanWordExit = iBuilder->CreateBasicBlock("ScanWordExit");
     BasicBlock * const blocksExit = iBuilder->CreateBasicBlock("blocksExit");
+    BasicBlock * const callFinalizeScan = iBuilder->CreateBasicBlock("callFinalizeScan");
+    BasicBlock * const scanReturn = iBuilder->CreateBasicBlock("scanReturn");
     IntegerType * const sizeTy = iBuilder->getSizeTy();
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / sizeTy->getBitWidth();
     VectorType * const scanwordVectorType =  VectorType::get(sizeTy, fieldCount);
     Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
-    Constant * blockSizeLess1 = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
 
     Function::arg_iterator args = mCurrentMethod->arg_begin();
     /* self = */ args++;
@@ -65,7 +66,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     Value * line_break = &*(args++);
     /* input_stream = */ args++;
 
-    Value * blocksToDo = iBuilder->CreateUDiv(iBuilder->CreateAdd(itemsToDo, blockSizeLess1), blockSize);
+    Value * blocksToDo = iBuilder->CreateUDivCeil(itemsToDo, blockSize);
     
     Value * match_result_ptr = iBuilder->CreateBitCast(match_result, scanwordVectorType->getPointerTo());
     Value * line_break_ptr = iBuilder->CreateBitCast(line_break, scanwordVectorType->getPointerTo());
@@ -153,10 +154,13 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
             phiRecordStart->addIncoming(matchRecordStart, loop_final_block);
             Value * matchRecordEnd = iBuilder->CreateAdd(phiScanwordPos, iBuilder->CreateCountForwardZeroes(phiMatchWord));
             if (mGrepType == GrepType::CallBack) {
+                Value * const inputStream = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
                 Function * dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
                 //Function * dispatcher = iBuilder->LinkFunction<void (intptr_t, size_t, size_t, size_t)>("accumulate_match_wrapper", & grep::accumulate_match_wrapper);
                 Value * accumulator = iBuilder->getScalarField("accumulator_address");
-                iBuilder->CreateCall(dispatcher, {accumulator, matchRecordNum, matchRecordStart, matchRecordEnd});
+                Value * start_ptr = iBuilder->CreateGEP(inputStream, matchRecordStart);
+                Value * end_ptr = iBuilder->CreateGEP(inputStream, matchRecordEnd);
+                iBuilder->CreateCall(dispatcher, {accumulator, matchRecordNum, start_ptr, end_ptr});
             }
             else {
                 Function * matcher = m->getFunction("matcher"); assert (matcher);
@@ -224,6 +228,19 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpNE(blockBaseNext, blocksToDo), initialBlock, blocksExit);
 
     iBuilder->SetInsertPoint(blocksExit);
+    iBuilder->CreateCondBr(iBuilder->CreateICmpULT(itemsToDo, blockSize), callFinalizeScan, scanReturn);
+    iBuilder->SetInsertPoint(callFinalizeScan);
+    if (mGrepType == GrepType::CallBack) {
+        Value * bufSize = iBuilder->getBufferedSize("InputStream");
+        Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+        Value * accumulator = iBuilder->getScalarField("accumulator_address");
+        Value * const buffer_base = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
+        Value * buffer_end_address = iBuilder->CreateGEP(buffer_base, bufSize);
+        iBuilder->CreateCall(finalizer, {accumulator, buffer_end_address});
+    }
+    iBuilder->CreateBr(scanReturn);
+    iBuilder->SetInsertPoint(scanReturn);
+    
 }
 
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, GrepType grepType, const unsigned codeUnitWidth)
