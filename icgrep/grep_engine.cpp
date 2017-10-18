@@ -36,6 +36,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <llvm/ADT/STLExtras.h> // for make_unique
 
 using namespace parabix;
 using namespace llvm;
@@ -165,7 +166,7 @@ uint64_t GrepEngine::doGrep(const int32_t fileDescriptor, const uint32_t fileIdx
     typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor, intptr_t accum_addr);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
     
-    uint64_t grepResult = f(fileDescriptor, reinterpret_cast<intptr_t>(resultAccums[fileIdx]));
+    uint64_t grepResult = f(fileDescriptor, reinterpret_cast<intptr_t>(resultAccums[fileIdx].get()));
     if (grepResult > 0) grepMatchFound = true;
     else if ((Mode == NormalMode) && !resultAccums[fileIdx]->mResultStr.str().empty()) grepMatchFound = true;
     
@@ -217,7 +218,7 @@ void GrepEngine::initFileResult(std::vector<std::string> filenames){
                 linePrefix = inputFiles[i] + fileSuffix;
             }
         }
-        resultAccums.push_back(new NonNormalizingReportMatch(linePrefix));
+        resultAccums.push_back(make_unique<NonNormalizingReportMatch>(linePrefix));
     }
 }
 

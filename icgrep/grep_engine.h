@@ -26,22 +26,20 @@ namespace grep {
 // Thread function only.
 void *DoGrepThreadFunction(void *args);
     
+
+class NonNormalizingReportMatch : public MatchAccumulator {
+public:
+    NonNormalizingReportMatch(std::string linePrefix) : mLinePrefix(linePrefix), mLineCount(0), mPrevious_line_end(nullptr) {}
+    void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
+    void finalize_match(char * buffer_end) override;
+    std::string mLinePrefix;
+    size_t mLineCount;
+    char * mPrevious_line_end;
+    std::stringstream mResultStr;
     
-    
-    class NonNormalizingReportMatch : public MatchAccumulator {
-    public:
-        NonNormalizingReportMatch(std::string linePrefix) : mLineCount(0), mPrevious_line_end(nullptr) {}
-        void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
-        void finalize_match(char * buffer_end) override;
-        std::string mLinePrefix;
-        size_t mLineCount;
-        char * mPrevious_line_end;
-        std::stringstream mResultStr;
-        
-    };
-    
-    
-    
+};
+
+
 class GrepEngine {
 public:
 
@@ -65,7 +63,7 @@ public:
     Driver * mGrepDriver;
     bool grepMatchFound;
 
-    std::vector<NonNormalizingReportMatch *> resultAccums;
+    std::vector<std::unique_ptr<NonNormalizingReportMatch>> resultAccums;
     std::vector<std::string> inputFiles;
     
     std::mutex count_mutex;
