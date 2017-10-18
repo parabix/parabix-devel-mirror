@@ -16,12 +16,11 @@ namespace kernel {
 
 class ScanMatchKernel : public MultiBlockKernel {
 public:
-	ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const GrepType grepType, const unsigned codeUnitWidth);
+	ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
 	void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-	const GrepType      mGrepType;
 };
 
 }

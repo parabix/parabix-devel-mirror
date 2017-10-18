@@ -20,21 +20,6 @@ inline static unsigned floor_log2(const unsigned v) {
 
 namespace kernel {
 
-inline std::string getGrepTypeId(const GrepType grepType) {
-    switch (grepType) {
-        case GrepType::Normal:
-            return "N";
-        case GrepType::NameExpression:
-            return "E";
-        case GrepType::PropertyValue:
-            return "P";
-        case GrepType::CallBack:
-            return "C";
-        default:
-            llvm_unreachable("unknown grep type!");
-    }
-}
-    
 void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder) {
 
     Module * const m = iBuilder->getModule();
@@ -70,6 +55,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     
     Value * match_result_ptr = iBuilder->CreateBitCast(match_result, scanwordVectorType->getPointerTo());
     Value * line_break_ptr = iBuilder->CreateBitCast(line_break, scanwordVectorType->getPointerTo());
+    Value * accumulator = iBuilder->getScalarField("accumulator_address");
 
     iBuilder->CreateCondBr(iBuilder->CreateICmpUGT(blocksToDo, iBuilder->getSize(0)), initialBlock, blocksExit);
 
@@ -153,31 +139,11 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
             matchRecordStart->addIncoming(priorRecordStart, prior_breaks_block);
             phiRecordStart->addIncoming(matchRecordStart, loop_final_block);
             Value * matchRecordEnd = iBuilder->CreateAdd(phiScanwordPos, iBuilder->CreateCountForwardZeroes(phiMatchWord));
-            if (mGrepType == GrepType::CallBack) {
-                Value * const inputStream = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
-                Function * dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
-                //Function * dispatcher = iBuilder->LinkFunction<void (intptr_t, size_t, size_t, size_t)>("accumulate_match_wrapper", & grep::accumulate_match_wrapper);
-                Value * accumulator = iBuilder->getScalarField("accumulator_address");
-                Value * start_ptr = iBuilder->CreateGEP(inputStream, matchRecordStart);
-                Value * end_ptr = iBuilder->CreateGEP(inputStream, matchRecordEnd);
-                iBuilder->CreateCall(dispatcher, {accumulator, matchRecordNum, start_ptr, end_ptr});
-            }
-            else {
-                Function * matcher = m->getFunction("matcher"); assert (matcher);
-                auto args_matcher = matcher->arg_begin();
-                Value * const mrn = iBuilder->CreateZExtOrTrunc(matchRecordNum, args_matcher->getType());
-                Value * const mrs = iBuilder->CreateZExtOrTrunc(matchRecordStart, (++args_matcher)->getType());
-                Value * const mre = iBuilder->CreateZExtOrTrunc(matchRecordEnd, (++args_matcher)->getType());
-                Value * const inputStream = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
-                Value * const is = iBuilder->CreatePointerCast(inputStream, (++args_matcher)->getType());
-                if (mGrepType == GrepType::Normal) {
-                    Value * const sz = iBuilder->CreateZExtOrTrunc(iBuilder->getBufferedSize("InputStream"), (++args_matcher)->getType());
-                    Value * const fi = iBuilder->CreateZExtOrTrunc(iBuilder->getScalarField("FileIdx"), (++args_matcher)->getType());
-                    iBuilder->CreateCall(matcher, {mrn, mrs, mre, is, sz, fi});
-                } else {
-                    iBuilder->CreateCall(matcher, {mrn, mrs, mre, is});
-                }
-            }
+            Value * const inputStream = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
+            Function * dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
+            Value * start_ptr = iBuilder->CreateGEP(inputStream, matchRecordStart);
+            Value * end_ptr = iBuilder->CreateGEP(inputStream, matchRecordEnd);
+            iBuilder->CreateCall(dispatcher, {accumulator, matchRecordNum, start_ptr, end_ptr});
             Value * remaining_matches = iBuilder->CreateResetLowestBit(phiMatchWord);
             phiMatchWord->addIncoming(remaining_matches, loop_final_block);
 
@@ -230,33 +196,21 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     iBuilder->SetInsertPoint(blocksExit);
     iBuilder->CreateCondBr(iBuilder->CreateICmpULT(itemsToDo, blockSize), callFinalizeScan, scanReturn);
     iBuilder->SetInsertPoint(callFinalizeScan);
-    if (mGrepType == GrepType::CallBack) {
-        Value * bufSize = iBuilder->getBufferedSize("InputStream");
-        Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
-        Value * accumulator = iBuilder->getScalarField("accumulator_address");
-        Value * const buffer_base = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
-        Value * buffer_end_address = iBuilder->CreateGEP(buffer_base, bufSize);
-        iBuilder->CreateCall(finalizer, {accumulator, buffer_end_address});
-    }
+    Value * bufSize = iBuilder->getBufferedSize("InputStream");
+    Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+    Value * const buffer_base = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
+    Value * buffer_end_address = iBuilder->CreateGEP(buffer_base, bufSize);
+    iBuilder->CreateCall(finalizer, {accumulator, buffer_end_address});
     iBuilder->CreateBr(scanReturn);
     iBuilder->SetInsertPoint(scanReturn);
     
 }
 
-ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, GrepType grepType, const unsigned codeUnitWidth)
-: MultiBlockKernel("scanMatch" + getGrepTypeId(grepType) + std::to_string(codeUnitWidth),
+ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
+: MultiBlockKernel("scanMatch",
     {Binding{b->getStreamSetTy(1, 1), "matchResult"}, Binding{b->getStreamSetTy(1, 1), "lineBreak"}, Binding{b->getStreamSetTy(1, 8), "InputStream", UnknownRate()}},
     {},
+    {Binding{b->getIntAddrTy(), "accumulator_address"}},
     {},
-    {},
-    {Binding{b->getSizeTy(), "BlockNo"}, Binding{b->getSizeTy(), "LineNum"}})
-, mGrepType(grepType) {
-    if (mGrepType == GrepType::CallBack) {
-        mScalarInputs.push_back(Binding{b->getIntAddrTy(), "accumulator_address"});
-    }
-    else {
-        mScalarInputs.push_back(Binding{b->getInt32Ty(), "FileIdx"});
-    }
-}
-
+    {Binding{b->getSizeTy(), "BlockNo"}, Binding{b->getSizeTy(), "LineNum"}}) {}
 }

@@ -77,7 +77,7 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     kernel::Kernel * matchedLinesK = pxDriver.addKernelInstance(make_unique<kernel::MatchedLinesKernel>(idb));
     pxDriver.makeKernelCall(matchedLinesK, {MatchResults, LineBreakStream}, {MatchedLines});
     
-    kernel::Kernel * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::CallBack, 8));
+    kernel::Kernel * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb));
     scanMatchK->setInitialArguments({ConstantInt::get(idb->getIntAddrTy(), reinterpret_cast<intptr_t>(accum))});
     pxDriver.makeKernelCall(scanMatchK, {MatchedLines, LineBreakStream, ByteStream}, {});
     pxDriver.LinkFunction(*scanMatchK, "accumulate_match_wrapper", &accumulate_match_wrapper);

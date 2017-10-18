@@ -21,6 +21,8 @@ public:
 };
 
 void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end);
+
+void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
     
 void grepBuffer(re::RE * pattern, const char * buffer, size_t bufferLength, MatchAccumulator * accum);
 

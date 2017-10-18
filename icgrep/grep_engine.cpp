@@ -30,31 +30,18 @@
 #include <toolchain/cpudriver.h>
 #include <toolchain/NVPTXDriver.h>
 #include <iostream>
-#include <sstream>
 #include <cc/multiplex_CCs.h>
 #include <llvm/Support/raw_ostream.h>
 #include <util/aligned_allocator.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <mutex>
 
 using namespace parabix;
 using namespace llvm;
 
 namespace grep {
 
-static std::stringstream * resultStrs = nullptr;
-static std::vector<std::string> inputFiles;
-static std::vector<std::string> linePrefix;
-static bool grepMatchFound;
-
-size_t * startPoints = nullptr;
-size_t * accumBytes = nullptr;
-
-
-std::mutex count_mutex;
-size_t fileCount;
 
 // DoGrep thread function.
 void *DoGrepThreadFunction(void *args)
@@ -62,24 +49,74 @@ void *DoGrepThreadFunction(void *args)
     size_t fileIdx;
     grep::GrepEngine * grepEngine = (grep::GrepEngine *)args;
 
-    count_mutex.lock();
-    fileIdx = fileCount;
-    fileCount++;
-    count_mutex.unlock();
+    grepEngine->count_mutex.lock();
+    fileIdx = grepEngine->fileCount;
+    grepEngine->fileCount++;
+    grepEngine->count_mutex.unlock();
 
-    while (fileIdx < inputFiles.size()) {
-        size_t grepResult = grepEngine->doGrep(inputFiles[fileIdx], fileIdx);
+    while (fileIdx < grepEngine->inputFiles.size()) {
+        size_t grepResult = grepEngine->doGrep(grepEngine->inputFiles[fileIdx], fileIdx);
         
-        count_mutex.lock();
-        if (grepResult > 0) grepMatchFound = true;
-        fileIdx = fileCount;
-        fileCount++;
-        count_mutex.unlock();
-        if (QuietMode && grepMatchFound) pthread_exit(nullptr);
+        grepEngine->count_mutex.lock();
+        if (grepResult > 0) grepEngine->grepMatchFound = true;
+        fileIdx = grepEngine->fileCount;
+        grepEngine->fileCount++;
+        grepEngine->count_mutex.unlock();
+        if (QuietMode && grepEngine->grepMatchFound) pthread_exit(nullptr);
     }
 
     pthread_exit(nullptr);
 }
+    
+    
+    void NonNormalizingReportMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
+        if (!(WithFilenameFlag | LineNumberFlag) && (line_start == mPrevious_line_end + 1)) {
+            // Consecutive matches: only one write call needed.
+            mResultStr.write(mPrevious_line_end, line_end - mPrevious_line_end);
+        }
+        else {
+            if (mLineCount > 0) {
+                // deal with the final byte of the previous line.
+                mResultStr.write(mPrevious_line_end, 1);
+            }
+            if (WithFilenameFlag) {
+                mResultStr << mLinePrefix;
+            }
+            if (LineNumberFlag) {
+                // Internally line numbers are counted from 0.  For display, adjust
+                // the line number so that lines are numbered from 1.
+                if (InitialTabFlag) {
+                    mResultStr << lineNum+1 << "\t:";
+                }
+                else {
+                    mResultStr << lineNum+1 << ":";
+                }
+            }
+            mResultStr.write(line_start, line_end - line_start);
+        }
+        mPrevious_line_end = line_end;
+        mLineCount++;
+    }
+    
+    void NonNormalizingReportMatch::finalize_match(char * buffer_end) {
+        if (mLineCount == 0) return;  // No matches.
+        if (mPrevious_line_end < buffer_end) {
+            mResultStr.write(mPrevious_line_end, 1);
+        }
+        else {
+            // Likely unterminated final line.
+            char last_byte = mPrevious_line_end[-1];
+            if (last_byte == 0x0D) {
+                // The final CR is acceptable as a line_end.
+                return;
+            }
+            // Terminate the line with an LF
+            // (Even if we had an incomplete UTF-8 sequence.)
+            mResultStr << "\n";
+        }
+    }
+    
+    
 
 bool matchesNeedToBeMovedToEOL() {
     if ((Mode == QuietMode) | (Mode == FilesWithMatch) | (Mode == FilesWithoutMatch)) {
@@ -92,7 +129,7 @@ bool matchesNeedToBeMovedToEOL() {
     return true;
 }
     
-uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) const {
+uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
     if (fileName == "-") {
         return doGrep(STDIN_FILENO, fileIdx);
     }
@@ -101,20 +138,20 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx
     if (LLVM_UNLIKELY(fd == -1)) {
         if (!NoMessagesFlag  && !(Mode == QuietMode)) {
             if (errno == EACCES) {
-                resultStrs[fileIdx] << "icgrep: " << fileName << ": Permission denied.\n";
+                resultAccums[fileIdx]->mResultStr << "icgrep: " << fileName << ": Permission denied.\n";
             }
             else if (errno == ENOENT) {
-                resultStrs[fileIdx] << "icgrep: " << fileName << ": No such file.\n";
+                resultAccums[fileIdx]->mResultStr << "icgrep: " << fileName << ": No such file.\n";
             }
             else {
-                resultStrs[fileIdx] << "icgrep: " << fileName << ": Failed.\n";
+                resultAccums[fileIdx]->mResultStr << "icgrep: " << fileName << ": Failed.\n";
             }
         }
         return 0;
     }
     if (stat(fileName.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) {
         if (!NoMessagesFlag  && !(Mode == QuietMode)) {
-            resultStrs[fileIdx] << "icgrep: " << fileName << ": Is a directory.\n";
+            resultAccums[fileIdx]->mResultStr << "icgrep: " << fileName << ": Is a directory.\n";
         }
         close(fd);
         return 0;
@@ -124,21 +161,21 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx
     return result;
 }
 
-uint64_t GrepEngine::doGrep(const int32_t fileDescriptor, const uint32_t fileIdx) const {
-    typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor, const uint32_t fileIdx);
+uint64_t GrepEngine::doGrep(const int32_t fileDescriptor, const uint32_t fileIdx) {
+    typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor, intptr_t accum_addr);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
     
-    uint64_t grepResult = f(fileDescriptor, fileIdx);
+    uint64_t grepResult = f(fileDescriptor, reinterpret_cast<intptr_t>(resultAccums[fileIdx]));
     if (grepResult > 0) grepMatchFound = true;
-    else if ((Mode == NormalMode) && !resultStrs[fileIdx].str().empty()) grepMatchFound = true;
+    else if ((Mode == NormalMode) && !resultAccums[fileIdx]->mResultStr.str().empty()) grepMatchFound = true;
     
     if (Mode == CountOnly) {
-        resultStrs[fileIdx] << linePrefix[fileIdx] << grepResult << "\n";
+        resultAccums[fileIdx]->mResultStr << resultAccums[fileIdx]->mLinePrefix << grepResult << "\n";
     }
     else if (Mode == FilesWithMatch || Mode == FilesWithoutMatch ) {
         size_t requiredCount = Mode == FilesWithMatch ? 1 : 0;
         if (grepResult == requiredCount) {
-            resultStrs[fileIdx] << linePrefix[fileIdx];
+            resultAccums[fileIdx]->mResultStr << resultAccums[fileIdx]->mLinePrefix;
         }
     }
     else if (Mode == QuietMode) {
@@ -147,10 +184,9 @@ uint64_t GrepEngine::doGrep(const int32_t fileDescriptor, const uint32_t fileIdx
     return grepResult;
 }
 
-void initFileResult(std::vector<std::string> filenames){
+void GrepEngine::initFileResult(std::vector<std::string> filenames){
     grepMatchFound = false;
     const int n = filenames.size();
-    linePrefix.resize(n);
     if ((n > 1) && !NoFilenameFlag) {
         WithFilenameFlag = true;
     }
@@ -171,84 +207,25 @@ void initFileResult(std::vector<std::string> filenames){
         }
     }
     inputFiles = filenames;
-    resultStrs = new std::stringstream[n];
     for (unsigned i = 0; i < inputFiles.size(); ++i) {
+        std::string linePrefix;
         if (setLinePrefix) {
             if (inputFiles[i] == "-") {
-                linePrefix[i] = LabelFlag + fileSuffix;
+                linePrefix = LabelFlag + fileSuffix;
             }
             else {
-                linePrefix[i] = inputFiles[i] + fileSuffix;
+                linePrefix = inputFiles[i] + fileSuffix;
             }
         }
+        resultAccums.push_back(new NonNormalizingReportMatch(linePrefix));
     }
 }
 
-template<typename CodeUnit>
-void wrapped_report_match(const size_t lineNum, size_t line_start, size_t line_end, const CodeUnit * const buffer, const size_t filesize, const size_t fileIdx) {
 
-//    errs().write_hex((size_t)buffer) << " : " << lineNum << " (" << line_start << ", " << line_end << ", " << filesize << ")\n";
-
-    assert (buffer);
-    assert (line_start <= line_end);
-    assert (line_end <= filesize);
-
-    if (WithFilenameFlag) {
-        resultStrs[fileIdx] << linePrefix[fileIdx];
-    }
-    if (LineNumberFlag) {
-        // Internally line numbers are counted from 0.  For display, adjust
-        // the line number so that lines are numbered from 1.
-        if (InitialTabFlag) {
-            resultStrs[fileIdx] << lineNum+1 << "\t:";
-        }
-        else {
-            resultStrs[fileIdx] << lineNum+1 << ":";
-        }
-    }
-
-    // If the line "starts" on the LF of a CRLF, it is actually the end of the last line.
-    if ((buffer[line_start] == 0xA) && (line_start != line_end)) {
-        ++line_start;
-    }
-
-    if (LLVM_UNLIKELY(line_end == filesize)) {
-        // The match position is at end-of-file.   We have a final unterminated line.
-        resultStrs[fileIdx].write((char *)&buffer[line_start], (line_end - line_start) * sizeof(CodeUnit));
-        if (NormalizeLineBreaksFlag) {
-            resultStrs[fileIdx] << '\n';  // terminate it
-        }
-    } else {
-        const auto end_byte = buffer[line_end];
-        if (grep::NormalizeLineBreaksFlag) {
-            if (LLVM_UNLIKELY(end_byte == 0x85)) {
-                // Line terminated with NEL, on the second byte.  Back up 1.
-                line_end -= 1;
-            } else if (LLVM_UNLIKELY(end_byte > 0xD)) {
-                // Line terminated with PS or LS, on the third byte.  Back up 2.
-                line_end -= 2;
-            }
-            resultStrs[fileIdx].write((char *)&buffer[line_start], (line_end - line_start) * sizeof(CodeUnit));
-            resultStrs[fileIdx] << '\n';
-        } else {
-            if (end_byte == 0x0D) {
-                // Check for line_end on first byte of CRLF; we don't want to access past the end of buffer.
-                if ((line_end + 1) < filesize) {
-                    if (buffer[line_end + 1] == 0x0A) {
-                        // Found CRLF; preserve both bytes.
-                        ++line_end;
-                    }
-                }
-            }
-            resultStrs[fileIdx].write((char *)&buffer[line_start], (line_end - line_start + 1) * sizeof(CodeUnit));
-        }
-    }
-}
-
-void PrintResults(){
+void GrepEngine::PrintResults(){
     
     for (unsigned i = 0; i < inputFiles.size(); ++i){
-        std::cout << resultStrs[i].str();
+        std::cout << resultAccums[i]->mResultStr.str();
     }
     exit(grepMatchFound ? MatchFoundExitCode : MatchNotFoundExitCode);
 }
@@ -338,18 +315,15 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned encodingBits = 8;
 
-    Type * const int64Ty = idb->getInt64Ty();
-    Type * const int32Ty = idb->getInt32Ty();
-
-    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", int64Ty, idb->getInt32Ty(), int32Ty, nullptr));
+    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), idb->getIntAddrTy(), nullptr));
     mainFunc->setCallingConv(CallingConv::C);
     idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
     auto args = mainFunc->arg_begin();
 
     Value * const fileDescriptor = &*(args++);
     fileDescriptor->setName("fileDescriptor");
-    Value * fileIdx = &*(args++);
-    fileIdx->setName("fileIdx");
+    Value * match_accumulator = &*(args++);
+    match_accumulator->setName("match_accumulator");
 
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
     kernel::Kernel * sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::FDSourceKernel>(idb, segmentSize));
@@ -361,10 +335,13 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
     std::tie(LineBreakStream, Matches) = grepPipeline(mGrepDriver, REs, grepMode, encodingBits, ByteStream);
     
     if (grepMode == NormalMode) {
-        kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb, GrepType::Normal, encodingBits));
-        scanMatchK->setInitialArguments({fileIdx});
+        kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb));
+        scanMatchK->setInitialArguments({match_accumulator});
         mGrepDriver->makeKernelCall(scanMatchK, {Matches, LineBreakStream, ByteStream}, {});
-        mGrepDriver->LinkFunction(*scanMatchK, "matcher", &wrapped_report_match<uint8_t>);
+        mGrepDriver->LinkFunction(*scanMatchK, "accumulate_match_wrapper", &accumulate_match_wrapper);
+        mGrepDriver->LinkFunction(*scanMatchK, "finalize_match_wrapper", &finalize_match_wrapper);
+
+        
         mGrepDriver->generatePipelineIR();
         mGrepDriver->deallocateBuffers();
 
@@ -375,17 +352,13 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
         mGrepDriver->generatePipelineIR();
         idb->setKernel(matchCountK);
         Value * matchedLineCount = idb->getAccumulator("countResult");
-        matchedLineCount = idb->CreateZExt(matchedLineCount, int64Ty);
+        matchedLineCount = idb->CreateZExt(matchedLineCount, idb->getInt64Ty());
         mGrepDriver->deallocateBuffers();
         idb->CreateRet(matchedLineCount);
     }
     mGrepDriver->finalizeObject();
 }
 
-GrepEngine::GrepEngine()
-: mGrepDriver(nullptr) {
-
-}
 
 GrepEngine::~GrepEngine() {
     delete mGrepDriver;

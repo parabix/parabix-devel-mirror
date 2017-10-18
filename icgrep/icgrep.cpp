@@ -189,7 +189,7 @@ int main(int argc, char *argv[]) {
                
     grepEngine.grepCodeGen(REs, grep::Mode);
 
-    grep::initFileResult(allFiles);
+    grepEngine.initFileResult(allFiles);
 
     if (Threads <= 1) {
         for (unsigned i = 0; i != allFiles.size(); ++i) {
@@ -215,7 +215,7 @@ int main(int argc, char *argv[]) {
     }
 
     
-    grep::PrintResults();
+    grepEngine.PrintResults();
     
     return 0;
 }
