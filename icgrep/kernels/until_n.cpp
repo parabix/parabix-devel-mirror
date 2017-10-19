@@ -148,7 +148,6 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     // exceeds N.  Determine the position immediately after the Nth one bit.
     // 
     kb->SetInsertPoint(findNth);
-    
     PHINode * seen1 = kb->CreatePHI(kb->getSizeTy(), 2);
     seen1->addIncoming(seenSoFarPhi, scanLoop);
     PHINode * remainingBits = kb->CreatePHI(iPackTy, 2);
@@ -163,7 +162,7 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     // We have cleared the low bits of scanMask up to and including the Nth in the stream.
     kb->SetInsertPoint(getPosnAfterNth);
     Value * scanMaskUpToN = kb->CreateXor(scanMask, clearLowest);
-    Value * posnInPack = kb->CreateSub(ConstantInt::get(iPackTy, packSize), kb->CreateCountReverseZeroes(scanMaskUpToN));
+    Value * posnInPack = kb->CreateSub(ConstantInt::get(iPackTy, packSize-1), kb->CreateCountReverseZeroes(scanMaskUpToN));
     Value * posnInGroup = kb->CreateAdd(kb->CreateMul(nonZeroPack, kb->getSize(packSize)), posnInPack);
     Value * posnInItemsToDo = kb->CreateAdd(kb->CreateMul(blockGroupBase, blockSize), posnInGroup);
     // It is conceivable that we found a bit at a position beyond the given itemsToDo,
@@ -172,10 +171,11 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     kb->CreateCondBr(kb->CreateICmpUGE(posnInItemsToDo, itemsToDo), notFoundYet, nthPosFound);
     
     kb->SetInsertPoint(nthPosFound);
-    finalCount = kb->CreateAdd(kb->getProcessedItemCount("bits"), posnInItemsToDo);
-    Value * finalBlock = kb->CreateUDiv(posnInItemsToDo, blockSize);
+    Value * itemsToKeep = kb->CreateAdd(posnInItemsToDo, kb->getSize(1));
+    finalCount = kb->CreateAdd(kb->getProcessedItemCount("bits"), itemsToKeep);
+    Value * finalBlock = kb->CreateUDiv(itemsToKeep, blockSize);
     blk = kb->CreateBlockAlignedLoad(kb->CreateGEP(sourceBitstream, {finalBlock, kb->getInt32(0)}));
-    blk = kb->CreateAnd(blk, kb->CreateNot(kb->bitblock_mask_from(kb->CreateURem(posnInItemsToDo, blockSize))));
+    blk = kb->CreateAnd(blk, kb->CreateNot(kb->bitblock_mask_from(kb->CreateURem(itemsToKeep, blockSize))));
     Value * outputPtr = kb->CreateGEP(uptoN_bitstream, {finalBlock, kb->getInt32(0)});
     kb->CreateBlockAlignedStore(blk, outputPtr);
     kb->setProcessedItemCount("bits", finalCount);
