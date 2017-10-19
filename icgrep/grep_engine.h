@@ -6,12 +6,9 @@
 #ifndef GREP_ENGINE_H
 #define GREP_ENGINE_H
 #include <grep_interface.h>
-#include <grep_type.h>  // for GrepType, GrepType::Normal
 #include <toolchain/grep_pipeline.h>
 #include <string>       // for string
 #include <vector>
-#include <re/re_parser.h>
-#include <re/re_multiplex.h>
 #include <sstream>
 #include <mutex>
 

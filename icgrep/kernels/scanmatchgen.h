@@ -5,7 +5,6 @@
 #ifndef SCANMATCHGEN_H
 #define SCANMATCHGEN_H
 
-#include "grep_type.h"
 #include "kernel.h"
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Function; }

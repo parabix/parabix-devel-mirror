@@ -306,5 +306,8 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
     if (ColorFlag!=neverColor) {
         llvm::report_fatal_error("Sorry, -color is not yet supported.\n");
     }
+    if ((Mode == QuietMode) | (Mode == FilesWithMatch) | (Mode == FilesWithoutMatch)) {
+        MaxCountFlag = 1;
+    }
 }
 }

@@ -232,12 +232,11 @@ void GrepEngine::PrintResults(){
 }
 
     
-std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver, std::vector<re::RE *> & REs, const GrepModeType grepMode, unsigned encodingBits, StreamSetBuffer * ByteStream) {
+std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver, std::vector<re::RE *> & REs, const GrepModeType grepMode, StreamSetBuffer * ByteStream) {
     auto & idb = grepDriver->getBuilder();
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
-    size_t MatchLimit = ((grepMode == QuietMode) | (grepMode == FilesWithMatch) | (grepMode == FilesWithoutMatch)) ? 1 : MaxCountFlag;
-    
+    const unsigned encodingBits = 8;
 
     StreamSetBuffer * BasisBits = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(encodingBits, 1), segmentSize * bufferSegments));
     kernel::Kernel * s2pk = grepDriver->addKernelInstance(make_unique<kernel::S2PKernel>(idb));
@@ -296,9 +295,9 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver
         Matches = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
         grepDriver->makeKernelCall(invertK, {OriginalMatches, LineBreakStream}, {Matches});
     }
-    if (MatchLimit > 0) {
+    if (MaxCountFlag > 0) {
         kernel::Kernel * untilK = grepDriver->addKernelInstance(make_unique<kernel::UntilNkernel>(idb));
-        untilK->setInitialArguments({idb->getSize(MatchLimit)});
+        untilK->setInitialArguments({idb->getSize(MaxCountFlag)});
         StreamSetBuffer * AllMatches = Matches;
         Matches = grepDriver->addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments));
         grepDriver->makeKernelCall(untilK, {AllMatches}, {Matches});
@@ -326,14 +325,14 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
     Value * match_accumulator = &*(args++);
     match_accumulator->setName("match_accumulator");
 
-    StreamSetBuffer * ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
+    StreamSetBuffer * ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits)));
     kernel::Kernel * sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::FDSourceKernel>(idb, segmentSize));
     sourceK->setInitialArguments({fileDescriptor});
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
     
     StreamSetBuffer * LineBreakStream;
     StreamSetBuffer * Matches;
-    std::tie(LineBreakStream, Matches) = grepPipeline(mGrepDriver, REs, grepMode, encodingBits, ByteStream);
+    std::tie(LineBreakStream, Matches) = grepPipeline(mGrepDriver, REs, grepMode, ByteStream);
     
     if (grepMode == NormalMode) {
         kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb));
