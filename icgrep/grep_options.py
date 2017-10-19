@@ -60,7 +60,7 @@ GrepOptions = [[boolean, "i", "ignore-case", "Ignore case distinctions in the pa
                   [integer, "A", "after-context", "Print <num> lines of context after each matching line.", "Output_Options"],
                   [integer, "B", "before-context", "Print <num>lines of context before each matching line.", "Output_Options"],
                   [integer, "C", "context", "Print <num> lines of context before and after each matching line.", "Output_Options"],
-                  [integer, "m", "max-count", "Process only the first <num> matches per file.", "Output_Options"]]
+                  [integer, "m", "max-count", "Process only the first <num> matches per file (overridden and set to 1 in -q, -l, -L modes).", "Output_Options"]]
 
 
 

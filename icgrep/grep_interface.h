@@ -76,7 +76,7 @@ extern DevDirAction DirectoriesFlag;
 enum BinaryFilesMode {Binary, WithoutMatch, Text};
 extern BinaryFilesMode BinaryFilesFlag;
     
-extern bool NoMessagesFlag; // -s
+extern bool NoMessagesFlag; // -s  (also set by QuietMode/-q)
 extern bool WithFilenameFlag; // -H
 extern bool NoFilenameFlag; // -h
 extern bool NullFlag; // -Z
@@ -91,7 +91,7 @@ extern bool NormalizeLineBreaksFlag; // -normalize-line-breaks
 extern int AfterContextFlag; // -A
 extern int BeforeContextFlag; // -B
 extern int ContextFlag; // -C
-extern int MaxCountFlag; // -m
+extern int MaxCountFlag; // -m  (overridden and set to 1 with -q, -l, -L modes)
     
 
 //

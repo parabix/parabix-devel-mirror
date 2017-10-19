@@ -184,23 +184,30 @@ int main(int argc, char *argv[]) {
         grep::WithFilenameFlag = true;
     }
 
-    grep::GrepEngine grepEngine;
+    grep::GrepEngine * grepEngine;
+    
+    if (grep::Mode == grep::NormalMode) {
+        grepEngine = new grep::GrepEngine();
+    }
+    else {
+        grepEngine = new grep::CountOnlyGrepEngine();
+    }
 
                
-    grepEngine.grepCodeGen(REs, grep::Mode);
+    grepEngine->grepCodeGen(REs);
 
-    grepEngine.initFileResult(allFiles);
+    grepEngine->initFileResult(allFiles);
 
     if (Threads <= 1) {
         for (unsigned i = 0; i != allFiles.size(); ++i) {
-            grepEngine.doGrep(allFiles[i], i);
+            grepEngine->doGrep(allFiles[i], i);
         }
     } else if (Threads > 1) {
         const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
         pthread_t threads[numOfThreads];
 
         for(unsigned long i = 0; i < numOfThreads; ++i){
-            const int rc = pthread_create(&threads[i], nullptr, grep::DoGrepThreadFunction, (void *)&grepEngine);
+            const int rc = pthread_create(&threads[i], nullptr, grep::DoGrepThreadFunction, (void *)grepEngine);
             if (rc) {
                 llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
             }
@@ -215,7 +222,9 @@ int main(int argc, char *argv[]) {
     }
 
     
-    grepEngine.PrintResults();
+    grepEngine->PrintResults();
+    
+    delete(grepEngine);
     
     return 0;
 }

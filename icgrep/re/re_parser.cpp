@@ -23,7 +23,6 @@
 #include <re/printer_re.h>
 #include <UCD/resolve_properties.h>
 #include <UCD/CaseFolding.h>
-#include <grep_engine.h>
 #include <sstream>
 #include <string>
 #include <algorithm>
@@ -31,15 +30,12 @@
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/ADT/STLExtras.h> // for make_unique
 
 using namespace llvm;
 
 namespace re {
 
-template<typename T, typename... Args>
-std::unique_ptr<T> make_unique(Args&&... args) {
-    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
 
 RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initialFlags, RE_Syntax syntax, bool ByteMode) {
 

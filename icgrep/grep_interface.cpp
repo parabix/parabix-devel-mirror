@@ -209,7 +209,9 @@ static cl::opt<int, true> ContextOption("C", cl::location(ContextFlag), cl::desc
 static cl::alias ContextAlias("context", cl::desc("Alias for -C"), cl::aliasopt(ContextOption));
 
 int MaxCountFlag;
-static cl::opt<int, true> MaxCountOption("m", cl::location(MaxCountFlag), cl::desc("Process only the first <num> matches per file."), cl::cat(Output_Options), cl::Grouping);
+static cl::opt<int, true> MaxCountOption("m", cl::location(MaxCountFlag),
+                                         cl::desc("Process only the first <num> matches per file3."),
+                                         cl::cat(Output_Options), cl::Grouping);
 static cl::alias MaxCountAlias("max-count", cl::desc("Alias for -m"), cl::aliasopt(MaxCountOption));
     
 ColoringType ColorFlag;
@@ -305,6 +307,9 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
     }
     if (ColorFlag!=neverColor) {
         llvm::report_fatal_error("Sorry, -color is not yet supported.\n");
+    }
+    if (Mode == QuietMode) {
+        NoMessagesFlag = true;
     }
     if ((Mode == QuietMode) | (Mode == FilesWithMatch) | (Mode == FilesWithoutMatch)) {
         MaxCountFlag = 1;

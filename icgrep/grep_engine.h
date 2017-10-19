@@ -43,11 +43,11 @@ public:
     GrepEngine() : mGrepDriver(nullptr), grepMatchFound(false), fileCount(0) {}
 
 
-    ~GrepEngine();
+    virtual ~GrepEngine();
     
     void initFileResult(std::vector<std::string> filenames);
     
-    void grepCodeGen(std::vector<re::RE *> REs, GrepModeType grepMode);
+    virtual void grepCodeGen(std::vector<re::RE *> REs);
 
     uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
 
@@ -68,7 +68,14 @@ public:
     
 };
 
+class CountOnlyGrepEngine : public GrepEngine {
+public:
     
+    CountOnlyGrepEngine() : GrepEngine() {}
+    void grepCodeGen(std::vector<re::RE *> REs) override;
+    
+};
+
 }
 
 #endif

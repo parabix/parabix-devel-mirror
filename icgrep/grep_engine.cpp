@@ -69,6 +69,9 @@ void *DoGrepThreadFunction(void *args)
     pthread_exit(nullptr);
 }
     
+    //
+    //  Default Report Match:  lines are emitted with whatever line terminators are found in the
+    //  input.  However, if the final line is not terminated, a new line is appended.
     
     void NonNormalizingReportMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
         if (!(WithFilenameFlag | LineNumberFlag) && (line_start == mPrevious_line_end + 1)) {
@@ -137,7 +140,7 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx
     struct stat sb;
     const int32_t fd = open(fileName.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
-        if (!NoMessagesFlag  && !(Mode == QuietMode)) {
+        if (!NoMessagesFlag) {
             if (errno == EACCES) {
                 resultAccums[fileIdx]->mResultStr << "icgrep: " << fileName << ": Permission denied.\n";
             }
@@ -151,7 +154,7 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx
         return 0;
     }
     if (stat(fileName.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) {
-        if (!NoMessagesFlag  && !(Mode == QuietMode)) {
+        if (!NoMessagesFlag) {
             resultAccums[fileIdx]->mResultStr << "icgrep: " << fileName << ": Is a directory.\n";
         }
         close(fd);
@@ -232,7 +235,7 @@ void GrepEngine::PrintResults(){
 }
 
     
-std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver, std::vector<re::RE *> & REs, const GrepModeType grepMode, StreamSetBuffer * ByteStream) {
+std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver, std::vector<re::RE *> & REs, StreamSetBuffer * ByteStream) {
     auto & idb = grepDriver->getBuilder();
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
@@ -305,48 +308,78 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> grepPipeline(Driver * grepDriver
     return std::pair<StreamSetBuffer *, StreamSetBuffer *>(LineBreakStream, Matches);
 }
 
-void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepMode) {
-
-    assert (mGrepDriver == nullptr);
-    mGrepDriver = new ParabixDriver("engine");
-    auto & idb = mGrepDriver->getBuilder();
-    Module * M = idb->getModule();
-
-    const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned encodingBits = 8;
-
-    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), idb->getIntAddrTy(), nullptr));
-    mainFunc->setCallingConv(CallingConv::C);
-    idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
-    auto args = mainFunc->arg_begin();
-
-    Value * const fileDescriptor = &*(args++);
-    fileDescriptor->setName("fileDescriptor");
-    Value * match_accumulator = &*(args++);
-    match_accumulator->setName("match_accumulator");
-
-    StreamSetBuffer * ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits)));
-    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::FDSourceKernel>(idb, segmentSize));
-    sourceK->setInitialArguments({fileDescriptor});
-    mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
-    
-    StreamSetBuffer * LineBreakStream;
-    StreamSetBuffer * Matches;
-    std::tie(LineBreakStream, Matches) = grepPipeline(mGrepDriver, REs, grepMode, ByteStream);
-    
-    if (grepMode == NormalMode) {
+    void GrepEngine::grepCodeGen(std::vector<re::RE *> REs) {
+        
+        assert (mGrepDriver == nullptr);
+        mGrepDriver = new ParabixDriver("engine");
+        auto & idb = mGrepDriver->getBuilder();
+        Module * M = idb->getModule();
+        
+        const unsigned segmentSize = codegen::SegmentSize;
+        const unsigned encodingBits = 8;
+        
+        Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), idb->getIntAddrTy(), nullptr));
+        mainFunc->setCallingConv(CallingConv::C);
+        idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+        auto args = mainFunc->arg_begin();
+        
+        Value * const fileDescriptor = &*(args++);
+        fileDescriptor->setName("fileDescriptor");
+        Value * match_accumulator = &*(args++);
+        match_accumulator->setName("match_accumulator");
+        
+        StreamSetBuffer * ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits)));
+        kernel::Kernel * sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::FDSourceKernel>(idb, segmentSize));
+        sourceK->setInitialArguments({fileDescriptor});
+        mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
+        
+        StreamSetBuffer * LineBreakStream;
+        StreamSetBuffer * Matches;
+        std::tie(LineBreakStream, Matches) = grepPipeline(mGrepDriver, REs, ByteStream);
+        
         kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance(make_unique<kernel::ScanMatchKernel>(idb));
         scanMatchK->setInitialArguments({match_accumulator});
         mGrepDriver->makeKernelCall(scanMatchK, {Matches, LineBreakStream, ByteStream}, {});
         mGrepDriver->LinkFunction(*scanMatchK, "accumulate_match_wrapper", &accumulate_match_wrapper);
         mGrepDriver->LinkFunction(*scanMatchK, "finalize_match_wrapper", &finalize_match_wrapper);
-
+        
         
         mGrepDriver->generatePipelineIR();
         mGrepDriver->deallocateBuffers();
-
+        
         idb->CreateRet(idb->getInt64(0));
-    } else {
+        mGrepDriver->finalizeObject();
+    }
+    
+    void CountOnlyGrepEngine::grepCodeGen(std::vector<re::RE *> REs) {
+        
+        assert (mGrepDriver == nullptr);
+        mGrepDriver = new ParabixDriver("engine");
+        auto & idb = mGrepDriver->getBuilder();
+        Module * M = idb->getModule();
+        
+        const unsigned segmentSize = codegen::SegmentSize;
+        const unsigned encodingBits = 8;
+        
+        Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), idb->getIntAddrTy(), nullptr));
+        mainFunc->setCallingConv(CallingConv::C);
+        idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+        auto args = mainFunc->arg_begin();
+        
+        Value * const fileDescriptor = &*(args++);
+        fileDescriptor->setName("fileDescriptor");
+        Value * match_accumulator = &*(args++);
+        match_accumulator->setName("match_accumulator");
+        
+        StreamSetBuffer * ByteStream = mGrepDriver->addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits)));
+        kernel::Kernel * sourceK = mGrepDriver->addKernelInstance(make_unique<kernel::FDSourceKernel>(idb, segmentSize));
+        sourceK->setInitialArguments({fileDescriptor});
+        mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
+        
+        StreamSetBuffer * LineBreakStream;
+        StreamSetBuffer * Matches;
+        std::tie(LineBreakStream, Matches) = grepPipeline(mGrepDriver, REs, ByteStream);
+        
         kernel::Kernel * matchCountK = mGrepDriver->addKernelInstance(make_unique<kernel::PopcountKernel>(idb));
         mGrepDriver->makeKernelCall(matchCountK, {Matches}, {});
         mGrepDriver->generatePipelineIR();
@@ -355,10 +388,9 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs, const GrepModeType grepM
         matchedLineCount = idb->CreateZExt(matchedLineCount, idb->getInt64Ty());
         mGrepDriver->deallocateBuffers();
         idb->CreateRet(matchedLineCount);
+        mGrepDriver->finalizeObject();
     }
-    mGrepDriver->finalizeObject();
-}
-
+    
 
 GrepEngine::~GrepEngine() {
     delete mGrepDriver;
