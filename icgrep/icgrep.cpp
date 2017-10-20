@@ -36,14 +36,11 @@ using namespace llvm;
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
 
-static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(1));
-
 static cl::opt<bool> ByteMode("enable-byte-mode", cl::desc("Process regular expressions in byte mode"));
 
 static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"));
 static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expressions processed by each kernel."), cl::init(1));
 
-static std::vector<std::string> allFiles;
 static re::ModeFlagSet globalFlags = 0;
 
 std::vector<re::RE *> readExpressions() {
@@ -176,7 +173,7 @@ int main(int argc, char *argv[]) {
     
     const auto REs = readExpressions();
 
-    allFiles = getFullFileList(inputFiles);
+    std::vector<std::string> allFiles = getFullFileList(inputFiles);
     if (allFiles.empty()) {
         allFiles = { "-" };
     }
@@ -186,41 +183,22 @@ int main(int argc, char *argv[]) {
 
     grep::GrepEngine * grepEngine;
     
-    if (grep::Mode == grep::NormalMode) {
-        grepEngine = new grep::GrepEngine();
+    switch (grep::Mode) {
+        case grep::NormalMode:
+            grepEngine = new grep::GrepEngine(); break;
+        case grep::CountOnly:
+            grepEngine = new grep::CountOnlyGrepEngine(); break;
+        case grep::FilesWithMatch:
+        case grep::FilesWithoutMatch:
+        case grep::QuietMode:
+            grepEngine = new grep::MatchOnlyGrepEngine(); break;
     }
-    else {
-        grepEngine = new grep::CountOnlyGrepEngine();
-    }
-
                
     grepEngine->grepCodeGen(REs);
 
     grepEngine->initFileResult(allFiles);
-
-    if (Threads <= 1) {
-        for (unsigned i = 0; i != allFiles.size(); ++i) {
-            grepEngine->doGrep(allFiles[i], i);
-        }
-    } else if (Threads > 1) {
-        const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
-        pthread_t threads[numOfThreads];
-
-        for(unsigned long i = 0; i < numOfThreads; ++i){
-            const int rc = pthread_create(&threads[i], nullptr, grep::DoGrepThreadFunction, (void *)grepEngine);
-            if (rc) {
-                llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
-            }
-        }
-        for(unsigned i = 0; i < numOfThreads; ++i) {
-            void * status = nullptr;
-            const int rc = pthread_join(threads[i], &status);
-            if (rc) {
-                llvm::report_fatal_error("Failed to join thread: code " + std::to_string(rc));
-            }
-        }
-    }
-
+    
+    grepEngine->run();
     
     grepEngine->PrintResults();
     

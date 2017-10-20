@@ -20,28 +20,10 @@ class Driver;
 
 namespace grep {
 
-// Thread function only.
-void *DoGrepThreadFunction(void *args);
-    
-
-class NonNormalizingReportMatch : public MatchAccumulator {
-public:
-    NonNormalizingReportMatch(std::string linePrefix) : mLinePrefix(linePrefix), mLineCount(0), mPrevious_line_end(nullptr) {}
-    void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
-    void finalize_match(char * buffer_end) override;
-    std::string mLinePrefix;
-    size_t mLineCount;
-    char * mPrevious_line_end;
-    std::stringstream mResultStr;
-    
-};
-
-
 class GrepEngine {
 public:
 
-    GrepEngine() : mGrepDriver(nullptr), grepMatchFound(false), fileCount(0) {}
-
+    GrepEngine() : mGrepDriver(nullptr), mFileSuffix(InitialTabFlag ? "\t:" : ":"), grepMatchFound(false), fileCount(0) {}
 
     virtual ~GrepEngine();
     
@@ -49,33 +31,48 @@ public:
     
     virtual void grepCodeGen(std::vector<re::RE *> REs);
 
-    uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
-
-    uint64_t doGrep(const int32_t fileDescriptor, const uint32_t fileIdx);
+    void run();
     
     void PrintResults();
     
     
-
-    Driver * mGrepDriver;
-    bool grepMatchFound;
-
-    std::vector<std::unique_ptr<NonNormalizingReportMatch>> resultAccums;
-    std::vector<std::string> inputFiles;
     
+protected:
+    static void * DoGrepThreadFunction(void *args);
+    virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
+    std::string linePrefix(std::string fileName);
+    
+    Driver * mGrepDriver;
+
+    std::vector<std::string> inputFiles;
+    std::vector<std::stringstream> mResultStrs;
+    
+    std::string mFileSuffix;
+    
+    bool grepMatchFound;
     std::mutex count_mutex;
     size_t fileCount;
-    
 };
 
 class CountOnlyGrepEngine : public GrepEngine {
 public:
     
-    CountOnlyGrepEngine() : GrepEngine() {}
+    CountOnlyGrepEngine() : GrepEngine() {mFileSuffix = ":";}
     void grepCodeGen(std::vector<re::RE *> REs) override;
+private:
+    uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
     
 };
 
+class MatchOnlyGrepEngine : public CountOnlyGrepEngine {
+public:
+    
+    MatchOnlyGrepEngine() : CountOnlyGrepEngine(), mRequiredCount(Mode != FilesWithoutMatch) {mFileSuffix = NullFlag ? std::string("\0", 1) : "\n";}
+private:
+    uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
+    unsigned mRequiredCount;        
+};
+    
 }
 
 #endif
