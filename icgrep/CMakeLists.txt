@@ -261,7 +261,8 @@ add_test(
 
 SET_PROPERTY(TEST greptest PROPERTY TIMEOUT 400)
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
-SET_PROPERTY(TEST abc_test u8u16_test lz4d_test editd_test base64_test PROPERTY TIMEOUT 40)
+SET_PROPERTY(TEST abc_test TIMEOUT 100)
+SET_PROPERTY(TEST u8u16_test lz4d_test editd_test base64_test PROPERTY TIMEOUT 40)
 
 
 add_custom_target (greptest
