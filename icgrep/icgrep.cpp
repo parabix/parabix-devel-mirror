@@ -185,24 +185,24 @@ int main(int argc, char *argv[]) {
     
     switch (grep::Mode) {
         case grep::NormalMode:
-            grepEngine = new grep::GrepEngine(); break;
+            grepEngine = new grep::EmitMatchesEngine(); break;
         case grep::CountOnly:
-            grepEngine = new grep::CountOnlyGrepEngine(); break;
+            grepEngine = new grep::CountOnlyEngine(); break;
         case grep::FilesWithMatch:
         case grep::FilesWithoutMatch:
         case grep::QuietMode:
-            grepEngine = new grep::MatchOnlyGrepEngine(); break;
+            grepEngine = new grep::MatchOnlyEngine(grep::Mode == grep::FilesWithoutMatch); break;
     }
                
     grepEngine->grepCodeGen(REs);
 
     grepEngine->initFileResult(allFiles);
     
-    grepEngine->run();
+    bool matchFound = grepEngine->searchAllFiles();
     
-    grepEngine->PrintResults();
+    grepEngine->writeMatches();
     
     delete(grepEngine);
     
-    return 0;
+    return matchFound ? grep::MatchFoundExitCode : grep::MatchNotFoundExitCode;
 }

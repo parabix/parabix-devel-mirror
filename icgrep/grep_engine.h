@@ -23,25 +23,20 @@ namespace grep {
 class GrepEngine {
 public:
 
-    GrepEngine() : mGrepDriver(nullptr), mFileSuffix(InitialTabFlag ? "\t:" : ":"), grepMatchFound(false), fileCount(0) {}
-
+    GrepEngine();
     virtual ~GrepEngine();
     
-    void initFileResult(std::vector<std::string> filenames);
-    
+    void initFileResult(std::vector<std::string> & filenames);
     virtual void grepCodeGen(std::vector<re::RE *> REs);
-
-    void run();
-    
-    void PrintResults();
-    
-    
+    bool searchAllFiles();
+    void writeMatches();
     
 protected:
     static void * DoGrepThreadFunction(void *args);
-    virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
+    virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) = 0;
     std::string linePrefix(std::string fileName);
-    
+    int32_t openFile(const std::string & fileName, std::stringstream & msgstrm);
+
     Driver * mGrepDriver;
 
     std::vector<std::string> inputFiles;
@@ -54,20 +49,24 @@ protected:
     size_t fileCount;
 };
 
-class CountOnlyGrepEngine : public GrepEngine {
+class EmitMatchesEngine : public GrepEngine {
 public:
-    
-    CountOnlyGrepEngine() : GrepEngine() {mFileSuffix = ":";}
+    EmitMatchesEngine();
     void grepCodeGen(std::vector<re::RE *> REs) override;
 private:
     uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
-    
 };
 
-class MatchOnlyGrepEngine : public CountOnlyGrepEngine {
+class CountOnlyEngine : public GrepEngine {
 public:
-    
-    MatchOnlyGrepEngine() : CountOnlyGrepEngine(), mRequiredCount(Mode != FilesWithoutMatch) {mFileSuffix = NullFlag ? std::string("\0", 1) : "\n";}
+    CountOnlyEngine();
+private:
+    uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
+};
+
+class MatchOnlyEngine : public GrepEngine {
+public:
+    MatchOnlyEngine(bool showFilesWithoutMatch);
 private:
     uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
     unsigned mRequiredCount;        
