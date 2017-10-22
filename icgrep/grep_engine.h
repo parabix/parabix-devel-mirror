@@ -6,6 +6,7 @@
 #ifndef GREP_ENGINE_H
 #define GREP_ENGINE_H
 #include <grep_interface.h>
+#include <kernels/streamset.h>
 #include <toolchain/grep_pipeline.h>
 #include <string>       // for string
 #include <vector>
@@ -32,8 +33,10 @@ public:
     void writeMatches();
     
 protected:
+    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> & REs, parabix::StreamSetBuffer * ByteStream);
+
     static void * DoGrepThreadFunction(void *args);
-    virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) = 0;
+    virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
     std::string linePrefix(std::string fileName);
     int32_t openFile(const std::string & fileName, std::stringstream & msgstrm);
 
@@ -47,6 +50,7 @@ protected:
     bool grepMatchFound;
     std::mutex count_mutex;
     size_t fileCount;
+    bool mMoveMatchesToEOL;
 };
 
 class EmitMatchesEngine : public GrepEngine {
@@ -69,9 +73,14 @@ public:
     MatchOnlyEngine(bool showFilesWithoutMatch);
 private:
     uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
-    unsigned mRequiredCount;        
+    unsigned mRequiredCount;
 };
-    
+
+class QuietModeEngine : public GrepEngine {
+public:
+    QuietModeEngine();
+};
+
 }
 
 #endif

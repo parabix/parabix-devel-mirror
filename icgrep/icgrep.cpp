@@ -190,8 +190,9 @@ int main(int argc, char *argv[]) {
             grepEngine = new grep::CountOnlyEngine(); break;
         case grep::FilesWithMatch:
         case grep::FilesWithoutMatch:
-        case grep::QuietMode:
             grepEngine = new grep::MatchOnlyEngine(grep::Mode == grep::FilesWithoutMatch); break;
+        case grep::QuietMode:
+            grepEngine = new grep::QuietModeEngine(); break;
     }
                
     grepEngine->grepCodeGen(REs);
