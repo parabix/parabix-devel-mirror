@@ -75,6 +75,7 @@ public:
         , Sel
         // Stream operations
         , Advance
+        , IndexedAdvance
         , ScanThru
         , AdvanceThenScanThru
         , ScanTo
@@ -297,6 +298,7 @@ public:
     static inline bool classof(const PabloAST * e) {
         switch (e->getClassTypeId()) {
             case PabloAST::ClassTypeId::Advance:
+            case PabloAST::ClassTypeId::IndexedAdvance:
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::AdvanceThenScanThru:
             case PabloAST::ClassTypeId::ScanTo:

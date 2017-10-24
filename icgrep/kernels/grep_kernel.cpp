@@ -184,7 +184,7 @@ ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuild
                Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"},
                Binding{iBuilder->getStreamSetTy(4, 1), "required"}},
 
-              {Binding{iBuilder->getStreamSetTy(1, 1), "matches"}}) {
+              {Binding{iBuilder->getStreamSetTy(1, 1), "matches", Add1()}}) {
 
 }
 

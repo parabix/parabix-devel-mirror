@@ -193,9 +193,6 @@ std::string LabelFlag;
 bool LineBufferedFlag;
 static cl::opt<bool, true> LineBufferedOption("line-buffered", cl::location(LineBufferedFlag), cl::desc("Buffer lines to output."), cl::cat(Output_Options));
 
-bool NormalizeLineBreaksFlag;
-static cl::opt<bool, true> NormalizeLineBreaksOption("normalize-line-breaks", cl::location(NormalizeLineBreaksFlag), cl::desc("Normalize line breaks to LF."), cl::cat(Output_Options));
-
 int AfterContextFlag;
 static cl::opt<int, true> AfterContextOption("A", cl::location(AfterContextFlag), cl::desc("Print <num> lines of context after each matching line."), cl::cat(Output_Options), cl::Grouping);
 static cl::alias AfterContextAlias("after-context", cl::desc("Alias for -A"), cl::aliasopt(AfterContextOption));

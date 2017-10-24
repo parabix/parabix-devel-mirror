@@ -502,6 +502,13 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             // If our expr is an Extract op on a mutable Var then we need to pass the index value to the carry
             // manager so that it properly selects the correct carry bit.
             value = mCarryManager->advanceCarryInCarryOut(iBuilder, adv, compileExpression(iBuilder, adv->getExpression()));
+        } else if (isa<IndexedAdvance>(stmt)) {
+            const IndexedAdvance * const adv = cast<IndexedAdvance>(stmt);
+            Value * strm = compileExpression(iBuilder, adv->getExpression());
+            Value * index_strm = compileExpression(iBuilder, adv->getIndex());
+            // If our expr is an Extract op on a mutable Var then we need to pass the index value to the carry
+            // manager so that it properly selects the correct carry bit.
+            value = mCarryManager->indexedAdvanceCarryInCarryOut(iBuilder, adv, strm, index_strm);
         } else if (const MatchStar * mstar = dyn_cast<MatchStar>(stmt)) {
             Value * const marker = compileExpression(iBuilder, mstar->getMarker());
             Value * const cc = compileExpression(iBuilder, mstar->getCharClass());

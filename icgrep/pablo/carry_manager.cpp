@@ -67,7 +67,7 @@ inline static unsigned ceil_udiv(const unsigned x, const unsigned y) {
 using TypeId = PabloAST::ClassTypeId;
 
 inline static bool isNonAdvanceCarryGeneratingStatement(const Statement * const stmt) {
-    return isa<CarryProducingStatement>(stmt) && !isa<Advance>(stmt);
+    return isa<CarryProducingStatement>(stmt) && !isa<Advance>(stmt) && !isa<IndexedAdvance>(stmt);
 }
 
 #define LONG_ADVANCE_BREAKPOINT 64
@@ -609,6 +609,10 @@ Value * CarryManager::advanceCarryInCarryOut(const std::unique_ptr<kernel::Kerne
     }
 }
 
+Value * CarryManager::indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const IndexedAdvance * const advance, Value * const value, Value * const index_strm) {
+    llvm::report_fatal_error("IndexedAdvance not yet supported.");
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief longAdvanceCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -921,7 +925,6 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
     const bool nonCarryCollapsingMode = hasIterationSpecificAssignment(scope);
     Type * const carryPackType = (loopDepth == 0) ? carryTy : ArrayType::get(carryTy, 2);
     std::vector<Type *> state;
-
     for (const Statement * stmt : *scope) {
         if (LLVM_UNLIKELY(isa<Advance>(stmt))) {
             const auto amount = cast<Advance>(stmt)->getAmount();
@@ -938,6 +941,16 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
                 mHasLongAdvance = true;                
             }
             state.push_back(type);
+        } else if (LLVM_UNLIKELY(isa<IndexedAdvance>(stmt))) {
+            // The carry data for the indexed advance stores N bits of carry data,
+            // organized in packs that can be processed with GR instructions (such as PEXT, PDEP, popcount).
+            // A circular buffer is used.  Because the number of bits to be dequeued
+            // and enqueued is variable (based on the popcount of the index), an extra
+            // pack stores the offset position in the circular buffer.
+            const auto amount = cast<IndexedAdvance>(stmt)->getAmount();
+            const auto packWidth = sizeof(size_t) * 8;
+            const auto packs = ceil_udiv(amount, packWidth);
+            state.push_back(ArrayType::get(iBuilder->getSizeTy(), nearest_pow2(packs) + 1));
         } else if (LLVM_UNLIKELY(isNonAdvanceCarryGeneratingStatement(stmt))) {
             state.push_back(carryPackType);
         } else if (LLVM_UNLIKELY(isa<If>(stmt))) {

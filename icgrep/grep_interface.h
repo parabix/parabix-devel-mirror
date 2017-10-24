@@ -87,7 +87,6 @@ extern bool InitialTabFlag; // -T
 extern bool OnlyMatchingFlag; // -o
 extern std::string LabelFlag; // -label
 extern bool LineBufferedFlag; // -line-buffered
-extern bool NormalizeLineBreaksFlag; // -normalize-line-breaks
 extern int AfterContextFlag; // -A
 extern int BeforeContextFlag; // -B
 extern int ContextFlag; // -C

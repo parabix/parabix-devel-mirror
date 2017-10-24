@@ -99,6 +99,12 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             out << " = pablo.Advance(";
             print(adv->getExpression(), out);
             out << ", " << std::to_string(adv->getAmount()) << ")";
+        } else if (const IndexedAdvance * adv = dyn_cast<IndexedAdvance>(stmt)) {
+            out << " = pablo.IndexedAdvance(";
+            print(adv->getExpression(), out);
+            out << ", ";
+            print(adv->getIndex(), out);
+            out << ", " << std::to_string(adv->getAmount()) << ")";
         } else if (const Lookahead * adv = dyn_cast<Lookahead>(stmt)) {
             out << " = pablo.Lookahead(";
             print(adv->getExpression(), out);

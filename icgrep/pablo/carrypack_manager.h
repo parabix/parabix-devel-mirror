@@ -19,6 +19,7 @@ namespace llvm { class StructType; }
 namespace llvm { class Type; }
 namespace llvm { class Value; }
 namespace pablo { class Advance; }
+namespace pablo { class IndexedAdvance; }
 namespace pablo { class PabloBlock; }
 namespace pablo { class PabloKernel; }
 namespace pablo { class Statement; }
@@ -91,6 +92,8 @@ public:
 
     llvm::Value * advanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Advance * advance, llvm::Value * const strm);
  
+    llvm::Value * indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const IndexedAdvance * advance, llvm::Value * const strm, llvm::Value * const index_strm);
+
     /* Methods for getting and setting carry summary values for If statements */
          
     llvm::Value * generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * condition);

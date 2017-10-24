@@ -624,6 +624,13 @@ Value * CarryManager::advanceCarryInCarryOut(const std::unique_ptr<kernel::Kerne
     }
 }
 
+
+Value * CarryManager::indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const IndexedAdvance * const advance, Value * const value, Value * const index_strm) {
+    report_fatal_error("IndexedAdvance not yet supported.");
+}
+
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief longAdvanceCarryInCarryOut
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -1034,6 +1041,10 @@ unsigned CarryManager::assignDefaultCarryGroups(PabloBlock * const scope, const 
                 amount = cast<Advance>(stmt)->getAmount();
                 canPack = (amount < mElementWidth);
             }
+            else if (isa<IndexedAdvance>(stmt)) {
+                amount = cast<Advance>(stmt)->getAmount();
+                canPack = (amount < mElementWidth);
+            }
             if (packedWidth == 0) {
                 ++carryGroups;
             }
@@ -1091,7 +1102,7 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
             CarryGroup & carryGroup = mCarryGroup[index];
             if (carryGroup.groupSize == 0) {
                 Type * packTy = carryPackTy;
-                if (LLVM_LIKELY(isa<Advance>(stmt))) {
+                if (LLVM_UNLIKELY(isa<Advance>(stmt))) {
                     const auto amount = cast<Advance>(stmt)->getAmount();
                     if (LLVM_UNLIKELY(amount >= mElementWidth)) {
                         if (LLVM_UNLIKELY(ifDepth > 0 && amount > iBuilder->getBitBlockWidth())) {
@@ -1102,6 +1113,17 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
                         const auto blocks = ceil_udiv(amount, iBuilder->getBitBlockWidth());
                         packTy = ArrayType::get(carryTy, nearest_pow2(blocks + ((loopDepth != 0) ? 1 : 0)));
                     }
+                }
+                if (LLVM_UNLIKELY(isa<IndexedAdvance>(stmt))) {
+                    // The carry data for the indexed advance stores N bits of carry data,
+                    // organized in packs that can be processed with GR instructions (such as PEXT, PDEP, popcount).
+                    // A circular buffer is used.  Because the number of bits to be dequeued
+                    // and enqueued is variable (based on the popcount of the index), an extra
+                    // pack stores the offset position in the circular buffer.
+                    const auto amount = cast<IndexedAdvance>(stmt)->getAmount();
+                    const auto packWidth = sizeof(size_t) * 8;
+                    const auto packs = ceil_udiv(amount, packWidth);
+                    packTy = ArrayType::get(iBuilder->getSizeTy(), nearest_pow2(packs) + 1);
                 }
                 state.push_back(packTy);
             }
