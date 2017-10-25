@@ -620,6 +620,7 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
 
     assert (mHasLongAdvance);
     assert (shiftAmount >= LONG_ADVANCE_BREAKPOINT);
+    assert (value);
 
     const auto blockWidth = iBuilder->getBitBlockWidth();
     Type * const streamTy = iBuilder->getIntNTy(blockWidth);
@@ -630,6 +631,8 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
 
     if (mIfDepth > 0) {
         if (shiftAmount > blockWidth) {
+
+            // TODO: once CEILING(shiftAmount / 256) > 2, consider using a half-adder/subtractor strategy?
 
             Value * carry = iBuilder->CreateZExt(iBuilder->bitblock_any(value), streamTy);
             const auto summaryBlocks = ceil_udiv(shiftAmount, blockWidth);
@@ -672,10 +675,8 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
                         std::fill_n(mask + m + 1, n - m, UndefValue::get(laneTy));
                     }
                     stream = iBuilder->CreateAnd(stream, ConstantVector::get(ArrayRef<Constant *>(mask, n)));
-
                     addToCarryOutSummary(iBuilder, stream);
                     iBuilder->CreateBlockAlignedStore(stream, ptr);
-                    RecursivelyDeleteTriviallyDeadInstructions(carry);
                     break;
                 }
                 addToCarryOutSummary(iBuilder, stream);
@@ -735,7 +736,7 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
 
             Value * const carryInPtr2 = iBuilder->CreateGEP(mCurrentFrame, indices);
             Value * const carryIn2 = iBuilder->CreateBlockAlignedLoad(carryInPtr2);
-
+            assert (carryOutPtr->getType()->getPointerElementType() == value->getType());
             iBuilder->CreateBlockAlignedStore(value, carryOutPtr);
 
             Value * const b0 = iBuilder->CreateLShr(iBuilder->CreateBitCast(carryIn, streamTy), blockWidth - blockShift);
@@ -858,34 +859,11 @@ unsigned CarryManager::getScopeCount(const PabloBlock * const scope, unsigned in
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief hasIterationSpecificAssignment
  ** ------------------------------------------------------------------------------------------------------------- */
-bool CarryManager::hasIterationSpecificAssignment(const PabloBlock * const scope) {
-#if 0
-    return dyn_cast_or_null<While>(scope->getBranch()) != nullptr;
-#else
-    if (const While * const br = dyn_cast_or_null<While>(scope->getBranch())) {
-        for (const Var * var : br->getEscaped()) {
-            for (const PabloAST * user : var->users()) {
-                if (const Extract * e = dyn_cast<Extract>(user)) {
-                    if (LLVM_UNLIKELY(e->getIndex() == var)) {
-                        // If we assign this Var a value and read the value as the index parameter
-                        // of a nested Extract statement, then we cannot collapse the carries.
-                        const PabloBlock * parent = e->getParent();
-                        for (;;) {
-                            if (parent == scope) {
-                                return true;
-                            }
-                            parent = parent->getPredecessor();
-                            if (parent == nullptr) {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+bool isNonRegularLanguage(const PabloBlock * const scope) {
+    if (const Branch * br = scope->getBranch()) {
+        return !br->isRegular();
     }
     return false;
-#endif
 }
 
 static bool hasNonEmptyCarryStruct(const Type * const frameTy) {
@@ -922,7 +900,7 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
     Type * const blockTy = iBuilder->getBitBlockType();
 
     const unsigned carryScopeIndex = mCarryScopes++;
-    const bool nonCarryCollapsingMode = hasIterationSpecificAssignment(scope);
+    const bool nonCarryCollapsingMode = isNonRegularLanguage(scope);
     Type * const carryPackType = (loopDepth == 0) ? carryTy : ArrayType::get(carryTy, 2);
     std::vector<Type *> state;
     for (const Statement * stmt : *scope) {

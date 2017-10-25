@@ -1,9 +1,4 @@
 #include "p2s_kernel.h"
-//#include "llvm/IR/Constant.h"      // for Constant
-//#include "llvm/IR/Constants.h"     // for ConstantInt
-//#include "llvm/IR/DerivedTypes.h"  // for PointerType, VectorType
-//#include "llvm/IR/Function.h"      // for Function, Function::arg_iterator
-//#include <llvm/IR/Module.h>
 #include <kernels/streamset.h>
 #include <kernels/kernel_builder.h>
 
@@ -106,7 +101,7 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     IntegerType * i32Ty = iBuilder->getInt32Ty();
     PointerType * int16PtrTy = iBuilder->getInt16Ty()->getPointerTo();
     PointerType * bitBlockPtrTy = iBuilder->getBitBlockType()->getPointerTo();
-    ConstantInt * stride = iBuilder->getSize(iBuilder->getStride());
+    ConstantInt * blockMask = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
 
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
@@ -122,26 +117,25 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     Value * lo_bytes[8];
     p2s(iBuilder, lo_input, lo_bytes);
 
-    Value * delCountBlock_ptr = iBuilder->getInputStreamBlockPtr("deletionCounts", iBuilder->getInt32(0));
-    Value * unit_counts = iBuilder->fwCast(iBuilder->getBitBlockWidth() / 16, iBuilder->CreateBlockAlignedLoad(delCountBlock_ptr));
-
-
-    Value * u16_output_ptr = iBuilder->getOutputStreamBlockPtr("i16Stream", iBuilder->getInt32(0));
-    u16_output_ptr = iBuilder->CreatePointerCast(u16_output_ptr, int16PtrTy);
+    Value * delCount = iBuilder->loadInputStreamBlock("deletionCounts", iBuilder->getInt32(0));
+    Value * unitCounts = iBuilder->fwCast(iBuilder->getBitBlockWidth() / 16, delCount);
+    Value * outputPtr = iBuilder->getOutputStreamBlockPtr("i16Stream", iBuilder->getInt32(0));
+    outputPtr = iBuilder->CreatePointerCast(outputPtr, int16PtrTy);
     Value * i16UnitsGenerated = iBuilder->getProducedItemCount("i16Stream"); // units generated to buffer
-    u16_output_ptr = iBuilder->CreateGEP(u16_output_ptr, iBuilder->CreateURem(i16UnitsGenerated, stride));
+    outputPtr = iBuilder->CreateGEP(outputPtr, iBuilder->CreateAnd(i16UnitsGenerated, blockMask));
 
     Value * offset = ConstantInt::get(i32Ty, 0);
 
     for (unsigned j = 0; j < 8; ++j) {
         Value * merge0 = iBuilder->bitCast(iBuilder->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
-        iBuilder->CreateAlignedStore(merge0, iBuilder->CreateBitCast(iBuilder->CreateGEP(u16_output_ptr, offset), bitBlockPtrTy), 1);
-        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2 * j)), i32Ty);
+        iBuilder->CreateAlignedStore(merge0, iBuilder->CreateBitCast(iBuilder->CreateGEP(outputPtr, offset), bitBlockPtrTy), 1);
+        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unitCounts, iBuilder->getInt32(2 * j)), i32Ty);
 
         Value * merge1 = iBuilder->bitCast(iBuilder->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
-        iBuilder->CreateAlignedStore(merge1, iBuilder->CreateBitCast(iBuilder->CreateGEP(u16_output_ptr, offset), bitBlockPtrTy), 1);
-        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unit_counts, iBuilder->getInt32(2 * j + 1)), i32Ty);
-    }    
+        iBuilder->CreateAlignedStore(merge1, iBuilder->CreateBitCast(iBuilder->CreateGEP(outputPtr, offset), bitBlockPtrTy), 1);
+        offset = iBuilder->CreateZExt(iBuilder->CreateExtractElement(unitCounts, iBuilder->getInt32(2 * j + 1)), i32Ty);
+    }
+
     Value * i16UnitsFinal = iBuilder->CreateAdd(i16UnitsGenerated, iBuilder->CreateZExt(offset, iBuilder->getSizeTy()));
     iBuilder->setProducedItemCount("i16Stream", i16UnitsFinal);
 }
@@ -156,7 +150,7 @@ P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
 P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
 : BlockOrientedKernel("p2s_compress",
               {Binding{iBuilder->getStreamSetTy(8, 1), "basisBits"}, Binding{iBuilder->getStreamSetTy(1, 1), "deletionCounts"}},
-                      {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream", MaxRatio(1)}},
+              {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)}},
               {}, {}, {}) {
 }
 
@@ -171,7 +165,7 @@ P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder
 P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b)
 : BlockOrientedKernel("p2s_16_compress",
               {Binding{b->getStreamSetTy(16, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "deletionCounts"}},
-              {Binding{b->getStreamSetTy(1, 16), "i16Stream", MaxRatio(1)}},
+              {Binding{b->getStreamSetTy(1, 16), "i16Stream", BoundedRate(0, 1)}},
               {},
               {},
               {}) {

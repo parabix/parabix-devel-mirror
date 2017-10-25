@@ -158,31 +158,31 @@ bool RE_Local::isLocalLanguage(RE * re) {
     return isLocalLanguage_helper(re, seen);
 }
 
-bool RE_Local::isLocalLanguage_helper(const RE * re, UCD::UnicodeSet & codepoints_seen) {
+bool RE_Local::isLocalLanguage_helper(const RE * re, UCD::UnicodeSet & seen) {
     assert ("RE object cannot be null!" && re);
     if (isa<Any>(re)) {
-        bool no_intersect = codepoints_seen.empty();
-        codepoints_seen = UCD::UnicodeSet(0x00, 0x10FFFF);
+        const bool no_intersect = seen.empty();
+        seen = UCD::UnicodeSet(0x00, 0x10FFFF);
         return no_intersect;
     } else if (const CC * cc = dyn_cast<CC>(re)) {
-        bool has_intersect = cast<UCD::UnicodeSet>(cc)->intersects(codepoints_seen);
-        codepoints_seen = codepoints_seen + *cast<UCD::UnicodeSet>(cc);
+        const bool has_intersect = cast<CC>(cc)->intersects(seen);
+        seen = seen + *cast<CC>(cc);
         return !has_intersect;
     } else if (const Name * n = dyn_cast<Name>(re)) {
-        return isLocalLanguage_helper(n->getDefinition(), codepoints_seen);
+        return isLocalLanguage_helper(n->getDefinition(), seen);
     } else if (const Seq * re_seq = dyn_cast<const Seq>(re)) {
         for (const RE * item : *re_seq) {
-            if (!isLocalLanguage_helper(item, codepoints_seen)) return false;
+            if (!isLocalLanguage_helper(item, seen)) return false;
         }
         return true;
     } else if (const Alt * re_alt = dyn_cast<const Alt>(re)) {
         for (RE * item : *re_alt) {
-            if (!isLocalLanguage_helper(item, codepoints_seen)) return false;
+            if (!isLocalLanguage_helper(item, seen)) return false;
         }
         return true;
     } else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
         if (re_rep->getUB() > 1) return false;
-        return isLocalLanguage_helper(re_rep->getRE(), codepoints_seen);
+        return isLocalLanguage_helper(re_rep->getRE(), seen);
     } else {
         // A local language cannot contain Intersects, Differences, Assertions, Start, End.
         return false;

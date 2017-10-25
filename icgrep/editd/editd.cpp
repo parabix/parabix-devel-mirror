@@ -162,7 +162,7 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
     // if there are no regexes specified through -e or -f, the first positional argument
     // must be a regex, not an input file.
 
-    if (pattVector.size() == 0) {
+    if (pattVector.size() == 0 && inputFiles.size() > 1) {
         pattVector.push_back(inputFiles[0]);
         inputFiles.erase(inputFiles.begin());
     }
@@ -574,7 +574,7 @@ void editdGPUCodeGen(unsigned patternLen){
     sourceK->setInitialArguments({inputThreadPtr, inputSize});
     pxDriver.makeKernelCall(sourceK, {}, {CCStream});
 
-    ExternalBuffer * ResultStream = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1), resultStreamPtr, 1));   
+    ExternalBuffer * ResultStream = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1), resultStreamPtr, 1));
     kernel::Kernel * editdk = pxDriver.addKernelInstance(make_unique<kernel::editdGPUKernel>(iBuilder, editDistance, patternLen, groupSize));
       
     const unsigned numOfCarries = patternLen * (editDistance + 1) * 4 * groupSize;

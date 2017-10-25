@@ -14,28 +14,23 @@ using namespace parabix;
 
 namespace kernel {
 
-// Rather than using doBlock logic to write one block at a time, this custom
-// doSegment method attempts to write the entire segment with a single write call.
-// However, if the segment spans two memory areas (e.g., because of wraparound),
-// then two write calls are made.
-void StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder) {
-    PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
-    Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth / 8);
-    
-    Function::arg_iterator args = mCurrentMethod->arg_begin();
-    /* self = */ args++;
-    Value * itemsToDo = &*(args++);
-    Value * codeUnitBuffer = &*(args++);
-
-    Value * bytesToDo = mCodeUnitWidth == 8 ? itemsToDo : iBuilder->CreateMul(itemsToDo, itemBytes);
-    Value * bytePtr = iBuilder->CreatePointerCast(codeUnitBuffer, i8PtrTy);
-    iBuilder->CreateWriteCall(iBuilder->getInt32(1), bytePtr, bytesToDo);
+void StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * const /* numOfStrides */) {
+    Value * codeUnitBuffer = iBuilder->getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0));
+    codeUnitBuffer = iBuilder->CreatePointerCast(codeUnitBuffer, iBuilder->getInt8PtrTy());
+    Value * bytesToDo = mAvailableItemCount[0];
+    if (LLVM_UNLIKELY(mCodeUnitWidth > 8)) {
+        bytesToDo = iBuilder->CreateMul(bytesToDo, iBuilder->getSize(mCodeUnitWidth / 8));
+    } else if (LLVM_UNLIKELY(mCodeUnitWidth < 8)) {
+        bytesToDo = iBuilder->CreateUDiv(bytesToDo, iBuilder->getSize(8 / mCodeUnitWidth));
+    }
+    iBuilder->CreateWriteCall(iBuilder->getInt32(1), codeUnitBuffer, bytesToDo);
 }
 
 StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth)
 : MultiBlockKernel("stdout", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {})
 , mCodeUnitWidth(codeUnitWidth) {
     setNoTerminateAttribute(true);
+    // setKernelStride(getpagesize());
 }
 
 void FileSink::generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
@@ -66,41 +61,39 @@ void FileSink::generateInitializeMethod(const std::unique_ptr<kernel::KernelBuil
     iBuilder->SetInsertPoint(fileSinkInitExit);
 }
 
-void FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder) {
-    BasicBlock * closeFile = iBuilder->CreateBasicBlock("closeFile");
-    BasicBlock * fileOutExit = iBuilder->CreateBasicBlock("fileOutExit");
-    
-    PointerType * i8PtrTy = iBuilder->getInt8PtrTy();
-    Constant * itemBytes = iBuilder->getSize(mCodeUnitWidth / 8);
-    Value * fileDes = iBuilder->getScalarField("fileDes");
+void FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, Value * const /* numOfStrides */) {
+    BasicBlock * const closeFile = iBuilder->CreateBasicBlock("closeFile");
+    BasicBlock * const fileOutExit = iBuilder->CreateBasicBlock("fileOutExit");
 
-    Function::arg_iterator args = mCurrentMethod->arg_begin();
-    /* self = */ args++;
-    Value * itemsToDo = &*(args++);
-    Value * codeUnitBuffer = &*(args++);
-    
-    Value * bytesToDo = mCodeUnitWidth == 8 ? itemsToDo : iBuilder->CreateMul(itemsToDo, itemBytes);
-    Value * bytePtr = iBuilder->CreatePointerCast(codeUnitBuffer, i8PtrTy);
-    
-    iBuilder->CreateWriteCall(fileDes, bytePtr, bytesToDo);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpULT(itemsToDo, iBuilder->getSize(getKernelStride())), closeFile, fileOutExit);
-    
-    iBuilder->SetInsertPoint(closeFile);
+    Value * const fileDes = iBuilder->getScalarField("fileDes");
+    Value * const codeUnitBuffer = iBuilder->CreatePointerCast(getStreamSetInputBufferPtr(0), iBuilder->getInt8PtrTy());
+    Value * bytesToDo = mAvailableItemCount[0];
+    if (LLVM_UNLIKELY(mCodeUnitWidth > 8)) {
+        bytesToDo = iBuilder->CreateMul(bytesToDo, iBuilder->getSize(mCodeUnitWidth / 8));
+    } else if (LLVM_UNLIKELY(mCodeUnitWidth < 8)) {
+        bytesToDo = iBuilder->CreateUDiv(bytesToDo, iBuilder->getSize(8 / mCodeUnitWidth));
+    }    
+    iBuilder->CreateWriteCall(fileDes, codeUnitBuffer, bytesToDo);
+    iBuilder->CreateUnlikelyCondBr(mIsFinal, closeFile, fileOutExit);
+
+    iBuilder->SetInsertPoint(closeFile);    
     iBuilder->CreateCloseCall(fileDes);
     Value * newFileNamePtr = iBuilder->getScalarField("fileName");
     Value * tmpFileNamePtr = iBuilder->getScalarField("tmpFileName");
     iBuilder->CreateRenameCall(tmpFileNamePtr, newFileNamePtr);
-    iBuilder->CreateFree(tmpFileNamePtr);
-    
+    iBuilder->CreateFree(tmpFileNamePtr);    
     iBuilder->CreateBr(fileOutExit);
     
     iBuilder->SetInsertPoint(fileOutExit);
 }
 
 FileSink::FileSink(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth)
-: MultiBlockKernel("filesink", {Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {},
-                {Binding{iBuilder->getInt8PtrTy(), "fileName"}}, {}, {Binding{iBuilder->getInt8PtrTy(), "tmpFileName"}, Binding{iBuilder->getInt32Ty(), "fileDes"}})
+: MultiBlockKernel("filesink" + std::to_string(codeUnitWidth),
+{Binding{iBuilder->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}},
+{},
+{Binding{iBuilder->getInt8PtrTy(), "fileName"}}, {}, {Binding{iBuilder->getInt8PtrTy(), "tmpFileName"}, Binding{iBuilder->getInt32Ty(), "fileDes"}})
 , mCodeUnitWidth(codeUnitWidth) {
+    // setKernelStride(getpagesize());
 }
 
 }

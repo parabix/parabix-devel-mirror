@@ -15,7 +15,7 @@ namespace grep {
     
 class MatchAccumulator {
 public:
-    MatchAccumulator() {};
+    MatchAccumulator() {}
     virtual void accumulate_match(const size_t lineNum, char * line_start, char * line_end) = 0;
     virtual void finalize_match(char * buffer_end) {}  // default: no op
 };

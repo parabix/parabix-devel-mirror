@@ -11,7 +11,8 @@
 #include <pablo/pe_ones.h>
 #include <pablo/builder.hpp>
 #include <pablo/pablo_kernel.h>
-
+#include <llvm/IR/DerivedTypes.h>
+#include <llvm/Support/ErrorHandling.h>
 
 using namespace re;
 using namespace pablo;

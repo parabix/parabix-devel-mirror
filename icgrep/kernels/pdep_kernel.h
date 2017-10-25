@@ -73,7 +73,7 @@ public:
 private:
     const unsigned mSwizzleFactor;
     const unsigned mPDEPWidth;
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb) override;
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
     std::vector<llvm::Value *> get_PDEP_masks(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * PDEP_ms_blk,
                                               const unsigned mask_width);
     std::vector<llvm::Value *> get_block_popcounts(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * blk,

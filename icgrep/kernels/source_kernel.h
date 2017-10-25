@@ -11,14 +11,28 @@ namespace kernel {
    pipeline. */
 
 class MMapSourceKernel final : public SegmentOrientedKernel {
+    friend class FDSourceKernel;
 public:
     MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
-    void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-    void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-    void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-    void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
+        mFileSizeFunction = linkFileSizeMethod(iBuilder);
+    }
+    void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
+        generateInitializeMethod(mFileSizeFunction, mCodeUnitWidth, iBuilder);
+    }
+    void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
+        generateDoSegmentMethod(mCodeUnitWidth, mSegmentBlocks, iBuilder);
+    }
+    void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
+        unmapSourceBuffer(iBuilder);
+    }
+protected:
+    static llvm::Function * linkFileSizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    static void generateInitializeMethod(llvm::Function * fileSize, const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    static void generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned segmentBlocks, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    static void unmapSourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 protected:
     const unsigned          mSegmentBlocks;
     const unsigned          mCodeUnitWidth;
@@ -26,13 +40,24 @@ protected:
 };
 
 class ReadSourceKernel final : public SegmentOrientedKernel {
+    friend class FDSourceKernel;
 public:
     ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned blocksPerSegment = 1, unsigned codeUnitWidth = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
-    void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-    void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-    void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
+        generateInitializeMethod(mCodeUnitWidth, iBuilder);
+    }
+    void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
+        generateDoSegmentMethod(mCodeUnitWidth, mSegmentBlocks, iBuilder);
+    }
+    void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
+        freeBuffer(iBuilder);
+    }
+protected:
+    static void generateInitializeMethod(const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    static void generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned segmentBlocks, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    static void freeBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 private:
     unsigned mSegmentBlocks;
     unsigned mCodeUnitWidth;

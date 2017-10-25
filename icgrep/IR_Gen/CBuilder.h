@@ -56,9 +56,35 @@ public:
     // Equivalent to CreateUDiv(CreateAdd(number, CreateSub(divisor, ConstantInt::get(divisor->getType(), 1))), divisor)
     llvm::Value * CreateUDivCeil(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
     
+    llvm::Value * CreateUDivCeil(llvm::Value * number, const uint64_t divisor, const llvm::Twine &Name = "");
+
     // Round up to a multiple of divisor.
     llvm::Value * CreateRoundUp(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
             
+    // Get minimum of two unsigned numbers
+    llvm::Value * CreateUMin(llvm::Value * a, llvm::Value * b) {
+        assert (a->getType() == b->getType());
+        return CreateSelect(CreateICmpULT(a, b), a, b);
+    }
+
+    // Get minimum of two signed numbers
+    llvm::Value * CreateSMin(llvm::Value * a, llvm::Value * b) {
+        assert (a->getType() == b->getType());
+        return CreateSelect(CreateICmpSLT(a, b), a, b);
+    }
+
+    // Get maximum of two unsigned numbers
+    llvm::Value * CreateUMax(llvm::Value * a, llvm::Value * b) {
+        assert (a->getType() == b->getType());
+        return CreateSelect(CreateICmpUGT(a, b), a, b);
+    }
+
+    // Get maximum of two signed numbers
+    llvm::Value * CreateSMax(llvm::Value * a, llvm::Value * b) {
+        assert (a->getType() == b->getType());
+        return CreateSelect(CreateICmpSGT(a, b), a, b);
+    }
+
     llvm::Value * CreateMalloc(llvm::Value * size);
 
     llvm::Value * CreateAlignedMalloc(llvm::Value * size, const unsigned alignment);

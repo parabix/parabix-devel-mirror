@@ -90,8 +90,6 @@ protected:
 
     static unsigned getScopeCount(const PabloBlock * const scope, unsigned index = 0);
 
-    static bool hasIterationSpecificAssignment(const PabloBlock * const scope);
-
     llvm::StructType * analyse(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false);
 
     /* Entering and leaving scopes. */

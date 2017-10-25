@@ -14,6 +14,7 @@
 #include <pablo/ps_assign.h>
 #include <pablo/branch.h>
 #include <pablo/printer_pablos.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_os_ostream.h>
 
 using namespace boost::container;

@@ -48,13 +48,6 @@ LZ4FrameDecoder::LZ4FrameDecoder(const std::string & filename) {
         mBlocksLength = blocksEnd - mBlocksStart;
         mValid = true;
     }
-
-#ifndef NDEBUG
-    std::cerr << "mBlocksStart = " << mBlocksStart << std::endl;
-    std::cerr << "mBlocksLength = " << mBlocksLength << std::endl;
-    std::cerr << "mHasBlockChecksum = " << mHasBlockChecksum << std::endl;
-    std::cerr << "mHasContentChecksum = " << mHasContentChecksum << std::endl;
-#endif
 }
 
 bool LZ4FrameDecoder::decodeFrameDescriptor(std::ifstream & f) {

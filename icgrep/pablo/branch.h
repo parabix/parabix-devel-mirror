@@ -37,6 +37,12 @@ public:
     inline  PabloBlock * getBody() const {
         return mBody;
     }
+    inline bool isRegular() const {
+        return mRegular;
+    }
+    inline void setRegular(const bool value) {
+        mRegular = value;
+    }
     PabloBlock * setBody(PabloBlock * const body);
     EscapedVars getEscaped() const;
 protected:
@@ -48,6 +54,7 @@ protected:
     unsigned        mEscapedCount;
     unsigned        mEscapedCapacity;
     PabloAST **     mEscaped;
+    bool            mRegular;
 };
 
 class If final : public Branch {

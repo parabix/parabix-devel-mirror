@@ -10,16 +10,13 @@
 #include <llvm/IR/Module.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
-#include <llvm/Support/CommandLine.h>
 #include <kernels/kernel_builder.h>
-
-#include <llvm/Support/raw_ostream.h>
 
 using namespace kernel;
 using namespace parabix;
 using namespace llvm;
 
-// static cl::opt<bool> UseYield("yield", cl::desc("yield after waiting"), cl::init(false));
+using Port = Kernel::Port;
 
 template <typename Value>
 using StreamSetBufferMap = boost::container::flat_map<const StreamSetBuffer *, Value>;
@@ -33,6 +30,8 @@ Function * makeThreadFunction(const std::unique_ptr<kernel::KernelBuilder> & b, 
     f->arg_begin()->setName("input");
     return f;
 }
+
+void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel);
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateSegmentParallelPipeline
@@ -110,10 +109,6 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         BasicBlock * const segmentWait = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Wait", threadFunc);
 
         BasicBlock * segmentYield = segmentWait;
-//        if (UseYield) {
-//            segmentYield = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Yield", threadFunc);
-//        }
-
         iBuilder->CreateBr(segmentWait);
 
         segmentLoopBody = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Do", threadFunc);
@@ -144,13 +139,6 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
             iBuilder->CreateBr(exitThreadBlock);
         }
 
-//        if (UseYield) {
-//            // Yield the thread after waiting
-//            iBuilder->SetInsertPoint(segmentYield);
-//            iBuilder->CreatePThreadYield();
-//            iBuilder->CreateBr(segmentWait);
-//        }
-
         // Execute the kernel segment
         iBuilder->SetInsertPoint(segmentLoopBody);
         const auto & inputs = kernel->getStreamInputs();
@@ -169,13 +157,13 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
 
         const auto & outputs = kernel->getStreamOutputs();
         for (unsigned i = 0; i < outputs.size(); ++i) {            
-            Value * const produced = iBuilder->getProducedItemCount(outputs[i].name, terminated);
+            Value * const produced = iBuilder->getProducedItemCount(outputs[i].getName()); // terminated
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
             assert (producedPos.count(buf) == 0);
             producedPos.emplace(buf, produced);
         }
         for (unsigned i = 0; i < inputs.size(); ++i) {
-            Value * const processedItemCount = iBuilder->getProcessedItemCount(inputs[i].name);
+            Value * const processedItemCount = iBuilder->getProcessedItemCount(inputs[i].getName());
             const StreamSetBuffer * const buf = kernel->getStreamSetInputBuffer(i);            
             auto f = consumedPos.find(buf);
             if (f == consumedPos.end()) {
@@ -187,7 +175,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         }
         if (codegen::EnableCycleCounter) {
             cycleCountEnd = iBuilder->CreateReadCycleCounter();
-            Value * counterPtr = iBuilder->getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR);
+            Value * counterPtr = iBuilder->getCycleCountPtr();
             iBuilder->CreateStore(iBuilder->CreateAdd(iBuilder->CreateLoad(counterPtr), iBuilder->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
             cycleCountStart = cycleCountEnd;
         }
@@ -200,12 +188,16 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
 
     for (const auto consumed : consumedPos) {
         const StreamSetBuffer * const buf = consumed.first;
-        Kernel * kernel = buf->getProducer();
-        const auto & outputs = kernel->getStreamSetOutputBuffers();
+        Kernel * const k = buf->getProducer();
+        const auto & outputs = k->getStreamSetOutputBuffers();
         for (unsigned i = 0; i < outputs.size(); ++i) {
             if (outputs[i] == buf) {
-                iBuilder->setKernel(kernel);
-                iBuilder->setConsumedItemCount(kernel->getStreamOutput(i).name, consumed.second);
+                const auto binding = k->getStreamOutput(i);
+                if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
+                    continue;
+                }
+                iBuilder->setKernel(k);
+                iBuilder->setConsumedItemCount(binding.getName(), consumed.second);
                 break;
             }
         }
@@ -286,12 +278,12 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
             const auto & outputs = kernel->getStreamOutputs();
             Value * items = nullptr;
             if (inputs.empty()) {
-                items = iBuilder->getProducedItemCount(outputs[0].name);
+                items = iBuilder->getProducedItemCount(outputs[0].getName());
             } else {
-                items = iBuilder->getProcessedItemCount(inputs[0].name);
+                items = iBuilder->getProcessedItemCount(inputs[0].getName());
             }
             Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
-            Value * cycles = iBuilder->CreateLoad(iBuilder->getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR));
+            Value * cycles = iBuilder->CreateLoad(iBuilder->getCycleCountPtr());
             Value * fCycles = iBuilder->CreateUIToFP(cycles, iBuilder->getDoubleTy());
             std::string formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
             Value * stringPtr = iBuilder->CreatePointerCast(iBuilder->GetString(formatString), iBuilder->getInt8PtrTy());
@@ -355,7 +347,7 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
         for (unsigned j = 0; j < outputs.size(); ++j) {
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(j);
             if (LLVM_UNLIKELY(producingKernel.count(buf) != 0)) {
-                report_fatal_error(kernel->getName() + " redefines stream set " + outputs[j].name);
+                report_fatal_error(kernel->getName() + " redefines stream set " + outputs[j].getName());
             }
             producingKernel.emplace(buf, id);
         }
@@ -365,7 +357,7 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
             auto f = consumingKernels.find(buf);
             if (f == consumingKernels.end()) {
                 if (LLVM_UNLIKELY(producingKernel.count(buf) == 0)) {
-                    report_fatal_error(kernel->getName() + " uses stream set " + inputs[j].name + " prior to its definition");
+                    report_fatal_error(kernel->getName() + " uses stream set " + inputs[j].getName() + " prior to its definition");
                 }
                 consumingKernels.emplace(buf, std::vector<unsigned>{ id });
             } else {
@@ -527,54 +519,52 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
         cycleCountStart = iBuilder->CreateReadCycleCounter();
     }
     Value * terminated = iBuilder->getFalse();
-    for (unsigned k = 0; k < kernels.size(); k++) {
 
-        auto & kernel = kernels[k];
+    for (Kernel * const kernel : kernels) {
 
         iBuilder->setKernel(kernel);
         const auto & inputs = kernel->getStreamInputs();
         const auto & outputs = kernel->getStreamOutputs();
 
-        std::vector<Value *> inputAvail;
         std::vector<Value *> args = {kernel->getInstance(), terminated};
-        
+
         for (unsigned i = 0; i < inputs.size(); ++i) {
             const auto f = producedPos.find(kernel->getStreamSetInputBuffer(i));
             if (LLVM_UNLIKELY(f == producedPos.end())) {
-                report_fatal_error(kernel->getName() + " uses stream set " + inputs[i].name + " prior to its definition");
+                report_fatal_error(kernel->getName() + " uses stream set " + inputs[i].getName() + " prior to its definition");
             }
-            inputAvail.push_back(f->second);
             args.push_back(f->second);
         }
-        applyOutputBufferExpansions(iBuilder, inputAvail, terminated);
+
+        applyOutputBufferExpansions(iBuilder, kernel);
 
         iBuilder->createDoSegmentCall(args);
+
         if (!kernel->hasNoTerminateAttribute()) {
             Value * terminatedSignal = iBuilder->getTerminationSignal();
             terminated = iBuilder->CreateOr(terminated, terminatedSignal);
         }
         for (unsigned i = 0; i < outputs.size(); ++i) {
-            Value * const produced = iBuilder->getProducedItemCount(outputs[i].name, terminated);
+            Value * const produced = iBuilder->getProducedItemCount(outputs[i].getName()); // , terminated
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
             assert (producedPos.count(buf) == 0);
             producedPos.emplace(buf, produced);
         }
 
         for (unsigned i = 0; i < inputs.size(); ++i) {
-            Value * const processedItemCount = iBuilder->getProcessedItemCount(inputs[i].name);
+            Value * const processed = iBuilder->getProcessedItemCount(inputs[i].getName());
             const StreamSetBuffer * const buf = kernel->getStreamSetInputBuffer(i);
             auto f = consumedPos.find(buf);
             if (f == consumedPos.end()) {
-                consumedPos.emplace(buf, processedItemCount);
+                consumedPos.emplace(buf, processed);
             } else {
-                Value * lesser = iBuilder->CreateICmpULT(processedItemCount, f->second);
-                f->second = iBuilder->CreateSelect(lesser, processedItemCount, f->second);
+                Value * lesser = iBuilder->CreateICmpULT(processed, f->second);
+                f->second = iBuilder->CreateSelect(lesser, processed, f->second);
             }
         }
         if (codegen::EnableCycleCounter) {
             cycleCountEnd = iBuilder->CreateReadCycleCounter();
-            //Value * counterPtr = iBuilder->CreateGEP(mCycleCounts, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
-            Value * counterPtr = iBuilder->getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR);
+            Value * counterPtr = iBuilder->getCycleCountPtr();
             iBuilder->CreateStore(iBuilder->CreateAdd(iBuilder->CreateLoad(counterPtr), iBuilder->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
             cycleCountStart = cycleCountEnd;
         }
@@ -586,19 +576,25 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
 
     for (const auto consumed : consumedPos) {
         const StreamSetBuffer * const buf = consumed.first;
-        Kernel * k = buf->getProducer();
+        Kernel * const k = buf->getProducer();
         const auto & outputs = k->getStreamSetOutputBuffers();
         for (unsigned i = 0; i < outputs.size(); ++i) {
             if (outputs[i] == buf) {
+                const auto binding = k->getStreamOutput(i);
+                if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
+                    continue;
+                }
                 iBuilder->setKernel(k);
-                iBuilder->setConsumedItemCount(k->getStreamOutput(i).name, consumed.second);
+                iBuilder->setConsumedItemCount(binding.getName(), consumed.second);
                 break;
             }
         }
     }
 
     iBuilder->CreateCondBr(terminated, pipelineExit, pipelineLoop);
+
     iBuilder->SetInsertPoint(pipelineExit);
+
     if (codegen::EnableCycleCounter) {
         for (unsigned k = 0; k < kernels.size(); k++) {
             auto & kernel = kernels[k];
@@ -607,16 +603,73 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
             const auto & outputs = kernel->getStreamOutputs();
             Value * items = nullptr;
             if (inputs.empty()) {
-                items = iBuilder->getProducedItemCount(outputs[0].name);
+                items = iBuilder->getProducedItemCount(outputs[0].getName());
             } else {
-                items = iBuilder->getProcessedItemCount(inputs[0].name);
+                items = iBuilder->getProcessedItemCount(inputs[0].getName());
             }
             Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
-            Value * cycles = iBuilder->CreateLoad(iBuilder->getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR));
+            Value * cycles = iBuilder->CreateLoad(iBuilder->getCycleCountPtr());
             Value * fCycles = iBuilder->CreateUIToFP(cycles, iBuilder->getDoubleTy());
             std::string formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
             Value * stringPtr = iBuilder->CreatePointerCast(iBuilder->GetString(formatString), iBuilder->getInt8PtrTy());
             iBuilder->CreateCall(iBuilder->GetDprintf(), {iBuilder->getInt32(2), stringPtr, fItems, fCycles, iBuilder->CreateFDiv(fCycles, fItems)});
+        }
+    }
+}
+
+void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const std::string & name, DynamicBuffer * const db, const uint64_t l) {
+
+    BasicBlock * const doExpand = b->CreateBasicBlock(name + "Expand");
+    BasicBlock * const nextBlock = b->GetInsertBlock()->getNextNode();
+    doExpand->moveAfter(b->GetInsertBlock());
+    BasicBlock * const bufferReady = b->CreateBasicBlock(name + "Ready");
+    bufferReady->moveAfter(doExpand);
+    if (nextBlock) nextBlock->moveAfter(bufferReady);
+
+    Value * const handle = db->getStreamSetHandle();
+
+    Value * const produced = b->getProducedItemCount(name);
+    Value * const consumed = b->getConsumedItemCount(name);
+    Value * const required = b->CreateAdd(b->CreateSub(produced, consumed), b->getSize(2 * l));
+
+    b->CreateCondBr(b->CreateICmpUGT(required, db->getCapacity(b.get(), handle)), doExpand, bufferReady);
+
+    b->SetInsertPoint(doExpand);
+    db->doubleCapacity(b.get(), handle);
+    // Ensure that capacity is sufficient by successive doubling, if necessary.
+    b->CreateCondBr(b->CreateICmpUGT(required, db->getBufferedSize(b.get(), handle)), doExpand, bufferReady);
+
+    b->SetInsertPoint(bufferReady);
+}
+
+inline const Binding & getBinding(const Kernel * k, const std::string & name) {
+    Port port; unsigned index;
+    std::tie(port, index) = k->getStreamPort(name);
+    if (port == Port::Input) {
+        return k->getStreamInput(index);
+    } else {
+        return k->getStreamOutput(index);
+    }
+}
+
+void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * k) {
+    const auto & outputs = k->getStreamSetOutputBuffers();
+    for (unsigned i = 0; i < outputs.size(); i++) {
+        if (isa<DynamicBuffer>(outputs[i])) {
+            const ProcessingRate & rate = k->getStreamOutput(i).getRate();
+            if (rate.isFixed() || rate.isBounded()) {
+                const auto & name = k->getStreamOutput(i).getName();
+                const auto l = rate.getUpperBound() * k->getKernelStride();
+                applyOutputBufferExpansions(b, name, cast<DynamicBuffer>(outputs[i]), l);
+            } else if (rate.isExactlyRelative()) {
+                const auto binding = getBinding(k, rate.getReference());
+                const ProcessingRate & ref = binding.getRate();
+                if (rate.isFixed() || rate.isBounded()) {
+                    const auto & name = k->getStreamOutput(i).getName();
+                    const auto l = (ref.getUpperBound() * rate.getNumerator() * k->getKernelStride() + rate.getDenominator() - 1) / rate.getDenominator();
+                    applyOutputBufferExpansions(b, name, cast<DynamicBuffer>(outputs[i]), l);
+                }
+            }
         }
     }
 }

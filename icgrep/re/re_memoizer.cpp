@@ -17,7 +17,7 @@ static bool compare(const RE * const lh, const RE * const rh);
 static bool lessThan(const Vector * const lh, const Vector * const rh) {
     assert (lh->getClassTypeId() == rh->getClassTypeId());
     assert (lh->getClassTypeId() == RE::ClassTypeId::Alt || lh->getClassTypeId() == RE::ClassTypeId::Seq);
-    if (lh->size() != rh->size()) {
+    if (LLVM_LIKELY(lh->size() != rh->size())) {
         return lh->size() < rh->size();
     }
     for (auto i = lh->begin(), j = rh->begin(); i != lh->end(); ++i, ++j) {

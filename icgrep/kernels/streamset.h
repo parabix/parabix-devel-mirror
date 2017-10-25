@@ -63,13 +63,13 @@ public:
 
     virtual void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const;
 
-    virtual llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, const bool readOnly) const;
+    virtual llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * addr, llvm::Value * streamIndex, const bool readOnly) const;
 
-    virtual llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex, const bool readOnly) const;
+    virtual llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * addr, llvm::Value * streamIndex, llvm::Value * packIndex, const bool readOnly) const;
     
     virtual llvm::Value * getStreamSetCount(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const;
 
-    virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
+    virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * absolutePosition) const;
 
     virtual void setBaseAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * addr, llvm::Value *) const;
 
@@ -84,6 +84,8 @@ public:
     // The number of items that cam be linearly accessed from a given logical stream position.
     virtual llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPos, llvm::Value * avail, bool reverse = false) const;
     
+    virtual llvm::Value * copy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * target, llvm::Value * source, llvm::Value * itemsToCopy, const unsigned alignment = 0) const;
+
     void createBlockCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * blocksToCopy) const;
 
     virtual void createBlockAlignedCopy(IDISA::IDISA_Builder * const iBuilder, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy) const;
@@ -93,7 +95,7 @@ public:
     virtual bool supportsCopyBack() const {
         return false;  // Overridden to return true by buffer types that support copyback.
     }
-    virtual void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string);
+    virtual void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) const;
     
     virtual ~StreamSetBuffer() = 0;
 
@@ -110,7 +112,7 @@ protected:
     StreamSetBuffer(BufferKind k, llvm::Type * baseType, llvm::Type * resolvedType, unsigned BufferBlocks, unsigned AddressSpace);
 
     // Get the buffer pointer for a given block of the stream set.
-    virtual llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const = 0;
+    virtual llvm::Value * getBlockAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const = 0;
 
     bool isCapacityGuaranteed(const llvm::Value * const index, const size_t capacity) const;
 
@@ -158,6 +160,8 @@ public:
     
     llvm::Value * getCapacity(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
     
+    llvm::Value * getBlockAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const override;
+
     llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
 
     llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
@@ -174,8 +178,6 @@ protected:
 
     llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
 
-    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const override;
-
 };
 
 class ExternalBuffer final : public StreamSetBuffer {
@@ -188,12 +190,14 @@ public:
 
     llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
     
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * fromPosition, bool reverse = false) const override;
+
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
     void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 
 protected:
-    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const override;
+    llvm::Value * getBlockAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockNo) const override;
 };
 
 class CircularBuffer : public StreamSetBuffer {
@@ -204,13 +208,13 @@ public:
     
     CircularBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
 
-    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * streamIndex, llvm::Value * absolutePosition) const final;
+    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * absolutePosition) const final;
 
 protected:
 
     CircularBuffer(const BufferKind kind, const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
 
-    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const final;
+    llvm::Value * getBlockAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const final;
 };
     
 
@@ -235,7 +239,7 @@ public:
         return mOverflowBlocks > 0;  
     }
     
-    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) override;
+    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) const override;
     
     
 private:
@@ -259,10 +263,10 @@ public:
         return mOverflowBlocks > 0;  
     }
     
-    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) override;
+    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) const override;
 
 protected:
-    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const override;
+    llvm::Value * getBlockAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self, llvm::Value * blockIndex) const override;
 private:
     size_t mOverflowBlocks;
     unsigned mFieldWidth;
@@ -294,7 +298,7 @@ protected:
 
     llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
 
-    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const iBuilder, llvm::Value * blockIndex, llvm::Value *) const override;
+    llvm::Value * getBlockAddress(IDISA::IDISA_Builder * const iBuilder, llvm::Value * blockIndex, llvm::Value *) const override;
 
 private:
 
@@ -321,7 +325,7 @@ public:
 
     void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 
-    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * streamIndex, llvm::Value * absolutePosition) const override;
+    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * absolutePosition) const override;
     
     llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const iBuilder, llvm::Value * self) const override;
     
@@ -331,12 +335,12 @@ public:
         return mOverflowBlocks > 0;  
     }
         
-    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) override;
+    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) const override;
 
 protected:
     llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
     
-    llvm::Value * getStreamSetBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * blockIndex) const override;
+    llvm::Value * getBlockAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * blockIndex) const override;
 
     
 private:

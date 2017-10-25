@@ -17,10 +17,12 @@
 #include <kernels/streamset.h>
 #include <sstream>
 #include <kernels/kernel_builder.h>
+#include <boost/math/common_factor_rt.hpp>
 #include <llvm/Support/Debug.h>
 
 using namespace llvm;
 using namespace parabix;
+using namespace boost::math;
 
 namespace kernel {
 
@@ -36,6 +38,9 @@ const std::string Kernel::BUFFER_PTR_SUFFIX = "_bufferPtr";
 const std::string Kernel::CONSUMER_SUFFIX = "_consumerLocks";
 const std::string Kernel::CYCLECOUNT_SCALAR = "CPUcycles";
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addScalar
+ ** ------------------------------------------------------------------------------------------------------------- */
 unsigned Kernel::addScalar(Type * const type, const std::string & name) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
         report_fatal_error("Cannot add field " + name + " to " + getName() + " after kernel state finalized");
@@ -49,6 +54,10 @@ unsigned Kernel::addScalar(Type * const type, const std::string & name) {
     return index;
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addUnnamedScalar
+ ** ------------------------------------------------------------------------------------------------------------- */
 unsigned Kernel::addUnnamedScalar(Type * const type) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
         report_fatal_error("Cannot add unnamed field  to " + getName() + " after kernel state finalized");
@@ -58,15 +67,23 @@ unsigned Kernel::addUnnamedScalar(Type * const type) {
     return index;
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief prepareStreamSetNameMap
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::prepareStreamSetNameMap() {
     for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        mStreamMap.emplace(mStreamSetInputs[i].name, std::make_pair(Port::Input, i));
+        mStreamMap.emplace(mStreamSetInputs[i].getName(), std::make_pair(Port::Input, i));
     }
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        mStreamMap.emplace(mStreamSetOutputs[i].name, std::make_pair(Port::Output, i));
+        mStreamMap.emplace(mStreamSetOutputs[i].getName(), std::make_pair(Port::Output, i));
     }
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief bindPorts
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::bindPorts(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs) {
     assert (mModule == nullptr);
     assert (mStreamSetInputBuffers.empty());
@@ -110,6 +127,10 @@ void Kernel::bindPorts(const StreamSetBuffers & inputs, const StreamSetBuffers &
     mStreamSetOutputBuffers.assign(outputs.begin(), outputs.end());
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getCacheName
+ ** ------------------------------------------------------------------------------------------------------------- */
 std::string Kernel::getCacheName(const std::unique_ptr<KernelBuilder> & idb) const {
     std::stringstream cacheName;
     cacheName << getName() << '_' << idb->getBuilderUniqueName();
@@ -122,6 +143,10 @@ std::string Kernel::getCacheName(const std::unique_ptr<KernelBuilder> & idb) con
     return cacheName.str();
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setModule
+ ** ------------------------------------------------------------------------------------------------------------- */
 Module * Kernel::setModule(Module * const module) {
     assert (mModule == nullptr || mModule == module);
     assert (module != nullptr);
@@ -129,73 +154,24 @@ Module * Kernel::setModule(Module * const module) {
     return mModule;
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeModule
+ ** ------------------------------------------------------------------------------------------------------------- */
 Module * Kernel::makeModule(const std::unique_ptr<kernel::KernelBuilder> & idb) {
     return setModule(new Module(getCacheName(idb), idb->getContext()));
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief prepareKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     assert ("KernelBuilder does not have a valid IDISA Builder" && idb);
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
         report_fatal_error(getName() + ": cannot prepare kernel after kernel state finalized");
     }
-    const auto blockSize = idb->getBitBlockWidth();
-    if (mStride == 0) {
-        // Set the default kernel stride.
-        mStride = blockSize;
-    }
-    IntegerType * const sizeTy = idb->getSizeTy();
-
-    assert (mStreamSetInputs.size() == mStreamSetInputBuffers.size());
-//    assert (mStreamSetInputs.size() == mStreamSetInputLookahead.size());
-
-    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-//        const auto requiredBlocks = codegen::SegmentSize + ((mStreamSetInputLookahead[i] + blockSize - 1) / blockSize);
-//        if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
-//            report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
-//        }
-        mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
-        if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
-            addScalar(sizeTy, mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
-        }
-    }
-
-    assert (mStreamSetOutputs.size() == mStreamSetOutputBuffers.size());
-
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
-        if ((mStreamSetInputs.empty() && (i == 0)) || !mStreamSetOutputs[i].rate.isExact()) {
-            addScalar(sizeTy, mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
-        }
-    }
-    for (const auto & binding : mScalarInputs) {
-        addScalar(binding.type, binding.name);
-    }
-    for (const auto & binding : mScalarOutputs) {
-        addScalar(binding.type, binding.name);
-    }
-    if (mStreamMap.empty()) {
-        prepareStreamSetNameMap();
-    }
-    for (const auto & binding : mInternalScalars) {
-        addScalar(binding.type, binding.name);
-    }
-
-    Type * const consumerSetTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        addScalar(consumerSetTy, mStreamSetOutputs[i].name + CONSUMER_SUFFIX);
-    }
-
-    addScalar(sizeTy, LOGICAL_SEGMENT_NO_SCALAR);
-    addScalar(idb->getInt1Ty(), TERMINATION_SIGNAL);
-
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        addScalar(sizeTy, mStreamSetOutputs[i].name + CONSUMED_ITEM_COUNT_SUFFIX);
-    }
-
-    // We compile in a 64-bit CPU cycle counter into every kernel.   It will remain unused
-    // in normal execution, but when codegen::EnableCycleCounter is specified, pipelines
-    // will be able to add instrumentation to cached modules without recompilation.
-    addScalar(idb->getInt64Ty(), CYCLECOUNT_SCALAR);
+    addBaseKernelProperties(idb);
     addInternalKernelProperties(idb);
     // NOTE: StructType::create always creates a new type even if an identical one exists.
     if (LLVM_UNLIKELY(mModule == nullptr)) {
@@ -205,150 +181,139 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     if (LLVM_LIKELY(mKernelStateType == nullptr)) {
         mKernelStateType = StructType::create(idb->getContext(), mKernelFields, getName());
         assert (mKernelStateType);
-    }
-    processingRateAnalysis();
+    }    
 }
 
-void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & idb) {
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief prepareCachedKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & idb) {
     assert ("KernelBuilder does not have a valid IDISA Builder" && idb);
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
         report_fatal_error(getName() + ": cannot prepare kernel after kernel state finalized");
     }
     assert (getModule());
-    const auto blockSize = idb->getBitBlockWidth();
+    addBaseKernelProperties(idb);
+    mKernelStateType = getModule()->getTypeByName(getName());
+    if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
+        report_fatal_error("Kernel definition for " + getName() + " could not be found in the cache object");
+    }    
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getItemsPerStride
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::pair<unsigned, unsigned> Kernel::getStreamRate(const Port p, const unsigned i) const {
+    const ProcessingRate & rate = (p == Port::Input) ? mStreamSetInputs[i].getRate() : mStreamSetOutputs[i].getRate();
+    unsigned min = 0, max = 0;
+    if (rate.isFixed()) {
+        min = max = rate.getRate();
+    } else if (rate.isBounded()) {
+        min = rate.getLowerBound();
+        max = rate.getUpperBound();
+    } else if (rate.isUnknown()) {
+        min = rate.getLowerBound();
+        max = 0;
+    } else if (rate.isExactlyRelative()) {
+        for (unsigned j = 0; j < mStreamSetInputs.size(); ++j) {
+            if (mStreamSetInputs[j].getName() == rate.getReference()) {
+                std::tie(min, max) = getStreamRate(Port::Input, j);
+                min = (min * rate.getNumerator()) / rate.getDenominator();
+                assert (max == 0 || (max * rate.getNumerator()) % rate.getDenominator() == 0);
+                max = (max * rate.getNumerator()) / rate.getDenominator();
+                return std::make_pair(min, max);
+            }
+        }
+        for (unsigned j = 0; j < mStreamSetOutputs.size(); ++j) {
+            if (mStreamSetOutputs[j].getName() == rate.getReference()) {
+                assert (p == Port::Output);
+                std::tie(min, max) = getStreamRate(Port::Output, j);
+                min = (min * rate.getNumerator()) / rate.getDenominator();
+                assert (max == 0 || (max * rate.getNumerator()) % rate.getDenominator() == 0);
+                max = (max * rate.getNumerator()) / rate.getDenominator();
+                return std::make_pair(min, max);
+            }
+        }
+        llvm_unreachable("Reference rate must be associated with an input or output!");
+    }
+    return std::make_pair(min, max);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addBaseKernelProperties
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & idb) {
+    
+    const unsigned inputSetCount = mStreamSetInputs.size();
+    const unsigned outputSetCount = mStreamSetOutputs.size();
+    
+    assert (inputSetCount == mStreamSetInputBuffers.size());
+    assert (outputSetCount == mStreamSetOutputBuffers.size());
+
     if (mStride == 0) {
         // Set the default kernel stride.
-        mStride = blockSize;
+        mStride = idb->getBitBlockWidth();
     }
+
     IntegerType * const sizeTy = idb->getSizeTy();
 
-    assert (mStreamSetInputs.size() == mStreamSetInputBuffers.size());
-//    assert (mStreamSetInputs.size() == mStreamSetInputLookahead.size());
-
-    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-//        const auto requiredBlocks = codegen::SegmentSize + ((mStreamSetInputLookahead[i] + blockSize - 1) / blockSize);
-//        if ((mStreamSetInputBuffers[i]->getBufferBlocks() != 0) && (mStreamSetInputBuffers[i]->getBufferBlocks() < requiredBlocks)) {
-//            report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " requires buffer size " + std::to_string(requiredBlocks));
-//        }
-        mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetInputs[i].name + BUFFER_PTR_SUFFIX);
-        if ((i == 0) || !mStreamSetInputs[i].rate.isExact()) {
-            addScalar(sizeTy, mStreamSetInputs[i].name + PROCESSED_ITEM_COUNT_SUFFIX);
-        }
+    for (unsigned i = 0; i < inputSetCount; i++) {
+        const Binding & b = mStreamSetInputs[i];
+        //const ProcessingRate & rate = b.getRate();
+        //if (rate.isBounded() || rate.isUnknown()) {
+            addScalar(sizeTy, b.getName() + PROCESSED_ITEM_COUNT_SUFFIX);
+        //}
     }
 
-    assert (mStreamSetOutputs.size() == mStreamSetOutputBuffers.size());
+    for (unsigned i = 0; i < outputSetCount; i++) {
+        const Binding & b = mStreamSetOutputs[i];
+        //const ProcessingRate & rate = b.getRate();
+        //if (rate.isBounded() || rate.isUnknown()) {
+            addScalar(sizeTy, b.getName() + PRODUCED_ITEM_COUNT_SUFFIX);
+        //}
+    }
 
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetOutputs[i].name + BUFFER_PTR_SUFFIX);
-        if ((mStreamSetInputs.empty() && (i == 0)) || !mStreamSetOutputs[i].rate.isExact()) {
-            addScalar(sizeTy, mStreamSetOutputs[i].name + PRODUCED_ITEM_COUNT_SUFFIX);
-        }
+    for (unsigned i = 0; i < inputSetCount; i++) {
+        mScalarInputs.emplace_back(mStreamSetInputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetInputs[i].getName() + BUFFER_PTR_SUFFIX);
+    }
+    for (unsigned i = 0; i < outputSetCount; i++) {
+        mScalarInputs.emplace_back(mStreamSetOutputBuffers[i]->getStreamSetHandle()->getType(), mStreamSetOutputs[i].getName() + BUFFER_PTR_SUFFIX);
     }
     for (const auto & binding : mScalarInputs) {
-        addScalar(binding.type, binding.name);
+        addScalar(binding.getType(), binding.getName());
     }
     for (const auto & binding : mScalarOutputs) {
-        addScalar(binding.type, binding.name);
+        addScalar(binding.getType(), binding.getName());
     }
     if (mStreamMap.empty()) {
         prepareStreamSetNameMap();
     }
     for (const auto & binding : mInternalScalars) {
-        addScalar(binding.type, binding.name);
+        addScalar(binding.getType(), binding.getName());
     }
     Type * const consumerSetTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        addScalar(consumerSetTy, mStreamSetOutputs[i].name + CONSUMER_SUFFIX);
+        addScalar(consumerSetTy, mStreamSetOutputs[i].getName() + CONSUMER_SUFFIX);
     }
     addScalar(sizeTy, LOGICAL_SEGMENT_NO_SCALAR);
     addScalar(idb->getInt1Ty(), TERMINATION_SIGNAL);
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        addScalar(sizeTy, mStreamSetOutputs[i].name + CONSUMED_ITEM_COUNT_SUFFIX);
+        addScalar(sizeTy, mStreamSetOutputs[i].getName() + CONSUMED_ITEM_COUNT_SUFFIX);
     }
     // We compile in a 64-bit CPU cycle counter into every kernel.   It will remain unused
     // in normal execution, but when codegen::EnableCycleCounter is specified, pipelines
     // will be able to add instrumentation to cached modules without recompilation.
     addScalar(idb->getInt64Ty(), CYCLECOUNT_SCALAR);
 
-    mKernelStateType = getModule()->getTypeByName(getName());
-    if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
-        report_fatal_error("Kernel " + getName() + " definition could not be found in the cache object");
-    }
-    processingRateAnalysis();
-}
-    
-void Kernel::processingRateAnalysis() {
-    
-    const unsigned inputSetCount = mStreamSetInputs.size();
-    const unsigned outputSetCount = mStreamSetOutputs.size();
-    const unsigned totalSetCount = inputSetCount + outputSetCount;
-    
-    mItemsPerStride.resize(totalSetCount);
-    mIsDerived.resize(totalSetCount);
-
-    mItemsPerStride[0] = mStride;
-    mIsDerived[0] = true;
-    
-    for (unsigned i = 0; i < inputSetCount; i++) {
-        // Default reference stream set is the principal input stream set.
-        auto & rate = mStreamSetInputs[i].rate;
-        if (rate.referenceStreamSet() == "") {
-            rate.setReferenceStreamSet(mStreamSetInputs[0].name);
-        }
-        Port port; unsigned ssIdx;
-        std::tie(port, ssIdx) = getStreamPort(rate.referenceStreamSet());
-        if ((port == Port::Output) || (ssIdx > i) || ((ssIdx == i) && (i > 0))) {
-            report_fatal_error(getName() + ": input set " + mStreamSetInputs[i].name + ": forward or circular rate dependency");
-        }
-        if ((rate.isExact() || rate.isMaxRatio()) && mIsDerived[ssIdx]) {
-            if ((mItemsPerStride[ssIdx] % rate.getRatioDenominator()) != 0) {
-                report_fatal_error(getName() + ": " + mStreamSetInputs[i].name + " processing rate denominator does not exactly divide items per stride.");
-            }
-            mItemsPerStride[i] = rate.calculateRatio(mItemsPerStride[ssIdx]);
-            mIsDerived[i] = rate.isExact();
-        }
-        else {
-            mIsDerived[i] = false;
-            mItemsPerStride[i] = 0;  // For unknown input rate, no items will be copied to temp buffers.
-        }
-    }
-    
-    for (unsigned i = inputSetCount; i < totalSetCount; i++) {
-        auto & rate = mStreamSetOutputs[i-inputSetCount].rate;
-        // Default reference stream set is the principal input stream set for the principal output stream set.
-        // Default reference stream set is the principal output stream set for other output stream sets.
-        if (rate.referenceStreamSet() == "") {
-            if ((mStreamSetInputs.size() > 0) && (i == inputSetCount)) {
-                rate.setReferenceStreamSet(mStreamSetInputs[0].name);
-            }
-            else {
-                rate.setReferenceStreamSet(mStreamSetOutputs[0].name);
-            }
-        }
-        Port port; unsigned ssIdx;
-        std::tie(port, ssIdx) = getStreamPort(rate.referenceStreamSet());
-        if (port == Port::Output) ssIdx += inputSetCount;
-        if ((ssIdx > i) || ((ssIdx == i) && (i > 0))) {
-            report_fatal_error(getName() + ": output set " + mStreamSetOutputs[i].name + ": forward or circular rate dependency");
-        }
-        if ((rate.isExact() || rate.isMaxRatio()) && mIsDerived[ssIdx]) {
-            if ((mItemsPerStride[ssIdx] % rate.getRatioDenominator()) != 0) {
-                report_fatal_error(getName() + ": " + mStreamSetOutputs[i-inputSetCount].name + " processing rate denominator does not exactly divide items per stride.");
-            }
-            mItemsPerStride[i] = rate.calculateRatio(mItemsPerStride[ssIdx]);
-            mIsDerived[i] = rate.isExact();
-        }
-        else {
-            mIsDerived[i] = false;
-            mItemsPerStride[i] = 0;  // For unknown output rate, no items will be copied to temp buffers.
-        }
-    }
 }
 
-    
 
-// Default kernel signature: generate the IR and emit as byte code.
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeSignature
+ *
+ * Default kernel signature: generate the IR and emit as byte code.
+ ** ------------------------------------------------------------------------------------------------------------- */
 std::string Kernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> & idb) {
     assert ("KernelBuilder does not have a valid IDISA Builder" && idb.get());
     if (LLVM_UNLIKELY(hasSignature())) {
@@ -362,6 +327,10 @@ std::string Kernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &
     }
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::generateKernel(const std::unique_ptr<kernel::KernelBuilder> & idb) {
     assert ("KernelBuilder does not have a valid IDISA Builder" && idb.get());
     // If the module id cannot uniquely identify this kernel, "generateKernelSignature()" will have already
@@ -382,6 +351,10 @@ void Kernel::generateKernel(const std::unique_ptr<kernel::KernelBuilder> & idb) 
     }
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief callGenerateInitializeMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
 inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & idb) {
     mCurrentMethod = getInitFunction(idb->getModule());
     idb->SetInsertPoint(BasicBlock::Create(idb->getContext(), "entry", mCurrentMethod));
@@ -389,45 +362,88 @@ inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<kernel::K
     setInstance(&*(args++));
     idb->CreateStore(ConstantAggregateZero::get(mKernelStateType), getInstance());
     for (const auto & binding : mScalarInputs) {
-        idb->setScalarField(binding.name, &*(args++));
+        idb->setScalarField(binding.getName(), &*(args++));
     }
     for (const auto & binding : mStreamSetOutputs) {
-        idb->setConsumerLock(binding.name, &*(args++));
+        idb->setConsumerLock(binding.getName(), &*(args++));
     }
     generateInitializeMethod(idb);
     idb->CreateRetVoid();
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief callGenerateDoSegmentMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
 inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & idb) {
     mCurrentMethod = getDoSegmentFunction(idb->getModule());
     idb->SetInsertPoint(BasicBlock::Create(idb->getContext(), "entry", mCurrentMethod));
     auto args = mCurrentMethod->arg_begin();
     setInstance(&*(args++));
     mIsFinal = &*(args++);
+    mAvailablePrincipleItemCount = nullptr;
+//    if (mHasPrincipleItemCount) {
+//        mAvailablePrincipleItemCount = &*(args++);
+//    }
     const auto n = mStreamSetInputs.size();
     mAvailableItemCount.resize(n, nullptr);
-    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
+    for (unsigned i = 0; i < n; i++) {
+//        const ProcessingRate & rate = mStreamSetInputs[i].getRate();
+//        Value * itemCount = nullptr;
+//        if (rate.isFixed()) {
+//            itemCount = mAvailablePrincipleItemCount;
+//            if (rate.getRate() != 1) {
+//                itemCount = idb->CreateMul(itemCount, ConstantInt::get(itemCount->getType(), rate.getRate()));
+//            }
+//        } else if (rate.isBounded() || rate.isUnknown()) {
+//            itemCount = &*(args++);
+//        } else if (rate.isRelative()) {
+//            for (unsigned j = 0; j < i; ++j) {
+//                if (mStreamSetInputs[j].getName() == rate.getReference()) {
+//                    itemCount = mAvailableItemCount[j];
+//                    break;
+//                }
+//            }
+//            if (LLVM_UNLIKELY(itemCount == nullptr)) {
+//                report_fatal_error(mStreamSetInputs[i].getName() + " is declared before " + rate.getReference());
+//            }
+//            if (rate.getNumerator() != 1) {
+//                itemCount = idb->CreateMul(itemCount, ConstantInt::get(itemCount->getType(), rate.getNumerator()));
+//            }
+//            if (rate.getDenominator() != 1) {
+//                itemCount = idb->CreateUDiv(itemCount, ConstantInt::get(itemCount->getType(), rate.getDenominator()));
+//            }
+//        }
+//        assert (itemCount);
+//        mAvailableItemCount[i] = itemCount;
+
+        assert (args != mCurrentMethod->arg_end());
         mAvailableItemCount[i] = &*(args++);
     }
-    generateDoSegmentMethod(idb); // must be overridden by the KernelBuilder subtype
+    assert (args == mCurrentMethod->arg_end());
+
+    generateKernelMethod(idb); // must be overridden by the Kernel subtype
     mIsFinal = nullptr;
     mAvailableItemCount.clear();
     idb->CreateRetVoid();
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief callGenerateFinalizeMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
 inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & idb) {
     mCurrentMethod = getTerminateFunction(idb->getModule());
     idb->SetInsertPoint(BasicBlock::Create(idb->getContext(), "entry", mCurrentMethod));
     auto args = mCurrentMethod->arg_begin();
     setInstance(&*(args++));
-    generateFinalizeMethod(idb); // may be overridden by the KernelBuilder subtype
+    generateFinalizeMethod(idb); // may be overridden by the Kernel subtype
     const auto n = mScalarOutputs.size();
     if (n == 0) {
         idb->CreateRetVoid();
     } else {
         Value * outputs[n];
         for (unsigned i = 0; i < n; ++i) {
-            outputs[i] = idb->getScalarField(mScalarOutputs[i].name);
+            outputs[i] = idb->getScalarField(mScalarOutputs[i].getName());
         }
         if (n == 1) {
             idb->CreateRet(outputs[0]);
@@ -437,14 +453,23 @@ inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuild
     }
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getScalarIndex
+ ** ------------------------------------------------------------------------------------------------------------- */
 unsigned Kernel::getScalarIndex(const std::string & name) const {
     const auto f = mKernelMap.find(name);
     if (LLVM_UNLIKELY(f == mKernelMap.end())) {
+        assert (false);
         report_fatal_error(getName() + " does not contain scalar: " + name);
     }
     return f->second;
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief createInstance
+ ** ------------------------------------------------------------------------------------------------------------- */
 Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & idb) {
     assert ("KernelBuilder does not have a valid IDISA Builder" && idb);
     if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
@@ -454,6 +479,10 @@ Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & idb) {
     return getInstance();
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initializeInstance
+ ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & idb) {
     assert ("KernelBuilder does not have a valid IDISA Builder" && idb);
     if (LLVM_UNLIKELY(getInstance() == nullptr)) {
@@ -517,10 +546,611 @@ void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & idb) {
     idb->CreateCall(getInitFunction(idb->getModule()), args);
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief finalizeInstance
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & idb) {
+    assert ("KernelBuilder does not have a valid IDISA Builder" && idb);
+    mOutputScalarResult = idb->CreateCall(getTerminateFunction(idb->getModule()), { getInstance() });
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getStreamPort
+ ** ------------------------------------------------------------------------------------------------------------- */
+Kernel::StreamPort Kernel::getStreamPort(const std::string & name) const {
+    const auto f = mStreamMap.find(name);
+    if (LLVM_UNLIKELY(f == mStreamMap.end())) {
+        report_fatal_error(getName() + " does not contain stream set " + name);
+    }
+    return f->second;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateKernelMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void SegmentOrientedKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
+
+    Constant * const log2BlockWidth = b->getSize(std::log2(b->getBitBlockWidth()));
+
+    const auto inputSetCount = mStreamSetInputs.size();
+    mStreamSetInputBufferPtr.resize(inputSetCount);
+    for (unsigned i = 0; i < inputSetCount; ++i) {
+        const auto & name = mStreamSetInputs[i].getName();
+        Value * ic = b->getProcessedItemCount(name);
+        Value * const blockIndex = b->CreateLShr(ic, log2BlockWidth);
+        mStreamSetInputBufferPtr[i] = b->getInputStreamPtr(name, blockIndex);
+    }
+
+    const auto outputSetCount = mStreamSetOutputs.size();
+    mStreamSetOutputBufferPtr.resize(outputSetCount);
+    for (unsigned i = 0; i < outputSetCount; ++i) {
+        const auto & name = mStreamSetOutputs[i].getName();
+        Value * ic = b->getProducedItemCount(name);
+        Value * const blockIndex = b->CreateLShr(ic, log2BlockWidth);
+        mStreamSetOutputBufferPtr[i] = b->getOutputStreamPtr(name, blockIndex);
+    }
+
+    generateDoSegmentMethod(b);
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateKernelMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> & kb) {
+
+    const auto inputSetCount = mStreamSetInputs.size();
+    const auto outputSetCount = mStreamSetOutputs.size();
+    const auto totalSetCount = inputSetCount + outputSetCount;
+
+    // Scan through and see if any of our input streams is marked as the principle
+
+    bool hasPrinciple = false;
+    unsigned principleInput = 0;
+
+    for (unsigned i = 0; i < inputSetCount; i++) {
+        for (const auto attr : mStreamSetInputs[i].getAttributes()) {
+            if (attr.isPrinciple()) {
+                hasPrinciple = true;
+                principleInput = i;
+                break;
+            }
+        }
+    }
+
+    // Now we iteratively process these blocks using the doMultiBlock method.
+    // In each iteration, we check how many linearly accessible / writable
+    // items can be processed with our current input / output buffers. If we
+    // cannot support an full stride, we check whether (a) there is enough
+    // input data to process but it is not linearly accessible, in which case
+    // we move the data into temporary buffers or (b) there is not enough data
+    // to process, in which case we abort unless IsFinal was set.
+
+    // Now proceed with creation of the doSegment method.
+    BasicBlock * const doSegmentLoop = kb->CreateBasicBlock("DoSegmentLoop");
+    kb->CreateBr(doSegmentLoop);
+
+    /// DO SEGMENT LOOP
+
+    kb->SetInsertPoint(doSegmentLoop);
+
+    // For each input buffer, determine the processedItemCount, the block pointer for the
+    // buffer block containing the next item, and the number of linearly available items.
+
+    Value * processedItemCount[inputSetCount];
+    Value * baseInputBuffer[inputSetCount];
+    Value * unprocessed[inputSetCount];
+    Value * linearlyAvailable[inputSetCount];
+    Value * readableStrides[inputSetCount];
+
+    Constant * const log2BlockWidth = kb->getSize(std::log2(kb->getBitBlockWidth()));
+
+    Value * numOfStrides = nullptr;
+
+    for (unsigned i = 0; i < inputSetCount; i++) {
+        const auto name = mStreamSetInputs[i].getName();
+        const ProcessingRate & rate = mStreamSetInputs[i].getRate();
+
+        processedItemCount[i] = kb->getProcessedItemCount(name);
+
+        assert (processedItemCount[i]->getType() == mAvailableItemCount[i]->getType());
+
+        Value * const blockIndex = kb->CreateLShr(processedItemCount[i], log2BlockWidth);
+        baseInputBuffer[i] = kb->getInputStreamPtr(name, blockIndex);
+
+        if (codegen::EnableAsserts) {
+            kb->CreateAssert(kb->CreateICmpUGE(mAvailableItemCount[i], processedItemCount[i]),
+                             "Processed item count cannot exceed the available item count");
+        }
+
+        unprocessed[i] = kb->CreateSub(mAvailableItemCount[i], processedItemCount[i]);
+
+        //kb->CallPrintInt(getName() + "_" + name + "_unprocessed", unprocessed[i]);
+
+        // INVESTIGATE: If the input rate of this stream is constant and known a priori, we could
+        // avoid checking whether it is linearly accessible. Should we have an attribute for this?
+
+        linearlyAvailable[i] = kb->getLinearlyAccessibleItems(name, processedItemCount[i], unprocessed[i]);
+
+        //kb->CallPrintInt(getName() + "_" + name + "_linearlyAvailable", linearlyAvailable[i]);
+
+        readableStrides[i] = nullptr;
+
+        if (rate.isFixed() || rate.isBounded()) {
+            Constant * const maxStrideSize = kb->getSize(rate.getUpperBound() * mStride);
+            readableStrides[i] = kb->CreateUDiv(linearlyAvailable[i], maxStrideSize);
+            if (numOfStrides) {
+                numOfStrides = kb->CreateUMin(numOfStrides, readableStrides[i]);
+            } else {
+                numOfStrides = readableStrides[i];
+            }
+        }
+    }
+
+    //kb->CallPrintInt(getName() + "_numOfStrides", numOfStrides);
+
+    // Now determine the linearly writeable blocks, based on available blocks reduced
+    // by limitations of output buffer space.
+
+    Value * producedItemCount[outputSetCount];
+    Value * baseOutputBuffer[outputSetCount];
+    Value * writableStrides[outputSetCount];
+    Value * linearlyWritable[outputSetCount];
+
+    for (unsigned i = 0; i < outputSetCount; i++) {
+        const auto & name = mStreamSetOutputs[i].getName();
+        const ProcessingRate & rate = mStreamSetOutputs[i].getRate();
+        producedItemCount[i] = kb->getProducedItemCount(name);
+
+        //kb->CallPrintInt(getName() + "_" + name + "_producedItemCount", producedItemCount[i]);
+
+        Value * const blockIndex = kb->CreateLShr(producedItemCount[i], log2BlockWidth);
+        baseOutputBuffer[i] = kb->getOutputStreamPtr(name, blockIndex);
+        linearlyWritable[i] = nullptr;
+        writableStrides[i] = nullptr;
+        if (rate.isFixed() || rate.isBounded()) {
+            linearlyWritable[i] = kb->getLinearlyWritableItems(name, producedItemCount[i]);
+
+            //kb->CallPrintInt(getName() + "_" + name + "_linearlyWritable", linearlyWritable[i]);
+
+            Constant * const maxStrideSize = kb->getSize(rate.getUpperBound() * mStride);
+            writableStrides[i] = kb->CreateUDiv(linearlyWritable[i], maxStrideSize);
+            if (numOfStrides) {
+                numOfStrides = kb->CreateUMin(numOfStrides, writableStrides[i]);
+            } else {
+                numOfStrides = writableStrides[i];
+            }
+        }
+    }
+
+    //kb->CallPrintInt(getName() + "_numOfStrides'", numOfStrides);
+
+    for (unsigned i = 0; i < inputSetCount; i++) {
+        const ProcessingRate & rate = mStreamSetInputs[i].getRate();
+        if (rate.isFixed()) {
+            mAvailableItemCount[i] = kb->CreateMul(numOfStrides, kb->getSize(rate.getRate() * mStride));
+        } else {
+            mAvailableItemCount[i] = linearlyAvailable[i];
+        }
+
+        //kb->CallPrintInt(getName() + "_" + mStreamSetInputs[i].getName() + "_avail", mAvailableItemCount[i]);
+    }
+
+    // Define and allocate the temporary buffer area.
+    Type * tempBuffers[totalSetCount];
+    for (unsigned i = 0; i < inputSetCount; ++i) {
+        Type * bufType = baseInputBuffer[i]->getType()->getPointerElementType();
+        assert (baseInputBuffer[i]->getType()->getPointerAddressSpace() == 0);
+        const ProcessingRate & rate = mStreamSetInputs[i].getRate();
+        unsigned count = 0;
+        if (rate.isFixed()) {
+            count = rate.getRate();
+        } else if (rate.isBounded()) {
+            count = rate.getUpperBound() + 2;
+        }
+        tempBuffers[i] = ArrayType::get(bufType, count);
+    }
+    for (unsigned i = 0; i < outputSetCount; i++) {
+        Type * const bufType = baseOutputBuffer[i]->getType()->getPointerElementType();
+        assert (baseOutputBuffer[i]->getType()->getPointerAddressSpace() == 0);
+        const ProcessingRate & rate = mStreamSetOutputs[i].getRate();
+        unsigned count = 0;
+        if (rate.isFixed()) {
+            count = rate.getRate();
+        } else if (rate.isBounded()) {
+            count = rate.getUpperBound() + 2;
+        }
+        tempBuffers[i + inputSetCount] = ArrayType::get(bufType, count);
+    }
+
+    Type * const tempParameterStructType = StructType::create(kb->getContext(), ArrayRef<Type *>(tempBuffers, totalSetCount));
+
+    Value * const tempBufferArea = kb->CreateCacheAlignedAlloca(tempParameterStructType);
+
+    BasicBlock * const temporaryBufferCheck = kb->CreateBasicBlock("temporaryBufferCheck");
+    BasicBlock * const doMultiBlock = kb->CreateBasicBlock("doMultiBlock");
+    BasicBlock * const copyToTemporaryBuffers = kb->CreateBasicBlock("copyToTemporaryBuffers");
+    BasicBlock * const segmentDone = kb->CreateBasicBlock("segmentDone");
+
+    Value * const hasFullStride = numOfStrides ? kb->CreateICmpNE(numOfStrides, kb->getSize(0)) : kb->getTrue();
+    kb->CreateCondBr(hasFullStride, doMultiBlock, temporaryBufferCheck);
+
+    // We use temporary buffers in 3 different cases that preclude full stride processing.
+
+    //  (a) One or more input buffers does not have a sufficient number of input items linearly available.
+    //  (b) One or more output buffers does not have sufficient linearly available buffer space.
+    //  (c) We have processed all the full strides of input and only the final block remains.
+
+    kb->SetInsertPoint(temporaryBufferCheck);
+
+    // Even if we copy the input data into a linear arrays, is there enough data to perform this stride?
+    // If not, proceed only if this is our final block.
+    Value * hasFullFragmentedStride = nullptr;
+    for (unsigned i = 0; i < inputSetCount; i++) {
+        const ProcessingRate & r = mStreamSetInputs[i].getRate();
+        if (r.isBounded() || (r.isUnknown() && r.getLowerBound() > 0)) {
+            const auto l = r.isBounded() ? r.getUpperBound() : r.getLowerBound();
+            Constant * const strideSize = kb->getSize(l * mStride);
+            Value * enoughAvail = kb->CreateICmpUGE(unprocessed[i], strideSize);
+            if (hasFullFragmentedStride) {
+                hasFullFragmentedStride = kb->CreateAnd(hasFullFragmentedStride, enoughAvail);
+            } else {
+                hasFullFragmentedStride = enoughAvail;
+            }
+        }
+    }
+
+    Value * hasFragmentedOrFinalStride = nullptr;
+    if (hasFullFragmentedStride) {
+        hasFragmentedOrFinalStride = kb->CreateOr(hasFullFragmentedStride, mIsFinal);
+        // Although this might be the final segment, we may have a full fragmented stride to process prior
+        // to the actual final stride.
+        mIsFinal = kb->CreateAnd(mIsFinal, kb->CreateNot(hasFullFragmentedStride));
+    } else {
+        hasFragmentedOrFinalStride = mIsFinal;
+    }
+    kb->CreateCondBr(hasFragmentedOrFinalStride, copyToTemporaryBuffers, segmentDone);
+
+    /// COPY TO TEMPORARY BUFFERS
+    kb->SetInsertPoint(copyToTemporaryBuffers);
+
+    kb->CreateAlignedStore(Constant::getNullValue(tempParameterStructType), tempBufferArea, kb->getCacheAlignment());
+
+    // For each input and output buffer, copy over necessary data starting from the last block boundary.
+
+    Value * temporaryInputBuffer[inputSetCount];
+    Value * temporaryAvailable[inputSetCount];
+
+    for (unsigned i = 0; i < inputSetCount; i++) {
+        temporaryInputBuffer[i] = baseInputBuffer[i];
+        if (readableStrides[i]) {
+            const auto name = mStreamSetInputs[i].getName();
+            const ProcessingRate & rate = mStreamSetInputs[i].getRate();
+            assert (rate.getUpperBound() > 0);
+            Constant * const maxStrideSize = kb->getSize(rate.getUpperBound() * mStride);
+            temporaryAvailable[i] = kb->CreateUMin(unprocessed[i], maxStrideSize);
+
+            BasicBlock * entry = kb->GetInsertBlock();
+            BasicBlock * copy = kb->CreateBasicBlock(name + "Copy");
+            BasicBlock * resume = kb->CreateBasicBlock(name + "ResumeCopy");
+            Value * const test = kb->CreateOr(kb->CreateICmpNE(readableStrides[i], kb->getSize(0)), mIsFinal);
+            kb->CreateCondBr(test, resume, copy);
+
+            kb->SetInsertPoint(copy);
+            Value * const tempBufferPtr = kb->CreateGEP(tempBufferArea, {kb->getInt32(0), kb->getInt32(i), kb->getInt32(0)});
+            assert (tempBufferPtr->getType() == baseInputBuffer[i]->getType());
+            Value * const neededItems = linearlyAvailable[i];
+            Value * const bytesCopied = kb->copy(name, tempBufferPtr, baseInputBuffer[i], neededItems);
+            Value * const nextInputPtr = kb->getRawInputPointer(name, kb->getSize(0));
+            Value * const remaining = kb->CreateSub(temporaryAvailable[i], neededItems);
+            Value * nextBufPtr = kb->CreatePointerCast(tempBufferPtr, kb->getInt8PtrTy());
+            nextBufPtr = kb->CreateGEP(nextBufPtr, bytesCopied);
+            kb->copy(name, nextBufPtr, nextInputPtr, remaining);
+
+            kb->CreateBr(resume);
+
+            kb->SetInsertPoint(resume);
+            PHINode * bufferPtr = kb->CreatePHI(baseInputBuffer[i]->getType(), 2);
+            bufferPtr->addIncoming(baseInputBuffer[i], entry);
+            bufferPtr->addIncoming(tempBufferPtr, copy);
+            temporaryInputBuffer[i] = bufferPtr;
+        }
+    }
+
+    Value * temporaryOutputBuffer[outputSetCount];
+    for (unsigned i = 0; i < outputSetCount; i++) {
+        temporaryOutputBuffer[i] = baseOutputBuffer[i];
+        if (writableStrides[i]) {
+            const auto name = mStreamSetOutputs[i].getName();
+
+            BasicBlock * const entry = kb->GetInsertBlock();
+            BasicBlock * const copy = kb->CreateBasicBlock(name + "Copy");
+            BasicBlock * const resume = kb->CreateBasicBlock(name + "ResumeCopy");
+
+            Value * const test = kb->CreateOr(kb->CreateICmpNE(writableStrides[i], kb->getSize(0)), mIsFinal);
+            kb->CreateCondBr(test, resume, copy);
+
+            kb->SetInsertPoint(copy);
+            Value * const tempBufferPtr = kb->CreateGEP(tempBufferArea,  {kb->getInt32(0), kb->getInt32(inputSetCount + i), kb->getInt32(0)});
+            assert (tempBufferPtr->getType() == baseOutputBuffer[i]->getType());
+            Value * const itemsToCopy = kb->CreateAnd(producedItemCount[i], kb->getSize(kb->getBitBlockWidth() - 1));
+            kb->copy(name, tempBufferPtr, baseOutputBuffer[i], itemsToCopy);
+            kb->CreateBr(resume);
+
+            kb->SetInsertPoint(resume);
+            PHINode * bufferPtr = kb->CreatePHI(tempBufferPtr->getType(), 2);
+            bufferPtr->addIncoming(baseOutputBuffer[i], entry);
+            bufferPtr->addIncoming(tempBufferPtr, copy);
+            temporaryOutputBuffer[i] = bufferPtr;
+        }
+    }
+
+    kb->CreateBr(doMultiBlock);
+    BasicBlock * const usingTemporaryBuffers = kb->GetInsertBlock();
+    doMultiBlock->moveAfter(usingTemporaryBuffers);
+
+    /// DO MULTI BLOCK
+
+    //  At this point we have verified the availability of one or more blocks of input data and output buffer space for all stream sets.
+    //  Now prepare the doMultiBlock call.
+    kb->SetInsertPoint(doMultiBlock);
+
+    PHINode * const isFinal = kb->CreatePHI(mIsFinal->getType(), 2);
+    isFinal->addIncoming(kb->getFalse(), doSegmentLoop);
+    isFinal->addIncoming(mIsFinal, usingTemporaryBuffers);
+    mIsFinal = isFinal;
+
+    mStreamSetInputBufferPtr.resize(inputSetCount);
+    for (unsigned i = 0; i < inputSetCount; ++i) {
+        assert (baseInputBuffer[i] && temporaryInputBuffer[i]);
+        if (baseInputBuffer[i] != temporaryInputBuffer[i]) {
+            PHINode * const avail = kb->CreatePHI(kb->getSizeTy(), 2);
+            avail->addIncoming(mAvailableItemCount[i], doSegmentLoop);
+            avail->addIncoming(temporaryAvailable[i], usingTemporaryBuffers);
+            mAvailableItemCount[i] = avail;
+            PHINode * const bufferPtr = kb->CreatePHI(baseInputBuffer[i]->getType(), 2);
+            bufferPtr->addIncoming(baseInputBuffer[i], doSegmentLoop);
+            assert (baseInputBuffer[i]->getType() == temporaryInputBuffer[i]->getType());
+            bufferPtr->addIncoming(temporaryInputBuffer[i], usingTemporaryBuffers);
+            temporaryInputBuffer[i] = bufferPtr;
+        }
+        mStreamSetInputBufferPtr[i] = temporaryInputBuffer[i];
+    }
+
+    mStreamSetOutputBufferPtr.resize(outputSetCount);
+    for (unsigned i = 0; i < outputSetCount; ++i) {
+        assert (baseOutputBuffer[i] && temporaryOutputBuffer[i]);
+        if (baseOutputBuffer[i] != temporaryOutputBuffer[i]) {
+            PHINode * const bufferPtr = kb->CreatePHI(baseOutputBuffer[i]->getType(), 2);
+            bufferPtr->addIncoming(baseOutputBuffer[i], doSegmentLoop);
+            assert (baseOutputBuffer[i]->getType() == temporaryOutputBuffer[i]->getType());
+            bufferPtr->addIncoming(temporaryOutputBuffer[i], usingTemporaryBuffers);
+            temporaryOutputBuffer[i] = bufferPtr;
+        }
+        mStreamSetOutputBufferPtr[i] = temporaryOutputBuffer[i];
+    }
+
+    // Now use the generateMultiBlockLogic method of the MultiBlockKernelBuilder subtype to
+    // provide the required multi-block kernel logic.
+    generateMultiBlockLogic(kb, numOfStrides);
+
+    // If we have no fixed rate inputs, we won't know when we're done parsing until we test
+    // whether any input data was processed.
+    bool mayMakeNoProgress = true;
+
+    // Update the processed item count of any Fixed input or output stream. While doing so, also
+    // calculate the LCM of their rates. The LCM is used to calculate the final item counts.
+
+    unsigned rateLCM = 1;
+
+    for (unsigned i = 0; i < inputSetCount; ++i) {
+        const ProcessingRate & rate = mStreamSetInputs[i].getRate();
+        if (rate.isFixed()) {
+            mayMakeNoProgress = false;
+            rateLCM = lcm(rateLCM, rate.getRate());
+            Value * const processed = mAvailableItemCount[i]; // kb->CreateMul(numOfStrides, kb->getSize(mStride * rate.getRate()));
+            Value * const ic = kb->CreateAdd(processedItemCount[i], processed);
+            kb->setProcessedItemCount(mStreamSetInputs[i].getName(), ic);
+        }
+    }
+
+    for (unsigned i = 0; i < outputSetCount; ++i) {
+        const ProcessingRate & rate = mStreamSetOutputs[i].getRate();
+        if (rate.isFixed()) {
+            rateLCM = lcm(rateLCM, rate.getRate());
+            Value * const produced = kb->CreateMul(numOfStrides, kb->getSize(mStride * rate.getRate()));
+            Value * const ic = kb->CreateAdd(producedItemCount[i], produced);
+            kb->setProducedItemCount(mStreamSetOutputs[i].getName(), ic);
+        }
+    }
+
+    BasicBlock * const finalStrideCheck = kb->CreateBasicBlock("finalStrideCheck");
+    BasicBlock * const finalStrideAdjustment = kb->CreateBasicBlock("finalStrideAdjustment");
+    BasicBlock * const standardCopyBack = kb->CreateBasicBlock("standardCopyBack");
+    BasicBlock * const temporaryBufferCopyBack = kb->CreateBasicBlock("temporaryBufferCopyBack");
+
+    kb->CreateLikelyCondBr(hasFullStride, standardCopyBack, finalStrideCheck);
+
+
+    /// FINAL STRIDE CHECK
+    kb->SetInsertPoint(finalStrideCheck);
+    kb->CreateUnlikelyCondBr(mIsFinal, finalStrideAdjustment, temporaryBufferCopyBack);
+
+    /// FINAL STRIDE ADJUSTMENT
+    kb->SetInsertPoint(finalStrideAdjustment);
+
+    // If this is our final stride, adjust the Fixed output item counts. The main loop assumes that
+    // the ITEM COUNT % FIXED RATE = 0 for all Fixed Input and Output streams. We correct that here
+    // to calculate them based on the actual input item counts.
+
+    // NOTE: This appears overly complex to avoid an integer overflow without reducing the maximum
+    // integer size. For each Fixed output stream, this calculates:
+
+    //       CEILING(MIN(Total Available Item Count / Fixed Input Rate) * Fixed Output Rate)
+
+    Value * basePreviouslyProcessedItemCount = nullptr;
+    Value * scaledInverseOfStrideItemCount = nullptr;
+
+    for (unsigned i = 0; i < inputSetCount; ++i) {
+        const ProcessingRate & r = mStreamSetInputs[i].getRate();
+        if (r.isFixed()) {
+            assert (rateLCM % r.getRate() == 0);
+            Value * const a = kb->CreateMul(mAvailableItemCount[i], kb->getSize(rateLCM / r.getRate())); // unprocessed
+            Value * const p = kb->CreateUDiv(processedItemCount[i], kb->getSize(r.getRate()));
+            if (scaledInverseOfStrideItemCount) {
+                scaledInverseOfStrideItemCount = kb->CreateUMin(scaledInverseOfStrideItemCount, a);
+                basePreviouslyProcessedItemCount = kb->CreateUMin(basePreviouslyProcessedItemCount, p);
+            } else {
+                scaledInverseOfStrideItemCount = a;
+                basePreviouslyProcessedItemCount = p;
+            }
+        }
+//        const auto name = mStreamSetInputs[i].getName();
+//        Value * const processed = kb->CreateAdd(processedItemCount[i], unprocessed[i]);
+//        kb->setProcessedItemCount(name, processed);
+    }
+
+    for (unsigned i = 0; i < outputSetCount; ++i) {
+        const auto name = mStreamSetOutputs[i].getName();
+        const ProcessingRate & r = mStreamSetOutputs[i].getRate();
+        Value * produced = nullptr;
+        if (r.isFixed()) {
+            assert (rateLCM % r.getRate() == 0);
+            assert (basePreviouslyProcessedItemCount && scaledInverseOfStrideItemCount);
+            Value * const p = kb->CreateMul(basePreviouslyProcessedItemCount, kb->getSize(r.getRate()));
+            Value * const ic = kb->CreateUDivCeil(scaledInverseOfStrideItemCount, kb->getSize(rateLCM / r.getRate()));
+            produced = kb->CreateAdd(p, ic);
+        } else { // check if we have an attribute; if so, get the current produced count and adjust it
+            bool noAttributes = true;
+            for (const Attribute & attr : mStreamSetOutputs[i].getAttributes()) {
+                if (attr.isAdd() || attr.isRoundUpTo()) {
+                    noAttributes = false;
+                    break;
+                }
+            }
+            if (noAttributes) {
+                continue;
+            }
+            produced = kb->getProducedItemCount(name);
+        }
+        for (const Attribute & attr : mStreamSetOutputs[i].getAttributes()) {
+            if (attr.isAdd()) {
+                produced = kb->CreateAdd(produced, kb->getSize(attr.getAmount()));
+            } else if (attr.isRoundUpTo()) {
+                produced = kb->CreateRoundUp(produced, kb->getSize(attr.getAmount()));
+            }
+        }
+        kb->setProducedItemCount(name, produced);
+    }
+
+    kb->CreateBr(temporaryBufferCopyBack);
+
+    /// TEMPORARY BUFFER COPY BACK
+    kb->SetInsertPoint(temporaryBufferCopyBack);
+
+    // Copy back data to the actual output buffers.
+    for (unsigned i = 0; i < outputSetCount; i++) {
+
+        if (baseOutputBuffer[i] != temporaryOutputBuffer[i]) {
+
+            const auto name = mStreamSetOutputs[i].getName();
+
+            BasicBlock * const copy = kb->CreateBasicBlock(name + "CopyBack");
+            BasicBlock * const resume = kb->CreateBasicBlock(name + "ResumeCopyBack");
+            Value * const usedTemporary = kb->CreateICmpNE(temporaryOutputBuffer[i], baseOutputBuffer[i]);
+
+            // If we used a temporary buffer ...
+            kb->CreateCondBr(usedTemporary, copy, resume);
+
+            kb->SetInsertPoint(copy);
+            Value * bytesCopied = kb->copy(name, baseOutputBuffer[i], temporaryOutputBuffer[i], linearlyWritable[i]);
+            Value * nextOutputPtr = kb->getRawOutputPointer(name, kb->getSize(0));
+            Value * producedCount = kb->getProducedItemCount(name);
+
+            Value * remaining = kb->CreateSub(producedCount, linearlyWritable[i]);
+            Value * nextBufPtr = kb->CreatePointerCast(temporaryOutputBuffer[i], kb->getInt8PtrTy());
+            nextBufPtr = kb->CreateGEP(nextBufPtr, bytesCopied);
+
+            kb->copy(name, nextOutputPtr, nextBufPtr, remaining);
+            kb->CreateBr(resume);
+
+            kb->SetInsertPoint(resume);
+        }
+    }
+
+    //  We've dealt with the partial block processing and copied information back into the
+    //  actual buffers.  If this isn't the final block, loop back for more multiblock processing.
+    BasicBlock * setTermination = nullptr;
+    if (hasNoTerminateAttribute()) {
+        kb->CreateCondBr(mIsFinal, segmentDone, standardCopyBack);
+    } else {
+        setTermination = kb->CreateBasicBlock("setTermination");
+        kb->CreateCondBr(mIsFinal, setTermination, standardCopyBack);
+    }
+
+    /// STANDARD COPY BACK
+    kb->SetInsertPoint(standardCopyBack);
+
+    // Do copybacks if necessary.
+    for (unsigned i = 0; i < outputSetCount; i++) {
+        if (mStreamSetOutputBuffers[i]->supportsCopyBack()) {
+            const auto name = mStreamSetOutputs[i].getName();
+            Value * newProduced = kb->getProducedItemCount(name);
+            kb->CreateCopyBack(name, producedItemCount[i], newProduced);
+        }
+    }
+
+    // If it is possible to make no progress, verify we processed some of the input. If we haven't,
+    // we're finished this segment.
+    if (mayMakeNoProgress) {
+        Value * madeProgress = nullptr;
+        for (unsigned i = 0; i < inputSetCount; ++i) {
+            Value * const processed = kb->getProcessedItemCount(mStreamSetInputs[i].getName());
+            Value * const progress = kb->CreateICmpNE(processed, processedItemCount[i]);
+            if (madeProgress) {
+                madeProgress = kb->CreateOr(madeProgress, progress);
+            } else {
+                madeProgress = progress;
+            }
+        }
+        assert (madeProgress);
+        kb->CreateCondBr(madeProgress, doSegmentLoop, segmentDone);
+    } else {
+        kb->CreateBr(doSegmentLoop);
+    }
+
+    if (hasNoTerminateAttribute()) {
+        segmentDone->moveAfter(kb->GetInsertBlock());
+    } else {
+        /// SET TERMINATION
+        setTermination->moveAfter(kb->GetInsertBlock());
+        kb->SetInsertPoint(setTermination);
+        kb->setTerminationSignal();
+        kb->CreateBr(segmentDone);
+        segmentDone->moveAfter(setTermination);
+    }
+
+    kb->SetInsertPoint(segmentDone);
+
+}
+
+//bool MultiBlockKernel::requiresCopyBack(const ProcessingRate & rate) const {
+//    if (rate.isBounded() || rate.isUnknown()) {
+//        return true;
+//    } else if (rate.isDirectlyRelative()) {
+//        Port port; unsigned i;
+//        std::tie(port, i) = getStreamPort(rate.getReference());
+//        const auto & binding = (port == Port::Input) ? mStreamSetInputs[i] : mStreamSetOutputs[i];
+//        return requiresCopyBack(binding.getRate());
+//    }
+//    return false;
+//}
+
 //  The default doSegment method dispatches to the doBlock routine for
 //  each block of the given number of blocksToDo, and then updates counts.
 
-void BlockOrientedKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & idb) {
+void BlockOrientedKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & idb, llvm::Value * const numOfStrides) {
+
     BasicBlock * const entryBlock = idb->GetInsertBlock();
     BasicBlock * const strideLoopCond = idb->CreateBasicBlock(getName() + "_strideLoopCond");
     mStrideLoopBody = idb->CreateBasicBlock(getName() + "_strideLoopBody");
@@ -533,28 +1163,75 @@ void BlockOrientedKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBu
         baseTarget = idb->CreateSelect(mIsFinal, BlockAddress::get(doFinalBlock), BlockAddress::get(segmentDone));
     }
 
-    ConstantInt * stride = idb->getSize(idb->getStride());
-    Value * availablePos = mAvailableItemCount[0];
-    Value * processed = idb->getProcessedItemCount(mStreamSetInputs[0].name);
-    Value * itemsAvail = idb->CreateSub(availablePos, processed);
-    Value * stridesToDo = idb->CreateUDiv(itemsAvail, stride);
+    Constant * const log2BlockSize = idb->getSize(std::log2(idb->getBitBlockWidth()));
+
+    const auto inputSetCount = mStreamSetInputs.size();
+    Value * baseProcessedIndex[inputSetCount];
+    for (unsigned i = 0; i < inputSetCount; ++i) {
+        const ProcessingRate & rate = mStreamSetInputs[i].getRate();
+        if (rate.isFixed()) {
+            baseProcessedIndex[i] = nullptr;
+        } else {
+            Value * ic = idb->getProcessedItemCount(mStreamSetInputs[i].getName());
+            ic = idb->CreateLShr(ic, log2BlockSize);
+            baseProcessedIndex[i] = ic;
+        }
+    }
+
+    const auto outputSetCount = mStreamSetOutputs.size();
+    Value * baseProducedIndex[outputSetCount];
+    for (unsigned i = 0; i < outputSetCount; ++i) {
+        const ProcessingRate & rate = mStreamSetOutputs[i].getRate();
+        if (rate.isFixed()) {
+            baseProducedIndex[i] = nullptr;
+        } else {
+            Value * ic = idb->getProducedItemCount(mStreamSetOutputs[i].getName());
+            ic = idb->CreateLShr(ic, log2BlockSize);
+            baseProducedIndex[i] = ic;
+        }
+    }
+
+    Value * const numOfBlocksToProcess = idb->CreateMul(numOfStrides, idb->getSize(mStride / idb->getBitBlockWidth()));
 
     idb->CreateBr(strideLoopCond);
+
+    /// BLOCK COND
 
     idb->SetInsertPoint(strideLoopCond);
 
     PHINode * branchTarget = nullptr;
-    if (idb->supportsIndirectBr()) {
+    if (baseTarget) {
         branchTarget = idb->CreatePHI(baseTarget->getType(), 2, "branchTarget");
         branchTarget->addIncoming(baseTarget, entryBlock);
     }
 
-    PHINode * const stridesRemaining = idb->CreatePHI(idb->getSizeTy(), 2, "stridesRemaining");
-    stridesRemaining->addIncoming(stridesToDo, entryBlock);
-    // NOTE: stridesRemaining may go to a negative number in the final block if the generateFinalBlockMethod(...)
-    // calls CreateDoBlockMethodCall(). Do *not* replace the comparator with an unsigned one!
-    Value * notDone = idb->CreateICmpSGT(stridesRemaining, idb->getSize(0));
+    PHINode * const blockIndex = idb->CreatePHI(idb->getSizeTy(), 2, "index");
+    blockIndex->addIncoming(idb->getSize(0), entryBlock);
+
+    for (unsigned i = 0; i < inputSetCount; ++i) {
+        Value * offset = blockIndex;
+        if (baseProcessedIndex[i]) {
+            offset = idb->getProcessedItemCount(mStreamSetInputs[i].getName());
+            offset = idb->CreateLShr(offset, log2BlockSize);
+            offset = idb->CreateSub(offset, baseProcessedIndex[i]);
+        }
+        mStreamSetInputBufferPtr[i] = idb->CreateGEP(mStreamSetInputBufferPtr[i], offset);
+    }
+
+    for (unsigned i = 0; i < outputSetCount; ++i) {
+        Value * offset = blockIndex;
+        if (baseProducedIndex[i]) {
+            offset = idb->getProducedItemCount(mStreamSetOutputs[i].getName());
+            offset = idb->CreateLShr(offset, log2BlockSize);
+            offset = idb->CreateSub(offset, baseProducedIndex[i]);
+        }
+        mStreamSetOutputBufferPtr[i] = idb->CreateGEP(mStreamSetOutputBufferPtr[i], offset);
+    }
+
+    Value * const notDone = idb->CreateICmpULT(blockIndex, numOfBlocksToProcess);
     idb->CreateLikelyCondBr(notDone, mStrideLoopBody, stridesDone);
+
+    /// BLOCK BODY
 
     idb->SetInsertPoint(mStrideLoopBody);
 
@@ -567,26 +1244,21 @@ void BlockOrientedKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBu
 
     writeDoBlockMethod(idb);
 
-    /// UPDATE PROCESSED COUNTS
-
-    processed = idb->getProcessedItemCount(mStreamSetInputs[0].name);
-    Value * itemsDone = idb->CreateAdd(processed, stride);
-    idb->setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);
-
-    stridesRemaining->addIncoming(idb->CreateSub(stridesRemaining, idb->getSize(1)), idb->GetInsertBlock());
-
-    BasicBlock * bodyEnd = idb->GetInsertBlock();
-    if (idb->supportsIndirectBr()) {
+    BasicBlock * const bodyEnd = idb->GetInsertBlock();
+    blockIndex->addIncoming(idb->CreateAdd(blockIndex, idb->getSize(1)), bodyEnd);
+    if (branchTarget) {
         branchTarget->addIncoming(mStrideLoopTarget, bodyEnd);
     }
     idb->CreateBr(strideLoopCond);
 
     stridesDone->moveAfter(bodyEnd);
 
+    /// STRIDE DONE
+
     idb->SetInsertPoint(stridesDone);
 
     // Now conditionally perform the final block processing depending on the doFinal parameter.
-    if (idb->supportsIndirectBr()) {
+    if (branchTarget) {
         mStrideLoopBranch = idb->CreateIndirectBr(branchTarget, 3);
         mStrideLoopBranch->addDestination(doFinalBlock);
         mStrideLoopBranch->addDestination(segmentDone);
@@ -598,13 +1270,21 @@ void BlockOrientedKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBu
 
     idb->SetInsertPoint(doFinalBlock);
 
-    Value * remainingItems = idb->CreateSub(mAvailableItemCount[0], idb->getProcessedItemCount(mStreamSetInputs[0].name));
+    Value * remainingItems = nullptr;
+    for (unsigned i = 0; i < inputSetCount; ++i) {
+        const ProcessingRate & r = mStreamSetInputs[i].getRate();
+        if (r.isFixed()) {
+            Value * ic = idb->CreateUDiv(mAvailableItemCount[i], idb->getSize(r.getRate()));
+            if (remainingItems) {
+                remainingItems = idb->CreateUMax(remainingItems, ic);
+            } else {
+                remainingItems = ic;
+            }
+        }
+    }
 
     writeFinalBlockMethod(idb, remainingItems);
 
-    itemsDone = mAvailableItemCount[0];
-    idb->setProcessedItemCount(mStreamSetInputs[0].name, itemsDone);
-    idb->setTerminationSignal();
     idb->CreateBr(segmentDone);
 
     segmentDone->moveAfter(idb->GetInsertBlock());
@@ -612,7 +1292,7 @@ void BlockOrientedKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBu
     idb->SetInsertPoint(segmentDone);
 
     // Update the branch prediction metadata to indicate that the likely target will be segmentDone
-    if (idb->supportsIndirectBr()) {
+    if (branchTarget) {
         MDBuilder mdb(idb->getContext());
         const auto destinations = mStrideLoopBranch->getNumDestinations();
         uint32_t weights[destinations];
@@ -632,7 +1312,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
     auto ip = idb->saveIP();
     std::vector<Value *> availableItemCount(0);
 
-    /// Check if the do block method is called and create the function if necessary    
+    /// Check if the do block method is called and create the function if necessary
     if (!idb->supportsIndirectBr()) {
 
         std::vector<Type *> params;
@@ -659,24 +1339,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
         idb->SetInsertPoint(BasicBlock::Create(idb->getContext(), "entry", mCurrentMethod));
     }
 
-    std::vector<Value *> priorProduced;
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        if (mStreamSetOutputBuffers[i]->supportsCopyBack())  {
-            priorProduced.push_back(idb->getProducedItemCount(mStreamSetOutputs[i].name));
-        }
-    }
-
     generateDoBlockMethod(idb); // must be implemented by the BlockOrientedKernelBuilder subtype
-
-    unsigned priorIdx = 0;
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        if (mStreamSetOutputBuffers[i]->supportsCopyBack()) {
-            Value * newProduced = idb->getProducedItemCount(mStreamSetOutputs[i].name);
-            Value * handle = idb->getStreamSetBufferPtr(mStreamSetOutputs[i].name);
-            mStreamSetOutputBuffers[i]->genCopyBackLogic(idb.get(), handle, priorProduced[priorIdx], newProduced, mStreamSetOutputs[i].name);
-            priorIdx++;
-        }
-    }
 
     if (!idb->supportsIndirectBr()) {
         // Restore the DoSegment function state then call the DoBlock method
@@ -728,8 +1391,6 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(const std::unique_ptr<Ker
 
     generateFinalBlockMethod(idb, remainingItems); // may be implemented by the BlockOrientedKernel subtype
 
-    RecursivelyDeleteTriviallyDeadInstructions(remainingItems); // if remainingItems was not used, this will eliminate it.
-
     if (!idb->supportsIndirectBr()) {
         idb->CreateRetVoid();
         idb->restoreIP(ip);
@@ -773,413 +1434,6 @@ void BlockOrientedKernel::CreateDoBlockMethodCall(const std::unique_ptr<KernelBu
     }
 }
 
-void MultiBlockKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & kb) {
-
-    // Stream set and buffer analysis.  When near the end of buffers
-    // or for final block processing, data for each streamset may need
-    // to be copied into temporary buffers to ensure linear access.
-    // Data is always copied as a number of whole blocks, dependent
-    // on the stream set processing rate.
-    
-    const unsigned bitBlockWidth = kb->getBitBlockWidth();
-    const unsigned inputSetCount = mStreamSetInputs.size();
-    const unsigned outputSetCount = mStreamSetOutputs.size();
-    const unsigned totalSetCount = inputSetCount + outputSetCount;
-    
-    int maxBlocksToCopy[totalSetCount];
-    for (unsigned i = 0; i < totalSetCount; i++) {
-        if (mIsDerived[i]) {
-            if (mItemsPerStride[i] % bitBlockWidth == 0) {
-                maxBlocksToCopy[i] = mItemsPerStride[i] / bitBlockWidth;
-            }
-            else {
-                // May not be block aligned, can overlap partial blocks at both ends.
-                maxBlocksToCopy[i] = mItemsPerStride[i]/bitBlockWidth + 2;
-            }
-        }
-        else {
-            // For variable input stream sets, we make a single stride of items
-            // available, if possible, but this stride could be nonaligned.
-            maxBlocksToCopy[i] = mStride / bitBlockWidth + 2;
-        }
-    }
-    auto ip = kb->saveIP();
-    Function * const cp = mCurrentMethod;
-    const auto saveInstance = getInstance();
-
-    // First prepare the multi-block method that will be used.
-
-    std::vector<Type *> multiBlockParmTypes;
-    multiBlockParmTypes.push_back(mKernelStateType->getPointerTo());
-    multiBlockParmTypes.push_back(kb->getSizeTy());
-    for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
-        if (!mIsDerived[i]) multiBlockParmTypes.push_back(kb->getSizeTy());
-    }
-    for (auto buffer : mStreamSetInputBuffers) {
-        multiBlockParmTypes.push_back(buffer->getStreamSetBlockType()->getPointerTo());
-    }
-    for (auto buffer : mStreamSetOutputBuffers) {
-        multiBlockParmTypes.push_back(buffer->getStreamSetBlockType()->getPointerTo());
-    }
-
-    FunctionType * const type = FunctionType::get(kb->getVoidTy(), multiBlockParmTypes, false);
-    Function * multiBlockFunction = Function::Create(type, GlobalValue::InternalLinkage, getName() + MULTI_BLOCK_SUFFIX, kb->getModule());
-    multiBlockFunction->setCallingConv(CallingConv::C);
-    multiBlockFunction->setDoesNotThrow();
-    mCurrentMethod = multiBlockFunction;
-    kb->SetInsertPoint(BasicBlock::Create(kb->getContext(), "multiBlockEntry", multiBlockFunction, 0));
-
-    auto args = multiBlockFunction->arg_begin();
-    args->setName("self");
-    setInstance(&*args);
-    (++args)->setName("itemsToDo");
-    for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
-        if (!mIsDerived[i]) (++args)->setName(mStreamSetInputs[i].name + "_availItems");
-    }
-    for (auto binding : mStreamSetInputs) {
-        (++args)->setName(binding.name + "BufPtr");
-    }
-    for (auto binding : mStreamSetOutputs) {
-        (++args)->setName(binding.name + "BufPtr");
-    }
-
-    // Now use the generateMultiBlockLogic method of the MultiBlockKernelBuilder subtype to
-    // provide the required multi-block kernel logic.
-    generateMultiBlockLogic(kb);
-
-    kb->CreateRetVoid();
-
-    kb->restoreIP(ip);
-    mCurrentMethod = cp;
-    setInstance(saveInstance);
-
-    // Now proceed with creation of the doSegment method.
-
-    BasicBlock * const entry = kb->GetInsertBlock();
-    BasicBlock * const doSegmentOuterLoop = kb->CreateBasicBlock(getName() + "_doSegmentOuterLoop");
-    BasicBlock * const doMultiBlockCall = kb->CreateBasicBlock(getName() + "_doMultiBlockCall");
-    BasicBlock * const tempBlockCheck = kb->CreateBasicBlock(getName() + "_tempBlockCheck");
-    BasicBlock * const doTempBufferBlock = kb->CreateBasicBlock(getName() + "_doTempBufferBlock");
-    BasicBlock * const segmentDone = kb->CreateBasicBlock(getName() + "_segmentDone");
-
-    Value * blockBaseMask = kb->CreateNot(kb->getSize(kb->getBitBlockWidth() - 1));
-    ConstantInt * blockSize = kb->getSize(kb->getBitBlockWidth());
-    ConstantInt * strideSize = kb->getSize(mStride);
-    
-    Value * availablePos = mAvailableItemCount[0];
-    Value * itemsAvail = availablePos;
-
-    //  Make sure that corresponding data is available depending on processing rate
-    //  for all derived input stream sets.
-    for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
-        Value * a = mAvailableItemCount[i];
-        auto & rate = mStreamSetInputs[i].rate;
-        if (mIsDerived[i]) {
-            Value * maxItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), a);
-            itemsAvail = kb->CreateSelect(kb->CreateICmpULT(itemsAvail, maxItems), itemsAvail, maxItems);
-        }
-    }
-
-    Value * processed = kb->getProcessedItemCount(mStreamSetInputs[0].name);
-    Value * itemsToDo = kb->CreateSub(itemsAvail, processed);
-    Value * fullStridesToDo = kb->CreateUDiv(itemsToDo, strideSize);
-
-    //  Now we iteratively process these blocks using the doMultiBlock method.
-    //  In each iteration, we process the maximum number of linearly accessible
-    //  blocks on the principal input, reduced to ensure that the corresponding
-    //  data is linearly available at the specified processing rates for the other inputs,
-    //  and that each of the output buffers has sufficient linearly available space
-    //  (using overflow areas, if necessary) for the maximum output that can be
-    //  produced.
-
-    kb->CreateBr(doSegmentOuterLoop);
-    kb->SetInsertPoint(doSegmentOuterLoop);
-    PHINode * const stridesRemaining = kb->CreatePHI(kb->getSizeTy(), 2, "stridesRemaining");
-    stridesRemaining->addIncoming(fullStridesToDo, entry);
-
-    // For each input buffer, determine the processedItemCount, the block pointer for the
-    // buffer block containing the next item, and the number of linearly available items.
-
-    Value * processedItemCount[inputSetCount];
-    Value * inputBlockPtr[inputSetCount];
-    Value * linearlyAvailItems[inputSetCount];
-
-    Value * linearlyAvailStrides = stridesRemaining;
-    for (unsigned i = 0; i < inputSetCount; i++) {
-        processedItemCount[i] = kb->getProcessedItemCount(mStreamSetInputs[i].name);
-        inputBlockPtr[i] = kb->getInputStreamBlockPtr(mStreamSetInputs[i].name, kb->getInt32(0));
-        Value * avail = kb->CreateSub(mAvailableItemCount[i], processedItemCount[i]);
-        linearlyAvailItems[i] = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, processedItemCount[i], avail);
-        auto & rate = mStreamSetInputs[i].rate;
-        if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
-        Value * maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), linearlyAvailItems[i]);
-        Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
-        linearlyAvailStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyAvailStrides), maxStrides, linearlyAvailStrides);
-    }
-
-    Value * producedItemCount[outputSetCount];
-    Value * outputBlockPtr[outputSetCount];
-    //  Now determine the linearly writeable blocks, based on available blocks reduced
-    //  by limitations of output buffer space.
-    Value * linearlyWritableStrides = linearlyAvailStrides;
-    for (unsigned i = 0; i < outputSetCount; i++) {
-        producedItemCount[i] = kb->getProducedItemCount(mStreamSetOutputs[i].name);
-        outputBlockPtr[i] = kb->getOutputStreamBlockPtr(mStreamSetOutputs[i].name, kb->getInt32(0));
-        
-        auto & rate = mStreamSetOutputs[i].rate;
-        if (rate.isUnknownRate()) continue;  // No calculation possible for unknown rates.
-        Value * writableItems = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, producedItemCount[i]);
-        Value * maxReferenceItems = rate.CreateMaxReferenceItemsCalculation(kb.get(), writableItems);
-        Value * maxStrides = kb->CreateUDiv(maxReferenceItems, strideSize);
-        linearlyWritableStrides = kb->CreateSelect(kb->CreateICmpULT(maxStrides, linearlyWritableStrides), maxStrides, linearlyWritableStrides);
-    }
-    Value * const haveFullStrides = kb->CreateICmpUGT(linearlyWritableStrides, kb->getSize(0));
-    kb->CreateCondBr(haveFullStrides, doMultiBlockCall, tempBlockCheck);
-
-    //  At this point we have verified the availability of one or more blocks of input data and output buffer space for all stream sets.
-    //  Now prepare the doMultiBlock call.
-    kb->SetInsertPoint(doMultiBlockCall);
-
-    Value * principalItemsToDo = kb->CreateMul(linearlyWritableStrides, strideSize);
-
-    std::vector<Value *> doMultiBlockArgs;
-    doMultiBlockArgs.push_back(getInstance());
-    doMultiBlockArgs.push_back(principalItemsToDo);
-    for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
-        if (!mIsDerived[i]) {
-            doMultiBlockArgs.push_back(linearlyAvailItems[i]);
-        }
-    }
-    for (unsigned i = 0; i < mStreamSetInputs.size(); i++) {
-        Value * bufPtr = kb->CreatePointerCast(inputBlockPtr[i], mStreamSetInputBuffers[i]->getStreamSetBlockType()->getPointerTo());
-        doMultiBlockArgs.push_back(bufPtr);
-    }
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        Value * bufPtr = kb->CreatePointerCast(outputBlockPtr[i], mStreamSetOutputBuffers[i]->getStreamSetBlockType()->getPointerTo());
-        doMultiBlockArgs.push_back(bufPtr);
-    }
-
-    kb->CreateCall(multiBlockFunction, doMultiBlockArgs);
-
-    // Do copybacks if necessary.
-    for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
-        if (mStreamSetOutputBuffers[i]->supportsCopyBack()) {
-            Value * newProduced = kb->getProducedItemCount(mStreamSetOutputs[i].name);
-            Value * handle = mStreamSetOutputBuffers[i]->getStreamSetHandle();
-            mStreamSetOutputBuffers[i]->genCopyBackLogic(kb.get(), handle, producedItemCount[i], newProduced, mStreamSetOutputs[i].name);
-        }
-    }
-
-    if (mIsDerived[0]) {
-        Value * reducedStridesToDo = kb->CreateSub(stridesRemaining, linearlyWritableStrides);
-        stridesRemaining->addIncoming(reducedStridesToDo, kb->GetInsertBlock());
-        Value * nowProcessed = kb->CreateAdd(processedItemCount[0], principalItemsToDo);
-        kb->setProcessedItemCount(mStreamSetInputs[0].name, nowProcessed);
-        kb->CreateBr(doSegmentOuterLoop);
-    }
-    else {
-        // Processed item count updated by the kernel itself.
-        Value * nowProcessed = kb->getProcessedItemCount(mStreamSetInputs[0].name);
-        Value * remainingItemsToDo = kb->CreateSub(itemsAvail, nowProcessed);
-        Value * reducedStridesToDo = kb->CreateUDiv(remainingItemsToDo, nowProcessed);
-        stridesRemaining->addIncoming(reducedStridesToDo, kb->GetInsertBlock());
-        // If we didn't make progress, we have gone as far as we can in this segment.
-        kb->CreateCondBr(kb->CreateICmpUGT(nowProcessed, processedItemCount[0]), doSegmentOuterLoop, segmentDone);
-    }
-
-    //
-    // We use temporary buffers in 3 different cases that preclude full block processing.
-    // (a) One or more input buffers does not have a sufficient number of input items linearly available.
-    // (b) One or more output buffers does not have sufficient linearly available buffer space.
-    // (c) We have processed all the full blocks of input and only the excessItems remain.
-    // In each case we set up temporary buffers for input and output and then
-    // call the Multiblock routine.
-    //
-
-    kb->SetInsertPoint(tempBlockCheck);
-    Value * const haveStrides = kb->CreateICmpUGT(stridesRemaining, kb->getSize(0));
-    kb->CreateCondBr(kb->CreateOr(mIsFinal, haveStrides), doTempBufferBlock, segmentDone);
-
-    kb->SetInsertPoint(doTempBufferBlock);
-    Value * excessItems = kb->CreateSub(itemsAvail, kb->getProcessedItemCount(mStreamSetInputs[0].name));
-    Value * tempBlockItems = kb->CreateSelect(haveStrides, strideSize, excessItems);
-    Value * doFinal = kb->CreateNot(haveStrides);
-
-    // Begin constructing the doMultiBlock args.
-    std::vector<Value *> tempArgs;
-    tempArgs.push_back(getInstance());
-    tempArgs.push_back(tempBlockItems);
-    // For non-derived inputs, add the available items.
-    for (unsigned i = 1; i < mStreamSetInputs.size(); i++) {
-        if (!mIsDerived[i]) {
-            Value * avail = kb->CreateSub(mAvailableItemCount[i], processedItemCount[i]);
-            tempArgs.push_back(kb->CreateSelect(kb->CreateICmpULT(avail, strideSize), avail, strideSize));
-        }
-    }
-    //
-    // Define and allocate the temporary buffer area.
-    //
-    Type * tempBuffers[totalSetCount];
-    for (unsigned i = 0; i < inputSetCount; ++i) {
-        Type * bufType = mStreamSetInputBuffers[i]->getStreamSetBlockType();
-        tempBuffers[i] = ArrayType::get(bufType, maxBlocksToCopy[i]);
-    }
-    for (unsigned i = 0; i < outputSetCount; i++) {
-        Type * bufType = mStreamSetOutputBuffers[i]->getStreamSetBlockType();
-        tempBuffers[i + inputSetCount] = ArrayType::get(bufType, maxBlocksToCopy[i + inputSetCount]);
-    }
-    Type * tempParameterStructType = StructType::create(kb->getContext(), ArrayRef<Type *>(tempBuffers, totalSetCount), "tempBuf");
-    // Prepare the temporary buffer area.
-    Value * tempParameterArea = kb->CreateCacheAlignedAlloca(tempParameterStructType);
-    kb->CreateMemZero(tempParameterArea, ConstantExpr::getSizeOf(tempParameterStructType));
-    // For each input and output buffer, copy over necessary data starting from the last block boundary.
-    Value * itemCountNeeded[inputSetCount];
-    itemCountNeeded[0] = tempBlockItems;
-    Value * finalItemCountNeeded[inputSetCount];
-
-    for (unsigned i = 0; i < inputSetCount; i++) {
-        Type * bufPtrType = mStreamSetInputBuffers[i]->getStreamSetBlockType()->getPointerTo();
-        if (mItemsPerStride[i] != 0) {
-            Value * tempBufPtr = kb->CreateGEP(tempParameterArea, {kb->getInt32(0), kb->getInt32(i)});
-            tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
-            ConstantInt * strideItems = kb->getSize(mItemsPerStride[i]);
-            Value * strideBasePos = kb->CreateSub(processedItemCount[i], kb->CreateURem(processedItemCount[i], strideItems));
-            Value * blockBasePos = strideBasePos;
-            if (mItemsPerStride[i] & (bitBlockWidth - 1)) {
-                blockBasePos = kb->CreateAnd(strideBasePos, blockBaseMask);
-            }
-
-            // The number of items to copy is determined by the processing rate requirements.
-            if (i >= 1) {
-                auto & rate = mStreamSetInputs[i].rate;
-                std::string refSet = mStreamSetInputs[i].rate.referenceStreamSet();
-                Port port; unsigned ssIdx;
-                std::tie(port, ssIdx) = getStreamPort(refSet);
-                itemCountNeeded[i] = rate.CreateRatioCalculation(kb.get(), itemCountNeeded[ssIdx], doFinal);
-            }
-            finalItemCountNeeded[i] = kb->CreateAdd(itemCountNeeded[i], processedItemCount[i]);
-
-            Value * inputPtr = kb->CreatePointerCast(kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), blockBasePos), bufPtrType);
-            
-            if (maxBlocksToCopy[i] == 1) {
-                // copy one block
-                mStreamSetInputBuffers[i]->createBlockCopy(kb.get(), tempBufPtr, inputPtr, kb->getSize(1));
-            }
-            else {
-                Value * neededItems = kb->CreateSub(finalItemCountNeeded[i], blockBasePos);
-                Value * copyItems1 = kb->getLinearlyAccessibleItems(mStreamSetInputs[i].name, blockBasePos, neededItems);
-                Value * allAvail = kb->CreateICmpEQ(neededItems, copyItems1);
-                Value * copyBlocks1 = kb->CreateUDivCeil(copyItems1, blockSize);
-                mStreamSetInputBuffers[i]->createBlockCopy(kb.get(), tempBufPtr, inputPtr, copyBlocks1);
-                BasicBlock * copyRemaining = kb->CreateBasicBlock("copyRemaining");
-                BasicBlock * copyDone = kb->CreateBasicBlock("copyDone");
-                kb->CreateCondBr(allAvail, copyDone, copyRemaining);
-                kb->SetInsertPoint(copyRemaining);
-                Value * copyItems2 = kb->CreateSub(neededItems, copyItems1);
-                Value * copyBlocks2 = kb->CreateUDivCeil(copyItems2, blockSize);
-                //Value * nextBasePos = kb->CreateAdd(blockBasePos, copyItems1);
-                Value * nextBasePos = kb->CreateAdd(blockBasePos, kb->CreateMul(copyBlocks2, blockSize));
-                Value * nextInputPtr = kb->CreatePointerCast(kb->getRawInputPointer(mStreamSetInputs[i].name, kb->getInt32(0), nextBasePos), bufPtrType);
-                Value * nextBufPtr = kb->CreateGEP(tempBufPtr, kb->CreateUDiv(copyItems1, blockSize));
-                //mStreamSetInputBuffers[i]->createBlockAlignedCopy(kb.get(), nextBufPtr, nextInputPtr, copyItems2);
-                mStreamSetInputBuffers[i]->createBlockCopy(kb.get(), nextBufPtr, nextInputPtr, copyBlocks2);
-                kb->CreateBr(copyDone);
-                kb->SetInsertPoint(copyDone);
-            }
-            tempArgs.push_back(tempBufPtr);
-        } else {
-            Value * bufPtr = kb->getInputStreamBlockPtr(mStreamSetInputs[i].name, kb->getInt32(0));
-            bufPtr = kb->CreatePointerCast(bufPtr, mStreamSetInputBuffers[i]->getStreamSetBlockType()->getPointerTo());
-            tempArgs.push_back(bufPtr);            
-        }
-    }
-    Value * outputBasePos[outputSetCount];
-    for (unsigned i = 0; i < outputSetCount; i++) {
-        Value * tempBufPtr = kb->CreateGEP(tempParameterArea,  {kb->getInt32(0), kb->getInt32(inputSetCount + i)});
-        Type * bufPtrType = mStreamSetOutputBuffers[i]->getStreamSetBlockType()->getPointerTo();
-        tempBufPtr = kb->CreatePointerCast(tempBufPtr, bufPtrType);
-        producedItemCount[i] = kb->getProducedItemCount(mStreamSetOutputs[i].name);
-        outputBasePos[i] = kb->CreateAnd(producedItemCount[i], blockBaseMask);
-        //mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), tempBufPtr, outputBlockPtr[i], kb->CreateSub(producedItemCount[i], outputBasePos[i]));
-        Value * copyBlocks = kb->CreateUDivCeil(kb->CreateSub(producedItemCount[i], outputBasePos[i]), blockSize);
-        mStreamSetOutputBuffers[i]->createBlockCopy(kb.get(), tempBufPtr, outputBlockPtr[i], copyBlocks);
-        tempArgs.push_back(tempBufPtr);
-    }
-
-    kb->CreateCall(multiBlockFunction, tempArgs);
-    
-    //  The items have been processed and output generated to the temporary areas.
-    //  Update the processed item count (and hence all the counts derived automatically
-    //  therefrom).
-    if (mIsDerived[0]) {
-        kb->setProcessedItemCount(mStreamSetInputs[0].name, finalItemCountNeeded[0]);
-    }
-    
-    // Copy back data to the actual output buffers.
-    for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); i++) {
-        Value * tempBufPtr = kb->CreateGEP(tempParameterArea,  {kb->getInt32(0), kb->getInt32(mStreamSetInputs.size() + i)});
-        tempBufPtr = kb->CreatePointerCast(tempBufPtr, mStreamSetOutputBuffers[i]->getStreamSetBlockType()->getPointerTo());
-        Value * finalOutputItems = kb->getProducedItemCount(mStreamSetOutputs[i].name);
-        Value * copyItems = kb->CreateSub(finalOutputItems, outputBasePos[i]);
-        // Round up to exact multiple of block size.
-        //copyItems = kb->CreateAnd(kb->CreateAdd(copyItems, kb->getSize(bitBlockWidth - 1)), blockBaseMask);
-        Value * writableFromBase = kb->getLinearlyWritableItems(mStreamSetOutputs[i].name, outputBasePos[i]); // must be a whole number of blocks.
-        Value * allWritable = kb->CreateICmpULE(copyItems, writableFromBase);
-        Value * copyItems1 = kb->CreateSelect(allWritable, copyItems, writableFromBase);
-        //mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), outputBlockPtr[i], tempBufPtr, copyItems1);
-        Value * copyBlocks1 = kb->CreateUDivCeil(copyItems1, blockSize);
-        mStreamSetOutputBuffers[i]->createBlockCopy(kb.get(), outputBlockPtr[i], tempBufPtr, copyBlocks1);
-        BasicBlock * copyBackRemaining = kb->CreateBasicBlock("copyBackRemaining");
-        BasicBlock * copyBackDone = kb->CreateBasicBlock("copyBackDone");
-        kb->CreateCondBr(allWritable, copyBackDone, copyBackRemaining);
-        kb->SetInsertPoint(copyBackRemaining);
-        Value * copyItems2 = kb->CreateSub(copyItems, copyItems1);
-        Value * nextBasePos = kb->CreateAdd(outputBasePos[i], copyItems1);
-        Type * bufPtrType = mStreamSetOutputBuffers[i]->getStreamSetBlockType()->getPointerTo();
-        Value * nextOutputPtr = kb->CreatePointerCast(kb->getRawOutputPointer(mStreamSetOutputs[i].name, kb->getInt32(0), nextBasePos), bufPtrType);
-        tempBufPtr = kb->CreateGEP(tempBufPtr, kb->CreateUDiv(copyItems1, blockSize));
-        //mStreamSetOutputBuffers[i]->createBlockAlignedCopy(kb.get(), nextOutputPtr, tempBufPtr, copyItems2);
-        Value * copyBlocks2 = kb->CreateUDivCeil(copyItems2, blockSize);
-        mStreamSetOutputBuffers[i]->createBlockCopy(kb.get(), nextOutputPtr, tempBufPtr, copyBlocks2);
-        kb->CreateBr(copyBackDone);
-        kb->SetInsertPoint(copyBackDone);
-    }
-
-    //  We've dealt with the partial block processing and copied information back into the
-    //  actual buffers.  If this isn't the final block, loop back for more multiblock processing.
-    //
-    BasicBlock * setTermination = kb->CreateBasicBlock("mBsetTermination");
-    if (mIsDerived[0]) {
-        stridesRemaining->addIncoming(kb->CreateSub(stridesRemaining, kb->CreateZExt(haveStrides, kb->getSizeTy())), kb->GetInsertBlock());
-        kb->CreateCondBr(haveStrides, doSegmentOuterLoop, setTermination);
-    }
-    else {
-        Value * nowProcessed = kb->getProcessedItemCount(mStreamSetInputs[0].name);
-        Value * remainingItemsToDo = kb->CreateSub(itemsAvail, nowProcessed);
-        Value * reducedStridesToDo = kb->CreateUDiv(remainingItemsToDo, nowProcessed);
-        stridesRemaining->addIncoming(reducedStridesToDo, kb->GetInsertBlock());
-        Value * haveStrides = kb->CreateICmpUGT(reducedStridesToDo, kb->getSize(0));
-        kb->CreateCondBr(haveStrides, doSegmentOuterLoop, setTermination);
-    }    
-    kb->SetInsertPoint(setTermination);
-    kb->setTerminationSignal();
-    kb->CreateBr(segmentDone);
-    kb->SetInsertPoint(segmentDone);
-}
-
-void Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & idb) {
-    assert ("KernelBuilder does not have a valid IDISA Builder" && idb);
-    mOutputScalarResult = idb->CreateCall(getTerminateFunction(idb->getModule()), { getInstance() });
-}
-
-Kernel::StreamPort Kernel::getStreamPort(const std::string & name) const {
-    const auto f = mStreamMap.find(name);
-    if (LLVM_UNLIKELY(f == mStreamMap.end())) {
-        report_fatal_error(getName() + " does not contain stream set " + name);
-    }
-    return f->second;
-}
-
 static inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
     if (codegen::EnableAsserts) {
         name += "_EA";
@@ -1200,11 +1454,12 @@ Kernel::Kernel(std::string && kernelName,
                   , std::move(scalar_parameters), std::move(scalar_outputs)
                   , std::move(internal_scalars))
 , mCurrentMethod(nullptr)
+, mAvailablePrincipleItemCount(nullptr)
 , mNoTerminateAttribute(false)
 , mIsGenerated(false)
+, mStride(0)
 , mIsFinal(nullptr)
-, mOutputScalarResult(nullptr)
-, mStride(0) {
+, mOutputScalarResult(nullptr) {
 
 }
 
@@ -1219,7 +1474,7 @@ BlockOrientedKernel::BlockOrientedKernel(std::string && kernelName,
                                          std::vector<Binding> && scalar_parameters,
                                          std::vector<Binding> && scalar_outputs,
                                          std::vector<Binding> && internal_scalars)
-: Kernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
+: MultiBlockKernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars))
 , mDoBlockMethod(nullptr)
 , mStrideLoopBody(nullptr)
 , mStrideLoopBranch(nullptr)
@@ -1227,7 +1482,7 @@ BlockOrientedKernel::BlockOrientedKernel(std::string && kernelName,
 
 }
 
-// CONSTRUCTOR
+// MULTI-BLOCK KERNEL CONSTRUCTOR
 MultiBlockKernel::MultiBlockKernel(std::string && kernelName,
                                    std::vector<Binding> && stream_inputs,
                                    std::vector<Binding> && stream_outputs,
@@ -1235,6 +1490,7 @@ MultiBlockKernel::MultiBlockKernel(std::string && kernelName,
                                    std::vector<Binding> && scalar_outputs,
                                    std::vector<Binding> && internal_scalars)
 : Kernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
+
 }
 
 // CONSTRUCTOR
@@ -1245,60 +1501,8 @@ SegmentOrientedKernel::SegmentOrientedKernel(std::string && kernelName,
                                              std::vector<Binding> && scalar_outputs,
                                              std::vector<Binding> && internal_scalars)
 : Kernel(std::move(kernelName), std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_parameters), std::move(scalar_outputs), std::move(internal_scalars)) {
-    
-}
-  
-    
-void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & kb,
-                                 std::vector<Value *> inputAvailable,
-                                 Value * doFinal) {
-    auto kernel = kb->getKernel();
-    const unsigned inputSetCount = inputAvailable.size();
-    if (inputSetCount == 0) return;  //  Cannot calculate buffer items expected from input.
-    auto & outputs = kernel->getStreamSetOutputBuffers();
-    const unsigned outputSetCount = outputs.size();
-
-    Constant * blockSize = kb->getSize(kb->getBitBlockWidth());
-    Value * newlyAvailInputItems[inputSetCount];
-    Value * requiredOutputBufferSpace[outputSetCount];
-    for (unsigned i = 0; i < inputSetCount; i++) {
-        Value * processed = kb->getProcessedItemCount(kernel->getStreamInput(i).name);
-        newlyAvailInputItems[i] = kb->CreateSub(inputAvailable[i], processed);
-    }
-    //kb->GetInsertBlock()->dump();
-    for (unsigned i = 0; i < outputSetCount; i++) {
-        const auto & rate = kernel->getStreamOutput(i).rate;
-        if (rate.isUnknownRate()) continue;  // No calculations possible.
-        Kernel::Port port; unsigned ssIdx;
-        std::tie(port, ssIdx) = kernel->getStreamPort(rate.referenceStreamSet());
-        Value * base = nullptr;
-        if (port == Kernel::Port::Output) {
-            base = requiredOutputBufferSpace[ssIdx]; assert (base);
-        } else {
-            base = newlyAvailInputItems[ssIdx]; assert (base);
-        }
-        requiredOutputBufferSpace[i] = rate.CreateRatioCalculation(kb.get(), base, doFinal);
-        if (auto db = dyn_cast<DynamicBuffer>(outputs[i])) {
-            Value * handle = db->getStreamSetHandle();
-            // This buffer can be expanded.
-            Value * producedBlock = kb->CreateUDivCeil(kb->getProducedItemCount(kernel->getStreamOutput(i).name), blockSize);
-            Value * consumedBlock = kb->CreateUDiv(kb->getConsumedItemCount(kernel->getStreamOutput(i).name), blockSize);
-            Value * blocksInUse = kb->CreateSub(producedBlock, consumedBlock);
-            Value * blocksRequired = kb->CreateAdd(blocksInUse, kb->CreateUDivCeil(requiredOutputBufferSpace[i], blockSize));
-            Value * spaceRequired = kb->CreateMul(blocksRequired, blockSize);
-            Value * expansionNeeded = kb->CreateICmpUGT(spaceRequired, db->getBufferedSize(kb.get(), handle));
-            BasicBlock * doExpand = kb->CreateBasicBlock("doExpand");
-            BasicBlock * bufferReady = kb->CreateBasicBlock("bufferReady");
-            kb->CreateCondBr(expansionNeeded, doExpand, bufferReady);
-            kb->SetInsertPoint(doExpand);
-            db->doubleCapacity(kb.get(), handle);
-            // Ensure that capacity is sufficient by successive doubling, if necessary.
-            expansionNeeded = kb->CreateICmpUGT(spaceRequired, db->getBufferedSize(kb.get(), handle));
-            kb->CreateCondBr(expansionNeeded, doExpand, bufferReady);
-            kb->SetInsertPoint(bufferReady);
-        }
-    }
 
 }
+
 
 }

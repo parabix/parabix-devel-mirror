@@ -136,7 +136,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
 RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb)
 : PabloKernel(kb, "RequiredStreams_UTF8",               
               {Binding{kb->getStreamSetTy(8), "basis"}}, 
-              {Binding{kb->getStreamSetTy(4), "required"}},
+              {Binding{kb->getStreamSetTy(4), "required", FixedRate(), Add1()}},
               {},
               {}) {
 }
@@ -170,7 +170,7 @@ void RequiredStreams_UTF16::generatePabloMethod() {
 RequiredStreams_UTF16::RequiredStreams_UTF16(const std::unique_ptr<kernel::KernelBuilder> & kb)
 : PabloKernel(kb, "RequiredStreams_UTF16",               
               {Binding{kb->getStreamSetTy(16), "basis"}}, 
-              {Binding{kb->getStreamSetTy(4), "required"}},
+              {Binding{kb->getStreamSetTy(4), "required", FixedRate(), Add1()}},
               {},
               {}) {
 }
@@ -183,8 +183,7 @@ ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuild
               {Binding{iBuilder->getStreamSetTy(numOfCharacterClasses), "basis"},
                Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"},
                Binding{iBuilder->getStreamSetTy(4, 1), "required"}},
-
-              {Binding{iBuilder->getStreamSetTy(1, 1), "matches", Add1()}}) {
+              {Binding{iBuilder->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}}) {
 
 }
 
@@ -226,7 +225,13 @@ void InvertMatchesKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuil
 }
 
 InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder)
-: BlockOrientedKernel("Invert", {Binding{builder->getStreamSetTy(1, 1), "matchedLines"}, Binding{builder->getStreamSetTy(1, 1), "lineBreaks"}}, {Binding{builder->getStreamSetTy(1, 1), "nonMatches"}}, {}, {}, {}) {
+: BlockOrientedKernel("Invert",
+    // Inputs
+    {Binding{builder->getStreamSetTy(1, 1), "matchedLines"}, Binding{builder->getStreamSetTy(1, 1), "lineBreaks"}},
+    // Outputs
+    {Binding{builder->getStreamSetTy(1, 1), "nonMatches"}},
+    // Input/Output Scalars and internal state
+    {}, {}, {}) {
     setNoTerminateAttribute(true);    
 }
 
@@ -245,4 +250,3 @@ PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & i
               {},
               {Binding{iBuilder->getSizeTy(), "countResult"}}) {
 }
-

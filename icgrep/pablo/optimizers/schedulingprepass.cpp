@@ -7,6 +7,8 @@
 #include <pablo/branch.h>
 #ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
+#else
+#include <llvm/Support/ErrorHandling.h>
 #endif
 #include <boost/container/flat_set.hpp>
 #include <boost/graph/adjacency_list.hpp>
@@ -371,7 +373,7 @@ private:
  ** ------------------------------------------------------------------------------------------------------------- */
 bool SchedulingPrePass::optimize(PabloKernel * const kernel) {
     #ifdef NDEBUG
-    report_fatal_error("DistributivePass is unsupported");
+    llvm::report_fatal_error("DistributivePass is unsupported");
     #else
     SchedulingPrePassContainer S;
     S.run(kernel->getEntryBlock());

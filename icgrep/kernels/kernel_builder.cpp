@@ -2,6 +2,7 @@
 #include <toolchain/toolchain.h>
 #include <kernels/kernel.h>
 #include <kernels/streamset.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 using namespace parabix;
@@ -10,9 +11,11 @@ using Value = Value;
 
 namespace kernel {
 
+using Port = Kernel::Port;
+
 Value * KernelBuilder::getScalarFieldPtr(llvm::Value * instance, Value * const index) {
     assert (instance);
-    CreateAssert(instance, "instance cannot be null!");
+    CreateAssert(instance, "getScalarFieldPtr: instance cannot be null!");
     return CreateGEP(instance, {getInt32(0), index});
 }
 
@@ -36,7 +39,7 @@ void KernelBuilder::setScalarField(const std::string & fieldName, Value * value)
     CreateStore(value, getScalarFieldPtr(fieldName));
 }
 
-Value * KernelBuilder::getStreamSetBufferPtr(const std::string & name) {
+Value * KernelBuilder::getStreamHandle(const std::string & name) {
     Value * const ptr = getScalarField(name + Kernel::BUFFER_PTR_SUFFIX);
     CreateAssert(ptr, name + " cannot be null!");
     return ptr;
@@ -50,104 +53,99 @@ void KernelBuilder::releaseLogicalSegmentNo(Value * nextSegNo) {
     CreateAtomicStoreRelease(nextSegNo, getScalarFieldPtr(Kernel::LOGICAL_SEGMENT_NO_SCALAR));
 }
 
-Value * KernelBuilder::getProducedItemCount(const std::string & name, Value * doFinal) {
-    Kernel::Port port; unsigned index;
-    std::tie(port, index) = mKernel->getStreamPort(name);
-    assert (port == Kernel::Port::Output);
-    const auto & rate = mKernel->getStreamOutput(index).rate;
-    const auto & refSet = rate.referenceStreamSet();
-    if ((refSet != name) && rate.isExact()) {
-        Value * principalCount;
-        std::tie(port, index) = mKernel->getStreamPort(refSet);
-        if (port == Kernel::Port::Input) {
-            principalCount = getProcessedItemCount(refSet);
-        } else {
-            principalCount = getProducedItemCount(refSet);
-        }
-        return rate.CreateRatioCalculation(this, principalCount, doFinal);
-    }
-    return getScalarField(name + Kernel::PRODUCED_ITEM_COUNT_SUFFIX);
+Value * KernelBuilder::getCycleCountPtr() {
+    return getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR);
 }
 
-Value * KernelBuilder::getProcessedItemCount(const std::string & name) {
-    Kernel::Port port; unsigned index;
-    std::tie(port, index) = mKernel->getStreamPort(name);
-    assert (port == Kernel::Port::Input);
-    const auto & rate = mKernel->getStreamInput(index).rate;
-    const auto & refSet = rate.referenceStreamSet();
-    if ((refSet != name) && rate.isExact()) {
-        Value * const principalCount = getProcessedItemCount(refSet);
-        return rate.CreateRatioCalculation(this, principalCount);
+inline const Binding & getBinding(const Kernel * k, const std::string & name) {
+    Port port; unsigned index;
+    std::tie(port, index) = k->getStreamPort(name);
+    if (port == Port::Input) {
+        return k->getStreamInput(index);
+    } else {
+        return k->getStreamOutput(index);
     }
-    return getScalarField(name + Kernel::PROCESSED_ITEM_COUNT_SUFFIX);
 }
+
+Value * KernelBuilder::getInternalItemCount(const std::string & name, const std::string & suffix) {
+    const ProcessingRate & rate = getBinding(mKernel, name).getRate();
+    Value * itemCount = nullptr;
+    if (rate.isExactlyRelative()) {
+        Port port; unsigned index;
+        std::tie(port, index) = mKernel->getStreamPort(rate.getReference());
+        if (port == Port::Input) {
+            itemCount = getProcessedItemCount(rate.getReference());
+        } else {
+            itemCount = getProducedItemCount(rate.getReference());
+        }
+        if (rate.getNumerator() != 1) {
+            itemCount = CreateMul(itemCount, ConstantInt::get(itemCount->getType(), rate.getNumerator()));
+        }
+        if (rate.getDenominator() != 1) {
+            itemCount = CreateExactUDiv(itemCount, ConstantInt::get(itemCount->getType(), rate.getDenominator()));
+        }
+    } else {
+        itemCount = getScalarField(name + suffix);
+    }
+    return itemCount;
+}
+
+void KernelBuilder::setInternalItemCount(const std::string & name, const std::string & suffix, llvm::Value * const value) {
+    const ProcessingRate & rate = getBinding(mKernel, name).getRate();
+    if (LLVM_UNLIKELY(rate.isDerived())) {
+        report_fatal_error("Cannot set item count: " + name + " is a Derived rate");
+    }
+    if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
+        CallPrintIntToStderr(mKernel->getName() + ": " + name + suffix, value);
+    }
+    setScalarField(name + suffix, value);
+}
+
 
 Value * KernelBuilder::getAvailableItemCount(const std::string & name) {
     const auto & inputs = mKernel->getStreamInputs();
     for (unsigned i = 0; i < inputs.size(); ++i) {
-        if (inputs[i].name == name) {
+        if (inputs[i].getName() == name) {
             return mKernel->getAvailableItemCount(i);
         }
     }
     return nullptr;
 }
 
-Value * KernelBuilder::getConsumedItemCount(const std::string & name) {
-    return getScalarField(name + Kernel::CONSUMED_ITEM_COUNT_SUFFIX);
-}
-
-void KernelBuilder::setProducedItemCount(const std::string & name, Value * value) {
-    setScalarField(name + Kernel::PRODUCED_ITEM_COUNT_SUFFIX, value);
-    if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
-        CallPrintIntToStderr(mKernel->getName() + ": " + name + "_producedItemCount", value);
-    }
-}
-
-void KernelBuilder::setProcessedItemCount(const std::string & name, Value * value) {
-    setScalarField(name + Kernel::PROCESSED_ITEM_COUNT_SUFFIX, value);
-    if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
-        CallPrintIntToStderr(mKernel->getName() + ": " + name + "_processedItemCount", value);
-    }
-}
-
-void KernelBuilder::setConsumedItemCount(const std::string & name, Value * value) {
-    setScalarField(name + Kernel::CONSUMED_ITEM_COUNT_SUFFIX, value);
-    if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
-        CallPrintIntToStderr(mKernel->getName() + ": " + name + "_consumedItemCount", value);
-    }
-}
-
 Value * KernelBuilder::getTerminationSignal() {
+    if (mKernel->hasNoTerminateAttribute()) {
+        return getFalse();
+    }
     return getScalarField(Kernel::TERMINATION_SIGNAL);
 }
 
-void KernelBuilder::setTerminationSignal() {
-    setScalarField(Kernel::TERMINATION_SIGNAL, getTrue());
+void KernelBuilder::setTerminationSignal(llvm::Value * const value) {
+    assert (!mKernel->hasNoTerminateAttribute());
+    assert (value->getType() == getInt1Ty());
     if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
-        CallPrintIntToStderr(mKernel->getName() + ": setTerminationSignal", getTrue());
+        CallPrintIntToStderr(mKernel->getName() + ": setTerminationSignal", value);
     }
+    setScalarField(Kernel::TERMINATION_SIGNAL, value);
 }
 
 Value * KernelBuilder::getLinearlyAccessibleItems(const std::string & name, Value * fromPosition, Value * avail, bool reverse) {
-    Kernel::Port port; unsigned index;
-    std::tie(port, index) = mKernel->getStreamPort(name);
-    const StreamSetBuffer * buf = nullptr;
-    if (port == Kernel::Port::Input) {
-        const auto lookAhead = mKernel->getLookAhead(index);
-        if (LLVM_UNLIKELY(lookAhead != 0)) {
-            fromPosition = CreateAdd(ConstantInt::get(fromPosition->getType(), lookAhead), fromPosition);
-        }
-        buf = mKernel->getInputStreamSetBuffer(name);
-    } else {
-        buf = mKernel->getOutputStreamSetBuffer(name);
-    }
-    assert (buf);
-    return buf->getLinearlyAccessibleItems(this, getStreamSetBufferPtr(name), fromPosition, avail, reverse);
+    const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
+    return buf->getLinearlyAccessibleItems(this, getStreamHandle(name), fromPosition, avail, reverse);
 }
 
 Value * KernelBuilder::getLinearlyWritableItems(const std::string & name, Value * fromPosition, bool reverse) {
     const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-    return buf->getLinearlyWritableItems(this, getStreamSetBufferPtr(name), fromPosition, reverse);
+    return buf->getLinearlyWritableItems(this, getStreamHandle(name), fromPosition, reverse);
+}
+
+Value * KernelBuilder::copy(const std::string & name, Value * target, Value * source, Value * itemsToCopy, const unsigned alignment) {
+    const StreamSetBuffer * const buf = mKernel->getAnyStreamSetBuffer(name);
+    return buf->copy(this, getStreamHandle(name), target, source, itemsToCopy, alignment);
+}
+
+void KernelBuilder::CreateCopyBack(const std::string & name, llvm::Value * from, llvm::Value * to) {
+    const StreamSetBuffer * const buf = mKernel->getAnyStreamSetBuffer(name);
+    return buf->genCopyBackLogic(this, getStreamHandle(name), from, to, name);
 }
 
 Value * KernelBuilder::getConsumerLock(const std::string & name) {
@@ -167,10 +165,20 @@ inline Value * KernelBuilder::computeBlockIndex(Value * itemCount) {
     }
 }
 
-Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * streamIndex) {
-    Value * const blockIndex = computeBlockIndex(getProcessedItemCount(name));
+Value * KernelBuilder::getInputStreamPtr(const std::string & name, Value * const blockIndex) {
+//    Value * const blockIndex = computeBlockIndex(getProcessedItemCount(name));
     const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-    return buf->getStreamBlockPtr(this, getStreamSetBufferPtr(name), streamIndex, blockIndex, true);
+    return buf->getBlockAddress(this, getStreamHandle(name), blockIndex);
+}
+
+Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * streamIndex) {
+    const Kernel::StreamPort p = mKernel->getStreamPort(name);
+    if (LLVM_UNLIKELY(p.first == Port::Output)) {
+        report_fatal_error(name + " is not an input stream set");
+    }
+    Value * const addr = mKernel->getStreamSetInputBufferPtr(p.second);
+    const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
+    return buf->getStreamBlockPtr(this, getStreamHandle(name), addr, streamIndex, true);
 }
 
 Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * streamIndex) {
@@ -178,9 +186,13 @@ Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * st
 }
 
 Value * KernelBuilder::getInputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) {
-    Value * const blockIndex = computeBlockIndex(getProcessedItemCount(name));
+    const Kernel::StreamPort p = mKernel->getStreamPort(name);
+    if (LLVM_UNLIKELY(p.first == Port::Output)) {
+        report_fatal_error(name + " is not an input stream set");
+    }
+    Value * const addr = mKernel->getStreamSetInputBufferPtr(p.second);
     const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-    return buf->getStreamPackPtr(this, getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex, true);
+    return buf->getStreamPackPtr(this, getStreamHandle(name), addr, streamIndex, packIndex, true);
 }
 
 Value * KernelBuilder::loadInputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex) {
@@ -189,19 +201,33 @@ Value * KernelBuilder::loadInputStreamPack(const std::string & name, Value * str
 
 Value * KernelBuilder::getInputStreamSetCount(const std::string & name) {
     const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-    return buf->getStreamSetCount(this, getStreamSetBufferPtr(name));
+    return buf->getStreamSetCount(this, getStreamHandle(name));
 }
 
 Value * KernelBuilder::getAdjustedInputStreamBlockPtr(Value * blockAdjustment, const std::string & name, Value * streamIndex) {
-    Value * const blockIndex = CreateAdd(computeBlockIndex(getProcessedItemCount(name)), blockAdjustment);
+    const Kernel::StreamPort p = mKernel->getStreamPort(name);
+    if (LLVM_UNLIKELY(p.first == Port::Output)) {
+        report_fatal_error(name + " is not an input stream set");
+    }
+    Value * const addr = mKernel->getStreamSetInputBufferPtr(p.second);
     const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-    return buf->getStreamBlockPtr(this, getStreamSetBufferPtr(name), streamIndex, blockIndex, true);
+    return buf->getStreamBlockPtr(this, getStreamHandle(name), CreateGEP(addr, blockAdjustment), streamIndex, true);
+}
+
+Value * KernelBuilder::getOutputStreamPtr(const std::string & name, Value * const blockIndex) {
+//    Value * const blockIndex = computeBlockIndex(getProducedItemCount(name));
+    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
+    return buf->getBlockAddress(this, getStreamHandle(name), blockIndex);
 }
 
 Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value * streamIndex) {
-    Value * const blockIndex = computeBlockIndex(getProducedItemCount(name));
+    const Kernel::StreamPort p = mKernel->getStreamPort(name);
+    if (LLVM_UNLIKELY(p.first == Port::Input)) {
+        report_fatal_error(name + " is not an output stream set");
+    }
+    Value * addr = mKernel->getStreamSetOutputBufferPtr(p.second);
     const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-    return buf->getStreamBlockPtr(this, getStreamSetBufferPtr(name), streamIndex, blockIndex, false);
+    return buf->getStreamBlockPtr(this, getStreamHandle(name), addr, streamIndex, true);
 }
 
 StoreInst * KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, Value * toStore) {
@@ -209,9 +235,13 @@ StoreInst * KernelBuilder::storeOutputStreamBlock(const std::string & name, Valu
 }
 
 Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) {
-    Value * const blockIndex = computeBlockIndex(getProducedItemCount(name));
+    const Kernel::StreamPort p = mKernel->getStreamPort(name);
+    if (LLVM_UNLIKELY(p.first == Port::Input)) {
+        report_fatal_error(name + " is not an output stream set");
+    }
+    Value * addr = mKernel->getStreamSetOutputBufferPtr(p.second);
     const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-    return buf->getStreamPackPtr(this, getStreamSetBufferPtr(name), streamIndex, blockIndex, packIndex, false);
+    return buf->getStreamPackPtr(this, getStreamHandle(name), addr, streamIndex, packIndex, false);
 }
 
 StoreInst * KernelBuilder::storeOutputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex, Value * toStore) {
@@ -220,49 +250,50 @@ StoreInst * KernelBuilder::storeOutputStreamPack(const std::string & name, Value
 
 Value * KernelBuilder::getOutputStreamSetCount(const std::string & name) {
     const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-    return buf->getStreamSetCount(this, getStreamSetBufferPtr(name));
+    return buf->getStreamSetCount(this, getStreamHandle(name));
 }
 
-Value * KernelBuilder::getRawInputPointer(const std::string & name, Value * streamIndex, Value * absolutePosition) {
+Value * KernelBuilder::getRawInputPointer(const std::string & name, Value * absolutePosition) {
     const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-    return buf->getRawItemPointer(this, getStreamSetBufferPtr(name), streamIndex, absolutePosition);
+    return buf->getRawItemPointer(this, getStreamHandle(name), absolutePosition);
 }
 
-Value * KernelBuilder::getRawOutputPointer(const std::string & name, Value * streamIndex, Value * absolutePosition) {
+Value * KernelBuilder::getRawOutputPointer(const std::string & name, Value * absolutePosition) {
     const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-    return buf->getRawItemPointer(this, getStreamSetBufferPtr(name), streamIndex, absolutePosition);
+    return buf->getRawItemPointer(this, getStreamHandle(name), absolutePosition);
 }
 
 Value * KernelBuilder::getBaseAddress(const std::string & name) {
-    return mKernel->getAnyStreamSetBuffer(name)->getBaseAddress(this, getStreamSetBufferPtr(name));
+    return mKernel->getAnyStreamSetBuffer(name)->getBaseAddress(this, getStreamHandle(name));
 }
 
 void KernelBuilder::setBaseAddress(const std::string & name, Value * const addr) {
-    return mKernel->getAnyStreamSetBuffer(name)->setBaseAddress(this, getStreamSetBufferPtr(name), addr);
+    return mKernel->getAnyStreamSetBuffer(name)->setBaseAddress(this, getStreamHandle(name), addr);
 }
 
 Value * KernelBuilder::getBufferedSize(const std::string & name) {
-    return mKernel->getAnyStreamSetBuffer(name)->getBufferedSize(this, getStreamSetBufferPtr(name));
+    return mKernel->getAnyStreamSetBuffer(name)->getBufferedSize(this, getStreamHandle(name));
 }
 
 void KernelBuilder::setBufferedSize(const std::string & name, Value * size) {
-    mKernel->getAnyStreamSetBuffer(name)->setBufferedSize(this, getStreamSetBufferPtr(name), size);
+    mKernel->getAnyStreamSetBuffer(name)->setBufferedSize(this, getStreamHandle(name), size);
 }
 
 
 Value * KernelBuilder::getCapacity(const std::string & name) {
-    return mKernel->getAnyStreamSetBuffer(name)->getCapacity(this, getStreamSetBufferPtr(name));
+    return mKernel->getAnyStreamSetBuffer(name)->getCapacity(this, getStreamHandle(name));
 }
 
 void KernelBuilder::setCapacity(const std::string & name, Value * c) {
-    mKernel->getAnyStreamSetBuffer(name)->setCapacity(this, getStreamSetBufferPtr(name), c);
+    mKernel->getAnyStreamSetBuffer(name)->setCapacity(this, getStreamHandle(name), c);
 }
 
     
 CallInst * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) {
-    Function * const doSegment = mKernel->getDoSegmentFunction(getModule());
-    assert (doSegment->getArgumentList().size() == args.size());
-    return CreateCall(doSegment, args);
+//    Function * const doSegment = mKernel->getDoSegmentFunction(getModule());
+//    assert (doSegment->getArgumentList().size() == args.size());
+//    return CreateCall(doSegment, args);
+    return mKernel->makeDoSegmentCall(*this, args);
 }
 
 Value * KernelBuilder::getAccumulator(const std::string & accumName) {
@@ -277,7 +308,7 @@ Value * KernelBuilder::getAccumulator(const std::string & accumName) {
     } else {
         for (unsigned i = 0; i < n; ++i) {
             const Binding & b = outputs[i];
-            if (b.name == accumName) {
+            if (b.getName() == accumName) {
                 if (n == 1) {
                     return results;
                 } else {
@@ -306,15 +337,15 @@ BasicBlock * KernelBuilder::CreateConsumerWait() {
         BasicBlock * load[n + 1];
         BasicBlock * wait[n];
         for (unsigned i = 0; i < n; ++i) {
-            load[i] = BasicBlock::Create(getContext(), consumers[i].name + "Load", parent);
-            wait[i] = BasicBlock::Create(getContext(), consumers[i].name + "Wait", parent);
+            load[i] = BasicBlock::Create(getContext(), consumers[i].getName() + "Load", parent);
+            wait[i] = BasicBlock::Create(getContext(), consumers[i].getName() + "Wait", parent);
         }
         load[n] = BasicBlock::Create(getContext(), "Resume", parent);
         CreateBr(load[0]);
         for (unsigned i = 0; i < n; ++i) {
 
             SetInsertPoint(load[i]);
-            Value * const outputConsumers = getConsumerLock(consumers[i].name);
+            Value * const outputConsumers = getConsumerLock(consumers[i].getName());
 
             Value * const consumerCount = CreateLoad(CreateGEP(outputConsumers, {zero, zero}));
             Value * const consumerPtr = CreateLoad(CreateGEP(outputConsumers, {zero, one}));

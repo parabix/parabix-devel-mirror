@@ -14,6 +14,8 @@
 #include <boost/container/flat_map.hpp>
 
 namespace llvm { class Type; }
+namespace llvm { class VectorType; }
+
 namespace pablo { class Integer; }
 namespace pablo { class Ones; }
 namespace pablo { class PabloBlock; }
@@ -132,10 +134,10 @@ protected:
 
     PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder,
                 std::string && kernelName,
-                std::vector<Binding> stream_inputs = {},
-                std::vector<Binding> stream_outputs = {},
-                std::vector<Binding> scalar_parameters = {},
-                std::vector<Binding> scalar_outputs = {});
+                std::vector<kernel::Binding> stream_inputs = {},
+                std::vector<kernel::Binding> stream_outputs = {},
+                std::vector<kernel::Binding> scalar_parameters = {},
+                std::vector<kernel::Binding> scalar_outputs = {});
 
     virtual void generatePabloMethod() = 0;
 

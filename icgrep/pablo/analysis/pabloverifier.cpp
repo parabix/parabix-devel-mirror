@@ -7,6 +7,7 @@
 #include <pablo/pablo_kernel.h>
 #include <pablo/printer_pablos.h>
 #include <boost/container/flat_set.hpp>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;

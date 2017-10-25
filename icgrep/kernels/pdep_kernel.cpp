@@ -13,7 +13,8 @@ namespace kernel {
 
 PDEPkernel::PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsigned streamCount, unsigned swizzleFactor, unsigned PDEP_width)
 : MultiBlockKernel("PDEPdel",
-                  {Binding{kb->getStreamSetTy(), "PDEPmarkerStream", MaxRatio(1)}, Binding{kb->getStreamSetTy(streamCount), "sourceStreamSet", MaxRatio(1)}},
+                  {Binding{kb->getStreamSetTy(), "PDEPmarkerStream", BoundedRate(0, 1)},
+                   Binding{kb->getStreamSetTy(streamCount), "sourceStreamSet", BoundedRate(0, 1)}},
                   {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"}},
                   {}, {}, {})
 , mSwizzleFactor(swizzleFactor)
@@ -23,22 +24,20 @@ PDEPkernel::PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsign
     assert((mPDEPWidth == 64 || mPDEPWidth == 32) && "PDEP width must be 32 or 64");
 }
 
-void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb) {    
+void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfStrides) {
     BasicBlock * entry = kb->GetInsertBlock();
     BasicBlock * checkLoopCond = kb->CreateBasicBlock("checkLoopCond");
     BasicBlock * checkSourceCount = kb->CreateBasicBlock("checkSourceCount");
     BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
     BasicBlock * terminate = kb->CreateBasicBlock("terminate");
 
-    Function::arg_iterator args = mCurrentMethod->arg_begin();
-    args++; //self
-    Value * itemsToDo = &*(args++); // Since PDEP marker stream is a bit stream, this is the number of PDEP marker bits to process
-    // Get pointer to start of the StreamSetBlock containing unprocessed input items.
-    Value * sourceItemsAvail =  &*(args++); 
-    Value * PDEPStrmPtr = &*(args++);
-    Value * inputSwizzlesPtr = &*(args++);
+    Value * itemsToDo = mAvailableItemCount[0];
+    Value * sourceItemsAvail = mAvailableItemCount[1];
+
+    Value * PDEPStrmPtr = iBuilder->getInputStreamBlockPtr("PDEPmarkerStream", iBuilder->getInt32(0)); // mStreamBufferPtr[0];
+    Value * inputSwizzlesPtr = iBuilder->getInputStreamBlockPtr("sourceStreamSet", iBuilder->getInt32(0)); // mStreamBufferPtr[1];
     // Get pointer to start of the output StreamSetBlock we're currently writing to
-    Value * outputStreamPtr = &*(args);
+    Value * outputStreamPtr = iBuilder->getOutputStreamBlockPtr("outputStreamSet", iBuilder->getInt32(0)); // mStreamBufferPtr[2];
 
     Constant * blockWidth = kb->getSize(kb->getBitBlockWidth());
     Value * blocksToDo = kb->CreateUDivCeil(itemsToDo, blockWidth); // 1 if this is the final block

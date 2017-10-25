@@ -105,13 +105,13 @@ void ParabixDriver::generatePipelineIR() {
     }
 
     // note: instantiation of all kernels must occur prior to initialization
-    for (const auto & k : mPipeline) {
+    for (Kernel * const k : mPipeline) {
         k->addKernelDeclarations(iBuilder);
     }
-    for (const auto & k : mPipeline) {
+    for (Kernel * const k : mPipeline) {
         k->createInstance(iBuilder);
     }
-    for (const auto & k : mPipeline) {
+    for (Kernel * const k : mPipeline) {
         k->initializeInstance(iBuilder);
     }
     if (codegen::PipelineParallel) {

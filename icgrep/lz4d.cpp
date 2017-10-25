@@ -68,11 +68,11 @@ void generatePipeline(ParabixDriver & pxDriver) {
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     // Output buffer should be at least one whole LZ4 block (4MB) large in case of uncompressed blocks.
     // And the size (in bytes) also needs to be a power of two.
-    const unsigned decompressBufBlocks = (4194304U) / codegen::BlockSize;
+    const unsigned decompressBufBlocks = (4 * 1024 * 1024) / codegen::BlockSize;
 
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
 
-    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments));
+    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
     StreamSetBuffer * const BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
     StreamSetBuffer * const Extenders = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
     StreamSetBuffer * const LiteralIndexes = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments));

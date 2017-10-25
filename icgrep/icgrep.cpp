@@ -181,7 +181,7 @@ int main(int argc, char *argv[]) {
         grep::WithFilenameFlag = true;
     }
 
-    grep::GrepEngine * grepEngine;
+    grep::GrepEngine * grepEngine = nullptr;
     
     switch (grep::Mode) {
         case grep::NormalMode:
@@ -193,6 +193,7 @@ int main(int argc, char *argv[]) {
             grepEngine = new grep::MatchOnlyEngine(grep::Mode == grep::FilesWithoutMatch); break;
         case grep::QuietMode:
             grepEngine = new grep::QuietModeEngine(); break;
+        default: llvm_unreachable("Invalid grep mode!");
     }
                
     grepEngine->grepCodeGen(REs);

@@ -19,111 +19,7 @@ static const auto TERMINATE_SUFFIX = "_Terminate";
 
 using namespace llvm;
 
-ProcessingRate FixedRatio(unsigned strmItems, unsigned referenceItems, std::string && referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::FixedRatio, strmItems, referenceItems, std::move(referenceStreamSet));
-}
-
-ProcessingRate MaxRatio(unsigned strmItems, unsigned referenceItems, std::string && referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::MaxRatio, strmItems, referenceItems, std::move(referenceStreamSet));
-}
-
-ProcessingRate RoundUpToMultiple(unsigned itemMultiple, std::string && referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::RoundUp, itemMultiple, itemMultiple, std::move(referenceStreamSet));
-}
-
-ProcessingRate Add1(std::string && referenceStreamSet) {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Add1, 0, 1, std::move(referenceStreamSet));
-}
-
-ProcessingRate UnknownRate() {
-    return ProcessingRate(ProcessingRate::ProcessingRateKind::Unknown, 0, 1, "");
-}
-
-unsigned ProcessingRate::calculateRatio(unsigned referenceItems, bool doFinal) const {
-    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
-        if (mRatioNumerator == mRatioDenominator) {
-            return referenceItems;
-        }
-        unsigned strmItems = referenceItems * mRatioNumerator;
-        return (strmItems + mRatioDenominator - 1) / mRatioDenominator;
-    }
-    if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
-        return ((referenceItems + mRatioDenominator - 1) / mRatioDenominator) * mRatioDenominator;
-    }
-    if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
-        return doFinal ? referenceItems + 1 : referenceItems;
-    }
-    report_fatal_error("Processing rate calculation attempted for variable or unknown rate.");
-}
-
-Value * ProcessingRate::CreateRatioCalculation(IDISA::IDISA_Builder * const b, Value * referenceItems, Value * doFinal) const {
-    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
-        if (mRatioNumerator == mRatioDenominator) {
-            return referenceItems;
-        }
-        Type * const T = referenceItems->getType();
-        Constant * const numerator = ConstantInt::get(T, mRatioNumerator);
-        Constant * const denominator = ConstantInt::get(T, mRatioDenominator);
-        Constant * const denominatorLess1 = ConstantInt::get(T, mRatioDenominator - 1);
-        Value * strmItems = b->CreateMul(referenceItems, numerator);
-        return b->CreateUDiv(b->CreateAdd(denominatorLess1, strmItems), denominator);
-    }
-    if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
-        Type * const T = referenceItems->getType();
-        Constant * const denominator = ConstantInt::get(T, mRatioDenominator);
-        Constant * const denominatorLess1 = ConstantInt::get(T, mRatioDenominator - 1);
-        return b->CreateMul(b->CreateUDiv(b->CreateAdd(referenceItems, denominatorLess1), denominator), denominator);
-    }
-    if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
-        if (doFinal) {
-            Type * const T = referenceItems->getType();
-            referenceItems = b->CreateAdd(referenceItems, b->CreateZExt(doFinal, T));
-        }
-        return referenceItems;
-    }
-    report_fatal_error("Processing rate calculation attempted for variable or unknown rate.");
-}
-
-unsigned ProcessingRate::calculateMaxReferenceItems(const unsigned outputItems, const bool doFinal) const {
-    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
-        if (mRatioNumerator == mRatioDenominator) {
-            return outputItems;
-        }
-        return (outputItems / mRatioNumerator) * mRatioDenominator;
-    }
-    if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
-        return (outputItems / mRatioDenominator) * mRatioDenominator;
-    }
-    if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
-        return outputItems - (doFinal ? 1 : 0);
-    }
-    report_fatal_error("Inverse processing rate calculation attempted for unknown rate.");
-}
-
-Value * ProcessingRate::CreateMaxReferenceItemsCalculation(IDISA::IDISA_Builder * const b, Value * outputItems, Value * doFinal) const {
-    if (mKind == ProcessingRate::ProcessingRateKind::FixedRatio || mKind == ProcessingRate::ProcessingRateKind::MaxRatio) {
-        if (mRatioNumerator == mRatioDenominator) {
-            return outputItems;
-        }
-        Type * const T = outputItems->getType();
-        Constant * const numerator = ConstantInt::get(T, mRatioNumerator);
-        Constant * const denominator = ConstantInt::get(T, mRatioDenominator);
-        return b->CreateMul(b->CreateUDiv(outputItems, numerator), denominator);
-    }
-    if (mKind == ProcessingRate::ProcessingRateKind::RoundUp) {
-        Type * const T = outputItems->getType();
-        Constant * const denominator = ConstantInt::get(T, mRatioDenominator);
-        return b->CreateMul(b->CreateUDiv(outputItems, denominator), denominator);
-    }
-    if (mKind == ProcessingRate::ProcessingRateKind::Add1) {
-        Type * const T = outputItems->getType();
-        if (doFinal) {
-            return b->CreateSub(outputItems, b->CreateZExt(doFinal, T));
-        }
-        return b->CreateSub(outputItems, ConstantInt::get(T, 1));
-    }
-    report_fatal_error("Inverse processing rate calculation attempted for unknown rate.");
-}
+namespace kernel {
 
 void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::KernelBuilder> & idb) {
 
@@ -140,7 +36,7 @@ void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::Kernel
     // Create the initialization function prototype
     std::vector<Type *> initParameters = {selfType};
     for (auto binding : mScalarInputs) {
-        initParameters.push_back(binding.type);
+        initParameters.push_back(binding.getType());
     }
     initParameters.insert(initParameters.end(), mStreamSetOutputs.size(), consumerTy);
 
@@ -150,16 +46,18 @@ void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::Kernel
     initFunc->setDoesNotThrow();
     auto args = initFunc->arg_begin();
     args->setName("self");
-    for (auto binding : mScalarInputs) {
-        (++args)->setName(binding.name);
+    for (const Binding & binding : mScalarInputs) {
+        (++args)->setName(binding.getName());
     }
-    for (auto binding : mStreamSetOutputs) {
-        (++args)->setName(binding.name + "ConsumerLocks");
+    for (const Binding & binding : mStreamSetOutputs) {
+        (++args)->setName(binding.getName() + "ConsumerLocks");
     }
 
     // Create the doSegment function prototype.
     std::vector<Type *> params = {selfType, idb->getInt1Ty()};
-    params.insert(params.end(), mStreamSetInputs.size(), sizeTy);
+
+    const auto count = mStreamSetInputs.size();
+    params.insert(params.end(), count, sizeTy);
 
     FunctionType * const doSegmentType = FunctionType::get(voidTy, params, false);
     Function * const doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, module);
@@ -169,8 +67,14 @@ void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::Kernel
     args = doSegment->arg_begin();
     args->setName("self");
     (++args)->setName("doFinal");
+//    if (mHasPrincipleItemCount) {
+//        (++args)->setName("principleAvailableItemCount");
+//    }
     for (const Binding & input : mStreamSetInputs) {
-        (++args)->setName(input.name + "AvailableItems");
+        //const ProcessingRate & r = input.getRate();
+        //if (!r.isDerived()) {
+            (++args)->setName(input.getName() + "AvailableItems");
+        //}
     }
 
     // Create the terminate function prototype
@@ -181,7 +85,7 @@ void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::Kernel
         const auto n = mScalarOutputs.size();
         Type * outputType[n];
         for (unsigned i = 0; i < n; ++i) {
-            outputType[i] = mScalarOutputs[i].type;
+            outputType[i] = mScalarOutputs[i].getType();
         }
         if (n == 1) {
             resultType = outputType[0];
@@ -200,6 +104,12 @@ void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::Kernel
     linkExternalMethods(idb);
 }
 
+void  KernelInterface::setInstance(Value * const instance) {
+    assert ("kernel instance cannot be null!" && instance);
+    assert ("kernel instance must point to a valid kernel state type!" && (instance->getType()->getPointerElementType() == mKernelStateType));
+    mKernelInstance = instance;
+}
+
 Function * KernelInterface::getInitFunction(Module * const module) const {
     const auto name = getName() + INIT_SUFFIX;
     Function * f = module->getFunction(name);
@@ -209,7 +119,7 @@ Function * KernelInterface::getInitFunction(Module * const module) const {
     return f;
 }
 
-Function * KernelInterface::getDoSegmentFunction(llvm::Module * const module) const {
+Function * KernelInterface::getDoSegmentFunction(Module * const module) const {
     const auto name = getName() + DO_SEGMENT_SUFFIX;
     Function * f = module->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
@@ -225,4 +135,25 @@ Function * KernelInterface::getTerminateFunction(Module * const module) const {
         llvm::report_fatal_error("Cannot find " + name);
     }
     return f;
+}
+
+CallInst * KernelInterface::makeDoSegmentCall(kernel::KernelBuilder & idb, const std::vector<llvm::Value *> & args) const {
+    Function * const doSegment = getDoSegmentFunction(idb.getModule());
+    assert (doSegment->getArgumentList().size() <= args.size());
+    return idb.CreateCall(doSegment, args);
+}
+
+void Binding::addAttribute(Attribute attribute) {
+    for (Attribute & attr : attributes) {
+        if (attr.getKind() == attribute.getKind()) {
+            return;
+        }
+    }
+    attributes.emplace_back(attribute);
+}
+
+void KernelInterface::normalizeStreamProcessingRates() {
+
+}
+
 }

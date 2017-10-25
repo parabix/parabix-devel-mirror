@@ -10,6 +10,7 @@
 #include <pablo/pe_ones.h>
 
 #include <pablo/printer_pablos.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace cc;

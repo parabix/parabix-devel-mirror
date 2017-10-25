@@ -17,7 +17,7 @@ namespace kernel {
 
 const unsigned packSize = 64;
     
-void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb) {
+void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfStrides) {
 /*  
    Strategy:  first form an index consisting of one bit per packsize input positions,
    with a 1 bit signifying that the corresponding pack has at least one 1 bit.
@@ -59,12 +59,16 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     Type * iPackTy = kb->getIntNTy(packSize);
     Type * iPackPtrTy = iPackTy->getPointerTo();
     
-    Function::arg_iterator args = mCurrentMethod->arg_begin();
-    /* self = */ args++;
-    Value * itemsToDo = &*(args++);
-    Value * sourceBitstream = &*(args++);
-    Value * uptoN_bitstream = &*(args);
+//    Function::arg_iterator args = mCurrentMethod->arg_begin();
+//    /* self = */ args++;
+//    Value * itemsToDo = &*(args++);
+//    Value * sourceBitstream = &*(args++);
+//    Value * uptoN_bitstream = &*(args);
     
+    Value * itemsToDo = mAvailableItemCount[0];
+    Value * sourceBitstream = kb->getInputStreamBlockPtr("bits", kb->getInt32(0)); // mStreamBufferPtr[0];
+    Value * uptoN_bitstream = kb->getInputStreamBlockPtr("uptoN", kb->getInt32(0)); // mStreamBufferPtr[1];
+
     // Compute the ceiling of the number of blocks to do.  If we have a final
     // partial block, it is treated as a full block initially.   
     Value * blocksToDo = kb->CreateUDiv(kb->CreateAdd(itemsToDo, blockSizeLess1), blockSize);
@@ -188,7 +192,7 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
 
 UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & kb)
 : MultiBlockKernel("UntilN", {Binding{kb->getStreamSetTy(1, 1), "bits"}},
-                             {Binding{kb->getStreamSetTy(1, 1), "uptoN", MaxRatio(1)}},
+                             {Binding{kb->getStreamSetTy(1, 1), "uptoN", BoundedRate(0, 1)}},
                              {Binding{kb->getSizeTy(), "N"}}, {},
                              {Binding{kb->getSizeTy(), "seenSoFar"}}) {
 }

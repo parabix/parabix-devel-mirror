@@ -33,6 +33,7 @@
 #include <unordered_set>
 
 #include <boost/graph/strong_components.hpp>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 #include <pablo/printer_pablos.h>
 

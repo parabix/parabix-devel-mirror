@@ -29,6 +29,7 @@
 #include <re/re_toolchain.h>        // for AlgorithmOptionIsSet, RE_Algorith...
 #include "cc/cc_compiler.h"         // for CC_Compiler
 #include "pablo/builder.hpp"        // for PabloBuilder
+#include <llvm/Support/ErrorHandling.h>
 
 namespace pablo { class PabloAST; }
 namespace pablo { class PabloKernel; }

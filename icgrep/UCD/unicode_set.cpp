@@ -650,28 +650,19 @@ bool UnicodeSet::intersects(const UnicodeSet & other) const {
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
-        const auto n = std::min(i1.length(), i2.length());
-        if (i1.type() == Empty) {
-            i1 += i1.length();
-            i2 += i1.length();
-        }
-        else if (i2.type() == Empty) {
-            i1 += i2.length();
-            i2 += i2.length();
-        }
-        else if (i1.type() == Full) {
-            return false;
-        }
-        else if (i2.type() == Full) {
-            return false;
-        }
-        else { //both Mixed
-            for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
-                if ((i1.quad() & i2.quad()) != 0) return false;
+        auto n = std::min(i1.length(), i2.length());
+        if (i1.type() == Empty || i2.type() == Empty) {
+            i1 += n;
+            i2 += n;
+        } else if (i1.type() == Full || i2.type() == Full) {
+            return true;
+        } else { //both Mixed
+            for (; n; --n, ++i1, ++i2) {
+                if ((i1.quad() & i2.quad()) != 0) return true;
             }
         }
     }
-    return true;
+    return false;
 }
 
 

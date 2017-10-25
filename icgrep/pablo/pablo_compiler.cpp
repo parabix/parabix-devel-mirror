@@ -460,6 +460,7 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             if (LLVM_LIKELY(array && array->isKernelParameter())) {
                 if (array->isReadOnly()) {
                     value = iBuilder->getInputStreamBlockPtr(array->getName(), index);
+                    value = iBuilder->CreateLoad(value);
                 } else if (array->isReadNone()) {
                     value = iBuilder->getOutputStreamBlockPtr(array->getName(), index);
                 } else {

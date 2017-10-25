@@ -1,14 +1,15 @@
 #ifndef KERNEL_BUILDER_H
 #define KERNEL_BUILDER_H
 
-#include <kernels/interface.h>
 #include <IR_Gen/idisa_builder.h>
+#include <kernels/kernel.h>
 
 namespace kernel {
 
 class Kernel;
 
 class KernelBuilder : public virtual IDISA::IDISA_Builder {
+    friend class Kernel;
 public:
 
     // Get the value of a scalar field for the current instance.
@@ -34,24 +35,42 @@ public:
 
     void releaseLogicalSegmentNo(llvm::Value * nextSegNo);
 
-    llvm::Value * getProducedItemCount(const std::string & name, llvm::Value * doFinal = nullptr);
+    llvm::Value * getProducedItemCount(const std::string & name) {
+        return getInternalItemCount(name, Kernel::PRODUCED_ITEM_COUNT_SUFFIX);
+    }
 
-    void setProducedItemCount(const std::string & name, llvm::Value * value);
+    void setProducedItemCount(const std::string & name, llvm::Value * value) {
+        setInternalItemCount(name, Kernel::PRODUCED_ITEM_COUNT_SUFFIX, value);
+    }
 
-    llvm::Value * getProcessedItemCount(const std::string & name);
+    llvm::Value * getProcessedItemCount(const std::string & name) {
+        return getInternalItemCount(name, Kernel::PROCESSED_ITEM_COUNT_SUFFIX);
+    }
 
-    void setProcessedItemCount(const std::string & name, llvm::Value * value);
+    void setProcessedItemCount(const std::string & name, llvm::Value * value) {
+        setInternalItemCount(name, Kernel::PROCESSED_ITEM_COUNT_SUFFIX, value);
+    }
 
-    llvm::Value * getConsumedItemCount(const std::string & name);
+    llvm::Value * getConsumedItemCount(const std::string & name) {
+        return getInternalItemCount(name, Kernel::CONSUMED_ITEM_COUNT_SUFFIX);
+    }
 
-    void setConsumedItemCount(const std::string & name, llvm::Value * value);
+    void setConsumedItemCount(const std::string & name, llvm::Value * value) {
+        setInternalItemCount(name, Kernel::CONSUMED_ITEM_COUNT_SUFFIX, value);
+    }
 
     llvm::Value * getTerminationSignal();
 
-    void setTerminationSignal();
+    void setTerminationSignal() { setTerminationSignal(getTrue()); }
+
+    void setTerminationSignal(llvm::Value * const value);
+
+    llvm::Value * getCycleCountPtr();
 
     // Run-time access of Kernel State and parameters of methods for
     // use in implementing kernels.
+
+    llvm::Value * getInputStreamPtr(const std::string & name, llvm::Value * const blockIndex);
 
     llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex);
 
@@ -62,6 +81,8 @@ public:
     llvm::Value * loadInputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex);
 
     llvm::Value * getInputStreamSetCount(const std::string & name);
+
+    llvm::Value * getOutputStreamPtr(const std::string & name, llvm::Value * const blockIndex);
 
     llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex);
 
@@ -75,11 +96,13 @@ public:
 
     llvm::Value * getAdjustedInputStreamBlockPtr(llvm::Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex);
 
-    llvm::Value * getRawInputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition);
+    llvm::Value * getRawInputPointer(const std::string & name, llvm::Value * absolutePosition);
 
-    llvm::Value * getRawOutputPointer(const std::string & name, llvm::Value * streamIndex, llvm::Value * absolutePosition);
+    llvm::Value * getRawOutputPointer(const std::string & name, llvm::Value * absolutePosition);
 
     llvm::Value * getBaseAddress(const std::string & name);
+
+    void CreateCopyBack(const std::string & name, llvm::Value * from, llvm::Value * to);
 
     void setBaseAddress(const std::string & name, llvm::Value * addr);
 
@@ -97,9 +120,11 @@ public:
     
     llvm::Value * getLinearlyWritableItems(const std::string & name, llvm::Value * fromPos, bool reverse = false);
     
+    llvm::Value * copy(const std::string & name, llvm::Value * target, llvm::Value * source, llvm::Value * itemsToCopy, const unsigned alignment = 0);
+
     llvm::BasicBlock * CreateConsumerWait();
 
-    llvm::Value * getStreamSetBufferPtr(const std::string & name);
+    llvm::Value * getStreamHandle(const std::string & name);
 
     llvm::CallInst * createDoSegmentCall(const std::vector<llvm::Value *> & args);
 
@@ -128,6 +153,10 @@ protected:
     llvm::Value * getScalarFieldPtr(llvm::Value * instance, llvm::Value * index);
 
     llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & fieldName);
+
+    llvm::Value * getInternalItemCount(const std::string & name, const std::string & suffix);
+
+    void setInternalItemCount(const std::string & name, const std::string & suffix, llvm::Value * const value);
 
 private:
 

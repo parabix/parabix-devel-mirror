@@ -31,8 +31,8 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod(const std::unique_ptr<Ker
     Value * iterations = selectMin(iBuilder,
             iBuilder->getSize(iBuilder->getBitBlockWidth()),
             iBuilder->CreateSub(iBuilder->getAvailableItemCount("literalIndexes"), iBuilder->getProcessedItemCount("literalIndexes")));
-    Value * inputBufferBasePtr = iBuilder->getRawInputPointer("inputStream", iBuilder->getSize(0), iBuilder->getSize(0));
-    Value * outputBufferBasePtr = iBuilder->getRawOutputPointer("outputStream", iBuilder->getSize(0), iBuilder->getSize(0));
+    Value * inputBufferBasePtr = iBuilder->getRawInputPointer("inputStream", iBuilder->getSize(0));
+    Value * outputBufferBasePtr = iBuilder->getRawOutputPointer("outputStream", iBuilder->getSize(0));
     iBuilder->CreateBr(loopBody);
 
     iBuilder->SetInsertPoint(loopBody);
@@ -54,14 +54,19 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod(const std::unique_ptr<Ker
     Value * matchOffset = iBuilder->CreateZExt(iBuilder->CreateLoad(matchOffsetPtr), iBuilder->getSizeTy());
     Value * matchLength = iBuilder->CreateZExt(iBuilder->CreateLoad(matchLengthPtr), iBuilder->getSizeTy());
 
-#if 0
-    Value * processedItem = iBuilder->CreateAdd(iBuilder->getProcessedItemCount("literalIndexes"), phiInputIndex);
-    iBuilder->CallPrintInt("ProccessedItem", processedItem);
-    iBuilder->CallPrintInt("LiteralStart", literalStart);
-    iBuilder->CallPrintInt("LiteralLength", literalLength);
-    iBuilder->CallPrintInt("MatchOffset", matchOffset);
-    iBuilder->CallPrintInt("MatchLength", matchLength);
-#endif
+//    iBuilder->CallPrintInt(" ----- literalStart", literalStart);
+//    iBuilder->CallPrintInt(" ----- literalLength", literalLength);
+//    iBuilder->CallPrintInt(" ----- matchOffset", matchOffset);
+//    iBuilder->CallPrintInt(" ----- matchLength", matchLength);
+
+//#if 0
+//    Value * processedItem = iBuilder->CreateAdd(iBuilder->getProcessedItemCount("literalIndexes"), phiInputIndex);
+//    iBuilder->CallPrintInt("ProccessedItem", processedItem);
+//    iBuilder->CallPrintInt("LiteralStart", literalStart);
+//    iBuilder->CallPrintInt("LiteralLength", literalLength);
+//    iBuilder->CallPrintInt("MatchOffset", matchOffset);
+//    iBuilder->CallPrintInt("MatchLength", matchLength);
+//#endif
 
     // =================================================
     // Literals.
@@ -113,10 +118,10 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod(const std::unique_ptr<Ker
             );
 
     iBuilder->SetInsertPoint(cpyLoopBody);
-#ifndef NDEBUG
-    iBuilder->CallPrintIntToStderr("srcOffset", phiSrcOffset);
-    iBuilder->CallPrintIntToStderr("dstOffset", phiDstOffset);
-#endif
+//#ifndef NDEBUG
+//    iBuilder->CallPrintIntToStderr("srcOffset", phiSrcOffset);
+//    iBuilder->CallPrintIntToStderr("dstOffset", phiDstOffset);
+//#endif
     BasicBlock * reachingBufferEnd_then = iBuilder->CreateBasicBlock("matchcopy_reaching_buf_end_then");
     BasicBlock * reachingBufferEnd_else = iBuilder->CreateBasicBlock("matchcopy_reaching_buf_end_else");
     Value * distSrcEnd = iBuilder->CreateSub(bufferSize, phiSrcOffset);
@@ -181,9 +186,9 @@ void LZ4ByteStreamDecoderKernel::generateDoBlockMethod(const std::unique_ptr<Ker
             );
 
     iBuilder->SetInsertPoint(loopExit);
-#ifndef NDEBUG
-    iBuilder->CallPrintInt("Decompressed bytes", iBuilder->getProducedItemCount("outputStream"));
-#endif
+//#ifndef NDEBUG
+//    iBuilder->CallPrintInt("Decompressed bytes", iBuilder->getProducedItemCount("outputStream"));
+//#endif
 }
 
 
@@ -192,7 +197,7 @@ LZ4ByteStreamDecoderKernel::LZ4ByteStreamDecoderKernel(const std::unique_ptr<ker
     // Inputs
     {Binding{iBuilder->getStreamSetTy(2, 32), "literalIndexes"},
      Binding{iBuilder->getStreamSetTy(2, 32), "matchIndexes"},
-     Binding{iBuilder->getStreamSetTy(1, 8), "inputStream", UnknownRate()}},
+     Binding{iBuilder->getStreamSetTy(1, 8), "inputStream", UnknownRate(), LookBehind(65536)}},
     // Outputs
     {Binding{iBuilder->getStreamSetTy(1, 8), "outputStream", UnknownRate()}},
     // Arguments

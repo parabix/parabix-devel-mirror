@@ -20,7 +20,7 @@ inline static unsigned floor_log2(const unsigned v) {
 
 namespace kernel {
 
-void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder) {
+void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, Value * const numOfStrides) {
 
     Module * const m = iBuilder->getModule();
     
@@ -41,17 +41,12 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     IntegerType * const sizeTy = iBuilder->getSizeTy();
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / sizeTy->getBitWidth();
     VectorType * const scanwordVectorType =  VectorType::get(sizeTy, fieldCount);
-    Constant * blockSize = iBuilder->getSize(iBuilder->getBitBlockWidth());
 
-    Function::arg_iterator args = mCurrentMethod->arg_begin();
-    /* self = */ args++;
-    Value * itemsToDo = &*(args++);
-    /* inputStreamAvail = */ args++;
-    Value * match_result = &*(args++);
-    Value * line_break = &*(args++);
-    /* input_stream = */ args++;
+    Value * match_result = iBuilder->getInputStreamBlockPtr("matchResult", iBuilder->getInt32(0));
+    Value * line_break = iBuilder->getInputStreamBlockPtr("lineBreak", iBuilder->getInt32(0));
 
-    Value * blocksToDo = iBuilder->CreateUDivCeil(itemsToDo, blockSize);
+    Value * blocksToDo = iBuilder->CreateAdd(numOfStrides, iBuilder->CreateZExt(mIsFinal, numOfStrides->getType()));
+    blocksToDo = iBuilder->CreateMul(blocksToDo, iBuilder->getSize(mStride / iBuilder->getBitBlockWidth()));
     
     Value * match_result_ptr = iBuilder->CreateBitCast(match_result, scanwordVectorType->getPointerTo());
     Value * line_break_ptr = iBuilder->CreateBitCast(line_break, scanwordVectorType->getPointerTo());
@@ -139,7 +134,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
             matchRecordStart->addIncoming(priorRecordStart, prior_breaks_block);
             phiRecordStart->addIncoming(matchRecordStart, loop_final_block);
             Value * matchRecordEnd = iBuilder->CreateAdd(phiScanwordPos, iBuilder->CreateCountForwardZeroes(phiMatchWord));
-            Value * const inputStream = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
+            Value * const inputStream = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0));
             Function * dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
             Value * start_ptr = iBuilder->CreateGEP(inputStream, matchRecordStart);
             Value * end_ptr = iBuilder->CreateGEP(inputStream, matchRecordEnd);
@@ -194,21 +189,23 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpNE(blockBaseNext, blocksToDo), initialBlock, blocksExit);
 
     iBuilder->SetInsertPoint(blocksExit);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpULT(itemsToDo, blockSize), callFinalizeScan, scanReturn);
+    iBuilder->CreateCondBr(mIsFinal, callFinalizeScan, scanReturn);
+
     iBuilder->SetInsertPoint(callFinalizeScan);
     Value * bufSize = iBuilder->getBufferedSize("InputStream");
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
-    Value * const buffer_base = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0), iBuilder->getInt32(0));
+    Value * const buffer_base = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0));
     Value * buffer_end_address = iBuilder->CreateGEP(buffer_base, bufSize);
     iBuilder->CreateCall(finalizer, {accumulator, buffer_end_address});
     iBuilder->CreateBr(scanReturn);
+
     iBuilder->SetInsertPoint(scanReturn);
     
 }
 
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
 : MultiBlockKernel("scanMatch",
-    {Binding{b->getStreamSetTy(1, 1), "matchResult"}, Binding{b->getStreamSetTy(1, 1), "lineBreak"}, Binding{b->getStreamSetTy(1, 8), "InputStream", UnknownRate()}},
+    {Binding{b->getStreamSetTy(1, 1), "matchResult", FixedRate(), Principle()}, Binding{b->getStreamSetTy(1, 1), "lineBreak"}, Binding{b->getStreamSetTy(1, 8), "InputStream", UnknownRate()}},
     {},
     {Binding{b->getIntAddrTy(), "accumulator_address"}},
     {},

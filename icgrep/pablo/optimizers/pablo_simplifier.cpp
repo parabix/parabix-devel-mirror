@@ -17,6 +17,7 @@
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
 #include <boost/container/flat_set.hpp>
+#include <llvm/IR/Type.h>
 
 using namespace boost;
 using namespace boost::container;

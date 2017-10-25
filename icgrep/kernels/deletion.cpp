@@ -63,12 +63,13 @@ SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(const std::unique_ptr<ker
         && "mDelCountFieldWidth must be a power of 2");
     assert(mSwizzleFactor > 1 && "mDelCountFieldWidth must be less than the block width");
     assert((mPEXTWidth == 64 || mPEXTWidth == 32) && "PEXT width must be 32 or 64");
-    
-    mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle0", MaxRatio(1)});
+
+    // why, if we have 1 input stream, are there n output swizzle streams rather 1 of n?
+    mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle0", BoundedRate(0, 1)});
     addScalar(iBuilder->getBitBlockType(), "pendingSwizzleData0");
     for (unsigned i = 1; i < mSwizzleSetCount; i++) {
         mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1),
-            "outputSwizzle" + std::to_string(i), FixedRatio(1, 1, "outputSwizzle0")});
+            "outputSwizzle" + std::to_string(i), RateEqualTo("outputSwizzle0")});
         addScalar(iBuilder->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
     }
     addScalar(iBuilder->getSizeTy(), "pendingOffset");
@@ -563,11 +564,11 @@ SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(const std::un
         assert((fieldWidth > 0) && ((fieldWidth & (fieldWidth - 1)) == 0) && "fieldWidth must be a power of 2");
         assert(mSwizzleFactor > 1 && "fieldWidth must be less than the block width");
         mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle0"});
-        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle0", MaxRatio(1)});
+        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle0", BoundedRate(0, 1)});
         addScalar(iBuilder->getBitBlockType(), "pendingSwizzleData0");
         for (unsigned i = 1; i < mSwizzleSetCount; i++) {
             mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle" + std::to_string(i)});
-            mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle" + std::to_string(i), FixedRatio(1, 1, "outputSwizzle0")});
+            mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle" + std::to_string(i), RateEqualTo("outputSwizzle0")});
             addScalar(iBuilder->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
         }
         addScalar(iBuilder->getSizeTy(), "pendingOffset");
@@ -601,7 +602,7 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
     // We load the count for the field and process all swizzle groups accordingly.
     for (unsigned i = 0; i < mSwizzleFactor; i++) {
         Value * newItemCount = iBuilder->CreateLoad(iBuilder->CreateGEP(countStreamPtr, iBuilder->getInt32(i)));
-	iBuilder->CallPrintInt("newItemCount", newItemCount);
+    //iBuilder->CallPrintInt("newItemCount", newItemCount);
         Value * pendingSpace = iBuilder->CreateSub(iBuilder->getSize(mFieldWidth), pendingOffset);
         Value * pendingSpaceFilled = iBuilder->CreateICmpUGE(newItemCount, pendingSpace);
         
@@ -609,7 +610,7 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
         // according to the same newItemCount, pendingSpace, ...
         for (unsigned j = 0; j < mSwizzleSetCount; j++) {
             Value * newItems = iBuilder->loadInputStreamBlock("inputSwizzle" + std::to_string(j), iBuilder->getInt32(i));
-	    iBuilder->CallPrintRegister("newItems", newItems);
+        //iBuilder->CallPrintRegister("newItems", newItems);
             // Combine as many of the new items as possible into the pending group.
             Value * combinedGroup = iBuilder->CreateOr(pendingData[j], iBuilder->CreateShl(newItems, iBuilder->simd_fill(mFieldWidth, pendingOffset)));
 	    //iBuilder->CallPrintRegister("combinedGroup", combinedGroup);

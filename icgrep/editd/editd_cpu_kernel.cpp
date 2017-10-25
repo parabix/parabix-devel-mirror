@@ -90,7 +90,7 @@ void editdCPUKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelB
 }
 
 void editdCPUKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & idb, Value * remainingBytes) {
-    idb->setScalarField("EOFmask", idb->bitblock_mask_from(remainingBytes));
+    idb->setScalarField("EOFmask", idb->bitblock_mask_from(mAvailableItemCount[0]));
     CreateDoBlockMethodCall(idb);
 }
 

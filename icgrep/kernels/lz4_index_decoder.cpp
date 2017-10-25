@@ -11,16 +11,16 @@ using namespace llvm;
 using namespace kernel;
 
 #ifndef NDEBUG
-#define DEBUG_RT_PRINT 1
+#define DEBUG_RT_PRINT 0
 #else
 #define DEBUG_RT_PRINT 0
 #endif
 
 #define printRTDebugMsg(MSG) \
-    do { if (DEBUG_RT_PRINT) iBuilder->CallPrintMsgToStderr(MSG); } while (0)
+    if (DEBUG_RT_PRINT) iBuilder->CallPrintMsgToStderr(MSG)
 
 #define printRTDebugInt(NAME, X) \
-    do { if (DEBUG_RT_PRINT) iBuilder->CallPrintIntToStderr(NAME, X); } while (0)
+    if (DEBUG_RT_PRINT) iBuilder->CallPrintIntToStderr(NAME, X)
 
 #define printGlobalPos() \
     printRTDebugInt("GlobalPos", iBuilder->CreateAdd(blockStartPos, iBuilder->CreateLoad(sOffset)))
@@ -143,16 +143,16 @@ void LZ4IndexDecoderKernel::loadCurrentExtender(const std::unique_ptr<KernelBuil
 void LZ4IndexDecoderKernel::generateProduceOutput(const std::unique_ptr<KernelBuilder> &iBuilder) {
     Value * producedItem = iBuilder->getProducedItemCount("literalIndexes");
 
-#ifndef NDEBUG
-    iBuilder->CallPrintInt("ProducedItem", producedItem);
-    // LiteralStart is adjusted to be relative to the block start, so that
-    // the output can be compared against that of the reference implementation.
-    Value * literalStart = iBuilder->CreateSub(iBuilder->getScalarField("LiteralStart"), iBuilder->getScalarField("LZ4BlockStart"));
-    iBuilder->CallPrintInt("LiteralStart", literalStart);
-    iBuilder->CallPrintInt("LiteralLength", iBuilder->getScalarField("LiteralLength"));
-    iBuilder->CallPrintInt("MatchOffset", iBuilder->getScalarField("MatchOffset"));
-    iBuilder->CallPrintInt("MatchLength", iBuilder->getScalarField("MatchLength"));
-#endif
+//#ifndef NDEBUG
+//    iBuilder->CallPrintInt("ProducedItem", producedItem);
+//    // LiteralStart is adjusted to be relative to the block start, so that
+//    // the output can be compared against that of the reference implementation.
+//    Value * literalStart = iBuilder->CreateSub(iBuilder->getScalarField("LiteralStart"), iBuilder->getScalarField("LZ4BlockStart"));
+//    iBuilder->CallPrintInt("LiteralStart", literalStart);
+//    iBuilder->CallPrintInt("LiteralLength", iBuilder->getScalarField("LiteralLength"));
+//    iBuilder->CallPrintInt("MatchOffset", iBuilder->getScalarField("MatchOffset"));
+//    iBuilder->CallPrintInt("MatchLength", iBuilder->getScalarField("MatchLength"));
+//#endif
     printRTDebugMsg("--------------");
 
     Value * outputOffset = iBuilder->CreateAnd(
@@ -694,7 +694,7 @@ LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(const std::unique_ptr<kernel::Kerne
      Binding{iBuilder->getStreamSetTy(1, 1), "extenders"}},
     // Outputs: literal start, literal length, match offset, match length
     {Binding{iBuilder->getStreamSetTy(2, 32), "literalIndexes", UnknownRate()},
-     Binding{iBuilder->getStreamSetTy(2, 32), "matchIndexes", FixedRatio(1, 1, "literalIndexes")}},
+     Binding{iBuilder->getStreamSetTy(2, 32), "matchIndexes", RateEqualTo("literalIndexes")}},
     // Arguments
     {Binding{iBuilder->getInt1Ty(), "hasBlockChecksum"}},
     {},

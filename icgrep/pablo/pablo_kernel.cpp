@@ -255,23 +255,23 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
 , mStreamTy(nullptr) {
     prepareStreamSetNameMap();
     for (const Binding & ss : mStreamSetInputs) {
-        Var * param = new (mAllocator) Var(makeName(ss.name), ss.type, mAllocator, Var::KernelInputParameter);
+        Var * param = new (mAllocator) Var(makeName(ss.getName()), ss.getType(), mAllocator, Var::KernelInputParameter);
         param->addUser(this);
         mInputs.push_back(param);
         mVariables.push_back(param);
     }
     for (const Binding & ss : mStreamSetOutputs) {
-        Var * result = new (mAllocator) Var(makeName(ss.name), ss.type, mAllocator, Var::KernelOutputParameter);
+        Var * result = new (mAllocator) Var(makeName(ss.getName()), ss.getType(), mAllocator, Var::KernelOutputParameter);
         result->addUser(this);
         mOutputs.push_back(result);
         mVariables.push_back(result);
     }
     for (const Binding & ss : mScalarOutputs) {
-        Var * result = new (mAllocator) Var(makeName(ss.name), ss.type, mAllocator, Var::KernelOutputParameter);
+        Var * result = new (mAllocator) Var(makeName(ss.getName()), ss.getType(), mAllocator, Var::KernelOutputParameter);
         result->addUser(this);
         mOutputs.push_back(result);
         mVariables.push_back(result);
-        mScalarOutputNameMap.emplace(ss.name, result);
+        mScalarOutputNameMap.emplace(ss.getName(), result);
         result->setScalar();
     }
 }

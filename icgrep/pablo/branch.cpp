@@ -112,6 +112,7 @@ Branch::Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body
 , mEscapedCount(0)
 , mEscapedCapacity(0)
 , mEscaped(nullptr)
+, mRegular(true)
 {
 
 }
