@@ -301,7 +301,7 @@ While * PabloBlock::createWhile(PabloAST * condition, PabloBlock * body) {
     return node;
 }
 
-/// TERNARY CREATE FUNCTION
+/// TERNARY CREATE FUNCTIONS
 
 Sel * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, String * name) {
     CHECK_SAME_TYPE(trueExpr, falseExpr);
@@ -310,6 +310,14 @@ Sel * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST 
     }
     return insertAtInsertionPoint(new (mAllocator) Sel(condition, trueExpr, falseExpr, name, mAllocator));
 }
+
+IndexedAdvance * PabloBlock::createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, PabloAST * shiftAmount, String * name) {
+    if (name == nullptr) {
+        name = makeName("indexed_advance");
+    }
+    return insertAtInsertionPoint(new (mAllocator) IndexedAdvance(expr, indexStream, shiftAmount, name, mAllocator));
+}
+    
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief Create

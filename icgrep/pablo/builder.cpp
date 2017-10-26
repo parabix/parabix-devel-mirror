@@ -132,6 +132,34 @@ PabloAST * PabloBuilder::createAdvance(PabloAST * expr, PabloAST * shiftAmount, 
     return result;
 }
 
+PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, PabloAST * shiftAmount) {
+    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
+        return expr;
+    }
+    else if (isa<Ones>(expr)) {
+        return createAdvance(expr, shiftAmount);
+    }
+    else if (cast<Integer>(shiftAmount)->value() == 1) {
+        return createAdvanceThenScanTo(expr, indexStream);
+    }
+    MAKE_TERNARY(createIndexedAdvance, TypeId::IndexedAdvance, expr, indexStream, shiftAmount);
+    return result;
+}
+
+PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, PabloAST * shiftAmount, const llvm::StringRef & prefix) {
+    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
+        return expr;
+    }
+    else if (isa<Ones>(expr)) {
+        return createAdvance(expr, shiftAmount, prefix);
+    }
+    else if (cast<Integer>(shiftAmount)->value() == 1) {
+        return createAdvanceThenScanTo(expr, indexStream, prefix);
+    }
+    MAKE_NAMED_TERNARY(createIndexedAdvance, TypeId::IndexedAdvance, prefix, expr, indexStream, shiftAmount);
+    return result;
+}
+    
 Extract * PabloBuilder::createExtract(PabloAST * value, not_null<PabloAST *> index) {
     MAKE_BINARY(createExtract, TypeId::Extract, value, index);
     return cast<Extract>(result);

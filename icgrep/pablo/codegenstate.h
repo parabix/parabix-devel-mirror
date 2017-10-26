@@ -14,6 +14,7 @@ namespace llvm { class Type; }
 namespace llvm { class raw_ostream; }
 namespace pablo { class Add; }
 namespace pablo { class Advance; }
+namespace pablo { class IndexedAdvance; }
 namespace pablo { class AdvanceThenScanThru; }
 namespace pablo { class AdvanceThenScanTo; }
 namespace pablo { class And; }
@@ -69,13 +70,23 @@ public:
     Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount) {
         return createAdvance(expr, shiftAmount, nullptr);
     }
-
+    
     Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const llvm::StringRef & prefix) {
         return createAdvance(expr, shiftAmount, makeName(prefix));
     }
-
+    
     Advance * createAdvance(PabloAST * expr, PabloAST * shiftAmount, String * name);
-
+    
+    IndexedAdvance * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, PabloAST * shiftAmount) {
+        return createIndexedAdvance(expr, indexStream, shiftAmount, nullptr);
+    }
+    
+    IndexedAdvance * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, PabloAST * shiftAmount, const llvm::StringRef & prefix) {
+        return createIndexedAdvance(expr, indexStream, shiftAmount, makeName(prefix));
+    }
+    
+    IndexedAdvance * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, PabloAST * shiftAmount, String * name);
+    
     Lookahead * createLookahead(PabloAST * expr, PabloAST * shiftAmount) {
         return createLookahead(expr, shiftAmount, nullptr);
     }

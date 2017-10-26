@@ -103,6 +103,18 @@ public:
 
     PabloAST * createAdvance(PabloAST * expr, PabloAST * shiftAmount, const llvm::StringRef & prefix);
 
+    inline PabloAST * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, const int64_t shiftAmount) {
+        return createIndexedAdvance(expr, indexStream, mPb->getInteger(shiftAmount));
+    }
+    
+    PabloAST * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, PabloAST * shiftAmount);
+    
+    inline PabloAST * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, const int64_t shiftAmount, const llvm::StringRef & prefix) {
+        return createIndexedAdvance(expr, indexStream, mPb->getInteger(shiftAmount), prefix);
+    }
+    
+    PabloAST * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, PabloAST * shiftAmount, const llvm::StringRef & prefix);
+    
     inline PabloAST * createLookahead(PabloAST * expr, const int64_t shiftAmount) {
         if (shiftAmount == 0) {
             return expr;
