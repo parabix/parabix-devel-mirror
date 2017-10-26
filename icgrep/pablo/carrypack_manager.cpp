@@ -136,6 +136,9 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
     if (mHasLongAdvance) {
         kernel->addScalar(iBuilder->getSizeTy(), "CarryBlockIndex");
     }
+    for (unsigned i = 0; i < mIndexedLongAdvanceTotal; i++) {
+        kernel->addScalar(iBuilder->getSizeTy(), "LongAdvancePosition" + std::to_string(i));
+    }
 }
 
 bool isDynamicallyAllocatedType(const Type * const ty) {
@@ -1102,28 +1105,18 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
             CarryGroup & carryGroup = mCarryGroup[index];
             if (carryGroup.groupSize == 0) {
                 Type * packTy = carryPackTy;
-                if (LLVM_UNLIKELY(isa<Advance>(stmt))) {
-                    const auto amount = cast<Advance>(stmt)->getAmount();
+                if (LLVM_UNLIKELY(isa<Advance>(stmt) || isa<IndexedAdvance>(stmt))) {
+                    const auto amount = isa<Advance>(stmt) ? : cast<Advance>(stmt)->getAmount() : cast<IndexedAdvance>(stmt)->getAmount();
                     if (LLVM_UNLIKELY(amount >= mElementWidth)) {
                         if (LLVM_UNLIKELY(ifDepth > 0 && amount > iBuilder->getBitBlockWidth())) {
                             // 1 bit will mark the presense of any bit in each block.
                             state.push_back(ArrayType::get(carryTy, ceil_udiv(amount, std::pow(iBuilder->getBitBlockWidth(), 2))));
                         }
                         mHasLongAdvance = true;
+                        if isa<IndexedAdvance>(stmt) mIndexedLongAdvanceTotal++;
                         const auto blocks = ceil_udiv(amount, iBuilder->getBitBlockWidth());
                         packTy = ArrayType::get(carryTy, nearest_pow2(blocks + ((loopDepth != 0) ? 1 : 0)));
                     }
-                }
-                if (LLVM_UNLIKELY(isa<IndexedAdvance>(stmt))) {
-                    // The carry data for the indexed advance stores N bits of carry data,
-                    // organized in packs that can be processed with GR instructions (such as PEXT, PDEP, popcount).
-                    // A circular buffer is used.  Because the number of bits to be dequeued
-                    // and enqueued is variable (based on the popcount of the index), an extra
-                    // pack stores the offset position in the circular buffer.
-                    const auto amount = cast<IndexedAdvance>(stmt)->getAmount();
-                    const auto packWidth = sizeof(size_t) * 8;
-                    const auto packs = ceil_udiv(amount, packWidth);
-                    packTy = ArrayType::get(iBuilder->getSizeTy(), nearest_pow2(packs) + 1);
                 }
                 state.push_back(packTy);
             }
@@ -1189,6 +1182,8 @@ CarryManager::CarryManager() noexcept
 , mNextSummaryTest(nullptr)
 , mIfDepth(0)
 , mHasLongAdvance(false)
+, mIndexedLongAdvanceTotal(0)
+, mIndexedLongAdvanceIndex(0)
 , mHasNonCarryCollapsingLoops(false)
 , mHasLoop(false)
 , mLoopDepth(0)

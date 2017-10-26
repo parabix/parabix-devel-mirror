@@ -149,6 +149,8 @@ private:
     unsigned                                        mIfDepth;
 
     bool                                            mHasLongAdvance;
+    unsigned                                        mIndexedLongAdvanceTotal;
+    unsigned                                        mIndexedLongAdvanceIndex;
     bool                                            mHasNonCarryCollapsingLoops;
     bool                                            mHasLoop;
     unsigned                                        mLoopDepth;
