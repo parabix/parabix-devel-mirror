@@ -38,12 +38,12 @@ protected:
     static void * DoGrepThreadFunction(void *args);
     virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
     std::string linePrefix(std::string fileName);
-    int32_t openFile(const std::string & fileName, std::stringstream & msgstrm);
+    int32_t openFile(const std::string & fileName, std::stringstream * msgstrm);
 
     Driver * mGrepDriver;
 
     std::vector<std::string> inputFiles;
-    std::vector<std::stringstream> mResultStrs;
+    std::vector<std::unique_ptr<std::stringstream>> mResultStrs;
     
     std::string mFileSuffix;
     

@@ -79,6 +79,9 @@ EmitMatchesEngine::EmitMatchesEngine() : GrepEngine() {
 void GrepEngine::initFileResult(std::vector<std::string> & filenames) {
     const int n = filenames.size();
     mResultStrs.resize(n);
+    for (unsigned i = 0; i < n; i++) {
+        mResultStrs[i] = make_unique<std::stringstream>();
+    }
     inputFiles = filenames;
 }
     
@@ -318,7 +321,7 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx
     typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
     
-    int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx]);
+    int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx].get());
     if (fileDescriptor == -1) return 0;
     
     uint64_t grepResult = f(fileDescriptor);
@@ -328,9 +331,8 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx
 
 uint64_t CountOnlyEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
     uint64_t grepResult = GrepEngine::doGrep(fileName, fileIdx);
-    
-    if (WithFilenameFlag) mResultStrs[fileIdx] << linePrefix(fileName);
-    mResultStrs[fileIdx] << grepResult << "\n";
+    if (WithFilenameFlag) *mResultStrs[fileIdx] << linePrefix(fileName);
+    *mResultStrs[fileIdx] << grepResult << "\n";
     return grepResult;
 }
 
@@ -346,7 +348,7 @@ std::string GrepEngine::linePrefix(std::string fileName) {
 uint64_t MatchOnlyEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
     uint64_t grepResult = GrepEngine::doGrep(fileName, fileIdx);
     if (grepResult == mRequiredCount) {
-        mResultStrs[fileIdx] << linePrefix(fileName);
+       *mResultStrs[fileIdx] << linePrefix(fileName);
     }
     return grepResult;
 }
@@ -355,9 +357,9 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, const uint32_t 
     typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor, intptr_t accum_addr);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
     
-    int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx]);
+    int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx].get());
     if (fileDescriptor == -1) return 0;
-    EmitMatch accum(linePrefix(fileName), &mResultStrs[fileIdx]);
+    EmitMatch accum(linePrefix(fileName), mResultStrs[fileIdx].get());
     uint64_t grepResult = f(fileDescriptor, reinterpret_cast<intptr_t>(&accum));
     close(fileDescriptor);
     if (accum.mLineCount > 0) grepMatchFound = true;
@@ -365,7 +367,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, const uint32_t 
 }
 
 // Open a file and return its file desciptor.
-int32_t GrepEngine::openFile(const std::string & fileName, std::stringstream & msgstrm) {
+int32_t GrepEngine::openFile(const std::string & fileName, std::stringstream * msgstrm) {
     if (fileName == "-") {
         return STDIN_FILENO;
     }
@@ -375,20 +377,20 @@ int32_t GrepEngine::openFile(const std::string & fileName, std::stringstream & m
         if (LLVM_UNLIKELY(fileDescriptor == -1)) {
             if (!NoMessagesFlag) {
                 if (errno == EACCES) {
-                    msgstrm << "icgrep: " << fileName << ": Permission denied.\n";
+                    *msgstrm << "icgrep: " << fileName << ": Permission denied.\n";
                 }
                 else if (errno == ENOENT) {
-                    msgstrm << "icgrep: " << fileName << ": No such file.\n";
+                    *msgstrm << "icgrep: " << fileName << ": No such file.\n";
                 }
                 else {
-                    msgstrm << "icgrep: " << fileName << ": Failed.\n";
+                    *msgstrm << "icgrep: " << fileName << ": Failed.\n";
                 }
             }
             return fileDescriptor;
         }
         if (stat(fileName.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) {
             if (!NoMessagesFlag) {
-                msgstrm << "icgrep: " << fileName << ": Is a directory.\n";
+                *msgstrm << "icgrep: " << fileName << ": Is a directory.\n";
             }
             close(fileDescriptor);
             return -1;
@@ -456,7 +458,7 @@ void * GrepEngine::DoGrepThreadFunction(void *args) {
     
 void GrepEngine::writeMatches() {
     for (unsigned i = 0; i < inputFiles.size(); ++i) {
-        std::cout << mResultStrs[i].str();
+        std::cout << mResultStrs[i]->str();
     }
 }
 
