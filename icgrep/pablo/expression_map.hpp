@@ -281,6 +281,7 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::Extract:
                 return mBinary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1));
             case PabloAST::ClassTypeId::Sel:
+            case PabloAST::ClassTypeId::IndexedAdvance:
                 return mTernary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2));
             default:
                 return std::make_pair(stmt, true);

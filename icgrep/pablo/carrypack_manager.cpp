@@ -136,9 +136,6 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
     if (mHasLongAdvance) {
         kernel->addScalar(iBuilder->getSizeTy(), "CarryBlockIndex");
     }
-    for (unsigned i = 0; i < mIndexedLongAdvanceTotal; i++) {
-        kernel->addScalar(iBuilder->getSizeTy(), "LongAdvancePosition" + std::to_string(i));
-    }
 }
 
 bool isDynamicallyAllocatedType(const Type * const ty) {
@@ -628,8 +625,48 @@ Value * CarryManager::advanceCarryInCarryOut(const std::unique_ptr<kernel::Kerne
 }
 
 
-Value * CarryManager::indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const IndexedAdvance * const advance, Value * const value, Value * const index_strm) {
-    report_fatal_error("IndexedAdvance not yet supported.");
+Value * CarryManager::indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & b, const IndexedAdvance * const advance, Value * const strm, Value * const index_strm) {
+    const auto shiftAmount = advance->getAmount();
+    if (LLVM_LIKELY(shiftAmount < mElementWidth)) {
+        Value * const carryIn = getNextCarryIn(b);
+        unsigned bitWidth = sizeof(size_t) * 8;
+        Value * popcount_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::ctpop, b->getSizeTy());
+        Value * PEXT_f = nullptr;
+        Value * PDEP_f = nullptr;
+        if (bitWidth == 64) {
+            PEXT_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pext_64);
+            PDEP_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_64);
+        }
+        else if ((bitWidth == 32)  && (shiftAmount < 32)) {
+            PEXT_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pext_32);
+            PDEP_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_32);
+        }
+        else {
+            llvm::report_fatal_error("indexed_advance unsupported bit width");
+        }
+        Value * shiftVal = b->getSize(shiftAmount);
+        Value * carry = b->mvmd_extract(bitWidth, carryIn, 0);
+        Value * result = b->allZeroes();
+        for (unsigned i = 0; i < b->getBitBlockWidth()/bitWidth; i++) {
+            Value * s = b->mvmd_extract(bitWidth, strm, i);
+            Value * ix = b->mvmd_extract(bitWidth, index_strm, i);
+            Value * ix_popcnt = b->CreateCall(popcount_f, {ix});
+            Value * bits = b->CreateCall(PEXT_f, {s, ix});
+            Value * adv = b->CreateOr(b->CreateShl(bits, shiftAmount), carry);
+            Value * popcount_small = b->CreateICmpULT(ix_popcnt, shiftVal);
+            Value * carry_if_popcount_small = 
+                b->CreateOr(b->CreateShl(bits, b->CreateSub(shiftVal, ix_popcnt)),
+                            b->CreateLShr(carry, ix_popcnt));
+            Value * carry_if_popcount_large = b->CreateLShr(bits, b->CreateSub(ix_popcnt, shiftVal));
+            carry = b->CreateSelect(popcount_small, carry_if_popcount_small, carry_if_popcount_large);
+            result = b->mvmd_insert(bitWidth, result, b->CreateCall(PDEP_f, {adv, ix}), i);
+        }
+        Value * carryOut = b->mvmd_insert(bitWidth, b->allZeroes(), carry, 0);
+        setNextCarryOut(b, carryOut);
+        return result;
+    } else {
+        llvm::report_fatal_error("IndexedAdvance > mElementWidth not yet supported.");
+    }
 }
 
 
@@ -1105,18 +1142,28 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
             CarryGroup & carryGroup = mCarryGroup[index];
             if (carryGroup.groupSize == 0) {
                 Type * packTy = carryPackTy;
-                if (LLVM_UNLIKELY(isa<Advance>(stmt) || isa<IndexedAdvance>(stmt))) {
-                    const auto amount = isa<Advance>(stmt) ? : cast<Advance>(stmt)->getAmount() : cast<IndexedAdvance>(stmt)->getAmount();
+                if (LLVM_UNLIKELY(isa<Advance>(stmt))) {
+                    const auto amount = cast<Advance>(stmt)->getAmount();
                     if (LLVM_UNLIKELY(amount >= mElementWidth)) {
                         if (LLVM_UNLIKELY(ifDepth > 0 && amount > iBuilder->getBitBlockWidth())) {
                             // 1 bit will mark the presense of any bit in each block.
                             state.push_back(ArrayType::get(carryTy, ceil_udiv(amount, std::pow(iBuilder->getBitBlockWidth(), 2))));
                         }
                         mHasLongAdvance = true;
-                        if isa<IndexedAdvance>(stmt) mIndexedLongAdvanceTotal++;
                         const auto blocks = ceil_udiv(amount, iBuilder->getBitBlockWidth());
                         packTy = ArrayType::get(carryTy, nearest_pow2(blocks + ((loopDepth != 0) ? 1 : 0)));
                     }
+                }
+                if (LLVM_UNLIKELY(isa<IndexedAdvance>(stmt))) {
+                    // The carry data for the indexed advance stores N bits of carry data,
+                    // organized in packs that can be processed with GR instructions (such as PEXT, PDEP, popcount).
+                    // A circular buffer is used.  Because the number of bits to be dequeued
+                    // and enqueued is variable (based on the popcount of the index), an extra
+                    // pack stores the offset position in the circular buffer.
+                    const auto amount = cast<IndexedAdvance>(stmt)->getAmount();
+                    const auto packWidth = sizeof(size_t) * 8;
+                    const auto packs = ceil_udiv(amount, packWidth);
+                    packTy = ArrayType::get(iBuilder->getSizeTy(), nearest_pow2(packs) + 1);
                 }
                 state.push_back(packTy);
             }
@@ -1182,8 +1229,6 @@ CarryManager::CarryManager() noexcept
 , mNextSummaryTest(nullptr)
 , mIfDepth(0)
 , mHasLongAdvance(false)
-, mIndexedLongAdvanceTotal(0)
-, mIndexedLongAdvanceIndex(0)
 , mHasNonCarryCollapsingLoops(false)
 , mHasLoop(false)
 , mLoopDepth(0)

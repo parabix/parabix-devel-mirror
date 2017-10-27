@@ -101,8 +101,8 @@ private:
     MarkerType compileRep(Rep * rep, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileDiff(Diff * diff, MarkerType marker, pablo::PabloBuilder & cg);
     MarkerType compileIntersect(Intersect * x, MarkerType marker, pablo::PabloBuilder & cg);
-    pablo::PabloAST * consecutive_matches(pablo::PabloAST * repeated,  int length, int repeat_count, pablo::PabloBuilder & pb);
-    pablo::PabloAST * reachable(pablo::PabloAST * repeated,  int length, int repeat_count, pablo::PabloBuilder & pb);
+    pablo::PabloAST * consecutive_matches(pablo::PabloAST * repeated, int length, int repeat_count, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
+    pablo::PabloAST * reachable(pablo::PabloAST * repeated, int length, int repeat_count, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
     static bool isFixedLength(RE * regexp);
     MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, int ifGroupSize, pablo::PabloBuilder & pb);
     MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBuilder & pb);

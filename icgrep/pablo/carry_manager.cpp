@@ -631,6 +631,7 @@ Value * CarryManager::indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel
         else {
             llvm::report_fatal_error("indexed_advance unsupported bit width");
         }
+        Value * shiftVal = b->getSize(shiftAmount);
         Value * carry = b->mvmd_extract(bitWidth, carryIn, 0);
         Value * result = b->allZeroes();
         for (unsigned i = 0; i < b->getBitBlockWidth()/bitWidth; i++) {
@@ -639,11 +640,16 @@ Value * CarryManager::indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel
             Value * ix_popcnt = b->CreateCall(popcount_f, {ix});
             Value * bits = b->CreateCall(PEXT_f, {s, ix});
             Value * adv = b->CreateOr(b->CreateShl(bits, shiftAmount), carry);
-            Value * overflow = b->CreateLShr(bits, bitWidth - shiftAmount);
+            Value * popcount_small = b->CreateICmpULT(ix_popcnt, shiftVal);
+            Value * carry_if_popcount_small = 
+                b->CreateOr(b->CreateShl(bits, b->CreateSub(shiftVal, ix_popcnt)),
+                            b->CreateLShr(carry, ix_popcnt));
+            Value * carry_if_popcount_large = b->CreateLShr(bits, b->CreateSub(ix_popcnt, shiftVal));
+            carry = b->CreateSelect(popcount_small, carry_if_popcount_small, carry_if_popcount_large);
             result = b->mvmd_insert(bitWidth, result, b->CreateCall(PDEP_f, {adv, ix}), i);
-            carry = b->CreateOr(b->CreateLShr(adv, ix_popcnt), b->CreateShl(overflow, b->CreateSub(b->getSize(bitWidth), ix_popcnt)));
         }
-        setNextCarryOut(b, carry);
+        Value * carryOut = b->mvmd_insert(bitWidth, b->allZeroes(), carry, 0);
+        setNextCarryOut(b, carryOut);
         return result;
     } else {
         llvm::report_fatal_error("IndexedAdvance > LONG_ADVANCE_BREAKPOINT not yet supported.");
