@@ -614,23 +614,23 @@ Value * CarryManager::advanceCarryInCarryOut(const std::unique_ptr<kernel::Kerne
 
 Value * CarryManager::indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & b, const IndexedAdvance * const advance, Value * const strm, Value * const index_strm) {
     const auto shiftAmount = advance->getAmount();
-    if (LLVM_LIKELY(shiftAmount < LONG_ADVANCE_BREAKPOINT)) {
+    Value * popcount_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::ctpop, b->getSizeTy());
+    Value * PEXT_f = nullptr;
+    Value * PDEP_f = nullptr;
+    unsigned bitWidth = sizeof(size_t) * 8;
+    if (bitWidth == 64) {
+        PEXT_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pext_64);
+        PDEP_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_64);
+    }
+    else if ((bitWidth == 32)  && (shiftAmount < 32)) {
+        PEXT_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pext_32);
+        PDEP_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_32);
+    }
+    else {
+        llvm::report_fatal_error("indexed_advance unsupported bit width");
+    }
+    if (LLVM_LIKELY(shiftAmount < bitWidth)) {
         Value * const carryIn = getNextCarryIn(b);
-        unsigned bitWidth = sizeof(size_t) * 8;
-        Value * popcount_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::ctpop, b->getSizeTy());
-        Value * PEXT_f = nullptr;
-        Value * PDEP_f = nullptr;
-        if (bitWidth == 64) {
-            PEXT_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pext_64);
-            PDEP_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_64);
-        }
-        else if ((bitWidth == 32)  && (shiftAmount < 32)) {
-            PEXT_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pext_32);
-            PDEP_f = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_32);
-        }
-        else {
-            llvm::report_fatal_error("indexed_advance unsupported bit width");
-        }
         Value * shiftVal = b->getSize(shiftAmount);
         Value * carry = b->mvmd_extract(bitWidth, carryIn, 0);
         Value * result = b->allZeroes();
@@ -651,8 +651,30 @@ Value * CarryManager::indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel
         Value * carryOut = b->mvmd_insert(bitWidth, b->allZeroes(), carry, 0);
         setNextCarryOut(b, carryOut);
         return result;
+    } else if (shiftAmount <= b->getBitBlockWidth()) {
+        // A single bitblock still holds all the shifted bits.   In this case, we know
+        // that the shift amount is always greater than the popcount of the individual
+        // elements that we deal with.   This simplifies some of the logic.
+        Type * iBitBlock = b->getIntNTy(b->getBitBlockWidth());
+        Value * carryInPtr = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex++), b->getInt32(0)});
+        Value * carryIn = b->CreateBlockAlignedLoad(carryInPtr);
+        Value * shiftVal = b->getSize(shiftAmount);
+        Value * carry = b->CreateBitCast(carryIn, iBitBlock);
+        Value * result = b->allZeroes();
+        for (unsigned i = 0; i < b->getBitBlockWidth()/bitWidth; i++) {
+            Value * s = b->mvmd_extract(bitWidth, strm, i);
+            Value * ix = b->mvmd_extract(bitWidth, index_strm, i);
+            Value * ix_popcnt = b->CreateCall(popcount_f, {ix});
+            Value * bits = b->CreateCall(PEXT_f, {s, ix});  // All these bits are shifted out (appended to carry).
+            result = b->mvmd_insert(bitWidth, result, b->CreateCall(PDEP_f, {b->mvmd_extract(bitWidth, carry, 0), ix}), i);
+            carry = b->CreateLShr(carry, b->CreateZExt(ix_popcnt, iBitBlock)); // Remove the carry bits consumed, make room for new bits.
+            carry = b->CreateOr(carry, b->CreateShl(b->CreateZExt(bits, iBitBlock), b->CreateZExt(b->CreateSub(shiftVal, ix_popcnt), iBitBlock)));
+        }
+        b->CreateBlockAlignedStore(b->CreateBitCast(carry, b->getBitBlockType()), carryInPtr);
+        return result;
     } else {
-        llvm::report_fatal_error("IndexedAdvance > LONG_ADVANCE_BREAKPOINT not yet supported.");
+        mIndexedLongAdvanceIndex++;
+        llvm::report_fatal_error("IndexedAdvance > BlockSize not yet supported.");
     }
 }
 
