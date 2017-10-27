@@ -140,7 +140,7 @@ PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexS
         return createAdvance(expr, shiftAmount);
     }
     else if (cast<Integer>(shiftAmount)->value() == 1) {
-        return createAdvanceThenScanTo(expr, indexStream);
+        return createAdvanceThenScanTo(createAnd(expr, indexStream), indexStream);
     }
     MAKE_TERNARY(createIndexedAdvance, TypeId::IndexedAdvance, expr, indexStream, shiftAmount);
     return result;
