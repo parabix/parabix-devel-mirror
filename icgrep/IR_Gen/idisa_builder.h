@@ -125,8 +125,10 @@ public:
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin);
     // full shift producing {shiftout, shifted}
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift);
+    virtual std::pair<llvm::Value *, llvm::Value *> bitblock_indexed_advance(llvm::Value * a, llvm::Value * index_strm, llvm::Value * shiftin, unsigned shift);
     virtual llvm::Value * bitblock_mask_from(llvm::Value * pos);
     virtual llvm::Value * bitblock_set_bit(llvm::Value * pos);
+    
 
     virtual void CreateBaseFunctions() {}
     

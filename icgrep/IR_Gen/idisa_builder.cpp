@@ -345,6 +345,11 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_advance(Value * a, Value * s
     return std::pair<Value *, Value *>(shiftout, shifted);
 }
 
+// full shift producing {shiftout, shifted}
+std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * a, Value * index, Value * shiftin, unsigned shift) {
+    llvm::report_fatal_error("bitblock_indexed_advance unimplemented for this architecture");
+}
+
 Value * IDISA_Builder::bitblock_mask_from(Value * pos) {
     Type * bitBlockInt = getIntNTy(getBitBlockWidth());
     return bitCast(CreateShl(ConstantInt::getAllOnesValue(bitBlockInt), CreateZExt(pos, bitBlockInt)));
