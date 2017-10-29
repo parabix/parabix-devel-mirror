@@ -398,7 +398,7 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
         const auto pos = markerPos(marker) == MarkerPosition::FinalMatchUnit ? lb : lb - 1;
         PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), pos);
         return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
-    } else if (!mGraphemeBoundaryRule && isUnicodeUnitLength(repeated) && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition) && (lb <= codegen::BlockSize) && AVX2_available()) {
+    } else if (!mGraphemeBoundaryRule && isUnicodeUnitLength(repeated) && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition) && AVX2_available()) {
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * cc_lb = consecutive_matches(cc, 1, lb, mFinal, pb);
         const auto pos = markerPos(marker) == MarkerPosition::FinalMatchUnit ? lb : lb - 1;
@@ -444,7 +444,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
         // "multi-byte" character. Combine the masked range with any nonFinals.
         PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, nonFinal), "bounded");
         return makeMarker(MarkerPosition::FinalPostPositionUnit, bounded);
-    } else if (!mGraphemeBoundaryRule && isUnicodeUnitLength(repeated) && ub > 1 && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)&& (ub <= codegen::BlockSize) && AVX2_available()) {
+    } else if (!mGraphemeBoundaryRule && isUnicodeUnitLength(repeated) && ub > 1 && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition) && AVX2_available()) {
         // log2 upper bound for fixed length (=1) class
         // Create a mask of positions reachable within ub from current marker.
         // Use matchstar, then apply filter.

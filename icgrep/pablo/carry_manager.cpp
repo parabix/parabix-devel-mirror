@@ -644,7 +644,7 @@ Value * CarryManager::indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel
         Constant * blockWidth_1 = b->getSize(b->getBitBlockWidth() - 1);
         Value * carryPosition = b->getScalarField("IndexedAdvancePosition" + std::to_string(mIndexedLongAdvanceIndex));
         Value * carryBlockEndPos = b->CreateAdd(carryPosition, blockWidth_1);
-        unsigned carry_blocks = nearest_pow2(20+ceil_udiv(shiftAmount, b->getBitBlockWidth()));
+        unsigned carry_blocks = nearest_pow2(1+ceil_udiv(shiftAmount, b->getBitBlockWidth()));
         Constant * carryQueueBlocks = b->getSize(carry_blocks);
         Value * carryBlock = b->CreateTrunc(b->CreateURem(b->CreateUDiv(carryPosition, blockWidth), carryQueueBlocks), b->getInt32Ty());
         Value * carryEndBlock = b->CreateTrunc(b->CreateURem(b->CreateUDiv(carryBlockEndPos, blockWidth), carryQueueBlocks), b->getInt32Ty());
@@ -987,7 +987,7 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
             if (LLVM_UNLIKELY(amount >= LONG_ADVANCE_BREAKPOINT)) {
                 const auto blockWidth = b->getBitBlockWidth();
                 const auto blocks = ceil_udiv(amount, blockWidth);
-                type = ArrayType::get(blockTy, nearest_pow2(blocks + (isa<IndexedAdvance>(stmt) ? 20:0) + ((loopDepth != 0) ? 1 : 0)));
+                type = ArrayType::get(blockTy, nearest_pow2(blocks + (isa<IndexedAdvance>(stmt) ? 1:0) + ((loopDepth != 0) ? 1 : 0)));
                 if (LLVM_UNLIKELY(ifDepth > 0 && blocks != 1)) {
                     const auto summarySize = ceil_udiv(blocks, blockWidth);
                     // 1 bit will mark the presense of any bit in each block.
