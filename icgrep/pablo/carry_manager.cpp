@@ -112,7 +112,7 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
         kernel->addScalar(b->getSizeTy(), "CarryBlockIndex");
     }
     for (unsigned i = 0; i < mIndexedLongAdvanceTotal; i++) {
-        kernel->addScalar(b->getSizeTy(), "LongAdvancePosition" + std::to_string(i));
+        kernel->addScalar(b->getSizeTy(), "IndexedAdvancePosition" + std::to_string(i));
     }
 }
 
@@ -634,8 +634,56 @@ Value * CarryManager::indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel
         }
         return result;
     } else {
+        unsigned summaryFrame = mCurrentFrameIndex;
+        if (mIfDepth > 0) {
+            // Skip over summary frame to perform the long indexed advance.
+            mCurrentFrameIndex++;
+        }
+        Type * iBitBlock = b->getIntNTy(b->getBitBlockWidth());
+        Constant * blockWidth = b->getSize(b->getBitBlockWidth());
+        Constant * blockWidth_1 = b->getSize(b->getBitBlockWidth() - 1);
+        Value * carryPosition = b->getScalarField("IndexedAdvancePosition" + std::to_string(mIndexedLongAdvanceIndex));
+        Value * carryBlockEndPos = b->CreateAdd(carryPosition, blockWidth_1);
+        unsigned carry_blocks = nearest_pow2(20+ceil_udiv(shiftAmount, b->getBitBlockWidth()));
+        Constant * carryQueueBlocks = b->getSize(carry_blocks);
+        Value * carryBlock = b->CreateTrunc(b->CreateURem(b->CreateUDiv(carryPosition, blockWidth), carryQueueBlocks), b->getInt32Ty());
+        Value * carryEndBlock = b->CreateTrunc(b->CreateURem(b->CreateUDiv(carryBlockEndPos, blockWidth), carryQueueBlocks), b->getInt32Ty());
+        Value * lo_GEP = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex), carryBlock});
+        Value * hi_GEP = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex), carryEndBlock});
+        Value * c_lo = b->CreateBitCast(b->CreateBlockAlignedLoad(lo_GEP), iBitBlock);
+        Value * c_hi = b->CreateBitCast(b->CreateBlockAlignedLoad(hi_GEP), iBitBlock);
+        Value * lo_shift = b->CreateZExt(b->CreateURem(carryPosition, blockWidth), iBitBlock);
+        Value * hi_shift = b->CreateZExt(b->CreateSub(blockWidth_1, b->CreateURem(carryBlockEndPos, blockWidth)), iBitBlock);
+        Value * carryIn = b->CreateOr(b->CreateLShr(c_lo, lo_shift), b->CreateShl(c_hi, hi_shift));
+        Value * carryOut, * result;
+        std::tie(carryOut, result) = b->bitblock_indexed_advance(strm, index_strm, carryIn, shiftAmount);
+        carryOut = b->CreateBitCast(carryOut, iBitBlock);
+        Value * adv = b->mvmd_extract(sizeof(size_t) * 8, b->simd_popcount(b->getBitBlockWidth(), index_strm), 0);
+        b->setScalarField("IndexedAdvancePosition" + std::to_string(mIndexedLongAdvanceIndex), b->CreateAdd(carryPosition, adv));
+        Value * carryOutPosition = b->CreateAdd(carryPosition, b->getSize(shiftAmount));
+        Value * carryOutEndPos = b->CreateAdd(carryOutPosition, blockWidth_1);
+        carryBlock = b->CreateTrunc(b->CreateURem(b->CreateUDiv(carryOutPosition, blockWidth), carryQueueBlocks), b->getInt32Ty());
+        carryEndBlock = b->CreateTrunc(b->CreateURem(b->CreateUDiv(carryOutEndPos, blockWidth), carryQueueBlocks), b->getInt32Ty());
+        lo_GEP = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex), carryBlock});
+        hi_GEP = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex), carryEndBlock});
+        lo_shift = b->CreateZExt(b->CreateURem(carryOutPosition, blockWidth), iBitBlock);
+        hi_shift = b->CreateZExt(b->CreateSub(blockWidth_1, b->CreateURem(carryOutEndPos, blockWidth)), iBitBlock);
+        c_lo = b->CreateOr(b->CreateBitCast(b->CreateBlockAlignedLoad(lo_GEP), iBitBlock), b->CreateShl(carryOut, lo_shift));
+        c_hi = b->CreateLShr(carryOut, hi_shift);
+        b->CreateBlockAlignedStore(b->CreateBitCast(c_lo, b->getBitBlockType()), lo_GEP);
+        b->CreateBlockAlignedStore(b->CreateBitCast(c_hi, b->getBitBlockType()), hi_GEP);
         mIndexedLongAdvanceIndex++;
-        llvm::report_fatal_error("IndexedAdvance > BlockSize not yet supported.");
+        mCurrentFrameIndex++;
+        // Now handle the summary.
+        if (mIfDepth > 0) {
+            const auto summaryBlocks = ceil_udiv(shiftAmount, b->getBitBlockWidth());
+            const auto summarySize = ceil_udiv(summaryBlocks, b->getBitBlockWidth());
+            for (unsigned i = 0; i < summarySize; i++) {
+                // All ones summary for now.
+                b->CreateBlockAlignedStore(b->allOnes(), b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(summaryFrame), b->getInt32(i)}));
+            }
+        }
+        return result;
     }
 }
 
@@ -939,7 +987,7 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
             if (LLVM_UNLIKELY(amount >= LONG_ADVANCE_BREAKPOINT)) {
                 const auto blockWidth = b->getBitBlockWidth();
                 const auto blocks = ceil_udiv(amount, blockWidth);
-                type = ArrayType::get(blockTy, nearest_pow2(blocks + ((loopDepth != 0) ? 1 : 0)));
+                type = ArrayType::get(blockTy, nearest_pow2(blocks + (isa<IndexedAdvance>(stmt) ? 20:0) + ((loopDepth != 0) ? 1 : 0)));
                 if (LLVM_UNLIKELY(ifDepth > 0 && blocks != 1)) {
                     const auto summarySize = ceil_udiv(blocks, blockWidth);
                     // 1 bit will mark the presense of any bit in each block.

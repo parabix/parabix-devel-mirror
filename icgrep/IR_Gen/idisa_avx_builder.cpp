@@ -198,11 +198,11 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value *
         Value * carryOut = mvmd_insert(bitWidth, allZeroes(), carry, 0);
         return std::pair<Value *, Value *>{bitCast(carryOut), bitCast(result)};
     }
-    else {
+    else if (shiftAmount <= mBitBlockWidth) {
         // The shift amount is always greater than the popcount of the individual
         // elements that we deal with.   This simplifies some of the logic.
-       Value * carry = CreateBitCast(shiftIn, iBitBlock);
-       Value * result = allZeroes();
+        Value * carry = CreateBitCast(shiftIn, iBitBlock);
+        Value * result = allZeroes();
         for (unsigned i = 0; i < getBitBlockWidth()/bitWidth; i++) {
             Value * s = mvmd_extract(bitWidth, strm, i);
             Value * ix = mvmd_extract(bitWidth, index_strm, i);
@@ -213,6 +213,26 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value *
             carry = CreateOr(carry, CreateShl(CreateZExt(bits, iBitBlock), CreateZExt(CreateSub(shiftVal, ix_popcnt), iBitBlock)));
         }
         return std::pair<Value *, Value *>{bitCast(carry), bitCast(result)};
+    }
+    else {
+        // The shift amount is greater than the total popcount.   We will consume popcount
+        // bits from the shiftIn value only, and produce a carry out value of the selected bits.
+        // elements that we deal with.   This simplifies some of the logic.
+        Value * carry = CreateBitCast(shiftIn, iBitBlock);
+        Value * result = allZeroes();
+        Value * carryOut = CreateBitCast(allZeroes(), iBitBlock);
+        Value * generated = getSize(0);
+        for (unsigned i = 0; i < getBitBlockWidth()/bitWidth; i++) {
+            Value * s = mvmd_extract(bitWidth, strm, i);
+            Value * ix = mvmd_extract(bitWidth, index_strm, i);
+            Value * ix_popcnt = CreateCall(popcount_f, {ix});
+            Value * bits = CreateCall(PEXT_f, {s, ix});  // All these bits are shifted out (appended to carry).
+            result = mvmd_insert(bitWidth, result, CreateCall(PDEP_f, {mvmd_extract(bitWidth, carry, 0), ix}), i);
+            carry = CreateLShr(carry, CreateZExt(ix_popcnt, iBitBlock)); // Remove the carry bits consumed, make room for new bits.
+            carryOut = CreateOr(carryOut, CreateShl(CreateZExt(bits, iBitBlock), generated));
+            generated = CreateAdd(generated, ix_popcnt);
+        }
+        return std::pair<Value *, Value *>{bitCast(carryOut), bitCast(result)};
     }
 }
 
