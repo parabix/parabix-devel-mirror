@@ -370,7 +370,9 @@ inline PabloAST * RE_Compiler::reachable(PabloAST * repeated, int length, int re
     if (repeat_count == 0) {
         return repeated;
     }
-    PabloAST * reachable = pb.createOr(repeated, pb.createAdvance(repeated, 1), "within1");
+    PabloAST * reachable = nullptr;
+    if (indexStream == nullptr) reachable = pb.createOr(repeated, pb.createAdvance(repeated, 1), "within1");
+    else reachable = pb.createOr(repeated, pb.createIndexedAdvance(repeated, indexStream, 1), "within1");
     while ((i * 2) < total_lgth) {
         PabloAST * v = reachable;
         PabloAST * v2 = nullptr;
@@ -452,7 +454,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
         // If we've advanced the cursor to the post position unit, cursor begins on the first masked bit of the bounded mask.
         // Extend the mask by ub - 1 byte positions to ensure the mask ends on the FinalMatchUnit of the repeated region.
         PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, mFinal, pb);
-        PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask);
+        PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask, "masked");
         PabloAST * nonFinal = mNonFinal;
         // MatchStar deposits any cursors on the post position. However those cursors may may land on the initial "byte" of a
         // "multi-byte" character. Combine the masked range with any nonFinals.
