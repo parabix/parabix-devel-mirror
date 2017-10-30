@@ -34,10 +34,10 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     Value * itemsToDo = mAvailableItemCount[0];
     Value * sourceItemsAvail = mAvailableItemCount[1];
 
-    Value * PDEPStrmPtr = iBuilder->getInputStreamBlockPtr("PDEPmarkerStream", iBuilder->getInt32(0)); // mStreamBufferPtr[0];
-    Value * inputSwizzlesPtr = iBuilder->getInputStreamBlockPtr("sourceStreamSet", iBuilder->getInt32(0)); // mStreamBufferPtr[1];
+    Value * PDEPStrmPtr = kb->getInputStreamBlockPtr("PDEPmarkerStream", kb->getInt32(0)); // mStreamBufferPtr[0];
+    Value * inputSwizzlesPtr = kb->getInputStreamBlockPtr("sourceStreamSet", kb->getInt32(0)); // mStreamBufferPtr[1];
     // Get pointer to start of the output StreamSetBlock we're currently writing to
-    Value * outputStreamPtr = iBuilder->getOutputStreamBlockPtr("outputStreamSet", iBuilder->getInt32(0)); // mStreamBufferPtr[2];
+    Value * outputStreamPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(0)); // mStreamBufferPtr[2];
 
     Constant * blockWidth = kb->getSize(kb->getBitBlockWidth());
     Value * blocksToDo = kb->CreateUDivCeil(itemsToDo, blockWidth); // 1 if this is the final block
