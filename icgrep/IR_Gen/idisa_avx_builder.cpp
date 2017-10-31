@@ -228,8 +228,8 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value *
             Value * ix_popcnt = CreateCall(popcount_f, {ix});
             Value * bits = CreateCall(PEXT_f, {s, ix});  // All these bits are shifted out (appended to carry).
             result = mvmd_insert(bitWidth, result, CreateCall(PDEP_f, {mvmd_extract(bitWidth, carry, 0), ix}), i);
-            carry = CreateLShr(carry, CreateZExt(ix_popcnt, iBitBlock)); // Remove the carry bits consumed, make room for new bits.
-            carryOut = CreateOr(carryOut, CreateShl(CreateZExt(bits, iBitBlock), generated));
+            carry = CreateLShr(carry, CreateZExt(ix_popcnt, iBitBlock)); // Remove the carry bits consumed.
+            carryOut = CreateOr(carryOut, CreateShl(CreateZExt(bits, iBitBlock), CreateZExt(generated, iBitBlock)));
             generated = CreateAdd(generated, ix_popcnt);
         }
         return std::pair<Value *, Value *>{bitCast(carryOut), bitCast(result)};
