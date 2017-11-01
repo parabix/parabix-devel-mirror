@@ -337,32 +337,38 @@ MarkerType RE_Compiler::compileRep(Rep * rep, MarkerType marker, PabloBuilder & 
 }
 
 /*
-   Given a stream |repeated| marking positions associated with matches to an item
-   of length |repeated_lgth|, compute a stream marking |repeat_count| consecutive
-   occurrences of such items.
+   Given a stream |repeated_j| marking positions associated with |j| conecutive matches to an item
+   compute a stream marking |repeat_count| consecutive occurrences of such items.
 */
-
-inline PabloAST * RE_Compiler::consecutive_matches(PabloAST * repeated, int length, int repeat_count, PabloAST * indexStream, PabloBuilder & pb) {
-    int i = length;
-    int total = repeat_count * length;
-    PabloAST * consecutive_i = repeated;
-    while ((i * 2) < total) {
-        PabloAST * v = consecutive_i;
-        PabloAST * v2 = nullptr;
-        if (indexStream == nullptr) v2 =  pb.createAdvance(v, i);
-        else v2 =  pb.createIndexedAdvance(v, indexStream, i);
-        i *= 2;
-        consecutive_i = pb.createAnd(v, v2, "at" + std::to_string(i) + "of" + std::to_string(total));
+    
+PabloAST * RE_Compiler::consecutive_matches(PabloAST * repeated_j, int j, int repeat_count, PabloAST * indexStream, PabloBuilder & pb) {
+    if (j == repeat_count) return repeated_j;
+    int i = std::min(j, repeat_count - j);
+    int k = j + i;
+    if (j > IfInsertionGap) {
+        Var * repeated = pb.createVar("repeated", pb.createZeroes());
+        PabloBuilder nested = PabloBuilder::Create(pb);
+        NameMap nestedMap(mCompiledName);
+        mCompiledName = &nestedMap;
+        
+        PabloAST * adv_i = nullptr;
+        if (indexStream == nullptr) adv_i = nested.createAdvance(repeated_j, i);
+        else adv_i = nested.createIndexedAdvance(repeated_j, indexStream, i);
+        PabloAST * repeated_k = nested.createAnd(repeated_j, adv_i, "at" + std::to_string(k) + "of" + std::to_string(repeat_count));
+        nested.createAssign(repeated, consecutive_matches(repeated_k, k, repeat_count, indexStream, nested));
+        pb.createIf(repeated_j, nested);
+        mCompiledName = nestedMap.getParent();
+        return repeated;
     }
-    if (LLVM_LIKELY(i < total)) {
-        PabloAST * v = consecutive_i;
-        PabloAST * v2 =  nullptr;
-        if (indexStream == nullptr) v2 = pb.createAdvance(v, total - i);
-        else v2 = pb.createIndexedAdvance(v, indexStream, total - i);
-        consecutive_i = pb.createAnd(v, v2, "at" + std::to_string(total));
+    else {
+        PabloAST * adv_i = nullptr;
+        if (indexStream == nullptr) adv_i = pb.createAdvance(repeated_j, i);
+        else adv_i = pb.createIndexedAdvance(repeated_j, indexStream, i);
+        PabloAST * repeated_k = pb.createAnd(repeated_j, adv_i, "at" + std::to_string(k) + "of" + std::to_string(repeat_count));
+        return consecutive_matches(repeated_k, k, repeat_count, indexStream, pb);
     }
-    return consecutive_i;
 }
+
 
 inline PabloAST * RE_Compiler::reachable(PabloAST * repeated, int length, int repeat_count, PabloAST * indexStream, PabloBuilder & pb) {
     int i = length;
@@ -392,20 +398,54 @@ inline PabloAST * RE_Compiler::reachable(PabloAST * repeated, int length, int re
 }
 
 MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, int ifGroupSize, PabloBuilder & pb) {
-    if (lb == 0) {
-        return marker;
-    } else if (!mGraphemeBoundaryRule && isByteLength(repeated) && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
-        PabloAST * cc = markerVar(compile(repeated, pb));
-        PabloAST * cc_lb = consecutive_matches(cc, 1, lb, nullptr, pb);
-        const auto pos = markerPos(marker) == MarkerPosition::FinalMatchUnit ? lb : lb - 1;
-        PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), pos);
-        return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
-    } else if (!mGraphemeBoundaryRule && isUnicodeUnitLength(repeated) && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition) && AVX2_available()) {
-        PabloAST * cc = markerVar(compile(repeated, pb));
-        PabloAST * cc_lb = consecutive_matches(cc, 1, lb, mFinal, pb);
-        const auto pos = markerPos(marker) == MarkerPosition::FinalMatchUnit ? lb : lb - 1;
-        PabloAST * marker_fwd = pb.createIndexedAdvance(markerVar(marker), mFinal, pos);
-        return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
+    if (LLVM_UNLIKELY(lb == 0)) return marker;
+    else if (LLVM_UNLIKELY(lb == 1)) return process(repeated, marker, pb);
+    //
+    // A bounded repetition with an upper bound of at least 2.
+    if (!mGraphemeBoundaryRule && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
+        // Check for a regular expression that satisfies on of the special conditions that 
+        // allow implementation using the log2 technique.
+        if (isByteLength(repeated)) {
+            PabloAST * cc = markerVar(compile(repeated, pb));
+            PabloAST * cc_lb = consecutive_matches(cc, 1, lb, nullptr, pb);
+            const auto pos = markerPos(marker) == MarkerPosition::FinalMatchUnit ? lb : lb - 1;
+            PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), pos);
+            return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
+        }
+        else if (isUnicodeUnitLength(repeated) && AVX2_available()) {
+            PabloAST * cc = markerVar(compile(repeated, pb));
+            PabloAST * cc_lb = consecutive_matches(cc, 1, lb, mFinal, pb);
+            const auto pos = markerPos(marker) == MarkerPosition::FinalMatchUnit ? lb : lb - 1;
+            PabloAST * marker_fwd = pb.createIndexedAdvance(markerVar(marker), mFinal, pos);
+            return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
+        }
+        else if (isTypeForLocal(repeated) && AVX2_available()) {
+            CC * firstSymSet = RE_Local::first(repeated);
+            std::map<CC *, CC*> followMap;
+            RE_Local::follow(repeated, followMap);
+            bool firstSymSet_found_in_follow = false;
+            for (auto & entry : followMap) {
+                if (entry.second->intersects(*firstSymSet)) {
+                    firstSymSet_found_in_follow = true;
+                }
+            }
+            if (!firstSymSet_found_in_follow) {
+                // When the first symbol is unique, we can use it as an index stream.
+                PabloAST * firstCCstream = markerVar(compile(firstSymSet, pb));
+                // Find all matches to the repeated regexp.
+                PabloAST * submatch = markerVar(AdvanceMarker(compile(repeated, pb), MarkerPosition::FinalPostPositionUnit, pb));
+                // Consecutive submatches require that the symbol following the end of one submatch is the first symbol for
+                // the next submatch.   lb-1 such submatches are required.
+                PabloAST * consecutive_submatch = consecutive_matches(submatch, 1, lb-1, firstCCstream, pb);
+                // Find submatch positions which are lb-2 start symbols forward from the current marker position.
+                PabloAST * base = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
+                PabloAST * marker_fwd = pb.createIndexedAdvance(base, firstCCstream, lb - 1);
+                PabloAST * consecutive_lb_1 = pb.createAnd(marker_fwd, consecutive_submatch);
+                // From any of these positions, any position reachable by one more occurrence of the
+                // regexp is a match.
+                return process(repeated, makeMarker(MarkerPosition::FinalPostPositionUnit, consecutive_lb_1), pb);
+            }
+        }
     }
     // Fall through to general case.  Process the first item and insert the rest into an if-structure.
     auto group = ifGroupSize < lb ? ifGroupSize : lb;
@@ -430,36 +470,55 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
 }
     
 MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType marker, int ifGroupSize,  PabloBuilder & pb) {
-    if (LLVM_UNLIKELY(ub == 0)) {
-        return marker;
-    } else if (!mGraphemeBoundaryRule && isByteLength(repeated) && ub > 1 && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
-        // log2 upper bound for fixed length (=1) class
-        // Create a mask of positions reachable within ub from current marker.
-        // Use matchstar, then apply filter.
-        PabloAST * cursor = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
-        // If we've advanced the cursor to the post position unit, cursor begins on the first masked bit of the bounded mask.
-        // Extend the mask by ub - 1 byte positions to ensure the mask ends on the FinalMatchUnit of the repeated region.
-        PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, nullptr, pb);
-        PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask);
-        PabloAST * nonFinal = mNonFinal;
-        // MatchStar deposits any cursors on the post position. However those cursors may may land on the initial "byte" of a
-        // "multi-byte" character. Combine the masked range with any nonFinals.
-        PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, nonFinal), "bounded");
-        return makeMarker(MarkerPosition::FinalPostPositionUnit, bounded);
-    } else if (!mGraphemeBoundaryRule && isUnicodeUnitLength(repeated) && ub > 1 && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition) && AVX2_available()) {
-        // log2 upper bound for fixed length (=1) class
-        // Create a mask of positions reachable within ub from current marker.
-        // Use matchstar, then apply filter.
-        PabloAST * cursor = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
-        // If we've advanced the cursor to the post position unit, cursor begins on the first masked bit of the bounded mask.
-        // Extend the mask by ub - 1 byte positions to ensure the mask ends on the FinalMatchUnit of the repeated region.
-        PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, mFinal, pb);
-        PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask, "masked");
-        PabloAST * nonFinal = mNonFinal;
-        // MatchStar deposits any cursors on the post position. However those cursors may may land on the initial "byte" of a
-        // "multi-byte" character. Combine the masked range with any nonFinals.
-        PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, nonFinal), "bounded");
-        return makeMarker(MarkerPosition::FinalPostPositionUnit, bounded);
+    if (LLVM_UNLIKELY(ub == 0)) return marker;
+    //
+    // A bounded repetition with an upper bound of at least 2.
+    if (!mGraphemeBoundaryRule && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition) && (ub > 1)) {
+        // Check for a regular expression that satisfies on of the special conditions that 
+        // allow implementation using the log2 technique.
+        if (isByteLength(repeated)) {
+            // log2 upper bound for fixed length (=1) class
+            // Create a mask of positions reachable within ub from current marker.
+            // Use matchstar, then apply filter.
+            PabloAST * cursor = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
+            // If we've advanced the cursor to the post position unit, cursor begins on the first masked bit of the bounded mask.
+            // Extend the mask by ub - 1 byte positions to ensure the mask ends on the FinalMatchUnit of the repeated region.
+            PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, nullptr, pb);
+            PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask);
+            // MatchStar deposits any cursors on the post position. However those cursors may may land on the initial "byte" of a
+            // "multi-byte" character. Combine the masked range with any nonFinals.
+            PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, mNonFinal), "bounded");
+            return makeMarker(MarkerPosition::FinalPostPositionUnit, bounded);
+        }
+        else if (isUnicodeUnitLength(repeated) && AVX2_available()) {
+            // For a regexp which represent a single Unicode codepoint, we can use the mFinal stream
+            // as an index stream for an indexed advance operation.
+            PabloAST * cursor = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
+            PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, mFinal, pb);
+            PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask, "masked");
+            PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, mNonFinal), "bounded");
+            return makeMarker(MarkerPosition::FinalPostPositionUnit, bounded);
+        }
+        else if (isTypeForLocal(repeated) && AVX2_available()) {
+            CC * firstSymSet = RE_Local::first(repeated);
+            std::map<CC *, CC*> followMap;
+            RE_Local::follow(repeated, followMap);
+            bool firstSymSet_found_in_follow = false;
+            for (auto & entry : followMap) {
+                if (entry.second->intersects(*firstSymSet)) {
+                    firstSymSet_found_in_follow = true;
+                }
+            }
+            if (!firstSymSet_found_in_follow) {
+                // When the first symbol is unique, we can use it as an index stream.
+                PabloAST * firstCCstream = markerVar(compile(firstSymSet, pb));
+                PabloAST * cursor = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
+                PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, firstCCstream, pb);
+                PabloAST * masked = pb.createAnd(markerVar(AdvanceMarker(compile(repeated, pb), MarkerPosition::FinalPostPositionUnit, pb)), upperLimitMask, "masked");
+                PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, mNonFinal), "bounded");
+                return makeMarker(MarkerPosition::FinalPostPositionUnit, bounded);
+            }
+        }
     }
     // Fall through to general case.  Process the first item and insert the rest into an if-structure.
     auto group = ifGroupSize < ub ? ifGroupSize : ub;

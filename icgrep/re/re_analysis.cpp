@@ -312,7 +312,9 @@ bool unitBoundedRep(const RE * re) {
 
 //Cases that not include bounded repetition, assertion, start and end type can suit for local language compile pipeline. 
 bool isTypeForLocal(const RE * re) {
-    if (const Alt * alt = dyn_cast<Alt>(re)) {
+    if (const Name * n = dyn_cast<Name>(re)) {
+        return isTypeForLocal(n->getDefinition());
+    } else if (const Alt * alt = dyn_cast<Alt>(re)) {
         for (const RE * re : *alt) {
             if (!isTypeForLocal(re)) {
                 return false;
