@@ -244,10 +244,10 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
   COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
 
-add_test(
-  NAME lz4d_test
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
-  COMMAND ./run_all ${CMAKE_BINARY_DIR}/lz4d)
+#add_test(
+#  NAME lz4d_test
+#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
+#  COMMAND ./run_all ${CMAKE_BINARY_DIR}/lz4d)
 
 add_test(
   NAME editd_test
@@ -262,24 +262,24 @@ add_test(
 SET_PROPERTY(TEST greptest PROPERTY TIMEOUT 400)
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
-SET_PROPERTY(TEST u8u16_test lz4d_test editd_test base64_test PROPERTY TIMEOUT 40)
+SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
 
 add_custom_target (greptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND python greptest.py "${CMAKE_BINARY_DIR}/icgrep -ea")
+  COMMAND python greptest.py "${CMAKE_BINARY_DIR}/icgrep")
 
 add_custom_target (proptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml "${CMAKE_BINARY_DIR}/icgrep -ea")
+  COMMAND python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml "${CMAKE_BINARY_DIR}/icgrep")
 
 add_custom_target (u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
-  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -ea -segment-size=16 -enable-segment-pipeline-parallel")
+  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
 
 add_custom_target (lz4d_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
-  COMMAND ./run_all "${CMAKE_BINARY_DIR}/lz4d -ea")
+  COMMAND ./run_all "${CMAKE_BINARY_DIR}/lz4d")
 
 add_custom_target (editd_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/editd
@@ -287,7 +287,7 @@ add_custom_target (editd_test
 
 add_custom_target (base64_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
-  COMMAND python base64test.py "${CMAKE_BINARY_DIR}/base64 -ea")
+  COMMAND python base64test.py "${CMAKE_BINARY_DIR}/base64")
 
 add_custom_target (abc_gen
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
@@ -295,7 +295,7 @@ add_custom_target (abc_gen
   
 add_custom_target (abc_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND ./run_abc "${CMAKE_BINARY_DIR}/icgrep -ea")
+  COMMAND ./run_abc "${CMAKE_BINARY_DIR}/icgrep")
 
 add_custom_target (check
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
@@ -313,8 +313,5 @@ add_custom_target (viewer
 add_custom_target (text_viewer
   COMMAND python2 viewer.py -t
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance)
-
-add_custom_target (clear_cache
-  COMMAND rm ~/.cache/parabix/*)
 
 
