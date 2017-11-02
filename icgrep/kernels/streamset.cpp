@@ -50,7 +50,7 @@ void StreamSetBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder>
 }
 
 Value * StreamSetBuffer::getStreamBlockPtr(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * addr, Value * streamIndex, const bool /* readOnly */) const {
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         Value * const count = getStreamSetCount(iBuilder, self);
         Value * const index = iBuilder->CreateZExtOrTrunc(streamIndex, count->getType());
         Value * const cond = iBuilder->CreateICmpULT(index, count);
@@ -60,7 +60,7 @@ Value * StreamSetBuffer::getStreamBlockPtr(IDISA::IDISA_Builder * const iBuilder
 }
 
 Value * StreamSetBuffer::getStreamPackPtr(IDISA::IDISA_Builder * const iBuilder, Value * self, Value * addr, Value * streamIndex, Value * packIndex, const bool /* readOnly */) const {
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         Value * const count = getStreamSetCount(iBuilder, self);
         Value * const index = iBuilder->CreateZExtOrTrunc(streamIndex, count->getType());
         Value * const cond = iBuilder->CreateICmpULT(index, count);

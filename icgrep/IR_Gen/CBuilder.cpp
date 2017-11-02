@@ -339,7 +339,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
 
     size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const align = ConstantInt::get(sizeTy, alignment);
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         CreateAssertZero(CreateURem(size, align), "CreateAlignedMalloc: size must be an integral multiple of alignment.");
     }
     Value * ptr = nullptr;
@@ -363,7 +363,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
         }
         Value * handle = CreateAlloca(voidPtrTy);
         CallInst * success = CreateCall(f, {handle, align, size});
-        if (codegen::EnableAsserts) {
+        if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
             CreateAssertZero(success, "CreateAlignedMalloc: posix_memalign reported bad allocation");
         }
         ptr = CreateLoad(handle);
@@ -447,7 +447,7 @@ Value * CBuilder::CreateMMap(Value * const addr, Value * size, Value * const pro
         fMMap = Function::Create(fty, Function::ExternalLinkage, "mmap", m);
     }
     Value * ptr = CreateCall(fMMap, {addr, size, prot, flags, fd, offset});
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         DataLayout DL(m);
         IntegerType * const intTy = getIntPtrTy(DL);
         Value * success = CreateICmpNE(CreatePtrToInt(addr, intTy), ConstantInt::getAllOnesValue(intTy)); // MAP_FAILED = -1
@@ -537,7 +537,7 @@ Value * CBuilder::CreateMRemap(Value * addr, Value * oldSize, Value * newSize) {
         newSize = CreateZExtOrTrunc(newSize, sizeTy);
         ConstantInt * const flags = ConstantInt::get(intTy, MREMAP_MAYMOVE);
         ptr = CreateCall(fMRemap, {addr, oldSize, newSize, flags});
-        if (codegen::EnableAsserts) {
+        if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
             Value * success = CreateICmpNE(CreatePtrToInt(addr, intTy), ConstantInt::getAllOnesValue(intTy)); // MAP_FAILED = -1
             CreateAssert(success, "CreateMRemap: mremap failed to allocate memory");
         }
@@ -559,7 +559,7 @@ Value * CBuilder::CreateMUnmap(Value * addr, Value * len) {
         munmapFunc = Function::Create(fty, Function::ExternalLinkage, "munmap", m);
     }
     len = CreateZExtOrTrunc(len, sizeTy);
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = getIntPtrTy(DL);
         CreateAssert(len, "CreateMUnmap: length cannot be 0");
@@ -857,7 +857,7 @@ _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned ski
 #endif
 
 void CBuilder::__CreateAssert(Value * const assertion, StringRef failureMessage) {
-    if (LLVM_UNLIKELY(codegen::EnableAsserts)) {
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Module * const m = getModule();
         if (LLVM_UNLIKELY(isa<ConstantInt>(assertion))) {
             if (LLVM_UNLIKELY(cast<ConstantInt>(assertion)->isZero())) {
@@ -1114,7 +1114,7 @@ static Value * checkStackAddress(CBuilder * const b, Value * const Ptr, AllocaIn
 }
 
 #define CHECK_ADDRESS(Ptr, Name) \
-if (codegen::EnableAsserts) { \
+if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) { \
     CreateAssert(Ptr, Name " was given a null address"); \
     if (AllocaInst * Base = resolveStackAddress(Ptr)) { \
         CreateAssert(checkStackAddress(this, Ptr, Base), Name " was given an invalid stack address"); \
@@ -1150,11 +1150,11 @@ StoreInst * CBuilder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
 }
 
 inline bool CBuilder::hasAddressSanitizer() const {
-    return codegen::EnableAsserts && mDriver && mDriver->hasExternalFunction("__asan_region_is_poisoned");
+    return codegen::DebugOptionIsSet(codegen::EnableAsserts) && mDriver && mDriver->hasExternalFunction("__asan_region_is_poisoned");
 }
 
 LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const char * Name) {
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
         Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
@@ -1166,7 +1166,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const char *
 }
 
 LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine & Name) {
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
         Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
@@ -1178,7 +1178,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine 
 }
 
 LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolatile, const Twine & Name) {
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
         Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
@@ -1190,7 +1190,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolat
 }
 
 StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Align, bool isVolatile) {
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
         Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
@@ -1203,7 +1203,7 @@ StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Alig
 
 CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsigned Align, bool isVolatile,
                                    MDNode *TBAATag, MDNode *ScopeTag, MDNode *NoAliasTag) {
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = DL.getIntPtrType(getContext());
         Value * intDst = CreatePtrToInt(Dst, intPtrTy);
@@ -1221,7 +1221,7 @@ CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsign
 
 CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned Align, bool isVolatile,
                                   MDNode *TBAATag, MDNode *TBAAStructTag, MDNode *ScopeTag, MDNode *NoAliasTag) {
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = DL.getIntPtrType(getContext());
         Value * intDst = CreatePtrToInt(Dst, intPtrTy);

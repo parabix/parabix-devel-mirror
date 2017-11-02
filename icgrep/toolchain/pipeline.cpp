@@ -98,7 +98,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
 
     Value * cycleCountStart = nullptr;
     Value * cycleCountEnd = nullptr;
-    if (codegen::EnableCycleCounter) {
+    if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
         cycleCountStart = iBuilder->CreateReadCycleCounter();
     }
 
@@ -173,7 +173,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
                 f->second = iBuilder->CreateSelect(lesser, processedItemCount, f->second);
             }
         }
-        if (codegen::EnableCycleCounter) {
+        if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
             cycleCountEnd = iBuilder->CreateReadCycleCounter();
             Value * counterPtr = iBuilder->getCycleCountPtr();
             iBuilder->CreateStore(iBuilder->CreateAdd(iBuilder->CreateLoad(counterPtr), iBuilder->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
@@ -270,7 +270,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         iBuilder->CreatePThreadJoinCall(threadId, status);
     }
     
-    if (codegen::EnableCycleCounter) {
+    if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
         for (unsigned k = 0; k < kernels.size(); k++) {
             auto & kernel = kernels[k];
             iBuilder->setKernel(kernel);
@@ -515,7 +515,7 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
     
     Value * cycleCountStart = nullptr;
     Value * cycleCountEnd = nullptr;
-    if (codegen::EnableCycleCounter) {
+    if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
         cycleCountStart = iBuilder->CreateReadCycleCounter();
     }
     Value * terminated = iBuilder->getFalse();
@@ -562,7 +562,7 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
                 f->second = iBuilder->CreateSelect(lesser, processed, f->second);
             }
         }
-        if (codegen::EnableCycleCounter) {
+        if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
             cycleCountEnd = iBuilder->CreateReadCycleCounter();
             Value * counterPtr = iBuilder->getCycleCountPtr();
             iBuilder->CreateStore(iBuilder->CreateAdd(iBuilder->CreateLoad(counterPtr), iBuilder->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
@@ -595,7 +595,7 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
 
     iBuilder->SetInsertPoint(pipelineExit);
 
-    if (codegen::EnableCycleCounter) {
+    if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
         for (unsigned k = 0; k < kernels.size(); k++) {
             auto & kernel = kernels[k];
             iBuilder->setKernel(kernel);

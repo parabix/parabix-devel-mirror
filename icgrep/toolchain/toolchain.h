@@ -32,7 +32,10 @@ enum DebugFlags {
 #endif
     SerializeThreads,
     TraceCounts,
-    TraceDynamicBuffers
+    TraceDynamicBuffers,
+    EnableAsserts,
+    EnableCycleCounter,
+    DebugFlagSentinel
 };
 
 bool DebugOptionIsSet(const DebugFlags flag);
@@ -50,8 +53,6 @@ extern int SegmentSize;  // set from command line
 extern int BufferSegments;
 extern int ThreadNum;
 extern bool EnableObjectCache;
-extern bool EnableAsserts;
-extern bool EnableCycleCounter;
 extern bool NVPTX;
 extern int GroupNum;
 extern std::string ProgramName;

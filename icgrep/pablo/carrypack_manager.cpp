@@ -451,7 +451,7 @@ void CarryManager::leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
 
         iBuilder->SetInsertPoint(resume);
 
-        if (codegen::EnableAsserts) {
+        if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
             iBuilder->CreateAssertZero(iBuilder->CreateOr(finalBorrow, finalCarry),
                                        "CarryPackManager: loop post-condition violated: final borrow and carry must be zero!");
         }

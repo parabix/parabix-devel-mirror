@@ -658,7 +658,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         Value * const blockIndex = kb->CreateLShr(processedItemCount[i], log2BlockWidth);
         baseInputBuffer[i] = kb->getInputStreamPtr(name, blockIndex);
 
-        if (codegen::EnableAsserts) {
+        if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
             kb->CreateAssert(kb->CreateICmpUGE(mAvailableItemCount[i], processedItemCount[i]),
                              "Processed item count cannot exceed the available item count");
         }
@@ -1435,7 +1435,7 @@ void BlockOrientedKernel::CreateDoBlockMethodCall(const std::unique_ptr<KernelBu
 }
 
 static inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
-    if (codegen::EnableAsserts) {
+    if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
         name += "_EA";
     }
     name += "_O" + std::to_string((int)codegen::OptLevel);

@@ -32,6 +32,8 @@ DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR.")
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
                         clEnumVal(TraceCounts, "Show kernel processed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Show dynamic buffer allocations and deallocations."),
+                        clEnumVal(EnableAsserts, "Enable built-in Parabix framework asserts in generated IR."),
+                        clEnumVal(EnableCycleCounter, "Count and report CPU cycles per kernel."),
                         clEnumValEnd), cl::cat(CodeGenOptions));
 
 static cl::opt<std::string> IROutputFilenameOption("dump-generated-IR-output", cl::init(""),
@@ -71,12 +73,6 @@ static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum),
                                           cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
 
 
-static cl::opt<bool, true> EnableAssertsOption("ea", cl::location(EnableAsserts), cl::init(IN_DEBUG_MODE),
-                                               cl::desc("Enable Asserts"), cl::cat(CodeGenOptions));
-
-static cl::opt<bool, true> EnableCycleCountOption("ShowKernelCycles", cl::location(EnableCycleCounter), cl::init(false),
-                                             cl::desc("Count and report CPU cycles per kernel"), cl::cat(CodeGenOptions));
-
 static cl::opt<bool, true> pipelineParallelOption("enable-pipeline-parallel", cl::location(PipelineParallel), cl::init(false),
                                                   cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(CodeGenOptions));
     
@@ -108,10 +104,6 @@ int SegmentSize;
 int BufferSegments;
 
 int ThreadNum;
-
-bool EnableAsserts;
-
-bool EnableCycleCounter;
 
 bool EnableObjectCache;
 
@@ -147,6 +139,7 @@ const cl::OptionCategory * codegen_flags() {
 }
 
 bool DebugOptionIsSet(const DebugFlags flag) {
+    if (IN_DEBUG_MODE && (flag == EnableAsserts)) return true;
     return DebugOptions.isSet(flag);
 }
 
