@@ -345,7 +345,7 @@ PabloAST * RE_Compiler::consecutive_matches(PabloAST * repeated_j, int j, int re
     if (j == repeat_count) return repeated_j;
     int i = std::min(j, repeat_count - j);
     int k = j + i;
-    if (j > IfInsertionGap) {
+    if (/*j > IfInsertionGap*/ false) {
         Var * repeated = pb.createVar("repeated", pb.createZeroes());
         PabloBuilder nested = PabloBuilder::Create(pb);
         NameMap nestedMap(mCompiledName);
