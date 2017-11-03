@@ -20,7 +20,7 @@ struct PassContainer {
             list.reserve(alt->size());
             for (RE * item : *alt) {
                 item = simplify(item);
-                if (LLVM_UNLIKELY(isa<Vector>(item) && cast<Vector>(item)->empty())) {
+                if (LLVM_UNLIKELY(isa<Alt>(item) && cast<Alt>(item)->empty())) {
                     continue;
                 }
                 list.insert(item);
@@ -31,7 +31,7 @@ struct PassContainer {
             list.reserve(seq->size());
             for (RE * item : *seq) {
                 item = simplify(item);
-                if (LLVM_UNLIKELY(isa<Vector>(item) && cast<Vector>(item)->empty())) {
+                if (LLVM_UNLIKELY(isa<Seq>(item) && cast<Seq>(item)->empty())) {
                     continue;
                 }
                 list.push_back(item);

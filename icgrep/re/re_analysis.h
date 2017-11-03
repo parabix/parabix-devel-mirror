@@ -27,8 +27,9 @@ bool unitBoundedRep(const RE * re);
 
 bool isTypeForLocal(const RE * re);
     
+bool hasAssertion(const RE * re);
+    
 void UndefinedNameError (const Name * n);
-
 }
 
 #endif // RE_ANALYSIS_H

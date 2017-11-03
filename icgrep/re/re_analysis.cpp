@@ -322,16 +322,16 @@ bool isTypeForLocal(const RE * re) {
         }
         return true;
     } else if (const Seq * seq = dyn_cast<Seq>(re)) {
-    for (const RE * re : *seq) {
-        if (!isTypeForLocal(re)) {
-            return false;
+        for (const RE * re : *seq) {
+            if (!isTypeForLocal(re)) {
+                return false;
+            }
         }
-    }
         return true;
     } else if (const Rep * rep = dyn_cast<Rep>(re)) {
         if (rep->getLB() != 0 || rep->getUB() != Rep::UNBOUNDED_REP) {
             return false;
-        } 
+        }
         return true;
     } else if (const Diff * diff = dyn_cast<Diff>(re)) {
         return isTypeForLocal(diff->getLH()) && isTypeForLocal(diff->getRH());
@@ -341,6 +341,33 @@ bool isTypeForLocal(const RE * re) {
         return false;
     }
     return true; // otherwise
+}
+
+bool hasAssertion(const RE * re) {
+    if (isa<CC>(re)) {
+        return false;
+    } else if (const Name * n = dyn_cast<Name>(re)) {
+        return hasAssertion(n->getDefinition());
+    } else if (const Alt * alt = dyn_cast<Alt>(re)) {
+        for (const RE * re : *alt) {
+            if (hasAssertion(re)) return true;
+        }
+        return false;
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+        for (const RE * re : *seq) {
+            if (hasAssertion(re)) return true;
+        }
+        return false;
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
+        return hasAssertion(rep->getRE());
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
+        return hasAssertion(diff->getLH()) || hasAssertion(diff->getRH());
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
+        return hasAssertion(e->getLH()) || hasAssertion(e->getRH());
+    } else if (isa<Start>(re) || isa<End>(re) || isa<Assertion>(re)) {
+        return true;
+    }
+    else llvm_unreachable("Unknown RE type");
 }
 
 void UndefinedNameError(const Name * n) {
