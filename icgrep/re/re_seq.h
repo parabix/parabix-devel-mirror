@@ -54,8 +54,6 @@ template<typename itr>
 inline RE * makeSeq(itr begin, itr end) {
     if (LLVM_UNLIKELY(std::distance(begin, end) == 0)) {
         return makeSeq();
-    } else if (std::distance(begin, end) == 1) {
-        return *begin;
     } else {
         Seq * seq = makeSeq();
         seq->flatten(begin, end);

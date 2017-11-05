@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -8,6 +8,8 @@
 #define RE_ASSERTION_H
 
 #include <re/re_re.h>
+#include <re/re_nullable.h>
+#include <re/re_seq.h>
 
 namespace re {
 
@@ -31,7 +33,7 @@ public:
     static Assertion::Sense negateSense(Assertion::Sense s);
 
 protected:
-    friend Assertion * makeAssertion(RE * asserted, Kind k, Sense s);
+    friend RE * makeAssertion(RE * asserted, Kind k, Sense s);
     Assertion(RE * r, Kind k, Sense s) : RE(ClassTypeId::Assertion), mAsserted(r), mKind(k), mSense(s) {}
     virtual ~Assertion() {}
 
@@ -50,7 +52,8 @@ inline Assertion::Sense Assertion::negateSense(Assertion::Sense s) {
     return s == Assertion::Sense::Positive ? Assertion::Sense::Negative : Assertion::Sense::Positive;
 }
 
-inline Assertion * makeAssertion(RE * asserted, Assertion::Kind k, Assertion::Sense s) {
+inline RE * makeAssertion(RE * asserted, Assertion::Kind k, Assertion::Sense s) {
+    if (RE_Nullable::isNullable(asserted)) return makeSeq();
     return new Assertion(asserted, k, s);
 }
 
@@ -77,7 +80,8 @@ inline RE * makeBoundaryAssertion(RE * r) {
 inline RE * makeNegativeBoundaryAssertion(RE * r) {
     return makeAssertion(r, Assertion::Kind::Boundary, Assertion::Sense::Negative);
 }
-    
+
+RE * expandBoundaryAssertion(RE * r);
 }
 
 #endif // RE_ASSERTION_H

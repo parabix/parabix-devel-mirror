@@ -92,4 +92,26 @@ RE * makeRep(RE * re, int lb, const int ub) {
     return new Rep(re, lb, ub);
 }
 
+RE * unrollFirst(Rep * rep) {
+    RE * e = rep->getRE();
+    auto lb = rep->getLB();
+    auto ub = rep->getUB();
+    if (ub == 0) return makeAlt();  // Can't unroll - return unmatchable regexp.
+    // Unroll one copy of the loop and simplify.
+    RE * reduced = makeRep(e, lb == 0 ? lb : lb - 1, ub == Rep::UNBOUNDED_REP ? ub : ub - 1);
+    RE * unrolled = makeSeq({e, reduced});
+    if (lb == 0) return makeAlt({makeSeq(), unrolled});
+    else return unrolled;
+}
+RE * unrollLast(Rep * rep) {
+    RE * e = rep->getRE();
+    auto lb = rep->getLB();
+    auto ub = rep->getUB();
+    if (ub == 0) return makeAlt();  // Can't unroll - return unmatchable regexp.
+    // Unroll one copy of the loop and simplify.
+    RE * reduced = makeRep(e, lb == 0 ? lb : lb - 1, ub == Rep::UNBOUNDED_REP ? ub : ub - 1);
+    RE * unrolled = makeSeq({reduced, e});
+    if (lb == 0) return makeAlt({makeSeq(), unrolled});
+    else return unrolled;
+}
 }

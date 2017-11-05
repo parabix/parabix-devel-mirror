@@ -87,7 +87,7 @@ ENDIF()
 
 add_library(CodeGen ${TOOLCHAIN_SRC} ${DRIVER_SRC} ${OBJECT_CACHE_SRC} ${KERNEL_SRC} ${IDISA_SRC})
 add_library(PabloADT ${PABLO_SRC})
-add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/printer_re.cpp)
+add_library(RegExpADT re/re_re.cpp re/re_cc.cpp re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_assertion.cpp re/printer_re.cpp)
 add_library(RegExpCompiler re/re_parser.cpp re/re_memoizer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/re_collect_unicodesets.cpp re/re_multiplex.cpp re/re_parser_pcre.cpp re/re_parser_ere.cpp re/re_parser_bre.cpp re/re_parser_prosite.cpp re/re_utility.cpp ${GREP_CORE_SRC})
 add_library(CCADT cc/cc_compiler.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/CaseFolding.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp)
 add_library(UCDlib UCD/unicode_set.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp)
