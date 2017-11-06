@@ -225,6 +225,10 @@ protected:
 //
 //  Default Report Match:  lines are emitted with whatever line terminators are found in the
 //  input.  However, if the final line is not terminated, a new line is appended.
+//
+//  It is possible that the line_end position is past the EOF, if there is an unterminated
+//  final line.   To avoid potential bus errors, we only emit bytes up to but not
+//  including the line_end position when we first find a match.
 void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
     if (!(WithFilenameFlag | LineNumberFlag) && (line_start == mPrevious_line_end + 1)) {
         // Consecutive matches: only one write call needed.
@@ -232,8 +236,14 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
     }
     else {
         if (mLineCount > 0) {
-            // deal with the final byte of the previous line.
-            mResultStr->write(mPrevious_line_end, 1);
+            // Deal with the terminator of the previous line.  It could be an LF, the
+            // last byte of NEL, LS or PS, or a two byte CRLF sequence.
+            if (LLVM_UNLIKELY(mPrevious_line_end[0] == 0x0D)) {
+                mResultStr->write(mPrevious_line_end, mPrevious_line_end[1] == 0x0A ? 2 : 1);
+            }
+            else {
+                mResultStr->write(mPrevious_line_end, 1);
+            }
         }
         if (WithFilenameFlag) {
             *mResultStr << mLinePrefix;
@@ -257,7 +267,12 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
 void EmitMatch::finalize_match(char * buffer_end) {
     if (mLineCount == 0) return;  // No matches.
     if (mPrevious_line_end < buffer_end) {
-        mResultStr->write(mPrevious_line_end, 1);
+        if (LLVM_UNLIKELY(mPrevious_line_end[0] == 0x0D)) {
+            mResultStr->write(mPrevious_line_end, mPrevious_line_end[1] == 0x0A ? 2 : 1);
+        }
+        else {
+            mResultStr->write(mPrevious_line_end, 1);
+        }
     }
     else {
         // Likely unterminated final line.
