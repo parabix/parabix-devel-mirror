@@ -88,7 +88,7 @@ const CC* matchableCodepoints(const RE * re) {
     } else if (const Diff * diff = dyn_cast<Diff>(re)) {
         return subtractCC(matchableCodepoints(diff->getLH()), matchableCodepoints(diff->getRH()));
     } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
-        return intersectCC(matchableCodepoints(diff->getLH()), matchableCodepoints(diff->getRH()));
+        return intersectCC(matchableCodepoints(e->getLH()), matchableCodepoints(e->getRH()));
     } else if (isa<Any>(re)) {
         return makeCC(0, 0x10FFFF);
     } else if (const Name * n = dyn_cast<Name>(re)) {

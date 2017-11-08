@@ -15,7 +15,7 @@
 //
 // The breakpoints may be determined by iterating through the interval
 // representation of each CC.   For each interval (lo, hi), lo and hi+1 
-// are breakpoints.
+// are breakpoints. 
 //
 // For each breakpoint, a bitset is computed identifying the source CCs whose
 // status changes at the breakpoint.
@@ -78,6 +78,7 @@ void doMultiplexCCs(const std::vector<UCD::UnicodeSet> & CCs,
         }
         // Start a new range.
         range_lo = bkpt_entry.first;
+        if (range_lo > UCD::UNICODE_MAX) continue; 
         current_set ^= bkpt_entry.second;
         auto idx_iter = CC_set_to_exclusive_set_map.find(current_set);
         if (idx_iter == CC_set_to_exclusive_set_map.end()) {

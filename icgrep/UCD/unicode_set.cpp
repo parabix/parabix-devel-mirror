@@ -31,7 +31,7 @@ using interval_t = UnicodeSet::interval_t;
 
 //
 // Select the correct built-in scan function, dependent on whatever
-// bitquad_t resolves to, when scan_forwrad_zeroes<bitquad_t> is called.
+// bitquad_t resolves to, when scan_forward_zeroes<bitquad_t> is called.
 template <typename T> int scan_forward_zeroes(T x);
 template <> inline int scan_forward_zeroes<unsigned int>(unsigned int x){return __builtin_ctz(x);}
 template <> inline int scan_forward_zeroes<unsigned long>(unsigned long x){return __builtin_ctzl(x);}
@@ -125,6 +125,13 @@ inline bool verify(const RunVector & runs, const QuadVector & quads) {
  ** ------------------------------------------------------------------------------------------------------------- */
 bool UnicodeSet::empty() const {
     return (mRuns.size() == 1) && typeOf(mRuns.front()) == Empty;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief full
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool UnicodeSet::full() const {
+    return (mRuns.size() == 1) && typeOf(mRuns.front()) == Full;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -423,7 +430,7 @@ bool UnicodeSet::operator<(const UnicodeSet & other) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 void UnicodeSet::insert(const codepoint_t cp) {
 
-    if (LLVM_UNLIKELY(cp >= UNICODE_MAX)) {
+    if (LLVM_UNLIKELY(cp > UNICODE_MAX)) {
         throw std::runtime_error(std::to_string(cp) + " exceeds maximum code point.");
     }
 
@@ -695,13 +702,13 @@ void UnicodeSet::iterator::advance(const unsigned n) {
 
     assert (n == 1);
 
-    if (LLVM_UNLIKELY(mMinCodePoint >= 0x110000)) {
+    if (LLVM_UNLIKELY(mMinCodePoint > UNICODE_MAX)) {
         throw std::runtime_error("UnicodeSet iterator exceeded maximum code point.");
     }
 
     bool found = false;
     // Find the start of our interval
-    while ( mBaseCodePoint < 0x110000 ) {
+    while ( mBaseCodePoint <= UNICODE_MAX ) {
         // Find the first non-empty block
         if (typeOf(*mRunIterator) != Mixed) {            
             // If we found a full run, this must be the start of our interval.
@@ -737,8 +744,8 @@ void UnicodeSet::iterator::advance(const unsigned n) {
     }
 
     if (!found) {
-        assert (mBaseCodePoint == 0x110000);
-        mMinCodePoint = 0x110000;
+        assert (mBaseCodePoint == (UNICODE_MAX+1));
+        mMinCodePoint = (UNICODE_MAX+1);
         return;
     }
 
@@ -746,7 +753,7 @@ void UnicodeSet::iterator::advance(const unsigned n) {
     assert (mMaxCodePoint <= mMinCodePoint);
     found = false;
     // Find the end of our interval
-    while ( mBaseCodePoint < 0x110000 ) {
+    while ( mBaseCodePoint <= UNICODE_MAX ) {
 
         // Find the first non-Full block
         if (typeOf(*mRunIterator) != Mixed) {
@@ -782,26 +789,27 @@ void UnicodeSet::iterator::advance(const unsigned n) {
             mMixedRunIndex = 0;
         }
     }
-    // if the very last block is a mixed block and we go past it, the last code point of the range is 0x10FFFF
+    // if the very last block is a mixed block and we go past it, the last code point of the range is UNICODE_MAX
     if (!found) {
-        assert (mBaseCodePoint == 0x110000);
-        mMaxCodePoint = 0x10FFFF;
+        assert (mBaseCodePoint == (UNICODE_MAX+1));
+        mMaxCodePoint = UNICODE_MAX;
     }
 
     assert (mMinCodePoint <= mMaxCodePoint);
 }
-
+    
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief Empty Set Constructor
+ * @brief Empty/Full Set Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-UnicodeSet::UnicodeSet()
+UnicodeSet::UnicodeSet(run_type_t emptyOrFull)
 : mRuns(mAllocator)
 , mQuads(mAllocator)
 {
-    append_run(Empty, UNICODE_QUAD_COUNT, mRuns);
+    assert((emptyOrFull == Empty) || (emptyOrFull == Full));
+    append_run(emptyOrFull, UNICODE_QUAD_COUNT, mRuns);
     assert (verify(mRuns, mQuads));
 }
-
+           
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief Singleton Set Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -849,9 +857,9 @@ template <typename itr>
 void convertIntervalRangesToSparseSet(const itr begin, const itr end, UnicodeSet::RunVector & mRuns, UnicodeSet::QuadVector & mQuads) {
     assert (std::is_sorted(begin, end, [](const interval_t l, const interval_t r) {
         assert (l.first <= l.second);
-        assert (l.second < UNICODE_MAX);
+        assert (l.second <= UNICODE_MAX);
         assert (r.first <= r.second);
-        assert (r.second < UNICODE_MAX);
+        assert (r.second <= UNICODE_MAX);
         return l.second < r.first;
     }));
 

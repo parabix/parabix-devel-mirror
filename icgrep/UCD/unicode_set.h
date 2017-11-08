@@ -97,11 +97,13 @@ public:
     }
 
     inline iterator end() const {
-        return iterator(mRuns.cend(), mQuads.cend(), 0x110000);
+        return iterator(mRuns.cend(), mQuads.cend(), UNICODE_MAX+1);
     }
 
-    bool empty() const;
-
+    bool empty() const; // The set has no members
+    
+    bool full() const;  // The set has the full set of possible Unicode codepoints.
+    
     bool contains(const codepoint_t codepoint) const;
 
     bool intersects(const codepoint_t lo, const codepoint_t hi) const;
@@ -133,14 +135,14 @@ public:
     bool operator==(const UnicodeSet & other) const;
     bool operator<(const UnicodeSet & other) const;
 
-    UnicodeSet();
+    UnicodeSet(run_type_t emptyOrFull = Empty);
     UnicodeSet(const codepoint_t codepoint);
     UnicodeSet(const codepoint_t lo, const codepoint_t hi);
     UnicodeSet(const UnicodeSet & other);
     UnicodeSet(std::initializer_list<run_t> r, std::initializer_list<bitquad_t> q);
     UnicodeSet(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end);
     UnicodeSet(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end);
-
+    
     inline void swap(UnicodeSet & other);
     inline void swap(UnicodeSet && other);
 
