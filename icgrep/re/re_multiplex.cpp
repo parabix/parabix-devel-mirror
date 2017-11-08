@@ -104,19 +104,9 @@ RE * multiplex(RE * const re,
         } else if (Diff * diff = dyn_cast<Diff>(re)) {
             diff->setLH(multiplex(diff->getLH()));
             diff->setRH(multiplex(diff->getRH()));
-            CC * lh = extractCC(diff->getLH());
-            CC * rh = extractCC(diff->getRH());
-            if (lh && rh) {
-                return multiplex(makeName("diff", subtractCC(lh, rh)));
-            }
         } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
             ix->setLH(multiplex(ix->getLH()));
             ix->setRH(multiplex(ix->getRH()));
-            CC * lh = extractCC(ix->getLH());
-            CC * rh = extractCC(ix->getRH());
-            if (lh && rh) {
-                return multiplex(makeName("intersect", intersectCC(lh, rh)));
-            }
         }
         return re;
     };

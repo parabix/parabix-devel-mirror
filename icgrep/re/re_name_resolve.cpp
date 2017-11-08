@@ -90,19 +90,9 @@ struct NameResolver {
         } else if (Diff * diff = dyn_cast<Diff>(re)) {
             diff->setLH(resolve(diff->getLH()));
             diff->setRH(resolve(diff->getRH()));
-            CC * lh = extractCC(diff->getLH());
-            CC * rh = extractCC(diff->getRH());
-            if (lh && rh) {
-                return resolve(makeName("diff", subtractCC(lh, rh)));
-            }
         } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
             ix->setLH(resolve(ix->getLH()));
             ix->setRH(resolve(ix->getRH()));
-            CC * lh = extractCC(ix->getLH());
-            CC * rh = extractCC(ix->getRH());
-            if (lh && rh) {
-                return resolve(makeName("intersect", intersectCC(lh, rh)));
-            }
         }
         return re;
     }
