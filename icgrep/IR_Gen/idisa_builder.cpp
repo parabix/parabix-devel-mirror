@@ -73,86 +73,211 @@ Constant * IDISA_Builder::simd_lomask(unsigned fw) {
 }
 
 Value * IDISA_Builder::simd_fill(unsigned fw, Value * a) {
-    unsigned field_count = mBitBlockWidth/fw;
+    if (fw < 8) report_fatal_error("Unsupported field width: simd_fill " + std::to_string(fw));
+   unsigned field_count = mBitBlockWidth/fw;
     Type * singleFieldVecTy = VectorType::get(getIntNTy(fw), 1);
     Value * aVec = CreateBitCast(a, singleFieldVecTy);
     return CreateShuffleVector(aVec, UndefValue::get(singleFieldVecTy), Constant::getNullValue(VectorType::get(getInt32Ty(), field_count)));
 }
 
 Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
+    if (fw == 1) return simd_xor(a, b);
+    if (fw < 8) {
+        Constant * hi_bit_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
+                                                           APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, 1)));
+        Constant * lo_bit_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
+                                                           APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw-1)));
+        Value * hi_xor = simd_xor(simd_and(a, hi_bit_mask), simd_and(b, hi_bit_mask));
+        Value * part_sum = simd_add(32, simd_and(a, lo_bit_mask), simd_and(b, lo_bit_mask));
+        return simd_xor(part_sum, hi_xor);
+    }
     return CreateAdd(fwCast(fw, a), fwCast(fw, b));
 }
 
 Value * IDISA_Builder::simd_sub(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: sub " + std::to_string(fw));
     return CreateSub(fwCast(fw, a), fwCast(fw, b));
 }
 
 Value * IDISA_Builder::simd_mult(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: mult " + std::to_string(fw));
     return CreateMul(fwCast(fw, a), fwCast(fw, b));
 }
 
 Value * IDISA_Builder::simd_eq(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) {
+        Value * eq_bits = simd_not(simd_xor(a, b));
+        if (fw == 1) return eq_bits;
+        eq_bits = simd_or(simd_and(simd_srli(32, simd_and(simd_himask(2), eq_bits), 1), eq_bits),
+                          simd_and(simd_slli(32, simd_and(simd_lomask(2), eq_bits), 1), eq_bits));
+        if (fw == 2) return eq_bits;
+        eq_bits = simd_or(simd_and(simd_srli(32, simd_and(simd_himask(4), eq_bits), 2), eq_bits),
+                          simd_and(simd_slli(32, simd_and(simd_lomask(4), eq_bits), 2), eq_bits));
+        return eq_bits;
+    }
     return CreateSExt(CreateICmpEQ(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_gt(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: gt " + std::to_string(fw));
     return CreateSExt(CreateICmpSGT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_ugt(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: ugt " + std::to_string(fw));
     return CreateSExt(CreateICmpUGT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_lt(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: lt " + std::to_string(fw));
     return CreateSExt(CreateICmpSLT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_ult(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: ult " + std::to_string(fw));
     return CreateSExt(CreateICmpULT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_max(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: max " + std::to_string(fw));
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
     return CreateSelect(CreateICmpSGT(aVec, bVec), aVec, bVec);
 }
 
 Value * IDISA_Builder::simd_umax(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: umax " + std::to_string(fw));
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
     return CreateSelect(CreateICmpUGT(aVec, bVec), aVec, bVec);
 }
 
 Value * IDISA_Builder::simd_min(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: min " + std::to_string(fw));
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
     return CreateSelect(CreateICmpSLT(aVec, bVec), aVec, bVec);
 }
 
 Value * IDISA_Builder::simd_umin(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: umin " + std::to_string(fw));
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
     return CreateSelect(CreateICmpULT(aVec, bVec), aVec, bVec);
 }
 
 Value * IDISA_Builder::simd_slli(unsigned fw, Value * a, unsigned shift) {
+    if (fw < 16) {
+        Constant * value_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
+                                                          APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw-shift)));
+        return CreateShl(fwCast(32, simd_and(a, value_mask)), shift);
+    }
     return CreateShl(fwCast(fw, a), shift);
 }
 
 Value * IDISA_Builder::simd_srli(unsigned fw, Value * a, unsigned shift) {
+    if (fw < 16) {
+        Constant * value_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
+                                                          APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw-shift)));
+        return CreateLShr(fwCast(32, simd_and(a, value_mask)), shift);
+    }
     return CreateLShr(fwCast(fw, a), shift);
 }
 
 Value * IDISA_Builder::simd_srai(unsigned fw, Value * a, unsigned shift) {
+    if (fw < 8) report_fatal_error("Unsupported field width: srai " + std::to_string(fw));
     return CreateAShr(fwCast(fw, a), shift);
+}
+    
+Value * IDISA_Builder::simd_sllv(unsigned fw, Value * v, Value * shifts) {
+    if (fw >= 8) return CreateShl(fwCast(fw, v), fwCast(fw, shifts));
+    Value * w = v;
+    for (unsigned shft_amt = 1; shft_amt < fw; shft_amt *= 2) {
+        APInt bit_in_field(fw, shft_amt);
+        // To simulate shift within a fw, we need to mask off the high shft_amt bits of each element.
+        Constant * value_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
+                                                          APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw-shft_amt)));
+        Constant * bit_select = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
+                                                          APInt::getSplat(mBitBlockWidth, bit_in_field));
+        Value * unshifted_field_mask = simd_eq(fw, simd_and(bit_select, shifts), allZeroes());
+        Value * fieldsToShift = simd_and(w, simd_and(value_mask, simd_not(unshifted_field_mask)));
+        w = simd_or(simd_and(w, unshifted_field_mask), simd_slli(32, fieldsToShift, shft_amt));
+    }
+    return w;
+}
+
+Value * IDISA_Builder::simd_srlv(unsigned fw, Value * v, Value * shifts) {
+    if (fw >= 8) return CreateLShr(fwCast(fw, v), fwCast(fw, shifts));
+    Value * w = v;
+    for (unsigned shft_amt = 1; shft_amt < fw; shft_amt *= 2) {
+        APInt bit_in_field(fw, shft_amt);
+        // To simulate shift within a fw, we need to mask off the low shft_amt bits of each element.
+        Constant * value_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
+                                                          APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw-shft_amt)));
+        Constant * bit_select = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
+                                                          APInt::getSplat(mBitBlockWidth, bit_in_field));
+        Value * unshifted_field_mask = simd_eq(fw, simd_and(bit_select, shifts), allZeroes());
+        Value * fieldsToShift = simd_and(w, simd_and(value_mask, simd_not(unshifted_field_mask)));
+        w = simd_or(simd_and(w, unshifted_field_mask), simd_srli(32, fieldsToShift, shft_amt));
+    }
+    return w;
+}
+
+Value * IDISA_Builder::simd_pext(unsigned fieldwidth, Value * v, Value * extract_mask) {
+    Value * delcounts = CreateNot(extract_mask);  // initially deletion counts per 1-bit field
+    Value * w = simd_and(extract_mask, v);
+    for (unsigned fw = 2; fw < fieldwidth; fw = fw * 2) {
+        Value * shift_fwd_field_mask = simd_lomask(fw*2);
+        Value * shift_back_field_mask = simd_himask(fw*2);
+        Value * shift_back_count_mask = simd_and(shift_back_field_mask, simd_lomask(fw));
+        Value * shift_fwd_amts = simd_srli(fw, simd_and(shift_fwd_field_mask, delcounts), fw/2);
+        Value * shift_back_amts = simd_and(shift_back_count_mask, delcounts);
+        w = simd_or(simd_sllv(fw, simd_and(w, shift_fwd_field_mask), shift_fwd_amts),
+                    simd_srlv(fw, simd_and(w, shift_back_field_mask), shift_back_amts));
+        delcounts = simd_add(fw, simd_and(simd_lomask(fw), delcounts), simd_srli(fw, delcounts, fw/2));
+    }
+    // Now shift back all fw fields.
+    Value * shift_back_amts = simd_and(simd_lomask(fieldwidth), delcounts);
+    w = simd_srlv(fieldwidth, w, shift_back_amts);
+    return w;
+}
+
+Value * IDISA_Builder::simd_pdep(unsigned fieldwidth, Value * v, Value * deposit_mask) {
+    // simd_pdep is implemented by reversing the process of simd_pext.
+    // First determine the deletion counts necessary for each stage of the process.
+    std::vector<Value *> delcounts;
+    delcounts.push_back(simd_not(deposit_mask)); // initially deletion counts per 1-bit field
+    for (unsigned fw = 2; fw < fieldwidth; fw = fw * 2) {
+        delcounts.push_back(simd_add(fw, simd_and(simd_lomask(fw), delcounts.back()), simd_srli(fw, delcounts.back(), fw/2)));
+    }
+    //
+    // Now reverse the pext process.  First reverse the final shift_back.
+    Value * pext_shift_back_amts = simd_and(simd_lomask(fieldwidth), delcounts.back());
+    Value * w = simd_sllv(fieldwidth, v, pext_shift_back_amts);
+    
+    //
+    // No work through the smaller field widths.
+    for (unsigned fw = fieldwidth/2; fw >= 2; fw = fw/2) {
+        delcounts.pop_back();
+        Value * pext_shift_fwd_field_mask = simd_lomask(fw*2);
+        Value * pext_shift_back_field_mask = simd_himask(fw*2);
+        Value * pext_shift_back_count_mask = simd_and(pext_shift_back_field_mask, simd_lomask(fw));
+        Value * pext_shift_fwd_amts = simd_srli(fw, simd_and(pext_shift_fwd_field_mask, delcounts.back()), fw/2);
+        Value * pext_shift_back_amts = simd_and(pext_shift_back_count_mask, delcounts.back());
+        w = simd_or(simd_srlv(fw, simd_and(w, pext_shift_fwd_field_mask), pext_shift_fwd_amts),
+                    simd_sllv(fw, simd_and(w, pext_shift_back_field_mask), pext_shift_back_amts));
+    }
+    return w;
 }
 
 Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
+    if (fw < 8) report_fatal_error("Unsupported field width: cttz " + std::to_string(fw));
     Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, fwVectorType(fw));
     return CreateCall(cttzFunc, {fwCast(fw, a), ConstantInt::get(getInt1Ty(), 0)});
 }
 
 Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
+    if (fw < 8) report_fatal_error("Unsupported field width: popcount " + std::to_string(fw));
     Value * ctpopFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, fwVectorType(fw));
     return CreateCall(ctpopFunc, fwCast(fw, a));
 }
@@ -190,6 +315,7 @@ Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) 
         Value * c = bitCast(cond);
         return CreateOr(CreateAnd(a1, c), CreateAnd(CreateXor(c, b1), b1));
     } else {
+        if (fw < 8) report_fatal_error("Unsupported field width: simd_if " + std::to_string(fw));
         Value * aVec = fwCast(fw, a);
         Value * bVec = fwCast(fw, b);
         return CreateSelect(CreateICmpSLT(cond, mZeroInitializer), aVec, bVec);
@@ -197,6 +323,7 @@ Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) 
 }
     
 Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {    
+    if (fw < 8) report_fatal_error("Unsupported field width: mergeh " + std::to_string(fw));
     const auto field_count = mBitBlockWidth / fw;
     Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count / 2; i++) {
@@ -207,6 +334,7 @@ Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {    
+    if (fw < 8) report_fatal_error("Unsupported field width: mergel " + std::to_string(fw));
     const auto field_count = mBitBlockWidth / fw;
     Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count / 2; i++) {
@@ -217,6 +345,7 @@ Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::esimd_bitspread(unsigned fw, Value * bitmask) {
+    if (fw < 8) report_fatal_error("Unsupported field width: bitspread " + std::to_string(fw));
     const auto field_count = mBitBlockWidth / fw;
     Type * field_type = getIntNTy(fw);
     Value * spread_field = CreateBitCast(CreateZExtOrTrunc(bitmask, field_type), VectorType::get(getIntNTy(fw), 1));
@@ -234,6 +363,7 @@ Value * IDISA_Builder::esimd_bitspread(unsigned fw, Value * bitmask) {
 }
 
 Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: packh " + std::to_string(fw));
     Value * aVec = fwCast(fw/2, a);
     Value * bVec = fwCast(fw/2, b);
     const auto field_count = 2 * mBitBlockWidth / fw;
@@ -245,6 +375,7 @@ Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: packl " + std::to_string(fw));
     Value * aVec = fwCast(fw/2, a);
     Value * bVec = fwCast(fw/2, b);
     const auto field_count = 2 * mBitBlockWidth / fw;
@@ -256,6 +387,7 @@ Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
+    if (fw < 16) report_fatal_error("Unsupported field width: packh_in_lanes " + std::to_string(fw));
     const unsigned fw_out = fw / 2;
     const unsigned fields_per_lane = mBitBlockWidth / (fw_out * lanes);
     const unsigned field_offset_for_b = mBitBlockWidth / fw_out;
@@ -274,6 +406,7 @@ Value * IDISA_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value *
 }
 
 Value * IDISA_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
+    if (fw < 16) report_fatal_error("Unsupported field width: packl_in_lanes " + std::to_string(fw));
     const unsigned fw_out = fw / 2;
     const unsigned fields_per_lane = mBitBlockWidth / (fw_out * lanes);
     const unsigned field_offset_for_b = mBitBlockWidth / fw_out;
@@ -292,28 +425,34 @@ Value * IDISA_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value *
 }
 
 Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
+    if (fw < 8) report_fatal_error("Unsupported field width: hsimd_signmask " + std::to_string(fw));
     Value * mask = CreateICmpSLT(fwCast(fw, a), ConstantAggregateZero::get(fwVectorType(fw)));
     return CreateZExt(CreateBitCast(mask, getIntNTy(mBitBlockWidth/fw)), getInt32Ty());
 }
 
 Value * IDISA_Builder::mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex) {
+    if (fw < 8) report_fatal_error("Unsupported field width: mvmd_extract " + std::to_string(fw));
     return CreateExtractElement(fwCast(fw, a), getInt32(fieldIndex));
 }
 
 Value * IDISA_Builder::mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex) {
+    if (fw < 8) report_fatal_error("Unsupported field width: mvmd_insert " + std::to_string(fw));
     return CreateInsertElement(fwCast(fw, blk), elt, getInt32(fieldIndex));
 }
 
 Value * IDISA_Builder::mvmd_slli(unsigned fw, Value * a, unsigned shift) {
+    if (fw < 8) report_fatal_error("Unsupported field width: mvmd_slli " + std::to_string(fw));
     const auto field_count = mBitBlockWidth / fw;
     return mvmd_dslli(fw, a, Constant::getNullValue(fwVectorType(fw)), field_count - shift);
 }
 
 Value * IDISA_Builder::mvmd_srli(unsigned fw, Value * a, unsigned shift) {
+    if (fw < 8) report_fatal_error("Unsupported field width: mvmd_srli " + std::to_string(fw));
     return mvmd_dslli(fw, Constant::getNullValue(fwVectorType(fw)), a, shift);
 }
 
 Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift) {
+    if (fw < 8) report_fatal_error("Unsupported field width: mvmd_dslli " + std::to_string(fw));
     const auto field_count = mBitBlockWidth/fw;
     Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count; i++) {
