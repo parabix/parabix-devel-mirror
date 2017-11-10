@@ -485,9 +485,68 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_advance(Value * a, Value * s
 }
 
 // full shift producing {shiftout, shifted}
-std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * a, Value * index, Value * shiftin, unsigned shift) {
-    llvm::report_fatal_error("bitblock_indexed_advance unimplemented for this architecture");
+std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm, Value * index_strm, Value * shiftIn, unsigned shiftAmount) {
+    Value * popcount_f = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, getSizeTy());
+    unsigned bitWidth = sizeof(size_t) * 8;
+    Type * iBitBlock = getIntNTy(getBitBlockWidth());
+    Value * shiftVal = getSize(shiftAmount);
+    Value * extracted_bits = simd_pext(bitWidth, strm, index_strm);
+    Value * ix_popcounts = simd_popcount(bitWidth, index_strm);
+
+    
+    if (LLVM_LIKELY(shiftAmount < bitWidth)) {
+        Value * carry = mvmd_extract(bitWidth, shiftIn, 0);
+        Value * result = allZeroes();
+        for (unsigned i = 0; i < getBitBlockWidth()/bitWidth; i++) {
+            Value * ix_popcnt = mvmd_extract(bitWidth, ix_popcounts, i);
+            Value * bits = mvmd_extract(bitWidth, extracted_bits, i);
+            Value * adv = CreateOr(CreateShl(bits, shiftAmount), carry);
+            // We have two cases depending on whether the popcount of the index pack is < shiftAmount or not.
+            Value * popcount_small = CreateICmpULT(ix_popcnt, shiftVal);
+            Value * carry_if_popcount_small = 
+                CreateOr(CreateShl(bits, CreateSub(shiftVal, ix_popcnt)),
+                            CreateLShr(carry, ix_popcnt));
+            Value * carry_if_popcount_large = CreateLShr(bits, CreateSub(ix_popcnt, shiftVal));
+            carry = CreateSelect(popcount_small, carry_if_popcount_small, carry_if_popcount_large);
+            result = mvmd_insert(bitWidth, result, adv, i);
+        }
+        Value * carryOut = mvmd_insert(bitWidth, allZeroes(), carry, 0);
+        return std::pair<Value *, Value *>{bitCast(carryOut), simd_pdep(bitWidth, result, index_strm)};
+    }
+    else if (shiftAmount <= mBitBlockWidth) {
+        // The shift amount is always greater than the popcount of the individual
+        // elements that we deal with.   This simplifies some of the logic.
+        Value * carry = CreateBitCast(shiftIn, iBitBlock);
+        Value * result = allZeroes();
+        for (unsigned i = 0; i < getBitBlockWidth()/bitWidth; i++) {
+            Value * ix_popcnt = mvmd_extract(bitWidth, ix_popcounts, i);
+            Value * bits = mvmd_extract(bitWidth, extracted_bits, i);  // All these bits are shifted out (appended to carry).
+            result = mvmd_insert(bitWidth, result, mvmd_extract(bitWidth, carry, 0), i);
+            carry = CreateLShr(carry, CreateZExt(ix_popcnt, iBitBlock)); // Remove the carry bits consumed, make room for new bits.
+            carry = CreateOr(carry, CreateShl(CreateZExt(bits, iBitBlock), CreateZExt(CreateSub(shiftVal, ix_popcnt), iBitBlock)));
+        }
+        return std::pair<Value *, Value *>{bitCast(carry), simd_pdep(bitWidth, result, index_strm)};
+    }
+    else {
+        // The shift amount is greater than the total popcount.   We will consume popcount
+        // bits from the shiftIn value only, and produce a carry out value of the selected bits.
+        // elements that we deal with.   This simplifies some of the logic.
+        Value * carry = CreateBitCast(shiftIn, iBitBlock);
+        Value * result = allZeroes();
+        Value * carryOut = CreateBitCast(allZeroes(), iBitBlock);
+        Value * generated = getSize(0);
+        for (unsigned i = 0; i < getBitBlockWidth()/bitWidth; i++) {
+            Value * ix_popcnt = mvmd_extract(bitWidth, ix_popcounts, i);
+            Value * bits = mvmd_extract(bitWidth, extracted_bits, i);  // All these bits are shifted out (appended to carry).
+            result = mvmd_insert(bitWidth, result, mvmd_extract(bitWidth, carry, 0), i);
+            carry = CreateLShr(carry, CreateZExt(ix_popcnt, iBitBlock)); // Remove the carry bits consumed.
+            carryOut = CreateOr(carryOut, CreateShl(CreateZExt(bits, iBitBlock), CreateZExt(generated, iBitBlock)));
+            generated = CreateAdd(generated, ix_popcnt);
+        }
+        return std::pair<Value *, Value *>{bitCast(carryOut), simd_pdep(bitWidth, result, index_strm)};
+    }
 }
+
 
 Value * IDISA_Builder::bitblock_mask_from(Value * pos) {
     Type * bitBlockInt = getIntNTy(getBitBlockWidth());

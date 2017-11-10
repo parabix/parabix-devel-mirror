@@ -412,14 +412,14 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
             PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), pos);
             return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
-        else if (isUnicodeUnitLength(repeated) && AVX2_available()) {
+        else if (isUnicodeUnitLength(repeated)) {
             PabloAST * cc = markerVar(compile(repeated, pb));
             PabloAST * cc_lb = consecutive_matches(cc, 1, lb, mFinal, pb);
             const auto pos = markerPos(marker) == MarkerPosition::FinalMatchUnit ? lb : lb - 1;
             PabloAST * marker_fwd = pb.createIndexedAdvance(markerVar(marker), mFinal, pos);
             return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
-        else if (isTypeForLocal(repeated) && AVX2_available()) {
+        else if (isTypeForLocal(repeated)) {
             CC * firstSymSet = RE_Local::first(repeated);
             std::map<CC *, CC*> followMap;
             RE_Local::follow(repeated, followMap);
@@ -490,7 +490,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
             PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, mNonFinal), "bounded");
             return makeMarker(MarkerPosition::FinalPostPositionUnit, bounded);
         }
-        else if (isUnicodeUnitLength(repeated) && AVX2_available()) {
+        else if (isUnicodeUnitLength(repeated)) {
             // For a regexp which represent a single Unicode codepoint, we can use the mFinal stream
             // as an index stream for an indexed advance operation.
             PabloAST * cursor = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
@@ -499,7 +499,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
             PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, mNonFinal), "bounded");
             return makeMarker(MarkerPosition::FinalPostPositionUnit, bounded);
         }
-        else if (isTypeForLocal(repeated) && AVX2_available()) {
+        else if (isTypeForLocal(repeated)) {
             CC * firstSymSet = RE_Local::first(repeated);
             std::map<CC *, CC*> followMap;
             RE_Local::follow(repeated, followMap);
