@@ -183,7 +183,7 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
 
         sys::path::replace_extension(objectName, ".kernel");
         raw_fd_ostream kernelFile(objectName.str(), EC, sys::fs::F_None);
-        WriteBitcodeToFile(header.get(), kernelFile, false, false);
+        WriteBitcodeToFile(header.get(), kernelFile);
         kernelFile.close();
     }
 }
@@ -235,12 +235,12 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * modul
 inline ParabixObjectCache::Path ParabixObjectCache::getDefaultPath() {
     // $HOME/.cache/parabix/
     Path cachePath;
-    #ifndef USE_LLVM_3_6
-    sys::path::user_cache_directory(cachePath, "parabix");
-    #else
+#if LLVM_VERSION_INTEGER < LLVM_3_7_0
+    sys::path::user_cache_directory(cachePath, "parabix", PARABIX_VERSION);
+#else
     sys::path::home_directory(cachePath);
-    sys::path::append(cachePath, ".cache", "parabix");
-    #endif
+    sys::path::append(cachePath, ".cache", "parabix", PARABIX_VERSION);
+#endif
     return cachePath;
 }
 

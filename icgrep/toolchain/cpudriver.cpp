@@ -1,6 +1,7 @@
 #include "cpudriver.h"
 
 #include <IR_Gen/idisa_target.h>
+#include <toolchain/toolchain.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for EngineBuilder
 #include <llvm/IR/LegacyPassManager.h>             // for PassManager
 #include <llvm/IR/IRPrintingPasses.h>
@@ -12,9 +13,11 @@
 #include <llvm/Target/TargetMachine.h>             // for TargetMachine, Tar...
 #include <llvm/Target/TargetOptions.h>             // for TargetOptions
 #include <llvm/Transforms/Scalar.h>
+#if LLVM_VERSION_INTEGER >= LLVM_3_9_0
+#include <llvm/Transforms/Scalar/GVN.h>
+#endif
 #include <llvm/Transforms/Utils/Local.h>
 #include <toolchain/object_cache.h>
-#include <toolchain/toolchain.h>
 #include <toolchain/pipeline.h>
 #include <kernels/kernel_builder.h>
 #include <kernels/kernel.h>
@@ -177,7 +180,7 @@ void ParabixDriver::finalizeObject() {
         PM.add(createPrintModulePass(*mIROutputStream));
     }
 
-    #ifndef USE_LLVM_3_6
+#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowASM))) {
         if (codegen::ASMOutputFilename) {
             std::error_code error;
@@ -189,7 +192,7 @@ void ParabixDriver::finalizeObject() {
             report_fatal_error("LLVM error: could not add emit assembly pass");
         }
     }
-    #endif
+#endif
 
     Module * module = nullptr;
     try {

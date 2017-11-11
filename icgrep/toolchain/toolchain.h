@@ -12,6 +12,15 @@
 #include <llvm/Target/TargetOptions.h>
 #include <llvm/Target/TargetMachine.h>
 
+// #defines for comparison with LLVM_VERSION_INTEGER
+#define LLVM_3_6_0 30600
+#define LLVM_3_7_0 30700
+#define LLVM_3_8_0 30800
+#define LLVM_3_9_0 30900
+#define LLVM_4_0_0 40000
+#define LLVM_5_0_0 50000
+
+
 // FIXME: llvm/CodeGen/CommandFlags.h can only be included once or the various cl::opt causes multiple definition
 // errors. To bypass for now, the relevant options and functions are accessible from here. Re-evaluate with later
 // versions of LLVM.
@@ -27,7 +36,7 @@ enum DebugFlags {
     ShowUnoptimizedIR,
     ShowIR,
     VerifyIR,
-#ifndef USE_LLVM_3_6
+#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
     ShowASM,
 #endif
     SerializeThreads,
@@ -42,7 +51,7 @@ bool DebugOptionIsSet(const DebugFlags flag);
 
 extern bool PipelineParallel;
 extern bool SegmentPipelineParallel;
-#ifndef USE_LLVM_3_6
+#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
 extern const char * ASMOutputFilename;
 #endif
 extern const char * IROutputFilename;

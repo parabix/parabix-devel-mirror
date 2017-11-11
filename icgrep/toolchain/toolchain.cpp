@@ -26,7 +26,7 @@ static cl::bits<DebugFlags>
 DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR."),
                         clEnumVal(ShowIR, "Print optimized LLVM IR."),
                         clEnumVal(VerifyIR, "Run the IR verification pass."),
-#ifndef USE_LLVM_3_6
+#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
                         clEnumVal(ShowASM, "Print assembly code."),
 #endif
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
@@ -39,7 +39,7 @@ DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR.")
 static cl::opt<std::string> IROutputFilenameOption("dump-generated-IR-output", cl::init(""),
                                                        cl::desc("output IR filename"), cl::cat(CodeGenOptions));
 
-#ifndef USE_LLVM_3_6
+#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
 static cl::opt<std::string> ASMOutputFilenameOption("asm-output", cl::init(""),
                                                     cl::desc("output ASM filename"), cl::cat(CodeGenOptions));
 
@@ -124,13 +124,7 @@ const llvm::CodeModel::Model CMModel = ::CMModel;
 
 const std::string MArch = ::MArch;
 
-const std::string RunPass = ::RunPass;
-
 const llvm::TargetMachine::CodeGenFileType FileType = ::FileType;
-
-const std::string StopAfter = ::StopAfter;
-
-const std::string StartAfter = ::StartAfter;
 
 TargetOptions Options;
 
@@ -160,11 +154,11 @@ std::string ProgramName;
 void ParseCommandLineOptions(int argc, const char * const *argv, std::initializer_list<const cl::OptionCategory *> hiding) {
     AddParabixVersionPrinter();
     codegen::ProgramName = argv[0];
-    #ifndef USE_LLVM_3_6
+#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
     if (hiding.size() != 0) {
         cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>(hiding));
     }
-    #endif
+#endif
     cl::ParseCommandLineOptions(argc, argv);
     if (DebugOptions.getBits()) {
         EnableObjectCache = false;
@@ -173,9 +167,9 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
     IROutputFilename = IROutputFilenameOption.empty() ? nullptr : IROutputFilenameOption.data();
     ASMOutputFilename = ASMOutputFilenameOption.empty() ? nullptr : ASMOutputFilenameOption.data();
     Options = InitTargetOptionsFromCodeGenFlags();
-    #ifndef USE_LLVM_3_6
+#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
     Options.MCOptions.AsmVerbose = AsmVerbose;
-    #endif
+#endif
     switch (OptLevelOption) {
         case '0': OptLevel = CodeGenOpt::None; break;
         case '1': OptLevel = CodeGenOpt::Less; break;

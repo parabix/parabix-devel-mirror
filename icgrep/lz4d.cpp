@@ -12,13 +12,14 @@
 #include <llvm/Support/PrettyStackTrace.h>
 #include <llvm/Support/Signals.h>
 #include <llvm/Support/ManagedStatic.h>
+#include <toolchain/toolchain.h>
+
 #include <IR_Gen/idisa_target.h>
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 
 #include <lz4FrameDecoder.h>
 #include <cc/cc_compiler.h>
-#include <toolchain/toolchain.h>
 #include <kernels/cc_kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/s2p_kernel.h>
@@ -29,7 +30,7 @@
 
 #include <kernels/kernel_builder.h>
 #include <toolchain/cpudriver.h>
-
+#include <llvm/Support/raw_ostream.h>
 #include <string>
 #include <iostream>
 namespace re { class CC; }
