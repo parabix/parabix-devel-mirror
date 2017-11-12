@@ -59,9 +59,11 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         structTypes.push_back(instance[i]->getType());
     }
     StructType * const sharedStructType = StructType::get(m->getContext(), structTypes);
-    StructType * const threadStructType = StructType::get(sharedStructType->getPointerTo(), sizeTy, nullptr);
+    StructType * const threadStructType = StructType::get(m->getContext(), {sharedStructType->getPointerTo(), sizeTy});
 
     Function * const threadFunc = makeThreadFunction(iBuilder, "segment");
+    Function::arg_iterator args = threadFunc->arg_begin();
+    Value * threadStruct = iBuilder->CreateBitCast(&*(args), threadStructType->getPointerTo());
 
     // -------------------------------------------------------------------------------------------------------------------------
     // MAKE SEGMENT PARALLEL PIPELINE THREAD
@@ -71,8 +73,6 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
      // Create the basic blocks for the thread function.
     BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc);
     iBuilder->SetInsertPoint(entryBlock);
-    Value * const input = &threadFunc->getArgumentList().front();
-    Value * const threadStruct = iBuilder->CreatePointerCast(input, threadStructType->getPointerTo());
     Value * const sharedStatePtr = iBuilder->CreateLoad(iBuilder->CreateGEP(threadStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
     for (unsigned k = 0; k < n; ++k) {
         Value * ptr = iBuilder->CreateLoad(iBuilder->CreateGEP(sharedStatePtr, {iBuilder->getInt32(0), iBuilder->getInt32(k)}));
@@ -382,7 +382,9 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
         const auto & inputs = kernel->getStreamInputs();
 
         Function * const threadFunc = makeThreadFunction(iBuilder, "ppt:" + kernel->getName());
-
+        Function::arg_iterator ai = threadFunc->arg_begin();
+        Value * sharedStruct = iBuilder->CreateBitCast(&*(ai), sharedStructType->getPointerTo());
+        
          // Create the basic blocks for the thread function.
         BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc);
         BasicBlock * outputCheckBlock = BasicBlock::Create(iBuilder->getContext(), "outputCheck", threadFunc);
@@ -392,7 +394,6 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
 
         iBuilder->SetInsertPoint(entryBlock);
 
-        Value * sharedStruct = iBuilder->CreateBitCast(&threadFunc->getArgumentList().front(), sharedStructType->getPointerTo());
 
         for (unsigned k = 0; k < n; k++) {
             Value * const ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(k)});

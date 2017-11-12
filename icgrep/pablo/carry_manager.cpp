@@ -1034,7 +1034,7 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
         // carry state pointer, and summary pointer struct.
         if (LLVM_UNLIKELY(nonCarryCollapsingMode)) {
             mHasNonCarryCollapsingLoops = true;
-            carryState = StructType::get(b->getSizeTy(), carryState->getPointerTo(), carryTy->getPointerTo(), nullptr);
+            carryState = StructType::get(b->getContext(), {b->getSizeTy(), carryState->getPointerTo(), carryTy->getPointerTo()});
             assert (isDynamicallyAllocatedType(carryState));
         }
         cd.setNonCollapsingCarryMode(nonCarryCollapsingMode);

@@ -10,6 +10,7 @@
 #include <llvm/Support/CodeGen.h>                  // for Level, Level::None
 #include <llvm/Support/Compiler.h>                 // for LLVM_UNLIKELY
 #include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/FileSystem.h>
 #include <llvm/Target/TargetMachine.h>             // for TargetMachine, Tar...
 #include <llvm/Target/TargetOptions.h>             // for TargetOptions
 #include <llvm/Transforms/Scalar.h>

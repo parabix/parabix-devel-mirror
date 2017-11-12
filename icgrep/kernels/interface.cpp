@@ -30,7 +30,7 @@ void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::Kernel
     Module * const module = idb->getModule();
     PointerType * const selfType = mKernelStateType->getPointerTo();
     IntegerType * const sizeTy = idb->getSizeTy();
-    PointerType * const consumerTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
+    PointerType * const consumerTy = StructType::get(idb->getContext(), {sizeTy, sizeTy->getPointerTo()->getPointerTo()})->getPointerTo();
     Type * const voidTy = idb->getVoidTy();
 
     // Create the initialization function prototype
@@ -63,7 +63,6 @@ void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::Kernel
     Function * const doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, module);
     doSegment->setCallingConv(CallingConv::C);
     doSegment->setDoesNotThrow();
-    doSegment->setDoesNotCapture(1); // for self parameter only.
     args = doSegment->arg_begin();
     args->setName("self");
     (++args)->setName("doFinal");
@@ -97,7 +96,6 @@ void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::Kernel
     Function * const terminateFunc = Function::Create(terminateType, GlobalValue::ExternalLinkage, getName() + TERMINATE_SUFFIX, module);
     terminateFunc->setCallingConv(CallingConv::C);
     terminateFunc->setDoesNotThrow();
-    terminateFunc->setDoesNotCapture(1);
     args = terminateFunc->arg_begin();
     args->setName("self");
 

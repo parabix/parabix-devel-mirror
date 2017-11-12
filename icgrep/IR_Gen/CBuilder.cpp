@@ -39,6 +39,12 @@ static_assert(sizeof(unw_word_t) <= sizeof(uintptr_t), "");
 static_assert(sizeof(void *) == sizeof(uintptr_t), "");
 #endif
 
+
+#if LLVM_VERSION_INTEGER < LLVM_5_0_0
+#define setReturnDoesNotAlias() setDoesNotAlias(0)
+#endif
+
+
 using namespace llvm;
 
 inline static bool is_power_2(const uint64_t n) {
@@ -125,7 +131,11 @@ Value * CBuilder::CreateWriteCall(Value * fileDescriptor, Value * buf, Value * n
         IntegerType * sizeTy = getSizeTy();
         IntegerType * int32Ty = getInt32Ty();
         write = cast<Function>(m->getOrInsertFunction("write",
+#if LLVM_VERSION_INTEGER < LLVM_5_0_0
                                                         AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias),
+#else
+                                                        AttributeList().addAttribute(getContext(), 2U, Attribute::NoAlias),
+#endif
                                                         sizeTy, int32Ty, voidPtrTy, sizeTy, nullptr));
     }
     buf = CreatePointerCast(buf, voidPtrTy);
@@ -140,7 +150,11 @@ Value * CBuilder::CreateReadCall(Value * fileDescriptor, Value * buf, Value * nb
         IntegerType * sizeTy = getSizeTy();
         IntegerType * int32Ty = getInt32Ty();
         readFn = cast<Function>(m->getOrInsertFunction("read",
+#if LLVM_VERSION_INTEGER < LLVM_5_0_0
                                                          AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias),
+#else
+                                                         AttributeList().addAttribute(getContext(), 2U, Attribute::NoAlias),
+#endif
                                                          sizeTy, int32Ty, voidPtrTy, sizeTy, nullptr));
     }
     buf = CreatePointerCast(buf, voidPtrTy);
@@ -309,7 +323,7 @@ Value * CBuilder::CreateMalloc(Value * size) {
         FunctionType * fty = FunctionType::get(voidPtrTy, {sizeTy}, false);
         f = Function::Create(fty, Function::ExternalLinkage, "malloc", m);
         f->setCallingConv(CallingConv::C);
-        f->setDoesNotAlias(0);
+        f->setReturnDoesNotAlias();
     }
     size = CreateZExtOrTrunc(size, sizeTy);
     CallInst * const ptr = CreateCall(f, size);
@@ -349,7 +363,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
             FunctionType * const fty = FunctionType::get(voidPtrTy, {sizeTy, sizeTy}, false);
             f = Function::Create(fty, Function::ExternalLinkage, "aligned_alloc", m);
             f->setCallingConv(CallingConv::C);
-            f->setDoesNotAlias(0);
+            f->setReturnDoesNotAlias();
         }
         ptr = CreateCall(f, {align, size});
     } else if (hasPosixMemalign()) {
@@ -358,8 +372,10 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
             FunctionType * const fty = FunctionType::get(getInt32Ty(), {voidPtrTy->getPointerTo(), sizeTy, sizeTy}, false);
             f = Function::Create(fty, Function::ExternalLinkage, "posix_memalign", m);
             f->setCallingConv(CallingConv::C);
-            f->setDoesNotAlias(0);
+            f->setReturnDoesNotAlias();
+#if LLVM_VERSION_INTEGER < LLVM_5_0_0
             f->setDoesNotAlias(1);
+#endif
         }
         Value * handle = CreateAlloca(voidPtrTy);
         CallInst * success = CreateCall(f, {handle, align, size});
@@ -392,8 +408,10 @@ Value * CBuilder::CreateRealloc(Value * const ptr, Value * const size) {
         FunctionType * fty = FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false);
         f = Function::Create(fty, Function::ExternalLinkage, "realloc", m);
         f->setCallingConv(CallingConv::C);
-        f->setDoesNotAlias(0);
+        f->setReturnDoesNotAlias();
+#if LLVM_VERSION_INTEGER < LLVM_5_0_0
         f->setDoesNotAlias(1);
+#endif
     }
     CallInst * const ci = CreateCall(f, {CreatePointerCast(ptr, voidPtrTy), CreateZExtOrTrunc(size, sizeTy)});
     return CreatePointerCast(ci, ptr->getType());
@@ -876,7 +894,9 @@ void CBuilder::__CreateAssert(Value * const assertion, StringRef failureMessage)
             FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
             function = Function::Create(fty, Function::PrivateLinkage, "assert", m);
             function->setDoesNotThrow();
+#if LLVM_VERSION_INTEGER < LLVM_5_0_0
             function->setDoesNotAlias(2);
+#endif
             BasicBlock * const entry = BasicBlock::Create(getContext(), "", function);
             BasicBlock * const failure = BasicBlock::Create(getContext(), "", function);
             BasicBlock * const success = BasicBlock::Create(getContext(), "", function);
@@ -1076,7 +1096,7 @@ Value * checkHeapAddress(CBuilder * const b, Value * const Ptr) {
     if (LLVM_UNLIKELY(isPoisoned == nullptr)) {
         isPoisoned = Function::Create(FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false), Function::ExternalLinkage, "__asan_region_is_poisoned", m);
         isPoisoned->setCallingConv(CallingConv::C);
-        isPoisoned->setDoesNotAlias(0);
+        isPoisoned->setReturnDoesNotAlias();
         isPoisoned->setDoesNotAlias(1);
     } \
     Value * const addr = b->CreatePointerCast(Ptr, voidPtrTy);

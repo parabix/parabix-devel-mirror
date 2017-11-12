@@ -811,7 +811,7 @@ void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * handl
 }
 
 SourceBuffer::SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, unsigned MemoryAddressSpace, unsigned StructAddressSpace)
-: StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(resolveStreamSetType(b, type)->getPointerTo(MemoryAddressSpace), b->getSizeTy(), b->getSizeTy(), nullptr), 0, StructAddressSpace) {
+: StreamSetBuffer(BufferKind::SourceBuffer, type, StructType::get(b->getContext(), {resolveStreamSetType(b, type)->getPointerTo(MemoryAddressSpace), b->getSizeTy(), b->getSizeTy()}), 0, StructAddressSpace) {
     mUniqueID = "B";
     if (MemoryAddressSpace != 0 || StructAddressSpace != 0) {
         mUniqueID += "@" + std::to_string(MemoryAddressSpace) + ":" + std::to_string(StructAddressSpace);
@@ -871,7 +871,7 @@ SwizzledCopybackBuffer::SwizzledCopybackBuffer(const std::unique_ptr<kernel::Ker
 inline StructType * getDynamicBufferStructType(const std::unique_ptr<kernel::KernelBuilder> & b, Type * baseType, const unsigned addrSpace) {
     IntegerType * sizeTy = b->getSizeTy();
     PointerType * typePtr = baseType->getPointerTo(addrSpace);
-    return StructType::get(typePtr, typePtr, sizeTy, sizeTy, sizeTy, sizeTy, sizeTy, nullptr);
+    return StructType::get(b->getContext(), {typePtr, typePtr, sizeTy, sizeTy, sizeTy, sizeTy, sizeTy});
 }
 
 DynamicBuffer::DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, Type * type, size_t initialCapacity, size_t overflow, unsigned swizzle, unsigned addrSpace)
@@ -946,7 +946,7 @@ StructType * resolveExpandableStreamSetType(const std::unique_ptr<kernel::Kernel
             if (fieldWidth != 1) {
                 type = ArrayType::get(type, fieldWidth);
             }
-            return StructType::get(b->getSizeTy(), type->getPointerTo(), nullptr);
+            return StructType::get(b->getContext(), {b->getSizeTy(), type->getPointerTo()});
         }
     }
     std::string tmp;

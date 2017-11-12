@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-
+#include <toolchain/toolchain.h>
 #include "idisa_nvptx_builder.h"
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Module.h>
@@ -262,8 +262,11 @@ void IDISA_NVPTX20_Builder::CreateBallotFunc(){
     FunctionType * AsmFnTy = FunctionType::get(int32ty, int32ty, false);
     InlineAsm *IA = InlineAsm::get(AsmFnTy, AsmStream, "=r,r", true, false);
     CallInst * result = CreateCall(IA, conv);
+#if LLVM_VERSION_INTEGER < LLVM_5_0_0
     result->addAttribute(AttributeSet::FunctionIndex, Attribute::NoUnwind);
-
+#else
+    result->addAttribute(AttributeList::FunctionIndex, Attribute::NoUnwind);
+#endif
     CreateRet(result);
 }
 

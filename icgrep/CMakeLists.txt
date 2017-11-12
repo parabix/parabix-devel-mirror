@@ -43,7 +43,7 @@ endif()
 
 # Let's suppose we want to build a JIT compiler with support for
 # binary code (no interpreter):
-set(LLVM_ALL_TARGETS AArch64 AMDGPU ARM BPF CppBackend Hexagon Mips MSP430 NVPTX PowerPC Sparc SystemZ X86 XCore)
+set(LLVM_ALL_TARGETS X86)
 llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit native IRReader Linker)
 
 # Check if boost has been installed on this system.

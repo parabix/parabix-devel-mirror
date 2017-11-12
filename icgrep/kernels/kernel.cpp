@@ -296,7 +296,7 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & idb)
     for (const auto & binding : mInternalScalars) {
         addScalar(binding.getType(), binding.getName());
     }
-    Type * const consumerSetTy = StructType::get(sizeTy, sizeTy->getPointerTo()->getPointerTo(), nullptr)->getPointerTo();
+    Type * const consumerSetTy = StructType::get(idb->getContext(), {sizeTy, sizeTy->getPointerTo()->getPointerTo()})->getPointerTo();
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         addScalar(consumerSetTy, mStreamSetOutputs[i].getName() + CONSUMER_SUFFIX);
     }
@@ -526,7 +526,7 @@ void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & idb) {
     IntegerType * const sizeTy = idb->getSizeTy();
     PointerType * const sizePtrTy = sizeTy->getPointerTo();
     PointerType * const sizePtrPtrTy = sizePtrTy->getPointerTo();
-    StructType * const consumerTy = StructType::get(sizeTy, sizePtrPtrTy, nullptr);
+    StructType * const consumerTy = StructType::get(idb->getContext(), {sizeTy, sizePtrPtrTy});
     for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
         const auto output = mStreamSetOutputBuffers[i];
         const auto & consumers = output->getConsumers();
@@ -1330,7 +1330,6 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
         mCurrentMethod = Function::Create(type, GlobalValue::InternalLinkage, getName() + DO_BLOCK_SUFFIX, idb->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
         mCurrentMethod->setDoesNotThrow();
-        mCurrentMethod->setDoesNotCapture(1);
         auto args = mCurrentMethod->arg_begin();
         args->setName("self");
         setInstance(&*args);
@@ -1378,7 +1377,6 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(const std::unique_ptr<Ker
         mCurrentMethod = Function::Create(type, GlobalValue::InternalLinkage, getName() + FINAL_BLOCK_SUFFIX, idb->getModule());
         mCurrentMethod->setCallingConv(CallingConv::C);
         mCurrentMethod->setDoesNotThrow();
-        mCurrentMethod->setDoesNotCapture(1);
         auto args = mCurrentMethod->arg_begin();
         args->setName("self");
         setInstance(&*args);
