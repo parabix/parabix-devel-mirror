@@ -9,7 +9,7 @@ class RE;
 
 class RE_Simplifier {
 public:
-    static RE * simplify(RE * re) LLVM_ATTRIBUTE_UNUSED_RESULT;
+    static RE * simplify(RE * re);
 };
 
 }

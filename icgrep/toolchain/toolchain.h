@@ -20,6 +20,13 @@
 #define LLVM_4_0_0 40000
 #define LLVM_5_0_0 50000
 
+// From LLVM 4.0.0 the clEnumValEnd sentinel is no longer needed.
+// We define a macro to adapt to the CommandLine syntax based on LLVM version.
+#if LLVM_VERSION_INTEGER < LLVM_4_0_0
+#define CL_ENUM_VAL_SENTINEL , clEnumValEnd
+#else
+#define CL_ENUM_VAL_SENTINEL
+#endif
 
 // FIXME: llvm/CodeGen/CommandFlags.h can only be included once or the various cl::opt causes multiple definition
 // errors. To bypass for now, the relevant options and functions are accessible from here. Re-evaluate with later

@@ -1,9 +1,10 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
 
+#include <toolchain/toolchain.h>
 #include <re/re_toolchain.h>
 #include <cc/cc_compiler.h>            // for CC_Compiler
 #include <llvm/Support/CommandLine.h>  // for clEnumVal, clEnumValEnd, Optio...
@@ -32,17 +33,16 @@ static cl::bits<RE_PrintFlags>
     PrintOptions(cl::values(clEnumVal(ShowREs, "Print parsed or generated regular expressions"),
                             clEnumVal(ShowAllREs, "Print all regular expression passes"),
                             clEnumVal(ShowStrippedREs, "Print REs with nullable prefixes/suffixes removed"),
-                            clEnumVal(ShowSimplifiedREs, "Print final simplified REs"),
-                            clEnumValEnd), cl::cat(RegexOptions));
+                            clEnumVal(ShowSimplifiedREs, "Print final simplified REs")
+                            CL_ENUM_VAL_SENTINEL), cl::cat(RegexOptions));
 
 static cl::bits<RE_AlgorithmFlags>
     AlgorithmOptions(cl::values(clEnumVal(DisableLog2BoundedRepetition, "disable log2 optimizations for bounded repetition of bytes"),
                               clEnumVal(DisableIfHierarchy, "disable nested if hierarchy for generated Unicode classes (not recommended)"), 
                               clEnumVal(DisableMatchStar, "disable MatchStar optimization"), 
                               clEnumVal(DisableUnicodeMatchStar, "disable Unicode MatchStar optimization"),
-                              clEnumVal(DisableUnicodeLineBreak, "disable Unicode line breaks - use LF only"),
-                              clEnumValEnd), 
-                   cl::cat(RegexOptions));
+                              clEnumVal(DisableUnicodeLineBreak, "disable Unicode line breaks - use LF only")
+                              CL_ENUM_VAL_SENTINEL), cl::cat(RegexOptions));
 
 bool AlgorithmOptionIsSet(RE_AlgorithmFlags flag) {
     return AlgorithmOptions.isSet(flag);

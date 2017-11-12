@@ -77,7 +77,7 @@ EmitMatchesEngine::EmitMatchesEngine() : GrepEngine() {
 }
 
 void GrepEngine::initFileResult(std::vector<std::string> & filenames) {
-    const int n = filenames.size();
+    const unsigned n = filenames.size();
     mResultStrs.resize(n);
     for (unsigned i = 0; i < n; i++) {
         mResultStrs[i] = make_unique<std::stringstream>();

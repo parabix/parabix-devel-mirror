@@ -5,7 +5,6 @@
  */
 
 #include <toolchain/toolchain.h>
-
 #include <UCD/UCD_Config.h>
 #include <llvm/CodeGen/CommandFlags.h>
 #include <llvm/Support/raw_ostream.h>
@@ -33,8 +32,8 @@ DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR.")
                         clEnumVal(TraceCounts, "Show kernel processed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Show dynamic buffer allocations and deallocations."),
                         clEnumVal(EnableAsserts, "Enable built-in Parabix framework asserts in generated IR."),
-                        clEnumVal(EnableCycleCounter, "Count and report CPU cycles per kernel."),
-                        clEnumValEnd), cl::cat(CodeGenOptions));
+                        clEnumVal(EnableCycleCounter, "Count and report CPU cycles per kernel.")
+                        CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
 
 static cl::opt<std::string> IROutputFilenameOption("dump-generated-IR-output", cl::init(""),
                                                        cl::desc("output IR filename"), cl::cat(CodeGenOptions));

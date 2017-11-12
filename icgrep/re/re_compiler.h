@@ -61,8 +61,8 @@ class RE_Compiler {
 public:
 
     RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler, bool local = false);
-    LLVM_ATTRIBUTE_UNUSED_RESULT RE * compileUnicodeNames(RE * re);
-    LLVM_ATTRIBUTE_UNUSED_RESULT pablo::PabloAST * compile(RE * re);
+    RE * compileUnicodeNames(RE * re);
+    pablo::PabloAST * compile(RE * re);
 
     static LLVM_ATTRIBUTE_NORETURN void UnsupportedRE(std::string errmsg);
     

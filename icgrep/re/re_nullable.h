@@ -10,10 +10,10 @@ namespace re {
 
 class RE_Nullable {
 public:
-    static RE * removeNullablePrefix(RE * re) LLVM_ATTRIBUTE_UNUSED_RESULT;
-    static RE * removeNullableSuffix(RE * re) LLVM_ATTRIBUTE_UNUSED_RESULT;
-    static RE * removeNullableAssertion(RE * re) LLVM_ATTRIBUTE_UNUSED_RESULT;
-    static RE * removeNullableAfterAssertion(RE * re) LLVM_ATTRIBUTE_UNUSED_RESULT;
+    static RE * removeNullablePrefix(RE * re);
+    static RE * removeNullableSuffix(RE * re);
+    static RE * removeNullableAssertion(RE * re);
+    static RE * removeNullableAfterAssertion(RE * re);
     static bool isNullable(const RE * re);
     static bool hasNullablePrefix(const RE * re);
     static bool hasNullableSuffix(const RE * re);

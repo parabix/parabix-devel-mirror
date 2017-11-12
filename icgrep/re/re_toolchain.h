@@ -28,9 +28,9 @@ extern int IfInsertionGap;
 
 const llvm::cl::OptionCategory * re_toolchain_flags();
 
-RE * regular_expression_passes(RE * re_ast) LLVM_ATTRIBUTE_UNUSED_RESULT;
+RE * regular_expression_passes(RE * re_ast);
 
-pablo::PabloAST * re2pablo_compiler(pablo::PabloKernel * kernel, RE * re_ast) LLVM_ATTRIBUTE_UNUSED_RESULT;
+pablo::PabloAST * re2pablo_compiler(pablo::PabloKernel * kernel, RE * re_ast);
     
 }
 #endif

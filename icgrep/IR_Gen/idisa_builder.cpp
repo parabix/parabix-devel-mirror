@@ -486,7 +486,6 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_advance(Value * a, Value * s
 
 // full shift producing {shiftout, shifted}
 std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm, Value * index_strm, Value * shiftIn, unsigned shiftAmount) {
-    Value * popcount_f = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, getSizeTy());
     unsigned bitWidth = sizeof(size_t) * 8;
     Type * iBitBlock = getIntNTy(getBitBlockWidth());
     Value * shiftVal = getSize(shiftAmount);

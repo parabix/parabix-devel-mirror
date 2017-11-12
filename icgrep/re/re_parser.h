@@ -39,7 +39,7 @@ public:
 
     static LLVM_ATTRIBUTE_NORETURN void ParseFailure(std::string errmsg);
 
-    static RE * parse(const std::string &input_string, ModeFlagSet initialFlags, RE_Syntax syntax = RE_Syntax::PCRE, bool ByteMode = false) LLVM_ATTRIBUTE_UNUSED_RESULT;
+    static RE * parse(const std::string &input_string, ModeFlagSet initialFlags, RE_Syntax syntax = RE_Syntax::PCRE, bool ByteMode = false);
 
 protected:
 

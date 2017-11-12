@@ -1,3 +1,4 @@
+#include "toolchain.h"
 #include "object_cache.h"
 #include <kernels/kernel.h>
 #include <kernels/kernel_builder.h>
@@ -13,7 +14,12 @@
 #include <boost/filesystem.hpp>
 #include <boost/range/iterator_range.hpp>
 #include <boost/container/flat_set.hpp>
+#if LLVM_VERSION_INTEGER < LLVM_4_0_0
 #include <llvm/Bitcode/ReaderWriter.h>
+#else
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/Bitcode/BitcodeWriter.h>
+#endif
 #include <llvm/IR/Verifier.h>
 #include <ctime>
 
@@ -112,7 +118,11 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
             if (*kernelBuffer) {
                 //MemoryBuffer * kb = kernelBuffer.get().release();
                 //auto loadedFile = parseBitcodeFile(kb->getMemBufferRef(), mContext);
+#if LLVM_VERSION_INTEGER < LLVM_4_0_0
                 auto loadedFile = getLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
+#else
+                auto loadedFile = getOwningLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
+#endif
                 if (*loadedFile) {
                     Module * const m = loadedFile.get().release(); assert (m);
                     // defaults to <path>/<moduleId>.kernel

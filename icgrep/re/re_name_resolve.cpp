@@ -29,7 +29,7 @@ static inline CC * extractCC(RE * re) {
 }
 
 struct NameResolver {
-    RE * resolve(RE * re) LLVM_ATTRIBUTE_UNUSED_RESULT {
+    RE * resolve(RE * re) {
         if (Name * name = dyn_cast<Name>(re)) {
             auto f = mMemoizer.find(name);
             if (f == mMemoizer.end()) {
