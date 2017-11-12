@@ -35,9 +35,9 @@ KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C) {
     }
     return new KernelBuilderImpl<IDISA_SSE2_Builder>(C, codegen::BlockSize, codegen::BlockSize);
 }
-
+#ifdef CUDA_ENABLED
 KernelBuilder * GetIDISA_GPU_Builder(llvm::LLVMContext & C) {
     return new KernelBuilderImpl<IDISA_NVPTX20_Builder>(C, 64, 64 * 64);
 }
-
+#endif
 }

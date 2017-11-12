@@ -31,9 +31,9 @@
 #include <boost/uuid/sha1.hpp>
 #include <editd/editd_cpu_kernel.h>
 
+#ifdef CUDA_ENABLED
 #include <toolchain/NVPTXDriver.h>
 #include <editd/editd_gpu_kernel.h>
-#ifdef CUDA_ENABLED
 #include <editd/EditdCudaDriver.h>
 #endif
 
@@ -62,7 +62,9 @@ using namespace kernel;
 using namespace pablo;
 using namespace parabix;
 
+#ifdef CUDA_ENABLED
 const static std::string PTXFilename = "editd.ptx";
+#endif
 
 struct matchPosition
 {
@@ -525,6 +527,7 @@ void * DoEditd(void *)
     pthread_exit(NULL);
 }
 
+#ifdef CUDA_ENABLED
 void editdGPUCodeGen(unsigned patternLen){
     NVPTXDriver pxDriver("editd");
     auto & iBuilder = pxDriver.getBuilder();
@@ -654,6 +657,7 @@ void mergeGPUCodeGen(){
     pxDriver.finalizeObject();
 
 }
+#endif
 
 editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
    

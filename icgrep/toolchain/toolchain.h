@@ -19,6 +19,7 @@
 #define LLVM_3_9_0 30900
 #define LLVM_4_0_0 40000
 #define LLVM_5_0_0 50000
+#define LLVM_6_0_0 60000
 
 // From LLVM 4.0.0 the clEnumValEnd sentinel is no longer needed.
 // We define a macro to adapt to the CommandLine syntax based on LLVM version.

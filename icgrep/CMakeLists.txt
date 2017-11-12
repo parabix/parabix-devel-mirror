@@ -62,13 +62,19 @@ SET(GREP_CORE_SRC toolchain/grep_pipeline.cpp kernels/linebreak_kernel.cpp kerne
 
 SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/pipeline.cpp)
 
-SET(DRIVER_SRC toolchain/driver.cpp toolchain/cpudriver.cpp toolchain/NVPTXDriver.cpp)
+SET(DRIVER_SRC toolchain/driver.cpp toolchain/cpudriver.cpp)
+if(ENABLE_CUDA_COMPILE)
+SET(DRIVER_SRC ${DRIVER_SRC} toolchain/NVPTXDriver.cpp)
+endif()
 
 SET(KERNEL_SRC kernels/interface.cpp kernels/kernel.cpp kernels/streamset.cpp kernels/kernel_builder.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp)
 
-SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp IR_Gen/idisa_nvptx_builder.cpp)
+SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp)
 SET(IDISA_SRC ${IDISA_SRC} IR_Gen/idisa_target.cpp)
+if(ENABLE_CUDA_COMPILE)
+SET(IDISA_SRC ${IDISA_SRC} IR_Gen/idisa_nvptx_builder.cpp)
+endif()
 
 SET(PABLO_SRC pablo/pabloAST.cpp pablo/branch.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_kernel.cpp pablo/pablo_compiler.cpp)
@@ -201,6 +207,7 @@ SET(CMAKE_REQUIRED_FLAGS)
 MATH(EXPR LLVM_VERSION_INTEGER "${LLVM_VERSION_MAJOR} * 10000 + ${LLVM_VERSION_MINOR} * 100 + ${LLVM_VERSION_PATCH}")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLLVM_VERSION_INTEGER=${LLVM_VERSION_INTEGER}")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLLVM_VERSION_major=${LLVM_VERSION_MAJOR} -DLLVM_VERSION_MINOR=${LLVM_VERSION_MINOR}")
+message(STATUS "LLVM Version Integer: ${LLVM_VERSION_INTEGER}")
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_VERSION='\"${Parabix_REVISION}\"'")
 IF (${CMAKE_SYSTEM_NAME} MATCHES "Linux")

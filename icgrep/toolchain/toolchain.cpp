@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -184,11 +184,17 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
 }
 
 }
-
+#if LLVM_VERSION_INTEGER < LLVM_6_0_0
 void printParabixVersion () {
     outs() << "Unicode version " << UCD::UnicodeVersion << "\n";
     outs() << "Parabix (http://parabix.costar.sfu.ca/):\n  " << "Parabix revision " << PARABIX_VERSION << "\n";
 }
+#else
+void printParabixVersion (raw_ostream & outs) {
+    outs << "Unicode version " << UCD::UnicodeVersion << "\n";
+    outs << "Parabix (http://parabix.costar.sfu.ca/):\n  " << "Parabix revision " << PARABIX_VERSION << "\n";
+}
+#endif
 
 void AddParabixVersionPrinter() {
     cl::AddExtraVersionPrinter(&printParabixVersion);
