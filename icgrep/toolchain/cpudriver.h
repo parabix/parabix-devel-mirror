@@ -24,6 +24,8 @@ public:
     bool hasExternalFunction(const llvm::StringRef functionName) const override;
 
     void * getMain() override; // "main" exists until the driver is deleted
+    
+    void performIncrementalCacheCleanupStep() override;
 
 private:
 

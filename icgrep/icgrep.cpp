@@ -202,8 +202,6 @@ int main(int argc, char *argv[]) {
     
     bool matchFound = grepEngine->searchAllFiles();
     
-    grepEngine->writeMatches();
-    
     delete(grepEngine);
     
     return matchFound ? grep::MatchFoundExitCode : grep::MatchNotFoundExitCode;

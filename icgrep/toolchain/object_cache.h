@@ -11,6 +11,7 @@
 #include <llvm/ExecutionEngine/ObjectCache.h>
 #include <llvm/ADT/StringRef.h>
 #include <boost/container/flat_map.hpp>
+#include <boost/filesystem.hpp>
 #include <vector>
 #include <string>
 
@@ -33,23 +34,27 @@ namespace kernel { class KernelBuilder; }
 // it to the ExecutionEngine.
 //
 
+unsigned const CACHE_ENTRY_MAX_HOURS (24 * 15);
+
 class ParabixObjectCache final : public llvm::ObjectCache {
     using Path = llvm::SmallString<128>;
     template <typename K, typename V>
     using Map = boost::container::flat_map<K, V>;
     using ModuleCache = Map<std::string, std::pair<llvm::Module *, std::unique_ptr<llvm::MemoryBuffer>>>;
 public:
-    ParabixObjectCache();
     ParabixObjectCache(const std::string dir);
+    ParabixObjectCache();
     bool loadCachedObjectFile(const std::unique_ptr<kernel::KernelBuilder> & idb, kernel::Kernel * const kernel);
     void notifyObjectCompiled(const llvm::Module * M, llvm::MemoryBufferRef Obj) override;
-    void cleanUpObjectCacheFiles();
     std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module * M) override;
+    void performIncrementalCacheCleanupStep();
 protected:
-    static Path getDefaultPath();
+    static std::string getDefaultPath();
 private:
     ModuleCache         mCachedObject;
     const Path          mCachePath;
+    boost::filesystem::directory_iterator mCacheCleanupIterator;
+    unsigned            mCacheEntryMaxHours;
 };
 
 #endif

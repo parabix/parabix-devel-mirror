@@ -46,6 +46,8 @@ public:
     virtual void finalizeObject() = 0;
     
     virtual void * getMain() = 0; // "main" exists until the driver is deleted
+    
+    virtual void performIncrementalCacheCleanupStep() = 0;
 
 protected:
 

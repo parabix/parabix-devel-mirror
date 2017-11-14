@@ -38,6 +38,7 @@
 #include <errno.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/Debug.h>
 
 using namespace parabix;
 using namespace llvm;
@@ -49,9 +50,11 @@ namespace grep {
     
 GrepEngine::GrepEngine() :
     mGrepDriver(nullptr),
+    mNextFileToGrep(0),
+    mNextFileToPrint(0),
     grepMatchFound(false),
-    fileCount(0),
-    mMoveMatchesToEOL(true) {}
+    mMoveMatchesToEOL(true),
+    mEngineThread(pthread_self()) {}
     
 GrepEngine::~GrepEngine() {
     delete mGrepDriver;
@@ -79,8 +82,10 @@ EmitMatchesEngine::EmitMatchesEngine() : GrepEngine() {
 void GrepEngine::initFileResult(std::vector<std::string> & filenames) {
     const unsigned n = filenames.size();
     mResultStrs.resize(n);
+    mFileStatus.resize(n);
     for (unsigned i = 0; i < n; i++) {
         mResultStrs[i] = make_unique<std::stringstream>();
+        mFileStatus[i] = FileStatus::Pending;
     }
     inputFiles = filenames;
 }
@@ -416,32 +421,29 @@ int32_t GrepEngine::openFile(const std::string & fileName, std::stringstream * m
 
 // The process of searching a group of files may use a sequential or a task
 // parallel approach.
+    
+void * DoGrepThreadFunction(void *args) {
+    reinterpret_cast<GrepEngine *>(args)->DoGrepThreadMethod();
+}
 
 bool GrepEngine::searchAllFiles() {
-    if (Threads <= 1) {
-        for (unsigned i = 0; i != inputFiles.size(); ++i) {
-            size_t grepResult = doGrep(inputFiles[i], i);
-            if (grepResult > 0) {
-                grepMatchFound = true;
-                if (QuietMode) break;
-            }
+    const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
+    pthread_t threads[numOfThreads];
+    
+    for(unsigned long i = 1; i < numOfThreads; ++i) {
+        const int rc = pthread_create(&threads[i], nullptr, DoGrepThreadFunction, (void *)this);
+        if (rc) {
+            llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
         }
-    } else if (Threads > 1) {
-        const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
-        pthread_t threads[numOfThreads];
-        
-        for(unsigned long i = 0; i < numOfThreads; ++i) {
-            const int rc = pthread_create(&threads[i], nullptr, DoGrepThreadFunction, (void *)this);
-            if (rc) {
-                llvm::report_fatal_error("Failed to create thread: code " + std::to_string(rc));
-            }
-        }
-        for(unsigned i = 0; i < numOfThreads; ++i) {
-            void * status = nullptr;
-            const int rc = pthread_join(threads[i], &status);
-            if (rc) {
-                llvm::report_fatal_error("Failed to join thread: code " + std::to_string(rc));
-            }
+    }
+    // Main thread also does the work;
+    
+    DoGrepThreadMethod();
+    for(unsigned i = 1; i < numOfThreads; ++i) {
+        void * status = nullptr;
+        const int rc = pthread_join(threads[i], &status);
+        if (rc) {
+            llvm::report_fatal_error("Failed to join thread: code " + std::to_string(rc));
         }
     }
     return grepMatchFound;
@@ -449,33 +451,65 @@ bool GrepEngine::searchAllFiles() {
 
 
 // DoGrep thread function.
-void * GrepEngine::DoGrepThreadFunction(void *args) {
+void * GrepEngine::DoGrepThreadMethod() {
     size_t fileIdx;
-    grep::GrepEngine * grepEngine = (grep::GrepEngine *)args;
 
-    grepEngine->count_mutex.lock();
-    fileIdx = grepEngine->fileCount;
-    grepEngine->fileCount++;
-    grepEngine->count_mutex.unlock();
+    count_mutex.lock();
+    fileIdx = mNextFileToGrep;
+    if (fileIdx < inputFiles.size()) {
+        mFileStatus[fileIdx] = FileStatus::InGrep;
+        mNextFileToGrep++;
+    }
+    count_mutex.unlock();
 
-    while (fileIdx < grepEngine->inputFiles.size()) {
-        size_t grepResult = grepEngine->doGrep(grepEngine->inputFiles[fileIdx], fileIdx);
+    while (fileIdx < inputFiles.size()) {
+        size_t grepResult = doGrep(inputFiles[fileIdx], fileIdx);
         
-        grepEngine->count_mutex.lock();
-        if (grepResult > 0) grepEngine->grepMatchFound = true;
-        fileIdx = grepEngine->fileCount;
-        grepEngine->fileCount++;
-        grepEngine->count_mutex.unlock();
-        if (QuietMode && grepEngine->grepMatchFound) pthread_exit(nullptr);
+        count_mutex.lock();
+        mFileStatus[fileIdx] = FileStatus::GrepComplete;
+        if (grepResult > 0) grepMatchFound = true;
+        fileIdx = mNextFileToGrep;
+        if (fileIdx < inputFiles.size()) {
+            mFileStatus[fileIdx] = FileStatus::InGrep;
+            mNextFileToGrep++;
+        }
+        count_mutex.unlock();
+        if (QuietMode && grepMatchFound) {
+            if (pthread_self() != mEngineThread) pthread_exit(nullptr);
+            return nullptr;
+        }
     }
-    pthread_exit(nullptr);
-}
-    
-void GrepEngine::writeMatches() {
-    for (unsigned i = 0; i < inputFiles.size(); ++i) {
-        std::cout << mResultStrs[i]->str();
+    count_mutex.lock();
+    fileIdx = mNextFileToPrint;
+    bool readyToPrint = ((fileIdx == 0) || (mFileStatus[fileIdx-1] == FileStatus::PrintComplete)) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
+    if (fileIdx < inputFiles.size() && readyToPrint) {
+        mFileStatus[fileIdx] = FileStatus::Printing;
+        mNextFileToPrint++;
+    }
+    count_mutex.unlock();
+    while (fileIdx < inputFiles.size()) {
+        if (readyToPrint) {
+            std::cout << mResultStrs[fileIdx]->str();
+        }
+        else if (pthread_self() == mEngineThread) {
+            mGrepDriver->performIncrementalCacheCleanupStep();
+        }
+        count_mutex.lock();
+        if (readyToPrint) mFileStatus[fileIdx] = FileStatus::PrintComplete;
+        fileIdx = mNextFileToPrint;
+        readyToPrint = (mFileStatus[fileIdx-1] == FileStatus::PrintComplete) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
+        if (fileIdx < inputFiles.size() && readyToPrint) {
+            mFileStatus[fileIdx] = FileStatus::Printing;
+            mNextFileToPrint++;
+        }
+        count_mutex.unlock();
+    }
+    if (pthread_self() != mEngineThread) {
+        pthread_exit(nullptr);
+    }
+    else {
+        return nullptr;
     }
 }
-
 }
 

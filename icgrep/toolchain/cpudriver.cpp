@@ -214,7 +214,6 @@ void ParabixDriver::finalizeObject() {
             mEngine->addModule(std::unique_ptr<Module>(kernel->getModule()));
         }
         mEngine->finalizeObject();
-        if (mCache) mCache->cleanUpObjectCacheFiles();
     } catch (const std::exception & e) {
         report_fatal_error(module->getName() + ": " + e.what());
     }
@@ -227,6 +226,10 @@ bool ParabixDriver::hasExternalFunction(llvm::StringRef functionName) const {
 
 void * ParabixDriver::getMain() {
     return mEngine->getPointerToNamedFunction("Main");
+}
+
+void ParabixDriver::performIncrementalCacheCleanupStep() {
+    mCache->performIncrementalCacheCleanupStep();
 }
 
 ParabixDriver::~ParabixDriver() {

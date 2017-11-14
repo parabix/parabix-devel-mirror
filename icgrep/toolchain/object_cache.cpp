@@ -7,6 +7,7 @@
 #include <llvm/IR/Metadata.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
+#include <llvm/Support/Debug.h> 
 #include <llvm/IR/Module.h>
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -67,8 +68,6 @@ const static auto CACHEABLE = "cacheable";
 
 const static auto SIGNATURE = "signature";
 
-const static boost::uintmax_t CACHE_SIZE_LIMIT = 50 * 1024 * 1024;
-
 const MDString * getSignature(const llvm::Module * const M) {
     NamedMDNode * const sig = M->getNamedMetadata(SIGNATURE);
     if (sig) {
@@ -110,6 +109,7 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
                         goto invalid;
                     }
                 } else {
+                    
                     report_fatal_error("signature file expected but not found: " + moduleId);
                 }                
             }
@@ -130,9 +130,15 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
                     kernel->setModule(m);
                     kernel->prepareCachedKernel(idb);                    
                     mCachedObject.emplace(moduleId, std::make_pair(m, std::move(objectBuffer.get())));
-                    // update the modified time of the object file
+                    // update the modified time of the .kernel, .o and .sig files
+                    time_t access_time = time(0);
+                    boost::filesystem::last_write_time(objectName.c_str(), access_time);
                     sys::path::replace_extension(objectName, ".o");
-                    boost::filesystem::last_write_time(objectName.c_str(), time(0));
+                    boost::filesystem::last_write_time(objectName.c_str(), access_time);
+                    if (kernel->hasSignature()) {
+                        sys::path::replace_extension(objectName, ".sig");
+                        boost::filesystem::last_write_time(objectName.c_str(), access_time);
+                    }
                     return true;
                 }
             }
@@ -164,10 +170,6 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
         objectName.append(moduleId);
         objectName.append(".o");
 
-        if (LLVM_LIKELY(!mCachePath.empty())) {
-            sys::fs::create_directories(Twine(mCachePath));
-        }
-
         // Write the object code
         std::error_code EC;
         raw_fd_ostream objFile(objectName, EC, sys::fs::F_None);
@@ -198,36 +200,20 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
     }
 }
 
-void ParabixObjectCache::cleanUpObjectCacheFiles() {
-
-    using namespace boost::filesystem;
-    using ObjectFile = std::pair<std::time_t, path>;
-
-    path cachePath(mCachePath.str());
-    if (LLVM_LIKELY(is_directory(cachePath))) {
-        std::vector<ObjectFile> files;
-        for(const directory_entry & entry : boost::make_iterator_range(directory_iterator(cachePath), {})) {
-            const auto path = entry.path();;
-            if (LLVM_LIKELY(is_regular_file(path) && path.has_extension() && path.extension().compare(".o") == 0)) {
-                files.emplace_back(last_write_time(path), path.filename());
-            }
-        }
-        // sort the files in decending order of last modified (datetime) then file name
-        std::sort(files.begin(), files.end(), std::greater<ObjectFile>());
-        boost::uintmax_t cacheSize = 0;
-        for(const ObjectFile & entry : files) {
-            auto objectPath = cachePath / std::get<1>(entry);
-            if (LLVM_LIKELY(exists(objectPath))) {
-                const auto size = file_size(objectPath);
-                if ((cacheSize + size) < CACHE_SIZE_LIMIT) {
-                    cacheSize += size;
-                } else {
-                    remove(objectPath);
-                    objectPath.replace_extension("sig");
-                    remove(objectPath);
-                    objectPath.replace_extension("kernel");
-                    remove(objectPath);
-                }
+void ParabixObjectCache::performIncrementalCacheCleanupStep() {
+    if (mCacheCleanupIterator != boost::filesystem::directory_iterator()) {
+        auto & e = mCacheCleanupIterator->path();
+        mCacheCleanupIterator++;
+        // Simple clean-up policy: files that haven't been touched by the
+        // driver in MaxCacheEntryHours are deleted.
+        // TODO: possibly incrementally manage by size and/or total file count.
+        // TODO: possibly determine total filecount and set items per clean up step based on
+        // filecount
+        if (boost::filesystem::is_regular_file(e)) {
+            auto age = std::time(nullptr) - boost::filesystem::last_write_time(e);
+            if (age > mCacheEntryMaxHours * 3600 /* secs/hour*/ ) {
+                boost::filesystem::remove(e);
+                errs() << e.string() << " removed.\n";
             }
         }
     }
@@ -242,24 +228,31 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * modul
     return MemoryBuffer::getMemBufferCopy(f->second.second.get()->getBuffer());
 }
 
-inline ParabixObjectCache::Path ParabixObjectCache::getDefaultPath() {
+inline std::string ParabixObjectCache::getDefaultPath() {
     // $HOME/.cache/parabix/
     Path cachePath;
 #if LLVM_VERSION_INTEGER < LLVM_3_7_0
-    sys::path::user_cache_directory(cachePath, "parabix", PARABIX_VERSION);
+    sys::path::user_cache_directory(cachePath, "parabix");
 #else
     sys::path::home_directory(cachePath);
-    sys::path::append(cachePath, ".cache", "parabix", PARABIX_VERSION);
+    sys::path::append(cachePath, ".cache", "parabix");
 #endif
-    return cachePath;
-}
-
-ParabixObjectCache::ParabixObjectCache()
-: mCachePath(getDefaultPath()) {
-
+    return cachePath.str();
 }
 
 ParabixObjectCache::ParabixObjectCache(const std::string dir)
 : mCachePath(dir) {
-
+    boost::filesystem::path p(mCachePath.str());
+    if (LLVM_LIKELY(!mCachePath.empty())) {
+        sys::fs::create_directories(Twine(mCachePath));
+    }
+    boost::filesystem::directory_iterator it(p);
+    mCacheCleanupIterator = it;
+    mCacheEntryMaxHours = CACHE_ENTRY_MAX_HOURS;
 }
+
+ParabixObjectCache::ParabixObjectCache()
+: ParabixObjectCache(getDefaultPath()) {
+}
+
+

@@ -30,27 +30,29 @@ public:
     void initFileResult(std::vector<std::string> & filenames);
     virtual void grepCodeGen(std::vector<re::RE *> REs);
     bool searchAllFiles();
-    void writeMatches();
-    
+    void * DoGrepThreadMethod();
+
 protected:
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> & REs, parabix::StreamSetBuffer * ByteStream);
 
-    static void * DoGrepThreadFunction(void *args);
     virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
     std::string linePrefix(std::string fileName);
     int32_t openFile(const std::string & fileName, std::stringstream * msgstrm);
 
     Driver * mGrepDriver;
 
+    enum class FileStatus {Pending, InGrep, GrepComplete, Printing, PrintComplete};
+    std::mutex count_mutex;
+    size_t mNextFileToGrep;
+    size_t mNextFileToPrint;
     std::vector<std::string> inputFiles;
     std::vector<std::unique_ptr<std::stringstream>> mResultStrs;
+    std::vector<FileStatus> mFileStatus;
+    bool grepMatchFound;
     
     std::string mFileSuffix;
-    
-    bool grepMatchFound;
-    std::mutex count_mutex;
-    size_t fileCount;
     bool mMoveMatchesToEOL;
+    pthread_t mEngineThread;
 };
 
 class EmitMatchesEngine : public GrepEngine {

@@ -176,11 +176,11 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
         case '3': OptLevel = CodeGenOpt::Aggressive; break;
         default: report_fatal_error(std::string(1, OptLevelOption) + " is an invalid optimization level.");
     }
-    #ifndef CUDA_ENABLED
+#ifndef CUDA_ENABLED
     if (NVPTX) {
         report_fatal_error("CUDA compiler is not supported.");
     }
-    #endif
+#endif
 }
 
 }
