@@ -98,13 +98,9 @@ RE * RE_Parser::parse_RE() {
 }
 
 RE * RE_Parser::parse_alt() {
-    return parse_alt_with_intersect(nullptr);
-}
-
-RE * RE_Parser::parse_alt_with_intersect(RE* reToBeIntersected) {
     std::vector<RE *> alt;
     for (;;) {
-        alt.push_back(parse_seq_with_intersect(reToBeIntersected));
+        alt.push_back(parse_seq());
         if (*mCursor != '|') {
             break;
         }
@@ -117,11 +113,8 @@ RE * RE_Parser::parse_alt_with_intersect(RE* reToBeIntersected) {
 }
 
 RE * RE_Parser::parse_seq() {
-    return parse_seq_with_intersect(nullptr);
-}
-
-RE * RE_Parser::parse_seq_with_intersect(RE* reToBeIntersected) {
     std::vector<RE *> seq;
+    if (!mCursor.more() || (*mCursor == '|') || (*mCursor == ')')) return makeSeq();
     for (;;) {
         RE * re = parse_next_item();
         if (re == nullptr) {
@@ -130,9 +123,6 @@ RE * RE_Parser::parse_seq_with_intersect(RE* reToBeIntersected) {
                 fGraphemeBoundaryPending = false;
             }
             break;
-        }
-        if (reToBeIntersected) {
-            re = makeIntersect(reToBeIntersected, re);
         }
         re = extend_item(re);
         seq.push_back(re);
@@ -282,22 +272,6 @@ RE * RE_Parser::parse_group() {
                     ++mCursor;
                     return parse_next_item();
                 }
-            case '\\': {
-                ++mCursor;
-                if (*mCursor == 'p' || *mCursor == 'P') {
-                    RE* reToBeIntersected = parseEscapedSet();
-                    if (*mCursor == ':') {
-                        ++mCursor;
-                        group_expr = parse_alt_with_intersect(reToBeIntersected);
-                        fModeFlagSet = modeFlagSet;
-                        break;
-                    } else {  // if *_cursor == ')'
-                        ++mCursor;
-                        return parse_next_item();
-                    }
-                }
-                break;
-            }
             default:
                 ParseFailure("Illegal (? syntax.");
         }

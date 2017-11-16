@@ -34,10 +34,10 @@ namespace re{
         }
     }
 
-    RE * RE_Parser_BRE::parse_alt_with_intersect(RE *reToBeIntersected) {
+    RE * RE_Parser_BRE::parse_alt() {
         std::vector<RE *> alt;
         for (;;) {
-            alt.push_back(parse_seq_with_intersect(reToBeIntersected));
+            alt.push_back(parse_seq());
 
             if (!isEscapedCharAhead('|')) {
                 break;

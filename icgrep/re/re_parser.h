@@ -111,11 +111,7 @@ protected:
 
     virtual RE * parse_alt();
 
-    virtual RE * parse_alt_with_intersect(RE* reToBeIntersected);
-
     virtual RE * parse_seq();
-
-    RE * parse_seq_with_intersect(RE* reToBeIntersected);
 
     virtual RE * parse_next_item();
 

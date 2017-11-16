@@ -19,7 +19,7 @@ namespace re {
     protected:
         virtual bool isSetEscapeChar(char c) override;
         virtual bool isUnsupportChartsetOperator(char c) override;
-        virtual RE * parse_alt_with_intersect(RE* reToBeIntersected) override;
+        virtual RE * parse_alt() override;
         virtual RE * parse_next_item() override ;
         virtual RE * parse_escaped() override;
         virtual RE * extend_item(RE * re) override;
