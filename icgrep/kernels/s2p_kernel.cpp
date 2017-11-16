@@ -11,7 +11,7 @@ using namespace llvm;
 
 namespace kernel {
 
-const int PACK_LANES = 1;
+const int PACK_LANES = 2;
 
 void s2p_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
     Value * t0 = nullptr;

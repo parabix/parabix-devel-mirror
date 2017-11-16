@@ -213,7 +213,6 @@ void ParabixObjectCache::performIncrementalCacheCleanupStep() {
             auto age = std::time(nullptr) - boost::filesystem::last_write_time(e);
             if (age > mCacheEntryMaxHours * 3600 /* secs/hour*/ ) {
                 boost::filesystem::remove(e);
-                errs() << e.string() << " removed.\n";
             }
         }
     }
