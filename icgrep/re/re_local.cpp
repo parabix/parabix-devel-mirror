@@ -120,20 +120,22 @@ void RE_Local::follow(RE * re, std::map<CC *, CC*> &follow_map) {
             UndefinedNameError(name);
         }
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        RE * re_first = *(seq->begin());
-        RE * re_follow = makeSeq(seq->begin() + 1, seq->end());
-        auto e1 = final(re_first);
-        auto e2 = first(re_follow);
-        if (e1 && e2) {
-            auto e = follow_map.find(e1);
-            if (e != follow_map.end()) {
-                e->second = makeCC(e->second, e2);
-            } else {
-                follow_map.emplace(e1, e2);
+        if (seq->size() > 0) {
+            RE * re_first = *(seq->begin());
+            RE * re_follow = makeSeq(seq->begin() + 1, seq->end());
+            auto e1 = final(re_first);
+            auto e2 = first(re_follow);
+            if (e1 && e2) {
+                auto e = follow_map.find(e1);
+                if (e != follow_map.end()) {
+                    e->second = makeCC(e->second, e2);
+                } else {
+                    follow_map.emplace(e1, e2);
+                }
             }
+            follow(re_first, follow_map);
+            follow(re_follow, follow_map);
         }
-        follow(re_first, follow_map);
-        follow(re_follow, follow_map);
     } else if (Alt * alt = dyn_cast<Alt>(re)) {
         for (auto ai = alt->begin(); ai != alt->end(); ++ai) {
             follow(*ai, follow_map);

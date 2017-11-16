@@ -322,6 +322,7 @@ bool isTypeForLocal(const RE * re) {
         }
         return true;
     } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+        if (seq->empty()) return false;
         for (const RE * re : *seq) {
             if (!isTypeForLocal(re)) {
                 return false;

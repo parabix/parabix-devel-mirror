@@ -62,8 +62,6 @@ template<typename iterator>
 RE * makeAlt(iterator begin, iterator end) {
     if (LLVM_UNLIKELY(std::distance(begin, end) == 0)) {
         return makeAlt();
-    } else if (std::distance(begin, end) == 1) {
-        return *begin;
     } else {
         Alt * alt = makeAlt();
         alt->flatten(begin, end);
