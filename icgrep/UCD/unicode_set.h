@@ -104,6 +104,8 @@ public:
     
     bool full() const;  // The set has the full set of possible Unicode codepoints.
     
+    codepoint_t at(const size_type k) const; // return the k-th codepoint (or throw an error if it doesn't exist)
+
     bool contains(const codepoint_t codepoint) const;
 
     bool intersects(const codepoint_t lo, const codepoint_t hi) const;
@@ -114,7 +116,9 @@ public:
 
     void insert_range(const codepoint_t lo, const codepoint_t hi);
 
-    size_type size() const;
+    size_type size() const; // number of intervals in this set
+
+    size_type count() const; // number of codepoints in this set
 
     interval_t front() const;
 

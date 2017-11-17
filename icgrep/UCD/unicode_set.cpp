@@ -32,10 +32,16 @@ using interval_t = UnicodeSet::interval_t;
 //
 // Select the correct built-in scan function, dependent on whatever
 // bitquad_t resolves to, when scan_forward_zeroes<bitquad_t> is called.
-template <typename T> int scan_forward_zeroes(T x);
-template <> inline int scan_forward_zeroes<unsigned int>(unsigned int x){return __builtin_ctz(x);}
-template <> inline int scan_forward_zeroes<unsigned long>(unsigned long x){return __builtin_ctzl(x);}
-template <> inline int scan_forward_zeroes<unsigned long long>(unsigned long long x){return __builtin_ctzll(x);}
+template <typename T> int scan_forward_zeroes(const T x) noexcept;
+template <> inline int scan_forward_zeroes<unsigned int>(const unsigned int x) noexcept { return __builtin_ctz(x); }
+template <> inline int scan_forward_zeroes<unsigned long>(const unsigned long x) noexcept { return __builtin_ctzl(x); }
+template <> inline int scan_forward_zeroes<unsigned long long>(const unsigned long long x) noexcept { return __builtin_ctzll(x); }
+
+template <typename T> unsigned popcount(const T x) noexcept;
+template <> inline unsigned popcount<unsigned int>(const unsigned int x) noexcept { return __builtin_popcount(x); }
+template <> inline unsigned popcount<unsigned long>(const unsigned long x) noexcept { return __builtin_popcountl(x); }
+template <> inline unsigned popcount<unsigned long long>(const unsigned long long x) noexcept { return __builtin_popcountll(x); }
+
 
 SlabAllocator<> UnicodeSet::mAllocator;
 
@@ -134,11 +140,73 @@ bool UnicodeSet::full() const {
     return (mRuns.size() == 1) && typeOf(mRuns.front()) == Full;
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief at
+ ** ------------------------------------------------------------------------------------------------------------- */
+codepoint_t UnicodeSet::at(const size_type k) const {
+    auto qi = mQuads.cbegin();
+    size_type base = 0;
+    size_type remaining = k;
+    for (const run_t & r : mRuns) {
+        assert ((base % QUAD_BITS) == 0);
+        if (typeOf(r) == Empty) {
+            base += QUAD_BITS * lengthOf(r);
+        } else if (typeOf(r) == Full) {
+            const auto m = QUAD_BITS * lengthOf(r);
+            if (LLVM_UNLIKELY(remaining < m)) {
+                return base + remaining;
+            }
+            base += m;
+            remaining -= m;
+        } else { // if (typeOf(r) == Mixed) {
+            for (auto l = lengthOf(r); l; --l, ++qi) {
+                auto q = *qi;
+                assert (q);
+                const auto c = popcount<bitquad_t>(q);
+                if (LLVM_UNLIKELY(remaining < c)) {
+                    // iterate through the remaining bits to find the offset
+                    for (;;) {
+                        assert (q);
+                        const bitquad_t k = scan_forward_zeroes<bitquad_t>(q);
+                        if (remaining == 0) {
+                            return base + k;
+                        }
+                        q ^= static_cast<bitquad_t>(1) << k;
+                        --remaining;
+                    }
+                }
+                base += QUAD_BITS;
+                remaining -= c;
+            }
+        }
+    }
+    throw std::runtime_error("cannot retrieve codepoint " + std::to_string(k) + " from a "
+                             " set containing " + std::to_string(count()) + " codepoints");
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief size
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::size_type UnicodeSet::size() const {
     return std::distance(begin(), end());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief count
+ ** ------------------------------------------------------------------------------------------------------------- */
+UnicodeSet::size_type UnicodeSet::count() const {
+    size_type count = 0;
+    for (const run_t & r : mRuns) {
+        if (typeOf(r) == Full) {
+            count += lengthOf(r);
+        }
+    }
+    count *= QUAD_BITS;
+    for (const bitquad_t q : mQuads) {
+        count += popcount<bitquad_t>(q);
+    }
+    return count;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -185,11 +253,9 @@ void UnicodeSet::dump(llvm::raw_ostream & out) const {
     for (const run_t & run : mRuns) {
         if (typeOf(run) == Empty) {
             out << "Empty(" << lengthOf(run) << ")\n";
-        }
-        else if (typeOf(run) == Full) {
+        } else if (typeOf(run) == Full) {
             out << "Full(" << lengthOf(run) << ")\n";
-        }
-        else {
+        } else {
             for (const auto qi_end = qi + lengthOf(run); qi != qi_end; ++qi) {
                 assert (qi != mQuads.cend());
                 out << "Mixed(" << llvm::format("%08x", *qi) << ")\n";
@@ -202,24 +268,23 @@ void UnicodeSet::dump(llvm::raw_ostream & out) const {
  * @brief complement
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet UnicodeSet::operator~() const {
-    std::vector<run_t> runs;
-    std::vector<bitquad_t> quads;
-    runs.reserve(mRuns.size());
-    quads.reserve(mQuads.size());
-    auto qi = quads.cbegin();
-    for (const run_t & run : mRuns) {
-        if (typeOf(run) == Empty) {
-            append_run(Full, lengthOf(run), runs);
+    std::vector<run_t> runs(mRuns.size());
+    auto ri = runs.begin();
+    for (const auto run : mRuns) {
+        run_type_t type = Empty;
+        if (typeOf(run) == Empty) {            
+            type = Full;
+        } else if (typeOf(run) == Full) {
+            type = Empty;
+        } else {
+            type = Mixed;
         }
-        else if (typeOf(run) == Full) {
-            append_run(Empty, lengthOf(run), runs);
-        }
-        else {
-            for (const auto qi_end = qi + lengthOf(run); qi != qi_end; ++qi) {
-                assert (qi != quads.cend());
-                append_quad(FULL_QUAD_MASK ^ *qi, quads, runs);
-            }
-        }
+        *ri++ = { type, lengthOf(run) };
+    }
+    std::vector<bitquad_t> quads(mQuads.size());
+    auto qi = quads.begin();
+    for (const auto quad : mQuads) {
+        *qi++ = ~quad;
     }
     return UnicodeSet(std::move(runs), std::move(quads));
 }
@@ -232,31 +297,28 @@ UnicodeSet UnicodeSet::operator&(const UnicodeSet & other) const {
     std::vector<bitquad_t> quads;
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
-    for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
+    auto i1 = quad_begin(), i2 = other.quad_begin();
+    while ((i1 != e1) && (i2 != e2)) {
         const auto n = std::min(i1.length(), i2.length());
         if ((i1.type() == Full) && (i2.type() == Full)) {
             append_run(Full, n, runs);
             i1 += n;
             i2 += n;
-        }
-        else if ((i1.type() == Empty) || (i2.type() == Empty)) {
+        } else if ((i1.type() == Empty) || (i2.type() == Empty)) {
             append_run(Empty, n, runs);
             i1 += n;
             i2 += n;
-        }
-        else if (i1.type() == Full) {
+        } else if (i1.type() == Full) {
             for (unsigned i = 0; i != n; ++i, ++i2) {
                 append_quad(i2.quad(), quads, runs);
             }
             i1 += n;
-        }
-        else if (i2.type() == Full) {
+        } else if (i2.type() == Full) {
             for (unsigned i = 0; i != n; ++i, ++i1) {
                 append_quad(i1.quad(), quads, runs);
             }
             i2 += n;
-        }
-        else { //both Mixed
+        } else { // both Mixed
             for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
                 append_quad(i1.quad() & i2.quad(), quads, runs);
             }
@@ -274,7 +336,7 @@ UnicodeSet UnicodeSet::operator+(const UnicodeSet & other) const {
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
     auto i1 = quad_begin(), i2 = other.quad_begin();
-    for (; i1 != e1 && i2 != e2; ) {
+    while ((i1 != e1) && (i2 != e2)) {
         const auto n = std::min(i1.length(), i2.length());
         if ((i1.type() == Empty) && (i2.type() == Empty)) {
             append_run(Empty, n, runs);
@@ -294,10 +356,27 @@ UnicodeSet UnicodeSet::operator+(const UnicodeSet & other) const {
                 append_quad(i1.quad(), quads, runs);
             }
             i2 += n;
-        } else {
+        } else { // both Mixed
             for (unsigned i = 0; i < n; ++i, ++i1, ++i2) {
                 append_quad(i1.quad() | i2.quad(), quads, runs);
             }
+        }
+    }
+    // append any remaining blocks
+    if ((i1 != e1) || (i2 != e2)) {
+        assert ((i1 != e1) ^ (i2 != e2));
+        auto i3 = (i1 != e1) ? i1 : i2;
+        const auto e3 = (i1 != e1) ? e1 : e2;        
+        while (i3 != e3) {
+            const auto n = i3.length();
+            if (i3.type() == Empty || i3.type() == Full) {
+                append_run(i3.type(), n, runs);
+                i3 += n;
+            } else {
+                for (unsigned i = 0; i != n; ++i3) {
+                    append_quad(i3.quad(), quads, runs);
+                }
+            }            
         }
     }
     return UnicodeSet(std::move(runs), std::move(quads));
@@ -311,30 +390,44 @@ UnicodeSet UnicodeSet::operator-(const UnicodeSet & other) const {
     std::vector<bitquad_t> quads;
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
-    for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
+    auto i1 = quad_begin(), i2 = other.quad_begin();
+    while ((i1 != e1) && (i2 != e2)) {
         unsigned n = std::min(i1.length(), i2.length());
-        if ((i1.type() == Empty) || (i2.type() == Full) || (i1.type() == Full && i2.type() == Empty)) {
-            append_run(i1.type(), n, runs);
+        if ((i1.type() == Empty) || (i2.type() == Full)) {           
+            append_run(Empty, n, runs);
             i1 += n;
             i2 += n;
-        }
-        else if (i1.type() == Full) {
-            for (unsigned i = 0; i != n; ++i, ++i2) {
-                append_quad(FULL_QUAD_MASK ^ i2.quad(), quads, runs);
+        } else if (i1.type() == Full) {
+            if (i2.type() == Empty) {
+                append_run(Full, n, runs);
+                i2 += n;
+            } else {
+                for (unsigned i = 0; i != n; ++i, ++i2) {
+                    append_quad(~i2.quad(), quads, runs);
+                }                
             }
             i1 += n;
-        }
-        else if (i2.type() == Empty) {
-            for (unsigned i = 0; i != n; ++i, ++i1) {
+        } else if (i2.type() == Empty) {
+            for (unsigned i = 0; i != n; ++i, ++i1) {                
                 append_quad(i1.quad(), quads, runs);
             }
             i2 += n;
-        }
-        else {
-            for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
+        } else {            
+            for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {                
                 append_quad(i1.quad() &~ i2.quad(), quads, runs);
             }
         }
+    }
+    while (i1 != e1) {
+        const auto n = i1.length();
+        if (i1.type() == Empty || i1.type() == Full) {
+            append_run(i1.type(), n, runs);
+            i1 += n;
+        } else {
+            for (unsigned i = 0; i != n; ++i1) {
+                append_quad(i1.quad(), quads, runs);
+            }
+        }            
     }
     return UnicodeSet(std::move(runs), std::move(quads));
 }
@@ -347,7 +440,8 @@ UnicodeSet UnicodeSet::operator^(const UnicodeSet & other) const {
     std::vector<bitquad_t> quads;
     const auto e1 = quad_end();
     const auto e2 = other.quad_end();
-    for (auto i1 = quad_begin(), i2 = other.quad_begin(); i1 != e1 && i2 != e2; ) {
+    auto i1 = quad_begin(), i2 = other.quad_begin();
+    while ((i1 != e1) && (i2 != e2)) {
         unsigned n = std::min(i1.length(), i2.length());
         if (i1.type() != Mixed && i2.type() != Mixed) {
             append_run(i1.type() == i2.type() ? Empty : Full, n, runs);
@@ -365,18 +459,35 @@ UnicodeSet UnicodeSet::operator^(const UnicodeSet & other) const {
             i2 += n;
         } else if (i1.type() == Full) {
             for (unsigned i = 0; i < n; ++i, ++i2) {
-                append_quad(FULL_QUAD_MASK ^ i2.quad(), quads, runs);
+                append_quad(~i2.quad(), quads, runs);
             }
             i1 += n;
         } else if (i2.type() == Full) {
             for (unsigned i = 0; i < n; ++i, ++i1) {
-                append_quad(FULL_QUAD_MASK ^ i1.quad(), quads, runs);
+                append_quad(~i1.quad(), quads, runs);
             }
             i2 += n;
         } else {
             for (unsigned i = 0; i != n; ++i, ++i1, ++i2) {
                 append_quad(i1.quad() ^ i2.quad(), quads, runs);
             }
+        }
+    }
+    // append any remaining blocks
+    if ((i1 != e1) || (i2 != e2)) {
+        assert ((i1 != e1) ^ (i2 != e2));
+        auto i3 = (i1 != e1) ? i1 : i2;
+        const auto e3 = (i1 != e1) ? e1 : e2;        
+        while (i3 != e3) {
+            const auto n = i3.length();
+            if (i3.type() == Empty || i3.type() == Full) {
+                append_run(i3.type(), n, runs);
+                i3 += n;
+            } else {
+                for (unsigned i = 0; i != n; ++i3) {
+                    append_quad(i3.quad(), quads, runs);
+                }
+            }            
         }
     }
     return UnicodeSet(std::move(runs), std::move(quads));
