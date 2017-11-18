@@ -380,7 +380,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, const uint32_t 
     int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx].get());
     if (fileDescriptor == -1) return 0;
     EmitMatch accum(linePrefix(fileName), mResultStrs[fileIdx].get());
-    uint64_t grepResult = f(fileDescriptor, reinterpret_cast<intptr_t>(&accum));
+    f(fileDescriptor, reinterpret_cast<intptr_t>(&accum));
     close(fileDescriptor);
     if (accum.mLineCount > 0) grepMatchFound = true;
     return accum.mLineCount;
@@ -423,7 +423,7 @@ int32_t GrepEngine::openFile(const std::string & fileName, std::stringstream * m
 // parallel approach.
     
 void * DoGrepThreadFunction(void *args) {
-    reinterpret_cast<GrepEngine *>(args)->DoGrepThreadMethod();
+    return reinterpret_cast<GrepEngine *>(args)->DoGrepThreadMethod();
 }
 
 bool GrepEngine::searchAllFiles() {
@@ -481,26 +481,28 @@ void * GrepEngine::DoGrepThreadMethod() {
     }
     count_mutex.lock();
     fileIdx = mNextFileToPrint;
-    bool readyToPrint = ((fileIdx == 0) || (mFileStatus[fileIdx-1] == FileStatus::PrintComplete)) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
+    bool readyToPrint = ((fileIdx == 0) || (mFileStatus[fileIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
     if (fileIdx < inputFiles.size() && readyToPrint) {
         mFileStatus[fileIdx] = FileStatus::Printing;
         mNextFileToPrint++;
     }
     count_mutex.unlock();
+
     while (fileIdx < inputFiles.size()) {
         if (readyToPrint) {
             std::cout << mResultStrs[fileIdx]->str();
-        }
-        else if (pthread_self() == mEngineThread) {
+        } else if (pthread_self() == mEngineThread) {
             mGrepDriver->performIncrementalCacheCleanupStep();
         }
         count_mutex.lock();
         if (readyToPrint) mFileStatus[fileIdx] = FileStatus::PrintComplete;
         fileIdx = mNextFileToPrint;
-        readyToPrint = (mFileStatus[fileIdx-1] == FileStatus::PrintComplete) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
-        if (fileIdx < inputFiles.size() && readyToPrint) {
-            mFileStatus[fileIdx] = FileStatus::Printing;
-            mNextFileToPrint++;
+        if (fileIdx < inputFiles.size()) {
+            readyToPrint = ((fileIdx == 0) || (mFileStatus[fileIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
+            if (readyToPrint) {
+                mFileStatus[fileIdx] = FileStatus::Printing;
+                mNextFileToPrint++;
+            }
         }
         count_mutex.unlock();
     }
@@ -511,5 +513,6 @@ void * GrepEngine::DoGrepThreadMethod() {
         return nullptr;
     }
 }
+
 }
 

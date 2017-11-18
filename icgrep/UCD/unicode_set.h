@@ -158,8 +158,15 @@ protected:
         friend class UnicodeSet;
         friend class boost::iterator_core_access;
     public:
-        quad_iterator(RunIterator runIterator, QuadIterator quadIterator)
-            : mRunIterator(runIterator), mQuadIterator(quadIterator), mOffset(0) {}
+        quad_iterator(RunIterator runIterator, RunIterator runEnd, QuadIterator quadIterator, QuadIterator quadEnd, const run_type_t type, const length_t remaining)
+        : mRunIterator(runIterator)
+        , mRunEnd(runEnd)
+        , mQuadIterator(quadIterator)
+        #ifndef NDEBUG
+        , mQuadEnd(quadEnd)
+        #endif
+        , mType(type)
+        , mRemaining(remaining) {}
 
         void advance(unsigned n);
 
@@ -172,33 +179,41 @@ protected:
         }
 
         inline run_type_t type() const {
-            return mRunIterator->first;
+            return mType;
         }
 
         inline length_t length() const {
-            return mRunIterator->second - mOffset;
+            return mRemaining;
         }
 
         inline bitquad_t quad() const {
+            assert (mQuadIterator != mQuadEnd);
             return *mQuadIterator;
         }
 
         inline bool equal(const quad_iterator & other) const {
-            return (mRunIterator == other.mRunIterator) && (mQuadIterator == other.mQuadIterator);
+            const auto r = (mRunIterator == other.mRunIterator) && (mRemaining == other.mRemaining);
+            assert (!r || (mQuadIterator == other.mQuadIterator));
+            return r;
         }
 
     private:
-        RunIterator     mRunIterator;
-        QuadIterator    mQuadIterator;
-        unsigned        mOffset;
+        RunIterator         mRunIterator;    
+        const RunIterator   mRunEnd;
+        QuadIterator        mQuadIterator;        
+        #ifndef NDEBUG
+        const QuadIterator  mQuadEnd;
+        #endif
+        run_type_t          mType;
+        length_t            mRemaining;
     };
 
     inline quad_iterator quad_begin() const {
-        return quad_iterator(mRuns.cbegin(), mQuads.cbegin());
+        return quad_iterator(mRuns.cbegin(), mRuns.cend(), mQuads.cbegin(), mQuads.cend(), std::get<0>(*mRuns.cbegin()), std::get<1>(*mRuns.cbegin()));
     }
 
     inline quad_iterator quad_end() const {
-        return quad_iterator(mRuns.cend(), mQuads.cend());
+        return quad_iterator(mRuns.cend(), mRuns.cend(), mQuads.cend(), mQuads.cend(), Empty, 0);
     }
 
 private:
