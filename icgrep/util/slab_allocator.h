@@ -50,8 +50,12 @@ public:
         return this != &other;
     }
 
+    inline void Reset() {
+        mAllocator.Reset();
+    }
+
     inline SlabAllocator() noexcept {}
-    inline SlabAllocator(const SlabAllocator &) noexcept { assert (false); }
+    inline SlabAllocator(const SlabAllocator &) noexcept = delete;
     template <class U> inline SlabAllocator (const SlabAllocator<U> &) noexcept { assert (false); }
 private:
     LLVMAllocator mAllocator;
@@ -60,6 +64,7 @@ private:
 template <typename T = uint8_t>
 class ProxyAllocator {
     using LLVMAllocator = typename SlabAllocator<T>::LLVMAllocator;
+    template<typename U> friend class ProxyAllocator;    
 public:
     using value_type = T;
     using pointer = value_type*;
@@ -102,8 +107,9 @@ public:
         return mAllocator != other.mAllocator;
     }
 
-    inline ProxyAllocator() noexcept { assert (false); }
-    inline ProxyAllocator(ProxyAllocator const & a) noexcept : mAllocator(const_cast<LLVMAllocator *>(a.mAllocator)) {}
+    inline ProxyAllocator() noexcept = delete;
+    template <class U> inline ProxyAllocator(ProxyAllocator<U> & a) noexcept : mAllocator(a.mAllocator) {}
+    template <class U> inline ProxyAllocator(ProxyAllocator<U> && a) noexcept : mAllocator(a.mAllocator) {}
     template <class U> inline ProxyAllocator (const SlabAllocator<U> & a) noexcept : mAllocator(const_cast<LLVMAllocator *>(&a.mAllocator)) {}
 private:
     LLVMAllocator * const mAllocator;

@@ -51,46 +51,21 @@ protected:
     friend CC * subtractCC(const CC * a, const CC * b);
     friend CC * intersectCC(const CC * a, const CC * b);
 
-    inline CC()
-    : RE(ClassTypeId::CC), UnicodeSet() {
-
-    }
+    CC();
 
     CC(const CC & cc);
 
-    inline CC(const codepoint_t codepoint)
-    : RE(ClassTypeId::CC)
-    , UCD::UnicodeSet(codepoint) {
+    CC(const codepoint_t codepoint);
 
-    }
+    explicit CC(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint);
 
-    inline CC(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint)
-    : RE(ClassTypeId::CC)
-    , UCD::UnicodeSet(lo_codepoint, hi_codepoint) {
+    explicit CC(const CC * cc1, const CC * cc2);
 
-    }
+    CC(UCD::UnicodeSet && set);
 
-    CC(const CC * cc1, const CC * cc2);
+    CC(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end);
 
-    inline CC(UCD::UnicodeSet && set)
-    : RE(ClassTypeId::CC)
-    , UCD::UnicodeSet(std::move(set)) {
-
-    }
-
-    CC(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end)
-    : RE(ClassTypeId::CC)
-    , UCD::UnicodeSet(begin, end)
-    {
-
-    }
-
-    CC(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end)
-    : RE(ClassTypeId::CC)
-    , UCD::UnicodeSet(begin, end)
-    {
-
-    }
+    CC(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end);
 
 };
 

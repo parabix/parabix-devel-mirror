@@ -111,6 +111,8 @@ public:
     bool intersects(const codepoint_t lo, const codepoint_t hi) const;
     
     bool intersects(const UnicodeSet & other) const;
+
+    bool subset(const UnicodeSet & other) const;
     
     void insert(const codepoint_t cp);
 
@@ -139,26 +141,30 @@ public:
     bool operator==(const UnicodeSet & other) const;
     bool operator<(const UnicodeSet & other) const;
 
-    UnicodeSet(run_type_t emptyOrFull = Empty);
-    UnicodeSet(const codepoint_t codepoint);
-    UnicodeSet(const codepoint_t lo, const codepoint_t hi);
-    UnicodeSet(const UnicodeSet & other);
-    UnicodeSet(std::initializer_list<run_t> r, std::initializer_list<bitquad_t> q);
-    UnicodeSet(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end);
-    UnicodeSet(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end);
+    UnicodeSet(run_type_t emptyOrFull = Empty, ProxyAllocator<> allocator = GlobalAllocator);
+    UnicodeSet(const codepoint_t codepoint, ProxyAllocator<> allocator = GlobalAllocator);
+    UnicodeSet(const codepoint_t lo, const codepoint_t hi, ProxyAllocator<> allocator = GlobalAllocator);
+    UnicodeSet(const UnicodeSet & other, ProxyAllocator<> allocator = GlobalAllocator);
+    UnicodeSet(std::initializer_list<run_t> r, std::initializer_list<bitquad_t> q, ProxyAllocator<> allocator = GlobalAllocator);
+    UnicodeSet(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end, ProxyAllocator<> allocator = GlobalAllocator);
+    UnicodeSet(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end, ProxyAllocator<> allocator = GlobalAllocator);
     
     inline void swap(UnicodeSet & other);
     inline void swap(UnicodeSet && other);
 
+    inline static void Reset() {
+        GlobalAllocator.Reset();
+    }
+
 protected:
 
-    UnicodeSet(std::vector<run_t> && r, std::vector<bitquad_t> && q);
-
+    UnicodeSet(std::vector<run_t> && r, std::vector<bitquad_t> && q, ProxyAllocator<> allocator = GlobalAllocator);
+    
     class quad_iterator : public boost::iterator_facade<quad_iterator, quad_iterator_return_t, boost::random_access_traversal_tag, quad_iterator_return_t> {
         friend class UnicodeSet;
         friend class boost::iterator_core_access;
     public:
-        quad_iterator(RunIterator runIterator, RunIterator runEnd, QuadIterator quadIterator, QuadIterator quadEnd, const run_type_t type, const length_t remaining)
+        explicit quad_iterator(RunIterator runIterator, RunIterator runEnd, QuadIterator quadIterator, QuadIterator quadEnd, const run_type_t type, const length_t remaining)
         : mRunIterator(runIterator)
         , mRunEnd(runEnd)
         , mQuadIterator(quadIterator)
@@ -166,7 +172,11 @@ protected:
         , mQuadEnd(quadEnd)
         #endif
         , mType(type)
-        , mRemaining(remaining) {}
+        , mRemaining(remaining) {
+            assert (type == Empty || type == Mixed || type == Full);
+            assert (remaining > 0 || type == Empty);
+            assert (remaining <= UNICODE_MAX);
+        }
 
         void advance(unsigned n);
 
@@ -209,7 +219,8 @@ protected:
     };
 
     inline quad_iterator quad_begin() const {
-        return quad_iterator(mRuns.cbegin(), mRuns.cend(), mQuads.cbegin(), mQuads.cend(), std::get<0>(*mRuns.cbegin()), std::get<1>(*mRuns.cbegin()));
+        assert (mRuns.cbegin() != mRuns.cend());
+        return quad_iterator(mRuns.cbegin(), mRuns.cend(), mQuads.cbegin(), mQuads.cend(), mRuns.cbegin()->first, mRuns.cbegin()->second);
     }
 
     inline quad_iterator quad_end() const {
@@ -220,7 +231,7 @@ private:
 
     RunVector               mRuns;
     QuadVector              mQuads;
-    static SlabAllocator<>  mAllocator;
+    static SlabAllocator<>  GlobalAllocator;
 };
 
 

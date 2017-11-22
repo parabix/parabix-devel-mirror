@@ -35,6 +35,9 @@ public:
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
+    inline static void Reset() {
+        mAllocator.Reset();
+    }
     typedef std::initializer_list<RE *> InitializerList;
 protected:
     inline RE(const ClassTypeId id)

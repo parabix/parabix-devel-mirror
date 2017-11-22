@@ -11,18 +11,6 @@
 
 namespace re {
 
-CC::CC(const CC * cc1, const CC * cc2)
-: RE(ClassTypeId::CC)
-, UCD::UnicodeSet(std::move(*cc1 + *cc2)) {
-
-}
-
-CC::CC(const CC & cc)
-: RE(ClassTypeId::CC)
-, UCD::UnicodeSet(cc) {
-
-}
-
 std::string CC::canonicalName(const CC_type type) const {
     std::stringstream name;
     name << std::hex;
@@ -52,5 +40,54 @@ CC * caseInsensitize(const CC * cc) {
     }
     return cci;
 }
-    
+
+CC::CC()
+: RE(ClassTypeId::CC), UnicodeSet() {
+
+}
+
+CC::CC(const CC & cc)
+: RE(ClassTypeId::CC)
+, UCD::UnicodeSet(cc) {
+
+}
+
+CC::CC(const codepoint_t codepoint)
+: RE(ClassTypeId::CC)
+, UCD::UnicodeSet(codepoint, mAllocator) {
+
+}
+
+CC::CC(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint)
+: RE(ClassTypeId::CC)
+, UCD::UnicodeSet(lo_codepoint, hi_codepoint, mAllocator) {
+
+}
+
+CC::CC(const CC * cc1, const CC * cc2)
+: RE(ClassTypeId::CC)
+, UCD::UnicodeSet(std::move(*cc1 + *cc2)) {
+
+}
+
+CC::CC(UCD::UnicodeSet && set)
+: RE(ClassTypeId::CC)
+, UCD::UnicodeSet(std::move(set), mAllocator) {
+
+}
+
+CC::CC(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end)
+: RE(ClassTypeId::CC)
+, UCD::UnicodeSet(begin, end, mAllocator)
+{
+
+}
+
+CC::CC(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end)
+: RE(ClassTypeId::CC)
+, UCD::UnicodeSet(begin, end, mAllocator)
+{
+
+}
+
 }
