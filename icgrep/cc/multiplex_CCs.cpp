@@ -11,7 +11,9 @@
 //
 // Breakpoints of a set of character classes (CCs): each codepoint c such that
 // there is some CC in CCs such that either (a) c is in the CC and c-1 is not, or
-// (b) c-1 is in the CC and c is not.
+// (b) c-1 is in the CC and c is not.  Boundary cases: if codepoint 0 is in
+// some CC, then 0 is a breakpoint (codepoint -1 is not in any CC).  If codepoint
+// 0x10FFFF is in some CC then 0x110000 is a breakpoint.
 //
 // The breakpoints may be determined by iterating through the interval
 // representation of each CC.   For each interval (lo, hi), lo and hi+1 
@@ -66,7 +68,7 @@ void doMultiplexCCs(const std::vector<UCD::UnicodeSet> & CCs,
     boost::dynamic_bitset<> current_set(CCs.size());
     
     unsigned range_lo = 0;
-    unsigned cur_index = 1;
+    unsigned next_set_index = 1;
     for (auto & bkpt_entry : breakpoints) {
         if (current_exclusive_set_idx > 0) {  // We have a range entry to close for a pending exclusive set.
             unsigned range_hi = bkpt_entry.first - 1;
@@ -78,14 +80,14 @@ void doMultiplexCCs(const std::vector<UCD::UnicodeSet> & CCs,
         }
         // Start a new range.
         range_lo = bkpt_entry.first;
-        if (range_lo > UCD::UNICODE_MAX) continue; 
+        if (range_lo > UCD::UNICODE_MAX) continue; // Nothing to do for bkpt 0x110000
         current_set ^= bkpt_entry.second;
         auto idx_iter = CC_set_to_exclusive_set_map.find(current_set);
         if (idx_iter == CC_set_to_exclusive_set_map.end()) {
             // New exclusive class; assign the next sequential integer.
             //current_exclusive_set_idx = exclusiveSetIDs.size();
-            current_exclusive_set_idx = cur_index;
-            cur_index++;
+            current_exclusive_set_idx = next_set_index;
+            next_set_index++;
             CC_set_to_exclusive_set_map.emplace(current_set, current_exclusive_set_idx);
             
             for (unsigned CC1 = current_set.find_first(); CC1 < CCs.size(); CC1 = current_set.find_next(CC1)) {
@@ -100,5 +102,4 @@ void doMultiplexCCs(const std::vector<UCD::UnicodeSet> & CCs,
             current_exclusive_set_idx = idx_iter->second;
         }
     }
-    assert (current_exclusive_set_idx == 0 && "Breakpoint for final interval not found.");
 }
