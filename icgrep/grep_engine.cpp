@@ -453,7 +453,8 @@ bool GrepEngine::searchAllFiles() {
 // DoGrep thread function.
 void * GrepEngine::DoGrepThreadMethod() {
     size_t fileIdx;
-
+    bool readyToPrint = false;
+    
     count_mutex.lock();
     fileIdx = mNextFileToGrep;
     if (fileIdx < inputFiles.size()) {
@@ -481,10 +482,13 @@ void * GrepEngine::DoGrepThreadMethod() {
     }
     count_mutex.lock();
     fileIdx = mNextFileToPrint;
-    bool readyToPrint = ((fileIdx == 0) || (mFileStatus[fileIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
-    if (fileIdx < inputFiles.size() && readyToPrint) {
-        mFileStatus[fileIdx] = FileStatus::Printing;
-        mNextFileToPrint++;
+    
+    if (fileIdx < inputFiles.size()) {
+        readyToPrint = ((fileIdx == 0) || (mFileStatus[fileIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
+        if (fileIdx < inputFiles.size() && readyToPrint) {
+            mFileStatus[fileIdx] = FileStatus::Printing;
+            mNextFileToPrint++;
+        }
     }
     count_mutex.unlock();
 
