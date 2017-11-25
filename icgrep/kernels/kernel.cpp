@@ -163,7 +163,10 @@ Module * Kernel::setModule(Module * const module) {
  * @brief makeModule
  ** ------------------------------------------------------------------------------------------------------------- */
 Module * Kernel::makeModule(const std::unique_ptr<kernel::KernelBuilder> & idb) {
-    return setModule(new Module(getCacheName(idb), idb->getContext()));
+    Module * m = new Module(getCacheName(idb), idb->getContext());
+    m->setTargetTriple(idb->getModule()->getTargetTriple());
+    m->setDataLayout(idb->getModule()->getDataLayout());
+    return setModule(m);
 }
 
 
@@ -179,7 +182,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & idb) {
     addInternalKernelProperties(idb);
     // NOTE: StructType::create always creates a new type even if an identical one exists.
     if (LLVM_UNLIKELY(mModule == nullptr)) {
-        setModule(new Module(getCacheName(idb), idb->getContext()));
+        makeModule(idb);
     }
     mKernelStateType = mModule->getTypeByName(getName());
     if (LLVM_LIKELY(mKernelStateType == nullptr)) {
