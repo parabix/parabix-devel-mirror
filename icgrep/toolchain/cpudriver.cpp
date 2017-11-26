@@ -147,11 +147,11 @@ Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, Fu
 void ParabixDriver::finalizeObject() {
 
     legacy::PassManager PM;
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowUnoptimizedIR))) {
+    if (LLVM_UNLIKELY(codegen::ShowUnoptimizedIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
-            if (codegen::IROutputFilename) {
+            if (codegen::ShowUnoptimizedIROption != "") {
                 std::error_code error;
-                mIROutputStream = new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
+                mIROutputStream = new raw_fd_ostream(codegen::ShowUnoptimizedIROption, error, sys::fs::OpenFlags::F_None);
             } else {
                 mIROutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
             }
@@ -169,11 +169,11 @@ void ParabixDriver::finalizeObject() {
     PM.add(createGVNPass());                        // Global value numbering redundant expression elimination pass
     PM.add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
 
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
+    if (LLVM_UNLIKELY(codegen::ShowIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
-            if (codegen::IROutputFilename) {
+            if (codegen::ShowIROption != "") {
                 std::error_code error;
-                mIROutputStream = new raw_fd_ostream(codegen::IROutputFilename, error, sys::fs::OpenFlags::F_None);
+                mIROutputStream = new raw_fd_ostream(codegen::ShowIROption, error, sys::fs::OpenFlags::F_None);
             } else {
                 mIROutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
             }
@@ -182,10 +182,10 @@ void ParabixDriver::finalizeObject() {
     }
 
 #if LLVM_VERSION_INTEGER >= LLVM_3_7_0
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowASM))) {
-        if (codegen::ASMOutputFilename) {
+    if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
+        if (codegen::ShowASMOption != "") {
             std::error_code error;
-            mASMOutputStream = new raw_fd_ostream(codegen::ASMOutputFilename, error, sys::fs::OpenFlags::F_None);
+            mASMOutputStream = new raw_fd_ostream(codegen::ShowASMOption, error, sys::fs::OpenFlags::F_None);
         } else {
             mASMOutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
         }

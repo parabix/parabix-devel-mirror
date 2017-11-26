@@ -41,12 +41,7 @@ const llvm::cl::OptionCategory * codegen_flags();
 
 // Command Parameters
 enum DebugFlags {
-    ShowUnoptimizedIR,
-    ShowIR,
     VerifyIR,
-#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
-    ShowASM,
-#endif
     SerializeThreads,
     TraceCounts,
     TraceDynamicBuffers,
@@ -59,10 +54,14 @@ bool DebugOptionIsSet(const DebugFlags flag);
 
 extern bool PipelineParallel;
 extern bool SegmentPipelineParallel;
+    
+// Options for generating IR or ASM to files
+const std::string OmittedOption = ".";
+extern std::string ShowUnoptimizedIROption;
+extern std::string ShowIROption;
 #if LLVM_VERSION_INTEGER >= LLVM_3_7_0
-extern const char * ASMOutputFilename;
+extern std::string ShowASMOption;
 #endif
-extern const char * IROutputFilename;
 extern const char * ObjectCacheDir;
 extern llvm::CodeGenOpt::Level OptLevel;  // set from command line
 extern int BlockSize;  // set from command line

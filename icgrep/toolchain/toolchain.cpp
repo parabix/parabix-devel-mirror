@@ -22,12 +22,7 @@ namespace codegen {
 static cl::OptionCategory CodeGenOptions("Code Generation Options", "These options control code generation.");
 
 static cl::bits<DebugFlags>
-DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR."),
-                        clEnumVal(ShowIR, "Print optimized LLVM IR."),
-                        clEnumVal(VerifyIR, "Run the IR verification pass."),
-#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
-                        clEnumVal(ShowASM, "Print assembly code."),
-#endif
+DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
                         clEnumVal(TraceCounts, "Show kernel processed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Show dynamic buffer allocations and deallocations."),
@@ -35,15 +30,18 @@ DebugOptions(cl::values(clEnumVal(ShowUnoptimizedIR, "Print generated LLVM IR.")
                         clEnumVal(EnableCycleCounter, "Count and report CPU cycles per kernel.")
                         CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
 
-static cl::opt<std::string> IROutputFilenameOption("dump-generated-IR-output", cl::init(""),
-                                                       cl::desc("output IR filename"), cl::cat(CodeGenOptions));
+std::string ShowIROption = OmittedOption;
+static cl::opt<std::string, true> IROutputOption("ShowIR", cl::location(ShowIROption), cl::ValueOptional,
+                                                         cl::desc("Print optimized LLVM IR to stderr (by omitting =<filename>) or a file"), cl::value_desc("filename"), cl::cat(CodeGenOptions));
+
+std::string ShowUnoptimizedIROption = OmittedOption;
+static cl::opt<std::string, true> UnoptimizedIROutputOption("ShowUnoptimizedIR", cl::location(ShowUnoptimizedIROption), cl::ValueOptional,
+                                                         cl::desc("Print generated LLVM IR to stderr (by omitting =<filename> or a file"), cl::value_desc("filename"), cl::cat(CodeGenOptions));
 
 #if LLVM_VERSION_INTEGER >= LLVM_3_7_0
-static cl::opt<std::string> ASMOutputFilenameOption("asm-output", cl::init(""),
-                                                    cl::desc("output ASM filename"), cl::cat(CodeGenOptions));
-
-static cl::opt<bool> AsmVerbose("asm-verbose", cl::init(true),
-                                cl::desc("Add comments to directives."), cl::cat(CodeGenOptions));
+std::string ShowASMOption = OmittedOption;
+static cl::opt<std::string, true> ASMOutputFilenameOption("ShowASM", cl::location(ShowASMOption), cl::ValueOptional,
+                                                         cl::desc("Print generated assembly code to stderr (by omitting =<filename> or a file"), cl::value_desc("filename"), cl::cat(CodeGenOptions));
 #endif
 
 static cl::opt<char> OptLevelOption("O", cl::desc("Optimization level. [-O0, -O1, -O2, or -O3] (default = '-O1')"),
@@ -89,10 +87,6 @@ CodeGenOpt::Level OptLevel;
 bool PipelineParallel;
 
 bool SegmentPipelineParallel;
-
-const char * ASMOutputFilename;
-
-const char * IROutputFilename;
 
 const char * ObjectCacheDir;
 
@@ -159,15 +153,13 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
     }
 #endif
     cl::ParseCommandLineOptions(argc, argv);
-    if (DebugOptions.getBits()) {
+    if (DebugOptions.getBits() || (ShowIROption != OmittedOption) || (ShowUnoptimizedIROption != OmittedOption) || (ShowASMOption != OmittedOption)) {
         EnableObjectCache = false;
     }
     ObjectCacheDir = ObjectCacheDirOption.empty() ? nullptr : ObjectCacheDirOption.data();
-    IROutputFilename = IROutputFilenameOption.empty() ? nullptr : IROutputFilenameOption.data();
-    ASMOutputFilename = ASMOutputFilenameOption.empty() ? nullptr : ASMOutputFilenameOption.data();
     Options = InitTargetOptionsFromCodeGenFlags();
 #if LLVM_VERSION_INTEGER >= LLVM_3_7_0
-    Options.MCOptions.AsmVerbose = AsmVerbose;
+    Options.MCOptions.AsmVerbose = true;
 #endif
     switch (OptLevelOption) {
         case '0': OptLevel = CodeGenOpt::None; break;
