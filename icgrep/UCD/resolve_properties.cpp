@@ -99,8 +99,8 @@ bool resolvePropertyDefinition(Name * const property) {
     } else {
         const std::string value = property->getName();
         // Try special cases of Unicode TR #18
-        if (value == "any") {
-            property->setDefinition(makeAny());
+        if ((value == "any") || (value == ".")) {
+            property->setDefinition(makeCC(0, 0x10FFFF));
             return true;
         } else if (value == "ascii") {
             property->setDefinition(makeName("blk", "ascii", Name::Type::UnicodeProperty));
@@ -198,6 +198,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             // Try special cases of Unicode TR #18
             // Now compatibility properties of UTR #18 Annex C
                     
+            else if (value == ".") return UnicodeSet(0, 0x10FFFF);
             else if (value == "alnum") {
                 Name * digit = makeName("nd", Name::Type::UnicodeProperty);
                 Name * alpha = makeName("alphabetic", Name::Type::UnicodeProperty);

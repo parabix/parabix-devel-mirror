@@ -9,6 +9,7 @@
 
 #include "re_re.h"
 #include "re_cc.h"
+#include "re_name.h"
 #include <UCD/unicode_set.h>
 #include <llvm/Support/Casting.h>
 
@@ -27,8 +28,8 @@ protected:
     virtual ~Any() {}
 };
 
-inline CC * makeAny() {
-    return makeCC(0, UCD::UNICODE_MAX);
+inline RE * makeAny() {
+    return makeName(".", Name::Type::UnicodeProperty);
 }
 
 }
