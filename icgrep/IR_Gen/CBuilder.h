@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 #ifndef CBUILDER_H
@@ -238,9 +238,7 @@ public:
 
     llvm::BasicBlock * CreateBasicBlock(std::string && name);
 
-    virtual bool supportsIndirectBr() const {
-        return true;
-    }
+    virtual bool supportsIndirectBr() const;
 
     llvm::Value * CreatePopcount(llvm::Value * bits);
 

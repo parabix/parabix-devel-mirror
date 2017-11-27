@@ -1010,6 +1010,10 @@ BasicBlock * CBuilder::CreateBasicBlock(std::string && name) {
     return BasicBlock::Create(getContext(), name, GetInsertBlock()->getParent());
 }
 
+bool CBuilder::supportsIndirectBr() const {
+    return !codegen::DebugOptionIsSet(codegen::DisableIndirectBranch);
+}
+
 BranchInst * CBuilder::CreateLikelyCondBr(Value * Cond, BasicBlock * True, BasicBlock * False, const int probability) {
     MDBuilder mdb(getContext());
     if (probability < 0 || probability > 100) {

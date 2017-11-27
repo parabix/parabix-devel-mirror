@@ -27,7 +27,8 @@ DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(TraceCounts, "Show kernel processed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Show dynamic buffer allocations and deallocations."),
                         clEnumVal(EnableAsserts, "Enable built-in Parabix framework asserts in generated IR."),
-                        clEnumVal(EnableCycleCounter, "Count and report CPU cycles per kernel.")
+                        clEnumVal(EnableCycleCounter, "Count and report CPU cycles per kernel."),
+                        clEnumVal(DisableIndirectBranch, "Disable use of indirect branches in kernel code.")
                         CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
 
 std::string ShowIROption = OmittedOption;

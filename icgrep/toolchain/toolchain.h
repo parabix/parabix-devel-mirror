@@ -47,6 +47,7 @@ enum DebugFlags {
     TraceDynamicBuffers,
     EnableAsserts,
     EnableCycleCounter,
+    DisableIndirectBranch,
     DebugFlagSentinel
 };
 
