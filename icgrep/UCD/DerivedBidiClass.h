@@ -110,123 +110,113 @@ namespace UCD {
     [50000, 5fffd], [60000, 6fffd], [70000, 7fffd], [80000, 8fffd],
     [90000, 9fffd], [a0000, afffd], [b0000, bfffd], [c0000, cfffd],
     [d0000, dfffd], [e1000, efffd], [f0000, ffffd], [100000, 10fffd]**/
-    const UnicodeSet l_Set 
-        {{{Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 13},
-          {Mixed, 3}, {Empty, 3}, {Mixed, 2}, {Full, 2}, {Mixed, 1},
-          {Full, 4}, {Mixed, 1}, {Full, 7}, {Mixed, 1}, {Empty, 27},
-          {Mixed, 21}, {Full, 1}, {Mixed, 14}, {Full, 2}, {Mixed, 1},
-          {Full, 2}, {Mixed, 2}, {Full, 2}, {Mixed, 2}, {Full, 1},
-          {Mixed, 2}, {Full, 1}, {Mixed, 4}, {Full, 2}, {Mixed, 4},
-          {Full, 21}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 3},
-          {Mixed, 1}, {Full, 19}, {Mixed, 1}, {Full, 3}, {Mixed, 4},
-          {Full, 1}, {Mixed, 4}, {Full, 3}, {Mixed, 2}, {Full, 3},
-          {Mixed, 2}, {Full, 3}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
-          {Full, 1}, {Mixed, 2}, {Full, 1}, {Mixed, 1}, {Full, 2},
-          {Mixed, 6}, {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
-          {Full, 4}, {Mixed, 2}, {Full, 6}, {Empty, 1}, {Mixed, 1},
-          {Full, 13}, {Mixed, 4}, {Empty, 2}, {Mixed, 2}, {Empty, 2},
-          {Mixed, 4}, {Full, 1}, {Mixed, 1}, {Empty, 12}, {Mixed, 1},
-          {Full, 1}, {Mixed, 2}, {Empty, 4}, {Mixed, 2}, {Empty, 1},
-          {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 13}, {Mixed, 1},
-          {Empty, 10}, {Full, 8}, {Empty, 19}, {Mixed, 5}, {Full, 7},
-          {Mixed, 1}, {Full, 3}, {Mixed, 1}, {Full, 3}, {Empty, 3},
-          {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-          {Empty, 6}, {Mixed, 4}, {Full, 2}, {Mixed, 2}, {Full, 1},
-          {Mixed, 1}, {Full, 6}, {Empty, 1}, {Mixed, 2}, {Full, 1},
-          {Mixed, 2}, {Full, 1}, {Mixed, 2}, {Full, 4}, {Mixed, 1},
-          {Full, 2}, {Mixed, 2}, {Full, 206}, {Empty, 2}, {Full, 692},
-          {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Full, 9}, {Mixed, 1},
-          {Full, 2}, {Mixed, 2}, {Full, 2}, {Mixed, 1}, {Empty, 1},
-          {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 3}, {Mixed, 2},
-          {Full, 1}, {Mixed, 1}, {Full, 2}, {Mixed, 2}, {Full, 1},
-          {Mixed, 2}, {Full, 1}, {Mixed, 2}, {Full, 1}, {Mixed, 1},
-          {Full, 1}, {Mixed, 3}, {Full, 1}, {Mixed, 3}, {Full, 7},
-          {Mixed, 1}, {Full, 632}, {Mixed, 1}, {Empty, 23}, {Mixed, 1},
-          {Empty, 1}, {Mixed, 2}, {Empty, 4}, {Mixed, 4}, {Full, 3},
-          {Mixed, 1}, {Full, 8}, {Mixed, 1}, {Full, 1}, {Empty, 2},
-          {Mixed, 2}, {Full, 1}, {Mixed, 1}, {Full, 7}, {Mixed, 1},
-          {Full, 3}, {Mixed, 1}, {Full, 36}, {Empty, 64}, {Mixed, 6},
-          {Full, 2}, {Mixed, 2}, {Full, 1}, {Mixed, 4}, {Full, 2},
-          {Mixed, 1}, {Full, 4}, {Mixed, 6}, {Full, 5}, {Mixed, 2},
-          {Full, 2}, {Mixed, 2}, {Full, 6}, {Mixed, 2}, {Full, 2},
-          {Mixed, 3}, {Full, 1}, {Mixed, 1}, {Full, 2}, {Mixed, 2},
-          {Full, 22}, {Mixed, 3}, {Full, 1}, {Mixed, 1}, {Full, 12},
-          {Mixed, 1}, {Full, 2}, {Mixed, 2}, {Full, 3}, {Mixed, 2},
-          {Full, 620}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 34},
-          {Mixed, 1}, {Full, 615}, {Mixed, 2}, {Full, 165}, {Mixed, 3},
-          {Full, 2}, {Empty, 2}, {Mixed, 1}, {Full, 5}, {Empty, 2},
-          {Mixed, 1}, {Full, 27}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
-          {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 1},
-          {Mixed, 1}, {Empty, 1}, {Full, 16}, {Empty, 1}, {Mixed, 1},
-          {Empty, 1}, {Mixed, 3}, {Full, 42}, {Mixed, 2}, {Full, 62},
-          {Empty, 65}, {Mixed, 1}, {Empty, 2}, {Mixed, 5}, {Full, 2},
-          {Mixed, 1}, {Full, 7}, {Mixed, 1}, {Full, 4}, {Empty, 30},
-          {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-          {Full, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 1},
-          {Mixed, 2}, {Full, 2}, {Mixed, 5}, {Full, 1}, {Mixed, 2},
-          {Full, 47}, {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Full, 2047},
-          {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1},
-          {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Full, 2047},
-          {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1},
-          {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Full, 2047},
-          {Mixed, 1}, {Empty, 128}, {Full, 1919}, {Mixed, 1}, {Full, 2047},
-          {Mixed, 1}, {Full, 2047}, {Mixed, 1}},
-         {0x07fffffe, 0x07fffffe, 0x04200400, 0xff7fffff, 0xff7fffff,
-          0xf9ffffff, 0x00030003, 0x0000401f, 0xbfcf0000, 0xffffff4f,
-          0xffbfffff, 0xfffffc07, 0x00001bff, 0xfffffff8, 0xebffffff,
-          0xff01de01, 0xfffffff3, 0xfffffffd, 0xefffffff, 0xffffdfe1,
-          0xf7f3fff3, 0xfffffff9, 0xefffffff, 0xfffdc679, 0xffdcffff,
-          0xfffffff9, 0xefffffff, 0xffffde41, 0x03fdfff3, 0xfffffffd,
-          0x6fffffff, 0xffbfdfe1, 0xfffffff3, 0xfffffffb, 0xffffdffe,
-          0xf807ffff, 0xfffffffe, 0x3fffffff, 0xff9fc23e, 0x80fffff3,
-          0xfffffffd, 0xefffffff, 0xffffcfff, 0xfffffff3, 0xfffffffc,
-          0xe7ffffff, 0xffffdfe1, 0xfffffff3, 0xffa3fbff, 0x780dffff,
-          0xffff807f, 0xe40dffff, 0xffffc0ff, 0xfcffffff, 0xc15fffff,
-          0x8001ffff, 0x01001f20, 0xe0000000, 0xffffffbf, 0x99021fff,
-          0x3cffffff, 0xffe1fffe, 0xdfffdf9b, 0x1fffffff, 0xfc00ffff,
-          0xfffffffe, 0xe7fffffe, 0xffe3ffff, 0xffe3ffff, 0xfff3ffff,
-          0xfff3ffff, 0xc04fffff, 0xd7f001bf, 0xfc00ffff, 0xffff8000,
-          0xffffff9f, 0xfffffdff, 0xf1fbfe78, 0xffffffce, 0x3fffffff,
-          0xf67fffff, 0x80bfffff, 0x6007e01a, 0x8000ffff, 0xfffffff0,
-          0xe82fffff, 0xfffffffb, 0xfff007ff, 0xfffffffc, 0xffffc4c3,
-          0xfffc5cbf, 0xff300fff, 0x0008ffff, 0xfcefde02, 0x04000000,
-          0x5fffffff, 0x1fff1ffc, 0x9fff1fff, 0x00004000, 0x800e0000,
-          0xffff8000, 0xfffe0000, 0x3e2ffc84, 0xf3ffbd50, 0x0000c3e0,
-          0x0000f1ff, 0xffc00000, 0x07ffffff, 0x00200000, 0xffffff80,
-          0xfffff800, 0xf0000000, 0x000003ff, 0x00001000, 0x00300000,
-          0x00c00000, 0x1c000000, 0xfff80200, 0xffff0fff, 0x01fc781f,
-          0x7fffffff, 0xfffffc00, 0x04000000, 0xfff00000, 0xffc00000,
-          0xf000ffff, 0x000000e0, 0x1f3ec3fe, 0xe1ffffff, 0xfffffffe,
-          0xf7ffffff, 0xfffffff0, 0x9fffffff, 0x0000ffff, 0x8fffffff,
-          0x0001ffff, 0xffff0fff, 0xf87fffff, 0x3fffffff, 0x7fffffff,
-          0x0000ffff, 0xffffff80, 0xffff1fff, 0x00007fff, 0x3fffffff,
-          0xfffcffff, 0xfffffffc, 0xfffffeff, 0xfffff7bb, 0xfcfff09f,
-          0xff0fffff, 0xffffffcf, 0xfffc0000, 0xffffc03f, 0xfffc007f,
-          0xfffffff8, 0xec37ffff, 0xffffffdf, 0xff9981ff, 0xffffeff7,
-          0xefffffff, 0x3e62ffff, 0xfffffffd, 0xffbfcfff, 0xffffdedf,
-          0x1fffffff, 0xfc000000, 0x00080000, 0x0000f080, 0x00000001,
-          0x07fffffe, 0x07fffffe, 0xffffffc0, 0x00008080, 0xfffffffd,
-          0xf000e000, 0xfffffffe, 0xdfffffff, 0xf0000000, 0xf83fffff,
-          0xfffffffd, 0x00ffffff, 0x0003ff80, 0x7fffffc0, 0xfffffffc,
-          0xf987ffff, 0xfffffff8, 0xffe0107f, 0xfff7ffff, 0xfffffffc,
-          0x803fffff, 0xffffe3ff, 0xbf2c7fff, 0x7fffffff, 0xfffff807,
-          0xfffffffc, 0xefffffff, 0xfffffffe, 0xffe0e03f, 0x00ffffff,
-          0xffffffa3, 0x7a07ffff, 0xfffffff2, 0x4fc3ffff, 0xcffffffe,
-          0x5807ffff, 0xfffffffe, 0xffffe000, 0xff40d7ff, 0x1fffffff,
-          0xfffff043, 0xfffff981, 0x8607ffff, 0xf181ff7f, 0xfc8003ff,
-          0xc080ffff, 0x0003ffff, 0xff920300, 0x4b81ffff, 0xffffff40,
-          0xffe0ffff, 0xff80ffff, 0xfff87fff, 0x9fffffff, 0xfffffff0,
-          0x0007fc7f, 0xfffff018, 0xffffc3ff, 0xffffffc0, 0xff800000,
-          0xf7ffffff, 0xffdfffff, 0xffff7fff, 0xfffffdff, 0x00003ff7,
-          0x07800000, 0xffdfe000, 0x07ffffef, 0xffff0001, 0x06000080,
-          0xfffff824, 0x0000f000, 0xfff00000, 0x00018000, 0x00010001,
-          0xffc00000, 0xffffe000, 0xfffff3ff, 0xffffffc0, 0xffe00000,
-          0xfe00e000, 0xfff00000, 0xffe00000, 0x0000f000, 0xfc00ff00,
-          0x0000ff00, 0xffffc000, 0x0000f000, 0x80000000, 0x0000e000,
-          0xfffff000, 0xff000000, 0x0000fffe, 0xffffff80, 0x3fffffff,
-          0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff,
-          0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff,
-          0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __l_Set_runs[] = {
+    {Empty, 2}, {Mixed, 2}, {Empty, 1}, {Mixed, 3}, {Full, 13}, {Mixed, 3},
+    {Empty, 3}, {Mixed, 2}, {Full, 2}, {Mixed, 1}, {Full, 4}, {Mixed, 1},
+    {Full, 7}, {Mixed, 1}, {Empty, 27}, {Mixed, 21}, {Full, 1}, {Mixed, 14},
+    {Full, 2}, {Mixed, 1}, {Full, 2}, {Mixed, 2}, {Full, 2}, {Mixed, 2},
+    {Full, 1}, {Mixed, 2}, {Full, 1}, {Mixed, 4}, {Full, 2}, {Mixed, 4},
+    {Full, 21}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 3}, {Mixed, 1},
+    {Full, 19}, {Mixed, 1}, {Full, 3}, {Mixed, 4}, {Full, 1}, {Mixed, 4},
+    {Full, 3}, {Mixed, 2}, {Full, 3}, {Mixed, 2}, {Full, 3}, {Mixed, 1},
+    {Empty, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 1}, {Mixed, 1},
+    {Full, 2}, {Mixed, 6}, {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
+    {Full, 4}, {Mixed, 2}, {Full, 6}, {Empty, 1}, {Mixed, 1}, {Full, 13},
+    {Mixed, 4}, {Empty, 2}, {Mixed, 2}, {Empty, 2}, {Mixed, 4}, {Full, 1},
+    {Mixed, 1}, {Empty, 12}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Empty, 4},
+    {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Empty, 13},
+    {Mixed, 1}, {Empty, 10}, {Full, 8}, {Empty, 19}, {Mixed, 5}, {Full, 7},
+    {Mixed, 1}, {Full, 3}, {Mixed, 1}, {Full, 3}, {Empty, 3}, {Mixed, 1},
+    {Full, 1}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 6}, {Mixed, 4},
+    {Full, 2}, {Mixed, 2}, {Full, 1}, {Mixed, 1}, {Full, 6}, {Empty, 1},
+    {Mixed, 2}, {Full, 1}, {Mixed, 2}, {Full, 1}, {Mixed, 2}, {Full, 4},
+    {Mixed, 1}, {Full, 2}, {Mixed, 2}, {Full, 206}, {Empty, 2}, {Full, 692},
+    {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Full, 9}, {Mixed, 1}, {Full, 2},
+    {Mixed, 2}, {Full, 2}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Full, 2},
+    {Mixed, 1}, {Full, 3}, {Mixed, 2}, {Full, 1}, {Mixed, 1}, {Full, 2},
+    {Mixed, 2}, {Full, 1}, {Mixed, 2}, {Full, 1}, {Mixed, 2}, {Full, 1},
+    {Mixed, 1}, {Full, 1}, {Mixed, 3}, {Full, 1}, {Mixed, 3}, {Full, 7},
+    {Mixed, 1}, {Full, 632}, {Mixed, 1}, {Empty, 23}, {Mixed, 1},
+    {Empty, 1}, {Mixed, 2}, {Empty, 4}, {Mixed, 4}, {Full, 3}, {Mixed, 1},
+    {Full, 8}, {Mixed, 1}, {Full, 1}, {Empty, 2}, {Mixed, 2}, {Full, 1},
+    {Mixed, 1}, {Full, 7}, {Mixed, 1}, {Full, 3}, {Mixed, 1}, {Full, 36},
+    {Empty, 64}, {Mixed, 6}, {Full, 2}, {Mixed, 2}, {Full, 1}, {Mixed, 4},
+    {Full, 2}, {Mixed, 1}, {Full, 4}, {Mixed, 6}, {Full, 5}, {Mixed, 2},
+    {Full, 2}, {Mixed, 2}, {Full, 6}, {Mixed, 2}, {Full, 2}, {Mixed, 3},
+    {Full, 1}, {Mixed, 1}, {Full, 2}, {Mixed, 2}, {Full, 22}, {Mixed, 3},
+    {Full, 1}, {Mixed, 1}, {Full, 12}, {Mixed, 1}, {Full, 2}, {Mixed, 2},
+    {Full, 3}, {Mixed, 2}, {Full, 620}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
+    {Full, 34}, {Mixed, 1}, {Full, 615}, {Mixed, 2}, {Full, 165},
+    {Mixed, 3}, {Full, 2}, {Empty, 2}, {Mixed, 1}, {Full, 5}, {Empty, 2},
+    {Mixed, 1}, {Full, 27}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 1},
+    {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 1},
+    {Full, 16}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 3}, {Full, 42},
+    {Mixed, 2}, {Full, 62}, {Empty, 65}, {Mixed, 1}, {Empty, 2}, {Mixed, 5},
+    {Full, 2}, {Mixed, 1}, {Full, 7}, {Mixed, 1}, {Full, 4}, {Empty, 30},
+    {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Full, 1},
+    {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Full, 2},
+    {Mixed, 5}, {Full, 1}, {Mixed, 2}, {Full, 47}, {Mixed, 1}, {Full, 2047},
+    {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1},
+    {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Full, 2047},
+    {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1},
+    {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Full, 2047},
+    {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Empty, 128}, {Full, 1919},
+    {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1}};
+    const static UnicodeSet::bitquad_t  __l_Set_quads[] = {
+    0x07fffffe, 0x07fffffe, 0x04200400, 0xff7fffff, 0xff7fffff, 0xf9ffffff,
+    0x00030003, 0x0000401f, 0xbfcf0000, 0xffffff4f, 0xffbfffff, 0xfffffc07,
+    0x00001bff, 0xfffffff8, 0xebffffff, 0xff01de01, 0xfffffff3, 0xfffffffd,
+    0xefffffff, 0xffffdfe1, 0xf7f3fff3, 0xfffffff9, 0xefffffff, 0xfffdc679,
+    0xffdcffff, 0xfffffff9, 0xefffffff, 0xffffde41, 0x03fdfff3, 0xfffffffd,
+    0x6fffffff, 0xffbfdfe1, 0xfffffff3, 0xfffffffb, 0xffffdffe, 0xf807ffff,
+    0xfffffffe, 0x3fffffff, 0xff9fc23e, 0x80fffff3, 0xfffffffd, 0xefffffff,
+    0xffffcfff, 0xfffffff3, 0xfffffffc, 0xe7ffffff, 0xffffdfe1, 0xfffffff3,
+    0xffa3fbff, 0x780dffff, 0xffff807f, 0xe40dffff, 0xffffc0ff, 0xfcffffff,
+    0xc15fffff, 0x8001ffff, 0x01001f20, 0xe0000000, 0xffffffbf, 0x99021fff,
+    0x3cffffff, 0xffe1fffe, 0xdfffdf9b, 0x1fffffff, 0xfc00ffff, 0xfffffffe,
+    0xe7fffffe, 0xffe3ffff, 0xffe3ffff, 0xfff3ffff, 0xfff3ffff, 0xc04fffff,
+    0xd7f001bf, 0xfc00ffff, 0xffff8000, 0xffffff9f, 0xfffffdff, 0xf1fbfe78,
+    0xffffffce, 0x3fffffff, 0xf67fffff, 0x80bfffff, 0x6007e01a, 0x8000ffff,
+    0xfffffff0, 0xe82fffff, 0xfffffffb, 0xfff007ff, 0xfffffffc, 0xffffc4c3,
+    0xfffc5cbf, 0xff300fff, 0x0008ffff, 0xfcefde02, 0x04000000, 0x5fffffff,
+    0x1fff1ffc, 0x9fff1fff, 0x00004000, 0x800e0000, 0xffff8000, 0xfffe0000,
+    0x3e2ffc84, 0xf3ffbd50, 0x0000c3e0, 0x0000f1ff, 0xffc00000, 0x07ffffff,
+    0x00200000, 0xffffff80, 0xfffff800, 0xf0000000, 0x000003ff, 0x00001000,
+    0x00300000, 0x00c00000, 0x1c000000, 0xfff80200, 0xffff0fff, 0x01fc781f,
+    0x7fffffff, 0xfffffc00, 0x04000000, 0xfff00000, 0xffc00000, 0xf000ffff,
+    0x000000e0, 0x1f3ec3fe, 0xe1ffffff, 0xfffffffe, 0xf7ffffff, 0xfffffff0,
+    0x9fffffff, 0x0000ffff, 0x8fffffff, 0x0001ffff, 0xffff0fff, 0xf87fffff,
+    0x3fffffff, 0x7fffffff, 0x0000ffff, 0xffffff80, 0xffff1fff, 0x00007fff,
+    0x3fffffff, 0xfffcffff, 0xfffffffc, 0xfffffeff, 0xfffff7bb, 0xfcfff09f,
+    0xff0fffff, 0xffffffcf, 0xfffc0000, 0xffffc03f, 0xfffc007f, 0xfffffff8,
+    0xec37ffff, 0xffffffdf, 0xff9981ff, 0xffffeff7, 0xefffffff, 0x3e62ffff,
+    0xfffffffd, 0xffbfcfff, 0xffffdedf, 0x1fffffff, 0xfc000000, 0x00080000,
+    0x0000f080, 0x00000001, 0x07fffffe, 0x07fffffe, 0xffffffc0, 0x00008080,
+    0xfffffffd, 0xf000e000, 0xfffffffe, 0xdfffffff, 0xf0000000, 0xf83fffff,
+    0xfffffffd, 0x00ffffff, 0x0003ff80, 0x7fffffc0, 0xfffffffc, 0xf987ffff,
+    0xfffffff8, 0xffe0107f, 0xfff7ffff, 0xfffffffc, 0x803fffff, 0xffffe3ff,
+    0xbf2c7fff, 0x7fffffff, 0xfffff807, 0xfffffffc, 0xefffffff, 0xfffffffe,
+    0xffe0e03f, 0x00ffffff, 0xffffffa3, 0x7a07ffff, 0xfffffff2, 0x4fc3ffff,
+    0xcffffffe, 0x5807ffff, 0xfffffffe, 0xffffe000, 0xff40d7ff, 0x1fffffff,
+    0xfffff043, 0xfffff981, 0x8607ffff, 0xf181ff7f, 0xfc8003ff, 0xc080ffff,
+    0x0003ffff, 0xff920300, 0x4b81ffff, 0xffffff40, 0xffe0ffff, 0xff80ffff,
+    0xfff87fff, 0x9fffffff, 0xfffffff0, 0x0007fc7f, 0xfffff018, 0xffffc3ff,
+    0xffffffc0, 0xff800000, 0xf7ffffff, 0xffdfffff, 0xffff7fff, 0xfffffdff,
+    0x00003ff7, 0x07800000, 0xffdfe000, 0x07ffffef, 0xffff0001, 0x06000080,
+    0xfffff824, 0x0000f000, 0xfff00000, 0x00018000, 0x00010001, 0xffc00000,
+    0xffffe000, 0xfffff3ff, 0xffffffc0, 0xffe00000, 0xfe00e000, 0xfff00000,
+    0xffe00000, 0x0000f000, 0xfc00ff00, 0x0000ff00, 0xffffc000, 0x0000f000,
+    0x80000000, 0x0000e000, 0xfffff000, 0xff000000, 0x0000fffe, 0xffffff80,
+    0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff,
+    0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff,
+    0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff};
+    }
+
+    const static UnicodeSet l_Set{const_cast<UnicodeSet::run_t *>(__l_Set_runs), 298, 0, const_cast<UnicodeSet::bitquad_t *>(__l_Set_quads), 280, 0};
+
     /** Code Point Ranges for R
     [0590, 0590], [05be, 05be], [05c0, 05c0], [05c3, 05c3], [05c6, 05c6],
     [05c8, 05ff], [07c0, 07ea], [07f4, 07f5], [07fa, 0815], [081a, 081a],
@@ -236,94 +226,163 @@ namespace UCD {
     [10a3b, 10a3e], [10a40, 10ae4], [10ae7, 10b38], [10b40, 10e5f],
     [10e7f, 10fff], [1e800, 1e8cf], [1e8d7, 1e943], [1e94b, 1edff],
     [1ef00, 1efff]**/
-    const UnicodeSet r_Set 
-        {{{Empty, 44}, {Mixed, 3}, {Full, 1}, {Empty, 14}, {Full, 1},
-          {Mixed, 5}, {Full, 1}, {Empty, 187}, {Mixed, 1}, {Empty, 1751},
-          {Mixed, 3}, {Empty, 101}, {Full, 8}, {Mixed, 1}, {Full, 7},
-          {Mixed, 2}, {Full, 5}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
-          {Full, 25}, {Mixed, 1}, {Full, 12}, {Empty, 1728}, {Full, 6},
-          {Mixed, 1}, {Full, 3}, {Mixed, 1}, {Full, 37}, {Empty, 8},
-          {Full, 8}, {Empty, 30848}},
-         {0x00010000, 0x40000000, 0xffffff49, 0xfc3007ff, 0x043fffff,
-          0xffffc110, 0xf1ffffff, 0xffff0000, 0x00008000, 0xa0000000,
-          0xfffffdff, 0x0000ffff, 0x7fffffff, 0xffff0f91, 0x78ffffff,
-          0xffffff9f, 0x01ffffff, 0x80000000, 0xff80ffff, 0xfffff80f}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __r_Set_runs[] = {
+    {Empty, 44}, {Mixed, 3}, {Full, 1}, {Empty, 14}, {Full, 1}, {Mixed, 5},
+    {Full, 1}, {Empty, 187}, {Mixed, 1}, {Empty, 1751}, {Mixed, 3},
+    {Empty, 101}, {Full, 8}, {Mixed, 1}, {Full, 7}, {Mixed, 2}, {Full, 5},
+    {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 25}, {Mixed, 1}, {Full, 12},
+    {Empty, 1728}, {Full, 6}, {Mixed, 1}, {Full, 3}, {Mixed, 1}, {Full, 37},
+    {Empty, 8}, {Full, 8}, {Empty, 30848}};
+    const static UnicodeSet::bitquad_t  __r_Set_quads[] = {
+    0x00010000, 0x40000000, 0xffffff49, 0xfc3007ff, 0x043fffff, 0xffffc110,
+    0xf1ffffff, 0xffff0000, 0x00008000, 0xa0000000, 0xfffffdff, 0x0000ffff,
+    0x7fffffff, 0xffff0f91, 0x78ffffff, 0xffffff9f, 0x01ffffff, 0x80000000,
+    0xff80ffff, 0xfffff80f};
+    }
+
+    const static UnicodeSet r_Set{const_cast<UnicodeSet::run_t *>(__r_Set_runs), 32, 0, const_cast<UnicodeSet::bitquad_t *>(__r_Set_quads), 20, 0};
+
     /** Code Point Ranges for EN
     [0030, 0039], [00b2, 00b3], [00b9, 00b9], [06f0, 06f9], [2070, 2070],
     [2074, 2079], [2080, 2089], [2488, 249b], [ff10, ff19], [102e1, 102fb],
     [1d7ce, 1d7ff], [1f100, 1f10a]**/
-    const UnicodeSet en_Set 
-        {{{Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 49},
-          {Mixed, 1}, {Empty, 203}, {Mixed, 2}, {Empty, 31}, {Mixed, 1},
-          {Empty, 1747}, {Mixed, 1}, {Empty, 30}, {Mixed, 1}, {Empty, 1702},
-          {Mixed, 1}, {Full, 1}, {Empty, 200}, {Mixed, 1}, {Empty, 30839}},
-         {0x03ff0000, 0x020c0000, 0x03ff0000, 0x03f10000, 0x000003ff,
-          0x0fffff00, 0x03ff0000, 0x0ffffffe, 0xffffc000, 0x000007ff}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __en_Set_runs[] = {
+    {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 49}, {Mixed, 1},
+    {Empty, 203}, {Mixed, 2}, {Empty, 31}, {Mixed, 1}, {Empty, 1747},
+    {Mixed, 1}, {Empty, 30}, {Mixed, 1}, {Empty, 1702}, {Mixed, 1},
+    {Full, 1}, {Empty, 200}, {Mixed, 1}, {Empty, 30839}};
+    const static UnicodeSet::bitquad_t  __en_Set_quads[] = {
+    0x03ff0000, 0x020c0000, 0x03ff0000, 0x03f10000, 0x000003ff, 0x0fffff00,
+    0x03ff0000, 0x0ffffffe, 0xffffc000, 0x000007ff};
+    }
+
+    const static UnicodeSet en_Set{const_cast<UnicodeSet::run_t *>(__en_Set_runs), 20, 0, const_cast<UnicodeSet::bitquad_t *>(__en_Set_quads), 10, 0};
+
     /** Code Point Ranges for ES
     [002b, 002b], [002d, 002d], [207a, 207b], [208a, 208b], [2212, 2212],
     [fb29, fb29], [fe62, fe63], [ff0b, ff0b], [ff0d, ff0d]**/
-    const UnicodeSet es_Set 
-        {{{Empty, 1}, {Mixed, 1}, {Empty, 257}, {Mixed, 2}, {Empty, 11},
-          {Mixed, 1}, {Empty, 1736}, {Mixed, 1}, {Empty, 25}, {Mixed, 1},
-          {Empty, 4}, {Mixed, 1}, {Empty, 32775}},
-         {0x00002800, 0x0c000000, 0x00000c00, 0x00040000, 0x00000200,
-          0x0000000c, 0x00002800}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __es_Set_runs[] = {
+    {Empty, 1}, {Mixed, 1}, {Empty, 257}, {Mixed, 2}, {Empty, 11},
+    {Mixed, 1}, {Empty, 1736}, {Mixed, 1}, {Empty, 25}, {Mixed, 1},
+    {Empty, 4}, {Mixed, 1}, {Empty, 32775}};
+    const static UnicodeSet::bitquad_t  __es_Set_quads[] = {
+    0x00002800, 0x0c000000, 0x00000c00, 0x00040000, 0x00000200, 0x0000000c,
+    0x00002800};
+    }
+
+    const static UnicodeSet es_Set{const_cast<UnicodeSet::run_t *>(__es_Set_runs), 13, 0, const_cast<UnicodeSet::bitquad_t *>(__es_Set_quads), 7, 0};
+
     /** Code Point Ranges for ET
     [0023, 0025], [00a2, 00a5], [00b0, 00b1], [058f, 058f], [0609, 060a],
     [066a, 066a], [09f2, 09f3], [09fb, 09fb], [0af1, 0af1], [0bf9, 0bf9],
     [0e3f, 0e3f], [17db, 17db], [2030, 2034], [20a0, 20cf], [212e, 212e],
     [2213, 2213], [a838, a839], [fe5f, fe5f], [fe69, fe6a], [ff03, ff05],
     [ffe0, ffe1], [ffe5, ffe6]**/
-    const UnicodeSet et_Set 
-        {{{Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 38},
-          {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-          {Empty, 27}, {Mixed, 1}, {Empty, 7}, {Mixed, 1}, {Empty, 7},
-          {Mixed, 1}, {Empty, 17}, {Mixed, 1}, {Empty, 76}, {Mixed, 1},
-          {Empty, 66}, {Mixed, 1}, {Empty, 3}, {Full, 1}, {Mixed, 1},
-          {Empty, 2}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 1072},
-          {Mixed, 1}, {Empty, 688}, {Mixed, 2}, {Empty, 4}, {Mixed, 1},
-          {Empty, 6}, {Mixed, 1}, {Empty, 32768}},
-         {0x00000038, 0x0003003c, 0x00008000, 0x00000600, 0x00000400,
-          0x080c0000, 0x00020000, 0x02000000, 0x80000000, 0x08000000,
-          0x001f0000, 0x0000ffff, 0x00004000, 0x00080000, 0x03000000,
-          0x80000000, 0x00000600, 0x00000038, 0x00000063}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __et_Set_runs[] = {
+    {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 38}, {Mixed, 1},
+    {Empty, 3}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 27}, {Mixed, 1},
+    {Empty, 7}, {Mixed, 1}, {Empty, 7}, {Mixed, 1}, {Empty, 17}, {Mixed, 1},
+    {Empty, 76}, {Mixed, 1}, {Empty, 66}, {Mixed, 1}, {Empty, 3}, {Full, 1},
+    {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 6}, {Mixed, 1},
+    {Empty, 1072}, {Mixed, 1}, {Empty, 688}, {Mixed, 2}, {Empty, 4},
+    {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 32768}};
+    const static UnicodeSet::bitquad_t  __et_Set_quads[] = {
+    0x00000038, 0x0003003c, 0x00008000, 0x00000600, 0x00000400, 0x080c0000,
+    0x00020000, 0x02000000, 0x80000000, 0x08000000, 0x001f0000, 0x0000ffff,
+    0x00004000, 0x00080000, 0x03000000, 0x80000000, 0x00000600, 0x00000038,
+    0x00000063};
+    }
+
+    const static UnicodeSet et_Set{const_cast<UnicodeSet::run_t *>(__et_Set_runs), 38, 0, const_cast<UnicodeSet::bitquad_t *>(__et_Set_quads), 19, 0};
+
     /** Code Point Ranges for AN
     [0600, 0605], [0660, 0669], [066b, 066c], [06dd, 06dd], [08e2, 08e2],
     [10e60, 10e7e]**/
-    const UnicodeSet an_Set 
-        {{{Empty, 48}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2},
-          {Mixed, 1}, {Empty, 16}, {Mixed, 1}, {Empty, 2091}, {Mixed, 1},
-          {Empty, 32652}},
-         {0x0000003f, 0x00001bff, 0x20000000, 0x00000004, 0x7fffffff}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __an_Set_runs[] = {
+    {Empty, 48}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
+    {Empty, 16}, {Mixed, 1}, {Empty, 2091}, {Mixed, 1}, {Empty, 32652}};
+    const static UnicodeSet::bitquad_t  __an_Set_quads[] = {
+    0x0000003f, 0x00001bff, 0x20000000, 0x00000004, 0x7fffffff};
+    }
+
+    const static UnicodeSet an_Set{const_cast<UnicodeSet::run_t *>(__an_Set_runs), 11, 0, const_cast<UnicodeSet::bitquad_t *>(__an_Set_quads), 5, 0};
+
     /** Code Point Ranges for CS
     [002c, 002c], [002e, 002f], [003a, 003a], [00a0, 00a0], [060c, 060c],
     [202f, 202f], [2044, 2044], [fe50, fe50], [fe52, fe52], [fe55, fe55],
     [ff0c, ff0c], [ff0e, ff0f], [ff1a, ff1a]**/
-    const UnicodeSet cs_Set 
-        {{{Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 42},
-          {Mixed, 1}, {Empty, 208}, {Mixed, 2}, {Empty, 1775}, {Mixed, 1},
-          {Empty, 5}, {Mixed, 1}, {Empty, 32775}},
-         {0x0400d000, 0x00000001, 0x00001000, 0x00008000, 0x00000010,
-          0x00250000, 0x0400d000}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __cs_Set_runs[] = {
+    {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 42}, {Mixed, 1},
+    {Empty, 208}, {Mixed, 2}, {Empty, 1775}, {Mixed, 1}, {Empty, 5},
+    {Mixed, 1}, {Empty, 32775}};
+    const static UnicodeSet::bitquad_t  __cs_Set_quads[] = {
+    0x0400d000, 0x00000001, 0x00001000, 0x00008000, 0x00000010, 0x00250000,
+    0x0400d000};
+    }
+
+    const static UnicodeSet cs_Set{const_cast<UnicodeSet::run_t *>(__cs_Set_runs), 13, 0, const_cast<UnicodeSet::bitquad_t *>(__cs_Set_quads), 7, 0};
+
     /** Code Point Ranges for B
     [000a, 000a], [000d, 000d], [001c, 001e], [0085, 0085], [2029, 2029]**/
-    const UnicodeSet b_Set 
-        {{{Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 252}, {Mixed, 1},
-          {Empty, 34558}},
-         {0x70002400, 0x00000020, 0x00000200}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __b_Set_runs[] = {
+    {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 252}, {Mixed, 1},
+    {Empty, 34558}};
+    const static UnicodeSet::bitquad_t  __b_Set_quads[] = {
+    0x70002400, 0x00000020, 0x00000200};
+    }
+
+    const static UnicodeSet b_Set{const_cast<UnicodeSet::run_t *>(__b_Set_runs), 6, 0, const_cast<UnicodeSet::bitquad_t *>(__b_Set_quads), 3, 0};
+
     /** Code Point Ranges for S
     [0009, 0009], [000b, 000b], [001f, 001f]**/
-    const UnicodeSet s_Set 
-        {{{Mixed, 1}, {Empty, 34815}},
-         {0x80000a00}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __s_Set_runs[] = {
+    {Mixed, 1}, {Empty, 34815}};
+    const static UnicodeSet::bitquad_t  __s_Set_quads[] = {
+    0x80000a00};
+    }
+
+    const static UnicodeSet s_Set{const_cast<UnicodeSet::run_t *>(__s_Set_runs), 2, 0, const_cast<UnicodeSet::bitquad_t *>(__s_Set_quads), 1, 0};
+
     /** Code Point Ranges for WS
     [000c, 000c], [0020, 0020], [1680, 1680], [2000, 200a], [2028, 2028],
     [205f, 205f], [3000, 3000]**/
-    const UnicodeSet ws_Set 
-        {{{Mixed, 2}, {Empty, 178}, {Mixed, 1}, {Empty, 75}, {Mixed, 3},
-          {Empty, 125}, {Mixed, 1}, {Empty, 34431}},
-         {0x00001000, 0x00000001, 0x00000001, 0x000007ff, 0x00000100,
-          0x80000000, 0x00000001}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __ws_Set_runs[] = {
+    {Mixed, 2}, {Empty, 178}, {Mixed, 1}, {Empty, 75}, {Mixed, 3},
+    {Empty, 125}, {Mixed, 1}, {Empty, 34431}};
+    const static UnicodeSet::bitquad_t  __ws_Set_quads[] = {
+    0x00001000, 0x00000001, 0x00000001, 0x000007ff, 0x00000100, 0x80000000,
+    0x00000001};
+    }
+
+    const static UnicodeSet ws_Set{const_cast<UnicodeSet::run_t *>(__ws_Set_runs), 8, 0, const_cast<UnicodeSet::bitquad_t *>(__ws_Set_quads), 7, 0};
+
     /** Code Point Ranges for ON
     [0021, 0022], [0026, 002a], [003b, 0040], [005b, 0060], [007b, 007e],
     [00a1, 00a1], [00a6, 00a9], [00ab, 00ac], [00ae, 00af], [00b4, 00b4],
@@ -363,69 +422,67 @@ namespace UCD {
     [1f850, 1f859], [1f860, 1f887], [1f890, 1f8ad], [1f900, 1f90b],
     [1f910, 1f93e], [1f940, 1f94c], [1f950, 1f96b], [1f980, 1f997],
     [1f9c0, 1f9c0], [1f9d0, 1f9e6]**/
-    const UnicodeSet on_Set 
-        {{{Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 3}, {Empty, 13},
-          {Mixed, 3}, {Empty, 3}, {Mixed, 2}, {Empty, 2}, {Mixed, 1},
-          {Empty, 12}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 5},
-          {Mixed, 2}, {Empty, 7}, {Mixed, 1}, {Empty, 31}, {Mixed, 1},
-          {Empty, 3}, {Mixed, 1}, {Empty, 21}, {Mixed, 1}, {Empty, 34},
-          {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 19}, {Mixed, 1},
-          {Empty, 10}, {Mixed, 2}, {Empty, 9}, {Mixed, 1}, {Empty, 3},
-          {Mixed, 1}, {Full, 1}, {Empty, 45}, {Mixed, 8}, {Empty, 3},
-          {Mixed, 3}, {Empty, 1}, {Mixed, 1}, {Full, 3}, {Mixed, 1},
-          {Full, 8}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Full, 4},
-          {Mixed, 2}, {Full, 1}, {Mixed, 1}, {Empty, 2}, {Mixed, 1},
-          {Full, 13}, {Mixed, 1}, {Full, 10}, {Empty, 8}, {Full, 19},
-          {Mixed, 5}, {Empty, 7}, {Mixed, 1}, {Empty, 8}, {Full, 2},
-          {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Full, 2}, {Mixed, 1},
-          {Full, 6}, {Mixed, 4}, {Empty, 2}, {Mixed, 2}, {Empty, 1},
-          {Mixed, 1}, {Empty, 6}, {Full, 1}, {Mixed, 2}, {Empty, 1},
-          {Mixed, 2}, {Empty, 1}, {Mixed, 2}, {Empty, 4}, {Mixed, 1},
-          {Empty, 2}, {Mixed, 2}, {Empty, 206}, {Full, 2}, {Empty, 692},
-          {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 9}, {Mixed, 1},
-          {Empty, 2}, {Mixed, 1}, {Empty, 4}, {Full, 1}, {Mixed, 1},
-          {Empty, 2}, {Mixed, 1}, {Empty, 4}, {Mixed, 1}, {Empty, 1},
-          {Mixed, 1}, {Empty, 677}, {Mixed, 1}, {Empty, 5}, {Mixed, 5},
-          {Empty, 4}, {Mixed, 4}, {Empty, 3}, {Mixed, 1}, {Empty, 8},
-          {Mixed, 1}, {Empty, 1}, {Full, 2}, {Mixed, 2}, {Empty, 58},
-          {Mixed, 1}, {Empty, 16}, {Mixed, 1}, {Empty, 40}, {Mixed, 2},
-          {Empty, 47}, {Mixed, 1}, {Empty, 1500}, {Full, 2}, {Mixed, 1},
-          {Empty, 5}, {Full, 2}, {Mixed, 1}, {Empty, 27}, {Mixed, 1},
-          {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 1},
-          {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 184}, {Mixed, 1},
-          {Empty, 8}, {Full, 1}, {Mixed, 1}, {Full, 2}, {Mixed, 5},
-          {Empty, 2}, {Mixed, 1}, {Empty, 7}, {Mixed, 1}, {Empty, 4},
-          {Full, 30}, {Mixed, 2}, {Full, 3}, {Mixed, 1}, {Full, 2},
-          {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 1},
-          {Full, 1}, {Mixed, 2}, {Empty, 2}, {Mixed, 5}, {Empty, 1},
-          {Mixed, 2}, {Empty, 30768}},
-         {0xf80007c6, 0xf8000001, 0x78000001, 0xf9d0dbc2, 0x00800000,
-          0x00800000, 0x06000000, 0xfffcfffc, 0xffffbfe0, 0x40300000,
-          0x000000b0, 0x00400000, 0x00006400, 0x0000c0c0, 0x40000000,
-          0x00000200, 0x03c00000, 0x05f80000, 0x7f000000, 0x3c000000,
-          0x03ff0000, 0x00000001, 0x18000000, 0x03ff0000, 0x000007ff,
-          0x00000031, 0xc0000000, 0xa0000000, 0xe000e003, 0x6000e000,
-          0xffff0000, 0xffe000ff, 0x7fffffef, 0x70000000, 0x00007000,
-          0xc1d0037b, 0x0c0002af, 0xffff3c1f, 0xffff0e00, 0xfff3ffff,
-          0x003fffff, 0xf8000000, 0xffdfffff, 0x0000007f, 0x000007ff,
-          0x000000ff, 0xfffffc00, 0xffffefff, 0xffcfffff, 0xff3fffff,
-          0xe3ffffff, 0x0007fdff, 0x0000f000, 0xfe0007e0, 0x000003ff,
-          0xfbffffff, 0x000fffff, 0x003fffff, 0x0fff0000, 0xffffff1e,
-          0xe0c10001, 0x18000000, 0x00000001, 0x08000000, 0x0000000f,
-          0x60000000, 0xffff0000, 0x70000000, 0xfffe0000, 0x0000f000,
-          0x07800000, 0xc0000000, 0x80000000, 0xffff0000, 0x0000007f,
-          0x0000e000, 0xc0080000, 0x00000003, 0x00000100, 0x00000f00,
-          0x00f00000, 0xc0000000, 0x20000000, 0x03ff0000, 0xffff0000,
-          0x7fd2ffff, 0x00000973, 0xf80007c6, 0xf8000001, 0xf8000001,
-          0x0000003f, 0x3e007f1c, 0x00000002, 0x0fff1fff, 0x00000001,
-          0x80000000, 0xfe000000, 0xfffc0000, 0x0000003f, 0x00001fff,
-          0x00000023, 0x007fffff, 0x08000000, 0x00200000, 0x00008000,
-          0x00000200, 0x00000008, 0x00030000, 0xffff0fff, 0x000fffff,
-          0xfffe7fff, 0xfffefffe, 0x003fffff, 0x00001800, 0x00000c00,
-          0x0000003f, 0x001fffff, 0x01ff1fff, 0x000fffff, 0x001fffff,
-          0xffff0fff, 0x03ff00ff, 0xffff00ff, 0x00003fff, 0xffff0fff,
-          0x7fffffff, 0xffff1fff, 0x00000fff, 0x00ffffff, 0xffff0001,
-          0x0000007f}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __on_Set_runs[] = {
+    {Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 3}, {Empty, 13}, {Mixed, 3},
+    {Empty, 3}, {Mixed, 2}, {Empty, 2}, {Mixed, 1}, {Empty, 12}, {Mixed, 1},
+    {Empty, 3}, {Mixed, 1}, {Empty, 5}, {Mixed, 2}, {Empty, 7}, {Mixed, 1},
+    {Empty, 31}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 21},
+    {Mixed, 1}, {Empty, 34}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
+    {Empty, 19}, {Mixed, 1}, {Empty, 10}, {Mixed, 2}, {Empty, 9},
+    {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Full, 1}, {Empty, 45}, {Mixed, 8},
+    {Empty, 3}, {Mixed, 3}, {Empty, 1}, {Mixed, 1}, {Full, 3}, {Mixed, 1},
+    {Full, 8}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Full, 4}, {Mixed, 2},
+    {Full, 1}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Full, 13}, {Mixed, 1},
+    {Full, 10}, {Empty, 8}, {Full, 19}, {Mixed, 5}, {Empty, 7}, {Mixed, 1},
+    {Empty, 8}, {Full, 2}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Full, 2},
+    {Mixed, 1}, {Full, 6}, {Mixed, 4}, {Empty, 2}, {Mixed, 2}, {Empty, 1},
+    {Mixed, 1}, {Empty, 6}, {Full, 1}, {Mixed, 2}, {Empty, 1}, {Mixed, 2},
+    {Empty, 1}, {Mixed, 2}, {Empty, 4}, {Mixed, 1}, {Empty, 2}, {Mixed, 2},
+    {Empty, 206}, {Full, 2}, {Empty, 692}, {Mixed, 1}, {Full, 1},
+    {Mixed, 1}, {Empty, 9}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 4},
+    {Full, 1}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 4}, {Mixed, 1},
+    {Empty, 1}, {Mixed, 1}, {Empty, 677}, {Mixed, 1}, {Empty, 5},
+    {Mixed, 5}, {Empty, 4}, {Mixed, 4}, {Empty, 3}, {Mixed, 1}, {Empty, 8},
+    {Mixed, 1}, {Empty, 1}, {Full, 2}, {Mixed, 2}, {Empty, 58}, {Mixed, 1},
+    {Empty, 16}, {Mixed, 1}, {Empty, 40}, {Mixed, 2}, {Empty, 47},
+    {Mixed, 1}, {Empty, 1500}, {Full, 2}, {Mixed, 1}, {Empty, 5}, {Full, 2},
+    {Mixed, 1}, {Empty, 27}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 1},
+    {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 1},
+    {Empty, 184}, {Mixed, 1}, {Empty, 8}, {Full, 1}, {Mixed, 1}, {Full, 2},
+    {Mixed, 5}, {Empty, 2}, {Mixed, 1}, {Empty, 7}, {Mixed, 1}, {Empty, 4},
+    {Full, 30}, {Mixed, 2}, {Full, 3}, {Mixed, 1}, {Full, 2}, {Mixed, 1},
+    {Empty, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 2},
+    {Empty, 2}, {Mixed, 5}, {Empty, 1}, {Mixed, 2}, {Empty, 30768}};
+    const static UnicodeSet::bitquad_t  __on_Set_quads[] = {
+    0xf80007c6, 0xf8000001, 0x78000001, 0xf9d0dbc2, 0x00800000, 0x00800000,
+    0x06000000, 0xfffcfffc, 0xffffbfe0, 0x40300000, 0x000000b0, 0x00400000,
+    0x00006400, 0x0000c0c0, 0x40000000, 0x00000200, 0x03c00000, 0x05f80000,
+    0x7f000000, 0x3c000000, 0x03ff0000, 0x00000001, 0x18000000, 0x03ff0000,
+    0x000007ff, 0x00000031, 0xc0000000, 0xa0000000, 0xe000e003, 0x6000e000,
+    0xffff0000, 0xffe000ff, 0x7fffffef, 0x70000000, 0x00007000, 0xc1d0037b,
+    0x0c0002af, 0xffff3c1f, 0xffff0e00, 0xfff3ffff, 0x003fffff, 0xf8000000,
+    0xffdfffff, 0x0000007f, 0x000007ff, 0x000000ff, 0xfffffc00, 0xffffefff,
+    0xffcfffff, 0xff3fffff, 0xe3ffffff, 0x0007fdff, 0x0000f000, 0xfe0007e0,
+    0x000003ff, 0xfbffffff, 0x000fffff, 0x003fffff, 0x0fff0000, 0xffffff1e,
+    0xe0c10001, 0x18000000, 0x00000001, 0x08000000, 0x0000000f, 0x60000000,
+    0xffff0000, 0x70000000, 0xfffe0000, 0x0000f000, 0x07800000, 0xc0000000,
+    0x80000000, 0xffff0000, 0x0000007f, 0x0000e000, 0xc0080000, 0x00000003,
+    0x00000100, 0x00000f00, 0x00f00000, 0xc0000000, 0x20000000, 0x03ff0000,
+    0xffff0000, 0x7fd2ffff, 0x00000973, 0xf80007c6, 0xf8000001, 0xf8000001,
+    0x0000003f, 0x3e007f1c, 0x00000002, 0x0fff1fff, 0x00000001, 0x80000000,
+    0xfe000000, 0xfffc0000, 0x0000003f, 0x00001fff, 0x00000023, 0x007fffff,
+    0x08000000, 0x00200000, 0x00008000, 0x00000200, 0x00000008, 0x00030000,
+    0xffff0fff, 0x000fffff, 0xfffe7fff, 0xfffefffe, 0x003fffff, 0x00001800,
+    0x00000c00, 0x0000003f, 0x001fffff, 0x01ff1fff, 0x000fffff, 0x001fffff,
+    0xffff0fff, 0x03ff00ff, 0xffff00ff, 0x00003fff, 0xffff0fff, 0x7fffffff,
+    0xffff1fff, 0x00000fff, 0x00ffffff, 0xffff0001, 0x0000007f};
+    }
+
+    const static UnicodeSet on_Set{const_cast<UnicodeSet::run_t *>(__on_Set_runs), 172, 0, const_cast<UnicodeSet::bitquad_t *>(__on_Set_quads), 131, 0};
+
     /** Code Point Ranges for BN
     [0000, 0008], [000e, 001b], [007f, 0084], [0086, 009f], [00ad, 00ad],
     [180e, 180e], [200b, 200d], [2060, 2065], [206a, 206f], [fdd0, fdef],
@@ -435,25 +492,31 @@ namespace UCD {
     [8fffe, 8ffff], [9fffe, 9ffff], [afffe, affff], [bfffe, bffff],
     [cfffe, cffff], [dfffe, e00ff], [e01f0, e0fff], [efffe, effff],
     [ffffe, fffff], [10fffe, 10ffff]**/
-    const UnicodeSet bn_Set 
-        {{{Mixed, 1}, {Empty, 2}, {Mixed, 3}, {Empty, 186}, {Mixed, 1},
-          {Empty, 63}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 1770},
-          {Mixed, 2}, {Empty, 7}, {Mixed, 1}, {Empty, 7}, {Mixed, 1},
-          {Empty, 1509}, {Mixed, 1}, {Empty, 165}, {Mixed, 1}, {Empty, 371},
-          {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
-          {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
-          {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
-          {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
-          {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
-          {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Full, 8},
-          {Empty, 7}, {Mixed, 1}, {Full, 112}, {Empty, 1919}, {Mixed, 1},
-          {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}},
-         {0x0fffc1ff, 0x80000000, 0xffffffdf, 0x00002000, 0x00004000,
-          0x00003800, 0x0000fc3f, 0xffff0000, 0x0000ffff, 0x80000000,
-          0xc1ff0000, 0x0000000f, 0x07f80000, 0xc0000000, 0xc0000000,
-          0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000,
-          0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000,
-          0xc0000000, 0xffff0000, 0xc0000000, 0xc0000000, 0xc0000000}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __bn_Set_runs[] = {
+    {Mixed, 1}, {Empty, 2}, {Mixed, 3}, {Empty, 186}, {Mixed, 1},
+    {Empty, 63}, {Mixed, 1}, {Empty, 2}, {Mixed, 1}, {Empty, 1770},
+    {Mixed, 2}, {Empty, 7}, {Mixed, 1}, {Empty, 7}, {Mixed, 1},
+    {Empty, 1509}, {Mixed, 1}, {Empty, 165}, {Mixed, 1}, {Empty, 371},
+    {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+    {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047},
+    {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+    {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047},
+    {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+    {Full, 8}, {Empty, 7}, {Mixed, 1}, {Full, 112}, {Empty, 1919},
+    {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}};
+    const static UnicodeSet::bitquad_t  __bn_Set_quads[] = {
+    0x0fffc1ff, 0x80000000, 0xffffffdf, 0x00002000, 0x00004000, 0x00003800,
+    0x0000fc3f, 0xffff0000, 0x0000ffff, 0x80000000, 0xc1ff0000, 0x0000000f,
+    0x07f80000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000,
+    0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000,
+    0xc0000000, 0xc0000000, 0xffff0000, 0xc0000000, 0xc0000000, 0xc0000000};
+    }
+
+    const static UnicodeSet bn_Set{const_cast<UnicodeSet::run_t *>(__bn_Set_runs), 55, 0, const_cast<UnicodeSet::bitquad_t *>(__bn_Set_quads), 30, 0};
+
     /** Code Point Ranges for NSM
     [0300, 036f], [0483, 0489], [0591, 05bd], [05bf, 05bf], [05c1, 05c2],
     [05c4, 05c5], [05c7, 05c7], [0610, 061a], [064b, 065f], [0670, 0670],
@@ -519,147 +582,224 @@ namespace UCD {
     [1da75, 1da75], [1da84, 1da84], [1da9b, 1da9f], [1daa1, 1daaf],
     [1e000, 1e006], [1e008, 1e018], [1e01b, 1e021], [1e023, 1e024],
     [1e026, 1e02a], [1e8d0, 1e8d6], [1e944, 1e94a], [e0100, e01ef]**/
-    const UnicodeSet nsm_Set 
-        {{{Empty, 24}, {Full, 3}, {Mixed, 1}, {Empty, 8}, {Mixed, 1},
-          {Empty, 7}, {Mixed, 3}, {Empty, 1}, {Mixed, 1}, {Empty, 1},
-          {Mixed, 2}, {Empty, 2}, {Mixed, 5}, {Empty, 2}, {Mixed, 1},
-          {Empty, 1}, {Mixed, 4}, {Empty, 3}, {Mixed, 23}, {Empty, 1},
-          {Mixed, 1}, {Empty, 1}, {Mixed, 12}, {Empty, 2}, {Mixed, 1},
-          {Empty, 2}, {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 1},
-          {Mixed, 2}, {Empty, 1}, {Mixed, 4}, {Empty, 2}, {Mixed, 4},
-          {Empty, 21}, {Mixed, 1}, {Empty, 29}, {Mixed, 4}, {Empty, 1},
-          {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 2},
-          {Empty, 3}, {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 1},
-          {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 2}, {Mixed, 6},
-          {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 4},
-          {Mixed, 2}, {Empty, 6}, {Full, 1}, {Mixed, 1}, {Empty, 22},
-          {Mixed, 2}, {Empty, 95}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-          {Empty, 3}, {Full, 1}, {Empty, 17}, {Mixed, 1}, {Empty, 2},
-          {Mixed, 1}, {Empty, 942}, {Mixed, 2}, {Empty, 2}, {Mixed, 1},
-          {Empty, 8}, {Mixed, 2}, {Empty, 4}, {Mixed, 2}, {Empty, 1},
-          {Mixed, 2}, {Empty, 1}, {Mixed, 2}, {Empty, 1}, {Mixed, 1},
-          {Empty, 1}, {Mixed, 3}, {Empty, 1}, {Mixed, 3}, {Empty, 7},
-          {Mixed, 1}, {Empty, 632}, {Mixed, 1}, {Empty, 23}, {Mixed, 2},
-          {Empty, 29}, {Mixed, 1}, {Empty, 7}, {Mixed, 1}, {Empty, 3},
-          {Mixed, 1}, {Empty, 52}, {Mixed, 2}, {Empty, 5}, {Mixed, 1},
-          {Empty, 40}, {Mixed, 6}, {Empty, 2}, {Mixed, 2}, {Empty, 1},
-          {Mixed, 4}, {Empty, 2}, {Mixed, 1}, {Empty, 4}, {Mixed, 6},
-          {Empty, 5}, {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 6},
-          {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 2}, {Mixed, 1},
-          {Empty, 2}, {Mixed, 2}, {Empty, 22}, {Mixed, 3}, {Empty, 1},
-          {Mixed, 1}, {Empty, 12}, {Mixed, 1}, {Empty, 2}, {Mixed, 2},
-          {Empty, 3}, {Mixed, 2}, {Empty, 620}, {Mixed, 1}, {Empty, 1},
-          {Mixed, 1}, {Empty, 34}, {Mixed, 1}, {Empty, 615}, {Mixed, 1},
-          {Empty, 166}, {Mixed, 3}, {Empty, 4}, {Mixed, 1}, {Empty, 61},
-          {Full, 1}, {Mixed, 1}, {Full, 1}, {Mixed, 3}, {Empty, 42},
-          {Mixed, 2}, {Empty, 68}, {Mixed, 1}, {Empty, 3}, {Mixed, 1},
-          {Empty, 24765}, {Full, 7}, {Mixed, 1}, {Empty, 6128}},
-         {0x0000ffff, 0x000003f8, 0xfffe0000, 0xbfffffff, 0x000000b6,
-          0x07ff0000, 0xfffff800, 0x00010000, 0x9fc00000, 0x00003d9f,
-          0x00020000, 0xffff0000, 0x000007ff, 0x0001ffc0, 0x000ff800,
-          0xfbc00000, 0x00003eef, 0x0e000000, 0xfff00000, 0xfffffffb,
-          0x00000007, 0x14000000, 0x00fe21fe, 0x0000000c, 0x00000002,
-          0x10000000, 0x0000201e, 0x0000000c, 0x00000006, 0x10000000,
-          0x00023986, 0x00230000, 0x00000006, 0x10000000, 0x000021be,
-          0xfc00000c, 0x00000002, 0x90000000, 0x0040201e, 0x0000000c,
-          0x00000004, 0x00002001, 0x00000001, 0xc0000000, 0x00603dc1,
-          0x0000000c, 0x00000002, 0x10000000, 0x00003000, 0x0000000c,
-          0x00000003, 0x18000000, 0x0000201e, 0x0000000c, 0x005c0400,
-          0x07f20000, 0x00007f80, 0x1bf20000, 0x00003f00, 0x03000000,
-          0x02a00000, 0x7ffe0000, 0xfeffe0df, 0x1fffffff, 0x00000040,
-          0x66fde000, 0xc3000000, 0x001e0001, 0x20002064, 0xe0000000,
-          0x001c0000, 0x001c0000, 0x000c0000, 0x000c0000, 0x3fb00000,
-          0x200ffe40, 0x00003800, 0x00000060, 0x00000200, 0x0e040187,
-          0x09800000, 0x7f400000, 0x9ff81fe5, 0x7fff0000, 0x0000000f,
-          0x17d00000, 0x00000004, 0x000ff800, 0x00000003, 0x00003b3c,
-          0x0003a340, 0x00cff000, 0xfff70000, 0x031021fd, 0xfbffffff,
-          0xffff0000, 0x0001ffff, 0x00038000, 0x80000000, 0x00003c00,
-          0x06000000, 0x3ff78000, 0xc0000000, 0x00030000, 0x00000844,
-          0x00000060, 0x00000030, 0x0003ffff, 0x00003fc0, 0x0003ff80,
-          0x00000007, 0x13c80000, 0x00000020, 0x00667e00, 0x00001008,
-          0x10000000, 0xc19d0000, 0x00000002, 0x00403000, 0x00002120,
-          0x40000000, 0x0000ffff, 0x0000ffff, 0x20000000, 0x00000001,
-          0x07c00000, 0x0000f06e, 0x87000000, 0x00000060, 0x00000002,
-          0xff000000, 0x0000007f, 0x80000000, 0x00000003, 0x06780000,
-          0x00000007, 0x001fef80, 0x00080000, 0x00000003, 0x7fc00000,
-          0x00001c00, 0x40d38000, 0x80000000, 0x000007f8, 0x00000003,
-          0x10000000, 0x00000001, 0x001f1fc0, 0xff000000, 0x0000005c,
-          0x85f80000, 0x0000000d, 0xb03c0000, 0x30000001, 0xa7f80000,
-          0x00000001, 0x00bf2800, 0xe0000000, 0x00000fbc, 0x0000067e,
-          0x79f80000, 0x0e7e0080, 0x037ffc00, 0x3f7f0000, 0xfffc0000,
-          0x006dfcff, 0xb47e0000, 0x000000bf, 0x001f0000, 0x007f0000,
-          0x00078000, 0x60000000, 0xf8000380, 0x00000fe7, 0x00003c00,
-          0x0000001c, 0xf87fffff, 0x00201fff, 0xf8000010, 0x0000fffe,
-          0xf9ffff7f, 0x000007db, 0x007f0000, 0x000007f0, 0x0000ffff}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __nsm_Set_runs[] = {
+    {Empty, 24}, {Full, 3}, {Mixed, 1}, {Empty, 8}, {Mixed, 1}, {Empty, 7},
+    {Mixed, 3}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 2},
+    {Mixed, 5}, {Empty, 2}, {Mixed, 1}, {Empty, 1}, {Mixed, 4}, {Empty, 3},
+    {Mixed, 23}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 12},
+    {Empty, 2}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 2}, {Mixed, 2},
+    {Empty, 1}, {Mixed, 2}, {Empty, 1}, {Mixed, 4}, {Empty, 2}, {Mixed, 4},
+    {Empty, 21}, {Mixed, 1}, {Empty, 29}, {Mixed, 4}, {Empty, 1},
+    {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 3}, {Mixed, 2}, {Empty, 3},
+    {Mixed, 1}, {Empty, 6}, {Mixed, 1}, {Empty, 1}, {Mixed, 2}, {Empty, 1},
+    {Mixed, 1}, {Empty, 2}, {Mixed, 6}, {Empty, 1}, {Mixed, 1}, {Empty, 1},
+    {Mixed, 1}, {Empty, 4}, {Mixed, 2}, {Empty, 6}, {Full, 1}, {Mixed, 1},
+    {Empty, 22}, {Mixed, 2}, {Empty, 95}, {Mixed, 1}, {Empty, 3},
+    {Mixed, 1}, {Empty, 3}, {Full, 1}, {Empty, 17}, {Mixed, 1}, {Empty, 2},
+    {Mixed, 1}, {Empty, 942}, {Mixed, 2}, {Empty, 2}, {Mixed, 1},
+    {Empty, 8}, {Mixed, 2}, {Empty, 4}, {Mixed, 2}, {Empty, 1}, {Mixed, 2},
+    {Empty, 1}, {Mixed, 2}, {Empty, 1}, {Mixed, 1}, {Empty, 1}, {Mixed, 3},
+    {Empty, 1}, {Mixed, 3}, {Empty, 7}, {Mixed, 1}, {Empty, 632},
+    {Mixed, 1}, {Empty, 23}, {Mixed, 2}, {Empty, 29}, {Mixed, 1},
+    {Empty, 7}, {Mixed, 1}, {Empty, 3}, {Mixed, 1}, {Empty, 52}, {Mixed, 2},
+    {Empty, 5}, {Mixed, 1}, {Empty, 40}, {Mixed, 6}, {Empty, 2}, {Mixed, 2},
+    {Empty, 1}, {Mixed, 4}, {Empty, 2}, {Mixed, 1}, {Empty, 4}, {Mixed, 6},
+    {Empty, 5}, {Mixed, 2}, {Empty, 2}, {Mixed, 2}, {Empty, 6}, {Mixed, 2},
+    {Empty, 2}, {Mixed, 2}, {Empty, 2}, {Mixed, 1}, {Empty, 2}, {Mixed, 2},
+    {Empty, 22}, {Mixed, 3}, {Empty, 1}, {Mixed, 1}, {Empty, 12},
+    {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 3}, {Mixed, 2},
+    {Empty, 620}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Empty, 34},
+    {Mixed, 1}, {Empty, 615}, {Mixed, 1}, {Empty, 166}, {Mixed, 3},
+    {Empty, 4}, {Mixed, 1}, {Empty, 61}, {Full, 1}, {Mixed, 1}, {Full, 1},
+    {Mixed, 3}, {Empty, 42}, {Mixed, 2}, {Empty, 68}, {Mixed, 1},
+    {Empty, 3}, {Mixed, 1}, {Empty, 24765}, {Full, 7}, {Mixed, 1},
+    {Empty, 6128}};
+    const static UnicodeSet::bitquad_t  __nsm_Set_quads[] = {
+    0x0000ffff, 0x000003f8, 0xfffe0000, 0xbfffffff, 0x000000b6, 0x07ff0000,
+    0xfffff800, 0x00010000, 0x9fc00000, 0x00003d9f, 0x00020000, 0xffff0000,
+    0x000007ff, 0x0001ffc0, 0x000ff800, 0xfbc00000, 0x00003eef, 0x0e000000,
+    0xfff00000, 0xfffffffb, 0x00000007, 0x14000000, 0x00fe21fe, 0x0000000c,
+    0x00000002, 0x10000000, 0x0000201e, 0x0000000c, 0x00000006, 0x10000000,
+    0x00023986, 0x00230000, 0x00000006, 0x10000000, 0x000021be, 0xfc00000c,
+    0x00000002, 0x90000000, 0x0040201e, 0x0000000c, 0x00000004, 0x00002001,
+    0x00000001, 0xc0000000, 0x00603dc1, 0x0000000c, 0x00000002, 0x10000000,
+    0x00003000, 0x0000000c, 0x00000003, 0x18000000, 0x0000201e, 0x0000000c,
+    0x005c0400, 0x07f20000, 0x00007f80, 0x1bf20000, 0x00003f00, 0x03000000,
+    0x02a00000, 0x7ffe0000, 0xfeffe0df, 0x1fffffff, 0x00000040, 0x66fde000,
+    0xc3000000, 0x001e0001, 0x20002064, 0xe0000000, 0x001c0000, 0x001c0000,
+    0x000c0000, 0x000c0000, 0x3fb00000, 0x200ffe40, 0x00003800, 0x00000060,
+    0x00000200, 0x0e040187, 0x09800000, 0x7f400000, 0x9ff81fe5, 0x7fff0000,
+    0x0000000f, 0x17d00000, 0x00000004, 0x000ff800, 0x00000003, 0x00003b3c,
+    0x0003a340, 0x00cff000, 0xfff70000, 0x031021fd, 0xfbffffff, 0xffff0000,
+    0x0001ffff, 0x00038000, 0x80000000, 0x00003c00, 0x06000000, 0x3ff78000,
+    0xc0000000, 0x00030000, 0x00000844, 0x00000060, 0x00000030, 0x0003ffff,
+    0x00003fc0, 0x0003ff80, 0x00000007, 0x13c80000, 0x00000020, 0x00667e00,
+    0x00001008, 0x10000000, 0xc19d0000, 0x00000002, 0x00403000, 0x00002120,
+    0x40000000, 0x0000ffff, 0x0000ffff, 0x20000000, 0x00000001, 0x07c00000,
+    0x0000f06e, 0x87000000, 0x00000060, 0x00000002, 0xff000000, 0x0000007f,
+    0x80000000, 0x00000003, 0x06780000, 0x00000007, 0x001fef80, 0x00080000,
+    0x00000003, 0x7fc00000, 0x00001c00, 0x40d38000, 0x80000000, 0x000007f8,
+    0x00000003, 0x10000000, 0x00000001, 0x001f1fc0, 0xff000000, 0x0000005c,
+    0x85f80000, 0x0000000d, 0xb03c0000, 0x30000001, 0xa7f80000, 0x00000001,
+    0x00bf2800, 0xe0000000, 0x00000fbc, 0x0000067e, 0x79f80000, 0x0e7e0080,
+    0x037ffc00, 0x3f7f0000, 0xfffc0000, 0x006dfcff, 0xb47e0000, 0x000000bf,
+    0x001f0000, 0x007f0000, 0x00078000, 0x60000000, 0xf8000380, 0x00000fe7,
+    0x00003c00, 0x0000001c, 0xf87fffff, 0x00201fff, 0xf8000010, 0x0000fffe,
+    0xf9ffff7f, 0x000007db, 0x007f0000, 0x000007f0, 0x0000ffff};
+    }
+
+    const static UnicodeSet nsm_Set{const_cast<UnicodeSet::run_t *>(__nsm_Set_runs), 169, 0, const_cast<UnicodeSet::bitquad_t *>(__nsm_Set_quads), 185, 0};
+
     /** Code Point Ranges for AL
     [0608, 0608], [060b, 060b], [060d, 060d], [061b, 064a], [066d, 066f],
     [0671, 06d5], [06e5, 06e6], [06ee, 06ef], [06fa, 0710], [0712, 072f],
     [074b, 07a5], [07b1, 07bf], [0860, 086f], [08a0, 08d3], [fb50, fd3d],
     [fd40, fdcf], [fdf0, fdfc], [fdfe, fdff], [fe70, fefe], [1ee00, 1eeef],
     [1eef2, 1eeff]**/
-    const UnicodeSet al_Set 
-        {{{Empty, 48}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 2},
-          {Mixed, 5}, {Full, 2}, {Mixed, 1}, {Empty, 5}, {Mixed, 1},
-          {Empty, 1}, {Full, 1}, {Mixed, 1}, {Empty, 1939}, {Mixed, 1},
-          {Full, 14}, {Mixed, 1}, {Full, 4}, {Mixed, 2}, {Empty, 3},
-          {Mixed, 1}, {Full, 3}, {Mixed, 1}, {Empty, 1912}, {Full, 7},
-          {Mixed, 1}, {Empty, 30856}},
-         {0xf8002900, 0x000007ff, 0xfffee000, 0x003fffff, 0xfc00c060,
-          0xfffdffff, 0x0000ffff, 0xfffff800, 0xfffe003f, 0x0000ffff,
-          0x000fffff, 0xffff0000, 0x3fffffff, 0x0000ffff, 0xdfff0000,
-          0xffff0000, 0x7fffffff, 0xfffcffff}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __al_Set_runs[] = {
+    {Empty, 48}, {Mixed, 1}, {Full, 1}, {Mixed, 2}, {Full, 2}, {Mixed, 5},
+    {Full, 2}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1}, {Full, 1},
+    {Mixed, 1}, {Empty, 1939}, {Mixed, 1}, {Full, 14}, {Mixed, 1},
+    {Full, 4}, {Mixed, 2}, {Empty, 3}, {Mixed, 1}, {Full, 3}, {Mixed, 1},
+    {Empty, 1912}, {Full, 7}, {Mixed, 1}, {Empty, 30856}};
+    const static UnicodeSet::bitquad_t  __al_Set_quads[] = {
+    0xf8002900, 0x000007ff, 0xfffee000, 0x003fffff, 0xfc00c060, 0xfffdffff,
+    0x0000ffff, 0xfffff800, 0xfffe003f, 0x0000ffff, 0x000fffff, 0xffff0000,
+    0x3fffffff, 0x0000ffff, 0xdfff0000, 0xffff0000, 0x7fffffff, 0xfffcffff};
+    }
+
+    const static UnicodeSet al_Set{const_cast<UnicodeSet::run_t *>(__al_Set_runs), 27, 0, const_cast<UnicodeSet::bitquad_t *>(__al_Set_quads), 18, 0};
+
     /** Code Point Ranges for LRO
     [202d, 202d]**/
-    const UnicodeSet lro_Set 
-        {{{Empty, 257}, {Mixed, 1}, {Empty, 34558}},
-         {0x00002000}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __lro_Set_runs[] = {
+    {Empty, 257}, {Mixed, 1}, {Empty, 34558}};
+    const static UnicodeSet::bitquad_t  __lro_Set_quads[] = {
+    0x00002000};
+    }
+
+    const static UnicodeSet lro_Set{const_cast<UnicodeSet::run_t *>(__lro_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__lro_Set_quads), 1, 0};
+
     /** Code Point Ranges for RLO
     [202e, 202e]**/
-    const UnicodeSet rlo_Set 
-        {{{Empty, 257}, {Mixed, 1}, {Empty, 34558}},
-         {0x00004000}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __rlo_Set_runs[] = {
+    {Empty, 257}, {Mixed, 1}, {Empty, 34558}};
+    const static UnicodeSet::bitquad_t  __rlo_Set_quads[] = {
+    0x00004000};
+    }
+
+    const static UnicodeSet rlo_Set{const_cast<UnicodeSet::run_t *>(__rlo_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__rlo_Set_quads), 1, 0};
+
     /** Code Point Ranges for LRE
     [202a, 202a]**/
-    const UnicodeSet lre_Set 
-        {{{Empty, 257}, {Mixed, 1}, {Empty, 34558}},
-         {0x00000400}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __lre_Set_runs[] = {
+    {Empty, 257}, {Mixed, 1}, {Empty, 34558}};
+    const static UnicodeSet::bitquad_t  __lre_Set_quads[] = {
+    0x00000400};
+    }
+
+    const static UnicodeSet lre_Set{const_cast<UnicodeSet::run_t *>(__lre_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__lre_Set_quads), 1, 0};
+
     /** Code Point Ranges for RLE
     [202b, 202b]**/
-    const UnicodeSet rle_Set 
-        {{{Empty, 257}, {Mixed, 1}, {Empty, 34558}},
-         {0x00000800}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __rle_Set_runs[] = {
+    {Empty, 257}, {Mixed, 1}, {Empty, 34558}};
+    const static UnicodeSet::bitquad_t  __rle_Set_quads[] = {
+    0x00000800};
+    }
+
+    const static UnicodeSet rle_Set{const_cast<UnicodeSet::run_t *>(__rle_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__rle_Set_quads), 1, 0};
+
     /** Code Point Ranges for PDF
     [202c, 202c]**/
-    const UnicodeSet pdf_Set 
-        {{{Empty, 257}, {Mixed, 1}, {Empty, 34558}},
-         {0x00001000}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __pdf_Set_runs[] = {
+    {Empty, 257}, {Mixed, 1}, {Empty, 34558}};
+    const static UnicodeSet::bitquad_t  __pdf_Set_quads[] = {
+    0x00001000};
+    }
+
+    const static UnicodeSet pdf_Set{const_cast<UnicodeSet::run_t *>(__pdf_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__pdf_Set_quads), 1, 0};
+
     /** Code Point Ranges for LRI
     [2066, 2066]**/
-    const UnicodeSet lri_Set 
-        {{{Empty, 259}, {Mixed, 1}, {Empty, 34556}},
-         {0x00000040}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __lri_Set_runs[] = {
+    {Empty, 259}, {Mixed, 1}, {Empty, 34556}};
+    const static UnicodeSet::bitquad_t  __lri_Set_quads[] = {
+    0x00000040};
+    }
+
+    const static UnicodeSet lri_Set{const_cast<UnicodeSet::run_t *>(__lri_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__lri_Set_quads), 1, 0};
+
     /** Code Point Ranges for RLI
     [2067, 2067]**/
-    const UnicodeSet rli_Set 
-        {{{Empty, 259}, {Mixed, 1}, {Empty, 34556}},
-         {0x00000080}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __rli_Set_runs[] = {
+    {Empty, 259}, {Mixed, 1}, {Empty, 34556}};
+    const static UnicodeSet::bitquad_t  __rli_Set_quads[] = {
+    0x00000080};
+    }
+
+    const static UnicodeSet rli_Set{const_cast<UnicodeSet::run_t *>(__rli_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__rli_Set_quads), 1, 0};
+
     /** Code Point Ranges for FSI
     [2068, 2068]**/
-    const UnicodeSet fsi_Set 
-        {{{Empty, 259}, {Mixed, 1}, {Empty, 34556}},
-         {0x00000100}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __fsi_Set_runs[] = {
+    {Empty, 259}, {Mixed, 1}, {Empty, 34556}};
+    const static UnicodeSet::bitquad_t  __fsi_Set_quads[] = {
+    0x00000100};
+    }
+
+    const static UnicodeSet fsi_Set{const_cast<UnicodeSet::run_t *>(__fsi_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__fsi_Set_quads), 1, 0};
+
     /** Code Point Ranges for PDI
     [2069, 2069]**/
-    const UnicodeSet pdi_Set 
-        {{{Empty, 259}, {Mixed, 1}, {Empty, 34556}},
-         {0x00000200}};
+
+
+    namespace {
+    const static UnicodeSet::run_t __pdi_Set_runs[] = {
+    {Empty, 259}, {Mixed, 1}, {Empty, 34556}};
+    const static UnicodeSet::bitquad_t  __pdi_Set_quads[] = {
+    0x00000200};
+    }
+
+    const static UnicodeSet pdi_Set{const_cast<UnicodeSet::run_t *>(__pdi_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__pdi_Set_quads), 1, 0};
+
     static EnumeratedPropertyObject property_object
         {bc,
          BC_ns::independent_prop_values,
-         BC_ns::enum_names,
-         BC_ns::value_names,
-         BC_ns::aliases_only_map,
-         {&l_Set, &r_Set, &en_Set, &es_Set, &et_Set, &an_Set, &cs_Set, &b_Set,
+         std::move(BC_ns::enum_names),
+         std::move(BC_ns::value_names),
+         std::move(BC_ns::aliases_only_map),{
+&l_Set, &r_Set, &en_Set, &es_Set, &et_Set, &an_Set, &cs_Set, &b_Set,
         &s_Set, &ws_Set, &on_Set, &bn_Set, &nsm_Set, &al_Set, &lro_Set,
         &rlo_Set, &lre_Set, &rle_Set, &pdf_Set, &lri_Set, &rli_Set,
         &fsi_Set, &pdi_Set

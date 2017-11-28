@@ -115,11 +115,11 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     
     const auto n = REs.size();
     
-    std::vector<std::vector<UCD::UnicodeSet>> charclasses(n);
+    std::vector<std::vector<re::CC *>> charclasses(n);
     
     for (unsigned i = 0; i < n; i++) {
         REs[i] = re::resolveNames(REs[i]);
-        std::vector<UCD::UnicodeSet> UnicodeSets = re::collect_UnicodeSets(REs[i]);
+        const auto UnicodeSets = re::collectUnicodeSets(REs[i]);
         std::vector<std::vector<unsigned>> exclusiveSetIDs;
         doMultiplexCCs(UnicodeSets, exclusiveSetIDs, charclasses[i]);
         REs[i] = multiplex(REs[i], UnicodeSets, exclusiveSetIDs);
@@ -453,8 +453,7 @@ bool GrepEngine::searchAllFiles() {
 // DoGrep thread function.
 void * GrepEngine::DoGrepThreadMethod() {
     size_t fileIdx;
-    bool readyToPrint = false;
-    
+
     count_mutex.lock();
     fileIdx = mNextFileToGrep;
     if (fileIdx < inputFiles.size()) {
@@ -482,13 +481,10 @@ void * GrepEngine::DoGrepThreadMethod() {
     }
     count_mutex.lock();
     fileIdx = mNextFileToPrint;
-    
-    if (fileIdx < inputFiles.size()) {
-        readyToPrint = ((fileIdx == 0) || (mFileStatus[fileIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
-        if (fileIdx < inputFiles.size() && readyToPrint) {
-            mFileStatus[fileIdx] = FileStatus::Printing;
-            mNextFileToPrint++;
-        }
+    bool readyToPrint = ((fileIdx == 0) || (mFileStatus[fileIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
+    if (fileIdx < inputFiles.size() && readyToPrint) {
+        mFileStatus[fileIdx] = FileStatus::Printing;
+        mNextFileToPrint++;
     }
     count_mutex.unlock();
 

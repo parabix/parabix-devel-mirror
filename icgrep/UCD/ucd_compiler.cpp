@@ -2,13 +2,13 @@
 #include <cc/cc_compiler.h>
 #include <UCD/unicode_set.h>
 #include <re/re_name.h>
+#include <re/re_cc.h>
 #include <utf8_encoder.h>
 #include <utf16_encoder.h>
 #include <array>
 #include <pablo/pe_var.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
-
 #include <pablo/printer_pablos.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>

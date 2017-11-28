@@ -12,6 +12,7 @@
 #include <UCD/resolve_properties.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/range/adaptor/reversed.hpp>
+#include <util/slab_allocator.h>
 #include <map>
 
 using namespace boost::container;
@@ -155,8 +156,8 @@ void RE_Local::follow(RE * re, std::map<CC *, CC*> &follow_map) {
     }
 }
 
-bool RE_Local::isLocalLanguage(RE * re) {
-    UCD::UnicodeSet seen = UCD::UnicodeSet();
+bool RE_Local::isLocalLanguage(RE * re) {    
+    UCD::UnicodeSet seen;
     return isLocalLanguage_helper(re, seen);
 }
 
@@ -164,27 +165,27 @@ bool RE_Local::isLocalLanguage_helper(const RE * re, UCD::UnicodeSet & seen) {
     assert ("RE object cannot be null!" && re);
     if (isa<Any>(re)) {
         const bool no_intersect = seen.empty();
-        seen = UCD::UnicodeSet(0x00, 0x10FFFF);
+        seen.insert_range(0x00, 0x10FFFF);
         return no_intersect;
     } else if (const CC * cc = dyn_cast<CC>(re)) {
-        const bool has_intersect = cast<CC>(cc)->intersects(seen);
-        seen = seen + *cast<CC>(cc);
+        const bool has_intersect = cc->intersects(seen);
+        seen = seen + *cc;
         return !has_intersect;
     } else if (const Name * n = dyn_cast<Name>(re)) {
         return isLocalLanguage_helper(n->getDefinition(), seen);
-    } else if (const Seq * re_seq = dyn_cast<const Seq>(re)) {
-        for (const RE * item : *re_seq) {
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+        for (const RE * item : *seq) {
             if (!isLocalLanguage_helper(item, seen)) return false;
         }
         return true;
-    } else if (const Alt * re_alt = dyn_cast<const Alt>(re)) {
-        for (RE * item : *re_alt) {
+    } else if (const Alt * alt = dyn_cast<Alt>(re)) {
+        for (RE * item : *alt) {
             if (!isLocalLanguage_helper(item, seen)) return false;
         }
         return true;
-    } else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
-        if (re_rep->getUB() > 1) return false;
-        return isLocalLanguage_helper(re_rep->getRE(), seen);
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
+        if (rep->getUB() > 1) return false;
+        return isLocalLanguage_helper(rep->getRE(), seen);
     } else {
         // A local language cannot contain Intersects, Differences, Assertions, Start, End.
         return false;

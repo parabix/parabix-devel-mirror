@@ -18,20 +18,36 @@ namespace UCD {
         /** Code Point Ranges for JSN mapping to <none>
         [0000, 10ff], [110b, 110b], [1113, 1160], [1176, 11a7],
         [11c3, 10ffff]**/
+        
+        
+        namespace {
+        const static UnicodeSet::run_t __null_codepoint_set_runs[] = {
+        {Full, 136}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 1},
+        {Mixed, 2}, {Full, 34673}};
+        const static UnicodeSet::bitquad_t  __null_codepoint_set_quads[] = {
+        0xfff80800, 0xffc00001, 0x000000ff, 0xfffffff8};
+        }
 
-        const UnicodeSet null_codepoint_set
-                    {{{Full, 136}, {Mixed, 1}, {Full, 2}, {Mixed, 1}, {Full, 1},
-              {Mixed, 2}, {Full, 34673}},
-             {0xfff80800, 0xffc00001, 0x000000ff, 0xfffffff8}};
+        const static UnicodeSet null_codepoint_set{const_cast<UnicodeSet::run_t *>(__null_codepoint_set_runs), 7, 0, const_cast<UnicodeSet::bitquad_t *>(__null_codepoint_set_quads), 4, 0};
+
+
 
         /** Code Point Ranges for JSN mapping to <codepoint>
         **/
-        const UnicodeSet reflexive_set
-                    {{{Empty, 34816}},
-             {}};
+        
+        
+        namespace {
+        const static UnicodeSet::run_t __reflexive_set_runs[] = {
+        {Empty, 34816}};
+        const static UnicodeSet::bitquad_t * const __reflexive_set_quads = nullptr;
+        }
+
+        const static UnicodeSet reflexive_set{const_cast<UnicodeSet::run_t *>(__reflexive_set_runs), 1, 0, const_cast<UnicodeSet::bitquad_t *>(__reflexive_set_quads), 0, 0};
+
+
 
         const unsigned buffer_length = 171;
-        const static char __attribute__ ((aligned (32))) string_buffer[256] = u8R"__(G
+        const static char string_buffer[256] LLVM_ALIGNAS(32) = u8R"__(G
 GG
 N
 D
@@ -99,7 +115,7 @@ P
 H
 )__";
 
-        const static std::vector<codepoint_t> defined_cps = {
+        const static std::vector<codepoint_t> defined_cps{
         0x1100, 0x1101, 0x1102, 0x1103, 0x1104, 0x1105, 0x1106, 0x1107,
         0x1108, 0x1109, 0x110a, 0x110c, 0x110d, 0x110e, 0x110f, 0x1110,
         0x1111, 0x1112, 0x1161, 0x1162, 0x1163, 0x1164, 0x1165, 0x1166,
@@ -110,11 +126,11 @@ H
         0x11b9, 0x11ba, 0x11bb, 0x11bc, 0x11bd, 0x11be, 0x11bf, 0x11c0,
         0x11c1, 0x11c2};
         static StringPropertyObject property_object(JSN, 
-                                                    null_codepoint_set, 
-                                                    reflexive_set, 
+                                                    std::move(null_codepoint_set), 
+                                                    std::move(reflexive_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
 }
 

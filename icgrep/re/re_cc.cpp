@@ -42,7 +42,8 @@ CC * caseInsensitize(const CC * cc) {
 }
 
 CC::CC()
-: RE(ClassTypeId::CC), UnicodeSet() {
+: RE(ClassTypeId::CC)
+, UnicodeSet() {
 
 }
 
@@ -54,13 +55,13 @@ CC::CC(const CC & cc)
 
 CC::CC(const codepoint_t codepoint)
 : RE(ClassTypeId::CC)
-, UCD::UnicodeSet(codepoint, mAllocator) {
+, UCD::UnicodeSet(codepoint) {
 
 }
 
 CC::CC(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint)
 : RE(ClassTypeId::CC)
-, UCD::UnicodeSet(lo_codepoint, hi_codepoint, mAllocator) {
+, UCD::UnicodeSet(lo_codepoint, hi_codepoint) {
 
 }
 
@@ -70,22 +71,22 @@ CC::CC(const CC * cc1, const CC * cc2)
 
 }
 
-CC::CC(UCD::UnicodeSet && set)
+CC::CC(const UCD::UnicodeSet && set)
 : RE(ClassTypeId::CC)
-, UCD::UnicodeSet(std::move(set), mAllocator) {
+, UCD::UnicodeSet(std::move(set)) {
 
 }
 
 CC::CC(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end)
 : RE(ClassTypeId::CC)
-, UCD::UnicodeSet(begin, end, mAllocator)
+, UCD::UnicodeSet(begin, end)
 {
 
 }
 
 CC::CC(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end)
 : RE(ClassTypeId::CC)
-, UCD::UnicodeSet(begin, end, mAllocator)
+, UCD::UnicodeSet(begin, end)
 {
 
 }

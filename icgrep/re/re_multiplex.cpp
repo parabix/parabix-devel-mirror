@@ -32,7 +32,7 @@ static inline CC * extractCC(RE * re) {
 }
 
 RE * multiplex(RE * const re,
-               const std::vector<UCD::UnicodeSet> & UnicodeSets,
+               const std::vector<const CC *> & UnicodeSets,
                const std::vector<std::vector<unsigned>> & exclusiveSetIDs) {
 
     Memoizer memoizer;
@@ -43,9 +43,8 @@ RE * multiplex(RE * const re,
             if (f == memoizer.end()) {
                 if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
                     if (CC * cc = dyn_cast<CC>(name->getDefinition())) {
-                        UCD::UnicodeSet * sets = cast<UCD::UnicodeSet>(cc);
-                        auto index = find(UnicodeSets.begin(), UnicodeSets.end(), *sets) - UnicodeSets.begin();
-                        auto exclusive_IDs = exclusiveSetIDs[index];
+                        const auto index = find(UnicodeSets.begin(), UnicodeSets.end(), cc) - UnicodeSets.begin();
+                        const auto exclusive_IDs = exclusiveSetIDs[index];
                         CC * CC_union = makeCC();
                         for (auto i : exclusive_IDs) {
                             CC_union = makeCC(CC_union, makeCC(i));

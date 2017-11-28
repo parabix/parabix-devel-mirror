@@ -11,22 +11,18 @@
 #include "PropertyAliases.h"
 #include "PropertyObjects.h"
 #include "PropertyValueAliases.h"
-#include "re/re_cc.h"
 #include "unicode_set.h"
 #include <vector>
 
-typedef unsigned codepoint_t;
-
 struct FoldEntry {
-    re::codepoint_t range_lo;
-    int fold_offset;
-    std::vector<re::interval_t> fold_pairs;
+    const UCD::codepoint_t range_lo;
+    const int fold_offset;
+    const std::vector<UCD::interval_t> fold_pairs;
 };
 
+void caseInsensitiveInsertRange(UCD::UnicodeSet * const cc, const UCD::codepoint_t lo, const UCD::codepoint_t hi);
 
-void caseInsensitiveInsertRange(re::CC * cc, const re::codepoint_t lo, const re::codepoint_t hi);
-
-inline void caseInsensitiveInsert(re::CC * cc, const re::codepoint_t cp) {
+inline void caseInsensitiveInsert(UCD::UnicodeSet * const cc, const UCD::codepoint_t cp) {
     caseInsensitiveInsertRange(cc, cp, cp); 
 }
 
@@ -311,10 +307,17 @@ namespace UCD {
     namespace SCF_ns {
         /** Code Point Ranges for scf mapping to <none>
         **/
+        
+        
+        namespace {
+        const static UnicodeSet::run_t __null_codepoint_set_runs[] = {
+        {Empty, 34816}};
+        const static UnicodeSet::bitquad_t * const __null_codepoint_set_quads = nullptr;
+        }
 
-        const UnicodeSet null_codepoint_set
-                    {{{Empty, 34816}},
-             {}};
+        const static UnicodeSet null_codepoint_set{const_cast<UnicodeSet::run_t *>(__null_codepoint_set_runs), 1, 0, const_cast<UnicodeSet::bitquad_t *>(__null_codepoint_set_quads), 0, 0};
+
+
 
         /** Code Point Ranges for scf mapping to <codepoint>
         [0000, 0040], [005b, 00b4], [00b6, 00bf], [00d7, 00d7],
@@ -467,37 +470,45 @@ namespace UCD {
         [a7a7, a7a7], [a7a9, a7a9], [a7af, a7af], [a7b5, a7b5],
         [a7b7, ab6f], [abc0, ff20], [ff3b, 103ff], [10428, 104af],
         [104d4, 10c7f], [10cb3, 1189f], [118c0, 1e8ff], [1e922, 10ffff]**/
-        const UnicodeSet reflexive_set
-                    {{{Full, 2}, {Mixed, 1}, {Full, 2}, {Mixed, 2}, {Full, 1},
-              {Mixed, 11}, {Full, 7}, {Mixed, 6}, {Empty, 1}, {Mixed, 1},
-              {Full, 1}, {Mixed, 8}, {Full, 90}, {Empty, 1}, {Mixed, 1},
-              {Full, 24}, {Mixed, 1}, {Full, 68}, {Mixed, 1}, {Full, 11},
-              {Mixed, 16}, {Full, 9}, {Mixed, 1}, {Full, 1}, {Mixed, 2},
-              {Full, 24}, {Mixed, 2}, {Full, 57}, {Empty, 1}, {Mixed, 1},
-              {Full, 1}, {Mixed, 5}, {Full, 970}, {Mixed, 3}, {Full, 4},
-              {Mixed, 5}, {Full, 29}, {Mixed, 1}, {Empty, 2}, {Full, 667},
-              {Mixed, 1}, {Full, 38}, {Empty, 1}, {Mixed, 1}, {Full, 3},
-              {Mixed, 2}, {Full, 61}, {Empty, 1}, {Mixed, 1}, {Full, 95},
-              {Empty, 1}, {Full, 1666}, {Empty, 1}, {Mixed, 1},
-              {Full, 30902}},
-             {0xf8000001, 0xffdfffff, 0x80800000, 0xaaaaaaaa, 0x55abaaaa,
-              0xaaaaab55, 0x54aaaaaa, 0x4e243129, 0xee512d2a, 0xb555524f,
-              0xaa29aaaa, 0xaaaaaaaa, 0x93faaaaa, 0xffffaa85, 0xffffffdf,
-              0x7fbaffff, 0x000128bf, 0xfffff004, 0xaa9c7ffb, 0x194caaaa,
-              0xffff0000, 0xaaaaaaaa, 0xaaaaabfe, 0xaaaaaaaa, 0xaaaad554,
-              0xaaaaaaaa, 0xaaaaaaaa, 0x0001aaaa, 0xff800000, 0xffffdf40,
-              0xc0ffffff, 0xfffffe00, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa,
-              0xaaaaaaaa, 0xb7eaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa,
-              0xc0ff00ff, 0x00ff00ff, 0x55ffc0ff, 0xffff00ff, 0x00ff00ff,
-              0xa0ff00ff, 0xf0ffe0ff, 0xe0ffe0ff, 0xfffbf3bf, 0xffff0000,
-              0xfffffff7, 0x003fffff, 0xffff0000, 0xffff8000, 0x3fda1562,
-              0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0xfffbd7fa, 0xaaaaaaaa,
-              0xffffeaaa, 0xfaaaaaaa, 0xaaabaaab, 0xaaaaaaaa, 0x95ffaaaa,
-              0xaabad7aa, 0xffa082aa, 0x0000ffff, 0xf8000001, 0xffffff00,
-              0x0000ffff, 0xfff00000, 0xfff80000, 0xfffffffc}};
+        
+        
+        namespace {
+        const static UnicodeSet::run_t __reflexive_set_runs[] = {
+        {Full, 2}, {Mixed, 1}, {Full, 2}, {Mixed, 2}, {Full, 1},
+        {Mixed, 11}, {Full, 7}, {Mixed, 6}, {Empty, 1}, {Mixed, 1},
+        {Full, 1}, {Mixed, 8}, {Full, 90}, {Empty, 1}, {Mixed, 1},
+        {Full, 24}, {Mixed, 1}, {Full, 68}, {Mixed, 1}, {Full, 11},
+        {Mixed, 16}, {Full, 9}, {Mixed, 1}, {Full, 1}, {Mixed, 2},
+        {Full, 24}, {Mixed, 2}, {Full, 57}, {Empty, 1}, {Mixed, 1},
+        {Full, 1}, {Mixed, 5}, {Full, 970}, {Mixed, 3}, {Full, 4},
+        {Mixed, 5}, {Full, 29}, {Mixed, 1}, {Empty, 2}, {Full, 667},
+        {Mixed, 1}, {Full, 38}, {Empty, 1}, {Mixed, 1}, {Full, 3},
+        {Mixed, 2}, {Full, 61}, {Empty, 1}, {Mixed, 1}, {Full, 95},
+        {Empty, 1}, {Full, 1666}, {Empty, 1}, {Mixed, 1}, {Full, 30902}};
+        const static UnicodeSet::bitquad_t  __reflexive_set_quads[] = {
+        0xf8000001, 0xffdfffff, 0x80800000, 0xaaaaaaaa, 0x55abaaaa,
+        0xaaaaab55, 0x54aaaaaa, 0x4e243129, 0xee512d2a, 0xb555524f,
+        0xaa29aaaa, 0xaaaaaaaa, 0x93faaaaa, 0xffffaa85, 0xffffffdf,
+        0x7fbaffff, 0x000128bf, 0xfffff004, 0xaa9c7ffb, 0x194caaaa,
+        0xffff0000, 0xaaaaaaaa, 0xaaaaabfe, 0xaaaaaaaa, 0xaaaad554,
+        0xaaaaaaaa, 0xaaaaaaaa, 0x0001aaaa, 0xff800000, 0xffffdf40,
+        0xc0ffffff, 0xfffffe00, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa,
+        0xaaaaaaaa, 0xb7eaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa,
+        0xc0ff00ff, 0x00ff00ff, 0x55ffc0ff, 0xffff00ff, 0x00ff00ff,
+        0xa0ff00ff, 0xf0ffe0ff, 0xe0ffe0ff, 0xfffbf3bf, 0xffff0000,
+        0xfffffff7, 0x003fffff, 0xffff0000, 0xffff8000, 0x3fda1562,
+        0xaaaaaaaa, 0xaaaaaaaa, 0xaaaaaaaa, 0xfffbd7fa, 0xaaaaaaaa,
+        0xffffeaaa, 0xfaaaaaaa, 0xaaabaaab, 0xaaaaaaaa, 0x95ffaaaa,
+        0xaabad7aa, 0xffa082aa, 0x0000ffff, 0xf8000001, 0xffffff00,
+        0x0000ffff, 0xfff00000, 0xfff80000, 0xfffffffc};
+        }
+
+        const static UnicodeSet reflexive_set{const_cast<UnicodeSet::run_t *>(__reflexive_set_runs), 55, 0, const_cast<UnicodeSet::bitquad_t *>(__reflexive_set_quads), 74, 0};
+
+
 
         const unsigned buffer_length = 4958;
-        const static char __attribute__ ((aligned (32))) string_buffer[5120] = u8R"__(a
+        const static char string_buffer[5120] LLVM_ALIGNAS(32) = u8R"__(a
 b
 c
 d
@@ -1824,7 +1835,7 @@ k
 𞥃
 )__";
 
-        const static std::vector<codepoint_t> defined_cps = {
+        const static std::vector<codepoint_t> defined_cps{
         0x0041, 0x0042, 0x0043, 0x0044, 0x0045, 0x0046, 0x0047, 0x0048,
         0x0049, 0x004a, 0x004b, 0x004c, 0x004d, 0x004e, 0x004f, 0x0050,
         0x0051, 0x0052, 0x0053, 0x0054, 0x0055, 0x0056, 0x0057, 0x0058,
@@ -1995,11 +2006,11 @@ k
         0x1e914, 0x1e915, 0x1e916, 0x1e917, 0x1e918, 0x1e919, 0x1e91a,
         0x1e91b, 0x1e91c, 0x1e91d, 0x1e91e, 0x1e91f, 0x1e920, 0x1e921};
         static StringPropertyObject property_object(scf, 
-                                                    null_codepoint_set, 
-                                                    reflexive_set, 
+                                                    std::move(null_codepoint_set), 
+                                                    std::move(reflexive_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
     namespace CF_ns {
         /** Code Point Ranges for cf (possibly overriding values from SCF)
@@ -2012,18 +2023,25 @@ k
         [1ff2, 1ff4], [1ff6, 1ff7], [1ffc, 1ffc], [fb00, fb06],
         [fb13, fb17]**/
 
-        const UnicodeSet explicitly_defined_set
-                    {{{Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
-              {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
-              {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
-              {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1},
-              {Empty, 32807}},
-             {0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
-              0x00010000, 0x00000080, 0x47c00000, 0x00550000, 0x10dcffff,
-              0x00cc10dc, 0x10dc00dc, 0x00f8007f}};
+        
+        namespace {
+        const static UnicodeSet::run_t __explicitly_defined_set_runs[] = {
+        {Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
+        {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
+        {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
+        {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1}, {Empty, 32807}};
+        const static UnicodeSet::bitquad_t  __explicitly_defined_set_quads[] = {
+        0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
+        0x00010000, 0x00000080, 0x47c00000, 0x00550000, 0x10dcffff,
+        0x00cc10dc, 0x10dc00dc, 0x00f8007f};
+        }
+
+        const static UnicodeSet explicitly_defined_set{const_cast<UnicodeSet::run_t *>(__explicitly_defined_set_runs), 20, 0, const_cast<UnicodeSet::bitquad_t *>(__explicitly_defined_set_quads), 13, 0};
+
+
 
         const unsigned buffer_length = 575;
-        const static char __attribute__ ((aligned (32))) string_buffer[768] = u8R"__(ss
+        const static char string_buffer[768] LLVM_ALIGNAS(32) = u8R"__(ss
 i̇
 ʼn
 ǰ
@@ -2129,7 +2147,7 @@ st
 մխ
 )__";
 
-        const static std::vector<codepoint_t> defined_cps = {
+        const static std::vector<codepoint_t> defined_cps{
         0x00df, 0x0130, 0x0149, 0x01f0, 0x0390, 0x03b0, 0x0587, 0x1e96,
         0x1e97, 0x1e98, 0x1e99, 0x1e9a, 0x1e9e, 0x1f50, 0x1f52, 0x1f54,
         0x1f56, 0x1f80, 0x1f81, 0x1f82, 0x1f83, 0x1f84, 0x1f85, 0x1f86,
@@ -2145,10 +2163,10 @@ st
         0xfb04, 0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
         static StringOverridePropertyObject property_object(cf, 
                                                     SCF_ns::property_object, 
-                                                    explicitly_defined_set, 
+                                                    std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
 }
 

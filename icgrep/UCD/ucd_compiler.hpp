@@ -1,9 +1,9 @@
 #ifndef UCDCOMPILER_HPP
 #define UCDCOMPILER_HPP
 
-#include <re/re_cc.h>
-#include <vector>
+#include "UCD_Config.h"
 #include <boost/container/flat_map.hpp>
+#include <vector>
 
 namespace cc {
     class CC_Compiler;
@@ -11,6 +11,7 @@ namespace cc {
 
 namespace re {
     class Name;
+    class CC;
 }
 
 namespace pablo {
@@ -28,11 +29,10 @@ class UCDCompiler {
     using CC = re::CC;
     using PabloBuilder = pablo::PabloBuilder;
     using PabloAST = pablo::PabloAST;
-    using codepoint_t = re::codepoint_t;
-    using RangeList = std::vector<re::interval_t>;
+    using RangeList = std::vector<interval_t>;
 
-    using TargetMap = boost::container::flat_map<const UnicodeSet *, pablo::Var *>;
-    using ValueMap = boost::container::flat_map<const UnicodeSet *, PabloAST *>;
+    using TargetMap = boost::container::flat_map<const CC *, pablo::Var *>;
+    using ValueMap = boost::container::flat_map<const CC *, PabloAST *>;
     using Values = std::vector<std::pair<ValueMap::key_type, ValueMap::mapped_type>>;
 
     static const RangeList defaultIfHierachy;

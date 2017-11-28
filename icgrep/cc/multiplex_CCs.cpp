@@ -23,12 +23,12 @@
 // status changes at the breakpoint.
 //
 
-std::map<UCD::codepoint_t, boost::dynamic_bitset<>> computeBreakpoints(std::vector<UCD::UnicodeSet> CCs) {
+std::map<UCD::codepoint_t, boost::dynamic_bitset<>> computeBreakpoints(const std::vector<const re::CC *> & CCs) {
     std::map<UCD::codepoint_t, boost::dynamic_bitset<>> breakpoints;
     for (unsigned i = 0; i < CCs.size(); i++) {
-        for (const UCD::UnicodeSet::interval_t & range : CCs[i]) {
-            auto lo = re::lo_codepoint(range);
-            auto hi = re::hi_codepoint(range);
+        for (const auto range : *CCs[i]) {
+            const auto lo = re::lo_codepoint(range);
+            const auto hi = re::hi_codepoint(range);
             auto f = breakpoints.find(lo);
             if (f == breakpoints.end()) {
                 breakpoints.emplace(lo, boost::dynamic_bitset<>(CCs.size()));
@@ -45,11 +45,11 @@ std::map<UCD::codepoint_t, boost::dynamic_bitset<>> computeBreakpoints(std::vect
 }
 
 
-void doMultiplexCCs(const std::vector<UCD::UnicodeSet> & CCs,
+void doMultiplexCCs(const std::vector<const re::CC *> & CCs,
                     std::vector<std::vector<unsigned>> & exclusiveSetIDs,
-                    std::vector<UCD::UnicodeSet> & multiplexedCCs) {
+                    std::vector<re::CC *> & multiplexedCCs) {
     
-    std::map<UCD::codepoint_t, boost::dynamic_bitset<>> breakpoints = computeBreakpoints(CCs);
+    const auto breakpoints = computeBreakpoints(CCs);
     // Initialize the exclusiveSetIDs to have one empty vector per source CC.
     exclusiveSetIDs.clear();
     exclusiveSetIDs.resize(CCs.size());
@@ -74,7 +74,7 @@ void doMultiplexCCs(const std::vector<UCD::UnicodeSet> & CCs,
             unsigned range_hi = bkpt_entry.first - 1;
             for (unsigned bit = 0; bit < multiplexed_bit_count; bit++) {
                 if (((current_exclusive_set_idx >> bit) & 1) == 1) {
-                    multiplexedCCs[bit].insert_range(range_lo, range_hi);
+                    multiplexedCCs[bit]->insert_range(range_lo, range_hi);
                 }
             }
         }
@@ -95,7 +95,7 @@ void doMultiplexCCs(const std::vector<UCD::UnicodeSet> & CCs,
             }
             if ((current_exclusive_set_idx & (current_exclusive_set_idx - 1)) == 0) {
                 multiplexed_bit_count++;
-                multiplexedCCs.push_back(UCD::UnicodeSet());
+                multiplexedCCs.push_back(re::makeCC());
             }
         }
         else {

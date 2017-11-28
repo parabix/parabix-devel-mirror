@@ -16,6 +16,8 @@
 #include <toolchain/grep_pipeline.h>
 #include <util/aligned_allocator.h>
 #include <re/re_analysis.h>
+#include <re/re_cc.h>
+
 using namespace llvm;
 
 namespace UCD {
@@ -93,10 +95,10 @@ const UnicodeSet EnumeratedPropertyObject::GetCodepointSetMatchingPattern(re::RE
     grepBuffer(pattern, aligned, n, & accum);
     alloc.deallocate(aligned, 0);
     
-    UnicodeSet a = UnicodeSet();
-    for (auto v : accumulatedValues) {
+    UnicodeSet a;
+    for (const auto & v : accumulatedValues) {
         int e = GetPropertyValueEnumCode(v);
-        a = a + GetCodepointSet(e);
+        a.insert(GetCodepointSet(e));
     }
     return a;
 }
@@ -117,7 +119,7 @@ std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
             basis_count++;
         }
         for (unsigned i = 0; i < basis_count; i++) {
-            enumeration_basis_sets.push_back(UnicodeSet());
+            enumeration_basis_sets.push_back(std::move(UnicodeSet()));
             for (unsigned e = 0; e < independent_enum_count; e++) {
                 if (((e >> i) & 1UL) == 0) {
                     enumeration_basis_sets[i] = enumeration_basis_sets[i] + *property_value_sets[e];
@@ -216,10 +218,10 @@ const UnicodeSet ExtensionPropertyObject::GetCodepointSetMatchingPattern(re::RE 
     grepBuffer(pattern, aligned, n, & accum);
     alloc.deallocate(aligned, 0);
     
-    UnicodeSet a = UnicodeSet();
-    for (auto v : accumulatedValues) {
+    UnicodeSet a;
+    for (const auto & v : accumulatedValues) {
         int e = baseObj->GetPropertyValueEnumCode(v);
-        a = a + GetCodepointSet(e);
+        a.insert(GetCodepointSet(e));
     }
     return a;
 }
@@ -289,26 +291,33 @@ const unsigned firstCodepointLengthAndVal(const std::string & s, codepoint_t & c
 class SetByLineNumberAccumulator : public grep::MatchAccumulator {
 public:
     
-    SetByLineNumberAccumulator(const std::vector<UCD::codepoint_t> & cps, UnicodeSet defaultValueSet)
-    : mCodepointTableByLineNum(cps), mDefaultValueSet(defaultValueSet) {}
+    SetByLineNumberAccumulator(const std::vector<UCD::codepoint_t> & cps, const UnicodeSet & defaultValueSet)
+    : mCodepointTableByLineNum(cps)
+    , mDefaultValueSet(defaultValueSet) {
+
+    }
     
     void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
-    UnicodeSet getAccumulatedSet() { return mAccumSet; }
+    UnicodeSet && getAccumulatedSet() { return std::move(mAccumSet); }
 private:
     const std::vector<UCD::codepoint_t> & mCodepointTableByLineNum;
-    UnicodeSet mDefaultValueSet;
+    const UnicodeSet & mDefaultValueSet;
     UnicodeSet mAccumSet;
 };
-void SetByLineNumberAccumulator::accumulate_match(const size_t lineNum, char * line_start, char * line_end) {
-    if (lineNum >= mCodepointTableByLineNum.size()) mAccumSet = mAccumSet + mDefaultValueSet;
-    else mAccumSet.insert(mCodepointTableByLineNum[lineNum]);
+
+void SetByLineNumberAccumulator::accumulate_match(const size_t lineNum, char * /* line_start */, char * /* line_end */) {
+    if (lineNum >= mCodepointTableByLineNum.size()) {
+        mAccumSet.insert(mDefaultValueSet);
+    } else {
+        mAccumSet.insert(mCodepointTableByLineNum[lineNum]);
+    }
 }
 
-
 const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & value_spec) {
-    if (value_spec == "NaN") return mNaNCodepointSet;
-    else {
-        UnicodeSet result_set = UnicodeSet();
+    if (value_spec == "NaN") {
+        return mNaNCodepointSet;
+    } else {
+        UnicodeSet result_set;
         unsigned val_bytes = value_spec.length();
         const char * value_str = value_spec.c_str();
         const char * search_str = mStringBuffer;
@@ -327,17 +336,17 @@ const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & valu
 }
 
 const UnicodeSet NumericPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
-    UnicodeSet matched;
     SetByLineNumberAccumulator accum(mExplicitCps, mNaNCodepointSet);
-    grepBuffer(pattern, mStringBuffer, mBufSize, & accum);
-    return matched + accum.getAccumulatedSet();
+    grepBuffer(pattern, mStringBuffer, mBufSize, &accum);
+    return accum.getAccumulatedSet();
 }
 
 
 const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value_spec) {
-    if (value_spec == "") return mNullCodepointSet;
-    else {
-        UnicodeSet result_set = UnicodeSet();
+    if (value_spec.empty()) {
+        return mNullCodepointSet;
+    } else {
+        UnicodeSet result_set;
         unsigned val_bytes = value_spec.length();
         codepoint_t cp;
         if (val_bytes == firstCodepointLengthAndVal(value_spec, cp)) {
@@ -362,13 +371,14 @@ const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value
 }
 
 const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
-    UnicodeSet matched = *cast<UnicodeSet>(matchableCodepoints(pattern)) & mSelfCodepointSet;
+    UnicodeSet matched(*matchableCodepoints(pattern) & mSelfCodepointSet);
     if (re::matchesEmptyString(pattern)) {
-        matched = matched + mNullCodepointSet;
+        matched.insert(mNullCodepointSet);
     }
     SetByLineNumberAccumulator accum(mExplicitCps, mNullCodepointSet);
-    grepBuffer(pattern, mStringBuffer, mBufSize, & accum);
-    return matched + accum.getAccumulatedSet();
+    grepBuffer(pattern, mStringBuffer, mBufSize, & accum);    
+    matched.insert(accum.getAccumulatedSet());
+    return matched;
 }
     
 const UnicodeSet StringPropertyObject::GetReflexiveSet() {
@@ -400,7 +410,8 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re
     UnicodeSet base_set = mBaseObject.GetCodepointSetMatchingPattern(pattern) - mOverriddenSet;
     SetByLineNumberAccumulator accum(mExplicitCps, UnicodeSet());
     grepBuffer(pattern, mStringBuffer, mBufSize, & accum);
-    return base_set + accum.getAccumulatedSet();
+    base_set.insert(accum.getAccumulatedSet());
+    return base_set;
 }
 
 const UnicodeSet StringOverridePropertyObject::GetReflexiveSet() {

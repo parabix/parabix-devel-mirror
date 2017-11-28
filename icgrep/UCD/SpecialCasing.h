@@ -25,18 +25,25 @@ namespace UCD {
         [1fd6, 1fd7], [1fe2, 1fe4], [1fe6, 1fe7], [1ff2, 1ff4],
         [1ff6, 1ff7], [1ffc, 1ffc], [fb00, fb06], [fb13, fb17]**/
 
-        const UnicodeSet explicitly_defined_set
-                    {{{Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
-              {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
-              {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
-              {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1},
-              {Empty, 32807}},
-             {0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
-              0x00010000, 0x00000080, 0x07c00000, 0x00550000, 0x10dcffff,
-              0x00cc10dc, 0x10dc00dc, 0x00f8007f}};
+        
+        namespace {
+        const static UnicodeSet::run_t __explicitly_defined_set_runs[] = {
+        {Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
+        {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
+        {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
+        {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1}, {Empty, 32807}};
+        const static UnicodeSet::bitquad_t  __explicitly_defined_set_quads[] = {
+        0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
+        0x00010000, 0x00000080, 0x07c00000, 0x00550000, 0x10dcffff,
+        0x00cc10dc, 0x10dc00dc, 0x00f8007f};
+        }
+
+        const static UnicodeSet explicitly_defined_set{const_cast<UnicodeSet::run_t *>(__explicitly_defined_set_runs), 20, 0, const_cast<UnicodeSet::bitquad_t *>(__explicitly_defined_set_quads), 13, 0};
+
+
 
         const unsigned buffer_length = 406;
-        const static char __attribute__ ((aligned (32))) string_buffer[512] = u8R"__(ß
+        const static char string_buffer[512] LLVM_ALIGNAS(32) = u8R"__(ß
 i̇
 ŉ
 ǰ
@@ -141,7 +148,7 @@ i̇
 ﬗ
 )__";
 
-        const static std::vector<codepoint_t> defined_cps = {
+        const static std::vector<codepoint_t> defined_cps{
         0x00df, 0x0130, 0x0149, 0x01f0, 0x0390, 0x03b0, 0x0587, 0x1e96,
         0x1e97, 0x1e98, 0x1e99, 0x1e9a, 0x1f50, 0x1f52, 0x1f54, 0x1f56,
         0x1f80, 0x1f81, 0x1f82, 0x1f83, 0x1f84, 0x1f85, 0x1f86, 0x1f87,
@@ -157,10 +164,10 @@ i̇
         0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
         static StringOverridePropertyObject property_object(lc, 
                                                     SLC_ns::property_object, 
-                                                    explicitly_defined_set, 
+                                                    std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
     namespace UC_ns {
         /** Code Point Ranges for uc (possibly overriding values from SUC)
@@ -172,18 +179,25 @@ i̇
         [1fd6, 1fd7], [1fe2, 1fe4], [1fe6, 1fe7], [1ff2, 1ff4],
         [1ff6, 1ff7], [1ffc, 1ffc], [fb00, fb06], [fb13, fb17]**/
 
-        const UnicodeSet explicitly_defined_set
-                    {{{Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
-              {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
-              {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
-              {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1},
-              {Empty, 32807}},
-             {0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
-              0x00010000, 0x00000080, 0x07c00000, 0x00550000, 0x10dcffff,
-              0x00cc10dc, 0x10dc00dc, 0x00f8007f}};
+        
+        namespace {
+        const static UnicodeSet::run_t __explicitly_defined_set_runs[] = {
+        {Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
+        {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
+        {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
+        {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1}, {Empty, 32807}};
+        const static UnicodeSet::bitquad_t  __explicitly_defined_set_quads[] = {
+        0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
+        0x00010000, 0x00000080, 0x07c00000, 0x00550000, 0x10dcffff,
+        0x00cc10dc, 0x10dc00dc, 0x00f8007f};
+        }
+
+        const static UnicodeSet explicitly_defined_set{const_cast<UnicodeSet::run_t *>(__explicitly_defined_set_runs), 20, 0, const_cast<UnicodeSet::bitquad_t *>(__explicitly_defined_set_quads), 13, 0};
+
+
 
         const unsigned buffer_length = 571;
-        const static char __attribute__ ((aligned (32))) string_buffer[768] = u8R"__(SS
+        const static char string_buffer[768] LLVM_ALIGNAS(32) = u8R"__(SS
 İ
 ʼN
 J̌
@@ -288,7 +302,7 @@ ST
 ՄԽ
 )__";
 
-        const static std::vector<codepoint_t> defined_cps = {
+        const static std::vector<codepoint_t> defined_cps{
         0x00df, 0x0130, 0x0149, 0x01f0, 0x0390, 0x03b0, 0x0587, 0x1e96,
         0x1e97, 0x1e98, 0x1e99, 0x1e9a, 0x1f50, 0x1f52, 0x1f54, 0x1f56,
         0x1f80, 0x1f81, 0x1f82, 0x1f83, 0x1f84, 0x1f85, 0x1f86, 0x1f87,
@@ -304,10 +318,10 @@ ST
         0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
         static StringOverridePropertyObject property_object(uc, 
                                                     SUC_ns::property_object, 
-                                                    explicitly_defined_set, 
+                                                    std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
     namespace TC_ns {
         /** Code Point Ranges for tc (possibly overriding values from STC)
@@ -319,18 +333,25 @@ ST
         [1fd6, 1fd7], [1fe2, 1fe4], [1fe6, 1fe7], [1ff2, 1ff4],
         [1ff6, 1ff7], [1ffc, 1ffc], [fb00, fb06], [fb13, fb17]**/
 
-        const UnicodeSet explicitly_defined_set
-                    {{{Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
-              {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
-              {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
-              {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1},
-              {Empty, 32807}},
-             {0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
-              0x00010000, 0x00000080, 0x07c00000, 0x00550000, 0x10dcffff,
-              0x00cc10dc, 0x10dc00dc, 0x00f8007f}};
+        
+        namespace {
+        const static UnicodeSet::run_t __explicitly_defined_set_runs[] = {
+        {Empty, 6}, {Mixed, 1}, {Empty, 2}, {Mixed, 2}, {Empty, 4},
+        {Mixed, 1}, {Empty, 12}, {Mixed, 2}, {Empty, 14}, {Mixed, 1},
+        {Empty, 199}, {Mixed, 1}, {Empty, 5}, {Mixed, 1}, {Empty, 1},
+        {Full, 1}, {Mixed, 3}, {Empty, 1752}, {Mixed, 1}, {Empty, 32807}};
+        const static UnicodeSet::bitquad_t  __explicitly_defined_set_quads[] = {
+        0x80000000, 0x00010000, 0x00000200, 0x00010000, 0x00010000,
+        0x00010000, 0x00000080, 0x07c00000, 0x00550000, 0x10dcffff,
+        0x00cc10dc, 0x10dc00dc, 0x00f8007f};
+        }
+
+        const static UnicodeSet explicitly_defined_set{const_cast<UnicodeSet::run_t *>(__explicitly_defined_set_runs), 20, 0, const_cast<UnicodeSet::bitquad_t *>(__explicitly_defined_set_quads), 13, 0};
+
+
 
         const unsigned buffer_length = 469;
-        const static char __attribute__ ((aligned (32))) string_buffer[512] = u8R"__(Ss
+        const static char string_buffer[512] LLVM_ALIGNAS(32) = u8R"__(Ss
 İ
 ʼN
 J̌
@@ -435,7 +456,7 @@ St
 Մխ
 )__";
 
-        const static std::vector<codepoint_t> defined_cps = {
+        const static std::vector<codepoint_t> defined_cps{
         0x00df, 0x0130, 0x0149, 0x01f0, 0x0390, 0x03b0, 0x0587, 0x1e96,
         0x1e97, 0x1e98, 0x1e99, 0x1e9a, 0x1f50, 0x1f52, 0x1f54, 0x1f56,
         0x1f80, 0x1f81, 0x1f82, 0x1f83, 0x1f84, 0x1f85, 0x1f86, 0x1f87,
@@ -451,10 +472,10 @@ St
         0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
         static StringOverridePropertyObject property_object(tc, 
                                                     STC_ns::property_object, 
-                                                    explicitly_defined_set, 
+                                                    std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
 }
 

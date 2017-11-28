@@ -39,33 +39,49 @@ namespace UCD {
         [301c, fe58], [fe5f, fe63], [fe66, ff07], [ff0a, ff1b],
         [ff1d, ff1d], [ff1f, ff3a], [ff3c, ff3c], [ff3e, ff5a],
         [ff5c, ff5c], [ff5e, ff5e], [ff61, ff61], [ff64, 10ffff]**/
+        
+        
+        namespace {
+        const static UnicodeSet::run_t __null_codepoint_set_runs[] = {
+        {Full, 1}, {Mixed, 3}, {Full, 1}, {Mixed, 1}, {Full, 115},
+        {Mixed, 1}, {Full, 58}, {Mixed, 1}, {Full, 76}, {Mixed, 4},
+        {Full, 11}, {Mixed, 10}, {Full, 33}, {Mixed, 1}, {Full, 2},
+        {Mixed, 2}, {Full, 12}, {Mixed, 4}, {Full, 1}, {Mixed, 1},
+        {Full, 1}, {Mixed, 5}, {Full, 24}, {Mixed, 2}, {Full, 14},
+        {Mixed, 1}, {Full, 1649}, {Mixed, 2}, {Full, 4}, {Mixed, 4},
+        {Full, 32772}};
+        const static UnicodeSet::bitquad_t  __null_codepoint_set_quads[] = {
+        0xaffffcff, 0xd7ffffff, 0xd7ffffff, 0xf7fff7ff, 0xc3ffffff,
+        0xe7ffffff, 0xf9ffffff, 0xffffff9f, 0x9fffffff, 0xffff9fff,
+        0xffdfc0ff, 0xcfffffff, 0xffc3fff7, 0x0000300f, 0xfef87000,
+        0xff00f4b3, 0x003cc1ff, 0x8320c000, 0xfffff0ff, 0xfffff9ff,
+        0xffc000ff, 0x9f9fd487, 0xffff0003, 0xfe000007, 0xfeffffff,
+        0xf0c87fcc, 0xccdfffff, 0xcfcf87ff, 0x19ffffcf, 0xe001e7e0,
+        0x07e64039, 0xbf801f80, 0xf87fcfc7, 0xcfffc9c3, 0xfffffc00,
+        0xf00c00ff, 0x81ffffff, 0xffffffcf, 0xaffffcff, 0xd7ffffff,
+        0x57ffffff, 0xfffffff2};
+        }
 
-        const UnicodeSet null_codepoint_set
-                    {{{Full, 1}, {Mixed, 3}, {Full, 1}, {Mixed, 1}, {Full, 115},
-              {Mixed, 1}, {Full, 58}, {Mixed, 1}, {Full, 76}, {Mixed, 4},
-              {Full, 11}, {Mixed, 10}, {Full, 33}, {Mixed, 1}, {Full, 2},
-              {Mixed, 2}, {Full, 12}, {Mixed, 4}, {Full, 1}, {Mixed, 1},
-              {Full, 1}, {Mixed, 5}, {Full, 24}, {Mixed, 2}, {Full, 14},
-              {Mixed, 1}, {Full, 1649}, {Mixed, 2}, {Full, 4}, {Mixed, 4},
-              {Full, 32772}},
-             {0xaffffcff, 0xd7ffffff, 0xd7ffffff, 0xf7fff7ff, 0xc3ffffff,
-              0xe7ffffff, 0xf9ffffff, 0xffffff9f, 0x9fffffff, 0xffff9fff,
-              0xffdfc0ff, 0xcfffffff, 0xffc3fff7, 0x0000300f, 0xfef87000,
-              0xff00f4b3, 0x003cc1ff, 0x8320c000, 0xfffff0ff, 0xfffff9ff,
-              0xffc000ff, 0x9f9fd487, 0xffff0003, 0xfe000007, 0xfeffffff,
-              0xf0c87fcc, 0xccdfffff, 0xcfcf87ff, 0x19ffffcf, 0xe001e7e0,
-              0x07e64039, 0xbf801f80, 0xf87fcfc7, 0xcfffc9c3, 0xfffffc00,
-              0xf00c00ff, 0x81ffffff, 0xffffffcf, 0xaffffcff, 0xd7ffffff,
-              0x57ffffff, 0xfffffff2}};
+        const static UnicodeSet null_codepoint_set{const_cast<UnicodeSet::run_t *>(__null_codepoint_set_runs), 31, 0, const_cast<UnicodeSet::bitquad_t *>(__null_codepoint_set_quads), 42, 0};
+
+
 
         /** Code Point Ranges for bmg mapping to <codepoint>
         **/
-        const UnicodeSet reflexive_set
-                    {{{Empty, 34816}},
-             {}};
+        
+        
+        namespace {
+        const static UnicodeSet::run_t __reflexive_set_runs[] = {
+        {Empty, 34816}};
+        const static UnicodeSet::bitquad_t * const __reflexive_set_quads = nullptr;
+        }
+
+        const static UnicodeSet reflexive_set{const_cast<UnicodeSet::run_t *>(__reflexive_set_runs), 1, 0, const_cast<UnicodeSet::bitquad_t *>(__reflexive_set_quads), 0, 0};
+
+
 
         const unsigned buffer_length = 1438;
-        const static char __attribute__ ((aligned (32))) string_buffer[1536] = u8R"__()
+        const static char string_buffer[1536] LLVM_ALIGNAS(32) = u8R"__()
 (
 >
 <
@@ -431,7 +447,7 @@ namespace UCD {
 ｢
 )__";
 
-        const static std::vector<codepoint_t> defined_cps = {
+        const static std::vector<codepoint_t> defined_cps{
         0x0028, 0x0029, 0x003c, 0x003e, 0x005b, 0x005d, 0x007b, 0x007d,
         0x00ab, 0x00bb, 0x0f3a, 0x0f3b, 0x0f3c, 0x0f3d, 0x169b, 0x169c,
         0x2039, 0x203a, 0x2045, 0x2046, 0x207d, 0x207e, 0x208d, 0x208e,
@@ -479,11 +495,11 @@ namespace UCD {
         0xff08, 0xff09, 0xff1c, 0xff1e, 0xff3b, 0xff3d, 0xff5b, 0xff5d,
         0xff5f, 0xff60, 0xff62, 0xff63};
         static StringPropertyObject property_object(bmg, 
-                                                    null_codepoint_set, 
-                                                    reflexive_set, 
+                                                    std::move(null_codepoint_set), 
+                                                    std::move(reflexive_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
 }
 

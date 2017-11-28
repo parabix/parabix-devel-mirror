@@ -6,29 +6,28 @@
 #define CHARCLASSES_H
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
-#include <UCD/resolve_properties.h>
 
 namespace kernel { class KernelBuilder; }
 namespace IDISA { class IDISA_Builder; }
-namespace re { class RE; }
+namespace re { class RE; class CC; }
 namespace kernel {
 
 struct CharClassesSignature {
-    CharClassesSignature(const std::vector<UCD::UnicodeSet> & ccs);
+    CharClassesSignature(const std::vector<re::CC *> & ccs);
 protected:
     const std::string mSignature;
 };
 
 class CharClassesKernel : public CharClassesSignature, public pablo::PabloKernel {
 public:
-    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<UCD::UnicodeSet> && ccs);
+    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs);
     bool hasSignature() const override { return true; }
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     bool isCachable() const override { return true; }
 protected:
     void generatePabloMethod() override;
 protected:
-    std::vector<UCD::UnicodeSet> mCCs;
+    std::vector<re::CC *> mCCs;
 };
 
 }

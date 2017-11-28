@@ -13,7 +13,7 @@
 namespace re {
 
 using codepoint_t = UCD::codepoint_t;
-using interval_t = UCD::UnicodeSet::interval_t;
+using interval_t = UCD::interval_t;
 
 enum CC_type {UnicodeClass, ByteClass};
 
@@ -61,7 +61,7 @@ protected:
 
     explicit CC(const CC * cc1, const CC * cc2);
 
-    CC(UCD::UnicodeSet && set);
+    CC(const UCD::UnicodeSet && set);
 
     CC(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end);
 

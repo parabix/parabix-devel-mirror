@@ -4,18 +4,11 @@
  */
 
 #include "charclasses.h"
-#include <boost/uuid/sha1.hpp>
 #include <re/re_toolchain.h>
-#include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
-#include <pablo/builder.hpp>
-#include <pablo/pe_count.h>
-#include <UCD/resolve_properties.h>
 #include <UCD/ucd_compiler.hpp>
-#include <re/re_cc.h>
 #include <cc/cc_compiler.h>
 #include <re/re_name.h>
-#include <llvm/Support/raw_ostream.h>
 #include <boost/uuid/sha1.hpp>
 
 using NameMap = UCD::UCDCompiler::NameMap;
@@ -38,7 +31,7 @@ inline static std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
-inline std::string signature(const std::vector<UCD::UnicodeSet> & ccs) {
+inline std::string signature(const std::vector<re::CC *> & ccs) {
     if (LLVM_UNLIKELY(ccs.empty())) {
         return "[]";
     } else {
@@ -47,7 +40,7 @@ inline std::string signature(const std::vector<UCD::UnicodeSet> & ccs) {
         char joiner = '[';
         for (const auto & set : ccs) {
             out << joiner;
-            set.print(out);
+            set->print(out);
             joiner = ',';
         }
         out << ']';
@@ -55,13 +48,13 @@ inline std::string signature(const std::vector<UCD::UnicodeSet> & ccs) {
     }
 }
 
-CharClassesSignature::CharClassesSignature(const std::vector<UCD::UnicodeSet> & ccs)
+CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs)
 : mSignature(signature(ccs)) {
 
 }
 
 
-CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<UnicodeSet> && ccs)
+CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<CC *> && ccs)
 : CharClassesSignature(ccs)
 , PabloKernel(iBuilder,
               "cc" + sha1sum(mSignature),
@@ -83,7 +76,7 @@ void CharClassesKernel::generatePabloMethod() {
     NameMap nameMap;
     std::vector<Name *> names;
     for (unsigned i = 0; i < n; i++) {
-        Name * name = re::makeName("cc" + std::to_string(i), makeCC(std::move(mCCs[i])));
+        Name * name = re::makeName("cc" + std::to_string(i), mCCs[i]);
         nameMap.emplace(name, nullptr);
         names.push_back(name);
     }

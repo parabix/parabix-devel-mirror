@@ -50,6 +50,10 @@ public:
         return this != &other;
     }
 
+    inline size_type getTotalMemory() const {
+        return mAllocator.getTotalMemory();
+    }
+
     inline void Reset() {
         mAllocator.Reset();
     }
@@ -105,6 +109,10 @@ public:
     template<typename Type = T>
     inline bool operator!=(ProxyAllocator<Type> const & other) {
         return mAllocator != other.mAllocator;
+    }
+
+    inline size_type getTotalMemory() const {
+        return mAllocator->getTotalMemory();
     }
 
     inline ProxyAllocator() noexcept = delete;

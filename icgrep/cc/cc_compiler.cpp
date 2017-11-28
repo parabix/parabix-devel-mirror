@@ -30,7 +30,7 @@ CC_Compiler::CC_Compiler(pablo::PabloKernel * kernel, pablo::Var * basisBits)
     mEncodingMask = (static_cast<unsigned>(1) << mEncodingBits) - static_cast<unsigned>(1);
 }
 
-PabloAST * CC_Compiler::compileCC(const std::string & canonicalName, const CC *cc, PabloBlock & block) {    
+PabloAST * CC_Compiler::compileCC(const std::string & canonicalName, const CC *cc, PabloBlock & block) {
     PabloAST * const var = charset_expr(cc, block);
     if (LLVM_LIKELY(isa<Statement>(var))) {
         cast<Statement>(var)->setName(block.makeName(canonicalName));

@@ -6,11 +6,12 @@
 #define MULTIPLEX_CCS_H
 
 #include <vector>
-#include <UCD/unicode_set.h>
+
+namespace re { class CC; }
 
 
-void doMultiplexCCs(const std::vector<UCD::UnicodeSet> & CCs,
+void doMultiplexCCs(const std::vector<const re::CC *> & CCs,
                     std::vector<std::vector<unsigned>> & exclusiveSetIDs,
-                    std::vector<UCD::UnicodeSet> & multiplexedCCs);
+                    std::vector<re::CC *> & multiplexedCCs);
 
 #endif

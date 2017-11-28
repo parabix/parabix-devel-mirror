@@ -1,14 +1,14 @@
 #ifndef RE_COLLECT_UNICODESETS_H
 #define RE_COLLECT_UNICODESETS_H
 
-#include <UCD/ucd_compiler.hpp>
+#include <vector>
 
 namespace re {
 
     class RE;
-    class Name;
+    class CC;
 
-    std::vector<UCD::UnicodeSet> collect_UnicodeSets(RE * re);
+    std::vector<const CC *> collectUnicodeSets(RE * const re);
 
 }
 #endif

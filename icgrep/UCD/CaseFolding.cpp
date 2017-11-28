@@ -8,7 +8,7 @@
 #include "CaseFolding.h"
 #include <algorithm>
 
-using namespace re;
+using namespace UCD;
 
 int findFoldEntry(const codepoint_t cp) {
     int lo = 0;
@@ -25,7 +25,7 @@ int findFoldEntry(const codepoint_t cp) {
     return lo;
 }
 
-void caseInsensitiveInsertRange(CC * cc, const codepoint_t lo, const codepoint_t hi) {
+void caseInsensitiveInsertRange(UnicodeSet * const cc, const codepoint_t lo, const codepoint_t hi) {
     cc->insert_range(lo, hi);
     // Find the first foldTable entry overlapping the (lo, hi) range.
     int e = findFoldEntry(lo);

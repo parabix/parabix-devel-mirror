@@ -7,9 +7,10 @@ namespace re {
 
     class RE;
     class Name;
+    class CC;
 
     RE * multiplex(RE * const re,
-                   const std::vector<UCD::UnicodeSet> & UnicodeSets,
+                   const std::vector<const CC *> & UnicodeSets,
                    const std::vector<std::vector<unsigned>> & exclusiveSetIDs);
 
 }

@@ -58,10 +58,10 @@ public:
         return false;
     }
     
-    BinaryPropertyObject(UCD::property_t p, UnicodeSet s)
+    BinaryPropertyObject(UCD::property_t p, const UnicodeSet && set)
     : PropertyObject(p, ClassTypeId::BinaryProperty)
     , mNoUninitialized(true)
-    , mY(s) {
+    , mY(std::move(set)) {
         
     }
     const UnicodeSet GetCodepointSet(const std::string & prop_value_string) override;
@@ -70,7 +70,7 @@ public:
     const std::string & GetPropertyValueGrepString() override;
 private:
     bool mNoUninitialized;
-    UnicodeSet mY;
+    const UnicodeSet mY;
     UnicodeSet mN;
     std::string mPropertyValueGrepString;
 };
@@ -86,17 +86,17 @@ public:
 
     EnumeratedPropertyObject(UCD::property_t p,
                              const unsigned independent_enums,
-                             const std::vector<std::string> & enum_names,
-                             const std::vector<std::string> & names,
-                             std::unordered_map<std::string, int> & aliases,
+                             const std::vector<std::string> && enum_names,
+                             const std::vector<std::string> && names,
+                             std::unordered_map<std::string, int> && aliases,
                              std::vector<const UnicodeSet *> && sets)
     : PropertyObject(p, ClassTypeId::EnumeratedProperty)
     , independent_enum_count(independent_enums)
-    , property_value_enum_names(enum_names)
-    , property_value_full_names(names)
-    , property_value_aliases(aliases)
+    , property_value_enum_names(std::move(enum_names))
+    , property_value_full_names(std::move(names))
+    , property_value_aliases(std::move(aliases))
     , uninitialized(true)
-    , property_value_sets(sets) {
+    , property_value_sets(std::move(sets)) {
 
     }
 
@@ -119,9 +119,9 @@ public:
 
 private:
     const unsigned independent_enum_count;
-    const std::vector<std::string> & property_value_enum_names;  // never changes
-    const std::vector<std::string> & property_value_full_names;  // never changes
-    std::unordered_map<std::string, int> & property_value_aliases;
+    const std::vector<std::string> property_value_enum_names;
+    const std::vector<std::string> property_value_full_names;
+    std::unordered_map<std::string, int> property_value_aliases;
     std::string mPropertyValueGrepString;
     bool uninitialized; // full names must be added dynamically.
     const std::vector<const UnicodeSet *> property_value_sets;
@@ -139,7 +139,7 @@ public:
 
     ExtensionPropertyObject(UCD::property_t p,
                             UCD::property_t base,
-                            std::vector<const UnicodeSet *> && sets)
+                            const std::vector<const UnicodeSet *> && sets)
     : PropertyObject(p, ClassTypeId::ExtensionProperty)
     , base_property(base)
     , property_value_sets(sets) {
@@ -171,12 +171,12 @@ public:
         return false;
     }
     
-    NumericPropertyObject(UCD::property_t p, UnicodeSet NaN_Set, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> & cps)
+    NumericPropertyObject(UCD::property_t p, const UnicodeSet && NaN_Set, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> && cps)
     : PropertyObject(p, ClassTypeId::NumericProperty)
-    , mNaNCodepointSet(NaN_Set)
+    , mNaNCodepointSet(std::move(NaN_Set))
     , mStringBuffer(string_buffer)
     , mBufSize(bufsize)
-    , mExplicitCps(cps)
+    , mExplicitCps(std::move(cps))
     {
         
     }
@@ -184,10 +184,10 @@ public:
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
 
 private:
-    UnicodeSet mNaNCodepointSet;  // codepoints for which the property value is NaN (not a number).
+    const UnicodeSet mNaNCodepointSet;  // codepoints for which the property value is NaN (not a number).
     const char * mStringBuffer;  // buffer holding all string values for other codepoints, in sorted order. 
     unsigned mBufSize;
-    const std::vector<UCD::codepoint_t> & mExplicitCps;
+    const std::vector<UCD::codepoint_t> mExplicitCps;
 };
 
 class StringPropertyObject : public PropertyObject {
@@ -198,10 +198,10 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    StringPropertyObject(UCD::property_t p, UnicodeSet nullSet, UnicodeSet mapsToSelf, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> & cps)
+    StringPropertyObject(UCD::property_t p, const UnicodeSet && nullSet, const UnicodeSet && mapsToSelf, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> && cps)
     : PropertyObject(p, ClassTypeId::StringProperty)
-    , mNullCodepointSet(nullSet)
-    , mSelfCodepointSet(mapsToSelf)
+    , mNullCodepointSet(std::move(nullSet))
+    , mSelfCodepointSet(std::move(mapsToSelf))
     , mStringBuffer(string_buffer)
     , mBufSize(bufsize)
     , mExplicitCps(cps)
@@ -213,11 +213,11 @@ public:
     const UnicodeSet GetReflexiveSet() override;
     
 private:
-    UnicodeSet mNullCodepointSet;  // codepoints for which the property value is the null string.
-    UnicodeSet mSelfCodepointSet;  // codepoints for which the property value is the codepoint itself.
+    const UnicodeSet mNullCodepointSet;  // codepoints for which the property value is the null string.
+    const UnicodeSet mSelfCodepointSet;  // codepoints for which the property value is the codepoint itself.
     const char * mStringBuffer;  // buffer holding all string values for other codepoints, in sorted order. 
     unsigned mBufSize;
-    const std::vector<UCD::codepoint_t> & mExplicitCps;
+    const std::vector<UCD::codepoint_t> mExplicitCps;
 
 };
     
@@ -229,10 +229,10 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    StringOverridePropertyObject(UCD::property_t p, PropertyObject & baseObj, UnicodeSet explicitly_defined, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> & cps)
+    StringOverridePropertyObject(UCD::property_t p, PropertyObject & baseObj, const UnicodeSet && overriddenSet, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> && cps)
     : PropertyObject(p, ClassTypeId::StringOverrideProperty)
     , mBaseObject(baseObj)
-    , mOverriddenSet(explicitly_defined)
+    , mOverriddenSet(std::move(overriddenSet))
     , mStringBuffer(string_buffer)
     , mBufSize(bufsize)
     , mExplicitCps(cps)
@@ -245,10 +245,10 @@ public:
     
 private:
     PropertyObject & mBaseObject;  // the base object that provides default values for this property unless overridden.
-    UnicodeSet mOverriddenSet;   // codepoints for which the baseObject value is overridden.
+    const UnicodeSet mOverriddenSet;   // codepoints for which the baseObject value is overridden.
     const char * mStringBuffer;  // buffer holding all string values for overridden codepoints, in sorted order. 
     unsigned mBufSize;
-    const std::vector<UCD::codepoint_t> & mExplicitCps;
+    const std::vector<codepoint_t> mExplicitCps;
     
 };
     

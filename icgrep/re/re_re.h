@@ -7,6 +7,8 @@
 #ifndef RE_H
 #define RE_H
 
+#include <llvm/Support/raw_ostream.h>
+#include <UCD/unicode_set.h>
 #include <util/slab_allocator.h>
 #include <vector>
 
@@ -36,9 +38,12 @@ public:
         return mClassTypeId;
     }
     inline static void Reset() {
+        llvm::outs() << "\nRE LOCAL: " << mAllocator.getTotalMemory() << "\n"
+                        "UCD GLOBAL: " << UCD::UnicodeSet::GlobalAllocator.getTotalMemory() << "\n\n";
         mAllocator.Reset();
     }
     typedef std::initializer_list<RE *> InitializerList;
+
 protected:
     inline RE(const ClassTypeId id)
     : mClassTypeId(id) {

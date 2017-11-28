@@ -17,19 +17,34 @@ namespace UCD {
     namespace NAME_ALIAS_ns {
         /** Code Point Ranges for Name_Alias mapping to <none>
         **/
+        
+        
+        namespace {
+        const static UnicodeSet::run_t __null_codepoint_set_runs[] = {
+        {Empty, 34816}};
+        const static UnicodeSet::bitquad_t * const __null_codepoint_set_quads = nullptr;
+        }
 
-        const UnicodeSet null_codepoint_set
-                    {{{Empty, 34816}},
-             {}};
+        const static UnicodeSet null_codepoint_set{const_cast<UnicodeSet::run_t *>(__null_codepoint_set_runs), 1, 0, const_cast<UnicodeSet::bitquad_t *>(__null_codepoint_set_quads), 0, 0};
+
+
 
         /** Code Point Ranges for Name_Alias mapping to <codepoint>
         **/
-        const UnicodeSet reflexive_set
-                    {{{Empty, 34816}},
-             {}};
+        
+        
+        namespace {
+        const static UnicodeSet::run_t __reflexive_set_runs[] = {
+        {Empty, 34816}};
+        const static UnicodeSet::bitquad_t * const __reflexive_set_quads = nullptr;
+        }
+
+        const static UnicodeSet reflexive_set{const_cast<UnicodeSet::run_t *>(__reflexive_set_runs), 1, 0, const_cast<UnicodeSet::bitquad_t *>(__reflexive_set_quads), 0, 0};
+
+
 
         const unsigned buffer_length = 2549;
-        const static char __attribute__ ((aligned (32))) string_buffer[2560] = u8R"__(NUL
+        const static char string_buffer[2560] LLVM_ALIGNAS(32) = u8R"__(NUL
 SOH
 STX
 ETX
@@ -403,7 +418,7 @@ VS255
 VS256
 )__";
 
-        const static std::vector<codepoint_t> defined_cps = {
+        const static std::vector<codepoint_t> defined_cps{
         0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
         0x0008, 0x0009, 0x000a, 0x000b, 0x000c, 0x000d, 0x000e, 0x000f,
         0x0010, 0x0011, 0x0012, 0x0013, 0x0014, 0x0015, 0x0016, 0x0017,
@@ -456,11 +471,11 @@ VS256
         0xe01e3, 0xe01e4, 0xe01e5, 0xe01e6, 0xe01e7, 0xe01e8, 0xe01e9,
         0xe01ea, 0xe01eb, 0xe01ec, 0xe01ed, 0xe01ee, 0xe01ef};
         static StringPropertyObject property_object(Name_Alias, 
-                                                    null_codepoint_set, 
-                                                    reflexive_set, 
+                                                    std::move(null_codepoint_set), 
+                                                    std::move(reflexive_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
 }
 

@@ -27,7 +27,7 @@ using FlatSet = boost::container::flat_set<Value>;
 Function * makeThreadFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const std::string & name) {
     Function * const f = Function::Create(FunctionType::get(b->getVoidTy(), {b->getVoidPtrTy()}, false), Function::InternalLinkage, name, b->getModule());
     f->setCallingConv(CallingConv::C);
-    f->arg_begin()->setName("input");
+    f->arg_begin()->setName("state");
     return f;
 }
 
@@ -50,7 +50,6 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
     PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
     Constant * nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
     std::vector<Type *> structTypes;
-
     codegen::BufferSegments = std::max(codegen::BufferSegments, codegen::ThreadNum);
 
     Value * instance[n];
@@ -61,18 +60,21 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
     StructType * const sharedStructType = StructType::get(m->getContext(), structTypes);
     StructType * const threadStructType = StructType::get(m->getContext(), {sharedStructType->getPointerTo(), sizeTy});
 
+    const auto ip = iBuilder->saveIP();
+
     Function * const threadFunc = makeThreadFunction(iBuilder, "segment");
-    Function::arg_iterator args = threadFunc->arg_begin();
-    Value * threadStruct = iBuilder->CreateBitCast(&*(args), threadStructType->getPointerTo());
+    auto args = threadFunc->arg_begin();
 
     // -------------------------------------------------------------------------------------------------------------------------
     // MAKE SEGMENT PARALLEL PIPELINE THREAD
     // -------------------------------------------------------------------------------------------------------------------------
-    const auto ip = iBuilder->saveIP();
 
      // Create the basic blocks for the thread function.
     BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc);
     iBuilder->SetInsertPoint(entryBlock);
+
+    Value * const threadStruct = iBuilder->CreateBitCast(&*(args), threadStructType->getPointerTo());
+
     Value * const sharedStatePtr = iBuilder->CreateLoad(iBuilder->CreateGEP(threadStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
     for (unsigned k = 0; k < n; ++k) {
         Value * ptr = iBuilder->CreateLoad(iBuilder->CreateGEP(sharedStatePtr, {iBuilder->getInt32(0), iBuilder->getInt32(k)}));
