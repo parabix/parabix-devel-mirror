@@ -354,7 +354,7 @@ namespace UCD {
 
 
         const unsigned buffer_length = 841401;
-        const static char string_buffer[841472] LLVM_ALIGNAS(32) = u8R"__(SPACE
+        const static char string_buffer LLVM_ALIGNAS(32) [841472] = u8R"__(SPACE
 EXCLAMATION MARK
 QUOTATION MARK
 NUMBER SIGN
@@ -36290,7 +36290,7 @@ VARIATION SELECTOR-256
 
 
         const unsigned buffer_length = 23174;
-        const static char string_buffer[23296] LLVM_ALIGNAS(32) = u8R"__( 
+        const static char string_buffer LLVM_ALIGNAS(32) [23296] = u8R"__( 
  ̈
 a
  ̄
@@ -42978,7 +42978,7 @@ DJ
 
 
         const unsigned buffer_length = 4961;
-        const static char string_buffer[5120] LLVM_ALIGNAS(32) = u8R"__(A
+        const static char string_buffer LLVM_ALIGNAS(32) [5120] = u8R"__(A
 B
 C
 D
@@ -44679,7 +44679,7 @@ S
 
 
         const unsigned buffer_length = 4893;
-        const static char string_buffer[5120] LLVM_ALIGNAS(32) = u8R"__(a
+        const static char string_buffer LLVM_ALIGNAS(32) [5120] = u8R"__(a
 b
 c
 d
@@ -46369,7 +46369,7 @@ k
 
 
         const unsigned buffer_length = 4961;
-        const static char string_buffer[5120] LLVM_ALIGNAS(32) = u8R"__(A
+        const static char string_buffer LLVM_ALIGNAS(32) [5120] = u8R"__(A
 B
 C
 D
@@ -47979,7 +47979,7 @@ S
 
 
         const unsigned buffer_length = 3948;
-        const static char string_buffer[4096] LLVM_ALIGNAS(32) = u8R"__(0
+        const static char string_buffer LLVM_ALIGNAS(32) [4096] = u8R"__(0
 1
 2
 3

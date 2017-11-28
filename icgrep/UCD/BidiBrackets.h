@@ -61,7 +61,7 @@ namespace UCD {
 
 
         const unsigned buffer_length = 468;
-        const static char string_buffer[512] LLVM_ALIGNAS(32) = u8R"__()
+        const static char string_buffer LLVM_ALIGNAS(32) [512] = u8R"__()
 (
 ]
 [
@@ -299,12 +299,12 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {bpt,
-         BPT_ns::independent_prop_values,
-         std::move(BPT_ns::enum_names),
-         std::move(BPT_ns::value_names),
-         std::move(BPT_ns::aliases_only_map),{
-&n_Set, &o_Set, &c_Set
-         }};
+        BPT_ns::independent_prop_values,
+        std::move(BPT_ns::enum_names),
+        std::move(BPT_ns::value_names),
+        std::move(BPT_ns::aliases_only_map),{
+        &n_Set, &o_Set, &c_Set
+        }};
     }
 }
 

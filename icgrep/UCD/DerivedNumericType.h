@@ -308,12 +308,12 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {nt,
-         NT_ns::independent_prop_values,
-         std::move(NT_ns::enum_names),
-         std::move(NT_ns::value_names),
-         std::move(NT_ns::aliases_only_map),{
-&none_Set, &nu_Set, &di_Set, &de_Set
-         }};
+        NT_ns::independent_prop_values,
+        std::move(NT_ns::enum_names),
+        std::move(NT_ns::value_names),
+        std::move(NT_ns::aliases_only_map),{
+        &none_Set, &nu_Set, &di_Set, &de_Set
+        }};
     }
 }
 

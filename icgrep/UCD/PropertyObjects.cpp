@@ -119,7 +119,7 @@ std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
             basis_count++;
         }
         for (unsigned i = 0; i < basis_count; i++) {
-            enumeration_basis_sets.push_back(std::move(UnicodeSet()));
+            enumeration_basis_sets.push_back(UnicodeSet());
             for (unsigned e = 0; e < independent_enum_count; e++) {
                 if (((e >> i) & 1UL) == 0) {
                     enumeration_basis_sets[i] = enumeration_basis_sets[i] + *property_value_sets[e];

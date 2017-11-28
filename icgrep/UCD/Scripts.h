@@ -2386,11 +2386,11 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {sc,
-         SC_ns::independent_prop_values,
-         std::move(SC_ns::enum_names),
-         std::move(SC_ns::value_names),
-         std::move(SC_ns::aliases_only_map),{
-&zzzz_Set, &zyyy_Set, &latn_Set, &grek_Set, &cyrl_Set, &armn_Set,
+        SC_ns::independent_prop_values,
+        std::move(SC_ns::enum_names),
+        std::move(SC_ns::value_names),
+        std::move(SC_ns::aliases_only_map),{
+        &zzzz_Set, &zyyy_Set, &latn_Set, &grek_Set, &cyrl_Set, &armn_Set,
         &hebr_Set, &arab_Set, &syrc_Set, &thaa_Set, &deva_Set, &beng_Set,
         &guru_Set, &gujr_Set, &orya_Set, &taml_Set, &telu_Set, &knda_Set,
         &mlym_Set, &sinh_Set, &thai_Set, &laoo_Set, &tibt_Set, &mymr_Set,
@@ -2414,7 +2414,7 @@ namespace UCD {
         &ahom_Set, &hluw_Set, &hatr_Set, &mult_Set, &hung_Set, &sgnw_Set,
         &adlm_Set, &bhks_Set, &marc_Set, &newa_Set, &osge_Set, &tang_Set,
         &gonm_Set, &nshu_Set, &soyo_Set, &zanb_Set, &hrkt_Set
-         }};
+        }};
     }
 }
 

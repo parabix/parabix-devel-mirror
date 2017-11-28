@@ -182,12 +182,12 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {vo,
-         VO_ns::independent_prop_values,
-         std::move(VO_ns::enum_names),
-         std::move(VO_ns::value_names),
-         std::move(VO_ns::aliases_only_map),{
-&r_Set, &u_Set, &tr_Set, &tu_Set
-         }};
+        VO_ns::independent_prop_values,
+        std::move(VO_ns::enum_names),
+        std::move(VO_ns::value_names),
+        std::move(VO_ns::aliases_only_map),{
+        &r_Set, &u_Set, &tr_Set, &tu_Set
+        }};
     }
 }
 

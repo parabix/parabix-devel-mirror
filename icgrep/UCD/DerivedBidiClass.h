@@ -795,15 +795,15 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {bc,
-         BC_ns::independent_prop_values,
-         std::move(BC_ns::enum_names),
-         std::move(BC_ns::value_names),
-         std::move(BC_ns::aliases_only_map),{
-&l_Set, &r_Set, &en_Set, &es_Set, &et_Set, &an_Set, &cs_Set, &b_Set,
+        BC_ns::independent_prop_values,
+        std::move(BC_ns::enum_names),
+        std::move(BC_ns::value_names),
+        std::move(BC_ns::aliases_only_map),{
+        &l_Set, &r_Set, &en_Set, &es_Set, &et_Set, &an_Set, &cs_Set, &b_Set,
         &s_Set, &ws_Set, &on_Set, &bn_Set, &nsm_Set, &al_Set, &lro_Set,
         &rlo_Set, &lre_Set, &rle_Set, &pdf_Set, &lri_Set, &rli_Set,
         &fsi_Set, &pdi_Set
-         }};
+        }};
     }
 }
 

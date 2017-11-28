@@ -3531,11 +3531,11 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {blk,
-         BLK_ns::independent_prop_values,
-         std::move(BLK_ns::enum_names),
-         std::move(BLK_ns::value_names),
-         std::move(BLK_ns::aliases_only_map),{
-&nb_Set, &ascii_Set, &latin_1_sup_Set, &latin_ext_a_Set,
+        BLK_ns::independent_prop_values,
+        std::move(BLK_ns::enum_names),
+        std::move(BLK_ns::value_names),
+        std::move(BLK_ns::aliases_only_map),{
+        &nb_Set, &ascii_Set, &latin_1_sup_Set, &latin_ext_a_Set,
         &latin_ext_b_Set, &ipa_ext_Set, &modifier_letters_Set,
         &diacriticals_Set, &greek_Set, &cyrillic_Set, &cyrillic_sup_Set,
         &armenian_Set, &hebrew_Set, &arabic_Set, &syriac_Set,
@@ -3618,7 +3618,7 @@ namespace UCD {
         &cjk_ext_d_Set, &cjk_ext_e_Set, &cjk_ext_f_Set,
         &cjk_compat_ideographs_sup_Set, &tags_Set, &vs_sup_Set,
         &sup_pua_a_Set, &sup_pua_b_Set
-         }};
+        }};
     }
 }
 

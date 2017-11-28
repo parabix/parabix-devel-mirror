@@ -935,11 +935,11 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {InSC,
-         INSC_ns::independent_prop_values,
-         std::move(INSC_ns::enum_names),
-         std::move(INSC_ns::value_names),
-         std::move(INSC_ns::aliases_only_map),{
-&other_Set, &bindu_Set, &visarga_Set, &avagraha_Set, &nukta_Set,
+        INSC_ns::independent_prop_values,
+        std::move(INSC_ns::enum_names),
+        std::move(INSC_ns::value_names),
+        std::move(INSC_ns::aliases_only_map),{
+        &other_Set, &bindu_Set, &visarga_Set, &avagraha_Set, &nukta_Set,
         &virama_Set, &pure_killer_Set, &invisible_stacker_Set,
         &vowel_independent_Set, &vowel_dependent_Set, &vowel_Set,
         &consonant_placeholder_Set, &consonant_Set, &consonant_dead_Set,
@@ -952,7 +952,7 @@ namespace UCD {
         &syllable_modifier_Set, &consonant_killer_Set, &non_joiner_Set,
         &joiner_Set, &number_joiner_Set, &number_Set,
         &brahmi_joining_number_Set
-         }};
+        }};
     }
 }
 

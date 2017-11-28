@@ -43,7 +43,7 @@ namespace UCD {
 
 
         const unsigned buffer_length = 406;
-        const static char string_buffer[512] LLVM_ALIGNAS(32) = u8R"__(ß
+        const static char string_buffer LLVM_ALIGNAS(32) [512] = u8R"__(ß
 i̇
 ŉ
 ǰ
@@ -197,7 +197,7 @@ i̇
 
 
         const unsigned buffer_length = 571;
-        const static char string_buffer[768] LLVM_ALIGNAS(32) = u8R"__(SS
+        const static char string_buffer LLVM_ALIGNAS(32) [768] = u8R"__(SS
 İ
 ʼN
 J̌
@@ -351,7 +351,7 @@ ST
 
 
         const unsigned buffer_length = 469;
-        const static char string_buffer[512] LLVM_ALIGNAS(32) = u8R"__(Ss
+        const static char string_buffer LLVM_ALIGNAS(32) [512] = u8R"__(Ss
 İ
 ʼN
 J̌

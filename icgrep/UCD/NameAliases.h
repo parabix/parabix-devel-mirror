@@ -44,7 +44,7 @@ namespace UCD {
 
 
         const unsigned buffer_length = 2549;
-        const static char string_buffer[2560] LLVM_ALIGNAS(32) = u8R"__(NUL
+        const static char string_buffer LLVM_ALIGNAS(32) [2560] = u8R"__(NUL
 SOH
 STX
 ETX

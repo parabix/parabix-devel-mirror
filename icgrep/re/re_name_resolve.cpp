@@ -39,7 +39,7 @@ struct NameResolver {
                     if (UCD::resolvePropertyDefinition(name)) {
                         name->setDefinition(resolve(name->getDefinition()));
                     } else {
-                        name->setDefinition(makeCC(std::move(UCD::resolveUnicodeSet(name))));
+                        name->setDefinition(makeCC(UCD::resolveUnicodeSet(name)));
                     }
                 } else {
                     throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");

@@ -905,14 +905,14 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {GCB,
-         GCB_ns::independent_prop_values,
-         std::move(GCB_ns::enum_names),
-         std::move(GCB_ns::value_names),
-         std::move(GCB_ns::aliases_only_map),{
-&xx_Set, &pp_Set, &cr_Set, &lf_Set, &cn_Set, &ex_Set, &ri_Set,
+        GCB_ns::independent_prop_values,
+        std::move(GCB_ns::enum_names),
+        std::move(GCB_ns::value_names),
+        std::move(GCB_ns::aliases_only_map),{
+        &xx_Set, &pp_Set, &cr_Set, &lf_Set, &cn_Set, &ex_Set, &ri_Set,
         &sm_Set, &l_Set, &v_Set, &t_Set, &lv_Set, &lvt_Set, &eb_Set,
         &em_Set, &zwj_Set, &gaz_Set, &ebg_Set
-         }};
+        }};
     }
 }
 

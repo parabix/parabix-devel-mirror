@@ -630,14 +630,14 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {dt,
-         DT_ns::independent_prop_values,
-         std::move(DT_ns::enum_names),
-         std::move(DT_ns::value_names),
-         std::move(DT_ns::aliases_only_map),{
-&none_Set, &can_Set, &com_Set, &font_Set, &nb_Set, &init_Set,
+        DT_ns::independent_prop_values,
+        std::move(DT_ns::enum_names),
+        std::move(DT_ns::value_names),
+        std::move(DT_ns::aliases_only_map),{
+        &none_Set, &can_Set, &com_Set, &font_Set, &nb_Set, &init_Set,
         &med_Set, &fin_Set, &iso_Set, &enc_Set, &sup_Set, &sub_Set,
         &vert_Set, &wide_Set, &nar_Set, &sml_Set, &sqr_Set, &fra_Set
-         }};
+        }};
     }
 }
 

@@ -398,12 +398,12 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {jt,
-         JT_ns::independent_prop_values,
-         std::move(JT_ns::enum_names),
-         std::move(JT_ns::value_names),
-         std::move(JT_ns::aliases_only_map),{
-&u_Set, &c_Set, &d_Set, &r_Set, &l_Set, &t_Set
-         }};
+        JT_ns::independent_prop_values,
+        std::move(JT_ns::enum_names),
+        std::move(JT_ns::value_names),
+        std::move(JT_ns::aliases_only_map),{
+        &u_Set, &c_Set, &d_Set, &r_Set, &l_Set, &t_Set
+        }};
     }
 }
 

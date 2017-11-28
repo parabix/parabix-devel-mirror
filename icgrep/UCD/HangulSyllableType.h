@@ -374,12 +374,12 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {hst,
-         HST_ns::independent_prop_values,
-         std::move(HST_ns::enum_names),
-         std::move(HST_ns::value_names),
-         std::move(HST_ns::aliases_only_map),{
-&na_Set, &l_Set, &v_Set, &t_Set, &lv_Set, &lvt_Set
-         }};
+        HST_ns::independent_prop_values,
+        std::move(HST_ns::enum_names),
+        std::move(HST_ns::value_names),
+        std::move(HST_ns::aliases_only_map),{
+        &na_Set, &l_Set, &v_Set, &t_Set, &lv_Set, &lvt_Set
+        }};
     }
 }
 

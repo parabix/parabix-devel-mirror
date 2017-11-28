@@ -483,12 +483,12 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {NFC_QC,
-         NFC_QC_ns::independent_prop_values,
-         std::move(NFC_QC_ns::enum_names),
-         std::move(NFC_QC_ns::value_names),
-         std::move(NFC_QC_ns::aliases_only_map),{
-&y_Set, &n_Set, &m_Set
-         }};
+        NFC_QC_ns::independent_prop_values,
+        std::move(NFC_QC_ns::enum_names),
+        std::move(NFC_QC_ns::value_names),
+        std::move(NFC_QC_ns::aliases_only_map),{
+        &y_Set, &n_Set, &m_Set
+        }};
     }
   namespace NFD_QC_ns {
     const unsigned independent_prop_values = 2;
@@ -673,12 +673,12 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {NFD_QC,
-         NFD_QC_ns::independent_prop_values,
-         std::move(NFD_QC_ns::enum_names),
-         std::move(NFD_QC_ns::value_names),
-         std::move(NFD_QC_ns::aliases_only_map),{
-&y_Set, &n_Set
-         }};
+        NFD_QC_ns::independent_prop_values,
+        std::move(NFD_QC_ns::enum_names),
+        std::move(NFD_QC_ns::value_names),
+        std::move(NFD_QC_ns::aliases_only_map),{
+        &y_Set, &n_Set
+        }};
     }
     namespace NFKC_CF_ns {
         /** Code Point Ranges for NFKC_CF mapping to <none>
@@ -997,7 +997,7 @@ namespace UCD {
 
 
         const unsigned buffer_length = 23235;
-        const static char string_buffer[23296] LLVM_ALIGNAS(32) = u8R"__(a
+        const static char string_buffer LLVM_ALIGNAS(32) [23296] = u8R"__(a
 b
 c
 d
@@ -8126,12 +8126,12 @@ dj
 
     static EnumeratedPropertyObject property_object
         {NFKC_QC,
-         NFKC_QC_ns::independent_prop_values,
-         std::move(NFKC_QC_ns::enum_names),
-         std::move(NFKC_QC_ns::value_names),
-         std::move(NFKC_QC_ns::aliases_only_map),{
-&y_Set, &n_Set, &m_Set
-         }};
+        NFKC_QC_ns::independent_prop_values,
+        std::move(NFKC_QC_ns::enum_names),
+        std::move(NFKC_QC_ns::value_names),
+        std::move(NFKC_QC_ns::aliases_only_map),{
+        &y_Set, &n_Set, &m_Set
+        }};
     }
   namespace NFKD_QC_ns {
     const unsigned independent_prop_values = 2;
@@ -8439,12 +8439,12 @@ dj
 
     static EnumeratedPropertyObject property_object
         {NFKD_QC,
-         NFKD_QC_ns::independent_prop_values,
-         std::move(NFKD_QC_ns::enum_names),
-         std::move(NFKD_QC_ns::value_names),
-         std::move(NFKD_QC_ns::aliases_only_map),{
-&y_Set, &n_Set
-         }};
+        NFKD_QC_ns::independent_prop_values,
+        std::move(NFKD_QC_ns::enum_names),
+        std::move(NFKD_QC_ns::value_names),
+        std::move(NFKD_QC_ns::aliases_only_map),{
+        &y_Set, &n_Set
+        }};
     }
     namespace XO_NFC_ns {
         static ObsoletePropertyObject property_object(XO_NFC);

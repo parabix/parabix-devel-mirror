@@ -528,16 +528,16 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {InPC,
-         INPC_ns::independent_prop_values,
-         std::move(INPC_ns::enum_names),
-         std::move(INPC_ns::value_names),
-         std::move(INPC_ns::aliases_only_map),{
-&na_Set, &right_Set, &left_Set, &visual_order_left_Set,
+        INPC_ns::independent_prop_values,
+        std::move(INPC_ns::enum_names),
+        std::move(INPC_ns::value_names),
+        std::move(INPC_ns::aliases_only_map),{
+        &na_Set, &right_Set, &left_Set, &visual_order_left_Set,
         &left_and_right_Set, &top_Set, &bottom_Set, &top_and_bottom_Set,
         &top_and_right_Set, &top_and_left_Set, &top_and_left_and_right_Set,
         &bottom_and_right_Set, &bottom_and_left_Set,
         &top_and_bottom_and_right_Set, &overstruck_Set
-         }};
+        }};
     }
 }
 

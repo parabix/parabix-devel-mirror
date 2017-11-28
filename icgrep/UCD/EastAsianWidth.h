@@ -311,12 +311,12 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {ea,
-         EA_ns::independent_prop_values,
-         std::move(EA_ns::enum_names),
-         std::move(EA_ns::value_names),
-         std::move(EA_ns::aliases_only_map),{
-&n_Set, &na_Set, &a_Set, &w_Set, &h_Set, &f_Set
-         }};
+        EA_ns::independent_prop_values,
+        std::move(EA_ns::enum_names),
+        std::move(EA_ns::value_names),
+        std::move(EA_ns::aliases_only_map),{
+        &n_Set, &na_Set, &a_Set, &w_Set, &h_Set, &f_Set
+        }};
     }
 }
 

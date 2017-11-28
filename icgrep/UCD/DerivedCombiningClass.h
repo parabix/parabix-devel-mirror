@@ -975,11 +975,11 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {ccc,
-         CCC_ns::independent_prop_values,
-         std::move(CCC_ns::enum_names),
-         std::move(CCC_ns::value_names),
-         std::move(CCC_ns::aliases_only_map),{
-&nr_Set, &ov_Set, &nk_Set, &kv_Set, &vr_Set, &ccc10_Set, &ccc11_Set,
+        CCC_ns::independent_prop_values,
+        std::move(CCC_ns::enum_names),
+        std::move(CCC_ns::value_names),
+        std::move(CCC_ns::aliases_only_map),{
+        &nr_Set, &ov_Set, &nk_Set, &kv_Set, &vr_Set, &ccc10_Set, &ccc11_Set,
         &ccc12_Set, &ccc13_Set, &ccc14_Set, &ccc15_Set, &ccc16_Set,
         &ccc17_Set, &ccc18_Set, &ccc19_Set, &ccc20_Set, &ccc21_Set,
         &ccc22_Set, &ccc23_Set, &ccc24_Set, &ccc25_Set, &ccc26_Set,
@@ -990,7 +990,7 @@ namespace UCD {
         &ata_Set, &atar_Set, &bl_Set, &b_Set, &br_Set, &l_Set, &r_Set,
         &al_Set, &a_Set, &ar_Set, &db_Set, &da_Set, &is_Set, &ccc133_Set,
         &atbl_Set
-         }};
+        }};
     }
 }
 

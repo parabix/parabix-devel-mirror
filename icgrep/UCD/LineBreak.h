@@ -1845,18 +1845,18 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {lb,
-         LB_ns::independent_prop_values,
-         std::move(LB_ns::enum_names),
-         std::move(LB_ns::value_names),
-         std::move(LB_ns::aliases_only_map),{
-&xx_Set, &cm_Set, &ba_Set, &lf_Set, &bk_Set, &cr_Set, &sp_Set,
+        LB_ns::independent_prop_values,
+        std::move(LB_ns::enum_names),
+        std::move(LB_ns::value_names),
+        std::move(LB_ns::aliases_only_map),{
+        &xx_Set, &cm_Set, &ba_Set, &lf_Set, &bk_Set, &cr_Set, &sp_Set,
         &ex_Set, &qu_Set, &al_Set, &pr_Set, &po_Set, &op_Set, &cp_Set,
         &is_Set, &hy_Set, &sy_Set, &nu_Set, &cl_Set, &nl_Set, &gl_Set,
         &ai_Set, &bb_Set, &hl_Set, &sa_Set, &jl_Set, &jv_Set, &jt_Set,
         &ns_Set, &zw_Set, &zwj_Set, &b2_Set, &in_Set, &wj_Set, &id_Set,
         &eb_Set, &cj_Set, &h2_Set, &h3_Set, &sg_Set, &cb_Set, &ri_Set,
         &em_Set
-         }};
+        }};
     }
 }
 

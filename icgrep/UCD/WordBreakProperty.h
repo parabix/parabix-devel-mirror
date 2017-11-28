@@ -1018,15 +1018,15 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {WB,
-         WB_ns::independent_prop_values,
-         std::move(WB_ns::enum_names),
-         std::move(WB_ns::value_names),
-         std::move(WB_ns::aliases_only_map),{
-&xx_Set, &dq_Set, &sq_Set, &hl_Set, &cr_Set, &lf_Set, &nl_Set,
+        WB_ns::independent_prop_values,
+        std::move(WB_ns::enum_names),
+        std::move(WB_ns::value_names),
+        std::move(WB_ns::aliases_only_map),{
+        &xx_Set, &dq_Set, &sq_Set, &hl_Set, &cr_Set, &lf_Set, &nl_Set,
         &extend_Set, &ri_Set, &fo_Set, &ka_Set, &le_Set, &ml_Set, &mn_Set,
         &mb_Set, &nu_Set, &ex_Set, &eb_Set, &em_Set, &zwj_Set, &gaz_Set,
         &ebg_Set
-         }};
+        }};
     }
 }
 

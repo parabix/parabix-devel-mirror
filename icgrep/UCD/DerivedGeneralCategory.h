@@ -2856,17 +2856,17 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {gc,
-         GC_ns::independent_prop_values,
-         std::move(GC_ns::enum_names),
-         std::move(GC_ns::value_names),
-         std::move(GC_ns::aliases_only_map),{
-&cn_Set, &lu_Set, &ll_Set, &lt_Set, &lm_Set, &lo_Set, &mn_Set,
+        GC_ns::independent_prop_values,
+        std::move(GC_ns::enum_names),
+        std::move(GC_ns::value_names),
+        std::move(GC_ns::aliases_only_map),{
+        &cn_Set, &lu_Set, &ll_Set, &lt_Set, &lm_Set, &lo_Set, &mn_Set,
         &me_Set, &mc_Set, &nd_Set, &nl_Set, &no_Set, &zs_Set, &zl_Set,
         &zp_Set, &cc_Set, &cf_Set, &co_Set, &cs_Set, &pd_Set, &ps_Set,
         &pe_Set, &pc_Set, &po_Set, &sm_Set, &sc_Set, &sk_Set, &so_Set,
         &pi_Set, &pf_Set, &c_Set, &l_Set, &lc_Set, &m_Set, &n_Set, &p_Set,
         &s_Set, &z_Set
-         }};
+        }};
     }
 }
 

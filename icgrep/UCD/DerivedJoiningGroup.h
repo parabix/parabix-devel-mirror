@@ -1353,11 +1353,11 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {jg,
-         JG_ns::independent_prop_values,
-         std::move(JG_ns::enum_names),
-         std::move(JG_ns::value_names),
-         std::move(JG_ns::aliases_only_map),{
-&no_joining_group_Set, &ain_Set, &alaph_Set, &alef_Set, &beh_Set,
+        JG_ns::independent_prop_values,
+        std::move(JG_ns::enum_names),
+        std::move(JG_ns::value_names),
+        std::move(JG_ns::aliases_only_map),{
+        &no_joining_group_Set, &ain_Set, &alaph_Set, &alef_Set, &beh_Set,
         &beth_Set, &dal_Set, &dalath_rish_Set, &e_Set, &feh_Set,
         &final_semkath_Set, &gaf_Set, &gamal_Set, &hah_Set,
         &teh_marbuta_goal_Set, &he_Set, &heh_Set, &heh_goal_Set, &heth_Set,
@@ -1385,7 +1385,7 @@ namespace UCD {
         &malayalam_tta_Set, &malayalam_nna_Set, &malayalam_nnna_Set,
         &malayalam_bha_Set, &malayalam_ra_Set, &malayalam_lla_Set,
         &malayalam_llla_Set, &malayalam_ssa_Set
-         }};
+        }};
     }
 }
 

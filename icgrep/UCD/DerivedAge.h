@@ -1241,15 +1241,15 @@ namespace UCD {
 
     static EnumeratedPropertyObject property_object
         {age,
-         AGE_ns::independent_prop_values,
-         std::move(AGE_ns::enum_names),
-         std::move(AGE_ns::value_names),
-         std::move(AGE_ns::aliases_only_map),{
-&unassigned_Set, &v1_1_Set, &v2_0_Set, &v2_1_Set, &v3_0_Set,
+        AGE_ns::independent_prop_values,
+        std::move(AGE_ns::enum_names),
+        std::move(AGE_ns::value_names),
+        std::move(AGE_ns::aliases_only_map),{
+        &unassigned_Set, &v1_1_Set, &v2_0_Set, &v2_1_Set, &v3_0_Set,
         &v3_1_Set, &v3_2_Set, &v4_0_Set, &v4_1_Set, &v5_0_Set, &v5_1_Set,
         &v5_2_Set, &v6_0_Set, &v6_1_Set, &v6_2_Set, &v6_3_Set, &v7_0_Set,
         &v8_0_Set, &v9_0_Set, &v10_0_Set
-         }};
+        }};
     }
 }
 
