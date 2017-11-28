@@ -671,10 +671,6 @@ void UnicodeSet::insert(const codepoint_t cp) {
         mRunLength = l;
     }
     assert (verify(mRuns, mRunLength, mQuads, mQuadLength));
-
-//    print(llvm::errs());
-//    llvm::errs() << "\n\n";
-
     assert (contains(cp));
 }
 

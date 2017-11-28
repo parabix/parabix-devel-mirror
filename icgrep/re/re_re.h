@@ -7,8 +7,6 @@
 #ifndef RE_H
 #define RE_H
 
-#include <llvm/Support/raw_ostream.h>
-#include <UCD/unicode_set.h>
 #include <util/slab_allocator.h>
 #include <vector>
 
@@ -27,19 +25,14 @@ public:
         , End
         , Intersect
         , Name
-        // , Permute
         , Rep
         , Seq
         , Start
-        // , SymDiff
-        // , Union
     };
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
     inline static void Reset() {
-        llvm::outs() << "\nRE LOCAL: " << mAllocator.getTotalMemory() << "\n"
-                        "UCD GLOBAL: " << UCD::UnicodeSet::GlobalAllocator.getTotalMemory() << "\n\n";
         mAllocator.Reset();
     }
     typedef std::initializer_list<RE *> InitializerList;

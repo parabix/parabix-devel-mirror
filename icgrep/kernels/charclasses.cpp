@@ -10,6 +10,7 @@
 #include <cc/cc_compiler.h>
 #include <re/re_name.h>
 #include <boost/uuid/sha1.hpp>
+#include <llvm/Support/raw_ostream.h>
 
 using NameMap = UCD::UCDCompiler::NameMap;
 
