@@ -8,11 +8,10 @@
 # Licensed under Open Software License 3.0.
 #
 #
-import re, string, os.path, cformat
 from random import randint
-from unicode_set import *
+
 from UCD_parser import *
-from string import Template
+
 
 class UCD_test_generator():
     def __init__(self): 

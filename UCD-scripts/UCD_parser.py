@@ -7,9 +7,7 @@
 # Licensed under Open Software License 3.0.
 #
 #
-import re, string, os.path
 import UCD_config
-from unicode_set import *
 from UCD_property_objects import *
 
 version_regexp = re.compile(".*Version\s+([0-9.]*)\s+of the Unicode Standard.*")

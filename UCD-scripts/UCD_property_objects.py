@@ -1,5 +1,3 @@
-import re, string, os.path
-import UCD_config
 from unicode_set import *
 trivial_name_char_re = re.compile('[-_\s]')
 def canonicalize(property_string):

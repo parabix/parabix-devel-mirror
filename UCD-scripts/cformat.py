@@ -32,16 +32,8 @@ def open_header_file_for_write(filename, generator_name='UCD_properties.py'):
    f.write(header_template % (hname, hname, generator_name))
    return f
 
-def open_cpp_file_for_write(filename, generator_name='UCD_properties.py'):
-   f = open(UCD_config.UCD_output_dir + '/' + filename + '.cpp', 'w')
-   f.write(cpp_template % (generator_name, filename))
-   return f
-
 def close_header_file(f):
    f.write("\n#endif\n")
-   f.close()
-
-def close_cpp_file(f):
    f.close()
 
 def write_imports(f, import_list):

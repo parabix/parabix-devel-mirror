@@ -9,8 +9,7 @@
 # Licensed under Open Software License 3.0.
 #
 #
-import re, string, os.path, cformat, UCD_config
-from unicode_set import *
+import string, os.path
 from UCD_parser import *
 from UCD_property_objects import *
 
@@ -44,26 +43,25 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
     s = string.Template(r"""    namespace ${prop_enum_up}_ns {
         /** Code Point Ranges for ${prop_enum} mapping to <none>
         ${null_set_ranges}**/
-
-        const UnicodeSet null_codepoint_set
-        ${null_set_value};
+        
+        ${null_set_value}
 
         /** Code Point Ranges for ${prop_enum} mapping to <codepoint>
         ${reflexive_set_ranges}**/
-        const UnicodeSet reflexive_set
-        ${reflexive_set_value};
+        
+        ${reflexive_set_value}
 
         const unsigned buffer_length = ${buffer_length};
-        const static char __attribute__ ((aligned (32))) string_buffer[${allocation_length}] = u8R"__(${string_buffer})__";
+        const static char string_buffer[${allocation_length}] LLVM_ALIGNAS(32) = u8R"__(${string_buffer})__";
 
-        const static std::vector<codepoint_t> defined_cps = {
+        const static std::vector<codepoint_t> defined_cps{
         ${explicitly_defined_cps}};
         static StringPropertyObject property_object(${prop_enum}, 
-                                                    null_codepoint_set, 
-                                                    reflexive_set, 
+                                                    std::move(null_codepoint_set), 
+                                                    std::move(reflexive_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
@@ -72,37 +70,36 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
         string_buffer += cp_value_map[cp] + "\n"
     buffer_length = len(string_buffer.encode("utf-8"))
     f.write(s.substitute(prop_enum = property_code,
-    prop_enum_up = property_code.upper(),
-    string_buffer = string_buffer,
-    buffer_length = buffer_length,
-    allocation_length = (buffer_length + 255) & -256,
-    null_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(null_set)], ',', 8),
-    null_set_value = null_set.showC(12),
-    reflexive_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(reflexive_set)], ',', 8),
-    reflexive_set_value = reflexive_set.showC(12),
-    explicitly_defined_cp_count = len(cps),
-    explicitly_defined_cps = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
-    ))
+                         prop_enum_up = property_code.upper(),
+                         string_buffer = string_buffer,
+                         buffer_length = buffer_length,
+                         allocation_length = (buffer_length + 255) & -256,
+                         null_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(null_set)], ',', 8),
+                         null_set_value = null_set.generate("null_codepoint_set", 8),
+                         reflexive_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(reflexive_set)], ',', 8),
+                         reflexive_set_value = reflexive_set.generate("reflexive_set", 8),
+                         explicitly_defined_cp_count = len(cps),
+                         explicitly_defined_cps = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
+                         ))
 
 def emit_string_override_property(f, property_code, overridden_code, override_set, cp_value_map):
     s = string.Template(r"""    namespace ${prop_enum_up}_ns {
         /** Code Point Ranges for ${prop_enum} (possibly overriding values from ${overridden})
         ${overridden_set_ranges}**/
 
-        const UnicodeSet explicitly_defined_set
-        ${overridden_set_value};
+        ${overridden_set_value}
 
         const unsigned buffer_length = ${buffer_length};
-        const static char __attribute__ ((aligned (32))) string_buffer[${allocation_length}] = u8R"__(${string_buffer})__";
+        const static char string_buffer[${allocation_length}] LLVM_ALIGNAS(32) = u8R"__(${string_buffer})__";
 
-        const static std::vector<codepoint_t> defined_cps = {
+        const static std::vector<codepoint_t> defined_cps{
         ${explicitly_defined_cps}};
         static StringOverridePropertyObject property_object(${prop_enum}, 
                                                     ${overridden}_ns::property_object, 
-                                                    explicitly_defined_set, 
+                                                    std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
@@ -111,35 +108,34 @@ def emit_string_override_property(f, property_code, overridden_code, override_se
         string_buffer += cp_value_map[cp] + "\n"
     buffer_length = len(string_buffer.encode("utf-8"))
     f.write(s.substitute(prop_enum = property_code,
-    prop_enum_up = property_code.upper(),
-    overridden = overridden_code.upper(),
-    string_buffer = string_buffer,
-    buffer_length = buffer_length,
-    allocation_length = (buffer_length + 255) & -256,
-    overridden_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(override_set)], ',', 8),
-    overridden_set_value = override_set.showC(12),
-    explicitly_defined_cp_count = len(cps),
-    explicitly_defined_cps = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
-    ))
+                         prop_enum_up = property_code.upper(),
+                         overridden = overridden_code.upper(),
+                         string_buffer = string_buffer,
+                         buffer_length = buffer_length,
+                         allocation_length = (buffer_length + 255) & -256,
+                         overridden_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(override_set)], ',', 8),
+                         overridden_set_value = override_set.generate("explicitly_defined_set", 8),
+                         explicitly_defined_cp_count = len(cps),
+                         explicitly_defined_cps = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
+                         ))
 
 def emit_numeric_property(f, property_code, NaN_set, cp_value_map):
     s = string.Template(r"""    namespace ${prop_enum_up}_ns {
         /** Code Point Ranges for ${prop_enum} mapping to NaN
         ${NaN_set_ranges}**/
 
-        const UnicodeSet NaN_set
-        ${NaN_set_value};
+        ${NaN_set_value}
 
-       const unsigned buffer_length = ${buffer_length};
-        const static char __attribute__ ((aligned (32))) string_buffer[${allocation_length}] = u8R"__(${string_buffer})__";
+        const unsigned buffer_length = ${buffer_length};
+        const static char string_buffer[${allocation_length}] LLVM_ALIGNAS(32) = u8R"__(${string_buffer})__";
 
         const static std::vector<codepoint_t> defined_cps = {
         ${explicitly_defined_cps}};
         static NumericPropertyObject property_object(${prop_enum}, 
-                                                    NaN_set, 
+                                                    std::move(NaN_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     buffer_length, 
-                                                    defined_cps);
+                                                    std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
@@ -149,25 +145,24 @@ def emit_numeric_property(f, property_code, NaN_set, cp_value_map):
     string_buffer += "NaN\n"  # This inserts the standard default value for strings as the last entry
     buffer_length = len(string_buffer.encode("utf-8"))
     f.write(s.substitute(prop_enum = property_code,
-    prop_enum_up = property_code.upper(),
-    string_buffer = string_buffer,
-    buffer_length = buffer_length,
-    allocation_length = (buffer_length + 255) & -256,
-    NaN_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(NaN_set)], ',', 8),
-    NaN_set_value = NaN_set.showC(12),
-    explicitly_defined_cp_count = len(cps),
-    explicitly_defined_cps = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
-    ))
+                         prop_enum_up = property_code.upper(),
+                         string_buffer = string_buffer,
+                         buffer_length = buffer_length,
+                         allocation_length = (buffer_length + 255) & -256,
+                         NaN_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(NaN_set)], ',', 8),
+                         NaN_set_value = NaN_set.generate("NaN_set", 8),
+                         explicitly_defined_cp_count = len(cps),
+                         explicitly_defined_cps = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
+                         ))
 
 
 def emit_binary_property(f, property_code, property_set):
     f.write("    namespace %s_ns {\n" % property_code.upper())
     f.write("        /** Code Point Ranges for %s\n        " % property_code)
     f.write(cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(property_set)], ',', 8))
-    f.write("**/\n")
-    f.write("        const UnicodeSet codepoint_set \n")
-    f.write(property_set.showC(12) + ";\n")
-    f.write("        static BinaryPropertyObject property_object{%s, codepoint_set};\n    }\n" % property_code)
+    f.write("**/\n\n")
+    f.write(property_set.generate("codepoint_set", 8))
+    f.write("        static BinaryPropertyObject property_object{%s, std::move(codepoint_set)};\n    }\n" % property_code)
 
 def emit_enumerated_property(f, property_code, independent_prop_values, prop_values, value_map):
     f.write("  namespace %s_ns {\n" % property_code.upper())
@@ -175,19 +170,18 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
     for v in prop_values:
         f.write("    /** Code Point Ranges for %s\n    " % v)
         f.write(cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(value_map[v])], ',', 4))
-        f.write("**/\n")
-        f.write("    const UnicodeSet %s_Set \n" % v.lower())
-        f.write(value_map[v].showC(8) + ";\n")
+        f.write("**/\n\n")
+        f.write(value_map[v].generate(v.lower() + "_Set", 4))
     set_list = ['&%s_Set' % v.lower() for v in prop_values]
     f.write("    static EnumeratedPropertyObject property_object\n")
     f.write("        {%s,\n" % property_code)
-    f.write("         %s_ns::independent_prop_values,\n" % property_code.upper())
-    f.write("         %s_ns::enum_names,\n" % property_code.upper())
-    f.write("         %s_ns::value_names,\n" % property_code.upper())
-    f.write("         %s_ns::aliases_only_map,\n" % property_code.upper())
-    f.write("         {")
-    f.write(cformat.multiline_fill(set_list, ',', 8))
-    f.write("\n         }};\n    }\n")
+    f.write("        %s_ns::independent_prop_values,\n" % property_code.upper())
+    f.write("        std::move(%s_ns::enum_names),\n" % property_code.upper())
+    f.write("        std::move(%s_ns::value_names),\n" % property_code.upper())
+    f.write("        std::move(%s_ns::aliases_only_map),{\n" % property_code.upper())
+    f.write("        " + cformat.multiline_fill(set_list, ',', 8))
+    f.write("\n        }};"
+            "\n    }\n")
 
 def emit_Obsolete_property(f, property_code):
     s = string.Template(r"""    namespace ${prop_enum_up}_ns {
@@ -293,18 +287,15 @@ def genFoldEntryData(casemap):
    return generated
 
 foldDeclarations = r"""
-typedef unsigned codepoint_t;
-
 struct FoldEntry {
-    re::codepoint_t range_lo;
-    int fold_offset;
-    std::vector<re::interval_t> fold_pairs;
+    const UCD::codepoint_t range_lo;
+    const int fold_offset;
+    const std::vector<UCD::interval_t> fold_pairs;
 };
 
+void caseInsensitiveInsertRange(UCD::UnicodeSet * const cc, const UCD::codepoint_t lo, const UCD::codepoint_t hi);
 
-void caseInsensitiveInsertRange(re::CC * cc, const re::codepoint_t lo, const re::codepoint_t hi);
-
-inline void caseInsensitiveInsert(re::CC * cc, const re::codepoint_t cp) {
+inline void caseInsensitiveInsert(UCD::UnicodeSet * const cc, const UCD::codepoint_t cp) {
     caseInsensitiveInsertRange(cc, cp, cp); 
 }
 """
@@ -484,8 +475,7 @@ class UCD_generator():
             f.write("        /** Code Point Ranges for %s\n        " % v)
             f.write(cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(value_map[v])], ',', 8))
             f.write("**/\n")
-            f.write("        const UnicodeSet %s_Ext \n" % v.lower())
-            f.write(value_map[v].showC(12) + ";\n")
+            f.write(value_map[v].generate(v.lower() + "_Ext", 8))
         set_list = ['&%s_Ext' % v.lower() for v in prop_list]
         f.write("        static ExtensionPropertyObject property_object\n")
         f.write("       {%s,\n" % property_code)
@@ -517,8 +507,12 @@ class UCD_generator():
     def generate_UCD_Config_h(self):
         setVersionfromReadMe_txt()
         f = cformat.open_header_file_for_write('UCD_Config')
-        f.write("\nnamespace UCD {\n")
-        f.write("   const std::string UnicodeVersion = \"%s\";\n" % UCD_config.version)
+        f.write("#include <utility>\n")
+        f.write("namespace UCD {\n")
+        f.write("\tconst auto UnicodeVersion = \"%s\";\n" % UCD_config.version)
+        f.write("\tusing codepoint_t = unsigned;\n")
+        f.write("\tenum : codepoint_t { UNICODE_MAX = %s };\n" % UCD_config.UCD_max_code_point)
+        f.write("\tusing interval_t = std::pair<codepoint_t, codepoint_t>;\n")
         f.write("}\n")
         cformat.close_header_file(f)
 
@@ -528,7 +522,7 @@ class UCD_generator():
         fold_data = parse_CaseFolding_txt(self.property_object_map)
         cm = simple_CaseClosure_map(fold_data)
         f = cformat.open_header_file_for_write(basename, 'casefold.py')
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"', "<vector>", '"re/re_cc.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"', '<vector>'])
         f.write(foldDeclarations)
         f.write(genFoldEntryData(cm))
         f.write("\nnamespace UCD {\n")
