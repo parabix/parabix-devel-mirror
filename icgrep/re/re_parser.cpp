@@ -60,6 +60,7 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     }
     parser->fByteMode = ByteMode;
     parser->fModeFlagSet = initialFlags;
+    parser->mGroupsOpen = 0;
     parser->fNested = false;
     parser->fGraphemeBoundaryPending = false;
     parser->mCaptureGroupCount = 0;
@@ -74,6 +75,7 @@ RE_Parser::RE_Parser(const std::string & regular_expression)
 : fByteMode(false)
 , fModeFlagSet(0)
 , fNested(false)
+, mGroupsOpen(0)
 , fGraphemeBoundaryPending(false)
 , fSupportNonCaptureGroup(false)
 , mCursor(regular_expression)
@@ -106,15 +108,12 @@ RE * RE_Parser::parse_alt() {
         }
         ++mCursor; // advance past the alternation character '|'
     }
-    if (alt.empty()) {
-        ParseFailure("No regular expression found!");
-    }
     return makeAlt(alt.begin(), alt.end());
 }
 
 RE * RE_Parser::parse_seq() {
     std::vector<RE *> seq;
-    if (!mCursor.more() || (*mCursor == '|') || (*mCursor == ')')) return makeSeq();
+    if (!mCursor.more() || (*mCursor == '|') || ((mGroupsOpen > 0) && (*mCursor == ')'))) return makeSeq();
     for (;;) {
         RE * re = parse_next_item();
         if (re == nullptr) {
@@ -154,8 +153,14 @@ RE * RE_Parser::parse_next_item() {
                     return makeLookAheadAssertion(makeCC('\n'));
                 }
                 return makeEnd();
-            case '|': case ')':
+            case '|':
                 break;
+            case ')':
+                if (mGroupsOpen > 0) break;
+                if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
+                    return createCC(parse_literal_codepoint());
+                }
+                ParseFailure("Use  \\) for literal ).");
             case '*': case '+': case '?': case '{':
                 ParseFailure("Need something to repeat before *, +, ? or {.");
             case ']':
@@ -197,7 +202,8 @@ RE * RE_Parser::parse_next_item() {
 // Parse some kind of parenthesized group.  Input precondition: mCursor
 // after the (
 RE * RE_Parser::parse_group() {
-    const ModeFlagSet modeFlagSet = fModeFlagSet;
+    const ModeFlagSet savedModeFlagSet = fModeFlagSet;
+    mGroupsOpen++;
     RE * group_expr = nullptr;
     if (*mCursor == '?' && fSupportNonCaptureGroup) {
         switch (*++mCursor) {
@@ -266,7 +272,7 @@ RE * RE_Parser::parse_group() {
                 if (*mCursor == ':') {
                     ++mCursor;
                     group_expr = parse_alt();
-                    fModeFlagSet = modeFlagSet;
+                    fModeFlagSet = savedModeFlagSet;
                     break;
                 } else {  // if *_cursor == ')'
                     ++mCursor;
@@ -287,6 +293,7 @@ RE * RE_Parser::parse_group() {
     if (*mCursor != ')') {
         ParseFailure("Closing parenthesis required.");
     }
+    mGroupsOpen--;
     ++mCursor;
     return group_expr;
 }
@@ -468,12 +475,12 @@ RE * RE_Parser::parseEscapedSet() {
             complemented = true;
         case 'q':
             if (*++mCursor != '{') {
-                ParseFailure("Malformed grapheme-boundary property expression");
+                ParseFailure("Malformed grapheme cluster expression");
             }
             ++mCursor;
             ParseFailure("Literal grapheme cluster expressions not yet supported.");
             if (*mCursor != '}') {
-                ParseFailure("Malformed grapheme-boundary property expression");
+                ParseFailure("Malformed grapheme cluster expression");
             }
             ++mCursor;
             return complemented ? makeComplement(re) : re;

@@ -179,6 +179,7 @@ protected:
     bool                        fByteMode;
     ModeFlagSet                 fModeFlagSet;
     bool                        fNested;
+    unsigned                    mGroupsOpen;
     bool                        fGraphemeBoundaryPending;
     bool                        fSupportNonCaptureGroup;
     Cursor                      mCursor;
