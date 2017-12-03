@@ -10,6 +10,7 @@
 #include <re/re_parser_ere.h>
 #include <re/re_parser_bre.h>
 #include <re/re_parser_prosite.h>
+#include <re/parse_fixed_strings.h>
 #include <re/re_name.h>
 #include <re/re_alt.h>
 #include <re/re_any.h>
@@ -54,8 +55,7 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
             parser = make_unique<RE_Parser_PROSITE>(regular_expression);
             break;
         default:
-            //TODO handle FixString
-            ParseFailure("Unsupported RE syntax!");
+            parser = make_unique<FixedStringParser>(regular_expression);
             break;
     }
     parser->fByteMode = ByteMode;
@@ -101,13 +101,10 @@ RE * RE_Parser::parse_RE() {
 
 RE * RE_Parser::parse_alt() {
     std::vector<RE *> alt;
-    for (;;) {
+    do {
         alt.push_back(parse_seq());
-        if (*mCursor != '|') {
-            break;
-        }
-        ++mCursor; // advance past the alternation character '|'
     }
+    while (mCursor.more() && (*mCursor == '|'));
     return makeAlt(alt.begin(), alt.end());
 }
 

@@ -248,9 +248,6 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
         DirectoriesFlag = Recurse;
     }
     
-    if (RegexpSyntax == re::RE_Syntax::FixedStrings) {
-        llvm::report_fatal_error("Sorry, FixedStrings syntax is not fully supported.\n");
-    }
     if (TextFlag) {
         if (BinaryNonMatchingFlag || (BinaryFilesFlag == WithoutMatch)) {
             llvm::report_fatal_error("Conflicting options for binary files.\n");
