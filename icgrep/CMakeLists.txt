@@ -67,7 +67,7 @@ if(ENABLE_CUDA_COMPILE)
 SET(DRIVER_SRC ${DRIVER_SRC} toolchain/NVPTXDriver.cpp)
 endif()
 
-SET(KERNEL_SRC kernels/interface.cpp kernels/kernel.cpp kernels/streamset.cpp kernels/kernel_builder.cpp)
+SET(KERNEL_SRC kernels/attributes.cpp kernels/processing_rate.cpp kernels/interface.cpp kernels/kernel.cpp kernels/streamset.cpp kernels/kernel_builder.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp)
 
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp)
@@ -245,10 +245,10 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
   COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
 
-#add_test(
-#  NAME lz4d_test
-#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
-#  COMMAND ./run_all ${CMAKE_BINARY_DIR}/lz4d)
+add_test(
+  NAME lz4d_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
+  COMMAND ./run_all ${CMAKE_BINARY_DIR}/lz4d)
 
 add_test(
   NAME editd_test

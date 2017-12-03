@@ -8,7 +8,8 @@
 
 namespace llvm { class LLVMContext; }
 namespace kernel { class KernelBuilder; }
-#include <string>
+
+extern bool AVX2_available();
 
 namespace IDISA {
     

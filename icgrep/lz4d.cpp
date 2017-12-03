@@ -73,33 +73,33 @@ void generatePipeline(ParabixDriver & pxDriver) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
 
-    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
-    StreamSetBuffer * const BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
-    StreamSetBuffer * const Extenders = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-    StreamSetBuffer * const LiteralIndexes = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments));
-    StreamSetBuffer * const MatchIndexes = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments));
-    StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), decompressBufBlocks));
+    StreamSetBuffer * const ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    StreamSetBuffer * const BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
+    StreamSetBuffer * const Extenders = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+    StreamSetBuffer * const LiteralIndexes = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments);
+    StreamSetBuffer * const MatchIndexes = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments);
+    StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), decompressBufBlocks);
 
     
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize);
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
 
     // Input stream is not aligned due to the offset.
-    Kernel * s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder, /*aligned = */ false));
+    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder, /*aligned = */ false);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
-    Kernel * extenderK = pxDriver.addKernelInstance(make_unique<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8));
+    Kernel * extenderK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
     pxDriver.makeKernelCall(extenderK, {BasisBits}, {Extenders});
 
-    Kernel * lz4iK = pxDriver.addKernelInstance(make_unique<LZ4IndexDecoderKernel>(iBuilder));
+    Kernel * lz4iK = pxDriver.addKernelInstance<LZ4IndexDecoderKernel>(iBuilder);
     lz4iK->setInitialArguments({iBuilder->CreateTrunc(hasBlockChecksum, iBuilder->getInt1Ty())});
     pxDriver.makeKernelCall(lz4iK, {ByteStream, Extenders}, {LiteralIndexes, MatchIndexes});
 
-    Kernel * lz4bK = pxDriver.addKernelInstance(make_unique<LZ4ByteStreamDecoderKernel>(iBuilder, decompressBufBlocks * codegen::BlockSize));
+    Kernel * lz4bK = pxDriver.addKernelInstance<LZ4ByteStreamDecoderKernel>(iBuilder, decompressBufBlocks * codegen::BlockSize);
     pxDriver.makeKernelCall(lz4bK, {LiteralIndexes, MatchIndexes, ByteStream}, {DecompressedByteStream});
 
-    Kernel * outK = pxDriver.addKernelInstance(make_unique<FileSink>(iBuilder, 8));
+    Kernel * outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 8);
     outK->setInitialArguments({iBuilder->GetString(outputFile)});
     pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
  

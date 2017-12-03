@@ -204,7 +204,8 @@ S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, bool aligned)
 #else
 	: BlockOrientedKernel(aligned ? "s2p" : "s2p_unaligned",
 #endif
-    {Binding{b->getStreamSetTy(1, 8), "byteStream"}}, {Binding{b->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
+    {Binding{b->getStreamSetTy(1, 8), "byteStream", FixedRate(), Principal()}},
+    {Binding{b->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
   mAligned(aligned) {
     setNoTerminateAttribute(true);
 }

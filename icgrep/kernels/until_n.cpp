@@ -17,7 +17,7 @@ namespace kernel {
 
 const unsigned packSize = 64;
     
-void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfStrides) {
+Value * UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfStrides) {
 /*  
    Strategy:  first form an index consisting of one bit per packsize input positions,
    with a 1 bit signifying that the corresponding pack has at least one 1 bit.
@@ -188,6 +188,7 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     kb->CreateBr(doSegmentReturn);
     
     kb->SetInsertPoint(doSegmentReturn);
+    return numOfStrides;
 }
 
 UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & kb)

@@ -24,7 +24,7 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value * const numOfStrides) override;
+    llvm::Value * generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value * const numOfStrides) override;
 };
 
 class radix64Kernel final : public BlockOrientedKernel {
@@ -35,7 +35,7 @@ public:
 private:
     virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
     virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
-    llvm::Value* processPackData(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* packData) const;
+    llvm::Value * processPackData(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* packData) const;
 };
 
 class base64Kernel final : public BlockOrientedKernel {

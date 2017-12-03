@@ -21,11 +21,11 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class LZ4IndexDecoderKernel : public BlockOrientedKernel {
+class LZ4IndexDecoderKernel final : public BlockOrientedKernel {
 public:
     LZ4IndexDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)override;
 private:
 
     enum State : unsigned char {

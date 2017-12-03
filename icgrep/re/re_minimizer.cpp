@@ -20,6 +20,7 @@ namespace re {
 
 using Set = boost::container::flat_set<RE *>;
 using Map = boost::container::flat_map<RE *, RE *>;
+using List = std::vector<RE *>;
 
 struct PassContainer : private Memoizer {
 
@@ -30,15 +31,16 @@ struct PassContainer : private Memoizer {
         }
         RE * re = original;
 repeat: if (Alt * alt = dyn_cast<Alt>(re)) {
-            Set list;
-            list.reserve(alt->size());
+            Set set;
+            set.reserve(alt->size());
             RE * namedCC = nullptr;
             bool repeat = false;
             for (RE * item : *alt) {
                 item = minimize(item);
-                if (LLVM_UNLIKELY(isa<Vector>(item) && cast<Vector>(item)->empty())) {
-                    continue;
-                } else if (LLVM_UNLIKELY(isa<Alt>(item))) {
+                if (LLVM_UNLIKELY(isa<Alt>(item))) {
+                    if (LLVM_UNLIKELY(cast<Alt>(item)->empty())) {
+                        continue;
+                    }
                     repeat = true;
                 } else { // if we have an alternation containing multiple CCs, combine them
                     CC * const cc = extractCC(item);
@@ -47,31 +49,32 @@ repeat: if (Alt * alt = dyn_cast<Alt>(re)) {
                         continue;
                     }
                 }
-                list.insert(item);
+                set.insert(item);
             }
             // Combine and/or insert any named CC object into the alternation
             if (namedCC) {
                 if (LLVM_UNLIKELY(isa<CC>(namedCC))) {
                     namedCC = memoize(cast<CC>(namedCC));
                 }
-                list.insert(cast<Name>(namedCC));
+                set.insert(cast<Name>(namedCC));
             }
             // Pablo CSE may identify common prefixes but cannot identify common suffixes.
-            extractCommonSuffixes(list);
-            extractCommonPrefixes(list);
-            re = makeAlt(list.begin(), list.end());
+            extractCommonSuffixes(set);
+            extractCommonPrefixes(set);
+            re = makeAlt(set.begin(), set.end());
             if (LLVM_UNLIKELY(repeat)) {
                 goto repeat;
             }
         } else if (Seq * seq = dyn_cast<Seq>(re)) {
-            std::vector<RE *> list;
+            List list;
             list.reserve(seq->size());
             bool repeat = false;
             for (RE * item : *seq) {
                 item = minimize(item);
-                if (LLVM_UNLIKELY(isa<Vector>(item) && cast<Vector>(item)->empty())) {
-                    continue;
-                } else if (LLVM_UNLIKELY(isa<Seq>(item))) {
+                if (LLVM_UNLIKELY(isa<Seq>(item))) {
+                    if (LLVM_UNLIKELY(cast<Seq>(item)->empty())) {
+                        continue;
+                    }
                     repeat = true;
                 }
                 list.push_back(item);
@@ -128,12 +131,12 @@ repeat: if (Alt * alt = dyn_cast<Alt>(re)) {
 protected:
 
     void extractCommonPrefixes(Set & source) {
-        std::vector<RE *> combine;
-restart:if (LLVM_UNLIKELY(source.size() < 2)) {
+        List combine;
+repeat: if (LLVM_UNLIKELY(source.size() < 2)) {
             return;
         }
         for (auto i = source.begin(); i != source.end(); ++i) {
-            assert (combine.empty());            
+            assert (combine.empty());
             RE * const head = getHead(*i);
             for (auto j = i + 1; j != source.end(); ) {
                 if (LLVM_UNLIKELY(head == getHead(*j))) {
@@ -177,14 +180,14 @@ restart:if (LLVM_UNLIKELY(source.size() < 2)) {
                     tail = makeRep(tail, 0, 1);
                 }
                 source.insert(minimize(makeSeq({ head, tail })));
-                goto restart;
+                goto repeat;
             }
         }
     }
 
     void extractCommonSuffixes(Set & source) {
-        std::vector<RE *> combine;
-restart:if (LLVM_UNLIKELY(source.size() < 2)) {
+        List combine;
+repeat: if (LLVM_UNLIKELY(source.size() < 2)) {
             return;
         }
         for (auto i = source.begin(); i != source.end(); ++i) {
@@ -234,7 +237,7 @@ restart:if (LLVM_UNLIKELY(source.size() < 2)) {
                     head = makeRep(head, 0, 1);
                 }
                 source.insert(minimize(makeSeq({ head, tail })));
-                goto restart;
+                goto repeat;
             }
         }
     }

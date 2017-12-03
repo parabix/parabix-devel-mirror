@@ -66,7 +66,7 @@ void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::Kernel
     args = doSegment->arg_begin();
     args->setName("self");
     (++args)->setName("doFinal");
-//    if (mHasPrincipleItemCount) {
+//    if (mHasPrincipalItemCount) {
 //        (++args)->setName("principleAvailableItemCount");
 //    }
     for (const Binding & input : mStreamSetInputs) {
@@ -139,19 +139,6 @@ CallInst * KernelInterface::makeDoSegmentCall(kernel::KernelBuilder & idb, const
     Function * const doSegment = getDoSegmentFunction(idb.getModule());
     assert (doSegment->getArgumentList().size() <= args.size());
     return idb.CreateCall(doSegment, args);
-}
-
-void Binding::addAttribute(Attribute attribute) {
-    for (Attribute & attr : attributes) {
-        if (attr.getKind() == attribute.getKind()) {
-            return;
-        }
-    }
-    attributes.emplace_back(attribute);
-}
-
-void KernelInterface::normalizeStreamProcessingRates() {
-
 }
 
 }

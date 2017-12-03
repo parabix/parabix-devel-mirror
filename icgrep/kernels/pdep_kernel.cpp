@@ -24,7 +24,7 @@ PDEPkernel::PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsign
     assert((mPDEPWidth == 64 || mPDEPWidth == 32) && "PDEP width must be 32 or 64");
 }
 
-void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfStrides) {
+Value * PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfStrides) {
     BasicBlock * entry = kb->GetInsertBlock();
     BasicBlock * checkLoopCond = kb->CreateBasicBlock("checkLoopCond");
     BasicBlock * checkSourceCount = kb->CreateBasicBlock("checkSourceCount");
@@ -133,7 +133,9 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     Value * itemsDone = kb->CreateMul(blockOffsetPhi, blockWidth);
     itemsDone = kb->CreateSelect(kb->CreateICmpULT(itemsToDo, itemsDone), itemsToDo, itemsDone);
     kb->setProcessedItemCount("PDEPmarkerStream", kb->CreateAdd(itemsDone, kb->getProcessedItemCount("PDEPmarkerStream")));    
-    kb->setProcessedItemCount("sourceStreamSet", updatedProcessedBitsPhi);    
+    kb->setProcessedItemCount("sourceStreamSet", updatedProcessedBitsPhi);
+
+    return numOfStrides;
 }
 
 std::vector<Value *> PDEPkernel::get_block_popcounts(const std::unique_ptr<KernelBuilder> & kb, Value * blk, const unsigned field_width) {

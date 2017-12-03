@@ -20,7 +20,7 @@ inline static unsigned floor_log2(const unsigned v) {
 
 namespace kernel {
 
-void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, Value * const numOfStrides) {
+Value * ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, Value * const numOfStrides) {
 
     Module * const m = iBuilder->getModule();
     
@@ -200,12 +200,12 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     iBuilder->CreateBr(scanReturn);
 
     iBuilder->SetInsertPoint(scanReturn);
-    
+    return numOfStrides;
 }
 
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
 : MultiBlockKernel("scanMatch",
-    {Binding{b->getStreamSetTy(1, 1), "matchResult", FixedRate(), Principle()}, Binding{b->getStreamSetTy(1, 1), "lineBreak"}, Binding{b->getStreamSetTy(1, 8), "InputStream", UnknownRate()}},
+    {Binding{b->getStreamSetTy(1, 1), "matchResult", FixedRate(), Principal()}, Binding{b->getStreamSetTy(1, 1), "lineBreak"}, Binding{b->getStreamSetTy(1, 8), "InputStream", FixedRate(), Deferred() }},
     {},
     {Binding{b->getIntAddrTy(), "accumulator_address"}},
     {},

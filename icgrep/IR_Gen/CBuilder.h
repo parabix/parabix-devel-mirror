@@ -56,54 +56,66 @@ public:
     // Equivalent to CreateUDiv(CreateAdd(number, CreateSub(divisor, ConstantInt::get(divisor->getType(), 1))), divisor)
     llvm::Value * CreateUDivCeil(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
     
-    llvm::Value * CreateUDivCeil(llvm::Value * number, const uint64_t divisor, const llvm::Twine &Name = "");
-
     // Round up to a multiple of divisor.
     llvm::Value * CreateRoundUp(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
             
     // Get minimum of two unsigned numbers
-    llvm::Value * CreateUMin(llvm::Value * a, llvm::Value * b) {
+    llvm::Value * CreateUMin(llvm::Value * const a, llvm::Value * const b) {
+        if (a == nullptr) return b;
+        if (b == nullptr) return a;
         assert (a->getType() == b->getType());
         return CreateSelect(CreateICmpULT(a, b), a, b);
     }
 
     // Get minimum of two signed numbers
-    llvm::Value * CreateSMin(llvm::Value * a, llvm::Value * b) {
+    llvm::Value * CreateSMin(llvm::Value * const a, llvm::Value * const b) {
+        if (a == nullptr) return b;
+        if (b == nullptr) return a;
         assert (a->getType() == b->getType());
         return CreateSelect(CreateICmpSLT(a, b), a, b);
     }
 
     // Get maximum of two unsigned numbers
-    llvm::Value * CreateUMax(llvm::Value * a, llvm::Value * b) {
+    llvm::Value * CreateUMax(llvm::Value * const a, llvm::Value * const b) {
+        if (a == nullptr) return b;
+        if (b == nullptr) return a;
         assert (a->getType() == b->getType());
         return CreateSelect(CreateICmpUGT(a, b), a, b);
     }
 
     // Get maximum of two signed numbers
-    llvm::Value * CreateSMax(llvm::Value * a, llvm::Value * b) {
+    llvm::Value * CreateSMax(llvm::Value * const a, llvm::Value * const b) {
+        if (a == nullptr) return b;
+        if (b == nullptr) return a;
         assert (a->getType() == b->getType());
         return CreateSelect(CreateICmpSGT(a, b), a, b);
     }
 
-    llvm::Value * CreateMalloc(llvm::Value * size);
+    llvm::Value * CreateMalloc(llvm::Value * const size);
 
-    llvm::Value * CreateAlignedMalloc(llvm::Value * size, const unsigned alignment);
+    llvm::Value * CreateAlignedMalloc(llvm::Value * const size, const unsigned alignment);
+
+    llvm::Value * CreateCacheAlignedMalloc(llvm::Value * const size) {
+        return CreateAlignedMalloc(size, getCacheAlignment());
+    }
     
     void CreateFree(llvm::Value * const ptr);
 
-    llvm::Value * CreateRealloc(llvm::Value * ptr, llvm::Value * size);
+    llvm::Value * CreateRealloc(llvm::Value * const ptr, llvm::Value * const size);
 
-    llvm::CallInst * CreateMemZero(llvm::Value * ptr, llvm::Value * size, const unsigned alignment = 1) {
+    llvm::CallInst * CreateMemZero(llvm::Value * const ptr, llvm::Value * const size, const unsigned alignment = 1) {
         return CreateMemSet(ptr, getInt8(0), size, alignment);
     }
 
-    llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * Ty, llvm::Value * ArraySize = nullptr) {
+    llvm::AllocaInst * CreateAlignedAlloca(llvm::Type * const Ty, const unsigned alignment, llvm::Value * const ArraySize = nullptr) {
         llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
-        instr->setAlignment(getCacheAlignment());
+        instr->setAlignment(alignment);
         return instr;
     }
 
-    llvm::Value * CreateCacheAlignedMalloc(llvm::Value * size);
+    llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * const Ty, llvm::Value * const ArraySize = nullptr) {
+        return CreateAlignedAlloca(Ty, getCacheAlignment(), ArraySize);
+    }
 
     // stdio.h functions
     //
@@ -168,6 +180,15 @@ public:
 
     llvm::Value * CreateMUnmap(llvm::Value * addr, llvm::Value * size);
 
+    enum Protect {
+        NONE = 0
+        , READ = 1
+        , WRITE = 2
+        , EXEC = 4
+    };
+
+    llvm::Value * CreateMProtect(llvm::Value * addr, llvm::Value * size, int protect);
+
     //  Posix thread (pthread.h) functions.
     //
     //  Create a call to:  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
@@ -202,7 +223,7 @@ public:
     
     llvm::IntegerType * getIntAddrTy() const;
     
-    llvm::PointerType * getVoidPtrTy() const;
+    llvm::PointerType * getVoidPtrTy(const unsigned AddressSpace = 0) const;
     
     llvm::PointerType * getFILEptrTy();
     
@@ -309,6 +330,17 @@ public:
                            llvm::MDNode *ScopeTag = nullptr,
                            llvm::MDNode *NoAliasTag = nullptr);
 
+    llvm::CallInst * CreateMemSet(llvm::Value *Ptr, llvm::Value *Val, uint64_t Size, unsigned Align,
+                           bool isVolatile = false, llvm::MDNode *TBAATag = nullptr,
+                           llvm::MDNode *ScopeTag = nullptr,
+                           llvm::MDNode *NoAliasTag = nullptr) {
+        return CreateMemSet(Ptr, Val, getInt64(Size), Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
+    }
+
+    llvm::CallInst * CreateMemSet(llvm::Value *Ptr, llvm::Value *Val, llvm::Value *Size, unsigned Align,
+                           bool isVolatile = false, llvm::MDNode *TBAATag = nullptr,
+                           llvm::MDNode *ScopeTag = nullptr,
+                           llvm::MDNode *NoAliasTag = nullptr);
 
     void setDriver(Driver * const driver) {
         mDriver = driver;

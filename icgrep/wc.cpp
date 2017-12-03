@@ -162,18 +162,18 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
-    StreamSetBuffer * const ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+    StreamSetBuffer * const ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
-    StreamSetBuffer * const BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments));
+    StreamSetBuffer * const BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
 
-    Kernel * mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder));
+    Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
     mmapK->setInitialArguments({fileDecriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
-    Kernel * s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
+    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
-    Kernel * wck = pxDriver.addKernelInstance(make_unique<WordCountKernel>(iBuilder));
+    Kernel * wck = pxDriver.addKernelInstance<WordCountKernel>(iBuilder);
     pxDriver.makeKernelCall(wck, {BasisBits}, {});
 
     pxDriver.generatePipelineIR();

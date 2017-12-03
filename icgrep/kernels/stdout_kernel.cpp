@@ -14,7 +14,7 @@ using namespace parabix;
 
 namespace kernel {
 
-void StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * const /* numOfStrides */) {
+Value * StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) {
     Value * codeUnitBuffer = iBuilder->getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0));
     codeUnitBuffer = iBuilder->CreatePointerCast(codeUnitBuffer, iBuilder->getInt8PtrTy());
     Value * bytesToDo = mAvailableItemCount[0];
@@ -24,6 +24,7 @@ void StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
         bytesToDo = iBuilder->CreateUDiv(bytesToDo, iBuilder->getSize(8 / mCodeUnitWidth));
     }
     iBuilder->CreateWriteCall(iBuilder->getInt32(1), codeUnitBuffer, bytesToDo);
+    return numOfStrides;
 }
 
 StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth)
@@ -61,12 +62,13 @@ void FileSink::generateInitializeMethod(const std::unique_ptr<kernel::KernelBuil
     iBuilder->SetInsertPoint(fileSinkInitExit);
 }
 
-void FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, Value * const /* numOfStrides */) {
+Value * FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, Value * const numOfStrides) {
     BasicBlock * const closeFile = iBuilder->CreateBasicBlock("closeFile");
     BasicBlock * const fileOutExit = iBuilder->CreateBasicBlock("fileOutExit");
 
     Value * const fileDes = iBuilder->getScalarField("fileDes");
-    Value * const codeUnitBuffer = iBuilder->CreatePointerCast(getStreamSetInputBufferPtr(0), iBuilder->getInt8PtrTy());
+    Value * codeUnitBuffer = iBuilder->getInputStreamBlockPtr("codeUnitBuffer", iBuilder->getInt32(0));
+    codeUnitBuffer = iBuilder->CreatePointerCast(codeUnitBuffer, iBuilder->getInt8PtrTy());
     Value * bytesToDo = mAvailableItemCount[0];
     if (LLVM_UNLIKELY(mCodeUnitWidth > 8)) {
         bytesToDo = iBuilder->CreateMul(bytesToDo, iBuilder->getSize(mCodeUnitWidth / 8));
@@ -85,6 +87,7 @@ void FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iB
     iBuilder->CreateBr(fileOutExit);
     
     iBuilder->SetInsertPoint(fileOutExit);
+    return numOfStrides;
 }
 
 FileSink::FileSink(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth)

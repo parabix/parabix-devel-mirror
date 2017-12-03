@@ -17,22 +17,6 @@ Driver::Driver(std::string && moduleName)
 
 }
 
-ExternalBuffer * Driver::addExternalBuffer(std::unique_ptr<ExternalBuffer> b) {
-    mOwnedBuffers.emplace_back(std::move(b));
-    return cast<ExternalBuffer>(mOwnedBuffers.back().get());
-}
-
-StreamSetBuffer * Driver::addBuffer(std::unique_ptr<StreamSetBuffer> b) {
-    b->allocateBuffer(iBuilder);
-    mOwnedBuffers.emplace_back(std::move(b));
-    return mOwnedBuffers.back().get();
-}
-
-kernel::Kernel * Driver::addKernelInstance(std::unique_ptr<Kernel> kb) {
-    mOwnedKernels.emplace_back(std::move(kb));
-    return mOwnedKernels.back().get();
-}
-
 void Driver::deallocateBuffers() {
     for (const auto & b : mOwnedBuffers) {
         b->releaseBuffer(iBuilder);

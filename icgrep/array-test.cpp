@@ -155,27 +155,27 @@ void pipeline(ParabixDriver & pxDriver, const unsigned count) {
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments;
     
-    auto ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, byteStreamTy));
+    auto ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, byteStreamTy);
 
-    auto mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, segmentSize));
+    auto mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder, segmentSize);
     mmapK->setInitialArguments({fileDecriptor});
 
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
-    auto BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, byteStreamTy, segmentSize * bufferSegments));
+    auto BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, byteStreamTy, segmentSize * bufferSegments);
 
-    auto s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
+    auto s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder, true);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
-    auto bm = pxDriver.addKernelInstance(make_unique<ParenthesisMatchingKernel>(iBuilder, count));
+    auto bm = pxDriver.addKernelInstance<ParenthesisMatchingKernel>(iBuilder, count);
 
-    auto matches = pxDriver.addBuffer(make_unique<ExpandableBuffer>(iBuilder, iBuilder->getStreamSetTy(count), segmentSize * bufferSegments));
+    auto matches = pxDriver.addBuffer<ExpandableBuffer>(iBuilder, iBuilder->getStreamSetTy(count), segmentSize * bufferSegments);
 
-    auto errors = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamTy(), segmentSize * bufferSegments));
+    auto errors = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamTy(), segmentSize * bufferSegments);
 
     pxDriver.makeKernelCall(bm, {BasisBits}, {matches, errors});
 
-    auto printer = pxDriver.addKernelInstance(make_unique<PrintStreamSet>(iBuilder, std::vector<std::string>{"matches", "errors"}));
+    auto printer = pxDriver.addKernelInstance<PrintStreamSet>(iBuilder, std::vector<std::string>{"matches", "errors"});
     pxDriver.makeKernelCall(printer, {&matches, &errors}, {});
 
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main, 0));

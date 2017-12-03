@@ -405,9 +405,11 @@ FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & kb
 /// MEMORY SOURCE KERNEL
 
 void MemorySourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & kb) {
-    kb->setBaseAddress("sourceBuffer", kb->CreatePointerCast(kb->getScalarField("fileSource"), kb->getVoidPtrTy()));
-    kb->setBufferedSize("sourceBuffer", kb->getScalarField("fileSize"));
-    kb->setCapacity("sourceBuffer", kb->getScalarField("fileSize"));
+    Value * const fileSource = kb->getScalarField("fileSource");
+    kb->setBaseAddress("sourceBuffer", fileSource);
+    Value * const fileSize = kb->getScalarField("fileSize");
+    kb->setBufferedSize("sourceBuffer", fileSize);
+    kb->setCapacity("sourceBuffer", fileSize);
 }
 
 void MemorySourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & kb) {

@@ -46,7 +46,6 @@ protected:
         return mAllocator.allocate<uint8_t>(size);
     }
     const ClassTypeId mClassTypeId;
-
     static Allocator mAllocator;
 };
 

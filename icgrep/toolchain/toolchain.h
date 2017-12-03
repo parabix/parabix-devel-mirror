@@ -92,6 +92,4 @@ void ParseCommandLineOptions(int argc, const char *const *argv, std::initializer
 
 void AddParabixVersionPrinter();
 
-bool AVX2_available();
-
 #endif

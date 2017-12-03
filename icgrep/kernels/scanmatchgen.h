@@ -19,7 +19,7 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    llvm::Value * generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
 };
 
 }

@@ -14,7 +14,7 @@ class UntilNkernel : public MultiBlockKernel {
 public:
     UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    llvm::Value * generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
 
 };
 

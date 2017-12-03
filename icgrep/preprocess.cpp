@@ -55,16 +55,16 @@ void preprocessPipeline(ParabixDriver & pxDriver){
     const unsigned segmentSize = codegen::SegmentSize;
     unsigned bufferSegments = codegen::BufferSegments;
 
-    StreamSetBuffer * ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize));
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize);
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
 
-    StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments));
-    kernel::Kernel * linefeedK = pxDriver.addKernelInstance(make_unique<kernel::DirectCharacterClassKernelBuilder>(iBuilder, "linefeed", std::vector<re::CC *>{re::makeCC(0x0A)}, 1));
+    StreamSetBuffer * MatchResults = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+    kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(iBuilder, "linefeed", std::vector<re::CC *>{re::makeCC(0x0A)}, 1);
     pxDriver.makeKernelCall(linefeedK, {ByteStream}, {MatchResults});
     
-    kernel::Kernel * scanMatchK = pxDriver.addKernelInstance(make_unique<kernel::CCScanKernel>(iBuilder, 1));
+    kernel::Kernel * scanMatchK = pxDriver.addKernelInstance<kernel::CCScanKernel>(iBuilder, 1);
     pxDriver.makeKernelCall(scanMatchK, {MatchResults}, {}); 
     
     pxDriver.generatePipelineIR();

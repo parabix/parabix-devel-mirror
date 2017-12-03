@@ -7,6 +7,7 @@
 #include <kernels/kernel.h>
 #include <string>
 #include <vector>
+#include <memory>
 
 namespace llvm { class Function; }
 namespace kernel { class KernelBuilder; }
@@ -22,11 +23,22 @@ public:
         return iBuilder;
     }
 
-    parabix::ExternalBuffer * addExternalBuffer(std::unique_ptr<parabix::ExternalBuffer> b);
+    template<typename BufferType, typename... Args>
+    parabix::StreamSetBuffer * addBuffer(Args &&... args) {
+        BufferType * const b = new BufferType(std::forward<Args>(args) ...);
+        mOwnedBuffers.emplace_back(b);
+        if (!std::is_same<BufferType, parabix::ExternalBuffer>::value) {
+            mOwnedBuffers.back()->allocateBuffer(iBuilder);
+        }
+        return b;
+    }
 
-    parabix::StreamSetBuffer * addBuffer(std::unique_ptr<parabix::StreamSetBuffer> b);
-
-    kernel::Kernel * addKernelInstance(std::unique_ptr<kernel::Kernel> kb);
+    template<typename KernelType, typename... Args>
+    kernel::Kernel * addKernelInstance(Args &&... args) {
+        KernelType * const k = new KernelType(std::forward<Args>(args) ...);
+        mOwnedKernels.emplace_back(k);
+        return k;
+    }
 
     void addKernelCall(kernel::Kernel & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
         return makeKernelCall(&kb, inputs, outputs);

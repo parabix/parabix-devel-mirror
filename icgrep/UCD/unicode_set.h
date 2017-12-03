@@ -222,7 +222,7 @@ protected:
         return quad_iterator(mRuns, mRuns + mRunLength, mQuads, mQuads + mQuadLength, std::get<0>(*mRuns), std::get<1>(*mRuns));
     }
 
-    inline quad_iterator quad_end() const {
+    inline quad_iterator quad_end() const {       
         return quad_iterator(mRuns + mRunLength, mRuns + mRunLength, mQuads + mQuadLength, mQuads + mQuadLength, Empty, 0);
     }
 

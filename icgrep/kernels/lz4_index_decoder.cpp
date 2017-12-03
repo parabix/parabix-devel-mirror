@@ -17,49 +17,45 @@ using namespace kernel;
 #endif
 
 #define printRTDebugMsg(MSG) \
-    if (DEBUG_RT_PRINT) iBuilder->CallPrintMsgToStderr(MSG)
+    if (DEBUG_RT_PRINT) b->CallPrintMsgToStderr(MSG)
 
 #define printRTDebugInt(NAME, X) \
-    if (DEBUG_RT_PRINT) iBuilder->CallPrintIntToStderr(NAME, X)
+    if (DEBUG_RT_PRINT) b->CallPrintIntToStderr(NAME, X)
 
 #define printGlobalPos() \
-    printRTDebugInt("GlobalPos", iBuilder->CreateAdd(blockStartPos, iBuilder->CreateLoad(sOffset)))
+    printRTDebugInt("GlobalPos", b->CreateAdd(blockStartPos, b->CreateLoad(sOffset)))
 
 namespace {
 
-Value * generateBitswap(const std::unique_ptr<KernelBuilder> & iBuilder, Value * v) {
-    Value * bswapFunc = Intrinsic::getDeclaration(iBuilder->getModule(),
+Value * generateBitswap(const std::unique_ptr<KernelBuilder> & b, Value * v) {
+    Value * bswapFunc = Intrinsic::getDeclaration(b->getModule(),
             Intrinsic::bswap, v->getType());
-    return iBuilder->CreateCall(bswapFunc, {v});
+    return b->CreateCall(bswapFunc, {v});
 }
 
-Value * selectMin(const std::unique_ptr<KernelBuilder> & iBuilder, Value * a, Value * b) {
-    return iBuilder->CreateSelect(iBuilder->CreateICmpULT(a, b), a, b);
-}
-
-Value * createStackVar(const std::unique_ptr<KernelBuilder> & iBuilder, Type * type, StringRef name, Value * initializer = nullptr) {
-    Value * var = iBuilder->CreateAlloca(type, nullptr, name);
+Value * createStackVar(const std::unique_ptr<KernelBuilder> & b, Type * type, StringRef name, Value * initializer = nullptr) {
+    Value * var = b->CreateAlloca(type, nullptr, name);
     if (initializer) {
-        iBuilder->CreateStore(initializer, var);
+        b->CreateStore(initializer, var);
     } else {
-        iBuilder->CreateStore(ConstantInt::get(type, 0), var);
+        b->CreateStore(ConstantInt::get(type, 0), var);
     }
     return var;
 }
 
-void incStackVar(const std::unique_ptr<KernelBuilder> & iBuilder, Value * svar, Value * increment = nullptr) {
-    Value * value = iBuilder->CreateLoad(svar);
+void incStackVar(const std::unique_ptr<KernelBuilder> & b, Value * svar, Value * increment = nullptr) {
+    Value * value = b->CreateLoad(svar);
     if (increment) {
-        value = iBuilder->CreateAdd(value, increment);
+        value = b->CreateAdd(value, increment);
     } else {
-        value = iBuilder->CreateAdd(value, ConstantInt::get(value->getType(), 1));
+        value = b->CreateAdd(value, ConstantInt::get(value->getType(), 1));
     }
-    iBuilder->CreateStore(value, svar);
+    b->CreateStore(value, svar);
 }
 
-Value * getOutputPtr(const std::unique_ptr<KernelBuilder> & iBuilder, Value * blockStartPtr, Value * offset) {
-    return iBuilder->CreateGEP(
-            iBuilder->CreatePointerCast(blockStartPtr, iBuilder->getInt32Ty()->getPointerTo()),
+Value * getOutputPtr(const std::unique_ptr<KernelBuilder> & b, Value * blockStartPtr, Value * offset) {
+    return b->CreateGEP(
+            b->CreatePointerCast(blockStartPtr, b->getInt32Ty()->getPointerTo()),
             offset
             );
 }
@@ -69,37 +65,37 @@ Value * getOutputPtr(const std::unique_ptr<KernelBuilder> & iBuilder, Value * bl
 /**
  * Get the offset within the current word.
  */
-Value * LZ4IndexDecoderKernel::getWordOffset(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
-    Value * offset = iBuilder->CreateLoad(sOffset);
+Value * LZ4IndexDecoderKernel::getWordOffset(const std::unique_ptr<kernel::KernelBuilder> & b) {
+    Value * offset = b->CreateLoad(sOffset);
     IntegerType * type = cast<IntegerType>(offset->getType());
     Constant * mask = ConstantInt::get(type, wordWidth - 1);
-    return iBuilder->CreateAnd(offset, mask);
+    return b->CreateAnd(offset, mask);
 }
 
 /**
  * Get the offset of the start of the current word.
  */
-Value * LZ4IndexDecoderKernel::getWordStartOffset(const std::unique_ptr<KernelBuilder> & iBuilder) {
-    Value * offset = iBuilder->CreateLoad(sOffset);
+Value * LZ4IndexDecoderKernel::getWordStartOffset(const std::unique_ptr<KernelBuilder> & b) {
+    Value * offset = b->CreateLoad(sOffset);
     IntegerType * type = cast<IntegerType>(offset->getType());
     Constant * mask = ConstantExpr::getNeg(ConstantInt::get(type, wordWidth));
-    return iBuilder->CreateAnd(offset, mask);
+    return b->CreateAnd(offset, mask);
 }
 
 /**
  * Load a raw byte from byteStream.
  * If offset is not provided, load the current byte by default.
  */
-Value * LZ4IndexDecoderKernel::loadRawByte(const std::unique_ptr<KernelBuilder> & iBuilder, Value * offset) {
-    Value * blockStartPtr = iBuilder->CreatePointerCast(
-            iBuilder->getInputStreamBlockPtr("byteStream", iBuilder->getInt32(0)),
-            iBuilder->getInt8PtrTy()
+Value * LZ4IndexDecoderKernel::loadRawByte(const std::unique_ptr<KernelBuilder> & b, Value * offset) {
+    Value * blockStartPtr = b->CreatePointerCast(
+            b->getInputStreamBlockPtr("byteStream", b->getInt32(0)),
+            b->getInt8PtrTy()
             );
     if (offset == nullptr) {
-        offset = iBuilder->CreateLoad(sOffset);
+        offset = b->CreateLoad(sOffset);
     }
-    Value * ptr = iBuilder->CreateGEP(blockStartPtr, offset);
-    return iBuilder->CreateLoad(ptr);
+    Value * ptr = b->CreateGEP(blockStartPtr, offset);
+    return b->CreateLoad(ptr);
 }
 
 
@@ -109,20 +105,20 @@ Value * LZ4IndexDecoderKernel::loadRawByte(const std::unique_ptr<KernelBuilder> 
  * offset   =    ^
  * cleared  = ....111
  */
-void LZ4IndexDecoderKernel::setExtenderUntilOffset(const std::unique_ptr<KernelBuilder> & iBuilder) {
+void LZ4IndexDecoderKernel::setExtenderUntilOffset(const std::unique_ptr<KernelBuilder> & b) {
     // Little-endian, offset counts from LSB
     // extender = extender ^ ~((1 << offset) -1)
-    Value * extender = iBuilder->CreateLoad(sExtender);
-    Value * wordOffset = iBuilder->CreateZExt(
-            getWordOffset(iBuilder),
-            iBuilder->getSizeTy()
+    Value * extender = b->CreateLoad(sExtender);
+    Value * wordOffset = b->CreateZExt(
+            getWordOffset(b),
+            b->getSizeTy()
             );
-    Value * one = iBuilder->getSize(1);
-    Value * mask = iBuilder->CreateSub(
-            iBuilder->CreateShl(one, wordOffset),
+    Value * one = b->getSize(1);
+    Value * mask = b->CreateSub(
+            b->CreateShl(one, wordOffset),
             one);
-    extender = iBuilder->CreateOr(extender, mask);
-    iBuilder->CreateStore(extender, sExtender);
+    extender = b->CreateOr(extender, mask);
+    b->CreateStore(extender, sExtender);
 }
 
 
@@ -130,146 +126,145 @@ void LZ4IndexDecoderKernel::setExtenderUntilOffset(const std::unique_ptr<KernelB
  * Load the extender word at the current offset.
  * Called when we potentially reach a new word.  Usually followed by setExtenderUntilOffset.
  */
-void LZ4IndexDecoderKernel::loadCurrentExtender(const std::unique_ptr<KernelBuilder> & iBuilder) {
-    Value * offset = iBuilder->CreateLoad(sOffset);
+void LZ4IndexDecoderKernel::loadCurrentExtender(const std::unique_ptr<KernelBuilder> & b) {
+    Value * offset = b->CreateLoad(sOffset);
     IntegerType * type = cast<IntegerType>(offset->getType());
     ConstantInt * shift = ConstantInt::get(type, std::log2(wordWidth));
-    Value * shiftedOffset = iBuilder->CreateLShr(offset, shift);
-    Value * extender = iBuilder->CreateExtractElement(extenders, shiftedOffset);
-    iBuilder->CreateStore(extender, sExtender);
+    Value * shiftedOffset = b->CreateLShr(offset, shift);
+    Value * extender = b->CreateExtractElement(extenders, shiftedOffset);
+    b->CreateStore(extender, sExtender);
 }
 
 
-void LZ4IndexDecoderKernel::generateProduceOutput(const std::unique_ptr<KernelBuilder> &iBuilder) {
-    Value * producedItem = iBuilder->getProducedItemCount("literalIndexes");
+void LZ4IndexDecoderKernel::generateProduceOutput(const std::unique_ptr<KernelBuilder> &b) {
+    Value * producedItem = b->getProducedItemCount("literalIndexes");
 
 //#ifndef NDEBUG
-//    iBuilder->CallPrintInt("ProducedItem", producedItem);
+//    b->CallPrintInt("ProducedItem", producedItem);
 //    // LiteralStart is adjusted to be relative to the block start, so that
 //    // the output can be compared against that of the reference implementation.
-//    Value * literalStart = iBuilder->CreateSub(iBuilder->getScalarField("LiteralStart"), iBuilder->getScalarField("LZ4BlockStart"));
-//    iBuilder->CallPrintInt("LiteralStart", literalStart);
-//    iBuilder->CallPrintInt("LiteralLength", iBuilder->getScalarField("LiteralLength"));
-//    iBuilder->CallPrintInt("MatchOffset", iBuilder->getScalarField("MatchOffset"));
-//    iBuilder->CallPrintInt("MatchLength", iBuilder->getScalarField("MatchLength"));
+//    Value * literalStart = b->CreateSub(b->getScalarField("LiteralStart"), b->getScalarField("LZ4BlockStart"));
+//    b->CallPrintInt("LiteralStart", literalStart);
+//    b->CallPrintInt("LiteralLength", b->getScalarField("LiteralLength"));
+//    b->CallPrintInt("MatchOffset", b->getScalarField("MatchOffset"));
+//    b->CallPrintInt("MatchLength", b->getScalarField("MatchLength"));
 //#endif
     printRTDebugMsg("--------------");
 
-    Value * outputOffset = iBuilder->CreateAnd(
-            iBuilder->CreateTrunc(producedItem, iBuilder->getInt32Ty()),
-            iBuilder->getInt32(iBuilder->getBitBlockWidth() - 1)
-            );  // producedItem % blockWidth (as blockWidth is always a power of 2)
-    Value * literalStartPtr = getOutputPtr(iBuilder,
-            iBuilder->getOutputStreamBlockPtr("literalIndexes", iBuilder->getInt32(0)), outputOffset);
-    Value * literalLengthPtr = getOutputPtr(iBuilder,
-            iBuilder->getOutputStreamBlockPtr("literalIndexes", iBuilder->getInt32(1)), outputOffset);
-    Value * matchOffsetPtr = getOutputPtr(iBuilder,
-            iBuilder->getOutputStreamBlockPtr("matchIndexes", iBuilder->getInt32(0)), outputOffset);
-    Value * matchLengthPtr = getOutputPtr(iBuilder,
-            iBuilder->getOutputStreamBlockPtr("matchIndexes", iBuilder->getInt32(1)), outputOffset);
-    iBuilder->CreateStore(iBuilder->getScalarField("LiteralStart"), literalStartPtr);
-    iBuilder->CreateStore(iBuilder->getScalarField("LiteralLength"), literalLengthPtr);
-    iBuilder->CreateStore(iBuilder->getScalarField("MatchOffset"), matchOffsetPtr);
-    iBuilder->CreateStore(iBuilder->getScalarField("MatchLength"), matchLengthPtr);
-    iBuilder->setProducedItemCount("literalIndexes", iBuilder->CreateAdd(producedItem, iBuilder->getSize(1)));
+    Value * outputOffset = b->CreateAnd(b->CreateTrunc(producedItem, b->getInt32Ty()), b->getInt32(b->getBitBlockWidth() - 1));  // producedItem % blockWidth (as blockWidth is always a power of 2)
+    Value * baseLiteralStartPtr = b->getOutputStreamBlockPtr("literalIndexes", b->getInt32(0));
+
+    Value * literalStartPtr = getOutputPtr(b, baseLiteralStartPtr, outputOffset);
+    Value * literalLengthPtr = getOutputPtr(b,
+            b->getOutputStreamBlockPtr("literalIndexes", b->getInt32(1)), outputOffset);
+    Value * matchOffsetPtr = getOutputPtr(b,
+            b->getOutputStreamBlockPtr("matchIndexes", b->getInt32(0)), outputOffset);
+    Value * matchLengthPtr = getOutputPtr(b,
+            b->getOutputStreamBlockPtr("matchIndexes", b->getInt32(1)), outputOffset);
+
+    b->CreateStore(b->getScalarField("LiteralStart"), literalStartPtr);
+    b->CreateStore(b->getScalarField("LiteralLength"), literalLengthPtr);
+    b->CreateStore(b->getScalarField("MatchOffset"), matchOffsetPtr);
+    b->CreateStore(b->getScalarField("MatchLength"), matchLengthPtr);
+    b->setProducedItemCount("literalIndexes", b->CreateAdd(producedItem, b->getSize(1)));
     // matchIndexes has a fixed ratio of 1:1 w.r.t. literalIndexes.
 }
 
 
-void LZ4IndexDecoderKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
-    BasicBlock * entry_block = iBuilder->GetInsertBlock();
-    BasicBlock * exit_block = iBuilder->CreateBasicBlock("exit");
+void LZ4IndexDecoderKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+    BasicBlock * entry_block = b->GetInsertBlock();
+    BasicBlock * exit_block = b->CreateBasicBlock("exit");
 
     // %entry
-    iBuilder->SetInsertPoint(entry_block);
+    b->SetInsertPoint(entry_block);
     printRTDebugMsg("entry");
     // Global positions in the byte stream.
-    Value * blockNo = iBuilder->getScalarField("BlockNo");
-    blockStartPos = iBuilder->CreateMul(blockNo, iBuilder->getInt32(iBuilder->getBitBlockWidth()), "blockStartPos");
-    extenders = iBuilder->CreateBitCast(
-            iBuilder->loadInputStreamBlock("extenders", iBuilder->getInt32(0)),
-            VectorType::get(iBuilder->getSizeTy(), iBuilder->getBitBlockWidth() / iBuilder->getSizeTy()->getBitWidth()),
+    Value * blockNo = b->getScalarField("BlockNo");
+    blockStartPos = b->CreateMul(blockNo, b->getInt32(b->getBitBlockWidth()), "blockStartPos");
+    extenders = b->CreateBitCast(
+            b->loadInputStreamBlock("extenders", b->getInt32(0)),
+            VectorType::get(b->getSizeTy(), b->getBitBlockWidth() / b->getSizeTy()->getBitWidth()),
             "extenders");
     // Create a series of stack variables which will be promoted by mem2reg.
-    sOffset = createStackVar(iBuilder, iBuilder->getInt32Ty(), "offset");
+    sOffset = createStackVar(b, b->getInt32Ty(), "offset");
     // tempLength has different meanings in different states.
-    sTempLength = createStackVar(iBuilder, iBuilder->getInt32Ty(), "tempLength", iBuilder->getScalarField("TempLength"));
-    sTempCount = createStackVar(iBuilder, iBuilder->getInt32Ty(), "tempCount", iBuilder->getScalarField("TempCount"));
-    sState = createStackVar(iBuilder, iBuilder->getInt8Ty(), "state", iBuilder->getScalarField("State"));
-    sExtender = createStackVar(iBuilder, iBuilder->getSizeTy(), "extender",
-            iBuilder->CreateExtractElement(extenders, iBuilder->getInt32(0)));
+    sTempLength = createStackVar(b, b->getInt32Ty(), "tempLength", b->getScalarField("TempLength"));
+    sTempCount = createStackVar(b, b->getInt32Ty(), "tempCount", b->getScalarField("TempCount"));
+    sState = createStackVar(b, b->getInt8Ty(), "state", b->getScalarField("State"));
+    sExtender = createStackVar(b, b->getSizeTy(), "extender",
+            b->CreateExtractElement(extenders, b->getInt32(0)));
 
-    BasicBlock * skippingBytes = iBuilder->CreateBasicBlock("skipping_bytes");
-    BasicBlock * dispatch = iBuilder->CreateBasicBlock("dispatch");
+    BasicBlock * skippingBytes = b->CreateBasicBlock("skipping_bytes");
+    BasicBlock * dispatch = b->CreateBasicBlock("dispatch");
 
-    iBuilder->CreateCondBr(
-            iBuilder->CreateICmpUGT(iBuilder->getScalarField("BytesToSkip"), iBuilder->getInt32(0)),
+    b->CreateCondBr(
+            b->CreateICmpUGT(b->getScalarField("BytesToSkip"), b->getInt32(0)),
             skippingBytes, dispatch
             );
 
     // %skipping_bytes
-    generateSkippingBytes(iBuilder, skippingBytes, exit_block);
+    generateSkippingBytes(b, skippingBytes, exit_block);
     // Insert point is at the end of skippingBytes.
-    iBuilder->CreateBr(dispatch);
+    b->CreateBr(dispatch);
 
     // %dispatch
     // Indirect branching will be added to %dispatch at last.
 
     // %at_block_checksum
-    BasicBlock * atBlockChecksum = iBuilder->CreateBasicBlock("at_block_checksum");
-    generateAtBlockChecksum(iBuilder, atBlockChecksum, skippingBytes);
+    BasicBlock * atBlockChecksum = b->CreateBasicBlock("at_block_checksum");
+    generateAtBlockChecksum(b, atBlockChecksum, skippingBytes);
   
     // %at_block_size
-    BasicBlock * atBlockSize = iBuilder->CreateBasicBlock("at_block_size");
-    generateAtBlockSize(iBuilder, atBlockSize, skippingBytes, exit_block);
+    BasicBlock * atBlockSize = b->CreateBasicBlock("at_block_size");
+    generateAtBlockSize(b, atBlockSize, skippingBytes, exit_block);
 
     // %at_token
-    BasicBlock * atToken = iBuilder->CreateBasicBlock("at_token");
-    generateAtToken(iBuilder, atToken, exit_block);
+    BasicBlock * atToken = b->CreateBasicBlock("at_token");
+    generateAtToken(b, atToken, exit_block);
 
     // %extending_literal_length
-    BasicBlock * extendingLiteralLen = iBuilder->CreateBasicBlock("extending_literal_length");
-    generateExtendingLiteralLen(iBuilder, extendingLiteralLen, exit_block);
+    BasicBlock * extendingLiteralLen = b->CreateBasicBlock("extending_literal_length");
+    generateExtendingLiteralLen(b, extendingLiteralLen, exit_block);
 
     // %at_literals
-    BasicBlock * atLiterals = iBuilder->CreateBasicBlock("at_literals");
-    generateAtLiterals(iBuilder, atLiterals);
-    iBuilder->CreateBr(skippingBytes);
+    BasicBlock * atLiterals = b->CreateBasicBlock("at_literals");
+    generateAtLiterals(b, atLiterals);
+    b->CreateBr(skippingBytes);
 
     // %at_first_offset
     // Note that the last sequence is incomplete and ends with literals.
     // If the whole LZ4 block is done, process the (optional) checksum.
     // Otherwise, go around to process the next sequence.
-    BasicBlock * atOffset1 = iBuilder->CreateBasicBlock("at_first_offset");
-    iBuilder->SetInsertPoint(atOffset1);
-    Value * nowGlobalPos = iBuilder->CreateAdd(blockStartPos, iBuilder->CreateLoad(sOffset));
-    BasicBlock * blockEnd_else = iBuilder->CreateBasicBlock("block_end_else");
+    BasicBlock * atOffset1 = b->CreateBasicBlock("at_first_offset");
+    b->SetInsertPoint(atOffset1);
+    Value * nowGlobalPos = b->CreateAdd(blockStartPos, b->CreateLoad(sOffset));
+    BasicBlock * blockEnd_else = b->CreateBasicBlock("block_end_else");
     // Conditional branch inserted at the end of the last block.
-    iBuilder->CreateUnlikelyCondBr(
-            iBuilder->CreateICmpEQ(nowGlobalPos, iBuilder->getScalarField("LZ4BlockEnd")),
+    b->CreateUnlikelyCondBr(
+            b->CreateICmpEQ(nowGlobalPos, b->getScalarField("LZ4BlockEnd")),
             atBlockChecksum, blockEnd_else
             );
-    generateAtFirstOffset(iBuilder, blockEnd_else, exit_block);
+    generateAtFirstOffset(b, blockEnd_else, exit_block);
 
     // %at_second_offset
-    BasicBlock * atOffset2 = iBuilder->CreateBasicBlock("at_second_offset");
-    generateAtSecondOffset(iBuilder, atOffset2, exit_block);
+    BasicBlock * atOffset2 = b->CreateBasicBlock("at_second_offset");
+    generateAtSecondOffset(b, atOffset2, exit_block);
 
     // %extending_match_length
-    BasicBlock * extendingMatchLen = iBuilder->CreateBasicBlock("extending_match_length");
-    generateExtendingMatchLen(iBuilder, extendingMatchLen, exit_block);
-    iBuilder->CreateBr(atToken);
+    BasicBlock * extendingMatchLen = b->CreateBasicBlock("extending_match_length");
+    generateExtendingMatchLen(b, extendingMatchLen, exit_block);
+    b->CreateBr(atToken);
 
     // Indirect branching.
-    iBuilder->SetInsertPoint(dispatch);
+    b->SetInsertPoint(dispatch);
     printRTDebugMsg("dispatch");
     // The order must comply with enum State.
     Constant * labels = ConstantVector::get(
             {BlockAddress::get(atBlockSize), BlockAddress::get(atToken), BlockAddress::get(extendingLiteralLen), BlockAddress::get(atLiterals),
              BlockAddress::get(atOffset1), BlockAddress::get(atOffset2), BlockAddress::get(extendingMatchLen), BlockAddress::get(atBlockChecksum)}
             );
-    Value * target = iBuilder->CreateExtractElement(labels, iBuilder->CreateLoad(sState));
-    IndirectBrInst * indirectBr = iBuilder->CreateIndirectBr(target);
+    Value * target = b->CreateExtractElement(labels, b->CreateLoad(sState));
+    IndirectBrInst * indirectBr = b->CreateIndirectBr(target);
     indirectBr->addDestination(atBlockSize);
     indirectBr->addDestination(atToken);
     indirectBr->addDestination(extendingLiteralLen);
@@ -280,76 +275,76 @@ void LZ4IndexDecoderKernel::generateDoBlockMethod(const std::unique_ptr<KernelBu
     indirectBr->addDestination(atBlockChecksum);
 
     // %exit
-    iBuilder->SetInsertPoint(exit_block);
+    b->SetInsertPoint(exit_block);
     printRTDebugMsg("exit");
-    iBuilder->setScalarField("State", iBuilder->CreateLoad(sState));
-    iBuilder->setScalarField("TempLength", iBuilder->CreateLoad(sTempLength));
-    iBuilder->setScalarField("TempCount", iBuilder->CreateLoad(sTempCount));
-    iBuilder->setScalarField("BlockNo", iBuilder->CreateAdd(blockNo, iBuilder->getInt32(1)));
+    b->setScalarField("State", b->CreateLoad(sState));
+    b->setScalarField("TempLength", b->CreateLoad(sTempLength));
+    b->setScalarField("TempCount", b->CreateLoad(sTempCount));
+    b->setScalarField("BlockNo", b->CreateAdd(blockNo, b->getInt32(1)));
     // When the kernel builder uses indirectbr, doBlock is not a separate function.
     // Hence, we branch to a new basic block and fall through instead of returning.
-    BasicBlock * end_block = iBuilder->CreateBasicBlock("end_of_block");
-    iBuilder->CreateBr(end_block);
-    iBuilder->SetInsertPoint(end_block);
+    BasicBlock * end_block = b->CreateBasicBlock("end_of_block");
+    b->CreateBr(end_block);
+    b->SetInsertPoint(end_block);
 }
 
 
-void LZ4IndexDecoderKernel::generateBoundaryDetection(const std::unique_ptr<KernelBuilder> & iBuilder, State state, BasicBlock * exit_block, bool updateExtenderWord) {
+void LZ4IndexDecoderKernel::generateBoundaryDetection(const std::unique_ptr<KernelBuilder> & b, State state, BasicBlock * exit_block, bool updateExtenderWord) {
     if (updateExtenderWord) {
-        BasicBlock * wordBoundary_then = iBuilder->CreateBasicBlock("word_boundary_then-" + StateLabels.at(state));
-        BasicBlock * blockBoundary_else = iBuilder->CreateBasicBlock("block_boundary_else-" + StateLabels.at(state));
-        BasicBlock * wordBoundary_cont = iBuilder->CreateBasicBlock("word_boundary_cont-" + StateLabels.at(state));
-        iBuilder->CreateUnlikelyCondBr(
-                iBuilder->CreateICmpEQ(getWordOffset(iBuilder), iBuilder->getInt32(0)),
+        BasicBlock * wordBoundary_then = b->CreateBasicBlock("word_boundary_then-" + StateLabels.at(state));
+        BasicBlock * blockBoundary_else = b->CreateBasicBlock("block_boundary_else-" + StateLabels.at(state));
+        BasicBlock * wordBoundary_cont = b->CreateBasicBlock("word_boundary_cont-" + StateLabels.at(state));
+        b->CreateUnlikelyCondBr(
+                b->CreateICmpEQ(getWordOffset(b), b->getInt32(0)),
                 wordBoundary_then, wordBoundary_cont
                 );
 
-        iBuilder->SetInsertPoint(wordBoundary_then);
-        iBuilder->CreateUnlikelyCondBr(
-                iBuilder->CreateICmpEQ(iBuilder->CreateLoad(sOffset), iBuilder->getInt32(iBuilder->getBitBlockWidth())),
+        b->SetInsertPoint(wordBoundary_then);
+        b->CreateUnlikelyCondBr(
+                b->CreateICmpEQ(b->CreateLoad(sOffset), b->getInt32(b->getBitBlockWidth())),
                 exit_block, blockBoundary_else
                 );
 
         // Reaching word boundary but not block boundary.  Update the extender word as requested.
-        iBuilder->SetInsertPoint(blockBoundary_else);
-        loadCurrentExtender(iBuilder);
-        iBuilder->CreateBr(wordBoundary_cont);
+        b->SetInsertPoint(blockBoundary_else);
+        loadCurrentExtender(b);
+        b->CreateBr(wordBoundary_cont);
 
         // Leave the insert point at the end and return.
-        iBuilder->SetInsertPoint(wordBoundary_cont);
+        b->SetInsertPoint(wordBoundary_cont);
     } else {
-        BasicBlock * blockBoundary_cont = iBuilder->CreateBasicBlock("block_boundary_cont-" + StateLabels.at(state));
-        iBuilder->CreateUnlikelyCondBr(
-                iBuilder->CreateICmpEQ(iBuilder->CreateLoad(sOffset), iBuilder->getInt32(iBuilder->getBitBlockWidth())),
+        BasicBlock * blockBoundary_cont = b->CreateBasicBlock("block_boundary_cont-" + StateLabels.at(state));
+        b->CreateUnlikelyCondBr(
+                b->CreateICmpEQ(b->CreateLoad(sOffset), b->getInt32(b->getBitBlockWidth())),
                 exit_block, blockBoundary_cont
                 );
         // Leave the insert point at the end and return.
-        iBuilder->SetInsertPoint(blockBoundary_cont);
+        b->SetInsertPoint(blockBoundary_cont);
     }
 }
 
 
-void LZ4IndexDecoderKernel::generateSkippingBytes(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, BasicBlock * bb, BasicBlock * exit_block) {
-    iBuilder->SetInsertPoint(bb);
+void LZ4IndexDecoderKernel::generateSkippingBytes(const std::unique_ptr<kernel::KernelBuilder> & b, BasicBlock * bb, BasicBlock * exit_block) {
+    b->SetInsertPoint(bb);
     printRTDebugMsg("skipping bytes");
 
-    Value * remainingBytesInBlock = iBuilder->CreateSub(
-            iBuilder->getInt32(iBuilder->getBitBlockWidth()), iBuilder->CreateLoad(sOffset)
+    Value * remainingBytesInBlock = b->CreateSub(
+            b->getInt32(b->getBitBlockWidth()), b->CreateLoad(sOffset)
             );
-    Value * remainingBytesToSkip = iBuilder->getScalarField("BytesToSkip");
-    Value * advanceDist = selectMin(iBuilder, remainingBytesInBlock, remainingBytesToSkip);
-    remainingBytesToSkip = iBuilder->CreateSub(remainingBytesToSkip, advanceDist);
-    incStackVar(iBuilder, sOffset, advanceDist);
-    iBuilder->setScalarField("BytesToSkip", remainingBytesToSkip);
+    Value * remainingBytesToSkip = b->getScalarField("BytesToSkip");
+    Value * advanceDist = b->CreateUMin(remainingBytesInBlock, remainingBytesToSkip);
+    remainingBytesToSkip = b->CreateSub(remainingBytesToSkip, advanceDist);
+    incStackVar(b, sOffset, advanceDist);
+    b->setScalarField("BytesToSkip", remainingBytesToSkip);
 
-    generateBoundaryDetection(iBuilder, State::SKIPPING_BYTES, exit_block);
+    generateBoundaryDetection(b, State::SKIPPING_BYTES, exit_block);
     // Falls through.
 }
 
 
-void LZ4IndexDecoderKernel::generateAtBlockSize(const std::unique_ptr<KernelBuilder> &iBuilder, BasicBlock * bb, BasicBlock * skippingBytes, BasicBlock * exit_block) {
-    iBuilder->CreateBr(bb);
-    iBuilder->SetInsertPoint(bb);
+void LZ4IndexDecoderKernel::generateAtBlockSize(const std::unique_ptr<KernelBuilder> &b, BasicBlock * bb, BasicBlock * skippingBytes, BasicBlock * exit_block) {
+    b->CreateBr(bb);
+    b->SetInsertPoint(bb);
     printRTDebugMsg("scanning block size");
     printGlobalPos();
 
@@ -359,357 +354,356 @@ void LZ4IndexDecoderKernel::generateAtBlockSize(const std::unique_ptr<KernelBuil
     // Both variables are initialized from kernel states at %entry.
 
     // A do-while loop.
-    BasicBlock * loopBody = iBuilder->CreateBasicBlock("blocksize_loop_body");
-    BasicBlock * loopExit = iBuilder->CreateBasicBlock("blocksize_loop_exit");
-    iBuilder->CreateBr(loopBody);
+    BasicBlock * loopBody = b->CreateBasicBlock("blocksize_loop_body");
+    BasicBlock * loopExit = b->CreateBasicBlock("blocksize_loop_exit");
+    b->CreateBr(loopBody);
 
-    iBuilder->SetInsertPoint(loopBody);
-    Value * byte = loadRawByte(iBuilder);
-    Value * newTempLength = iBuilder->CreateAdd(
-            iBuilder->CreateShl(iBuilder->CreateLoad(sTempLength), iBuilder->getInt32(8)),
-            iBuilder->CreateZExt(byte, iBuilder->getInt32Ty())
+    b->SetInsertPoint(loopBody);
+    Value * byte = loadRawByte(b);
+    Value * newTempLength = b->CreateAdd(
+            b->CreateShl(b->CreateLoad(sTempLength), b->getInt32(8)),
+            b->CreateZExt(byte, b->getInt32Ty())
             );
-    iBuilder->CreateStore(newTempLength, sTempLength);
-    incStackVar(iBuilder, sTempCount);
-    incStackVar(iBuilder, sOffset);
+    b->CreateStore(newTempLength, sTempLength);
+    incStackVar(b, sTempCount);
+    incStackVar(b, sOffset);
     // Stop when we read all four bytes or reach the end of the block.
-    iBuilder->CreateCondBr(
-            iBuilder->CreateOr(
-                iBuilder->CreateICmpEQ(iBuilder->CreateLoad(sTempCount), iBuilder->getInt32(4)),
-                iBuilder->CreateICmpEQ(iBuilder->CreateLoad(sOffset), iBuilder->getInt32(iBuilder->getBitBlockWidth()))
+    b->CreateCondBr(
+            b->CreateOr(
+                b->CreateICmpEQ(b->CreateLoad(sTempCount), b->getInt32(4)),
+                b->CreateICmpEQ(b->CreateLoad(sOffset), b->getInt32(b->getBitBlockWidth()))
                 ),
             loopExit, loopBody
             );
 
-    iBuilder->SetInsertPoint(loopExit);
-    BasicBlock * blockSizeCompleted_then = iBuilder->CreateBasicBlock("blocksize_completed_then");
-    BasicBlock * blockSizeCompleted_cont = iBuilder->CreateBasicBlock("blocksize_completed_cont");
-    iBuilder->CreateLikelyCondBr(
-            iBuilder->CreateICmpEQ(iBuilder->CreateLoad(sTempCount), iBuilder->getInt32(4)),
+    b->SetInsertPoint(loopExit);
+    BasicBlock * blockSizeCompleted_then = b->CreateBasicBlock("blocksize_completed_then");
+    BasicBlock * blockSizeCompleted_cont = b->CreateBasicBlock("blocksize_completed_cont");
+    b->CreateLikelyCondBr(
+            b->CreateICmpEQ(b->CreateLoad(sTempCount), b->getInt32(4)),
             blockSizeCompleted_then, blockSizeCompleted_cont
             );
 
     // All four bytes of the block size are read in.
-    iBuilder->SetInsertPoint(blockSizeCompleted_then);
+    b->SetInsertPoint(blockSizeCompleted_then);
     // Remember to swap the block size back to little-endian.
-    Value * blockSize = generateBitswap(iBuilder, iBuilder->CreateLoad(sTempLength));
-    Value * currentPos = iBuilder->CreateAdd(blockStartPos, iBuilder->CreateLoad(sOffset));
-    iBuilder->setScalarField("LZ4BlockStart", currentPos);
-    iBuilder->setScalarField("LZ4BlockEnd", iBuilder->CreateAdd(currentPos, blockSize));
+    Value * blockSize = generateBitswap(b, b->CreateLoad(sTempLength));
+    Value * currentPos = b->CreateAdd(blockStartPos, b->CreateLoad(sOffset));
+    b->setScalarField("LZ4BlockStart", currentPos);
+    b->setScalarField("LZ4BlockEnd", b->CreateAdd(currentPos, blockSize));
     printRTDebugInt("blockSize", blockSize);
 
-    BasicBlock * uncompressedBlock_then = iBuilder->CreateBasicBlock("uncompressed_block_then");
-    BasicBlock * uncompressedBlock_else = iBuilder->CreateBasicBlock("uncompressed_block_cont");
-    iBuilder->CreateUnlikelyCondBr(
-            iBuilder->CreateTrunc(
-                iBuilder->CreateLShr(blockSize, iBuilder->getInt32(31)),
-                iBuilder->getInt1Ty()
+    BasicBlock * uncompressedBlock_then = b->CreateBasicBlock("uncompressed_block_then");
+    BasicBlock * uncompressedBlock_else = b->CreateBasicBlock("uncompressed_block_cont");
+    b->CreateUnlikelyCondBr(
+            b->CreateTrunc(
+                b->CreateLShr(blockSize, b->getInt32(31)),
+                b->getInt1Ty()
                 ),
             uncompressedBlock_then,
             uncompressedBlock_else
             );
 
-    iBuilder->SetInsertPoint(uncompressedBlock_then);
-    Value * realBlockSize = iBuilder->CreateXor(blockSize, iBuilder->getInt32(1L << 31));
-    iBuilder->setScalarField("LZ4BlockEnd", iBuilder->CreateAdd(currentPos, realBlockSize));
-    iBuilder->setScalarField("BytesToSkip", realBlockSize);
-    iBuilder->setScalarField("LiteralStart", currentPos);
-    iBuilder->setScalarField("LiteralLength", realBlockSize);
+    b->SetInsertPoint(uncompressedBlock_then);
+    Value * realBlockSize = b->CreateXor(blockSize, b->getInt32(1L << 31));
+    b->setScalarField("LZ4BlockEnd", b->CreateAdd(currentPos, realBlockSize));
+    b->setScalarField("BytesToSkip", realBlockSize);
+    b->setScalarField("LiteralStart", currentPos);
+    b->setScalarField("LiteralLength", realBlockSize);
     // No need to set MatchLength/MatchOffset to 0, nor to produce output,
     // because %atBlockChecksum will do so as the last sequence.
-    iBuilder->CreateStore(iBuilder->getInt8(State::AT_BLOCK_CHECKSUM), sState);
-    iBuilder->CreateBr(skippingBytes);
+    b->CreateStore(b->getInt8(State::AT_BLOCK_CHECKSUM), sState);
+    b->CreateBr(skippingBytes);
 
-    iBuilder->SetInsertPoint(uncompressedBlock_else);
+    b->SetInsertPoint(uncompressedBlock_else);
     // Reset these temporary values for later use.
-    iBuilder->CreateStore(iBuilder->getInt32(0), sTempLength);
-    iBuilder->CreateStore(iBuilder->getInt32(0), sTempCount);
-    iBuilder->CreateStore(iBuilder->getInt8(State::AT_TOKEN), sState);
+    b->CreateStore(b->getInt32(0), sTempLength);
+    b->CreateStore(b->getInt32(0), sTempCount);
+    b->CreateStore(b->getInt8(State::AT_TOKEN), sState);
     // A block size of 0 is the end mark of the frame. Exit.
-    iBuilder->CreateUnlikelyCondBr(
-            iBuilder->CreateICmpEQ(blockSize, ConstantInt::getNullValue(blockSize->getType())),
+    b->CreateUnlikelyCondBr(
+            b->CreateICmpEQ(blockSize, ConstantInt::getNullValue(blockSize->getType())),
             exit_block,
             blockSizeCompleted_cont
             );
 
     // We could be at the boundary no matter the block size is completed or not.
-    iBuilder->SetInsertPoint(blockSizeCompleted_cont);
-    generateBoundaryDetection(iBuilder, State::AT_BLOCK_SIZE, exit_block);
+    b->SetInsertPoint(blockSizeCompleted_cont);
+    generateBoundaryDetection(b, State::AT_BLOCK_SIZE, exit_block);
     // Falls through to %at_token.
 }
 
 
-void LZ4IndexDecoderKernel::generateAtToken(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, BasicBlock * bb, BasicBlock * exit_block) {
-    iBuilder->CreateBr(bb);
-    iBuilder->SetInsertPoint(bb);
+void LZ4IndexDecoderKernel::generateAtToken(const std::unique_ptr<kernel::KernelBuilder> & b, BasicBlock * bb, BasicBlock * exit_block) {
+    b->CreateBr(bb);
+    b->SetInsertPoint(bb);
     printRTDebugMsg("reading token");
 
-    Value * token = loadRawByte(iBuilder);
-    Value * literalLen = iBuilder->CreateZExt(
-        iBuilder->CreateLShr(token, iBuilder->getInt8(4)),
-        iBuilder->getInt32Ty()
+    Value * token = loadRawByte(b);
+    Value * literalLen = b->CreateZExt(
+        b->CreateLShr(token, b->getInt8(4)),
+        b->getInt32Ty()
         );
-    Value * matchLen = iBuilder->CreateZExt(
-        iBuilder->CreateAnd(token, iBuilder->getInt8(0xf)),
-        iBuilder->getInt32Ty()
+    Value * matchLen = b->CreateZExt(
+        b->CreateAnd(token, b->getInt8(0xf)),
+        b->getInt32Ty()
         );
-    incStackVar(iBuilder, sOffset);
+    incStackVar(b, sOffset);
     // Prepare extender word for scanning.
-    loadCurrentExtender(iBuilder);
-    setExtenderUntilOffset(iBuilder);
+    loadCurrentExtender(b);
+    setExtenderUntilOffset(b);
     // Store the (partial) match length to be extended later.
-    iBuilder->setScalarField("MatchLength", matchLen);
+    b->setScalarField("MatchLength", matchLen);
     // Use tempLength to accumulate extended lengths (until at_literals).
-    iBuilder->CreateStore(literalLen, sTempLength);
-    iBuilder->CreateStore(iBuilder->getInt8(State::EXTENDING_LITERAL_LENGTH), sState);
+    b->CreateStore(literalLen, sTempLength);
+    b->CreateStore(b->getInt8(State::EXTENDING_LITERAL_LENGTH), sState);
 
-    generateBoundaryDetection(iBuilder, State::AT_TOKEN, exit_block);
+    generateBoundaryDetection(b, State::AT_TOKEN, exit_block);
     // Falls through to %extending_literal_length.
 }
 
 
-void LZ4IndexDecoderKernel::generateExtendingLiteralLen(const std::unique_ptr<KernelBuilder> & iBuilder, BasicBlock * bb, BasicBlock * exit_block) {
-    iBuilder->CreateBr(bb);
-    iBuilder->SetInsertPoint(bb);
+void LZ4IndexDecoderKernel::generateExtendingLiteralLen(const std::unique_ptr<KernelBuilder> & b, BasicBlock * bb, BasicBlock * exit_block) {
+    b->CreateBr(bb);
+    b->SetInsertPoint(bb);
     printRTDebugMsg("extending literal len");
 
-    Value * wordOffset = getWordOffset(iBuilder);
-    Value * blockOffset = getWordStartOffset(iBuilder);
-    Value * literalLen = iBuilder->CreateLoad(sTempLength);
-    Value * literalExtEnd = iBuilder->CreateTrunc(
-                iBuilder->CreateCountForwardZeroes(iBuilder->CreateNot(iBuilder->CreateLoad(sExtender))),
-                iBuilder->getInt32Ty());
+    Value * wordOffset = getWordOffset(b);
+    Value * blockOffset = getWordStartOffset(b);
+    Value * literalLen = b->CreateLoad(sTempLength);
+    Value * literalExtEnd = b->CreateTrunc(
+                b->CreateCountForwardZeroes(b->CreateNot(b->CreateLoad(sExtender))),
+                b->getInt32Ty());
     printRTDebugInt("wordOffset", wordOffset);
     printRTDebugInt("literalExtEnd", literalExtEnd);
     // number of extender = literalExtEnd - wordOffset
-    Value * numExtenders = iBuilder->CreateSub(literalExtEnd, wordOffset);
+    Value * numExtenders = b->CreateSub(literalExtEnd, wordOffset);
     Value * literalExtReachBoundary =
-            iBuilder->CreateICmpEQ(literalExtEnd, iBuilder->getInt32(wordWidth));
+            b->CreateICmpEQ(literalExtEnd, b->getInt32(wordWidth));
     // There are literalExtEnd forward zeroes, we load bytes[literalExtEnd]
     // which is the first non-extender.  If literalExtEnd == 64, we force the
     // load index to be 0 to avoid out-of-bound access, and lastByte will be 0.
-    Value * loadOffset = iBuilder->CreateSelect(literalExtReachBoundary,
+    Value * loadOffset = b->CreateSelect(literalExtReachBoundary,
             ConstantInt::getNullValue(literalExtEnd->getType()),
             literalExtEnd);
-    Value * lastByte = iBuilder->CreateSelect(literalExtReachBoundary,
-            iBuilder->getInt8(0),
-            loadRawByte(iBuilder, iBuilder->CreateAdd(blockOffset, loadOffset)));
-    Value * literalLenExted = iBuilder->CreateICmpUGE(literalLen, iBuilder->getInt32(0xf));
-    literalLen = iBuilder->CreateSelect(literalLenExted,
-            iBuilder->CreateAdd(
+    Value * lastByte = b->CreateSelect(literalExtReachBoundary,
+            b->getInt8(0),
+            loadRawByte(b, b->CreateAdd(blockOffset, loadOffset)));
+    Value * literalLenExted = b->CreateICmpUGE(literalLen, b->getInt32(0xf));
+    literalLen = b->CreateSelect(literalLenExted,
+            b->CreateAdd(
                 literalLen,
-                iBuilder->CreateAdd(
-                    iBuilder->CreateMul(numExtenders, iBuilder->getInt32(0xff)),
-                    iBuilder->CreateZExt(lastByte, iBuilder->getInt32Ty())
+                b->CreateAdd(
+                    b->CreateMul(numExtenders, b->getInt32(0xff)),
+                    b->CreateZExt(lastByte, b->getInt32Ty())
                     )
                 ),      // literalLen + numExtenders * 255
             literalLen);
-    wordOffset = iBuilder->CreateSelect(literalLenExted,
+    wordOffset = b->CreateSelect(literalLenExted,
             literalExtEnd,
             wordOffset);
     // If lastByte is truly the last length byte, we need to advance the cursor by 1.
-    wordOffset = iBuilder->CreateSelect(
-            iBuilder->CreateAnd(literalLenExted, iBuilder->CreateNot(literalExtReachBoundary)),
-            iBuilder->CreateAdd(wordOffset, iBuilder->getInt32(1)),
+    wordOffset = b->CreateSelect(
+            b->CreateAnd(literalLenExted, b->CreateNot(literalExtReachBoundary)),
+            b->CreateAdd(wordOffset, b->getInt32(1)),
             wordOffset
             );
-    iBuilder->CreateStore(literalLen, sTempLength);
-    iBuilder->CreateStore(iBuilder->CreateAdd(blockOffset, wordOffset), sOffset);
-    Value * unfinished = iBuilder->CreateAnd(literalExtReachBoundary, literalLenExted);
-    Value * newState = iBuilder->CreateSelect(unfinished,
-            iBuilder->getInt8(State::EXTENDING_LITERAL_LENGTH),
-            iBuilder->getInt8(State::AT_LITERALS));
-    iBuilder->CreateStore(newState, sState);
+    b->CreateStore(literalLen, sTempLength);
+    b->CreateStore(b->CreateAdd(blockOffset, wordOffset), sOffset);
+    Value * unfinished = b->CreateAnd(literalExtReachBoundary, literalLenExted);
+    Value * newState = b->CreateSelect(unfinished,
+            b->getInt8(State::EXTENDING_LITERAL_LENGTH),
+            b->getInt8(State::AT_LITERALS));
+    b->CreateStore(newState, sState);
 
-    generateBoundaryDetection(iBuilder, State::EXTENDING_LITERAL_LENGTH, exit_block, true);
-    BasicBlock * cont_block = iBuilder->CreateBasicBlock("finished_" + StateLabels.at(State::EXTENDING_LITERAL_LENGTH));
+    generateBoundaryDetection(b, State::EXTENDING_LITERAL_LENGTH, exit_block, true);
+    BasicBlock * cont_block = b->CreateBasicBlock("finished_" + StateLabels.at(State::EXTENDING_LITERAL_LENGTH));
     // Insert point is still in wordBoundary block now.
     // See if there are still more extenders.
-    iBuilder->CreateUnlikelyCondBr(unfinished, bb, cont_block);
+    b->CreateUnlikelyCondBr(unfinished, bb, cont_block);
 
-    iBuilder->SetInsertPoint(cont_block);
+    b->SetInsertPoint(cont_block);
     // Falls through to %at_literals.
 }
 
 
-void LZ4IndexDecoderKernel::generateAtLiterals(const std::unique_ptr<KernelBuilder> & iBuilder, BasicBlock * bb) {
-    iBuilder->CreateBr(bb);
-    iBuilder->SetInsertPoint(bb);
-
-    iBuilder->setScalarField("LiteralStart", iBuilder->CreateAdd(blockStartPos, iBuilder->CreateLoad(sOffset)));
-    iBuilder->setScalarField("LiteralLength", iBuilder->CreateLoad(sTempLength));
-    iBuilder->setScalarField("BytesToSkip", iBuilder->CreateLoad(sTempLength));
-    iBuilder->CreateStore(iBuilder->getInt8(State::AT_FIRST_OFFSET), sState);
+void LZ4IndexDecoderKernel::generateAtLiterals(const std::unique_ptr<KernelBuilder> & b, BasicBlock * bb) {
+    b->CreateBr(bb);
+    b->SetInsertPoint(bb);
+    b->setScalarField("LiteralStart", b->CreateAdd(blockStartPos, b->CreateLoad(sOffset)));
+    b->setScalarField("LiteralLength", b->CreateLoad(sTempLength));
+    b->setScalarField("BytesToSkip", b->CreateLoad(sTempLength));
+    b->CreateStore(b->getInt8(State::AT_FIRST_OFFSET), sState);
 
     // No boundary detection here as we do not advance the cursor.
     // Control flow will be redirected to %skipping_bytes later.
 }
 
 
-void LZ4IndexDecoderKernel::generateAtFirstOffset(const std::unique_ptr<KernelBuilder> &iBuilder, BasicBlock * bb, BasicBlock * exit_block) {
-    iBuilder->SetInsertPoint(bb);
+void LZ4IndexDecoderKernel::generateAtFirstOffset(const std::unique_ptr<KernelBuilder> &b, BasicBlock * bb, BasicBlock * exit_block) {
+    b->SetInsertPoint(bb);
     printRTDebugMsg("reading first offset");
 
-    Value * byte = iBuilder->CreateZExt(loadRawByte(iBuilder), iBuilder->getInt32Ty());
+    Value * byte = b->CreateZExt(loadRawByte(b), b->getInt32Ty());
     // Use tempLength to store partial offset.
-    iBuilder->CreateStore(byte, sTempLength);
-    incStackVar(iBuilder, sOffset);
-    iBuilder->CreateStore(iBuilder->getInt8(State::AT_SECOND_OFFSET), sState);
+    b->CreateStore(byte, sTempLength);
+    incStackVar(b, sOffset);
+    b->CreateStore(b->getInt8(State::AT_SECOND_OFFSET), sState);
 
-    generateBoundaryDetection(iBuilder, State::AT_FIRST_OFFSET, exit_block);
+    generateBoundaryDetection(b, State::AT_FIRST_OFFSET, exit_block);
     // Falls through to %at_second_offset.
 }
 
 
-void LZ4IndexDecoderKernel::generateAtSecondOffset(const std::unique_ptr<KernelBuilder> & iBuilder, BasicBlock * bb, BasicBlock * exit_block) {
-    iBuilder->CreateBr(bb);
-    iBuilder->SetInsertPoint(bb);
+void LZ4IndexDecoderKernel::generateAtSecondOffset(const std::unique_ptr<KernelBuilder> & b, BasicBlock * bb, BasicBlock * exit_block) {
+    b->CreateBr(bb);
+    b->SetInsertPoint(bb);
     printRTDebugMsg("reading second offset");
 
-    Value * byte1 = iBuilder->CreateLoad(sTempLength);
-    Value * byte2 = iBuilder->CreateZExt(loadRawByte(iBuilder), iBuilder->getInt32Ty());
-    Value * offset = iBuilder->CreateAdd(
-            iBuilder->CreateShl(byte2, iBuilder->getInt32(8)),
+    Value * byte1 = b->CreateLoad(sTempLength);
+    Value * byte2 = b->CreateZExt(loadRawByte(b), b->getInt32Ty());
+    Value * offset = b->CreateAdd(
+            b->CreateShl(byte2, b->getInt32(8)),
             byte1
             );
-    iBuilder->setScalarField("MatchOffset", offset);
-    incStackVar(iBuilder, sOffset);
+    b->setScalarField("MatchOffset", offset);
+    incStackVar(b, sOffset);
     // Prepare extender word and tempLength for extending.
-    loadCurrentExtender(iBuilder);
-    setExtenderUntilOffset(iBuilder);
-    iBuilder->CreateStore(iBuilder->getScalarField("MatchLength"), sTempLength);
-    iBuilder->CreateStore(iBuilder->getInt8(State::EXTENDING_MATCH_LENGTH), sState);
+    loadCurrentExtender(b);
+    setExtenderUntilOffset(b);
+    b->CreateStore(b->getScalarField("MatchLength"), sTempLength);
+    b->CreateStore(b->getInt8(State::EXTENDING_MATCH_LENGTH), sState);
 
-    generateBoundaryDetection(iBuilder, State::AT_SECOND_OFFSET, exit_block);
+    generateBoundaryDetection(b, State::AT_SECOND_OFFSET, exit_block);
     // Falls through to %extending_match_length.
 }
 
 
-void LZ4IndexDecoderKernel::generateExtendingMatchLen(const std::unique_ptr<KernelBuilder> & iBuilder, BasicBlock * bb, BasicBlock * exit_block) {
-    iBuilder->CreateBr(bb);
-    iBuilder->SetInsertPoint(bb);
+void LZ4IndexDecoderKernel::generateExtendingMatchLen(const std::unique_ptr<KernelBuilder> & b, BasicBlock * bb, BasicBlock * exit_block) {
+    b->CreateBr(bb);
+    b->SetInsertPoint(bb);
     printRTDebugMsg("extending match length");
     printGlobalPos();
-    printRTDebugInt("rawbyte", loadRawByte(iBuilder));
-    printRTDebugInt("extword", iBuilder->CreateLoad(sExtender));
+    printRTDebugInt("rawbyte", loadRawByte(b));
+    printRTDebugInt("extword", b->CreateLoad(sExtender));
 
-    Value * wordOffset = getWordOffset(iBuilder);
-    Value * blockOffset = getWordStartOffset(iBuilder);
-    Value * matchLen = iBuilder->CreateLoad(sTempLength);
-    Value * matchExtEnd = iBuilder->CreateTrunc(
-        iBuilder->CreateCountForwardZeroes(iBuilder->CreateNot(iBuilder->CreateLoad(sExtender))),
-        iBuilder->getInt32Ty()
+    Value * wordOffset = getWordOffset(b);
+    Value * blockOffset = getWordStartOffset(b);
+    Value * matchLen = b->CreateLoad(sTempLength);
+    Value * matchExtEnd = b->CreateTrunc(
+        b->CreateCountForwardZeroes(b->CreateNot(b->CreateLoad(sExtender))),
+        b->getInt32Ty()
         );
     printRTDebugInt("wordoffset", wordOffset);
     printRTDebugInt("matchExtEnd", matchExtEnd);
     // number of extender = matchExtEnd - wordOffset
-    Value * numExtenders = iBuilder->CreateSub(matchExtEnd, wordOffset);
+    Value * numExtenders = b->CreateSub(matchExtEnd, wordOffset);
     Value * matchExtReachBoundary = 
-            iBuilder->CreateICmpEQ(matchExtEnd, iBuilder->getInt32(wordWidth));
+            b->CreateICmpEQ(matchExtEnd, b->getInt32(wordWidth));
     // There are matchExtEnd forward zeroes, we load bytes[matchExtEnd]
     // which is the first non-extender.  If matchExtEnd == 64, we force the
     // load index to be 0 to avoid out-of-bound access, and lastByte will be 0.
-    Value * loadOffset = iBuilder->CreateSelect(matchExtReachBoundary,
+    Value * loadOffset = b->CreateSelect(matchExtReachBoundary,
             ConstantInt::getNullValue(matchExtEnd->getType()),
             matchExtEnd);
-    Value * lastByte = iBuilder->CreateSelect(matchExtReachBoundary,
-            iBuilder->getInt8(0),
-            loadRawByte(iBuilder, iBuilder->CreateAdd(blockOffset, loadOffset)));
-    Value * matchLenExted = iBuilder->CreateICmpUGE(matchLen, iBuilder->getInt32(0xf));
-    matchLen = iBuilder->CreateSelect(matchLenExted,
-            iBuilder->CreateAdd(
+    Value * lastByte = b->CreateSelect(matchExtReachBoundary,
+            b->getInt8(0),
+            loadRawByte(b, b->CreateAdd(blockOffset, loadOffset)));
+    Value * matchLenExted = b->CreateICmpUGE(matchLen, b->getInt32(0xf));
+    matchLen = b->CreateSelect(matchLenExted,
+            b->CreateAdd(
                 matchLen,
-                iBuilder->CreateAdd(
-                    iBuilder->CreateMul(numExtenders, iBuilder->getInt32(0xff)),
-                    iBuilder->CreateZExt(lastByte, iBuilder->getInt32Ty())
+                b->CreateAdd(
+                    b->CreateMul(numExtenders, b->getInt32(0xff)),
+                    b->CreateZExt(lastByte, b->getInt32Ty())
                     )
                 ),      // matchLen + numExtenders * 255
             matchLen);
-    wordOffset = iBuilder->CreateSelect(matchLenExted,
+    wordOffset = b->CreateSelect(matchLenExted,
             matchExtEnd,
             wordOffset);
     // If lastByte is truly the last length byte, we need to advance the cursor by 1.
-    wordOffset = iBuilder->CreateSelect(
-            iBuilder->CreateAnd(matchLenExted, iBuilder->CreateNot(matchExtReachBoundary)),
-            iBuilder->CreateAdd(wordOffset, iBuilder->getInt32(1)),
+    wordOffset = b->CreateSelect(
+            b->CreateAnd(matchLenExted, b->CreateNot(matchExtReachBoundary)),
+            b->CreateAdd(wordOffset, b->getInt32(1)),
             wordOffset
             );
-    iBuilder->CreateStore(matchLen, sTempLength);
-    iBuilder->CreateStore(iBuilder->CreateAdd(blockOffset, wordOffset), sOffset);
+    b->CreateStore(matchLen, sTempLength);
+    b->CreateStore(b->CreateAdd(blockOffset, wordOffset), sOffset);
 
-    Value * unfinished = iBuilder->CreateAnd(matchExtReachBoundary, matchLenExted);
-    BasicBlock * output_then = iBuilder->CreateBasicBlock("output_then");
-    BasicBlock * output_cont = iBuilder->CreateBasicBlock("output_cont");
-    iBuilder->CreateLikelyCondBr(
-            iBuilder->CreateNot(unfinished),
+    Value * unfinished = b->CreateAnd(matchExtReachBoundary, matchLenExted);
+    BasicBlock * output_then = b->CreateBasicBlock("output_then");
+    BasicBlock * output_cont = b->CreateBasicBlock("output_cont");
+    b->CreateLikelyCondBr(
+            b->CreateNot(unfinished),
             output_then, output_cont
             );
-    iBuilder->SetInsertPoint(output_then);
-    iBuilder->CreateStore(iBuilder->getInt8(State::AT_TOKEN), sState);
-    matchLen = iBuilder->CreateAdd(matchLen, iBuilder->getInt32(4));    // Add the constant at the end.
-    iBuilder->setScalarField("MatchLength", matchLen);
-    generateProduceOutput(iBuilder);
-    iBuilder->CreateBr(output_cont);
+    b->SetInsertPoint(output_then);
+    b->CreateStore(b->getInt8(State::AT_TOKEN), sState);
+    matchLen = b->CreateAdd(matchLen, b->getInt32(4));    // Add the constant at the end.
+    b->setScalarField("MatchLength", matchLen);
+    generateProduceOutput(b);
+    b->CreateBr(output_cont);
 
-    iBuilder->SetInsertPoint(output_cont);
-    generateBoundaryDetection(iBuilder, State::EXTENDING_MATCH_LENGTH, exit_block, true);
-    BasicBlock * cont_block = iBuilder->CreateBasicBlock("finished_" + StateLabels.at(State::EXTENDING_MATCH_LENGTH));
+    b->SetInsertPoint(output_cont);
+    generateBoundaryDetection(b, State::EXTENDING_MATCH_LENGTH, exit_block, true);
+    BasicBlock * cont_block = b->CreateBasicBlock("finished_" + StateLabels.at(State::EXTENDING_MATCH_LENGTH));
     // Insert point is still in wordBoundary block now.
     // See if there are still more extenders.
-    iBuilder->CreateUnlikelyCondBr(unfinished, bb, cont_block);
+    b->CreateUnlikelyCondBr(unfinished, bb, cont_block);
 
-    iBuilder->SetInsertPoint(cont_block);
+    b->SetInsertPoint(cont_block);
 }
 
 
-void LZ4IndexDecoderKernel::generateAtBlockChecksum(const std::unique_ptr<KernelBuilder> & iBuilder, BasicBlock * bb, BasicBlock * skippingBytes) {
+void LZ4IndexDecoderKernel::generateAtBlockChecksum(const std::unique_ptr<KernelBuilder> & b, BasicBlock * bb, BasicBlock * skippingBytes) {
     // No branch here as we have made a conditional branch outside.
-    iBuilder->SetInsertPoint(bb);
+    b->SetInsertPoint(bb);
     printRTDebugMsg("processing block checksum");
 
     // Produce the partial output (fill matchIndexes with 0).
-    iBuilder->setScalarField("MatchOffset", iBuilder->getInt32(0));
-    iBuilder->setScalarField("MatchLength", iBuilder->getInt32(0));
-    generateProduceOutput(iBuilder);
+    b->setScalarField("MatchOffset", b->getInt32(0));
+    b->setScalarField("MatchLength", b->getInt32(0));
+    generateProduceOutput(b);
 
-    BasicBlock * hasChecksum_then = iBuilder->CreateBasicBlock("has_checksum_then");
-    BasicBlock * hasChecksum_cont = iBuilder->CreateBasicBlock("has_checksum_cont");
+    BasicBlock * hasChecksum_then = b->CreateBasicBlock("has_checksum_then");
+    BasicBlock * hasChecksum_cont = b->CreateBasicBlock("has_checksum_cont");
 
-    iBuilder->CreateStore(iBuilder->getInt8(State::AT_BLOCK_SIZE), sState);
-    iBuilder->CreateCondBr(iBuilder->getScalarField("hasBlockChecksum"), hasChecksum_then, hasChecksum_cont);
+    b->CreateStore(b->getInt8(State::AT_BLOCK_SIZE), sState);
+    b->CreateCondBr(b->getScalarField("hasBlockChecksum"), hasChecksum_then, hasChecksum_cont);
 
-    iBuilder->SetInsertPoint(hasChecksum_then);
-    iBuilder->setScalarField("BytesToSkip", iBuilder->getInt32(4));
-    iBuilder->CreateBr(skippingBytes);
+    b->SetInsertPoint(hasChecksum_then);
+    b->setScalarField("BytesToSkip", b->getInt32(4));
+    b->CreateBr(skippingBytes);
     // Boundary detection will be done in skipping_bytes.
 
-    iBuilder->SetInsertPoint(hasChecksum_cont);
+    b->SetInsertPoint(hasChecksum_cont);
     // No checksum, offset not advanced.  Falls through to the next block (block_size).
 }
 
-LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
+LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
 : BlockOrientedKernel("lz4IndexDecoder",
     // Inputs
-    {Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"},
-     Binding{iBuilder->getStreamSetTy(1, 1), "extenders"}},
+    {Binding{b->getStreamSetTy(1, 8), "byteStream"},
+     Binding{b->getStreamSetTy(1, 1), "extenders"}},
     // Outputs: literal start, literal length, match offset, match length
-    {Binding{iBuilder->getStreamSetTy(2, 32), "literalIndexes", UnknownRate()},
-     Binding{iBuilder->getStreamSetTy(2, 32), "matchIndexes", RateEqualTo("literalIndexes")}},
+    {Binding{b->getStreamSetTy(2, 32), "literalIndexes", UnknownRate()},
+     Binding{b->getStreamSetTy(2, 32), "matchIndexes", RateEqualTo("literalIndexes")}},
     // Arguments
-    {Binding{iBuilder->getInt1Ty(), "hasBlockChecksum"}},
+    {Binding{b->getInt1Ty(), "hasBlockChecksum"}},
     {},
     // Internal states:
-    {Binding{iBuilder->getInt32Ty(), "BlockNo"},
-     Binding{iBuilder->getInt8Ty(), "State"},
-     Binding{iBuilder->getInt32Ty(), "LZ4BlockStart"},
-     Binding{iBuilder->getInt32Ty(), "LZ4BlockEnd"},
-     Binding{iBuilder->getInt32Ty(), "BytesToSkip"},
-     Binding{iBuilder->getInt32Ty(), "TempLength"},
-     Binding{iBuilder->getInt32Ty(), "TempCount"},
-     Binding{iBuilder->getInt32Ty(), "LiteralStart"},
-     Binding{iBuilder->getInt32Ty(), "LiteralLength"},
-     Binding{iBuilder->getInt32Ty(), "MatchOffset"},
-     Binding{iBuilder->getInt32Ty(), "MatchLength"}})
-, wordWidth{iBuilder->getSizeTy()->getBitWidth()} {
+    {Binding{b->getInt32Ty(), "BlockNo"},
+     Binding{b->getInt8Ty(), "State"},
+     Binding{b->getInt32Ty(), "LZ4BlockStart"},
+     Binding{b->getInt32Ty(), "LZ4BlockEnd"},
+     Binding{b->getInt32Ty(), "BytesToSkip"},
+     Binding{b->getInt32Ty(), "TempLength"},
+     Binding{b->getInt32Ty(), "TempCount"},
+     Binding{b->getInt32Ty(), "LiteralStart"},
+     Binding{b->getInt32Ty(), "LiteralLength"},
+     Binding{b->getInt32Ty(), "MatchOffset"},
+     Binding{b->getInt32Ty(), "MatchLength"}})
+, wordWidth{b->getSizeTy()->getBitWidth()} {
     setNoTerminateAttribute(true);
 }

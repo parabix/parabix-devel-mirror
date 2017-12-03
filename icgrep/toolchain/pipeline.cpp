@@ -194,7 +194,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
         const auto & outputs = k->getStreamSetOutputBuffers();
         for (unsigned i = 0; i < outputs.size(); ++i) {
             if (outputs[i] == buf) {
-                const auto binding = k->getStreamOutput(i);
+                const auto & binding = k->getStreamOutput(i);
                 if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
                     continue;
                 }
@@ -583,7 +583,7 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
         const auto & outputs = k->getStreamSetOutputBuffers();
         for (unsigned i = 0; i < outputs.size(); ++i) {
             if (outputs[i] == buf) {
-                const auto binding = k->getStreamOutput(i);
+                const auto & binding = k->getStreamOutput(i);
                 if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
                     continue;
                 }
@@ -620,7 +620,7 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
     }
 }
 
-void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const std::string & name, DynamicBuffer * const db, const uint64_t l) {
+void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const std::string & name, DynamicBuffer * const db, const uint64_t baseSize) {
 
     BasicBlock * const doExpand = b->CreateBasicBlock(name + "Expand");
     BasicBlock * const nextBlock = b->GetInsertBlock()->getNextNode();
@@ -633,7 +633,7 @@ void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const
 
     Value * const produced = b->getProducedItemCount(name);
     Value * const consumed = b->getConsumedItemCount(name);
-    Value * const required = b->CreateAdd(b->CreateSub(produced, consumed), b->getSize(2 * l));
+    Value * const required = b->CreateAdd(b->CreateSub(produced, consumed), b->getSize(2 * baseSize));
 
     b->CreateCondBr(b->CreateICmpUGT(required, db->getCapacity(b.get(), handle)), doExpand, bufferReady);
 
@@ -655,23 +655,25 @@ inline const Binding & getBinding(const Kernel * k, const std::string & name) {
     }
 }
 
+ProcessingRate::RateValue getUpperBound(const Kernel * const k, const ProcessingRate & rate) {
+    if (rate.isFixed() || rate.isBounded()) {
+        return rate.getUpperBound();
+    } else if (rate.isRelative()) {
+        return rate.getRate() * getUpperBound(k, getBinding(k, rate.getReference()).getRate());
+    } else { // if (rate.isUnknown())
+        return 0;
+    }
+}
+
 void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * k) {
     const auto & outputs = k->getStreamSetOutputBuffers();
     for (unsigned i = 0; i < outputs.size(); i++) {
         if (isa<DynamicBuffer>(outputs[i])) {
-            const ProcessingRate & rate = k->getStreamOutput(i).getRate();
-            if (rate.isFixed() || rate.isBounded()) {
+            const auto ub = getUpperBound(k, k->getStreamOutput(i).getRate());
+            const auto baseSize = (ub.numerator() * k->getStride() + ub.denominator() - 1) / ub.denominator();
+            if (LLVM_LIKELY(baseSize > 0)) {
                 const auto & name = k->getStreamOutput(i).getName();
-                const auto l = rate.getUpperBound() * k->getKernelStride();
-                applyOutputBufferExpansions(b, name, cast<DynamicBuffer>(outputs[i]), l);
-            } else if (rate.isExactlyRelative()) {
-                const auto binding = getBinding(k, rate.getReference());
-                const ProcessingRate & ref = binding.getRate();
-                if (rate.isFixed() || rate.isBounded()) {
-                    const auto & name = k->getStreamOutput(i).getName();
-                    const auto l = (ref.getUpperBound() * rate.getNumerator() * k->getKernelStride() + rate.getDenominator() - 1) / rate.getDenominator();
-                    applyOutputBufferExpansions(b, name, cast<DynamicBuffer>(outputs[i]), l);
-                }
+                applyOutputBufferExpansions(b, name, cast<DynamicBuffer>(outputs[i]), baseSize);
             }
         }
     }

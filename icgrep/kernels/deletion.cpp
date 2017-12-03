@@ -368,18 +368,18 @@ void DeletionKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilde
         Value * output = apply_parallel_prefix_deletion(iBuilder, mDeletionFieldWidth, delMask, move_masks, input);
         iBuilder->storeOutputStreamBlock("outputStreamSet", iBuilder->getInt32(j), output);
     }
-    Value * delCount = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(delMask));
+    Value * const delCount = partial_sum_popcount(iBuilder, mDeletionFieldWidth, iBuilder->simd_not(delMask));
     iBuilder->storeOutputStreamBlock("deletionCounts", iBuilder->getInt32(0), iBuilder->bitCast(delCount));
 }
 
-DeletionKernel::DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount)
-: BlockOrientedKernel("del" + std::to_string(fw) + "_" + std::to_string(streamCount),
+DeletionKernel::DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const unsigned fieldWidth, const unsigned streamCount)
+: BlockOrientedKernel("del" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
               {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"},
                Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
               {Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet"},
-               Binding{iBuilder->getStreamSetTy(), "deletionCounts"}},
+               Binding{iBuilder->getStreamSetTy(), "deletionCounts", FixedRate(), RoundUpTo(iBuilder->getBitBlockWidth())}},
               {}, {}, {})
-, mDeletionFieldWidth(fw)
+, mDeletionFieldWidth(fieldWidth)
 , mStreamCount(streamCount) {
 }
 
@@ -625,10 +625,7 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
         outputIndex = iBuilder->CreateSelect(pendingSpaceFilled, iBuilder->CreateAdd(outputIndex, iBuilder->getSize(1)), outputIndex);
         pendingOffset = iBuilder->CreateAnd(iBuilder->CreateAdd(newItemCount, pendingOffset), iBuilder->getSize(mFieldWidth-1));
     }
-    iBuilder->setScalarField("pendingOffset", pendingOffset);
-    iBuilder->CallPrintInt("pendingOffset", pendingOffset);
-
-    
+    iBuilder->setScalarField("pendingOffset", pendingOffset);   
     Value * newlyProduced = iBuilder->CreateSub(iBuilder->CreateShl(outputIndex, outputIndexShift), producedOffset);
     Value * produced = iBuilder->CreateAdd(outputProduced, newlyProduced);
     for (unsigned j = 0; j < mSwizzleSetCount; j++) {

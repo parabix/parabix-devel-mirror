@@ -256,16 +256,16 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     fileSize->setName("fileSize");
     idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
-    auto ChStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(4)));
-    auto mmapK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(idb, inputType, segmentSize));
+    auto ChStream = pxDriver.addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(4));
+    auto mmapK = pxDriver.addKernelInstance<MemorySourceKernel>(idb, inputType, segmentSize);
     mmapK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
-    auto MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments));
-    auto editdk = pxDriver.addKernelInstance(make_unique<PatternKernel>(idb, patterns));
+    auto MatchResults = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments);
+    auto editdk = pxDriver.addKernelInstance<PatternKernel>(idb, patterns);
     pxDriver.makeKernelCall(editdk, {ChStream}, {MatchResults});
 
-    auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(idb, editDistance));
+    auto editdScanK = pxDriver.addKernelInstance<editdScanKernel>(idb, editDistance);
     pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
 
     pxDriver.generatePipelineIR();
@@ -326,18 +326,18 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main));
 
-    auto ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8)));
+    auto ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
-    auto mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(iBuilder, segmentSize));
+    auto mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder, segmentSize);
     mmapK->setInitialArguments({fileDescriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
-    auto BasisBits = pxDriver.addBuffer(make_unique<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments));
-    auto s2pk = pxDriver.addKernelInstance(make_unique<S2PKernel>(iBuilder));
+    auto BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), segmentSize * bufferSegments);
+    auto s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
-    auto CCResults = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputStream));
-    auto ccck = pxDriver.addKernelInstance(make_unique<PreprocessKernel>(iBuilder));
+    auto CCResults = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputStream);
+    auto ccck = pxDriver.addKernelInstance<PreprocessKernel>(iBuilder);
     pxDriver.makeKernelCall(ccck, {BasisBits}, {CCResults});
 
     pxDriver.generatePipelineIR();
@@ -367,18 +367,18 @@ void multiEditdPipeline(ParabixDriver & pxDriver) {
 
     idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
-    auto ByteStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(1, 8)));
+    auto ByteStream = pxDriver.addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, 8));
 
-    auto mmapK = pxDriver.addKernelInstance(make_unique<MMapSourceKernel>(idb, segmentSize));
+    auto mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(idb, segmentSize);
     mmapK->setInitialArguments({fileDescriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
-    auto ChStream = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(4), segmentSize * bufferSegments));
-    auto ccck = pxDriver.addKernelInstance(make_unique<kernel::DirectCharacterClassKernelBuilder>(idb, "ccc", 
+    auto ChStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(4), segmentSize * bufferSegments);
+    auto ccck = pxDriver.addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(idb, "ccc", 
         std::vector<re::CC *>{re::makeCC(re::makeCC(0x41), re::makeCC(0x61)),
                               re::makeCC(re::makeCC(0x43), re::makeCC(0x63)),
                               re::makeCC(re::makeCC(0x54), re::makeCC(0x74)),
-                              re::makeCC(re::makeCC(0x47), re::makeCC(0x67))}, 1));
+                              re::makeCC(re::makeCC(0x47), re::makeCC(0x67))}, 1);
     pxDriver.makeKernelCall(ccck, {ByteStream}, {ChStream});
 
     const auto n = pattGroups.size();
@@ -386,19 +386,19 @@ void multiEditdPipeline(ParabixDriver & pxDriver) {
     std::vector<StreamSetBuffer *> MatchResultsBufs(n);
     
     for(unsigned i = 0; i < n; ++i){
-        auto MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments));
-        auto editdk = pxDriver.addKernelInstance(make_unique<PatternKernel>(idb, pattGroups[i]));
+        auto MatchResults = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments);
+        auto editdk = pxDriver.addKernelInstance<PatternKernel>(idb, pattGroups[i]);
         pxDriver.makeKernelCall(editdk, {ChStream}, {MatchResults});
         MatchResultsBufs[i] = MatchResults;
     }
     StreamSetBuffer * MergedResults = MatchResultsBufs[0];
     if (n > 1) {
-        MergedResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments));
-        kernel::Kernel * streamsMergeK = pxDriver.addKernelInstance(make_unique<kernel::StreamsMerge>(idb, editDistance + 1, n));
+        MergedResults = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments);
+        kernel::Kernel * streamsMergeK = pxDriver.addKernelInstance<kernel::StreamsMerge>(idb, editDistance + 1, n);
         pxDriver.makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
     }
 
-    auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(idb, editDistance));
+    auto editdScanK = pxDriver.addKernelInstance<editdScanKernel>(idb, editDistance);
     pxDriver.makeKernelCall(editdScanK, {MergedResults}, {});
 
     pxDriver.generatePipelineIR();
@@ -434,13 +434,13 @@ void editdIndexPatternPipeline(ParabixDriver & pxDriver, unsigned patternLen) {
     pattStream->setName("pattStream");
     idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
-    auto ChStream = pxDriver.addBuffer(make_unique<SourceBuffer>(idb, idb->getStreamSetTy(4)));
-    auto mmapK = pxDriver.addKernelInstance(make_unique<MemorySourceKernel>(idb, inputType, segmentSize));
+    auto ChStream = pxDriver.addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(4));
+    auto mmapK = pxDriver.addKernelInstance<MemorySourceKernel>(idb, inputType, segmentSize);
     mmapK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
-    auto MatchResults = pxDriver.addBuffer(make_unique<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments));
-    auto editdk = pxDriver.addKernelInstance(make_unique<kernel::editdCPUKernel>(idb, editDistance, patternLen, groupSize));
+    auto MatchResults = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(editDistance + 1), segmentSize * bufferSegments);
+    auto editdk = pxDriver.addKernelInstance<kernel::editdCPUKernel>(idb, editDistance, patternLen, groupSize);
 
     const unsigned numOfCarries = patternLen * (editDistance + 1) * 4 * groupSize;
     Type * strideCarryTy = ArrayType::get(idb->getBitBlockType(), numOfCarries);
@@ -450,7 +450,7 @@ void editdIndexPatternPipeline(ParabixDriver & pxDriver, unsigned patternLen) {
     editdk->setInitialArguments({pattStream, strideCarry});
     pxDriver.makeKernelCall(editdk, {ChStream}, {MatchResults});
 
-    auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(idb, editDistance));
+    auto editdScanK = pxDriver.addKernelInstance<editdScanKernel>(idb, editDistance);
     pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
 
     pxDriver.generatePipelineIR();
@@ -546,7 +546,7 @@ void editdGPUCodeGen(unsigned patternLen){
 
     Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputTy, inputSizeTy, patternPtrTy, outputTy, stridesTy, nullptr));
     main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
+    auto args = main->arg_begin();
 
     Value * const inputStream = &*(args++);
     inputStream->setName("input");
@@ -572,13 +572,13 @@ void editdGPUCodeGen(unsigned patternLen){
     Value * resultStreamPtr = iBuilder->CreateGEP(resultStream, iBuilder->CreateAdd(iBuilder->CreateMul(bid, outputBlocks), tid));
     Value * inputSize = iBuilder->CreateLoad(inputSizePtr);
 
-    StreamSetBuffer * CCStream = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(4), 1));
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, inputTy, segmentSize));
+    auto CCStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(4), 1);
+    auto sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(iBuilder, inputTy, segmentSize);
     sourceK->setInitialArguments({inputThreadPtr, inputSize});
     pxDriver.makeKernelCall(sourceK, {}, {CCStream});
 
-    ExternalBuffer * ResultStream = pxDriver.addExternalBuffer(make_unique<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1), resultStreamPtr, 1));
-    kernel::Kernel * editdk = pxDriver.addKernelInstance(make_unique<kernel::editdGPUKernel>(iBuilder, editDistance, patternLen, groupSize));
+    auto ResultStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1), resultStreamPtr, 1);
+    auto editdk = pxDriver.addKernelInstance<kernel::editdGPUKernel>(iBuilder, editDistance, patternLen, groupSize);
       
     const unsigned numOfCarries = patternLen * (editDistance + 1) * 4 * groupSize;
     Type * strideCarryTy = ArrayType::get(mBitBlockType, numOfCarries);
@@ -681,12 +681,12 @@ editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
 
-    StreamSetBuffer * MatchResults = pxDriver.addBuffer(make_unique<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1)));
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance(make_unique<kernel::MemorySourceKernel>(iBuilder, inputType, segmentSize * bufferSegments));
+    StreamSetBuffer * MatchResults = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(iBuilder, inputType, segmentSize * bufferSegments);
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {MatchResults});
 
-    auto editdScanK = pxDriver.addKernelInstance(make_unique<editdScanKernel>(iBuilder, editDistance));
+    auto editdScanK = pxDriver.addKernelInstance<editdScanKernel>(iBuilder, editDistance);
     pxDriver.makeKernelCall(editdScanK, {MatchResults}, {});
     pxDriver.LinkFunction(*editdScanK, "wrapped_report_pos", &wrapped_report_pos);
     pxDriver.generatePipelineIR();

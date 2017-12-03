@@ -127,7 +127,6 @@ const cl::OptionCategory * codegen_flags() {
 }
 
 bool DebugOptionIsSet(const DebugFlags flag) {
-    // if (IN_DEBUG_MODE && (flag == EnableAsserts)) return true;
     return DebugOptions.isSet(flag);
 }
 
@@ -191,13 +190,4 @@ void printParabixVersion (raw_ostream & outs) {
 
 void AddParabixVersionPrinter() {
     cl::AddExtraVersionPrinter(&printParabixVersion);
-}
-
-bool AVX2_available() {
-    StringMap<bool> HostCPUFeatures;
-    if (sys::getHostCPUFeatures(HostCPUFeatures)) {
-        auto f = HostCPUFeatures.find("avx2");
-        return ((f != HostCPUFeatures.end()) && f->second);
-    }
-    return false;
 }

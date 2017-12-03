@@ -43,7 +43,7 @@ public:
         setInternalItemCount(name, Kernel::PRODUCED_ITEM_COUNT_SUFFIX, value);
     }
 
-    llvm::Value * getProcessedItemCount(const std::string & name) {
+    llvm::Value * getProcessedItemCount(const std::string & name) {        
         return getInternalItemCount(name, Kernel::PROCESSED_ITEM_COUNT_SUFFIX);
     }
 
@@ -70,8 +70,6 @@ public:
     // Run-time access of Kernel State and parameters of methods for
     // use in implementing kernels.
 
-    llvm::Value * getInputStreamPtr(const std::string & name, llvm::Value * const blockIndex);
-
     llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex);
 
     llvm::Value * loadInputStreamBlock(const std::string & name, llvm::Value * streamIndex);
@@ -81,8 +79,6 @@ public:
     llvm::Value * loadInputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex);
 
     llvm::Value * getInputStreamSetCount(const std::string & name);
-
-    llvm::Value * getOutputStreamPtr(const std::string & name, llvm::Value * const blockIndex);
 
     llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex);
 
@@ -102,6 +98,8 @@ public:
 
     llvm::Value * getBaseAddress(const std::string & name);
 
+    llvm::Value * getBlockAddress(const std::string & name, llvm::Value * const blockIndex);
+
     void CreateCopyBack(const std::string & name, llvm::Value * from, llvm::Value * to);
 
     void setBaseAddress(const std::string & name, llvm::Value * addr);
@@ -120,7 +118,7 @@ public:
     
     llvm::Value * getLinearlyWritableItems(const std::string & name, llvm::Value * fromPos, bool reverse = false);
     
-    llvm::Value * copy(const std::string & name, llvm::Value * target, llvm::Value * source, llvm::Value * itemsToCopy, const unsigned alignment = 0);
+    void CreateStreamCpy(const std::string & name, llvm::Value * const target, llvm::Value * const targetOffset, llvm::Value * const source, llvm::Value * const sourceOffset, llvm::Value * const itemsToCopy, const unsigned itemAlignment);
 
     llvm::BasicBlock * CreateConsumerWait();
 
@@ -142,6 +140,8 @@ public:
         mKernel = kernel;
     }
 
+    void protectOutputStream(const std::string & name, const bool readOnly);
+
 protected:
 
     KernelBuilder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
@@ -157,10 +157,6 @@ protected:
     llvm::Value * getInternalItemCount(const std::string & name, const std::string & suffix);
 
     void setInternalItemCount(const std::string & name, const std::string & suffix, llvm::Value * const value);
-
-private:
-
-    llvm::Value * computeBlockIndex(llvm::Value * itemCount);
 
 protected:
     const Kernel * mKernel;

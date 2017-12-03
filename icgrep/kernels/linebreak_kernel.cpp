@@ -20,7 +20,9 @@ using namespace re;
 using namespace llvm;
 
 LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned basisBitsCount)
-: PabloKernel(b, "lb", {Binding{b->getStreamSetTy(basisBitsCount), "basis"}}, {Binding{b->getStreamSetTy(1), "linebreak", FixedRate(), Add1()}}) {
+: PabloKernel(b, "lb",
+    {Binding{b->getStreamSetTy(basisBitsCount), "basis", FixedRate(), Principal()}},
+    {Binding{b->getStreamSetTy(1), "linebreak", FixedRate(), Add1()}}) {
 
 }
 

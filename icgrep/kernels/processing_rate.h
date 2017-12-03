@@ -3,6 +3,7 @@
 
 #include <string>
 #include <assert.h>
+#include <boost/rational.hpp>
 
 namespace kernel {
 
@@ -26,44 +27,35 @@ namespace kernel {
 
 struct ProcessingRate  {
 
+    friend struct Binding;
+
     enum class KindId {
-        Fixed, Bounded, Unknown, DirectlyRelative, PopCountRelative
+        Fixed, Bounded, Unknown, Relative, PopCount
     };
+
+    using RateValue = boost::rational<unsigned>;
 
     KindId getKind() const { return mKind; }
 
-    unsigned getRate() const {
-        assert (isFixed());
-        assert (mN > 0 && mN == mM);
-        return mN;
+    RateValue getRate() const {
+        assert (isFixed() || isRelative());
+        return mLowerBound;
     }
 
-    unsigned getLowerBound() const {
+    RateValue getLowerBound() const {
         assert (isFixed() || isBounded() || isUnknown());
-        return mN;
+        return mLowerBound;
     }
 
-    unsigned getUpperBound() const {
+    RateValue getUpperBound() const {
         assert (isFixed() || isBounded());
-        assert (isFixed() ? mM == mN : mM > mN);
-        return mM;
+        assert (isFixed() ? mUpperBound == mLowerBound : mUpperBound > mLowerBound);
+        return mUpperBound;
     }
 
     const std::string & getReference() const {
-        assert (isExactlyRelative());
+        assert (isRelative());
         return mReference;
-    }
-
-    const unsigned getNumerator() const {
-        assert (isExactlyRelative());
-        assert (mM > 0);
-        return mM;
-    }
-
-    const unsigned getDenominator() const {
-        assert (isExactlyRelative());
-        assert (mN > 0);
-        return mN;
     }
 
     bool isFixed() const {
@@ -74,8 +66,12 @@ struct ProcessingRate  {
         return mKind == KindId::Bounded;
     }
 
-    bool isExactlyRelative() const {
-        return mKind == KindId::DirectlyRelative;
+    bool isRelative() const {
+        return mKind == KindId::Relative;
+    }
+
+    bool isPopCount() const {
+        return mKind == KindId::PopCount;
     }
 
     bool isUnknown() const {
@@ -83,37 +79,34 @@ struct ProcessingRate  {
     }
 
     bool isDerived() const {
-        return isExactlyRelative(); // isFixed() ||
+        return isRelative(); // isFixed() ||
     }
 
     bool operator == (const ProcessingRate & other) const {
-        return mKind == other.mKind && mN == other.mN && mM == other.mM && mReference == other.mReference;
+        return mKind == other.mKind && mLowerBound == other.mLowerBound && mUpperBound == other.mUpperBound && mReference == other.mReference;
     }
 
     bool operator != (const ProcessingRate & other) const {
         return !(*this == other);
     }
 
-    ProcessingRate & operator = (const ProcessingRate & other) {
-        mKind = other.mKind;
-        mN = other.mN;
-        mM = other.mM;
-        mReference = other.mReference;
-        return *this;
-    }
-
     friend ProcessingRate FixedRate(const unsigned);
     friend ProcessingRate BoundedRate(const unsigned, const unsigned);
     friend ProcessingRate UnknownRate(const unsigned);
     friend ProcessingRate RateEqualTo(std::string);
+    friend ProcessingRate PopcountOf(std::string, const ProcessingRate::RateValue);
 
-protected:
+    ProcessingRate(ProcessingRate &&) = default;
+    ProcessingRate(const ProcessingRate &) = default;
+    ProcessingRate & operator = (const ProcessingRate & other) = default;
 
-    ProcessingRate(const KindId k, const unsigned n, const unsigned m, const std::string && ref = "") : mKind(k), mN(n), mM(m), mReference(ref) {}
+protected:    
+    ProcessingRate(const KindId k, const unsigned n, const unsigned m, const std::string && ref = "") : mKind(k), mLowerBound(n), mUpperBound(m), mReference(ref) {}
+    ProcessingRate(const KindId k, const RateValue n, const RateValue m, const std::string && ref = "") : mKind(k), mLowerBound(n), mUpperBound(m), mReference(ref) {}
 private:
     KindId mKind;
-    unsigned mN;
-    unsigned mM;
+    RateValue mLowerBound;
+    RateValue mUpperBound;
     std::string mReference;
 };
 
@@ -125,17 +118,30 @@ inline ProcessingRate BoundedRate(const unsigned lower, const unsigned upper) {
     if (lower == upper) {
         return FixedRate(lower);
     } else {
-        return ProcessingRate(ProcessingRate::KindId::Bounded, lower, upper);
+        return ProcessingRate(ProcessingRate::KindId::Bounded, {lower}, {upper});
     }
 }
 
+/**
+ * @brief UnknownRate
+ *
+ * The produced item count per stride should never be dependent on an unknown rate input stream.
+ */
 inline ProcessingRate UnknownRate(const unsigned lower = 0) {
     return ProcessingRate(ProcessingRate::KindId::Unknown, lower, 0);
 }
 
 inline ProcessingRate RateEqualTo(std::string ref) {
-    return ProcessingRate(ProcessingRate::KindId::DirectlyRelative, 1, 1, std::move(ref));
+    return ProcessingRate(ProcessingRate::KindId::Relative, 1, 0, std::move(ref));
 }
+
+inline ProcessingRate PopcountOf(std::string ref, const ProcessingRate::RateValue ratio = ProcessingRate::RateValue{1}) {
+    return ProcessingRate(ProcessingRate::KindId::PopCount, ratio, ProcessingRate::RateValue{0}, std::move(ref));
+}
+
+ProcessingRate::RateValue lcm(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y);
+
+ProcessingRate::RateValue gcd(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y);
 
 }
 

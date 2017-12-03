@@ -13,11 +13,11 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class LZ4ByteStreamDecoderKernel : public BlockOrientedKernel {
+class LZ4ByteStreamDecoderKernel final : public MultiBlockKernel {
 public:
     LZ4ByteStreamDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, size_t bufferSize);
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    llvm::Value * generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * numOfStrides) override;
 private:
     size_t mBufferSize;
 };

@@ -10,6 +10,7 @@
 #include <boost/container/flat_map.hpp>
 
 namespace llvm { class BasicBlock; }
+namespace llvm { class Constant; }
 namespace llvm { class Function; }
 namespace llvm { class IntegerType; }
 namespace llvm { class IndirectBrInst; }
@@ -25,17 +26,7 @@ class KernelBuilder;
 
 class Kernel : public KernelInterface {
     friend class KernelBuilder;
-public:
-    enum class Port { Input, Output };
-
-    using StreamPort = std::pair<Port, unsigned>;
-
 protected:
-
-    using KernelMap = boost::container::flat_map<std::string, unsigned>;
-    using StreamMap = boost::container::flat_map<std::string, StreamPort>;
-    using StreamSetBuffers = std::vector<parabix::StreamSetBuffer *>;
-    using Kernels = std::vector<Kernel *>;
 
     static const std::string DO_BLOCK_SUFFIX;
     static const std::string FINAL_BLOCK_SUFFIX;
@@ -51,19 +42,25 @@ protected:
 
 public:
     
+    enum class Port { Input, Output };
+    using StreamPort = std::pair<Port, unsigned>;
+    using StreamMap = boost::container::flat_map<std::string, StreamPort>;
+    using KernelFieldMap = boost::container::flat_map<std::string, unsigned>;
+    using StreamSetBuffers = std::vector<parabix::StreamSetBuffer *>;
+
     // Kernel Signatures and Module IDs
     //
     // A kernel signature uniquely identifies a kernel and its full functionality.
     // In the event that a particular kernel instance is to be generated and compiled
-    // to produce object code, and we have a cached kernel object code instance with 
-    // the same signature and targetting the same IDISA architecture, then the cached 
+    // to produce object code, and we have a cached kernel object code instance with
+    // the same signature and targetting the same IDISA architecture, then the cached
     // object code may safely be used to avoid recompilation.
     //
     // A kernel signature is a byte string of arbitrary length.
     //
     // Kernel developers should take responsibility for designing appropriate signature
     // mechanisms that are short, inexpensive to compute and guarantee uniqueness
-    // based on the semantics of the kernel.  
+    // based on the semantics of the kernel.
     //
     // If no other mechanism is available, the default makeSignature() method uses the
     // full LLVM IR (before optimization) of the kernel instance.
@@ -86,20 +83,15 @@ public:
     // all scalar fields have been added.   If there are no fields to
     // be added, the default method for preparing kernel state may be used.
 
-       
-    bool isCachable() const override { return false; }
 
     std::string makeSignature(const std::unique_ptr<KernelBuilder> & idb) override;
 
     // Can the module ID itself serve as the unique signature?
     virtual bool hasSignature() const { return true; }
 
-    // Create a module stub for the kernel, populated only with its Module ID.     
-    //
+    bool isCachable() const override { return false; }
 
     void bindPorts(const StreamSetBuffers & inputs, const StreamSetBuffers & outputs);
-
-    StreamPort getStreamPort(const std::string & name) const;
 
     llvm::Module * setModule(llvm::Module * const module);
 
@@ -121,20 +113,60 @@ public:
         return mNoTerminateAttribute;
     }
 
+    StreamPort getStreamPort(const std::string & name) const;
+
+    const Binding & getBinding(const std::string & name) const;
+
     const StreamSetBuffers & getStreamSetInputBuffers() const {
         return mStreamSetInputBuffers;
     }
 
     const parabix::StreamSetBuffer * getStreamSetInputBuffer(const unsigned i) const {
+        assert (i < mStreamSetInputBuffers.size());
+        assert (mStreamSetInputBuffers[i]);
         return mStreamSetInputBuffers[i];
+    }
+
+    const parabix::StreamSetBuffer * getInputStreamSetBuffer(const std::string & name) const {
+        const auto port = getStreamPort(name);
+        assert (port.first == Port::Input);
+        return getStreamSetInputBuffer(port.second);
     }
 
     const StreamSetBuffers & getStreamSetOutputBuffers() const {
         return mStreamSetOutputBuffers;
     }
 
+    const Binding & getStreamInput(const unsigned i) const {
+        return KernelInterface::getStreamInput(i);
+    }
+
+    const Binding & getStreamInput(const std::string & name) const {
+        const auto port = getStreamPort(name);
+        assert (port.first == Port::Input);
+        return KernelInterface::getStreamInput(port.second);
+    }
+
     const parabix::StreamSetBuffer * getStreamSetOutputBuffer(const unsigned i) const {
+        assert (i < mStreamSetOutputBuffers.size());
+        assert (mStreamSetOutputBuffers[i]);
         return mStreamSetOutputBuffers[i];
+    }
+
+    const parabix::StreamSetBuffer * getOutputStreamSetBuffer(const std::string & name) const {
+        const auto port = getStreamPort(name);
+        assert (port.first == Port::Output);
+        return getStreamSetOutputBuffer(port.second);
+    }
+
+    const Binding & getStreamOutput(const unsigned i) const {
+        return KernelInterface::getStreamOutput(i);
+    }
+
+    const Binding & getStreamOutput(const std::string & name) const {
+        const auto port = getStreamPort(name);
+        assert (port.first == Port::Output);
+        return KernelInterface::getStreamOutput(port.second);
     }
     
     // Kernels typically perform block-at-a-time processing, but some kernels may require
@@ -143,7 +175,7 @@ public:
     // on each doMultiBlock call.
     // 
     
-    unsigned getKernelStride() const { return mStride; }
+    unsigned getStride() const { return mStride; }
     
     virtual ~Kernel() = 0;
 
@@ -155,26 +187,23 @@ public:
 
 protected:
 
-    void setKernelStride(unsigned stride) { mStride = stride; }
-
     virtual void addInternalKernelProperties(const std::unique_ptr<KernelBuilder> & idb) { }
 
     void getDoSegmentFunctionArguments(const std::vector<llvm::Value *> & availItems) const;
 
     // Constructor
-    Kernel(std::string && kernelName,
-                  std::vector<Binding> && stream_inputs,
-                  std::vector<Binding> && stream_outputs,
-                  std::vector<Binding> && scalar_parameters,
-                  std::vector<Binding> && scalar_outputs,
-                  std::vector<Binding> && internal_scalars);
+    Kernel(std::string && kernelName, Bindings && stream_inputs,
+          Bindings && stream_outputs,
+          Bindings && scalar_parameters,
+          Bindings && scalar_outputs,
+          Bindings && internal_scalars);
 
     void setNoTerminateAttribute(const bool noTerminate = true) {
         mNoTerminateAttribute = noTerminate;
     }
 
-    llvm::Value * getPrincipleItemCount() const {
-        return mAvailablePrincipleItemCount;
+    llvm::Value * getPrincipalItemCount() const {
+        return mAvailablePrincipalItemCount;
     }
 
     unsigned getScalarIndex(const std::string & name) const;
@@ -201,25 +230,6 @@ protected:
 
     void callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & idb);
 
-
-    std::pair<unsigned, unsigned> getStreamRate(const Port p, const unsigned i) const;
-
-    const parabix::StreamSetBuffer * getInputStreamSetBuffer(const std::string & name) const {
-        const auto port = getStreamPort(name);
-        assert (port.first == Port::Input);
-        assert (port.second < mStreamSetInputBuffers.size());
-        assert (mStreamSetInputBuffers[port.second]);
-        return mStreamSetInputBuffers[port.second];
-    }
-
-    const parabix::StreamSetBuffer * getOutputStreamSetBuffer(const std::string & name) const {
-        const auto port = getStreamPort(name);
-        assert (port.first == Port::Output);
-        assert (port.second < mStreamSetOutputBuffers.size());
-        assert (mStreamSetOutputBuffers[port.second]);
-        return mStreamSetOutputBuffers[port.second];
-    }
-
     const parabix::StreamSetBuffer * getAnyStreamSetBuffer(const std::string & name) const {
         unsigned index; Port port;
         std::tie(port, index) = getStreamPort(name);
@@ -234,59 +244,70 @@ protected:
         }
     }
 
-    llvm::Value * getStreamSetInputBufferPtr(const unsigned i) const {
-        return mStreamSetInputBufferPtr[i];
-    }
-
-    llvm::Value * getStreamSetOutputBufferPtr(const unsigned i) const {
-        return mStreamSetOutputBufferPtr[i];
-    }
+    void setStride(unsigned stride) { mStride = stride; }
 
 private:
 
     void addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & idb);
 
+    llvm::Value * getStreamSetInputAddress(const std::string & name) const {
+        const Kernel::StreamPort p = getStreamPort(name);
+        assert (p.first == Port::Input);
+        return mStreamSetInputBaseAddress[p.second];
+    }
+
+    llvm::Value * getStreamSetOutputAddress(const std::string & name) const {
+        const Kernel::StreamPort p = getStreamPort(name);
+        assert (p.first == Port::Output);
+        return mStreamSetOutputBaseAddress[p.second];
+    }
+
     llvm::Value * getAvailableItemCount(const unsigned i) const {
         return mAvailableItemCount[i];
     }
 
+    void normalizeStreamProcessingRates();
+
+    bool normalizeRelativeToFixedProcessingRate(const ProcessingRate & base, ProcessingRate & toUpdate);
+
 protected:
 
     llvm::Function *                    mCurrentMethod;
-    llvm::Value *                       mAvailablePrincipleItemCount;
+    llvm::Value *                       mAvailablePrincipalItemCount;
     bool                                mNoTerminateAttribute;
     bool                                mIsGenerated;
     unsigned                            mStride;
     llvm::Value *                       mIsFinal;
     llvm::Value *                       mOutputScalarResult;
-
-
     std::vector<llvm::Value *>          mAvailableItemCount;
 
+    KernelFieldMap                      mKernelFieldMap;
     std::vector<llvm::Type *>           mKernelFields;
-    KernelMap                           mKernelMap;
-    StreamMap                           mStreamMap;
-    StreamSetBuffers                    mStreamSetInputBuffers;
-    std::vector<llvm::Value *>          mStreamSetInputBufferPtr;
-    StreamSetBuffers                    mStreamSetOutputBuffers;
-    std::vector<llvm::Value *>          mStreamSetOutputBufferPtr;
 
+    StreamMap                           mStreamMap;
+
+    StreamSetBuffers                    mStreamSetInputBuffers;
+    std::vector<llvm::Value *>          mStreamSetInputBaseAddress;
+    StreamSetBuffers                    mStreamSetOutputBuffers;
+    std::vector<llvm::Value *>          mStreamSetOutputBaseAddress;
 };
+
+using Kernels = std::vector<Kernel *>;
 
 class SegmentOrientedKernel : public Kernel {
 protected:
 
     SegmentOrientedKernel(std::string && kernelName,
-                          std::vector<Binding> && stream_inputs,
-                          std::vector<Binding> && stream_outputs,
-                          std::vector<Binding> && scalar_parameters,
-                          std::vector<Binding> && scalar_outputs,
-                          std::vector<Binding> && internal_scalars);
+                          Bindings && stream_inputs,
+                          Bindings && stream_outputs,
+                          Bindings && scalar_parameters,
+                          Bindings && scalar_outputs,
+                          Bindings && internal_scalars);
 protected:
 
     void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
-    virtual void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & kb) = 0;
+    virtual void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) = 0;
 
 };
 
@@ -385,11 +406,11 @@ class MultiBlockKernel : public Kernel {
 protected:
 
     MultiBlockKernel(std::string && kernelName,
-                     std::vector<Binding> && stream_inputs,
-                     std::vector<Binding> && stream_outputs,
-                     std::vector<Binding> && scalar_parameters,
-                     std::vector<Binding> && scalar_outputs,
-                     std::vector<Binding> && internal_scalars);
+                     Bindings && stream_inputs,
+                     Bindings && stream_outputs,
+                     Bindings && scalar_parameters,
+                     Bindings && scalar_outputs,
+                     Bindings && internal_scalars);
 
     // Each multi-block kernel subtype must provide its own logic for handling
     // doMultiBlock calls, subject to the requirements laid out above.
@@ -398,16 +419,34 @@ protected:
     // the builder insertion point will be set to the entry block; upone
     // exit the RetVoid instruction will be added to complete the method.
     //
-    virtual void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & idb, llvm::Value * const numOfStrides) = 0;
+    virtual llvm::Value * generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) = 0;
 
 private:
 
     // Given a kernel subtype with an appropriate interface, the generateDoSegment
     // method of the multi-block kernel builder makes all the necessary arrangements
     // to translate doSegment calls into a minimal sequence of doMultiBlock calls.
-    void generateKernelMethod(const std::unique_ptr<KernelBuilder> & kb) final;
+    void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
+
+    unsigned getItemAlignment(const Binding & binding) const;
+
+    ProcessingRate::RateValue getLowerBound(const ProcessingRate &rate) const;
+
+    ProcessingRate::RateValue getUpperBound(const ProcessingRate & rate) const;
+
+    bool isTransitivelyUnknownRate(const ProcessingRate & rate) const;
+
+    llvm::Value * getStrideSize(const std::unique_ptr<KernelBuilder> & b, const ProcessingRate & rate);
 
     bool requiresCopyBack(const ProcessingRate & rate) const;
+
+    void reviseFinalProducedItemCounts(const std::unique_ptr<KernelBuilder> & b);
+
+protected:
+
+    std::vector<llvm::Value *>      mInitialAvailableItemCount;
+    std::vector<llvm::Value *>      mInitialProcessedItemCount;
+    std::vector<llvm::Value *>      mInitialProducedItemCount;
 
 };
 
@@ -415,11 +454,11 @@ private:
 class BlockOrientedKernel : public MultiBlockKernel {
 protected:
 
-    void CreateDoBlockMethodCall(const std::unique_ptr<KernelBuilder> & idb);
+    void CreateDoBlockMethodCall(const std::unique_ptr<KernelBuilder> & b);
 
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
-    virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & idb) = 0;
+    virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) = 0;
 
     // Each kernel builder subtypre must also specify the logic for processing the
     // final block of stream data, if there is any special processing required
@@ -428,29 +467,32 @@ protected:
     // without additional preparation, the default generateFinalBlockMethod need
     // not be overridden.
 
-    virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & idb, llvm::Value * remainingItems);
-
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & idb, llvm::Value * const numOfStrides) final;
+    virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * remainingItems);
 
     BlockOrientedKernel(std::string && kernelName,
-                        std::vector<Binding> && stream_inputs,
-                        std::vector<Binding> && stream_outputs,
-                        std::vector<Binding> && scalar_parameters,
-                        std::vector<Binding> && scalar_outputs,
-                        std::vector<Binding> && internal_scalars);
+                        Bindings && stream_inputs,
+                        Bindings && stream_outputs,
+                        Bindings && scalar_parameters,
+                        Bindings && scalar_outputs,
+                        Bindings && internal_scalars);
 
 private:
 
-    void writeDoBlockMethod(const std::unique_ptr<KernelBuilder> & idb);
+    llvm::Value * generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
 
-    void writeFinalBlockMethod(const std::unique_ptr<KernelBuilder> & idb, llvm::Value * remainingItems);
+    void writeDoBlockMethod(const std::unique_ptr<KernelBuilder> & b);
+
+    void writeFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * remainingItems);
+
+    llvm::Value * getRemainingItems(const std::unique_ptr<KernelBuilder> & b);
 
 private:
 
-    llvm::Function *        mDoBlockMethod;
-    llvm::BasicBlock *      mStrideLoopBody;
-    llvm::IndirectBrInst *  mStrideLoopBranch;
-    llvm::PHINode *         mStrideLoopTarget;
+    llvm::Function *            mDoBlockMethod;
+    llvm::BasicBlock *          mStrideLoopBody;
+    llvm::IndirectBrInst *      mStrideLoopBranch;
+    llvm::PHINode *             mStrideLoopTarget;
+    llvm::PHINode *             mStrideBlockIndex;
 };
 
 }

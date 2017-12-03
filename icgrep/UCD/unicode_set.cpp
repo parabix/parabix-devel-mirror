@@ -184,10 +184,10 @@ codepoint_t UnicodeSet::at(const size_type k) const {
         } else if (typeOf(r) == Full) {
             const auto m = lengthOf(r) * QUAD_BITS;
             if (LLVM_UNLIKELY(remaining < m)) {
-                return base + remaining;
+                return (base * QUAD_BITS) + remaining;
             }
             base += m;
-            remaining -= m;
+            remaining -= m * QUAD_BITS;
         } else { // if (typeOf(r) == Mixed) {
             for (auto l = lengthOf(r); l; --l, ++qi) {
                 auto q = *qi; assert (q);
@@ -198,13 +198,13 @@ codepoint_t UnicodeSet::at(const size_type k) const {
                         assert (q);
                         const bitquad_t k = scan_forward_zeroes<bitquad_t>(q);
                         if (remaining == 0) {
-                            return base + k;
+                            return (base * QUAD_BITS) + k;
                         }
                         q ^= static_cast<bitquad_t>(1) << k;
                         --remaining;
                     }
                 }
-                base += QUAD_BITS;
+                ++base;
                 remaining -= c;
             }
         }
@@ -1411,12 +1411,29 @@ UnicodeSet & UnicodeSet::operator=(const UnicodeSet && other) noexcept {
  * @brief Copy Constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet::UnicodeSet(const UnicodeSet & other) noexcept
-: mRuns(other.mRuns)
-, mQuads(other.mQuads)
-, mRunLength(other.mRunLength)
-, mQuadLength(other.mQuadLength)
-, mRunCapacity(0) // lazily ensure reallocation on modification
+: mRuns(nullptr)
+, mQuads(nullptr)
+, mRunLength(0)
+, mQuadLength(0)
+, mRunCapacity(0)
 , mQuadCapacity(0) {
+    // lazily ensure reallocation on modification if and only if the source cannot modify it
+    if (other.mRunCapacity == 0) {
+        mRuns = other.mRuns;
+        mRunCapacity = 0;
+    } else {
+        mRuns = copyOf<run_t>(other.mRuns, other.mRunLength, GlobalAllocator);
+        mRunCapacity = other.mRunLength;
+    }
+    mRunLength = other.mRunLength;
+    if (other.mQuadCapacity == 0) {
+        mQuads = other.mQuads;
+        mQuadCapacity = 0;
+    } else {
+        mQuads = copyOf<bitquad_t>(other.mQuads, other.mQuadCapacity, GlobalAllocator);
+        mQuadCapacity = other.mQuadLength;
+    }
+    mQuadLength = other.mQuadLength;
     assert (verify(mRuns, other.mRunLength, mQuads, other.mQuadLength));
 }
 
@@ -1430,12 +1447,23 @@ UnicodeSet & UnicodeSet::operator=(const UnicodeSet & other) noexcept {
     if (mQuadCapacity) {
         GlobalAllocator.deallocate<bitquad_t>(mQuads, mQuadCapacity);
     }
-    mRuns = other.mRuns;
-    mQuads = other.mQuads;
+    // lazily ensure reallocation on modification if and only if the source cannot modify it
+    if (other.mRunCapacity == 0) {
+        mRuns = other.mRuns;
+        mRunCapacity = 0;
+    } else {
+        mRuns = copyOf<run_t>(other.mRuns, other.mRunLength, GlobalAllocator);
+        mRunCapacity = other.mRunLength;
+    }
     mRunLength = other.mRunLength;
+    if (other.mQuadCapacity == 0) {
+        mQuads = other.mQuads;
+        mQuadCapacity = 0;
+    } else {
+        mQuads = copyOf<bitquad_t>(other.mQuads, other.mQuadCapacity, GlobalAllocator);
+        mQuadCapacity = other.mQuadLength;
+    }
     mQuadLength = other.mQuadLength;
-    mRunCapacity = 0; // lazily ensure reallocation on modification
-    mQuadCapacity = 0;
     assert (verify(mRuns, mRunLength, mQuads, mQuadLength));
     return *this;
 }

@@ -29,7 +29,7 @@
 #include <re/re_toolchain.h>        // for AlgorithmOptionIsSet, RE_Algorith...
 #include "cc/cc_compiler.h"         // for CC_Compiler
 #include "pablo/builder.hpp"        // for PabloBuilder
-#include "toolchain/toolchain.h"    // for AVX2_available
+#include <IR_Gen/idisa_target.h>    // for AVX2_available
 #include <llvm/Support/ErrorHandling.h>
 
 namespace pablo { class PabloAST; }

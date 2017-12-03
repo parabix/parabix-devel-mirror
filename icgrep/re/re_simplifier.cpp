@@ -13,21 +13,24 @@ using namespace llvm;
 
 namespace re {
 
+using Set = boost::container::flat_set<RE *>;
+using List = std::vector<RE *>;
+
 struct PassContainer {
     RE * simplify(RE * re) {
         if (Alt * alt = dyn_cast<Alt>(re)) {
-            boost::container::flat_set<RE *> list;
-            list.reserve(alt->size());
+            Set set;
+            set.reserve(alt->size());
             for (RE * item : *alt) {
                 item = simplify(item);
                 if (LLVM_UNLIKELY(isa<Alt>(item) && cast<Alt>(item)->empty())) {
                     continue;
                 }
-                list.insert(item);
+                set.insert(item);
             }
-            re = makeAlt(list.begin(), list.end());
+            re = makeAlt(set.begin(), set.end());
         } else if (Seq * seq = dyn_cast<Seq>(re)) {
-            std::vector<RE *> list;
+            List list;
             list.reserve(seq->size());
             for (RE * item : *seq) {
                 item = simplify(item);
