@@ -110,7 +110,9 @@ protected:
     virtual RE * parse_RE();
 
     virtual RE * parse_alt();
-
+    
+    virtual bool accept_alt_mark();
+    
     virtual RE * parse_seq();
 
     virtual RE * parse_next_item();

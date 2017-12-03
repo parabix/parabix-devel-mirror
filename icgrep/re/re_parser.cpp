@@ -104,8 +104,14 @@ RE * RE_Parser::parse_alt() {
     do {
         alt.push_back(parse_seq());
     }
-    while (mCursor.more() && (*mCursor == '|'));
+    while (accept_alt_mark());
     return makeAlt(alt.begin(), alt.end());
+}
+    
+bool RE_Parser::accept_alt_mark() {
+    if (!mCursor.more() || (*mCursor != '|')) return false;
+    mCursor++;
+    return true;
 }
 
 RE * RE_Parser::parse_seq() {

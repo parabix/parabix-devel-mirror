@@ -14,7 +14,7 @@ namespace re {
         FixedStringParser(const std::string & regular_expression) : RE_Parser(regular_expression) {
             mReSyntax = RE_Syntax::FixedStrings;
         }
-        RE * parse_alt () override;
+        bool accept_alt_mark () override;
         RE * parse_seq () override;
     };
 }
