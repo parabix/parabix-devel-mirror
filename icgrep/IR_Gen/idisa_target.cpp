@@ -12,6 +12,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/ADT/Triple.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_ostream.h>
 #include <kernels/kernel_builder.h>
 
 using namespace kernel;
@@ -27,8 +28,8 @@ Features getHostCPUFeatures() {
     Features hostCPUFeatures;
     StringMap<bool> features;
     if (sys::getHostCPUFeatures(features)) {
-        hostCPUFeatures.hasAVX = features.count("avx");
-        hostCPUFeatures.hasAVX2 = features.count("avx2");
+        hostCPUFeatures.hasAVX = features.lookup("avx");
+        hostCPUFeatures.hasAVX2 = features.lookup("avx2");
     }
     return hostCPUFeatures;
 }
@@ -36,7 +37,7 @@ Features getHostCPUFeatures() {
 bool AVX2_available() {
     StringMap<bool> features;
     if (sys::getHostCPUFeatures(features)) {
-        return features.count("avx2");
+        return features.lookup("avx2");
     }
     return false;
 }
@@ -46,12 +47,14 @@ namespace IDISA {
 KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C) {
     const auto hostCPUFeatures = getHostCPUFeatures();
     if (LLVM_LIKELY(codegen::BlockSize == 0)) {  // No BlockSize override: use processor SIMD width
+        
         codegen::BlockSize = hostCPUFeatures.hasAVX2 ? 256 : 128;
     }
     else if (((codegen::BlockSize & (codegen::BlockSize - 1)) != 0) || (codegen::BlockSize < 64)) {
         llvm::report_fatal_error("BlockSize must be a power of 2 and >=64");
     }
-    if (codegen::BlockSize >= 128) {
+    if (codegen::BlockSize >= 256) {
+        // AVX2 or AVX builders can only be used for BlockSize multiples of 256
         if (hostCPUFeatures.hasAVX2) {
             return new KernelBuilderImpl<IDISA_AVX2_Builder>(C, codegen::BlockSize, codegen::BlockSize);
         } else if (hostCPUFeatures.hasAVX) {

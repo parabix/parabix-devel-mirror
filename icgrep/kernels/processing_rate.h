@@ -115,10 +115,11 @@ inline ProcessingRate FixedRate(const unsigned rate = 1) {
 }
 
 inline ProcessingRate BoundedRate(const unsigned lower, const unsigned upper) {
+    using RateValue = boost::rational<unsigned>;
     if (lower == upper) {
         return FixedRate(lower);
     } else {
-        return ProcessingRate(ProcessingRate::KindId::Bounded, {lower}, {upper});
+        return ProcessingRate(ProcessingRate::KindId::Bounded, RateValue(lower), RateValue(upper));
     }
 }
 
