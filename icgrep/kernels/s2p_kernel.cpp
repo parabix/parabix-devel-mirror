@@ -160,7 +160,7 @@ void S2PKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBu
         } else {
             Value * ptr = iBuilder->getInputStreamPackPtr("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
             // CreateLoad defaults to aligned here, so we need to force the alignment to 1 byte.
-            bytepack[i] = iBuilder->CreateAlignedLoad(ptr, 1);
+            bytepack[i] = iBuilder->CreateAlignedLoad(ptr, 1);            
         }
     }
     Value * basisbits[8];

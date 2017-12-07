@@ -645,31 +645,11 @@ void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const
     b->SetInsertPoint(bufferReady);
 }
 
-inline const Binding & getBinding(const Kernel * k, const std::string & name) {
-    Port port; unsigned index;
-    std::tie(port, index) = k->getStreamPort(name);
-    if (port == Port::Input) {
-        return k->getStreamInput(index);
-    } else {
-        return k->getStreamOutput(index);
-    }
-}
-
-ProcessingRate::RateValue getUpperBound(const Kernel * const k, const ProcessingRate & rate) {
-    if (rate.isFixed() || rate.isBounded()) {
-        return rate.getUpperBound();
-    } else if (rate.isRelative()) {
-        return rate.getRate() * getUpperBound(k, getBinding(k, rate.getReference()).getRate());
-    } else { // if (rate.isUnknown())
-        return 0;
-    }
-}
-
 void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * k) {
     const auto & outputs = k->getStreamSetOutputBuffers();
     for (unsigned i = 0; i < outputs.size(); i++) {
         if (isa<DynamicBuffer>(outputs[i])) {
-            const auto ub = getUpperBound(k, k->getStreamOutput(i).getRate());
+            const auto ub = k->getUpperBound(k->getStreamOutput(i).getRate());
             const auto baseSize = (ub.numerator() * k->getStride() + ub.denominator() - 1) / ub.denominator();
             if (LLVM_LIKELY(baseSize > 0)) {
                 const auto & name = k->getStreamOutput(i).getName();

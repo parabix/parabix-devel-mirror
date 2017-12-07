@@ -168,7 +168,7 @@ inline unsigned getItemWidth(const Type * ty) {
  * @brief getFieldWidth
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned getFieldWidth(const unsigned bitWidth, const unsigned blockWidth) {
-    for (unsigned k = 16; k < blockWidth; k *= 2) {
+    for (unsigned k = 16; k <= blockWidth; k *= 2) {
         if ((bitWidth & (k - 1)) != 0) {
             return k / 2;
         }
@@ -185,21 +185,16 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
     assert (source && sourceOffset);
     assert (target->getType() == source->getType());
     assert (target->getType()->isPointerTy());
+    assert (isConstantZero(targetOffset) || isConstantZero(sourceOffset));
 
     const StreamSetBuffer * const buf = mKernel->getAnyStreamSetBuffer(name);
-
     const auto itemWidth = getItemWidth(buf->getBaseType());
     assert ("invalid item width" && is_power_2(itemWidth));
     const auto blockWidth = getBitBlockWidth();
-
+    // Although our item width may be n bits, if we know we're always processing m items per block, our field width
+    // (w.r.t the stream copy) would be n*m. By taking this into account we can optimize and simplify the copy code.
     const auto fieldWidth = getFieldWidth(itemWidth * itemAlignment, blockWidth);
-    assert ("overflow error" && is_power_2(fieldWidth) && (itemWidth <= fieldWidth));
-
-    assert (isConstantZero(targetOffset) || isConstantZero(sourceOffset));
-
-    IntegerType * const fieldWidthTy = getIntNTy(fieldWidth / 8);
-
-    const auto alignment = fieldWidth / 8;
+    assert ("overflow error" && is_power_2(fieldWidth) && (itemWidth <= fieldWidth) && (fieldWidth <= blockWidth));
 
     if (LLVM_LIKELY(itemWidth < fieldWidth)) {
         Constant * const factor = getSize(fieldWidth / itemWidth);
@@ -210,7 +205,6 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
     }
 
     /*
-
        Streams are conceptually modelled as:
 
                                             BLOCKS
@@ -231,9 +225,12 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
     */
 
+    const auto alignment = (fieldWidth + 7) / 8;
+
+    Type * const fieldWidthTy = getIntNTy(fieldWidth);
+
     Value * const n = buf->getStreamSetCount(this, getStreamHandle(name));
-    if (fieldWidth == blockWidth || isConstantOne(n) || (isConstantZero(targetOffset) && isConstantZero(sourceOffset))) {
-        PointerType * const fieldWidthPtrTy = fieldWidthTy->getPointerTo();
+    if (isConstantOne(n) || fieldWidth == blockWidth || (isConstantZero(targetOffset) && isConstantZero(sourceOffset))) {
         if (isConstantOne(n)) {
             if (LLVM_LIKELY(itemWidth < 8)) {
                 itemsToCopy = CreateUDivCeil(itemsToCopy, getSize(8 / itemWidth));
@@ -241,10 +238,16 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
                 itemsToCopy = CreateMul(itemsToCopy, getSize(itemWidth / 8));
             }
         } else {
-            itemsToCopy = CreateMul(CreateUDivCeil(itemsToCopy, getSize(blockWidth / (8 * itemWidth))), n);
+            if (LLVM_LIKELY(blockWidth > (itemWidth * 8))) {
+                itemsToCopy = CreateUDivCeil(itemsToCopy, getSize(blockWidth / (8 * itemWidth)));
+            } else if (LLVM_LIKELY(blockWidth < (itemWidth * 8))) {
+                itemsToCopy = CreateUDivCeil(CreateMul(itemsToCopy, getSize(8)), getSize(blockWidth / itemWidth));
+            }
+            itemsToCopy = CreateMul(itemsToCopy, n);
         }
-        target = CreateGEP(CreatePointerCast(target, fieldWidthPtrTy), targetOffset);
-        source = CreateGEP(CreatePointerCast(source, fieldWidthPtrTy), sourceOffset);
+        PointerType * const ptrTy = fieldWidthTy->getPointerTo();
+        target = CreateGEP(CreatePointerCast(target, ptrTy), targetOffset);
+        source = CreateGEP(CreatePointerCast(source, ptrTy), sourceOffset);
         CreateMemCpy(target, source, itemsToCopy, alignment);
 
     } else { // either the target offset or source offset is non-zero but not both
@@ -255,10 +258,11 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
         target = CreatePointerCast(target, blockPtrTy);
         source = CreatePointerCast(source, blockPtrTy);
 
+        assert ((blockWidth % fieldWidth) == 0);
+
         VectorType * const shiftTy = VectorType::get(fieldWidthTy, blockWidth / fieldWidth);
         Constant * const width = getSize(blockWidth / itemWidth);
         BasicBlock * const entry = GetInsertBlock();
-
 
         if (isConstantZero(targetOffset)) {
 

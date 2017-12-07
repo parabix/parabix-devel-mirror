@@ -60,7 +60,7 @@ struct Binding : public AttributeSet {
         return hasAttribute(Attribute::KindId::Principal);
     }
 
-    bool notDeferred() const {
+    bool nonDeferred() const {
         return !hasAttribute(Attribute::KindId::Deferred);
     }
 

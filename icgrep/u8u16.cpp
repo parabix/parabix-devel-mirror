@@ -59,7 +59,7 @@ public:
 U8U16Kernel::U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b)
 : PabloKernel(b, "u8u16",
 {Binding{b->getStreamSetTy(8, 1), "u8bit"}},
-{Binding{b->getStreamSetTy(16, 1), "u16bit"}, Binding{b->getStreamSetTy(1, 1), "delMask"}, Binding{b->getStreamSetTy(1, 1), "errMask"}}) {
+{Binding{b->getStreamSetTy(16, 1), "u16bit"}, Binding{b->getStreamSetTy(1, 1), "delMask"}}) {
 
 }
 
@@ -252,8 +252,6 @@ void U8U16Kernel::generatePabloMethod() {
 
     Var * output = getOutputStreamVar("u16bit");
     Var * delmask_out = getOutputStreamVar("delMask");
-    Var * error_mask_out = getOutputStreamVar("errMask");
-
     for (unsigned i = 0; i < 8; i++) {
         main.createAssign(main.createExtract(output, i), u16_hi[i]);
     }
@@ -261,7 +259,6 @@ void U8U16Kernel::generatePabloMethod() {
         main.createAssign(main.createExtract(output, i + 8), u16_lo[i]);
     }
     main.createAssign(main.createExtract(delmask_out, main.getInteger(0)), delmask);
-    main.createAssign(main.createExtract(error_mask_out,  main.getInteger(0)), error_mask);
 }
 
 void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
@@ -304,10 +301,9 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
     StreamSetBuffer * U8u16Bits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
     StreamSetBuffer * DelMask = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
-    StreamSetBuffer * ErrorMask = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
     
     Kernel * u8u16k = pxDriver.addKernelInstance<U8U16Kernel>(iBuilder);
-    pxDriver.makeKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask, ErrorMask});
+    pxDriver.makeKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask});
     
     // Allocate space for fully compressed swizzled UTF-16 bit streams
     StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), segmentSize * (bufferSegments+2), 1);
@@ -389,10 +385,9 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
     StreamSetBuffer * U8u16Bits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
     StreamSetBuffer * DelMask = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
-    StreamSetBuffer * ErrorMask = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), segmentSize * bufferSegments);
     
     Kernel * u8u16k = pxDriver.addKernelInstance<U8U16Kernel>(iBuilder);
-    pxDriver.makeKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask, ErrorMask});
+    pxDriver.makeKernelCall(u8u16k, {BasisBits}, {U8u16Bits, DelMask});
     
     StreamSetBuffer * U16Bits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
     

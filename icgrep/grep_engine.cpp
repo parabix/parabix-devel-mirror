@@ -179,7 +179,9 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs) {
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
     
-    const unsigned segmentSize = codegen::SegmentSize;
+    const auto segmentSize = codegen::SegmentSize;
+    const auto bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
+
     const unsigned encodingBits = 8;
     
     Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), nullptr));
@@ -191,7 +193,7 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs) {
     fileDescriptor->setName("fileDescriptor");
     
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits));
-    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb, segmentSize);
+    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb, segmentSize * bufferSegments);
     sourceK->setInitialArguments({fileDescriptor});
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
     
@@ -298,7 +300,8 @@ void EmitMatchesEngine::grepCodeGen(std::vector<re::RE *> REs) {
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
     
-    const unsigned segmentSize = codegen::SegmentSize;
+    const auto segmentSize = codegen::SegmentSize;
+    const auto bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = 8;
     
     Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), idb->getIntAddrTy(), nullptr));
@@ -312,7 +315,7 @@ void EmitMatchesEngine::grepCodeGen(std::vector<re::RE *> REs) {
     match_accumulator->setName("match_accumulator");
     
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits));
-    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb, segmentSize);
+    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb, segmentSize * bufferSegments);
     sourceK->setInitialArguments({fileDescriptor});
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
     

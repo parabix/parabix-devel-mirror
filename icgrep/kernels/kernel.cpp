@@ -513,6 +513,32 @@ const Binding & Kernel::getBinding(const std::string & name) const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getLowerBound
+ ** ------------------------------------------------------------------------------------------------------------- */
+ProcessingRate::RateValue Kernel::getLowerBound(const ProcessingRate & rate) const {
+    if (rate.isFixed() || rate.isBounded()) {
+        return rate.getLowerBound();
+    } else if (rate.isRelative()) {
+        return rate.getRate() * getLowerBound(getBinding(rate.getReference()).getRate());
+    } else { // if (rate.isUnknown())
+        return 0;
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getUpperBound
+ ** ------------------------------------------------------------------------------------------------------------- */
+ProcessingRate::RateValue Kernel::getUpperBound(const ProcessingRate &rate) const {
+    if (rate.isFixed() || rate.isBounded()) {
+        return rate.getUpperBound();
+    } else if (rate.isRelative()) {
+        return rate.getRate() * getUpperBound(getBinding(rate.getReference()).getRate());
+    } else { // if (rate.isUnknown())
+        return 0;
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief normalizeRelativeToFixedProcessingRate
  ** ------------------------------------------------------------------------------------------------------------- */
 bool Kernel::normalizeRelativeToFixedProcessingRate(const ProcessingRate & base, ProcessingRate & toUpdate) {
@@ -566,9 +592,9 @@ void SegmentOrientedKernel::generateKernelMethod(const std::unique_ptr<KernelBui
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief requiresBufferedFinalStride
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool requiresBufferedFinalStride(const Binding & b) {
-    if (LLVM_LIKELY(isa<ArrayType>(b.getType()))) {
-        return b.getType()->getArrayNumElements() == 1;
+inline bool requiresBufferedFinalStride(const Binding & binding) {
+    if (LLVM_LIKELY(isa<ArrayType>(binding.getType()))) {
+        return binding.getType()->getArrayNumElements() == 1;
     }
     return true;
 }
@@ -582,32 +608,6 @@ inline unsigned getItemWidth(const Binding & b) {
         ty = ty->getArrayElementType();
     }
     return cast<IntegerType>(ty->getVectorElementType())->getBitWidth();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getLowerBound
- ** ------------------------------------------------------------------------------------------------------------- */
-ProcessingRate::RateValue MultiBlockKernel::getLowerBound(const ProcessingRate & rate) const {
-    if (rate.isFixed() || rate.isBounded()) {
-        return rate.getLowerBound();
-    } else if (rate.isRelative()) {
-        return rate.getRate() * getLowerBound(getBinding(rate.getReference()).getRate());
-    } else { // if (rate.isUnknown())
-        return 0;
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getUpperBound
- ** ------------------------------------------------------------------------------------------------------------- */
-ProcessingRate::RateValue MultiBlockKernel::getUpperBound(const ProcessingRate &rate) const {
-    if (rate.isFixed() || rate.isBounded()) {
-        return rate.getUpperBound();
-    } else if (rate.isRelative()) {
-        return rate.getRate() * getUpperBound(getBinding(rate.getReference()).getRate());
-    } else { // if (rate.isUnknown())
-        return 0;
-    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -678,7 +678,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
     const auto outputSetCount = mStreamSetOutputs.size();
 
     // Define and allocate the temporary buffer area in the prolog.
-    const auto alignment = b->getBitBlockWidth() / 8;
+    const auto blockAlignment = b->getBitBlockWidth() / 8;
     Value * temporaryInputBuffer[inputSetCount];
     for (unsigned i = 0; i < inputSetCount; ++i) {
 
@@ -692,7 +692,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         if (ub.numerator() == 0) {
             report_fatal_error("MultiBlock kernels do not support unknown rate input streams or streams relative to an unknown rate input.");
         } else {            
-            temporaryInputBuffer[i] = b->CreateAlignedAlloca(ty, alignment, b->getSize(roundUp(ub)));
+            temporaryInputBuffer[i] = b->CreateAlignedAlloca(ty, blockAlignment, b->getSize(roundUp(ub)));
             Type * const sty = temporaryInputBuffer[i]->getType()->getPointerElementType();
             b->CreateStore(Constant::getNullValue(sty), temporaryInputBuffer[i]);
         }        
@@ -709,7 +709,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             if (LLVM_UNLIKELY(mStreamSetOutputBuffers[i]->supportsCopyBack() && requiresCopyBack(rate))) {
                 ub += mStreamSetOutputBuffers[i]->overflowSize();
             }
-            temporaryOutputBuffer[i] = b->CreateAlignedAlloca(ty, alignment, b->getSize(roundUp(ub)));
+            temporaryOutputBuffer[i] = b->CreateAlignedAlloca(ty, blockAlignment, b->getSize(roundUp(ub)));
             Type * const sty = temporaryOutputBuffer[i]->getType()->getPointerElementType();
             b->CreateStore(Constant::getNullValue(sty), temporaryOutputBuffer[i]);
         }
@@ -753,13 +753,16 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         b->CreateAssert(b->CreateICmpUGE(mAvailableItemCount[i], ic), "processed item count cannot exceed the available item count");
         assert (ic->getType() == mAvailableItemCount[i]->getType());
         Value * const unprocessed = b->CreateSub(mAvailableItemCount[i], ic);
+
         mStreamSetInputBaseAddress[i]  = b->getBlockAddress(name, b->CreateLShr(ic, LOG_2_BLOCK_WIDTH));
         mInitialAvailableItemCount[i] = mAvailableItemCount[i];
         mAvailableItemCount[i] = b->getLinearlyAccessibleItems(name, ic, unprocessed);
+
         // Are our linearly accessible items sufficient for a stride?
         inputStrideSize[i] = getStrideSize(b, rate);
+
         Value * accessibleStrides = b->CreateUDiv(mAvailableItemCount[i], inputStrideSize[i]);
-        if (!rate.isFixed() || requiresBufferedFinalStride(input)) {
+        if (!rate.isFixed() || (requiresBufferedFinalStride(input) && input.nonDeferred())) {
 
             // Since we trust that the pipeline won't call this kernel unless there is enough data to process a stride, whenever
             // we discover that there isn't enough linearly available data, optimistically copy the data to the temporary buffer.
@@ -773,11 +776,13 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
 
             b->SetInsertPoint(copyFromBack);
             Value * const temporaryAvailable = b->CreateUMin(unprocessed, inputStrideSize[i]);
+
             b->CreateAssert(b->CreateICmpULE(mAvailableItemCount[i], temporaryAvailable), "linearly available cannot be greater than temporarily available");
             Value * const tempBufferPtr = temporaryInputBuffer[i];
             Value * const offset = b->CreateAnd(ic, BLOCK_WIDTH_MASK);
-            const auto alignment = getItemAlignment(mStreamSetInputs[i]);
-            b->CreateStreamCpy(name, tempBufferPtr, ZERO, mStreamSetInputBaseAddress[i] , offset, mAvailableItemCount[i], alignment);
+            const auto copyAlignment = getItemAlignment(mStreamSetInputs[i]);
+            b->CreateMemZero(tempBufferPtr, ConstantExpr::getSizeOf(tempBufferPtr->getType()), blockAlignment);
+            b->CreateStreamCpy(name, tempBufferPtr, ZERO, mStreamSetInputBaseAddress[i] , offset, mAvailableItemCount[i], copyAlignment);
             Value * const temporaryStrides = b->CreateSelect(b->CreateICmpULT(unprocessed, inputStrideSize[i]), ZERO, ONE);
             BasicBlock * const copyToBackEnd = b->GetInsertBlock();
             b->CreateCondBr(b->CreateICmpNE(mAvailableItemCount[i], temporaryAvailable), copyFromFront, resume);
@@ -785,7 +790,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             b->SetInsertPoint(copyFromFront);
             Value * const remaining = b->CreateSub(temporaryAvailable, mAvailableItemCount[i]);
             Value * const baseAddress = b->getBaseAddress(name);
-            b->CreateStreamCpy(name, tempBufferPtr, mAvailableItemCount[i], baseAddress, ZERO, remaining, alignment);
+            b->CreateStreamCpy(name, tempBufferPtr, mAvailableItemCount[i], baseAddress, ZERO, remaining, copyAlignment);
             BasicBlock * const copyToFrontEnd = b->GetInsertBlock();
             b->CreateBr(resume);
 
@@ -843,14 +848,16 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         mStreamSetOutputBaseAddress[i] = baseOutputBuffer[i];
     }
 
+    BasicBlock * const segmentDone = b->CreateBasicBlock("SegmentDone");
+
     Value * const initiallyFinal = mIsFinal;
     if (LLVM_LIKELY(numOfStrides != nullptr)) {
         mIsFinal = b->CreateAnd(mIsFinal, b->CreateICmpEQ(numOfStrides, ZERO));
-        Value * const processStride = b->CreateOr(b->CreateICmpNE(numOfStrides, ZERO), mIsFinal);
-        b->CreateAssert(processStride, getName() + " does not have sufficient input data or output space for one stride");
+        Value * const hasStride = b->CreateOr(b->CreateICmpNE(numOfStrides, ZERO), mIsFinal);
+        b->CreateAssert(hasStride, getName() + " has insufficient input data or output space for one stride");
         for (unsigned i = 0; i < inputSetCount; ++i) {
             const ProcessingRate & rate = mStreamSetInputs[i].getRate();
-            if (rate.isFixed() && mStreamSetInputs[i].notDeferred()) {
+            if (rate.isFixed() && mStreamSetInputs[i].nonDeferred()) {
                 mAvailableItemCount[i] = b->CreateSelect(mIsFinal, mAvailableItemCount[i], b->CreateMul(numOfStrides, inputStrideSize[i]));
             }
         }
@@ -861,7 +868,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
 
     for (unsigned i = 0; i < inputSetCount; ++i) {
         const ProcessingRate & rate = mStreamSetInputs[i].getRate();
-        if (rate.isFixed() && mStreamSetInputs[i].notDeferred()) {
+        if (rate.isFixed() && mStreamSetInputs[i].nonDeferred()) {
             Value * const ic = b->CreateAdd(mInitialProcessedItemCount[i], mAvailableItemCount[i]);
             b->setProcessedItemCount(mStreamSetInputs[i].getName(), ic);
         }
@@ -870,7 +877,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
     for (unsigned i = 0; i < outputSetCount; ++i) {
         const ProcessingRate & rate = mStreamSetOutputs[i].getRate();
         if (rate.isFixed()) {
-            assert (mStreamSetOutputs[i].notDeferred());
+            assert (mStreamSetOutputs[i].nonDeferred());
             Value * const produced = b->CreateMul(numOfStrides, outputStrideSize[i]);
             Value * const ic = b->CreateAdd(mInitialProducedItemCount[i], produced);
             b->setProducedItemCount(mStreamSetOutputs[i].getName(), ic);
@@ -881,7 +888,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
     BasicBlock * const temporaryBufferCopyBack = b->CreateBasicBlock("TemporaryBufferCopyBack");
     BasicBlock * const strideDone = b->CreateBasicBlock("MultiBlockDone");
 
-    b->CreateLikelyCondBr(b->CreateICmpNE(numOfStrides, ZERO), temporaryBufferCopyBack, handleFinalBlock);
+    b->CreateUnlikelyCondBr(mIsFinal, handleFinalBlock, temporaryBufferCopyBack);
 
 
     /// FINAL STRIDE ADJUSTMENT
@@ -905,10 +912,11 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             continue;
         }
         Value * const baseBuffer = baseOutputBuffer[i];
-        assert ("stack overflow" && (tempBuffer->getType() == baseBuffer->getType()));
+        assert ("stack corruption likely" && (tempBuffer->getType() == baseBuffer->getType()));
         const auto & name = mStreamSetOutputs[i].getName();
         BasicBlock * const copyToBack = b->CreateBasicBlock(name + "CopyToBack");
         BasicBlock * const copyToFront = b->CreateBasicBlock(name + "CopyToFront");
+        BasicBlock * const clearBuffer = b->CreateBasicBlock(name + "ClearBuffer");
         BasicBlock * const resume = b->CreateBasicBlock(name + "ResumeCopyBack");
         // If we used a temporary buffer, copy it back to the original output buffer
         b->CreateCondBr(b->CreateICmpEQ(tempBuffer, baseBuffer), copyToBack, resume);
@@ -921,20 +929,21 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         const auto alignment = getItemAlignment(mStreamSetOutputs[i]);
         b->CreateStreamCpy(name, baseBuffer, offset, tempBuffer, ZERO, toWrite, alignment);
         // If we required a temporary output buffer, we will probably need to write to the beginning of the buffer as well.
-        b->CreateLikelyCondBr(b->CreateICmpULT(toWrite, newlyProduced), copyToFront, resume);
+        b->CreateLikelyCondBr(b->CreateICmpULT(toWrite, newlyProduced), copyToFront, clearBuffer);
 
         b->SetInsertPoint(copyToFront);
         Value * const remaining = b->CreateSub(newlyProduced, toWrite);
         Value * const baseAddress = b->getBaseAddress(name);
         b->CreateStreamCpy(name, baseAddress, ZERO, tempBuffer, toWrite, remaining, alignment);
+        b->CreateBr(clearBuffer);
+        // Clear the buffer after use since we may end up reusing it within the same stride
+        b->SetInsertPoint(clearBuffer);
+
         b->CreateBr(resume);
 
         b->SetInsertPoint(resume);
     }
 
-    strideDone->moveAfter(b->GetInsertBlock());
-
-    BasicBlock * const segmentDone = b->CreateBasicBlock("SegmentDone");
     //  We've dealt with the partial block processing and copied information back into the
     //  actual buffers.  If this isn't the final block, loop back for more multiblock processing.
     if (hasNoTerminateAttribute()) {
@@ -949,36 +958,46 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
     }
 
     /// STRIDE DONE
+    strideDone->moveAfter(b->GetInsertBlock());
     b->SetInsertPoint(strideDone);
 
+    b->CreateAssertZero(mIsFinal, "stride done cannot process the final block");
+
     // do we have enough data for another stride?
-    Value * pendingStrides = nullptr;
+    Value * hasMoreStrides = b->getTrue();
     for (unsigned i = 0; i < inputSetCount; ++i) {
-        Value * const processed = b->getProcessedItemCount(mStreamSetInputs[i].getName());
-        Value * const remaining = b->CreateSub(mInitialAvailableItemCount[i], processed);
+        const auto & name = mStreamSetInputs[i].getName();
+        Value * const avail = mInitialAvailableItemCount[i];
+        Value * const processed = b->getProcessedItemCount(name);
+        b->CreateAssert(b->CreateICmpULE(processed, avail), name + ": processed data cannot exceed available data");
+        Value * const remaining = b->CreateSub(avail, processed);
         Value * const remainingStrides = b->CreateUDiv(remaining, inputStrideSize[i]);
-        pendingStrides = b->CreateUMin(pendingStrides, remainingStrides);
+        hasMoreStrides = b->CreateAnd(hasMoreStrides, b->CreateICmpNE(remainingStrides, ZERO));
     }
+    // even if we do not have enough input data for a full stride, if this is our final stride, allow it ...
+    hasMoreStrides = b->CreateOr(hasMoreStrides, initiallyFinal);
 
     // do we have enough room for another stride?
     for (unsigned i = 0; i < outputSetCount; ++i) {
         const ProcessingRate & rate = mStreamSetOutputs[i].getRate();
         const auto & name = mStreamSetOutputs[i].getName();
-        Value * const newProduced = b->getProducedItemCount(name);
+        Value * const produced = b->getProducedItemCount(name);
         // If this output has a Fixed/Bounded rate, determine whether we have room for another stride.
         if (LLVM_LIKELY(outputStrideSize[i] != nullptr)) {
-            Value * const unconsumed = b->CreateSub(newProduced, b->getConsumedItemCount(name));
-            Value * const remaining = b->CreateSub(b->getCapacity(name), unconsumed);
+            Value * const consumed = b->getConsumedItemCount(name);
+            b->CreateAssert(b->CreateICmpULE(consumed, produced), name + ": consumed data cannot exceed produced data");
+            Value * const unconsumed = b->CreateSub(produced, consumed);
+            Value * const capacity = b->getCapacity(name);
+            b->CreateAssert(b->CreateICmpULE(unconsumed, capacity), name + ": unconsumed data cannot exceed capacity");
+            Value * const remaining = b->CreateSub(capacity, unconsumed);
             Value * const remainingStrides = b->CreateUDiv(remaining, outputStrideSize[i]);
-            pendingStrides = b->CreateUMin(pendingStrides, remainingStrides);
+            hasMoreStrides = b->CreateAnd(hasMoreStrides, b->CreateICmpNE(remainingStrides, ZERO));
         }
         // Do copybacks if necessary.
         if (mStreamSetOutputBuffers[i]->supportsCopyBack() && requiresCopyBack(rate)) {
-            b->CreateCopyBack(name, mInitialProducedItemCount[i], newProduced);
+            b->CreateCopyBack(name, mInitialProducedItemCount[i], produced);
         }
     }
-
-    Value * const hasMoreStrides = b->CreateOr(b->CreateICmpNE(pendingStrides, ZERO), initiallyFinal);
     b->CreateCondBr(hasMoreStrides, segmentLoop, segmentDone);
 
     /// SEGMENT DONE
@@ -1102,7 +1121,7 @@ void MultiBlockKernel::reviseFinalProducedItemCounts(const std::unique_ptr<Kerne
         const auto name = output.getName();
         const ProcessingRate & pr = output.getRate();
         Value * produced = nullptr;
-        if (pr.isFixed() && output.notDeferred()) {
+        if (pr.isFixed() && output.nonDeferred()) {
             assert (baseInitialProcessedItemCount && scaledInverseOfAvailItemCount);
             const auto rate = pr.getRate();
             Value * p = baseInitialProcessedItemCount;

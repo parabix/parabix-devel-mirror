@@ -966,15 +966,12 @@ _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned ski
 #endif
 
 void CBuilder::__CreateAssert(Value * const assertion, StringRef failureMessage) {
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        Module * const m = getModule();
-        if (LLVM_UNLIKELY(isa<ConstantInt>(assertion))) {
-            if (LLVM_UNLIKELY(cast<ConstantInt>(assertion)->isZero())) {
-                report_fatal_error(failureMessage);
-            } else {
-                return;
-            }
+    if (LLVM_UNLIKELY(isa<Constant>(assertion))) {
+        if (LLVM_UNLIKELY(cast<Constant>(assertion)->isNullValue())) {
+            report_fatal_error(failureMessage);
         }
+    } else if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Module * const m = getModule();
         Type * const stackTy = TypeBuilder<uintptr_t, false>::get(getContext());
         PointerType * const stackPtrTy = stackTy->getPointerTo();
         PointerType * const int8PtrTy = getInt8PtrTy();

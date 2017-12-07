@@ -117,6 +117,10 @@ public:
 
     const Binding & getBinding(const std::string & name) const;
 
+    ProcessingRate::RateValue getLowerBound(const ProcessingRate &rate) const;
+
+    ProcessingRate::RateValue getUpperBound(const ProcessingRate & rate) const;
+
     const StreamSetBuffers & getStreamSetInputBuffers() const {
         return mStreamSetInputBuffers;
     }
@@ -429,10 +433,6 @@ private:
     void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
     unsigned getItemAlignment(const Binding & binding) const;
-
-    ProcessingRate::RateValue getLowerBound(const ProcessingRate &rate) const;
-
-    ProcessingRate::RateValue getUpperBound(const ProcessingRate & rate) const;
 
     bool isTransitivelyUnknownRate(const ProcessingRate & rate) const;
 

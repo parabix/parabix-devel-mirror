@@ -205,6 +205,7 @@ public:
 
     void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 
+    llvm::Value * getCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
 };
 
 class CircularBuffer : public StreamSetBuffer {

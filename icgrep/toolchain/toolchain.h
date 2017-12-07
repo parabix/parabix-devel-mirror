@@ -65,13 +65,13 @@ extern std::string ShowASMOption;
 #endif
 extern const char * ObjectCacheDir;
 extern llvm::CodeGenOpt::Level OptLevel;  // set from command line
-extern int BlockSize;  // set from command line
-extern int SegmentSize;  // set from command line
-extern int BufferSegments;
-extern int ThreadNum;
+extern unsigned BlockSize;  // set from command line
+extern unsigned SegmentSize;  // set from command line
+extern unsigned BufferSegments;
+extern unsigned ThreadNum;
 extern bool EnableObjectCache;
 extern bool NVPTX;
-extern int GroupNum;
+extern unsigned GroupNum;
 extern std::string ProgramName;
 extern llvm::TargetOptions Options;
 extern const llvm::Reloc::Model RelocModel;

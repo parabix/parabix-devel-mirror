@@ -101,8 +101,8 @@ void StreamSetBuffer::setBufferedSize(IDISA::IDISA_Builder * const /* b */, Valu
     report_fatal_error("setBufferedSize is not supported by this buffer type");
 }
 
-Value * StreamSetBuffer::getCapacity(IDISA::IDISA_Builder * const b, Value * const handle) const {
-    return getBufferedSize(b, handle);
+Value * StreamSetBuffer::getCapacity(IDISA::IDISA_Builder * const b, Value * const /* handle */) const {
+    return b->getSize(mBufferBlocks * b->getBitBlockWidth());
 }
 
 void StreamSetBuffer::setCapacity(IDISA::IDISA_Builder * const /* b */, Value * /* handle */, Value * /* c */) const {
@@ -328,6 +328,11 @@ Value * ExternalBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const, V
     // Trust that the buffer is large enough to write any amount
     return reverse ? fromPosition : ConstantInt::getAllOnesValue(fromPosition->getType());
 }
+
+Value * ExternalBuffer::getCapacity(IDISA::IDISA_Builder * const b, Value * const /* handle */) const {
+    return ConstantInt::getAllOnesValue(b->getSizeTy());
+}
+
 
 // Circular Buffer
 Value * CircularBuffer::getBlockAddress(IDISA::IDISA_Builder * const b, Value * const handle, Value * const blockIndex) const {

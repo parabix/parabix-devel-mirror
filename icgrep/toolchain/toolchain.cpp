@@ -56,18 +56,18 @@ static cl::opt<std::string> ObjectCacheDirOption("object-cache-dir", cl::init(""
                                                  cl::desc("Path to the object cache diretory"), cl::cat(CodeGenOptions));
 
 
-static cl::opt<int, true> BlockSizeOption("BlockSize", cl::location(BlockSize), cl::init(0),
+static cl::opt<unsigned, true> BlockSizeOption("BlockSize", cl::location(BlockSize), cl::init(0),
                                           cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 
 
-static cl::opt<int, true> SegmentSizeOption("segment-size", cl::location(SegmentSize), cl::init(8),
+static cl::opt<unsigned, true> SegmentSizeOption("segment-size", cl::location(SegmentSize), cl::init(8),
                                             cl::desc("Segment Size"), cl::value_desc("positive integer"));
 
-static cl::opt<int, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::init(1),
+static cl::opt<unsigned, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::init(1),
                                                cl::desc("Buffer Segments"), cl::value_desc("positive integer"));
 
 
-static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(2),
+static cl::opt<unsigned, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(2),
                                           cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
 
 
@@ -80,7 +80,7 @@ static cl::opt<bool, true> segmentPipelineParallelOption("enable-segment-pipelin
 static cl::opt<bool, true> NVPTXOption("NVPTX", cl::location(NVPTX), cl::init(false),
                                  cl::desc("Run on GPU only."), cl::cat(CodeGenOptions));
 
-static cl::opt<int, true> GroupNumOption("group-num", cl::location(GroupNum), cl::init(256),
+static cl::opt<unsigned, true> GroupNumOption("group-num", cl::location(GroupNum), cl::init(256),
                                          cl::desc("NUmber of groups declared on GPU"), cl::value_desc("positive integer"), cl::cat(CodeGenOptions));
 
 CodeGenOpt::Level OptLevel;
@@ -91,13 +91,13 @@ bool SegmentPipelineParallel;
 
 const char * ObjectCacheDir;
 
-int BlockSize;
+unsigned BlockSize;
 
-int SegmentSize;
+unsigned SegmentSize;
 
-int BufferSegments;
+unsigned BufferSegments;
 
-int ThreadNum;
+unsigned ThreadNum;
 
 bool EnableObjectCache;
 
@@ -110,7 +110,7 @@ bool NVPTX = [](const bool nvptx) {
     return nvptx;
 }(NVPTXOption);
 
-int GroupNum;
+unsigned GroupNum;
 
 const llvm::Reloc::Model RelocModel = ::RelocModel;
 
@@ -127,6 +127,7 @@ const cl::OptionCategory * codegen_flags() {
 }
 
 bool DebugOptionIsSet(const DebugFlags flag) {
+    if (flag == EnableAsserts) return true;
     return DebugOptions.isSet(flag);
 }
 

@@ -41,6 +41,7 @@ Value * ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     IntegerType * const sizeTy = iBuilder->getSizeTy();
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / sizeTy->getBitWidth();
     VectorType * const scanwordVectorType =  VectorType::get(sizeTy, fieldCount);
+    Constant * const ZERO = ConstantInt::getNullValue(sizeTy);
 
     Value * match_result = iBuilder->getInputStreamBlockPtr("matchResult", iBuilder->getInt32(0));
     Value * line_break = iBuilder->getInputStreamBlockPtr("lineBreak", iBuilder->getInt32(0));
@@ -100,7 +101,7 @@ Value * ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
         phiRecordBreaks->addIncoming(recordBreaks, scanWordIteration);
         phiRecordNum->addIncoming(phiLineNum, scanWordIteration);
         phiRecordStart->addIncoming(phiLineStart, scanWordIteration);
-        Value * anyMatches = iBuilder->CreateICmpNE(phiMatchWord, ConstantInt::getNullValue(sizeTy));
+        Value * anyMatches = iBuilder->CreateICmpNE(phiMatchWord, ZERO);
         iBuilder->CreateCondBr(anyMatches, processMatchesEntry, processMatchesExit);
 
             // LOOP BODY
@@ -108,16 +109,16 @@ Value * ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
             iBuilder->SetInsertPoint(processMatchesEntry);
             Value * prior_breaks = iBuilder->CreateAnd(iBuilder->CreateMaskToLowestBitExclusive(phiMatchWord), phiRecordBreaks);
             // Within the loop we have a conditional block that is executed if there are any prior record breaks.
-            Value * prior_breaks_cond = iBuilder->CreateICmpNE(prior_breaks, ConstantInt::getNullValue(sizeTy));
+            Value * prior_breaks_cond = iBuilder->CreateICmpNE(prior_breaks, ZERO);
             iBuilder->CreateCondBr(prior_breaks_cond, prior_breaks_block, loop_final_block);
 
                 // PRIOR_BREAKS_BLOCK
                 // If there are prior breaks, we count them and compute the record start position.
                 iBuilder->SetInsertPoint(prior_breaks_block);
                 Value * matchedRecordNum = iBuilder->CreateAdd(iBuilder->CreatePopcount(prior_breaks), phiRecordNum);
-                Value * reverseDistance = iBuilder->CreateCountReverseZeroes(prior_breaks);
+                Value * reverseDistance = iBuilder->CreateCountReverseZeroes(prior_breaks, true);
                 Value * width = ConstantInt::get(sizeTy, sizeTy->getBitWidth());
-                Value * priorRecordStart = iBuilder->CreateAdd(phiScanwordPos, iBuilder->CreateSub(width, reverseDistance));
+                Value * priorRecordStart = iBuilder->CreateAdd(phiScanwordPos, iBuilder->CreateSub(width, reverseDistance));                
                 iBuilder->CreateBr(loop_final_block);
 
             // LOOP FINAL BLOCK
@@ -129,16 +130,15 @@ Value * ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
             matchRecordNum->addIncoming(matchedRecordNum, prior_breaks_block);
             phiRecordNum->addIncoming(matchRecordNum, loop_final_block);
 
-            PHINode * matchRecordStart = iBuilder->CreatePHI(sizeTy, 2, "matchRecordStart");
+            PHINode * const matchRecordStart = iBuilder->CreatePHI(sizeTy, 2, "matchRecordStart");
             matchRecordStart->addIncoming(phiRecordStart, processMatchesEntry);
             matchRecordStart->addIncoming(priorRecordStart, prior_breaks_block);
             phiRecordStart->addIncoming(matchRecordStart, loop_final_block);
-            Value * matchRecordEnd = iBuilder->CreateAdd(phiScanwordPos, iBuilder->CreateCountForwardZeroes(phiMatchWord));
-            Value * const inputStream = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0));
-            Function * dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
-            Value * start_ptr = iBuilder->CreateGEP(inputStream, matchRecordStart);
-            Value * end_ptr = iBuilder->CreateGEP(inputStream, matchRecordEnd);
-            iBuilder->CreateCall(dispatcher, {accumulator, matchRecordNum, start_ptr, end_ptr});
+            Value * const matchRecordEnd = iBuilder->CreateAdd(phiScanwordPos, iBuilder->CreateCountForwardZeroes(phiMatchWord, true));
+            Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
+            Value * const startPtr = iBuilder->getRawInputPointer("InputStream", matchRecordStart);
+            Value * const endPtr = iBuilder->getRawInputPointer("InputStream", matchRecordEnd);
+            iBuilder->CreateCall(dispatcher, {accumulator, matchRecordNum, startPtr, endPtr});
             Value * remaining_matches = iBuilder->CreateResetLowestBit(phiMatchWord);
             phiMatchWord->addIncoming(remaining_matches, loop_final_block);
 
@@ -150,7 +150,7 @@ Value * ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
         // LOOP EXIT/MATCHES_DONE
         iBuilder->SetInsertPoint(processMatchesExit);
         // When the matches are done, there may be additional record breaks remaining
-        Value * more_breaks_cond = iBuilder->CreateICmpNE(phiRecordBreaks, ConstantInt::getNullValue(sizeTy));
+        Value * more_breaks_cond = iBuilder->CreateICmpNE(phiRecordBreaks, ZERO);
         iBuilder->CreateCondBr(more_breaks_cond, remaining_breaks_block, return_block);
 
             // REMAINING_BREAKS_BLOCK: process remaining record breaks after all matches are processed
