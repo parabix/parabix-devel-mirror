@@ -219,13 +219,13 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs) {
 class EmitMatch : public MatchAccumulator {
     friend class EmitMatchesEngine;
 public:
-    EmitMatch(std::string linePrefix, std::stringstream * strm) : mLinePrefix(linePrefix), mLineCount(0), mPrevious_line_end(nullptr), mResultStr(strm) {}
+    EmitMatch(std::string linePrefix, std::stringstream * strm) : mLinePrefix(linePrefix), mLineCount(0), mTerminated(true), mResultStr(strm) {}
     void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
     void finalize_match(char * buffer_end) override;
 protected:
     std::string mLinePrefix;
     size_t mLineCount;
-    char * mPrevious_line_end;
+    bool mTerminated;
     std::stringstream* mResultStr;
 };
 
@@ -233,65 +233,40 @@ protected:
 //  Default Report Match:  lines are emitted with whatever line terminators are found in the
 //  input.  However, if the final line is not terminated, a new line is appended.
 //
-//  It is possible that the line_end position is past the EOF, if there is an unterminated
-//  final line.   To avoid potential bus errors, we only emit bytes up to but not
-//  including the line_end position when we first find a match.
 void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
-    if (!(WithFilenameFlag | LineNumberFlag) && (line_start == mPrevious_line_end + 1)) {
-        // Consecutive matches: only one write call needed.
-        mResultStr->write(mPrevious_line_end, line_end - mPrevious_line_end);
+    if (WithFilenameFlag) {
+        *mResultStr << mLinePrefix;
     }
-    else {
-        if (mLineCount > 0) {
-            // Deal with the terminator of the previous line.  It could be an LF, the
-            // last byte of NEL, LS or PS, or a two byte CRLF sequence.
-            if (LLVM_UNLIKELY(mPrevious_line_end[0] == 0x0D)) {
-                mResultStr->write(mPrevious_line_end, mPrevious_line_end[1] == 0x0A ? 2 : 1);
-            }
-            else {
-                mResultStr->write(mPrevious_line_end, 1);
-            }
+    if (LineNumberFlag) {
+        // Internally line numbers are counted from 0.  For display, adjust
+        // the line number so that lines are numbered from 1.
+        if (InitialTabFlag) {
+            *mResultStr << lineNum+1 << "\t:";
         }
-        if (WithFilenameFlag) {
-            *mResultStr << mLinePrefix;
+        else {
+            *mResultStr << lineNum+1 << ":";
         }
-        if (LineNumberFlag) {
-            // Internally line numbers are counted from 0.  For display, adjust
-            // the line number so that lines are numbered from 1.
-            if (InitialTabFlag) {
-                *mResultStr << lineNum+1 << "\t:";
-            }
-            else {
-                *mResultStr << lineNum+1 << ":";
-            }
-        }
-        mResultStr->write(line_start, line_end - line_start);
     }
-    mPrevious_line_end = line_end;
+    size_t bytes = line_end - line_start + 1;
+    mResultStr->write(line_start, bytes);
     mLineCount++;
+    unsigned last_byte = *line_end;
+    mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
+    if (LLVM_UNLIKELY(!mTerminated)) {
+        if (last_byte == 0x85) {  //  Possible NEL terminator.
+            mTerminated = (bytes >= 2) && (static_cast<unsigned>(line_end[-1]) == 0xC2);
+        }
+        else {
+            // Possible LS or PS terminators.
+            mTerminated = (bytes >= 3) && (static_cast<unsigned>(line_end[-2]) == 0xE2)
+                                       && (static_cast<unsigned>(line_end[-1]) == 0x80)
+                                       && ((last_byte == 0xA8) || (last_byte == 0xA9));
+        }
+    }
 }
 
 void EmitMatch::finalize_match(char * buffer_end) {
-    if (mLineCount == 0) return;  // No matches.
-    if (mPrevious_line_end < buffer_end) {
-        if (LLVM_UNLIKELY(mPrevious_line_end[0] == 0x0D)) {
-            mResultStr->write(mPrevious_line_end, mPrevious_line_end[1] == 0x0A ? 2 : 1);
-        }
-        else {
-            mResultStr->write(mPrevious_line_end, 1);
-        }
-    }
-    else {
-        // Likely unterminated final line.
-        char last_byte = mPrevious_line_end[-1];
-        if (last_byte == 0x0D) {
-            // The final CR is acceptable as a line_end.
-            return;
-        }
-        // Terminate the line with an LF
-        // (Even if we had an incomplete UTF-8 sequence.)
-        *mResultStr << "\n";
-    }
+    if (!mTerminated) *mResultStr << "\n";
 }
 
 void EmitMatchesEngine::grepCodeGen(std::vector<re::RE *> REs) {
