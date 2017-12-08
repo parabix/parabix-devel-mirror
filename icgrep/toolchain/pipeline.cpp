@@ -287,7 +287,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
             Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
             Value * cycles = iBuilder->CreateLoad(iBuilder->getCycleCountPtr());
             Value * fCycles = iBuilder->CreateUIToFP(cycles, iBuilder->getDoubleTy());
-            std::string formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
+            const auto formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
             Value * stringPtr = iBuilder->CreatePointerCast(iBuilder->GetString(formatString), iBuilder->getInt8PtrTy());
             iBuilder->CreateCall(iBuilder->GetDprintf(), {iBuilder->getInt32(2), stringPtr, fItems, fCycles, iBuilder->CreateFDiv(fCycles, fItems)});
         }
@@ -384,8 +384,7 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
         const auto & inputs = kernel->getStreamInputs();
 
         Function * const threadFunc = makeThreadFunction(iBuilder, "ppt:" + kernel->getName());
-        Function::arg_iterator ai = threadFunc->arg_begin();
-        Value * sharedStruct = iBuilder->CreateBitCast(&*(ai), sharedStructType->getPointerTo());
+        auto ai = threadFunc->arg_begin();
         
          // Create the basic blocks for the thread function.
         BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc);
@@ -396,6 +395,7 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
 
         iBuilder->SetInsertPoint(entryBlock);
 
+        Value * const sharedStruct = iBuilder->CreateBitCast(&*(ai), sharedStructType->getPointerTo());
 
         for (unsigned k = 0; k < n; k++) {
             Value * const ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(k)});
@@ -613,7 +613,7 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const
             Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
             Value * cycles = iBuilder->CreateLoad(iBuilder->getCycleCountPtr());
             Value * fCycles = iBuilder->CreateUIToFP(cycles, iBuilder->getDoubleTy());
-            std::string formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
+            const auto formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
             Value * stringPtr = iBuilder->CreatePointerCast(iBuilder->GetString(formatString), iBuilder->getInt8PtrTy());
             iBuilder->CreateCall(iBuilder->GetDprintf(), {iBuilder->getInt32(2), stringPtr, fItems, fCycles, iBuilder->CreateFDiv(fCycles, fItems)});
         }

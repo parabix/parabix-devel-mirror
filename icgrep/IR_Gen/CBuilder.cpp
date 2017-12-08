@@ -965,7 +965,7 @@ _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned ski
 }
 #endif
 
-void CBuilder::__CreateAssert(Value * const assertion, StringRef failureMessage) {
+void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessage) {
     if (LLVM_UNLIKELY(isa<Constant>(assertion))) {
         if (LLVM_UNLIKELY(cast<Constant>(assertion)->isNullValue())) {
             report_fatal_error(failureMessage);
@@ -1077,8 +1077,9 @@ void CBuilder::__CreateAssert(Value * const assertion, StringRef failureMessage)
             }
             trace = CreatePointerCast(trace, stackPtrTy);
             depth = getInt32(n);
-        }
-        IRBuilder<>::CreateCall(function, {assertion, GetString(failureMessage), trace, depth});
+        }       
+        SmallVector<char, 1024> tmp;
+        IRBuilder<>::CreateCall(function, {assertion, GetString(failureMessage.toStringRef(tmp)), trace, depth});
     } else { // if assertions are not enabled, make it a compiler assumption.
         IRBuilder<>::CreateAssumption(assertion);
     }

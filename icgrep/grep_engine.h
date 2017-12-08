@@ -12,6 +12,7 @@
 #include <vector>
 #include <sstream>
 #include <mutex>
+#include <atomic>
 
 namespace re { class CC; }
 namespace re { class RE; }
@@ -22,6 +23,7 @@ class Driver;
 namespace grep {
 
 class GrepEngine {
+    enum class FileStatus {Pending, GrepComplete, PrintComplete};
 public:
 
     GrepEngine();
@@ -41,13 +43,15 @@ protected:
 
     Driver * mGrepDriver;
 
-    enum class FileStatus {Pending, InGrep, GrepComplete, Printing, PrintComplete};
-    std::mutex count_mutex;
-    size_t mNextFileToGrep;
-    size_t mNextFileToPrint;
+    std::atomic<unsigned> mNextFileToGrep;
+    std::atomic<unsigned> mNextFileToPrint;
     std::vector<std::string> inputFiles;
     std::vector<std::unique_ptr<std::stringstream>> mResultStrs;
     std::vector<FileStatus> mFileStatus;
+    std::mutex mWriteMutex;
+    std::mutex mCacheMutex;
+
+
     bool grepMatchFound;
     
     std::string mFileSuffix;

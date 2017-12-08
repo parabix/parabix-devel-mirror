@@ -7,7 +7,7 @@
 #include <llvm/IR/Metadata.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
-#include <llvm/Support/Debug.h> 
+#include <llvm/Support/Debug.h>
 #include <llvm/IR/Module.h>
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -25,7 +25,15 @@
 #include <ctime>
 
 using namespace llvm;
+namespace fs = boost::filesystem;
 
+#ifdef NDEBUG
+#define CACHE_ENTRY_MAX_HOURS (24 * 15)
+#else
+#define CACHE_ENTRY_MAX_HOURS (1)
+#endif
+
+#define SECONDS_PER_HOUR (3600)
 //===----------------------------------------------------------------------===//
 // Object cache (based on tools/lli/lli.cpp, LLVM 3.6.1)
 //
@@ -73,7 +81,7 @@ const MDString * getSignature(const llvm::Module * const M) {
     if (sig) {
         assert ("empty metadata node" && sig->getNumOperands() == 1);
         assert ("no signature payload" && sig->getOperand(0)->getNumOperands() == 1);
-        return cast<MDString>(sig->getOperand(0)->getOperand(0));
+        return dyn_cast<MDString>(sig->getOperand(0)->getOperand(0));
     }
     return nullptr;
 }
@@ -93,52 +101,42 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
         }
 
         // No, check for an existing cache file.
-        Path objectName(mCachePath);
-        sys::path::append(objectName, CACHE_PREFIX);
-        objectName.append(moduleId);
-        objectName.append(".o");
+        Path fileName(mCachePath);
+        sys::path::append(fileName, CACHE_PREFIX);
+        fileName.append(moduleId);
+        fileName.append(".kernel");
 
-        auto objectBuffer = MemoryBuffer::getFile(objectName.c_str(), -1, false);
-        if (objectBuffer) {
-            if (kernel->hasSignature()) {
-                sys::path::replace_extension(objectName, ".sig");
-                const auto signatureBuffer = MemoryBuffer::getFile(objectName.c_str(), -1, false);
-                if (signatureBuffer) {
-                    const StringRef loadedSig = signatureBuffer.get()->getBuffer();
-                    if (LLVM_UNLIKELY(!loadedSig.equals(kernel->makeSignature(idb)))) {
+        auto kernelBuffer = MemoryBuffer::getFile(fileName.c_str(), -1, false);
+        if (kernelBuffer) {
+            #if LLVM_VERSION_INTEGER < LLVM_4_0_0
+            auto loadedFile = getLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
+            #else
+            auto loadedFile = getOwningLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
+            #endif
+            // if there was no error when parsing the bitcode
+            if (LLVM_LIKELY(loadedFile)) {
+                std::unique_ptr<Module> M(std::move(loadedFile.get()));
+                if (kernel->hasSignature()) {
+                    const MDString * const sig = getSignature(M.get());
+                    assert ("signature is missing from kernel file: possible module naming conflict?" && sig);
+                    if (LLVM_UNLIKELY(sig == nullptr || !sig->getString().equals(kernel->makeSignature(idb)))) {
                         goto invalid;
                     }
-                } else {
-                    
-                    report_fatal_error("signature file expected but not found: " + moduleId);
-                }                
-            }
-            sys::path::replace_extension(objectName, ".kernel");
-            auto kernelBuffer = MemoryBuffer::getFile(objectName.c_str(), -1, false);
-            if (*kernelBuffer) {
-                //MemoryBuffer * kb = kernelBuffer.get().release();
-                //auto loadedFile = parseBitcodeFile(kb->getMemBufferRef(), mContext);
-#if LLVM_VERSION_INTEGER < LLVM_4_0_0
-                auto loadedFile = getLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
-#else
-                auto loadedFile = getOwningLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
-#endif
-                if (*loadedFile) {
-                    Module * const m = loadedFile.get().release(); assert (m);
+                }
+                sys::path::replace_extension(fileName, ".o");
+                auto objectBuffer = MemoryBuffer::getFile(fileName.c_str(), -1, false);
+                if (LLVM_LIKELY(objectBuffer)) {
+                    Module * const m = M.release();
                     // defaults to <path>/<moduleId>.kernel
                     m->setModuleIdentifier(moduleId);
                     kernel->setModule(m);
-                    kernel->prepareCachedKernel(idb);                    
+                    kernel->prepareCachedKernel(idb);
                     mCachedObject.emplace(moduleId, std::make_pair(m, std::move(objectBuffer.get())));
                     // update the modified time of the .kernel, .o and .sig files
                     time_t access_time = time(0);
-                    boost::filesystem::last_write_time(objectName.c_str(), access_time);
-                    sys::path::replace_extension(objectName, ".o");
-                    boost::filesystem::last_write_time(objectName.c_str(), access_time);
-                    if (kernel->hasSignature()) {
-                        sys::path::replace_extension(objectName, ".sig");
-                        boost::filesystem::last_write_time(objectName.c_str(), access_time);
-                    }
+                    fs::last_write_time(fileName.c_str(), access_time);
+                    sys::path::replace_extension(fileName, ".kernel");
+                    fs::last_write_time(fileName.c_str(), access_time);
                     return true;
                 }
             }
@@ -176,43 +174,43 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
         objFile.write(Obj.getBufferStart(), Obj.getBufferSize());
         objFile.close();
 
+        // and kernel prototype header
+        std::unique_ptr<Module> H(new Module(M->getModuleIdentifier(), M->getContext()));
+        for (const Function & f : M->getFunctionList()) {
+            if (f.hasExternalLinkage() && !f.empty()) {
+                Function::Create(f.getFunctionType(), Function::ExternalLinkage, f.getName(), H.get());
+            }
+        }
+
         // then the signature (if one exists)
         const MDString * const sig = getSignature(M);
         if (sig) {
-            sys::path::replace_extension(objectName, ".sig");
-            raw_fd_ostream sigfile(objectName, EC, sys::fs::F_None);
-            sigfile << sig->getString();
-            sigfile.close();
-        }
-
-        // and finally kernel prototype header.
-        std::unique_ptr<Module> header(new Module(M->getModuleIdentifier(), M->getContext()));
-        for (const Function & f : M->getFunctionList()) {
-            if (f.hasExternalLinkage() && !f.empty()) {
-                Function::Create(f.getFunctionType(), Function::ExternalLinkage, f.getName(), header.get());
-            }
+            NamedMDNode * const md = H->getOrInsertNamedMetadata(SIGNATURE);
+            assert (md->getNumOperands() == 0);
+            MDString * const sigCopy = MDString::get(H->getContext(), sig->getString());
+            md->addOperand(MDNode::get(H->getContext(), {sigCopy}));
         }
 
         sys::path::replace_extension(objectName, ".kernel");
         raw_fd_ostream kernelFile(objectName.str(), EC, sys::fs::F_None);
-        WriteBitcodeToFile(header.get(), kernelFile);
+        WriteBitcodeToFile(H.get(), kernelFile);
         kernelFile.close();
     }
 }
 
 void ParabixObjectCache::performIncrementalCacheCleanupStep() {
-    if (mCacheCleanupIterator != boost::filesystem::directory_iterator()) {
-        auto & e = mCacheCleanupIterator->path();
+    if (mCacheCleanupIterator != fs::directory_iterator()) {
+        const auto e = mCacheCleanupIterator->path();
         mCacheCleanupIterator++;
         // Simple clean-up policy: files that haven't been touched by the
         // driver in MaxCacheEntryHours are deleted.
         // TODO: possibly incrementally manage by size and/or total file count.
         // TODO: possibly determine total filecount and set items per clean up step based on
         // filecount
-        if (boost::filesystem::is_regular_file(e)) {
-            auto age = std::time(nullptr) - boost::filesystem::last_write_time(e);
-            if (age > mCacheEntryMaxHours * 3600 /* secs/hour*/ ) {
-                boost::filesystem::remove(e);
+        if (fs::is_regular_file(e)) {
+            const auto age = std::time(nullptr) - fs::last_write_time(e);
+            if (age > (CACHE_ENTRY_MAX_HOURS * SECONDS_PER_HOUR)) {
+                fs::remove(e);
             }
         }
     }
@@ -227,31 +225,31 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * modul
     return MemoryBuffer::getMemBufferCopy(f->second.second.get()->getBuffer());
 }
 
-inline std::string ParabixObjectCache::getDefaultPath() {
+ParabixObjectCache::ParabixObjectCache(const StringRef dir)
+: mCachePath(dir) {
+    fs::path p(mCachePath.str());
+    if (LLVM_LIKELY(!mCachePath.empty())) {
+        sys::fs::create_directories(mCachePath);
+    }
+    fs::directory_iterator it(p);
+    mCacheCleanupIterator = it;
+}
+
+inline ParabixObjectCache::Path getDefaultPath() {
     // $HOME/.cache/parabix/
-    Path cachePath;
+    ParabixObjectCache::Path cachePath;
 #if LLVM_VERSION_INTEGER < LLVM_3_7_0
     sys::path::user_cache_directory(cachePath, "parabix");
 #else
     sys::path::home_directory(cachePath);
     sys::path::append(cachePath, ".cache", "parabix");
 #endif
-    return cachePath.str();
-}
-
-ParabixObjectCache::ParabixObjectCache(const std::string dir)
-: mCachePath(dir) {
-    boost::filesystem::path p(mCachePath.str());
-    if (LLVM_LIKELY(!mCachePath.empty())) {
-        sys::fs::create_directories(Twine(mCachePath));
-    }
-    boost::filesystem::directory_iterator it(p);
-    mCacheCleanupIterator = it;
-    mCacheEntryMaxHours = CACHE_ENTRY_MAX_HOURS;
+    return cachePath;
 }
 
 ParabixObjectCache::ParabixObjectCache()
 : ParabixObjectCache(getDefaultPath()) {
+
 }
 
 

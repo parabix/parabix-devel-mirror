@@ -972,7 +972,8 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         b->CreateAssert(b->CreateICmpULE(processed, avail), name + ": processed data cannot exceed available data");
         Value * const remaining = b->CreateSub(avail, processed);
         Value * const remainingStrides = b->CreateUDiv(remaining, inputStrideSize[i]);
-        hasMoreStrides = b->CreateAnd(hasMoreStrides, b->CreateICmpNE(remainingStrides, ZERO));
+        Value * const hasRemainingStrides = b->CreateICmpNE(remainingStrides, ZERO);
+        hasMoreStrides = b->CreateAnd(hasMoreStrides, hasRemainingStrides);
     }
     // even if we do not have enough input data for a full stride, if this is our final stride, allow it ...
     hasMoreStrides = b->CreateOr(hasMoreStrides, initiallyFinal);
@@ -991,13 +992,17 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             b->CreateAssert(b->CreateICmpULE(unconsumed, capacity), name + ": unconsumed data cannot exceed capacity");
             Value * const remaining = b->CreateSub(capacity, unconsumed);
             Value * const remainingStrides = b->CreateUDiv(remaining, outputStrideSize[i]);
-            hasMoreStrides = b->CreateAnd(hasMoreStrides, b->CreateICmpNE(remainingStrides, ZERO));
+            Value * const hasRemainingStrides = b->CreateICmpNE(remainingStrides, ZERO);
+            hasMoreStrides = b->CreateAnd(hasMoreStrides, hasRemainingStrides);
         }
         // Do copybacks if necessary.
         if (mStreamSetOutputBuffers[i]->supportsCopyBack() && requiresCopyBack(rate)) {
             b->CreateCopyBack(name, mInitialProducedItemCount[i], produced);
         }
     }
+
+    // b->CreateAssertZero(b->CreateOr(b->CreateNot(initiallyFinal), hasMoreStrides), getName() + " does not have enough output space for the final stride");
+
     b->CreateCondBr(hasMoreStrides, segmentLoop, segmentDone);
 
     /// SEGMENT DONE

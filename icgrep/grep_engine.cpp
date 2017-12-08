@@ -430,64 +430,46 @@ bool GrepEngine::searchAllFiles() {
 
 // DoGrep thread function.
 void * GrepEngine::DoGrepThreadMethod() {
-    size_t fileIdx;
 
-    count_mutex.lock();
-    fileIdx = mNextFileToGrep;
-    if (fileIdx < inputFiles.size()) {
-        mFileStatus[fileIdx] = FileStatus::InGrep;
-        mNextFileToGrep++;
-    }
-    count_mutex.unlock();
-
+    auto fileIdx = mNextFileToGrep++;
     while (fileIdx < inputFiles.size()) {
-        size_t grepResult = doGrep(inputFiles[fileIdx], fileIdx);
-        
-        count_mutex.lock();
+        const size_t grepResult = doGrep(inputFiles[fileIdx], fileIdx);
         mFileStatus[fileIdx] = FileStatus::GrepComplete;
-        if (grepResult > 0) grepMatchFound = true;
-        fileIdx = mNextFileToGrep;
-        if (fileIdx < inputFiles.size()) {
-            mFileStatus[fileIdx] = FileStatus::InGrep;
-            mNextFileToGrep++;
+        if (grepResult > 0) {
+            grepMatchFound = true;
         }
-        count_mutex.unlock();
         if (QuietMode && grepMatchFound) {
-            if (pthread_self() != mEngineThread) pthread_exit(nullptr);
+            if (pthread_self() != mEngineThread) {
+                pthread_exit(nullptr);
+            }
             return nullptr;
         }
+        fileIdx = mNextFileToGrep++;
     }
-    count_mutex.lock();
-    fileIdx = mNextFileToPrint;
-    bool readyToPrint = ((fileIdx == 0) || (mFileStatus[fileIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
-    if (fileIdx < inputFiles.size() && readyToPrint) {
-        mFileStatus[fileIdx] = FileStatus::Printing;
-        mNextFileToPrint++;
-    }
-    count_mutex.unlock();
 
-    while (fileIdx < inputFiles.size()) {
+    auto printIdx = mNextFileToPrint++;
+    while (printIdx < inputFiles.size()) {
+        const bool readyToPrint = ((printIdx == 0) || (mFileStatus[printIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[printIdx] == FileStatus::GrepComplete);
         if (readyToPrint) {
-            std::cout << mResultStrs[fileIdx]->str();
-        } else if (pthread_self() == mEngineThread) {
-            mGrepDriver->performIncrementalCacheCleanupStep();
-        }
-        count_mutex.lock();
-        if (readyToPrint) mFileStatus[fileIdx] = FileStatus::PrintComplete;
-        fileIdx = mNextFileToPrint;
-        if (fileIdx < inputFiles.size()) {
-            readyToPrint = ((fileIdx == 0) || (mFileStatus[fileIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[fileIdx] == FileStatus::GrepComplete);
-            if (readyToPrint) {
-                mFileStatus[fileIdx] = FileStatus::Printing;
-                mNextFileToPrint++;
+            const auto output = mResultStrs[printIdx]->str();
+            if (!output.empty()) {
+                mWriteMutex.lock();
+                std::cout << output;
+                mWriteMutex.unlock();
             }
+            mFileStatus[printIdx] = FileStatus::PrintComplete;
+            printIdx = mNextFileToPrint++;
+        } else {
+            mCacheMutex.lock();
+            mGrepDriver->performIncrementalCacheCleanupStep();
+            mCacheMutex.unlock();
         }
-        count_mutex.unlock();
+        pthread_yield();
     }
+
     if (pthread_self() != mEngineThread) {
         pthread_exit(nullptr);
-    }
-    else {
+    } else {
         return nullptr;
     }
 }
