@@ -175,7 +175,7 @@ protected:
         , mRemaining(remaining) {
             assert (type == Empty || type == Mixed || type == Full);
             assert (remaining > 0 || type == Empty);
-            assert (remaining <= UNICODE_MAX);
+            assert (remaining <= ((UNICODE_MAX+1) / (sizeof(bitquad_t) * 8)));
         }
 
         void advance(unsigned n);

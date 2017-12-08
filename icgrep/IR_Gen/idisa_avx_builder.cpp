@@ -96,19 +96,23 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
 }
     
 Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
+#if LLVM_VERSION_INTEGER < LLVM_6_0_0
     if ((fw == 128) && (mBitBlockWidth == 256)) {
         Value * vperm2i128func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_vperm2i128);
         return CreateCall(vperm2i128func, {fwCast(64, a), fwCast(64, b), getInt8(0x31)});
     }
+#endif
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::esimd_mergeh(fw, a, b);
 }
 
 Value * IDISA_AVX2_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
+#if LLVM_VERSION_INTEGER < LLVM_6_0_0
     if ((fw == 128) && (mBitBlockWidth == 256)) {
         Value * vperm2i128func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_vperm2i128);
         return CreateCall(vperm2i128func, {fwCast(64, a), fwCast(64, b), getInt8(0x20)});
     }
+#endif
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::esimd_mergel(fw, a, b);
 }

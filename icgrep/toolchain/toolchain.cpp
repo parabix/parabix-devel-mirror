@@ -127,7 +127,6 @@ const cl::OptionCategory * codegen_flags() {
 }
 
 bool DebugOptionIsSet(const DebugFlags flag) {
-    if (flag == EnableAsserts) return true;
     return DebugOptions.isSet(flag);
 }
 
