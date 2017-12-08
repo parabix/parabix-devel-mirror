@@ -39,6 +39,7 @@
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Debug.h>
+#include <sched.h>
 
 using namespace parabix;
 using namespace llvm;
@@ -464,7 +465,7 @@ void * GrepEngine::DoGrepThreadMethod() {
             mGrepDriver->performIncrementalCacheCleanupStep();
             mCacheMutex.unlock();
         }
-        pthread_yield();
+        sched_yield();
     }
 
     if (pthread_self() != mEngineThread) {
