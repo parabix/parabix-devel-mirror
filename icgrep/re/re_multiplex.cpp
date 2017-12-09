@@ -38,7 +38,15 @@ RE * multiplex(RE * const re,
     Memoizer memoizer;
 
     std::function<RE *(RE *)> multiplex = [&](RE * const re) -> RE * {
-        if (Name * name = dyn_cast<Name>(re)) {
+        if (CC * cc = dyn_cast<CC>(re)) {
+            const auto index = find(UnicodeSets.begin(), UnicodeSets.end(), cc) - UnicodeSets.begin();
+            const auto exclusive_IDs = exclusiveSetIDs[index];
+            CC * CC_union = makeCC();
+            for (auto i : exclusive_IDs) {
+                CC_union = makeCC(CC_union, makeCC(i));
+            }
+            return CC_union;
+        } else if (Name * name = dyn_cast<Name>(re)) {
             auto f = memoizer.find(name);
             if (f == memoizer.end()) {
                 if (LLVM_LIKELY(name->getDefinition() != nullptr)) {

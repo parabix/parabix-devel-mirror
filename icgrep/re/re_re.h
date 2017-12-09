@@ -26,6 +26,7 @@ public:
         , End
         , Intersect
         , Name
+        , Group
         , Rep
         , Seq
         , Start
