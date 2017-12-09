@@ -21,6 +21,7 @@ public:
         , Any
         , Assertion
         , CC
+        , Range
         , Diff
         , End
         , Intersect

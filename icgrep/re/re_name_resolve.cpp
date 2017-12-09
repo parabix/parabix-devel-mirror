@@ -4,6 +4,7 @@
 #include <re/re_cc.h>
 #include <re/re_seq.h>
 #include <re/re_rep.h>
+#include <re/re_range.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
@@ -87,6 +88,9 @@ struct NameResolver {
             rep->setRE(resolve(rep->getRE()));
         } else if (Assertion * a = dyn_cast<Assertion>(re)) {
             a->setAsserted(resolve(a->getAsserted()));
+        } else if (Range * rg = dyn_cast<Range>(re)) {
+            rg->setLo(resolve(rg->getLo()));
+            rg->setHi(resolve(rg->getHi()));
         } else if (Diff * diff = dyn_cast<Diff>(re)) {
             diff->setLH(resolve(diff->getLH()));
             diff->setRH(resolve(diff->getRH()));

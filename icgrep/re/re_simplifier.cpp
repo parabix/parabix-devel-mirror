@@ -3,6 +3,7 @@
 #include <re/re_alt.h>
 #include <re/re_seq.h>
 #include <re/re_rep.h>
+#include <re/re_range.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
@@ -47,6 +48,8 @@ struct PassContainer {
             re = makeRep(expr, rep->getLB(), rep->getUB());
         } else if (Diff * diff = dyn_cast<Diff>(re)) {
             re = makeDiff(simplify(diff->getLH()), simplify(diff->getRH()));
+        } else if (Range * rg = dyn_cast<Range>(re)) {
+            re = makeRange(simplify(rg->getLo()), simplify(rg->getHi()));
         } else if (Intersect * e = dyn_cast<Intersect>(re)) {
             re = makeIntersect(simplify(e->getLH()), simplify(e->getRH()));
         }

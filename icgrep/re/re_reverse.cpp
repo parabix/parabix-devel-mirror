@@ -13,6 +13,7 @@
 #include <re/re_seq.h>
 #include <re/re_alt.h>
 #include <re/re_rep.h>
+#include <re/re_range.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
@@ -29,6 +30,8 @@ namespace re {
 RE * reverse_helper(RE * re, std::map<std::string, Name *> & captureMap) {
     if (CC * cc = dyn_cast<CC>(re)) {
         return makeCC(cc, makeCC());
+    } else if (Range * rg = dyn_cast<Range>(re)) {
+        return makeRange(rg->getLo(), rg->getHi());
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         std::vector<RE*> list;
         for (auto i = seq->rbegin(); i != seq->rend(); ++i) {

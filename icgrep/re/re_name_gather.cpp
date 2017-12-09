@@ -4,6 +4,7 @@
 #include <re/re_cc.h>
 #include <re/re_seq.h>
 #include <re/re_rep.h>
+#include <re/re_range.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
@@ -48,6 +49,9 @@ struct NameGather {
             gather(cast<Rep>(re)->getRE());
         } else if (isa<Assertion>(re)) {
             gather(cast<Assertion>(re)->getAsserted());
+        } else if (Range * rg = dyn_cast<Range>(re)) {
+            gather(rg->getLo());
+            gather(rg->getHi());
         } else if (isa<Diff>(re)) {
             gather(cast<Diff>(re)->getLH());
             gather(cast<Diff>(re)->getRH());

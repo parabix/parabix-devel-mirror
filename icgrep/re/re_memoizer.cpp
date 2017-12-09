@@ -3,6 +3,7 @@
 #include <re/re_cc.h>
 #include <re/re_seq.h>
 #include <re/re_rep.h>
+#include <re/re_range.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
@@ -53,6 +54,10 @@ inline bool lessThan(const Diff * const lh, const Diff * const rh) {
     return compare(lh->getLH(), rh->getLH()) || compare(lh->getRH(), rh->getRH());
 }
 
+inline bool lessThan(const Range * const lh, const Range * const rh) {
+    return compare(lh->getLo(), rh->getLo()) || compare(lh->getHi(), rh->getHi());
+}
+
 static bool lessThan(const Intersect * const lh, const Intersect * const rh) {
     return compare(lh->getLH(), rh->getLH()) || compare(lh->getRH(), rh->getRH());
 }
@@ -84,6 +89,8 @@ inline bool compare(const RE * const lh, const RE * const rh) {
             return *cast<CC>(lh) < *cast<CC>(rh);
         case Type::Name:
             return *cast<Name>(lh) < *cast<Name>(rh);
+        case Type::Range:
+            return lessThan(cast<Range>(lh), cast<Range>(rh));
         case Type::Diff:
             return lessThan(cast<Diff>(lh), cast<Diff>(rh));
         case Type::Intersect:
