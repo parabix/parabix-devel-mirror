@@ -124,7 +124,8 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
         std::vector<std::vector<unsigned>> exclusiveSetIDs;
         doMultiplexCCs(UnicodeSets, exclusiveSetIDs, charclasses[i]);
         REs[i] = multiplex(REs[i], UnicodeSets, exclusiveSetIDs);
-    }
+        REs[i] = regular_expression_passes(REs[i]);
+  }
     
     std::vector<StreamSetBuffer *> MatchResultsBufs(n);
     

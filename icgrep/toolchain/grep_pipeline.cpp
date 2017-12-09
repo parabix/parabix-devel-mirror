@@ -37,6 +37,8 @@ void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
 void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLength, MatchAccumulator * accum) {
     const unsigned segmentSize = 8;
 
+    pattern = regular_expression_passes(pattern);
+    
     ParabixDriver pxDriver("codepointEngine");
     auto & idb = pxDriver.getBuilder();
     Module * M = idb->getModule();

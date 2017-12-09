@@ -37,7 +37,7 @@ inline static std::string sha1sum(const std::string & str) {
 }
 
 RegularExpressionOptimizer::RegularExpressionOptimizer(re::RE * const re_ast)
-: mRE(regular_expression_passes(re_ast))
+: mRE(re_ast)
 , mSignature(Printer_RE::PrintRE(mRE)) {
 
 }

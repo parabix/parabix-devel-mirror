@@ -24,8 +24,12 @@ RE * resolveCaseInsensitiveMode(RE * re, bool inCaseInsensitiveMode) {
         if (inCaseInsensitiveMode) return caseInsensitize(cast<CC>(re));
         else return re;
     }
-    else if (isa<Name>(re)) {
-        return re;
+    else if (Name * name = dyn_cast<Name>(re)) {
+        if (!inCaseInsensitiveMode || (name->getDefinition() == nullptr)) return re;
+        RE * r = resolveCaseInsensitiveMode(name->getDefinition(), true);
+        Name * n = makeName(name->getNamespace(), name->getName() + "/i", name->getType());
+        n->setDefinition(r);
+        return n;
     }
     else if (Seq * seq = dyn_cast<Seq>(re)) {
         std::vector<RE*> list;
