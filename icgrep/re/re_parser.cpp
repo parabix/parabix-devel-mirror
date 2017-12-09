@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -18,8 +18,10 @@
 #include <re/re_rep.h>
 #include <re/re_seq.h>
 #include <re/re_start.h>
+#include <re/re_range.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
+#include <re/re_group.h>
 #include <re/re_assertion.h>
 #include <re/printer_re.h>
 #include <UCD/resolve_properties.h>
@@ -275,11 +277,22 @@ RE * RE_Parser::parse_group() {
                 if (*mCursor == ':') {
                     ++mCursor;
                     group_expr = parse_alt();
+                    auto changed = fModeFlagSet ^ savedModeFlagSet;
+                    if ((changed & CASE_INSENSITIVE_MODE_FLAG) != 0) {
+                        group_expr = makeGroup(Group::Mode::CaseInsensitiveMode, group_expr,
+                                               (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) == 0 ? Group::Sense::Off : Group::Sense::On);
+                    }
                     fModeFlagSet = savedModeFlagSet;
                     break;
                 } else {  // if *_cursor == ')'
                     ++mCursor;
-                    return parse_next_item();
+                    auto changed = fModeFlagSet ^ savedModeFlagSet;
+                    if ((changed & CASE_INSENSITIVE_MODE_FLAG) != 0) {
+                        group_expr = parse_seq();
+                        return makeGroup(Group::Mode::CaseInsensitiveMode, group_expr,
+                                               (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) == 0 ? Group::Sense::Off : Group::Sense::On);
+                    }
+                    else return parse_next_item();
                 }
             default:
                 ParseFailure("Illegal (? syntax.");
@@ -897,8 +910,10 @@ RE * RE_Parser::parse_charset() {
                     mCursor++;
                     if ((*mCursor == 'x') || (*mCursor == 'o') || (*mCursor == '0')) possibleByteCodeEscape = true;
                     insert_range(cc, lastCodepointItem, parse_escaped_codepoint());
+                    //subexprs.push_back(makeRange(makeCC(lastCodepointItem), makeCC(parse_escaped_codepoint())));
                 } else {
                     insert_range(cc, lastCodepointItem, parse_literal_codepoint());
+                    //subexprs.push_back(makeRange(makeCC(lastCodepointItem), makeCC(parse_literal_codepoint())));
                 }
                 lastItemKind = RangeItem;
                 break;
@@ -1056,30 +1071,16 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
 }
 
 Name * RE_Parser::createCC(const codepoint_t cp) {
-    CC * cc = nullptr;
-    if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
-        cc = makeCC();
-        caseInsensitiveInsert(cc, cp);
-    } else {
-        cc = makeCC(cp);
-    }
+    CC * cc = makeCC(cp);
     return mMemoizer.memoize(cc);
 }
 
 void RE_Parser::insert(CC * cc, const codepoint_t cp) {
-    if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
-        caseInsensitiveInsert(cc, cp);
-    } else {
-        cc->insert(cp);
-    }
+    cc->insert(cp);
 }
 
 void RE_Parser::insert_range(CC * cc, const codepoint_t lo, const codepoint_t hi) {
-    if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
-        caseInsensitiveInsertRange(cc, lo, hi);
-    } else {
-        cc->insert_range(lo, hi);
-    }
+    cc->insert_range(lo, hi);
 }
 
 RE * RE_Parser::makeComplement(RE * s) {

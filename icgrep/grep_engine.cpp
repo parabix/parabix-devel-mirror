@@ -22,6 +22,7 @@
 #include <kernels/kernel_builder.h>
 #include <pablo/pablo_kernel.h>
 #include <re/re_cc.h>
+#include <re/casing.h>
 #include <re/re_toolchain.h>
 #include <toolchain/toolchain.h>
 #include <re/re_name_resolve.h>    
@@ -119,6 +120,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     std::vector<std::vector<re::CC *>> charclasses(n);
     
     for (unsigned i = 0; i < n; i++) {
+        REs[i] = resolveCaseInsensitiveMode(REs[i], false);
         REs[i] = re::resolveNames(REs[i]);
         const auto UnicodeSets = re::collectUnicodeSets(REs[i]);
         std::vector<std::vector<unsigned>> exclusiveSetIDs;

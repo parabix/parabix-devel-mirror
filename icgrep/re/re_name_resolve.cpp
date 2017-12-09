@@ -1,3 +1,4 @@
+#include <re/re_re.h>
 #include "re_name_resolve.h"
 #include <re/re_name.h>
 #include <re/re_alt.h>
@@ -9,8 +10,8 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <re/re_analysis.h>
+#include <re/re_group.h>
 #include <re/re_memoizer.hpp>
-#include <UCD/ucd_compiler.hpp>
 #include <UCD/resolve_properties.h>
 #include <boost/container/flat_set.hpp>
 #include <sstream>
@@ -97,6 +98,8 @@ struct NameResolver {
         } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
             ix->setLH(resolve(ix->getLH()));
             ix->setRH(resolve(ix->getRH()));
+        } else if (Group * g = dyn_cast<Group>(re)) {
+            g->setRE(resolve(g->getRE()));
         }
         return re;
     }

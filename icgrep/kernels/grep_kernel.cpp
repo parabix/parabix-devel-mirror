@@ -36,12 +36,6 @@ inline static std::string sha1sum(const std::string & str) {
     return std::string(buffer);
 }
 
-RegularExpressionOptimizer::RegularExpressionOptimizer(re::RE * const re_ast)
-: mRE(re_ast)
-, mSignature(Printer_RE::PrintRE(mRE)) {
-
-}
-
 void RequiredStreams_UTF8::generatePabloMethod() {
     
     cc::CC_Compiler ccc(this, getInput(0));
@@ -176,8 +170,14 @@ RequiredStreams_UTF16::RequiredStreams_UTF16(const std::unique_ptr<kernel::Kerne
 }
 
 
+ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
+: mRE(re_ast)
+, mSignature(Printer_RE::PrintRE(mRE)) {
+    
+}
+
 ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re, unsigned numOfCharacterClasses)
-: RegularExpressionOptimizer(re)
+: ICGrepSignature(re)
 , PabloKernel(iBuilder,
               "ic" + sha1sum(mSignature),
               {Binding{iBuilder->getStreamSetTy(numOfCharacterClasses), "basis"},

@@ -11,14 +11,6 @@ namespace IDISA { class IDISA_Builder; }
 namespace re { class RE; }
 namespace kernel {
 
-struct RegularExpressionOptimizer {
-    RegularExpressionOptimizer(re::RE * re_ast);
-protected:
-    re::RE * const  mRE;
-    std::string     mSignature;
-};
-
-
     
 class RequiredStreams_UTF8 : public pablo::PabloKernel {
 public:
@@ -39,7 +31,15 @@ protected:
 };
 
 
-class ICGrepKernel : public RegularExpressionOptimizer, public pablo::PabloKernel {
+struct ICGrepSignature {
+    ICGrepSignature(re::RE * re_ast);
+protected:
+    re::RE * const  mRE;
+    std::string     mSignature;
+};
+
+    
+class ICGrepKernel : public ICGrepSignature, public pablo::PabloKernel {
 public:
     ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast, const unsigned numOfCharacterClasses = 8);
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;

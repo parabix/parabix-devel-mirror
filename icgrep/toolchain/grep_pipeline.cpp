@@ -14,6 +14,7 @@
 #include <kernels/scanmatchgen.h>
 #include <kernels/streamset.h>
 #include <kernels/kernel_builder.h>
+#include <re/casing.h>
 #include <re/re_toolchain.h>
 #include <toolchain/toolchain.h>
 #include <re/re_name_resolve.h>    
@@ -37,7 +38,9 @@ void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
 void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLength, MatchAccumulator * accum) {
     const unsigned segmentSize = 8;
 
+    pattern = resolveCaseInsensitiveMode(pattern, false);
     pattern = regular_expression_passes(pattern);
+    
     
     ParabixDriver pxDriver("codepointEngine");
     auto & idb = pxDriver.getBuilder();
