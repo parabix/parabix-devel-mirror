@@ -428,10 +428,8 @@ void CarryManager::leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
 
         b->SetInsertPoint(resume);
 
-        if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
-            b->CreateAssertZero(b->CreateOr(finalBorrow, finalCarry),
-                                       "CarryManager: loop post-condition violated: final borrow and carry must be zero!");
-        }
+        b->CreateAssertZero(b->CreateOr(finalBorrow, finalCarry),
+                                   "CarryManager: loop post-condition violated: final borrow and carry must be zero!");
 
         assert (!mLoopIndicies.empty());
         PHINode * index = mLoopIndicies.back();

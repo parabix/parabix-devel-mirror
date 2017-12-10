@@ -122,11 +122,11 @@ const llvm::TargetMachine::CodeGenFileType FileType = ::FileType;
 
 TargetOptions Options;
 
-const cl::OptionCategory * codegen_flags() {
+const cl::OptionCategory * LLVM_READONLY codegen_flags() {
     return &CodeGenOptions;
 }
 
-bool DebugOptionIsSet(const DebugFlags flag) {
+bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag) {
     return DebugOptions.isSet(flag);
 }
 

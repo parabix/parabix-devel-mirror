@@ -37,7 +37,7 @@ namespace llvm { namespace cl { class OptionCategory; } }
 
 namespace codegen {
 
-const llvm::cl::OptionCategory * codegen_flags();
+const llvm::cl::OptionCategory * LLVM_READONLY codegen_flags();
 
 // Command Parameters
 enum DebugFlags {
@@ -51,7 +51,7 @@ enum DebugFlags {
     DebugFlagSentinel
 };
 
-bool DebugOptionIsSet(const DebugFlags flag);
+bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag);
 
 extern bool PipelineParallel;
 extern bool SegmentPipelineParallel;

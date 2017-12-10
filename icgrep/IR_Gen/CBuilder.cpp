@@ -92,7 +92,7 @@ static AllocaInst * resolveStackAddress(Value * Ptr) {
 static Value * checkStackAddress(CBuilder * const b, Value * const Ptr, Value * const Size, AllocaInst * const Base) {
     DataLayout DL(b->getModule());
     IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
-    Value * sz = ConstantExpr::getTrunc(ConstantExpr::getSizeOf(Base->getAllocatedType()), intPtrTy);
+    Value * sz = ConstantExpr::getBitCast(ConstantExpr::getSizeOf(Base->getAllocatedType()), intPtrTy);
     if (dyn_cast_or_null<Constant>(Base->getArraySize()) && !cast<Constant>(Base->getArraySize())->isNullValue()) {
         sz = b->CreateMul(sz, b->CreateZExtOrTrunc(Base->getArraySize(), intPtrTy));
     }
@@ -965,7 +965,7 @@ _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned ski
 }
 #endif
 
-void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessage) {
+void CBuilder::__CreateAssert(Value * const assertion, const Twine & failureMessage) {
     if (LLVM_UNLIKELY(isa<Constant>(assertion))) {
         if (LLVM_UNLIKELY(cast<Constant>(assertion)->isNullValue())) {
             report_fatal_error(failureMessage);
@@ -1081,7 +1081,12 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         SmallVector<char, 1024> tmp;
         IRBuilder<>::CreateCall(function, {assertion, GetString(failureMessage.toStringRef(tmp)), trace, depth});
     } else { // if assertions are not enabled, make it a compiler assumption.
-        IRBuilder<>::CreateAssumption(assertion);
+
+        // INVESTIGATE: while interesting, this does not seem to produce faster code and only provides a trivial reduction
+        // of compiled code size in LLVM 3.8 but nearly doubles compilation time. This may have been improved with later
+        // versions of LLVM but it's likely that assumptions ought to be hand placed once they're prove to improve performance.
+
+        // IRBuilder<>::CreateAssumption(assertion);
     }
 }
 

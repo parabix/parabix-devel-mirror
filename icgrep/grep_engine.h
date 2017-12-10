@@ -8,10 +8,9 @@
 #include <grep_interface.h>
 #include <kernels/streamset.h>
 #include <toolchain/grep_pipeline.h>
-#include <string>       // for string
+#include <string>
 #include <vector>
 #include <sstream>
-#include <mutex>
 #include <atomic>
 
 namespace re { class CC; }
@@ -39,21 +38,17 @@ protected:
 
     virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
     std::string linePrefix(std::string fileName);
-    int32_t openFile(const std::string & fileName, std::stringstream * msgstrm);
+    int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
 
     Driver * mGrepDriver;
 
     std::atomic<unsigned> mNextFileToGrep;
     std::atomic<unsigned> mNextFileToPrint;
     std::vector<std::string> inputFiles;
-    std::vector<std::unique_ptr<std::stringstream>> mResultStrs;
+    std::vector<std::ostringstream> mResultStrs;
     std::vector<FileStatus> mFileStatus;
-    std::mutex mWriteMutex;
-    std::mutex mCacheMutex;
-
-
     bool grepMatchFound;
-    
+
     std::string mFileSuffix;
     bool mMoveMatchesToEOL;
     pthread_t mEngineThread;

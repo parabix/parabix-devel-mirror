@@ -52,7 +52,7 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
     
     Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, int32Ty, outputType, nullptr));
     main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
+    auto args = main->arg_begin();
     
     Value * const fileDescriptor = &*(args++);
     fileDescriptor->setName("fileDescriptor");

@@ -118,7 +118,7 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
                 std::unique_ptr<Module> M(std::move(loadedFile.get()));
                 if (kernel->hasSignature()) {
                     const MDString * const sig = getSignature(M.get());
-                    assert ("signature is missing from kernel file: possible module naming conflict?" && sig);
+                    assert ("signature is missing from kernel file: possible module naming conflict or change in the LLVM metadata storage policy?" && sig);
                     if (LLVM_UNLIKELY(sig == nullptr || !sig->getString().equals(kernel->makeSignature(idb)))) {
                         goto invalid;
                     }
@@ -199,9 +199,14 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
 }
 
 void ParabixObjectCache::performIncrementalCacheCleanupStep() {
-    if (mCacheCleanupIterator != fs::directory_iterator()) {
-        const auto e = mCacheCleanupIterator->path();
-        mCacheCleanupIterator++;
+    mCleanupMutex.lock();
+    if (LLVM_UNLIKELY(mCleanupIterator == fs::directory_iterator())) {
+        mCleanupMutex.unlock();
+    } else {
+        const auto e = mCleanupIterator->path();
+        mCleanupIterator++;
+        mCleanupMutex.unlock();
+
         // Simple clean-up policy: files that haven't been touched by the
         // driver in MaxCacheEntryHours are deleted.
         // TODO: possibly incrementally manage by size and/or total file count.
@@ -231,8 +236,7 @@ ParabixObjectCache::ParabixObjectCache(const StringRef dir)
     if (LLVM_LIKELY(!mCachePath.empty())) {
         sys::fs::create_directories(mCachePath);
     }
-    fs::directory_iterator it(p);
-    mCacheCleanupIterator = it;
+    mCleanupIterator = fs::directory_iterator(p);
 }
 
 inline ParabixObjectCache::Path getDefaultPath() {

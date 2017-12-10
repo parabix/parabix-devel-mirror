@@ -235,14 +235,14 @@ public:
 
     virtual llvm::StoreInst *  CreateAtomicStoreRelease(llvm::Value * val, llvm::Value * ptr);
 
-    void CreateAssert(llvm::Value * assertion, const llvm::Twine failureMessage) {
+    void CreateAssert(llvm::Value * assertion, const llvm::Twine & failureMessage) {
         if (LLVM_UNLIKELY(assertion->getType()->isVectorTy())) {
             assertion = CreateBitCast(assertion, getIntNTy(assertion->getType()->getPrimitiveSizeInBits()));
         }
         return __CreateAssert(CreateIsNotNull(assertion), failureMessage);
     }
 
-    void CreateAssertZero(llvm::Value * assertion, const llvm::Twine failureMessage) {
+    void CreateAssertZero(llvm::Value * assertion, const llvm::Twine & failureMessage) {
         if (LLVM_UNLIKELY(assertion->getType()->isVectorTy())) {
             assertion = CreateBitCast(assertion, getIntNTy(assertion->getType()->getPrimitiveSizeInBits()));
         }
@@ -354,7 +354,7 @@ protected:
 
     bool hasAddressSanitizer() const;
 
-    void __CreateAssert(llvm::Value * assertion, const llvm::Twine failureMessage);
+    void __CreateAssert(llvm::Value * assertion, const llvm::Twine & failureMessage);
 
     llvm::Function * LinkFunction(llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
 

@@ -14,6 +14,7 @@
 #include <boost/filesystem.hpp>
 #include <vector>
 #include <string>
+#include <mutex>
 
 namespace llvm { class Module; }
 namespace llvm { class MemoryBuffer; }
@@ -47,9 +48,10 @@ public:
     std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module * M) override;
     void performIncrementalCacheCleanupStep();
 private:
+    std::mutex mCleanupMutex;
+    boost::filesystem::directory_iterator mCleanupIterator;
     ModuleCache mCachedObject;
     const Path mCachePath;
-    boost::filesystem::directory_iterator mCacheCleanupIterator;
 };
 
 #endif

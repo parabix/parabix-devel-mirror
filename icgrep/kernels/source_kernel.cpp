@@ -231,7 +231,6 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     Constant * const bytesToRead = ConstantExpr::getMul(itemsToRead, codeUnitBytes);
     Value * const bytesRead = b->CreateReadCall(fd, sourceBuffer, bytesToRead);
     Value * const itemsRead = b->CreateUDiv(bytesRead, codeUnitBytes);
-    b->CreateAssert(b->CreateICmpULE(itemsRead, itemsToRead), "read more items than expected");
     Value * const itemsBuffered = b->CreateAdd(buffered, itemsRead);
     b->setBufferedSize("sourceBuffer", itemsBuffered);
     b->CreateUnlikelyCondBr(b->CreateICmpULT(itemsBuffered, itemsPending), setTermination, readExit);
