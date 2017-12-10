@@ -28,6 +28,7 @@
 #include <re/re_name_resolve.h>
 #include <re/re_collect_unicodesets.h>
 #include <re/re_multiplex.h>
+#include <re/grapheme_clusters.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>
 #include <iostream>
@@ -114,6 +115,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     std::vector<std::vector<re::CC *>> charclasses(n);
     for (unsigned i = 0; i < n; i++) {
         REs[i] = resolveCaseInsensitiveMode(REs[i], grep::IgnoreCaseFlag);
+        REs[i] = resolveGraphemeMode(REs[i], false /* not in grapheme mode at top level*/);
         REs[i] = re::resolveNames(REs[i]);
         const auto UnicodeSets = re::collectUnicodeSets(REs[i]);
         std::vector<std::vector<unsigned>> exclusiveSetIDs;

@@ -5,6 +5,7 @@
 #include <re/re_cc.h>
 #include <re/re_seq.h>
 #include <re/re_rep.h>
+#include <re/re_range.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
@@ -28,7 +29,9 @@ void SetCollector::collect(RE * const re) {
         if (CC * cc = dyn_cast<CC>(re)) {
             UnicodeSets.push_back(cc);
         } else if (isa<Name>(re)) {
-            collect(cast<Name>(re)->getDefinition());
+            auto def = cast<Name>(re)->getDefinition();
+            if (def != nullptr)
+                collect(def);
         } else if (isa<Seq>(re)) {
             for (auto item : *cast<Seq>(re)) {
                 collect(item);
@@ -47,8 +50,6 @@ void SetCollector::collect(RE * const re) {
         } else if (isa<Intersect>(re)) {
             collect(cast<Intersect>(re)->getLH());
             collect(cast<Intersect>(re)->getRH());
-        } else if (isa<Any>(re)) {
-            UnicodeSets.push_back(makeCC(0x00, 0x10FFFF));
         }
     }
 }

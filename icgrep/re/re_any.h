@@ -29,7 +29,9 @@ protected:
 };
 
 inline RE * makeAny() {
-    return makeName(".", Name::Type::UnicodeProperty);
+    Name * dot = makeName(".", Name::Type::UnicodeProperty);
+    dot->setDefinition(makeCC(0, 0x10FFFF));
+    return dot;
 }
 
 }

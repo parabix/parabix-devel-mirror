@@ -24,8 +24,6 @@
 #include <re/re_group.h>
 #include <re/re_assertion.h>
 #include <re/printer_re.h>
-#include <UCD/resolve_properties.h>
-#include <UCD/CaseFolding.h>
 #include <sstream>
 #include <string>
 #include <algorithm>
@@ -122,10 +120,6 @@ RE * RE_Parser::parse_seq() {
     for (;;) {
         RE * re = parse_next_item();
         if (re == nullptr) {
-            if (fGraphemeBoundaryPending == true) {
-                seq.push_back(makeZeroWidth("GCB"));
-                fGraphemeBoundaryPending = false;
-            }
             break;
         }
         re = extend_item(re);
@@ -183,9 +177,6 @@ RE * RE_Parser::parse_next_item() {
             case '[':
                 mCursor++;
                 re = parse_charset();
-                if ((fModeFlagSet & ModeFlagType::GRAPHEME_CLUSTER_MODE) != 0) {
-                    re = makeSeq({re, makeZeroWidth("GCB")});
-                }
                 break;
             case '.': // the 'any' metacharacter
                 mCursor++;
@@ -195,9 +186,6 @@ RE * RE_Parser::parse_next_item() {
                 return parse_escaped();
             default:
                 re = createCC(parse_literal_codepoint());
-                if ((fModeFlagSet & ModeFlagType::GRAPHEME_CLUSTER_MODE) != 0) {
-                    fGraphemeBoundaryPending = true;
-                }
         }
     }
     return re;
@@ -282,15 +270,26 @@ RE * RE_Parser::parse_group() {
                         group_expr = makeGroup(Group::Mode::CaseInsensitiveMode, group_expr,
                                                (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) == 0 ? Group::Sense::Off : Group::Sense::On);
                     }
+                    if ((changed & GRAPHEME_CLUSTER_MODE) != 0) {
+                        group_expr = makeGroup(Group::Mode::GraphemeMode, group_expr,
+                                               (fModeFlagSet & GRAPHEME_CLUSTER_MODE) == 0 ? Group::Sense::Off : Group::Sense::On);
+                    }
                     fModeFlagSet = savedModeFlagSet;
                     break;
                 } else {  // if *_cursor == ')'
                     ++mCursor;
                     auto changed = fModeFlagSet ^ savedModeFlagSet;
-                    if ((changed & CASE_INSENSITIVE_MODE_FLAG) != 0) {
+                    if ((changed & (CASE_INSENSITIVE_MODE_FLAG|GRAPHEME_CLUSTER_MODE)) != 0) {
                         group_expr = parse_seq();
-                        return makeGroup(Group::Mode::CaseInsensitiveMode, group_expr,
-                                               (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) == 0 ? Group::Sense::Off : Group::Sense::On);
+                        if ((changed & CASE_INSENSITIVE_MODE_FLAG) != 0) {
+                            group_expr = makeGroup(Group::Mode::CaseInsensitiveMode, group_expr,
+                                                   (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) == 0 ? Group::Sense::Off : Group::Sense::On);
+                        }
+                        if ((changed & GRAPHEME_CLUSTER_MODE) != 0) {
+                            group_expr = makeGroup(Group::Mode::GraphemeMode, group_expr,
+                                                   (fModeFlagSet & GRAPHEME_CLUSTER_MODE) == 0 ? Group::Sense::Off : Group::Sense::On);
+                        }
+                        return group_expr;
                     }
                     else return parse_next_item();
                 }

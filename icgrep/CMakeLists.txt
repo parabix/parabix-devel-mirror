@@ -97,7 +97,7 @@ add_library(PabloADT ${PABLO_SRC})
 add_library(CCADT re/re_re.cpp re/re_cc.cpp cc/cc_compiler.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp UCD/unicode_set.cpp)
 # RegExpADT is the core library for representing, parsing and printing regular expressions
 add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_range.cpp re/re_assertion.cpp re/printer_re.cpp re/re_parser_pcre.cpp re/re_parser_ere.cpp re/re_parser_bre.cpp re/re_parser_prosite.cpp re/parse_fixed_strings.cpp)
-add_library(RegExpCompiler re/casing.cpp re/to_utf8.cpp re/re_parser.cpp re/re_memoizer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/re_collect_unicodesets.cpp re/re_multiplex.cpp re/re_utility.cpp ${GREP_CORE_SRC})
+add_library(RegExpCompiler re/casing.cpp re/to_utf8.cpp re/re_parser.cpp re/re_memoizer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/re_collect_unicodesets.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp ${GREP_CORE_SRC})
 add_library(UCDlib UCD/CaseFolding.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp)
 
 # force the compiler to compile the object cache to ensure that the versioning information is up to date
