@@ -855,11 +855,6 @@ RE * RE_Parser::parse_charset() {
                         newOperand = makeDiff(pendingOperand, newOperand);
                     }
                 }
-                if (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) {
-                    if (CC * cc1 = dyn_cast<CC>(newOperand)) {
-                        newOperand = caseInsensitize(cc1);
-                    }
-                }
                 return negated ? makeComplement(newOperand) : newOperand;
             }
             case setOpener:

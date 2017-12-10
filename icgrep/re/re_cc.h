@@ -135,8 +135,6 @@ inline CC * intersectCC(const CC * a, const CC * b) {
     return new CC(*a & *b);
 }
 
-CC * caseInsensitize(const CC * cc);
-
 }
 
 #endif // RE_CC_H

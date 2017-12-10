@@ -1,5 +1,7 @@
 #include <re/casing.h>
 #include <re/re_cc.h>
+#include <UCD/unicode_set.h>
+#include <UCD/CaseFolding.h>
 #include <re/re_alt.h>             // for Alt, makeAlt
 #include <re/re_any.h>             // for makeAny, Any
 #include <re/re_assertion.h>       // for Assertion, Assertion::Sense, Asser...
@@ -21,7 +23,10 @@ using namespace llvm;
 namespace re {
 RE * resolveCaseInsensitiveMode(RE * re, bool inCaseInsensitiveMode) {
     if (isa<CC>(re)) {
-        if (inCaseInsensitiveMode) return caseInsensitize(cast<CC>(re));
+        if (inCaseInsensitiveMode) {
+            UCD::UnicodeSet * cased = caseInsensitize(cast<CC>(re));
+            return makeCC(std::move(*cased));
+        }
         else return re;
     }
     else if (Name * name = dyn_cast<Name>(re)) {

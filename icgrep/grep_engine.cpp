@@ -25,7 +25,7 @@
 #include <re/casing.h>
 #include <re/re_toolchain.h>
 #include <toolchain/toolchain.h>
-#include <re/re_name_resolve.h>    
+#include <re/re_name_resolve.h>
 #include <re/re_collect_unicodesets.h>
 #include <re/re_multiplex.h>
 #include <toolchain/toolchain.h>
@@ -49,7 +49,7 @@ static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(
 namespace grep {
 
 // Grep Engine construction and initialization.
-    
+
 GrepEngine::GrepEngine() :
     mGrepDriver(nullptr),
     mNextFileToGrep(0),
@@ -57,11 +57,11 @@ GrepEngine::GrepEngine() :
     grepMatchFound(false),
     mMoveMatchesToEOL(true),
     mEngineThread(pthread_self()) {}
-    
+
 GrepEngine::~GrepEngine() {
     delete mGrepDriver;
 }
-    
+
 QuietModeEngine::QuietModeEngine() : GrepEngine() {
     mMoveMatchesToEOL = false;
 }
@@ -91,7 +91,6 @@ void GrepEngine::initFileResult(std::vector<std::string> & filenames) {
     }
     inputFiles = filenames;
 }
-    
 
 // Code Generation
 //
@@ -102,25 +101,23 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = 8;
-    
+
     StreamSetBuffer * BasisBits = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(encodingBits, 1), segmentSize * bufferSegments);
     kernel::Kernel * s2pk = mGrepDriver->addKernelInstance<kernel::S2PKernel>(idb);
     mGrepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
-    
+
     StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
     kernel::Kernel * linebreakK = mGrepDriver->addKernelInstance<kernel::LineBreakKernelBuilder>(idb, encodingBits);
     mGrepDriver->makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
-    
+
     kernel::Kernel * requiredStreamsK = mGrepDriver->addKernelInstance<kernel::RequiredStreams_UTF8>(idb);
     StreamSetBuffer * RequiredStreams = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(4, 1), segmentSize * bufferSegments);
     mGrepDriver->makeKernelCall(requiredStreamsK, {BasisBits}, {RequiredStreams});
-    
+
     const auto n = REs.size();
-    
     std::vector<std::vector<re::CC *>> charclasses(n);
-    
     for (unsigned i = 0; i < n; i++) {
-        REs[i] = resolveCaseInsensitiveMode(REs[i], false);
+        REs[i] = resolveCaseInsensitiveMode(REs[i], grep::IgnoreCaseFlag);
         REs[i] = re::resolveNames(REs[i]);
         const auto UnicodeSets = re::collectUnicodeSets(REs[i]);
         std::vector<std::vector<unsigned>> exclusiveSetIDs;
@@ -128,9 +125,9 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
         REs[i] = multiplex(REs[i], UnicodeSets, exclusiveSetIDs);
         REs[i] = regular_expression_passes(REs[i]);
   }
-    
+
     std::vector<StreamSetBuffer *> MatchResultsBufs(n);
-    
+
     for(unsigned i = 0; i < n; ++i){
         const auto numOfCharacterClasses = charclasses[i].size();
         StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), segmentSize * bufferSegments);
@@ -148,14 +145,14 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
         mGrepDriver->makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
     }
     StreamSetBuffer * Matches = MergedResults;
-    
+
     if (mMoveMatchesToEOL) {
         StreamSetBuffer * OriginalMatches = Matches;
         kernel::Kernel * matchedLinesK = mGrepDriver->addKernelInstance<kernel::MatchedLinesKernel>(idb);
         Matches = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
         mGrepDriver->makeKernelCall(matchedLinesK, {OriginalMatches, LineBreakStream}, {Matches});
     }
-    
+
     if (InvertMatchFlag) {
         kernel::Kernel * invertK = mGrepDriver->addKernelInstance<kernel::InvertMatchesKernel>(idb);
         StreamSetBuffer * OriginalMatches = Matches;
@@ -177,34 +174,34 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
 //
 
 void GrepEngine::grepCodeGen(std::vector<re::RE *> REs) {
-    
+
     assert (mGrepDriver == nullptr);
     mGrepDriver = new ParabixDriver("engine");
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
-    
+
     const auto segmentSize = codegen::SegmentSize;
     const auto bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
 
     const unsigned encodingBits = 8;
-    
+
     Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), nullptr));
     mainFunc->setCallingConv(CallingConv::C);
     idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
     auto args = mainFunc->arg_begin();
-    
+
     Value * const fileDescriptor = &*(args++);
     fileDescriptor->setName("fileDescriptor");
-    
+
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits));
     kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb, segmentSize * bufferSegments);
     sourceK->setInitialArguments({fileDescriptor});
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
-    
+
     StreamSetBuffer * LineBreakStream;
     StreamSetBuffer * Matches;
     std::tie(LineBreakStream, Matches) = grepPipeline(REs, ByteStream);
-    
+
     kernel::Kernel * matchCountK = mGrepDriver->addKernelInstance<kernel::PopcountKernel>(idb);
     mGrepDriver->makeKernelCall(matchCountK, {Matches}, {});
     mGrepDriver->generatePipelineIR();
@@ -278,36 +275,36 @@ void EmitMatchesEngine::grepCodeGen(std::vector<re::RE *> REs) {
     mGrepDriver = new ParabixDriver("engine");
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
-    
+
     const auto segmentSize = codegen::SegmentSize;
     const auto bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = 8;
-    
+
     Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), idb->getIntAddrTy(), nullptr));
     mainFunc->setCallingConv(CallingConv::C);
     idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
     auto args = mainFunc->arg_begin();
-    
+
     Value * const fileDescriptor = &*(args++);
     fileDescriptor->setName("fileDescriptor");
     Value * match_accumulator = &*(args++);
     match_accumulator->setName("match_accumulator");
-    
+
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits));
     kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb, segmentSize * bufferSegments);
     sourceK->setInitialArguments({fileDescriptor});
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
-    
+
     StreamSetBuffer * LineBreakStream;
     StreamSetBuffer * Matches;
     std::tie(LineBreakStream, Matches) = grepPipeline(REs, ByteStream);
-    
+
     kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance<kernel::ScanMatchKernel>(idb);
     scanMatchK->setInitialArguments({match_accumulator});
     mGrepDriver->makeKernelCall(scanMatchK, {Matches, LineBreakStream, ByteStream}, {});
     mGrepDriver->LinkFunction(*scanMatchK, "accumulate_match_wrapper", &accumulate_match_wrapper);
     mGrepDriver->LinkFunction(*scanMatchK, "finalize_match_wrapper", &finalize_match_wrapper);
-    
+
     mGrepDriver->generatePipelineIR();
     mGrepDriver->deallocateBuffers();
     idb->CreateRet(idb->getInt64(0));
@@ -318,14 +315,14 @@ void EmitMatchesEngine::grepCodeGen(std::vector<re::RE *> REs) {
 //
 //  The doGrep methods apply a GrepEngine to a single file, processing the results
 //  differently based on the engine type.
-    
+
 uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
     typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
-    
+
     int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx].get());
     if (fileDescriptor == -1) return 0;
-    
+
     uint64_t grepResult = f(fileDescriptor);
     close(fileDescriptor);
     return grepResult;
@@ -346,7 +343,7 @@ std::string GrepEngine::linePrefix(std::string fileName) {
         return fileName + mFileSuffix;
     }
 }
-    
+
 uint64_t MatchOnlyEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
     uint64_t grepResult = GrepEngine::doGrep(fileName, fileIdx);
     if (grepResult == mRequiredCount) {
@@ -358,7 +355,7 @@ uint64_t MatchOnlyEngine::doGrep(const std::string & fileName, const uint32_t fi
 uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
     typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor, intptr_t accum_addr);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
-    
+
     int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx].get());
     if (fileDescriptor == -1) return 0;
     EmitMatch accum(linePrefix(fileName), mResultStrs[fileIdx].get());
@@ -403,7 +400,7 @@ int32_t GrepEngine::openFile(const std::string & fileName, std::stringstream * m
 
 // The process of searching a group of files may use a sequential or a task
 // parallel approach.
-    
+
 void * DoGrepThreadFunction(void *args) {
     return reinterpret_cast<GrepEngine *>(args)->DoGrepThreadMethod();
 }
@@ -411,7 +408,7 @@ void * DoGrepThreadFunction(void *args) {
 bool GrepEngine::searchAllFiles() {
     const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
     pthread_t threads[numOfThreads];
-    
+
     for(unsigned long i = 1; i < numOfThreads; ++i) {
         const int rc = pthread_create(&threads[i], nullptr, DoGrepThreadFunction, (void *)this);
         if (rc) {
@@ -419,7 +416,7 @@ bool GrepEngine::searchAllFiles() {
         }
     }
     // Main thread also does the work;
-    
+
     DoGrepThreadMethod();
     for(unsigned i = 1; i < numOfThreads; ++i) {
         void * status = nullptr;
@@ -479,4 +476,3 @@ void * GrepEngine::DoGrepThreadMethod() {
 }
 
 }
-

@@ -3,6 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
+#include <re/re_re.h>
 #include "resolve_properties.h"
 #include <re/re_alt.h>
 #include <re/re_any.h>
@@ -30,14 +31,13 @@ namespace UCD {
     
 void UnicodePropertyExpressionError(std::string errmsg) {
     llvm::report_fatal_error(errmsg);
-
 }
 
+#define Behind(x) makeLookBehindAssertion(x)
+#define Ahead(x) makeLookAheadAssertion(x)
 
 void generateGraphemeClusterBoundaryRule(Name * const &property) {
     // 3.1.1 Grapheme Cluster Boundary Rules
-#define Behind(x) makeLookBehindAssertion(x)
-#define Ahead(x) makeLookAheadAssertion(x)
 
 //    RE * GCB_Control = makeName("gcb", "cn", Name::Type::UnicodeProperty);
     RE * GCB_CR = makeName("gcb", "cr", Name::Type::UnicodeProperty);

@@ -11,6 +11,7 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
+#include <re/re_group.h>
 #include <re/re_nullable.h>
 #include <re/printer_re.h>
 #include <limits.h>
@@ -51,6 +52,8 @@ bool matchesEmptyString(const RE * re) {
         return false;
     } else if (isa<CC>(re)) {
         return false;
+    } else if (const Group * g = dyn_cast<Group>(re)) {
+        return matchesEmptyString(g->getRE());
     } else if (const Name * n = dyn_cast<Name>(re)) {
         return matchesEmptyString(n->getDefinition());
     }
@@ -367,6 +370,13 @@ bool hasAssertion(const RE * re) {
         return hasAssertion(e->getLH()) || hasAssertion(e->getRH());
     } else if (isa<Start>(re) || isa<End>(re) || isa<Assertion>(re)) {
         return true;
+    } else if (const Group * g = dyn_cast<Group>(re)) {
+        if ((g->getMode() == Group::Mode::GraphemeMode) && (g->getSense() == Group::Sense::On)) {
+            return true;
+        }
+        else {
+            return hasAssertion(g->getRE());
+        }
     }
     else llvm_unreachable("Unknown RE type");
 }

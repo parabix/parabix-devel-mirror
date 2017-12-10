@@ -6,6 +6,7 @@
  */
 
 #include "CaseFolding.h"
+#include <UCD/unicode_set.h>
 #include <algorithm>
 
 using namespace UCD;
@@ -71,6 +72,21 @@ void caseInsensitiveInsertRange(UnicodeSet * const cc, const codepoint_t lo, con
         // Move on to the next fold_entry.
         e++;
     }
+}
+inline codepoint_t lo_codepoint(const interval_t & i) {
+    return std::get<0>(i);
+}
+
+inline codepoint_t hi_codepoint(const interval_t & i) {
+    return std::get<1>(i);
+}
+
+UnicodeSet * caseInsensitize(UnicodeSet * const cc) {
+    UnicodeSet * cci = new UnicodeSet();
+    for (const interval_t i : *cc) {
+        caseInsensitiveInsertRange(cci, lo_codepoint(i), hi_codepoint(i));
+    }
+    return cci;
 }
 
 

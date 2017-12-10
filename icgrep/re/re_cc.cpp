@@ -6,7 +6,6 @@
 
 #include "re_cc.h"
 #include <llvm/Support/Compiler.h>
-#include <UCD/CaseFolding.h>
 #include <sstream>
 
 namespace re {
@@ -33,14 +32,6 @@ std::string CC::canonicalName(const CC_type type) const {
     return name.str();
 }
     
-CC * caseInsensitize(const CC * cc) {
-    CC * cci = makeCC();
-    for (const interval_t i : *cc) {
-        caseInsensitiveInsertRange(cci, lo_codepoint(i), hi_codepoint(i));
-    }
-    return cci;
-}
-
 CC::CC()
 : RE(ClassTypeId::CC)
 , UnicodeSet() {
