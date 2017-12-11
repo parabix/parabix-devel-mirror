@@ -8,6 +8,7 @@
 #define ALT_H
 
 #include "re_re.h"
+#include "re_cc.h"
 #include <llvm/Support/Casting.h>
 
 namespace re {
@@ -31,17 +32,6 @@ protected:
     : Vector(ClassTypeId::Alt, begin, end) {
 
     }
-private:
-    template<typename iterator>
-    void flatten(iterator begin, iterator end) {
-        for (auto i = begin; i != end; ++i) {
-            if (LLVM_UNLIKELY(llvm::isa<Alt>(*i))) {
-                flatten<Alt::iterator>(llvm::cast<Alt>(*i)->begin(), llvm::cast<Alt>(*i)->end());
-            } else {
-                push_back(*i);
-            }
-        }
-    }
 };
 
 /**
@@ -60,16 +50,28 @@ inline Alt * makeAlt() {
 
 template<typename iterator>
 RE * makeAlt(iterator begin, iterator end) {
-    if (LLVM_UNLIKELY(std::distance(begin, end) == 0)) {
-        return makeAlt();
-    } else {
-        Alt * alt = makeAlt();
-        alt->flatten(begin, end);
-        if (alt->size() == 1) {
-            return alt->front();
+    Alt * newAlt = makeAlt();
+    CC * unionCC = makeCC();
+    for (auto i = begin; i != end; ++i) {
+        if (const CC * cc = llvm::dyn_cast<CC>(*i)) {
+            unionCC = makeCC(unionCC, cc);
+        } else if (const Alt * alt = llvm::dyn_cast<Alt>(*i)) {
+            // We have an Alt to embed within the alt.  We extract the individual
+            // elements to include within the new alt.   Note that recursive flattening
+            // is not required, if the elements themselves were created with makeAlt.
+            for (RE * a : *alt) {
+                if (CC * cc = llvm::dyn_cast<CC>(a)) {
+                    unionCC = makeCC(unionCC, cc);
+                }
+                else newAlt->push_back(a);
+            }
         }
-        return alt;
+        else {
+            newAlt->push_back(*i);
+        }
     }
+    if (!unionCC->empty()) newAlt->push_back(unionCC);
+    return newAlt;
 }
 
 inline RE * makeAlt(RE::InitializerList list) {
