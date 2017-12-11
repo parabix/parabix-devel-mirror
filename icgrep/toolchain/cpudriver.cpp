@@ -229,7 +229,7 @@ void * ParabixDriver::getMain() {
 }
 
 void ParabixDriver::performIncrementalCacheCleanupStep() {
-    mCache->performIncrementalCacheCleanupStep();
+    if (mCache) mCache->performIncrementalCacheCleanupStep();
 }
 
 ParabixDriver::~ParabixDriver() {

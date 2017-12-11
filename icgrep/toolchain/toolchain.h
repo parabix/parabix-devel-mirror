@@ -64,6 +64,7 @@ extern std::string ShowIROption;
 extern std::string ShowASMOption;
 #endif
 extern const char * ObjectCacheDir;
+extern unsigned CacheDaysLimit;  // set from command line
 extern llvm::CodeGenOpt::Level OptLevel;  // set from command line
 extern unsigned BlockSize;  // set from command line
 extern unsigned SegmentSize;  // set from command line

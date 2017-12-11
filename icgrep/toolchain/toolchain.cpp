@@ -56,6 +56,10 @@ static cl::opt<std::string> ObjectCacheDirOption("object-cache-dir", cl::init(""
                                                  cl::desc("Path to the object cache diretory"), cl::cat(CodeGenOptions));
 
 
+static cl::opt<unsigned, true> CacheLimitOption("cache-days-limit", cl::location(CacheDaysLimit), cl::init(15),
+                                          cl::desc("number of days a cache entry may be unused before auto deletion may be applied"), cl::cat(CodeGenOptions));
+
+
 static cl::opt<unsigned, true> BlockSizeOption("BlockSize", cl::location(BlockSize), cl::init(0),
                                           cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 
@@ -100,6 +104,8 @@ unsigned BufferSegments;
 unsigned ThreadNum;
 
 bool EnableObjectCache;
+
+unsigned CacheDaysLimit;
 
 bool NVPTX = [](const bool nvptx) {
     #ifndef CUDA_ENABLED

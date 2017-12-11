@@ -28,7 +28,7 @@ using namespace llvm;
 namespace fs = boost::filesystem;
 
 #ifdef NDEBUG
-#define CACHE_ENTRY_MAX_HOURS (24 * 15)
+#define CACHE_ENTRY_MAX_HOURS (24 * codegen::CacheDaysLimit)
 #else
 #define CACHE_ENTRY_MAX_HOURS (1)
 #endif
