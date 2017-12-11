@@ -54,7 +54,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         Type * const byteVectorType = VectorType::get(getInt8Ty(), (mBitBlockWidth / 8));
         value = builder.CreateBitCast(value, byteVectorType);
         for(unsigned i = (mBitBlockWidth / 8); i != 0; --i) {
-            args.push_back(builder.CreateExtractElement(value, builder.getInt32(i - 1)));
+            args.push_back(builder.CreateZExt(builder.CreateExtractElement(value, builder.getInt32(i - 1)), builder.getInt32Ty()));
         }
         builder.CreateCall(GetPrintf(), args);
         builder.CreateRetVoid();
