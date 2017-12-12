@@ -13,8 +13,10 @@ namespace pablo { class PabloKernel; }
 namespace pablo {
 
 enum PabloDebugFlags {
-    ShowPablo, ShowOptimizedPablo, VerifyPablo, DumpTrace,
+    VerifyPablo, DumpTrace,
 };
+extern std::string ShowOptimizedPabloOption;
+extern std::string ShowPabloOption;
 
 enum PabloCompilationFlags {
     DisableSimplification, DisableCodeMotion, EnableDistribution, EnableSchedulingPrePass, EnableProfiling
