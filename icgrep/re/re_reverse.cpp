@@ -13,6 +13,7 @@
 #include <re/re_seq.h>
 #include <re/re_alt.h>
 #include <re/re_rep.h>
+#include <re/re_group.h>
 #include <re/re_range.h>
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
@@ -46,6 +47,8 @@ RE * reverse_helper(RE * re, std::map<std::string, Name *> & captureMap) {
         return makeAlt(list.begin(), list.end());
     } else if (Rep * rep = dyn_cast<Rep>(re)) {
         return makeRep(reverse_helper(rep->getRE(), captureMap), rep->getLB(), rep->getUB());
+    } else if (Group * g = dyn_cast<Group>(re)) {
+        return makeGroup(g->getMode(), reverse_helper(g->getRE(), captureMap), g->getSense());
     } else if (Diff * diff = dyn_cast<Diff>(re)) {
         return makeDiff(reverse_helper(diff->getLH(), captureMap), reverse_helper(diff->getRH(), captureMap));
     } else if (Intersect * e = dyn_cast<Intersect>(re)) {

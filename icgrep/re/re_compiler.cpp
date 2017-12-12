@@ -158,7 +158,7 @@ MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb)
     } else {
         nextPos = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
     }
-    return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(markerVar(marker), pb.createAnd(mCCCompiler.compileCC(cc, pb), mAny)));
+    return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(markerVar(nextPos), pb.createAnd(mCCCompiler.compileCC(cc, pb), mAny)));
 }
 
 inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, PabloBuilder & pb) {
