@@ -125,7 +125,6 @@ private:
     bool                                            mLocal;
     pablo::PabloAST *                               mLineBreak;
     pablo::PabloAST *                               mCRLF;
-    pablo::PabloAST *                               mAny;
     pablo::PabloAST *                               mGraphemeBoundaryRule;
     pablo::PabloAST *                               mInitial;
     pablo::PabloAST *                               mNonFinal;

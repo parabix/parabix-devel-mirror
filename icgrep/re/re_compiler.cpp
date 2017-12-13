@@ -86,8 +86,8 @@ MarkerType RE_Compiler::compile_local(RE * re, MarkerType marker, PabloBuilder &
     for (auto i = follow_map.begin(); i != follow_map.end(); i++) {
         CC * one = makeCC(std::move(*i->first));
         CC * two = makeCC(std::move(*i->second));
-        PabloAST * pablo_one = pb.createAnd(mCCCompiler.compileCC(one), mAny);
-        PabloAST * pablo_two = pb.createAnd(mCCCompiler.compileCC(two), mAny);
+        PabloAST * pablo_one = mCCCompiler.compileCC(one);
+        PabloAST * pablo_two = mCCCompiler.compileCC(two);
         PabloAST * one1 = pb.createAdvance(pablo_one, 1, "one1");
         PabloAST * follow = pb.createAnd(pb.createScanThru(pb.createAnd(mInitial, one1), mNonFinal), pablo_two);
         pablo_follow = pb.createOr(pablo_follow, follow);
@@ -144,11 +144,7 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
 
 inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb) {
     PabloAST * nextFinalByte = markerVar(AdvanceMarker(m, MarkerPosition::FinalPostPositionUnit, pb));
-    PabloAST * lb = mLineBreak;
-    if (UNICODE_LINE_BREAK) {
-        lb = pb.createOr(mLineBreak, mCRLF);
-    }
-    return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(nextFinalByte, pb.createNot(lb), "dot"));
+    return makeMarker(MarkerPosition::FinalMatchUnit, nextFinalByte);
 }
 
 MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb) {
@@ -158,7 +154,7 @@ MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb)
     } else {
         nextPos = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
     }
-    return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(markerVar(nextPos), pb.createAnd(mCCCompiler.compileCC(cc, pb), mAny)));
+    return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(markerVar(nextPos), mCCCompiler.compileCC(cc, pb)));
 }
 
 inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, PabloBuilder & pb) {
@@ -270,7 +266,7 @@ MarkerType RE_Compiler::compileAssertion(Assertion * a, MarkerType marker, Pablo
         MarkerType cond = compile(asserted, pb);
         if (LLVM_LIKELY(markerPos(cond) == MarkerPosition::FinalMatchUnit)) {
             MarkerType postCond = AdvanceMarker(cond, MarkerPosition::FinalPostPositionUnit, pb);
-            PabloAST * boundaryCond = pb.createAnd(mAny, pb.createXor(markerVar(cond), markerVar(postCond)));
+            PabloAST * boundaryCond = pb.createXor(markerVar(cond), markerVar(postCond));
             if (a->getSense() == Assertion::Sense::Negative) {
                 boundaryCond = pb.createNot(boundaryCond);
             }
@@ -662,7 +658,6 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler, boo
 , mLocal(local)
 , mLineBreak(nullptr)
 , mCRLF(nullptr)
-, mAny(nullptr)
 , mGraphemeBoundaryRule(nullptr)
 , mInitial(nullptr)
 , mNonFinal(nullptr)
@@ -673,7 +668,6 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler, boo
 , mCompiledName(&mBaseMap) {
     Var * const linebreak = mKernel->getInputStreamVar("linebreak");
     mLineBreak = mPB.createExtract(linebreak, mPB.getInteger(0));
-    mAny = mPB.createNot(mLineBreak, "any");
     Var * const required = mKernel->getInputStreamVar("required");
     mInitial = mPB.createExtract(required, mPB.getInteger(0));
     mNonFinal = mPB.createExtract(required, mPB.getInteger(1));

@@ -57,7 +57,7 @@ RE * exclude_CC(RE * re, CC * cc) {
             case Name::Type::Byte:
             case Name::Type::Unicode:
             case Name::Type::UnicodeProperty:
-                return exclude_CC(n->getDefinition(), cc);
+                return makeName(subtractCC(cast<CC>(n->getDefinition()), cc));
             case Name::Type::ZeroWidth:
                 return re;
             case Name::Type::Capture:

@@ -23,6 +23,7 @@
 #include <pablo/pablo_kernel.h>
 #include <re/re_cc.h>
 #include <re/casing.h>
+#include <re/exclude_CC.h>
 #include <re/re_toolchain.h>
 #include <toolchain/toolchain.h>
 #include <re/re_name_resolve.h>
@@ -117,6 +118,8 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
         REs[i] = resolveCaseInsensitiveMode(REs[i], grep::IgnoreCaseFlag);
         REs[i] = resolveGraphemeMode(REs[i], false /* not in grapheme mode at top level*/);
         REs[i] = re::resolveNames(REs[i]);
+        REs[i] = exclude_CC(REs[i], re::makeCC(re::makeCC(0x0A, 0x0D), re::makeCC(re::makeCC(0x85), re::makeCC(0x2028, 0x2029))));
+
         const auto UnicodeSets = re::collectUnicodeSets(REs[i]);
         std::vector<std::vector<unsigned>> exclusiveSetIDs;
         doMultiplexCCs(UnicodeSets, exclusiveSetIDs, charclasses[i]);
