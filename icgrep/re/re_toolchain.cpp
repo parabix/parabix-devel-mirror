@@ -106,9 +106,8 @@ RE * regular_expression_passes(RE * re)  {
     
 PabloAST * re2pablo_compiler(PabloKernel * kernel, RE * re_ast) {
     Var * const basis = kernel->getInputStreamVar("basis");
-    const bool local = RE_Local::isLocalLanguage(re_ast) && isTypeForLocal(re_ast);
     cc::CC_Compiler cc_compiler(kernel, basis);
-    RE_Compiler re_compiler(kernel, cc_compiler, local);
+    RE_Compiler re_compiler(kernel, cc_compiler);
     re_ast = re_compiler.compileUnicodeNames(re_ast);
     return re_compiler.compile(re_ast);
 }

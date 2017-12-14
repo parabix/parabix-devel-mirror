@@ -60,7 +60,7 @@ inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {ret
 class RE_Compiler {
 public:
 
-    RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler, bool local = false);
+    RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler);
     RE * compileUnicodeNames(RE * re);
     pablo::PabloAST * compile(RE * re);
 
@@ -89,7 +89,6 @@ private:
     };
 
     MarkerType compile(RE * re, pablo::PabloBuilder & cg);
-    MarkerType compile_local(RE * re, MarkerType marker, pablo::PabloBuilder & cg);
 
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileName(Name * name, MarkerType marker, pablo::PabloBuilder & pb);
@@ -122,7 +121,6 @@ private:
     pablo::PabloKernel * const                      mKernel;
     bool                                            mCountOnly;
     cc::CC_Compiler &                               mCCCompiler;
-    bool                                            mLocal;
     pablo::PabloAST *                               mLineBreak;
     pablo::PabloAST *                               mCRLF;
     pablo::PabloAST *                               mGraphemeBoundaryRule;

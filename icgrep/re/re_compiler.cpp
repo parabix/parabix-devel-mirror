@@ -68,77 +68,32 @@ MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
     return process(re, makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createOnes()), pb);
 }
     
-MarkerType RE_Compiler::compile_local(RE * re, MarkerType marker, PabloBuilder & pb) {
-    CC * first = RE_Local::first(re);
-    CC * final = RE_Local::final(re);
-
-    if (first == nullptr || final == nullptr) {
-        mLocal = false;
-        return process(re, marker, pb);
-    }
-
-    PabloAST * pablo_first = mCCCompiler.compileCC(first);
-    PabloAST * pablo_final = mCCCompiler.compileCC(final);
-    std::map<CC*, CC*> follow_map;
-    RE_Local::follow(re, follow_map);
-
-    PabloAST * pablo_follow = pb.createZeroes();
-    for (auto i = follow_map.begin(); i != follow_map.end(); i++) {
-        CC * one = makeCC(std::move(*i->first));
-        CC * two = makeCC(std::move(*i->second));
-        PabloAST * pablo_one = mCCCompiler.compileCC(one);
-        PabloAST * pablo_two = mCCCompiler.compileCC(two);
-        PabloAST * one1 = pb.createAdvance(pablo_one, 1, "one1");
-        PabloAST * follow = pb.createAnd(pb.createScanThru(pb.createAnd(mInitial, one1), mNonFinal), pablo_two);
-        pablo_follow = pb.createOr(pablo_follow, follow);
-    }
-    PabloAST * result = pb.createAnd(pb.createMatchStar(pb.createAdvance(pablo_first, 1),
-                                                        pb.createOr(pablo_follow, mNonFinal)),
-                                     pb.createAdvance(pablo_final, 1));
-    return makeMarker(MarkerPosition::FinalPostPositionUnit, result);
-}
-
-    
 MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
-    if (mLocal) {
-        if (isa<Name>(re) || isa<Seq>(re) || isa<Alt>(re) || isa<Rep>(re) || isa<CC>(re)) {
-            return compile_local(re, marker, pb);
-        } else if (isa<Any>(re)) {
-            return compileAny(marker, pb);
-        } else if (isa<Diff>(re)) {
-            return compileDiff(cast<Diff>(re), marker, pb);
-        } else if (isa<Intersect>(re)) {
-            return compileIntersect(cast<Intersect>(re), marker, pb);
-        } else {
-            UnsupportedRE("RE Compiler for local language failed to process " + Printer_RE::PrintRE(re));
-        }
+    if (isa<Name>(re)) {
+        return compileName(cast<Name>(re), marker, pb);
+    } else if (isa<Seq>(re)) {
+        return compileSeq(cast<Seq>(re), marker, pb);
+    } else if (isa<Alt>(re)) {
+        return compileAlt(cast<Alt>(re), marker, pb);
+    } else if (isa<Rep>(re)) {
+        return compileRep(cast<Rep>(re), marker, pb);
+    } else if (isa<Assertion>(re)) {
+        return compileAssertion(cast<Assertion>(re), marker, pb);
+    } else if (isa<Any>(re)) {
+        return compileAny(marker, pb);
+    } else if (isa<Diff>(re)) {
+        return compileDiff(cast<Diff>(re), marker, pb);
+    } else if (isa<Intersect>(re)) {
+        return compileIntersect(cast<Intersect>(re), marker, pb);
+    } else if (isa<Start>(re)) {
+        return compileStart(marker, pb);
+    } else if (isa<End>(re)) {
+        return compileEnd(marker, pb);
+    } else if (isa<CC>(re)) {
+        // CCs may be passed through the toolchain directly to the compiler.
+        return compileCC(cast<CC>(re), marker, pb);
     } else {
-        if (isa<Name>(re)) {
-            return compileName(cast<Name>(re), marker, pb);
-        } else if (isa<Seq>(re)) {
-            return compileSeq(cast<Seq>(re), marker, pb);
-        } else if (isa<Alt>(re)) {
-            return compileAlt(cast<Alt>(re), marker, pb);
-        } else if (isa<Rep>(re)) {
-            return compileRep(cast<Rep>(re), marker, pb);
-        } else if (isa<Assertion>(re)) {
-            return compileAssertion(cast<Assertion>(re), marker, pb);
-        } else if (isa<Any>(re)) {
-            return compileAny(marker, pb);
-        } else if (isa<Diff>(re)) {
-            return compileDiff(cast<Diff>(re), marker, pb);
-        } else if (isa<Intersect>(re)) {
-            return compileIntersect(cast<Intersect>(re), marker, pb);
-        } else if (isa<Start>(re)) {
-            return compileStart(marker, pb);
-        } else if (isa<End>(re)) {
-            return compileEnd(marker, pb);
-        } else if (isa<CC>(re)) {
-            // CCs may be passed through the toolchain directly to the compiler.
-            return compileCC(cast<CC>(re), marker, pb);
-        } else {
-            UnsupportedRE("RE Compiler failed to process " + Printer_RE::PrintRE(re));
-        }
+        UnsupportedRE("RE Compiler failed to process " + Printer_RE::PrintRE(re));
     }
 }
 
@@ -652,10 +607,9 @@ LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
     
     
 
-RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler, bool local)
+RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 : mKernel(kernel)
 , mCCCompiler(ccCompiler)
-, mLocal(local)
 , mLineBreak(nullptr)
 , mCRLF(nullptr)
 , mGraphemeBoundaryRule(nullptr)
