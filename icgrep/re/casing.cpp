@@ -24,8 +24,8 @@ namespace re {
 RE * resolveCaseInsensitiveMode(RE * re, bool inCaseInsensitiveMode) {
     if (isa<CC>(re)) {
         if (inCaseInsensitiveMode) {
-            UCD::UnicodeSet * cased = caseInsensitize(cast<CC>(re));
-            return makeCC(std::move(*cased));
+            UCD::UnicodeSet cased = caseInsensitize(*cast<CC>(re));
+            return makeCC(std::move(cased));
         }
         else return re;
     }

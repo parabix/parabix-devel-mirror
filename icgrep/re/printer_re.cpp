@@ -43,7 +43,7 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         retVal += "])";
     } else if (const CC* re_cc = dyn_cast<const CC>(re)) {
         retVal = "CC \"";
-        retVal += re_cc->canonicalName(UnicodeClass);
+        retVal += re_cc->canonicalName(CC_type::UnicodeClass);
         retVal += "\" ";
 
         for (const auto & i : *re_cc) {
@@ -61,9 +61,7 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         }
         retVal += re_name->getName();
         retVal += "\" ";
-        if (re_name->getType() == Name::Type::Capture) {
             retVal += "=(" + PrintRE(re_name->getDefinition()) + ")";
-        }
     } else if (const Range* rg = dyn_cast<const Range>(re)) {
         retVal = "Range (";
         retVal += PrintRE(rg->getLo());

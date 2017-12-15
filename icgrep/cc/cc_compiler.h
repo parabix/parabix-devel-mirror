@@ -73,11 +73,11 @@ inline pablo::PabloAST *CC_Compiler::compileCC(const re::CC *cc) {
 }
 
 inline pablo::PabloAST * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBlock & block) {
-    return compileCC(cc->canonicalName(re::ByteClass), cc, block);
+    return compileCC(cc->canonicalName(re::CC_type::ByteClass), cc, block);
 }
 
 inline pablo::PabloAST *CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBuilder & builder) {
-    return compileCC(cc->canonicalName(re::ByteClass), cc, builder);
+    return compileCC(cc->canonicalName(re::CC_type::ByteClass), cc, builder);
 }
 
 inline pablo::PabloBuilder & CC_Compiler::getBuilder() {

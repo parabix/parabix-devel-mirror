@@ -13,7 +13,7 @@ namespace re {
 std::string CC::canonicalName(const CC_type type) const {
     std::stringstream name;
     name << std::hex;
-    if ((type == ByteClass) && (max_codepoint() >= 0x80)) {
+    if ((type == CC_type::ByteClass) && (max_codepoint() >= 0x80)) {
         name << "BC";
     } else {
         name << "CC";

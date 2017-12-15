@@ -72,7 +72,7 @@ struct NameResolver {
                         }
                         name << n->getName();
                     } else if (isa<CC>(item)) {
-                        name << cast<CC>(item)->canonicalName(UnicodeClass);
+                        name << cast<CC>(item)->canonicalName(CC_type::UnicodeClass);
                     }
                     ai = alt->erase(ai);
                 } else {

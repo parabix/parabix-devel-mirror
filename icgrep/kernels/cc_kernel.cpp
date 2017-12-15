@@ -74,7 +74,7 @@ ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
 : PabloKernel(b, ccSetName +"_kernel", {Binding{b->getStreamSetTy(codeUnitSize), "basis"}})
 , mCharClasses(charClasses) {
     for (CC * cc : mCharClasses) {
-        addOutput(cc->canonicalName(re::ByteClass), b->getStreamTy());
+        addOutput(cc->canonicalName(re::CC_type::ByteClass), b->getStreamTy());
     }
 }
 

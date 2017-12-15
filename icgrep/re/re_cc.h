@@ -15,7 +15,7 @@ namespace re {
 using codepoint_t = UCD::codepoint_t;
 using interval_t = UCD::interval_t;
 
-enum CC_type {UnicodeClass, ByteClass};
+enum class CC_type {UnicodeClass, ByteClass};
 
 class CC : public RE, public UCD::UnicodeSet {
 public:

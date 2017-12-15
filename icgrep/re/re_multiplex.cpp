@@ -91,7 +91,7 @@ RE * multiplex(RE * const re,
                         }
                         name << n->getName();
                     } else if (isa<CC>(re)) {
-                        name << cast<CC>(re)->canonicalName(UnicodeClass);
+                        name << cast<CC>(re)->canonicalName(CC_type::UnicodeClass);
                     }
                     ai = alt->erase(ai);
                 } else {

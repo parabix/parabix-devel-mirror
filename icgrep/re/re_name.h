@@ -59,12 +59,12 @@ protected:
 
     }
     inline const char * replicateString(const char * string, const length_t length) {
-        if (string) {
+        if (string && (length > 0)) {
             char * allocated = reinterpret_cast<char*>(mAllocator.allocate(length));
             std::memcpy(allocated, string, length);
-            string = allocated;
+            return allocated;
         }
-        return string;
+        return nullptr;
     }
 
 private:

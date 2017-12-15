@@ -26,8 +26,8 @@ int findFoldEntry(const codepoint_t cp) {
     return lo;
 }
 
-void caseInsensitiveInsertRange(UnicodeSet * const cc, const codepoint_t lo, const codepoint_t hi) {
-    cc->insert_range(lo, hi);
+void caseInsensitiveInsertRange(UnicodeSet & cc, const codepoint_t lo, const codepoint_t hi) {
+    cc.insert_range(lo, hi);
     // Find the first foldTable entry overlapping the (lo, hi) range.
     int e = findFoldEntry(lo);
     // There may be multiple consecutive entries overlapping the range.
@@ -49,25 +49,25 @@ void caseInsensitiveInsertRange(UnicodeSet * const cc, const codepoint_t lo, con
             codepoint_t negative_subrange_hi = subrange_lo + 2 * fe.fold_offset - 1;
             if ((lo1 <= negative_subrange_hi) && (hi1 >= negative_subrange_lo)) {
                 // negative offsets apply
-                cc->insert_range(std::max(negative_subrange_lo,lo1) - fe.fold_offset, std::min(negative_subrange_hi, hi1) - fe.fold_offset);
+                cc.insert_range(std::max(negative_subrange_lo,lo1) - fe.fold_offset, std::min(negative_subrange_hi, hi1) - fe.fold_offset);
             }
             // Now the positive offset subrange.
             codepoint_t positive_subrange_lo = hi1 - ((hi1 - fe.range_lo) % (2 * fe.fold_offset));
             codepoint_t positive_subrange_hi = positive_subrange_lo + fe.fold_offset - 1;
             if ((lo1 <= positive_subrange_hi) && (hi1 >= positive_subrange_lo)) {
-                cc->insert_range(std::max(positive_subrange_lo, lo1) + fe.fold_offset, std::min(positive_subrange_hi, hi1) + fe.fold_offset);
+                cc.insert_range(std::max(positive_subrange_lo, lo1) + fe.fold_offset, std::min(positive_subrange_hi, hi1) + fe.fold_offset);
             }
         }
         else if (fe.fold_offset != 0) {
             // We have either a positive or negative offset, and all offsets for
             // this entry have the same sign.
-            cc->insert_range(lo1 + fe.fold_offset, hi1 + fe.fold_offset);
+            cc.insert_range(lo1 + fe.fold_offset, hi1 + fe.fold_offset);
         }
         // Now pick up any individual fold entries.
         for (unsigned i = 0; i < fe.fold_pairs.size(); i++) {
             if (fe.fold_pairs[i].first < lo) continue;  // Only possible for first fold_entry.
             if (fe.fold_pairs[i].first > hi) break;     // Only possible for last fold_entry.
-            cc->insert(fe.fold_pairs[i].second);
+            cc.insert(fe.fold_pairs[i].second);
         }
         // Move on to the next fold_entry.
         e++;
@@ -81,9 +81,9 @@ inline codepoint_t hi_codepoint(const interval_t & i) {
     return std::get<1>(i);
 }
 
-UnicodeSet * caseInsensitize(UnicodeSet * const cc) {
-    UnicodeSet * cci = new UnicodeSet();
-    for (const interval_t i : *cc) {
+UnicodeSet caseInsensitize(UnicodeSet & cc) {
+    UnicodeSet cci;
+    for (const interval_t i : cc) {
         caseInsensitiveInsertRange(cci, lo_codepoint(i), hi_codepoint(i));
     }
     return cci;
