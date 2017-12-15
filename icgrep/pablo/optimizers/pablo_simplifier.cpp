@@ -482,22 +482,30 @@ void strengthReduction(PabloBlock * const block) {
                     op->eraseFromParent(false);
                 }
             }
-        } else if (LLVM_UNLIKELY(isa<ScanThru>(stmt))) {
-            ScanThru * scanThru = cast<ScanThru>(stmt);
-            if (LLVM_UNLIKELY(isa<Advance>(scanThru->getScanFrom()))) {
-                // Replace a ScanThru(Advance(x,n),y) with an ScanThru(Advance(x, n - 1), Advance(x, n - 1) | y), where Advance(x, 0) = x
-                Advance * adv = cast<Advance>(scanThru->getScanFrom());
-                if (LLVM_UNLIKELY(adv->getNumUses() == 1)) {
-                    PabloAST * stream = adv->getExpression();
+        } else if (LLVM_UNLIKELY(isa<ScanThru>(stmt))) {            
+            ScanThru * const outer = cast<ScanThru>(stmt);
+            if (LLVM_UNLIKELY(isa<Advance>(outer->getScanFrom()))) {
+                // Replace ScanThru(Advance(x,n),y) with ScanThru(Advance(x, n - 1), Advance(x, n - 1) | y), where Advance(x, 0) = x                
+                Advance * const inner = cast<Advance>(outer->getScanFrom());
+                if (LLVM_UNLIKELY(inner->getNumUses() == 1)) {
+                    PabloAST * stream = inner->getExpression();
                     block->setInsertPoint(stmt);
-                    if (LLVM_UNLIKELY(adv->getAmount() != 1)) {
-                        stream = block->createAdvance(stream, block->getInteger(adv->getAmount() - 1));
+                    if (LLVM_UNLIKELY(inner->getAmount() != 1)) {
+                        stream = block->createAdvance(stream, block->getInteger(inner->getAmount() - 1));
                     }
-                    stmt = scanThru->replaceWith(block->createAdvanceThenScanThru(stream, scanThru->getScanThru()));
-                    adv->eraseFromParent(false);
+                    stmt = outer->replaceWith(block->createAdvanceThenScanThru(stream, outer->getScanThru()));
+                    inner->eraseFromParent(false);
                     continue;
                 }
-            } else if (LLVM_UNLIKELY(isa<And>(scanThru->getScanFrom()))) {
+            } else if (LLVM_UNLIKELY(isa<ScanThru>(outer->getScanFrom()))) {
+                // Replace ScanThru(ScanThru(x, y), z) with ScanThru(x, y | z)
+                ScanThru * const inner = cast<ScanThru>(outer->getScanFrom());
+                block->setInsertPoint(stmt);
+                ScanThru * const scanThru = block->createScanThru(inner->getScanFrom(), block->createOr(inner->getScanThru(), outer->getScanThru()));
+                stmt->replaceWith(scanThru);
+                stmt = scanThru;
+                continue;
+            } else if (LLVM_UNLIKELY(isa<And>(outer->getScanFrom()))) {
                 // Suppose B is an arbitrary bitstream and A = Advance(B, 1). ScanThru(B ∧ ¬A, B) will leave a marker on the position
                 // following the end of any run of 1-bits in B. But this is equivalent to computing A ∧ ¬B since A will have exactly
                 // one 1-bit past the end of any run of 1-bits in B.

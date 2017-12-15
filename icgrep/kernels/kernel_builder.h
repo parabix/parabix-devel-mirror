@@ -90,7 +90,7 @@ public:
 
     llvm::Value * getOutputStreamSetCount(const std::string & name);
 
-    llvm::Value * getAdjustedInputStreamBlockPtr(llvm::Value * blockAdjustment, const std::string & name, llvm::Value * streamIndex);
+    llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);
 
     llvm::Value * getRawInputPointer(const std::string & name, llvm::Value * absolutePosition);
 

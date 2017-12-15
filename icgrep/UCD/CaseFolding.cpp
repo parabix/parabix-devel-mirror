@@ -81,7 +81,7 @@ inline codepoint_t hi_codepoint(const interval_t & i) {
     return std::get<1>(i);
 }
 
-UnicodeSet caseInsensitize(UnicodeSet & cc) {
+UnicodeSet caseInsensitize(const UnicodeSet & cc) {
     UnicodeSet cci;
     for (const interval_t i : cc) {
         caseInsensitiveInsertRange(cci, lo_codepoint(i), hi_codepoint(i));

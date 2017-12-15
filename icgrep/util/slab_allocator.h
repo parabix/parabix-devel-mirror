@@ -23,11 +23,11 @@ public:
     };
 
     template<typename Type = T>
-    inline Type * allocate(size_type n, const_pointer = nullptr) noexcept {
+    inline Type * allocate(const size_type n, const_pointer = nullptr) noexcept {
         static_assert(sizeof(Type) > 0, "Cannot allocate a zero-length type.");
-        assert ("Cannot allocate 0 items." && n > 0);
+        assert ("A memory leak will occur whenever the SlabAllocator allocates 0 items" && n > 0);
         auto ptr = static_cast<Type *>(mAllocator.Allocate(n * sizeof(Type), sizeof(void*)));
-        assert ("Allocating returned a null pointer. Function was likely called before Allocator creation!" && ptr);
+        assert ("allocator returned a null pointer. Function was likely called before Allocator creation!" && ptr);
         return ptr;
     }
 
@@ -41,16 +41,16 @@ public:
     }
 
     template<typename Type = T>
-    inline bool operator==(SlabAllocator<Type> const & other) {
+    inline bool operator==(SlabAllocator<Type> const & other) const noexcept {
         return this == &other;
     }
 
     template<typename Type = T>
-    inline bool operator!=(SlabAllocator<Type> const & other) {
+    inline bool operator!=(SlabAllocator<Type> const & other) const noexcept {
         return this != &other;
     }
 
-    inline size_type getTotalMemory() const {
+    inline size_type getTotalMemory() const noexcept {
         return mAllocator.getTotalMemory();
     }
 
@@ -60,7 +60,7 @@ public:
 
     inline SlabAllocator() noexcept {}
     inline SlabAllocator(const SlabAllocator &) noexcept = delete;
-    template <class U> inline SlabAllocator (const SlabAllocator<U> &) noexcept { assert (false); }
+    template <class U> inline SlabAllocator (const SlabAllocator<U> &) noexcept { }
 private:
     LLVMAllocator mAllocator;
 };
@@ -97,21 +97,21 @@ public:
         mAllocator->Deallocate(p, size);
     }
 
-    inline size_type max_size() const {
+    inline size_type max_size() const noexcept {
         return std::numeric_limits<size_type>::max();
     }
 
     template<typename Type = T>
-    inline bool operator==(ProxyAllocator<Type> const & other) {
+    inline bool operator==(ProxyAllocator<Type> const & other) const noexcept {
         return mAllocator == other.mAllocator;
     }
 
     template<typename Type = T>
-    inline bool operator!=(ProxyAllocator<Type> const & other) {
+    inline bool operator!=(ProxyAllocator<Type> const & other) const noexcept {
         return mAllocator != other.mAllocator;
     }
 
-    inline size_type getTotalMemory() const {
+    inline size_type getTotalMemory() const noexcept {
         return mAllocator->getTotalMemory();
     }
 

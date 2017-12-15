@@ -110,8 +110,8 @@ private:
 
     MarkerType compileName(Name * name, pablo::PabloBuilder & pb);
     MarkerType compileAny(const MarkerType m, pablo::PabloBuilder & pb);
-    MarkerType compileStart(const MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileEnd(const MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType compileStart(MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType compileEnd(MarkerType marker, pablo::PabloBuilder & pb);
 
     MarkerType AdvanceMarker(MarkerType marker, const MarkerPosition newpos, pablo::PabloBuilder & pb);
     void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBuilder & pb);

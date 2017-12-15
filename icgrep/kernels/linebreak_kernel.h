@@ -11,6 +11,16 @@ namespace kernel { class KernelBuilder; }
 
 namespace kernel {
 
+class LineFeedKernelBuilder final : public pablo::PabloKernel {
+public:
+    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, unsigned basisBitsCount);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
+
 class LineBreakKernelBuilder final : public pablo::PabloKernel {
 public:
     LineBreakKernelBuilder(const std::unique_ptr<KernelBuilder> & b, unsigned basisBitsCount);

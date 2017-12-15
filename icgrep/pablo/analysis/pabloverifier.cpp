@@ -6,9 +6,12 @@
 #include <pablo/codegenstate.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/printer_pablos.h>
-#include <boost/container/flat_set.hpp>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/ADT/SmallSet.h>
+#include <llvm/ADT/DenseMap.h>
+#include <llvm/ADT/SmallBitVector.h>
+#include <llvm/IR/Type.h>
 
 using namespace llvm;
 
@@ -16,17 +19,14 @@ namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
 
-template <typename Type>
-using SmallSet = boost::container::flat_set<Type>;
-
-using ScopeSet = SmallSet<const PabloBlock *>;
+using ScopeSet = SmallSet<const PabloBlock *, 32>;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyUseDefInformation
  ** ------------------------------------------------------------------------------------------------------------- */
 void testUsers(const PabloAST * expr, const ScopeSet & validScopes) { 
     size_t uses = 0;
-    SmallSet<const PabloAST *> verified;
+    SmallSet<const PabloAST *, 16> verified;
     for (const PabloAST * use : expr->users()) {
         if (LLVM_UNLIKELY(verified.count(use) != 0)) {
             continue;
@@ -153,20 +153,6 @@ void verifyUseDefInformation(const PabloKernel * kernel) {
         testUsers(kernel->getOutput(i), validScopes);
     }
     verifyUseDefInformation(kernel->getEntryBlock(), validScopes);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief unreachable
- ** ------------------------------------------------------------------------------------------------------------- */
-bool unreachable(const Statement * stmt, const PabloBlock * const block) {
-    PabloBlock * parent = stmt->getParent();
-    while (parent)  {
-        if (parent == block) {
-            return false;
-        }
-        parent = parent->getPredecessor();
-    }
-    return true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -301,86 +287,136 @@ inline void verifyProgramStructure(const PabloKernel * kernel) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isTopologicallyOrdered
+ * @brief verifyAllPathsDominate
  ** ------------------------------------------------------------------------------------------------------------- */
-struct OrderingVerifier {
-    OrderingVerifier() : mParent(nullptr), mSet() {}
-    OrderingVerifier(const OrderingVerifier & parent) : mParent(&parent) {}
-    bool count(const PabloAST * expr) const {
-        if (mSet.count(expr)) {
-            return true;
-        } else if (mParent) {
-            return mParent->count(expr);
-        }
-        return false;
-    }
-    void insert(const PabloAST * expr) {
-        mSet.insert(expr);
-    }
-private:
-    const OrderingVerifier * const mParent;
-    SmallSet<const PabloAST *> mSet;
-};
-
-void isTopologicallyOrdered(const PabloBlock * block, const OrderingVerifier & parent) {
-    OrderingVerifier ov(parent);
+void verifyAllPathsDominate(const PabloBlock * block) {
     for (const Statement * stmt : *block) {
-        if (LLVM_UNLIKELY(isa<While>(stmt))) {
-            isTopologicallyOrdered(cast<While>(stmt)->getBody(), ov);
-            for (const Var * var : cast<While>(stmt)->getEscaped()) {
-                ov.insert(var);
-            }
-        } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
-            ov.insert(cast<Assign>(stmt)->getVariable());
-        }
         for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
             const PabloAST * const op = stmt->getOperand(i);
-            if (LLVM_UNLIKELY((isa<Statement>(op) || isa<Var>(op)) && ov.count(op) == 0)) {
+            if (LLVM_UNLIKELY(!dominates(op, stmt))) {
                 std::string tmp;
                 raw_string_ostream out(tmp);
-                if (isa<Var>(op)) {
-                    PabloPrinter::print(op, out);
-                    out << " is used by ";
-                    PabloPrinter::print(stmt, out);
-                    out << " before being assigned a value.";
-                } else {
-                    PabloPrinter::print(op, out);
-                    if (LLVM_UNLIKELY(isa<Statement>(op) && unreachable(stmt, cast<Statement>(op)->getParent()))) {
-                        out << " was defined in a scope that is unreachable by ";
-                    } else {
-                        out << " was used before definition by ";
-                    }
-                    PabloPrinter::print(stmt, out);
-                }
+                PabloPrinter::print(cast<Statement>(op), out);
+                out << " does not dominate ";
+                PabloPrinter::print(stmt, out);
                 throw std::runtime_error(out.str());
             }
         }
-        ov.insert(stmt);
-        if (LLVM_UNLIKELY(isa<If>(stmt))) {
-            isTopologicallyOrdered(cast<If>(stmt)->getBody(), ov);
-            for (const Var * def : cast<If>(stmt)->getEscaped()) {
-                ov.insert(def);
-            }
+        if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+            verifyAllPathsDominate(cast<Branch>(stmt)->getBody());
         }
     }
 }
 
-void isTopologicallyOrdered(const PabloKernel * kernel) {
-    OrderingVerifier ov;
-    for (unsigned i = 0; i != kernel->getNumOfInputs(); ++i) {
-        ov.insert(kernel->getInput(i));
-    }
-    for (unsigned i = 0; i != kernel->getNumOfOutputs(); ++i) {
-        ov.insert(kernel->getOutput(i));
-    }
-    isTopologicallyOrdered(kernel->getEntryBlock(), ov);
+void verifyAllPathsDominate(const PabloKernel * kernel) {
+    verifyAllPathsDominate(kernel->getEntryBlock());
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief verifyVariableAssignments
+ ** ------------------------------------------------------------------------------------------------------------- */
+struct AssignmentSet {
+    AssignmentSet() : mParent(nullptr), mSet() {}
+    AssignmentSet(const AssignmentSet & parent) : mParent(&parent) {}
+    bool contains(const Var * expr) const {
+        if (mSet.count(expr)) {
+            return true;
+        } else if (mParent) {
+            return mParent->contains(expr);
+        }
+        return false;
+    }
+
+    void insert_full(const Var * expr) {
+        const auto n = getNumOfElements(expr);
+        auto f = mAssignment.find(expr);
+        if (LLVM_LIKELY(f == mAssignment.end())) {
+            mAssignment.insert(std::move(std::make_pair(expr, SmallBitVector(n, true))));
+        } else {
+            f->second.resize(n, true);
+        }
+    }
+
+    void insert(const Var * expr, const unsigned i) {
+        mSet.insert(expr);
+    }
+protected:
+
+    static unsigned getNumOfElements(const Var * expr) {
+        const Type * const ty = expr->getType();
+        if (ty->isArrayTy()) {
+            return ty->getArrayNumElements();
+        }
+        return 1;
+    }
+
+private:
+    const AssignmentSet * const mParent;
+    DenseMap<const Var *, SmallBitVector> mAssignment;
+
+    SmallSet<const Var *, 16> mSet;
+};
+
+//void verifyVariableUsages(const PabloBlock * block, const AssignmentSet & parent) {
+//    AssignmentSet A(parent);
+//    for (const Statement * stmt : *block) {
+//        if (isa<Assign>(stmt)) {
+//            PabloAST * var = cast<Assign>(stmt)->getVariable();
+//            if (isa<Extract>(var)) {
+//                var = cast<Extract>(var)->getArray();
+//            }
+//            A.insert(cast<Var>(var));
+//        } else if (isa<Extract>(stmt)) {
+//            Var * const var = cast<Var>(cast<Extract>(var)->getArray());
+//            if (A.contains(var)) {
+//                continue;
+//            }
+//        } else {
+//            for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+//                const PabloAST * const op = stmt->getOperand(i);
+//                if (isa<Var>(op)) {
+
+//                }
+//            }
+//        }
+
+
+
+//        for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+//            const PabloAST * const op = stmt->getOperand(i);
+//            if (LLVM_UNLIKELY(!dominates(op, stmt))) {
+//                std::string tmp;
+//                raw_string_ostream out(tmp);
+//                PabloPrinter::print(cast<Statement>(op), out);
+//                out << " does not dominate ";
+//                PabloPrinter::print(stmt, out);
+//                throw std::runtime_error(out.str());
+//            }
+//        }
+//        if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+//            verifyAllPathsDominate(cast<Branch>(stmt)->getBody());
+//        }
+//    }
+//}
+
+//void verifyVariableUsages(const PabloKernel * kernel) {
+//    AssignmentSet A;
+//    for (unsigned i = 0; i != kernel->getNumOfInputs(); ++i) {
+//        A.insert(kernel->getInput(i));
+//    }
+//    for (unsigned i = 0; i != kernel->getNumOfOutputs(); ++i) {
+//        A.insert(kernel->getOutput(i));
+//    }
+//    verifyVariableUsages(kernel->getEntryBlock(), A);
+//}
+
+
 
 void PabloVerifier::verify(const PabloKernel * kernel, const std::string & location) {
     try {
         verifyProgramStructure(kernel);
         verifyUseDefInformation(kernel);
-        isTopologicallyOrdered(kernel);
+        verifyAllPathsDominate(kernel);
     } catch(std::runtime_error & err) {
         PabloPrinter::print(kernel, errs());
         errs().flush();

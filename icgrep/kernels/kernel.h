@@ -151,6 +151,15 @@ public:
         return KernelInterface::getStreamInput(port.second);
     }
 
+    const Binding & getStreamInput(const parabix::StreamSetBuffer * const buffer) const {
+        for (unsigned i = 0; i < mStreamSetInputBuffers.size(); ++i) {
+            if (mStreamSetInputBuffers[i] == buffer) {
+                return getStreamInput(i);
+            }
+        }
+        throw std::runtime_error("no output binding found given buffer");
+    }
+
     const parabix::StreamSetBuffer * getStreamSetOutputBuffer(const unsigned i) const {
         assert (i < mStreamSetOutputBuffers.size());
         assert (mStreamSetOutputBuffers[i]);
@@ -165,6 +174,15 @@ public:
 
     const Binding & getStreamOutput(const unsigned i) const {
         return KernelInterface::getStreamOutput(i);
+    }
+
+    const Binding & getStreamOutput(const parabix::StreamSetBuffer * const buffer) const {
+        for (unsigned i = 0; i < mStreamSetOutputBuffers.size(); ++i) {
+            if (mStreamSetOutputBuffers[i] == buffer) {
+                return getStreamOutput(i);
+            }
+        }
+        throw std::runtime_error("no output binding found given buffer");
     }
 
     const Binding & getStreamOutput(const std::string & name) const {

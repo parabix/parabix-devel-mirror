@@ -21,22 +21,24 @@
 using namespace llvm;
 
 namespace re {
-RE * resolveCaseInsensitiveMode(RE * re, bool inCaseInsensitiveMode) {
+RE * resolveCaseInsensitiveMode(RE * re, const bool inCaseInsensitiveMode) {
     if (isa<CC>(re)) {
         if (inCaseInsensitiveMode) {
-            UCD::UnicodeSet cased = caseInsensitize(*cast<CC>(re));
-            return makeCC(std::move(cased));
+            return makeCC(std::move(caseInsensitize(*cast<CC>(re))));
         }
-        else return re;
-    }
-    else if (Name * name = dyn_cast<Name>(re)) {
+        return re;
+    } else if (Name * name = dyn_cast<Name>(re)) {
         if (!inCaseInsensitiveMode || (name->getDefinition() == nullptr)) return re;
         RE * r = resolveCaseInsensitiveMode(name->getDefinition(), true);
-        Name * n = makeName(name->getNamespace(), name->getName() + "/i", name->getType());
+        Name * n = nullptr;
+        if (name->hasNamespace()) {
+            n = makeName(name->getNamespace(), name->getName() + "/i", name->getType());
+        } else {
+            n = makeName(name->getName() + "/i", name->getType());
+        }
         n->setDefinition(r);
         return n;
-    }
-    else if (Seq * seq = dyn_cast<Seq>(re)) {
+    } else if (Seq * seq = dyn_cast<Seq>(re)) {
         std::vector<RE*> list;
         for (auto i = seq->begin(); i != seq->end(); ++i) {
             list.push_back(resolveCaseInsensitiveMode(*i, inCaseInsensitiveMode));

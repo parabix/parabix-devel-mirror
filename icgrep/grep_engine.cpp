@@ -100,16 +100,21 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = 8;
 
-    StreamSetBuffer * BasisBits = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(encodingBits, 1), segmentSize * bufferSegments);
+    StreamSetBuffer * BasisBits = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(encodingBits, 1), segmentSize * bufferSegments + 1);
     kernel::Kernel * s2pk = mGrepDriver->addKernelInstance<kernel::S2PKernel>(idb);
     mGrepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
+    StreamSetBuffer * LineFeedStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments + 1);
+    kernel::Kernel * linefeedK = mGrepDriver->addKernelInstance<kernel::LineFeedKernelBuilder>(idb, encodingBits);
+    mGrepDriver->makeKernelCall(linefeedK, {BasisBits}, {LineFeedStream});
+
     StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+    StreamSetBuffer * CRLFStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
     kernel::Kernel * linebreakK = mGrepDriver->addKernelInstance<kernel::LineBreakKernelBuilder>(idb, encodingBits);
-    mGrepDriver->makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
+    mGrepDriver->makeKernelCall(linebreakK, {BasisBits, LineFeedStream}, {LineBreakStream, CRLFStream});
 
     kernel::Kernel * requiredStreamsK = mGrepDriver->addKernelInstance<kernel::RequiredStreams_UTF8>(idb);
-    StreamSetBuffer * RequiredStreams = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(4, 1), segmentSize * bufferSegments);
+    StreamSetBuffer * RequiredStreams = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(3, 1), segmentSize * bufferSegments);
     mGrepDriver->makeKernelCall(requiredStreamsK, {BasisBits}, {RequiredStreams});
 
     const auto n = REs.size();
@@ -136,7 +141,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
         mGrepDriver->makeKernelCall(ccK, {BasisBits}, {CharClasses});
         StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
         kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i], numOfCharacterClasses);
-        mGrepDriver->makeKernelCall(icgrepK, {CharClasses, LineBreakStream, RequiredStreams}, {MatchResults});
+        mGrepDriver->makeKernelCall(icgrepK, {CharClasses, LineBreakStream, CRLFStream, RequiredStreams}, {MatchResults});
         MatchResultsBufs[i] = MatchResults;
     }
     StreamSetBuffer * MergedResults = MatchResultsBufs[0];

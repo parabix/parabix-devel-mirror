@@ -98,8 +98,9 @@ static Value * checkStackAddress(CBuilder * const b, Value * const Ptr, Value * 
     }
     Value * const p = b->CreatePtrToInt(Ptr, intPtrTy);
     Value * const s = b->CreatePtrToInt(Base, intPtrTy);
-    Value * const e = b->CreateAdd(s, b->CreateSub(sz, b->CreateZExtOrTrunc(Size, intPtrTy)));
-    return b->CreateAnd(b->CreateICmpUGE(p, s), b->CreateICmpULE(p, e));
+    Value * const w = b->CreateAdd(p, b->CreateZExtOrTrunc(Size, intPtrTy));
+    Value * const e = b->CreateAdd(s, sz);
+    return b->CreateAnd(b->CreateICmpUGE(p, s), b->CreateICmpULE(w, e));
 }
 
 #define CHECK_ADDRESS(Ptr, Size, Name) \

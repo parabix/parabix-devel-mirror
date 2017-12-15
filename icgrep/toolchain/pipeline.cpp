@@ -33,6 +33,8 @@ Function * makeThreadFunction(const std::unique_ptr<kernel::KernelBuilder> & b, 
 
 void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel);
 
+void handleInsufficientData(const std::unique_ptr<KernelBuilder> & b, Value * const produced, Value * const final, BasicBlock * const entry, const Kernel * const consumer,  const Binding & input, const StreamSetBuffer * const buffer);
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateSegmentParallelPipeline
  *
@@ -42,12 +44,12 @@ void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const
  * Let S_0, S_1, ... S_N be the segments of S.   Segments are assigned to threads in a round-robin
  * fashion such that processing of segment S_i by the full pipeline is carried out by thread i mod T.
  ** ------------------------------------------------------------------------------------------------------------- */
-void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<Kernel *> & kernels) {
+void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, const std::vector<Kernel *> & kernels) {
 
     const unsigned n = kernels.size();
-    Module * const m = iBuilder->getModule();
-    IntegerType * const sizeTy = iBuilder->getSizeTy();
-    PointerType * const voidPtrTy = iBuilder->getVoidPtrTy();
+    Module * const m = b->getModule();
+    IntegerType * const sizeTy = b->getSizeTy();
+    PointerType * const voidPtrTy = b->getVoidPtrTy();
     Constant * nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
     std::vector<Type *> structTypes;
     codegen::BufferSegments = std::max(codegen::BufferSegments, codegen::ThreadNum);
@@ -60,9 +62,9 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
     StructType * const sharedStructType = StructType::get(m->getContext(), structTypes);
     StructType * const threadStructType = StructType::get(m->getContext(), {sharedStructType->getPointerTo(), sizeTy});
 
-    const auto ip = iBuilder->saveIP();
+    const auto ip = b->saveIP();
 
-    Function * const threadFunc = makeThreadFunction(iBuilder, "segment");
+    Function * const threadFunc = makeThreadFunction(b, "segment");
     auto args = threadFunc->arg_begin();
 
     // -------------------------------------------------------------------------------------------------------------------------
@@ -70,125 +72,129 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
     // -------------------------------------------------------------------------------------------------------------------------
 
      // Create the basic blocks for the thread function.
-    BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", threadFunc);
-    iBuilder->SetInsertPoint(entryBlock);
+    BasicBlock * entryBlock = BasicBlock::Create(b->getContext(), "entry", threadFunc);
+    b->SetInsertPoint(entryBlock);
 
-    Value * const threadStruct = iBuilder->CreateBitCast(&*(args), threadStructType->getPointerTo());
+    Value * const threadStruct = b->CreateBitCast(&*(args), threadStructType->getPointerTo());
 
-    Value * const sharedStatePtr = iBuilder->CreateLoad(iBuilder->CreateGEP(threadStruct, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
+    Value * const sharedStatePtr = b->CreateLoad(b->CreateGEP(threadStruct, {b->getInt32(0), b->getInt32(0)}));
     for (unsigned k = 0; k < n; ++k) {
-        Value * ptr = iBuilder->CreateLoad(iBuilder->CreateGEP(sharedStatePtr, {iBuilder->getInt32(0), iBuilder->getInt32(k)}));
+        Value * ptr = b->CreateLoad(b->CreateGEP(sharedStatePtr, {b->getInt32(0), b->getInt32(k)}));
         kernels[k]->setInstance(ptr);
     }
-    Value * const segOffset = iBuilder->CreateLoad(iBuilder->CreateGEP(threadStruct, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
+    Value * const segOffset = b->CreateLoad(b->CreateGEP(threadStruct, {b->getInt32(0), b->getInt32(1)}));
 
-    BasicBlock * segmentLoop = BasicBlock::Create(iBuilder->getContext(), "segmentLoop", threadFunc);
-    iBuilder->CreateBr(segmentLoop);
+    BasicBlock * segmentLoop = BasicBlock::Create(b->getContext(), "segmentLoop", threadFunc);
+    b->CreateBr(segmentLoop);
 
-    iBuilder->SetInsertPoint(segmentLoop);
-    PHINode * const segNo = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2, "segNo");
+    b->SetInsertPoint(segmentLoop);
+    PHINode * const segNo = b->CreatePHI(b->getSizeTy(), 2, "segNo");
     segNo->addIncoming(segOffset, entryBlock);
 
-    Value * terminated = iBuilder->getFalse();
-    Value * const nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
+    Value * terminated = b->getFalse();
+    Value * const nextSegNo = b->CreateAdd(segNo, b->getSize(1));
 
-    BasicBlock * segmentLoopBody = nullptr;
-    BasicBlock * const exitThreadBlock = BasicBlock::Create(iBuilder->getContext(), "exitThread", threadFunc);
+    BasicBlock * const exitThreadBlock = BasicBlock::Create(b->getContext(), "exitThread", threadFunc);
 
-    StreamSetBufferMap<Value *> producedPos;
-    StreamSetBufferMap<Value *> consumedPos;
+    StreamSetBufferMap<Value *> producedItemCount;
+    StreamSetBufferMap<Value *> consumedItemCount;
 
     Value * cycleCountStart = nullptr;
     Value * cycleCountEnd = nullptr;
     if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
-        cycleCountStart = iBuilder->CreateReadCycleCounter();
+        cycleCountStart = b->CreateReadCycleCounter();
     }
 
     for (unsigned k = 0; k < n; ++k) {
 
         const auto & kernel = kernels[k];
 
-        BasicBlock * const segmentWait = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Wait", threadFunc);
+        BasicBlock * const kernelWait = BasicBlock::Create(b->getContext(), kernel->getName() + "Wait", threadFunc);
 
-        BasicBlock * segmentYield = segmentWait;
-        iBuilder->CreateBr(segmentWait);
+        b->CreateBr(kernelWait);
 
-        segmentLoopBody = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Do", threadFunc);
+        BasicBlock * const kernelBody = BasicBlock::Create(b->getContext(), kernel->getName() + "Do", threadFunc);
 
-        iBuilder->SetInsertPoint(segmentWait);
+        b->SetInsertPoint(kernelWait);
         const unsigned waitIdx = codegen::DebugOptionIsSet(codegen::SerializeThreads) ? (n - 1) : k;
 
-        iBuilder->setKernel(kernels[waitIdx]);
-        Value * const processedSegmentCount = iBuilder->acquireLogicalSegmentNo();
-        iBuilder->setKernel(kernel);
+        b->setKernel(kernels[waitIdx]);
+        Value * const processedSegmentCount = b->acquireLogicalSegmentNo();
+        b->setKernel(kernel);
 
         assert (processedSegmentCount->getType() == segNo->getType());
-        Value * const ready = iBuilder->CreateICmpEQ(segNo, processedSegmentCount);
+        Value * const ready = b->CreateICmpEQ(segNo, processedSegmentCount);
 
         if (kernel->hasNoTerminateAttribute()) {
-            iBuilder->CreateCondBr(ready, segmentLoopBody, segmentYield);
+            b->CreateCondBr(ready, kernelBody, kernelWait);
         } else { // If the kernel was terminated in a previous segment then the pipeline is done.
-            BasicBlock * completionTest = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Completed", threadFunc, 0);
-            BasicBlock * exitBlock = BasicBlock::Create(iBuilder->getContext(), kernel->getName() + "Exit", threadFunc, 0);
-            iBuilder->CreateCondBr(ready, completionTest, segmentYield);
+            BasicBlock * kernelTerminated = BasicBlock::Create(b->getContext(), kernel->getName() + "Terminated", threadFunc, 0);
+            BasicBlock * exitBlock = BasicBlock::Create(b->getContext(), kernel->getName() + "Exit", threadFunc, 0);
+            b->CreateCondBr(ready, kernelTerminated, kernelWait);
 
-            iBuilder->SetInsertPoint(completionTest);
-            Value * terminationSignal = iBuilder->getTerminationSignal();
-            iBuilder->CreateCondBr(terminationSignal, exitBlock, segmentLoopBody);
-            iBuilder->SetInsertPoint(exitBlock);
-            // Ensure that the next thread will also exit.
-            iBuilder->releaseLogicalSegmentNo(nextSegNo);
-            iBuilder->CreateBr(exitThreadBlock);
+            b->SetInsertPoint(kernelTerminated);
+            Value * terminationSignal = b->getTerminationSignal();
+            b->CreateCondBr(terminationSignal, exitBlock, kernelBody);
+            b->SetInsertPoint(exitBlock);
+            b->releaseLogicalSegmentNo(nextSegNo); // Ensure that the next thread will also exit.
+            b->CreateBr(exitThreadBlock);
         }
 
+        BasicBlock * const kernelEnd = BasicBlock::Create(b->getContext(), kernel->getName() + "End", threadFunc);
+
         // Execute the kernel segment
-        iBuilder->SetInsertPoint(segmentLoopBody);
+        b->SetInsertPoint(kernelBody);
         const auto & inputs = kernel->getStreamInputs();
         std::vector<Value *> args = {kernel->getInstance(), terminated};
         for (unsigned i = 0; i < inputs.size(); ++i) {
-            const auto f = producedPos.find(kernel->getStreamSetInputBuffer(i));
-            assert (f != producedPos.end());
-            args.push_back(f->second);
+            const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
+            const auto f = producedItemCount.find(buffer);
+            assert (f != producedItemCount.end());
+            Value * const produced = f->second;
+            args.push_back(produced);
+            handleInsufficientData(b, produced, terminated, kernelEnd, kernel, inputs[i], buffer);
         }
 
-        iBuilder->setKernel(kernel);
-        iBuilder->createDoSegmentCall(args);
+        b->setKernel(kernel);
+        b->createDoSegmentCall(args);
+        b->CreateBr(kernelEnd);
+
+        b->SetInsertPoint(kernelEnd);
+
         if (!kernel->hasNoTerminateAttribute()) {
-            terminated = iBuilder->CreateOr(terminated, iBuilder->getTerminationSignal());
+            terminated = b->CreateOr(terminated, b->getTerminationSignal());
         }
 
         const auto & outputs = kernel->getStreamOutputs();
         for (unsigned i = 0; i < outputs.size(); ++i) {            
-            Value * const produced = iBuilder->getProducedItemCount(outputs[i].getName()); // terminated
+            Value * const produced = b->getProducedItemCount(outputs[i].getName());
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
-            assert (producedPos.count(buf) == 0);
-            producedPos.emplace(buf, produced);
+            assert (producedItemCount.count(buf) == 0);
+            producedItemCount.emplace(buf, produced);
         }
         for (unsigned i = 0; i < inputs.size(); ++i) {
-            Value * const processedItemCount = iBuilder->getProcessedItemCount(inputs[i].getName());
+            Value * const processedItemCount = b->getProcessedItemCount(inputs[i].getName());
             const StreamSetBuffer * const buf = kernel->getStreamSetInputBuffer(i);            
-            auto f = consumedPos.find(buf);
-            if (f == consumedPos.end()) {
-                consumedPos.emplace(buf, processedItemCount);
+            auto f = consumedItemCount.find(buf);
+            if (f == consumedItemCount.end()) {
+                consumedItemCount.emplace(buf, processedItemCount);
             } else {
-                Value * lesser = iBuilder->CreateICmpULT(processedItemCount, f->second);
-                f->second = iBuilder->CreateSelect(lesser, processedItemCount, f->second);
+                assert (f->second);
+                f->second = b->CreateUMin(processedItemCount, f->second);
             }
         }
+
         if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
-            cycleCountEnd = iBuilder->CreateReadCycleCounter();
-            Value * counterPtr = iBuilder->getCycleCountPtr();
-            iBuilder->CreateStore(iBuilder->CreateAdd(iBuilder->CreateLoad(counterPtr), iBuilder->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
+            cycleCountEnd = b->CreateReadCycleCounter();
+            Value * counterPtr = b->getCycleCountPtr();
+            b->CreateStore(b->CreateAdd(b->CreateLoad(counterPtr), b->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
             cycleCountStart = cycleCountEnd;
-        }
-        
-        iBuilder->releaseLogicalSegmentNo(nextSegNo);
+        }        
+        b->releaseLogicalSegmentNo(nextSegNo);
     }
 
-    assert (segmentLoopBody);
-    exitThreadBlock->moveAfter(segmentLoopBody);
-
-    for (const auto consumed : consumedPos) {
+    exitThreadBlock->moveAfter(b->GetInsertBlock());
+    for (const auto consumed : consumedItemCount) {
         const StreamSetBuffer * const buf = consumed.first;
         Kernel * const k = buf->getProducer();
         const auto & outputs = k->getStreamSetOutputBuffers();
@@ -198,32 +204,32 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
                 if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
                     continue;
                 }
-                iBuilder->setKernel(k);
-                iBuilder->setConsumedItemCount(binding.getName(), consumed.second);
+                b->setKernel(k);
+                b->setConsumedItemCount(binding.getName(), consumed.second);
                 break;
             }
         }
     }
 
-    segNo->addIncoming(iBuilder->CreateAdd(segNo, iBuilder->getSize(codegen::ThreadNum)), segmentLoopBody);
-    iBuilder->CreateCondBr(terminated, exitThreadBlock, segmentLoop);
+    segNo->addIncoming(b->CreateAdd(segNo, b->getSize(codegen::ThreadNum)), b->GetInsertBlock());
+    b->CreateUnlikelyCondBr(terminated, exitThreadBlock, segmentLoop);
 
-    iBuilder->SetInsertPoint(exitThreadBlock);
+    b->SetInsertPoint(exitThreadBlock);
 
     // only call pthread_exit() within spawned threads; otherwise it'll be equivalent to calling exit() within the process
-    BasicBlock * const exitThread = BasicBlock::Create(iBuilder->getContext(), "ExitThread", threadFunc);
-    BasicBlock * const exitFunction = BasicBlock::Create(iBuilder->getContext(), "ExitProcessFunction", threadFunc);
+    BasicBlock * const exitThread = BasicBlock::Create(b->getContext(), "ExitThread", threadFunc);
+    BasicBlock * const exitFunction = BasicBlock::Create(b->getContext(), "ExitProcessFunction", threadFunc);
 
-    Value * const exitCond = iBuilder->CreateICmpEQ(segOffset, ConstantInt::getNullValue(segOffset->getType()));
-    iBuilder->CreateCondBr(exitCond, exitFunction, exitThread);
-    iBuilder->SetInsertPoint(exitThread);
-    iBuilder->CreatePThreadExitCall(nullVoidPtrVal);
-    iBuilder->CreateBr(exitFunction);
-    iBuilder->SetInsertPoint(exitFunction);
-    iBuilder->CreateRetVoid();
+    Value * const exitCond = b->CreateICmpEQ(segOffset, ConstantInt::getNullValue(segOffset->getType()));
+    b->CreateCondBr(exitCond, exitFunction, exitThread);
+    b->SetInsertPoint(exitThread);
+    b->CreatePThreadExitCall(nullVoidPtrVal);
+    b->CreateBr(exitFunction);
+    b->SetInsertPoint(exitFunction);
+    b->CreateRetVoid();
 
     // -------------------------------------------------------------------------------------------------------------------------
-    iBuilder->restoreIP(ip);
+    b->restoreIP(ip);
 
     for (unsigned i = 0; i < n; ++i) {
         kernels[i]->setInstance(instance[i]);
@@ -235,61 +241,61 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & iBui
     const unsigned threads = codegen::ThreadNum - 1;
     assert (codegen::ThreadNum > 1);
     Type * const pthreadsTy = ArrayType::get(sizeTy, threads);
-    AllocaInst * const pthreads = iBuilder->CreateAlloca(pthreadsTy);
+    AllocaInst * const pthreads = b->CreateAlloca(pthreadsTy);
     Value * threadIdPtr[threads];
 
     for (unsigned i = 0; i < threads; ++i) {
-        threadIdPtr[i] = iBuilder->CreateGEP(pthreads, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
+        threadIdPtr[i] = b->CreateGEP(pthreads, {b->getInt32(0), b->getInt32(i)});
     }
 
     for (unsigned i = 0; i < n; ++i) {
-        iBuilder->setKernel(kernels[i]);
-        iBuilder->releaseLogicalSegmentNo(iBuilder->getSize(0));
+        b->setKernel(kernels[i]);
+        b->releaseLogicalSegmentNo(b->getSize(0));
     }
 
-    AllocaInst * const sharedStruct = iBuilder->CreateCacheAlignedAlloca(sharedStructType);
+    AllocaInst * const sharedStruct = b->CreateCacheAlignedAlloca(sharedStructType);
     for (unsigned i = 0; i < n; ++i) {
-        Value * ptr = iBuilder->CreateGEP(sharedStruct, {iBuilder->getInt32(0), iBuilder->getInt32(i)});
-        iBuilder->CreateStore(kernels[i]->getInstance(), ptr);
+        Value * ptr = b->CreateGEP(sharedStruct, {b->getInt32(0), b->getInt32(i)});
+        b->CreateStore(kernels[i]->getInstance(), ptr);
     }
 
     // use the process thread to handle the initial segment function after spawning (n - 1) threads to handle the subsequent offsets
     for (unsigned i = 0; i < threads; ++i) {
-        AllocaInst * const threadState = iBuilder->CreateAlloca(threadStructType);
-        iBuilder->CreateStore(sharedStruct, iBuilder->CreateGEP(threadState, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
-        iBuilder->CreateStore(iBuilder->getSize(i + 1), iBuilder->CreateGEP(threadState, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
-        iBuilder->CreatePThreadCreateCall(threadIdPtr[i], nullVoidPtrVal, threadFunc, threadState);
+        AllocaInst * const threadState = b->CreateAlloca(threadStructType);
+        b->CreateStore(sharedStruct, b->CreateGEP(threadState, {b->getInt32(0), b->getInt32(0)}));
+        b->CreateStore(b->getSize(i + 1), b->CreateGEP(threadState, {b->getInt32(0), b->getInt32(1)}));
+        b->CreatePThreadCreateCall(threadIdPtr[i], nullVoidPtrVal, threadFunc, threadState);
     }
 
-    AllocaInst * const threadState = iBuilder->CreateAlloca(threadStructType);
-    iBuilder->CreateStore(sharedStruct, iBuilder->CreateGEP(threadState, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
-    iBuilder->CreateStore(iBuilder->getSize(0), iBuilder->CreateGEP(threadState, {iBuilder->getInt32(0), iBuilder->getInt32(1)}));
-    iBuilder->CreateCall(threadFunc, iBuilder->CreatePointerCast(threadState, voidPtrTy));
+    AllocaInst * const threadState = b->CreateAlloca(threadStructType);
+    b->CreateStore(sharedStruct, b->CreateGEP(threadState, {b->getInt32(0), b->getInt32(0)}));
+    b->CreateStore(b->getSize(0), b->CreateGEP(threadState, {b->getInt32(0), b->getInt32(1)}));
+    b->CreateCall(threadFunc, b->CreatePointerCast(threadState, voidPtrTy));
 
-    AllocaInst * const status = iBuilder->CreateAlloca(voidPtrTy);
+    AllocaInst * const status = b->CreateAlloca(voidPtrTy);
     for (unsigned i = 0; i < threads; ++i) {
-        Value * threadId = iBuilder->CreateLoad(threadIdPtr[i]);
-        iBuilder->CreatePThreadJoinCall(threadId, status);
+        Value * threadId = b->CreateLoad(threadIdPtr[i]);
+        b->CreatePThreadJoinCall(threadId, status);
     }
     
     if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
         for (unsigned k = 0; k < kernels.size(); k++) {
             auto & kernel = kernels[k];
-            iBuilder->setKernel(kernel);
+            b->setKernel(kernel);
             const auto & inputs = kernel->getStreamInputs();
             const auto & outputs = kernel->getStreamOutputs();
             Value * items = nullptr;
             if (inputs.empty()) {
-                items = iBuilder->getProducedItemCount(outputs[0].getName());
+                items = b->getProducedItemCount(outputs[0].getName());
             } else {
-                items = iBuilder->getProcessedItemCount(inputs[0].getName());
+                items = b->getProcessedItemCount(inputs[0].getName());
             }
-            Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
-            Value * cycles = iBuilder->CreateLoad(iBuilder->getCycleCountPtr());
-            Value * fCycles = iBuilder->CreateUIToFP(cycles, iBuilder->getDoubleTy());
+            Value * fItems = b->CreateUIToFP(items, b->getDoubleTy());
+            Value * cycles = b->CreateLoad(b->getCycleCountPtr());
+            Value * fCycles = b->CreateUIToFP(cycles, b->getDoubleTy());
             const auto formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
-            Value * stringPtr = iBuilder->CreatePointerCast(iBuilder->GetString(formatString), iBuilder->getInt8PtrTy());
-            iBuilder->CreateCall(iBuilder->GetDprintf(), {iBuilder->getInt32(2), stringPtr, fItems, fCycles, iBuilder->CreateFDiv(fCycles, fItems)});
+            Value * stringPtr = b->CreatePointerCast(b->GetString(formatString), b->getInt8PtrTy());
+            b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fItems, fCycles, b->CreateFDiv(fCycles, fItems)});
         }
     }
     
@@ -501,128 +507,126 @@ void generateParallelPipeline(const std::unique_ptr<KernelBuilder> & iBuilder, c
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generatePipelineLoop
  ** ------------------------------------------------------------------------------------------------------------- */
-void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & iBuilder, const std::vector<Kernel *> & kernels) {
+void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::vector<Kernel *> & kernels) {
 
-    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * entryBlock = b->GetInsertBlock();
     Function * main = entryBlock->getParent();
 
     // Create the basic blocks for the loop.
-    BasicBlock * pipelineLoop = BasicBlock::Create(iBuilder->getContext(), "pipelineLoop", main);
-    BasicBlock * pipelineExit = BasicBlock::Create(iBuilder->getContext(), "pipelineExit", main);
+    BasicBlock * pipelineLoop = BasicBlock::Create(b->getContext(), "pipelineLoop", main);
+    BasicBlock * pipelineExit = BasicBlock::Create(b->getContext(), "pipelineExit", main);
 
-    StreamSetBufferMap<Value *> producedPos;
-    StreamSetBufferMap<Value *> consumedPos;
+    StreamSetBufferMap<Value *> producedItemCount;
+    StreamSetBufferMap<Value *> consumedItemCount;
 
-    iBuilder->CreateBr(pipelineLoop);
-    iBuilder->SetInsertPoint(pipelineLoop);
+    b->CreateBr(pipelineLoop);
+    b->SetInsertPoint(pipelineLoop);
     
     Value * cycleCountStart = nullptr;
     Value * cycleCountEnd = nullptr;
     if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
-        cycleCountStart = iBuilder->CreateReadCycleCounter();
+        cycleCountStart = b->CreateReadCycleCounter();
     }
-    Value * terminated = iBuilder->getFalse();
+    Value * terminated = b->getFalse();
 
     for (Kernel * const kernel : kernels) {
 
-        iBuilder->setKernel(kernel);
+        b->setKernel(kernel);
         const auto & inputs = kernel->getStreamInputs();
         const auto & outputs = kernel->getStreamOutputs();
 
         std::vector<Value *> args = {kernel->getInstance(), terminated};
 
         for (unsigned i = 0; i < inputs.size(); ++i) {
-            const auto f = producedPos.find(kernel->getStreamSetInputBuffer(i));
-            if (LLVM_UNLIKELY(f == producedPos.end())) {
+            const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
+            const auto f = producedItemCount.find(buffer);
+            if (LLVM_UNLIKELY(f == producedItemCount.end())) {
                 report_fatal_error(kernel->getName() + " uses stream set " + inputs[i].getName() + " prior to its definition");
             }
-            args.push_back(f->second);
+            Value * const produced = f->second;
+            args.push_back(produced);
+            handleInsufficientData(b, produced, terminated, pipelineLoop, kernel, inputs[i], buffer);
         }
 
-        applyOutputBufferExpansions(iBuilder, kernel);
+        applyOutputBufferExpansions(b, kernel);
 
-        iBuilder->createDoSegmentCall(args);
+        b->createDoSegmentCall(args);
 
         if (!kernel->hasNoTerminateAttribute()) {
-            Value * terminatedSignal = iBuilder->getTerminationSignal();
-            terminated = iBuilder->CreateOr(terminated, terminatedSignal);
+            Value * terminatedSignal = b->getTerminationSignal();
+            terminated = b->CreateOr(terminated, terminatedSignal);
         }
         for (unsigned i = 0; i < outputs.size(); ++i) {
-            Value * const produced = iBuilder->getProducedItemCount(outputs[i].getName()); // , terminated
+            Value * const produced = b->getProducedItemCount(outputs[i].getName());
             const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
-            assert (producedPos.count(buf) == 0);
-            producedPos.emplace(buf, produced);
+            assert (producedItemCount.count(buf) == 0);
+            producedItemCount.emplace(buf, produced);
         }
 
         for (unsigned i = 0; i < inputs.size(); ++i) {
-            Value * const processed = iBuilder->getProcessedItemCount(inputs[i].getName());
+            Value * const processed = b->getProcessedItemCount(inputs[i].getName());
             const StreamSetBuffer * const buf = kernel->getStreamSetInputBuffer(i);
-            auto f = consumedPos.find(buf);
-            if (f == consumedPos.end()) {
-                consumedPos.emplace(buf, processed);
+            auto f = consumedItemCount.find(buf);
+            if (f == consumedItemCount.end()) {
+                consumedItemCount.emplace(buf, processed);
             } else {
-                Value * lesser = iBuilder->CreateICmpULT(processed, f->second);
-                f->second = iBuilder->CreateSelect(lesser, processed, f->second);
+                f->second = b->CreateUMin(processed, f->second);
             }
         }
+
         if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
-            cycleCountEnd = iBuilder->CreateReadCycleCounter();
-            Value * counterPtr = iBuilder->getCycleCountPtr();
-            iBuilder->CreateStore(iBuilder->CreateAdd(iBuilder->CreateLoad(counterPtr), iBuilder->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
+            cycleCountEnd = b->CreateReadCycleCounter();
+            Value * counterPtr = b->getCycleCountPtr();
+            b->CreateStore(b->CreateAdd(b->CreateLoad(counterPtr), b->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
             cycleCountStart = cycleCountEnd;
         }
-
-        Value * const segNo = iBuilder->acquireLogicalSegmentNo();
-        Value * nextSegNo = iBuilder->CreateAdd(segNo, iBuilder->getSize(1));
-        iBuilder->releaseLogicalSegmentNo(nextSegNo);
+//        Value * const segNo = b->acquireLogicalSegmentNo();
+//        Value * nextSegNo = b->CreateAdd(segNo, b->getSize(1));
+//        b->releaseLogicalSegmentNo(nextSegNo);
     }
 
-    for (const auto consumed : consumedPos) {
-        const StreamSetBuffer * const buf = consumed.first;
-        Kernel * const k = buf->getProducer();
-        const auto & outputs = k->getStreamSetOutputBuffers();
-        for (unsigned i = 0; i < outputs.size(); ++i) {
-            if (outputs[i] == buf) {
-                const auto & binding = k->getStreamOutput(i);
-                if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
-                    continue;
-                }
-                iBuilder->setKernel(k);
-                iBuilder->setConsumedItemCount(binding.getName(), consumed.second);
-                break;
-            }
+    for (const auto consumed : consumedItemCount) {
+        const StreamSetBuffer * const buffer = consumed.first;
+        Kernel * const kernel = buffer->getProducer();
+        const auto & binding = kernel->getStreamOutput(buffer);
+        if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
+            continue;
         }
+        b->setKernel(kernel);
+        b->setConsumedItemCount(binding.getName(), consumed.second);
     }
 
-    iBuilder->CreateCondBr(terminated, pipelineExit, pipelineLoop);
+    b->CreateCondBr(terminated, pipelineExit, pipelineLoop);
 
-    iBuilder->SetInsertPoint(pipelineExit);
+    b->SetInsertPoint(pipelineExit);
 
     if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
         for (unsigned k = 0; k < kernels.size(); k++) {
             auto & kernel = kernels[k];
-            iBuilder->setKernel(kernel);
+            b->setKernel(kernel);
             const auto & inputs = kernel->getStreamInputs();
             const auto & outputs = kernel->getStreamOutputs();
             Value * items = nullptr;
             if (inputs.empty()) {
-                items = iBuilder->getProducedItemCount(outputs[0].getName());
+                items = b->getProducedItemCount(outputs[0].getName());
             } else {
-                items = iBuilder->getProcessedItemCount(inputs[0].getName());
+                items = b->getProcessedItemCount(inputs[0].getName());
             }
-            Value * fItems = iBuilder->CreateUIToFP(items, iBuilder->getDoubleTy());
-            Value * cycles = iBuilder->CreateLoad(iBuilder->getCycleCountPtr());
-            Value * fCycles = iBuilder->CreateUIToFP(cycles, iBuilder->getDoubleTy());
+            Value * fItems = b->CreateUIToFP(items, b->getDoubleTy());
+            Value * cycles = b->CreateLoad(b->getCycleCountPtr());
+            Value * fCycles = b->CreateUIToFP(cycles, b->getDoubleTy());
             const auto formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
-            Value * stringPtr = iBuilder->CreatePointerCast(iBuilder->GetString(formatString), iBuilder->getInt8PtrTy());
-            iBuilder->CreateCall(iBuilder->GetDprintf(), {iBuilder->getInt32(2), stringPtr, fItems, fCycles, iBuilder->CreateFDiv(fCycles, fItems)});
+            Value * stringPtr = b->CreatePointerCast(b->GetString(formatString), b->getInt8PtrTy());
+            b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fItems, fCycles, b->CreateFDiv(fCycles, fItems)});
         }
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief applyOutputBufferExpansions
+ ** ------------------------------------------------------------------------------------------------------------- */
 void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const std::string & name, DynamicBuffer * const db, const uint64_t baseSize) {
-
-    BasicBlock * const doExpand = b->CreateBasicBlock(name + "Expand");
+    BasicBlock * const doExpand = BasicBlock::Create(b->getContext(), name + "Expand", b->GetInsertBlock()->getParent());
     BasicBlock * const nextBlock = b->GetInsertBlock()->getNextNode();
     doExpand->moveAfter(b->GetInsertBlock());
     BasicBlock * const bufferReady = b->CreateBasicBlock(name + "Ready");
@@ -658,3 +662,31 @@ void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const
         }
     }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief handleInsufficientData
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void handleInsufficientData(const std::unique_ptr<KernelBuilder> & b, Value * const produced, Value * const final, BasicBlock * const insufficient,
+                                   const Kernel * const consumer,  const Binding & input, const StreamSetBuffer * const buffer) {
+    const Kernel * const producer = buffer->getProducer();
+    const Binding & output = producer->getStreamOutput(buffer);
+    auto producedRate = producer->getLowerBound(output.getRate()) * producer->getStride();
+    const auto consumedRate = consumer->getUpperBound(input.getRate()) * consumer->getStride();
+    if (LLVM_UNLIKELY(input.hasLookahead())) {
+        producedRate -= input.getLookahead();
+//        const auto amount = input.getLookahead();
+//        const auto strides = ((amount + consumer->getStride() - 1) / consumer->getStride());
+//        consumedRate += strides * consumer->getStride();
+    }
+    if (LLVM_UNLIKELY(producedRate < consumedRate)) {
+        const auto name = input.getName();
+        BasicBlock * const sufficient = BasicBlock::Create(b->getContext(), name + "IsSufficient", b->GetInsertBlock()->getParent());
+        Value * const processed = b->getProcessedItemCount(name);
+        Value * const unread = b->CreateSub(produced, processed);
+        Constant * const amount = ConstantInt::get(unread->getType(), ceiling(consumedRate));
+        Value * const cond = b->CreateOr(b->CreateICmpUGE(unread, amount), final);
+        b->CreateLikelyCondBr(cond, sufficient, insufficient);
+        b->SetInsertPoint(sufficient);
+    }
+}
+

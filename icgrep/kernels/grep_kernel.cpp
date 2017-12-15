@@ -40,99 +40,95 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     
     cc::CC_Compiler ccc(this, getInput(0));
     auto & pb = ccc.getBuilder();
-    Zeroes * const zero = pb.createZeroes();
-    PabloAST * LF = ccc.compileCC("LF", makeCC(0x0A), pb);
-    PabloAST * CR = ccc.compileCC(makeCC(0x0D));
+    Zeroes * const ZEROES = pb.createZeroes();
+    PabloAST * const u8pfx = ccc.compileCC(makeCC(0xC0, 0xFF));
 
-    Var * crlf = pb.createVar("crlf", zero);
-    PabloBuilder crb = PabloBuilder::Create(pb);
-    PabloAST * cr1 = crb.createAdvance(CR, 1, "cr1");
-    crb.createAssign(crlf, crb.createAnd(cr1, LF));
-    pb.createIf(CR, crb);
-   
-    Var * u8invalid = pb.createVar("u8invalid", zero);
-    Var * valid_pfx = pb.createVar("valid_pfx", zero);
-    Var * nonFinal = pb.createVar("nonfinal", zero);
-    PabloAST * u8pfx = ccc.compileCC(makeCC(0xC0, 0xFF));
-    
+
+    Var * const nonFinal = pb.createVar("nonFinal", u8pfx);
+    Var * const u8invalid = pb.createVar("u8invalid", ZEROES);
+    Var * const valid_pfx = pb.createVar("valid_pfx", u8pfx);
+
     PabloBuilder it = PabloBuilder::Create(pb);
 
     pb.createIf(u8pfx, it);
-    PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF), it);
-    PabloAST * u8pfx3 = ccc.compileCC(makeCC(0xE0, 0xEF), it);
-    PabloAST * u8pfx4 = ccc.compileCC(makeCC(0xF0, 0xF4), it);
-    PabloAST * u8suffix = ccc.compileCC("u8suffix", makeCC(0x80, 0xBF), it);
+    PabloAST * const u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF), it);
+    PabloAST * const u8pfx3 = ccc.compileCC(makeCC(0xE0, 0xEF), it);
+    PabloAST * const u8pfx4 = ccc.compileCC(makeCC(0xF0, 0xF4), it);
+    PabloAST * const u8suffix = ccc.compileCC("u8suffix", makeCC(0x80, 0xBF), it);
     
     //
     // Two-byte sequences
-    Var * u8scope22 = it.createVar("u8scope22", zero);
+    Var * const anyscope = it.createVar("anyscope", ZEROES);
     PabloBuilder it2 = PabloBuilder::Create(it);
-    it2.createAssign(u8scope22, it2.createAdvance(u8pfx2, 1));
     it.createIf(u8pfx2, it2);
+    it2.createAssign(anyscope, it2.createAdvance(u8pfx2, 1));
+
     //
-    // Three-byte sequences
-    
-    Var * u8scope32 = it.createVar("u8scope32", zero);
-    Var * u8scope3X = it.createVar("u8scope3X", zero);
-    Var * EX_invalid = it.createVar("EX_invalid", zero);
+    // Three-byte sequences    
+    Var * const EF_invalid = it.createVar("EF_invalid", ZEROES);
     PabloBuilder it3 = PabloBuilder::Create(it);
     it.createIf(u8pfx3, it3);
-    it3.createAssign(u8scope32, it3.createAdvance(u8pfx3, 1));
-    PabloAST * u8scope33 = it3.createAdvance(u8pfx3, 2);
-    it3.createAssign(u8scope3X, it3.createOr(u8scope32, u8scope33));
-    PabloAST * E0_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xE0), it3), 1), ccc.compileCC(makeCC(0x80, 0x9F), it3));
-    PabloAST * ED_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xED), it3), 1), ccc.compileCC(makeCC(0xA0, 0xBF), it3));
-    it3.createAssign(EX_invalid, it3.createOr(E0_invalid, ED_invalid));
-   
+    PabloAST * const u8scope32 = it3.createAdvance(u8pfx3, 1);
+    it3.createAssign(nonFinal, it3.createOr(nonFinal, u8scope32));
+    PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
+    PabloAST * const u8scope3X = it3.createOr(u8scope32, u8scope33);
+    it3.createAssign(anyscope, it3.createOr(anyscope, u8scope3X));
+    PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xE0), it3), 1), ccc.compileCC(makeCC(0x80, 0x9F), it3));
+    PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xED), it3), 1), ccc.compileCC(makeCC(0xA0, 0xBF), it3));
+    PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
+    it3.createAssign(EF_invalid, EX_invalid);
+
+
     //
     // Four-byte sequences
-    Var * u8scope4nonfinal = it.createVar("u8scope4nonfinal", zero);
-    Var * u8scope4X = it.createVar("u8scope4X", zero);
-    Var * FX_invalid = it.createVar("FX_invalid", zero);
     PabloBuilder it4 = PabloBuilder::Create(it);
     it.createIf(u8pfx4, it4);
-    PabloAST * u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
-    PabloAST * u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
-    PabloAST * u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
-    it4.createAssign(u8scope4nonfinal, it4.createOr(u8scope42, u8scope43));
-    it4.createAssign(u8scope4X, it4.createOr(u8scope4nonfinal, u8scope44));
-    PabloAST * F0_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeCC(0xF0), it4), 1), ccc.compileCC(makeCC(0x80, 0x8F), it4));
-    PabloAST * F4_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeCC(0xF4), it4), 1), ccc.compileCC(makeCC(0x90, 0xBF), it4));
-    it4.createAssign(FX_invalid, it4.createOr(F0_invalid, F4_invalid));
+    PabloAST * const u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
+    PabloAST * const u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
+    PabloAST * const u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
+    PabloAST * const u8scope4nonfinal = it4.createOr(u8scope42, u8scope43);
+    it4.createAssign(nonFinal, it4.createOr(nonFinal, u8scope4nonfinal));
+    PabloAST * const u8scope4X = it4.createOr(u8scope4nonfinal, u8scope44);
+    it4.createAssign(anyscope, it4.createOr(anyscope, u8scope4X));
+    PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeCC(0xF0), it4), 1), ccc.compileCC(makeCC(0x80, 0x8F), it4));
+    PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeCC(0xF4), it4), 1), ccc.compileCC(makeCC(0x90, 0xBF), it4));
+    PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
+    it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
     
     //
     // Invalid cases
-    PabloAST * anyscope = it.createOr(u8scope22, it.createOr(u8scope3X, u8scope4X));
-    PabloAST * legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
+    PabloAST * const legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
     //  Any scope that does not have a suffix byte, and any suffix byte that is not in
     //  a scope is a mismatch, i.e., invalid UTF-8.
-    PabloAST * mismatch = it.createXor(anyscope, u8suffix);
+    PabloAST * const mismatch = it.createXor(anyscope, u8suffix);
     //
-    PabloAST * EF_invalid = it.createOr(EX_invalid, FX_invalid);
-    PabloAST * pfx_invalid = it.createXor(u8pfx, legalpfx);
+    PabloAST * const pfx_invalid = it.createXor(valid_pfx, legalpfx);
     it.createAssign(u8invalid, it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
-    PabloAST * u8valid = it.createNot(u8invalid, "u8valid");
+    PabloAST * const u8valid = it.createNot(u8invalid, "u8valid");
     //
     //
     
-    it.createAssign(valid_pfx, it.createAnd(u8pfx, u8valid));
-    it.createAssign(nonFinal, it.createAnd(it.createOr(it.createOr(u8pfx, u8scope32), u8scope4nonfinal), u8valid));
+    it.createAssign(valid_pfx, it.createAnd(valid_pfx, u8valid));
+    it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
     
     PabloAST * u8single = pb.createAnd(ccc.compileCC(makeCC(0x00, 0x7F)), pb.createNot(u8invalid));
-    
+    PabloAST * const initial = pb.createOr(u8single, valid_pfx, "initial");
+    PabloAST * const final = pb.createNot(pb.createOr(nonFinal, u8invalid), "final");
+
     Var * const required = getOutputStreamVar("required");
-    pb.createAssign(pb.createExtract(required, pb.getInteger(0)), pb.createOr(u8single, valid_pfx, "initial"));
+    pb.createAssign(pb.createExtract(required, pb.getInteger(0)), initial);
     pb.createAssign(pb.createExtract(required, pb.getInteger(1)), nonFinal);
-    pb.createAssign(pb.createExtract(required, pb.getInteger(2)), pb.createNot(pb.createOr(nonFinal, u8invalid), "final"));
-    pb.createAssign(pb.createExtract(required, pb.getInteger(3)), crlf);
+    pb.createAssign(pb.createExtract(required, pb.getInteger(2)), final);
+
 }
 
 RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb)
-: PabloKernel(kb, "RequiredStreams_UTF8",               
-              {Binding{kb->getStreamSetTy(8), "basis"}}, 
-              {Binding{kb->getStreamSetTy(4), "required", FixedRate(), Add1()}},
-              {},
-              {}) {
+: PabloKernel(kb, "RequiredStreams_UTF8",
+// input
+{Binding{kb->getStreamSetTy(8), "basis"}},
+// output
+{Binding{kb->getStreamSetTy(3), "required", FixedRate(), Add1()}}) {
+
 }
 
 void RequiredStreams_UTF16::generatePabloMethod() {
@@ -140,35 +136,37 @@ void RequiredStreams_UTF16::generatePabloMethod() {
     cc::CC_Compiler ccc(this, getInput(0));
     auto & pb = ccc.getBuilder();
     
-    PabloAST * LF = ccc.compileCC("LF", makeCC(0x000A), pb);
-    PabloAST * CR = ccc.compileCC("CR", makeCC(0x000D), pb);
-    PabloAST * cr1 = pb.createAdvance(CR, 1, "cr1");
-    
     PabloAST * u16hi_hi_surrogate = ccc.compileCC(makeCC(0xD800, 0xDBFF));    //u16hi_hi_surrogate = [\xD8-\xDB]
     PabloAST * u16hi_lo_surrogate = ccc.compileCC(makeCC(0xDC00, 0xDFFF));    //u16hi_lo_surrogate = [\xDC-\xDF]
     
     PabloAST * invalidTemp = pb.createAdvance(u16hi_hi_surrogate, 1, "InvalidTemp");
     PabloAST * u16invalid = pb.createXor(invalidTemp, u16hi_lo_surrogate, "u16invalid");
+
     PabloAST * u16valid = pb.createNot(u16invalid, "u16valid");
-    
+    PabloAST * nonFinal = pb.createAnd(u16hi_hi_surrogate, u16valid, "nonfinal");
+
     PabloAST * u16single_temp = pb.createOr(ccc.compileCC(makeCC(0x0000, 0xD7FF)), ccc.compileCC(makeCC(0xE000, 0xFFFF)));
     PabloAST * u16single = pb.createAnd(u16single_temp, pb.createNot(u16invalid));
 
+    PabloAST * const nonFinalCodeUnits = pb.createExtract(getInput(1), pb.getInteger(0));
+    PabloAST * const initial = pb.createOr(u16single, u16hi_hi_surrogate, "initial");
+    PabloAST * const final = pb.createNot(pb.createOr(pb.createOr(u16hi_hi_surrogate, u16invalid), nonFinalCodeUnits), "final");
+
     Var * const required = getOutputStreamVar("required");
-    pb.createAssign(pb.createExtract(required, pb.getInteger(0)), pb.createOr(u16single, u16hi_hi_surrogate, "initial"));
-    pb.createAssign(pb.createExtract(required, pb.getInteger(1)), pb.createAnd(u16hi_hi_surrogate, u16valid, "nonfinal"));
-    pb.createAssign(pb.createExtract(required, pb.getInteger(2)), pb.createNot(pb.createOr(u16hi_hi_surrogate, u16invalid), "final"));
-    pb.createAssign(pb.createExtract(required, pb.getInteger(3)), pb.createAnd(cr1, LF, "crlf"));
+    pb.createAssign(pb.createExtract(required, pb.getInteger(0)), initial);
+    pb.createAssign(pb.createExtract(required, pb.getInteger(1)), nonFinal);
+    pb.createAssign(pb.createExtract(required, pb.getInteger(2)), final);
+
 }
 
 RequiredStreams_UTF16::RequiredStreams_UTF16(const std::unique_ptr<kernel::KernelBuilder> & kb)
 : PabloKernel(kb, "RequiredStreams_UTF16",               
-              {Binding{kb->getStreamSetTy(16), "basis"}}, 
-              {Binding{kb->getStreamSetTy(4), "required", FixedRate(), Add1()}},
-              {},
-              {}) {
-}
+// inputs
+{Binding{kb->getStreamSetTy(8), "basis"}},
+// output
+{Binding{kb->getStreamSetTy(3), "required", FixedRate(), Add1()}}) {
 
+}
 
 ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
 : mRE(re_ast)
@@ -178,12 +176,14 @@ ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
 
 ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re, unsigned numOfCharacterClasses)
 : ICGrepSignature(re)
-, PabloKernel(iBuilder,
-              "ic" + sha1sum(mSignature),
-              {Binding{iBuilder->getStreamSetTy(numOfCharacterClasses), "basis"},
-               Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"},
-               Binding{iBuilder->getStreamSetTy(4, 1), "required"}},
-              {Binding{iBuilder->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}}) {
+, PabloKernel(iBuilder, "ic" + sha1sum(mSignature),
+// inputs
+{Binding{iBuilder->getStreamSetTy(numOfCharacterClasses), "basis"},
+Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"},
+Binding{iBuilder->getStreamSetTy(1, 1), "cr+lf"},
+Binding{iBuilder->getStreamSetTy(3, 1), "required"}},
+// output
+{Binding{iBuilder->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}}) {
 
 }
 
@@ -210,10 +210,12 @@ void MatchedLinesKernel::generatePabloMethod() {
 
 MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
 : PabloKernel(iBuilder, "MatchedLines",
-              {Binding{iBuilder->getStreamSetTy(1), "matchResults"}, Binding{iBuilder->getStreamSetTy(1), "lineBreaks"}},
-              {Binding{iBuilder->getStreamSetTy(1), "matchedLines"}},
-              {},
-              {}) {
+// inputs
+{Binding{iBuilder->getStreamSetTy(1), "matchResults"}
+,Binding{iBuilder->getStreamSetTy(1), "lineBreaks"}},
+// output
+{Binding{iBuilder->getStreamSetTy(1), "matchedLines"}}) {
+
 }
 
 

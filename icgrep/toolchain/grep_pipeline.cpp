@@ -61,22 +61,26 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     sourceK->setInitialArguments({buffer, length});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
     
-    StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize);
-    
+    StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize + 1);
     kernel::Kernel * s2pk = pxDriver.addKernelInstance<kernel::S2PKernel>(idb);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
+    kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, 8);
+    StreamSetBuffer * LineFeedStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize + 1);
+    pxDriver.makeKernelCall(linefeedK, {BasisBits}, {LineFeedStream});
+
     kernel::Kernel * linebreakK = pxDriver.addKernelInstance<kernel::LineBreakKernelBuilder>(idb, 8);
     StreamSetBuffer * LineBreakStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
-    pxDriver.makeKernelCall(linebreakK, {BasisBits}, {LineBreakStream});
+    StreamSetBuffer * CRLFStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
+    pxDriver.makeKernelCall(linebreakK, {BasisBits, LineFeedStream}, {LineBreakStream, CRLFStream});
     
     kernel::Kernel * requiredStreamsK = pxDriver.addKernelInstance<kernel::RequiredStreams_UTF8>(idb);
-    StreamSetBuffer * RequiredStreams = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(4, 1), segmentSize);
+    StreamSetBuffer * RequiredStreams = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(3, 1), segmentSize);
     pxDriver.makeKernelCall(requiredStreamsK, {BasisBits}, {RequiredStreams});
     
     StreamSetBuffer * MatchResults = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
     kernel::Kernel * icgrepK = pxDriver.addKernelInstance<kernel::ICGrepKernel>(idb, pattern);
-    pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream, RequiredStreams}, {MatchResults});
+    pxDriver.makeKernelCall(icgrepK, {BasisBits, LineBreakStream, CRLFStream, RequiredStreams}, {MatchResults});
     
     StreamSetBuffer * MatchedLines = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
     kernel::Kernel * matchedLinesK = pxDriver.addKernelInstance<kernel::MatchedLinesKernel>(idb);

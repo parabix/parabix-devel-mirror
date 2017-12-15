@@ -20,8 +20,8 @@ struct FoldEntry {
     const std::vector<UCD::interval_t> fold_pairs;
 };
 
-UCD::UnicodeSet caseInsensitize(UCD::UnicodeSet & cc);
 
+UCD::UnicodeSet caseInsensitize(const UCD::UnicodeSet & cc);
 
 const int foldTableSize = 246;
 

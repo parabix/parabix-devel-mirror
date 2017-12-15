@@ -37,9 +37,6 @@ namespace pablo { class PabloKernel; }
 namespace re { class Alt; }
 namespace re { class RE; }
 
-
-#define UNICODE_LINE_BREAK (!AlgorithmOptionIsSet(DisableUnicodeLineBreak))
-
 using namespace pablo;
 using namespace llvm;
 
@@ -98,18 +95,13 @@ MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
 }
 
 inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb) {
-    PabloAST * nextFinalByte = markerVar(AdvanceMarker(m, MarkerPosition::FinalPostPositionUnit, pb));
+    PabloAST * const nextFinalByte = markerVar(AdvanceMarker(m, MarkerPosition::FinalPostPositionUnit, pb));
     return makeMarker(MarkerPosition::FinalMatchUnit, nextFinalByte);
 }
 
 MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb) {
-    MarkerType nextPos;
-    if (markerPos(marker) == MarkerPosition::FinalPostPositionUnit) {
-        nextPos = marker;
-    } else {
-        nextPos = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
-    }
-    return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(markerVar(nextPos), mCCCompiler.compileCC(cc, pb)));
+    PabloAST * const nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
+    return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(nextPos, mCCCompiler.compileCC(cc, pb)));
 }
 
 inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, PabloBuilder & pb) {
@@ -122,12 +114,7 @@ inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, Pablo
         return compileEnd(marker, pb);
     } else if (isUnicodeUnitLength(name)) {
         MarkerType nameMarker = compileName(name, pb);
-        MarkerType nextPos;
-        if (markerPos(marker) == MarkerPosition::FinalPostPositionUnit) {
-            nextPos = marker;
-        } else {
-            nextPos = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
-        }
+        MarkerType nextPos = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
         nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
         return nameMarker;
     } else if (name->getType() == Name::Type::ZeroWidth) {
@@ -559,22 +546,18 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
     }
 }
 
-inline MarkerType RE_Compiler::compileStart(const MarkerType marker, pablo::PabloBuilder & pb) {
-    MarkerType m = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
-    if (UNICODE_LINE_BREAK) {
-        PabloAST * line_end = mPB.createOr(mLineBreak, mCRLF);
-        PabloAST * sol_init = pb.createNot(pb.createOr(pb.createAdvance(pb.createNot(line_end), 1), mCRLF));
-        PabloAST * sol = pb.createScanThru(pb.createAnd(mInitial, sol_init), mNonFinal);
-        return makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(markerVar(m), sol, "sol"));
-    } else {
-        PabloAST * sol = pb.createNot(pb.createAdvance(pb.createNot(mLineBreak), 1));
-        return makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(markerVar(m), sol, "sol"));
+inline MarkerType RE_Compiler::compileStart(MarkerType marker, pablo::PabloBuilder & pb) {
+    PabloAST * sol = pb.createNot(pb.createAdvance(pb.createNot(mLineBreak), 1));
+    if (!AlgorithmOptionIsSet(DisableUnicodeLineBreak)) {
+        sol = pb.createScanThru(pb.createAnd(mInitial, sol), mNonFinal);
     }
+    MarkerType m = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
+    return makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(markerVar(m), sol, "sol"));
 }
 
-inline MarkerType RE_Compiler::compileEnd(const MarkerType marker, pablo::PabloBuilder & pb) {
-    PabloAST * nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
-    return makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(nextPos, mLineBreak, "eol"));
+inline MarkerType RE_Compiler::compileEnd(MarkerType marker, pablo::PabloBuilder & pb) {
+    PabloAST * const nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
+    return makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(pb.createScanThru(nextPos, mCRLF), mLineBreak, "eol"));
 }
 
 inline MarkerType RE_Compiler::AdvanceMarker(MarkerType marker, const MarkerPosition newpos, PabloBuilder & pb) {
@@ -604,8 +587,6 @@ inline void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBui
 LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
     llvm::report_fatal_error(errmsg);
 }
-    
-    
 
 RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 : mKernel(kernel)
@@ -622,11 +603,13 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 , mCompiledName(&mBaseMap) {
     Var * const linebreak = mKernel->getInputStreamVar("linebreak");
     mLineBreak = mPB.createExtract(linebreak, mPB.getInteger(0));
+    Var * const crlf = mKernel->getInputStreamVar("cr+lf");
+    mCRLF = mPB.createExtract(crlf, mPB.getInteger(0));
     Var * const required = mKernel->getInputStreamVar("required");
     mInitial = mPB.createExtract(required, mPB.getInteger(0));
     mNonFinal = mPB.createExtract(required, mPB.getInteger(1));
     mFinal = mPB.createExtract(required, mPB.getInteger(2));
-    mCRLF = mPB.createExtract(required, mPB.getInteger(3));
+
 }
 
 } // end of namespace re

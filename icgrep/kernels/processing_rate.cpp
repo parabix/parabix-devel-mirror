@@ -16,6 +16,9 @@ ProcessingRate::RateValue lcm(const ProcessingRate::RateValue & x, const Process
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief gcd
+ ** ------------------------------------------------------------------------------------------------------------- */
 ProcessingRate::RateValue gcd(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y) {
     const auto n = boost::gcd(x.numerator(), y.numerator());
     if (LLVM_LIKELY(x.denominator() == 1 && y.denominator() == 1)) {
@@ -24,5 +27,17 @@ ProcessingRate::RateValue gcd(const ProcessingRate::RateValue & x, const Process
         return ProcessingRate::RateValue(n, boost::lcm(x.denominator(), y.denominator()));
     }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief roundUp
+ ** ------------------------------------------------------------------------------------------------------------- */
+unsigned ceiling(const ProcessingRate::RateValue & r) {
+    if (LLVM_LIKELY(r.denominator() == 1)) {
+        return r.numerator();
+    } else {
+        return (r.numerator() + r.denominator() - 1) / r.denominator();
+    }
+}
+
 
 }

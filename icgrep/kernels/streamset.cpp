@@ -143,7 +143,7 @@ Value * StreamSetBuffer::getRawItemPointer(IDISA::IDISA_Builder * const b, Value
     return b->CreateGEP(ptr, relativePosition);
 }
 
-Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value * availItems, bool reverse) const {
+Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * const /* handle */, Value * fromPosition, Value * availItems, bool reverse) const {
     Constant * bufSize = ConstantInt::get(fromPosition->getType(), mBufferBlocks * b->getStride());
     Value * itemsFromBase = b->CreateURem(fromPosition, bufSize);
     if (reverse) {
@@ -155,13 +155,15 @@ Value * StreamSetBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const
     }
 }
 
-Value * StreamSetBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, bool reverse) const {
-    Constant * bufSize = ConstantInt::get(fromPosition->getType(), mBufferBlocks * b->getStride());
-    Value * bufRem = b->CreateURem(fromPosition, bufSize);
+Value * StreamSetBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const /* handle */, Value * fromPosition, Value * consumed, bool reverse) const {
+    Constant * const bufferSize = ConstantInt::get(fromPosition->getType(), mBufferBlocks * b->getStride());
+    fromPosition = b->CreateURem(fromPosition, bufferSize);
     if (reverse) {
-        return b->CreateSelect(b->CreateICmpEQ(bufRem, b->getSize(0)), bufSize, bufRem);
+        return b->CreateSelect(b->CreateICmpEQ(fromPosition, b->getSize(0)), bufferSize, fromPosition);
     }
-    return b->CreateSub(bufSize, bufRem, "linearSpace");
+    consumed = b->CreateURem(consumed, bufferSize);
+    Value * const limit = b->CreateSelect(b->CreateICmpULE(consumed, fromPosition), bufferSize, consumed);
+    return b->CreateNUWSub(limit, fromPosition);
 }
 
 Value * StreamSetBuffer::getBaseAddress(IDISA::IDISA_Builder * const b, Value * const handle) const {
@@ -186,10 +188,6 @@ void StreamSetBuffer::createBlockCopy(IDISA::IDISA_Builder * const b, Value * ta
     const auto fieldWidth = mBaseType->getArrayElementType()->getScalarSizeInBits();
     Value * blockCopyBytes = b->CreateMul(blocksToCopy, b->getSize(b->getBitBlockWidth() * numStreams * fieldWidth/8));
     b->CreateMemMove(b->CreateBitCast(targetBlockPtr, i8ptr), b->CreateBitCast(sourceBlockPtr, i8ptr), blockCopyBytes, alignment);
-}
-
-inline bool isConstantZero(Value * const v) {
-    return isa<Constant>(v) && cast<Constant>(v)->isNullValue();
 }
 
 void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const b, Value * targetBlockPtr, Value * sourceBlockPtr, Value * itemsToCopy, const unsigned alignment) const {
@@ -292,7 +290,7 @@ Value * SourceBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b,
     return b->CreateSelect(b->CreateICmpULT(availItems, maxAvail), availItems, maxAvail);
 }
 
-Value * SourceBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, bool reverse) const {
+Value * SourceBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value *consumed, bool reverse) const {
     report_fatal_error("SourceBuffers cannot be written");
 }
 
@@ -324,7 +322,7 @@ Value * ExternalBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const,
     return reverse ? ConstantInt::getAllOnesValue(availItems->getType()) : availItems;
 }
 
-Value * ExternalBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const, Value *, Value * fromPosition, const bool reverse) const {
+Value * ExternalBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const, Value *, Value * fromPosition, Value *consumed, const bool reverse) const {
     // Trust that the buffer is large enough to write any amount
     return reverse ? fromPosition : ConstantInt::getAllOnesValue(fromPosition->getType());
 }
@@ -373,8 +371,8 @@ void CircularCopybackBuffer::allocateBuffer(const std::unique_ptr<kernel::Kernel
     mStreamSetBufferPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(size), ty->getPointerTo());
 }
 
-Value * CircularCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, bool reverse) const {
-    Value * writableProper = StreamSetBuffer::getLinearlyWritableItems(b, handle, fromPosition, reverse);
+Value * CircularCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value * consumed, bool reverse) const {
+    Value * writableProper = StreamSetBuffer::getLinearlyWritableItems(b, handle, fromPosition, consumed, reverse);
     if (reverse) return writableProper;
     return b->CreateAdd(writableProper, b->getSize(mOverflowBlocks * b->getBitBlockWidth()));
 }
@@ -451,8 +449,8 @@ Value * SwizzledCopybackBuffer::getBlockAddress(IDISA::IDISA_Builder * const b, 
     return b->CreateGEP(getBaseAddress(b, handle), modBufferSize(b, blockIndex));
 }
 
-Value * SwizzledCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, bool reverse) const {
-    Value * writableProper = StreamSetBuffer::getLinearlyWritableItems(b, handle, fromPosition, reverse);
+Value * SwizzledCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value *consumed, bool reverse) const {
+    Value * writableProper = StreamSetBuffer::getLinearlyWritableItems(b, handle, fromPosition, consumed, reverse);
     if (reverse) return writableProper;
     return b->CreateAdd(writableProper, b->getSize(mOverflowBlocks * b->getBitBlockWidth()));
 }
@@ -691,7 +689,7 @@ Value * DynamicBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b
     }
 }
 
-Value * DynamicBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, bool reverse) const {
+Value * DynamicBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value *consumed, bool reverse) const {
     Value * bufBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::WorkingBlocks))}));
     Constant * blockSize = ConstantInt::get(bufBlocks->getType(), b->getBitBlockWidth());
     Value * bufSize = b->CreateMul(bufBlocks, blockSize);

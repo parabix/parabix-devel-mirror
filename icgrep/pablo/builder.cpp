@@ -171,7 +171,7 @@ Extract * PabloBuilder::createExtract(PabloAST * value, not_null<PabloAST *> ind
 }
 
 PabloAST * PabloBuilder::createLookahead(PabloAST * expr, PabloAST * shiftAmount) {
-    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
+    if (LLVM_UNLIKELY(isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0)) {
         return expr;
     }
     MAKE_BINARY(createLookahead, TypeId::Lookahead, expr, shiftAmount);
@@ -179,7 +179,7 @@ PabloAST * PabloBuilder::createLookahead(PabloAST * expr, PabloAST * shiftAmount
 }
 
 PabloAST * PabloBuilder::createLookahead(PabloAST * expr, PabloAST * shiftAmount, const llvm::StringRef & prefix) {
-    if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
+    if (LLVM_UNLIKELY(isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0)) {
         return expr;
     }
     MAKE_NAMED_BINARY(createLookahead, TypeId::Lookahead, prefix, expr, shiftAmount);

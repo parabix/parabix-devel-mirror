@@ -51,26 +51,29 @@ inline Alt * makeAlt() {
 template<typename iterator>
 RE * makeAlt(iterator begin, iterator end) {
     Alt * newAlt = makeAlt();
-    CC * unionCC = makeCC();
+    CC * unionCC = nullptr;
     for (auto i = begin; i != end; ++i) {
-        if (const CC * cc = llvm::dyn_cast<CC>(*i)) {
-            unionCC = makeCC(unionCC, cc);
+        if (CC * cc = llvm::dyn_cast<CC>(*i)) {
+            unionCC = unionCC ? makeCC(unionCC, cc) : cc;
         } else if (const Alt * alt = llvm::dyn_cast<Alt>(*i)) {
             // We have an Alt to embed within the alt.  We extract the individual
             // elements to include within the new alt.   Note that recursive flattening
             // is not required, if the elements themselves were created with makeAlt.
             for (RE * a : *alt) {
                 if (CC * cc = llvm::dyn_cast<CC>(a)) {
-                    unionCC = makeCC(unionCC, cc);
+                    unionCC = unionCC ? makeCC(unionCC, cc) : cc;
+                } else {
+                    newAlt->push_back(a);
                 }
-                else newAlt->push_back(a);
             }
         }
         else {
             newAlt->push_back(*i);
         }
     }
-    if (!unionCC->empty()) newAlt->push_back(unionCC);
+    if (unionCC) {
+        newAlt->push_back(unionCC);
+    }
     return newAlt;
 }
 

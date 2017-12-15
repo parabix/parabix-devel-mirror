@@ -81,15 +81,20 @@ void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & 
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
             PabloAST * input = la->getExpression();
-            if (LLVM_UNLIKELY(isa<Extract>(input))) {
+            if (isa<Extract>(input)) {
                 input = cast<Extract>(input)->getArray();
             }
             bool notFound = true;
             if (LLVM_LIKELY(isa<Var>(input))) {
                 for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
                     if (input == mKernel->getInput(i)) {
-                        if (LLVM_LIKELY(mKernel->getLookAhead(i) < la->getAmount())) {
-                            mKernel->setLookAhead(i, la->getAmount());
+                        const auto & binding = mKernel->getStreamInput(i);
+                        if (LLVM_UNLIKELY(!binding.hasLookahead() || binding.getLookahead() < la->getAmount())) {
+                            std::string tmp;
+                            raw_string_ostream out(tmp);
+                            input->print(out);
+                            out << " must have a lookahead attribute of at least " << la->getAmount();
+                            report_fatal_error(out.str());
                         }
                         notFound = false;
                         break;
@@ -565,20 +570,20 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             PabloAST * stream = l->getExpression();
             Value * index = nullptr;
-            if (LLVM_UNLIKELY(isa<Extract>(stream))) {
+            if (LLVM_UNLIKELY(isa<Extract>(stream))) {                
+                index = compileExpression(iBuilder, cast<Extract>(stream)->getIndex(), true);
                 stream = cast<Extract>(stream)->getArray();
-                index = compileExpression(iBuilder, cast<Extract>(stream)->getIndex());
             } else {
                 index = iBuilder->getInt32(0);
             }
             const auto bit_shift = (l->getAmount() % iBuilder->getBitBlockWidth());
             const auto block_shift = (l->getAmount() / iBuilder->getBitBlockWidth());
-            Value * ptr = iBuilder->getAdjustedInputStreamBlockPtr(iBuilder->getSize(block_shift), cast<Var>(stream)->getName(), index);
+            Value * ptr = iBuilder->getInputStreamBlockPtr(cast<Var>(stream)->getName(), index, iBuilder->getSize(block_shift));
             Value * lookAhead = iBuilder->CreateBlockAlignedLoad(ptr);
             if (bit_shift == 0) {  // Simple case with no intra-block shifting.
                 value = lookAhead;
             } else { // Need to form shift result from two adjacent blocks.
-                Value * ptr = iBuilder->getAdjustedInputStreamBlockPtr(iBuilder->getSize(block_shift + 1), cast<Var>(stream)->getName(), index);
+                Value * ptr = iBuilder->getInputStreamBlockPtr(cast<Var>(stream)->getName(), index, iBuilder->getSize(block_shift + 1));
                 Value * lookAhead1 = iBuilder->CreateBlockAlignedLoad(ptr);
                 if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
                     value = iBuilder->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));

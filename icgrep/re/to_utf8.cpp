@@ -18,6 +18,7 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/ErrorHandling.h>
 
 using namespace llvm;
 
@@ -93,6 +94,9 @@ RE * toUTF8(RE * r) {
     } else if (Intersect * e = dyn_cast<Intersect>(r)) {
         return makeIntersect(toUTF8(e->getLH()), toUTF8(e->getRH()));
     }
+    llvm_unreachable("unexpected RE type given to toUTF8");
+    return nullptr;
 }
+
 }
 

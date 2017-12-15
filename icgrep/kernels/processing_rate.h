@@ -7,23 +7,20 @@
 
 namespace kernel {
 
-// Processing rate attributes are required for all stream set bindings for a kernel.
-// These attributes describe the number of items that are processed or produced as
-// a ratio in comparison to a reference stream set, normally the principal input stream set
-// by default (or the principal output stream set if there is no input).
+// Processing rate attributes are required for all stream set bindings. They describe
+// the relationship between processed items (inputs) and produced items (outputs).
 //
-// The default ratio is FixedRatio(1) which means that there is one item processed or
-// produced for every item of the reference stream.
-// FixedRatio(m, n) means that for every group of n items of the refrence stream,
-// there are m items in the output stream (rounding up).
+// For example, the 3-to-4 kernel converts every 3 input items into 4 output items.
+// Thus it has a FixedRate(3) for its input stream and FixedRate(4) for its output
+// stream. Processing these every 3 items individually would be time consuming. Instead
+// the kernel processes a strides' worth of "iterations" and automatically scales the
+// FixedRates accordingly.
 //
-// Kernels which produce a variable number of items use MaxRatio(n), for a maximum
-// of n items produced or consumed per principal input or output item.  MaxRatio(m, n)
-// means there are at most m items for every n items of the reference stream.
-//
-// RoundUpToMultiple(n) means that number of items produced is the same as the
-// number of reference items, rounded up to an exact multiple of n.
-//
+// NOTE: fixed and bounded rates should be the smallest number of input items for the
+// smallest number of output items that can be logically produced by a kernel.
+
+
+
 
 struct ProcessingRate  {
 
@@ -143,6 +140,8 @@ inline ProcessingRate PopcountOf(std::string ref, const ProcessingRate::RateValu
 ProcessingRate::RateValue lcm(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y);
 
 ProcessingRate::RateValue gcd(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y);
+
+unsigned ceiling(const ProcessingRate::RateValue & r);
 
 }
 

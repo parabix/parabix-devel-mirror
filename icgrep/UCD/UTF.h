@@ -45,7 +45,7 @@ template <> inline unsigned UTF<8>::nthCodeUnit(codepoint_t cp, unsigned n) {
             case 4: return static_cast<unsigned>(0xF0 | (cp >> 18));
         }
     }
-    else return static_cast<unsigned>(0x80 | ((cp >> (6 * (length - n))) & 0x3F));
+    return static_cast<unsigned>(0x80 | ((cp >> (6 * (length - n))) & 0x3F));
 }
 
 template<> inline codepoint_t UTF<8>::minCodePointWithCommonCodeUnits(codepoint_t cp, unsigned common) {

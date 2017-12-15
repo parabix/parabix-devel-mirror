@@ -182,34 +182,6 @@ void PabloKernel::generateFinalizeMethod(const std::unique_ptr<kernel::KernelBui
 
         }
 
-//        Value * base = iBuilder->CreateLoad(iBuilder->CreateGEP(profile, {iBuilder->getInt32(0), iBuilder->getInt32(0)}));
-//        base = iBuilder->CreateUIToFP(base, iBuilder->getDoubleTy());
-
-//        unsigned branchCount = 0;
-//        std::function<void (const PabloBlock *)> writeProfile = [&](const PabloBlock * const scope) {
-//            for (const Statement * stmt : *scope) {
-//                if (isa<Branch>(stmt)) {
-
-//                    ++branchCount;
-
-//                    std::string tmp;
-//                    raw_string_ostream str(tmp);
-//                    str << "%3.3f\t";
-//                    str << mPabloCompiler->getBranchEntry(branchCount)->getName();
-//                    str << "\n";
-
-//                    Value * branches = iBuilder->CreateLoad(iBuilder->CreateGEP(profile, {iBuilder->getInt32(0), iBuilder->getInt32(branchCount)}));
-//                    branches = iBuilder->CreateUIToFP(branches, iBuilder->getDoubleTy());
-//                    Value * prob = iBuilder->CreateFDiv(branches, base);
-//                    iBuilder->CreateCall(dprintf, {fd, iBuilder->GetString(str.str()), prob});
-
-//                    writeProfile(cast<Branch>(stmt)->getBody());
-
-//                }
-//            }
-//        };
-
-//        writeProfile(getEntryBlock());
         iBuilder->CreateCloseCall(fd);
     }
 

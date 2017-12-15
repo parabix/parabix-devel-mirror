@@ -26,13 +26,13 @@ public:
     inline PabloAST * getExpression() const {
         return getOperand(0);
     }
-    inline int64_t getAmount() const {
+    inline unsigned getAmount() const {
         return llvm::cast<Integer>(getOperand(1))->value();
     }
 protected:
     Lookahead(PabloAST * expr, PabloAST * shiftAmount, const String * name, Allocator & allocator)
     : Statement(ClassTypeId::Lookahead, expr->getType(), {expr, shiftAmount}, name, allocator) {
-        assert(llvm::isa<Integer>(shiftAmount));
+        assert(llvm::isa<Integer>(shiftAmount) && llvm::cast<Integer>(shiftAmount)->value() >= 0);
     }
 };
 

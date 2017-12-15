@@ -81,6 +81,13 @@ Value * KernelBuilder::getInternalItemCount(const std::string & name, const std:
         if (r.denominator() != 1) {
             itemCount = CreateExactUDiv(itemCount, ConstantInt::get(itemCount->getType(), r.denominator()));
         }
+    } else if (LLVM_UNLIKELY(rate.isPopCount())) {
+        Port port; unsigned index;
+        std::tie(port, index) = mKernel->getStreamPort(rate.getReference());
+
+
+
+
     } else {
         itemCount = getScalarField(name + suffix);
     }
@@ -132,7 +139,7 @@ Value * KernelBuilder::getLinearlyAccessibleItems(const std::string & name, Valu
 
 Value * KernelBuilder::getLinearlyWritableItems(const std::string & name, Value * fromPosition, bool reverse) {
     const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-    return buf->getLinearlyWritableItems(this, getStreamHandle(name), fromPosition, reverse);
+    return buf->getLinearlyWritableItems(this, getStreamHandle(name), fromPosition, getConsumedItemCount(name), reverse);
 }
 
 //Value * KernelBuilder::getLinearlyCopyableItems(const std::string & name, Value * fromPosition, bool reverse) {
@@ -194,7 +201,12 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
     // Although our item width may be n bits, if we know we're always processing m items per block, our field width
     // (w.r.t the stream copy) would be n*m. By taking this into account we can optimize and simplify the copy code.
     const auto fieldWidth = getFieldWidth(itemWidth * itemAlignment, blockWidth);
-    assert ("overflow error" && is_power_2(fieldWidth) && (itemWidth <= fieldWidth) && (fieldWidth <= blockWidth));
+
+//    CallPrintInt(mKernel->getName() + "_" + name + "_target", target);
+//    CallPrintInt(mKernel->getName() + "_" + name + "_targetOffset", targetOffset);
+//    CallPrintInt(mKernel->getName() + "_" + name + "_source", source);
+//    CallPrintInt(mKernel->getName() + "_" + name + "_sourceOffset", sourceOffset);
+//    CallPrintInt(mKernel->getName() + "_" + name + "_itemsToCopy", itemsToCopy);
 
     if (LLVM_LIKELY(itemWidth < fieldWidth)) {
         Constant * const factor = getSize(fieldWidth / itemWidth);
@@ -222,6 +234,9 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
 
        So if we're copying the entire stream set block or our stream set has one element, we can use memcpy.
+
+       One compilication here is when the BlockSize of a stream is not equal to the BitBlockWidth.
+
 
     */
 
@@ -420,9 +435,6 @@ Value * KernelBuilder::getInputStreamPackPtr(const std::string & name, Value * s
 }
 
 Value * KernelBuilder::loadInputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex) {
-
-
-
     return CreateBlockAlignedLoad(getInputStreamPackPtr(name, streamIndex, packIndex));
 }
 
@@ -431,14 +443,14 @@ Value * KernelBuilder::getInputStreamSetCount(const std::string & name) {
     return buf->getStreamSetCount(this, getStreamHandle(name));
 }
 
-Value * KernelBuilder::getAdjustedInputStreamBlockPtr(Value * blockAdjustment, const std::string & name, Value * streamIndex) {
+Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * const streamIndex, Value * const blockOffset) {
     Value * const addr = mKernel->getStreamSetInputAddress(name);
     if (addr) {
-        return CreateGEP(addr, {blockAdjustment, streamIndex});
+        return CreateGEP(addr, {blockOffset, streamIndex});
     } else {
         const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
         Value * blockIndex = CreateLShr(getProcessedItemCount(name), std::log2(getBitBlockWidth()));
-        blockIndex = CreateAdd(blockIndex, blockAdjustment);
+        blockIndex = CreateAdd(blockIndex, blockOffset);
         return buf->getStreamBlockPtr(this, getStreamHandle(name), getBaseAddress(name), streamIndex, blockIndex, true);
     }
 }

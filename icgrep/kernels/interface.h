@@ -32,7 +32,7 @@ struct Binding : public AttributeSet {
 
 
     Binding(llvm::Type * type, const std::string & name, ProcessingRate r, Attribute && attribute)
-    : AttributeSet({std::move(attribute)})
+    : AttributeSet(std::move(attribute))
     , mType(type), mName(name), mRate(std::move(r)) { }
 
 
@@ -57,11 +57,19 @@ struct Binding : public AttributeSet {
     }
 
     bool isPrincipal() const {
-        return hasAttribute(Attribute::KindId::Principal);
+        return hasAttribute(AttributeId::Principal);
+    }
+
+    bool hasLookahead() const {
+        return hasAttribute(AttributeId::LookAhead);
+    }
+
+    unsigned const getLookahead() const {
+        return findAttribute(AttributeId::LookAhead).amount();
     }
 
     bool nonDeferred() const {
-        return !hasAttribute(Attribute::KindId::Deferred);
+        return !hasAttribute(AttributeId::Deferred);
     }
 
 private:
@@ -158,14 +166,6 @@ public:
         return mHasPrincipalItemCount;
     }
 
-    unsigned getLookAhead(const unsigned i) const {
-        return 0;
-    }
-
-    void setLookAhead(const unsigned i, const unsigned lookAheadPositions) {
-
-    }
-
 protected:
 
     llvm::Function * getInitFunction(llvm::Module * const module) const;
@@ -177,11 +177,11 @@ protected:
     llvm::CallInst * makeDoSegmentCall(KernelBuilder & idb, const std::vector<llvm::Value *> & args) const;
 
     KernelInterface(const std::string && kernelName,
-                    std::vector<Binding> && stream_inputs,
-                    std::vector<Binding> && stream_outputs,
-                    std::vector<Binding> && scalar_inputs,
-                    std::vector<Binding> && scalar_outputs,
-                    std::vector<Binding> && internal_scalars)
+                    Bindings && stream_inputs,
+                    Bindings && stream_outputs,
+                    Bindings && scalar_inputs,
+                    Bindings && scalar_outputs,
+                    Bindings && internal_scalars)
     : mKernelInstance(nullptr)
     , mModule(nullptr)
     , mKernelStateType(nullptr)
@@ -197,17 +197,17 @@ protected:
     
 protected:
 
-    llvm::Value *                           mKernelInstance;
-    llvm::Module *                          mModule;
-    llvm::StructType *                      mKernelStateType;
-    bool                                    mHasPrincipalItemCount;
-    const std::string                       mKernelName;
-    std::vector<llvm::Value *>              mInitialArguments;
-    std::vector<Binding>                    mStreamSetInputs;
-    std::vector<Binding>                    mStreamSetOutputs;
-    std::vector<Binding>                    mScalarInputs;
-    std::vector<Binding>                    mScalarOutputs;
-    std::vector<Binding>                    mInternalScalars;
+    llvm::Value *                   mKernelInstance;
+    llvm::Module *                  mModule;
+    llvm::StructType *              mKernelStateType;
+    bool                            mHasPrincipalItemCount;
+    const std::string               mKernelName;
+    std::vector<llvm::Value *>      mInitialArguments;
+    Bindings                        mStreamSetInputs;
+    Bindings                        mStreamSetOutputs;
+    Bindings                        mScalarInputs;
+    Bindings                        mScalarOutputs;
+    Bindings                        mInternalScalars;
 };
 
 }

@@ -209,9 +209,20 @@ Value * ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
 
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
 : MultiBlockKernel("scanMatch",
-    {Binding{b->getStreamSetTy(1, 1), "matchResult", FixedRate(), Principal()}, Binding{b->getStreamSetTy(1, 1), "lineBreak"}, Binding{b->getStreamSetTy(1, 8), "InputStream", FixedRate(), Deferred() }},
-    {},
-    {Binding{b->getIntAddrTy(), "accumulator_address"}},
-    {},
-    {Binding{b->getSizeTy(), "BlockNo"}, Binding{b->getSizeTy(), "LineNum"}}) {}
+// inputs
+{Binding{b->getStreamSetTy(1, 1), "matchResult", FixedRate(), Principal()}
+,Binding{b->getStreamSetTy(1, 1), "lineBreak"}
+,Binding{b->getStreamSetTy(1, 8), "InputStream", FixedRate(), Deferred()}},
+// outputs
+{},
+// input scalars
+{Binding{b->getIntAddrTy(), "accumulator_address"}},
+// output scalars
+{},
+// kernel state
+{Binding{b->getSizeTy(), "BlockNo"}
+,Binding{b->getSizeTy(), "LineNum"}}) {
+
+}
+
 }

@@ -7,10 +7,6 @@ namespace kernel {
 
 struct Attribute {
 
-    friend struct AttributeSet;
-
-    friend struct Binding;
-
     enum class KindId {
 
         /** INPUT STREAM ATTRIBUTES **/
@@ -18,8 +14,8 @@ struct Attribute {
         LookAhead, /// NOT DONE
 
         // A LookAhead(n) attribute on an input stream set S declares that the kernel
-        // looks ahead n positions in the input stream.   That is,
-        // processing of item S[i, j] may be defined in terms of S[i, j+n].
+        // looks ahead n positions in the input stream.  That is, processing of item
+        // S[i, j] may be defined in terms of S[i, j+n].
 
         // Guarantee required: the pipeline compiler must ensure that, when
         // the kernel is called with an available item count of N for the
@@ -67,11 +63,32 @@ struct Attribute {
         // as Deferred provides the pipeline with a stronger guarantee when it comes to
         // buffer size calculations.
 
-        Greedy,
+        IndependentRegionBegin, IndependentRegionEnd, /// NOT DONE
 
-        // Normally, the available item count of fixed rate streams is equal to the
-        // number of strides processed by the MultiBlock times its stride size for all
-        // strides except for the final stride. Some kernels consume
+        // Some kernels can divide their processing into concrete non-overlapping regions
+        // between a beginning and ending position. This is a hard guarantee that regardless
+        // of the computations between the start of the stream and the beginning of the first
+        // independent region or between the *beginning* of any two independent regions, A,
+        // B, the calculations that occur prior to the beginning of B do not affect the
+        // calculations after it --- even if A is started at an arbitrary position with a
+        // zeroed-out kernel state.
+
+        // If a kernel K is processed simultaneously by two threads, K_0 and K_1, and K_1 is
+        // waiting K_0 to finish and update it's kernel state for K_1 to resume at, K_1 can
+        // compute what its state will be and begin processing before K_0 is finished. This
+        // requires a the pipeline to intervene and call an optimized "output-less" instance
+        // of the kernel prior to calling B.
+
+        ConditionalRegionBegin, ConditionalRegionEnd, /// NOT DONE
+
+        // Some kernels have clearly demarcated regions in which a MultiBlock kernel will
+        // produce useful outputs for only the inputs within those regions. This attribute
+        // instructs the kernel to "zero-fill" the output of any non-selected regions,
+        // skipping strides entirely whenever possible.
+
+        // If the same regions are also independent, we can avoid the overhead of "masking
+        // out" the input streams. Otherwise a MultiBlock will use temporary buffers for all
+        // uses of the streams and zero out any non-regions from the data.
 
         /** OUTPUT STREAM ATTRIBUTES **/
 
@@ -100,6 +117,70 @@ struct Attribute {
         // the pipeline will take on the role of automatically inserting the
         // swizzling code necessary).
 
+        ReverseRegionBegin, ReverseRegionEnd, /// NOT DONE
+
+        // Conceptually, reversing a stream S is simple: {S_1,...,S_n} -> {S_n,...,S_1}.
+        // However, this means all of the input data must be computed and stored prior to
+        // executing this kernel. In practice, this is unnecessary as in the context of
+        // text parsing, we're almost always searching for the true starting position of
+        // something ambigious after we've found its end position in some prior kernel.
+
+
+
+
+
+//        Here is a revised definition of SegmentedReverse:
+
+//        Given a stream of data bits S that is considered to be divided into
+//        segments, and a marker stream S having a one bit at the final position
+//        of each segment, the R = SegmentedReverse(S, M) when
+
+//        R_{i} = S_{l + (h - i)}
+//              where l = the maximum j such that j <= i and either j = 0 or M_{j-1} = 1
+//          and where h = the minimum j such that j >= i and either j = length(S) -  or M_j = 1
+//          (l and h are the low and high positions of the segment containing i)
+
+//        This is an invertible operation, so we can apply R to a kernel's input
+//        and then to its output to get a SegmentedReverse version of a kernel
+
+//        A kernel which computes segmented reverse is feasible, but seems complex
+//        to implement, and probably too slow.  I have played around with several
+//        ways of tackling it, no good method yet.
+
+//        If there are multiple segments within a block, we could instead use
+//        the following:
+
+//        BlockSegmentedReverse
+
+//        B_{i} = S_{L + (H - i)}
+//             where l = the maximum j such that j <= i and either j = 0 or M_{j-1} = 1
+//                   h = the minimum j such that j >= i and either j = length(S) -  or M_j = 1
+//                   L = l if l div BlockSize < h divBlockSize, otherwise (i div BlockSize) * BlockSize
+//                   H = h if l div BlockSize < h divBlockSize, otherwise L + BlockSize - 1
+
+//        An alternative way of looking at this is to eliminate all but the first
+//        and last marker positions within a block.
+
+//        The main point is that, if we apply B to inputs, perform the kernel
+//        and the apply B to outputs, we get the same result if we applied R
+//        (assuming that the kernel computations do not cross boundaries in M).
+
+//        This will be more efficient to compute, but still involves overhead
+//        for shifting and combining streams.
+
+//        I think it may be better to focus on the ReverseKernel adapter, that
+//        handles the reverse operations for both input and output.   This actually
+//        gives more flexibility, because, in a multiblock scenario, we can process
+//        the longest sequence of blocks such that both the beginning and end blocks
+//        have a one bit.   If there are any interior blocks with one bits, then
+//        they will be handled automatically without special shifting and masking.
+
+//        By the way, in my designs, I am wanting to have a callable Multiblock
+//        function, so that the Multiblock function for a Reversed Kernel just
+//        does a little work before calling the Multiblock function of the base kernel.
+//        That seems to have disappeared in the current system.
+
+
         /** KERNEL ATTRIBUTES **/
 
         SelectMinimumInputLength, /// NOT DONE
@@ -123,16 +204,6 @@ struct Attribute {
         // in which case the pipeline will propogate the message to the subsequent
         // kernels and end the program once the final kernel has returned its result.
 
-        IndependentRegions,
-
-        // Some kernels can divide their processing into concrete non-overlapping regions
-        // between a start and end position in which the data produced by a kernel. If a
-        // kernel K is processed simultaneously by two threads, K_0 and K_1, and K_1 is
-        // waiting K_0 to finish and update it's kernel state for K_1 to resume at, K_1 can
-        // compute what its state will be and begin processing before K_0 is finished. This
-        // requires a the pipeline to intervene and call an optimized "output-less" instance
-        // of the kernel prior to calling B.
-
     };
 
     bool isAdd() const {
@@ -151,12 +222,16 @@ struct Attribute {
         return mKind == KindId::BlockSize;
     }
 
-    unsigned getAmount() const {
-        return mK;
+    unsigned amount() const {
+        return mAmount;
+    }
+
+    void setAmount(const unsigned amount) {
+        mAmount = amount;
     }
 
     bool operator == (const Attribute & other) const {
-        return mKind == other.mKind && mK == other.mK;
+        return mKind == other.mKind && mAmount == other.mAmount;
     }
 
     bool operator != (const Attribute & other) const {
@@ -169,18 +244,23 @@ protected:
         return mKind;
     }
 
+    friend struct AttributeSet;
+    friend struct Binding;
     friend Attribute Add1();
     friend Attribute Principal();
     friend Attribute RoundUpTo(const unsigned);
+    friend Attribute LookAhead(const unsigned);
     friend Attribute LookBehind(const unsigned);
     friend Attribute Deferred();
+    friend Attribute ConditionalRegionBegin();
+    friend Attribute ConditionalRegionEnd();
 
-    Attribute(const KindId kind, const unsigned k) : mKind(kind), mK(k) { }
+    Attribute(const KindId kind, const unsigned k) : mKind(kind), mAmount(k) { }
 
 private:
 
     const KindId    mKind;
-    unsigned        mK;
+    unsigned        mAmount;
 };
 
 struct AttributeSet : public std::vector<Attribute> {
@@ -191,21 +271,38 @@ struct AttributeSet : public std::vector<Attribute> {
         return *this;
     }
 
-    const Attribute & getAttribute(const unsigned i) const {
-        return getAttributes()[i];
+    Attribute & findOrAddAttribute(const AttributeId id) {
+        if (Attribute * const attr = __findAttribute(id)) {
+            return *attr;
+        } else {
+            return addAttribute(Attribute(id, 0));
+        }
     }
 
-    void addAttribute(Attribute attribute);
+    Attribute & findAttribute(const AttributeId id) const {
+        return *__findAttribute(id);
+    }
+
+    Attribute & addAttribute(Attribute attribute);
 
     bool hasAttributes() const {
         return !empty();
     }
 
-    bool hasAttribute(const AttributeId id) const;
+    bool hasAttribute(const AttributeId id) const {
+        return __findAttribute(id) != nullptr;
+    }
 
     AttributeSet() = default;
 
+    AttributeSet(Attribute && attr) { emplace_back(std::move(attr)); }
+
     AttributeSet(std::initializer_list<Attribute> attrs) : std::vector<Attribute>(attrs) { }
+
+private:
+
+    Attribute * __findAttribute(const AttributeId id) const;
+
 };
 
 
@@ -221,12 +318,24 @@ inline Attribute Principal() {
     return Attribute(Attribute::KindId::Principal, 0);
 }
 
+inline Attribute LookAhead(const unsigned k) {
+    return Attribute(Attribute::KindId::LookAhead, k);
+}
+
 inline Attribute LookBehind(const unsigned k) {
     return Attribute(Attribute::KindId::LookBehind, k);
 }
 
 inline Attribute Deferred() {
     return Attribute(Attribute::KindId::Deferred, 0);
+}
+
+inline Attribute ConditionalRegionBegin() {
+    return Attribute(Attribute::KindId::ConditionalRegionBegin, 0);
+}
+
+inline Attribute ConditionalRegionEnd() {
+    return Attribute(Attribute::KindId::ConditionalRegionEnd, 0);
 }
 
 }

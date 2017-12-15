@@ -96,7 +96,7 @@ public:
 
     virtual void createBlockAlignedCopy(IDISA::IDISA_Builder * const b, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy, const unsigned alignment = 1) const;
 
-    virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, bool reverse = false) const;
+    virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const;
     
     bool supportsCopyBack() const {
         return mOverflowBlocks != 0;
@@ -117,6 +117,8 @@ public:
     const std::vector<kernel::Kernel *> & getConsumers() const {
         return mConsumers;
     }
+
+
 
 protected:
 
@@ -173,7 +175,7 @@ public:
     
     llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
 
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, bool reverse = false) const override;
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
 
     llvm::Type * getStreamSetBlockType() const override;
 
@@ -199,7 +201,7 @@ public:
 
     llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
     
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, bool reverse = false) const override;
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
 
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 
@@ -241,7 +243,7 @@ public:
     
     CircularCopybackBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace = 0);
     
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, bool reverse = false) const override;
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
     
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 
@@ -257,7 +259,7 @@ public:
        
     void createBlockAlignedCopy(IDISA::IDISA_Builder * const b, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy, const unsigned alignment = 1) const override;
 
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, bool reverse = false) const override;
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
     
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 
@@ -316,7 +318,7 @@ public:
     
     llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
     
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, bool reverse = false) const override;
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
     
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 
