@@ -10,6 +10,7 @@
 #include <cc/cc_compiler.h>
 #include <re/re_name.h>
 #include <boost/uuid/sha1.hpp>
+#include <pablo/builder.hpp>
 #include <llvm/Support/raw_ostream.h>
 
 using NameMap = UCD::UCDCompiler::NameMap;
@@ -98,7 +99,7 @@ void CharClassesKernel::generatePabloMethod() {
             if (t->first->getType() == Name::Type::Byte) {
                 pb.createAssign(r, ccc.compileCC(dyn_cast<CC>(t->first->getDefinition())));
             } else {
-                pb.createAssign(r, t->second);
+                pb.createAssign(r, pb.createInFile(t->second));
             }
         } else {
             throw std::runtime_error("Can't compile character classes.");

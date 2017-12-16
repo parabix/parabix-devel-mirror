@@ -83,7 +83,16 @@ std::pair<RE *, std::vector<re::CC *>> multiplexing_passes(RE * r) {
         errs() << "RemoveNullableAssertion:\n" << Printer_RE::PrintRE(r) << '\n';
     }
     r = RE_Star_Normal::star_normal(r);
-    
+
+    r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
+    if (PrintOptions.isSet(ShowAllREs)) {
+        errs() << "resolveGraphemeMode:\n" << Printer_RE::PrintRE(r) << '\n';
+    }
+    r = re::resolveUnicodeProperties(r);
+    if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
+        errs() << "resolveUnicodeProperties:\n" << Printer_RE::PrintRE(r) << '\n';
+    }
+
     r = RE_Simplifier::simplify(r);
     
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowSimplifiedREs)) {
@@ -97,10 +106,6 @@ std::pair<RE *, std::vector<re::CC *>> multiplexing_passes(RE * r) {
     r = resolveCaseInsensitiveMode(r, grep::IgnoreCaseFlag);
     if (PrintOptions.isSet(ShowAllREs)) {
         errs() << "resolveCaseInsensitiveMode:\n" << Printer_RE::PrintRE(r) << '\n';
-    }
-    r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
-    if (PrintOptions.isSet(ShowAllREs)) {
-        errs() << "resolveGraphemeMode:\n" << Printer_RE::PrintRE(r) << '\n';
     }
     r = re::resolveNames(r);
     if (PrintOptions.isSet(ShowAllREs)) {
@@ -172,7 +177,6 @@ PabloAST * re2pablo_compiler(PabloKernel * kernel, RE * re_ast) {
     Var * const basis = kernel->getInputStreamVar("basis");
     cc::CC_Compiler cc_compiler(kernel, basis);
     RE_Compiler re_compiler(kernel, cc_compiler);
-    re_ast = re_compiler.compileUnicodeNames(re_ast);
     return re_compiler.compile(re_ast);
 }
 

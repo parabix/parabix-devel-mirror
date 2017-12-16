@@ -31,20 +31,59 @@ static inline CC * extractCC(RE * re) {
 }
 
 struct NameResolver {
+    RE * resolveUnicodeProperties(RE * re) {
+        if (Name * name = dyn_cast<Name>(re)) {
+            auto f = mMemoizer.find(name);
+            if (f == mMemoizer.end()) {
+                if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+                    name->setDefinition(resolveUnicodeProperties(name->getDefinition()));
+                } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty || name->getType() == Name::Type::ZeroWidth)) {
+                    if (UCD::resolvePropertyDefinition(name)) {
+                        name->setDefinition(resolveUnicodeProperties(name->getDefinition()));
+                    } else {
+                        name->setDefinition(makeCC(UCD::resolveUnicodeSet(name)));
+                    }
+                } else {
+                    UndefinedNameError(name);
+                }
+            } else {
+                return *f;
+            }
+        } else if (Seq * seq = dyn_cast<Seq>(re)) {
+            for (auto si = seq->begin(); si != seq->end(); ++si) {
+                *si = resolveUnicodeProperties(*si);
+            }
+        } else if (Alt * alt = dyn_cast<Alt>(re)) {
+            for (auto ai = alt->begin(); ai != alt->end(); ++ai) {
+                *ai = resolveUnicodeProperties(*ai);
+            }
+        } else if (Rep * rep = dyn_cast<Rep>(re)) {
+            rep->setRE(resolveUnicodeProperties(rep->getRE()));
+        } else if (Assertion * a = dyn_cast<Assertion>(re)) {
+            a->setAsserted(resolveUnicodeProperties(a->getAsserted()));
+        } else if (Range * rg = dyn_cast<Range>(re)) {
+            rg->setLo(resolveUnicodeProperties(rg->getLo()));
+            rg->setHi(resolveUnicodeProperties(rg->getHi()));
+        } else if (Diff * diff = dyn_cast<Diff>(re)) {
+            diff->setLH(resolveUnicodeProperties(diff->getLH()));
+            diff->setRH(resolveUnicodeProperties(diff->getRH()));
+        } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
+            ix->setLH(resolveUnicodeProperties(ix->getLH()));
+            ix->setRH(resolveUnicodeProperties(ix->getRH()));
+        } else if (Group * g = dyn_cast<Group>(re)) {
+            g->setRE(resolveUnicodeProperties(g->getRE()));
+        }
+        return re;
+    }
+    
     RE * resolve(RE * re) {
         if (Name * name = dyn_cast<Name>(re)) {
             auto f = mMemoizer.find(name);
             if (f == mMemoizer.end()) {
                 if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
                     name->setDefinition(resolve(name->getDefinition()));
-                } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty || name->getType() == Name::Type::ZeroWidth)) {
-                    if (UCD::resolvePropertyDefinition(name)) {
-                        name->setDefinition(resolve(name->getDefinition()));
-                    } else {
-                        name->setDefinition(makeCC(UCD::resolveUnicodeSet(name)));
-                    }
                 } else {
-                    throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
+                    UndefinedNameError(name);
                 }
             } else {
                 return *f;
@@ -103,14 +142,19 @@ struct NameResolver {
         }
         return re;
     }
-
+    
 private:
     Memoizer                mMemoizer;
 };
     
-RE * resolveNames(RE * re) {
-    NameResolver nameResolver;
-    return nameResolver.resolve(re);    
-}
-
+    RE * resolveUnicodeProperties(RE * re) {
+        NameResolver nameResolver;
+        return nameResolver.resolveUnicodeProperties(re);
+    }
+    
+    RE * resolveNames(RE * re) {
+        NameResolver nameResolver;
+        return nameResolver.resolve(re);
+    }
+    
 }

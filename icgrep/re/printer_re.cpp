@@ -61,7 +61,9 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         }
         retVal += re_name->getName();
         retVal += "\" ";
+        if (re_name->getType() == Name::Type::Capture) {
             retVal += "=(" + PrintRE(re_name->getDefinition()) + ")";
+        }
     } else if (const Range* rg = dyn_cast<const Range>(re)) {
         retVal = "Range (";
         retVal += PrintRE(rg->getLo());

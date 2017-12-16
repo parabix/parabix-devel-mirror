@@ -109,8 +109,14 @@ bool resolvePropertyDefinition(Name * const property) {
             Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
             property->setDefinition(makeDiff(makeAny(), unassigned));
             return true;
-        } else if (value == "GCB" || value == "NonGCB"){
+        } else if (value == "GCB" || value == "NonGCB") {
             generateGraphemeClusterBoundaryRule(property);
+            return true;
+        } else if (value == "^s") {  // "start anchor (^) in single-line mode"
+            property->setDefinition(makeNegativeLookBehindAssertion(makeCC(0, 0x10FFFF)));
+            return true;
+        } else if (value == "$s") { // "end anchor ($) in single-line mode"
+            property->setDefinition(makeNegativeLookAheadAssertion(makeCC(0, 0x10FFFF)));
             return true;
         }
     }

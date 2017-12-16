@@ -8,6 +8,7 @@ namespace re {
     class RE;
     class Name;
 
+    RE * resolveUnicodeProperties(RE * re);
     RE * resolveNames(RE * re);
 
 }

@@ -61,7 +61,6 @@ class RE_Compiler {
 public:
 
     RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler);
-    RE * compileUnicodeNames(RE * re);
     pablo::PabloAST * compile(RE * re);
 
     static LLVM_ATTRIBUTE_NORETURN void UnsupportedRE(std::string errmsg);
@@ -106,7 +105,6 @@ private:
     MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, int ifGroupSize, pablo::PabloBuilder & pb);
     MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, int ifGroupSize,  pablo::PabloBuilder & pb);
-    RE * resolveUnicodeProperties(RE * re);
 
     MarkerType compileName(Name * name, pablo::PabloBuilder & pb);
     MarkerType compileAny(const MarkerType m, pablo::PabloBuilder & pb);
@@ -123,7 +121,6 @@ private:
     cc::CC_Compiler &                               mCCCompiler;
     pablo::PabloAST *                               mLineBreak;
     pablo::PabloAST *                               mCRLF;
-    pablo::PabloAST *                               mGraphemeBoundaryRule;
     pablo::PabloAST *                               mInitial;
     pablo::PabloAST *                               mNonFinal;
     pablo::PabloAST *                               mFinal;

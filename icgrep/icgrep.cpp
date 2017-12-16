@@ -41,7 +41,7 @@ static cl::opt<bool> ByteMode("enable-byte-mode", cl::desc("Process regular expr
 static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"));
 static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expressions processed by each kernel."), cl::init(1));
 
-static re::ModeFlagSet globalFlags = 0;
+static re::ModeFlagSet globalFlags = re::MULTILINE_MODE_FLAG;
 
 std::vector<re::RE *> readExpressions() {
   

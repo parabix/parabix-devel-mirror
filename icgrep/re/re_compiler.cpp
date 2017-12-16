@@ -42,21 +42,6 @@ using namespace llvm;
 
 namespace re {
 
-RE * RE_Compiler::resolveUnicodeProperties(RE * re) {
-    Name * ZeroWidth = nullptr;
-    mCompiledName = &mBaseMap;
-    gatherNames(re, ZeroWidth);
-    // Now precompile any grapheme segmentation rules
-    if (ZeroWidth) {
-        mCompiledName->add(ZeroWidth, compileName(ZeroWidth, mPB));
-    }
-    return re;
-}
-
-RE * RE_Compiler::compileUnicodeNames(RE * re) {
-    return resolveUnicodeProperties(re);
-}
-
 PabloAST * RE_Compiler::compile(RE * re) {
     return markerVar(AdvanceMarker(compile(re, mPB), MarkerPosition::FinalPostPositionUnit, mPB));
 }
@@ -340,7 +325,7 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
     else if (LLVM_UNLIKELY(lb == 1)) return process(repeated, marker, pb);
     //
     // A bounded repetition with an upper bound of at least 2.
-    if (!mGraphemeBoundaryRule && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
+    if (!AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
         // Check for a regular expression that satisfies on of the special conditions that 
         // allow implementation using the log2 technique.
         if (isByteLength(repeated)) {
@@ -389,9 +374,6 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
     auto group = ifGroupSize < lb ? ifGroupSize : lb;
     for (auto i = 0; i < group; i++) {
         marker = process(repeated, marker, pb);
-        if (mGraphemeBoundaryRule) {
-            marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
-        }
     }
     if (lb == group) {
         return marker;
@@ -411,7 +393,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
     if (LLVM_UNLIKELY(ub == 0)) return marker;
     //
     // A bounded repetition with an upper bound of at least 2.
-    if (!mGraphemeBoundaryRule && !AlgorithmOptionIsSet(DisableLog2BoundedRepetition) && (ub > 1)) {
+    if (!AlgorithmOptionIsSet(DisableLog2BoundedRepetition) && (ub > 1)) {
         // Check for a regular expression that satisfies on of the special conditions that 
         // allow implementation using the log2 technique.
         if (isByteLength(repeated)) {
@@ -465,9 +447,6 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
         MarkerType m = marker;
         AlignMarkers(a, m, pb);
         marker = makeMarker(markerPos(a), pb.createOr(markerVar(a), markerVar(m)));
-        if (mGraphemeBoundaryRule) {
-            marker = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
-        }
     }
     if (ub == group) {
         return marker;
@@ -486,12 +465,9 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
 MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, PabloBuilder & pb) {
     // always use PostPosition markers for unbounded repetition.
     PabloAST * base = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
-    if (!mGraphemeBoundaryRule && isByteLength(repeated)  && !AlgorithmOptionIsSet(DisableMatchStar)) {
+    if (isByteLength(repeated)  && !AlgorithmOptionIsSet(DisableMatchStar)) {
         PabloAST * mask = markerVar(compile(repeated, pb));
         PabloAST * nonFinal = mNonFinal;
-        if (mGraphemeBoundaryRule) {
-            nonFinal = pb.createOr(nonFinal, pb.createNot(mGraphemeBoundaryRule, "gext"));
-        }
         // The post position character may land on the initial byte of a multi-byte character. Combine them with the masked range.
         PabloAST * unbounded = pb.createMatchStar(base, pb.createOr(mask, nonFinal), "unbounded");
         return makeMarker(MarkerPosition::FinalPostPositionUnit, unbounded);
@@ -499,15 +475,9 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         PabloAST * cc = markerVar(compile(repeated, pb));
         PabloAST * mstar = nullptr;
         PabloAST * nonFinal = mNonFinal;
-        if (mGraphemeBoundaryRule) {
-            nonFinal = pb.createOr(nonFinal, pb.createNot(mGraphemeBoundaryRule, "gext"));
-        }
         cc = pb.createOr(cc, nonFinal);
         mstar = pb.createMatchStar(base, cc);
         PabloAST * final = mFinal;
-        if (mGraphemeBoundaryRule) {
-            final = mGraphemeBoundaryRule;
-        }
         return makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(mstar, final, "unbounded"));
     } else if (mStarDepth > 0){
         PabloBuilder * const outer = pb.getParent();
@@ -565,9 +535,6 @@ inline MarkerType RE_Compiler::AdvanceMarker(MarkerType marker, const MarkerPosi
         if (marker.pos == MarkerPosition::FinalMatchUnit) {
             marker.stream = pb.createAdvance(marker.stream, 1, "ipp");
             PabloAST * nonFinal = mNonFinal;
-            if (mGraphemeBoundaryRule) {
-                nonFinal = pb.createOr(nonFinal, pb.createNot(mGraphemeBoundaryRule, "gext"));
-            }
             PabloAST * starts = pb.createAnd(mInitial, marker.stream);
             marker.stream = pb.createScanThru(starts, nonFinal, "fpp");
             marker.pos = MarkerPosition::FinalPostPositionUnit;
@@ -593,7 +560,6 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 , mCCCompiler(ccCompiler)
 , mLineBreak(nullptr)
 , mCRLF(nullptr)
-, mGraphemeBoundaryRule(nullptr)
 , mInitial(nullptr)
 , mNonFinal(nullptr)
 , mFinal(nullptr)

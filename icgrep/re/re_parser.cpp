@@ -73,7 +73,7 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
 
 RE_Parser::RE_Parser(const std::string & regular_expression)
 : fByteMode(false)
-, fModeFlagSet(0)
+, fModeFlagSet(MULTILINE_MODE_FLAG)
 , fNested(false)
 , mGroupsOpen(0)
 , fGraphemeBoundaryPending(false)
@@ -142,12 +142,18 @@ RE * RE_Parser::parse_next_item() {
                 return parse_group();
             case '^':
                 ++mCursor;
+                if ((fModeFlagSet & ModeFlagType::MULTILINE_MODE_FLAG) == 0) {
+                    return makeZeroWidth("^s");  //single-line mode
+                }
                 if ((fModeFlagSet & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
                     return makeNegativeLookBehindAssertion(makeByte(makeCC(makeCC(0, '\n'-1), makeCC('\n'+1, 0xFF))));
                 }
                 return makeStart();
             case '$':
                 ++mCursor;
+                if ((fModeFlagSet & ModeFlagType::MULTILINE_MODE_FLAG) == 0) {
+                    return makeZeroWidth("$s");  //single-line mode
+                }
                 if ((fModeFlagSet & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
                     return makeLookAheadAssertion(makeCC('\n'));
                 }
