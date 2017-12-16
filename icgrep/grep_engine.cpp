@@ -119,22 +119,10 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
 
     const auto n = REs.size();
     std::vector<std::vector<re::CC *>> charclasses(n);
-    for (unsigned i = 0; i < n; i++) {
-        REs[i] = resolveCaseInsensitiveMode(REs[i], grep::IgnoreCaseFlag);
-        REs[i] = resolveGraphemeMode(REs[i], false /* not in grapheme mode at top level*/);
-        REs[i] = re::resolveNames(REs[i]);
-        REs[i] = exclude_CC(REs[i], re::makeCC(re::makeCC(0x0A, 0x0D), re::makeCC(re::makeCC(0x85), re::makeCC(0x2028, 0x2029))));
-
-        const auto UnicodeSets = re::collectUnicodeSets(REs[i]);
-        std::vector<std::vector<unsigned>> exclusiveSetIDs;
-        doMultiplexCCs(UnicodeSets, exclusiveSetIDs, charclasses[i]);
-        REs[i] = multiplex(REs[i], UnicodeSets, exclusiveSetIDs);
-        REs[i] = regular_expression_passes(REs[i]);
-  }
-
     std::vector<StreamSetBuffer *> MatchResultsBufs(n);
 
     for(unsigned i = 0; i < n; ++i){
+        std::tie<re::RE*, std::vector<re::CC *>>(REs[i], charclasses[i]) = multiplexing_passes(REs[i]);
         const auto numOfCharacterClasses = charclasses[i].size();
         StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), segmentSize * bufferSegments);
         kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(charclasses[i]));

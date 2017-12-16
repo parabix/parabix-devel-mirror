@@ -9,7 +9,8 @@
 #include <llvm/Support/Compiler.h>
 namespace llvm { namespace cl { class OptionCategory; } }
 namespace pablo { class PabloKernel; class PabloAST; }
-namespace re { class RE; }
+namespace re { class RE; class CC;}
+#include <vector>
 
 namespace re {
 
@@ -29,6 +30,8 @@ extern int IfInsertionGap;
 const llvm::cl::OptionCategory * re_toolchain_flags();
 
 RE * regular_expression_passes(RE * re_ast);
+
+std::pair<RE *, std::vector<re::CC *>> multiplexing_passes(RE * r);
 
 pablo::PabloAST * re2pablo_compiler(pablo::PabloKernel * kernel, RE * re_ast);
     

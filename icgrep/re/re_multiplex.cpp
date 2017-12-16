@@ -22,15 +22,6 @@ using namespace llvm;
 
 namespace re {
   
-static inline CC * extractCC(RE * re) {
-    if (isa<CC>(re)) {
-        return cast<CC>(re);
-    } else if (isa<Name>(re)) {
-        return extractCC(cast<Name>(re)->getDefinition());
-    }
-    return nullptr;
-}
-
 RE * multiplex(RE * const re,
                const std::vector<const CC *> & UnicodeSets,
                const std::vector<std::vector<unsigned>> & exclusiveSetIDs) {
@@ -62,7 +53,7 @@ RE * multiplex(RE * const re,
                         multiplex(name->getDefinition());
                     }
                 } else {
-                    throw std::runtime_error("All non-unicode-property Name objects should have been defined prior to Unicode property resolution.");
+                    UndefinedNameError(name);
                 }
                 return memoizer.memoize(name);
             } else {
@@ -73,36 +64,8 @@ RE * multiplex(RE * const re,
                 *si = multiplex(*si);
             }
         } else if (Alt * alt = dyn_cast<Alt>(re)) {
-            CC * unionCC = nullptr;
-            std::stringstream name;
-            for (auto ai = alt->begin(); ai != alt->end(); ) {
-                RE * re = multiplex(*ai);
-                if (CC * cc = extractCC(re)) {
-                    if (unionCC == nullptr) {
-                        unionCC = cc;
-                    } else {
-                        unionCC = makeCC(unionCC, cc);
-                        name << '+';
-                    }
-                    if (LLVM_LIKELY(isa<Name>(re))) {
-                        Name * n = cast<Name>(re);
-                        if (n->hasNamespace()) {
-                            name << n->getNamespace() << ':';
-                        }
-                        name << n->getName();
-                    } else if (isa<CC>(re)) {
-                        name << cast<CC>(re)->canonicalName(CC_type::UnicodeClass);
-                    }
-                    ai = alt->erase(ai);
-                } else {
-                    *ai++ = re;
-                }
-            }
-            if (unionCC) {
-                alt->push_back(multiplex(makeName(name.str(), unionCC)));
-            }
-            if (alt->size() == 1) {
-                return alt->front();
+            for (auto ai = alt->begin(); ai != alt->end(); ++ai) {
+                *ai = multiplex(*ai);
             }
         } else if (Rep * rep = dyn_cast<Rep>(re)) {
             rep->setRE(multiplex(rep->getRE()));

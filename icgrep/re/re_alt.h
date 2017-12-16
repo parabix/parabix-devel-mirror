@@ -74,6 +74,7 @@ RE * makeAlt(iterator begin, iterator end) {
     if (unionCC) {
         newAlt->push_back(unionCC);
     }
+    if (newAlt->size() == 1) return newAlt->front();
     return newAlt;
 }
 

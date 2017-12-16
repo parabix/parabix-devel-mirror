@@ -24,7 +24,7 @@ namespace re {
 RE * resolveCaseInsensitiveMode(RE * re, const bool inCaseInsensitiveMode) {
     if (isa<CC>(re)) {
         if (inCaseInsensitiveMode) {
-            return makeCC(std::move(caseInsensitize(*cast<CC>(re))));
+            return makeCC(caseInsensitize(*cast<CC>(re)));
         }
         return re;
     } else if (Name * name = dyn_cast<Name>(re)) {
