@@ -117,7 +117,7 @@ std::pair<RE *, std::vector<re::CC *>> multiplexing_passes(RE * r) {
     if (PrintOptions.isSet(ShowAllREs)) {
         errs() << "multiplex:\n" << Printer_RE::PrintRE(r) << '\n';
     }
-    return std::tie<RE *, std::vector<re::CC *>>(r, charclasses);
+    return std::pair<RE *, std::vector<re::CC *>>(r, charclasses);
 }
 
 RE * regular_expression_passes(RE * r)  {
