@@ -791,14 +791,15 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             b->CreateUnlikelyCondBr(b->CreateICmpEQ(accessibleStrides, ZERO), copyFromBack, resume);
 
             b->SetInsertPoint(copyFromBack);
-            Value * const temporarySize = b->CreateMul(tempBuffer->getArraySize(), b->getSize(mStride));
+            Value * const arraySize = b->CreateZExt(tempBuffer->getArraySize(), b->getInt64Ty());
+            Value * const temporarySize = b->CreateTrunc(b->CreateMul(arraySize, b->getInt64(mStride)), unprocessed->getType());
             Value * const temporaryAvailable = b->CreateUMin(unprocessed, temporarySize);
             if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
                 b->CreateAssert(b->CreateICmpULE(avail, temporaryAvailable),
                                 "linearly available item count cannot exceed the temporarily available item count");
             }
             Value * const offset = b->CreateAnd(processed, BLOCK_WIDTH_MASK);
-            Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(tempBuffer->getAllocatedType()), tempBuffer->getArraySize());
+            Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(tempBuffer->getAllocatedType()), arraySize);
             b->CreateMemZero(tempBuffer, bufferSize, blockAlignment);
             const auto copyAlignment = getItemAlignment(mStreamSetInputs[i]);
             b->CreateStreamCpy(name, tempBuffer, ZERO, baseBuffer, offset, avail, copyAlignment);
