@@ -17,20 +17,17 @@ namespace re {
 enum RE_Syntax {FixedStrings, BRE, ERE, PCRE, PROSITE};
 
 enum CharsetOperatorKind
-    {intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};
-
+    {intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};    
+    
 enum ModeFlagType : unsigned {
     DEFAULT_MODE = 0,
     CASE_INSENSITIVE_MODE_FLAG = 1,
-    MULTILINE_MODE_FLAG = 2,      // not currently implemented
+    MULTILINE_MODE_FLAG = 2,
     DOTALL_MODE_FLAG = 4,         // not currently implemented
     IGNORE_SPACE_MODE_FLAG = 8,
     UNIX_LINES_MODE_FLAG = 16,
     GRAPHEME_CLUSTER_MODE = 32
 };
-
-const int MAX_REPETITION_LOWER_BOUND = 1024;
-const int MAX_REPETITION_UPPER_BOUND = 2048;
 
 using ModeFlagSet = unsigned;
 
@@ -90,7 +87,8 @@ protected:
         inline cursor_t pos() const {
             return mCursor;
         }
-
+        
+        
         Cursor(const std::string & expression) : mCursor(expression.cbegin()), mEnd(expression.cend()) {}
         Cursor(const Cursor & cursor) : mCursor(cursor.mCursor), mEnd(cursor.mEnd) {}
         inline Cursor & operator=(const Cursor & cursor) {
@@ -103,6 +101,46 @@ protected:
         cursor_t    mEnd;
     };
 
+    
+    
+    inline bool at(char c) {
+        return (mCursor.more()) && (*mCursor == c);
+    }
+    
+    inline bool accept(char c) {
+        if (at(c)) {
+            mCursor++;
+            return true;
+        }
+        return false;
+    }
+    
+    inline bool atany(std::string s) {
+        if (mCursor.noMore()) return false;
+        for (unsigned i = 0; i < s.length(); i++) {
+            if (s[i] == *mCursor) return true;
+        }
+        return false;
+    }
+    
+    inline bool at(std::string s) {
+        Cursor tmp = mCursor;
+        for (unsigned i = 0; i < s.length(); i++) {
+            if (tmp.noMore() || (s[i] != *tmp)) return false;
+            tmp++;
+        }
+        return true;
+    }
+    
+    inline bool accept(std::string s) {
+        for (unsigned i = 0; i < s.length(); i++) {
+            if (mCursor.noMore() || (s[i] != *mCursor)) return false;
+            mCursor++;
+        }
+        return true;
+    }
+    
+
     RE_Parser(const std::string & regular_expression);
 
     RE_Parser(const std::string & regular_expression, ModeFlagSet initialFlags);
@@ -110,8 +148,6 @@ protected:
     virtual RE * parse_RE();
 
     virtual RE * parse_alt();
-    
-    virtual bool accept_alt_mark();
     
     virtual RE * parse_seq();
 
@@ -156,11 +192,15 @@ protected:
     Name * createName(std::string value);
     Name * createName(std::string prop, std::string value);
 
-    virtual bool isUnsupportChartsetOperator(char c);
-    CharsetOperatorKind getCharsetOperator();
-
-    RE * parse_charset();
-
+    RE * parse_extended_bracket_expression();
+    RE * parse_bracketed_items();
+    RE * range_extend(RE * e1);
+    
+    RE * parse_equivalence_class();
+    RE * parse_collation_element();
+    RE * parse_Posix_class();
+    RE * parse_escaped_char_item();
+    
     codepoint_t parse_codepoint();
 
     virtual codepoint_t parse_escaped_codepoint();
@@ -182,7 +222,6 @@ protected:
     ModeFlagSet                 fModeFlagSet;
     bool                        fNested;
     unsigned                    mGroupsOpen;
-    bool                        fGraphemeBoundaryPending;
     bool                        fSupportNonCaptureGroup;
     Cursor                      mCursor;
     unsigned                    mCaptureGroupCount;

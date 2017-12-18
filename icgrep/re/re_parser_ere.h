@@ -17,8 +17,15 @@ namespace re {
         }
 
     protected:
-        virtual bool isSetEscapeChar(char c) override;
-        virtual bool isUnsupportChartsetOperator(char c) override;
+       virtual RE * parse_next_item() override;
+
+       virtual RE * parse_group() override;
+
+       virtual RE * parse_escaped() override;
+       
+       RE * parse_bracket_expr();
+
+       
     };
 }
 

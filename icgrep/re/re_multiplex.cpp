@@ -7,6 +7,7 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
+#include <re/re_group.h>
 #include <re/re_analysis.h>
 #include <re/re_memoizer.hpp>
 #include <UCD/ucd_compiler.hpp>
@@ -77,6 +78,8 @@ RE * multiplex(RE * const re,
         } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
             ix->setLH(multiplex(ix->getLH()));
             ix->setRH(multiplex(ix->getRH()));
+        } else if (Group * g = dyn_cast<Group>(re)) {
+            g->setRE(multiplex(g->getRE()));
         }
         return re;
     };

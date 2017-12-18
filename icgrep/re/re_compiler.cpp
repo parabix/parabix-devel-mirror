@@ -107,7 +107,7 @@ inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, Pablo
         MarkerType zero = compile(zerowidth, pb);
         AlignMarkers(marker, zero, pb);
         PabloAST * ze = markerVar(zero);
-        if (nameString == "NonGCB") {
+        if (nameString == "\\B{g}") {
             ze = pb.createNot(ze);
         }
         return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), ze, "zerowidth"));

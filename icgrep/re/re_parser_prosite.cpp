@@ -103,9 +103,6 @@ namespace re{
              if (*mCursor == '(') {
                 int lb = 0, ub = 0;
                 std::tie(lb, ub) = parse_range_bound();
-                if (lb > MAX_REPETITION_LOWER_BOUND || ub > MAX_REPETITION_UPPER_BOUND) {
-                    ParseFailure("Bounded repetition exceeds icgrep implementation limit");
-                }
                 if ((ub != Rep::UNBOUNDED_REP) && (lb > ub)) {
                     ParseFailure("Lower bound cannot exceed upper bound in bounded repetition");
                 }

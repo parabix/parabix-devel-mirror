@@ -8,6 +8,7 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
+#include <re/re_group.h>
 #include <re/re_analysis.h>
 #include <re/re_memoizer.hpp>
 #include <UCD/ucd_compiler.hpp>
@@ -58,9 +59,10 @@ struct NameGather {
         } else if (isa<Intersect>(re)) {
             gather(cast<Intersect>(re)->getLH());
             gather(cast<Intersect>(re)->getRH());
+        } else if (isa<Group>(re)) {
+            gather(cast<Group>(re)->getRE());
         }
     }
-
     NameGather(NameMap & nameMap, Name *& zeroWidth)
     : mZeroWidth(zeroWidth)
     , mNameMap(nameMap) {

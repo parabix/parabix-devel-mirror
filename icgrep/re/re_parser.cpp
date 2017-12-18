@@ -62,7 +62,6 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     parser->fModeFlagSet = initialFlags;
     parser->mGroupsOpen = 0;
     parser->fNested = false;
-    parser->fGraphemeBoundaryPending = false;
     parser->mCaptureGroupCount = 0;
     RE * re = parser->parse_RE();
     if (re == nullptr) {
@@ -76,7 +75,6 @@ RE_Parser::RE_Parser(const std::string & regular_expression)
 , fModeFlagSet(MULTILINE_MODE_FLAG)
 , fNested(false)
 , mGroupsOpen(0)
-, fGraphemeBoundaryPending(false)
 , fSupportNonCaptureGroup(false)
 , mCursor(regular_expression)
 , mCaptureGroupCount(0)
@@ -104,16 +102,10 @@ RE * RE_Parser::parse_alt() {
     do {
         alt.push_back(parse_seq());
     }
-    while (accept_alt_mark());
+    while (accept('|'));
     return makeAlt(alt.begin(), alt.end());
 }
     
-bool RE_Parser::accept_alt_mark() {
-    if (!mCursor.more() || (*mCursor != '|')) return false;
-    mCursor++;
-    return true;
-}
-
 RE * RE_Parser::parse_seq() {
     std::vector<RE *> seq;
     if (!mCursor.more() || (*mCursor == '|') || ((mGroupsOpen > 0) && (*mCursor == ')'))) return makeSeq();
@@ -128,75 +120,37 @@ RE * RE_Parser::parse_seq() {
     return makeSeq(seq.begin(), seq.end());
 }
 
-RE * RE_Parser::parse_next_item() {
-    RE * re = nullptr;
-    if (fModeFlagSet & IGNORE_SPACE_MODE_FLAG) {
-        while (mCursor.more() && *mCursor == ' ') {
-            ++mCursor;
-        }
+RE * createStart(ModeFlagSet flags) {
+    if ((flags && ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("^s");  //single-line mode
+    if ((flags & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
+        return makeNegativeLookBehindAssertion(makeByte(makeCC(makeCC(0, '\n'-1), makeCC('\n'+1, 0xFF))));
     }
-    if (mCursor.more()) {
-        switch (*mCursor) {
-            case '(':
-                ++mCursor;
-                return parse_group();
-            case '^':
-                ++mCursor;
-                if ((fModeFlagSet & ModeFlagType::MULTILINE_MODE_FLAG) == 0) {
-                    return makeZeroWidth("^s");  //single-line mode
-                }
-                if ((fModeFlagSet & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
-                    return makeNegativeLookBehindAssertion(makeByte(makeCC(makeCC(0, '\n'-1), makeCC('\n'+1, 0xFF))));
-                }
-                return makeStart();
-            case '$':
-                ++mCursor;
-                if ((fModeFlagSet & ModeFlagType::MULTILINE_MODE_FLAG) == 0) {
-                    return makeZeroWidth("$s");  //single-line mode
-                }
-                if ((fModeFlagSet & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
-                    return makeLookAheadAssertion(makeCC('\n'));
-                }
-                return makeEnd();
-            case '|':
-                break;
-            case ')':
-                if (mGroupsOpen > 0) break;
-                if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-                    return createCC(parse_literal_codepoint());
-                }
-                ParseFailure("Use  \\) for literal ).");
-            case '*': case '+': case '?': case '{':
-                ParseFailure("Need something to repeat before *, +, ? or {.");
-            case ']':
-                if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-                    return createCC(parse_literal_codepoint());
-                }
-                ParseFailure("Use  \\] for literal ].");
-            case '}':
-                if (fNested) {
-                    break;  //  a recursive invocation for a regexp in \N{...}
-                } else if (LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-                    return createCC(parse_literal_codepoint());
-                }
-                ParseFailure("Use \\} for literal }.");
-            case '[':
-                mCursor++;
-                re = parse_charset();
-                break;
-            case '.': // the 'any' metacharacter
-                mCursor++;
-                return makeAny();
-            case '\\':  // escape processing
-                ++mCursor;
-                return parse_escaped();
-            default:
-                re = createCC(parse_literal_codepoint());
-        }
-    }
-    return re;
+    return makeStart();
 }
-
+RE * createEnd(ModeFlagSet flags) {
+    if ((flags && ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("$s");  //single-line mode
+    if ((flags & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
+        return makeNegativeLookAheadAssertion(makeByte(makeCC(makeCC(0, '\n'-1), makeCC('\n'+1, 0xFF))));
+    }
+    return makeEnd();
+}
+RE * createAny(ModeFlagSet flags) {
+    return makeAny();
+}
+    
+    
+RE * RE_Parser::parse_next_item() {
+    if (mCursor.noMore() || atany("*?+{|")) return nullptr;
+    else if (((mGroupsOpen > 0) && at(')')) || (fNested && at('}'))) return nullptr;
+    else if (accept('^')) return createStart(fModeFlagSet);
+    else if (accept('$')) return createEnd(fModeFlagSet);
+    else if (accept('.')) return createAny(fModeFlagSet);
+    else if (accept('(')) return parse_group();
+    else if (accept('[')) return parse_extended_bracket_expression();
+    else if (accept('\\')) return parse_escaped();
+    else return createCC(parse_literal_codepoint());
+}
+                                                          
 
 // Parse some kind of parenthesized group.  Input precondition: mCursor
 // after the (
@@ -324,50 +278,27 @@ RE * RE_Parser::parse_group() {
     
 // Extend a RE item with one or more quantifiers
 RE * RE_Parser::extend_item(RE * re) {
-    if (LLVM_UNLIKELY(!(mCursor.more()))) return re;
-    int lb = 0, ub = 0;
-    switch (*mCursor) {
-        case '*':
-            lb = 0;
-            ub = Rep::UNBOUNDED_REP;
-            break;
-        case '?':
-            lb = 0;
-            ub = 1;
-            break;
-        case '+':
-            lb = 1;
-            ub = Rep::UNBOUNDED_REP;
-            break;
-        case '{':
-            std::tie(lb, ub) = parse_range_bound();
-            if ((ub != Rep::UNBOUNDED_REP) && (lb > ub)) {
-                ParseFailure("Lower bound cannot exceed upper bound in bounded repetition");
-            }
-            break;
-        default:
-            // No quantifiers
-            return re;
+    int lb, ub;
+    if (accept('*')) {lb = 0; ub = Rep::UNBOUNDED_REP;}
+    else if (accept('?')) {lb = 0; ub = 1;}
+    else if (accept('+')) {lb = 1; ub = Rep::UNBOUNDED_REP;}
+    else if (accept('{')) std::tie(lb, ub) = parse_range_bound();
+    else {
+        // No quantifier found.
+        return re;
     }
-    ++mCursor;
-    if (ENABLE_EXTENDED_QUANTIFIERS) {
-        if (LLVM_UNLIKELY(!(mCursor.more()))) return makeRep(re, lb, ub);;
-        if (*mCursor == '?') { // Non-greedy qualifier
-            // Greedy vs. non-greedy makes no difference for icgrep.
-            ++mCursor;
-            re = makeRep(re, lb, ub);
-        } else if (*mCursor == '+') {
-            ++mCursor;
-            if (ub == Rep::UNBOUNDED_REP) {
-                re = makeSeq({makeRep(re, lb, ub), makeNegativeLookAheadAssertion(re)});
-            } else if (lb == ub) {
-                re = makeRep(re, ub, ub);
-            } else /* if (lb < ub) */{
-                re = makeAlt({makeSeq({makeRep(re, lb, ub-1), makeNegativeLookAheadAssertion(re)}), makeRep(re, ub, ub)});
-            }
-        } else {
-            re = makeRep(re, lb, ub);
-        } 
+    if (ENABLE_EXTENDED_QUANTIFIERS && accept('?')) {
+        // Non-greedy qualifier: no difference for Parabix RE matching
+        re = makeRep(re, lb, ub);
+    } else if (ENABLE_EXTENDED_QUANTIFIERS && accept('+')) {
+        // Possessive qualifier
+        if (ub == Rep::UNBOUNDED_REP) {
+            re = makeSeq({makeRep(re, lb, ub), makeNegativeLookAheadAssertion(re)});
+        } else if (lb == ub) {
+            re = makeRep(re, ub, ub);
+        } else /* if (lb < ub) */{
+            re = makeAlt({makeSeq({makeRep(re, lb, ub-1), makeNegativeLookAheadAssertion(re)}), makeRep(re, ub, ub)});
+        }
     } else {
         re = makeRep(re, lb, ub);
     }
@@ -376,23 +307,20 @@ RE * RE_Parser::extend_item(RE * re) {
 }
 
 std::pair<int, int> RE_Parser::parse_range_bound() {
-    int lower_bound = 0, upper_bound = 0;
-    if (*++mCursor != ',') {
-        lower_bound = parse_int();
-    }
-    if (*mCursor == '}') {
-        upper_bound = lower_bound;
-    } else if (*mCursor != ',') {
-        ParseFailure("Bad lower bound!");
-    } else if (*++mCursor == '}') {
-        upper_bound = Rep::UNBOUNDED_REP;
+    int lb, ub;
+    if (accept(',')) {
+        lb = 0;
+        ub = parse_int();
     } else {
-        upper_bound = parse_int();
-        if (*mCursor != '}') {
-            ParseFailure("Bad upper bound!");
-        }
+        lb = parse_int();
+        if (accept('}')) return std::make_pair(lb, lb);
+        if (!accept(',')) ParseFailure("Expecting , or }");
+        if (accept('}')) return std::make_pair(lb, Rep::UNBOUNDED_REP);
+        ub = parse_int();
+        if (ub < lb) ParseFailure("Upper bound less than lower bound");
     }
-    return std::make_pair(lower_bound, upper_bound);
+    if (accept('}')) return std::make_pair(lb, ub);
+    else ParseFailure("Expecting }");
 }
 
 unsigned RE_Parser::parse_int() {
@@ -455,7 +383,7 @@ RE * RE_Parser::parseEscapedSet() {
                 if (isCharAhead('}')) {
                     switch (*mCursor) {
                         case 'g':
-                            re = complemented ? makeZeroWidth("NonGCB") : makeZeroWidth("GCB");
+                            re = complemented ? makeZeroWidth("\\B{g}") : makeZeroWidth("\\b{g}");
                             ++mCursor;
                             ++mCursor;
                             break;
@@ -522,17 +450,10 @@ RE * RE_Parser::parseEscapedSet() {
             // \X is equivalent to ".+?\b{g}"; proceed the minimal number of characters (but at least one)
             // to get to the next extended grapheme cluster boundary.
             ++mCursor;
-            return makeSeq({makeAny(), makeRep(makeSeq({makeZeroWidth("NonGCB"), makeAny()}), 0, Rep::UNBOUNDED_REP), makeZeroWidth("GCB")});
+            return makeSeq({makeAny(), makeRep(makeSeq({makeZeroWidth("\\B{g}"), makeAny()}), 0, Rep::UNBOUNDED_REP), makeZeroWidth("\\b{g}")});
         case 'N':
-            if (*++mCursor != '{') {
-                ParseFailure("Malformed \\N expression");
-            }
             ++mCursor;
             re = parseNamePatternExpression();
-            if (*mCursor != '}') {
-                ParseFailure("Malformed \\N expression");
-            }
-            ++mCursor;
             assert (re);
             return re;
         case '<':
@@ -704,6 +625,7 @@ RE * RE_Parser::parsePropertyExpression() {
 
 Name * RE_Parser::parseNamePatternExpression(){
 
+    if (!accept('{')) ParseFailure("Expecting { after \\N");
     const auto start = mCursor.pos();
     while (mCursor.more()) {
         if (*mCursor == '\\') {
@@ -718,235 +640,104 @@ Name * RE_Parser::parseNamePatternExpression(){
         ++mCursor;
     }
     std::string nameRegexp = "/(?i)" + std::string(start, mCursor.pos());
+    if (!accept('}')) ParseFailure("Expecting } after \\N{...");
     return createName("na", nameRegexp);
 }
 
-bool RE_Parser::isUnsupportChartsetOperator(char c) {
-    return false;
+
+// Parse a bracketted expression with possible && (intersection) or
+// -- (set difference) operators.
+// Initially, the opening bracket has been consumed.
+RE * RE_Parser::parse_extended_bracket_expression () {
+    bool negated = accept('^');
+    RE * t1 = parse_bracketed_items();
+    bool have_new_expr = true;
+    while (have_new_expr) {
+        if (accept("&&")) {
+            RE * t2 = parse_bracketed_items();
+            t1 = makeIntersect(t1, t2);
+        } else if (accept("--")) {
+            RE * t2 = parse_bracketed_items();
+            t1 = makeDiff(t1, t2);
+        }
+        else have_new_expr = false;
+    }
+    if (!accept(']')) ParseFailure("Expecting ]");
+    if (negated) return makeComplement(t1);
+    else return t1;
 }
 
-CharsetOperatorKind RE_Parser::getCharsetOperator() {
-    if (isUnsupportChartsetOperator(*mCursor)) {
-        return emptyOperator;
-    }
-    switch (*mCursor) {
-        case '&':
-            ++mCursor;
-            if (*mCursor == '&') {
-                ++mCursor;
-                return intersectOp;
-            } else if (*mCursor == '[') {
-                // Short-hand for intersectOp when a set follows
-                return intersectOp;
-            }
-            return ampChar;
-        case '-':
-            ++mCursor;
-            if (*mCursor == '-') {
-                ++mCursor;
-                return setDiffOp;
-            } else if (*mCursor == '[') {
-                return setDiffOp;
-            } else if (*mCursor == ']') {
-                return hyphenChar;
-            }
-            return rangeHyphen;
-        case '[':
-            ++mCursor;
-            if (*mCursor == ':') {
-                ++mCursor;
-                return posixPropertyOpener;
-            }
-            return setOpener;
-        case ']':
-            ++mCursor;
-            return setCloser;
-        case '\\':
-            ++mCursor;
-            return backSlash;
-        default:
-            return emptyOperator;
-    }
+// Parsing items within a bracket expression.
+// Items represent individual characters or sets of characters.
+// Ranges may be formed by individual character items separated by '-'.
+RE * RE_Parser::parse_bracketed_items () {
+    std::vector<RE *> items;
+    do {
+        if (accept('[')) {
+            if (accept('=')) items.push_back(parse_equivalence_class());
+            else if (accept('.')) items.push_back(range_extend(parse_collation_element()));
+            else if (accept(':')) items.push_back(parse_Posix_class());
+            else items.push_back(parse_extended_bracket_expression());
+        } else if (accept('\\')) {
+            if (at('N') || !isSetEscapeChar(*mCursor)) items.push_back(range_extend(parse_escaped_char_item()));
+            else items.push_back(parseEscapedSet());
+        } else {
+            items.push_back(range_extend(makeCC(parse_literal_codepoint())));
+        }
+    } while (mCursor.more() && !at(']') && !at("&&") && (!at("--") || at("--]")));
+    return makeAlt(items.begin(), items.end());
 }
 
-// Precondition: cursor is immediately after opening '[' character
-RE * RE_Parser::parse_charset() {
-    // Sets are accumulated using two variables:
-    // subexprs accumulates set expressions such as \p{Lu}, [\w && \p{Greek}]
-    // cc accumulates the literal and calculated codepoints and ranges
-    std::vector<RE *> subexprs;
-    CC * cc = makeCC();
-    // When the last item deal with is a single literal charcacter or calculated codepoint,
-    // a following hyphen can indicate a range.   When the last item is a set subexpression,
-    // a following hyphen can indicate set subtraction.
-    enum {NoItem, CodepointItem, RangeItem, SetItem, BrackettedSetItem} lastItemKind = NoItem;
+//  Given an individual character expression, check for and parse
+//  a range extension if one exists, or return the individual expression.
+RE * RE_Parser::range_extend(RE * char_expr1) {
+    // A range extension is signalled by a hyphen '-', except for special cases:
+    // (a) if the following character is "]" the hyphen is a literal set character.
+    // (b) if the following character is "-" the hyphen is part of a set subtract
+    // operator, unless it the set is immediately closed by "--]".
+    if (!at('-') || at("-]") || (at("--") && !at("--]"))) return char_expr1;
+    accept('-');
+    RE * char_expr2 = nullptr;
+    if (accept('\\')) char_expr2 = parse_escaped_char_item();
+    else if (accept('[')) {
+        if (accept('.')) char_expr2 = parse_collation_element();
+        else ParseFailure("Error in range expression");
+    } else {
+        char_expr2 = makeCC(parse_literal_codepoint());
+    }
+    return makeRange(char_expr1, char_expr2);
+}
 
-    codepoint_t lastCodepointItem = 0;
-    bool havePendingOperation = false;
-    bool possibleByteCodeEscape = false;  // set to true when \x, \o or \0 hex or octal escapes seen.
-    CharsetOperatorKind pendingOperationKind = intersectOp;
-    RE * pendingOperand = nullptr;
+RE * RE_Parser::parse_equivalence_class() {
+    const auto start = mCursor.pos() - 1;
+    while (mCursor.more() && !at('=')) {
+        ++mCursor;
+    }
+    std::string name = std::string(start, mCursor.pos());
+    if (!accept("=]")) ParseFailure("Posix equivalence class improperly terminated.");
+    return createName(name);
+}
+RE * RE_Parser::parse_collation_element() {
+    const auto start = mCursor.pos() - 1;
+    while (mCursor.more() && !at('.')) {
+        ++mCursor;
+    }
+    std::string name = std::string(start, mCursor.pos());
+    if (!accept(".]")) ParseFailure("Posix equivalence class improperly terminated.");
+    return createName(name);
+}
 
-    // If the first character after the [ is a ^ (caret) then the matching character class is complemented.
-    bool negated = false;
-    if (*mCursor == '^') {
-        negated = true;
-        ++mCursor;
-    }
-    // Legacy rule: an unescaped ] may appear as a literal set character
-    // if and only if it appears immediately after the opening [ or [^
-    if ( *mCursor == ']' && LEGACY_UNESCAPED_RBRAK_RBRACE_ALLOWED) {
-        insert(cc, ']');
-        lastItemKind = CodepointItem;
-        lastCodepointItem = static_cast<codepoint_t> (']');
-        ++mCursor;
-    } else if ( *mCursor == '-' && LEGACY_UNESCAPED_HYPHEN_ALLOWED) {
-        ++mCursor;
-        insert(cc, '-');
-        lastItemKind = CodepointItem;
-        lastCodepointItem = static_cast<codepoint_t> ('-');
-        if (*mCursor == '-') {
-            ParseFailure("Set operator has no left operand.");
-        }
-    }
-    while (mCursor.more()) {
-        const CharsetOperatorKind op = getCharsetOperator();
-        switch (op) {
-            case intersectOp:
-            case setDiffOp: {
-                if (lastItemKind == NoItem) {
-                    ParseFailure("Set operator has no left operand.");
-                }
-                if (!cc->empty()) {
-                    subexprs.push_back(mMemoizer.memoize(cc));
-                }
-                RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
-                subexprs.clear();
-                cc = makeCC();
-                if (havePendingOperation) {
-                    if (pendingOperationKind == intersectOp) {
-                        pendingOperand = makeIntersect(pendingOperand, newOperand);
-                    }
-                    else {
-                        pendingOperand = makeDiff(pendingOperand, newOperand);
-                    }
-                }
-                else {
-                    pendingOperand = newOperand;
-                }
-                havePendingOperation = true;
-                pendingOperationKind = op;
-                lastItemKind = NoItem;
-            }
-            break;
-            case setCloser: {
-                if (lastItemKind == NoItem) {
-                    ParseFailure("Set operator has no right operand.");
-                }
-                if (!cc->empty()) {
-                    if (possibleByteCodeEscape && (cc->max_codepoint() <= 0xFF) && subexprs.empty() && !havePendingOperation) {
-                        subexprs.push_back(makeByte(cc));
-                    }
-                    else {
-                        subexprs.push_back(mMemoizer.memoize(cc));
-                    }
-                }
-                RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
-                if (havePendingOperation) {
-                    if (pendingOperationKind == intersectOp) {
-                        newOperand = makeIntersect(pendingOperand, newOperand);
-                    }
-                    else {
-                        newOperand = makeDiff(pendingOperand, newOperand);
-                    }
-                }
-                return negated ? makeComplement(newOperand) : newOperand;
-            }
-            case setOpener:
-            case posixPropertyOpener: {
-                if (lastItemKind != NoItem) {
-                    if (!cc->empty()) {
-                        subexprs.push_back(mMemoizer.memoize(cc));
-                    }
-                    RE * newOperand = makeAlt(subexprs.begin(), subexprs.end());
-                    subexprs.clear();
-                    cc = makeCC();
-                    if (havePendingOperation) {
-                        if (pendingOperationKind == intersectOp) {
-                            pendingOperand = makeIntersect(pendingOperand, newOperand);
-                        } else {
-                            pendingOperand = makeDiff(pendingOperand, newOperand);
-                        }
-                    }
-                    else {
-                        pendingOperand = newOperand;
-                    }
-                    subexprs.push_back(pendingOperand);
-                    havePendingOperation = false;
-                }
-                if (op == setOpener) {
-                    subexprs.push_back(parse_charset());
-                    lastItemKind = SetItem;
-                }
-                else if (op == posixPropertyOpener) {
-                    bool negated = false;
-                    if (*mCursor == '^') {
-                        negated = true;
-                        mCursor++;
-                    }
-                    RE * posixSet = parsePropertyExpression();
-                    subexprs.push_back(negated ? makeComplement(posixSet) : posixSet);
-                    lastItemKind = BrackettedSetItem;
-                    if (*mCursor++ != ':' || *mCursor++ != ']')
-                        ParseFailure("Posix set expression improperly terminated.");
-                }
-            }
-            break;
-            case rangeHyphen:
-                if (lastItemKind != CodepointItem) {
-                    ParseFailure("Range operator - has illegal left operand.");
-                }
-                if (*mCursor == '\\') {
-                    mCursor++;
-                    if ((*mCursor == 'x') || (*mCursor == 'o') || (*mCursor == '0')) possibleByteCodeEscape = true;
-                    insert_range(cc, lastCodepointItem, parse_escaped_codepoint());
-                    //subexprs.push_back(makeRange(makeCC(lastCodepointItem), makeCC(parse_escaped_codepoint())));
-                } else {
-                    insert_range(cc, lastCodepointItem, parse_literal_codepoint());
-                    //subexprs.push_back(makeRange(makeCC(lastCodepointItem), makeCC(parse_literal_codepoint())));
-                }
-                lastItemKind = RangeItem;
-                break;
-            case hyphenChar:
-                insert(cc, '-');
-                lastItemKind = CodepointItem;
-                lastCodepointItem = static_cast<codepoint_t> ('-');
-                break;
-            case ampChar:
-                insert(cc, '&');
-                lastItemKind = CodepointItem;
-                lastCodepointItem = static_cast<codepoint_t> ('&');
-                break;
-            case backSlash:
-                if (isSetEscapeChar(*mCursor)) {
-                    subexprs.push_back(parseEscapedSet());
-                    lastItemKind = SetItem;
-                }
-                else {
-                    if ((*mCursor == 'x') || (*mCursor == 'o') || (*mCursor == '0')) possibleByteCodeEscape = true;
-                    lastCodepointItem = parse_escaped_codepoint();
-                    insert(cc, lastCodepointItem);
-                    lastItemKind = CodepointItem;
-                }
-                break;
-            case emptyOperator:
-                lastCodepointItem = parse_literal_codepoint();
-                insert(cc, lastCodepointItem);
-                lastItemKind = CodepointItem;
-                break;
-        }
-    }
-    ParseFailure("Set expression not properly terminated.");
+RE * RE_Parser::parse_Posix_class() {
+    bool negated = accept('^');
+    RE * posixSet = parsePropertyExpression();
+    if (!accept(":]")) ParseFailure("Posix set expression improperly terminated.");
+    if (negated) return makeComplement(posixSet);
+    else return posixSet;
+}
+
+RE * RE_Parser::parse_escaped_char_item() {
+    if (accept('N')) return parseNamePatternExpression();
+    else return makeCC(parse_escaped_codepoint());
 }
 
 
@@ -964,73 +755,50 @@ RE * RE_Parser::parse_charset() {
 
 codepoint_t RE_Parser::parse_escaped_codepoint() {
     codepoint_t cp_value;
-    switch (*mCursor) {
-        case 'a': ++mCursor; return 0x07; // BEL
-        case 'e': ++mCursor; return 0x1B; // ESC
-        case 'f': ++mCursor; return 0x0C; // FF
-        case 'n': ++mCursor; return 0x0A; // LF
-        case 'r': ++mCursor; return 0x0D; // CR
-        case 't': ++mCursor; return 0x09; // HT
-        case 'v': ++mCursor; return 0x0B; // VT
-        case 'c': // Control-escape based on next char
-            ++mCursor;
+    if (accept('a')) return 0x07; // BEL
+    else if (accept('e')) return 0x1B; // ESC
+    else if (accept('f')) return 0x0C; // FF
+    else if (accept('n')) return 0x0A; // LF
+    else if (accept('r')) return 0x0D; // CR
+    else if (accept('t')) return 0x09; // HT
+    else if (accept('v')) return 0x0B; // VT
+    else if (accept('c')) {// Control-escape based on next char
             // \c@, \cA, ... \c_, or \ca, ..., \cz
             if (((*mCursor >= '@') && (*mCursor <= '_')) || ((*mCursor >= 'a') && (*mCursor <= 'z'))) {
                 cp_value = static_cast<codepoint_t>(*mCursor & 0x1F);
                 mCursor++;
                 return cp_value;
             }
-            else if (*mCursor++ == '?') return 0x7F;  // \c? ==> DEL
+            else if (accept('?')) return 0x7F;  // \c? ==> DEL
             else ParseFailure("Illegal \\c escape sequence");
-        case '0': // Octal escape:  0 - 0377
-            ++mCursor;
-            return parse_octal_codepoint(0,3);
-        case 'o':
-            ++mCursor;
-            if (*mCursor == '{') {
-                ++mCursor;
-                cp_value = parse_octal_codepoint(1, 7);
-                if (*mCursor++ != '}') ParseFailure("Malformed octal escape sequence");
-                return cp_value;
-            }
-            else {
-                ParseFailure("Malformed octal escape sequence");
-            }
-        case 'x':
-            ++mCursor;
-            if (*mCursor == '{') {
-              ++mCursor;
-              cp_value = parse_hex_codepoint(1, 6);
-              if (*mCursor++ != '}') ParseFailure("Malformed hex escape sequence");
-              return cp_value;
-            }
-            else {
-                return parse_hex_codepoint(1,2);  // ICU compatibility
-            }
-        case 'u':
-            ++mCursor;
-            if (*mCursor == '{') {
-                ++mCursor;
-                cp_value = parse_hex_codepoint(1, 6);
-                if (*mCursor++ != '}') ParseFailure("Malformed hex escape sequence");
-                return cp_value;
-            }
-            else {
-                return parse_hex_codepoint(4,4);  // ICU compatibility
-            }
-        case 'U':
-            ++mCursor;
-            return parse_hex_codepoint(8,8);  // ICU compatibility
-        default:
-            // Escaped letters should be reserved for special functions.
-            if (((*mCursor >= 'A') && (*mCursor <= 'Z')) || ((*mCursor >= 'a') && (*mCursor <= 'z'))){
-                //Escape unknown letter will be parse as normal letter
-                return parse_literal_codepoint();
-                //ParseFailure("Undefined or unsupported escape sequence");
-            }
-            else if ((*mCursor < 0x20) || (*mCursor >= 0x7F))
-                ParseFailure("Illegal escape sequence");
-            else return static_cast<codepoint_t>(*mCursor++);
+    } else if (accept('0')) {
+        return parse_octal_codepoint(0,3);
+    } else if (accept('o')) {
+        if (!accept('{')) ParseFailure("Malformed octal escape sequence");
+        cp_value = parse_octal_codepoint(1, 7);
+        if (!accept('}')) ParseFailure("Malformed octal escape sequence");
+        return cp_value;
+    } else if (accept('x')) {
+        if (!accept('{')) return parse_hex_codepoint(1,2);  // ICU compatibility
+        cp_value = parse_hex_codepoint(1, 6);
+        if (!accept('}')) ParseFailure("Malformed hex escape sequence");
+        return cp_value;
+    } else if (accept('u')) {
+        if (!accept('{')) return parse_hex_codepoint(4,4);  // ICU compatibility
+        cp_value = parse_hex_codepoint(1, 6);
+        if (!accept('}')) ParseFailure("Malformed hex escape sequence");
+        return cp_value;
+    } else if (accept('U')) {
+        return parse_hex_codepoint(8,8);  // ICU compatibility
+    } else {
+        if (((*mCursor >= 'A') && (*mCursor <= 'Z')) || ((*mCursor >= 'a') && (*mCursor <= 'z'))){
+            //Escape unknown letter will be parse as normal letter
+            return parse_literal_codepoint();
+            //ParseFailure("Undefined or unsupported escape sequence");
+        }
+        else if ((*mCursor < 0x20) || (*mCursor >= 0x7F))
+            ParseFailure("Illegal escape sequence");
+        else return static_cast<codepoint_t>(*mCursor++);
     }
 }
 

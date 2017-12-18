@@ -109,7 +109,7 @@ bool resolvePropertyDefinition(Name * const property) {
             Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
             property->setDefinition(makeDiff(makeAny(), unassigned));
             return true;
-        } else if (value == "GCB" || value == "NonGCB") {
+        } else if (value == "\\b{g}" || value == "\\B{g}") {
             generateGraphemeClusterBoundaryRule(property);
             return true;
         } else if (value == "^s") {  // "start anchor (^) in single-line mode"

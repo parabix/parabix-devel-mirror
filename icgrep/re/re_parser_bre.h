@@ -8,30 +8,22 @@
 #define ICGREP_RE_PARSER_BRE_H
 
 #include <re/re_parser.h>
+#include <re/re_parser_ere.h>
 
 namespace re {
-    class RE_Parser_BRE : public RE_Parser  {
+    class RE_Parser_BRE : public RE_Parser_ERE  {
     public:
-        RE_Parser_BRE(const std::string & regular_expression) : RE_Parser(regular_expression) {
+        RE_Parser_BRE(const std::string & regular_expression) : RE_Parser_ERE(regular_expression) {
             mReSyntax = RE_Syntax::BRE;
         }
 
     protected:
-        virtual bool isSetEscapeChar(char c) override;
-        virtual bool isUnsupportChartsetOperator(char c) override;
-        virtual RE * parse_alt() override;
-        virtual RE * parse_next_item() override ;
-        virtual RE * parse_escaped() override;
-        virtual RE * extend_item(RE * re) override;
-        virtual RE * parse_group() override;
-        virtual std::pair<int, int> parse_range_bound() override;
-        virtual codepoint_t parse_escaped_codepoint() override;
-        virtual RE * parsePropertyExpression() override;
-        virtual RE * parseEscapedSet() override;
-
-    private:
-        bool isEscapedCharAhead(char c);
-
+        RE * parse_alt() override;
+        RE * parse_seq() override;
+        RE * parse_next_item() override ;
+        RE * extend_item(RE * re) override;
+        RE * parse_group() override;
+        std::pair<int, int> parse_range_bound() override;
     };
 }
 

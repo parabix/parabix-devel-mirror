@@ -37,9 +37,9 @@ bool hasGraphemeClusterBoundary(const RE * re) {
     } else if (const Name * n = dyn_cast<Name>(re)) {
         if (n->getType() == Name::Type::ZeroWidth) {
             const std::string nameString = n->getName();
-            return (nameString == "GCB") || (nameString == "nonGCB");
+            return (nameString == "\\b{g}") || (nameString == "\\B{g}");
         }
-        return hasGraphemeClusterBoundary(n->getDefinition());
+        return false;
     } else if (const Alt * alt = dyn_cast<Alt>(re)) {
         for (const RE * re : *alt) {
             if (hasGraphemeClusterBoundary(re)) return true;
@@ -70,11 +70,11 @@ bool hasGraphemeClusterBoundary(const RE * re) {
 RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
     if (isa<Name>(re)) {
         if (inGraphemeMode && (cast<Name>(re)->getName() == "."))
-            return makeSeq({makeAny(), makeRep(makeSeq({makeZeroWidth("NonGCB"), makeAny()}), 0, Rep::UNBOUNDED_REP), makeZeroWidth("GCB")});
+            return makeSeq({makeAny(), makeRep(makeSeq({makeZeroWidth("\\B{g}"), makeAny()}), 0, Rep::UNBOUNDED_REP), makeZeroWidth("\\b{g}")});
         else return re;
     }
     else if (isa<CC>(re)) {
-        if (inGraphemeMode) return makeSeq({re, makeZeroWidth("GCB")});
+        if (inGraphemeMode) return makeSeq({re, makeZeroWidth("\\b{g}")});
         else return re;
     }
     else if (Seq * seq = dyn_cast<Seq>(re)) {
@@ -83,14 +83,14 @@ RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
         for (auto i = seq->begin(); i != seq->end(); ++i) {
             bool atSingleChar = isa<CC>(re) && (cast<CC>(re)->count() == 1);
             if (afterSingleChar && inGraphemeMode && !atSingleChar)
-                list.push_back(makeZeroWidth("GCB"));
+                list.push_back(makeZeroWidth("\\b{g}"));
             if (isa<CC>(re)) list.push_back(*i);
             else {
                 list.push_back(resolveGraphemeMode(*i, inGraphemeMode));
             }
             afterSingleChar = atSingleChar;
         }
-        if (afterSingleChar && inGraphemeMode) list.push_back(makeZeroWidth("GCB"));
+        if (afterSingleChar && inGraphemeMode) list.push_back(makeZeroWidth("\\b{g}"));
         return makeSeq(list.begin(), list.end());
     } else if (Group * g = dyn_cast<Group>(re)) {
         if (g->getMode() == Group::Mode::GraphemeMode) {

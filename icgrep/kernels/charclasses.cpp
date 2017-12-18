@@ -78,7 +78,7 @@ void CharClassesKernel::generatePabloMethod() {
     NameMap nameMap;
     std::vector<Name *> names;
     for (unsigned i = 0; i < n; i++) {
-        Name * name = re::makeName("cc" + std::to_string(i), mCCs[i]);
+        Name * name = re::makeName("mpx_basis" + std::to_string(i), mCCs[i]);
         nameMap.emplace(name, nullptr);
         names.push_back(name);
     }

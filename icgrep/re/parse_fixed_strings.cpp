@@ -11,15 +11,18 @@
 
 namespace re {
 
-bool FixedStringParser::accept_alt_mark() {
-    if (!mCursor.more() || (*mCursor != '\n')) return false;
-    mCursor++;
-    return true;
+RE * FixedStringParser::parse_alt() {
+    std::vector<RE *> alt;
+    do {
+        alt.push_back(parse_seq());
+    }
+    while (accept('\n'));
+    return makeAlt(alt.begin(), alt.end());
 }
 
 RE * FixedStringParser::parse_seq() {
     std::vector<RE *> seq;
-    while (mCursor.more() && (*mCursor != '\n')) {
+    while (mCursor.more() && (!at('\n'))) {
         seq.push_back(createCC(parse_literal_codepoint()));
     }
     return makeSeq(seq.begin(), seq.end());
