@@ -150,7 +150,7 @@ protected:
     inline void require(std::string s) {
         if (!accept(s)) {
             if (mCursor.noMore()) ParseFailure("Expecting " + s + " but end of input encountered");
-            unsigned long rem = mCursor.remaining();
+            size_t rem = mCursor.remaining();
             ParseFailure("Expecting " + s + " but " + std::string(mCursor.pos(), mCursor.pos() + std::min(rem, s.length())) + " encountered");
         }
     }
