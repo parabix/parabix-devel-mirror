@@ -26,19 +26,13 @@ RE * RE_Parser_ERE::parse_next_item() {
     else return createCC(parse_literal_codepoint());
 }
 
-// A parenthesized group.  Input precondition: the opening ( has been consumed
+// A parenthesized capture group.  Input precondition: the opening ( has been consumed
 RE * RE_Parser_ERE::parse_group() {
-    // Capturing paren group.
     mGroupsOpen++;
-    RE * captured = parse_alt();
-    mCaptureGroupCount++;
-    std::string captureName = "\\" + std::to_string(mCaptureGroupCount);
-    Name * const capture  = mMemoizer.memoize(makeCapture(captureName, captured));
-    auto key = std::make_pair("", captureName);
-    mNameMap.insert(std::make_pair(std::move(key), capture));
-    if (!accept(')')) ParseFailure("Closing parenthesis required.");
+    RE * captured = parse_capture_body();
+    require(')');
     mGroupsOpen--;
-    return capture;
+    return captured;
 }
 
 RE * RE_Parser_ERE::parse_escaped() {
@@ -48,18 +42,7 @@ RE * RE_Parser_ERE::parse_escaped() {
     if (accept('S')) return makeComplement(makeWhitespaceSet());
     if (accept('<')) return makeWordBegin();
     if (accept('>')) return makeWordEnd();
-    if (isdigit(*mCursor)) {
-        mCursor++;
-        std::string backref = std::string(mCursor.pos()-2, mCursor.pos());
-        auto key = std::make_pair("", backref);
-        auto f = mNameMap.find(key);
-        if (f != mNameMap.end()) {
-            return makeReference(backref, f->second);
-        }
-        else {
-            ParseFailure("Back reference " + backref + " without prior capture group.");
-        }
-    }
+    if (isdigit(*mCursor)) return parse_back_reference();
     else {
         return createCC(parse_literal_codepoint());
     }
@@ -69,6 +52,7 @@ RE * RE_Parser_ERE::parse_escaped() {
 // Parsing items within a bracket expression.
 // Items represent individual characters or sets of characters.
 // Ranges may be formed by individual character items separated by '-'.
+// Note that there are no backslash escapes for ERE or BRE bracket expressions.
 RE * RE_Parser_ERE::parse_bracket_expr () {
     bool negated = accept('^');
     std::vector<RE *> items;
@@ -83,7 +67,7 @@ RE * RE_Parser_ERE::parse_bracket_expr () {
         }
     } while (mCursor.more() && !at(']'));
     RE * t = makeAlt(items.begin(), items.end());
-    if (!accept(']')) ParseFailure("Expecting ]");
+    require(']');
     if (negated) return makeComplement(t);
     else return t;
 }

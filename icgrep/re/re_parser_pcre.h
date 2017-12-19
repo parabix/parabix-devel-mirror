@@ -13,7 +13,6 @@ namespace re {
     class RE_Parser_PCRE : public RE_Parser {
     public:
         RE_Parser_PCRE(const std::string & regular_expression) : RE_Parser(regular_expression) {
-            fSupportNonCaptureGroup = true;
             mReSyntax = RE_Syntax ::PCRE;
         }
     protected:

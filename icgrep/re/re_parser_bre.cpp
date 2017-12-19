@@ -12,6 +12,7 @@
 #include <re/re_end.h>
 #include <re/re_assertion.h>
 #include <re/re_rep.h>
+#include <llvm/Support/raw_ostream.h>
 
 
 namespace re {
@@ -28,7 +29,7 @@ RE * RE_Parser_BRE::parse_alt() {
 
 RE * RE_Parser_BRE::parse_seq() {
     std::vector<RE *> seq;
-    if (!mCursor.more() || at("\\|") || ((mGroupsOpen > 0) && at("\\)"))) return makeSeq();
+    if (!mCursor.more() || at("\\|") || at("\\)")) return makeSeq();
     for (;;) {
         RE * re = parse_next_item();
         if (re == nullptr) {
@@ -53,19 +54,13 @@ RE * RE_Parser_BRE::parse_next_item() {
     else return createCC(parse_literal_codepoint());
 }
 
-// A parenthesized group.  Input precondition: the opening ( has been consumed
+// A parenthesized capture group.  Input precondition: the opening \( has been consumed
 RE * RE_Parser_BRE::parse_group() {
-    // Capturing paren group.
     mGroupsOpen++;
-    RE * captured = parse_alt();
-    mCaptureGroupCount++;
-    std::string captureName = "\\" + std::to_string(mCaptureGroupCount);
-    Name * const capture  = mMemoizer.memoize(makeCapture(captureName, captured));
-    auto key = std::make_pair("", captureName);
-    mNameMap.insert(std::make_pair(std::move(key), capture));
-    if (!accept("\\)")) ParseFailure("Closing parenthesis required.");
+    RE * captured = parse_capture_body();
+    require("\\)");
     mGroupsOpen--;
-    return capture;
+    return captured;
 }
 
 // Extend a RE item with one or more quantifiers
@@ -92,13 +87,13 @@ std::pair<int, int> RE_Parser_BRE::parse_range_bound() {
     } else {
         lb = parse_int();
         if (accept("\\}")) return std::make_pair(lb, lb);
-        if (!accept(',')) ParseFailure("Expecting , or }");
+        else require(',');
         if (accept("\\}")) return std::make_pair(lb, Rep::UNBOUNDED_REP);
         ub = parse_int();
         if (ub < lb) ParseFailure("Upper bound less than lower bound");
     }
-    if (accept("\\}")) return std::make_pair(lb, ub);
-    else ParseFailure("Expecting \\}");
+    require("\\}");
+    return std::make_pair(lb, ub);
 }
 
 }

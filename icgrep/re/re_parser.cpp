@@ -75,7 +75,6 @@ RE_Parser::RE_Parser(const std::string & regular_expression)
 , fModeFlagSet(MULTILINE_MODE_FLAG)
 , fNested(false)
 , mGroupsOpen(0)
-, fSupportNonCaptureGroup(false)
 , mCursor(regular_expression)
 , mCaptureGroupCount(0)
 , mReSyntax(RE_Syntax::PCRE)
@@ -150,130 +149,129 @@ RE * RE_Parser::parse_next_item() {
     else if (accept('\\')) return parse_escaped();
     else return createCC(parse_literal_codepoint());
 }
-                                                          
+    
+    
+RE * RE_Parser::parse_mode_group(bool & closing_paren_parsed) {
+    const ModeFlagSet savedModeFlagSet = fModeFlagSet;
+    while (mCursor.more() && !atany(":)")) {
+        bool negateMode = accept('-');
+        ModeFlagType modeBit;
+        switch (*mCursor) {
+            case 'i': modeBit = CASE_INSENSITIVE_MODE_FLAG; break;
+            case 'g': modeBit = GRAPHEME_CLUSTER_MODE; break;
+            case 'm': modeBit = MULTILINE_MODE_FLAG; break;
+                //case 's': modeBit = DOTALL_MODE_FLAG; break;
+            case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
+            case 'd': modeBit = UNIX_LINES_MODE_FLAG; break;
+            default: ParseFailure("Unsupported mode flag.");
+        }
+        ++mCursor;
+        if (negateMode) {
+            fModeFlagSet &= ~modeBit;
+            negateMode = false;  // for next flag
+        } else {
+            fModeFlagSet |= modeBit;
+        }
+    }
+    if (accept(':')) {
+        RE * group_expr = parse_alt();
+        auto changed = fModeFlagSet ^ savedModeFlagSet;
+        if ((changed & CASE_INSENSITIVE_MODE_FLAG) != 0) {
+            group_expr = makeGroup(Group::Mode::CaseInsensitiveMode, group_expr,
+                                   (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) == 0 ? Group::Sense::Off : Group::Sense::On);
+        }
+        if ((changed & GRAPHEME_CLUSTER_MODE) != 0) {
+            group_expr = makeGroup(Group::Mode::GraphemeMode, group_expr,
+                                   (fModeFlagSet & GRAPHEME_CLUSTER_MODE) == 0 ? Group::Sense::Off : Group::Sense::On);
+        }
+        fModeFlagSet = savedModeFlagSet;
+        closing_paren_parsed = false;
+        return group_expr;
+    } else {  // if *_cursor == ')'
+        require(')');
+        closing_paren_parsed = true;
+        auto changed = fModeFlagSet ^ savedModeFlagSet;
+        if ((changed & (CASE_INSENSITIVE_MODE_FLAG|GRAPHEME_CLUSTER_MODE)) != 0) {
+            RE * group_expr = parse_seq();
+            if ((changed & CASE_INSENSITIVE_MODE_FLAG) != 0) {
+                group_expr = makeGroup(Group::Mode::CaseInsensitiveMode, group_expr,
+                                       (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) == 0 ? Group::Sense::Off : Group::Sense::On);
+            }
+            if ((changed & GRAPHEME_CLUSTER_MODE) != 0) {
+                group_expr = makeGroup(Group::Mode::GraphemeMode, group_expr,
+                                       (fModeFlagSet & GRAPHEME_CLUSTER_MODE) == 0 ? Group::Sense::Off : Group::Sense::On);
+            }
+            return group_expr;
+        }
+        else return makeSeq();
+    }
+
+}
 
 // Parse some kind of parenthesized group.  Input precondition: mCursor
 // after the (
 RE * RE_Parser::parse_group() {
-    const ModeFlagSet savedModeFlagSet = fModeFlagSet;
     mGroupsOpen++;
     RE * group_expr = nullptr;
-    if (*mCursor == '?' && fSupportNonCaptureGroup) {
-        switch (*++mCursor) {
-            case '#':  // comment
-                while (*++mCursor != ')');
-                ++mCursor;
-                return parse_next_item();
-            case ':':  // Non-capturing paren
-                ++mCursor;
-                group_expr = parse_alt();
-                break;
-            case '=':
-                ++mCursor;
-                group_expr = makeLookAheadAssertion(parse_alt());
-                break;
-            case '!':
-                ++mCursor;
-                group_expr = makeNegativeLookAheadAssertion(parse_alt());
-                break;
-            case '>':
-                ++mCursor;
-                group_expr = makeAtomicGroup(parse_alt());
-                break;
-            case '|':
-                ++mCursor;
-                group_expr = makeBranchResetGroup(parse_alt());
-                break;
-            case '<':
-                ++mCursor;
-                if (*mCursor == '=') {
-                    ++mCursor;
-                    group_expr = makeLookBehindAssertion(parse_alt());
-                }
-                else if (*mCursor == '!') {
-                    ++mCursor;
-                    group_expr = makeNegativeLookBehindAssertion(parse_alt());
-                } else {
-                    ParseFailure("Illegal lookbehind assertion syntax.");
-                }
-                break;
-            case '-': case 'd' : case 'i': case 'm': case 's': case 'x': case 'g':
-                while (*mCursor != ')' && *mCursor != ':') {
-                    bool negateMode = false;
-                    ModeFlagType modeBit;
-                    if (*mCursor == '-') {
-                        negateMode = true;
-                        ++mCursor;
-                    }
-                    switch (*mCursor) {
-                        case 'i': modeBit = CASE_INSENSITIVE_MODE_FLAG; break;
-                        case 'g': modeBit = GRAPHEME_CLUSTER_MODE; break;
-                        case 'm': modeBit = MULTILINE_MODE_FLAG; break;
-                        //case 's': modeBit = DOTALL_MODE_FLAG; break;
-                        case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
-                        case 'd': modeBit = UNIX_LINES_MODE_FLAG; break;
-                        default: ParseFailure("Unsupported mode flag.");
-                    }
-                    ++mCursor;
-                    if (negateMode) {
-                        fModeFlagSet &= ~modeBit;
-                        negateMode = false;  // for next flag
-                    } else {
-                        fModeFlagSet |= modeBit;
-                    }
-                }
-                if (*mCursor == ':') {
-                    ++mCursor;
-                    group_expr = parse_alt();
-                    auto changed = fModeFlagSet ^ savedModeFlagSet;
-                    if ((changed & CASE_INSENSITIVE_MODE_FLAG) != 0) {
-                        group_expr = makeGroup(Group::Mode::CaseInsensitiveMode, group_expr,
-                                               (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) == 0 ? Group::Sense::Off : Group::Sense::On);
-                    }
-                    if ((changed & GRAPHEME_CLUSTER_MODE) != 0) {
-                        group_expr = makeGroup(Group::Mode::GraphemeMode, group_expr,
-                                               (fModeFlagSet & GRAPHEME_CLUSTER_MODE) == 0 ? Group::Sense::Off : Group::Sense::On);
-                    }
-                    fModeFlagSet = savedModeFlagSet;
-                    break;
-                } else {  // if *_cursor == ')'
-                    ++mCursor;
-                    auto changed = fModeFlagSet ^ savedModeFlagSet;
-                    if ((changed & (CASE_INSENSITIVE_MODE_FLAG|GRAPHEME_CLUSTER_MODE)) != 0) {
-                        group_expr = parse_seq();
-                        if ((changed & CASE_INSENSITIVE_MODE_FLAG) != 0) {
-                            group_expr = makeGroup(Group::Mode::CaseInsensitiveMode, group_expr,
-                                                   (fModeFlagSet & CASE_INSENSITIVE_MODE_FLAG) == 0 ? Group::Sense::Off : Group::Sense::On);
-                        }
-                        if ((changed & GRAPHEME_CLUSTER_MODE) != 0) {
-                            group_expr = makeGroup(Group::Mode::GraphemeMode, group_expr,
-                                                   (fModeFlagSet & GRAPHEME_CLUSTER_MODE) == 0 ? Group::Sense::Off : Group::Sense::On);
-                        }
-                        return group_expr;
-                    }
-                    else return parse_next_item();
-                }
-            default:
-                ParseFailure("Illegal (? syntax.");
+    if (accept('?')) {
+        if (accept('#')) {
+            while (mCursor.more() && !at(')')) ++mCursor;
+            group_expr = makeSeq();
+        } else if (accept(':')) { // Non-capturing paren
+            group_expr = parse_alt();
+        } else if (accept('=')) { // positive look ahead
+            group_expr = makeLookAheadAssertion(parse_alt());
+        } else if (accept('!')) { // negative look ahead
+            group_expr = makeNegativeLookAheadAssertion(parse_alt());
+        } else if (accept("<=")) { // positive look ahead
+            group_expr = makeLookBehindAssertion(parse_alt());
+        } else if (accept("<!")) { // negative look ahead
+            group_expr = makeNegativeLookBehindAssertion(parse_alt());
+        } else if (accept('>')) { // negative look ahead
+            group_expr = makeAtomicGroup(parse_alt());
+        } else if (accept('|')) { // negative look ahead
+            group_expr = makeBranchResetGroup(parse_alt());
+        } else if (atany("-dimsxg")) { // mode switches
+            bool closing_paren_parsed;
+            group_expr = parse_mode_group(closing_paren_parsed);
+            if (closing_paren_parsed) {
+                mGroupsOpen--;
+                return group_expr;
+            }
+        } else {
+            ParseFailure("Illegal (? syntax.");
         }
     } else { // Capturing paren group.
-        RE * captured = parse_alt();
-        mCaptureGroupCount++;
-        std::string captureName = "\\" + std::to_string(mCaptureGroupCount);
-        Name * const capture  = mMemoizer.memoize(makeCapture(captureName, captured));
-        auto key = std::make_pair("", captureName);
-        mNameMap.insert(std::make_pair(std::move(key), capture));
-        group_expr = capture;
+        group_expr = parse_capture_body();
     }
-    if (*mCursor != ')') {
-        ParseFailure("Closing parenthesis required.");
-    }
+    require(')');
     mGroupsOpen--;
-    ++mCursor;
     return group_expr;
 }
+    
+RE * RE_Parser::parse_capture_body() {
+    RE * captured = parse_alt();
+    mCaptureGroupCount++;
+    std::string captureName = "\\" + std::to_string(mCaptureGroupCount);
+    Name * const capture  = mMemoizer.memoize(makeCapture(captureName, captured));
+    auto key = std::make_pair("", captureName);
+    mNameMap.insert(std::make_pair(std::move(key), capture));
+    return capture;
+}
+    
+    RE * RE_Parser::parse_back_reference() {
+        mCursor++;
+        std::string backref = std::string(mCursor.pos()-2, mCursor.pos());
+        auto key = std::make_pair("", backref);
+        auto f = mNameMap.find(key);
+        if (f != mNameMap.end()) {
+            return makeReference(backref, f->second);
+        }
+        else {
+            ParseFailure("Back reference " + backref + " without prior capture group.");
+        }
+    }
 
-// TODO: Set ENABLE_EXTENDED_QUANTIFIERS false for ERE, BRE
 #define ENABLE_EXTENDED_QUANTIFIERS true
     
 // Extend a RE item with one or more quantifiers
@@ -314,17 +312,18 @@ std::pair<int, int> RE_Parser::parse_range_bound() {
     } else {
         lb = parse_int();
         if (accept('}')) return std::make_pair(lb, lb);
-        if (!accept(',')) ParseFailure("Expecting , or }");
+        else require(',');
         if (accept('}')) return std::make_pair(lb, Rep::UNBOUNDED_REP);
         ub = parse_int();
         if (ub < lb) ParseFailure("Upper bound less than lower bound");
     }
-    if (accept('}')) return std::make_pair(lb, ub);
-    else ParseFailure("Expecting }");
+    require('}');
+    return std::make_pair(lb, ub);
 }
 
 unsigned RE_Parser::parse_int() {
     unsigned value = 0;
+    if (!isdigit(*mCursor)) ParseFailure("Expecting integer");
     while (isdigit(*mCursor)) {
         value *= 10;
         value += static_cast<int>(*mCursor++) - 48;
@@ -346,7 +345,7 @@ RE * RE_Parser::parse_escaped() {
     if (isSetEscapeChar(*mCursor)) {
         return parseEscapedSet();
     }
-    else if ((*mCursor == 'x') || (*mCursor == 'o') || (*mCursor == '0')) {
+    else if (atany("xo0")) {
         codepoint_t cp = parse_escaped_codepoint();
         if ((cp >= 0x80) && (cp <= 0xFF)) {
             return makeByte(makeCC(cp));
@@ -354,16 +353,7 @@ RE * RE_Parser::parse_escaped() {
         else return createCC(cp);
     }
     else if (isdigit(*mCursor)) {
-        mCursor++;
-        std::string backref = std::string(mCursor.pos()-2, mCursor.pos());
-        auto key = std::make_pair("", backref);
-        auto f = mNameMap.find(key);
-        if (f != mNameMap.end()) {
-            return makeReference(backref, f->second);
-        }
-        else {
-            ParseFailure("Back reference " + backref + " without prior capture group.");
-        }
+        return parse_back_reference();
     }
     else {
         return createCC(parse_escaped_codepoint());
@@ -624,8 +614,7 @@ RE * RE_Parser::parsePropertyExpression() {
 }
 
 Name * RE_Parser::parseNamePatternExpression(){
-
-    if (!accept('{')) ParseFailure("Expecting { after \\N");
+    require('{');
     const auto start = mCursor.pos();
     while (mCursor.more()) {
         if (*mCursor == '\\') {
@@ -640,7 +629,7 @@ Name * RE_Parser::parseNamePatternExpression(){
         ++mCursor;
     }
     std::string nameRegexp = "/(?i)" + std::string(start, mCursor.pos());
-    if (!accept('}')) ParseFailure("Expecting } after \\N{...");
+    require('}');
     return createName("na", nameRegexp);
 }
 
@@ -662,7 +651,7 @@ RE * RE_Parser::parse_extended_bracket_expression () {
         }
         else have_new_expr = false;
     }
-    if (!accept(']')) ParseFailure("Expecting ]");
+    require(']');
     if (negated) return makeComplement(t1);
     else return t1;
 }
@@ -714,7 +703,7 @@ RE * RE_Parser::parse_equivalence_class() {
         ++mCursor;
     }
     std::string name = std::string(start, mCursor.pos());
-    if (!accept("=]")) ParseFailure("Posix equivalence class improperly terminated.");
+    require("=]");
     return createName(name);
 }
 RE * RE_Parser::parse_collation_element() {
@@ -723,14 +712,14 @@ RE * RE_Parser::parse_collation_element() {
         ++mCursor;
     }
     std::string name = std::string(start, mCursor.pos());
-    if (!accept(".]")) ParseFailure("Posix equivalence class improperly terminated.");
+    require(".]");
     return createName(name);
 }
 
 RE * RE_Parser::parse_Posix_class() {
     bool negated = accept('^');
     RE * posixSet = parsePropertyExpression();
-    if (!accept(":]")) ParseFailure("Posix set expression improperly terminated.");
+    require(":]");
     if (negated) return makeComplement(posixSet);
     else return posixSet;
 }
@@ -776,17 +765,17 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
     } else if (accept('o')) {
         if (!accept('{')) ParseFailure("Malformed octal escape sequence");
         cp_value = parse_octal_codepoint(1, 7);
-        if (!accept('}')) ParseFailure("Malformed octal escape sequence");
+        require('}');
         return cp_value;
     } else if (accept('x')) {
         if (!accept('{')) return parse_hex_codepoint(1,2);  // ICU compatibility
         cp_value = parse_hex_codepoint(1, 6);
-        if (!accept('}')) ParseFailure("Malformed hex escape sequence");
+        require('}');
         return cp_value;
     } else if (accept('u')) {
         if (!accept('{')) return parse_hex_codepoint(4,4);  // ICU compatibility
         cp_value = parse_hex_codepoint(1, 6);
-        if (!accept('}')) ParseFailure("Malformed hex escape sequence");
+        require('}');
         return cp_value;
     } else if (accept('U')) {
         return parse_hex_codepoint(8,8);  // ICU compatibility

@@ -7,18 +7,16 @@
 #ifndef RE_PARSER_H
 #define RE_PARSER_H
 
-#include <map>                           // for map
-#include <re/re_memoizer.hpp>            // for Memoizer
-#include "re/re_cc.h"                    // for codepoint_t, CC (ptr only)
+#include <map>
+#include <re/re_memoizer.hpp>
+#include "re/re_cc.h"
+
 namespace re { class Name; }
 
 namespace re {
 
 enum RE_Syntax {FixedStrings, BRE, ERE, PCRE, PROSITE};
 
-enum CharsetOperatorKind
-    {intersectOp, setDiffOp, ampChar, hyphenChar, rangeHyphen, posixPropertyOpener, setOpener, setCloser, backSlash, emptyOperator};    
-    
 enum ModeFlagType : unsigned {
     DEFAULT_MODE = 0,
     CASE_INSENSITIVE_MODE_FLAG = 1,
@@ -115,6 +113,13 @@ protected:
         return false;
     }
     
+    inline void require(char c) {
+        if (!accept(c)) {
+            if (mCursor.noMore()) ParseFailure("Expecting " + std::string(1, c) + " but end of input encountered");
+            ParseFailure("Expecting " + std::string(1, c) + " but " + std::string(1, *mCursor) + " encountered");
+        }
+    }
+    
     inline bool atany(std::string s) {
         if (mCursor.noMore()) return false;
         for (unsigned i = 0; i < s.length(); i++) {
@@ -133,14 +138,23 @@ protected:
     }
     
     inline bool accept(std::string s) {
+        Cursor tmp = mCursor;
         for (unsigned i = 0; i < s.length(); i++) {
-            if (mCursor.noMore() || (s[i] != *mCursor)) return false;
-            mCursor++;
+            if (tmp.noMore() || (s[i] != *tmp)) return false;
+            tmp++;
         }
+        mCursor = tmp;
         return true;
     }
     
-
+    inline void require(std::string s) {
+        if (!accept(s)) {
+            if (mCursor.noMore()) ParseFailure("Expecting " + s + " but end of input encountered");
+            unsigned long rem = mCursor.remaining();
+            ParseFailure("Expecting " + s + " but " + std::string(mCursor.pos(), mCursor.pos() + std::min(rem, s.length())) + " encountered");
+        }
+    }
+    
     RE_Parser(const std::string & regular_expression);
 
     RE_Parser(const std::string & regular_expression, ModeFlagSet initialFlags);
@@ -154,7 +168,13 @@ protected:
     virtual RE * parse_next_item();
 
     virtual RE * parse_group();
+    
+    RE * parse_mode_group(bool & closing_paren_parsed);
 
+    RE * parse_capture_body();
+    
+    RE * parse_back_reference();
+    
     virtual bool isSetEscapeChar(char c);
 
     virtual RE * extend_item(RE * re);
@@ -222,7 +242,6 @@ protected:
     ModeFlagSet                 fModeFlagSet;
     bool                        fNested;
     unsigned                    mGroupsOpen;
-    bool                        fSupportNonCaptureGroup;
     Cursor                      mCursor;
     unsigned                    mCaptureGroupCount;
     NameMap                     mNameMap;
