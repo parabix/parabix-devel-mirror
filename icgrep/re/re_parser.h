@@ -155,6 +155,9 @@ protected:
         }
     }
     
+    inline char get1() { return *mCursor++;}
+
+    
     RE_Parser(const std::string & regular_expression);
 
     RE_Parser(const std::string & regular_expression, ModeFlagSet initialFlags);

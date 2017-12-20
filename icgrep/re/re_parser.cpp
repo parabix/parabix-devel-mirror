@@ -259,18 +259,18 @@ RE * RE_Parser::parse_capture_body() {
     return capture;
 }
     
-    RE * RE_Parser::parse_back_reference() {
-        mCursor++;
-        std::string backref = std::string(mCursor.pos()-2, mCursor.pos());
-        auto key = std::make_pair("", backref);
-        auto f = mNameMap.find(key);
-        if (f != mNameMap.end()) {
-            return makeReference(backref, f->second);
-        }
-        else {
-            ParseFailure("Back reference " + backref + " without prior capture group.");
-        }
+RE * RE_Parser::parse_back_reference() {
+    mCursor++;
+    std::string backref = std::string(mCursor.pos()-2, mCursor.pos());
+    auto key = std::make_pair("", backref);
+    auto f = mNameMap.find(key);
+    if (f != mNameMap.end()) {
+        return makeReference(backref, f->second);
     }
+    else {
+        ParseFailure("Back reference " + backref + " without prior capture group.");
+    }
+}
 
 #define ENABLE_EXTENDED_QUANTIFIERS true
     
@@ -323,11 +323,11 @@ std::pair<int, int> RE_Parser::parse_range_bound() {
 
 unsigned RE_Parser::parse_int() {
     unsigned value = 0;
-    if (!isdigit(*mCursor)) ParseFailure("Expecting integer");
-    while (isdigit(*mCursor)) {
+    if (!atany("0123456789")) ParseFailure("Expecting integer");
+    do {
         value *= 10;
-        value += static_cast<int>(*mCursor++) - 48;
-    }
+        value += static_cast<int>(get1()) - 48;
+    } while (atany("0123456789"));
     return value;
 }
 
@@ -352,7 +352,7 @@ RE * RE_Parser::parse_escaped() {
         }
         else return createCC(cp);
     }
-    else if (isdigit(*mCursor)) {
+    else if (atany("123456789")) {
         return parse_back_reference();
     }
     else {
@@ -534,26 +534,17 @@ bool RE_Parser::isCharAhead(char c) {
 
 RE * RE_Parser::parsePropertyExpression() {
     const auto start = mCursor.pos();
-    while (mCursor.more()) {
-        bool done = false;
-        switch (*mCursor) {
-            case '}': case ':': case '=':
-                done = true;
-        }
-        if (done) {
-            break;
-        }
-        ++mCursor;
+    while (mCursor.more() && !atany("}:=")) {
+        get1();
     }
-    if (*mCursor == '=') {
+    if (accept('=')) {
         // We have a property-name = value expression
-        const auto prop_end = mCursor.pos();
-        mCursor++;
+        const auto prop_end = mCursor.pos()-1;
         auto val_start = mCursor.pos();
-        if (*val_start == '/') {
+        if (accept('/')) {
             // property-value is another regex
             auto previous = val_start;
-            auto current = (++mCursor).pos();
+            auto current = mCursor.pos();
             val_start = current;
             
             while (true) {
@@ -615,22 +606,19 @@ RE * RE_Parser::parsePropertyExpression() {
 
 Name * RE_Parser::parseNamePatternExpression(){
     require('{');
-    const auto start = mCursor.pos();
-    while (mCursor.more()) {
-        if (*mCursor == '\\') {
-            ++mCursor;
-            if (!mCursor.more()) {
-                break;
-            }
+    std::stringstream nameRegexp;
+    nameRegexp << "/(?m)^";
+    while (mCursor.more() && !at('}')) {
+        if (accept("\\}")) {
+            nameRegexp << "}";
         }
-        else if (*mCursor == '}') {
-            break;
+        else {
+            nameRegexp << std::string(1, std::toupper(get1()));
         }
-        ++mCursor;
     }
-    std::string nameRegexp = "/(?i)" + std::string(start, mCursor.pos());
+    nameRegexp << "$";
     require('}');
-    return createName("na", nameRegexp);
+    return createName("na", nameRegexp.str());
 }
 
 
@@ -698,21 +686,21 @@ RE * RE_Parser::range_extend(RE * char_expr1) {
 }
 
 RE * RE_Parser::parse_equivalence_class() {
-    const auto start = mCursor.pos() - 1;
+    const auto start = mCursor.pos() - 2;
     while (mCursor.more() && !at('=')) {
         ++mCursor;
     }
-    std::string name = std::string(start, mCursor.pos());
     require("=]");
+    std::string name = std::string(start, mCursor.pos());
     return createName(name);
 }
 RE * RE_Parser::parse_collation_element() {
-    const auto start = mCursor.pos() - 1;
+    const auto start = mCursor.pos() - 2;
     while (mCursor.more() && !at('.')) {
         ++mCursor;
     }
-    std::string name = std::string(start, mCursor.pos());
     require(".]");
+    std::string name = std::string(start, mCursor.pos());
     return createName(name);
 }
 
@@ -794,13 +782,9 @@ codepoint_t RE_Parser::parse_escaped_codepoint() {
 codepoint_t RE_Parser::parse_octal_codepoint(int mindigits, int maxdigits) {
     codepoint_t value = 0;
     int count = 0;
-    while (mCursor.more() && count < maxdigits) {
-        const char t = *mCursor;
-        if (t < '0' || t > '7') {
-            break;
-        }
+    while (mCursor.more() && atany("01234567") && count < maxdigits) {
+        const char t = get1();
         value = value * 8 | (t - '0');
-        ++mCursor;
         ++count;
     }
     if (count < mindigits) ParseFailure("Octal sequence has too few digits");
@@ -811,15 +795,14 @@ codepoint_t RE_Parser::parse_octal_codepoint(int mindigits, int maxdigits) {
 codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
     codepoint_t value = 0;
     int count = 0;
-    while (mCursor.more() && isxdigit(*mCursor) && count < maxdigits) {
-        const char t = *mCursor;
+    while (mCursor.more() && atany("0123456789abcdefABCDEF") && count < maxdigits) {
+        const char t = get1();
         if (isdigit(t)) {
             value = (value * 16) | (t - '0');
         }
         else {
             value = ((value * 16) | ((t | 32) - 'a')) + 10;
         }
-        ++mCursor;
         ++count;
     }
     if (count < mindigits) ParseFailure("Hexadecimal sequence has too few digits");

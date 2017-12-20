@@ -16,8 +16,8 @@ namespace re {
 
 RE * makeRange(RE * lo, RE * hi) {
     if (isa<CC>(lo) && isa<CC>(hi)) {
-        if (!(dyn_cast<CC>(lo)->count() == 1) && (dyn_cast<CC>(hi)->count() == 1))
-            llvm::report_fatal_error("illegal range operand");
+        if (!((dyn_cast<CC>(lo)->count() == 1) && (dyn_cast<CC>(hi)->count() == 1)))
+            llvm::report_fatal_error("invalid range operand");
         auto lo_val = dyn_cast<CC>(lo)->front().first;
         auto hi_val = dyn_cast<CC>(hi)->front().first;
         if (hi_val < lo_val) llvm::report_fatal_error("illegal range");
