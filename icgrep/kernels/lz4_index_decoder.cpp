@@ -683,27 +683,27 @@ void LZ4IndexDecoderKernel::generateAtBlockChecksum(const std::unique_ptr<Kernel
 
 LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
 : BlockOrientedKernel("lz4IndexDecoder",
-    // Inputs
-    {Binding{b->getStreamSetTy(1, 8), "byteStream"},
-     Binding{b->getStreamSetTy(1, 1), "extenders"}},
-    // Outputs: literal start, literal length, match offset, match length
-    {Binding{b->getStreamSetTy(2, 32), "literalIndexes", UnknownRate()},
-     Binding{b->getStreamSetTy(2, 32), "matchIndexes", RateEqualTo("literalIndexes")}},
-    // Arguments
-    {Binding{b->getInt1Ty(), "hasBlockChecksum"}},
-    {},
-    // Internal states:
-    {Binding{b->getInt32Ty(), "BlockNo"},
-     Binding{b->getInt8Ty(), "State"},
-     Binding{b->getInt32Ty(), "LZ4BlockStart"},
-     Binding{b->getInt32Ty(), "LZ4BlockEnd"},
-     Binding{b->getInt32Ty(), "BytesToSkip"},
-     Binding{b->getInt32Ty(), "TempLength"},
-     Binding{b->getInt32Ty(), "TempCount"},
-     Binding{b->getInt32Ty(), "LiteralStart"},
-     Binding{b->getInt32Ty(), "LiteralLength"},
-     Binding{b->getInt32Ty(), "MatchOffset"},
-     Binding{b->getInt32Ty(), "MatchLength"}})
+// Inputs
+{Binding{b->getStreamSetTy(1, 8), "byteStream", FixedRate(), Misaligned()},
+ Binding{b->getStreamSetTy(1, 1), "extenders"}},
+// Outputs: literal start, literal length, match offset, match length
+{Binding{b->getStreamSetTy(2, 32), "literalIndexes", UnknownRate()},
+ Binding{b->getStreamSetTy(2, 32), "matchIndexes", RateEqualTo("literalIndexes")}},
+// Arguments
+{Binding{b->getInt1Ty(), "hasBlockChecksum"}},
+{},
+// Internal states:
+{Binding{b->getInt32Ty(), "BlockNo"},
+ Binding{b->getInt8Ty(), "State"},
+ Binding{b->getInt32Ty(), "LZ4BlockStart"},
+ Binding{b->getInt32Ty(), "LZ4BlockEnd"},
+ Binding{b->getInt32Ty(), "BytesToSkip"},
+ Binding{b->getInt32Ty(), "TempLength"},
+ Binding{b->getInt32Ty(), "TempCount"},
+ Binding{b->getInt32Ty(), "LiteralStart"},
+ Binding{b->getInt32Ty(), "LiteralLength"},
+ Binding{b->getInt32Ty(), "MatchOffset"},
+ Binding{b->getInt32Ty(), "MatchLength"}})
 , wordWidth{b->getSizeTy()->getBitWidth()} {
-    setNoTerminateAttribute(true);
+
 }

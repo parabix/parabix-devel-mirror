@@ -57,7 +57,7 @@ void LineBreakKernelBuilder::generatePabloMethod() {
 
     PabloAST * const LF = pb.createExtract(getInput(1), ZERO, "LF");
     PabloAST * const CR = ccc.compileCC(makeCC(0x0D));
-    PabloAST * const LF_VT_FF_CR = ccc.compileCC(makeCC(0x0A, 0x0D));
+    PabloAST * const LF_VT_FF_CR = ccc.compileCC("LF,VT,FF,CR", makeCC(0x0A, 0x0D), pb);
     Var * const LineBreak = pb.createVar("LineBreak", LF_VT_FF_CR);
 
     // Remove the CR of any CR+LF
@@ -92,6 +92,6 @@ void LineBreakKernelBuilder::generatePabloMethod() {
     PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9), it3), "LS_PS");
     it3.createAssign(LineBreak, it3.createOr(LineBreak, LS_PS));
 
-    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1));
+    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1), "unterminatedLineAtEOF");
     pb.createAssign(pb.createExtract(getOutput(0), ZERO), pb.createOr(LineBreak, unterminatedLineAtEOF, "EOL"));
 }

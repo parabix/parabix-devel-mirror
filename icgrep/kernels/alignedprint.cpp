@@ -269,18 +269,16 @@ void PrintStreamSet::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> 
 
 PrintableBits::PrintableBits(const std::unique_ptr<kernel::KernelBuilder> & builder)
 : BlockOrientedKernel("PrintableBits", {Binding{builder->getStreamSetTy(1), "bitStream"}}, {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {}, {}, {}) {
-    setNoTerminateAttribute(true);
+
 }
 
 SelectStream::SelectStream(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned streamIndex)
 : BlockOrientedKernel("SelectStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(1, 1), "bitStream"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mStreamIndex(streamIndex) {
-    setNoTerminateAttribute(true);
 
 }
 
 ExpandOrSelectStreams::ExpandOrSelectStreams(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet)
 : BlockOrientedKernel("ExpandOrSelectStreams", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(sizeOutputStreamSet), "outputbitStreams"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mSizeOutputStreamSet(sizeOutputStreamSet) {
-    setNoTerminateAttribute(true);
 
 }
 

@@ -53,7 +53,6 @@ enum DebugFlags {
 
 bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag);
 
-extern bool PipelineParallel;
 extern bool SegmentPipelineParallel;
     
 // Options for generating IR or ASM to files

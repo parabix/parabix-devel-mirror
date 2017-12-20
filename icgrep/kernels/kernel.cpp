@@ -268,7 +268,7 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & idb)
         addScalar(consumerSetTy, mStreamSetOutputs[i].getName() + CONSUMER_SUFFIX);
     }
     addScalar(sizeTy, LOGICAL_SEGMENT_NO_SCALAR);
-    addScalar(idb->getInt1Ty(), TERMINATION_SIGNAL);
+    addScalar(sizeTy, TERMINATION_SIGNAL);
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         addScalar(sizeTy, mStreamSetOutputs[i].getName() + CONSUMED_ITEM_COUNT_SUFFIX);
     }
@@ -627,7 +627,7 @@ bool MultiBlockKernel::isTransitivelyUnknownRate(const ProcessingRate & rate) co
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned MultiBlockKernel::getItemAlignment(const Binding & binding) const {
     const auto & rate = binding.getRate();
-    if (rate.isFixed() && binding.nonDeferred()) {
+    if (rate.isFixed() && binding.nonDeferred() && !binding.isMisaligned()) {
         const auto r = rate.getRate();
         auto n = (r.numerator() * mStride);
         if (LLVM_LIKELY(r.denominator() == 1)) {
@@ -663,7 +663,6 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
                            "must be a multiple of the BitBlockWidth (" + std::to_string(b->getBitBlockWidth()) + ")");
     }
 
-    using AttributeId = kernel::Attribute::KindId;
     using RateValue = ProcessingRate::RateValue;
 
     const auto inputSetCount = mStreamSetInputs.size();
@@ -724,6 +723,20 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(std::log2(b->getBitBlockWidth()));
     Constant * const BLOCK_WIDTH_MASK = b->getSize(b->getBitBlockWidth() - 1);
 
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Value * terminatedTwice = b->CreateAnd(mIsFinal, b->getTerminationSignal());
+        Value * unprocessedData = nullptr;
+        for (unsigned i = 0; i < inputSetCount; i++) {
+            Value * processed = b->getProcessedItemCount(mStreamSetInputs[i].getName());
+            Value * const check = b->CreateICmpNE(processed, mAvailableItemCount[i]);
+            unprocessedData = unprocessedData ? b->CreateOr(unprocessedData, check) : check;
+        }
+        b->CreateAssertZero(b->CreateAnd(terminatedTwice, unprocessedData),
+                            getName() + " was called after its termination with additional input data");
+        b->CreateAssertZero(terminatedTwice,
+                            getName() + " was called after its termination");
+    }
+
     // Now proceed with creation of the doSegment method.
     BasicBlock * const segmentLoop = b->CreateBasicBlock("SegmentLoop");
 
@@ -744,39 +757,29 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         const Binding & input = mStreamSetInputs[i];
         const auto & name = input.getName();
         const ProcessingRate & rate = input.getRate();
-        Value * processed = b->getProcessedItemCount(name);
-        //b->CallPrintInt(getName() + "_" + name + "_processed", processed);
+        Value * const processed = b->getProcessedItemCount(name);
 
         mInitialProcessedItemCount[i] = processed;
         Value * baseBuffer  = b->getBlockAddress(name, b->CreateLShr(processed, LOG_2_BLOCK_WIDTH));
 
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            b->CreateAssert(b->CreateICmpULT(processed, mAvailableItemCount[i]), "processed item count must be less than the available item count");
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {            
+            b->CreateAssert(b->CreateICmpULE(processed, mAvailableItemCount[i]),
+                            getName() + ": " + name + " processed item count exceeds its available item count");
         }
 
+        // Ensure that everything between S⌈P/S⌉, and S⌈n*(P + L)/S⌉ is linearly available, where S is the stride size,
+        // P is the current processed position, L is the lookahead amount and n ∈ ℤ+.
+
         Value * const unprocessed = b->CreateSub(mAvailableItemCount[i], processed);
-        //b->CallPrintInt(getName() + "_" + name + "_unprocessed", unprocessed);
-
         Value * avail = b->getLinearlyAccessibleItems(name, processed, unprocessed);
-        //b->CallPrintInt(getName() + "_" + name + "_avail", avail);
-
-
-        // Ensure that everything between S⌈P/S⌉, and S⌈n*(P + L)/S⌉ is linearly available, where S is
-        // the stride size, P is the current processed position, L is the lookahead amount and n ∈ ℤ+.
-
         Value * remaining = avail;
         if (LLVM_UNLIKELY(input.hasLookahead())) {
             Constant * const lookahead = b->getSize(input.getLookahead());
             remaining = b->CreateSelect(b->CreateICmpULT(lookahead, remaining), b->CreateSub(remaining, lookahead), ZERO);
-            //b->CallPrintInt(getName() + "_" + name + "_remaining", remaining);
         }
 
         inputStrideSize[i] = getStrideSize(b, rate);
-
         Value * accessibleStrides = b->CreateUDiv(remaining, inputStrideSize[i]);
-
-        //b->CallPrintInt(getName() + "_" + name + "_accessibleStrides", accessibleStrides);
-
         AllocaInst * const tempBuffer = temporaryInputBuffer[i];
         if (tempBuffer) {
 
@@ -794,10 +797,6 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             Value * const arraySize = b->CreateZExt(tempBuffer->getArraySize(), b->getInt64Ty());
             Value * const temporarySize = b->CreateTrunc(b->CreateMul(arraySize, b->getInt64(mStride)), unprocessed->getType());
             Value * const temporaryAvailable = b->CreateUMin(unprocessed, temporarySize);
-            if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-                b->CreateAssert(b->CreateICmpULE(avail, temporaryAvailable),
-                                "linearly available item count cannot exceed the temporarily available item count");
-            }
             Value * const offset = b->CreateAnd(processed, BLOCK_WIDTH_MASK);
             Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(tempBuffer->getAllocatedType()), arraySize);
             b->CreateMemZero(tempBuffer, bufferSize, blockAlignment);
@@ -815,19 +814,19 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             b->CreateBr(resume);
 
             b->SetInsertPoint(resume);
-            PHINode * const bufferPtr = b->CreatePHI(baseBuffer->getType(), 3);
-            bufferPtr->addIncoming(baseBuffer , entry);
+            PHINode * const bufferPtr = b->CreatePHI(baseBuffer->getType(), 4);
+            bufferPtr->addIncoming(baseBuffer, entry);
             bufferPtr->addIncoming(tempBuffer, copyToBackEnd);
             bufferPtr->addIncoming(tempBuffer, copyToFrontEnd);
             baseBuffer = bufferPtr;
 
-            PHINode * const phiAvailItemCount = b->CreatePHI(b->getSizeTy(), 3);
+            PHINode * const phiAvailItemCount = b->CreatePHI(b->getSizeTy(), 4);
             phiAvailItemCount->addIncoming(avail, entry);
             phiAvailItemCount->addIncoming(temporaryAvailable, copyToBackEnd);
             phiAvailItemCount->addIncoming(temporaryAvailable, copyToFrontEnd);
             avail = phiAvailItemCount;
 
-            PHINode * const phiStrides = b->CreatePHI(b->getSizeTy(), 2);
+            PHINode * const phiStrides = b->CreatePHI(b->getSizeTy(), 4);
             phiStrides->addIncoming(accessibleStrides, entry);
             phiStrides->addIncoming(temporaryStrides, copyToBackEnd);
             phiStrides->addIncoming(temporaryStrides, copyToFrontEnd);
@@ -848,33 +847,24 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         const auto & name = output.getName();
         const ProcessingRate & rate = output.getRate();
         Value * const produced = b->getProducedItemCount(name);
-
-        //b->CallPrintInt(getName() + "_" + name + "_produced", produced);
-
         Value * baseBuffer = b->getBlockAddress(name, b->CreateLShr(produced, LOG_2_BLOCK_WIDTH));
         assert (baseBuffer->getType()->isPointerTy());
         linearlyWritable[i] = b->getLinearlyWritableItems(name, produced);
-
-        //b->CallPrintInt(getName() + "_" + name + "_linearlyWritable", linearlyWritable[i]);
-
         outputStrideSize[i] = getStrideSize(b, rate);
         // Is the number of linearly writable items sufficient for a stride?
         if (outputStrideSize[i]) {
             AllocaInst * const tempBuffer = temporaryOutputBuffer[i];
             Value * writableStrides = b->CreateUDiv(linearlyWritable[i], outputStrideSize[i]);
-            //b->CallPrintInt(getName() + "_" + name + "_writableStrides", writableStrides);
-
-
             // Do we require a temporary buffer to write to?
             if (tempBuffer) {
                 assert (tempBuffer->getType() == baseBuffer->getType());
                 BasicBlock * const entry = b->GetInsertBlock();
-                BasicBlock * const clearBuffer = b->CreateBasicBlock(name + "ClearTemporaryBuffer");
+                BasicBlock * const prepareTempBuffer = b->CreateBasicBlock(name + "PrepareTempBuffer");
                 BasicBlock * const resume = b->CreateBasicBlock(name + "Resume");
                 Value * const requiresCopy = b->CreateICmpEQ(writableStrides, ZERO);
-                b->CreateUnlikelyCondBr(requiresCopy, clearBuffer, resume);
+                b->CreateUnlikelyCondBr(requiresCopy, prepareTempBuffer, resume);
                 // Clear the output buffer prior to using it
-                b->SetInsertPoint(clearBuffer);
+                b->SetInsertPoint(prepareTempBuffer);
                 Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(tempBuffer->getAllocatedType()), tempBuffer->getArraySize());
                 b->CreateMemZero(tempBuffer, bufferSize, blockAlignment);
                 b->CreateBr(resume);
@@ -882,11 +872,11 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
                 b->SetInsertPoint(resume);
                 PHINode * const phiBuffer = b->CreatePHI(baseBuffer->getType(), 3);
                 phiBuffer->addIncoming(baseBuffer, entry);
-                phiBuffer->addIncoming(tempBuffer, clearBuffer);
+                phiBuffer->addIncoming(tempBuffer, prepareTempBuffer);
                 baseBuffer = phiBuffer;
                 PHINode * const phiStrides = b->CreatePHI(b->getSizeTy(), 2);
                 phiStrides->addIncoming(writableStrides, entry);
-                phiStrides->addIncoming(ONE, clearBuffer);
+                phiStrides->addIncoming(ONE, prepareTempBuffer);
                 writableStrides = phiStrides;
             }
             numOfStrides = b->CreateUMin(numOfStrides, writableStrides);
@@ -963,6 +953,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         if (LLVM_UNLIKELY(tempBuffer == nullptr)) {
             continue;
         }
+
         Value * const baseBuffer = mStreamSetOutputBaseAddress[i];
         assert ("stack corruption likely" && (tempBuffer->getType() == baseBuffer->getType()));
         const auto & name = mStreamSetOutputs[i].getName();
@@ -993,22 +984,16 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
 
     //  We've dealt with the partial block processing and copied information back into the
     //  actual buffers.  If this isn't the final block, loop back for more multiblock processing.
-    if (hasNoTerminateAttribute()) {
-        b->CreateCondBr(mIsFinal, segmentDone, strideDone);
-    } else {
-        BasicBlock * const setTermination = b->CreateBasicBlock("setTermination");
-        b->CreateCondBr(mIsFinal, setTermination, strideDone);
+    BasicBlock * const setTermination = b->CreateBasicBlock("setTermination");
+    b->CreateCondBr(mIsFinal, setTermination, strideDone);
 
-        b->SetInsertPoint(setTermination);
-        b->setTerminationSignal();
-        b->CreateBr(segmentDone);        
-    }
+    b->SetInsertPoint(setTermination);
+    b->setTerminationSignal();
+    b->CreateBr(segmentDone);
 
     /// STRIDE DONE
     strideDone->moveAfter(b->GetInsertBlock());
     b->SetInsertPoint(strideDone);
-
-    b->CreateAssertZero(mIsFinal, "stride done cannot process the final block");
 
     // do we have enough data for another stride?
     Value * hasMoreStrides = b->getTrue();
@@ -1018,11 +1003,11 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         Value * const avail = mInitialAvailableItemCount[i];
         Value * const processed = b->getProcessedItemCount(name);
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            b->CreateAssert(b->CreateICmpULE(processed, avail), getName() + "." + name + ": processed data exceeds available data");
+            b->CreateAssert(b->CreateICmpULE(processed, avail), getName() + ": " + name + " processed data exceeds available data");
         }
         Value * remaining = b->CreateSub(avail, processed);
-        if (LLVM_UNLIKELY(input.hasAttribute(AttributeId::LookAhead))) {
-            Constant * const lookahead = b->getSize(input.findAttribute(AttributeId::LookAhead).amount());
+        if (LLVM_UNLIKELY(input.hasLookahead())) {
+            Constant * const lookahead = b->getSize(input.getLookahead());
             remaining = b->CreateSelect(b->CreateICmpULT(lookahead, remaining), b->CreateSub(remaining, lookahead), ZERO);
         }
         Value * const remainingStrides = b->CreateUDiv(remaining, inputStrideSize[i]);
@@ -1041,25 +1026,40 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         if (LLVM_LIKELY(outputStrideSize[i] != nullptr)) {
             Value * const consumed = b->getConsumedItemCount(name);
             if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-                b->CreateAssert(b->CreateICmpULE(consumed, produced), getName() + "." + name + ": consumed data exceeds produced data");
+                b->CreateAssert(b->CreateICmpULE(consumed, produced),
+                                getName() + ": " + name + " consumed data exceeds produced data");
             }
             Value * const unconsumed = b->CreateSub(produced, consumed);
             Value * const capacity = b->getCapacity(name);
             if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-                b->CreateAssert(b->CreateICmpULE(unconsumed, capacity), getName() + "." + name + ": unconsumed data exceeds capacity");
+                b->CreateAssert(b->CreateICmpULE(unconsumed, capacity),
+                                getName() + ": " + name + " unconsumed data exceeds capacity");
             }
             Value * const remaining = b->CreateSub(capacity, unconsumed);
             Value * const remainingStrides = b->CreateUDiv(remaining, outputStrideSize[i]);
             Value * const hasRemainingStrides = b->CreateICmpNE(remainingStrides, ZERO);
+
             hasMoreStrides = b->CreateAnd(hasMoreStrides, hasRemainingStrides);
         }
         // Do copybacks if necessary.
         if (mStreamSetOutputBuffers[i]->supportsCopyBack() && requiresCopyBack(rate)) {
-            b->CreateCopyBack(name, mInitialProducedItemCount[i], produced);
+            BasicBlock * const copyBack = b->CreateBasicBlock(name + "CopyBack");
+            BasicBlock * const done = b->CreateBasicBlock(name + "CopyBackDone");
+
+            Value * const bufferSize = b->getBufferedSize(name);
+            Value * const prior = b->CreateURem(mInitialProducedItemCount[i], bufferSize);
+            Value * const current = b->CreateURem(produced, bufferSize);
+            b->CreateUnlikelyCondBr(b->CreateICmpUGT(prior, current), copyBack, done);
+
+            b->SetInsertPoint(copyBack);
+            Value * const baseAddress = b->getBaseAddress(name);
+            const auto copyAlignment = getItemAlignment(mStreamSetOutputs[i]);
+            b->CreateStreamCpy(name, baseAddress, ZERO, baseAddress, bufferSize, current, copyAlignment);
+            b->CreateBr(done);
+
+            b->SetInsertPoint(done);
         }
     }
-
-    // b->CreateAssertZero(b->CreateOr(b->CreateNot(initiallyFinal), hasMoreStrides), getName() + " does not have enough output space for the final stride");
 
     b->CreateCondBr(hasMoreStrides, segmentLoop, segmentDone);
 
@@ -1343,7 +1343,11 @@ Value * BlockOrientedKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
         mStreamSetOutputBaseAddress[i] = baseOutputAddress[i];
     }
 
-    writeFinalBlockMethod(b, getRemainingItems(b));
+    Value * const remainingItems = getRemainingItems(b);
+
+//    b->CallPrintInt(getName() + "_remainingItems", remainingItems);
+
+    writeFinalBlockMethod(b, remainingItems);
 
     b->CreateBr(segmentDone);
 
@@ -1550,7 +1554,6 @@ Kernel::Kernel(std::string && kernelName,
                   , std::move(internal_scalars))
 , mCurrentMethod(nullptr)
 , mAvailablePrincipalItemCount(nullptr)
-, mNoTerminateAttribute(false)
 , mIsGenerated(false)
 , mStride(0)
 , mIsFinal(nullptr)

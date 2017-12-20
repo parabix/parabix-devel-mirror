@@ -75,9 +75,6 @@ static cl::opt<unsigned, true> ThreadNumOption("thread-num", cl::location(Thread
                                           cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
 
 
-static cl::opt<bool, true> pipelineParallelOption("enable-pipeline-parallel", cl::location(PipelineParallel), cl::init(false),
-                                                  cl::desc("Enable multithreading with pipeline parallelism."), cl::cat(CodeGenOptions));
-    
 static cl::opt<bool, true> segmentPipelineParallelOption("enable-segment-pipeline-parallel", cl::location(SegmentPipelineParallel),
                                                          cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
 
@@ -88,8 +85,6 @@ static cl::opt<unsigned, true> GroupNumOption("group-num", cl::location(GroupNum
                                          cl::desc("NUmber of groups declared on GPU"), cl::value_desc("positive integer"), cl::cat(CodeGenOptions));
 
 CodeGenOpt::Level OptLevel;
-
-bool PipelineParallel;
 
 bool SegmentPipelineParallel;
 

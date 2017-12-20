@@ -88,10 +88,6 @@ public:
     // The number of items that cam be linearly accessed from a given logical stream position.
     virtual llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPos, llvm::Value * avail, bool reverse = false) const;
 
-    virtual llvm::Value * getLinearlyCopyableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPos, llvm::Value * avail, bool reverse = false) const {
-        return getLinearlyAccessibleItems(b, handle, fromPos, avail, reverse);
-    }
-    
     void createBlockCopy(IDISA::IDISA_Builder * const b, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * blocksToCopy) const;
 
     virtual void createBlockAlignedCopy(IDISA::IDISA_Builder * const b, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy, const unsigned alignment = 1) const;
@@ -105,8 +101,6 @@ public:
     size_t overflowSize() const {
         return mOverflowBlocks;
     }
-
-    virtual void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) const;
     
     virtual ~StreamSetBuffer() = 0;
 
@@ -220,8 +214,6 @@ public:
 
     llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * absolutePosition) const final;
 
-    llvm::Value * getLinearlyCopyableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPos, llvm::Value * avail, bool reverse = false) const final;
-
 protected:
 
     CircularBuffer(const BufferKind kind, const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace);
@@ -242,12 +234,8 @@ public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::CircularCopybackBuffer;}
     
     CircularCopybackBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace = 0);
-    
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
-    
+       
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
-
-    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) const override;
 
 };
     
@@ -259,11 +247,7 @@ public:
        
     void createBlockAlignedCopy(IDISA::IDISA_Builder * const b, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * itemsToCopy, const unsigned alignment = 1) const override;
 
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
-    
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
-
-    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) const override;
 
 protected:
     llvm::Value * getBlockAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * blockIndex) const override;
@@ -329,8 +313,6 @@ public:
     llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
     
     void doubleCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle);
-
-    void genCopyBackLogic(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * priorProduced, llvm::Value * newProduced, const std::string) const override;
 
 protected:
     llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;

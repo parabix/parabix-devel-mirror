@@ -174,16 +174,18 @@ Value * LZ4ByteStreamDecoderKernel::generateMultiBlockLogic(const std::unique_pt
 
 LZ4ByteStreamDecoderKernel::LZ4ByteStreamDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, size_t bufferSize)
 : MultiBlockKernel("lz4ByteStreamDecoder",
-    // Inputs
-    {Binding{iBuilder->getStreamSetTy(2, 32), "literalIndexes"},
-     Binding{iBuilder->getStreamSetTy(2, 32), "matchIndexes"},
-     Binding{iBuilder->getStreamSetTy(1, 8), "inputStream", FixedRate(), { Deferred(), LookBehind(65536) }}},
-    // Outputs
-    {Binding{iBuilder->getStreamSetTy(1, 8), "outputStream", UnknownRate()}},
-    // Arguments
-    {},
-    {},
-    {}),
- mBufferSize(bufferSize) {
-    setNoTerminateAttribute(true);
+// Inputs
+{Binding{iBuilder->getStreamSetTy(2, 32), "literalIndexes"},
+ Binding{iBuilder->getStreamSetTy(2, 32), "matchIndexes"},
+ Binding{iBuilder->getStreamSetTy(1, 8), "inputStream", FixedRate(), { Deferred(), Misaligned(), LookBehind(65536) }}},
+// Outputs
+{Binding{iBuilder->getStreamSetTy(1, 8), "outputStream", UnknownRate()}},
+// Arguments
+{},
+{},
+{})
+, mBufferSize(bufferSize) {
+
 }
+
+

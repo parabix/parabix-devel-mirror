@@ -61,12 +61,12 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     sourceK->setInitialArguments({buffer, length});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
     
-    StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize + 1);
+    StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize);
     kernel::Kernel * s2pk = pxDriver.addKernelInstance<kernel::S2PKernel>(idb);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
     kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, 8);
-    StreamSetBuffer * LineFeedStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize + 1);
+    StreamSetBuffer * LineFeedStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
     pxDriver.makeKernelCall(linefeedK, {BasisBits}, {LineFeedStream});
 
     kernel::Kernel * linebreakK = pxDriver.addKernelInstance<kernel::LineBreakKernelBuilder>(idb, 8);

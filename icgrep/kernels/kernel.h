@@ -109,10 +109,6 @@ public:
 
     void finalizeInstance(const std::unique_ptr<kernel::KernelBuilder> & idb) final;
 
-    bool hasNoTerminateAttribute() const {
-        return mNoTerminateAttribute;
-    }
-
     StreamPort getStreamPort(const std::string & name) const;
 
     const Binding & getBinding(const std::string & name) const;
@@ -220,10 +216,6 @@ protected:
           Bindings && scalar_outputs,
           Bindings && internal_scalars);
 
-    void setNoTerminateAttribute(const bool noTerminate = true) {
-        mNoTerminateAttribute = noTerminate;
-    }
-
     llvm::Value * getPrincipalItemCount() const {
         return mAvailablePrincipalItemCount;
     }
@@ -296,7 +288,6 @@ protected:
 
     llvm::Function *                    mCurrentMethod;
     llvm::Value *                       mAvailablePrincipalItemCount;
-    bool                                mNoTerminateAttribute;
     bool                                mIsGenerated;
     unsigned                            mStride;
     llvm::Value *                       mIsFinal;

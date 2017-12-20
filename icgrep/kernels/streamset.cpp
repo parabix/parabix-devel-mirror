@@ -162,7 +162,11 @@ Value * StreamSetBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b
         return b->CreateSelect(b->CreateICmpEQ(fromPosition, b->getSize(0)), bufferSize, fromPosition);
     }
     consumed = b->CreateURem(consumed, bufferSize);
-    Value * const limit = b->CreateSelect(b->CreateICmpULE(consumed, fromPosition), bufferSize, consumed);
+    Constant * capacity = bufferSize;
+    if (mOverflowBlocks) {
+        capacity = ConstantInt::get(fromPosition->getType(), (mBufferBlocks + mOverflowBlocks) * b->getStride());
+    }
+    Value * const limit = b->CreateSelect(b->CreateICmpULE(consumed, fromPosition), capacity, consumed);
     return b->CreateNUWSub(limit, fromPosition);
 }
 
@@ -216,10 +220,6 @@ void StreamSetBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const b, Val
             b->CreateMemCpy(strmTargetPtr, strmSourcePtr, partialCopyBytesPerStream, alignment);
         }
     }
-}
-
-void StreamSetBuffer::genCopyBackLogic(IDISA::IDISA_Builder * const b, Value * const handle, Value * priorProduced, Value * newProduced, const std::string Name) const {
-    report_fatal_error("Copy back not supported for this buffer type:" + Name);
 }
 
 // Source File Buffer
@@ -337,16 +337,6 @@ Value * CircularBuffer::getBlockAddress(IDISA::IDISA_Builder * const b, Value * 
     return b->CreateGEP(getBaseAddress(b, handle), modBufferSize(b, blockIndex));
 }
 
-Value * CircularBuffer::getLinearlyCopyableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value * availItems, bool reverse) const {
-//    Constant * bufSize = ConstantInt::get(priorProduced->getType(), mBufferBlocks * b->getBitBlockWidth());
-//    Value * from = b->CreateURem(fromPosition, bufSize);
-//    Value * avail = b->CreateURem(availItems, bufSize);
-//    Value * wraparound = b->CreateICmpUGT(from, avail);
-
-
-    return nullptr;
-}
-
 Value * CircularBuffer::getRawItemPointer(IDISA::IDISA_Builder * const b, Value * const handle, Value * absolutePosition) const {
     Value * ptr = getBaseAddress(b, handle);
     Value * relativePosition = b->CreateURem(absolutePosition, ConstantInt::get(absolutePosition->getType(), mBufferBlocks * b->getBitBlockWidth()));
@@ -371,35 +361,8 @@ void CircularCopybackBuffer::allocateBuffer(const std::unique_ptr<kernel::Kernel
     mStreamSetBufferPtr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(size), ty->getPointerTo());
 }
 
-Value * CircularCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value * consumed, bool reverse) const {
-    Value * writableProper = StreamSetBuffer::getLinearlyWritableItems(b, handle, fromPosition, consumed, reverse);
-    if (reverse) return writableProper;
-    return b->CreateAdd(writableProper, b->getSize(mOverflowBlocks * b->getBitBlockWidth()));
-}
-
-void CircularCopybackBuffer::genCopyBackLogic(IDISA::IDISA_Builder * const b, Value * const handle, Value * priorProduced, Value * newProduced, const std::string Name) const {
-    assert (priorProduced->getType() == newProduced->getType());
-    Constant * bufSize = ConstantInt::get(priorProduced->getType(), mBufferBlocks * b->getBitBlockWidth());
-    Value * priorBufPos = b->CreateURem(priorProduced, bufSize);
-    Value * newBufPos = b->CreateURem(newProduced, bufSize);
-    BasicBlock * copyBack = b->CreateBasicBlock(Name + "_circularCopyBack");
-    BasicBlock * done = b->CreateBasicBlock(Name + "_circularCopyBackDone");
-    Value * wraparound = b->CreateICmpUGT(priorBufPos, newBufPos);
-    b->CreateCondBr(wraparound, copyBack, done);
-
-    b->SetInsertPoint(copyBack);
-    Value * const baseAddress = getBaseAddress(b, handle);
-    Value * overflowAddress = b->CreateGEP(baseAddress, b->getInt32(mBufferBlocks));
-    // copyStream(b, baseAddress, b->getSize(0), overflowAddress, b->getSize(0), newBufPos);
-    createBlockAlignedCopy(b, baseAddress, overflowAddress, newBufPos);
-    b->CreateBr(done);
-
-    b->SetInsertPoint(done);
-}
-
 
 // SwizzledCopybackBuffer Buffer
-
 void SwizzledCopybackBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) {
     Type * const ty = getType();
     Constant * size = ConstantExpr::getSizeOf(ty);
@@ -447,28 +410,6 @@ void SwizzledCopybackBuffer::createBlockAlignedCopy(IDISA::IDISA_Builder * const
 
 Value * SwizzledCopybackBuffer::getBlockAddress(IDISA::IDISA_Builder * const b, Value * const handle, Value * blockIndex) const {
     return b->CreateGEP(getBaseAddress(b, handle), modBufferSize(b, blockIndex));
-}
-
-Value * SwizzledCopybackBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value *consumed, bool reverse) const {
-    Value * writableProper = StreamSetBuffer::getLinearlyWritableItems(b, handle, fromPosition, consumed, reverse);
-    if (reverse) return writableProper;
-    return b->CreateAdd(writableProper, b->getSize(mOverflowBlocks * b->getBitBlockWidth()));
-}
-
-void SwizzledCopybackBuffer::genCopyBackLogic(IDISA::IDISA_Builder * const b, Value * const handle, Value * priorProduced, Value * newProduced, const std::string Name) const {
-    assert (priorProduced->getType() == newProduced->getType());
-    Constant * bufSize = ConstantInt::get(priorProduced->getType(), mBufferBlocks * b->getBitBlockWidth());
-    Value * priorBufPos = b->CreateURem(priorProduced, bufSize);
-    Value * newBufPos = b->CreateURem(newProduced, bufSize);
-    BasicBlock * copyBack = b->CreateBasicBlock(Name + "_swizzledCopyBack");
-    BasicBlock * done = b->CreateBasicBlock(Name + "_swizzledCopyBackDone");
-    Value * wraparound = b->CreateICmpUGT(priorBufPos, newBufPos);
-    b->CreateCondBr(wraparound, copyBack, done);
-    b->SetInsertPoint(copyBack);
-    Value * overFlowAreaPtr = b->CreateGEP(handle, b->getSize(mBufferBlocks));
-    createBlockAlignedCopy(b, handle, overFlowAreaPtr, newBufPos);
-    b->CreateBr(done);
-    b->SetInsertPoint(done);
 }
 
 // Expandable Buffer
@@ -706,28 +647,6 @@ Value * DynamicBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, 
 Value * DynamicBuffer::getBufferedSize(IDISA::IDISA_Builder * const b, Value * const handle) const {
     Value * ptr = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(Field::WorkingBlocks))});
     return b->CreateMul(b->CreateLoad(ptr), b->getSize(b->getBitBlockWidth()));
-}
-
-void DynamicBuffer::genCopyBackLogic(IDISA::IDISA_Builder * const b, Value * const handle, Value * priorProducedCount, Value * newProducedCount, const std::string Name) const {
-    assert (priorProducedCount->getType() == newProducedCount->getType());    
-    Value * workingBlocks = b->CreateLoad(b->CreateGEP(handle, {b->getInt32(0), b->getInt32(int(DynamicBuffer::Field::WorkingBlocks))}));
-    assert (workingBlocks->getType() == newProducedCount->getType());
-    Value * bufSize = b->CreateMul(workingBlocks, ConstantInt::get(workingBlocks->getType(), b->getBitBlockWidth()));
-    Value * priorBufPos = b->CreateURem(priorProducedCount, bufSize);
-    Value * newBufPos = b->CreateURem(newProducedCount, bufSize);
-    BasicBlock * copyBack = b->CreateBasicBlock(Name + "_dynamicCopyBack");
-    BasicBlock * done = b->CreateBasicBlock(Name + "_dynamicCopyBackDone");
-
-    Value * wraparound = b->CreateICmpUGT(priorBufPos, newBufPos);
-    b->CreateCondBr(wraparound, copyBack, done);
-
-    b->SetInsertPoint(copyBack);
-    Value * bufBasePtr = getBaseAddress(b, handle);
-    Value * overFlowAreaPtr = b->CreateGEP(bufBasePtr, workingBlocks);
-    createBlockAlignedCopy(b, bufBasePtr, overFlowAreaPtr, newBufPos);
-    b->CreateBr(done);
-
-    b->SetInsertPoint(done);
 }
 
 void DynamicBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) {

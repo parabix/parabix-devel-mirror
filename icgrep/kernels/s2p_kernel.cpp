@@ -207,7 +207,8 @@ S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, bool aligned)
     {Binding{b->getStreamSetTy(1, 8), "byteStream", FixedRate(), Principal()}},
     {Binding{b->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
   mAligned(aligned) {
-    setNoTerminateAttribute(true);
+    if (!aligned) {
+        mStreamSetInputs[0].addAttribute(Misaligned());
+    }
 }
-
 }

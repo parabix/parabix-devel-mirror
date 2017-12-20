@@ -104,6 +104,11 @@ struct Attribute {
 
         /** INPUT/OUTPUT STREAM ATTRIBUTES **/
 
+        Misaligned,
+
+        // Assume that we cannot statically compute the alignment of this stream set and
+        // perform any operations accordingly
+
         BlockSize, /// NOT DONE
 
         // A BlockSize(K) attribute, where K=2^k for some value of k>=4 declares
@@ -198,12 +203,6 @@ struct Attribute {
         // a MultiBlock kernel will select the *maximum* input item count as it's
         // principle item length and zero-extend the streams accordingly.
 
-        CanTerminate,
-
-        // Informs the pipeline that this kernel can pass a "termination" message to it.
-        // in which case the pipeline will propogate the message to the subsequent
-        // kernels and end the program once the final kernel has returned its result.
-
     };
 
     bool isAdd() const {
@@ -252,6 +251,7 @@ protected:
     friend Attribute LookAhead(const unsigned);
     friend Attribute LookBehind(const unsigned);
     friend Attribute Deferred();
+    friend Attribute Misaligned();
     friend Attribute ConditionalRegionBegin();
     friend Attribute ConditionalRegionEnd();
 
@@ -328,6 +328,10 @@ inline Attribute LookBehind(const unsigned k) {
 
 inline Attribute Deferred() {
     return Attribute(Attribute::KindId::Deferred, 0);
+}
+
+inline Attribute Misaligned() {
+    return Attribute(Attribute::KindId::Misaligned, 0);
 }
 
 inline Attribute ConditionalRegionBegin() {

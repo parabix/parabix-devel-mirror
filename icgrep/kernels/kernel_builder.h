@@ -100,8 +100,6 @@ public:
 
     llvm::Value * getBlockAddress(const std::string & name, llvm::Value * const blockIndex);
 
-    void CreateCopyBack(const std::string & name, llvm::Value * from, llvm::Value * to);
-
     void setBaseAddress(const std::string & name, llvm::Value * addr);
 
     llvm::Value * getBufferedSize(const std::string & name);

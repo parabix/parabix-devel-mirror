@@ -117,19 +117,15 @@ Value * KernelBuilder::getAvailableItemCount(const std::string & name) {
 }
 
 Value * KernelBuilder::getTerminationSignal() {
-    if (mKernel->hasNoTerminateAttribute()) {
-        return getFalse();
-    }
-    return getScalarField(Kernel::TERMINATION_SIGNAL);
+    return CreateICmpNE(getScalarField(Kernel::TERMINATION_SIGNAL), getSize(0));
 }
 
 void KernelBuilder::setTerminationSignal(llvm::Value * const value) {
-    assert (!mKernel->hasNoTerminateAttribute());
     assert (value->getType() == getInt1Ty());
     if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
         CallPrintIntToStderr(mKernel->getName() + ": setTerminationSignal", value);
     }
-    setScalarField(Kernel::TERMINATION_SIGNAL, value);
+    setScalarField(Kernel::TERMINATION_SIGNAL, CreateZExt(value, getSizeTy()));
 }
 
 Value * KernelBuilder::getLinearlyAccessibleItems(const std::string & name, Value * fromPosition, Value * avail, bool reverse) {
@@ -141,11 +137,6 @@ Value * KernelBuilder::getLinearlyWritableItems(const std::string & name, Value 
     const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
     return buf->getLinearlyWritableItems(this, getStreamHandle(name), fromPosition, getConsumedItemCount(name), reverse);
 }
-
-//Value * KernelBuilder::getLinearlyCopyableItems(const std::string & name, Value * fromPosition, bool reverse) {
-//    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-//    return buf->getLinearlyCopyableItems(this, getStreamHandle(name), fromPosition, reverse);
-//}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isConstantZero
@@ -195,25 +186,27 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
     assert (isConstantZero(targetOffset) || isConstantZero(sourceOffset));
 
     const StreamSetBuffer * const buf = mKernel->getAnyStreamSetBuffer(name);
+
     const auto itemWidth = getItemWidth(buf->getBaseType());
     assert ("invalid item width" && is_power_2(itemWidth));
     const auto blockWidth = getBitBlockWidth();
     // Although our item width may be n bits, if we know we're always processing m items per block, our field width
     // (w.r.t the stream copy) would be n*m. By taking this into account we can optimize and simplify the copy code.
     const auto fieldWidth = getFieldWidth(itemWidth * itemAlignment, blockWidth);
-
-//    CallPrintInt(mKernel->getName() + "_" + name + "_target", target);
-//    CallPrintInt(mKernel->getName() + "_" + name + "_targetOffset", targetOffset);
-//    CallPrintInt(mKernel->getName() + "_" + name + "_source", source);
-//    CallPrintInt(mKernel->getName() + "_" + name + "_sourceOffset", sourceOffset);
-//    CallPrintInt(mKernel->getName() + "_" + name + "_itemsToCopy", itemsToCopy);
-
+    const auto alignment = (fieldWidth + 7) / 8;
     if (LLVM_LIKELY(itemWidth < fieldWidth)) {
-        Constant * const factor = getSize(fieldWidth / itemWidth);
-        CreateAssertZero(CreateURem(targetOffset, factor), "target offset is not a multiple of its field width");
-        targetOffset = CreateUDiv(targetOffset, factor);
-        CreateAssertZero(CreateURem(sourceOffset, factor), "source offset is not a multiple of its field width");
-        sourceOffset = CreateUDiv(sourceOffset, factor);
+        const auto factor = fieldWidth / itemWidth;
+        Constant * const FACTOR = getSize(factor);
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+            ConstantInt * const ALIGNMENT = getSize(alignment);
+            const auto kernelName = mKernel->getName()+ ": " + name;
+            CreateAssertZero(CreateURem(CreatePtrToInt(target, getSizeTy()), ALIGNMENT), kernelName + " target is misaligned (" + std::to_string(alignment) + ")");
+            CreateAssertZero(CreateURem(targetOffset, FACTOR), kernelName + " target offset is misaligned (" + std::to_string(factor) + ")");
+            CreateAssertZero(CreateURem(CreatePtrToInt(source, getSizeTy()), ALIGNMENT), kernelName + " source is misaligned (" + std::to_string(alignment) + ")");
+            CreateAssertZero(CreateURem(sourceOffset, FACTOR), kernelName + " source offset is misaligned (" + std::to_string(factor) + ")");
+        }
+        targetOffset = CreateUDiv(targetOffset, FACTOR);
+        sourceOffset = CreateUDiv(sourceOffset, FACTOR);
     }
 
     /*
@@ -239,8 +232,6 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
 
     */
-
-    const auto alignment = (fieldWidth + 7) / 8;
 
     Type * const fieldWidthTy = getIntNTy(fieldWidth);
 
@@ -393,11 +384,6 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
         }
 
     }
-}
-
-void KernelBuilder::CreateCopyBack(const std::string & name, llvm::Value * from, llvm::Value * to) {
-    const StreamSetBuffer * const buf = mKernel->getAnyStreamSetBuffer(name);
-    buf->genCopyBackLogic(this, getStreamHandle(name), from, to, name);
 }
 
 Value * KernelBuilder::getConsumerLock(const std::string & name) {

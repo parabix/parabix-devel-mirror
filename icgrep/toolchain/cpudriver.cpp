@@ -118,9 +118,7 @@ void ParabixDriver::generatePipelineIR() {
     for (Kernel * const k : mPipeline) {
         k->initializeInstance(iBuilder);
     }
-    if (codegen::PipelineParallel) {
-        generateParallelPipeline(iBuilder, mPipeline);
-    } else if (codegen::SegmentPipelineParallel) {
+    if (codegen::SegmentPipelineParallel) {
         generateSegmentParallelPipeline(iBuilder, mPipeline);
     } else {
         generatePipelineLoop(iBuilder, mPipeline);

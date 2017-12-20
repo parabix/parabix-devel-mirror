@@ -100,11 +100,11 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = 8;
 
-    StreamSetBuffer * BasisBits = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(encodingBits, 1), segmentSize * bufferSegments + 1);
+    StreamSetBuffer * BasisBits = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(encodingBits, 1), segmentSize * bufferSegments);
     kernel::Kernel * s2pk = mGrepDriver->addKernelInstance<kernel::S2PKernel>(idb);
     mGrepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
-    StreamSetBuffer * LineFeedStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments + 1);
+    StreamSetBuffer * LineFeedStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
     kernel::Kernel * linefeedK = mGrepDriver->addKernelInstance<kernel::LineFeedKernelBuilder>(idb, encodingBits);
     mGrepDriver->makeKernelCall(linefeedK, {BasisBits}, {LineFeedStream});
 

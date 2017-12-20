@@ -228,13 +228,13 @@ void InvertMatchesKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuil
 
 InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder)
 : BlockOrientedKernel("Invert",
-    // Inputs
-    {Binding{builder->getStreamSetTy(1, 1), "matchedLines"}, Binding{builder->getStreamSetTy(1, 1), "lineBreaks"}},
-    // Outputs
-    {Binding{builder->getStreamSetTy(1, 1), "nonMatches"}},
-    // Input/Output Scalars and internal state
-    {}, {}, {}) {
-    setNoTerminateAttribute(true);    
+// Inputs
+{Binding{builder->getStreamSetTy(1, 1), "matchedLines"}, Binding{builder->getStreamSetTy(1, 1), "lineBreaks"}},
+// Outputs
+{Binding{builder->getStreamSetTy(1, 1), "nonMatches"}},
+// Input/Output Scalars and internal state
+{}, {}, {}) {
+
 }
 
 

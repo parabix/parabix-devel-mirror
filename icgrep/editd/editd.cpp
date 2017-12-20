@@ -338,6 +338,7 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 
     auto CCResults = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputStream);
     auto ccck = pxDriver.addKernelInstance<PreprocessKernel>(iBuilder);
+    // NOTE: CCResults are never consumed because they are written directly into an external buffer. This may make analysis difficult.
     pxDriver.makeKernelCall(ccck, {BasisBits}, {CCResults});
 
     pxDriver.generatePipelineIR();
