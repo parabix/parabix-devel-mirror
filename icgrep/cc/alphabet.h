@@ -9,7 +9,9 @@
 
 #include <string>
 #include <UCD/unicode_set.h>
+#include <vector>
 
+namespace cc {
 //
 // An Alphabet is the universe of characters used to form strings in 
 // a given language, together with a mapping of those characters to 
@@ -18,52 +20,58 @@
 
 class Alphabet {
 public:
-
-    //  Alphabets may simply be a subset of Unicode characters including all
-    //  characters up to and including a given maximum Unicode codepoint.
-    
-    Alphabet(std::string alphabetName, UCD::codepoint_t maxChar) :
-        mAlphabetName(alphabetName), mCharSet(UCD::UnicodeSet(0, maxChar)) {}
-        
     const std::string & getName() const { return mAlphabetName;}
+protected:
+    Alphabet(std::string alphabetName) : mAlphabetName(alphabetName) {}
+private:
+    std::string mAlphabetName;
+};
+
+class UnicodeMappableAlphabet : public Alphabet {
+public:
+    //  Alphabets may be formed by some subset of Unicode characters, together
+    //  with a mapping to and from Unicode.  The mapping is defined in terms of the
+    //  number of character codes unicodeCommon such that all character codes in the range
+    //  0..unicodeCommon - 1 map to the same numeric value as the corresponding Unicode
+    //  codepoint, together with a vector defining the Unicode codepoints for consecutive
+    //  character codes (if any) above unicodeCommon - 1.
     
-    const UCD::UnicodeSet & getSet() const { return mCharSet;}
+    UnicodeMappableAlphabet(std::string alphabetName,
+                            unsigned unicodeCommon,
+                            std::vector <UCD::codepoint_t> aboveCommon);
     
     //  The Unicode codepoint of the nth character (the character whose alphabet code is n).
-    virtual UCD::codepoint_t toUnicode(const unsigned n) const;
+    UCD::codepoint_t toUnicode(const unsigned n) const;
     
     //  The ordinal position of the character whose Unicode codepoint value is ucp.
-    virtual unsigned fromUnicode(const UCD::codepoint_t ucp) const;
+    unsigned fromUnicode(const UCD::codepoint_t ucp) const;
 
 protected:
-    std::string mAlphabetName;
-    UCD::UnicodeSet mCharSet;
+    UCD::codepoint_t mCharSet;
+    UCD::codepoint_t mUnicodeCommon;
+    std::vector <UCD::codepoint_t> mAboveCommon;
 };
 
-
-Alphabet Unicode("Unicode", UCD::UNICODE_MAX);
-
-Alphabet ASCII("ASCII", 0x7F);
-
-Alphabet ISO_Latin1("ISO_Latin1", 0xFF);
-
-
-// Extended ASCII alphabets can be defined with a table of 128 entries defining 
-// the codepoints for codes in the 0x80 to 0xFF range.
-//
-// ExtendedASCII<uint16_t> uses compact tables of 16-bit entries, while
-// ExtendedASCII<uint32_t> uses tables of 32-bit entries, necessary if any
-// codepoint is above 0xFFFF.
-
-template <class uint_t> class ExtendedASCII : public Alphabet {
+class CodeUnitAlphabet : public Alphabet {
 public:
-    ExtendedASCII(std::string alphabetName, const uint_t (& extendedTable)[128]);
-    UCD::codepoint_t toUnicode(const unsigned n) const final;
-    unsigned fromUnicode(const UCD::codepoint_t ucp) const final;
+    CodeUnitAlphabet(std::string alphabetName, uint8_t codeUnitBits);
+    uint8_t getCodeUnitBitWidth() { return mCodeUnitBits;}
+    
 private:
-    const uint_t (& mExtendedCharacterTable)[128];
+    uint8_t mCodeUnitBits;
 };
 
+//  Some important alphabets are predefined.
+
+const static UnicodeMappableAlphabet Unicode("Unicode", UCD::UNICODE_MAX, {});
+
+const static UnicodeMappableAlphabet ASCII("ASCII", 0x7F, {});
+
+const static UnicodeMappableAlphabet ISO_Latin1("ISO_Latin1", 0xFF, {});
+
+const static CodeUnitAlphabet Byte("Byte", 8);
+
+}
 
 #endif // ALPHABET_H
 

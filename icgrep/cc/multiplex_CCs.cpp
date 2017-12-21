@@ -7,6 +7,9 @@
 #include <UCD/unicode_set.h>
 #include <re/re_cc.h>
 #include "boost/dynamic_bitset.hpp"
+#include <cc/multiplex_CCs.h>
+
+namespace cc {
 
 //
 // Breakpoints of a set of character classes (CCs): each codepoint c such that
@@ -103,3 +106,20 @@ void doMultiplexCCs(const std::vector<const re::CC *> & CCs,
         }
     }
 }
+
+
+
+MultiplexedAlphabet::MultiplexedAlphabet(std::string alphabetName, const std::vector<const re::CC *> CCs) 
+    : Alphabet(alphabetName) {
+        cc::doMultiplexCCs(CCs, mExclusiveSetIDs, mMultiplexedCCs);
+}
+
+std::vector<std::vector<unsigned>> MultiplexedAlphabet::getExclusiveSetIDs() { 
+    return mExclusiveSetIDs;
+}
+
+std::vector<re::CC *> MultiplexedAlphabet::getMultiplexedCCs() {
+    return mMultiplexedCCs;
+}
+}
+

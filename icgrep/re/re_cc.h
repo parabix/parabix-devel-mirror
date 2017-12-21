@@ -9,6 +9,7 @@
 
 #include "re_re.h"
 #include <UCD/unicode_set.h>
+#include <cc/alphabet.h>
 
 namespace re {
 
@@ -27,6 +28,7 @@ public:
         return false;
     }
 
+    const cc::Alphabet * getAlphabet() const { return mAlphabet;}
 
     std::string canonicalName(const CC_type type) const;
 
@@ -41,31 +43,34 @@ public:
     virtual ~CC() {}
 
 protected:
-    friend CC * makeCC();
-    friend CC * makeCC(const codepoint_t codepoint);
-    friend CC * makeCC(const codepoint_t lo, const codepoint_t hi);
+    friend CC * makeCC(const cc::Alphabet * alphabet);
+    friend CC * makeCC(const codepoint_t codepoint, const cc::Alphabet * alphabet);
+    friend CC * makeCC(const codepoint_t lo, const codepoint_t hi, const cc::Alphabet * alphabet);
     friend CC * makeCC(const CC * cc1, const CC * cc2);
-    friend CC * makeCC(std::initializer_list<interval_t> list);
-    friend CC * makeCC(std::vector<interval_t> && list);
-    friend CC * makeCC(UCD::UnicodeSet && set);
+    friend CC * makeCC(std::initializer_list<interval_t> list, const cc::Alphabet * alphabet);
+    friend CC * makeCC(std::vector<interval_t> && list, const cc::Alphabet * alphabet);
+    friend CC * makeCC(UCD::UnicodeSet && set, const cc::Alphabet * alphabet);
     friend CC * subtractCC(const CC * a, const CC * b);
     friend CC * intersectCC(const CC * a, const CC * b);
 
-    CC();
+    CC(const cc::Alphabet * alphabet);
 
     CC(const CC & cc);
 
-    CC(const codepoint_t codepoint);
+    CC(const codepoint_t codepoint, const cc::Alphabet * alphabet);
 
-    explicit CC(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint);
+    explicit CC(const codepoint_t lo_codepoint, const codepoint_t hi_codepoint, const cc::Alphabet * alphabet);
 
     explicit CC(const CC * cc1, const CC * cc2);
 
-    CC(const UCD::UnicodeSet && set);
+    CC(const UCD::UnicodeSet && set, const cc::Alphabet * alphabet);
 
-    CC(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end);
+    CC(std::initializer_list<interval_t>::iterator begin, std::initializer_list<interval_t>::iterator end, const cc::Alphabet * alphabet);
 
-    CC(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end);
+    CC(const std::vector<interval_t>::iterator begin, const std::vector<interval_t>::iterator end, const cc::Alphabet * alphabet);
+private:
+    const cc::Alphabet * mAlphabet;
+    
 
 };
 
@@ -99,40 +104,42 @@ inline codepoint_t hi_codepoint(const CC::iterator i) {
  * @return a CC object
  */
 
-inline CC * makeCC() {
-    return new CC();
+inline CC * makeCC(const cc::Alphabet * alphabet = &cc::Unicode) {
+    return new CC(alphabet);
 }
 
-inline CC * makeCC(const codepoint_t codepoint) {
-    return new CC(codepoint);
+    inline CC * makeCC(const codepoint_t codepoint, const cc::Alphabet * alphabet = &cc::Unicode) {
+    return new CC(codepoint, alphabet);
 }
 
-inline CC * makeCC(const codepoint_t lo, const codepoint_t hi) {
-    return new CC(lo, hi);
+inline CC * makeCC(const codepoint_t lo, const codepoint_t hi, const cc::Alphabet * alphabet = &cc::Unicode) {
+    return new CC(lo, hi, alphabet);
 }
 
 inline CC * makeCC(const CC * cc1, const CC * cc2) {
     return new CC(cc1, cc2);
 }
 
-inline CC * makeCC(std::initializer_list<interval_t> list) {
-    return new CC(list.begin(), list.end());
+inline CC * makeCC(std::initializer_list<interval_t> list, const cc::Alphabet * alphabet = &cc::Unicode) {
+    return new CC(list.begin(), list.end(), alphabet);
 }
 
-inline CC * makeCC(std::vector<interval_t> && list) {
-    return new CC(list.begin(), list.end());
+inline CC * makeCC(std::vector<interval_t> && list, const cc::Alphabet * alphabet = &cc::Unicode) {
+    return new CC(list.begin(), list.end(), alphabet);
 }
 
-inline CC * makeCC(UCD::UnicodeSet && set) {
-    return new CC(std::move(set));
+inline CC * makeCC(UCD::UnicodeSet && set, const cc::Alphabet * alphabet = &cc::Unicode) {
+    return new CC(std::move(set), alphabet);
 }
 
 inline CC * subtractCC(const CC * a, const CC * b) {
-    return new CC(*a - *b);
+    //assert (a->getAlphabet() == b->getAlphabet());
+    return new CC(*a - *b, a->getAlphabet());
 }
 
 inline CC * intersectCC(const CC * a, const CC * b) {
-    return new CC(*a & *b);
+    //assert (a->getAlphabet() == b->getAlphabet());
+    return new CC(*a & *b, a->getAlphabet());
 }
 
 }

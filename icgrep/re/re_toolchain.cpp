@@ -21,10 +21,7 @@
 #include <re/casing.h>
 #include <re/exclude_CC.h>
 #include <re/re_name_resolve.h>
-#include <re/re_collect_unicodesets.h>
-#include <re/re_multiplex.h>
 #include <re/grapheme_clusters.h>
-#include <cc/multiplex_CCs.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace pablo;
@@ -64,7 +61,7 @@ static cl::opt<int, true>
                          cl::cat(RegexOptions));
 
 
-std::pair<RE *, std::vector<re::CC *>> multiplexing_passes(RE * r) {
+RE * multiplexing_prepasses(RE * r) {
     std::vector<re::CC *> charclasses;
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowREs)) {
         errs() << "Parser:\n" << Printer_RE::PrintRE(r) << '\n';
@@ -115,14 +112,7 @@ std::pair<RE *, std::vector<re::CC *>> multiplexing_passes(RE * r) {
     if (PrintOptions.isSet(ShowAllREs)) {
         errs() << "exclude_CC:\n" << Printer_RE::PrintRE(r) << '\n';
     }
-    const auto UnicodeSets = re::collectUnicodeSets(r);
-    std::vector<std::vector<unsigned>> exclusiveSetIDs;
-    doMultiplexCCs(UnicodeSets, exclusiveSetIDs, charclasses);
-    r = multiplex(r, UnicodeSets, exclusiveSetIDs);
-    if (PrintOptions.isSet(ShowAllREs)) {
-        errs() << "multiplex:\n" << Printer_RE::PrintRE(r) << '\n';
-    }
-    return std::pair<RE *, std::vector<re::CC *>>(r, charclasses);
+    return r;
 }
 
 RE * regular_expression_passes(RE * r)  {

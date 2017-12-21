@@ -46,6 +46,8 @@
 
 using namespace parabix;
 using namespace llvm;
+using namespace cc;
+
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
 
 namespace grep {
@@ -124,10 +126,15 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     for(unsigned i = 0; i < n; ++i){
 #define USE_MULTIPLEX_CC
 #ifdef USE_MULTIPLEX_CC
-        std::tie<re::RE*, std::vector<re::CC *>>(REs[i], charclasses[i]) = multiplexing_passes(REs[i]);
-        const auto numOfCharacterClasses = charclasses[i].size();
+        
+        REs[i] = multiplexing_prepasses(REs[i]);
+        const std::vector<const re::CC *> UnicodeSets = re::collectUnicodeSets(REs[i]);
+        std::unique_ptr<cc::MultiplexedAlphabet> mpx = make_unique<MultiplexedAlphabet>("mpx", UnicodeSets);
+        REs[i] = multiplex(REs[i], UnicodeSets, mpx->getExclusiveSetIDs());
+        std::vector<re::CC *> mpx_basis = mpx->getMultiplexedCCs();
+        auto numOfCharacterClasses = mpx_basis.size();
         StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), segmentSize * bufferSegments);
-        kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(charclasses[i]));
+        kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis));
         mGrepDriver->makeKernelCall(ccK, {BasisBits}, {CharClasses});
         StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
         kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i], numOfCharacterClasses);
@@ -408,8 +415,8 @@ void * DoGrepThreadFunction(void *args) {
 }
 
 bool GrepEngine::searchAllFiles() {
-    const unsigned numOfThreads = Threads; // <- convert the command line value into an integer to allow stack allocation
-    pthread_t threads[numOfThreads];
+    const unsigned numOfThreads = std::min(static_cast<unsigned>(Threads), static_cast<unsigned>(inputFiles.size())); 
+    std::vector<pthread_t> threads(numOfThreads);
 
     for(unsigned long i = 1; i < numOfThreads; ++i) {
         const int rc = pthread_create(&threads[i], nullptr, DoGrepThreadFunction, (void *)this);
@@ -469,7 +476,8 @@ void * GrepEngine::DoGrepThreadMethod() {
     if (pthread_self() != mEngineThread) {
         pthread_exit(nullptr);
     } else {
-        return nullptr;
+        // Always perform one final cache cleanup step.
+        mGrepDriver->performIncrementalCacheCleanupStep();
     }
 }
 

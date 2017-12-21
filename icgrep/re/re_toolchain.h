@@ -31,7 +31,7 @@ const llvm::cl::OptionCategory * re_toolchain_flags();
 
 RE * regular_expression_passes(RE * re_ast);
 
-std::pair<RE *, std::vector<re::CC *>> multiplexing_passes(RE * r);
+RE * multiplexing_prepasses(RE * r);
 
 pablo::PabloAST * re2pablo_compiler(pablo::PabloKernel * kernel, RE * re_ast);
     
