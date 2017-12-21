@@ -847,5 +847,5 @@ Unterminated</datafile>
 <grepcase regexp="(?:\p{greek}\p{greek}\p{greek})" datafile="upper_lower_greek" grepcount="3"/>
 
 <grepcase regexp="\p{name=/AIRPLANE/}" datafile="../All_good" grepcount="8"/>
-<grepcase regexp="[\N{GREEK CAPITAL LETTER ALPHA}-\N{Greek capital letter UPSILON with DIALYTIKA}]" grepcount="27"/>
+<grepcase regexp="[\N{GREEK CAPITAL LETTER ALPHA}-\N{Greek capital letter UPSILON with DIALYTIKA}]" datafile="../All_good" grepcount="27"/>
 </greptest>
