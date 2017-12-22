@@ -34,7 +34,7 @@ LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::Kerne
 void LineFeedKernelBuilder::generatePabloMethod() {
     CC_Compiler ccc(this, getInput(0));
     auto & pb = ccc.getBuilder();
-    PabloAST * LF = ccc.compileCC("LF", makeCC(0x0A), pb);
+    PabloAST * LF = ccc.compileCC("LF", makeByte(0x0A), pb);
     pb.createAssign(pb.createExtract(getOutput(0), pb.getInteger(0)), LF);
 }
 
@@ -56,8 +56,8 @@ void LineBreakKernelBuilder::generatePabloMethod() {
     Integer * const ZERO = pb.getInteger(0);
 
     PabloAST * const LF = pb.createExtract(getInput(1), ZERO, "LF");
-    PabloAST * const CR = ccc.compileCC(makeCC(0x0D));
-    PabloAST * const LF_VT_FF_CR = ccc.compileCC("LF,VT,FF,CR", makeCC(0x0A, 0x0D), pb);
+    PabloAST * const CR = ccc.compileCC(makeByte(0x0D));
+    PabloAST * const LF_VT_FF_CR = ccc.compileCC("LF,VT,FF,CR", makeByte(0x0A, 0x0D), pb);
     Var * const LineBreak = pb.createVar("LineBreak", LF_VT_FF_CR);
 
     // Remove the CR of any CR+LF
@@ -73,23 +73,23 @@ void LineBreakKernelBuilder::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutput(1), ZERO), CRLF);
 
     // Check for Unicode Line Breaks
-    PabloAST * u8pfx = ccc.compileCC(makeCC(0xC0, 0xFF));
+    PabloAST * u8pfx = ccc.compileCC(makeByte(0xC0, 0xFF));
     PabloBuilder it = PabloBuilder::Create(pb);
     pb.createIf(u8pfx, it);
-    PabloAST * u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF), it);
-    PabloAST * u8pfx3 = ccc.compileCC(makeCC(0xE0, 0xEF), it);
+    PabloAST * u8pfx2 = ccc.compileCC(makeByte(0xC2, 0xDF), it);
+    PabloAST * u8pfx3 = ccc.compileCC(makeByte(0xE0, 0xEF), it);
 
     // Two-byte sequences
     PabloBuilder it2 = PabloBuilder::Create(it);
     it.createIf(u8pfx2, it2);
-    PabloAST * NEL = it2.createAnd(it2.createAdvance(ccc.compileCC(makeCC(0xC2), it2), 1), ccc.compileCC(makeCC(0x85), it2), "NEL");
+    PabloAST * NEL = it2.createAnd(it2.createAdvance(ccc.compileCC(makeByte(0xC2), it2), 1), ccc.compileCC(makeByte(0x85), it2), "NEL");
     it2.createAssign(LineBreak, it2.createOr(LineBreak, NEL));
 
     // Three-byte sequences
     PabloBuilder it3 = PabloBuilder::Create(it);
     it.createIf(u8pfx3, it3);
-    PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xE2), it3), 1), ccc.compileCC(makeCC(0x80), it3));
-    PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc.compileCC(makeCC(0xA8,0xA9), it3), "LS_PS");
+    PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc.compileCC(makeByte(0xE2), it3), 1), ccc.compileCC(makeByte(0x80), it3));
+    PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc.compileCC(makeByte(0xA8,0xA9), it3), "LS_PS");
     it3.createAssign(LineBreak, it3.createOr(LineBreak, LS_PS));
 
     PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1), "unterminatedLineAtEOF");

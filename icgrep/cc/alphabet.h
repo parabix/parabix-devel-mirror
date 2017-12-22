@@ -30,8 +30,8 @@ private:
 class UnicodeMappableAlphabet : public Alphabet {
 public:
     //  Alphabets may be formed by some subset of Unicode characters, together
-    //  with a mapping to and from Unicode.  The mapping is defined in terms of the
-    //  number of character codes unicodeCommon such that all character codes in the range
+    //  with a mapping to and from Unicode.  The mapping is defined in terms of unicodeCommon:
+    //  the number of character codes (if any) such that all character codes in the range
     //  0..unicodeCommon - 1 map to the same numeric value as the corresponding Unicode
     //  codepoint, together with a vector defining the Unicode codepoints for consecutive
     //  character codes (if any) above unicodeCommon - 1.
@@ -63,14 +63,16 @@ private:
 
 //  Some important alphabets are predefined.
 
-const extern UnicodeMappableAlphabet Unicode; 
+const extern UnicodeMappableAlphabet Unicode; // Unicode("Unicode", UCD::UNICODE_MAX, {})
 
-const extern UnicodeMappableAlphabet ASCII;
+const extern UnicodeMappableAlphabet ASCII;  // ASCII("ASCII", 0x7F, {});
 
-const extern UnicodeMappableAlphabet ISO_Latin1;
+const extern UnicodeMappableAlphabet ISO_Latin1; // ISO_Latin1("ISO_Latin1", 0xFF, {});
 
-const extern CodeUnitAlphabet Byte;
-
+const extern CodeUnitAlphabet Byte; // Byte("Byte", 8);
+    
+const extern CodeUnitAlphabet UTF16; // UTF16("UTF16", 16);
+    
 }
 
 #endif // ALPHABET_H

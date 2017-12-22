@@ -91,7 +91,7 @@ void U8U16Kernel::generatePabloMethod() {
     Var * error_mask = main.createVar("error_mask", zeroes);
 
     // The logic for processing non-ASCII bytes will be embedded within an if-hierarchy.
-    PabloAST * nonASCII = ccc.compileCC(re::makeCC(0x80, 0xFF));
+    PabloAST * nonASCII = ccc.compileCC(re::makeByte(0x80, 0xFF));
 
     // Builder for the if statement handling all non-ASCII logic
     PabloBuilder nAb = PabloBuilder::Create(main);
@@ -104,7 +104,7 @@ void U8U16Kernel::generatePabloMethod() {
     PabloAST * bit7a1 = nAb.createAdvance(u8_bits[7], 1);
 
     // Entry condition for 3 or 4 byte sequences: we have a prefix byte in the range 0xE0-0xFF.
-    PabloAST * pfx34 = ccc.compileCC(re::makeCC(0xE0, 0xFF), nAb);
+    PabloAST * pfx34 = ccc.compileCC(re::makeByte(0xE0, 0xFF), nAb);
     // Builder for the if statement handling all logic for 3- and 4-byte sequences.
     PabloBuilder p34b = PabloBuilder::Create(nAb);
     // Bits 4 through 7 of a 3-byte prefix are data bits.  They must be moved
@@ -123,15 +123,15 @@ void U8U16Kernel::generatePabloMethod() {
     // Logic for 4-byte UTF-8 sequences
     //
     // Entry condition  or 4 byte sequences: we have a prefix byte in the range 0xF0-0xFF.
-    PabloAST * pfx4 = ccc.compileCC(re::makeCC(0xF0, 0xFF), p34b);
+    PabloAST * pfx4 = ccc.compileCC(re::makeByte(0xF0, 0xFF), p34b);
     // Builder for the if statement handling all logic for 4-byte sequences only.
     PabloBuilder p4b = PabloBuilder::Create(p34b);
     // Illegal 4-byte sequences
-    PabloAST * F0 = ccc.compileCC(re::makeCC(0xF0), p4b);
-    PabloAST * F4 = ccc.compileCC(re::makeCC(0xF4), p4b);
-    PabloAST * F0_err = p4b.createAnd(p4b.createAdvance(F0, 1), ccc.compileCC(re::makeCC(0x80, 0x8F), p4b));
-    PabloAST * F4_err = p4b.createAnd(p4b.createAdvance(F4, 1), ccc.compileCC(re::makeCC(0x90, 0xBF), p4b));
-    PabloAST * F5_FF = ccc.compileCC(re::makeCC(0xF5, 0xFF), p4b);
+    PabloAST * F0 = ccc.compileCC(re::makeByte(0xF0), p4b);
+    PabloAST * F4 = ccc.compileCC(re::makeByte(0xF4), p4b);
+    PabloAST * F0_err = p4b.createAnd(p4b.createAdvance(F0, 1), ccc.compileCC(re::makeByte(0x80, 0x8F), p4b));
+    PabloAST * F4_err = p4b.createAnd(p4b.createAdvance(F4, 1), ccc.compileCC(re::makeByte(0x90, 0xBF), p4b));
+    PabloAST * F5_FF = ccc.compileCC(re::makeByte(0xF5, 0xFF), p4b);
 
     Var * FX_err = p34b.createVar("FX_err", zeroes);
     p4b.createAssign(FX_err, p4b.createOr(F5_FF, p4b.createOr(F0_err, F4_err)));
@@ -180,16 +180,16 @@ void U8U16Kernel::generatePabloMethod() {
     //
     // Combined logic for 3 and 4 byte sequences
     //
-    PabloAST * pfx3 = ccc.compileCC(re::makeCC(0xE0, 0xEF), p34b);
+    PabloAST * pfx3 = ccc.compileCC(re::makeByte(0xE0, 0xEF), p34b);
 
     p34b.createAssign(u8scope32, p34b.createAdvance(pfx3, 1));
     p34b.createAssign(u8scope33, p34b.createAdvance(u8scope32, 1));
 
     // Illegal 3-byte sequences
-    PabloAST * E0 = ccc.compileCC(re::makeCC(0xE0), p34b);
-    PabloAST * ED = ccc.compileCC(re::makeCC(0xED), p34b);
-    PabloAST * E0_err = p34b.createAnd(p34b.createAdvance(E0, 1), ccc.compileCC(re::makeCC(0x80, 0x9F), p34b));
-    PabloAST * ED_err = p34b.createAnd(p34b.createAdvance(ED, 1), ccc.compileCC(re::makeCC(0xA0, 0xBF), p34b));
+    PabloAST * E0 = ccc.compileCC(re::makeByte(0xE0), p34b);
+    PabloAST * ED = ccc.compileCC(re::makeByte(0xED), p34b);
+    PabloAST * E0_err = p34b.createAnd(p34b.createAdvance(E0, 1), ccc.compileCC(re::makeByte(0x80, 0x9F), p34b));
+    PabloAST * ED_err = p34b.createAnd(p34b.createAdvance(ED, 1), ccc.compileCC(re::makeByte(0xA0, 0xBF), p34b));
     Var * EX_FX_err = nAb.createVar("EX_FX_err", zeroes);
 
     p34b.createAssign(EX_FX_err, p34b.createOr(p34b.createOr(E0_err, ED_err), FX_err));
@@ -216,15 +216,15 @@ void U8U16Kernel::generatePabloMethod() {
 
     Var * u8lastscope = main.createVar("u8lastscope", zeroes);
 
-    PabloAST * pfx2 = ccc.compileCC(re::makeCC(0xC0, 0xDF), nAb);
+    PabloAST * pfx2 = ccc.compileCC(re::makeByte(0xC0, 0xDF), nAb);
     PabloAST * u8scope22 = nAb.createAdvance(pfx2, 1);
     nAb.createAssign(u8lastscope, nAb.createOr(u8scope22, nAb.createOr(u8scope33, u8scope44)));
     PabloAST * u8anyscope = nAb.createOr(u8lastscope, p34del);
 
-    PabloAST * C0_C1_err = ccc.compileCC(re::makeCC(0xC0, 0xC1), nAb);
-    PabloAST * scope_suffix_mismatch = nAb.createXor(u8anyscope, ccc.compileCC(re::makeCC(0x80, 0xBF), nAb));
+    PabloAST * C0_C1_err = ccc.compileCC(re::makeByte(0xC0, 0xC1), nAb);
+    PabloAST * scope_suffix_mismatch = nAb.createXor(u8anyscope, ccc.compileCC(re::makeByte(0x80, 0xBF), nAb));
     nAb.createAssign(error_mask, nAb.createOr(scope_suffix_mismatch, nAb.createOr(C0_C1_err, EX_FX_err)));
-    nAb.createAssign(delmask, nAb.createOr(p34del, ccc.compileCC(re::makeCC(0xC0, 0xFF), nAb)));
+    nAb.createAssign(delmask, nAb.createOr(p34del, ccc.compileCC(re::makeByte(0xC0, 0xFF), nAb)));
 
     // The low 3 bits of the high byte of the UTF-16 code unit as well as the high bit of the
     // low byte are only nonzero for 2, 3 and 4 byte sequences.
@@ -240,7 +240,7 @@ void U8U16Kernel::generatePabloMethod() {
     main.createIf(nonASCII, nAb);
     //
     //
-    PabloAST * ASCII = ccc.compileCC(re::makeCC(0x0, 0x7F));
+    PabloAST * ASCII = ccc.compileCC(re::makeByte(0x0, 0x7F));
     PabloAST * last_byte = main.createOr(ASCII, u8lastscope);
     main.createAssign(u16_lo[1], main.createOr(main.createAnd(ASCII, u8_bits[1]), p234_lo1));
     main.createAssign(u16_lo[2], main.createOr(main.createAnd(last_byte, u8_bits[2]), s43_lo2));

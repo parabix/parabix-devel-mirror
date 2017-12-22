@@ -45,7 +45,6 @@ protected:
     friend Name * makeReference(const std::string & name, RE * captureName);
     friend Name * makeZeroWidth(const std::string & name, RE * zerowidth);
     friend Name * makeName(CC * const cc);
-    friend Name * makeByte(CC * const cc);
     friend Name * makeName(const std::string &, Type);
     friend Name * makeName(const std::string &, const std::string &, Type);
     Name(const char * nameSpace, const length_t namespaceLength, const char * name, const length_t nameLength, Type type, RE * defn)
@@ -162,13 +161,7 @@ inline Name * makeName(CC * const cc) {
     return new Name(nullptr, 0, name.c_str(), name.length(), ascii ? Name::Type::Byte : Name::Type::Unicode, cc);
 }
 
-inline Name * makeByte(CC * const cc) {
-    assert(cc->max_codepoint() <= 0xFF);
-    const std::string name = cc->canonicalName(CC_type::ByteClass);
-    return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Byte, cc);
-}
-    
-    inline Name * makeCapture(const std::string & name, RE * captured) {
+inline Name * makeCapture(const std::string & name, RE * captured) {
     return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Capture, captured);
 }
     

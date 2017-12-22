@@ -41,5 +41,7 @@ const UnicodeMappableAlphabet ASCII("ASCII", 0x7F, {});
 const UnicodeMappableAlphabet ISO_Latin1("ISO_Latin1", 0xFF, {});
 
 const CodeUnitAlphabet Byte("Byte", 8);
-
+    
+const CodeUnitAlphabet UTF16("UTF16", 16);
+    
 }

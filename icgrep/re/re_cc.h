@@ -52,6 +52,8 @@ protected:
     friend CC * makeCC(UCD::UnicodeSet && set, const cc::Alphabet * alphabet);
     friend CC * subtractCC(const CC * a, const CC * b);
     friend CC * intersectCC(const CC * a, const CC * b);
+    friend CC * makeByte(const codepoint_t codepoint);
+    friend CC * makeByte(const codepoint_t lo, const codepoint_t hi);
 
     CC(const cc::Alphabet * alphabet);
 
@@ -108,7 +110,7 @@ inline CC * makeCC(const cc::Alphabet * alphabet = &cc::Unicode) {
     return new CC(alphabet);
 }
 
-    inline CC * makeCC(const codepoint_t codepoint, const cc::Alphabet * alphabet = &cc::Unicode) {
+inline CC * makeCC(const codepoint_t codepoint, const cc::Alphabet * alphabet = &cc::Unicode) {
     return new CC(codepoint, alphabet);
 }
 
@@ -142,6 +144,14 @@ inline CC * intersectCC(const CC * a, const CC * b) {
     return new CC(*a & *b, a->getAlphabet());
 }
 
+inline CC * makeByte(const codepoint_t codepoint) {
+    return new CC(codepoint, &cc::Byte);
+}
+
+inline CC * makeByte(const codepoint_t lo, const codepoint_t hi) {
+    return new CC(lo, hi, &cc::Byte);
+}
+    
 }
 
 #endif // RE_CC_H

@@ -122,14 +122,14 @@ RE * RE_Parser::parse_seq() {
 RE * createStart(ModeFlagSet flags) {
     if ((flags & ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("^s");  //single-line mode
     if ((flags & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
-        return makeNegativeLookBehindAssertion(makeByte(makeCC(makeCC(0, '\n'-1), makeCC('\n'+1, 0xFF))));
+        return makeNegativeLookBehindAssertion(makeCC(makeByte(0, '\n'-1), makeByte('\n'+1, 0xFF)));
     }
     return makeStart();
 }
 RE * createEnd(ModeFlagSet flags) {
     if ((flags & ModeFlagType::MULTILINE_MODE_FLAG) == 0) return makeZeroWidth("$s");  //single-line mode
     if ((flags & ModeFlagType::UNIX_LINES_MODE_FLAG) != 0) {
-        return makeNegativeLookAheadAssertion(makeByte(makeCC(makeCC(0, '\n'-1), makeCC('\n'+1, 0xFF))));
+        return makeNegativeLookAheadAssertion(makeCC(makeByte(0, '\n'-1), makeByte('\n'+1, 0xFF)));
     }
     return makeEnd();
 }
@@ -348,7 +348,7 @@ RE * RE_Parser::parse_escaped() {
     else if (atany("xo0")) {
         codepoint_t cp = parse_escaped_codepoint();
         if ((cp >= 0x80) && (cp <= 0xFF)) {
-            return makeByte(makeCC(cp));
+            return makeByte(cp);
         }
         else return createCC(cp);
     }

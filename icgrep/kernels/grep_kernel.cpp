@@ -16,8 +16,8 @@
 #include <pablo/boolean.h>
 #include <pablo/pe_count.h>
 #include <pablo/pe_matchstar.h>
-#include "cc/cc_compiler.h"         // for CC_Compiler
-
+#include <cc/cc_compiler.h>         // for CC_Compiler
+#include <cc/alphabet.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace kernel;
@@ -41,7 +41,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     cc::CC_Compiler ccc(this, getInput(0));
     auto & pb = ccc.getBuilder();
     Zeroes * const ZEROES = pb.createZeroes();
-    PabloAST * const u8pfx = ccc.compileCC(makeCC(0xC0, 0xFF));
+    PabloAST * const u8pfx = ccc.compileCC(makeByte(0xC0, 0xFF));
 
 
     Var * const nonFinal = pb.createVar("nonFinal", u8pfx);
@@ -51,10 +51,10 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloBuilder it = PabloBuilder::Create(pb);
 
     pb.createIf(u8pfx, it);
-    PabloAST * const u8pfx2 = ccc.compileCC(makeCC(0xC2, 0xDF), it);
-    PabloAST * const u8pfx3 = ccc.compileCC(makeCC(0xE0, 0xEF), it);
-    PabloAST * const u8pfx4 = ccc.compileCC(makeCC(0xF0, 0xF4), it);
-    PabloAST * const u8suffix = ccc.compileCC("u8suffix", makeCC(0x80, 0xBF), it);
+    PabloAST * const u8pfx2 = ccc.compileCC(makeByte(0xC2, 0xDF), it);
+    PabloAST * const u8pfx3 = ccc.compileCC(makeByte(0xE0, 0xEF), it);
+    PabloAST * const u8pfx4 = ccc.compileCC(makeByte(0xF0, 0xF4), it);
+    PabloAST * const u8suffix = ccc.compileCC("u8suffix", makeByte(0x80, 0xBF), it);
     
     //
     // Two-byte sequences
@@ -73,8 +73,8 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
     PabloAST * const u8scope3X = it3.createOr(u8scope32, u8scope33);
     it3.createAssign(anyscope, it3.createOr(anyscope, u8scope3X));
-    PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xE0), it3), 1), ccc.compileCC(makeCC(0x80, 0x9F), it3));
-    PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeCC(0xED), it3), 1), ccc.compileCC(makeCC(0xA0, 0xBF), it3));
+    PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeByte(0xE0), it3), 1), ccc.compileCC(makeByte(0x80, 0x9F), it3));
+    PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeByte(0xED), it3), 1), ccc.compileCC(makeByte(0xA0, 0xBF), it3));
     PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
     it3.createAssign(EF_invalid, EX_invalid);
 
@@ -90,8 +90,8 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     it4.createAssign(nonFinal, it4.createOr(nonFinal, u8scope4nonfinal));
     PabloAST * const u8scope4X = it4.createOr(u8scope4nonfinal, u8scope44);
     it4.createAssign(anyscope, it4.createOr(anyscope, u8scope4X));
-    PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeCC(0xF0), it4), 1), ccc.compileCC(makeCC(0x80, 0x8F), it4));
-    PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeCC(0xF4), it4), 1), ccc.compileCC(makeCC(0x90, 0xBF), it4));
+    PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeByte(0xF0), it4), 1), ccc.compileCC(makeByte(0x80, 0x8F), it4));
+    PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeByte(0xF4), it4), 1), ccc.compileCC(makeByte(0x90, 0xBF), it4));
     PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
     it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
     
@@ -111,7 +111,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     it.createAssign(valid_pfx, it.createAnd(valid_pfx, u8valid));
     it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
     
-    PabloAST * u8single = pb.createAnd(ccc.compileCC(makeCC(0x00, 0x7F)), pb.createNot(u8invalid));
+    PabloAST * u8single = pb.createAnd(ccc.compileCC(makeByte(0x00, 0x7F)), pb.createNot(u8invalid));
     PabloAST * const initial = pb.createOr(u8single, valid_pfx, "initial");
     PabloAST * const final = pb.createNot(pb.createOr(nonFinal, u8invalid), "final");
 
@@ -136,8 +136,8 @@ void RequiredStreams_UTF16::generatePabloMethod() {
     cc::CC_Compiler ccc(this, getInput(0));
     auto & pb = ccc.getBuilder();
     
-    PabloAST * u16hi_hi_surrogate = ccc.compileCC(makeCC(0xD800, 0xDBFF));    //u16hi_hi_surrogate = [\xD8-\xDB]
-    PabloAST * u16hi_lo_surrogate = ccc.compileCC(makeCC(0xDC00, 0xDFFF));    //u16hi_lo_surrogate = [\xDC-\xDF]
+    PabloAST * u16hi_hi_surrogate = ccc.compileCC(makeCC(0xD800, 0xDBFF, &cc::UTF16));    //u16hi_hi_surrogate = [\xD8-\xDB]
+    PabloAST * u16hi_lo_surrogate = ccc.compileCC(makeCC(0xDC00, 0xDFFF, &cc::UTF16));    //u16hi_lo_surrogate = [\xDC-\xDF]
     
     PabloAST * invalidTemp = pb.createAdvance(u16hi_hi_surrogate, 1, "InvalidTemp");
     PabloAST * u16invalid = pb.createXor(invalidTemp, u16hi_lo_surrogate, "u16invalid");
@@ -145,7 +145,7 @@ void RequiredStreams_UTF16::generatePabloMethod() {
     PabloAST * u16valid = pb.createNot(u16invalid, "u16valid");
     PabloAST * nonFinal = pb.createAnd(u16hi_hi_surrogate, u16valid, "nonfinal");
 
-    PabloAST * u16single_temp = pb.createOr(ccc.compileCC(makeCC(0x0000, 0xD7FF)), ccc.compileCC(makeCC(0xE000, 0xFFFF)));
+    PabloAST * u16single_temp = pb.createOr(ccc.compileCC(makeCC(0x0000, 0xD7FF, &cc::UTF16)), ccc.compileCC(makeCC(0xE000, 0xFFFF, &cc::UTF16)));
     PabloAST * u16single = pb.createAnd(u16single_temp, pb.createNot(u16invalid));
 
     PabloAST * const nonFinalCodeUnits = pb.createExtract(getInput(1), pb.getInteger(0));
