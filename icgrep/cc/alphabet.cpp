@@ -34,4 +34,12 @@ unsigned UnicodeMappableAlphabet::fromUnicode(const UCD::codepoint_t codepoint) 
 CodeUnitAlphabet::CodeUnitAlphabet(std::string alphabetName, uint8_t bits) :
     Alphabet(alphabetName), mCodeUnitBits(bits) {}
 
+const UnicodeMappableAlphabet Unicode("Unicode", UCD::UNICODE_MAX, {});
+
+const UnicodeMappableAlphabet ASCII("ASCII", 0x7F, {});
+
+const UnicodeMappableAlphabet ISO_Latin1("ISO_Latin1", 0xFF, {});
+
+const CodeUnitAlphabet Byte("Byte", 8);
+
 }

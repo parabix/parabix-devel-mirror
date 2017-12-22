@@ -12,6 +12,7 @@
 #include <re/re_seq.h>             // for Seq, makeSeq
 #include <re/re_start.h>
 #include <re/re_end.h>
+#include <re/re_range.h>
 #include <re/printer_re.h>
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa
@@ -73,7 +74,7 @@ RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
             return makeSeq({makeAny(), makeRep(makeSeq({makeZeroWidth("\\B{g}"), makeAny()}), 0, Rep::UNBOUNDED_REP), makeZeroWidth("\\b{g}")});
         else return re;
     }
-    else if (isa<CC>(re)) {
+    else if (isa<CC>(re) || isa<Range>(re)) {
         if (inGraphemeMode) return makeSeq({re, makeZeroWidth("\\b{g}")});
         else return re;
     }

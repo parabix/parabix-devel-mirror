@@ -9,8 +9,9 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
+#include <cc/alphabet.h>
 #include <boost/container/flat_set.hpp>
-
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
@@ -27,7 +28,9 @@ void SetCollector::collect(RE * const re) {
     assert ("RE object cannot be null!" && re);
     if (Visited.insert(re).second) {
         if (CC * cc = dyn_cast<CC>(re)) {
-            UnicodeSets.push_back(cc);
+            if (cc->getAlphabet() == &cc::Unicode) {
+                UnicodeSets.push_back(cc);
+            }
         } else if (isa<Name>(re)) {
             auto def = cast<Name>(re)->getDefinition();
             if (def != nullptr)

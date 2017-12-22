@@ -63,13 +63,13 @@ private:
 
 //  Some important alphabets are predefined.
 
-const static UnicodeMappableAlphabet Unicode("Unicode", UCD::UNICODE_MAX, {});
+const extern UnicodeMappableAlphabet Unicode; 
 
-const static UnicodeMappableAlphabet ASCII("ASCII", 0x7F, {});
+const extern UnicodeMappableAlphabet ASCII;
 
-const static UnicodeMappableAlphabet ISO_Latin1("ISO_Latin1", 0xFF, {});
+const extern UnicodeMappableAlphabet ISO_Latin1;
 
-const static CodeUnitAlphabet Byte("Byte", 8);
+const extern CodeUnitAlphabet Byte;
 
 }
 
