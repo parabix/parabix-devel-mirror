@@ -28,10 +28,10 @@ static RE * rangeCodeUnits(codepoint_t lo, codepoint_t hi, unsigned index, const
     const codepoint_t hunit = UTF<8>::nthCodeUnit(hi, index);
     const codepoint_t lunit = UTF<8>::nthCodeUnit(lo, index);
     if (index == lgth) {
-        return makeCC(lunit, hunit);
+        return makeByte(lunit, hunit);
     }
     else if (hunit == lunit) {
-        return makeSeq({makeCC(hunit), rangeCodeUnits(lo, hi, index + 1, lgth)});
+        return makeSeq({makeByte(hunit), rangeCodeUnits(lo, hi, index + 1, lgth)});
     }
     else {
         const unsigned suffix_mask = (static_cast<unsigned>(1) << ((lgth - index) * 6)) - 1;
@@ -44,7 +44,7 @@ static RE * rangeCodeUnits(codepoint_t lo, codepoint_t hi, unsigned index, const
             return makeAlt({rangeCodeUnits(low_ceil + 1, hi, index, lgth), rangeCodeUnits(lo, low_ceil, index, lgth)});
         }
         else {
-            return makeSeq({makeCC(lunit, hunit), rangeCodeUnits(lo, hi, index + 1, lgth)});
+            return makeSeq({makeByte(lunit, hunit), rangeCodeUnits(lo, hi, index + 1, lgth)});
         }
     }
 }

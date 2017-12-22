@@ -1,4 +1,5 @@
 #include "ucd_compiler.hpp"
+#include <cc/alphabet.h>
 #include <cc/cc_compiler.h>
 #include <UCD/unicode_set.h>
 #include <re/re_name.h>
@@ -144,7 +145,7 @@ const UCDCompiler::RangeList UCDCompiler::noIfHierachy = {{0x80, 0x10FFFF}};
 void UCDCompiler::generateRange(const RangeList & ifRanges, PabloBuilder & entry) {
     // Pregenerate the suffix var outside of the if ranges. The DCE pass will either eliminate it if it's not used or the
     // code sinking pass will move appropriately into an inner if block.
-    CC *  suffix = makeCC(0x80, 0xBF);
+    CC *  suffix = makeByte(0x80, 0xBF);
     assert (!suffix->empty());
     mSuffixVar = mCharacterClassCompiler.compileCC(suffix, entry);
     generateRange(ifRanges, 0, UNICODE_MAX, entry);
@@ -255,7 +256,7 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
         } else if (min == byte_no) {
             // We have a single byte remaining to match for all code points in this CC.
             // Use the byte class compiler to generate matches for these codepoints.
-            PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(byteDefinitions(ranges, byte_no, isUTF_16)), builder);
+            PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(byteDefinitions(ranges, byte_no, isUTF_16), &Byte), builder);
             if (byte_no > 1) {
                 var = builder.createAnd(var, builder.createAdvance(makePrefix(lo, byte_no, builder, prefix), 1));
             }
@@ -277,7 +278,7 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
                         target = sequenceGenerator(lo, mid - 1, byte_no, builder, target, prefix);
                         target = sequenceGenerator(mid, hi, byte_no, builder, target, prefix);
                     } else { // we have a prefix group of type (a)
-                        PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), builder);
+                        PabloAST * var = mCharacterClassCompiler.compileCC(makeByte(lo_byte, hi_byte), builder);
                         if (byte_no > 1) {
                             var = builder.createAnd(builder.createAdvance(prefix, 1), var);
                         }
@@ -287,7 +288,7 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
                         target = builder.createOr(target, var);
                     }
                 } else { // lbyte == hbyte
-                    PabloAST * var = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), builder);
+                    PabloAST * var = mCharacterClassCompiler.compileCC(makeByte(lo_byte, hi_byte), builder);
                     if (byte_no > 1) {
                         var = builder.createAnd(builder.createAdvance(prefix ? prefix : var, 1), var);
                     }
@@ -333,10 +334,10 @@ PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t h
 		if (hi == 0x10FFFF) hi_byte = 0xFF;
 	    }
 	}
-        PabloAST * cc = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), builder);
+        PabloAST * cc = mCharacterClassCompiler.compileCC(makeByte(lo_byte, hi_byte), builder);
         target = builder.createAnd(cc, target);
     } else if (lo_byte == hi_byte) {
-        PabloAST * cc = mCharacterClassCompiler.compileCC(makeCC(lo_byte, hi_byte), builder);
+        PabloAST * cc = mCharacterClassCompiler.compileCC(makeByte(lo_byte, hi_byte), builder);
         target = builder.createAnd(cc, target);
         target = builder.createAdvance(target, 1);
         target = ifTestCompiler(lo, hi, byte_no + 1, builder, target);
@@ -366,7 +367,7 @@ PabloAST * UCDCompiler::makePrefix(const codepoint_t cp, const unsigned byte_no,
     assert (byte_no == 1 || prefix != nullptr);
     bool isUTF_16 = mCharacterClassCompiler.isUTF_16();
     for (unsigned i = 1; i != byte_no; ++i) {
-        const CC * const cc = makeCC(encodingByte(cp, i, isUTF_16));
+        const CC * const cc = makeByte(encodingByte(cp, i, isUTF_16));
         PabloAST * var = mCharacterClassCompiler.compileCC(cc, builder);
         if (i > 1) {
             var = builder.createAnd(var, builder.createAdvance(prefix, 1));
