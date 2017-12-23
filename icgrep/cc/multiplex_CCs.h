@@ -16,10 +16,16 @@ class MultiplexedAlphabet : public Alphabet {
 public:
     MultiplexedAlphabet(std::string alphabetName, const std::vector<const re::CC *> CCs);
     
+    const Alphabet * getSourceAlphabet();
+    
     std::vector<std::vector<unsigned>> getExclusiveSetIDs();
     
     std::vector<re::CC *> getMultiplexedCCs();
+    
+    re::CC * transformCC(re::CC * sourceCC);
 private:
+    const Alphabet * mSourceAlphabet;
+    const std::vector<const re::CC *> mUnicodeSets;
     std::vector<std::vector<unsigned>> mExclusiveSetIDs;
     std::vector<re::CC *> mMultiplexedCCs;
 };

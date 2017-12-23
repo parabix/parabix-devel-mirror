@@ -8,6 +8,8 @@
 #include <re/re_cc.h>
 #include "boost/dynamic_bitset.hpp"
 #include <cc/multiplex_CCs.h>
+#include <llvm/Support/Casting.h>
+#include <llvm/Support/ErrorHandling.h>
 
 namespace cc {
 
@@ -110,8 +112,18 @@ void doMultiplexCCs(const std::vector<const re::CC *> & CCs,
 
 
 MultiplexedAlphabet::MultiplexedAlphabet(std::string alphabetName, const std::vector<const re::CC *> CCs) 
-    : Alphabet(alphabetName) {
+    : Alphabet(alphabetName), mUnicodeSets(CCs) {
+        if (CCs.size() > 0) {
+            mSourceAlphabet = CCs[0]->getAlphabet();
+            for (unsigned i = 1; i < CCs.size(); i++) {
+                if (CCs[i]->getAlphabet() != mSourceAlphabet) llvm::report_fatal_error("Mismatched source alphabets for Multiplexed Alphabet");
+            }
+        }
         cc::doMultiplexCCs(CCs, mExclusiveSetIDs, mMultiplexedCCs);
+}
+
+const Alphabet * MultiplexedAlphabet::getSourceAlphabet() {
+    return mSourceAlphabet;
 }
 
 std::vector<std::vector<unsigned>> MultiplexedAlphabet::getExclusiveSetIDs() { 
@@ -120,6 +132,18 @@ std::vector<std::vector<unsigned>> MultiplexedAlphabet::getExclusiveSetIDs() {
 
 std::vector<re::CC *> MultiplexedAlphabet::getMultiplexedCCs() {
     return mMultiplexedCCs;
+}
+    
+re::CC * MultiplexedAlphabet::transformCC(re::CC * sourceCC) {
+    if (sourceCC->getAlphabet() != mSourceAlphabet) llvm::report_fatal_error("Mismatched source alphabets for transformCC");
+    
+    const auto index = find(mUnicodeSets.begin(), mUnicodeSets.end(), sourceCC) - mUnicodeSets.begin();
+    const auto exclusive_IDs = mExclusiveSetIDs[index];
+    re::CC * CC_union = re::makeCC(this);
+    for (auto i : exclusive_IDs) {
+        CC_union = re::makeCC(CC_union, re::makeCC(i, this));
+    }
+    return CC_union;
 }
 }
 
