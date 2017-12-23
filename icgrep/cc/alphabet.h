@@ -21,10 +21,16 @@ namespace cc {
 class Alphabet {
 public:
     const std::string & getName() const { return mAlphabetName;}
+    enum class ClassTypeId : unsigned {UnicodeMappableAlphabet, CodeUnitAlphabet, MultiplexedAlphabet};
+    inline ClassTypeId getClassTypeId() const {
+        return mClassTypeId;
+    }
+
 protected:
-    Alphabet(std::string alphabetName) : mAlphabetName(alphabetName) {}
+    Alphabet(std::string name, ClassTypeId k) : mAlphabetName(name), mClassTypeId(k) {}
 private:
-    std::string mAlphabetName;
+    const std::string mAlphabetName;
+    const ClassTypeId mClassTypeId;
 };
 
 class UnicodeMappableAlphabet : public Alphabet {
@@ -40,6 +46,10 @@ public:
                             unsigned unicodeCommon,
                             std::vector <UCD::codepoint_t> aboveCommon);
     
+    static inline bool classof(const Alphabet * a) {
+        return a->getClassTypeId() == ClassTypeId::UnicodeMappableAlphabet;
+    }
+    static inline bool classof(const void *) {return false;}
     //  The Unicode codepoint of the nth character (the character whose alphabet code is n).
     UCD::codepoint_t toUnicode(const unsigned n) const;
     
@@ -55,6 +65,10 @@ protected:
 class CodeUnitAlphabet : public Alphabet {
 public:
     CodeUnitAlphabet(std::string alphabetName, uint8_t codeUnitBits);
+    static inline bool classof(const Alphabet * a) {
+        return a->getClassTypeId() == ClassTypeId::CodeUnitAlphabet;
+    }
+    static inline bool classof(const void *) {return false;}
     uint8_t getCodeUnitBitWidth() { return mCodeUnitBits;}
     
 private:

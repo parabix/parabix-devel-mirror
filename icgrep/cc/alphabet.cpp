@@ -13,7 +13,9 @@ namespace cc {
 UnicodeMappableAlphabet::UnicodeMappableAlphabet(std::string alphabetName,
                                                  unsigned unicodeCommon,
                                                  std::vector <UCD::codepoint_t> aboveCommon) :
-    Alphabet(alphabetName), mUnicodeCommon(unicodeCommon), mAboveCommon(aboveCommon) {}
+    Alphabet(alphabetName, ClassTypeId::UnicodeMappableAlphabet),
+    mUnicodeCommon(unicodeCommon),
+    mAboveCommon(aboveCommon) {}
 
 UCD::codepoint_t UnicodeMappableAlphabet::toUnicode(const unsigned n) const {
     UCD::codepoint_t cp = n;
@@ -32,7 +34,7 @@ unsigned UnicodeMappableAlphabet::fromUnicode(const UCD::codepoint_t codepoint) 
 }
 
 CodeUnitAlphabet::CodeUnitAlphabet(std::string alphabetName, uint8_t bits) :
-    Alphabet(alphabetName), mCodeUnitBits(bits) {}
+    Alphabet(alphabetName, ClassTypeId::CodeUnitAlphabet), mCodeUnitBits(bits) {}
 
 const UnicodeMappableAlphabet Unicode("Unicode", UCD::UNICODE_MAX, {});
 
