@@ -73,6 +73,7 @@ RE * resolveModesAndExternalSymbols(RE * r) {
     if (PrintOptions.isSet(ShowAllREs)) {
         errs() << "resolveCaseInsensitiveMode:\n" << Printer_RE::PrintRE(r) << '\n';
     }
+    return r;
 }
 
 RE * excludeUnicodeLineBreak(RE * r) {
@@ -80,6 +81,7 @@ RE * excludeUnicodeLineBreak(RE * r) {
     if (PrintOptions.isSet(ShowAllREs)) {
         errs() << "excludeUnicodeLineBreak:\n" << Printer_RE::PrintRE(r) << '\n';
     }
+    return r;
 }
 
 RE * multiplexing_prepasses(RE * r) {

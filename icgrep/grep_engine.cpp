@@ -132,7 +132,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
         
         REs[i] = multiplexing_prepasses(REs[i]);
         const std::vector<const re::CC *> UnicodeSets = re::collectUnicodeSets(REs[i]);
-        std::unique_ptr<cc::MultiplexedAlphabet> mpx = make_unique<MultiplexedAlphabet>("mpx", UnicodeSets);
+        mpx = make_unique<MultiplexedAlphabet>("mpx", UnicodeSets);
         REs[i] = transformCCs(mpx.get(), REs[i]);
         //llvm::errs() << Printer_RE::PrintRE(REs[i]) << '\n';
         std::vector<re::CC *> mpx_basis = mpx->getMultiplexedCCs();

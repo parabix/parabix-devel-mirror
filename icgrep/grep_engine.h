@@ -8,6 +8,7 @@
 #include <grep_interface.h>
 #include <kernels/streamset.h>
 #include <toolchain/grep_pipeline.h>
+#include <cc/multiplex_CCs.h>
 #include <string>
 #include <vector>
 #include <sstream>
@@ -49,6 +50,7 @@ protected:
     std::vector<FileStatus> mFileStatus;
     bool grepMatchFound;
 
+    std::unique_ptr<cc::MultiplexedAlphabet> mpx;
     std::string mFileSuffix;
     bool mMoveMatchesToEOL;
     pthread_t mEngineThread;
