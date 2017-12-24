@@ -29,7 +29,11 @@ extern int IfInsertionGap;
 
 const llvm::cl::OptionCategory * re_toolchain_flags();
 
-RE * regular_expression_passes(RE * re_ast);
+RE * resolveModesAndExternalSymbols(RE * r);
+
+RE * excludeUnicodeLineBreak(RE * r);
+
+RE * regular_expression_passes(RE * r);
 
 RE * multiplexing_prepasses(RE * r);
 

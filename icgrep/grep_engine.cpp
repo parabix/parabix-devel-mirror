@@ -124,7 +124,9 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     std::vector<std::vector<re::CC *>> charclasses(n);
     std::vector<StreamSetBuffer *> MatchResultsBufs(n);
 
-    for(unsigned i = 0; i < n; ++i){
+    for(unsigned i = 0; i < n; ++i) {
+        REs[i] = resolveModesAndExternalSymbols(REs[i]);
+        REs[i] = excludeUnicodeLineBreak(REs[i]);
 #define USE_MULTIPLEX_CC
 #ifdef USE_MULTIPLEX_CC
         

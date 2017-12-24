@@ -63,8 +63,8 @@ struct NameResolver {
         } else if (Assertion * a = dyn_cast<Assertion>(re)) {
             a->setAsserted(resolveUnicodeProperties(a->getAsserted()));
         } else if (Range * rg = dyn_cast<Range>(re)) {
-            rg->setLo(resolveUnicodeProperties(rg->getLo()));
-            rg->setHi(resolveUnicodeProperties(rg->getHi()));
+            return makeRange(resolveUnicodeProperties(rg->getLo()),
+                             resolveUnicodeProperties(rg->getHi()));
         } else if (Diff * diff = dyn_cast<Diff>(re)) {
             diff->setLH(resolveUnicodeProperties(diff->getLH()));
             diff->setRH(resolveUnicodeProperties(diff->getRH()));
@@ -130,8 +130,7 @@ struct NameResolver {
         } else if (Assertion * a = dyn_cast<Assertion>(re)) {
             a->setAsserted(resolve(a->getAsserted()));
         } else if (Range * rg = dyn_cast<Range>(re)) {
-            rg->setLo(resolve(rg->getLo()));
-            rg->setHi(resolve(rg->getHi()));
+            return makeRange(resolve(rg->getLo()), resolve(rg->getHi()));
         } else if (Diff * diff = dyn_cast<Diff>(re)) {
             diff->setLH(resolve(diff->getLH()));
             diff->setRH(resolve(diff->getRH()));
