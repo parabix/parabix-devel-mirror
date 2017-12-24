@@ -13,6 +13,7 @@
 #include <re/re_group.h>
 #include <re/re_memoizer.hpp>
 #include <UCD/resolve_properties.h>
+#include <cc/alphabet.h>
 #include <boost/container/flat_set.hpp>
 #include <sstream>
 
@@ -41,7 +42,7 @@ struct NameResolver {
                     if (UCD::resolvePropertyDefinition(name)) {
                         name->setDefinition(resolveUnicodeProperties(name->getDefinition()));
                     } else {
-                        name->setDefinition(makeCC(UCD::resolveUnicodeSet(name)));
+                        name->setDefinition(makeCC(UCD::resolveUnicodeSet(name), &cc::Unicode));
                     }
                 } else {
                     UndefinedNameError(name);

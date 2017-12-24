@@ -53,7 +53,7 @@ static RE * rangeToUTF8(codepoint_t lo, codepoint_t hi) {
     const auto min_lgth = UTF<8>::encoded_length(lo);
     const auto max_lgth = UTF<8>::encoded_length(hi);
     if (min_lgth < max_lgth) {
-        const auto m = UTF<8>::max_codepoint_of_length(lo);
+        const auto m = UTF<8>::max_codepoint_of_length(min_lgth);
         return makeAlt({rangeToUTF8(lo, m), rangeToUTF8(m + 1, hi)});
     }
     else {

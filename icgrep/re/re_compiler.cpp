@@ -26,6 +26,7 @@
 #include <re/re_seq.h>              // for Seq
 #include <re/re_start.h>
 #include <re/re_local.h>
+#include <re/to_utf8.h>
 #include <re/re_toolchain.h>        // for AlgorithmOptionIsSet, RE_Algorith...
 #include "cc/cc_compiler.h"         // for CC_Compiler
 #include "pablo/builder.hpp"        // for PabloBuilder
@@ -85,6 +86,9 @@ inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb)
 }
 
 MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb) {
+    // If Unicode CCs weren't pulled out earlier, we generate the equivalent
+    // byte sequence as an RE.
+    if (cc->getAlphabet() == &cc::Unicode) return process(toUTF8(cc), marker, pb);
     PabloAST * nextPos = markerVar(marker);
     if (isByteLength(cc)) {
         if (marker.pos == MarkerPosition::FinalMatchUnit) nextPos = pb.createAdvance(nextPos, 1);
