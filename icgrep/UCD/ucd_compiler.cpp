@@ -512,11 +512,8 @@ inline void UCDCompiler::makeTargets(PabloBuilder & entry, NameMap & names) {
 
     for (auto & t : names) {
         Name * const name = t.first;
-        if (name->getType() == Name::Type::Byte) {
-            continue;
-        }        
         CC * const cc = dyn_cast<CC>(name->getDefinition());
-        if (cc) {
+        if (cc && (cc->getAlphabet() == &cc::Unicode)) {
             const auto f = CCs.find(cc);
             // This check may not be needed. Memoization ought to detect duplicate classes earlier.
             if (LLVM_LIKELY(f == CCs.end())) {
@@ -530,7 +527,7 @@ inline void UCDCompiler::makeTargets(PabloBuilder & entry, NameMap & names) {
                 t.second = f->second;
             }
         } else {
-            report_fatal_error(name->getName() + " is not defined by a CC!");
+            report_fatal_error(name->getName() + " is not defined by a Unicode CC!");
         }
     }
 }

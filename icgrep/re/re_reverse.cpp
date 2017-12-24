@@ -30,7 +30,7 @@ namespace re {
 
 RE * reverse_helper(RE * re, std::map<std::string, Name *> & captureMap) {
     if (CC * cc = dyn_cast<CC>(re)) {
-        return makeCC(cc, makeCC());
+        return re;
     } else if (Range * rg = dyn_cast<Range>(re)) {
         return makeRange(rg->getLo(), rg->getHi());
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
@@ -61,7 +61,6 @@ RE * reverse_helper(RE * re, std::map<std::string, Name *> & captureMap) {
         return makeStart();
     } else if (Name * n = dyn_cast<Name>(re)) {
         switch (n->getType()) {
-            case Name::Type::Byte:
             case Name::Type::Unicode:
                 return makeName(cast<CC>(n->getDefinition()));
             case Name::Type::UnicodeProperty:

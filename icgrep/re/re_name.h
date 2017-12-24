@@ -21,8 +21,7 @@ public:
     }
     using length_t = std::string::size_type;
     enum class Type {
-        Byte
-        , Unicode
+        Unicode
         , UnicodeProperty
         , Capture
         , Reference
@@ -149,16 +148,14 @@ inline Name * makeName(const std::string & name, RE * cc) {
         return llvm::cast<Name>(cc);
     }
     else if (llvm::isa<CC>(cc)) {
-        Name::Type ccType = llvm::cast<CC>(cc)->max_codepoint() <= 0x7F ? Name::Type::Byte : Name::Type::Unicode;
-        return new Name(nullptr, 0, name.c_str(), name.length(), ccType, cc);
+        return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Unicode, cc);
     }
     else return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Unknown, cc);
 }
 
 inline Name * makeName(CC * const cc) {
-    const bool ascii = cc->max_codepoint() <= 0x7F;
-    const std::string name = cc->canonicalName(ascii ? CC_type::ByteClass : CC_type::UnicodeClass);
-    return new Name(nullptr, 0, name.c_str(), name.length(), ascii ? Name::Type::Byte : Name::Type::Unicode, cc);
+    const std::string name = cc->canonicalName(CC_type::UnicodeClass);
+    return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Unicode, cc);
 }
 
 inline Name * makeCapture(const std::string & name, RE * captured) {

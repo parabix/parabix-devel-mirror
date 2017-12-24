@@ -54,7 +54,6 @@ RE * exclude_CC(RE * re, CC * cc) {
         return re;
     } else if (Name * n = dyn_cast<Name>(re)) {
         switch (n->getType()) {
-            case Name::Type::Byte:
             case Name::Type::Unicode:
             case Name::Type::UnicodeProperty:
                 return makeName(subtractCC(cast<CC>(n->getDefinition()), cc));

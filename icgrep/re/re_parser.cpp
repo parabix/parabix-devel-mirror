@@ -89,7 +89,7 @@ RE * makeAtomicGroup(RE * r) {
 RE * makeBranchResetGroup(RE * r) {
     // Branch reset groups only affect submatch numbering, but
     // this has no effect in icgrep.
-    return r;
+    RE_Parser::ParseFailure("Branch reset groups not supported.");
 }
 
 RE * RE_Parser::parse_RE() {

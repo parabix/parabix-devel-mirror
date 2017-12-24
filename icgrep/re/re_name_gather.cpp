@@ -11,6 +11,7 @@
 #include <re/re_group.h>
 #include <re/re_analysis.h>
 #include <re/re_memoizer.hpp>
+#include <cc/alphabet.h>
 #include <UCD/ucd_compiler.hpp>
 #include <UCD/resolve_properties.h>
 #include <boost/container/flat_set.hpp>
@@ -29,13 +30,12 @@ struct NameGather {
         assert ("RE object cannot be null!" && re);
         if (isa<Name>(re)) {
             if (mVisited.insert(cast<Name>(re)).second) {
-                if (cast<Name>(re)->getType() == Name::Type::ZeroWidth) {
-                    mZeroWidth = cast<Name>(re);
-                }
-                if (isa<CC>(cast<Name>(re)->getDefinition())) {
-                    mNameMap.emplace(cast<Name>(re), nullptr);
+                RE * defn = cast<Name>(re)->getDefinition();
+                if (isa<CC>(defn)) {
+                    if (cast<CC>(defn)->getAlphabet() == &cc::Unicode)
+                        mNameMap.emplace(cast<Name>(re), nullptr);
                 } else {
-                    gather(cast<Name>(re)->getDefinition());
+                    gather(defn);
                 }
             }
         } else if (isa<Seq>(re)) {
@@ -63,23 +63,21 @@ struct NameGather {
             gather(cast<Group>(re)->getRE());
         }
     }
-    NameGather(NameMap & nameMap, Name *& zeroWidth)
-    : mZeroWidth(zeroWidth)
-    , mNameMap(nameMap) {
+    NameGather(NameMap & nameMap)
+    : mNameMap(nameMap) {
 
     }
 
 private:
 
-    Name *&                 mZeroWidth;
     NameMap &               mNameMap;
     flat_set<Name *>        mVisited;
 
 };
     
-NameMap gatherNames(RE *& re, Name *& zeroWidth) {
+NameMap gatherNames(RE *& re) {
     NameMap nameMap;
-    NameGather nameGather(nameMap, zeroWidth);
+    NameGather nameGather(nameMap);
     nameGather.gather(re);
     return nameMap;
     

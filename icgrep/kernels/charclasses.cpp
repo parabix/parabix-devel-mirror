@@ -11,6 +11,7 @@
 #include <re/re_name.h>
 #include <boost/uuid/sha1.hpp>
 #include <pablo/builder.hpp>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 
 using NameMap = UCD::UCDCompiler::NameMap;
@@ -96,13 +97,9 @@ void CharClassesKernel::generatePabloMethod() {
         auto t = nameMap.find(names[i]); 
         if (t != nameMap.end()) {
             PabloAST * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
-            if (t->first->getType() == Name::Type::Byte) {
-                pb.createAssign(r, ccc.compileCC(dyn_cast<CC>(t->first->getDefinition())));
-            } else {
-                pb.createAssign(r, pb.createInFile(t->second));
-            }
+            pb.createAssign(r, pb.createInFile(t->second));
         } else {
-            throw std::runtime_error("Can't compile character classes.");
+            llvm::report_fatal_error("Can't compile character classes.");
         }
     }
 }

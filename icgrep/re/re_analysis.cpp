@@ -166,7 +166,7 @@ bool isUnicodeUnitLength(const RE * re) {
         return true;
     } else if (const Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
-        if (n->getType() == Name::Type::Unicode || n->getType() == Name::Type::UnicodeProperty || n->getType() == Name::Type::Byte) {
+        if (n->getType() == Name::Type::Unicode || n->getType() == Name::Type::UnicodeProperty) {
             return true;
         } else if (n->getType() == Name::Type::Capture || n->getType() == Name::Type::Reference) {
             return isUnicodeUnitLength(n->getDefinition());
@@ -229,7 +229,6 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
     } else if (const Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
         switch (n->getType()) {
-            case Name::Type::Byte:
             case Name::Type::Unicode:
             case Name::Type::UnicodeProperty:
                 return std::make_pair(1, 1);
@@ -274,7 +273,6 @@ int minMatchLength(RE * re) {
     } else if (const Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
         switch (n->getType()) {
-            case Name::Type::Byte:
             case Name::Type::Unicode:
             case Name::Type::UnicodeProperty:
                 return 1;

@@ -137,7 +137,6 @@ std::vector<std::string> StringGenerator::generate(RE * re) {
     } else if (Name* re_name = dyn_cast<Name>(re)) {
 
     	switch (re_name->getType()) {
-    		case Name::Type::Byte:
     		case Name::Type::Unicode:
 		 		retVec = generate(re_name->getDefinition()); 
 		 		break;
