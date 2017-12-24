@@ -10,6 +10,7 @@
 #include <re/re_re.h>
 #include <re/re_nullable.h>
 #include <re/re_seq.h>
+#include <re/re_alt.h>
 
 namespace re {
 
@@ -53,7 +54,14 @@ inline Assertion::Sense Assertion::negateSense(Assertion::Sense s) {
 }
 
 inline RE * makeAssertion(RE * asserted, Assertion::Kind k, Assertion::Sense s) {
-    if (RE_Nullable::isNullable(asserted)) return makeSeq();
+    if (RE_Nullable::isNullable(asserted)) {
+        if (k == Assertion::Kind::Boundary) {
+            if (s == Assertion::Sense::Positive) return makeAlt();
+            else return makeSeq();
+        }
+        if (s == Assertion::Sense::Positive) return makeSeq();
+        else return makeAlt();
+    }
     return new Assertion(asserted, k, s);
 }
 

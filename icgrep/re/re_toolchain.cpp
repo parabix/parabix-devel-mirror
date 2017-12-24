@@ -98,10 +98,6 @@ RE * multiplexing_prepasses(RE * r) {
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
         errs() << "RemoveNullableSuffix:\n" << Printer_RE::PrintRE(r) << '\n';
     }
-    r = RE_Nullable::removeNullableAssertion(r);
-    if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
-        errs() << "RemoveNullableAssertion:\n" << Printer_RE::PrintRE(r) << '\n';
-    }
     r = RE_Star_Normal::star_normal(r);
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowSimplifiedREs)) {
         //Print to the terminal the AST that was transformed to the star normal form.
@@ -135,15 +131,6 @@ RE * regular_expression_passes(RE * r)  {
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
         errs() << "RemoveNullableSuffix:\n" << Printer_RE::PrintRE(r) << '\n';
     }
-    r = RE_Nullable::removeNullableAssertion(r);
-    if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
-        errs() << "RemoveNullableAssertion:\n" << Printer_RE::PrintRE(r) << '\n';
-    }
-    //r = RE_Nullable::removeNullableAfterAssertion(r);
-    //if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
-    //    errs() << "RemoveNullableAfterAssertion\n" << Printer_RE::PrintRE(r) << '\n';
-    //}
-
     r = RE_Simplifier::simplify(r);
 
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowSimplifiedREs)) {
