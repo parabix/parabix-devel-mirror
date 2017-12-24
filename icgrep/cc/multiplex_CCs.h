@@ -26,7 +26,9 @@ public:
     
     std::vector<re::CC *> getMultiplexedCCs();
     
-    re::CC * transformCC(re::CC * sourceCC);
+    re::CC * transformCC(const re::CC * sourceCC) const;
+    
+    re::CC * invertCC(const re::CC * transformedCC) const;
 private:
     const Alphabet * mSourceAlphabet;
     const std::vector<const re::CC *> mUnicodeSets;

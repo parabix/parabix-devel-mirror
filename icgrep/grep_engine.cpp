@@ -30,6 +30,7 @@
 #include <re/re_collect_unicodesets.h>
 #include <re/re_multiplex.h>
 #include <re/grapheme_clusters.h>
+#include <re/printer_re.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>
 #include <iostream>
@@ -130,7 +131,8 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
         REs[i] = multiplexing_prepasses(REs[i]);
         const std::vector<const re::CC *> UnicodeSets = re::collectUnicodeSets(REs[i]);
         std::unique_ptr<cc::MultiplexedAlphabet> mpx = make_unique<MultiplexedAlphabet>("mpx", UnicodeSets);
-        REs[i] = multiplex(REs[i], UnicodeSets, mpx->getExclusiveSetIDs());
+        REs[i] = transformCCs(mpx.get(), REs[i]);
+        //llvm::errs() << Printer_RE::PrintRE(REs[i]) << '\n';
         std::vector<re::CC *> mpx_basis = mpx->getMultiplexedCCs();
         auto numOfCharacterClasses = mpx_basis.size();
         StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), segmentSize * bufferSegments);

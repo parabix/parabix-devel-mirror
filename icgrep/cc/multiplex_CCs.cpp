@@ -133,7 +133,7 @@ std::vector<re::CC *> MultiplexedAlphabet::getMultiplexedCCs() {
     return mMultiplexedCCs;
 }
     
-re::CC * MultiplexedAlphabet::transformCC(re::CC * sourceCC) {
+re::CC * MultiplexedAlphabet::transformCC(const re::CC * sourceCC) const {
     if (sourceCC->getAlphabet() != mSourceAlphabet) llvm::report_fatal_error("Mismatched source alphabets for transformCC");
     
     const auto index = find(mUnicodeSets.begin(), mUnicodeSets.end(), sourceCC) - mUnicodeSets.begin();
@@ -144,5 +144,19 @@ re::CC * MultiplexedAlphabet::transformCC(re::CC * sourceCC) {
     }
     return CC_union;
 }
+
+re::CC * MultiplexedAlphabet::invertCC(const re::CC * transformedCC) const {
+    if (transformedCC->getAlphabet() != this) llvm::report_fatal_error("invertCC applied to non-transformed CC");
+    re::CC * CC_union = re::makeCC(mSourceAlphabet);
+    for (const UCD::interval_t i : *transformedCC) {
+        for (unsigned cp = re::lo_codepoint(i); cp <= re::hi_codepoint(i); cp++) {
+            CC_union = re::makeCC(mUnicodeSets[cp], CC_union);
+        }
+    }
+    return CC_union;
+}
+    
+
+    
 }
 

@@ -14,6 +14,8 @@
 #include <re/re_group.h>
 #include <re/re_nullable.h>
 #include <re/printer_re.h>
+#include <cc/alphabet.h>
+#include <cc/multiplex_CCs.h>
 #include <limits.h>
 #include <llvm/Support/ErrorHandling.h>
 
@@ -118,15 +120,24 @@ bool isByteLength(const RE * re) {
         return isByteLength(diff->getLH()) && isByteLength(diff->getRH());
     } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         return isByteLength(e->getLH()) && isByteLength(e->getRH());
-    } else if (isa<CC>(re)) {
-        return cast<CC>(re)->max_codepoint() <= 0x7F;
-    } else if (const Name * n = dyn_cast<Name>(re)) {
-        if (n->getType() == Name::Type::Byte) {
-            return true;
-        } else if (n->getType() == Name::Type::Capture || n->getType() == Name::Type::Reference) {
-            return isByteLength(n->getDefinition());
+    } else if (const CC * cc = dyn_cast<CC>(re)) {
+        const cc::Alphabet * a = cc->getAlphabet();
+        if (a == &cc::Unicode) return (cc->max_codepoint() <= 0x7F);
+        else if (a == &cc::Byte) return true;
+        else if (isa<cc::MultiplexedAlphabet>(a)) {
+            const cc::Alphabet * srcA = cast<cc::MultiplexedAlphabet>(a)->getSourceAlphabet();
+            if (srcA == &cc::Byte) {
+                return true;
+//            } else if (srcA == &cc::Unicode) {
+//                return cast<cc::MultiplexedAlphabet>(a)->invertCC(cc)->max_codepoint() <= 0x7F;
+            } else return (a == &cc::Byte);
         }
         return false;
+    } else if (const Name * n = dyn_cast<Name>(re)) {
+        if (n->getType() == Name::Type::ZeroWidth) {
+            return false;
+        }
+        return isByteLength(n->getDefinition());
     }
     return false; // otherwise
 }

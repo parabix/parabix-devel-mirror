@@ -10,6 +10,7 @@
 #include <re/re_group.h>
 #include <re/re_analysis.h>
 #include <re/re_memoizer.hpp>
+#include <re/printer_re.h>
 #include <UCD/ucd_compiler.hpp>
 #include <UCD/resolve_properties.h>
 #include <boost/container/flat_set.hpp>
@@ -17,6 +18,7 @@
 #include <sstream>
 #include <iostream>
 #include <functional>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace boost::container;
 using namespace llvm;
@@ -86,5 +88,53 @@ RE * multiplex(RE * const re,
 
     return multiplex(re);
 }    
+
+
+RE * transformCCs(cc::MultiplexedAlphabet * mpx, RE * re) {
+    if (CC * cc = dyn_cast<CC>(re)) {
+        if (cc->getAlphabet() == mpx->getSourceAlphabet()) {
+            re = mpx->transformCC(cc);
+        }
+    } else if (Name * name = dyn_cast<Name>(re)) {
+        if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+            RE * xfrm = transformCCs(mpx, name->getDefinition());
+            if (name->getType() == Name::Type::ZeroWidth)
+                re = makeZeroWidth(name->getName(), xfrm);
+            else
+                re = makeName(name->getName(), xfrm);
+        } else {
+            UndefinedNameError(name);
+        }
+    } else if (Seq * seq = dyn_cast<Seq>(re)) {
+        std::vector<RE *> list;
+        list.reserve(seq->size());
+        for (RE * item : *seq) {
+            item = transformCCs(mpx, item);
+            list.push_back(item);
+        }
+        re = makeSeq(list.begin(), list.end());
+    } else if (Alt * alt = dyn_cast<Alt>(re)) {
+        std::vector<RE *> list;
+        list.reserve(alt->size());
+        for (RE * item : *alt) {
+            item = transformCCs(mpx, item);
+            list.push_back(item);
+        }
+        re = makeAlt(list.begin(), list.end());
+    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        re = makeAssertion(transformCCs(mpx, a->getAsserted()), a->getKind(), a->getSense());
+    } else if (Rep * rep = dyn_cast<Rep>(re)) {
+        RE * expr = transformCCs(mpx, rep->getRE());
+        re = makeRep(expr, rep->getLB(), rep->getUB());
+    } else if (Diff * diff = dyn_cast<Diff>(re)) {
+        re = makeDiff(transformCCs(mpx, diff->getLH()), transformCCs(mpx, diff->getRH()));
+    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
+        re = makeIntersect(transformCCs(mpx, e->getLH()), transformCCs(mpx, e->getRH()));
+    } else if (Group * g = dyn_cast<Group>(re)) {
+        re = makeGroup(g->getMode(), transformCCs(mpx, g->getRE()), g->getSense());
+    }
+    return re;
+};
+
 
 }

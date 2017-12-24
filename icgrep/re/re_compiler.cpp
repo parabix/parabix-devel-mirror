@@ -85,7 +85,13 @@ inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb)
 }
 
 MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb) {
-    PabloAST * const nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
+    PabloAST * nextPos = markerVar(marker);
+    if (isByteLength(cc)) {
+        if (marker.pos == MarkerPosition::FinalMatchUnit) nextPos = pb.createAdvance(nextPos, 1);
+    }
+    else {
+        nextPos = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
+    }
     return makeMarker(MarkerPosition::FinalMatchUnit, pb.createAnd(nextPos, mCCCompiler.compileCC(cc, pb)));
 }
 
