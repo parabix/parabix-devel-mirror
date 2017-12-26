@@ -27,7 +27,8 @@ namespace re {
 
 RE * exclude_CC(RE * re, CC * cc) {
     if (CC * cc0 = dyn_cast<CC>(re)) {
-        return subtractCC(cc0, cc);
+        if (intersects(cc0, cc)) return subtractCC(cc0, cc);
+        else return cc0;
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         std::vector<RE*> list;
         for (auto s : * seq) {
@@ -54,17 +55,21 @@ RE * exclude_CC(RE * re, CC * cc) {
         return re;
     } else if (Name * n = dyn_cast<Name>(re)) {
         switch (n->getType()) {
-            case Name::Type::Unicode:
-            case Name::Type::UnicodeProperty:
-                return makeName(subtractCC(cast<CC>(n->getDefinition()), cc));
+            case Name::Type::Reference:
             case Name::Type::ZeroWidth:
                 return re;
             case Name::Type::Capture:
                 return makeCapture(n->getName(), exclude_CC(n->getDefinition(), cc));
-            case Name::Type::Reference:
-                return re;
             default:
-                report_fatal_error("exclude_CC: unhandled Name type");
+                RE * defn = n->getDefinition();
+                if (const CC * cc0 = dyn_cast<CC>(defn)) {
+                    if (!intersects(cc0, cc)) return re;
+                }
+                std::string cc_name = n->getName() + "--" + cc->canonicalName(CC_type::UnicodeClass);
+                return makeName(cc_name, n->getType(), exclude_CC(defn, cc));
+                /*
+                return exclude_CC(defn, cc);
+                */
         }
     } else {
         report_fatal_error("exclude_CC: unhandled regexp type");

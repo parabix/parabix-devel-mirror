@@ -46,6 +46,7 @@ protected:
     friend Name * makeName(CC * const cc);
     friend Name * makeName(const std::string &, Type);
     friend Name * makeName(const std::string &, const std::string &, Type);
+    friend Name * makeName(const std::string & nm, const Name::Type type, RE * defn); 
     Name(const char * nameSpace, const length_t namespaceLength, const char * name, const length_t nameLength, Type type, RE * defn)
     : RE(ClassTypeId::Name)
     , mNamespaceLength(namespaceLength)
@@ -140,7 +141,11 @@ inline Name * makeName(const std::string & name, const Name::Type type) {
 }
 
 inline Name * makeName(const std::string & property, const std::string & value, const Name::Type type) {
-    return new Name(property.c_str(), property.length(), value.c_str(), value.length(),  type, nullptr);
+    return new Name(property.c_str(), property.length(), value.c_str(), value.length(), type, nullptr);
+}
+    
+inline Name * makeName(const std::string & nm, const Name::Type type, RE * defn) {
+    return new Name(nullptr, 0, nm.c_str(), nm.length(), type, defn);
 }
 
 inline Name * makeName(const std::string & name, RE * cc) {

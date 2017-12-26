@@ -50,6 +50,7 @@ protected:
     friend CC * makeCC(std::initializer_list<interval_t> list, const cc::Alphabet * alphabet);
     friend CC * makeCC(std::vector<interval_t> && list, const cc::Alphabet * alphabet);
     friend CC * makeCC(UCD::UnicodeSet && set, const cc::Alphabet * alphabet);
+    friend bool intersects(const CC * a, const CC * b);
     friend CC * subtractCC(const CC * a, const CC * b);
     friend CC * intersectCC(const CC * a, const CC * b);
     friend CC * makeByte(const codepoint_t codepoint);
@@ -142,6 +143,10 @@ inline CC * subtractCC(const CC * a, const CC * b) {
 inline CC * intersectCC(const CC * a, const CC * b) {
     //assert (a->getAlphabet() == b->getAlphabet());
     return new CC(*a & *b, a->getAlphabet());
+}
+
+inline bool intersects(const CC * a, const CC * b) {
+    return (*a).intersects(*b);
 }
 
 inline CC * makeByte(const codepoint_t codepoint) {

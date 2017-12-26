@@ -588,6 +588,7 @@ Unterminated</datafile>
 <grepcase regexp="PS" datafile="LineBreaking" grepcount="4"/>
 <grepcase regexp="\S" datafile="LineBreaking" grepcount="16"/>
 <grepcase regexp="$" datafile="LineBreaking" grepcount="19"/>
+<grepcase regexp="\p{ascii}" datafile="LineBreaking" grepcount="16"/>
 
 <grepcase regexp="[a-z]{20}" datafile="4KiB-onepage" grepcount="77"/>
 <grepcase regexp="[a-z]{15}" datafile="4KiB-onepage" grepcount="78"/>
