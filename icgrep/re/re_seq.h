@@ -68,6 +68,9 @@ inline RE * makeSeq(RE::InitializerList list) {
     return makeSeq(list.begin(), list.end());
 }
 
+inline bool isEmptySeq(RE * s) {
+    return llvm::isa<Seq>(s) && llvm::cast<Seq>(s)->empty();
+}
 }
 
 #endif // RE_SEQ_H

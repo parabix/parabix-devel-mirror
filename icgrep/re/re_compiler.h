@@ -42,7 +42,7 @@ namespace re { class CC; }
 
 namespace re {
 
-enum MarkerPosition {FinalMatchUnit, FinalPostPositionUnit};
+enum MarkerPosition {FinalMatchUnit, InitialPostPositionUnit, FinalPostPositionUnit};
 
 struct MarkerType { 
     MarkerPosition pos;

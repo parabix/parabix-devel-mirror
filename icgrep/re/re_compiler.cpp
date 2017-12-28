@@ -181,10 +181,13 @@ MarkerType RE_Compiler::compileAlt(Alt * alt, MarkerType marker, PabloBuilder & 
         MarkerPosition p = markerPos(m);
         accum[p] = pb.createOr(accum[p], markerVar(m), "alt");
     }
-    if (isa<Zeroes>(accum[MarkerPosition::FinalPostPositionUnit])) {
+    if (isa<Zeroes>(accum[MarkerPosition::InitialPostPositionUnit]) && isa<Zeroes>(accum[MarkerPosition::FinalPostPositionUnit])) {
         return makeMarker(MarkerPosition::FinalMatchUnit, accum[MarkerPosition::FinalMatchUnit]);
     }
-    PabloAST * combine = pb.createAdvance(accum[MarkerPosition::FinalMatchUnit], 1, "combine");
+    PabloAST * combine = pb.createOr(accum[InitialPostPositionUnit], pb.createAdvance(accum[MarkerPosition::FinalMatchUnit], 1), "alt");
+    if (isa<Zeroes>(accum[FinalPostPositionUnit])) {
+        return makeMarker(InitialPostPositionUnit, combine);
+    }
     combine = pb.createOr(pb.createScanThru(pb.createAnd(mInitial, combine), mNonFinal), accum[MarkerPosition::FinalPostPositionUnit], "alt");
     return makeMarker(MarkerPosition::FinalPostPositionUnit, combine);
 }
@@ -410,7 +413,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
             // log2 upper bound for fixed length (=1) class
             // Create a mask of positions reachable within ub from current marker.
             // Use matchstar, then apply filter.
-            PabloAST * cursor = markerVar(AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb));
+            PabloAST * cursor = markerVar(AdvanceMarker(marker, MarkerPosition::InitialPostPositionUnit, pb));
             // If we've advanced the cursor to the post position unit, cursor begins on the first masked bit of the bounded mask.
             // Extend the mask by ub - 1 byte positions to ensure the mask ends on the FinalMatchUnit of the repeated region.
             PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, nullptr, pb);
@@ -418,7 +421,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
             // MatchStar deposits any cursors on the post position. However those cursors may may land on the initial "byte" of a
             // "multi-byte" character. Combine the masked range with any nonFinals.
             PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, mNonFinal), "bounded");
-            return makeMarker(MarkerPosition::FinalPostPositionUnit, bounded);
+            return makeMarker(MarkerPosition::InitialPostPositionUnit, bounded);
         }
         else if (isUnicodeUnitLength(repeated)) {
             // For a regexp which represent a single Unicode codepoint, we can use the mFinal stream
@@ -528,11 +531,8 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
 
 inline MarkerType RE_Compiler::compileStart(MarkerType marker, pablo::PabloBuilder & pb) {
     PabloAST * sol = pb.createNot(pb.createAdvance(pb.createNot(mLineBreak), 1));
-    if (!AlgorithmOptionIsSet(DisableUnicodeLineBreak)) {
-        sol = pb.createScanThru(pb.createAnd(mInitial, sol), mNonFinal);
-    }
-    MarkerType m = AdvanceMarker(marker, MarkerPosition::FinalPostPositionUnit, pb);
-    return makeMarker(MarkerPosition::FinalPostPositionUnit, pb.createAnd(markerVar(m), sol, "sol"));
+    MarkerType m = AdvanceMarker(marker, MarkerPosition::InitialPostPositionUnit, pb);
+    return makeMarker(MarkerPosition::InitialPostPositionUnit, pb.createAnd(markerVar(m), sol, "sol"));
 }
 
 inline MarkerType RE_Compiler::compileEnd(MarkerType marker, pablo::PabloBuilder & pb) {
@@ -545,9 +545,11 @@ inline MarkerType RE_Compiler::AdvanceMarker(MarkerType marker, const MarkerPosi
     if (marker.pos != newpos) {
         if (marker.pos == MarkerPosition::FinalMatchUnit) {
             marker.stream = pb.createAdvance(marker.stream, 1, "ipp");
+            marker.pos = MarkerPosition::InitialPostPositionUnit;
+        }
+        if (newpos == MarkerPosition::FinalPostPositionUnit) {
             PabloAST * nonFinal = mNonFinal;
-            PabloAST * starts = pb.createAnd(mInitial, marker.stream);
-            marker.stream = pb.createScanThru(starts, nonFinal, "fpp");
+            marker.stream = pb.createScanThru(pb.createAnd(mInitial, marker.stream), nonFinal, "fpp");
             marker.pos = MarkerPosition::FinalPostPositionUnit;
         }
     }
