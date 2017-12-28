@@ -1,8 +1,6 @@
 #ifndef RE_NULLABLE_H
 #define RE_NULLABLE_H
 
-#include <llvm/Support/Compiler.h>
-
 namespace re { class RE; }
 namespace re { class Vector; }
 

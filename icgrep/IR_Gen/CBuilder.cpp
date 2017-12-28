@@ -1310,8 +1310,8 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
         // guarantees that both the source and destination pointers are aligned to that boundary.
         if (Align > 1) {
             ConstantInt * align = ConstantInt::get(intPtrTy, Align);
-            CreateAssertZero(CreateURem(intSrc, align), "CreateMemCpy: Src pointer is misaligned");
-            CreateAssertZero(CreateURem(intDst, align), "CreateMemCpy: Dst pointer is misaligned");
+            CreateAssertZero(CreateURem(intSrc, align), "CreateMemCpy: Src is misaligned");
+            CreateAssertZero(CreateURem(intDst, align), "CreateMemCpy: Dst is misaligned");
         }
         Value * intSize = CreateZExtOrTrunc(Size, intPtrTy);
         Value * nonOverlapping = CreateOr(CreateICmpULT(CreateAdd(intSrc, intSize), intDst),
@@ -1325,6 +1325,13 @@ llvm::CallInst * CBuilder::CreateMemSet(llvm::Value * Ptr, llvm::Value * Val, ll
                        bool isVolatile, llvm::MDNode * TBAATag, llvm::MDNode * ScopeTag, llvm::MDNode * NoAliasTag) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CHECK_ADDRESS(Ptr, Size, "CreateMemSet");
+        if (Align > 1) {
+            DataLayout DL(getModule());
+            IntegerType * const intPtrTy = DL.getIntPtrType(getContext());
+            Value * intPtr = CreatePtrToInt(Ptr, intPtrTy);
+            ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+            CreateAssertZero(CreateURem(intPtr, align), "CreateMemSet: Ptr is misaligned");
+        }
     }
     return IRBuilder<>::CreateMemSet(Ptr, Val, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
 }

@@ -483,6 +483,7 @@ void * GrepEngine::DoGrepThreadMethod() {
         // Always perform one final cache cleanup step.
         mGrepDriver->performIncrementalCacheCleanupStep();
     }
+    return nullptr;
 }
 
 }

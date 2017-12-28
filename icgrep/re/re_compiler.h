@@ -24,10 +24,6 @@ namespace re { class RE; }
 namespace re { class Rep; }
 namespace re { class CC; }
 
-//namespace UCD {
-//class UnicodeSet;
-//}
-
 /*   Marker streams represent the results of matching steps.
      Three types of marker streams are used internally.
      FinalMatchUnit markers are used for character classes and
@@ -42,26 +38,19 @@ namespace re { class CC; }
 
 namespace re {
 
-enum MarkerPosition {FinalMatchUnit, InitialPostPositionUnit, FinalPostPositionUnit};
-
-struct MarkerType { 
-    MarkerPosition pos;
-    pablo::PabloAST * stream;
-    MarkerType & operator =(const MarkerType &) = default;
-};
-
-inline MarkerPosition markerPos(const MarkerType & m) {return m.pos; }
-
-inline pablo::PabloAST * markerVar(const MarkerType & m) {return m.stream; }
-
-inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {return {newpos, strm};}
-
-
 class RE_Compiler {
 public:
 
+    enum MarkerPosition {FinalMatchUnit, InitialPostPositionUnit, FinalPostPositionUnit};
+
+    struct MarkerType {
+        MarkerPosition pos;
+        pablo::PabloAST * stream;
+        MarkerType & operator =(const MarkerType &) = default;
+    };
+
     RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler);
-    pablo::PabloAST * compile(RE * re);
+    pablo::PabloAST * compile(RE * re, pablo::PabloAST * const initialCursors = nullptr);
 
     static LLVM_ATTRIBUTE_NORETURN void UnsupportedRE(std::string errmsg);
     
@@ -87,14 +76,16 @@ private:
         boost::container::flat_map<const Name *, MarkerType> mMap;
     };
 
-    MarkerType compile(RE * re, pablo::PabloBuilder & cg);
+
+    MarkerType compile(RE * re, pablo::PabloBuilder & pb);
+    MarkerType compile(RE * re, pablo::PabloAST * const cursors, pablo::PabloBuilder & pb);
 
     MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileName(Name * name, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileCC(CC * cc, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileSeq(Seq * seq, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileSeqTail(Seq::iterator current, const Seq::iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileAlt(Alt * alt, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType compileAlt(Alt * alt, MarkerType base, pablo::PabloBuilder & pb);
     MarkerType compileAssertion(Assertion * a, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileRep(Rep * rep, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileDiff(Diff * diff, MarkerType marker, pablo::PabloBuilder & cg);
@@ -113,6 +104,10 @@ private:
 
     MarkerType AdvanceMarker(MarkerType marker, const MarkerPosition newpos, pablo::PabloBuilder & pb);
     void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBuilder & pb);
+
+    static inline MarkerPosition markerPos(const MarkerType & m) {return m.pos; }
+    static inline pablo::PabloAST * markerVar(const MarkerType & m) {return m.stream; }
+    static inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {return {newpos, strm};}
 
 private:
 
