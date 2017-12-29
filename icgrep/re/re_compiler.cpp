@@ -95,12 +95,14 @@ inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb)
 }
 
 MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb) {
+    PabloAST * nextPos = markerVar(marker);
     // If Unicode CCs weren't pulled out earlier, we generate the equivalent
     // byte sequence as an RE.
     if (cc->getAlphabet() == &cc::Unicode) {
-        return process(toUTF8(cc), marker, pb);
+         MarkerType m = compile(toUTF8(cc), pb);
+         nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
+         return makeMarker(FinalMatchUnit, pb.createAnd(markerVar(m), nextPos));
     }
-    PabloAST * nextPos = markerVar(marker);
     if (isByteLength(cc)) {
         if (marker.pos == FinalMatchUnit) {
             nextPos = pb.createAdvance(nextPos, 1);
@@ -184,10 +186,9 @@ MarkerType RE_Compiler::compileSeqTail(Seq::iterator current, Seq::iterator end,
 }
 
 MarkerType RE_Compiler::compileAlt(Alt * alt, const MarkerType base, PabloBuilder & pb) {
-    std::array<PabloAST *, 3> accum;
+    std::vector<PabloAST *>  accum(3, pb.createZeroes());
     // The following may be useful to force a common Advance rather than separate
     // Advances in each alternative.
-    accum.fill(pb.createZeroes());
     for (RE * re : *alt) {
         MarkerType m = process(re, base, pb);
         const MarkerPosition p = markerPos(m);
@@ -430,7 +431,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
             // MatchStar deposits any cursors on the post position. However those cursors may may land on the initial "byte" of a
             // "multi-byte" character. Combine the masked range with any nonFinals.
             PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, mNonFinal), "bounded");
-            return makeMarker(InitialPostPositionUnit, bounded);
+            return makeMarker(FinalPostPositionUnit, bounded);
         }
         else if (isUnicodeUnitLength(repeated)) {
             // For a regexp which represent a single Unicode codepoint, we can use the mFinal stream
@@ -477,7 +478,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
 
 MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, PabloBuilder & pb) {
     // always use PostPosition markers for unbounded repetition.
-    PabloAST * base = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
+    PabloAST * base = markerVar(AdvanceMarker(marker, InitialPostPositionUnit, pb));
     if (isByteLength(repeated)  && !AlgorithmOptionIsSet(DisableMatchStar)) {
         PabloAST * mask = markerVar(compile(repeated, pb));
         PabloAST * nonFinal = mNonFinal;
@@ -499,8 +500,8 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         mStarDepth++;
         PabloAST * m1 = pb.createOr(base, starPending);
         PabloAST * m2 = pb.createOr(base, starAccum);
-        MarkerType result = process(repeated, makeMarker(FinalPostPositionUnit, m1), pb);
-        result = AdvanceMarker(result, FinalPostPositionUnit, pb);
+        MarkerType result = process(repeated, makeMarker(InitialPostPositionUnit, m1), pb);
+        result = AdvanceMarker(result, InitialPostPositionUnit, pb);
         PabloAST * loopComputation = markerVar(result);
         pb.createAssign(starPending, pb.createAnd(loopComputation, pb.createNot(m2)));
         pb.createAssign(starAccum, pb.createOr(loopComputation, m2));
@@ -516,8 +517,8 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
         NameMap nestedMap(mCompiledName);
         mCompiledName = &nestedMap;
         mStarDepth++;
-        MarkerType result = process(repeated, makeMarker(FinalPostPositionUnit, whilePending), wb);
-        result = AdvanceMarker(result, FinalPostPositionUnit, wb);
+        MarkerType result = process(repeated, makeMarker(InitialPostPositionUnit, whilePending), wb);
+        result = AdvanceMarker(result, InitialPostPositionUnit, wb);
         PabloAST * loopComputation = markerVar(result);
         wb.createAssign(whilePending, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
         wb.createAssign(whileAccum, wb.createOr(loopComputation, whileAccum));
