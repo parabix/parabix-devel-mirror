@@ -91,8 +91,8 @@ protected:
 
 WordCountKernel::WordCountKernel (const std::unique_ptr<kernel::KernelBuilder> & b)
 : PabloKernel(b, "wc",
-    {Binding{b->getStreamSetTy(8, 1), "u8bit"}, Binding{b->getStreamSetTy(1, 8), "u8byte"}},
-    {Binding{b->getStreamSetTy(1, 8), "dblbyte"}},
+    {Binding{b->getStreamSetTy(8, 1), "u8bit"}},
+    {},
     {},
     {Binding{b->getSizeTy(), "lineCount"}, Binding{b->getSizeTy(), "wordCount"}, Binding{b->getSizeTy(), "charCount"}}) {
 
@@ -102,18 +102,12 @@ void WordCountKernel::generatePabloMethod() {
 
     //  input: 8 basis bit streams
     const auto u8bitSet = getInputStreamVar("u8bit");
-    const auto u8byteSet = getInputStreamVar("u8byte");
-    const auto dblbyteSet = getOutputStreamVar("dblbyte");
     //  output: 3 counters
 
     cc::CC_Compiler ccc(this, u8bitSet);
 
     PabloBuilder & pb = ccc.getBuilder();
 
-    PabloAST * bytes = pb.createExtract(u8byteSet, pb.getInteger(0));
-    PabloAST * dbl = pb.createAdd(bytes, bytes);
-    pb.createAssign(pb.createExtract(dblbyteSet, pb.getInteger(0)), dbl);
-    
     Var * lc = getOutputScalarVar("lineCount");
     Var * wc = getOutputScalarVar("wordCount");
     Var * cc = getOutputScalarVar("charCount");
@@ -169,7 +163,6 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     StreamSetBuffer * const ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    StreamSetBuffer * const ByteOut = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), segmentSize * bufferSegments);
 
     StreamSetBuffer * const BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
 
@@ -181,7 +174,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
     Kernel * wck = pxDriver.addKernelInstance<WordCountKernel>(iBuilder);
-    pxDriver.makeKernelCall(wck, {BasisBits,ByteStream}, {ByteOut});
+    pxDriver.makeKernelCall(wck, {BasisBits}, {});
 
     pxDriver.generatePipelineIR();
     
