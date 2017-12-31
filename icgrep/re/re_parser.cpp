@@ -347,7 +347,7 @@ RE * RE_Parser::parse_escaped() {
     }
     else if (atany("xo0")) {
         codepoint_t cp = parse_escaped_codepoint();
-        if ((cp >= 0x80) && (cp <= 0xFF)) {
+        if ((cp <= 0xFF)) {
             return makeByte(cp);
         }
         else return createCC(cp);
@@ -714,6 +714,13 @@ RE * RE_Parser::parse_Posix_class() {
 
 RE * RE_Parser::parse_escaped_char_item() {
     if (accept('N')) return parseNamePatternExpression();
+    else if (atany("xo0")) {
+        codepoint_t cp = parse_escaped_codepoint();
+        if ((cp <= 0xFF)) {
+            return makeByte(cp);
+        }
+        else return createCC(cp);
+    }
     else return makeCC(parse_escaped_codepoint());
 }
 
@@ -810,26 +817,15 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
     return value;
 }
 
-Name * RE_Parser::createCC(const codepoint_t cp) {
-    CC * cc = makeCC(cp);
-    return mMemoizer.memoize(cc);
-}
-
-void RE_Parser::insert(CC * cc, const codepoint_t cp) {
-    cc->insert(cp);
-}
-
-void RE_Parser::insert_range(CC * cc, const codepoint_t lo, const codepoint_t hi) {
-    cc->insert_range(lo, hi);
+CC * RE_Parser::createCC(const codepoint_t cp) {
+    CC * cc = mMemoizer.memoize(makeCC(cp));
+    return cc;
 }
 
 RE * RE_Parser::makeComplement(RE * s) {
   return makeDiff(makeAny(), s);
 }
 
-           
-
-                           
 RE * RE_Parser::makeWordBoundary() {
     Name * wordC = makeWordSet();
     return makeReBoundary(wordC);

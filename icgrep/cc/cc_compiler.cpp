@@ -141,7 +141,7 @@ PabloAST * CC_Compiler::make_range(const codepoint_t n1, const codepoint_t n2, P
     for (codepoint_t diff_bits = n1 ^ n2; diff_bits; diff_count++, diff_bits >>= 1);
 
     if ((n2 < n1) || (diff_count > mEncodingBits)) {
-        throw std::runtime_error("Bad Range: [" + std::to_string(n1) + "," +
+        llvm::report_fatal_error("Bad Range: [" + std::to_string(n1) + "," +
                                  std::to_string(n2) + "] for " +
                                  std::to_string(mEncodingBits) + "-bit encoding");
     }
@@ -217,7 +217,7 @@ inline PabloAST * CC_Compiler::char_or_range_expr(const codepoint_t lo, const co
     } else if (lo < hi) {
         return make_range(lo, hi, pb);
     }
-    throw std::runtime_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
+    llvm::report_fatal_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
 }
 
 inline PabloAST * CC_Compiler::getBasisVar(const unsigned i) const {

@@ -20,8 +20,7 @@ RE * makeRange(RE * lo, RE * hi) {
             llvm::report_fatal_error("invalid range operand");
         auto lo_val = dyn_cast<CC>(lo)->front().first;
         auto hi_val = dyn_cast<CC>(hi)->front().first;
-        if (hi_val < lo_val) llvm::report_fatal_error("illegal range");
-        return makeCC(lo_val, hi_val);
+        return makeCC(lo_val, hi_val, dyn_cast<CC>(hi)->getAlphabet());
     }
     else if (isa<Name>(lo) && (cast<Name>(lo)->getDefinition() != nullptr)) {
         return makeRange(cast<Name>(lo)->getDefinition(), hi);

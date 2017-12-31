@@ -232,10 +232,7 @@ protected:
 
     codepoint_t parse_octal_codepoint(int mindigits, int maxdigits);
 
-    // CC insertion dependent on case-insensitive flag.
-    Name * createCC(const codepoint_t cp);
-    void insert(CC * cc, const codepoint_t cp);
-    void insert_range(CC * cc, const codepoint_t lo, const codepoint_t hi);
+    CC * createCC(const codepoint_t cp);
 
     static std::string canonicalize(const cursor_t begin, const cursor_t end);
     bool isCharAhead(char c);

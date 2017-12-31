@@ -20,13 +20,8 @@ struct Memoizer : public std::set<RE *, MemoizerComparator> {
         return llvm::cast<Name>(memoize(llvm::cast<RE>(name)));
     }
 
-    Name * memoize(CC * const cc) {
-        auto f = find(cc);
-        if (f != end()) {
-            return llvm::cast<Name>(*f);
-        } else {
-            return memoize(makeName(cc));
-        }
+    CC * memoize(CC * const cc) {
+        return llvm::cast<CC>(memoize(llvm::cast<RE>(cc)));
     }
 };
 
