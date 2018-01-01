@@ -9,6 +9,7 @@
 
 namespace IDISA { class IDISA_Builder; }
 namespace re { class RE; }
+namespace cc { class Alphabet; }
 namespace kernel {
 
     
@@ -41,11 +42,12 @@ protected:
     
 class ICGrepKernel : public ICGrepSignature, public pablo::PabloKernel {
 public:
-    ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast, const unsigned numOfCharacterClasses = 8);
+    ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast, std::vector<cc::Alphabet *> alphabets = {});
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     bool isCachable() const override { return true; }
 protected:
     void generatePabloMethod() override;
+    std::vector<cc::Alphabet *> mAlphabets;
 };
 
 class MatchedLinesKernel : public pablo::PabloKernel {

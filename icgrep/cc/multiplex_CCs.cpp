@@ -8,8 +8,10 @@
 #include <re/re_cc.h>
 #include "boost/dynamic_bitset.hpp"
 #include <cc/multiplex_CCs.h>
+#include <re/printer_re.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_ostream.h>
 
 namespace cc {
 
@@ -137,6 +139,9 @@ re::CC * MultiplexedAlphabet::transformCC(const re::CC * sourceCC) const {
     if (sourceCC->getAlphabet() != mSourceAlphabet) llvm::report_fatal_error("Mismatched source alphabets for transformCC");
     
     const auto index = find(mUnicodeSets.begin(), mUnicodeSets.end(), sourceCC) - mUnicodeSets.begin();
+    if (index >= mUnicodeSets.size()) {
+        llvm::errs() << Printer_RE::PrintRE(sourceCC) << " not found\n";
+    }
     const auto exclusive_IDs = mExclusiveSetIDs[index];
     re::CC * CC_union = re::makeCC(this);
     for (auto i : exclusive_IDs) {

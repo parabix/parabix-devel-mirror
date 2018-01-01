@@ -28,12 +28,16 @@
 #include <re/re_local.h>
 #include <re/to_utf8.h>
 #include <re/re_toolchain.h>        // for AlgorithmOptionIsSet, RE_Algorith...
-#include "cc/cc_compiler.h"         // for CC_Compiler
+#include <cc/alphabet.h>
+#include <cc/cc_compiler.h>
 #include "pablo/builder.hpp"        // for PabloBuilder
 #include <IR_Gen/idisa_target.h>    // for AVX2_available
+#include <llvm/ADT/STLExtras.h> // for make_unique
+#include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
 
 namespace pablo { class PabloAST; }
+namespace pablo { class Var; }
 namespace pablo { class PabloKernel; }
 namespace re { class Alt; }
 namespace re { class RE; }
@@ -44,6 +48,12 @@ using namespace llvm;
 using FollowMap = std::map<re::CC *, re::CC*>;
 
 namespace re {
+
+    
+void RE_Compiler::addAlphabet(cc::Alphabet * a, pablo::Var * basis_set) {
+    mAlphabets.push_back(a);
+    mAlphabetCompilers.push_back(make_unique<cc::CC_Compiler>(mKernel, basis_set));
+}
 
 using MarkerType = RE_Compiler::MarkerType;
 
@@ -96,21 +106,29 @@ inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb)
 
 MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb) {
     PabloAST * nextPos = markerVar(marker);
-    // If Unicode CCs weren't pulled out earlier, we generate the equivalent
-    // byte sequence as an RE.
-    if (cc->getAlphabet() == &cc::Unicode) {
-         MarkerType m = compile(toUTF8(cc), pb);
-         nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
-         return makeMarker(FinalMatchUnit, pb.createAnd(markerVar(m), nextPos));
-    }
-    if (isByteLength(cc)) {
+    const cc::Alphabet * a = cc->getAlphabet();
+    if (a == &cc::Byte) {
         if (marker.pos == FinalMatchUnit) {
             nextPos = pb.createAdvance(nextPos, 1);
         }
-    } else {
+        return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, mCCCompiler.compileCC(cc, pb)));
+    } else if (a == &cc::Unicode) {
+        MarkerType m = compile(toUTF8(cc), pb);
         nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
+        return makeMarker(FinalMatchUnit, pb.createAnd(markerVar(m), nextPos));
+    } else {
+        if (isByteLength(cc)) {
+            if (marker.pos == FinalMatchUnit) {
+                nextPos = pb.createAdvance(nextPos, 1);
+            }
+        } else {
+            nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
+        }
+        unsigned i = 0;
+        while (i < mAlphabets.size() && (a != mAlphabets[i])) i++;
+        if (i == mAlphabets.size()) llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler");
+        return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
     }
-    return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, mCCCompiler.compileCC(cc, pb)));
 }
 
 inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, PabloBuilder & pb) {

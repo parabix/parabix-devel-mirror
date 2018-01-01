@@ -721,7 +721,7 @@ RE * RE_Parser::parse_escaped_char_item() {
         }
         else return createCC(cp);
     }
-    else return makeCC(parse_escaped_codepoint());
+    else return createCC(parse_escaped_codepoint());
 }
 
 

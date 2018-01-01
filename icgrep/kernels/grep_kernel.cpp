@@ -18,6 +18,7 @@
 #include <pablo/pe_matchstar.h>
 #include <cc/cc_compiler.h>         // for CC_Compiler
 #include <cc/alphabet.h>
+#include <re/re_compiler.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace kernel;
@@ -174,17 +175,32 @@ ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
     
 }
 
-ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re, unsigned numOfCharacterClasses)
+inline static unsigned ceil_log2(const unsigned v) {
+    assert ("log2(0) is undefined!" && v != 0);
+    return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1U);
+}
+
+// Helper to compute stream set inputs to pass into PabloKernel constructor.
+std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<cc::Alphabet *> alphabets) {
+    std::vector<Binding> streamSetInputs = {Binding{iBuilder->getStreamSetTy(8), "basis"},
+        Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"},
+        Binding{iBuilder->getStreamSetTy(1, 1), "cr+lf"},
+        Binding{iBuilder->getStreamSetTy(3, 1), "required"}};
+    for (unsigned i = 0; i < alphabets.size(); i++) {
+        unsigned basis_size = ceil_log2(alphabets[i]->getSize());
+        streamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(basis_size, 1), "basisSet" + std::to_string(i)});
+    }
+    return streamSetInputs;
+}
+
+ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re, std::vector<cc::Alphabet *> alphabets)
 : ICGrepSignature(re)
 , PabloKernel(iBuilder, "ic" + sha1sum(mSignature),
 // inputs
-{Binding{iBuilder->getStreamSetTy(numOfCharacterClasses), "basis"},
-Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"},
-Binding{iBuilder->getStreamSetTy(1, 1), "cr+lf"},
-Binding{iBuilder->getStreamSetTy(3, 1), "required"}},
+icGrepInputs(iBuilder, alphabets),
 // output
 {Binding{iBuilder->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}}) {
-
+    mAlphabets = alphabets;
 }
 
 std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -192,7 +208,14 @@ std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuil
 }
 
 void ICGrepKernel::generatePabloMethod() {
-    PabloAST * const match_post = re2pablo_compiler(this, mRE);
+    Var * const basis = getInputStreamVar("basis");
+    cc::CC_Compiler cc_compiler(this, basis);
+    RE_Compiler re_compiler(this, cc_compiler);
+    for (unsigned i = 0; i < mAlphabets.size(); i++) {
+        auto basis = getInputStreamVar("basisSet" + std::to_string(i));
+        re_compiler.addAlphabet(mAlphabets[i], basis);
+    }
+    PabloAST * const match_post = re_compiler.compile(mRE);
     PabloBlock * const pb = getEntryBlock();
     Var * const output = getOutputStreamVar("matches");
     pb->createAssign(pb->createExtract(output, pb->getInteger(0)), match_post);

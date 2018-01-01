@@ -127,29 +127,36 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     for(unsigned i = 0; i < n; ++i) {
         REs[i] = resolveModesAndExternalSymbols(REs[i]);
         REs[i] = excludeUnicodeLineBreak(REs[i]);
-#define USE_MULTIPLEX_CC
+//#define USE_MULTIPLEX_CC
 #ifdef USE_MULTIPLEX_CC
-        
         REs[i] = multiplexing_prepasses(REs[i]);
         const std::vector<const re::CC *> UnicodeSets = re::collectUnicodeSets(REs[i]);
-        mpx = make_unique<MultiplexedAlphabet>("mpx", UnicodeSets);
-        REs[i] = transformCCs(mpx.get(), REs[i]);
-        //llvm::errs() << Printer_RE::PrintRE(REs[i]) << '\n';
-        std::vector<re::CC *> mpx_basis = mpx->getMultiplexedCCs();
-        auto numOfCharacterClasses = mpx_basis.size();
-        StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), segmentSize * bufferSegments);
-        kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis));
-        mGrepDriver->makeKernelCall(ccK, {BasisBits}, {CharClasses});
-        StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
-        kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i], numOfCharacterClasses);
-        mGrepDriver->makeKernelCall(icgrepK, {CharClasses, LineBreakStream, CRLFStream, RequiredStreams}, {MatchResults});
+        if (UnicodeSets.size() <= 1) {
+            StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+            kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i]);
+            mGrepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, CRLFStream, RequiredStreams}, {MatchResults});
+            MatchResultsBufs[i] = MatchResults;
+        }
+        else {
+            mpx = make_unique<MultiplexedAlphabet>("mpx", UnicodeSets);
+            REs[i] = transformCCs(mpx.get(), REs[i]);
+            std::vector<re::CC *> mpx_basis = mpx->getMultiplexedCCs();
+            auto numOfCharacterClasses = mpx_basis.size();
+            StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), segmentSize * bufferSegments);
+            kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis));
+            mGrepDriver->makeKernelCall(ccK, {BasisBits}, {CharClasses});
+            StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+            kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i], std::vector<cc::Alphabet *>{mpx.get()});
+            mGrepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, CRLFStream, RequiredStreams, CharClasses}, {MatchResults});
+            MatchResultsBufs[i] = MatchResults;
+        }
 #else
         REs[i] = regular_expression_passes(REs[i]);
         StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
         kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i]);
         mGrepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, CRLFStream, RequiredStreams}, {MatchResults});
-#endif
         MatchResultsBufs[i] = MatchResults;
+#endif
     }
     StreamSetBuffer * MergedResults = MatchResultsBufs[0];
     if (REs.size() > 1) {

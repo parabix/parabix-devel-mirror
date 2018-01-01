@@ -158,7 +158,6 @@ RE * regular_expression_passes(RE * r)  {
 PabloAST * re2pablo_compiler(PabloKernel * kernel, RE * re_ast) {
     Var * const basis = kernel->getInputStreamVar("basis");
     cc::CC_Compiler cc_compiler(kernel, basis);
-    // compile Unicode names
     RE_Compiler re_compiler(kernel, cc_compiler);
     return re_compiler.compile(re_ast);
 }

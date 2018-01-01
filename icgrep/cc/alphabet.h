@@ -21,6 +21,7 @@ namespace cc {
 class Alphabet {
 public:
     const std::string & getName() const { return mAlphabetName;}
+    virtual const unsigned getSize() const = 0;
     enum class ClassTypeId : unsigned {UnicodeMappableAlphabet, CodeUnitAlphabet, MultiplexedAlphabet};
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
@@ -56,6 +57,8 @@ public:
     //  The ordinal position of the character whose Unicode codepoint value is ucp.
     unsigned fromUnicode(const UCD::codepoint_t ucp) const;
 
+    const unsigned getSize() const override {return mUnicodeCommon + mAboveCommon.size();}
+
 protected:
     UCD::codepoint_t mCharSet;
     UCD::codepoint_t mUnicodeCommon;
@@ -70,7 +73,8 @@ public:
     }
     static inline bool classof(const void *) {return false;}
     uint8_t getCodeUnitBitWidth() { return mCodeUnitBits;}
-    
+    const unsigned getSize() const override {return 1<<mCodeUnitBits;}
+
 private:
     uint8_t mCodeUnitBits;
 };

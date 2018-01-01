@@ -19,6 +19,8 @@ public:
         return a->getClassTypeId() == ClassTypeId::MultiplexedAlphabet;
     }
     static inline bool classof(const void *) {return false;}
+    
+    const unsigned getSize() const override {return mUnicodeSets.size() + 1;}
 
     const Alphabet * getSourceAlphabet() const;
     

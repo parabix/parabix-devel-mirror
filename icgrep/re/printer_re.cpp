@@ -21,6 +21,7 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <re/re_group.h>
+#include <cc/alphabet.h>
 
 using namespace re;
 using namespace llvm;
@@ -53,6 +54,7 @@ const std::string Printer_RE::PrintRE(const RE * re) {
                 retVal += "-" + std::to_string(hi_codepoint(i));
             retVal += "]";
         }
+        retVal += "/" + re_cc->getAlphabet()->getName();
     } else if (const Name* re_name = dyn_cast<const Name>(re)) {
         retVal = "Name \"";
         if (re_name->hasNamespace()) {
@@ -61,9 +63,9 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         }
         retVal += re_name->getName();
         retVal += "\" ";
-        if (re_name->getType() == Name::Type::Capture) {
+        //if (re_name->getType() == Name::Type::Capture) {
             retVal += "=(" + PrintRE(re_name->getDefinition()) + ")";
-        }
+        //}
     } else if (const Range* rg = dyn_cast<const Range>(re)) {
         retVal = "Range (";
         retVal += PrintRE(rg->getLo());

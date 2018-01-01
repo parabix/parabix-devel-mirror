@@ -11,10 +11,11 @@
 #include <boost/container/flat_map.hpp>
 #include <pablo/builder.hpp>
 #include <vector>       // for vector<>::iterator
-namespace cc { class CC_Compiler; }
+namespace cc { class CC_Compiler; class Alphabet;}
 namespace pablo { class PabloAST; }
 namespace pablo { class PabloBuilder; }
 namespace pablo { class PabloKernel; }
+namespace pablo { class Var; }
 namespace re { class Alt; }
 namespace re { class Assertion; }
 namespace re { class Diff; }
@@ -50,6 +51,23 @@ public:
     };
 
     RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler);
+    
+    //
+    // The CCs (character classes) within a regular expression are generally
+    // expressed using a single alphabet.   But multiple alphabets may be
+    // used under some circumstances.   For example, regular expressions for
+    // Unicode may use both the Unicode alphabet for full Unicode characters
+    // as well as the Byte alphabet for the individual code units of UTF-8.
+    // In other cases, a multiplexed alphabet may be used for a certain
+    // subexpression, for example, if the subexpression involves a local
+    // language or a capture-backreference combination.
+    //
+    // Alphabets are added as needed using the addAlphabet method, giving both
+    // the alphabet value and the set of parallel bit streams that comprise
+    // a basis for the coded alphabet values.
+    
+    void addAlphabet(cc::Alphabet * a, pablo::Var * basis_set);
+
     pablo::PabloAST * compile(RE * re, pablo::PabloAST * const initialCursors = nullptr);
 
     static LLVM_ATTRIBUTE_NORETURN void UnsupportedRE(std::string errmsg);
@@ -112,6 +130,9 @@ private:
 private:
 
     pablo::PabloKernel * const                      mKernel;
+    std::vector<cc::Alphabet *>                     mAlphabets;
+    std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
+
     bool                                            mCountOnly;
     cc::CC_Compiler &                               mCCCompiler;
     pablo::PabloAST *                               mLineBreak;
