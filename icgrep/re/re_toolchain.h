@@ -34,10 +34,6 @@ RE * resolveModesAndExternalSymbols(RE * r);
 RE * excludeUnicodeLineBreak(RE * r);
 
 RE * regular_expression_passes(RE * r);
-
-RE * multiplexing_prepasses(RE * r);
-
-pablo::PabloAST * re2pablo_compiler(pablo::PabloKernel * kernel, RE * re_ast);
     
 }
 #endif

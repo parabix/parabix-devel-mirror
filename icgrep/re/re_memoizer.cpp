@@ -26,9 +26,29 @@ static bool lessThan(const Vector * const lh, const Vector * const rh) {
         assert (*i && *j);
         if (compare(*i, *j)) {
             return true;
+        } else if (compare(*j, *i)) {
+            return false;
         }
     }
     return false;
+}
+
+inline bool lessThan(const Name * const lh, const Name * const rh) {
+    if (lh->getType() != rh->getType()) {
+        return lh->getType() < rh->getType();
+    } else if (lh->hasNamespace() != rh->hasNamespace()) {
+        return lh->hasNamespace();
+    } else if (lh->hasNamespace() && (lh->getNamespace() != rh->getNamespace())) {
+        return lh->getNamespace() < rh->getNamespace();
+    } else if (lh->getName() != rh->getName()) {
+        return lh->getName() < rh->getName();
+    } else if (lh->getDefinition() == nullptr) {
+        return rh->getDefinition() != nullptr;
+    } else if (rh->getDefinition() == nullptr) {
+        return false;
+    } else {
+        return compare(lh->getDefinition(), rh->getDefinition());
+    }
 }
 
 inline bool lessThan(const Assertion * const lh, const Assertion * const rh) {
@@ -40,7 +60,7 @@ inline bool lessThan(const Assertion * const lh, const Assertion * const rh) {
     }
     return compare(lh->getAsserted(), rh->getAsserted());
 }
-
+    
 inline bool lessThan(const Rep * const lh, const Rep * const rh) {
     if (lh->getLB() != rh->getLB()) {
         return lh->getLB() < rh->getLB();
@@ -52,15 +72,39 @@ inline bool lessThan(const Rep * const lh, const Rep * const rh) {
 }
 
 inline bool lessThan(const Diff * const lh, const Diff * const rh) {
-    return compare(lh->getLH(), rh->getLH()) || compare(lh->getRH(), rh->getRH());
+    if (compare(lh->getLH(), rh->getLH())) {
+        return true;
+    } else if (compare(rh->getLH(), lh->getLH())) {
+        return false;
+    } else if (compare(lh->getRH(), rh->getRH())) {
+        return true;
+    } else {
+        return !compare(rh->getRH(), lh->getRH());
+    }
 }
 
 inline bool lessThan(const Range * const lh, const Range * const rh) {
-    return compare(lh->getLo(), rh->getLo()) || compare(lh->getHi(), rh->getHi());
+    if (compare(lh->getLo(), rh->getLo())) {
+        return true;
+    } else if (compare(rh->getLo(), lh->getLo())) {
+        return false;
+    } else if (compare(lh->getHi(), rh->getHi())) {
+        return true;
+    } else {
+        return !compare(rh->getHi(), lh->getHi());
+    }
 }
 
 static bool lessThan(const Intersect * const lh, const Intersect * const rh) {
-    return compare(lh->getLH(), rh->getLH()) || compare(lh->getRH(), rh->getRH());
+    if (compare(lh->getLH(), rh->getLH())) {
+        return true;
+    } else if (compare(rh->getLH(), lh->getLH())) {
+        return false;
+    } else if (compare(lh->getRH(), rh->getRH())) {
+        return true;
+    } else {
+        return !compare(rh->getRH(), lh->getRH());
+    }
 }
 
 inline bool lessThan(const Group * const lh, const Group * const rh) {
@@ -79,13 +123,6 @@ inline bool compare(const RE * const lh, const RE * const rh) {
     const auto typeL = lh->getClassTypeId();
     const auto typeR = rh->getClassTypeId();
     if (LLVM_LIKELY(typeL != typeR)) {
-        if ((typeL == Type::CC || typeR == Type::CC) && (typeL == Type::Name || typeR == Type::Name)) {
-            if (typeL == Type::Name) {
-                return *cast<Name>(lh) < *cast<CC>(rh);
-            } else {
-                return *cast<Name>(rh) > *cast<CC>(lh);
-            }
-        }
         return typeL < typeR;
     }
     switch (typeL) {
@@ -99,7 +136,7 @@ inline bool compare(const RE * const lh, const RE * const rh) {
         case Type::CC:
             return *cast<CC>(lh) < *cast<CC>(rh);
         case Type::Name:
-            return *cast<Name>(lh) < *cast<Name>(rh);
+            return lessThan(cast<Name>(lh), cast<Name>(rh));
         case Type::Group:
             return lessThan(cast<Group>(lh), cast<Group>(rh));
         case Type::Range:

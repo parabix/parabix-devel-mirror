@@ -129,7 +129,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
         REs[i] = excludeUnicodeLineBreak(REs[i]);
 //#define USE_MULTIPLEX_CC
 #ifdef USE_MULTIPLEX_CC
-        REs[i] = multiplexing_prepasses(REs[i]);
+        REs[i] = regular_expression_passes(REs[i]);
         const std::vector<const re::CC *> UnicodeSets = re::collectUnicodeSets(REs[i]);
         if (UnicodeSets.size() <= 1) {
             StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
