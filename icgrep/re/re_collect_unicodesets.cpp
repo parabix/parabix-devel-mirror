@@ -29,7 +29,8 @@ void SetCollector::collect(RE * const re) {
     if (Visited.insert(re).second) {
         if (CC * cc = dyn_cast<CC>(re)) {
             if (cc->getAlphabet() == &cc::Unicode) {
-                UnicodeSets.push_back(cc);
+                const auto index = find(UnicodeSets.begin(), UnicodeSets.end(), cc) - UnicodeSets.begin();
+                if (index == UnicodeSets.size()) UnicodeSets.push_back(cc);
             }
         } else if (isa<Name>(re)) {
             auto def = cast<Name>(re)->getDefinition();

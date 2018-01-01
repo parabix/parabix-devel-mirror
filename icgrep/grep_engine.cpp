@@ -127,7 +127,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     for(unsigned i = 0; i < n; ++i) {
         REs[i] = resolveModesAndExternalSymbols(REs[i]);
         REs[i] = excludeUnicodeLineBreak(REs[i]);
-//#define USE_MULTIPLEX_CC
+#define USE_MULTIPLEX_CC
 #ifdef USE_MULTIPLEX_CC
         REs[i] = regular_expression_passes(REs[i]);
         const std::vector<const re::CC *> UnicodeSets = re::collectUnicodeSets(REs[i]);

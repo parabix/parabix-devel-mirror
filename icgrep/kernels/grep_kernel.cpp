@@ -18,6 +18,7 @@
 #include <pablo/pe_matchstar.h>
 #include <cc/cc_compiler.h>         // for CC_Compiler
 #include <cc/alphabet.h>
+#include <cc/multiplex_CCs.h>
 #include <re/re_compiler.h>
 #include <llvm/Support/raw_ostream.h>
 
@@ -175,11 +176,6 @@ ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
     
 }
 
-inline static unsigned ceil_log2(const unsigned v) {
-    assert ("log2(0) is undefined!" && v != 0);
-    return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1U);
-}
-
 // Helper to compute stream set inputs to pass into PabloKernel constructor.
 std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<cc::Alphabet *> alphabets) {
     std::vector<Binding> streamSetInputs = {Binding{iBuilder->getStreamSetTy(8), "basis"},
@@ -187,8 +183,8 @@ std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBuilder> &
         Binding{iBuilder->getStreamSetTy(1, 1), "cr+lf"},
         Binding{iBuilder->getStreamSetTy(3, 1), "required"}};
     for (unsigned i = 0; i < alphabets.size(); i++) {
-        unsigned basis_size = ceil_log2(alphabets[i]->getSize());
-        streamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(basis_size, 1), "basisSet" + std::to_string(i)});
+        unsigned basis_size = cast<cc::MultiplexedAlphabet>(alphabets[i])->getMultiplexedCCs().size();
+        streamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(basis_size, 1), alphabets[i]->getName() + "_basis"});
     }
     return streamSetInputs;
 }
@@ -212,7 +208,7 @@ void ICGrepKernel::generatePabloMethod() {
     cc::CC_Compiler cc_compiler(this, basis);
     RE_Compiler re_compiler(this, cc_compiler);
     for (unsigned i = 0; i < mAlphabets.size(); i++) {
-        auto basis = getInputStreamVar("basisSet" + std::to_string(i));
+        auto basis = getInputStreamVar(mAlphabets[i]->getName() + "_basis");
         re_compiler.addAlphabet(mAlphabets[i], basis);
     }
     PabloAST * const match_post = re_compiler.compile(mRE);
