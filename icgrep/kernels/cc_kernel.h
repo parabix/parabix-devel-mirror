@@ -17,6 +17,7 @@ public:
     DirectCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize);
     void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
     bool isCachable() const override { return true;}
+    bool hasSignature() const override { return false; }
 private:
     const std::vector<re::CC *> mCharClasses;
     const unsigned              mCodeUnitSize;
