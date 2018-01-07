@@ -211,4 +211,32 @@ S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, bool aligned)
         mStreamSetInputs[0].addAttribute(Misaligned());
     }
 }
+#ifdef PABLO_PACKING
+void S2P_PabloKernel::generatePabloMethod() {
+    auto pb = this->getEntryBlock();
+    const unsigned steps = std::log2(mCodeUnitWidth);
+    std::vector<PabloAST *> streamSet[steps + 1];
+    streamSet[0].push_back(pb->createExtract(getInputStreamVar("codeUnitStream"), pb->getInteger(0)));
+    unsigned streamWidth = mCodeUnitWidth;
+    for (unsigned step = 1; step <= steps; step++) {
+        for (auto strm : streamSet[i-1]) {
+            streamSet[i].push_back(pb.createPackL(streamWidth, strm));
+            streamSet[i].push_back(pb.createPackH(streamWidth, strm));
+        }
+        streamWidth = streamWidth/2;
+    }
+    for (unsigned bit = 0; bit <= mCodeUnitWidth, bit++) {
+        pb.createAssign(pb.createExtract(getInputStreamVar("basisBits"), pb.getInteger(bit)), streamSet[steps][bit]);
+    }
+}
+
+S2P_PabloKernel::S2P_PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth)
+: PabloKernel(b, "s2p_pablo" + std::to_string(codeUnitWidth),
+    {Binding{b->getStreamSetTy(1, codeUnitWidth), "codeUnitStream"}},
+    {Binding{b->getStreamSetTy(codeUnitWidth, 1), "basisBits"}}, {}, {}, {}),
+  mCodeUnitWidth(codeUnitWidth) {
+}
+
+#endif
+
 }

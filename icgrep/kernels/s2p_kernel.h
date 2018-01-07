@@ -6,6 +6,11 @@
 #define S2P_KERNEL_H
 
 #include "kernel.h"  // for KernelBuilder
+
+#ifdef PABLO_PACKING
+#include <pablo/pablo_kernel.h>
+#endif
+
 namespace IDISA { class IDISA_Builder; }  // lines 14-14
 namespace llvm { class Value; }
 //#define S2P_MULTIBLOCK
@@ -29,6 +34,19 @@ protected:
 private:
     bool mAligned;
 };
+
+#ifdef PABLO_PACKING
+
+class S2P_PabloKernel final : public pablo::PabloKernel {
+public:
+    S2P_PabloKernel(const std::unique_ptr<KernelBuilder> & b, unsigned codeUnitWidth);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+    unsigned mCodeUnitWidth;
+};
+#endif
 
 }
 #endif
