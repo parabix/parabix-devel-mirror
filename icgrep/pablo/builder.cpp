@@ -136,7 +136,7 @@ PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexS
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
         return expr;
     }
-    else if (isa<Ones>(indexStream)) {
+    else if (indexStream == nullptr || isa<Ones>(indexStream)) {
         return createAdvance(expr, shiftAmount);
     }
     else if (cast<Integer>(shiftAmount)->value() == 1) {
@@ -150,7 +150,7 @@ PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexS
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount)->value() == 0) {
         return expr;
     }
-    else if (isa<Ones>(indexStream)) {
+    else if (indexStream == nullptr || isa<Ones>(indexStream)) {
         return createAdvance(expr, shiftAmount, prefix);
     }
     else if (cast<Integer>(shiftAmount)->value() == 1) {

@@ -50,13 +50,9 @@ struct NameResolver {
             } else {
                 return *f;
             }
-        } else if (Seq * seq = dyn_cast<Seq>(re)) {
-            for (auto si = seq->begin(); si != seq->end(); ++si) {
-                *si = resolveUnicodeProperties(*si);
-            }
-        } else if (Alt * alt = dyn_cast<Alt>(re)) {
-            for (auto ai = alt->begin(); ai != alt->end(); ++ai) {
-                *ai = resolveUnicodeProperties(*ai);
+        } else if (Vector * vec = dyn_cast<Vector>(re)) {
+            for (RE *& re : *vec) {
+                re = resolveUnicodeProperties(re);
             }
         } else if (Rep * rep = dyn_cast<Rep>(re)) {
             rep->setRE(resolveUnicodeProperties(rep->getRE()));
@@ -89,41 +85,9 @@ struct NameResolver {
             } else {
                 return *f;
             }
-        } else if (Seq * seq = dyn_cast<Seq>(re)) {
-            for (auto si = seq->begin(); si != seq->end(); ++si) {
-                *si = resolve(*si);
-            }
-        } else if (Alt * alt = dyn_cast<Alt>(re)) {
-            CC * unionCC = nullptr;
-            std::stringstream name;
-            for (auto ai = alt->begin(); ai != alt->end(); ) {
-                RE * item = resolve(*ai);
-                if (CC * cc = extractCC(item)) {
-                    if (unionCC == nullptr) {
-                        unionCC = cc;
-                    } else {
-                        unionCC = makeCC(unionCC, cc);
-                        name << '+';
-                    }
-                    if (LLVM_LIKELY(isa<Name>(item))) {
-                        Name * n = cast<Name>(item);
-                        if (n->hasNamespace()) {
-                            name << n->getNamespace() << ':';
-                        }
-                        name << n->getName();
-                    } else if (isa<CC>(item)) {
-                        name << cast<CC>(item)->canonicalName(CC_type::UnicodeClass);
-                    }
-                    ai = alt->erase(ai);
-                } else {
-                    *ai++ = item;
-                }
-            }
-            if (unionCC) {
-                alt->push_back(resolve(makeName(name.str(), unionCC)));
-            }
-            if (alt->size() == 1) {
-                return alt->front();
+        } else if (Vector * vec = dyn_cast<Vector>(re)) {
+            for (RE *& re : *vec) {
+                re = resolve(re);
             }
         } else if (Rep * rep = dyn_cast<Rep>(re)) {
             rep->setRE(resolve(rep->getRE()));

@@ -57,20 +57,20 @@ void RE_Compiler::addAlphabet(cc::Alphabet * a, pablo::Var * basis_set) {
 
 using MarkerType = RE_Compiler::MarkerType;
 
-PabloAST * RE_Compiler::compile(RE * re, PabloAST * const initialCursors) {
+PabloAST * RE_Compiler::compile(RE * const re, PabloAST * const initialCursors) {
     const auto markers = initialCursors ? compile(re, initialCursors, mPB) : compile(re, mPB);
     return markerVar(AdvanceMarker(markers, FinalPostPositionUnit, mPB));
 }
 
-inline MarkerType RE_Compiler::compile(RE * re, PabloAST * const cursors, PabloBuilder & pb) {
+inline MarkerType RE_Compiler::compile(RE * const re, PabloAST * const cursors, PabloBuilder & pb) {
     return process(re, makeMarker(FinalMatchUnit, cursors), pb);
 }
 
-inline MarkerType RE_Compiler::compile(RE * re, PabloBuilder & pb) {
+inline MarkerType RE_Compiler::compile(RE * const re, PabloBuilder & pb) {
     return process(re, makeMarker(FinalPostPositionUnit, pb.createOnes()), pb);
 }
     
-MarkerType RE_Compiler::process(RE * re, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::process(RE * const re, MarkerType marker, PabloBuilder & pb) {
     if (isa<Name>(re)) {
         return compileName(cast<Name>(re), marker, pb);
     } else if (isa<Seq>(re)) {
@@ -104,7 +104,7 @@ inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb)
     return makeMarker(FinalMatchUnit, nextFinalByte);
 }
 
-MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder & pb) {
     PabloAST * nextPos = markerVar(marker);
     const cc::Alphabet * a = cc->getAlphabet();
     if (a == &cc::Byte) {
@@ -131,8 +131,8 @@ MarkerType RE_Compiler::compileCC(CC * cc, MarkerType marker, PabloBuilder & pb)
     }
 }
 
-inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, PabloBuilder & pb) {
-    const std::string nameString = name->getName();
+inline MarkerType RE_Compiler::compileName(Name * const name, MarkerType marker, PabloBuilder & pb) {
+    const auto & nameString = name->getName();
     if (nameString == ".") {
         return compileAny(marker, pb);
     } else if (nameString == "^"){
@@ -158,7 +158,7 @@ inline MarkerType RE_Compiler::compileName(Name * name, MarkerType marker, Pablo
     }
 }
 
-inline MarkerType RE_Compiler::compileName(Name * name, PabloBuilder & pb) {
+inline MarkerType RE_Compiler::compileName(Name * const name, PabloBuilder & pb) {
     MarkerType m;
     if (LLVM_LIKELY(mCompiledName->get(name, m))) {
         return m;
@@ -170,7 +170,7 @@ inline MarkerType RE_Compiler::compileName(Name * name, PabloBuilder & pb) {
     UnsupportedRE("Unresolved name " + name->getName());
 }
 
-MarkerType RE_Compiler::compileSeq(Seq * seq, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileSeq(Seq * const seq, MarkerType marker, PabloBuilder & pb) {
     // if-hierarchies are not inserted within unbounded repetitions
     if (mStarDepth > 0) {
         for (RE * re : *seq) {
@@ -178,18 +178,17 @@ MarkerType RE_Compiler::compileSeq(Seq * seq, MarkerType marker, PabloBuilder & 
         }
         return marker;
     } else {
-        return compileSeqTail(seq->begin(), seq->end(), 0, marker, pb);
+        return compileSeqTail(seq->cbegin(), seq->cend(), 0, marker, pb);
     }
 }
 
-MarkerType RE_Compiler::compileSeqTail(Seq::iterator current, Seq::iterator end, int matchLenSoFar, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileSeqTail(Seq::const_iterator current, const Seq::const_iterator end, const int matchLenSoFar, MarkerType marker, PabloBuilder & pb) {
     if (current == end) {
         return marker;
     } else if (matchLenSoFar < IfInsertionGap) {
         RE * r = *current;
         marker = process(r, marker, pb);
-        current++;
-        return compileSeqTail(current, end, matchLenSoFar + minMatchLength(r), marker, pb);
+        return compileSeqTail(++current, end, matchLenSoFar + minMatchLength(r), marker, pb);
     } else {
         Var * m = pb.createVar("m", pb.createZeroes());
         NameMap nestedMap(mCompiledName);
@@ -203,7 +202,7 @@ MarkerType RE_Compiler::compileSeqTail(Seq::iterator current, Seq::iterator end,
     }
 }
 
-MarkerType RE_Compiler::compileAlt(Alt * alt, const MarkerType base, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileAlt(Alt * const alt, const MarkerType base, PabloBuilder & pb) {
     std::vector<PabloAST *>  accum(3, pb.createZeroes());
     // The following may be useful to force a common Advance rather than separate
     // Advances in each alternative.
@@ -224,7 +223,7 @@ MarkerType RE_Compiler::compileAlt(Alt * alt, const MarkerType base, PabloBuilde
     return makeMarker(FinalPostPositionUnit, combine);
 }
 
-MarkerType RE_Compiler::compileAssertion(Assertion * a, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker, PabloBuilder & pb) {
     RE * asserted = a->getAsserted();
     if (a->getKind() == Assertion::Kind::Lookbehind) {
         MarkerType lookback = compile(asserted, pb);
@@ -260,15 +259,15 @@ MarkerType RE_Compiler::compileAssertion(Assertion * a, MarkerType marker, Pablo
     UnsupportedRE("Unsupported lookahead assertion.");
 }
 
-inline bool alignedUnicodeLength(const RE * lh, const RE * rh) {
+inline bool alignedUnicodeLength(const RE * const lh, const RE * const rh) {
     const auto lhl = getUnicodeUnitLengthRange(lh);
     const auto rhl = getUnicodeUnitLengthRange(rh);
     return (lhl.first == lhl.second && lhl.first == rhl.first && lhl.second == rhl.second);
 }
 
 MarkerType RE_Compiler::compileDiff(Diff * diff, MarkerType marker, PabloBuilder & pb) {
-    RE * lh = diff->getLH();
-    RE * rh = diff->getRH();
+    RE * const lh = diff->getLH();
+    RE * const rh = diff->getRH();
     if (alignedUnicodeLength(lh, rh)) {
         MarkerType t1 = process(lh, marker, pb);
         MarkerType t2 = process(rh, marker, pb);
@@ -278,9 +277,9 @@ MarkerType RE_Compiler::compileDiff(Diff * diff, MarkerType marker, PabloBuilder
     UnsupportedRE("Unsupported Diff operands: " + Printer_RE::PrintRE(diff));
 }
 
-MarkerType RE_Compiler::compileIntersect(Intersect * x, MarkerType marker, PabloBuilder & pb) {
-    RE * lh = x->getLH();
-    RE * rh = x->getRH();
+MarkerType RE_Compiler::compileIntersect(Intersect * const x, MarkerType marker, PabloBuilder & pb) {
+    RE * const lh = x->getLH();
+    RE * const rh = x->getRH();
     if (alignedUnicodeLength(lh, rh)) {
         MarkerType t1 = process(lh, marker, pb);
         MarkerType t2 = process(rh, marker, pb);
@@ -290,9 +289,9 @@ MarkerType RE_Compiler::compileIntersect(Intersect * x, MarkerType marker, Pablo
     UnsupportedRE("Unsupported Intersect operands: " + Printer_RE::PrintRE(x));
 }
 
-MarkerType RE_Compiler::compileRep(Rep * rep, MarkerType marker, PabloBuilder & pb) {
-    int lb = rep->getLB();
-    int ub = rep->getUB();
+MarkerType RE_Compiler::compileRep(Rep * const rep, MarkerType marker, PabloBuilder & pb) {
+    const auto lb = rep->getLB();
+    const auto ub = rep->getUB();
     if (lb > 0) {
         marker = processLowerBound(rep->getRE(), lb, marker, IfInsertionGap, pb);
     }
@@ -309,63 +308,52 @@ MarkerType RE_Compiler::compileRep(Rep * rep, MarkerType marker, PabloBuilder & 
    compute a stream marking |repeat_count| consecutive occurrences of such items.
 */
     
-PabloAST * RE_Compiler::consecutive_matches(PabloAST * repeated_j, int j, int repeat_count, PabloAST * indexStream, PabloBuilder & pb) {
-    if (j == repeat_count) return repeated_j;
-    int i = std::min(j, repeat_count - j);
-    int k = j + i;
+PabloAST * RE_Compiler::consecutive_matches(PabloAST * const repeated_j, const int j, const int repeat_count, PabloAST * const indexStream, PabloBuilder & pb) {
+    if (j == repeat_count) {
+        return repeated_j;
+    }
+    const int i = std::min(j, repeat_count - j);
+    const int k = j + i;
     if (/*j > IfInsertionGap*/ false) {
         Var * repeated = pb.createVar("repeated", pb.createZeroes());
         PabloBuilder nested = PabloBuilder::Create(pb);
         NameMap nestedMap(mCompiledName);
         mCompiledName = &nestedMap;
-        
-        PabloAST * adv_i = nullptr;
-        if (indexStream == nullptr) adv_i = nested.createAdvance(repeated_j, i);
-        else adv_i = nested.createIndexedAdvance(repeated_j, indexStream, i);
+        PabloAST * adv_i = nested.createIndexedAdvance(repeated_j, indexStream, i);
         PabloAST * repeated_k = nested.createAnd(repeated_j, adv_i, "at" + std::to_string(k) + "of" + std::to_string(repeat_count));
         nested.createAssign(repeated, consecutive_matches(repeated_k, k, repeat_count, indexStream, nested));
         pb.createIf(repeated_j, nested);
         mCompiledName = nestedMap.getParent();
         return repeated;
-    }
-    else {
-        PabloAST * adv_i = nullptr;
-        if (indexStream == nullptr) adv_i = pb.createAdvance(repeated_j, i);
-        else adv_i = pb.createIndexedAdvance(repeated_j, indexStream, i);
+    } else {
+        PabloAST * adv_i = pb.createIndexedAdvance(repeated_j, indexStream, i);
         PabloAST * repeated_k = pb.createAnd(repeated_j, adv_i, "at" + std::to_string(k) + "of" + std::to_string(repeat_count));
         return consecutive_matches(repeated_k, k, repeat_count, indexStream, pb);
     }
 }
 
 
-inline PabloAST * RE_Compiler::reachable(PabloAST * repeated, int length, int repeat_count, PabloAST * indexStream, PabloBuilder & pb) {
-    int i = length;
-    int total_lgth = repeat_count * length;
+inline PabloAST * RE_Compiler::reachable(PabloAST *  const repeated, const int length, const int repeat_count, PabloAST * const indexStream, PabloBuilder & pb) {
     if (repeat_count == 0) {
         return repeated;
-    }
-    PabloAST * reachable = nullptr;
-    if (indexStream == nullptr) reachable = pb.createOr(repeated, pb.createAdvance(repeated, 1), "within1");
-    else reachable = pb.createOr(repeated, pb.createIndexedAdvance(repeated, indexStream, 1), "within1");
-    while ((i * 2) < total_lgth) {
-        PabloAST * v = reachable;
-        PabloAST * v2 = nullptr;
-        if (indexStream == nullptr) v2 = pb.createAdvance(v, i);
-        else v2 = pb.createIndexedAdvance(v, indexStream, i);
+    }    
+    const int total_length = repeat_count * length;
+    PabloAST * const v2 = pb.createIndexedAdvance(repeated, indexStream, 1);
+    PabloAST * reachable = pb.createOr(repeated, v2, "within1");
+    int i = length;
+    while ((i * 2) < total_length) {
+        PabloAST * const extension = pb.createIndexedAdvance(reachable, indexStream, i);
         i *= 2;
-        reachable = pb.createOr(v, v2, "within" + std::to_string(i));
+        reachable = pb.createOr(reachable, extension, "within" + std::to_string(i));
     }
-    if (LLVM_LIKELY(i < total_lgth)) {
-        PabloAST * v = reachable;
-        PabloAST * v2 = nullptr;
-        if (indexStream == nullptr) v2 = pb.createAdvance(v, total_lgth - i);
-        else v2 = pb.createIndexedAdvance(v, indexStream, total_lgth - i);
-        reachable = pb.createOr(v, v2, "within" + std::to_string(total_lgth));
+    if (LLVM_LIKELY(i < total_length)) {
+        PabloAST * const extension = pb.createIndexedAdvance(reachable, indexStream, total_length - i);
+        reachable = pb.createOr(reachable, extension, "within" + std::to_string(total_length));
     }
     return reachable;
 }
 
-MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType marker, int ifGroupSize, PabloBuilder & pb) {
+MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, MarkerType marker, const int ifGroupSize, PabloBuilder & pb) {
     if (LLVM_UNLIKELY(lb == 0)) {
         return marker;
     } else if (LLVM_UNLIKELY(lb == 1)) {
@@ -373,7 +361,7 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
     }
     //
     // A bounded repetition with an upper bound of at least 2.
-    if (!AlgorithmOptionIsSet(DisableLog2BoundedRepetition)) {
+    if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that 
         // allow implementation using the log2 technique.
         if (isByteLength(repeated)) {
@@ -410,7 +398,7 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
         }
     }
     // Fall through to general case.  Process the first item and insert the rest into an if-structure.
-    auto group = ifGroupSize < lb ? ifGroupSize : lb;
+    const auto group = ifGroupSize < lb ? ifGroupSize : lb;
     for (auto i = 0; i < group; i++) {
         marker = process(repeated, marker, pb);
     }
@@ -428,13 +416,13 @@ MarkerType RE_Compiler::processLowerBound(RE * repeated, int lb, MarkerType mark
     return makeMarker(m1.pos, m);
 }
     
-MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType marker, int ifGroupSize,  PabloBuilder & pb) {
+MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, MarkerType marker, const int ifGroupSize,  PabloBuilder & pb) {
     if (LLVM_UNLIKELY(ub == 0)) {
         return marker;
     }
     //
     // A bounded repetition with an upper bound of at least 2.
-    if (!AlgorithmOptionIsSet(DisableLog2BoundedRepetition) && (ub > 1)) {
+    if ((ub > 1) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that 
         // allow implementation using the log2 technique.
         if (isByteLength(repeated)) {
@@ -473,7 +461,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
         }
     }
     // Fall through to general case.  Process the first item and insert the rest into an if-structure.
-    auto group = ifGroupSize < ub ? ifGroupSize : ub;
+    const auto group = ifGroupSize < ub ? ifGroupSize : ub;
     for (auto i = 0; i < group; i++) {
         MarkerType a = process(repeated, marker, pb);
         MarkerType m = marker;
@@ -483,7 +471,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
     if (ub == group) {
         return marker;
     }
-    Var * m1a = pb.createVar("m", pb.createZeroes());
+    Var * const m1a = pb.createVar("m", pb.createZeroes());
     PabloBuilder nested = PabloBuilder::Create(pb);
     NameMap nestedMap(mCompiledName);
     mCompiledName = &nestedMap;
@@ -491,26 +479,21 @@ MarkerType RE_Compiler::processBoundedRep(RE * repeated, int ub, MarkerType mark
     nested.createAssign(m1a, markerVar(m1));
     pb.createIf(markerVar(marker), nested);
     mCompiledName = nestedMap.getParent();
-    return makeMarker(m1.pos, m1a);
+    return makeMarker(markerPos(m1), m1a);
 }
 
-MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, PabloBuilder & pb) {
+MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType marker, PabloBuilder & pb) {
     // always use PostPosition markers for unbounded repetition.
     PabloAST * base = markerVar(AdvanceMarker(marker, InitialPostPositionUnit, pb));
-    if (isByteLength(repeated)  && !AlgorithmOptionIsSet(DisableMatchStar)) {
-        PabloAST * mask = markerVar(compile(repeated, pb));
-        PabloAST * nonFinal = mNonFinal;
+    if (isByteLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar))) {
+        PabloAST * mask = pb.createOr(markerVar(compile(repeated, pb)), mNonFinal);
         // The post position character may land on the initial byte of a multi-byte character. Combine them with the masked range.
-        PabloAST * unbounded = pb.createMatchStar(base, pb.createOr(mask, nonFinal), "unbounded");
+        PabloAST * unbounded = pb.createMatchStar(base, mask, "unbounded");
         return makeMarker(FinalPostPositionUnit, unbounded);
-    } else if (isUnicodeUnitLength(repeated) && !AlgorithmOptionIsSet(DisableMatchStar) && !AlgorithmOptionIsSet(DisableUnicodeMatchStar)) {
-        PabloAST * cc = markerVar(compile(repeated, pb));
-        PabloAST * mstar = nullptr;
-        PabloAST * nonFinal = mNonFinal;
-        cc = pb.createOr(cc, nonFinal);
-        mstar = pb.createMatchStar(base, cc);
-        PabloAST * final = mFinal;
-        return makeMarker(FinalPostPositionUnit, pb.createAnd(mstar, final, "unbounded"));
+    } else if (isUnicodeUnitLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar) && !AlgorithmOptionIsSet(DisableUnicodeMatchStar))) {
+        PabloAST * mask = pb.createOr(markerVar(compile(repeated, pb)), mNonFinal);
+        PabloAST * mstar = pb.createMatchStar(base, mask);
+        return makeMarker(FinalPostPositionUnit, pb.createAnd(mstar, mFinal, "unbounded"));
     } else if (mStarDepth > 0){
         PabloBuilder * const outer = pb.getParent();
         Var * starPending = outer->createVar("pending", outer->createZeroes());
@@ -549,7 +532,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * repeated, MarkerType marker, Pa
 }
 
 inline MarkerType RE_Compiler::compileStart(MarkerType marker, pablo::PabloBuilder & pb) {
-    PabloAST * sol = pb.createNot(pb.createAdvance(pb.createNot(mLineBreak), 1));
+    PabloAST * const sol = pb.createNot(pb.createAdvance(pb.createNot(mLineBreak), 1));
     MarkerType m = AdvanceMarker(marker, InitialPostPositionUnit, pb);
     return makeMarker(InitialPostPositionUnit, pb.createAnd(markerVar(m), sol, "sol"));
 }

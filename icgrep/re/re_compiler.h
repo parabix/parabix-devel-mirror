@@ -102,7 +102,7 @@ private:
     MarkerType compileName(Name * name, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileCC(CC * cc, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileSeq(Seq * seq, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileSeqTail(Seq::iterator current, const Seq::iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBuilder & pb);
+    MarkerType compileSeqTail(Seq::const_iterator current, const Seq::const_iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileAlt(Alt * alt, MarkerType base, pablo::PabloBuilder & pb);
     MarkerType compileAssertion(Assertion * a, MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileRep(Rep * rep, MarkerType marker, pablo::PabloBuilder & pb);

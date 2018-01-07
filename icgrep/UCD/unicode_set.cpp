@@ -846,13 +846,12 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi) {
         }
         append_quad(lo_quad, quads, runs);
     }
-
     assert (length > 0);
     --length;
 
     // Now check if we need to write out any Full blocks between the lo and hi code points; adjust our position
     // in the original quad to suit.
-    if (hi_index) {
+    if (hi_index) {        
         // Add in any full runs between the lo and hi quads
         append_run(Full, hi_index - 1, runs);
         // Advance past original quads that were filled in
@@ -866,14 +865,20 @@ void UnicodeSet::insert_range(const codepoint_t lo, const codepoint_t hi) {
             std::tie(type, length) = *ri++;
         }
         length -= hi_index;
+
         // Write out the hi_quad value
         if (LLVM_UNLIKELY(type == Full)) {
             append_run(Full, 1, runs);
-        } else {
+        } else {            
             if (type == Mixed) {
-                assert ((qi + hi_index) < qi_end);
+                const auto qi_begin = qi;
+                assert ((qi + hi_index) <= qi_end);
                 qi += hi_index;
-                hi_quad |= *qi++;
+                if (length) {
+                    quads.append<const bitquad_t *>(qi_begin, qi);
+                    assert (qi != qi_end);
+                    hi_quad |= *qi++;
+                }
             }
             append_quad(hi_quad, quads, runs);
         }
