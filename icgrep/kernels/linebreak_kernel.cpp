@@ -22,6 +22,22 @@ using namespace re;
 using namespace llvm;
 
 
+DirectLineFeedBuilder::DirectLineFeedBuilder(const std::unique_ptr<kernel::KernelBuilder> & b)
+: PabloKernel(b, "lf_byte",
+// input
+{Binding{b->getStreamSetTy(1, 8), "codeUnitStream", FixedRate(), Principal()}},
+// output
+{Binding{b->getStreamSetTy(1), "lf"}}) {
+
+}
+
+void DirectLineFeedBuilder::generatePabloMethod() {
+    PabloBuilder pb(getEntryBlock());
+    PabloAST * LF = compileCCfromCodeUnitStream(makeByte(0x0A), getInput(0), pb);
+    pb.createAssign(pb.createExtract(getOutput(0), pb.getInteger(0)), LF);
+}
+
+
 LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned basisBitsCount)
 : PabloKernel(b, "lf" + std::to_string(basisBitsCount),
 // input

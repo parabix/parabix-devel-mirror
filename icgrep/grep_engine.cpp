@@ -96,6 +96,7 @@ void GrepEngine::initFileResult(std::vector<std::string> & filenames) {
 // Code Generation
 //
 // All engines share a common pipeline to compute a stream of Matches from a given input Bytestream.
+//#define USE_DIRECT_LF_BUILDER 1
 
 std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::vector<re::RE *> & REs, StreamSetBuffer * ByteStream) {
     auto & idb = mGrepDriver->getBuilder();
@@ -108,8 +109,13 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     mGrepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
     StreamSetBuffer * LineFeedStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+#ifdef USE_DIRECT_LF_BUILDER
+    kernel::Kernel * linefeedK = mGrepDriver->addKernelInstance<kernel::DirectLineFeedBuilder>(idb);
+    mGrepDriver->makeKernelCall(linefeedK, {ByteStream}, {LineFeedStream});
+#else
     kernel::Kernel * linefeedK = mGrepDriver->addKernelInstance<kernel::LineFeedKernelBuilder>(idb, encodingBits);
     mGrepDriver->makeKernelCall(linefeedK, {BasisBits}, {LineFeedStream});
+#endif
 
     StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
     StreamSetBuffer * CRLFStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
@@ -121,15 +127,14 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     mGrepDriver->makeKernelCall(requiredStreamsK, {BasisBits}, {RequiredStreams});
 
     const auto n = REs.size();
-    std::vector<std::vector<re::CC *>> charclasses(n);
     std::vector<StreamSetBuffer *> MatchResultsBufs(n);
 
     for(unsigned i = 0; i < n; ++i) {
         REs[i] = resolveModesAndExternalSymbols(REs[i]);
         REs[i] = excludeUnicodeLineBreak(REs[i]);
+        REs[i] = regular_expression_passes(REs[i]);
 #define USE_MULTIPLEX_CC
 #ifdef USE_MULTIPLEX_CC
-        REs[i] = regular_expression_passes(REs[i]);
         const std::vector<const re::CC *> UnicodeSets = re::collectUnicodeSets(REs[i]);
         if (UnicodeSets.size() <= 1) {
             StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
@@ -151,7 +156,6 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
             MatchResultsBufs[i] = MatchResults;
         }
 #else
-        REs[i] = regular_expression_passes(REs[i]);
         StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize * bufferSegments);
         kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i]);
         mGrepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, CRLFStream, RequiredStreams}, {MatchResults});
