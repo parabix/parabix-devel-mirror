@@ -18,7 +18,7 @@ using namespace llvm;
 DirectCharacterClassKernelBuilder::DirectCharacterClassKernelBuilder(
         const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize)
 : BlockOrientedKernel(std::move(ccSetName),
-              {Binding{b->getStreamSetTy(1, 8 * codeUnitSize), "codeUnitStream"}},
+              {Binding{b->getStreamSetTy(1, 8 * codeUnitSize), "codeUnitStream", FixedRate(), Principal()}},
               {Binding{b->getStreamSetTy(charClasses.size(), 1), "ccStream"}},
               {}, {}, {})
 , mCharClasses(charClasses)
@@ -29,6 +29,8 @@ DirectCharacterClassKernelBuilder::DirectCharacterClassKernelBuilder(
 void DirectCharacterClassKernelBuilder::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     unsigned packCount = 8 * mCodeUnitSize;  
     unsigned codeUnitWidth = 8 * mCodeUnitSize;
+    unsigned topBit = 1 << codeUnitWidth;
+    unsigned maxCodeVal = (topBit - 1) | topBit;
     Value * codeUnitPack[packCount];
     for (unsigned i = 0; i < packCount; i++) {
         codeUnitPack[i] = iBuilder->loadInputStreamPack("codeUnitStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
@@ -45,8 +47,25 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod(const std::unique_
                 for (unsigned k = 0; k < packCount; k++) {
                     strmPack[k] = iBuilder->simd_eq(codeUnitWidth, codeUnitPack[k], cp_splat);
                 }
-            }
-            else {
+            } else if (lo == 0) {
+                if (hi == maxCodeVal) {
+                    for (unsigned k = 0; k < packCount; k++) {
+                        strmPack[k] = iBuilder->allOnes();
+                    }
+                } else {
+                    Value * cp = ConstantInt::get(iBuilder->getIntNTy(codeUnitWidth), hi + 1);
+                    Value * cp_splat = iBuilder->simd_fill(codeUnitWidth, cp);
+                    for (unsigned k = 0; k < packCount; k++) {
+                        strmPack[k] = iBuilder->simd_ult(codeUnitWidth, codeUnitPack[k], cp_splat);
+                    }
+                }
+            } else if (hi == maxCodeVal) {
+                Value * cp = ConstantInt::get(iBuilder->getIntNTy(codeUnitWidth), lo - 1);
+                Value * cp_splat = iBuilder->simd_fill(codeUnitWidth, cp);
+                for (unsigned k = 0; k < packCount; k++) {
+                    strmPack[k] = iBuilder->simd_ugt(codeUnitWidth, codeUnitPack[k], cp_splat);
+                }
+            } else {
                 Value * v1 = ConstantInt::get(iBuilder->getIntNTy(codeUnitWidth), lo-1);
                 Value * lo_splat = iBuilder->simd_fill(codeUnitWidth, v1);
                 Value * v2 = ConstantInt::get(iBuilder->getIntNTy(codeUnitWidth), hi+1);

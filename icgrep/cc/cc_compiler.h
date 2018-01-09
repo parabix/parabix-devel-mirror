@@ -84,6 +84,8 @@ inline pablo::PabloBuilder & CC_Compiler::getBuilder() {
     return mBuilder;
 }
 
+pablo::PabloAST * compileCCfromCodeUnitStream(const re::CC *cc, pablo::PabloAST * codeUnitStream, pablo::PabloBuilder & pb);
+    
 }
 
 #endif // CC_COMPILER_H

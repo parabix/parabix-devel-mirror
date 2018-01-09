@@ -72,7 +72,7 @@ public:
         return a->getClassTypeId() == ClassTypeId::CodeUnitAlphabet;
     }
     static inline bool classof(const void *) {return false;}
-    uint8_t getCodeUnitBitWidth() { return mCodeUnitBits;}
+    uint8_t getCodeUnitBitWidth() const { return mCodeUnitBits;}
     const unsigned getSize() const override {return 1<<mCodeUnitBits;}
 
 private:
