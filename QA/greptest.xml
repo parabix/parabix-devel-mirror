@@ -371,6 +371,7 @@ alshat@emirates.net.ae
 </datafile>
 
 <grepcase regexp="^$" datafile="CRLF" grepcount="1"/>
+<grepcase regexp="^$" datafile="CRLF" flags="-v" grepcount="3"/>
 <grepcase regexp="^.*$" datafile="CRLF" grepcount="4"/>
 <grepcase regexp="" datafile="CRLF" grepcount="4"/>
 
@@ -488,6 +489,7 @@ abcdefghijklmno</datafile>
 <grepcase regexp="=[0-9]{100};" datafile="bounded_charclass" grepcount="1"/>
 <grepcase regexp="=[0-9]{50,};" datafile="bounded_charclass" grepcount="9"/>
 <grepcase regexp="=[0-9]{107,};" datafile="bounded_charclass" grepcount="8"/>
+<grepcase regexp="=[0-9]{107,};" datafile="bounded_charclass" flags="-m=5" grepcount="5"/>
 <grepcase regexp="=0123[0-9]{107,};" datafile="bounded_charclass" grepcount="7"/>
 <grepcase regexp="=[0-9]{299,};" datafile="bounded_charclass" grepcount="2"/>
 <grepcase regexp="=0123[0-9]{295,};" datafile="bounded_charclass" grepcount="2"/>
@@ -513,6 +515,7 @@ abcdefghijklmno</datafile>
 
 <grepcase regexp="[]]" datafile="special_characters" grepcount="9"/>
 <grepcase regexp="[-]" datafile="special_characters" grepcount="8"/>
+<grepcase regexp="[-]" datafile="special_characters" flags="-m=4" grepcount="4"/>
 <grepcase regexp="[]^-]" datafile="special_characters" grepcount="14"/>
 <grepcase regexp="[\-\]\^]" datafile="special_characters" grepcount="14"/>
 <grepcase regexp="[^]]" datafile="special_characters" grepcount="16"/>
