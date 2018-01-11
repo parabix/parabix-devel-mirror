@@ -1,93 +1,74 @@
 #include "icgrep-test.h"
 #include "../stringGen.h"
+#include "process.h"
 #include <iostream>
 #include <vector>
+#include <array>
 #include <string>
-#include <algorithm>
 #include <fstream>
-#include <boost/filesystem.hpp>
-#include <boost/iostreams/device/mapped_file.hpp>
-#include <boost/algorithm/string/replace.hpp>
+#include <stdexcept>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 
 using namespace std;
-namespace io = boost::iostreams;
-namespace fs=boost::filesystem;
 
-IcgrepTest::IcgrepTest(){}
 
-std::size_t directorySize(fs::path path)
-{
-	return std::count_if(fs::directory_iterator(path),
-                         fs::directory_iterator(), 
-                         [](const fs::directory_entry& e) { 
-                          return true;  });
-}
-
-void IcgrepTest::backup(){
-	int count = directorySize("../icgrep/combine/Archive");
-
-	fs::path src("../icgrep/combine/icgrep-test");
-	fs::path dst("../icgrep/combine/Archive/test" + to_string(count+1));
-	if (!fs::create_directory(dst))
-    {
-        throw std::runtime_error("Cannot create destination directory " + dst.string());
-    }
-
-	for (const auto& dirEnt : fs::recursive_directory_iterator{src})
-    {
-        const auto& path = dirEnt.path();
-        auto relativePathStr = path.string();
-        boost::replace_first(relativePathStr, src.string(), "");
-        fs::copy(path, dst / relativePathStr);
-    }
-}
-void IcgrepTest::resetBash(string fileName){
+void IcgrepTest::writeToFile(string content, string dir){
 	ofstream file;
-	file.open(fileName);
-	file << "#!/bin/bash\n\n";
-	file << "echo \"Starting bash file: " << fileName << "\"\n";
-	file.close();
-	//give permission.
-	string cmd = "chmod +x " + fileName;
-	system(cmd.c_str());
-}
-
-void IcgrepTest::clearDir(string dir){
-  	fs::path path_to_remove(dir);
-  	for (fs::directory_iterator end_dir_it, it(path_to_remove); it!=end_dir_it; ++it) {
-   		fs::remove_all(it->path());
-  	}
-}
-void IcgrepTest::writeToBash(string fileName, string value){
-	ofstream file;
-	file.open(fileName, ios::app);
-	file << value << endl;
-	file.close();
-}
-void IcgrepTest::writetoFile(string content, string dir, int fileNo){
-	string fileName = dir + to_string(fileNo);
-	ofstream file;
-	file.open(fileName);
+	file.open(dir, std::ofstream::out | std::ofstream::app);
 	if (!file.is_open()){
-		cerr << "Could not open input file\n";
+		cerr << "Could not open input file: " << dir << endl;
+		return;
 	}
 	file << content << endl;
 	file.close();
 }
 
-void IcgrepTest::prepare(){
-	backup();
-	clearDir("../icgrep/combine/icgrep-test/regs");
-	clearDir("../icgrep/combine/icgrep-test/files");
-	resetBash("../icgrep/combine/icgrep-test/grep/icgrep-bash.sh");
-	resetBash("../icgrep/combine/icgrep-test/grep/grep-bash.sh");
-	resetBash("../icgrep/combine/icgrep-test/ugrep/icgrep-bash.sh");
-	resetBash("../icgrep/combine/icgrep-test/ugrep/ugrep-bash.sh");
-	remove("..//icgrep/combine/icgrep-test/grep/icgrep-result");
-	remove("..//icgrep/combine/icgrep-test/grep/grep-result");
-	remove("..//icgrep/combine/icgrep-test/ugrep/icgrep-result");
-	remove("..//icgrep/combine/icgrep-test/ugrep/ugrep-result");
+void IcgrepTest::generateStringFile(string re, std::vector<string> flags, re::RE_Syntax syntax,
+									RegexGen::FileType fTy, string dir){
+
+
+	int lineNum = 0;
+	if (fTy == RegexGen::FileType::SMALL){
+		lineNum = 1;
+	}
+	else if (fTy == RegexGen::FileType::MEDIUM){
+		lineNum = 10;
+	}
+	else {
+		lineNum = 100;
+	}
+	for (int i = 0; i < lineNum; i++){
+		StringGenerator strGen(re, flags, syntax);
+		writeToFile(strGen.generate() + "\n", dir);
+	}
+
+}
+
+void IcgrepTest::copyFile(string src, string dst){
+
+	std::ifstream sFile (src.c_str());
+    std::ofstream dFile(dst.c_str());
+    dFile << sFile.rdbuf();
+    dFile.close();
+    sFile.close();
+}
+
+string IcgrepTest::UniversalizePropertyName(string re){
+	std::string::size_type pos = re.find("\\N{^");
+	while (pos != std::string::npos){
+		re.erase(pos+3, 1);
+		pos = re.find("$}");
+		if (pos != std::string::npos){
+			re.erase(pos,1);
+		}
+		pos = re.find("\\N{^");
+	}
+	return re;
 }
 
 bool IcgrepTest::hasFlag(string flag, std::vector<string> flags){
@@ -102,171 +83,206 @@ bool IcgrepTest::hasFlag(string flag, std::vector<string> flags){
 std::vector<string> IcgrepTest::removeFlag(string flag, std::vector<string> flags){
 	int c = 0;
 	for (auto f : flags){
-		if (strncmp(f.c_str(), flag.c_str(), flag.size()) == 0){
+		if (f.find(flag) == 0){
 			flags.erase(flags.begin()+c);
+			return flags;
 		}
 		c++;
 	}
 	return flags;
 }
 
-void IcgrepTest::buildTest(string re, vector<string> flags, re::RE_Syntax syntax, int testNum){
-	cout << "test: " << testNum << endl;
+template<typename InputIterator1, typename InputIterator2>
+bool
+range_equal(InputIterator1 first1, InputIterator1 last1,
+        InputIterator2 first2, InputIterator2 last2)
+{
+    while(first1 != last1 && first2 != last2)
+    {
+        if(*first1 != *first2) return false;
+        ++first1;
+        ++first2;
+    }
+    return (first1 == last1) && (first2 == last2);
+}
+
+bool IcgrepTest::identicalFiles(const std::string& filename1, const std::string& filename2)
+{
+    std::ifstream file1(filename1);
+    std::ifstream file2(filename2);
+
+    std::istreambuf_iterator<char> begin1(file1);
+    std::istreambuf_iterator<char> begin2(file2);
+
+    std::istreambuf_iterator<char> end;
+    bool identical = range_equal(begin1, end, begin2, end);
+
+    file1.close();
+    file2.close();
+
+    return identical;
+}
+
+void IcgrepTest::reportBug(vector<string> &icgrepArgs, vector<string> &grepArgs, int testNum){
+	cout << "\033[1;31mFAIL\033[0m\n";
+	// ++mBugCount;
+	string bugList = "core-out/bugs/bugList";
+	string bugTestLine = "bug #" + to_string(testNum) + "= ";
+	for (auto arg : icgrepArgs){
+		bugTestLine += arg + " ";
+	}
+	bugTestLine += " === ";
+	for (auto arg : grepArgs){
+		bugTestLine += arg + " ";
+	}
+	bugTestLine += "\n\n";
+	writeToFile(bugTestLine, bugList);
+	string srcReDir = "core-out/reg";
+	string srcStrDir = "core-out/file";
+	string dstReDir = "core-out/bugs/regs/reg" + to_string(testNum);
+	string dstStrDir = "core-out/bugs/files/file" + to_string(testNum);
+	copyFile(srcReDir, dstReDir);
+	copyFile(srcStrDir, dstStrDir);
+
+}
+
+void IcgrepTest::clearTest(){
+	remove("core-out/reg");
+	remove("core-out/file");
+	remove("core-out/icgrep-out");
+	remove("core-out/grep-out");
+}
+
+unsigned IcgrepTest::buildTest(string re, vector<string> flags, re::RE_Syntax syntax, RegexGen::FileType fTy, int testNum){
+
+	clearTest();
+	unsigned errorNo = 0;
+	cout << "==========test: " << testNum << "==========" << endl;
 	cout << "RE: \'" << re << "\'" << endl;
 
-	string reDir = "../icgrep/combine/icgrep-test/regs/reg";
-	string strDir = "../icgrep/combine/icgrep-test/files/file";
+	string reDir = "core-out/reg";
+	string strDir = "core-out/file";
 
-	StringGenerator strGen;
-	writetoFile(strGen.generate(re, flags, syntax) + "\n", strDir, testNum);
-	//remove icgrep specific flags for comparison.
+	string icgrepOutputName = "core-out/icgrep-out";
+	string grepOutputName = "core-out/grep-out";
+
+	generateStringFile(re, flags, syntax, fTy, strDir);
+
+	cout << "file generated" << endl;
+	//remove icgrep specific flags and syntax for comparison.
 	vector<string> gflags = removeFlag("-t", flags);
 	gflags = removeFlag("-BlockSize", gflags);
 	gflags = removeFlag("-P", gflags);
 	gflags = removeFlag("-f", gflags);
 	gflags = removeFlag("-e", gflags);
 
-	if (syntax == re::RE_Syntax::ERE){
-		string icgrepScript = "../icgrep/combine/icgrep-test/grep/icgrep-bash.sh";
-		string grepScript = "../icgrep/combine/icgrep-test/grep/grep-bash.sh";
-		string icgrepResult = "../icgrep/combine/icgrep-test/grep/icgrep-result";
-		string grepResult = "../icgrep/combine/icgrep-test/grep/grep-result";
+	vector<string> icgrepArgs = {"./icgrep"};
+	vector<string> grepArgs;
+	string baseGrep;
+	bool REfromFile = hasFlag("-f", flags);
+	bool multipleRE = hasFlag("-e", flags);
+	flags = removeFlag("-f", flags);
+ 	flags = removeFlag("-e", flags);
 
-		writeToBash(icgrepScript, "echo \"" + re + "\" | tee -a " + icgrepResult);
-		writeToBash(grepScript, "echo \"" + re + "\" | tee -a " + grepResult);
-
-		if (hasFlag("-f", flags)){
-			flags = removeFlag("-f", flags);
-	 		flags = removeFlag("-e", flags);
-	 		
-	 		writetoFile(re, reDir, testNum);
-	 	
- 			writeToBash(icgrepScript, 
- 				"./icgrep " + strGen.stringifyVec(flags, " ") + " -f " + reDir + to_string(testNum)+
- 				 " " + strDir + to_string(testNum) + " >> " + icgrepResult + "\n");	
-	 	}
-	 	else if (hasFlag("-e", flags)){
-	 		flags = removeFlag("-f", flags);
-	 		flags = removeFlag("-e", flags);
-
- 			writeToBash(icgrepScript, 
- 				"./icgrep " + strGen.stringifyVec(flags, " ") + " -e \'" + re + "\' " +
- 				" " + strDir + to_string(testNum) + " >> " + icgrepResult + "\n");
-	 	}
-	 	else{
- 			writeToBash(icgrepScript, 
- 				"./icgrep " + strGen.stringifyVec(flags, " ") + " \'" + re + "\' " +
- 				" " + strDir + to_string(testNum) + " >> " + icgrepResult + "\n");
-	 	}
-
-	 	writeToBash(grepScript, 
- 			"grep " + strGen.stringifyVec(gflags, " ") + " \'" + re + "\' " +
- 			" " + strDir + to_string(testNum) + " >> " + grepResult + "\n");
+ 	for (auto f : flags){
+ 		icgrepArgs.push_back(f);
+ 	}
+	if (REfromFile){
+ 		writeToFile(re, reDir);
+ 		icgrepArgs.push_back("-f");
+ 		icgrepArgs.push_back(reDir);
+ 	}
+ 	else if (multipleRE){
+ 		icgrepArgs.push_back("-e");
+ 		icgrepArgs.push_back(re);
+ 	}
+ 	else{
+ 		icgrepArgs.push_back(re);
 	}
-	else if (syntax == re::RE_Syntax::BRE){
+	icgrepArgs.push_back(strDir);
 
-		string icgrepScript = "../icgrep/combine/icgrep-test/grep/icgrep-bash.sh";
-		string grepScript = "../icgrep/combine/icgrep-test/grep/grep-bash.sh";
-		string icgrepResult = "../icgrep/combine/icgrep-test/grep/icgrep-result";
-		string grepResult = "../icgrep/combine/icgrep-test/grep/grep-result";
-
-		writeToBash(icgrepScript, "echo \"" + re + "\" | tee -a " + icgrepResult);
-		writeToBash(grepScript, "echo \"" + re + "\" | tee -a " + grepResult);
-
-	 	if (hasFlag("-f", flags)){
-	 		flags = removeFlag("-f", flags);
-	 		flags = removeFlag("-e", flags);
-
-	 		writetoFile(re, reDir, testNum);
- 			writeToBash(icgrepScript, 
- 				"./icgrep " + strGen.stringifyVec(flags, " ") + " -f " + reDir + to_string(testNum) + 
- 				" " + strDir + to_string(testNum) + " >> " + icgrepResult + "\n");
-
-	 	}
-	 	else if (hasFlag("-e", flags)){
-	 		flags = removeFlag("-f", flags);
-	 		flags = removeFlag("-e", flags);
-	 		
- 			writeToBash(icgrepScript, 
- 				"./icgrep " + strGen.stringifyVec(flags, " ") + " -e \'" + re + "\' " +
- 				strDir + to_string(testNum) + " >> " + icgrepResult + "\n");
-	 	}
-	 	else{
- 			writeToBash(icgrepScript, 
- 				"./icgrep " + strGen.stringifyVec(flags, " ") + " \'" + re + "\' " +
- 				strDir + to_string(testNum) + " >> " + icgrepResult + "\n");
-	 	}
-
-	 	writeToBash(grepScript, 
- 			"grep " + strGen.stringifyVec(gflags, " ") + " \'" + re + "\' " +
- 			strDir + to_string(testNum) + " >> " + icgrepResult + "\n");
+	if (syntax == re::RE_Syntax::ERE || syntax == re::RE_Syntax::BRE){
+	 	grepArgs.push_back("grep");
 	}
 	else {
-		gflags = removeFlag("-c", gflags);
-
-		string icgrepScript = "../icgrep/combine/icgrep-test/ugrep/icgrep-bash.sh";
-		string ugrepScript = "../icgrep/combine/icgrep-test/ugrep/ugrep-bash.sh";
-		string icgrepResult = "../icgrep/combine/icgrep-test/ugrep/icgrep-result";
-		string ugrepResult = "../icgrep/combine/icgrep-test/ugrep/ugrep-result";
-
-		writeToBash(icgrepScript, "echo \"" + re + "\" | tee -a " + icgrepResult);
-		writeToBash(ugrepScript, "echo \"" + re + "\" | tee -a " + ugrepResult);
-
-	 	if (hasFlag("-f", flags)){
-	 		flags = removeFlag("-f", flags);
-	 		flags = removeFlag("-e", flags);
-	 
-	 		writetoFile(re, reDir, testNum);
- 			writeToBash(icgrepScript, 
- 				"./icgrep " + strGen.stringifyVec(flags, " ") + " -f " + reDir + to_string(testNum) + 
- 				" " + strDir + to_string(testNum) + " >> " + icgrepResult + "\n");
-	 	}
-	 	else if (hasFlag("-e", flags)){
-	 		flags = removeFlag("-f", flags);
-	 		flags = removeFlag("-e", flags);
-
- 			writeToBash(icgrepScript, 
- 				"./icgrep " + strGen.stringifyVec(flags, " ") + " -e \'" + re + "\' " +
- 				strDir + to_string(testNum) + " >> " + icgrepResult + "\n");
-	 	}
-	 	else{
- 			writeToBash(icgrepScript, 
- 				"./icgrep " + strGen.stringifyVec(flags, " ") + " \'" + re + "\' " +
- 				strDir + to_string(testNum) + " >> " + icgrepResult + "\n");
-
-	 	}
-
-	 	writeToBash(ugrepScript, 
- 			"./ugrep " + strGen.stringifyVec(gflags, " ") + " \'" + re + "\' " +
- 			strDir + to_string(testNum) + " >> " + ugrepResult + "\n");
-
+		grepArgs.push_back("./ugrep");
+		re = UniversalizePropertyName(re);
 	}
+	for (auto f : gflags){
+		grepArgs.push_back(f);
+	}
+	grepArgs.push_back(re);
+	grepArgs.push_back(strDir);
+
+
+	cout << "running " << grepArgs[0] << endl;
+	int r2 = run_test(grepArgs, grepOutputName);
+
+	cout << "running icgrep:\n";
+	int r1 = run_test(icgrepArgs, icgrepOutputName);
+
+
+	cout << "Differential..." << endl;
+
+	if (!r1 && !r2){
+
+		ifstream file;
+		file.open(grepOutputName.c_str());
+		if (!file.is_open()){
+			cerr << "baseGrep file could not be open." << endl;
+		}
+		string line;
+		if (getline(file, line)){
+			cout << line << endl;
+		}
+		file.close();
+
+		file.open(icgrepOutputName.c_str());
+		if (!file.is_open()){
+			cerr << "icgrep file could not be open." << endl;
+		}
+		if (getline(file, line)){
+			cout << line << endl;
+		}
+		file.close();
+
+		if (identicalFiles(icgrepOutputName, grepOutputName)){
+			// reportBug(icgrepArgs, grepArgs, testNum);
+			cout << "\033[1;32mPASS\033[0m\n";
+		}
+		else{
+			// string line;
+			file.open(grepOutputName.c_str());
+			if (!file.is_open()){
+				cerr << "ugrep file could not be open." << endl;
+			}
+			if (getline(file, line)){
+				if (line.find("U_") ==0)
+					cout << "\033[1;34mSKIPPED\033[0m\n";
+				else{
+					errorNo = 1;
+					reportBug(icgrepArgs, grepArgs, testNum);
+				}
+
+			}
+			else {
+				errorNo = 1;
+				reportBug(icgrepArgs, grepArgs, testNum);
+			}
+			file.close();
+		}
+	}
+	else {
+		errorNo = 1;
+		reportBug(icgrepArgs, grepArgs, testNum);
+	}
+
+return errorNo;
 }
 
-void IcgrepTest::execute(){
-	system("../icgrep/combine/icgrep-test/grep/icgrep-bash.sh");
-	system("../icgrep/combine/icgrep-test/grep/grep-bash.sh");
-	system("../icgrep/combine/icgrep-test/ugrep/icgrep-bash.sh");
-	system("../icgrep/combine/icgrep-test/ugrep/ugrep-bash.sh");
-}
-
-void compareResults(string dir1, string dir2, string testName){
-	io::mapped_file_source f1(dir1);
-    io::mapped_file_source f2(dir2);
-
-    if(    f1.size() == f2.size()
-        && std::equal(f1.data(), f1.data() + f1.size(), f2.data())
-       )
-        std::cout << testName << "test suceeded!\n";
-    else
-        std::cout << testName << "test FAILED!\n";
-}
-
-void IcgrepTest::getResult(){
-
-	compareResults("../icgrep/combine/icgrep-test/grep/icgrep-result", "../icgrep/combine/icgrep-test/grep/grep-result", "GNU grep");
-    compareResults("../icgrep/combine/icgrep-test/ugrep/icgrep-result", "../icgrep/combine/icgrep-test/ugrep/ugrep-result", "ICU grep");
-
-    cout << "End of test\n";
-}
-
+// void IcgrepTest::getResult(int testNum){
+// 	float bugRate = 100 * (float)(mBugCount) / testNum;
+// 	cout << "Number of bugs found: " << to_string(mBugCount) << endl;
+// 	cout << "Number of tests performed: " << to_string(testNum) << endl;
+// 	cout << "Fail Rate: " << to_string(bugRate) << endl;
+// }

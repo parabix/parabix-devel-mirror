@@ -1,24 +1,38 @@
 #include <unicode/regex.h>
 #include <iostream>
 #include <fstream>
+#include <cstring>
 
 using namespace std;
+
+bool hasFlag(int argc, char *argv[], string flag){
+	for (int i = 0;i < argc; i++){
+		string e = argv[i];
+		if (flag == e){
+			return true;
+		}
+	}
+	return false;
+}
 
 int main(int argc, char *argv[]) {
 	string re;
 	UnicodeString str2match;
 	string fileName;
-	uint32_t caseInsensitive = 0;
-	if (argc == 3 || argc == 4){
-		re = argv[argc-2];
-		fileName = argv[argc-1];
-		if (argc == 4 && strcmp(argv[1], "-i") == 0) {
-			caseInsensitive = 2;
-		}
+	uint32_t caseInsensitive = hasFlag(argc, argv, "-i")? 2 : 0;
+	bool countOnly = hasFlag(argc, argv, "-c");
+	bool invertedMatch = hasFlag(argc, argv, "-v");
+	bool lineMatch = hasFlag(argc, argv, "-x");
+	bool wordMatch = hasFlag(argc, argv, "-w");
+
+	re = argv[argc-2];
+	fileName = argv[argc-1];
+	
+	if (lineMatch){
+		re = "^" + re + "$";
 	}
-	else {
-		cerr << "Usage: ugrep [regex] [-i] [file name]\n";
-		return 0;
+	if (wordMatch){
+		re = "\\b" + re + "\\b";
 	}
 	
 	UErrorCode status = U_ZERO_ERROR;
@@ -26,7 +40,7 @@ int main(int argc, char *argv[]) {
 	uRE.setTo(re.c_str());
 	RegexMatcher *matcher = new RegexMatcher(uRE, caseInsensitive, status);
 	if (U_FAILURE(status)) {
-	    cerr << "syntax error for ugrep\n";
+        cerr << u_errorName(status) << endl;
 	    return 0;
 	}
 
@@ -43,12 +57,33 @@ int main(int argc, char *argv[]) {
 		str2match.setTo(line.c_str());
 		matcher->reset(str2match);
 		if (matcher->find()) {
-			count++;
+			if (!invertedMatch){
+				if (countOnly){
+					count ++;
+				}
+				else{
+					std::string ustr;
+					str2match.toUTF8String(ustr);
+					cout << ustr << endl;
+				}
+			}
+		}
+		else {
+			if (invertedMatch){
+				if (countOnly){
+					count ++;
+				}
+				else{
+					std::string ustr;
+					str2match.toUTF8String(ustr);
+					cout << ustr << endl;
+				}
+			}
 		}
 	}
-
-	
-	
-	cout << count << endl;
+	if (countOnly){
+		cout << count << endl;
+	}
+	inputFile.close();
 	return 0;
 }

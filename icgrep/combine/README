@@ -1,0 +1,21 @@
+This is the automated combinatorial testing too for icGrep.
+
+Requirement: ICU4C to compile ugrep for differential.
+
+To set up:
+(1) cd to icgrep-build directory.
+(2) run 
+
+$ g++ -std=c++11 -o ugrep ../icgrep/ugrep.cpp `pkg-config --libs --cflags icu-uc icu-io` 
+
+to create ugrep for differential testing
+
+(3) run setup.sh from icgrep-build:
+$ ../icgrep/combine/setup.sh
+(4) run “./core —help” for usage.
+
+Analysis:
+In core-out/bugs there would be a file named bugList where all bugs are logged.
+the folders regs and files contain the reg and files named based on the test number.
+
+Note: CoRE currently works on revision 5742 of icgrep. You can compile CoRE and then update icgrep to test the latest version.

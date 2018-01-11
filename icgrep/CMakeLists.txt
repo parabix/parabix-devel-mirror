@@ -119,8 +119,10 @@ add_executable(wc wc.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp kernels/streams_merge.cpp kernels/cc_kernel.cpp)
 add_executable(array-test array-test.cpp kernels/alignedprint.cpp)
 add_executable(lz4d lz4d.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4_index_decoder.cpp kernels/lz4_bytestream_decoder.cpp)
-add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/icgrep-test/icgrep-test.cpp combine/pugixml/src/pugixml.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
+add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/propGen.cpp combine/icgrep-test/icgrep-test.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
 
+#Exclude CoRE from default build.
+set_target_properties(core PROPERTIES EXCLUDE_FROM_ALL 1)
 
 target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u8u16 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})

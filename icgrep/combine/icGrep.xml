@@ -12,6 +12,7 @@
     </Parameter>
     <Parameter id="1" name="posix" type="1">
       <values>
+        <value>off</value>
         <value>alnum</value>
         <value>alpha</value>
         <value>lower</value>
@@ -21,7 +22,6 @@
         <value>xdigit</value>
         <value>graph</value>
         <value>blank</value>
-        <value>off</value>
       </values>
       <basechoices>
         <basechoice />
@@ -108,19 +108,25 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="11" name="property" type="2">
+    <Parameter id="11" name="property" type="1">
       <values>
-        <value>true</value>
-        <value>false</value>
+        <value>off</value>
+        <value>binary</value>
+        <value>enum</value>
+        <value>catalog</value>
+        <value>numeric</value>
       </values>
       <basechoices>
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="12" name="notproperty" type="2">
+    <Parameter id="12" name="notProperty" type="1">
       <values>
-        <value>true</value>
-        <value>false</value>
+        <value>off</value>
+        <value>binary</value>
+        <value>enum</value>
+        <value>catalog</value>
+        <value>numeric</value>
       </values>
       <basechoices>
         <basechoice />
@@ -153,7 +159,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="16" name="\q" type="2">
+    <Parameter id="16" name="look_ahead" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -162,7 +168,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="17" name="\Q" type="2">
+    <Parameter id="17" name="nlook_ahead" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -171,7 +177,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="18" name="\x" type="2">
+    <Parameter id="18" name="look_behind" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -180,7 +186,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="19" name="look_ahead" type="2">
+    <Parameter id="19" name="nlook_behind" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -189,7 +195,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="20" name="nlook_ahead" type="2">
+    <Parameter id="20" name="unicodeC" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -198,7 +204,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="21" name="look_behind" type="2">
+    <Parameter id="21" name="backref" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -207,7 +213,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="22" name="nlook_behind" type="2">
+    <Parameter id="22" name="zeroOrOne" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -216,7 +222,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="23" name="grapheme_cluster" type="2">
+    <Parameter id="23" name="zeroOrOne_nested" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -225,7 +231,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="24" name="unicodeC" type="2">
+    <Parameter id="24" name="zeroOrMore" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -234,7 +240,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="25" name="backref" type="2">
+    <Parameter id="25" name="zeroOrMore_nested" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -243,7 +249,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="26" name="zeroOrOne" type="2">
+    <Parameter id="26" name="oneOrMore" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -252,7 +258,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="27" name="zeroOrMore" type="2">
+    <Parameter id="27" name="oneOrMore_nested" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -261,38 +267,18 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="28" name="zeroOrMore_nested" type="1">
+    <Parameter id="28" name="repeat_n" type="1">
       <values>
-        <value>0</value>
-        <value>1</value>
-        <value>2</value>
-        <value>3</value>
+        <value>off</value>
+        <value>small</value>
+        <value>medium</value>
+        <value>large</value>
       </values>
       <basechoices>
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="29" name="oneOrMore" type="2">
-      <values>
-        <value>true</value>
-        <value>false</value>
-      </values>
-      <basechoices>
-        <basechoice />
-      </basechoices>
-    </Parameter>
-    <Parameter id="30" name="oneOrMore_nested" type="1">
-      <values>
-        <value>0</value>
-        <value>1</value>
-        <value>2</value>
-        <value>3</value>
-      </values>
-      <basechoices>
-        <basechoice />
-      </basechoices>
-    </Parameter>
-    <Parameter id="31" name="repeat_n" type="2">
+    <Parameter id="29" name="repeat_n_nested" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -301,38 +287,21 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="32" name="repeat_n_nested" type="1">
+    <Parameter id="30" name="repeat_nm" type="1">
       <values>
-        <value>0</value>
-        <value>1</value>
-        <value>2</value>
-        <value>3</value>
+        <value>off</value>
+        <value>small-small</value>
+        <value>small-medium</value>
+        <value>small-large</value>
+        <value>medium-medium</value>
+        <value>medium-large</value>
+        <value>large-large</value>
       </values>
       <basechoices>
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="33" name="repeat_nm" type="2">
-      <values>
-        <value>true</value>
-        <value>false</value>
-      </values>
-      <basechoices>
-        <basechoice />
-      </basechoices>
-    </Parameter>
-    <Parameter id="34" name="repeat_nm_nested" type="1">
-      <values>
-        <value>0</value>
-        <value>1</value>
-        <value>2</value>
-        <value>3</value>
-      </values>
-      <basechoices>
-        <basechoice />
-      </basechoices>
-    </Parameter>
-    <Parameter id="35" name="repeat_n_more" type="2">
+    <Parameter id="31" name="repeat_nm_nested" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -341,38 +310,18 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="36" name="repeat_n_more_nested" type="1">
+    <Parameter id="32" name="repeat_n_more" type="1">
       <values>
-        <value>0</value>
-        <value>1</value>
-        <value>2</value>
-        <value>3</value>
+        <value>off</value>
+        <value>small</value>
+        <value>medium</value>
+        <value>large</value>
       </values>
       <basechoices>
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="37" name="repeat_m_less" type="2">
-      <values>
-        <value>true</value>
-        <value>false</value>
-      </values>
-      <basechoices>
-        <basechoice />
-      </basechoices>
-    </Parameter>
-    <Parameter id="38" name="repeat_m_less_nested" type="1">
-      <values>
-        <value>0</value>
-        <value>1</value>
-        <value>2</value>
-        <value>3</value>
-      </values>
-      <basechoices>
-        <basechoice />
-      </basechoices>
-    </Parameter>
-    <Parameter id="39" name="join" type="2">
+    <Parameter id="33" name="repeat_n_more_nested" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -381,7 +330,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="40" name="list" type="2">
+    <Parameter id="34" name="join" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -390,7 +339,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="41" name="nList" type="2">
+    <Parameter id="35" name="list" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -399,7 +348,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="42" name="range" type="2">
+    <Parameter id="36" name="nList" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -408,7 +357,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="43" name="start" type="2">
+    <Parameter id="37" name="range" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -417,7 +366,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="44" name="end" type="2">
+    <Parameter id="38" name="start" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -426,7 +375,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="45" name="-l" type="2">
+    <Parameter id="39" name="end" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -435,7 +384,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="46" name="-L" type="2">
+    <Parameter id="40" name="-w" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -444,7 +393,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="47" name="-w" type="2">
+    <Parameter id="41" name="-c" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -453,7 +402,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="48" name="-utf_16" type="2">
+    <Parameter id="42" name="-i" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -462,7 +411,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="49" name="-c" type="2">
+    <Parameter id="43" name="-e" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -471,7 +420,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="50" name="-i" type="2">
+    <Parameter id="44" name="-f" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -480,7 +429,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="51" name="-e" type="2">
+    <Parameter id="45" name="-x" type="2">
       <values>
         <value>true</value>
         <value>false</value>
@@ -489,25 +438,7 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="52" name="-f" type="2">
-      <values>
-        <value>true</value>
-        <value>false</value>
-      </values>
-      <basechoices>
-        <basechoice />
-      </basechoices>
-    </Parameter>
-    <Parameter id="53" name="-x" type="2">
-      <values>
-        <value>true</value>
-        <value>false</value>
-      </values>
-      <basechoices>
-        <basechoice />
-      </basechoices>
-    </Parameter>
-    <Parameter id="54" name="-t" type="0">
+    <Parameter id="46" name="-t" type="1">
       <values>
         <value>off</value>
         <value>1</value>
@@ -519,7 +450,16 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="55" name="-BlockSize" type="0">
+    <Parameter id="47" name="-v" type="2">
+      <values>
+        <value>true</value>
+        <value>false</value>
+      </values>
+      <basechoices>
+        <basechoice />
+      </basechoices>
+    </Parameter>
+    <Parameter id="48" name="-BlockSize" type="1">
       <values>
         <value>off</value>
         <value>64</value>
@@ -531,8 +471,9 @@
         <basechoice />
       </basechoices>
     </Parameter>
-    <Parameter id="56" name="syntax" type="0">
+    <Parameter id="49" name="syntax" type="1">
       <values>
+        <value>off</value>
         <value>-E</value>
         <value>-G</value>
         <value>-P</value>
@@ -541,5 +482,16 @@
         <basechoice />
       </basechoices>
     </Parameter>
+    <Parameter id="50" name="fileType" type="1">
+      <values>
+        <value>s</value>
+        <value>m</value>
+        <value>l</value>
+      </values>
+      <basechoices>
+        <basechoice />
+      </basechoices>
+    </Parameter>
   </Parameters>
 </System>
+
