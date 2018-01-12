@@ -194,6 +194,7 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
     // (w.r.t the stream copy) would be n*m. By taking this into account we can optimize and simplify the copy code.
     const auto fieldWidth = getFieldWidth(itemWidth * itemAlignment, blockWidth);
     const auto alignment = (fieldWidth + 7) / 8;
+
     if (LLVM_LIKELY(itemWidth < fieldWidth)) {
         const auto factor = fieldWidth / itemWidth;
         Constant * const FACTOR = getSize(factor);
@@ -236,6 +237,7 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
     Type * const fieldWidthTy = getIntNTy(fieldWidth);
 
     Value * const n = buf->getStreamSetCount(this, getStreamHandle(name));
+
     if (isConstantOne(n) || fieldWidth == blockWidth || (isConstantZero(targetOffset) && isConstantZero(sourceOffset))) {
         if (isConstantOne(n)) {
             if (LLVM_LIKELY(itemWidth < 8)) {
@@ -261,13 +263,15 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
         VectorType * const blockTy = getBitBlockType();
         PointerType * const blockPtrTy = blockTy->getPointerTo();
 
-        target = CreatePointerCast(target, blockPtrTy);
-        source = CreatePointerCast(source, blockPtrTy);
+        target = CreatePointerCast(target, blockPtrTy, "target");
+        source = CreatePointerCast(source, blockPtrTy, "source");
 
         assert ((blockWidth % fieldWidth) == 0);
 
         VectorType * const shiftTy = VectorType::get(fieldWidthTy, blockWidth / fieldWidth);
         Constant * const width = getSize(blockWidth / itemWidth);
+        Constant * const ZERO = getSize(0);
+        Constant * const ONE = getSize(1);
         BasicBlock * const entry = GetInsertBlock();
 
         if (isConstantZero(targetOffset)) {
@@ -289,38 +293,38 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
             Value * const blocksToCopy = CreateMul(CreateUDiv(itemsToCopy, width), n);
             Value * const offset = CreateURem(sourceOffset, width);
+            Value * const offsetVector = simd_fill(fieldWidth, CreateTrunc(offset, fieldWidthTy));
             Value * const remaining = CreateSub(width, offset);
-            Value * const trailing = CreateURem(CreateAdd(sourceOffset, itemsToCopy), width);
+            Value * const remainingVector = simd_fill(fieldWidth, CreateTrunc(remaining, fieldWidthTy));
 
-            BasicBlock * const streamCopy = CreateBasicBlock(name + "StreamCopy");
-            BasicBlock * const streamCopyRemaining = CreateBasicBlock(name + "StreamCopyRemaining");
-            BasicBlock * const streamCopyEnd = CreateBasicBlock(name + "StreamCopyEnd");
+            BasicBlock * const streamCopy = CreateBasicBlock(name + "PullCopy");
+            BasicBlock * const streamCopyRemaining = CreateBasicBlock(name + "PullCopyRemaining");
+            BasicBlock * const streamCopyEnd = CreateBasicBlock(name + "PullCopyEnd");
 
-            CreateCondBr(CreateICmpNE(blocksToCopy, getSize(0)), streamCopy, streamCopyRemaining);
+            CreateCondBr(CreateICmpNE(blocksToCopy, ZERO), streamCopy, streamCopyRemaining);
 
             SetInsertPoint(streamCopy);
             PHINode * const i = CreatePHI(getSizeTy(), 2);
             i->addIncoming(n, entry);
             Value * prior = CreateAlignedLoad(CreateGEP(source, CreateSub(i, n)), alignment);
-            prior = CreateLShr(CreateBitCast(prior, shiftTy), offset);
+            prior = CreateBitCast(CreateLShr(CreateBitCast(prior, shiftTy), offsetVector), blockTy);
             Value * value = CreateAlignedLoad(CreateGEP(source, i), alignment);
-            value = CreateShl(CreateBitCast(value, shiftTy), remaining);
-            Value * const result = CreateBitCast(CreateOr(value, prior), blockTy);
-            CreateAlignedStore(result, CreateGEP(target, i), alignment);
-            Value * const next_i = CreateAdd(i, getSize(1));
+            value = CreateBitCast(CreateShl(CreateBitCast(value, shiftTy), remainingVector), blockTy);
+            CreateAlignedStore(CreateOr(value, prior), CreateGEP(target, i), alignment);
+            Value * const next_i = CreateAdd(i, ONE);
             i->addIncoming(next_i, streamCopy);
             CreateCondBr(CreateICmpNE(next_i, blocksToCopy), streamCopy, streamCopyRemaining);
 
             SetInsertPoint(streamCopyRemaining);
             PHINode * const j = CreatePHI(getSizeTy(), 2);
-            j->addIncoming(getSize(0), streamCopy);
-            Value * k = CreateAdd(blocksToCopy, j);
-            Value * final = CreateAlignedLoad(CreateGEP(source, k), alignment);
-            final = CreateLShr(CreateBitCast(prior, shiftTy), trailing);
-            CreateAlignedStore(final, CreateGEP(target, k), alignment);
-            Value * const next_j = CreateAdd(i, getSize(1));
-            i->addIncoming(next_j, streamCopyRemaining);
-            CreateCondBr(CreateICmpNE(next_j, n), streamCopyRemaining, streamCopyEnd);
+            j->addIncoming(blocksToCopy, entry);
+            j->addIncoming(blocksToCopy, streamCopy);
+            Value * final = CreateAlignedLoad(CreateGEP(source, j), alignment);
+            final = CreateBitCast(CreateLShr(CreateBitCast(final, shiftTy), offsetVector), blockTy);
+            CreateAlignedStore(final, CreateGEP(target, j), alignment);
+            Value * const next_j = CreateAdd(j, ONE);
+            j->addIncoming(next_j, streamCopyRemaining);
+            CreateCondBr(CreateICmpNE(next_j, CreateAdd(blocksToCopy, n)), streamCopyRemaining, streamCopyEnd);
 
             SetInsertPoint(streamCopyEnd);
 
@@ -342,24 +346,28 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
             */
 
-            BasicBlock * const streamCopy = CreateBasicBlock(name + "StreamCopy");
-            BasicBlock * const streamCopyRemainingCond = CreateBasicBlock(name + "StreamCopyRemainingCond");
-            BasicBlock * const streamCopyRemaining = CreateBasicBlock(name + "StreamCopyRemaining");
-            BasicBlock * const streamCopyEnd = CreateBasicBlock(name + "StreamCopyEnd");
+            BasicBlock * const streamCopy = CreateBasicBlock(name + "PushCopy");
+            BasicBlock * const streamCopyRemainingCond = CreateBasicBlock(name + "PushCopyRemainingCond");
+            BasicBlock * const streamCopyRemaining = CreateBasicBlock(name + "PushCopyRemaining");
+            BasicBlock * const streamCopyEnd = CreateBasicBlock(name + "PushCopyEnd");
 
-            Value * const offset = CreateURem(targetOffset, width);
-            Value * const copied = CreateSub(width, offset);
-            Value * const mask = CreateLShr(Constant::getAllOnesValue(shiftTy), copied);
+            Value * const pos = CreateURem(targetOffset, width);
+            Value * const copied = CreateSub(width, pos);
+            Value * const copiedVector = simd_fill(fieldWidth, CreateTrunc(copied, fieldWidthTy));
+            Value * const mask = CreateLShr(Constant::getAllOnesValue(shiftTy), copiedVector);
+            Value * const offsetVector = simd_fill(fieldWidth, CreateTrunc(pos, fieldWidthTy));
+
+            CreateBr(streamCopy);
 
             SetInsertPoint(streamCopy);
             PHINode * const i = CreatePHI(getSizeTy(), 2);
-            i->addIncoming(getSize(0), entry);
-            Value * targetValue = CreateAlignedLoad(CreateGEP(target, i), alignment);
-            targetValue = CreateAnd(CreateBitCast(targetValue, shiftTy), mask);
+            i->addIncoming(ZERO, entry);
+            Value * priorTargetValue = CreateAlignedLoad(CreateGEP(target, i), alignment);
+            priorTargetValue = CreateBitCast(CreateAnd(CreateBitCast(priorTargetValue, shiftTy), mask), blockTy);
             Value * sourceValue = CreateAlignedLoad(CreateGEP(source, i), alignment);
-            sourceValue = CreateShl(CreateBitCast(sourceValue, shiftTy), offset);
-            CreateAlignedStore(CreateOr(sourceValue, targetValue), CreateGEP(source, i), alignment);
-            Value * const next_i = CreateAdd(i, getSize(1));
+            sourceValue = CreateBitCast(CreateShl(CreateBitCast(sourceValue, shiftTy), offsetVector), blockTy);
+            CreateAlignedStore(CreateOr(sourceValue, priorTargetValue), CreateGEP(target, i), alignment);
+            Value * const next_i = CreateAdd(i, ONE);
             i->addIncoming(next_i, streamCopy);
             CreateCondBr(CreateICmpNE(next_i, n), streamCopy, streamCopyRemainingCond);
 
@@ -369,20 +377,18 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
             SetInsertPoint(streamCopyRemaining);
             PHINode * const j = CreatePHI(getSizeTy(), 2);
-            j->addIncoming(n, entry);
+            j->addIncoming(n, streamCopyRemainingCond);
             Value * prior = CreateAlignedLoad(CreateGEP(source, CreateSub(j, n)), alignment);
-            prior = CreateShl(CreateBitCast(prior, shiftTy), offset);
+            prior = CreateBitCast(CreateShl(CreateBitCast(prior, shiftTy), offsetVector), blockTy);
             Value * value = CreateAlignedLoad(CreateGEP(source, j), alignment);
-            value = CreateLShr(CreateBitCast(value, shiftTy), copied);
-            Value * const result = CreateBitCast(CreateOr(value, prior), blockTy);
-            CreateAlignedStore(result, CreateGEP(target, j), alignment);
-            Value * const next_j = CreateAdd(j, getSize(1));
-            j->addIncoming(next_j, streamCopy);
+            value = CreateBitCast(CreateLShr(CreateBitCast(value, shiftTy), copiedVector), blockTy);
+            CreateAlignedStore(CreateOr(value, prior), CreateGEP(target, j), alignment);
+            Value * const next_j = CreateAdd(j, ONE);
+            j->addIncoming(next_j, streamCopyRemaining);
             CreateCondBr(CreateICmpNE(next_j, blocksToCopy), streamCopyRemaining, streamCopyEnd);
 
             SetInsertPoint(streamCopyEnd);
         }
-
     }
 }
 
