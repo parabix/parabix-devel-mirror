@@ -92,7 +92,7 @@ private:
     const String * const mName;
 };
 
-class Extract : public Statement {
+class Extract : public PabloAST {
     friend class PabloBlock;
 public:
     static inline bool classof(const PabloAST * e) {
@@ -103,17 +103,22 @@ public:
     }
     virtual ~Extract(){
     }
-    inline PabloAST * getArray() const {
-        return getOperand(0);
+    inline Var * getArray() const {
+        return mArray;
     }
     inline PabloAST * getIndex() const {
-        return getOperand(1);
+        return mIndex;
     }
 protected:
-    Extract(PabloAST * array, PabloAST * const index, const String * const name, llvm::Type * type, Allocator & allocator)
-    : Statement(ClassTypeId::Extract, type, {array, index}, name, allocator) {
+    Extract(Var * array, PabloAST * const index, llvm::Type * type, Allocator & allocator)
+    : PabloAST(ClassTypeId::Extract, type, allocator)
+    , mArray(array)
+    , mIndex(index) {
 
     }
+private:
+    Var * const mArray;
+    PabloAST * const mIndex;
 };
 
 }

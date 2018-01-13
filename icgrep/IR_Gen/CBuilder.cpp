@@ -677,11 +677,11 @@ Value * CBuilder::CreateMProtect(Value * addr, Value * size, const int protect) 
 
 }
 
-IntegerType * CBuilder::getIntAddrTy() const {
+IntegerType * LLVM_READNONE CBuilder::getIntAddrTy() const {
     return TypeBuilder<intptr_t, false>::get(getContext());
 }
 
-PointerType * CBuilder::getVoidPtrTy(const unsigned AddressSpace) const {
+PointerType * LLVM_READNONE CBuilder::getVoidPtrTy(const unsigned AddressSpace) const {
     return PointerType::get(Type::getVoidTy(getContext()), AddressSpace);
 }
 
@@ -700,7 +700,7 @@ StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     return inst;
 }
 
-PointerType * CBuilder::getFILEptrTy() {
+PointerType * LLVM_READNONE CBuilder::getFILEptrTy() {
     if (mFILEtype == nullptr) {
         mFILEtype = StructType::create(getContext(), "struct._IO_FILE");
     }
@@ -1083,9 +1083,10 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine & failureMess
         IRBuilder<>::CreateCall(function, {assertion, GetString(failureMessage.toStringRef(tmp)), trace, depth});
     } else { // if assertions are not enabled, make it a compiler assumption.
 
-        // INVESTIGATE: while interesting, this does not seem to produce faster code and only provides a trivial reduction
-        // of compiled code size in LLVM 3.8 but nearly doubles compilation time. This may have been improved with later
-        // versions of LLVM but it's likely that assumptions ought to be hand placed once they're prove to improve performance.
+        // INVESTIGATE: while interesting, this does not seem to produce faster code and only provides a trivial
+        // reduction of compiled code size in LLVM 3.8 but nearly doubles compilation time. This may have been
+        // improved with later versions of LLVM but it's likely that assumptions ought to be hand placed once
+        // they're proven to improve performance.
 
         // IRBuilder<>::CreateAssumption(assertion);
     }
@@ -1103,8 +1104,8 @@ void CBuilder::CreateExit(const int exitCode) {
     CreateCall(exit, getInt32(exitCode));
 }
 
-BasicBlock * CBuilder::CreateBasicBlock(std::string && name) {
-    return BasicBlock::Create(getContext(), name, GetInsertBlock()->getParent());
+BasicBlock * CBuilder::CreateBasicBlock(const StringRef name, BasicBlock * insertBefore) {
+    return BasicBlock::Create(getContext(), name, GetInsertBlock()->getParent(), insertBefore);
 }
 
 bool CBuilder::supportsIndirectBr() const {
@@ -1124,20 +1125,20 @@ Value * CBuilder::CreatePopcount(Value * bits) {
     return CreateCall(ctpopFunc, bits);
 }
 
-Value * CBuilder::CreateCountForwardZeroes(Value * value, const bool isZeroUndefined) {
-    if (LLVM_UNLIKELY(isZeroUndefined && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+Value * CBuilder::CreateCountForwardZeroes(Value * value, const bool guaranteedNonZero) {
+    if (LLVM_UNLIKELY(guaranteedNonZero && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(value, "CreateCountForwardZeroes: value cannot be zero!");
     }
-    Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());
-    return CreateCall(cttzFunc, {value, getInt1(isZeroUndefined)});
+    Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());   
+    return CreateCall(cttzFunc, {value, getInt1(guaranteedNonZero)});
 }
 
-Value * CBuilder::CreateCountReverseZeroes(Value * value, const bool isZeroUndefined) {
-    if (LLVM_UNLIKELY(isZeroUndefined && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+Value * CBuilder::CreateCountReverseZeroes(Value * value, const bool guaranteedNonZero) {
+    if (LLVM_UNLIKELY(guaranteedNonZero && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(value, "CreateCountReverseZeroes: value cannot be zero!");
     }
     Value * ctlzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctlz, value->getType());
-    return CreateCall(ctlzFunc, {value, getInt1(isZeroUndefined)});
+    return CreateCall(ctlzFunc, {value, getInt1(guaranteedNonZero)});
 }
 
 Value * CBuilder::CreateResetLowestBit(Value * bits) {

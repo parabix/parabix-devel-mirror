@@ -221,11 +221,11 @@ public:
         return llvm::ConstantInt::get(getSizeTy(), value);
     }
     
-    llvm::IntegerType * getIntAddrTy() const;
+    llvm::IntegerType * LLVM_READNONE getIntAddrTy() const;
     
-    llvm::PointerType * getVoidPtrTy(const unsigned AddressSpace = 0) const;
+    llvm::PointerType * LLVM_READNONE getVoidPtrTy(const unsigned AddressSpace = 0) const;
     
-    llvm::PointerType * getFILEptrTy();
+    llvm::PointerType * LLVM_READNONE getFILEptrTy();
     
     inline unsigned getCacheAlignment() const {
         return mCacheLineAlignment;
@@ -257,15 +257,15 @@ public:
         return CreateLikelyCondBr(Cond, True, False, 100 - probability);
     }
 
-    llvm::BasicBlock * CreateBasicBlock(std::string && name);
+    llvm::BasicBlock * CreateBasicBlock(const llvm::StringRef name, llvm::BasicBlock * insertBefore = nullptr);
 
     virtual bool supportsIndirectBr() const;
 
     llvm::Value * CreatePopcount(llvm::Value * bits);
 
-    llvm::Value * CreateCountForwardZeroes(llvm::Value * value, const bool isZeroUndefined = false);
-
-    llvm::Value * CreateCountReverseZeroes(llvm::Value * value, const bool isZeroUndefined = false);
+    // TODO: AVX512 offers these as vector instructions
+    llvm::Value * CreateCountForwardZeroes(llvm::Value * value, const bool guaranteedNonZero = false);
+    llvm::Value * CreateCountReverseZeroes(llvm::Value * value, const bool guaranteedNonZero = false);
     
     // Useful bit manipulation operations  
     llvm::Value * CreateResetLowestBit(llvm::Value * bits);   

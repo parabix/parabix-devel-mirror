@@ -88,13 +88,24 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod(const std::unique_
     }
 }
 
+inline std::vector<Binding> makeOutputBindings(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<CC *> & charClasses) {
+    std::vector<Binding> bindings;
+    for (CC * cc : charClasses) {
+        bindings.emplace_back(Binding(b->getStreamTy(), cc->canonicalName(re::CC_type::ByteClass)));
+    }
+    return bindings;
+}
+
 ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
         const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, const std::vector<CC *> & charClasses, unsigned codeUnitSize)
-: PabloKernel(b, ccSetName +"_kernel", {Binding{b->getStreamSetTy(codeUnitSize), "basis"}})
+: PabloKernel(b, ccSetName +"_kernel",
+// stream inputs
+{Binding{b->getStreamSetTy(codeUnitSize), "basis"}}
+// stream outputs
+, makeOutputBindings(b, charClasses)
+)
 , mCharClasses(charClasses) {
-    for (CC * cc : mCharClasses) {
-        addOutput(cc->canonicalName(re::CC_type::ByteClass), b->getStreamTy());
-    }
+
 }
 
 void ParabixCharacterClassKernelBuilder::generatePabloMethod() {

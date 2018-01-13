@@ -11,7 +11,6 @@
 #include <pablo/symbol_generator.h>
 #include <util/slab_allocator.h>
 #include <llvm/ADT/StringRef.h>
-#include <boost/container/flat_map.hpp>
 
 namespace llvm { class Type; }
 namespace llvm { class VectorType; }
@@ -65,14 +64,14 @@ public:
     Var * getInputStreamVar(const std::string & name);
 
     Var * getInput(const unsigned index) {
+        assert (index < mInputs.size() && mInputs[index]);
         return mInputs[index];
     }
 
     const Var * getInput(const unsigned index) const {
+        assert (index < mInputs.size() && mInputs[index]);
         return mInputs[index];
     }
-
-    Var * addInput(const std::string & name, llvm::Type * const type);
 
     unsigned getNumOfInputs() const {
         return mInputs.size();
@@ -83,22 +82,21 @@ public:
     Var * getOutputScalarVar(const std::string & name);
 
     Var * getOutput(const unsigned index) {
+        assert (index < mOutputs.size() && mOutputs[index]);
         return mOutputs[index];
     }
 
     const Var * getOutput(const unsigned index) const {
+        assert (index < mOutputs.size() && mOutputs[index]);
         return mOutputs[index];
     }
-
-    Var * addOutput(const std::string & name, llvm::Type * const type);
 
     unsigned getNumOfOutputs() const {
         return mOutputs.size();
     }
 
-    Var * makeVariable(String * name, llvm::Type * const type);
-
     Var * getVariable(const unsigned index) {
+        assert (index < mVariables.size() && mVariables[index]);
         return mVariables[index];
     }
 
@@ -130,6 +128,11 @@ public:
         return mCarryDataTy;
     }
 
+    llvm::LLVMContext & getContext() const {
+        assert (mContext);
+        return *mContext;
+    }
+
 protected:
 
     PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder,
@@ -155,6 +158,8 @@ protected:
         mCarryDataTy = carryDataTy;
     }
 
+    Var * makeVariable(String * name, llvm::Type * const type);
+
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
     // finalizing the KernelStateType.
@@ -171,20 +176,26 @@ private:
 
     void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) final;
 
+    #if 0
+    void beginConditionalRegion(const std::unique_ptr<KernelBuilder> & b) final;
+    #endif
+
 private:
 
     Allocator                       mAllocator;
-    PabloCompiler * const           mPabloCompiler;
+    PabloCompiler *                 mPabloCompiler;
     SymbolGenerator *               mSymbolTable;
     PabloBlock *                    mEntryBlock;
     llvm::IntegerType *             mSizeTy;
     llvm::VectorType *              mStreamTy;
     llvm::StructType *              mCarryDataTy;
+    llvm::LLVMContext *             mContext;
+
     std::vector<Var *>              mInputs;
     std::vector<Var *>              mOutputs;
     std::vector<PabloAST *>         mConstants;
     std::vector<Var *>              mVariables;
-    boost::container::flat_map<std::string, Var *> mScalarOutputNameMap;
+    std::vector<Var *>              mScalarOutputVars;
 };
 
 }

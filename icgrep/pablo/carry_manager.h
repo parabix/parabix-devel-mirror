@@ -46,7 +46,7 @@ public:
   
     CarryManager() noexcept;
 
-    void initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel);
+    void initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel);    
 
     void releaseCarryData(const std::unique_ptr<kernel::KernelBuilder> & idb);
 
@@ -85,6 +85,10 @@ public:
     /* Methods for getting and setting carry summary values for If statements */
          
     llvm::Value * generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * condition);
+
+    /* Clear carry state for conditional regions */
+
+    void clearCarryData(const std::unique_ptr<kernel::KernelBuilder> & idb);
 
 protected:
 

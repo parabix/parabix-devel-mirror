@@ -180,6 +180,15 @@ void CarryManager::releaseCarryData(const std::unique_ptr<kernel::KernelBuilder>
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief clearCarryState
+ ** ------------------------------------------------------------------------------------------------------------- */
+void CarryManager::clearCarryData(const std::unique_ptr<kernel::KernelBuilder> & idb) {
+
+
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeCodeGen
  ** ------------------------------------------------------------------------------------------------------------- */
 void CarryManager::initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & b) {

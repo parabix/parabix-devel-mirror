@@ -1,8 +1,8 @@
 #include "pabloverifier.hpp"
 #include <pablo/branch.h>
 #include <pablo/pe_var.h>
-#include <pablo/pe_phi.h>
 #include <pablo/ps_assign.h>
+#include <pablo/arithmetic.h>
 #include <pablo/codegenstate.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/printer_pablos.h>
@@ -75,7 +75,7 @@ void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
                 throw std::runtime_error(str.str());
             }
         } else if (isa<Var>(expr)) {
-            if (LLVM_UNLIKELY(isa<Branch>(use) || isa<PabloKernel>(use))) {
+            if (LLVM_UNLIKELY(isa<Branch>(use) || isa<Operator>(use) || isa<PabloKernel>(use))) {
                 ++uses;
             } else {
                 std::string tmp;
@@ -84,8 +84,15 @@ void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
                 PabloPrinter::print(use, str);
                 str << " is a user of ";
                 PabloPrinter::print(expr, str);
-                str << " but can only be a user of a Branch or Kernel.";
+                str << " but can only be a user of a Branch, Operator or Kernel.";
                 throw std::runtime_error(str.str());
+            }
+        } else if (const Operator * const user = dyn_cast<Operator>(use)) {
+            if (user->getLH() == expr) {
+                ++uses;
+            }
+            if (user->getRH() == expr) {
+                ++uses;
             }
         }
         verified.insert(use);

@@ -229,7 +229,7 @@ inline PabloAST * CC_Compiler::getBasisVar(const unsigned i) const {
 }
 
     
-PabloAST * compileCCfromCodeUnitStream(const CC *cc, PabloAST * codeUnitStream, PabloBuilder & pb) {
+PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream, PabloBuilder & pb) {
     const Alphabet * a = cc->getAlphabet();
     if (!isa<CodeUnitAlphabet>(a)) {
         llvm::report_fatal_error("compileCCfromCodeUnitStream must be applied to a CC with a CodeUnitAlphabet");
@@ -238,32 +238,30 @@ PabloAST * compileCCfromCodeUnitStream(const CC *cc, PabloAST * codeUnitStream, 
     unsigned topBit = 1 << codeUnitWidth;
     unsigned maxCodeVal = (topBit - 1) | topBit;
     PabloAST * ccStrm = pb.createZeroes();
-#ifdef PABLO_ALL
     for (const auto & interval : *cc) {
         unsigned lo = re::lo_codepoint(interval);
         unsigned hi = re::hi_codepoint(interval);
         if (lo == hi) {
-            PabloAST * testVal = pb.createAll(codeUnitWidth, lo);
-            ccStrm = pb.createOr(ccStrm, pb.createEqual(codeUnitStream, testVal));
+            PabloAST * testVal = pb.createRepeat(codeUnitWidth, lo);
+            ccStrm = pb.createOr(ccStrm, pb.createEquals(codeUnitStream, testVal));
         } else if (lo == 0) {
             if (hi == maxCodeVal) {
                 // All code units
                 ccStrm = pb.createOnes();
             } else {
-                PabloAST * testVal = pb.createAll(codeUnitWidth, hi+1);
+                PabloAST * testVal = pb.createRepeat(codeUnitWidth, hi+1);
                 ccStrm = pb.createOr(ccStrm, pb.createLessThan(codeUnitStream, testVal));
             }
         } else if (hi == maxCodeVal) {
-            PabloAST * testVal = pb.createAll(codeUnitWidth, lo);
-            ccStrm = pb.createOr(ccStrm, pb.createNot(pb.createLessThan(codeUnitStream, testVal));)
+            PabloAST * testVal = pb.createRepeat(codeUnitWidth, lo);
+            ccStrm = pb.createOr(ccStrm, pb.createNot(pb.createLessThan(codeUnitStream, testVal)));
         } else {
-            PabloAST * testVal_lo = pb.createAll(codeUnitWidth, lo);
-            PabloAST * testVal_hi = pb.createAll(codeUnitWidth, hi+1);
+            PabloAST * testVal_lo = pb.createRepeat(codeUnitWidth, lo);
+            PabloAST * testVal_hi = pb.createRepeat(codeUnitWidth, hi + 1);
             ccStrm = pb.createOr(ccStrm, pb.createAnd(pb.createNot(pb.createLessThan(codeUnitStream, testVal_lo)),
                                                       pb.createLessThan(codeUnitStream, testVal_hi)));
         }
     }
-#endif
     return ccStrm;
 }
 } // end of namespace cc

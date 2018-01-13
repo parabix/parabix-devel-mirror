@@ -90,7 +90,7 @@ bool equals(const PabloAST * const expr1, const PabloAST * const expr2) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief replaceAllUsesWith
  ** ------------------------------------------------------------------------------------------------------------- */
-void PabloAST::replaceAllUsesWith(PabloAST * const expr) {
+void PabloAST::replaceAllUsesWith(PabloAST * const expr) noexcept {
     assert (expr);
     if (LLVM_UNLIKELY(this == expr)) {
         return;
@@ -114,7 +114,8 @@ void PabloAST::replaceAllUsesWith(PabloAST * const expr) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addUser
  ** ------------------------------------------------------------------------------------------------------------- */
-bool PabloAST::addUser(PabloAST * const user) { assert (user);
+bool PabloAST::addUser(PabloAST * const user) noexcept {
+    assert (user);
     const auto p = std::lower_bound(mUsers.begin(), mUsers.end(), user);
     const bool unique = p == mUsers.end() || *p != user;
     mUsers.insert(p, user);
@@ -124,7 +125,8 @@ bool PabloAST::addUser(PabloAST * const user) { assert (user);
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief removeUser
  ** ------------------------------------------------------------------------------------------------------------- */
-bool PabloAST::removeUser(PabloAST * const user) { assert (user);
+bool PabloAST::removeUser(PabloAST * const user) noexcept {
+    assert (user);
     const auto p = std::lower_bound(mUsers.begin(), mUsers.end(), user);
     assert (p != mUsers.end() && *p == user);
     const auto n = mUsers.erase(p);
@@ -229,12 +231,9 @@ void Statement::insertAfter(Statement * const statement) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief removeFromParent
  ** ------------------------------------------------------------------------------------------------------------- */
-Statement * Statement::removeFromParent() {
+Statement * Statement::removeFromParent() noexcept {
     Statement * next = mNext;
     if (LLVM_LIKELY(mParent != nullptr)) {
-
-
-
         if (LLVM_UNLIKELY(mParent->mFirst == this)) {
             mParent->mFirst = mNext;
         }
@@ -260,7 +259,7 @@ Statement * Statement::removeFromParent() {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief eraseFromParent
  ** ------------------------------------------------------------------------------------------------------------- */
-Statement * Statement::eraseFromParent(const bool recursively) {
+Statement * Statement::eraseFromParent(const bool recursively) noexcept {
 
     if (LLVM_UNLIKELY(getParent() == nullptr)) {
         return nullptr;
@@ -273,7 +272,6 @@ Statement * Statement::eraseFromParent(const bool recursively) {
     }
 
     Statement * const next = removeFromParent();
-
     for (unsigned i = 0; i != mOperands; ++i) {
         PabloAST * const op = mOperand[i]; assert (op);
         op->removeUser(this);
@@ -291,7 +289,7 @@ Statement * Statement::eraseFromParent(const bool recursively) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief replaceWith
  ** ------------------------------------------------------------------------------------------------------------- */
-Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, const bool recursively) {
+Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, const bool recursively) noexcept {
     assert (expr);
     if (LLVM_UNLIKELY(expr == this)) {
         return getNextNode();
@@ -318,7 +316,7 @@ void Statement::setName(const String * const name) noexcept {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addOperand
  ** ------------------------------------------------------------------------------------------------------------- */
-void Variadic::addOperand(PabloAST * const expr) {
+void Variadic::addOperand(PabloAST * const expr) noexcept {
     if (LLVM_UNLIKELY(mOperands == mCapacity)) {
         mCapacity = std::max<unsigned>(mCapacity * 2, 2);
         PabloAST ** expandedOperandSpace = mAllocator.allocate(mCapacity);
@@ -335,7 +333,7 @@ void Variadic::addOperand(PabloAST * const expr) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief removeOperand
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * Variadic::removeOperand(const unsigned index) {
+PabloAST * Variadic::removeOperand(const unsigned index) noexcept {
     assert (index < mOperands);
     PabloAST * const expr = mOperand[index];
     assert (expr);

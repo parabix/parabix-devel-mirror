@@ -17,12 +17,13 @@
 #include <pablo/pe_lookahead.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_ones.h>
-#include <pablo/pe_phi.h>
+#include <pablo/pe_repeat.h>
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_string.h>
 #include <pablo/pe_var.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/ps_assign.h>
+#include <llvm/IR/Type.h>
 #include <llvm/Support/raw_os_ostream.h>
 
 using namespace pablo;
@@ -57,12 +58,7 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
     } else {
         print(cast<PabloAST>(stmt), out);
 
-        if (const Extract * extract = dyn_cast<Extract>(stmt)) {
-            out << " = Extract ";
-            print(extract->getArray(), out);
-            out << ", ";
-            print(extract->getIndex(), out);
-        } else if (const And * andNode = dyn_cast<And>(stmt)) {
+        if (const And * andNode = dyn_cast<And>(stmt)) {
             out << " = (";
             for (unsigned i = 0; i != andNode->getNumOperands(); ++i) {
                 if (i) out << " & ";
@@ -143,6 +139,12 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             out << " = pablo.Count(";
             print(count->getExpr(), out);
             out << ")";
+        } else if (const Repeat * splat = dyn_cast<Repeat>(stmt)) {
+            out << " = pablo.Repeat(";
+            print(splat->getFieldWidth(), out);
+            out << ", ";
+            print(splat->getValue(), out);
+            out << ")";
         } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
             out << " = pablo.InFile(";
             print(e->getExpr(), out);
@@ -164,15 +166,13 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
         out << "0";
     } else if (isa<Ones>(expr)) {
         out << "1";
+    } else if (const Extract * extract = dyn_cast<Extract>(expr)) {
+        print(extract->getArray(), out);
+        out << "[";
+        print(extract->getIndex(), out);
+        out << "]";
     } else if (const Var * var = dyn_cast<Var>(expr)) {
         out << var->getName();
-    } else if (const Phi * const phi = dyn_cast<Phi>(expr)) {
-        out << "phi(";
-        for (unsigned i = 0; i != phi->getNumIncomingValues(); ++i) {
-            if (i) out << ", ";
-            print(phi->getIncomingValue(i), out);
-        }
-        out << ")";
     } else if (const If * ifstmt = dyn_cast<If>(expr)) {
         out << "If ";
         print(ifstmt->getCondition(), out);

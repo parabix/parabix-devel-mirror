@@ -103,8 +103,13 @@ public:
     virtual llvm::Value * simd_pext(unsigned fw, llvm::Value * v, llvm::Value * extract_mask);
     virtual llvm::Value * simd_pdep(unsigned fw, llvm::Value * v, llvm::Value * deposit_mask);
     
-    virtual llvm::Value * simd_cttz(unsigned fw, llvm::Value * a);
-    virtual llvm::Value * simd_popcount(unsigned fw, llvm::Value * a);
+    llvm::Value * simd_popcount(unsigned fw, llvm::Value * a) {
+        if (LLVM_UNLIKELY(fw < 8)) {
+            llvm::report_fatal_error("Unsupported field width: popcount " + std::to_string(fw));
+        }
+        return CreatePopcount(fwCast(fw, a));
+    }
+
     virtual llvm::Value * simd_bitreverse(unsigned fw, llvm::Value * a);
     
     virtual llvm::Value * esimd_mergeh(unsigned fw, llvm::Value * a, llvm::Value * b);
@@ -133,7 +138,6 @@ public:
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_indexed_advance(llvm::Value * a, llvm::Value * index_strm, llvm::Value * shiftin, unsigned shift);
     virtual llvm::Value * bitblock_mask_from(llvm::Value * pos);
     virtual llvm::Value * bitblock_set_bit(llvm::Value * pos);
-    
 
     virtual void CreateBaseFunctions() {}
     

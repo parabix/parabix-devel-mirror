@@ -74,15 +74,16 @@ Constant * IDISA_Builder::simd_lomask(unsigned fw) {
 
 Value * IDISA_Builder::simd_fill(unsigned fw, Value * a) {
     if (fw < 8) report_fatal_error("Unsupported field width: simd_fill " + std::to_string(fw));
-   unsigned field_count = mBitBlockWidth/fw;
+    const unsigned field_count = mBitBlockWidth/fw;
     Type * singleFieldVecTy = VectorType::get(getIntNTy(fw), 1);
     Value * aVec = CreateBitCast(a, singleFieldVecTy);
     return CreateShuffleVector(aVec, UndefValue::get(singleFieldVecTy), Constant::getNullValue(VectorType::get(getInt32Ty(), field_count)));
 }
 
 Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
-    if (fw == 1) return simd_xor(a, b);
-    if (fw < 8) {
+    if (fw == 1) {
+        return simd_xor(a, b);
+    } else if (fw < 8) {
         Constant * hi_bit_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
                                                            APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, 1)));
         Constant * lo_bit_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
@@ -268,18 +269,6 @@ Value * IDISA_Builder::simd_pdep(unsigned fieldwidth, Value * v, Value * deposit
                     simd_sllv(fw, simd_and(w, pext_shift_back_field_mask), pext_shift_back_amts));
     }
     return w;
-}
-
-Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
-    if (fw < 8) report_fatal_error("Unsupported field width: cttz " + std::to_string(fw));
-    Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, fwVectorType(fw));
-    return CreateCall(cttzFunc, {fwCast(fw, a), ConstantInt::get(getInt1Ty(), 0)});
-}
-
-Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
-    if (fw < 8) report_fatal_error("Unsupported field width: popcount " + std::to_string(fw));
-    Value * ctpopFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, fwVectorType(fw));
-    return CreateCall(ctpopFunc, fwCast(fw, a));
 }
 
 Value * IDISA_Builder::simd_bitreverse(unsigned fw, Value * a) {

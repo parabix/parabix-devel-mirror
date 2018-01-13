@@ -52,7 +52,7 @@ public:
         // Arithmetic expressions
         , Add
         , Subtract
-        // Relational expressions
+        // Relational operators
         , LessThan
         , LessThanEquals
         , Equals
@@ -65,7 +65,7 @@ public:
         , String
         , Block
         , Kernel
-        , Phi
+        , Extract
         /** Statements **/
         // Boolean operations
         , And
@@ -88,10 +88,13 @@ public:
         , Count
         // Variable assignments
         , Assign
-        , Extract     
-        // Scope blocks
+        // Scope branch statements
         , If
         , While
+        // Misc. operations
+        , Fill
+        , PackH
+        , PackL
     };
 
     inline ClassTypeId getClassTypeId() const noexcept {
@@ -106,33 +109,33 @@ public:
         mType = type;
     }
 
-    inline user_iterator user_begin() {
+    inline user_iterator user_begin() noexcept {
         return mUsers.begin();
     }
 
-    inline user_iterator user_end() {
+    inline user_iterator user_end() noexcept {
         return mUsers.end();
     }
 
-    inline const_user_iterator user_begin() const {
+    inline const_user_iterator user_begin() const noexcept {
         return mUsers.cbegin();
     }
 
-    inline const_user_iterator user_end() const {
+    inline const_user_iterator user_end() const noexcept {
         return mUsers.cend();
     }
 
-    inline Users & users() {
+    inline Users & users() noexcept {
         return mUsers;
     }
 
-    inline const Users & users() const {
+    inline const Users & users() const noexcept {
         return mUsers;
     }
 
-    void replaceAllUsesWith(PabloAST * const expr);
+    void replaceAllUsesWith(PabloAST * const expr) noexcept;
 
-    inline Users::size_type getNumUses() const {
+    inline Users::size_type getNumUses() const noexcept {
         return mUsers.size();
     }
 
@@ -153,9 +156,9 @@ protected:
     , mUsers(allocator) {
 
     }
-    bool addUser(PabloAST * const user);
+    bool addUser(PabloAST * const user) noexcept;
 
-    bool removeUser(PabloAST * const user);
+    bool removeUser(PabloAST * const user) noexcept;
 
     virtual ~PabloAST() = default;
 
@@ -208,7 +211,7 @@ public:
 
     void setName(const String * const name) noexcept;
 
-    inline PabloAST * getOperand(const unsigned index) const {
+    inline PabloAST * getOperand(const unsigned index) const noexcept {
         assert (index < getNumOperands());
         return mOperand[index];
     }
@@ -221,9 +224,9 @@ public:
 
     void insertBefore(Statement * const statement);
     void insertAfter(Statement * const statement);
-    Statement * removeFromParent();
-    Statement * eraseFromParent(const bool recursively = false);
-    Statement * replaceWith(PabloAST * const expr, const bool rename = true, const bool recursively = false);
+    Statement * removeFromParent() noexcept;
+    Statement * eraseFromParent(const bool recursively = false) noexcept;
+    Statement * replaceWith(PabloAST * const expr, const bool rename = true, const bool recursively = false) noexcept;
 
     inline Statement * getNextNode() const {
         return mNext;
@@ -403,11 +406,11 @@ public:
 
     using const_iterator = iterator;
 
-    void addOperand(PabloAST * const expr);
+    void addOperand(PabloAST * const expr) noexcept;
 
-    PabloAST * removeOperand(const unsigned index);
+    PabloAST * removeOperand(const unsigned index) noexcept;
 
-    bool deleteOperand(const PabloAST * const expr);
+    bool deleteOperand(const PabloAST * const expr) noexcept;
 
     iterator begin() {
         return iterator(mOperand);
@@ -712,7 +715,7 @@ private:
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deleteOperand
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool Variadic::deleteOperand(const PabloAST * const expr) {
+inline bool Variadic::deleteOperand(const PabloAST * const expr) noexcept {
     for (unsigned i = 0; i != getNumOperands(); ++i) {
         if (LLVM_UNLIKELY(getOperand(i) == expr)) {
             removeOperand(i);
