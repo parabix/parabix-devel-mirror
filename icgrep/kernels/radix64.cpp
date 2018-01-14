@@ -38,7 +38,7 @@ namespace kernel {
 // relying on the MultiBlockKernel builder to only copy the correct number
 // of bytes to the actual output stream.
 
-Value * expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, Value * const numOfStrides) {
+void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, Value * const numOfStrides) {
 
     BasicBlock * expand2_3entry = iBuilder->GetInsertBlock();
     BasicBlock * expand_3_4_loop = iBuilder->CreateBasicBlock("expand_3_4_loop");
@@ -130,7 +130,6 @@ Value * expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     
     iBuilder->SetInsertPoint(expand3_4_exit);
 
-    return numOfStrides;
 }
 
 

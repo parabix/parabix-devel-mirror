@@ -20,7 +20,7 @@ inline static unsigned floor_log2(const unsigned v) {
 
 namespace kernel {
 
-Value * ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, Value * const numOfStrides) {
+void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, Value * const numOfStrides) {
 
     Module * const m = iBuilder->getModule();
     
@@ -46,8 +46,7 @@ Value * ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * match_result = iBuilder->getInputStreamBlockPtr("matchResult", iBuilder->getInt32(0));
     Value * line_break = iBuilder->getInputStreamBlockPtr("lineBreak", iBuilder->getInt32(0));
 
-    Value * blocksToDo = iBuilder->CreateAdd(numOfStrides, iBuilder->CreateZExt(mIsFinal, numOfStrides->getType()));
-    blocksToDo = iBuilder->CreateMul(blocksToDo, iBuilder->getSize(mStride / iBuilder->getBitBlockWidth()));
+    Value * const blocksToDo = iBuilder->CreateMul(numOfStrides, iBuilder->getSize(mStride / iBuilder->getBitBlockWidth()));
     
     Value * match_result_ptr = iBuilder->CreateBitCast(match_result, scanwordVectorType->getPointerTo());
     Value * line_break_ptr = iBuilder->CreateBitCast(line_break, scanwordVectorType->getPointerTo());
@@ -204,7 +203,6 @@ Value * ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     iBuilder->CreateBr(scanReturn);
 
     iBuilder->SetInsertPoint(scanReturn);
-    return numOfStrides;
 }
 
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b)

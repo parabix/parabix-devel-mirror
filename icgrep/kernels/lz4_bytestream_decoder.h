@@ -17,7 +17,7 @@ class LZ4ByteStreamDecoderKernel final : public MultiBlockKernel {
 public:
     LZ4ByteStreamDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, size_t bufferSize);
 protected:
-    llvm::Value * generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * numOfStrides) override;
+    void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * numOfStrides) override;
 private:
     size_t mBufferSize;
 };

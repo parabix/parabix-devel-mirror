@@ -14,7 +14,7 @@ using namespace parabix;
 
 namespace kernel {
 
-Value * StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
+void StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
     Value * codeUnitBuffer = b->getInputStreamBlockPtr("codeUnitBuffer", b->getInt32(0));
     codeUnitBuffer = b->CreatePointerCast(codeUnitBuffer, b->getInt8PtrTy());
     Value * bytesToDo = mAvailableItemCount[0];
@@ -24,7 +24,6 @@ Value * StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
         bytesToDo = b->CreateUDiv(bytesToDo, b->getSize(8 / mCodeUnitWidth));
     }
     b->CreateWriteCall(b->getInt32(1), codeUnitBuffer, bytesToDo);
-    return numOfStrides;
 }
 
 StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned codeUnitWidth)
@@ -63,7 +62,7 @@ void FileSink::generateInitializeMethod(const std::unique_ptr<kernel::KernelBuil
     b->SetInsertPoint(fileSinkInitExit);
 }
 
-Value * FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
     Value * const fileDes = b->getScalarField("fileDes");
     Value * codeUnitBuffer = b->getInputStreamBlockPtr("codeUnitBuffer", b->getInt32(0));
     codeUnitBuffer = b->CreatePointerCast(codeUnitBuffer, b->getInt8PtrTy());
@@ -74,7 +73,6 @@ Value * FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
         bytesToDo = b->CreateUDiv(bytesToDo, b->getSize(8 / mCodeUnitWidth));
     }    
     b->CreateWriteCall(fileDes, codeUnitBuffer, bytesToDo);
-    return numOfStrides;
 }
 
 void FileSink::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {

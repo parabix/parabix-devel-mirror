@@ -432,7 +432,7 @@ protected:
     // the builder insertion point will be set to the entry block; upone
     // exit the RetVoid instruction will be added to complete the method.
     //
-    virtual llvm::Value * generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) = 0;
+    virtual void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) = 0;
 
 private:
 
@@ -443,7 +443,13 @@ private:
 
     unsigned getItemAlignment(const Binding & binding) const;
 
+    unsigned getCopyAlignment(const Binding & binding) const;
+
     bool isTransitivelyUnknownRate(const ProcessingRate & rate) const;
+
+    bool requiresTemporaryInputBuffer(const Binding & binding, const ProcessingRate & rate) const;
+
+    bool requiresTemporaryOutputBuffer(const Binding & binding, const ProcessingRate & rate) const;
 
     llvm::Value * getStrideSize(const std::unique_ptr<KernelBuilder> & b, const ProcessingRate & rate);
 
@@ -487,7 +493,7 @@ protected:
 
 private:
 
-    llvm::Value * generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
 
     void writeDoBlockMethod(const std::unique_ptr<KernelBuilder> & b);
 

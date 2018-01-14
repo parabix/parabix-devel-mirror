@@ -10,7 +10,7 @@
 using namespace llvm;
 using namespace kernel;
 
-Value * LZ4ByteStreamDecoderKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * numOfStrides) {
+void LZ4ByteStreamDecoderKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * numOfStrides) {
 
     BasicBlock * entry_block = b->GetInsertBlock();
     BasicBlock * loopBody = b->CreateBasicBlock("bytestream_block_loop_body");
@@ -168,7 +168,6 @@ Value * LZ4ByteStreamDecoderKernel::generateMultiBlockLogic(const std::unique_pt
             );
 
     b->SetInsertPoint(loopExit);
-    return numOfStrides;
 }
 
 

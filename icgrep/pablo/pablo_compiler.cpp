@@ -41,12 +41,16 @@ namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
 
-inline static unsigned getAlignment(const Value * const type) {
-    return type->getType()->getPrimitiveSizeInBits() / 8;
+inline static unsigned getAlignment(const Type * const type) {
+    return type->getPrimitiveSizeInBits() / 8;
+}
+
+inline static unsigned getAlignment(const Value * const expr) {
+    return getAlignment(expr->getType());
 }
 
 inline static unsigned getPointerElementAlignment(const Value * const ptr) {
-    return ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
+    return getAlignment(ptr->getType()->getPointerElementType());
 }
 
 void PabloCompiler::initializeKernelData(const std::unique_ptr<kernel::KernelBuilder> & b) {
@@ -671,7 +675,7 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                 } else if (isa<Extract>(lh)) {
                     lhvStreamIndex = compileExpression(b, cast<Extract>(lh)->getIndex());
                 } else {
-                    baseLhv = compileExpression(b, lh, false);
+                    baseLhv = compileExpression(b, lh);
                 }
 
                 Value * baseRhv = nullptr;
@@ -681,14 +685,12 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                 } else if (isa<Extract>(lh)) {
                     rhvStreamIndex = compileExpression(b, cast<Extract>(rh)->getIndex());
                 } else {
-                    baseRhv = compileExpression(b, rh, false);
+                    baseRhv = compileExpression(b, rh);
                 }
 
                 const TypeId typeId = op->getClassTypeId();
 
                 if (LLVM_UNLIKELY(typeId == TypeId::Add || typeId == TypeId::Subtract)) {
-
-
 
                     value = b->CreateAlloca(vTy, b->getInt32(n));
 
@@ -699,7 +701,7 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                             lhv = baseLhv;
                         } else {
                             lhv = getPointerToVar(b, cast<Var>(lh), lhvStreamIndex, index);
-                            lhv = b->CreateAlignedLoad(lhv, getAlignment(lhv));
+                            lhv = b->CreateBlockAlignedLoad(lhv);
                         }
                         lhv = b->CreateBitCast(lhv, vTy);
 
@@ -708,20 +710,18 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                             rhv = baseRhv;
                         } else {
                             rhv = getPointerToVar(b, cast<Var>(rh), rhvStreamIndex, index);
-                            rhv = b->CreateAlignedLoad(rhv, getAlignment(rhv));
+                            rhv = b->CreateBlockAlignedLoad(rhv);
                         }
                         rhv = b->CreateBitCast(rhv, vTy);
 
                         Value * result = nullptr;
                         if (typeId == TypeId::Add) {
                             result = b->CreateAdd(lhv, rhv);
-                        } else {
+                        } else { // if (typeId == TypeId::Subtract) {
                             result = b->CreateSub(lhv, rhv);
                         }
                         b->CreateAlignedStore(result, b->CreateGEP(value, {b->getInt32(0), b->getInt32(i)}), getAlignment(result));
                     }
-
-
 
                 } else {
 
@@ -734,7 +734,7 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                             lhv = baseLhv;
                         } else {
                             lhv = getPointerToVar(b, cast<Var>(lh), lhvStreamIndex, index);
-                            lhv = b->CreateAlignedLoad(lhv, getAlignment(lhv));
+                            lhv = b->CreateBlockAlignedLoad(lhv);
                         }
                         lhv = b->CreateBitCast(lhv, vTy);
 
@@ -743,7 +743,7 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                             rhv = baseRhv;
                         } else {
                             rhv = getPointerToVar(b, cast<Var>(rh), rhvStreamIndex, index);
-                            rhv = b->CreateAlignedLoad(rhv, getAlignment(rhv));
+                            rhv = b->CreateBlockAlignedLoad(rhv);
                         }
                         rhv = b->CreateBitCast(rhv, vTy);
 
@@ -763,7 +763,7 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                                 break;
                             default: llvm_unreachable("invalid vector operator id");
                         }
-                        Value * const mask = b->CreateBitCast(b->hsimd_signmask(n, comp), fw);
+                        Value * const mask = b->CreateZExtOrTrunc(b->hsimd_signmask(n, comp), fw);
                         value = b->mvmd_insert(m, value, mask, i);
                     }
 

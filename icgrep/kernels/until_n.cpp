@@ -16,9 +16,7 @@ using namespace parabix;
 
 namespace kernel {
 
-const unsigned packSize = 64;
-    
-llvm::Value * UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
+void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
 
 /*  
    Strategy:  first form an index consisting of one bit per packsize input positions,
@@ -38,6 +36,7 @@ llvm::Value * UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<Kernel
    input stream.
 */
 
+    const unsigned packSize = b->getSizeTy()->getBitWidth();
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
     const auto packsPerBlock = b->getBitBlockWidth() / packSize;
@@ -100,7 +99,7 @@ llvm::Value * UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<Kernel
     //Type * packPtrTy = packTy->getPointerTo();
     //Value * const packPtr = b->CreateGEP(b->CreatePointerCast(groupPtr, packPtrTy), packOffset);
     //Value * const packBits = b->CreateLoad(packPtr);
-    Value * const packCount = b->CreatePopcount(packBits);
+    Value * const packCount = b->CreateZExtOrTrunc(b->CreatePopcount(packBits), b->getSizeTy());
     Value * const observedUpTo = b->CreateNUWAdd(observed, packCount);
 
     BasicBlock * const haveNotSeenEnough = b->CreateBasicBlock("haveNotSeenEnough");
@@ -172,15 +171,19 @@ llvm::Value * UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<Kernel
     producedCount = b->CreateNUWAdd(producedCount, produced);
     b->setProducedItemCount("uptoN", producedCount);
 
-    return numOfStrides;
+}
+
+unsigned LLVM_READNONE calculateRate(const std::unique_ptr<kernel::KernelBuilder> & b) {
+    const unsigned packSize = b->getSizeTy()->getBitWidth();
+    return (packSize * packSize) / b->getBitBlockWidth();
 }
 
 UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & b)
-: MultiBlockKernel("UntilN",
+: MultiBlockKernel("UntilN_" + std::to_string(calculateRate(b)),
 // inputs
-{Binding{b->getStreamSetTy(), "bits", FixedRate((packSize * packSize) / b->getBitBlockWidth())}},
+{Binding{b->getStreamSetTy(), "bits", FixedRate(calculateRate(b))}},
 // outputs
-{Binding{b->getStreamSetTy(), "uptoN", BoundedRate(0, (packSize * packSize) / b->getBitBlockWidth())}},
+{Binding{b->getStreamSetTy(), "uptoN", BoundedRate(0, calculateRate(b))}},
 // input scalar
 {Binding{b->getSizeTy(), "N"}}, {},
 // internal state
