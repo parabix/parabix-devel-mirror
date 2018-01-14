@@ -5,16 +5,15 @@
 #ifndef UNTIL_N_H
 #define UNTIL_N_H
 
-#include "kernel.h"  // for KernelBuilder
-namespace IDISA { class IDISA_Builder; } 
+#include "kernel.h"
 
 namespace kernel {
 
-class UntilNkernel : public MultiBlockKernel {
+class UntilNkernel final : public MultiBlockKernel {
 public:
     UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 private:
-    llvm::Value * generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    llvm::Value * generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
 
 };
 

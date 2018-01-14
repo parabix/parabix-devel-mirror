@@ -7,6 +7,7 @@
 #include <llvm/IR/Module.h>
 #include <kernels/kernel_builder.h>
 #include <kernels/streamset.h>
+#include <toolchain/toolchain.h>
 
 namespace llvm { class Type; }
 
@@ -17,7 +18,8 @@ namespace kernel {
 
 const unsigned packSize = 64;
     
-Value * UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfStrides) {
+llvm::Value * UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
+
 /*  
    Strategy:  first form an index consisting of one bit per packsize input positions,
    with a 1 bit signifying that the corresponding pack has at least one 1 bit.
@@ -35,167 +37,155 @@ Value * UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
    EOF position, then this is treated as if the Nth bit does not exist in the
    input stream.
 */
-    
-    BasicBlock * entry = kb->GetInsertBlock();
-    
-    BasicBlock * processGroups = kb->CreateBasicBlock("processGroups");
-    BasicBlock * processBlockGroup = kb->CreateBasicBlock("processBlockGroup");
-    BasicBlock * doScan = kb->CreateBasicBlock("doScan");
-    BasicBlock * scanLoop = kb->CreateBasicBlock("scanLoop");
-    BasicBlock * continueScanLoop = kb->CreateBasicBlock("continueScanLoop");
-    BasicBlock * scanDone = kb->CreateBasicBlock("scanDone");
-    BasicBlock * notFoundYet = kb->CreateBasicBlock("notFoundYet");
-    BasicBlock * findNth = kb->CreateBasicBlock("findNth");
-    BasicBlock * getPosnAfterNth = kb->CreateBasicBlock("getPosnAfterNth");
-    BasicBlock * nthPosFound = kb->CreateBasicBlock("nthPosFound");
-    BasicBlock * doSegmentReturn = kb->CreateBasicBlock("doSegmentReturn");
-    Constant * blockSize = kb->getSize(kb->getBitBlockWidth());
-    Constant * blockSizeLess1 = kb->getSize(kb->getBitBlockWidth() - 1);
-    Constant * packsPerBlock = kb->getSize(kb->getBitBlockWidth()/packSize);
-    
-    Value * N = kb->getScalarField("N");
-    
-    // Set up the types for processing by pack.
-    Type * iPackTy = kb->getIntNTy(packSize);
-    Type * iPackPtrTy = iPackTy->getPointerTo();
-    
-//    Function::arg_iterator args = mCurrentMethod->arg_begin();
-//    /* self = */ args++;
-//    Value * itemsToDo = &*(args++);
-//    Value * sourceBitstream = &*(args++);
-//    Value * uptoN_bitstream = &*(args);
-    
-    Value * itemsToDo = mAvailableItemCount[0];
-    Value * sourceBitstream = kb->getInputStreamBlockPtr("bits", kb->getInt32(0)); // mStreamBufferPtr[0];
-    Value * uptoN_bitstream = kb->getInputStreamBlockPtr("uptoN", kb->getInt32(0)); // mStreamBufferPtr[1];
 
-    // Compute the ceiling of the number of blocks to do.  If we have a final
-    // partial block, it is treated as a full block initially.   
-    Value * blocksToDo = kb->CreateUDiv(kb->CreateAdd(itemsToDo, blockSizeLess1), blockSize);
-    
-    // We will create a bitmask of size packSize with one bit for every packSize positions.
-    // The index can accommodate blocksPerGroup blocks.
-    Constant * blocksPerGroup = kb->getSize(packSize/((kb->getBitBlockWidth()/packSize)));
-    kb->CreateCondBr(kb->CreateICmpUGT(blocksToDo, kb->getSize(0)), processGroups, notFoundYet);
-    
-    // Each iteration of the outerloop processes one blockGroup of at most blocksPerGroup.
-    kb->SetInsertPoint(processGroups);
-    PHINode * blockGroupBase = kb->CreatePHI(kb->getSizeTy(), 2);
-    blockGroupBase->addIncoming(kb->getSize(0), entry);
-    Value * groupPackPtr = kb->CreatePointerCast(kb->CreateGEP(sourceBitstream, blockGroupBase), iPackPtrTy);
-    Value * blockGroupLimit = kb->CreateAdd(blockGroupBase, blocksPerGroup);
-    blockGroupLimit = kb->CreateSelect(kb->CreateICmpULT(blockGroupLimit, blocksToDo), blockGroupLimit, blocksToDo);
-    kb->CreateBr(processBlockGroup);
+    Constant * const ZERO = b->getSize(0);
+    Constant * const ONE = b->getSize(1);
+    const auto packsPerBlock = b->getBitBlockWidth() / packSize;
+    Constant * const PACK_SIZE = b->getSize(packSize);
+    Constant * const PACKS_PER_BLOCK = b->getSize(packsPerBlock);
+    Value * const ZEROES = b->allZeroes();
+    Type * packTy = b->getIntNTy(packSize);
 
-    // Outer loop processes the blocksToDo in groups of up to blocksPerGroup at a time.
-    // The bitmask for this group is assembled.
-    kb->SetInsertPoint(processBlockGroup);
-    PHINode * blockNo = kb->CreatePHI(kb->getSizeTy(), 2);
-    PHINode * groupMask = kb->CreatePHI(iPackTy, 2);
-    blockNo->addIncoming(blockGroupBase, processGroups);
-    groupMask->addIncoming(ConstantInt::getNullValue(iPackTy), processGroups);
+    BasicBlock * const entry = b->GetInsertBlock();
+    BasicBlock * const strideLoop = b->CreateBasicBlock("strideLoop");
 
-    Value * blk = kb->CreateBlockAlignedLoad(kb->CreateGEP(sourceBitstream, {blockNo, kb->getInt32(0)}));
-    kb->CreateBlockAlignedStore(blk, kb->CreateGEP(uptoN_bitstream, {blockNo, kb->getInt32(0)}));
-    Value * hasbit = kb->simd_ugt(packSize, blk, kb->allZeroes());
-    Value * blockMask = kb->CreateZExtOrTrunc(kb->hsimd_signmask(packSize, hasbit), iPackTy);
-    Value * nextBlockNo = kb->CreateAdd(blockNo, kb->getSize(1));
-    Value * blockMaskPosition = kb->CreateMul(kb->CreateSub(blockNo, blockGroupBase), packsPerBlock);
-    Value * nextgroupMask = kb->CreateOr(groupMask, kb->CreateShl(blockMask, blockMaskPosition));
-    blockNo->addIncoming(nextBlockNo, processBlockGroup);
-    groupMask->addIncoming(nextgroupMask, processBlockGroup);
-    kb->CreateCondBr(kb->CreateICmpULT(nextBlockNo, blockGroupLimit), processBlockGroup, doScan);
+    b->CreateBr(strideLoop);
+    b->SetInsertPoint(strideLoop);
+    PHINode * const strideIndex = b->CreatePHI(b->getSizeTy(), 2);
+    strideIndex->addIncoming(ZERO, entry);
 
-    // The index pack has been assembled - process the corresponding blocks.
-    kb->SetInsertPoint(doScan);
-    Value * seenSoFar = kb->getScalarField("seenSoFar");
-    kb->CreateCondBr(kb->CreateICmpUGT(nextgroupMask, ConstantInt::getNullValue(iPackTy)), scanLoop, scanDone);
-    
-    kb->SetInsertPoint(scanLoop);
-    PHINode * groupMaskPhi = kb->CreatePHI(iPackTy, 2);
-    groupMaskPhi->addIncoming(nextgroupMask, doScan);
-    PHINode * seenSoFarPhi = kb->CreatePHI(kb->getSizeTy(), 2);
-    seenSoFarPhi->addIncoming(seenSoFar, doScan);
-    Value * nonZeroPack = kb->CreateZExtOrTrunc(kb->CreateCountForwardZeroes(groupMaskPhi), kb->getSizeTy());
-    Value * scanMask = kb->CreateLoad(kb->CreateGEP(groupPackPtr, nonZeroPack));
-    Value * packCount = kb->CreateZExtOrTrunc(kb->CreatePopcount(scanMask), kb->getSizeTy());
-    Value * newTotalSeen = kb->CreateAdd(packCount, seenSoFarPhi);
-    Value * seenLessThanN = kb->CreateICmpULT(newTotalSeen, N);
-    kb->CreateCondBr(seenLessThanN, continueScanLoop, findNth);
+    const auto n = (packSize * packSize) / b->getBitBlockWidth();
+    Value * groupMask = nullptr;
+    Value * const baseOffset = b->CreateMul(strideIndex, b->getSize(n));
+    for (unsigned i = 0; i < n; ++i) {
+        Value * offset = b->CreateNUWAdd(baseOffset, b->getSize(i));
+        Value * inputPtr = b->getInputStreamBlockPtr("bits", ZERO, offset);
+        Value * inputValue = b->CreateBlockAlignedLoad(inputPtr);
+        Value * outputPtr = b->getOutputStreamBlockPtr("uptoN", ZERO, offset);
+        b->CreateBlockAlignedStore(inputValue, outputPtr);
+        Value * markers = b->CreateNot(b->simd_eq(packSize, inputValue, ZEROES));
+        Value * blockMask = b->CreateZExtOrTrunc(b->hsimd_signmask(packSize, markers), packTy);
+        if (i) {
+            blockMask = b->CreateShl(blockMask, i * packsPerBlock);
+            groupMask = b->CreateOr(groupMask, blockMask);
+        } else {
+            groupMask = blockMask;
+        }
+    }
 
-    kb->SetInsertPoint(continueScanLoop);
-    Value * reducedGroupMask = kb->CreateResetLowestBit(groupMaskPhi);
-    groupMaskPhi->addIncoming(reducedGroupMask, continueScanLoop);
-    seenSoFarPhi->addIncoming(newTotalSeen, continueScanLoop);
-    kb->CreateCondBr(kb->CreateICmpUGT(reducedGroupMask, ConstantInt::getNullValue(iPackTy)), scanLoop, scanDone);
+    BasicBlock * const processGroups = b->CreateBasicBlock("processGroups");
+    BasicBlock * const nextStride = b->CreateBasicBlock("nextStride");
 
-    // Now we have processed the group of blocks and updated the number of positions
-    // seenSoFar without finding the Nth bit.  
-    kb->SetInsertPoint(scanDone);
-    PHINode * newTotalSeenPhi = kb->CreatePHI(kb->getSizeTy(), 2);
-    newTotalSeenPhi->addIncoming(seenSoFar, doScan);
-    newTotalSeenPhi->addIncoming(newTotalSeen, continueScanLoop);
-    kb->setScalarField("seenSoFar", newTotalSeenPhi);
-    blockGroupBase->addIncoming(nextBlockNo, scanDone);
-    kb->CreateCondBr(kb->CreateICmpULT(nextBlockNo, blocksToDo), processGroups, notFoundYet);
+    b->CreateLikelyCondBr(b->CreateIsNull(groupMask), nextStride, processGroups);
 
-    kb->SetInsertPoint(notFoundYet);
-    // Now we have determined that the Nth bit has not been found in the entire
-    // set of itemsToDo.
-    
-    Value * finalCount = kb->CreateAdd(kb->getProducedItemCount("uptoN"), itemsToDo);
-    kb->setProducedItemCount("uptoN", finalCount);
-    kb->CreateBr(doSegmentReturn);
+    b->SetInsertPoint(processGroups);
+    Value * const N = b->getScalarField("N");
+    Value * const initiallyObserved = b->getScalarField("observed");
+    BasicBlock * const processGroup = b->CreateBasicBlock("processGroup");
+    b->CreateBr(processGroup);
 
-    //
-    // With the last input scanMask loaded, the count of one bits seen reaches or
-    // exceeds N.  Determine the position immediately after the Nth one bit.
-    // 
-    kb->SetInsertPoint(findNth);
-    PHINode * seen1 = kb->CreatePHI(kb->getSizeTy(), 2);
-    seen1->addIncoming(seenSoFarPhi, scanLoop);
-    PHINode * remainingBits = kb->CreatePHI(iPackTy, 2);
-    remainingBits->addIncoming(scanMask, scanLoop);
-    Value * clearLowest = kb->CreateResetLowestBit(remainingBits);
-    Value * oneMoreSeen = kb->CreateAdd(seen1, kb->getSize(1));
-    seen1->addIncoming(oneMoreSeen, findNth);
-    remainingBits->addIncoming(clearLowest, findNth);
-    kb->CreateCondBr(kb->CreateICmpULT(oneMoreSeen, N), findNth, getPosnAfterNth);
+    b->SetInsertPoint(processGroup);
+    PHINode * const observed = b->CreatePHI(initiallyObserved->getType(), 2);
+    observed->addIncoming(initiallyObserved, processGroups);
+    PHINode * const groupMarkers = b->CreatePHI(groupMask->getType(), 2);
+    groupMarkers->addIncoming(groupMask, processGroups);
 
-    //
-    // We have cleared the low bits of scanMask up to and including the Nth in the stream.
-    kb->SetInsertPoint(getPosnAfterNth);
-    Value * scanMaskUpToN = kb->CreateXor(scanMask, clearLowest);
-    Value * posnInPack = kb->CreateSub(ConstantInt::get(iPackTy, packSize-1), kb->CreateCountReverseZeroes(scanMaskUpToN));
-    Value * posnInGroup = kb->CreateAdd(kb->CreateMul(nonZeroPack, kb->getSize(packSize)), posnInPack);
-    Value * posnInItemsToDo = kb->CreateAdd(kb->CreateMul(blockGroupBase, blockSize), posnInGroup);
-    // It is conceivable that we found a bit at a position beyond the given itemsToDo,
-    // when we have a partial pack at the end of input.  In this case, the Nth bit does
-    // not exist in the valid range of itemsToDo.
-    kb->CreateCondBr(kb->CreateICmpUGE(posnInItemsToDo, itemsToDo), notFoundYet, nthPosFound);
-    
-    kb->SetInsertPoint(nthPosFound);
-    Value * itemsToKeep = kb->CreateAdd(posnInItemsToDo, kb->getSize(1));
-    finalCount = kb->CreateAdd(kb->getProcessedItemCount("bits"), itemsToKeep);
-    Value * finalBlock = kb->CreateUDiv(itemsToKeep, blockSize);
-    blk = kb->CreateBlockAlignedLoad(kb->CreateGEP(sourceBitstream, {finalBlock, kb->getInt32(0)}));
-    blk = kb->CreateAnd(blk, kb->CreateNot(kb->bitblock_mask_from(kb->CreateURem(itemsToKeep, blockSize))));
-    Value * outputPtr = kb->CreateGEP(uptoN_bitstream, {finalBlock, kb->getInt32(0)});
-    kb->CreateBlockAlignedStore(blk, outputPtr);
-    kb->setProcessedItemCount("bits", finalCount);
-    kb->setProducedItemCount("uptoN", finalCount);
-    kb->setTerminationSignal();
-    kb->CreateBr(doSegmentReturn);
-    
-    kb->SetInsertPoint(doSegmentReturn);
+    Value * const groupIndex = b->CreateZExtOrTrunc(b->CreateCountForwardZeroes(groupMarkers), b->getSizeTy());
+    Value * const blockIndex = b->CreateNUWAdd(baseOffset, b->CreateUDiv(groupIndex, PACKS_PER_BLOCK));
+    Value * const packOffset = b->CreateURem(groupIndex, PACKS_PER_BLOCK);
+    Value * const groupPtr = b->getInputStreamBlockPtr("bits", ZERO, blockIndex);
+    Value * const groupValue = b->CreateBlockAlignedLoad(groupPtr);
+    Value * const packBits = b->CreateExtractElement(groupValue, packOffset);
+
+    //Type * packPtrTy = packTy->getPointerTo();
+    //Value * const packPtr = b->CreateGEP(b->CreatePointerCast(groupPtr, packPtrTy), packOffset);
+    //Value * const packBits = b->CreateLoad(packPtr);
+    Value * const packCount = b->CreatePopcount(packBits);
+    Value * const observedUpTo = b->CreateNUWAdd(observed, packCount);
+
+    BasicBlock * const haveNotSeenEnough = b->CreateBasicBlock("haveNotSeenEnough");
+    BasicBlock * const seenNOrMore = b->CreateBasicBlock("seenNOrMore");
+    b->CreateLikelyCondBr(b->CreateICmpULT(observedUpTo, N), haveNotSeenEnough, seenNOrMore);
+
+    // update our kernel state and check whether we have any other groups to process
+    b->SetInsertPoint(haveNotSeenEnough);
+    observed->addIncoming(observedUpTo, haveNotSeenEnough);
+    b->setScalarField("observed", observedUpTo);
+    Value * const remainingGroupMarkers = b->CreateResetLowestBit(groupMarkers);
+    groupMarkers->addIncoming(remainingGroupMarkers, haveNotSeenEnough);
+    b->CreateLikelyCondBr(b->CreateIsNull(remainingGroupMarkers), nextStride, processGroup);
+
+    // we've seen N non-zero items; determine the position of our items and clear any subsequent markers
+    b->SetInsertPoint(seenNOrMore);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        b->CreateAssert(b->CreateICmpUGT(N, observed), "N must be greater than observed count!");
+    }
+    Value * const bitsToFind = b->CreateNUWSub(N, observed);
+    BasicBlock * const findNthBit = b->CreateBasicBlock("findNthBit");
+    BasicBlock * const foundNthBit = b->CreateBasicBlock("foundNthBit");
+    b->CreateBr(findNthBit);
+
+    b->SetInsertPoint(findNthBit);
+    PHINode * const remainingPositions = b->CreatePHI(bitsToFind->getType(), 2);
+    remainingPositions->addIncoming(bitsToFind, seenNOrMore);
+    PHINode * const remainingBits = b->CreatePHI(packBits->getType(), 2);
+    remainingBits->addIncoming(packBits, seenNOrMore);
+    Value * const nextRemainingPositions = b->CreateNUWSub(remainingPositions, ONE);
+    remainingPositions->addIncoming(nextRemainingPositions, findNthBit);
+    Value * const nextRemainingBits = b->CreateResetLowestBit(remainingBits);
+    remainingBits->addIncoming(nextRemainingBits, findNthBit);
+
+    b->CreateLikelyCondBr(b->CreateIsNull(nextRemainingPositions), foundNthBit, findNthBit);
+
+    // If we've found the n-th bit, end the segment after clearing the markers
+    b->SetInsertPoint(foundNthBit);
+    Value * const inputPtr = b->getInputStreamBlockPtr("bits", ZERO, blockIndex);
+    Value * const inputValue = b->CreateBlockAlignedLoad(inputPtr);
+    Value * const packPosition = b->CreateZExtOrTrunc(b->CreateCountForwardZeroes(remainingBits), b->getSizeTy());
+    Value * const basePosition = b->CreateNUWMul(packOffset, PACK_SIZE);
+    Value * const blockOffset = b->CreateNUWAdd(b->CreateOr(basePosition, packPosition), ONE);
+    Value * const mask = b->CreateNot(b->bitblock_mask_from(blockOffset));
+    Value * const maskedInputValue = b->CreateAnd(inputValue, mask);
+    Value * const outputPtr = b->getOutputStreamBlockPtr("uptoN", ZERO, blockIndex);
+    b->CreateBlockAlignedStore(maskedInputValue, outputPtr);
+    Value * const positionOfNthItem = b->CreateNUWAdd(b->CreateMul(blockIndex, b->getSize(b->getBitBlockWidth())), blockOffset);
+    b->setTerminationSignal();
+    BasicBlock * const segmentDone = b->CreateBasicBlock("segmentDone");
+    b->CreateBr(segmentDone);
+
+    nextStride->moveAfter(foundNthBit);
+
+    b->SetInsertPoint(nextStride);
+    Value * const nextStrideIndex = b->CreateNUWAdd(strideIndex, ONE);
+    strideIndex->addIncoming(nextStrideIndex, nextStride);
+    b->CreateLikelyCondBr(b->CreateICmpEQ(nextStrideIndex, numOfStrides), segmentDone, strideLoop);
+
+    Constant * const FULL_STRIDE = b->getSize(packSize * packSize);
+
+    b->SetInsertPoint(segmentDone);
+    PHINode * const produced = b->CreatePHI(b->getSizeTy(), 2);
+    produced->addIncoming(positionOfNthItem, foundNthBit);
+    produced->addIncoming(FULL_STRIDE, nextStride);
+
+    Value * producedCount = b->getProducedItemCount("uptoN");
+    producedCount = b->CreateNUWAdd(producedCount, b->CreateNUWMul(FULL_STRIDE, strideIndex));
+    producedCount = b->CreateNUWAdd(producedCount, produced);
+    b->setProducedItemCount("uptoN", producedCount);
+
     return numOfStrides;
 }
 
-UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & kb)
-: MultiBlockKernel("UntilN", {Binding{kb->getStreamSetTy(1, 1), "bits"}},
-                             {Binding{kb->getStreamSetTy(1, 1), "uptoN", BoundedRate(0, 1)}},
-                             {Binding{kb->getSizeTy(), "N"}}, {},
-                             {Binding{kb->getSizeTy(), "seenSoFar"}}) {
+UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & b)
+: MultiBlockKernel("UntilN",
+// inputs
+{Binding{b->getStreamSetTy(), "bits", FixedRate((packSize * packSize) / b->getBitBlockWidth())}},
+// outputs
+{Binding{b->getStreamSetTy(), "uptoN", BoundedRate(0, (packSize * packSize) / b->getBitBlockWidth())}},
+// input scalar
+{Binding{b->getSizeTy(), "N"}}, {},
+// internal state
+{Binding{b->getSizeTy(), "observed"}}) {
+
 }
 
 }

@@ -70,7 +70,11 @@ public:
     // Run-time access of Kernel State and parameters of methods for
     // use in implementing kernels.
 
-    llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex);
+    llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex) {
+        return getInputStreamBlockPtr(name, streamIndex, getInt32(0));
+    }
+
+    llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);
 
     llvm::Value * loadInputStreamBlock(const std::string & name, llvm::Value * streamIndex);
 
@@ -80,7 +84,11 @@ public:
 
     llvm::Value * getInputStreamSetCount(const std::string & name);
 
-    llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex);
+    llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex) {
+        return getOutputStreamBlockPtr(name, streamIndex, getInt32(0));
+    }
+
+    llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);
 
     llvm::StoreInst * storeOutputStreamBlock(const std::string & name, llvm::Value * streamIndex, llvm::Value * toStore);
 
@@ -89,8 +97,6 @@ public:
     llvm::StoreInst * storeOutputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * toStore);
 
     llvm::Value * getOutputStreamSetCount(const std::string & name);
-
-    llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);
 
     llvm::Value * getRawInputPointer(const std::string & name, llvm::Value * absolutePosition);
 

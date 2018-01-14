@@ -400,17 +400,6 @@ void KernelBuilder::setConsumerLock(const std::string & name, Value * value) {
     setScalarField(name + Kernel::CONSUMER_SUFFIX, value);
 }
 
-Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * streamIndex) {
-    Value * const addr = mKernel->getStreamSetInputAddress(name);
-    if (addr) {
-        return CreateGEP(addr, {getInt32(0), streamIndex});
-    } else {
-        const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-        Value * const blockIndex = CreateLShr(getProcessedItemCount(name), std::log2(getBitBlockWidth()));
-        return buf->getStreamBlockPtr(this, getStreamHandle(name), getBaseAddress(name), streamIndex, blockIndex, true);
-    }
-}
-
 Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * streamIndex) {
     return CreateBlockAlignedLoad(getInputStreamBlockPtr(name, streamIndex));
 }
@@ -447,10 +436,10 @@ Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * 
     }
 }
 
-Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value * streamIndex) {
+Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value * streamIndex, Value * const blockOffset) {
     Value * const addr = mKernel->getStreamSetOutputAddress(name);
     if (addr) {
-        return CreateGEP(addr, {getInt32(0), streamIndex});
+        return CreateGEP(addr, {blockOffset, streamIndex});
     } else {
         const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
         Value * const blockIndex = CreateLShr(getProducedItemCount(name), std::log2(getBitBlockWidth()));

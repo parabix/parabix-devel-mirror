@@ -537,13 +537,17 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm
 
 
 Value * IDISA_Builder::bitblock_mask_from(Value * pos) {
-    Type * bitBlockInt = getIntNTy(getBitBlockWidth());
-    return bitCast(CreateShl(ConstantInt::getAllOnesValue(bitBlockInt), CreateZExt(pos, bitBlockInt)));
-    
+    Type * const ty = getIntNTy(getBitBlockWidth());
+    Constant * const ONES = ConstantInt::getAllOnesValue(ty);
+    Constant * const ZEROES = ConstantInt::getNullValue(ty);
+    Constant * const BIT_BLOCK_WIDTH = ConstantInt::get(pos->getType(), getBitBlockWidth());
+    Value * const mask = CreateSelect(CreateICmpULT(pos, BIT_BLOCK_WIDTH), CreateShl(ONES, CreateZExt(pos, ty)), ZEROES);
+    return bitCast(mask);
 }
+
 Value * IDISA_Builder::bitblock_set_bit(Value * pos) {
-    Type * bitBlockInt = getIntNTy(getBitBlockWidth());
-    return bitCast(CreateShl(ConstantInt::get(bitBlockInt, 1), CreateZExt(pos, bitBlockInt)));
+    Type * const ty = getIntNTy(getBitBlockWidth());
+    return bitCast(CreateShl(ConstantInt::get(ty, 1), CreateZExt(pos, ty)));
 }
 
 Value * IDISA_Builder::simd_and(Value * a, Value * b) {
