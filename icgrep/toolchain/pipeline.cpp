@@ -35,6 +35,8 @@ void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const
 
 void handleInsufficientData(const std::unique_ptr<KernelBuilder> & b, Value * const produced, Value * const final, BasicBlock * const entry, const Kernel * const consumer,  const Binding & input, const StreamSetBuffer * const buffer);
 
+bool requiresCopyBack(const Kernel * k, const ProcessingRate & rate);
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateSegmentParallelPipeline
  *
@@ -208,9 +210,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
     }
 
     segNo->addIncoming(b->CreateAdd(segNo, b->getSize(codegen::ThreadNum)), b->GetInsertBlock());
-    if (LLVM_UNLIKELY(terminated == nullptr)) {
-        report_fatal_error("error: at least one kernel must have a termination signal");
-    }
+
     b->CreateUnlikelyCondBr(terminated, exitThreadBlock, segmentLoop);
 
     b->SetInsertPoint(exitThreadBlock);
@@ -308,8 +308,8 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
     Function * main = entryBlock->getParent();
 
     // Create the basic blocks for the loop.
-    BasicBlock * pipelineLoop = BasicBlock::Create(b->getContext(), "pipelineLoop", main);
-    BasicBlock * pipelineExit = BasicBlock::Create(b->getContext(), "pipelineExit", main);
+    BasicBlock * const pipelineLoop = BasicBlock::Create(b->getContext(), "pipelineLoop", main);
+    BasicBlock * const pipelineExit = BasicBlock::Create(b->getContext(), "pipelineExit", main);
 
     StreamSetBufferMap<Value *> producedItemCount;
     StreamSetBufferMap<Value *> consumedItemCount;
@@ -327,6 +327,14 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
     for (Kernel * const kernel : kernels) {
 
         b->setKernel(kernel);
+
+        BasicBlock * const entry = b->GetInsertBlock();
+        BasicBlock * const kernelCode = BasicBlock::Create(b->getContext(), kernel->getName(), main);
+        BasicBlock * const kernelExit = BasicBlock::Create(b->getContext(), kernel->getName() + "_exit", main);
+
+        b->CreateUnlikelyCondBr(b->getTerminationSignal(), kernelExit, kernelCode);
+
+        b->SetInsertPoint(kernelCode);
         const auto & inputs = kernel->getStreamInputs();
         const auto & outputs = kernel->getStreamOutputs();
 
@@ -349,12 +357,18 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
 
         b->createDoSegmentCall(args);
 
+        BasicBlock * const kernelFinished = b->GetInsertBlock();
         Value * const finished = b->getTerminationSignal();
-        if (terminated) {
-            // All kernels must agree that we've terminated.
-            terminated = b->CreateAnd(terminated, finished);
+        b->CreateBr(kernelExit);
+
+        b->SetInsertPoint(kernelExit);
+        PHINode * const finishedPhi = b->CreatePHI(b->getInt1Ty(), 2);
+        finishedPhi->addIncoming(b->getTrue(), entry);
+        finishedPhi->addIncoming(finished, kernelFinished);
+        if (terminated) { // All kernels must agree that we've terminated.
+            terminated = b->CreateAnd(terminated, finishedPhi);
         } else {
-            terminated = finished;
+            terminated = finishedPhi;
         }
 
         for (unsigned i = 0; i < outputs.size(); ++i) {
@@ -397,9 +411,6 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
         b->setConsumedItemCount(binding.getName(), consumed.second);
     }
 
-    if (LLVM_UNLIKELY(terminated == nullptr)) {
-        report_fatal_error("error: at least one kernel must have a termination signal");
-    }
     b->CreateCondBr(terminated, pipelineExit, pipelineLoop);
 
     pipelineExit->moveAfter(b->GetInsertBlock());
@@ -500,3 +511,14 @@ inline void handleInsufficientData(const std::unique_ptr<KernelBuilder> & b, Val
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief requiresCopyBack
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool requiresCopyBack(const Kernel * k, const ProcessingRate & rate) {
+    if (rate.isBounded() || rate.isUnknown()) {
+        return true;
+    } else if (rate.isRelative()) {
+        return requiresCopyBack(k, k->getBinding(rate.getReference()).getRate());
+    }
+    return false;
+}
