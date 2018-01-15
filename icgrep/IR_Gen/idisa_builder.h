@@ -105,6 +105,7 @@ public:
     
     llvm::Value * simd_popcount(unsigned fw, llvm::Value * a) {
         if (LLVM_UNLIKELY(fw < 8)) {
+            assert ("field width is less than 8" && false);
             llvm::report_fatal_error("Unsupported field width: popcount " + std::to_string(fw));
         }
         return CreatePopcount(fwCast(fw, a));

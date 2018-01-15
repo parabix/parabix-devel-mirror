@@ -65,7 +65,7 @@ Value * IDISA_SSE2_Builder::hsimd_signmask(unsigned fw, Value * a) {
     return IDISA_SSE_Builder::hsimd_signmask(fw, a);
 }
 
-Value * IDISA_SSE_Builder::hsimd_signmask(unsigned fw, Value * a) {
+Value * IDISA_SSE_Builder::hsimd_signmask(const unsigned fw, Value * a) {
     // SSE special cases using Intrinsic::x86_sse_movmsk_ps (fw=32 only)
     if (fw == 32) {
         Value * signmask_f32func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse_movmsk_ps);

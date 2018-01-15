@@ -498,22 +498,22 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
         } else if (const Count * c = dyn_cast<Count>(stmt)) {
             Value * EOFbit = b->getScalarField("EOFbit");
             Value * EOFmask = b->getScalarField("EOFmask");
-            Value * const to_count = b->simd_and(b->simd_or(b->simd_not(EOFmask), EOFbit), compileExpression(b, c->getExpr()));
-            const unsigned counterSize = b->getSizeTy()->getBitWidth();
+            Value * const to_count = b->simd_and(b->simd_or(b->simd_not(EOFmask), EOFbit), compileExpression(b, c->getExpr()));            
             const auto f = mAccumulator.find(c);
             if (LLVM_UNLIKELY(f == mAccumulator.end())) {
                 report_fatal_error("Unknown accumulator: " + c->getName().str());
             }
-            Value * ptr = b->getScalarFieldPtr(f->second);
+            Value * const ptr = b->getScalarFieldPtr(f->second);
             const auto alignment = getPointerElementAlignment(ptr);
-            Value * countSoFar = b->CreateAlignedLoad(ptr, alignment, c->getName() + "_accumulator");
-            auto fields = (b->getBitBlockWidth() / counterSize);
-            Value * fieldCounts = b->simd_popcount(counterSize, to_count);
+            Value * const countSoFar = b->CreateAlignedLoad(ptr, alignment, c->getName() + "_accumulator");
+            const auto fieldWidth = b->getSizeTy()->getBitWidth();
+            auto fields = (b->getBitBlockWidth() / fieldWidth);
+            Value * fieldCounts = b->simd_popcount(fieldWidth, to_count);
             while (fields > 1) {
-                fields = fields/2;
-                fieldCounts = b->CreateAdd(fieldCounts, b->mvmd_srli(counterSize, fieldCounts, fields));
+                fields /= 2;
+                fieldCounts = b->CreateAdd(fieldCounts, b->mvmd_srli(fieldWidth, fieldCounts, fields));
             }
-            value = b->CreateAdd(b->mvmd_extract(counterSize, fieldCounts, 0), countSoFar, "countSoFar");
+            value = b->CreateAdd(b->mvmd_extract(fieldWidth, fieldCounts, 0), countSoFar, "countSoFar");
             b->CreateAlignedStore(value, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             PabloAST * stream = l->getExpression();
