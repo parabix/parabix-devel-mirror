@@ -151,7 +151,7 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::Assign:
             case PabloAST::ClassTypeId::Extract:
             return mBinary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1));
-            case PabloAST::ClassTypeId::Fill:
+            case PabloAST::ClassTypeId::Repeat:
                 return mBinary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getType());
             case PabloAST::ClassTypeId::Sel:
             case PabloAST::ClassTypeId::IndexedAdvance:

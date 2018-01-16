@@ -422,20 +422,17 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
         const PabloAST * expr = stmt;
         Value * value = nullptr;
         if (isa<And>(stmt)) {
-            value = compileExpression(b, stmt->getOperand(0));
-            for (unsigned i = 1; i < stmt->getNumOperands(); ++i) {
-                value = b->simd_and(value, compileExpression(b, stmt->getOperand(1)));
-            }
+            Value * const op0 = compileExpression(b, stmt->getOperand(0));
+            Value * const op1 = compileExpression(b, stmt->getOperand(1));
+            value = b->simd_and(op0, op1);
         } else if (isa<Or>(stmt)) {
-            value = compileExpression(b, stmt->getOperand(0));
-            for (unsigned i = 1; i < stmt->getNumOperands(); ++i) {
-                value = b->simd_or(value, compileExpression(b, stmt->getOperand(1)));
-            }
+            Value * const op0 = compileExpression(b, stmt->getOperand(0));
+            Value * const op1 = compileExpression(b, stmt->getOperand(1));
+            value = b->simd_or(op0, op1);
         } else if (isa<Xor>(stmt)) {
-            value = compileExpression(b, stmt->getOperand(0));
-            for (unsigned i = 1; i < stmt->getNumOperands(); ++i) {
-                value = b->simd_xor(value, compileExpression(b, stmt->getOperand(1)));
-            }
+            Value * const op0 = compileExpression(b, stmt->getOperand(0));
+            Value * const op1 = compileExpression(b, stmt->getOperand(1));
+            value = b->simd_xor(op0, op1);
         } else if (const Sel * sel = dyn_cast<Sel>(stmt)) {
             Value* ifMask = compileExpression(b, sel->getCondition());
             Value* ifTrue = b->simd_and(ifMask, compileExpression(b, sel->getTrueExpr()));

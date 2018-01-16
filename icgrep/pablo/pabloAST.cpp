@@ -24,6 +24,10 @@ namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
 
+size_t constexpr __length(const char * const str) {
+    return *str ? 1 + __length(str + 1) : 0;
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief equals
  *
@@ -46,30 +50,20 @@ bool equals(const PabloAST * const expr1, const PabloAST * const expr2) {
                 return equals(cast<InFile>(expr1)->getOperand(0), cast<InFile>(expr2)->getOperand(0));
             } else if (isa<AtEOF>(expr1)) {
                 return equals(cast<AtEOF>(expr1)->getOperand(0), cast<AtEOF>(expr2)->getOperand(0));
-            } else if (isa<Variadic>(expr1)) {
-                const Variadic * const var1 = cast<Variadic>(expr1);
-                const Variadic * const var2 = cast<Variadic>(expr2);
-                if (var1->getNumOperands() == var2->getNumOperands()) {
-                    const unsigned operands = var1->getNumOperands();
-                    for (unsigned i = 0; i != operands; ++i) {
-                        bool missing = true;
-                        for (unsigned j = 0; j != operands; ++j) {
-                            // odds are both variadics will be sorted; optimize towards testing them in order.
-                            unsigned k = i + j;
-                            if (LLVM_UNLIKELY(k >= operands)) {
-                                k -= operands;
-                            }
-                            if (equals(var1->getOperand(i), var2->getOperand(k))) {
-                                missing = false;
-                                break;
-                            }
-                        }
-                        if (missing) {
-                            return false;
-                        }
-                    }
-                    return true;
+            } else if (isa<And>(expr1) || isa<Or>(expr1) || isa<Xor>(expr1)) {
+                PabloAST * op1[2];
+                PabloAST * op2[2];
+                op1[0] = cast<Statement>(expr1)->getOperand(0);
+                op1[1] = cast<Statement>(expr1)->getOperand(1);
+                if (op1[1] < op1[0]) {
+                    std::swap(op1[0], op1[1]);
                 }
+                op2[0] = cast<Statement>(expr2)->getOperand(0);
+                op2[1] = cast<Statement>(expr2)->getOperand(1);
+                if (op2[1] < op2[0]) {
+                    std::swap(op2[0], op2[1]);
+                }
+                return (op1[0] == op2[0]) && (op1[1] == op2[1]);
             } else if (isa<Statement>(expr1)) {
                 const Statement * stmt1 = cast<Statement>(expr1);
                 const Statement * stmt2 = cast<Statement>(expr2);
@@ -304,46 +298,58 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getName
+ ** ------------------------------------------------------------------------------------------------------------- */
+const String & Statement::getName() const {
+    if (mName == nullptr) {
+        if (LLVM_UNLIKELY(mParent == nullptr)) {
+            llvm::report_fatal_error("cannot assign a default name to a statement that is not within a PabloBlock");
+        }
+        const char * prefix = nullptr;
+        size_t length = 0;
+        #define MAKE_PREFIX(type_id, name) \
+            case ClassTypeId:: type_id : prefix = name; length = __length(name); break
+        switch (mClassTypeId) {
+            // Boolean operations
+            MAKE_PREFIX(And, "and");
+            MAKE_PREFIX(Or, "or");
+            MAKE_PREFIX(Xor, "xor");
+            MAKE_PREFIX(Not, "not");
+            MAKE_PREFIX(Sel, "sel");
+            // Stream operations
+            MAKE_PREFIX(Advance, "advance");
+            MAKE_PREFIX(IndexedAdvance, "indexed_advance");
+            MAKE_PREFIX(ScanThru, "scanthru");
+            MAKE_PREFIX(AdvanceThenScanThru, "advscanthru");
+            MAKE_PREFIX(ScanTo, "scanto");
+            MAKE_PREFIX(AdvanceThenScanTo, "advscanto");
+            MAKE_PREFIX(Lookahead, "lookahead");
+            MAKE_PREFIX(MatchStar, "matchstar");
+            MAKE_PREFIX(InFile, "inFile");
+            MAKE_PREFIX(AtEOF, "atEOF");
+            // Statistics operations
+            MAKE_PREFIX(Count, "count");
+            // Misc. operations
+            MAKE_PREFIX(Repeat, "repeat");
+            MAKE_PREFIX(PackH, "packh");
+            MAKE_PREFIX(PackL, "packl");
+            default: llvm_unreachable("invalid statement type");
+        }
+        #undef MAKE_PREFIX
+        const StringRef __prefix(prefix, length);
+        mName = mParent->makeName(__prefix);
+    }
+    return *mName;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief setName
  ** ------------------------------------------------------------------------------------------------------------- */
-void Statement::setName(const String * const name) noexcept {
+void Statement::setName(const String * const name) {
     if (LLVM_UNLIKELY(name == nullptr)) {
         llvm::report_fatal_error("Statement name cannot be null!");
     }
     mName = name;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addOperand
- ** ------------------------------------------------------------------------------------------------------------- */
-void Variadic::addOperand(PabloAST * const expr) noexcept {
-    if (LLVM_UNLIKELY(mOperands == mCapacity)) {
-        mCapacity = std::max<unsigned>(mCapacity * 2, 2);
-        PabloAST ** expandedOperandSpace = mAllocator.allocate(mCapacity);
-        for (unsigned i = 0; i != mOperands; ++i) {
-            expandedOperandSpace[i] = mOperand[i];
-        }
-        mAllocator.deallocate(mOperand);
-        mOperand = expandedOperandSpace;
-    }
-    mOperand[mOperands++] = expr;
-    expr->addUser(this);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief removeOperand
- ** ------------------------------------------------------------------------------------------------------------- */
-PabloAST * Variadic::removeOperand(const unsigned index) noexcept {
-    assert (index < mOperands);
-    PabloAST * const expr = mOperand[index];
-    assert (expr);
-    --mOperands;
-    for (unsigned i = index; i != mOperands; ++i) {
-        mOperand[i] = mOperand[i + 1];
-    }
-    mOperand[mOperands] = nullptr;
-    expr->removeUser(this);
-    return expr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -205,12 +205,12 @@ PabloAST * PabloBuilder::createCount(PabloAST * expr, const llvm::StringRef & pr
 }
 
 PabloAST * PabloBuilder::createRepeat(not_null<Integer *> fieldWidth, PabloAST * value) {
-    MAKE_BINARY(createRepeat, TypeId::Fill, fieldWidth.get(), value);
+    MAKE_BINARY(createRepeat, TypeId::Repeat, fieldWidth.get(), value);
     return result;
 }
 
 PabloAST * PabloBuilder::createRepeat(not_null<Integer *> fieldWidth, PabloAST * value, const llvm::StringRef & prefix) {
-    MAKE_NAMED_BINARY(createRepeat, TypeId::Fill, prefix, fieldWidth.get(), value);
+    MAKE_NAMED_BINARY(createRepeat, TypeId::Repeat, prefix, fieldWidth.get(), value);
     return result;
 }
 

@@ -48,7 +48,7 @@ inline void checkSameType(const PabloAST * const A, const PabloAST * const B) {
 /// UNARY CREATE FUNCTIONS
 ///
 
-Count * PabloBlock::createCount(PabloAST * expr) {
+Count * PabloBlock::createCount(PabloAST * const expr) {
     IntegerType * const type = getParent()->getSizeTy();
     return insertAtInsertionPoint(new (mAllocator) Count(expr, makeName("count"), type, mAllocator));
 }
@@ -60,17 +60,14 @@ Count * PabloBlock::createCount(PabloAST * const expr, const llvm::StringRef & p
 
 Not * PabloBlock::createNot(PabloAST * expr, String * name) {
     assert (expr);
-    if (name == nullptr) {
-        name = makeName("not");
-    }
     return insertAtInsertionPoint(new (mAllocator) Not(expr, name, mAllocator));
 }
 
-Var * PabloBlock::createVar(PabloAST * name, Type * type) {
+Var * PabloBlock::createVar(String * name, Type * type) {
     if (type == nullptr) {
         type = getParent()->getStreamTy();
     }
-    if (LLVM_UNLIKELY(name == nullptr || !isa<String>(name))) {
+    if (LLVM_UNLIKELY(name == nullptr)) {
         throw std::runtime_error("Var objects must have a String name");
     }
     return mParent->makeVariable(cast<String>(name), type);
@@ -78,33 +75,21 @@ Var * PabloBlock::createVar(PabloAST * name, Type * type) {
 
 InFile * PabloBlock::createInFile(PabloAST * expr, String * name) {
     assert (expr);
-    if (name == nullptr) {
-        name = makeName("inFile");
-    }
     return insertAtInsertionPoint(new (mAllocator) InFile(expr, name, mAllocator));
 }
 
 AtEOF * PabloBlock::createAtEOF(PabloAST * expr, String * name) {
     assert (expr);
-    if (name == nullptr) {
-        name = makeName("atEOF");
-    }
     return insertAtInsertionPoint(new (mAllocator) AtEOF(expr, name, mAllocator));
 }
 
 /// BINARY CREATE FUNCTIONS
 
 Advance * PabloBlock::createAdvance(PabloAST * expr, Integer * shiftAmount, String * name) {
-    if (name == nullptr) {
-        name = makeName("advance");
-    }
     return insertAtInsertionPoint(new (mAllocator) Advance(expr, shiftAmount, name, mAllocator));
 }
 
 Lookahead * PabloBlock::createLookahead(PabloAST * expr, Integer * shiftAmount, String * name) {
-    if (name == nullptr) {
-        name = makeName("lookahead");
-    }
     return insertAtInsertionPoint(new (mAllocator) Lookahead(expr, shiftAmount, name, mAllocator));
 }
 
@@ -128,47 +113,17 @@ Extract * PabloBlock::createExtract(Var * array, Integer * index) {
 
 And * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, String * name) {
     CHECK_SAME_TYPE(expr1, expr2);
-    if (name == nullptr) {
-        name = makeName("and");
-    }
     return insertAtInsertionPoint(new (mAllocator) And(expr1->getType(), expr1, expr2, name, mAllocator));
-}
-
-And * PabloBlock::createAnd(Type * const type, const unsigned reserved, String * name) {
-    if (name == nullptr) {
-        name = makeName("and");
-    }
-    return insertAtInsertionPoint(new (mAllocator) And(type, reserved, name, mAllocator));
 }
 
 Or * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, String * name) {
     CHECK_SAME_TYPE(expr1, expr2);
-    if (name == nullptr) {
-        name = makeName("or");
-    }
     return insertAtInsertionPoint(new (mAllocator) Or(expr1->getType(), expr1, expr2, name, mAllocator));
-}
-
-Or * PabloBlock::createOr(Type * const type, const unsigned reserved, String * name) {
-    if (name == nullptr) {
-        name = makeName("or");
-    }
-    return insertAtInsertionPoint(new (mAllocator) Or(type, reserved, name, mAllocator));
 }
 
 Xor * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, String * name) {
     CHECK_SAME_TYPE(expr1, expr2);
-    if (name == nullptr) {
-        name = makeName("xor");
-    }
     return insertAtInsertionPoint(new (mAllocator) Xor(expr1->getType(), expr1, expr2, name, mAllocator));
-}
-
-Xor * PabloBlock::createXor(Type * const type, const unsigned reserved, String * name) {
-    if (name == nullptr) {
-        name = makeName("xor");
-    }
-    return insertAtInsertionPoint(new (mAllocator) Xor(type, reserved, name, mAllocator));
 }
 
 Add * PabloBlock::createAdd(PabloAST * expr1, PabloAST * expr2) {
@@ -232,41 +187,26 @@ Assign * PabloBlock::createAssign(PabloAST * const var, PabloAST * const value) 
 
 MatchStar * PabloBlock::createMatchStar(PabloAST * marker, PabloAST * charclass, String * name) {
     CHECK_SAME_TYPE(marker, charclass);
-    if (name == nullptr) {
-        name = makeName("matchstar");
-    }
     return insertAtInsertionPoint(new (mAllocator) MatchStar(marker, charclass, name, mAllocator));
 }
 
 ScanThru * PabloBlock::createScanThru(PabloAST * from, PabloAST * thru, String * name) {
     CHECK_SAME_TYPE(from, thru);
-    if (name == nullptr) {
-        name = makeName("scanthru");
-    }
     return insertAtInsertionPoint(new (mAllocator) ScanThru(from, thru, name, mAllocator));
 }
 
 ScanTo * PabloBlock::createScanTo(PabloAST * from, PabloAST * to, String * name) {
     CHECK_SAME_TYPE(from, to);
-    if (name == nullptr) {
-        name = makeName("scanto");
-    }
     return insertAtInsertionPoint(new (mAllocator) ScanTo(from, to, name, mAllocator));
 }
 
 AdvanceThenScanThru * PabloBlock::createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, String * name) {
     CHECK_SAME_TYPE(from, thru);
-    if (name == nullptr) {
-        name = makeName("advscanthru");
-    }
     return insertAtInsertionPoint(new (mAllocator) AdvanceThenScanThru(from, thru, name, mAllocator));
 }
 
 AdvanceThenScanTo * PabloBlock::createAdvanceThenScanTo(PabloAST * from, PabloAST * to, String * name) {
     CHECK_SAME_TYPE(from, to);
-    if (name == nullptr) {
-        name = makeName("advscanto");
-    }
     return insertAtInsertionPoint(new (mAllocator) AdvanceThenScanTo(from, to, name, mAllocator));
 }
 
@@ -286,27 +226,18 @@ While * PabloBlock::createWhile(PabloAST * condition, PabloBlock * body) {
 
 Repeat * PabloBlock::createRepeat(Integer * fieldWidth, PabloAST * value, String * name) {
     assert (fieldWidth && value);
-    if (name == nullptr) {
-        name = makeName("fill");
-    }
     Type * const type = VectorType::get(IntegerType::get(value->getType()->getContext(), fieldWidth->value()), 0);
     return insertAtInsertionPoint(new (mAllocator) Repeat(fieldWidth, value, type, name, mAllocator));
 }
 
 PackH * PabloBlock::createPackH(Integer * fieldWidth, PabloAST * value, String * name) {
     assert (fieldWidth && value);
-    if (name == nullptr) {
-        name = makeName("packh");
-    }
     Type * const type = VectorType::get(IntegerType::get(value->getType()->getContext(), fieldWidth->value()), 0);
     return insertAtInsertionPoint(new (mAllocator) PackH(fieldWidth, value, name, type, mAllocator));
 }
 
 PackL * PabloBlock::createPackL(Integer * fieldWidth, PabloAST * value, String * name) {
     assert (fieldWidth && value);
-    if (name == nullptr) {
-        name = makeName("packl");
-    }
     Type * const type = VectorType::get(IntegerType::get(value->getType()->getContext(), fieldWidth->value()), 0);
     return insertAtInsertionPoint(new (mAllocator) PackL(fieldWidth, value, name, type, mAllocator));
 }
@@ -315,16 +246,10 @@ PackL * PabloBlock::createPackL(Integer * fieldWidth, PabloAST * value, String *
 
 Sel * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, String * name) {
     CHECK_SAME_TYPE(trueExpr, falseExpr);
-    if (name == nullptr) {
-        name = makeName("sel");
-    }
     return insertAtInsertionPoint(new (mAllocator) Sel(condition, trueExpr, falseExpr, name, mAllocator));
 }
 
 IndexedAdvance * PabloBlock::createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, Integer * shiftAmount, String * name) {
-    if (name == nullptr) {
-        name = makeName("indexed_advance");
-    }
     return insertAtInsertionPoint(new (mAllocator) IndexedAdvance(expr, indexStream, shiftAmount, name, mAllocator));
 }
     

@@ -22,7 +22,6 @@ namespace pablo {
 
 class PabloAST {
     friend class Statement;
-    friend class Variadic;
     friend class StatementList;
     friend class Branch;
     friend class PabloBlock;
@@ -44,6 +43,8 @@ public:
         return false;
     }
 
+    // NOTE: when adding new statement types, update Statement::getName() to generate
+    // a default name for the class.
     enum class ClassTypeId : unsigned {
         /** Expressions and Constants **/
         // Constants
@@ -92,7 +93,7 @@ public:
         , If
         , While
         // Misc. operations
-        , Fill
+        , Repeat
         , PackH
         , PackL
     };
@@ -205,11 +206,8 @@ public:
 
     void replaceUsesOfWith(PabloAST * const from, PabloAST * const to);
 
-    const String & getName() const noexcept {
-        return *mName;
-    }
-
-    void setName(const String * const name) noexcept;
+    // NOTE: getName() can generate a default name if one is does not exist for it
+    const String & getName() const;
 
     inline PabloAST * getOperand(const unsigned index) const noexcept {
         assert (index < getNumOperands());
@@ -237,7 +235,10 @@ public:
     inline PabloBlock * getParent() const {
         return mParent;
     }
+
     virtual ~Statement() = default;
+
+    void setName(const String * const name);
 
 protected:
 
@@ -258,41 +259,13 @@ protected:
         }
     }
 
-    explicit Statement(const ClassTypeId id, llvm::Type * const type, const unsigned reserved, const String * const name, Allocator & allocator)
-    : PabloAST(id, type, allocator)
-    , mOperands(0)
-    , mOperand(allocator.allocate(reserved))
-    , mNext(nullptr)
-    , mPrev(nullptr)
-    , mName(name)
-    , mParent(nullptr) {
-        std::memset(mOperand, 0, reserved * sizeof(PabloAST *));
-    }
-
-    template<typename iterator>
-    explicit Statement(const ClassTypeId id, llvm::Type * const type, iterator begin, iterator end, const String * const name, Allocator & allocator)
-    : PabloAST(id, type, allocator)
-    , mOperands(std::distance(begin, end))
-    , mOperand(allocator.allocate(mOperands))
-    , mNext(nullptr)
-    , mPrev(nullptr)
-    , mName(name)
-    , mParent(nullptr) {
-        unsigned i = 0;
-        for (auto value = begin; value != end; ++value, ++i) {
-            assert (*value);
-            mOperand[i] = *value;
-            (*value)->addUser(this);
-        }
-    }
-
 protected:    
-    unsigned        mOperands;
-    PabloAST **     mOperand;
-    Statement *     mNext;
-    Statement *     mPrev;
-    const String *  mName;
-    PabloBlock *    mParent;
+    unsigned                mOperands;
+    PabloAST **             mOperand;
+    Statement *             mNext;
+    Statement *             mPrev;
+    mutable const String *  mName;
+    PabloBlock *            mParent;
 };
 
 class CarryProducingStatement : public Statement {
@@ -345,114 +318,10 @@ protected:
 
     }
 
-    explicit CarryProducingStatement(const ClassTypeId id, llvm::Type * const type, const unsigned reserved, const String * name, Allocator & allocator)
-    : Statement(id, type, reserved, name, allocator)
-    , mCarryGroup(0)
-    , mCarryWidth(0) {
-
-    }
-
-    template<typename iterator>
-    explicit CarryProducingStatement(const ClassTypeId id, llvm::Type * const type, iterator begin, iterator end, const String * name, Allocator & allocator)
-    : Statement(id, type, begin, end, name, allocator)
-    , mCarryGroup(0)
-    , mCarryWidth(0) {
-
-    }
-
 private:
 
     unsigned mCarryGroup;
     unsigned mCarryWidth;
-};
-
-
-class Variadic : public Statement {
-public:
-
-    static inline bool classof(const PabloAST * e) {
-        switch (e->getClassTypeId()) {
-            case PabloAST::ClassTypeId::And:
-            case PabloAST::ClassTypeId::Or:
-            case PabloAST::ClassTypeId::Xor:
-                return true;
-            default: return false;
-        }
-    }
-    static inline bool classof(const Variadic *) {
-        return true;
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
-
-    class iterator : public boost::iterator_facade<iterator, PabloAST *, boost::random_access_traversal_tag> {
-        friend class Variadic;
-        friend class boost::iterator_core_access;
-    protected:
-
-        iterator(PabloAST ** pointer) : mCurrent(pointer) { }
-        inline void increment() { ++mCurrent; }
-        inline void decrement() { --mCurrent; }
-        inline void advance(const std::ptrdiff_t n) { mCurrent += n; }
-        inline std::ptrdiff_t distance_to(const iterator & other) const { return other.mCurrent - mCurrent; }
-        inline PabloAST *& dereference() const { return *mCurrent; }
-
-        inline bool equal(const iterator & other) const { return (mCurrent == other.mCurrent); }
-
-    private:
-        PabloAST **        mCurrent;
-    };
-
-    using const_iterator = iterator;
-
-    void addOperand(PabloAST * const expr) noexcept;
-
-    PabloAST * removeOperand(const unsigned index) noexcept;
-
-    bool deleteOperand(const PabloAST * const expr) noexcept;
-
-    iterator begin() {
-        return iterator(mOperand);
-    }
-
-    const_iterator begin() const {
-        return iterator(mOperand);
-    }
-
-    iterator end() {
-        return iterator(mOperand + mOperands);
-    }
-
-    const_iterator end() const {
-        return iterator(mOperand + mOperands);
-    }
-
-    virtual ~Variadic() = default;
-
-protected:
-    explicit Variadic(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
-    : Statement(id, type, operands, name, allocator)
-    , mCapacity(operands.size())
-    , mAllocator(allocator) {
-
-    }
-    explicit Variadic(const ClassTypeId id, llvm::Type * const type, const unsigned reserved, const String * name, Allocator & allocator)
-    : Statement(id, type, reserved, name, allocator)
-    , mCapacity(reserved)
-    , mAllocator(allocator) {
-
-    }
-    template<typename iterator>
-    explicit Variadic(const ClassTypeId id, llvm::Type * const type, iterator begin, iterator end, const String * name, Allocator & allocator)
-    : Statement(id, type, begin, end, name, allocator)
-    , mCapacity(std::distance(begin, end))
-    , mAllocator(allocator) {
-
-    }
-private:
-    unsigned        mCapacity;
-    Allocator &     mAllocator;
 };
 
 class StatementList {
@@ -711,19 +580,6 @@ private:
     Statement   * mFirst;
     Statement   * mLast;    
 };
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief deleteOperand
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool Variadic::deleteOperand(const PabloAST * const expr) noexcept {
-    for (unsigned i = 0; i != getNumOperands(); ++i) {
-        if (LLVM_UNLIKELY(getOperand(i) == expr)) {
-            removeOperand(i);
-            return true;
-        }
-    }
-    return false;
-}
 
 }
 

@@ -56,6 +56,7 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             print(br->getBody(), out, true, indent + BlockIndenting);
         }
     } else {
+
         print(cast<PabloAST>(stmt), out);
 
         if (const And * andNode = dyn_cast<And>(stmt)) {

@@ -11,7 +11,7 @@ class Repeat final : public Statement {
     friend class PabloBlock;
 public:
     static bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::Fill;
+        return e->getClassTypeId() == ClassTypeId::Repeat;
     }
     static bool classof(const void *) {
         return false;
@@ -26,7 +26,7 @@ public:
     }
 protected:
     Repeat(Integer * const fieldWidth, PabloAST * const value, llvm::Type * type, const String * name, Allocator & allocator)
-    : Statement(ClassTypeId::Fill, type, { fieldWidth, value }, name, allocator) {
+    : Statement(ClassTypeId::Repeat, type, { fieldWidth, value }, name, allocator) {
 
     }
 };

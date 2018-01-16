@@ -122,9 +122,7 @@ public:
         return createVar(makeName(name), type);
     }
 
-    inline Var * createVar(String * name, llvm::Type * const type = nullptr) {
-        return createVar(reinterpret_cast<PabloAST *>(name), type);
-    }
+    Var * createVar(String * name, llvm::Type * const type = nullptr);
 
     Count * createCount(PabloAST * expr);
 
@@ -164,12 +162,6 @@ public:
 
     And * createAnd(PabloAST * expr1, PabloAST * expr2, String * name);
 
-    And * createAnd(llvm::Type * const type, const unsigned reserved) {
-        return createAnd(type, reserved, nullptr);
-    }
-
-    And * createAnd(llvm::Type * const type, const unsigned reserved, String * name);
-
     Or * createOr(PabloAST * expr1, PabloAST * expr2) {
         return createOr(expr1, expr2, nullptr);
     }
@@ -180,12 +172,6 @@ public:
 
     Or * createOr(PabloAST * expr1, PabloAST * expr2, String * name);
 
-    Or * createOr(llvm::Type * const type, const unsigned reserved) {
-        return createOr(type, reserved, nullptr);
-    }
-
-    Or * createOr(llvm::Type * const type, const unsigned reserved, String * name);
-
     Xor * createXor(PabloAST * expr1, PabloAST * expr2) {
         return createXor(expr1, expr2, nullptr);
     }
@@ -195,12 +181,6 @@ public:
     }
 
     Xor * createXor(PabloAST * expr1, PabloAST * expr2, String * name);
-
-    Xor * createXor(llvm::Type * const type, const unsigned reserved) {
-        return createXor(type, reserved, nullptr);
-    }
-
-    Xor * createXor(llvm::Type * const type, const unsigned reserved, String * name);
 
     Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
         return createSel(condition, trueExpr, falseExpr, nullptr);
@@ -355,8 +335,6 @@ protected:
         }
         return expr;
     }
-
-    Var * createVar(PabloAST * name, llvm::Type * const type);
 
 private:        
     PabloKernel * const         mParent;
