@@ -51,56 +51,65 @@ inline Alt * makeAlt() {
     return new Alt();
 }
     
-inline void add_CC(std::vector<CC *> & CCs_found, CC * cc) {
-    for (unsigned j = 0; j < CCs_found.size(); j++) {
-        if (CCs_found[j]->getAlphabet() == cc->getAlphabet()) {
-            CCs_found[j] = makeCC(CCs_found[j], cc);
-            return;
-        }
-    }
-    CCs_found.push_back(cc);
-}
-
 template<typename iterator>
 RE * makeAlt(iterator begin, iterator end) {
     Alt * newAlt = makeAlt();
-    bool nullableAltFound = false;
-    std::vector<CC *> CCs_found;  // CCs with possibly different alphabets
+    if (LLVM_UNLIKELY(begin == end)) {
+        return newAlt;
+    }
+
+    llvm::SmallVector<CC *, 2> CCs(0); // CCs with possibly different alphabets
+    auto combineCC = [&CCs] (CC * cc) {
+        for (CC *& existing : CCs) {
+            if (LLVM_LIKELY(existing->getAlphabet() == cc->getAlphabet())) {
+                existing = makeCC(existing, cc);
+                return;
+            }
+        }
+        CCs.push_back(cc);
+    };
+
+    bool nullable = false;
+    RE * emptySeq = nullptr;
     for (auto i = begin; i != end; ++i) {
         if (CC * cc = llvm::dyn_cast<CC>(*i)) {
-            add_CC(CCs_found, cc);
+            combineCC(cc);
         } else if (const Alt * alt = llvm::dyn_cast<Alt>(*i)) {
             // We have an Alt to embed within the alt.  We extract the individual
             // elements to include within the new alt.   Note that recursive flattening
             // is not required, if the elements themselves were created with makeAlt.
             for (RE * a : *alt) {
                 if (CC * cc = llvm::dyn_cast<CC>(a)) {
-                    add_CC(CCs_found, cc);
+                    combineCC(cc);
                 } else if (isEmptySeq(a)) {
-                    nullableAltFound = true;
+                    nullable = true;
+                    emptySeq = a;
                 } else {
                     newAlt->push_back(a);
                 }
             }
         } else if (const Rep * rep = llvm::dyn_cast<Rep>(*i)) {
             if (rep->getLB() == 0) {
-                nullableAltFound = true;
+                nullable = true;
                 newAlt->push_back(makeRep(rep->getRE(), 1, rep->getUB()));
             } else {
                 newAlt->push_back(*i);
             }
         } else if (isEmptySeq(*i)) {
-            nullableAltFound = true;
+            nullable = true;
+            emptySeq = *i;
         } else {
             newAlt->push_back(*i);
         }
     }
-    for (CC * cc : CCs_found) {
-        newAlt->push_back(cc);
+    newAlt->insert(newAlt->end(), CCs.begin(), CCs.end());
+    if (nullable) {
+        if (emptySeq == nullptr) {
+            emptySeq = makeSeq();
+        }
+        newAlt->push_back(emptySeq);
     }
-    if (nullableAltFound) newAlt->push_back(makeSeq());
-    if (newAlt->size() == 1) return newAlt->front();
-    return newAlt;
+    return newAlt->size() == 1 ? newAlt->front() : newAlt;
 }
 
 inline RE * makeAlt(RE::InitializerList list) {

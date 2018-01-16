@@ -11,13 +11,54 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <re/re_analysis.h>
+#include <re/re_nullable.h>
 
 using namespace llvm;
 
 namespace re {
 
-RE * RE_Star_Normal::star_normal(RE * re) {
+RE * RE_Star_Normal::optimize(RE * re) {
+    if (Alt * alt = dyn_cast<Alt>(re)) {
+        std::vector<RE *> list;
+        list.reserve(alt->size());
+        for (RE * re : *alt) {
+            list.push_back(optimize(re));
+        }
+        re = makeAlt(list.begin(), list.end());
+    } else if (Seq * seq = dyn_cast<Seq>(re)) {
+        RE * head = *(seq->begin());
+        RE * tail = makeSeq(seq->begin() + 1, seq->end());
+        const auto headNullable = RE_Nullable::isNullable(head);
+        head = headNullable ? optimize(head) : star_normal(head);
+        const auto tailNullable = RE_Nullable::isNullable(tail);
+        tail = tailNullable ? optimize(tail) : star_normal(tail);
+        if (LLVM_UNLIKELY(headNullable && tailNullable)) {
+            re = makeAlt({head, tail});
+        } else {
+            re = makeSeq({head, tail});
+        }
+    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        re = makeAssertion(optimize(a->getAsserted()), a->getKind(), a->getSense());
+    } else if (Rep * rep = dyn_cast<Rep>(re)) {
+        RE * const expr = optimize(rep->getRE());
+        if (rep->getLB() == 0 && rep->getUB() == Rep::UNBOUNDED_REP) {
+            re = expr;
+        } else {
+            re = makeRep(expr, rep->getLB(), rep->getUB());
+        }
+    } else if (Diff * diff = dyn_cast<Diff>(re)) {
+        re = makeDiff(optimize(diff->getLH()), optimize(diff->getRH()));
+    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
+        re = makeIntersect(optimize(e->getLH()), optimize(e->getRH()));
+    } else if (Name * name = dyn_cast<Name>(re)) {
+        if (name->getDefinition()) {
+            name->setDefinition(optimize(name->getDefinition()));
+        }
+    }
+    return re;
+}
 
+RE * RE_Star_Normal::star_normal(RE * re) {
     if (Alt * alt = dyn_cast<Alt>(re)) {
         std::vector<RE *> list;
         list.reserve(alt->size());
@@ -36,7 +77,7 @@ RE * RE_Star_Normal::star_normal(RE * re) {
         re = makeAssertion(star_normal(a->getAsserted()), a->getKind(), a->getSense());
     } else if (Rep * rep = dyn_cast<Rep>(re)) {
          if (rep->getLB() == 0 && rep->getUB() == Rep::UNBOUNDED_REP) {
-            RE * expr = helper(rep->getRE());
+            RE * expr = optimize(rep->getRE());
             re = makeRep(expr, 0, rep->getUB());
         } else {
             RE * expr = star_normal(rep->getRE());
@@ -53,73 +94,5 @@ RE * RE_Star_Normal::star_normal(RE * re) {
     }
     return re;
 }
-
-RE * RE_Star_Normal::helper(RE * re) {
-    if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE *> list;
-        list.reserve(alt->size());
-        for (RE * re : *alt) {
-            list.push_back(helper(re));
-        }
-        re = makeAlt(list.begin(), list.end());
-    } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        RE * const re_first = *(seq->begin());
-        RE * const re_follow = makeSeq(seq->begin() + 1, seq->end());
-        const auto isFirstNullable = isNullable(re_first);
-        const auto isFollowNullable = isNullable(re_follow);
-        if (LLVM_LIKELY(!isFirstNullable && !isFollowNullable)) {
-            re = makeSeq({star_normal(re_first), star_normal(re_follow)});
-        } else if (!isFirstNullable && isFollowNullable) {
-            re = makeSeq({helper(re_first), star_normal(re_follow)});
-        } else if (isFirstNullable && !isFollowNullable) {
-            re = makeSeq({star_normal(re_first), helper(re_follow)});
-        } else {
-            re = makeAlt({helper(re_first), helper(re_follow)});
-        }
-    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-        re = makeAssertion(helper(a->getAsserted()), a->getKind(), a->getSense());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        RE * const expr = helper(rep->getRE());
-        if (rep->getLB() == 0 && rep->getUB() == Rep::UNBOUNDED_REP) {
-            re = expr;
-        } else {
-            re = makeRep(expr, rep->getLB(), rep->getUB());
-        }
-    } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        re = makeDiff(helper(diff->getLH()), helper(diff->getRH()));
-    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
-        re = makeIntersect(helper(e->getLH()), helper(e->getRH()));
-    } else if (Name * name = dyn_cast<Name>(re)) {
-        if (name->getDefinition()) {
-            name->setDefinition(helper(name->getDefinition()));
-        }
-    }
-    return re;
-}
-
-bool RE_Star_Normal::isNullable(const RE * re) {
-    if (const Seq * re_seq = dyn_cast<const Seq>(re)) {
-        for (const RE * re : *re_seq) {
-            if (!isNullable(re)) {
-                return false;
-            }
-        }
-        return true;
-    } else if (const Alt * re_alt = dyn_cast<const Alt>(re)) {
-        for (const RE * re : *re_alt) {
-            if (isNullable(re)) {
-                return true;
-            }
-        }
-    } else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
-        return re_rep->getLB() == 0 ? true : isNullable(re_rep->getRE());
-    } else if (const Diff * diff = dyn_cast<const Diff>(re)) {
-        return isNullable(diff->getLH()) && !isNullable(diff->getRH());
-    } else if (const Intersect * e = dyn_cast<const Intersect>(re)) {
-        return isNullable(e->getLH()) && isNullable(e->getRH());
-    } 
-    return false;
-}
-
 
 }

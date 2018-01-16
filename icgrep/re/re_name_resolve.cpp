@@ -47,6 +47,7 @@ struct NameResolver {
                 } else {
                     UndefinedNameError(name);
                 }
+                re = mMemoizer.memoize(name);
             } else {
                 return *f;
             }
@@ -82,6 +83,7 @@ struct NameResolver {
                 } else {
                     UndefinedNameError(name);
                 }
+                re = mMemoizer.memoize(name);
             } else {
                 return *f;
             }

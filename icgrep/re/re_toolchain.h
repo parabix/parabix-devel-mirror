@@ -10,7 +10,6 @@
 namespace llvm { namespace cl { class OptionCategory; } }
 namespace pablo { class PabloKernel; class PabloAST; }
 namespace re { class RE; class CC;}
-#include <vector>
 
 namespace re {
 
@@ -23,11 +22,11 @@ enum RE_AlgorithmFlags {
     DisableUnicodeLineBreak, UsePregeneratedUnicode
 };
     
-bool AlgorithmOptionIsSet(RE_AlgorithmFlags flag);
+bool LLVM_READONLY AlgorithmOptionIsSet(RE_AlgorithmFlags flag);
     
 extern int IfInsertionGap;
 
-const llvm::cl::OptionCategory * re_toolchain_flags();
+const llvm::cl::OptionCategory * LLVM_READONLY re_toolchain_flags();
 
 RE * resolveModesAndExternalSymbols(RE * r);
 

@@ -10,74 +10,61 @@
 #include <re/re_memoizer.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
+#include <llvm/ADT/SmallVector.h>
 
-#include <llvm/Support/raw_ostream.h>
-#include <re/printer_re.h>
 
 using namespace llvm;
+using namespace boost::container;
 
 namespace re {
 
-using Set = boost::container::flat_set<RE *>;
-using Map = boost::container::flat_map<RE *, RE *>;
+using Set = flat_set<RE *>;
+using Map = flat_map<RE *, RE *>;
 using List = std::vector<RE *>;
 
 struct PassContainer : private Memoizer {
 
-    RE * minimize(RE * original) {
-        const auto f = mMap.find(original);
-        if (LLVM_UNLIKELY(f != mMap.end())) {
-            return f->second;
+    RE * minimize(RE * re) {
+        const auto f = find(re);
+        if (LLVM_UNLIKELY(f != end())) {
+            return *f;
         }
-        RE * re = original;
-repeat: if (Alt * alt = dyn_cast<Alt>(re)) {
+        if (Alt * const alt = dyn_cast<Alt>(re)) {
             Set set;
             set.reserve(alt->size());
-            RE * namedCC = nullptr;
-            bool repeat = false;
             for (RE * item : *alt) {
                 item = minimize(item);
                 if (LLVM_UNLIKELY(isa<Alt>(item))) {
-                    if (LLVM_UNLIKELY(cast<Alt>(item)->empty())) {
-                        continue;
+                    for (RE * const innerItem : *cast<Alt>(item)) {
+                        set.insert(innerItem);
                     }
-                    repeat = true;
-                } else { // if we have an alternation containing multiple CCs, combine them
-                    CC * const cc = extractCC(item);
-                    if (cc) {
-                        namedCC = namedCC ? makeCC(extractCC(namedCC), cc) : item;
-                        continue;
-                    }
+                } else if (CC * const cc = extractCC(item)) {
+                    combineCC(cc);
+                } else {
+                    set.insert(item);
                 }
-                set.insert(item);
             }
-            // Combine and/or insert any named CC object into the alternation
-            if (namedCC) {
-                if (LLVM_UNLIKELY(isa<CC>(namedCC))) {
-                    namedCC = memoize(cast<CC>(namedCC));
-                }
-                set.insert(cast<Name>(namedCC));
+            // insert any CC objects into the alternation
+            for (auto cc : mCombine) {
+                set.insert(memoize(cc));
             }
+            mCombine.clear();
             // Pablo CSE may identify common prefixes but cannot identify common suffixes.
             extractCommonSuffixes(set);
             extractCommonPrefixes(set);
             re = makeAlt(set.begin(), set.end());
-            if (LLVM_UNLIKELY(repeat)) {
-                goto repeat;
-            }
-        } else if (Seq * seq = dyn_cast<Seq>(re)) {
+        } else if (Seq * const seq = dyn_cast<Seq>(re)) {
             List list;
             list.reserve(seq->size());
-            bool repeat = false;
             for (RE * item : *seq) {
                 item = minimize(item);
                 if (LLVM_UNLIKELY(isa<Seq>(item))) {
-                    if (LLVM_UNLIKELY(cast<Seq>(item)->empty())) {
-                        continue;
+                    for (RE * const innerItem : *cast<Seq>(item)) {
+                        list.push_back(innerItem);
                     }
-                    repeat = true;
+                } else {
+                    list.push_back(item);
                 }
-                list.push_back(item);
             }
             for (unsigned i = 1, run = 0; i < list.size(); ) {
                 if (LLVM_UNLIKELY(list[i - 1] == list[i])) {
@@ -91,11 +78,11 @@ repeat: if (Alt * alt = dyn_cast<Alt>(re)) {
                     run = 0;
                     continue;
                 } else if (LLVM_UNLIKELY(isa<Rep>(list[i - 1]) && isa<Rep>(list[i]))){
-                    // If we have adjacent repetitions of the same RE, we can merge them
+                    // If we have adjacent repetitions of the same RE, merge them
                     Rep * const r1 = cast<Rep>(list[i - 1]);
                     Rep * const r2 = cast<Rep>(list[i]);
                     if (LLVM_UNLIKELY(r1->getRE() == r2->getRE())) {
-                        list[i - 1] = memoize(combineRep(r1, r2));
+                        list[i - 1] = memoize(combineTwoReps(r1, r2));
                         list.erase(list.begin() + i);
                         continue;
                     }
@@ -103,147 +90,131 @@ repeat: if (Alt * alt = dyn_cast<Alt>(re)) {
                 ++i;
             }
             re = makeSeq(list.begin(), list.end());
-            if (LLVM_UNLIKELY(repeat)) {
-                goto repeat;
-            }
-        } else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        } else if (Assertion * const a = dyn_cast<Assertion>(re)) {
             re = makeAssertion(minimize(a->getAsserted()), a->getKind(), a->getSense());
-        } else if (Rep * rep = dyn_cast<Rep>(re)) {
+        } else if (Rep * const rep = dyn_cast<Rep>(re)) {
             re = makeRep(minimize(rep->getRE()), rep->getLB(), rep->getUB());
-        } else if (Diff * diff = dyn_cast<Diff>(re)) {
+        } else if (Diff * const diff = dyn_cast<Diff>(re)) {
             re = makeDiff(minimize(diff->getLH()), minimize(diff->getRH()));
-        } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
+        } else if (Intersect * const ix = dyn_cast<Intersect>(re)) {
             re = makeIntersect(minimize(ix->getLH()), minimize(ix->getRH()));
-        } else if (Name * n = dyn_cast<Name>(re)) {
-            RE * const def = n->getDefinition(); assert (def);
-            if (LLVM_UNLIKELY(!isa<CC>(def))) {
+        } else if (Name * const n = dyn_cast<Name>(re)) {
+            RE * const def = n->getDefinition();
+            if (LLVM_LIKELY(def != nullptr)) {
                 n->setDefinition(minimize(def));
             }
         }
-        re = memoize(re);
-        mMap.emplace(original, re);
-        if (LLVM_LIKELY(original != re)) {
-            mMap.emplace(re, re);
-        }
-        return re;
+        return memoize(re);
     }
 
 protected:
 
-    void extractCommonPrefixes(Set & source) {
-        List combine;
-repeat: if (LLVM_UNLIKELY(source.size() < 2)) {
-            return;
-        }
-        for (auto i = source.begin(); i != source.end(); ++i) {
-            assert (combine.empty());
-            RE * const head = getHead(*i);
-            for (auto j = i + 1; j != source.end(); ) {
-                if (LLVM_UNLIKELY(head == getHead(*j))) {
-                    combine.push_back(*j);
-                    j = source.erase(j);
-                    continue;
-                }
-                ++j;
-            }
-
-            if (LLVM_UNLIKELY(!combine.empty())) {
-                combine.push_back(*i);
-                source.erase(i);
-                Set tailSet;
-                tailSet.reserve(combine.size());
-                bool isOptional = false;
-                for (RE * const re : combine) {
-                    if (LLVM_LIKELY(isa<Seq>(re))) {
-                        Seq * const seq = cast<Seq>(re);
-                        if (LLVM_LIKELY(seq->size() > 1)) {
-                            tailSet.insert(minimize(makeSeq(seq->begin() + 1, seq->end())));
-                            continue;
-                        }
-                    } else if (LLVM_UNLIKELY(isa<Rep>(re))) {
-                        Rep * const rep = cast<Rep>(re);
-                        if (head != rep) {
-                            assert (head == rep->getRE());
-                            assert (rep->getLB() > 0);
-                            const auto lb = rep->getLB() - 1;
-                            const auto ub = rep->getUB() == Rep::UNBOUNDED_REP ? Rep::UNBOUNDED_REP : rep->getUB() - 1;
-                            tailSet.insert(minimize(makeRep(rep->getRE(), lb, ub)));
-                            continue;
-                        }
+    void extractCommonPrefixes(Set & alts) {        
+        if (LLVM_LIKELY(alts.size() > 1)) {
+            SmallVector<RE *, 8> optimized;
+            for (auto i = alts.begin(); i != alts.end(); ) {
+                assert ("combine list must be empty!" && mCombine.empty());
+                RE * const head = headOf(*i);
+                for (auto j = i + 1; j != alts.end(); ) {
+                    if (LLVM_UNLIKELY(head == headOf(*j))) {
+                        mCombine.push_back(*j);
+                        j = alts.erase(j);
+                    } else {
+                        ++j;
                     }
-                    isOptional = true;
                 }
-                combine.clear();
-                extractCommonPrefixes(tailSet);
-                RE * tail = makeAlt(tailSet.begin(), tailSet.end());
-                if (LLVM_UNLIKELY(isOptional)) {
-                    tail = makeRep(tail, 0, 1);
+                if (LLVM_LIKELY(mCombine.empty())) {
+                    ++i;
+                } else {
+                    mCombine.push_back(*i);
+                    i = alts.erase(i);
+                    Set tailSet;
+                    tailSet.reserve(mCombine.size());
+                    bool nullable = false;
+                    for (RE * const re : mCombine) {
+                        if (LLVM_LIKELY(isa<Seq>(re))) {
+                            Seq * const seq = cast<Seq>(re);
+                            if (LLVM_LIKELY(seq->size() > 1)) {
+                                assert (head == seq->front());
+                                tailSet.insert(memoize(makeSeq(seq->begin() + 1, seq->end())));
+                                continue;
+                            }
+                        } else if (LLVM_UNLIKELY(isa<Rep>(re))) {
+                            Rep * const rep = cast<Rep>(re);
+                            if (head != rep) {
+                                assert (head == rep->getRE());
+                                tailSet.insert(memoize(makeRepWithOneFewerRepitition(rep)));
+                                continue;
+                            }
+                        }
+                        nullable = true;
+                    }
+                    mCombine.clear();
+                    if (LLVM_UNLIKELY(nullable)) {
+                        tailSet.insert(memoize(makeSeq()));
+                    }
+                    RE * const tail = makeAlt(tailSet.begin(), tailSet.end());
+                    optimized.push_back(minimize(makeSeq({ head, tail })));
                 }
-                source.insert(minimize(makeSeq({ head, tail })));
-                goto repeat;
             }
-        }
+            alts.insert(optimized.begin(), optimized.end());
+        }        
     }
 
-    void extractCommonSuffixes(Set & source) {
-        List combine;
-repeat: if (LLVM_UNLIKELY(source.size() < 2)) {
-            return;
-        }
-        for (auto i = source.begin(); i != source.end(); ++i) {
-            assert (combine.empty());
-            assert (*i);
-            RE * const tail = getTail(*i);
-            for (auto j = i + 1; j != source.end(); ) {
-                if (LLVM_UNLIKELY(tail == getTail(*j))) {
-                    combine.push_back(*j);
-                    j = source.erase(j);
-                    continue;
-                }
-                ++j;
-            }
-            if (LLVM_UNLIKELY(!combine.empty())) {
-                combine.push_back(*i);
-                source.erase(i);
-                Set headSet;
-                headSet.reserve(combine.size());
-                bool isOptional = false;
-                for (RE * const re : combine) {
-                    if (LLVM_LIKELY(isa<Seq>(re))) {
-                        Seq * const seq = cast<Seq>(re);
-                        if (LLVM_LIKELY(seq->size() > 1)) {
-                            headSet.insert(minimize(makeSeq(seq->begin(), seq->end() - 1)));
-                            continue;
-                        }
-                    } else if (LLVM_UNLIKELY(isa<Rep>(re))) {
-                        Rep * const rep = cast<Rep>(re);
-                        if (tail != rep) {
-                            assert (tail == rep->getRE());
-                            assert (rep->getUB() != 0);
-                            assert (rep->getLB() > 0);
-                            const auto lb = rep->getLB() - 1;
-                            const auto ub = (rep->getUB() == Rep::UNBOUNDED_REP) ? Rep::UNBOUNDED_REP : rep->getUB() - 1;
-                            headSet.insert(minimize(makeRep(rep->getRE(), lb, ub)));
-                            continue;
-                        }
+    void extractCommonSuffixes(Set & alts) {
+        if (LLVM_LIKELY(alts.size() > 1)) {
+            SmallVector<RE *, 8> optimized;
+            for (auto i = alts.begin(); i != alts.end(); ) {
+                assert ("combine list must be empty!" && mCombine.empty());
+                RE * const last = lastOf(*i);
+                for (auto j = i + 1; j != alts.end(); ) {
+                    if (LLVM_UNLIKELY(last == lastOf(*j))) {
+                        mCombine.push_back(*j);
+                        j = alts.erase(j);
+                    } else {
+                        ++j;
                     }
-                    isOptional = true;
                 }
-                combine.clear();
-                extractCommonSuffixes(headSet);
-                extractCommonPrefixes(headSet);
-                RE * head = makeAlt(headSet.begin(), headSet.end());
-                if (LLVM_UNLIKELY(isOptional)) {
-                    head = makeRep(head, 0, 1);
+                if (LLVM_LIKELY(mCombine.empty())) {
+                    ++i;
+                } else {
+                    mCombine.push_back(*i);
+                    i = alts.erase(i);
+                    Set initSet;
+                    initSet.reserve(mCombine.size());
+                    bool nullable = false;
+                    for (RE * const re : mCombine) {
+                        if (LLVM_LIKELY(isa<Seq>(re))) {
+                            Seq * const seq = cast<Seq>(re);
+                            if (LLVM_LIKELY(seq->size() > 1)) {
+                                assert (last == seq->back());
+                                initSet.insert(memoize(makeSeq(seq->begin(), seq->end() - 1)));
+                                continue;
+                            }
+                        } else if (LLVM_UNLIKELY(isa<Rep>(re))) {
+                            Rep * const rep = cast<Rep>(re);
+                            if (last != rep) {
+                                assert (last == rep->getRE());
+                                initSet.insert(memoize(makeRepWithOneFewerRepitition(rep)));
+                                continue;
+                            }
+                        }
+                        nullable = true;
+                    }
+                    mCombine.clear();
+                    if (LLVM_UNLIKELY(nullable)) {
+                        initSet.insert(memoize(makeSeq()));
+                    }
+                    RE * const init = makeAlt(initSet.begin(), initSet.end());
+                    optimized.push_back(minimize(makeSeq({ init, last })));
                 }
-                source.insert(minimize(makeSeq({ head, tail })));
-                goto repeat;
             }
-        }
+            alts.insert(optimized.begin(), optimized.end());
+        }        
     }
 
     static CC * extractCC(RE * const re) {
-        if (LLVM_UNLIKELY(isa<CC>(re))) {
+        if (isa<CC>(re)) {
             return cast<CC>(re);
         } else if (isa<Name>(re)) {
             RE * const def = cast<Name>(re)->getDefinition();
@@ -254,51 +225,64 @@ repeat: if (LLVM_UNLIKELY(source.size() < 2)) {
         return nullptr;
     }
 
-    static RE * combineRep(Rep * const r1, Rep * const r2) {
+    void combineCC(CC * const cc) {
+        for (RE *& existing : mCombine) {
+            if (LLVM_LIKELY(cast<CC>(existing)->getAlphabet() == cc->getAlphabet())) {
+                existing = makeCC(cast<CC>(existing), cc);
+                return;
+            }
+        }
+        mCombine.push_back(cc);
+    }
+
+    static RE * combineTwoReps(Rep * const r1, Rep * const r2) {
         assert (r1->getRE() == r2->getRE());
         assert (r1->getLB() != Rep::UNBOUNDED_REP);
         assert (r2->getLB() != Rep::UNBOUNDED_REP);
         const int lb = r1->getLB() + r2->getLB();
         int ub = Rep::UNBOUNDED_REP;
         if ((r1->getUB() != Rep::UNBOUNDED_REP) && (r2->getUB() != Rep::UNBOUNDED_REP)) {
+            assert (r1->getUB() < (std::numeric_limits<int>::max() - r2->getUB()));
             ub = r1->getUB() + r2->getUB();
         }
         return makeRep(r1->getRE(), lb, ub);
     }
 
-    static RE * getHead(RE * re) {
-        assert (re);
-        if (isa<Seq>(re)) {
-            re = cast<Seq>(re)->front(); assert (re);
-        } else if (isa<Rep>(re)) {
-            Rep * const rep = cast<Rep>(re);
-            assert (rep->getLB() != Rep::UNBOUNDED_REP);
+    static RE * makeRepWithOneFewerRepitition(Rep * const re) {
+        assert (re->getLB() > 0);
+        const auto lb = re->getLB() - 1;
+        assert (re->getUB() != 0);
+        const auto ub = (re->getUB() == Rep::UNBOUNDED_REP) ? Rep::UNBOUNDED_REP : re->getUB() - 1;
+        return makeRep(re->getRE(), lb, ub);
+    }
+
+    static RE * headOf(RE * const re) {
+        if (Seq * seq = dyn_cast<Seq>(re)) {
+            if (LLVM_LIKELY(!seq->empty())) {
+                return seq->front();
+            }
+        } else if (Rep * const rep = dyn_cast<Rep>(re)) {
             if (rep->getLB() > 0) {
-                re = rep->getRE(); assert (re);
+                return rep->getRE();
             }
         }
         return re;
     }
 
-    static RE * getTail(RE * re) {
-        assert (re);
-        if (isa<Seq>(re)) {
-            re = cast<Seq>(re)->back();
-            assert (re);
-        } else if (isa<Rep>(re)) {
-            Rep * const rep = cast<Rep>(re);
-            assert (rep->getLB() != Rep::UNBOUNDED_REP);
-            assert (rep->getUB() == Rep::UNBOUNDED_REP || rep->getUB() >= rep->getLB());
+    static RE * lastOf(RE * const re) {
+        if (Seq * seq = dyn_cast<Seq>(re)) {
+            if (LLVM_LIKELY(!seq->empty())) {
+                return seq->back();
+            }
+        } else if (Rep * const rep = dyn_cast<Rep>(re)) {
             if (rep->getLB() > 0) {
-                re = rep->getRE(); assert (re);
+                return rep->getRE();
             }
         }
         return re;
     }
 
-private:
-
-    Map mMap;
+    SmallVector<RE *, 16> mCombine;
 };
 
 

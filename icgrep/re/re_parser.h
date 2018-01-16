@@ -32,8 +32,6 @@ using ModeFlagSet = unsigned;
 class RE_Parser {
 public:
 
-    static LLVM_ATTRIBUTE_NORETURN void ParseFailure(std::string errmsg);
-
     static RE * parse(const std::string &input_string, ModeFlagSet initialFlags, RE_Syntax syntax = RE_Syntax::PCRE, bool ByteMode = false);
 
 protected:
@@ -45,10 +43,11 @@ protected:
     using char_t = const std::string::value_type;
 
     struct Cursor {
+        friend class RE_Parser;
 
         inline Cursor & operator++() {
             if (LLVM_UNLIKELY(mCursor == mEnd)) {
-                ParseFailure("Incomplete regular expression!");
+                IncompleteRegularExpression();
             }
             ++mCursor;
             return *this;
@@ -56,7 +55,7 @@ protected:
 
         inline Cursor operator++(int) {
             if (LLVM_UNLIKELY(mCursor == mEnd)) {
-                ParseFailure("Incomplete regular expression!");
+                IncompleteRegularExpression();
             }
             Cursor tmp(*this);
             ++mCursor;
@@ -85,18 +84,21 @@ protected:
         inline cursor_t pos() const {
             return mCursor;
         }
-        
-        
-        Cursor(const std::string & expression) : mCursor(expression.cbegin()), mEnd(expression.cend()) {}
-        Cursor(const Cursor & cursor) : mCursor(cursor.mCursor), mEnd(cursor.mEnd) {}
+                
+        Cursor(const std::string & expression) : mCursor(expression.cbegin()), mEnd(expression.cend()), mStart(expression.cbegin()) {}
+        Cursor(const Cursor & cursor) : mCursor(cursor.mCursor), mEnd(cursor.mEnd), mStart(cursor.mStart) {}
         inline Cursor & operator=(const Cursor & cursor) {
             mCursor = cursor.mCursor;
             mEnd = cursor.mEnd;
             return *this;
         }
+    private:        
+        LLVM_ATTRIBUTE_NORETURN void IncompleteRegularExpression();
+        LLVM_ATTRIBUTE_NORETURN void ParseFailure(const std::string & errmsg);
     private:
         cursor_t    mCursor;
         cursor_t    mEnd;
+        cursor_t    mStart;
     };
 
     
@@ -224,6 +226,9 @@ protected:
     RE * parse_Posix_class();
     RE * parse_escaped_char_item();
     
+    RE * makeAtomicGroup(RE * r);
+    RE * makeBranchResetGroup(RE * r);
+
     codepoint_t parse_codepoint();
 
     virtual codepoint_t parse_escaped_codepoint();
@@ -235,7 +240,14 @@ protected:
     CC * createCC(const codepoint_t cp);
 
     static std::string canonicalize(const cursor_t begin, const cursor_t end);
+
     bool isCharAhead(char c);
+
+    LLVM_ATTRIBUTE_NORETURN void InvalidUTF8Encoding();
+
+    LLVM_ATTRIBUTE_NORETURN void ParseFailure(const std::string & errmsg) {
+        mCursor.ParseFailure(errmsg);
+    }
 
 protected:
     bool                        fByteMode;
@@ -244,9 +256,9 @@ protected:
     unsigned                    mGroupsOpen;
     Cursor                      mCursor;
     unsigned                    mCaptureGroupCount;
+    RE_Syntax                   mReSyntax;
     NameMap                     mNameMap;
     Memoizer                    mMemoizer;
-    RE_Syntax                   mReSyntax;
 };
 
 }

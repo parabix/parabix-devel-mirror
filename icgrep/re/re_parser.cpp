@@ -65,31 +65,19 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     parser->mCaptureGroupCount = 0;
     RE * re = parser->parse_RE();
     if (re == nullptr) {
-        ParseFailure("An unexpected parsing error occurred!");
+        parser->ParseFailure("An unexpected parsing error occurred!");
     }
     return re;
 }
 
-RE_Parser::RE_Parser(const std::string & regular_expression)
-: fByteMode(false)
-, fModeFlagSet(MULTILINE_MODE_FLAG)
-, fNested(false)
-, mGroupsOpen(0)
-, mCursor(regular_expression)
-, mCaptureGroupCount(0)
-, mReSyntax(RE_Syntax::PCRE)
-{
-
+RE * RE_Parser::makeAtomicGroup(RE * r) {
+    ParseFailure("Atomic grouping not supported.");
 }
 
-RE * makeAtomicGroup(RE * r) {
-    RE_Parser::ParseFailure("Atomic grouping not supported.");
-}
-
-RE * makeBranchResetGroup(RE * r) {
+RE * RE_Parser::makeBranchResetGroup(RE * r) {
     // Branch reset groups only affect submatch numbering, but
     // this has no effect in icgrep.
-    RE_Parser::ParseFailure("Branch reset groups not supported.");
+    ParseFailure("Branch reset groups not supported.");
 }
 
 RE * RE_Parser::parse_RE() {
@@ -456,10 +444,6 @@ RE * RE_Parser::parseEscapedSet() {
             ParseFailure("Internal error");
     }
 }
-    
-void InvalidUTF8Encoding() {
-    RE_Parser::ParseFailure("Invalid UTF-8 encoding!");
-}
 
 codepoint_t RE_Parser::parse_literal_codepoint() {
     if (fByteMode) {
@@ -470,7 +454,7 @@ codepoint_t RE_Parser::parse_literal_codepoint() {
 
 codepoint_t RE_Parser::parse_utf8_codepoint() {
     // Must cast to unsigned char to avoid sign extension.
-    unsigned char pfx = static_cast<unsigned char>(*mCursor++);
+    const unsigned char pfx = static_cast<unsigned char>(*mCursor++);
     codepoint_t cp = pfx;
     if (pfx < 0x80) return cp;
     unsigned suffix_bytes = 0;
@@ -491,7 +475,7 @@ codepoint_t RE_Parser::parse_utf8_codepoint() {
         if (mCursor.noMore()) {
             InvalidUTF8Encoding();
         }
-        char_t sfx = *mCursor++;
+        const char_t sfx = *mCursor++;
         if ((sfx & 0xC0) != 0x80) {
             InvalidUTF8Encoding();
         }
@@ -891,7 +875,37 @@ Name * RE_Parser::createName(std::string prop, std::string value) {
     return property;
 }
 
-LLVM_ATTRIBUTE_NORETURN void RE_Parser::ParseFailure(std::string errmsg) {
+RE_Parser::RE_Parser(const std::string & regular_expression)
+: fByteMode(false)
+, fModeFlagSet(MULTILINE_MODE_FLAG)
+, fNested(false)
+, mGroupsOpen(0)
+, mCursor(regular_expression)
+, mCaptureGroupCount(0)
+, mReSyntax(RE_Syntax::PCRE) {
+
+}
+
+LLVM_ATTRIBUTE_NORETURN void RE_Parser::InvalidUTF8Encoding() {
+    ParseFailure("Invalid UTF-8 encoding!");
+}
+
+LLVM_ATTRIBUTE_NORETURN void RE_Parser::Cursor::IncompleteRegularExpression() {
+    ParseFailure("Incomplete regular expression!");
+}
+
+LLVM_ATTRIBUTE_NORETURN void RE_Parser::Cursor::ParseFailure(const std::string & errmsg) {
+#if 0
+    // TODO: this ought to check if the cursor position is on a UTF-8 character
+    raw_fd_ostream out(STDERR_FILENO, false);
+    out.changeColor(raw_string_ostream::WHITE);
+    out.write(mStart.base(), mCursor - mStart);
+    out.changeColor(raw_string_ostream::BLUE, true);
+    out << *mCursor;
+    out.changeColor(raw_string_ostream::WHITE);
+    out.write(mCursor.base() + 1, mEnd - mCursor - 1);
+    out << "\n\n";
+#endif
     llvm::report_fatal_error(errmsg);
 }
 

@@ -486,14 +486,16 @@ MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType mark
     // always use PostPosition markers for unbounded repetition.
     PabloAST * base = markerVar(AdvanceMarker(marker, InitialPostPositionUnit, pb));
     if (isByteLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar))) {
-        PabloAST * mask = pb.createOr(markerVar(compile(repeated, pb)), mNonFinal);
+        PabloAST * mask = markerVar(compile(repeated, pb));
         // The post position character may land on the initial byte of a multi-byte character. Combine them with the masked range.
+        mask = pb.createOr(mask, mNonFinal);
         PabloAST * unbounded = pb.createMatchStar(base, mask, "unbounded");
         return makeMarker(FinalPostPositionUnit, unbounded);
     } else if (isUnicodeUnitLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar) && !AlgorithmOptionIsSet(DisableUnicodeMatchStar))) {
-        PabloAST * mask = pb.createOr(markerVar(compile(repeated, pb)), mNonFinal);
-        PabloAST * mstar = pb.createMatchStar(base, mask);
-        return makeMarker(FinalPostPositionUnit, pb.createAnd(mstar, mFinal, "unbounded"));
+        PabloAST * mask = markerVar(compile(repeated, pb));
+        mask = pb.createOr(mask, mNonFinal);
+        PabloAST * unbounded = pb.createMatchStar(base, mask);
+        return makeMarker(FinalPostPositionUnit, pb.createAnd(unbounded, mFinal, "unbounded"));
     } else if (mStarDepth > 0){
         PabloBuilder * const outer = pb.getParent();
         Var * starPending = outer->createVar("pending", outer->createZeroes());
@@ -507,7 +509,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType mark
         pb.createAssign(starPending, pb.createAnd(loopComputation, pb.createNot(m2)));
         pb.createAssign(starAccum, pb.createOr(loopComputation, m2));
         mWhileTest = pb.createOr(mWhileTest, starPending);
-        mStarDepth--;      
+        mStarDepth--;
         return makeMarker(markerPos(result), pb.createOr(base, starAccum, "unbounded"));
     } else {
         Var * whileTest = pb.createVar("test", base);
@@ -582,13 +584,13 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 , mPB(ccCompiler.getBuilder())
 , mCompiledName(&mBaseMap) {
     Var * const linebreak = mKernel->getInputStreamVar("linebreak");
-    mLineBreak = mPB.createExtract(linebreak, mPB.getInteger(0));
+    mLineBreak = mPB.createExtract(linebreak, 0);
     Var * const crlf = mKernel->getInputStreamVar("cr+lf");
-    mCRLF = mPB.createExtract(crlf, mPB.getInteger(0));
+    mCRLF = mPB.createExtract(crlf, 0);
     Var * const required = mKernel->getInputStreamVar("required");
-    mInitial = mPB.createExtract(required, mPB.getInteger(0));
-    mNonFinal = mPB.createExtract(required, mPB.getInteger(1));
-    mFinal = mPB.createExtract(required, mPB.getInteger(2));
+    mInitial = mPB.createExtract(required, 0);
+    mNonFinal = mPB.createExtract(required, 1);
+    mFinal = mPB.createExtract(required, 2);
 }
 
 } // end of namespace re

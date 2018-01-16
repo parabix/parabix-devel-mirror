@@ -122,9 +122,11 @@ bool isByteLength(const RE * re) {
         return isByteLength(e->getLH()) && isByteLength(e->getRH());
     } else if (const CC * cc = dyn_cast<CC>(re)) {
         const cc::Alphabet * a = cc->getAlphabet();
-        if (a == &cc::Unicode) return (cc->max_codepoint() <= 0x7F);
-        else if (a == &cc::Byte) return true;
-        else if (isa<cc::MultiplexedAlphabet>(a)) {
+        if (a == &cc::Unicode) {
+            return (cc->max_codepoint() <= 0x7F);
+        } else if (a == &cc::Byte) {
+            return true;
+        } else if (isa<cc::MultiplexedAlphabet>(a)) {
             const cc::Alphabet * srcA = cast<cc::MultiplexedAlphabet>(a)->getSourceAlphabet();
             if (srcA == &cc::Byte) {
                 return true;
