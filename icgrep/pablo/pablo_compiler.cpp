@@ -55,7 +55,7 @@ inline static unsigned getPointerElementAlignment(const Value * const ptr) {
 
 void PabloCompiler::initializeKernelData(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mBranchCount = 0;
-    examineBlock(b, mKernel->getEntryBlock());
+    examineBlock(b, mKernel->getEntryScope());
     mCarryManager->initializeCarryData(b, mKernel);
     if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {
         const auto count = (mBranchCount * 2) + 1;
@@ -74,7 +74,7 @@ void PabloCompiler::clearCarryData(const std::unique_ptr<kernel::KernelBuilder> 
 
 void PabloCompiler::compile(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mCarryManager->initializeCodeGen(b);
-    PabloBlock * const entryBlock = mKernel->getEntryBlock(); assert (entryBlock);
+    PabloBlock * const entryBlock = mKernel->getEntryScope(); assert (entryBlock);
     mMarker.emplace(entryBlock->createZeroes(), b->allZeroes());
     mMarker.emplace(entryBlock->createOnes(), b->allOnes());
     mBranchCount = 0;

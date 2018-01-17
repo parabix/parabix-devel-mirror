@@ -22,39 +22,17 @@ public:
         T const  _value;
     };
 
-    explicit PabloBuilder(PabloBlock * block)
-    : mPb(block), mParent(nullptr), mExprTable(nullptr) {
-
-    }
-
-    PabloBuilder & operator=(PabloBuilder) = delete;
-
-    PabloBuilder & operator=(PabloBuilder &) = delete;
-
-    PabloBuilder(PabloBuilder && builder)
-    : mPb(builder.mPb)
-    , mParent(builder.mParent)
-    , mExprTable(std::move(builder.mExprTable)) {
-
-    }
-
-    PabloBuilder & operator=(PabloBuilder && builder) {
-        mPb = builder.mPb;
-        mParent = builder.mParent;
-        mExprTable = std::move(builder.mExprTable);
-        return *this;
-    }
-
     using iterator = PabloBlock::iterator;
 
     using const_iterator = PabloBlock::const_iterator;
 
-    static PabloBuilder Create(PabloBlock * block) noexcept {
-        return PabloBuilder(block);
+    PabloBuilder(not_null<PabloBlock *> block)
+    : mPb(block), mParent(nullptr), mExprTable(nullptr) {
+
     }
 
-    static PabloBuilder Create(PabloBuilder & builder) noexcept {
-        return PabloBuilder(PabloBlock::Create(builder.getPabloBlock()->getParent()), builder);
+    PabloBuilder createScope() noexcept {
+        return PabloBuilder(&mPb->createScope(), this);
     }
 
     Zeroes * createZeroes(llvm::Type * const type = nullptr) {
@@ -307,16 +285,16 @@ public:
 
 protected:
 
-    explicit PabloBuilder(PabloBlock * block, PabloBuilder & parent)
-    : mPb(block), mParent(&parent), mExprTable(&(parent.mExprTable)) {
+    PabloBuilder(not_null<PabloBlock *> block, not_null<PabloBuilder *> parent)
+    : mPb(block), mParent(parent), mExprTable(&(parent->mExprTable)) {
 
     }
 
 private:
 
-    PabloBlock *        mPb;
-    PabloBuilder *      mParent;
-    ExpressionTable     mExprTable;
+    PabloBlock * const          mPb;
+    PabloBuilder * const        mParent;
+    ExpressionTable             mExprTable;
 };
 
 

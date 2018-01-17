@@ -169,25 +169,39 @@ private:
     Users                   mUsers;
 };
 
-bool equals(const PabloAST * const expr1, const PabloAST * const expr2);
+bool equals(const PabloAST * const expr1, const PabloAST * const expr2) noexcept;
 
-bool dominates(const PabloAST * const expr1, const PabloAST * const expr2);
+bool dominates(const PabloAST * const expr1, const PabloAST * const expr2) noexcept;
 
-inline bool strictly_dominates(const PabloAST * const expr1, const PabloAST * const expr2) {
+inline bool strictly_dominates(const PabloAST * const expr1, const PabloAST * const expr2) noexcept {
     return (expr1 != expr2) && dominates(expr1, expr2);
 }
 
-bool postdominates(const PabloAST * const expr1, const PabloAST * const expr2);
+bool postdominates(const PabloAST * const expr1, const PabloAST * const expr2) noexcept;
 
-inline bool strictly_postdominates(const PabloAST * const expr1, const PabloAST * const expr2) {
+inline bool strictly_postdominates(const PabloAST * const expr1, const PabloAST * const expr2) noexcept {
     return (expr1 != expr2) && postdominates(expr1, expr2);
 }
 
-class StatementList;
-
 class String;
 
-class Statement : public PabloAST {
+class NamedPabloAST : public PabloAST {
+public:
+    virtual const String & getName() const = 0;
+    void setName(const String * const name);
+protected:
+    explicit NamedPabloAST(const ClassTypeId id, llvm::Type * const type, const String * const name, Allocator & allocator)
+    : PabloAST(id, type, allocator)
+    , mName(name) {
+
+    }
+protected:
+    mutable const String * mName;
+};
+
+class StatementList;
+
+class Statement : public NamedPabloAST {
     friend class StatementList;
     friend class If;
     friend class While;
@@ -205,9 +219,6 @@ public:
     }
 
     void replaceUsesOfWith(PabloAST * const from, PabloAST * const to);
-
-    // NOTE: getName() can generate a default name if one is does not exist for it
-    const String & getName() const;
 
     inline PabloAST * getOperand(const unsigned index) const noexcept {
         assert (index < getNumOperands());
@@ -236,19 +247,18 @@ public:
         return mParent;
     }
 
-    virtual ~Statement() = default;
+    const String & getName() const final;
 
-    void setName(const String * const name);
+    virtual ~Statement() = default;
 
 protected:
 
     explicit Statement(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
-    : PabloAST(id, type, allocator)
+    : NamedPabloAST(id, type, name, allocator)
     , mOperands(operands.size())
     , mOperand(allocator.allocate(mOperands))
     , mNext(nullptr)
     , mPrev(nullptr)
-    , mName(name)
     , mParent(nullptr) {
         unsigned i = 0;
         for (PabloAST * const value : operands) {
@@ -260,11 +270,10 @@ protected:
     }
 
 protected:    
-    unsigned                mOperands;
-    PabloAST **             mOperand;
+    const unsigned          mOperands;
+    PabloAST ** const       mOperand;
     Statement *             mNext;
     Statement *             mPrev;
-    mutable const String *  mName;
     PabloBlock *            mParent;
 };
 
@@ -568,7 +577,7 @@ public:
         return mInsertionPoint;
     }
 
-    bool contains(const Statement * const statement) const;
+    bool contains(const Statement * const statement) const noexcept;
 
 protected:
 

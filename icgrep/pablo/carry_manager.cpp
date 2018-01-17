@@ -94,7 +94,7 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
     // set of carries for that iteration.
 
     assert (mKernel == nullptr);
-    mCurrentScope = kernel->getEntryBlock();
+    mCurrentScope = kernel->getEntryScope();
     mKernel = kernel;
 
     mCarryScopes = 0;
@@ -976,7 +976,7 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
                                    const unsigned ifDepth, const unsigned loopDepth, const bool isNestedWithinNonCarryCollapsingLoop) {
     assert ("scope cannot be null!" && scope);
     assert ("entry scope (and only the entry scope) must be in scope 0"
-            && (mCarryScopes == 0 ? (scope == mKernel->getEntryBlock()) : (scope != mKernel->getEntryBlock())));
+            && (mCarryScopes == 0 ? (scope == mKernel->getEntryScope()) : (scope != mKernel->getEntryScope())));
     assert (mCarryScopes < mCarryMetadata.size());
     Type * const carryTy = b->getBitBlockType();
     Type * const blockTy = b->getBitBlockType();

@@ -61,13 +61,20 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     sourceK->setInitialArguments({buffer, length});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
     
+    StreamSetBuffer * LineFeedStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
+    #ifdef USE_DIRECT_LF_BUILDER
+    kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, 8);
+    pxDriver.makeKernelCall(linefeedK, {ByteStream}, {LineFeedStream});
+    #endif
+
     StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize);
     kernel::Kernel * s2pk = pxDriver.addKernelInstance<kernel::S2PKernel>(idb);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
-    
+
+    #ifndef USE_DIRECT_LF_BUILDER
     kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, 8);
-    StreamSetBuffer * LineFeedStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
     pxDriver.makeKernelCall(linefeedK, {BasisBits}, {LineFeedStream});
+    #endif
 
     kernel::Kernel * linebreakK = pxDriver.addKernelInstance<kernel::LineBreakKernelBuilder>(idb, 8);
     StreamSetBuffer * LineBreakStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);

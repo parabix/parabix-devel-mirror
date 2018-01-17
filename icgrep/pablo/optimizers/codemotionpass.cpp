@@ -87,7 +87,7 @@ struct CodeMotionPassContainer {
             if (LLVM_LIKELY(isa<Statement>(use))) {
                 mScopes.insert(cast<Statement>(use)->getParent());
             } else if (LLVM_UNLIKELY(isa<PabloKernel>(use))) {
-                mScopes.insert(cast<PabloKernel>(use)->getEntryBlock());
+                mScopes.insert(cast<PabloKernel>(use)->getEntryScope());
             }
         }
     }
@@ -126,10 +126,6 @@ struct CodeMotionPassContainer {
             getScopesOfAllUsers(isa<Assign>(stmt) ? cast<Assign>(stmt)->getVariable() : stmt);
         }
         if (LLVM_UNLIKELY(mScopes.empty())) {
-            assert (!isa<Assign>(stmt));
-            // should not occur unless we have a branch with no escaped vars or a statement
-            // that has no users. In either event, the statement itself should be removed.
-            stmt->eraseFromParent(true);
             return;
         }
         while (mScopes.size() > 1) {
@@ -273,7 +269,7 @@ private:
  ** ------------------------------------------------------------------------------------------------------------- */
 bool CodeMotionPass::optimize(PabloKernel * kernel) {
     CodeMotionPassContainer C;
-    C.doCodeMovement(kernel->getEntryBlock());
+    C.doCodeMovement(kernel->getEntryScope());
     #ifndef NDEBUG
     PabloVerifier::verify(kernel, "post-code-motion");
     #endif

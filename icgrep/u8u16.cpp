@@ -94,7 +94,7 @@ void U8U16Kernel::generatePabloMethod() {
     PabloAST * nonASCII = ccc.compileCC(re::makeByte(0x80, 0xFF));
 
     // Builder for the if statement handling all non-ASCII logic
-    PabloBuilder nAb = PabloBuilder::Create(main);
+    auto nAb = main.createScope();
     // Bits 3 through 7 of a 2-byte prefix are data bits, needed to
     // produce the UTF-16 code unit data ...,
     PabloAST * bit3a1 = nAb.createAdvance(u8_bits[3], 1);
@@ -106,7 +106,7 @@ void U8U16Kernel::generatePabloMethod() {
     // Entry condition for 3 or 4 byte sequences: we have a prefix byte in the range 0xE0-0xFF.
     PabloAST * pfx34 = ccc.compileCC(re::makeByte(0xE0, 0xFF), nAb);
     // Builder for the if statement handling all logic for 3- and 4-byte sequences.
-    PabloBuilder p34b = PabloBuilder::Create(nAb);
+    auto p34b = nAb.createScope();
     // Bits 4 through 7 of a 3-byte prefix are data bits.  They must be moved
     // to the final position of the 3-byte sequence.
     PabloAST * bit2a1 = p34b.createAdvance(u8_bits[2], 1);
@@ -125,7 +125,7 @@ void U8U16Kernel::generatePabloMethod() {
     // Entry condition  or 4 byte sequences: we have a prefix byte in the range 0xF0-0xFF.
     PabloAST * pfx4 = ccc.compileCC(re::makeByte(0xF0, 0xFF), p34b);
     // Builder for the if statement handling all logic for 4-byte sequences only.
-    PabloBuilder p4b = PabloBuilder::Create(p34b);
+    auto p4b = p34b.createScope();
     // Illegal 4-byte sequences
     PabloAST * F0 = ccc.compileCC(re::makeByte(0xF0), p4b);
     PabloAST * F4 = ccc.compileCC(re::makeByte(0xF4), p4b);

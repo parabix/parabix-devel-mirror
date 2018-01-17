@@ -8,6 +8,7 @@
 
 #include <kernels/processing_rate.h>
 #include <kernels/attributes.h>
+#include <llvm/Support/Compiler.h>
 #include <memory>
 #include <string>
 #include <vector>

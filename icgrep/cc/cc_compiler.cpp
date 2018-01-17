@@ -22,7 +22,7 @@ using namespace llvm;
 namespace cc {
 
 CC_Compiler::CC_Compiler(pablo::PabloKernel * kernel, pablo::Var * basisBits)
-: mBuilder(kernel->getEntryBlock())
+: mBuilder(kernel->getEntryScope())
 , mEncodingBits(basisBits->getType()->getArrayNumElements())
 , mBasisBit(mEncodingBits) {
     for (unsigned i = 0; i != mEncodingBits; i++) {

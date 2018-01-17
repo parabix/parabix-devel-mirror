@@ -286,7 +286,7 @@ Value * SourceBuffer::getBaseAddress(IDISA::IDISA_Builder * const b, Value * con
 
 Value * SourceBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value * availItems, bool reverse) const {
     if (reverse) report_fatal_error("SourceBuffer cannot be accessed in reverse");
-    Value * maxAvail = b->CreateSub(getBufferedSize(b, handle), fromPosition);
+    Value * maxAvail = b->CreateNUWSub(getBufferedSize(b, handle), fromPosition);
     return b->CreateSelect(b->CreateICmpULT(availItems, maxAvail), availItems, maxAvail);
 }
 

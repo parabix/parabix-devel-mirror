@@ -193,7 +193,7 @@ MarkerType RE_Compiler::compileSeqTail(Seq::const_iterator current, const Seq::c
         Var * m = pb.createVar("m", pb.createZeroes());
         NameMap nestedMap(mCompiledName);
         mCompiledName = &nestedMap;
-        PabloBuilder nested = PabloBuilder::Create(pb);
+        auto nested = pb.createScope();
         MarkerType m1 = compileSeqTail(current, end, 0, marker, nested);
         nested.createAssign(m, markerVar(m1));
         pb.createIf(markerVar(marker), nested);
@@ -316,7 +316,7 @@ PabloAST * RE_Compiler::consecutive_matches(PabloAST * const repeated_j, const i
     const int k = j + i;
     if (/*j > IfInsertionGap*/ false) {
         Var * repeated = pb.createVar("repeated", pb.createZeroes());
-        PabloBuilder nested = PabloBuilder::Create(pb);
+        auto nested = pb.createScope();
         NameMap nestedMap(mCompiledName);
         mCompiledName = &nestedMap;
         PabloAST * adv_i = nested.createIndexedAdvance(repeated_j, indexStream, i);
@@ -406,7 +406,7 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
         return marker;
     }
     Var * m = pb.createVar("m", pb.createZeroes());
-    PabloBuilder nested = PabloBuilder::Create(pb);
+    auto nested = pb.createScope();
     NameMap nestedMap(mCompiledName);
     mCompiledName = &nestedMap;
     MarkerType m1 = processLowerBound(repeated, lb - group, marker, ifGroupSize * 2, nested);
@@ -472,7 +472,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Mar
         return marker;
     }
     Var * const m1a = pb.createVar("m", pb.createZeroes());
-    PabloBuilder nested = PabloBuilder::Create(pb);
+    auto nested = pb.createScope();
     NameMap nestedMap(mCompiledName);
     mCompiledName = &nestedMap;
     MarkerType m1 = processBoundedRep(repeated, ub - group, marker, ifGroupSize * 2, nested);
@@ -516,7 +516,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType mark
         Var * whilePending = pb.createVar("pending", base);
         Var * whileAccum = pb.createVar("accum", base);
         mWhileTest = pb.createZeroes();
-        PabloBuilder wb = PabloBuilder::Create(pb);
+        auto wb = pb.createScope();
         NameMap nestedMap(mCompiledName);
         mCompiledName = &nestedMap;
         mStarDepth++;

@@ -25,7 +25,7 @@ inline std::string make_e(int i, int j) {return ("e_"+std::to_string(i)+"_"+std:
 
 
 void optimizer(const std::string & patt, PabloAST * basisBits[], std::vector<std::vector<PabloAST *>> & e, unsigned i, PabloAST * cond, PabloBuilder & main, PabloBuilder & pb, int dist, int stepSize){
-    PabloBuilder it = PabloBuilder::Create(pb);
+    auto it = pb.createScope();
 
     Zeroes * zeroes = pb.createZeroes();
 

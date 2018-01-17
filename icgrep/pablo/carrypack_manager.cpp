@@ -114,7 +114,7 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
 
     assert (mKernel == nullptr);
 
-    mCurrentScope = kernel->getEntryBlock();
+    mCurrentScope = kernel->getEntryScope();
     mKernel = kernel;
 
     Type * const carryTy = iBuilder->getBitBlockType();
@@ -124,7 +124,7 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
 
     mCarryScopes = 0;
     mCarryMetadata.resize(getScopeCount(mCurrentScope));
-    mCarryGroup.resize(assignDefaultCarryGroups(kernel->getEntryBlock()));
+    mCarryGroup.resize(assignDefaultCarryGroups(kernel->getEntryScope()));
 
     kernel->setCarryDataTy(analyse(iBuilder, mCurrentScope));
 
@@ -1105,7 +1105,7 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
 
     assert ("scope cannot be null!" && scope);
     assert ("the entry scope -- and only the entry scope -- must be in carry scope 0"
-            && (mCarryScopes == 0 ? (scope == mKernel->getEntryBlock()) : (scope != mKernel->getEntryBlock())));
+            && (mCarryScopes == 0 ? (scope == mKernel->getEntryScope()) : (scope != mKernel->getEntryScope())));
     assert (mCarryScopes < mCarryMetadata.size());
 
     Type * const carryTy = iBuilder->getBitBlockType();

@@ -51,13 +51,13 @@ public:
 
     virtual ~PabloKernel();
 
-    PabloBlock * getEntryBlock() const {
-        return mEntryBlock;
+    PabloBlock * getEntryScope() const {
+        return mEntryScope;
     }
 
-    PabloBlock * setEntryBlock(PabloBlock * entryBlock) {
+    PabloBlock * setEntryScope(PabloBlock * entryBlock) {
         assert (entryBlock);
-        std::swap(mEntryBlock, entryBlock);
+        std::swap(mEntryScope, entryBlock);
         return entryBlock;
     }
     
@@ -158,7 +158,7 @@ protected:
         mCarryDataTy = carryDataTy;
     }
 
-    Var * makeVariable(String * name, llvm::Type * const type);
+    Var * makeVariable(const String * name, llvm::Type * const type);
 
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
@@ -185,7 +185,7 @@ private:
     Allocator                       mAllocator;
     PabloCompiler *                 mPabloCompiler;
     SymbolGenerator *               mSymbolTable;
-    PabloBlock *                    mEntryBlock;
+    PabloBlock *                    mEntryScope;
     llvm::IntegerType *             mSizeTy;
     llvm::VectorType *              mStreamTy;
     llvm::StructType *              mCarryDataTy;

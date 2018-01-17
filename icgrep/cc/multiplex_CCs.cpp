@@ -122,26 +122,16 @@ MultiplexedAlphabet::MultiplexedAlphabet(std::string alphabetName, const std::ve
         }
         cc::doMultiplexCCs(CCs, mExclusiveSetIDs, mMultiplexedCCs);
 }
-
-const Alphabet * MultiplexedAlphabet::getSourceAlphabet() const {
-    return mSourceAlphabet;
-}
-
-std::vector<std::vector<unsigned>> MultiplexedAlphabet::getExclusiveSetIDs() { 
-    return mExclusiveSetIDs;
-}
-
-std::vector<re::CC *> MultiplexedAlphabet::getMultiplexedCCs() {
-    return mMultiplexedCCs;
-}
     
 re::CC * MultiplexedAlphabet::transformCC(const re::CC * sourceCC) const {
-    if (sourceCC->getAlphabet() != mSourceAlphabet) llvm::report_fatal_error("Mismatched source alphabets for transformCC");
-    
-    const auto index = find(mUnicodeSets.begin(), mUnicodeSets.end(), sourceCC) - mUnicodeSets.begin();
-    if (index >= mUnicodeSets.size()) {
-        llvm::errs() << Printer_RE::PrintRE(sourceCC) << " not found\n";
+    if (sourceCC->getAlphabet() != mSourceAlphabet) {
+        llvm::report_fatal_error("Mismatched source alphabets for transformCC");
     }
+    const auto f = find(mUnicodeSets.begin(), mUnicodeSets.end(), sourceCC);
+    if (f == mUnicodeSets.end()) {
+        llvm::report_fatal_error(Printer_RE::PrintRE(sourceCC) + " not found");
+    }
+    const auto index = f - mUnicodeSets.begin();
     const auto exclusive_IDs = mExclusiveSetIDs[index];
     re::CC * CC_union = re::makeCC(this);
     for (auto i : exclusive_IDs) {

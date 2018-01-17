@@ -209,7 +209,7 @@ std::string PatternKernel::makeSignature(const std::unique_ptr<kernel::KernelBui
 }
 
 void PatternKernel::generatePabloMethod() {
-    PabloBuilder entry(getEntryBlock());
+    PabloBuilder entry(getEntryScope());
     Var * const pat = getInputStreamVar("pat");
     PabloAST * basisBits[4];
     basisBits[0] = entry.createExtract(pat, 0, "A");

@@ -376,7 +376,7 @@ bool SchedulingPrePass::optimize(PabloKernel * const kernel) {
     llvm::report_fatal_error("DistributivePass is unsupported");
     #else
     SchedulingPrePassContainer S;
-    S.run(kernel->getEntryBlock());
+    S.run(kernel->getEntryScope());
     PabloVerifier::verify(kernel, "post-scheduling-prepass");
     return true;
     #endif

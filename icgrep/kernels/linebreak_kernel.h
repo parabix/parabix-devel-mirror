@@ -7,23 +7,15 @@
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
 
+#define USE_DIRECT_LF_BUILDER
+
 namespace kernel { class KernelBuilder; }
 
 namespace kernel {
 
-class DirectLineFeedBuilder final : public pablo::PabloKernel {
-public:
-    DirectLineFeedBuilder(const std::unique_ptr<KernelBuilder> & b);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-};
-
-
 class LineFeedKernelBuilder final : public pablo::PabloKernel {
 public:
-    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, unsigned basisBitsCount);
+    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, unsigned codeUnitWidth = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

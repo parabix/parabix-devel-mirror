@@ -53,7 +53,7 @@ void U8U32KernelBuilder::generatePabloMethod() {
     Var * error_mask = main.createVar("error_mask", zeroes);
     
     PabloAST * ASCII = ccc.compileCC("ASCII", re::makeByte(0x0, 0x7F), main);
-    PabloBuilder ascii = PabloBuilder::Create(main);
+    auto ascii = main.createScope();
     for (int i = 1; i <= 7; i++) {
         ascii.createAssign(u32_2[i], ascii.createOr(u32_2[i], ascii.createAnd(ASCII, u8_bits[i])));
     }
@@ -61,7 +61,7 @@ void U8U32KernelBuilder::generatePabloMethod() {
     
     PabloAST * u8pfx = ccc.compileCC("u8pfx", re::makeByte(0xC0, 0xFF), main);
     PabloAST * nonASCII = ccc.compileCC("u8pfx", re::makeByte(0x80, 0xFF), main);
-    PabloBuilder it = PabloBuilder::Create(main);
+    auto it = main.createScope();
     main.createIf(nonASCII, it);
     
     Var * u8invalid = it.createVar("u8invalid", zeroes);
@@ -75,7 +75,7 @@ void U8U32KernelBuilder::generatePabloMethod() {
     //
     // Two-byte sequences
     Var * u8scope22 = it.createVar("u8scope22", zeroes);
-    PabloBuilder it2 = PabloBuilder::Create(it);
+    auto it2 = it.createScope();
     it.createIf(u8pfx2, it2);
     it2.createAssign(u8scope22, it2.createAdvance(u8pfx2, 1));
     //PabloAST * u8scope22 = it2.createAdvance(u8pfx2, 1, "u8scope22");
@@ -94,7 +94,7 @@ void U8U32KernelBuilder::generatePabloMethod() {
     Var * EX_invalid = it.createVar("EX_invalid", zeroes);
     Var * del3 = it.createVar("del3", zeroes);
 
-    PabloBuilder it3 = PabloBuilder::Create(it);
+    auto it3 = it.createScope();
     it.createIf(u8pfx3, it3);
     
     PabloAST * u8scope32 = it3.createAdvance(u8pfx3, 1, "u8scope32");
@@ -124,7 +124,7 @@ void U8U32KernelBuilder::generatePabloMethod() {
     Var * FX_invalid = it.createVar("FX_invalid", zeroes);
     Var * del4 = it.createVar("del4", zeroes);
     
-    PabloBuilder it4 = PabloBuilder::Create(it);
+    auto it4 = it.createScope();
     it.createIf(u8pfx4, it4);
     PabloAST * u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
     PabloAST * u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");

@@ -36,11 +36,11 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     Var * error_mask = main.createVar("error_mask", zeroes);
     
     PabloAST * ASCII = ccc.compileCC("ASCII", re::makeCC(0x0, 0x7F), main);
-    PabloBuilder ascii = PabloBuilder::Create(main);
+    auto ascii = main.createScope();
     main.createIf(ASCII, ascii);
     PabloAST * u8pfx = ccc.compileCC("u8pfx", re::makeCC(0xC0, 0xFF), main);
     PabloAST * nonASCII = ccc.compileCC("u8pfx", re::makeCC(0x80, 0xFF), main);
-    PabloBuilder it = PabloBuilder::Create(main);
+    auto it = main.createScope();
     main.createIf(nonASCII, it);
     Var * u8invalid = it.createVar("u8invalid", zeroes);
     PabloAST * u8pfx2 = ccc.compileCC(re::makeCC(0xC2, 0xDF), it);
@@ -50,7 +50,7 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     //
     // Two-byte sequences
     Var * u8scope22 = it.createVar("u8scope22", zeroes);
-    PabloBuilder it2 = PabloBuilder::Create(it);
+    auto it2 = it.createScope();
     it.createIf(u8pfx2, it2);
     it2.createAssign(u8scope22, it2.createAdvance(u8pfx2, 1));
     //
@@ -58,7 +58,7 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     Var * u8scope3X = it.createVar("u8scope3X", zeroes);
     Var * EX_invalid = it.createVar("EX_invalid", zeroes);
     Var * del3 = it.createVar("del3", zeroes);
-    PabloBuilder it3 = PabloBuilder::Create(it);
+    auto it3 = it.createScope();
     it.createIf(u8pfx3, it3);
     PabloAST * u8scope32 = it3.createAdvance(u8pfx3, 1, "u8scope32");
     PabloAST * u8scope33 = it3.createAdvance(u8scope32, 1, "u8scope33");
@@ -73,7 +73,7 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     Var * u8scope4X = it.createVar("u8scope4X", zeroes);
     Var * FX_invalid = it.createVar("FX_invalid", zeroes);
     Var * del4 = it.createVar("del4", zeroes);
-    PabloBuilder it4 = PabloBuilder::Create(it);
+    auto it4 = it.createScope();
     it.createIf(u8pfx4, it4);
     PabloAST * u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
     PabloAST * u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");

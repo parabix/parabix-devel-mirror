@@ -12,7 +12,7 @@
 
 namespace pablo {
 
-class Var : public PabloAST {
+class Var : public NamedPabloAST {
     friend class PabloBlock;
     friend class PabloAST;
     friend class PabloKernel;
@@ -76,20 +76,20 @@ public:
             mAttribute &= ~(Attribute::Scalar);
         }
     }
-    const String & getName() const noexcept {
+
+    const String & getName() const final {
+        assert (mName);
         return *mName;
     }
 
 protected:
     Var(const String * name, llvm::Type * const type, Allocator & allocator, const Attribute attr = Attribute::None)
-    : PabloAST(ClassTypeId::Var, type, allocator)
-    , mAttribute(attr)
-    , mName(name) {
+    : NamedPabloAST(ClassTypeId::Var, type, name, allocator)
+    , mAttribute(attr) {
 
     }
 private:
     unsigned mAttribute;
-    const String * const mName;
 };
 
 class Extract : public PabloAST {

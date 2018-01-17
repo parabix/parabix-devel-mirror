@@ -129,9 +129,9 @@ struct PassContainer {
      * Try to simplify the equations and eliminate some of the unnecessary statements
      ** ------------------------------------------------------------------------------------------------------------- */
     bool run(PabloKernel * const kernel) {
-        readAST(kernel->getEntryBlock());
+        readAST(kernel->getEntryScope());
         if (LLVM_LIKELY(simplifyGraph())) {
-            rewriteAST(kernel->getEntryBlock());
+            rewriteAST(kernel->getEntryScope());
             return true;
         }
         return false;

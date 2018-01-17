@@ -7,6 +7,7 @@
 #include <boost/uuid/sha1.hpp>
 #include <re/printer_re.h>
 #include <re/re_toolchain.h>
+#include <re/re_reverse.h>
 #include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
 #include <pablo/builder.hpp>
@@ -50,8 +51,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     Var * const u8invalid = pb.createVar("u8invalid", ZEROES);
     Var * const valid_pfx = pb.createVar("valid_pfx", u8pfx);
 
-    PabloBuilder it = PabloBuilder::Create(pb);
-
+    auto it = pb.createScope();
     pb.createIf(u8pfx, it);
     PabloAST * const u8pfx2 = ccc.compileCC(makeByte(0xC2, 0xDF), it);
     PabloAST * const u8pfx3 = ccc.compileCC(makeByte(0xE0, 0xEF), it);
@@ -61,14 +61,14 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     //
     // Two-byte sequences
     Var * const anyscope = it.createVar("anyscope", ZEROES);
-    PabloBuilder it2 = PabloBuilder::Create(it);
+    auto it2 = it.createScope();
     it.createIf(u8pfx2, it2);
     it2.createAssign(anyscope, it2.createAdvance(u8pfx2, 1));
 
     //
     // Three-byte sequences    
     Var * const EF_invalid = it.createVar("EF_invalid", ZEROES);
-    PabloBuilder it3 = PabloBuilder::Create(it);
+    auto it3 = it.createScope();
     it.createIf(u8pfx3, it3);
     PabloAST * const u8scope32 = it3.createAdvance(u8pfx3, 1);
     it3.createAssign(nonFinal, it3.createOr(nonFinal, u8scope32));
@@ -83,7 +83,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
 
     //
     // Four-byte sequences
-    PabloBuilder it4 = PabloBuilder::Create(it);
+    auto it4 = it.createScope();
     it.createIf(u8pfx4, it4);
     PabloAST * const u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
     PabloAST * const u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
@@ -177,26 +177,30 @@ ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
 }
 
 // Helper to compute stream set inputs to pass into PabloKernel constructor.
-std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<cc::Alphabet *> alphabets) {
-    std::vector<Binding> streamSetInputs = {Binding{iBuilder->getStreamSetTy(8), "basis"},
-        Binding{iBuilder->getStreamSetTy(1, 1), "linebreak"},
-        Binding{iBuilder->getStreamSetTy(1, 1), "cr+lf"},
-        Binding{iBuilder->getStreamSetTy(3, 1), "required"}};
-    for (unsigned i = 0; i < alphabets.size(); i++) {
-        unsigned basis_size = cast<cc::MultiplexedAlphabet>(alphabets[i])->getMultiplexedCCs().size();
-        streamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(basis_size, 1), alphabets[i]->getName() + "_basis"});
+inline std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                         const std::vector<cc::Alphabet *> & alphabets) {
+    std::vector<Binding> streamSetInputs = {
+        Binding{b->getStreamSetTy(8), "basis"},
+        Binding{b->getStreamSetTy(1, 1), "linebreak"},
+        Binding{b->getStreamSetTy(1, 1), "cr+lf"},
+        Binding{b->getStreamSetTy(3, 1), "required"}
+    };
+    for (const auto & alphabet : alphabets) {
+        unsigned basis_size = cast<cc::MultiplexedAlphabet>(alphabet)->getMultiplexedCCs().size();
+        streamSetInputs.push_back(Binding{b->getStreamSetTy(basis_size, 1), alphabet->getName() + "_basis"});
     }
     return streamSetInputs;
 }
 
-ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, RE * const re, std::vector<cc::Alphabet *> alphabets)
+ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<cc::Alphabet *> alphabets)
 : ICGrepSignature(re)
-, PabloKernel(iBuilder, "ic" + sha1sum(mSignature),
+, PabloKernel(b, "ic" + sha1sum(mSignature),
 // inputs
-icGrepInputs(iBuilder, alphabets),
+icGrepInputs(b, alphabets),
 // output
-{Binding{iBuilder->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}}) {
-    mAlphabets = alphabets;
+{Binding{b->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}})
+, mAlphabets(alphabets) {
+
 }
 
 std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -207,18 +211,18 @@ void ICGrepKernel::generatePabloMethod() {
     Var * const basis = getInputStreamVar("basis");
     cc::CC_Compiler cc_compiler(this, basis);
     RE_Compiler re_compiler(this, cc_compiler);
-    for (unsigned i = 0; i < mAlphabets.size(); i++) {
-        auto basis = getInputStreamVar(mAlphabets[i]->getName() + "_basis");
-        re_compiler.addAlphabet(mAlphabets[i], basis);
+    for (auto a : mAlphabets) {
+        auto basis = getInputStreamVar(a->getName() + "_basis");
+        re_compiler.addAlphabet(a, basis);
     }
-    PabloAST * const match_post = re_compiler.compile(mRE);
-    PabloBlock * const pb = getEntryBlock();
+    PabloAST * const matches = re_compiler.compile(mRE);
+    PabloBlock * const pb = getEntryScope();
     Var * const output = getOutputStreamVar("matches");
-    pb->createAssign(pb->createExtract(output, pb->getInteger(0)), match_post);
+    pb->createAssign(pb->createExtract(output, pb->getInteger(0)), matches);
 }
 
 void MatchedLinesKernel::generatePabloMethod() {
-    auto pb = this->getEntryBlock();
+    auto pb = this->getEntryScope();
     PabloAST * matchResults = pb->createExtract(getInputStreamVar("matchResults"), pb->getInteger(0));
     PabloAST * lineBreaks = pb->createExtract(getInputStreamVar("lineBreaks"), pb->getInteger(0));
     PabloAST * notLB = pb->createNot(lineBreaks);
@@ -258,7 +262,7 @@ InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBui
 
 
 void PopcountKernel::generatePabloMethod() {
-    auto pb = this->getEntryBlock();
+    auto pb = this->getEntryScope();
     const auto toCount = pb->createExtract(getInputStreamVar("toCount"), pb->getInteger(0));
     pablo::Var * countResult = getOutputScalarVar("countResult");
     pb->createAssign(countResult, pb->createCount(toCount));
@@ -266,8 +270,9 @@ void PopcountKernel::generatePabloMethod() {
 
 PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
 : PabloKernel(iBuilder, "Popcount",
-              {Binding{iBuilder->getStreamSetTy(1), "toCount"}},
-              {},
-              {},
-              {Binding{iBuilder->getSizeTy(), "countResult"}}) {
+{Binding{iBuilder->getStreamSetTy(1), "toCount"}},
+{},
+{},
+{Binding{iBuilder->getSizeTy(), "countResult"}}) {
+
 }

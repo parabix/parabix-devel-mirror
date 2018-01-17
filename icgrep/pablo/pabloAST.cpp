@@ -34,7 +34,7 @@ size_t constexpr __length(const char * const str) {
  *  Return true if expr1 and expr2 can be proven equivalent according to some rules, false otherwise.  Note that
  *  false may be returned i some cases when the exprs are equivalent.
  ** ------------------------------------------------------------------------------------------------------------- */
-bool equals(const PabloAST * const expr1, const PabloAST * const expr2) {
+bool equals(const PabloAST * const expr1, const PabloAST * const expr2) noexcept {
     assert (expr1 && expr2);
     if (LLVM_UNLIKELY(expr1 == expr2)) {
         return true;
@@ -132,6 +132,61 @@ bool PabloAST::removeUser(PabloAST * const user) noexcept {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PabloAST::print(llvm::raw_ostream & O) const {
     PabloPrinter::print(this, O);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setName
+ ** ------------------------------------------------------------------------------------------------------------- */
+void NamedPabloAST::setName(const String * const name) {
+    if (LLVM_UNLIKELY(name == nullptr)) {
+        llvm::report_fatal_error("name cannot be null");
+    }
+    mName = name;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getName
+ ** ------------------------------------------------------------------------------------------------------------- */
+const String & Statement::getName() const {
+    if (mName == nullptr) {
+        if (LLVM_UNLIKELY(mParent == nullptr)) {
+            llvm::report_fatal_error("cannot assign a default name to a statement that is not within a PabloBlock");
+        }
+        const char * prefix = nullptr;
+        size_t length = 0;
+        #define MAKE_PREFIX(type_id, name) \
+            case ClassTypeId:: type_id : prefix = name; length = __length(name); break
+        switch (mClassTypeId) {
+            // Boolean operations
+            MAKE_PREFIX(And, "and");
+            MAKE_PREFIX(Or, "or");
+            MAKE_PREFIX(Xor, "xor");
+            MAKE_PREFIX(Not, "not");
+            MAKE_PREFIX(Sel, "sel");
+            // Stream operations
+            MAKE_PREFIX(Advance, "advance");
+            MAKE_PREFIX(IndexedAdvance, "indexed_advance");
+            MAKE_PREFIX(ScanThru, "scanthru");
+            MAKE_PREFIX(AdvanceThenScanThru, "advscanthru");
+            MAKE_PREFIX(ScanTo, "scanto");
+            MAKE_PREFIX(AdvanceThenScanTo, "advscanto");
+            MAKE_PREFIX(Lookahead, "lookahead");
+            MAKE_PREFIX(MatchStar, "matchstar");
+            MAKE_PREFIX(InFile, "inFile");
+            MAKE_PREFIX(AtEOF, "atEOF");
+            // Statistics operations
+            MAKE_PREFIX(Count, "count");
+            // Misc. operations
+            MAKE_PREFIX(Repeat, "repeat");
+            MAKE_PREFIX(PackH, "packh");
+            MAKE_PREFIX(PackL, "packl");
+            default: llvm_unreachable("invalid statement type");
+        }
+        #undef MAKE_PREFIX
+        const StringRef __prefix(prefix, length);
+        mName = mParent->makeName(__prefix);
+    }
+    return *mName;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -288,9 +343,10 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
     if (LLVM_UNLIKELY(expr == this)) {
         return getNextNode();
     }
-    if (LLVM_LIKELY(rename && isa<Statement>(expr))) {
-        if (mName && cast<Statement>(expr)->mName == nullptr) {
+    if (LLVM_UNLIKELY(mName && rename)) {
+        if (LLVM_LIKELY(isa<Statement>(expr) && cast<Statement>(expr)->mName == nullptr)) {
             cast<Statement>(expr)->setName(mName);
+            mName = nullptr;
         }
     }
     replaceAllUsesWith(expr);
@@ -298,64 +354,9 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getName
- ** ------------------------------------------------------------------------------------------------------------- */
-const String & Statement::getName() const {
-    if (mName == nullptr) {
-        if (LLVM_UNLIKELY(mParent == nullptr)) {
-            llvm::report_fatal_error("cannot assign a default name to a statement that is not within a PabloBlock");
-        }
-        const char * prefix = nullptr;
-        size_t length = 0;
-        #define MAKE_PREFIX(type_id, name) \
-            case ClassTypeId:: type_id : prefix = name; length = __length(name); break
-        switch (mClassTypeId) {
-            // Boolean operations
-            MAKE_PREFIX(And, "and");
-            MAKE_PREFIX(Or, "or");
-            MAKE_PREFIX(Xor, "xor");
-            MAKE_PREFIX(Not, "not");
-            MAKE_PREFIX(Sel, "sel");
-            // Stream operations
-            MAKE_PREFIX(Advance, "advance");
-            MAKE_PREFIX(IndexedAdvance, "indexed_advance");
-            MAKE_PREFIX(ScanThru, "scanthru");
-            MAKE_PREFIX(AdvanceThenScanThru, "advscanthru");
-            MAKE_PREFIX(ScanTo, "scanto");
-            MAKE_PREFIX(AdvanceThenScanTo, "advscanto");
-            MAKE_PREFIX(Lookahead, "lookahead");
-            MAKE_PREFIX(MatchStar, "matchstar");
-            MAKE_PREFIX(InFile, "inFile");
-            MAKE_PREFIX(AtEOF, "atEOF");
-            // Statistics operations
-            MAKE_PREFIX(Count, "count");
-            // Misc. operations
-            MAKE_PREFIX(Repeat, "repeat");
-            MAKE_PREFIX(PackH, "packh");
-            MAKE_PREFIX(PackL, "packl");
-            default: llvm_unreachable("invalid statement type");
-        }
-        #undef MAKE_PREFIX
-        const StringRef __prefix(prefix, length);
-        mName = mParent->makeName(__prefix);
-    }
-    return *mName;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief setName
- ** ------------------------------------------------------------------------------------------------------------- */
-void Statement::setName(const String * const name) {
-    if (LLVM_UNLIKELY(name == nullptr)) {
-        llvm::report_fatal_error("Statement name cannot be null!");
-    }
-    mName = name;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief contains
  ** ------------------------------------------------------------------------------------------------------------- */
-bool StatementList::contains(const Statement * const statement) const {
+bool StatementList::contains(const Statement * const statement) const noexcept {
     for (const Statement * stmt : *this) {
         if (statement == stmt) {
             return true;
@@ -378,7 +379,7 @@ bool StatementList::contains(const Statement * const statement) const {
  * 5.   Assign a, q         5 >> 5
  * 6. Assign a, t           6 >> 6
  ** ------------------------------------------------------------------------------------------------------------- */
-bool dominates(const PabloAST * const expr1, const PabloAST * const expr2) {
+bool dominates(const PabloAST * const expr1, const PabloAST * const expr2) noexcept {
     if (LLVM_UNLIKELY(expr1 == nullptr || expr2 == nullptr)) {
         return (expr2 == nullptr);
     } else if (LLVM_LIKELY(isa<Statement>(expr1))) {
@@ -427,7 +428,7 @@ bool dominates(const PabloAST * const expr1, const PabloAST * const expr2) {
  * 5.   Assign a, q         5 << 1, 2, 4, 5
  * 6. Assign a, t           6 << 1, 2, 3, 4, 5, 6
  ** ------------------------------------------------------------------------------------------------------------- */
-bool postdominates(const PabloAST * const expr1, const PabloAST * const expr2) {
+bool postdominates(const PabloAST * const expr1, const PabloAST * const expr2) noexcept {
     throw std::runtime_error("not implemented yet!");
 }
 

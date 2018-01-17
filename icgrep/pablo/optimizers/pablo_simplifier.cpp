@@ -70,9 +70,9 @@ struct PassContainer {
  * @brief run
  ** ------------------------------------------------------------------------------------------------------------- */
 void run(PabloKernel * const kernel) {
-    redundancyElimination(kernel->getEntryBlock(), nullptr, nullptr);
-    strengthReduction(kernel->getEntryBlock());
-    deadCodeElimination(kernel->getEntryBlock());
+    redundancyElimination(kernel->getEntryScope(), nullptr, nullptr);
+    strengthReduction(kernel->getEntryScope());
+    deadCodeElimination(kernel->getEntryScope());
 }
 
 protected:

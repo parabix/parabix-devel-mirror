@@ -22,11 +22,17 @@ public:
     
     const unsigned getSize() const override {return mUnicodeSets.size() + 1;}
 
-    const Alphabet * getSourceAlphabet() const;
+    const Alphabet * getSourceAlphabet() const {
+        return mSourceAlphabet;
+    }
     
-    std::vector<std::vector<unsigned>> getExclusiveSetIDs();
+    const std::vector<std::vector<unsigned>> & getExclusiveSetIDs() const {
+        return mExclusiveSetIDs;
+    }
     
-    std::vector<re::CC *> getMultiplexedCCs();
+    const std::vector<re::CC *> & getMultiplexedCCs() const {
+        return mMultiplexedCCs;
+    }
     
     re::CC * transformCC(const re::CC * sourceCC) const;
     

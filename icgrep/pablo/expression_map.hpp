@@ -14,7 +14,7 @@ struct FixedArgMap {
     typedef std::tuple<PabloAST::ClassTypeId, Args...> Key;
     friend struct ExpressionTable;
 
-    explicit FixedArgMap(Type * predecessor = nullptr) noexcept
+    explicit FixedArgMap(const Type * predecessor = nullptr) noexcept
     : mPredecessor(predecessor) {
 
     }
@@ -91,7 +91,7 @@ private:
     }
 
 private:
-    Type *                      mPredecessor;
+    const Type *                mPredecessor;
     std::map<Key, PabloAST *>   mMap;
 };
 

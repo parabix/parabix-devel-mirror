@@ -21,37 +21,29 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 
-
-DirectLineFeedBuilder::DirectLineFeedBuilder(const std::unique_ptr<kernel::KernelBuilder> & b)
-: PabloKernel(b, "lf_byte",
+LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth)
+: PabloKernel(b, "lf" + std::to_string(codeUnitWidth),
 // input
-{Binding{b->getStreamSetTy(1, 8), "codeUnitStream", FixedRate(), Principal()}},
-// output
-{Binding{b->getStreamSetTy(1), "lf"}}) {
-
-}
-
-void DirectLineFeedBuilder::generatePabloMethod() {
-    PabloBuilder pb(getEntryBlock());
-    PabloAST * LF = compileCCfromCodeUnitStream(makeByte(0x0A), getInput(0), pb);
-    pb.createAssign(pb.createExtract(getOutput(0), pb.getInteger(0)), LF);
-}
-
-
-LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned basisBitsCount)
-: PabloKernel(b, "lf" + std::to_string(basisBitsCount),
-// input
-{Binding{b->getStreamSetTy(basisBitsCount), "basis", FixedRate(), Principal()}},
+#ifdef USE_DIRECT_LF_BUILDER
+{Binding{b->getStreamSetTy(1, codeUnitWidth), "byteStream", FixedRate(), Principal()}},
+#else
+{Binding{b->getStreamSetTy(codeUnitWidth), "basis", FixedRate(), Principal()}},
+#endif
 // output
 {Binding{b->getStreamSetTy(1), "lf"}}) {
 
 }
 
 void LineFeedKernelBuilder::generatePabloMethod() {
+    #ifdef USE_DIRECT_LF_BUILDER
+    PabloBuilder pb(getEntryScope());
+    PabloAST * LF = compileCCfromCodeUnitStream(makeByte(0x0A), getInput(0), pb);
+    #else
     CC_Compiler ccc(this, getInput(0));
     auto & pb = ccc.getBuilder();
     PabloAST * LF = ccc.compileCC("LF", makeByte(0x0A), pb);
-    pb.createAssign(pb.createExtract(getOutput(0), pb.getInteger(0)), LF);
+    #endif
+    pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
 }
 
 LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned basisBitsCount)
@@ -78,7 +70,7 @@ void LineBreakKernelBuilder::generatePabloMethod() {
 
     // Remove the CR of any CR+LF
     Var * const CRLF = pb.createVar("CRLF", pb.createZeroes());
-    PabloBuilder crb = PabloBuilder::Create(pb);
+    auto crb = pb.createScope();
     pb.createIf(CR, crb);
     PabloAST * const lookaheadLF = crb.createLookahead(LF, 1, "lookaheadLF");
     PabloAST * const crlf = crb.createAnd(CR, lookaheadLF);
@@ -90,19 +82,19 @@ void LineBreakKernelBuilder::generatePabloMethod() {
 
     // Check for Unicode Line Breaks
     PabloAST * u8pfx = ccc.compileCC(makeByte(0xC0, 0xFF));
-    PabloBuilder it = PabloBuilder::Create(pb);
+    auto it = pb.createScope();
     pb.createIf(u8pfx, it);
     PabloAST * u8pfx2 = ccc.compileCC(makeByte(0xC2, 0xDF), it);
     PabloAST * u8pfx3 = ccc.compileCC(makeByte(0xE0, 0xEF), it);
 
     // Two-byte sequences
-    PabloBuilder it2 = PabloBuilder::Create(it);
+    auto it2 = it.createScope();
     it.createIf(u8pfx2, it2);
     PabloAST * NEL = it2.createAnd(it2.createAdvance(ccc.compileCC(makeByte(0xC2), it2), 1), ccc.compileCC(makeByte(0x85), it2), "NEL");
     it2.createAssign(LineBreak, it2.createOr(LineBreak, NEL));
 
     // Three-byte sequences
-    PabloBuilder it3 = PabloBuilder::Create(it);
+    auto it3 = it.createScope();
     it.createIf(u8pfx3, it3);
     PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc.compileCC(makeByte(0xE2), it3), 1), ccc.compileCC(makeByte(0x80), it3));
     PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc.compileCC(makeByte(0xA8,0xA9), it3), "LS_PS");

@@ -33,7 +33,7 @@ using TypeId = PabloAST::ClassTypeId;
 const unsigned BlockIndenting = 2;
 
 void PabloPrinter::print(const PabloKernel * kernel, raw_ostream & out) {
-    print(kernel->getEntryBlock(), out, true);
+    print(kernel->getEntryScope(), out, true);
 }
 
 void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool expandNested, const unsigned indent) {

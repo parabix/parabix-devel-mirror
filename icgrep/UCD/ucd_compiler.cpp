@@ -200,7 +200,7 @@ void UCDCompiler::generateRange(const RangeList & ifRanges, const codepoint_t lo
             }
         }
         if (mTargetValue.size() > 0) {
-            PabloBuilder inner_block = PabloBuilder::Create(builder);
+            auto inner_block = builder.createScope();
             builder.createIf(ifTestCompiler(range.first, range.second, builder), inner_block);
             generateRange(inner, range.first, range.second, inner_block);
         }

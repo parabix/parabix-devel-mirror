@@ -152,14 +152,14 @@ void gatherValidScopes(const PabloBlock * block, ScopeSet & validScopes) {
 
 void verifyUseDefInformation(const PabloKernel * kernel) {
     ScopeSet validScopes;
-    gatherValidScopes(kernel->getEntryBlock(), validScopes);
+    gatherValidScopes(kernel->getEntryScope(), validScopes);
     for (unsigned i = 0; i < kernel->getNumOfInputs(); ++i) {
         testUsers(kernel->getInput(i), validScopes);
     }
     for (unsigned i = 0; i < kernel->getNumOfOutputs(); ++i) {
         testUsers(kernel->getOutput(i), validScopes);
     }
-    verifyUseDefInformation(kernel->getEntryBlock(), validScopes);
+    verifyUseDefInformation(kernel->getEntryScope(), validScopes);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -285,7 +285,7 @@ void verifyProgramStructure(const PabloBlock * block, unsigned & nestingDepth) {
 
 inline void verifyProgramStructure(const PabloKernel * kernel) {
     unsigned nestingDepth = 0;
-    verifyProgramStructure(kernel->getEntryBlock(), nestingDepth);
+    verifyProgramStructure(kernel->getEntryScope(), nestingDepth);
     if (LLVM_UNLIKELY(nestingDepth != 0)) {
         // This error isn't actually possible to occur with the current AST structure but that could change
         // in the future. Leaving this test in for a reminder to check for it.
@@ -316,7 +316,7 @@ void verifyAllPathsDominate(const PabloBlock * block) {
 }
 
 void verifyAllPathsDominate(const PabloKernel * kernel) {
-    verifyAllPathsDominate(kernel->getEntryBlock());
+    verifyAllPathsDominate(kernel->getEntryScope());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -414,7 +414,7 @@ private:
 //    for (unsigned i = 0; i != kernel->getNumOfOutputs(); ++i) {
 //        A.insert(kernel->getOutput(i));
 //    }
-//    verifyVariableUsages(kernel->getEntryBlock(), A);
+//    verifyVariableUsages(kernel->getEntryScope(), A);
 //}
 
 

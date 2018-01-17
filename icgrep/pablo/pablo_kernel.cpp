@@ -48,7 +48,7 @@ Var * PabloKernel::getOutputScalarVar(const std::string & name) {
     report_fatal_error("Kernel does not contain scalar " + name);
 }
 
-Var * PabloKernel::makeVariable(String * name, Type * const type) {
+Var * PabloKernel::makeVariable(const String * name, Type * const type) {
     Var * const var = new (mAllocator) Var(name, type, mAllocator);
     mVariables.push_back(var);
     return var;
@@ -86,7 +86,7 @@ void PabloKernel::addInternalKernelProperties(const std::unique_ptr<kernel::Kern
     mSizeTy = b->getSizeTy();
     mStreamTy = b->getStreamTy();
     mSymbolTable = new SymbolGenerator(b->getContext(), mAllocator);
-    mEntryBlock = PabloBlock::Create(this);
+    mEntryScope = new (mAllocator) PabloBlock(this, mAllocator);
     mContext = &b->getContext();
     for (const Binding & ss : mStreamSetInputs) {
         Var * param = new (mAllocator) Var(makeName(ss.getName()), ss.getType(), mAllocator, Var::KernelInputParameter);
@@ -210,7 +210,7 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
 , PabloAST(PabloAST::ClassTypeId::Kernel, nullptr, mAllocator)
 , mPabloCompiler(nullptr)
 , mSymbolTable(nullptr)
-, mEntryBlock(nullptr)
+, mEntryScope(nullptr)
 , mSizeTy(nullptr)
 , mStreamTy(nullptr)
 , mContext(nullptr) {
