@@ -33,6 +33,7 @@
 #include <kernels/kernel_builder.h>
 #include <kernels/streamset.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Type.h>
 #include <llvm/Support/raw_os_ostream.h>
 
 using namespace llvm;
@@ -550,46 +551,46 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             } else {
                 value = b->CreateZExtOrTrunc(value, ty);
             }
-        #if 0
         } else if (const PackH * const p = dyn_cast<PackH>(stmt)) {
             const auto sourceWidth = p->getValue()->getType()->getVectorElementType()->getIntegerBitWidth();
-            const auto packedWidth = p->getFieldWidth()->value();
+            const auto packWidth = p->getFieldWidth()->value();
+            assert (sourceWidth == packWidth);
             Value * const base = compileExpression(b, p->getValue(), false);
-            const auto packs = sourceWidth / 2;
-            if (LLVM_LIKELY(packs > 1)) {
-                value = b->CreateAlloca(b->getBitBlockType(), b->getInt32(packs));
+            const auto result_packs = sourceWidth/2;
+            if (LLVM_LIKELY(result_packs > 1)) {
+                value = b->CreateAlloca(ArrayType::get(b->getBitBlockType(), result_packs));
             }
             Constant * const ZERO = b->getInt32(0);
-            for (unsigned i = 0; i < packs; ++i) {
+            for (unsigned i = 0; i < result_packs; ++i) {
                 Value * A = b->CreateLoad(b->CreateGEP(base, {ZERO, b->getInt32(i * 2)}));
                 Value * B = b->CreateLoad(b->CreateGEP(base, {ZERO, b->getInt32(i * 2 + 1)}));
-                Value * P = b->hsimd_packh(packedWidth, A, B);
-                if (LLVM_UNLIKELY(packs == 1)) {
+                Value * P = b->bitCast(b->hsimd_packh(packWidth, A, B));
+                if (LLVM_UNLIKELY(result_packs == 1)) {
                     value = P;
                     break;
                 }
-                b->CreateStore(P, b->CreateGEP(value, b->getInt32(i)));
+                b->CreateStore(P, b->CreateGEP(value, {ZERO, b->getInt32(i)}));
             }
         } else if (const PackL * const p = dyn_cast<PackL>(stmt)) {
             const auto sourceWidth = p->getValue()->getType()->getVectorElementType()->getIntegerBitWidth();
-            const auto packedWidth = p->getFieldWidth()->value();
+            const auto packWidth = p->getFieldWidth()->value();
+            assert (sourceWidth == packWidth);
             Value * const base = compileExpression(b, p->getValue(), false);
-            const auto count = sourceWidth / 2;
-            if (LLVM_LIKELY(count > 1)) {
-                value = b->CreateAlloca(b->getBitBlockType(), b->getInt32(count));
+            const auto result_packs = sourceWidth/2;
+            if (LLVM_LIKELY(result_packs > 1)) {
+                value = b->CreateAlloca(ArrayType::get(b->getBitBlockType(), result_packs));
             }
             Constant * const ZERO = b->getInt32(0);
-            for (unsigned i = 0; i < count; ++i) {
+            for (unsigned i = 0; i < result_packs; ++i) {
                 Value * A = b->CreateLoad(b->CreateGEP(base, {ZERO, b->getInt32(i * 2)}));
                 Value * B = b->CreateLoad(b->CreateGEP(base, {ZERO, b->getInt32(i * 2 + 1)}));
-                Value * P = b->hsimd_packl(packedWidth, A, B);
-                if (LLVM_UNLIKELY(count == 1)) {
+                Value * P = b->bitCast(b->hsimd_packl(packWidth, A, B));
+                if (LLVM_UNLIKELY(result_packs == 1)) {
                     value = P;
                     break;
                 }
-                b->CreateStore(P, b->CreateGEP(value, b->getInt32(i)));
+                b->CreateStore(P, b->CreateGEP(value, {ZERO, b->getInt32(i)}));
             }
-        #endif
         } else {
             std::string tmp;
             raw_string_ostream out(tmp);

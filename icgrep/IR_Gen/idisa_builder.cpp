@@ -352,7 +352,12 @@ Value * IDISA_Builder::esimd_bitspread(unsigned fw, Value * bitmask) {
 }
 
 Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
-    if (fw < 8) report_fatal_error("Unsupported field width: packh " + std::to_string(fw));
+    if (fw <= 8) {
+        const unsigned fw_wkg = 32;
+        Value * aLo = simd_srli(fw_wkg, a, fw/2);
+        Value * bLo = simd_srli(fw_wkg, b, fw/2);
+        return hsimd_packl(fw, aLo, bLo);
+    }
     Value * aVec = fwCast(fw/2, a);
     Value * bVec = fwCast(fw/2, b);
     const auto field_count = 2 * mBitBlockWidth / fw;
@@ -364,7 +369,14 @@ Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
-    if (fw < 8) report_fatal_error("Unsupported field width: packl " + std::to_string(fw));
+    if (fw <= 8) {
+        const unsigned fw_wkg = 64;
+        Value * aLo = simd_srli(fw_wkg, a, fw/2);
+        Value * bLo = simd_srli(fw_wkg, b, fw/2);
+        return hsimd_packl(fw*2,
+                           bitCast(simd_or(simd_and(simd_himask(fw), aLo), simd_and(simd_lomask(fw), a))),
+                           bitCast(simd_or(simd_and(simd_himask(fw), bLo), simd_and(simd_lomask(fw), b))));
+    }
     Value * aVec = fwCast(fw/2, a);
     Value * bVec = fwCast(fw/2, b);
     const auto field_count = 2 * mBitBlockWidth / fw;

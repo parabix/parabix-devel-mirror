@@ -227,13 +227,13 @@ Repeat * PabloBlock::createRepeat(Integer * fieldWidth, PabloAST * value, const 
 
 PackH * PabloBlock::createPackH(Integer * fieldWidth, PabloAST * value, const String * const name) {
     assert (fieldWidth && value);
-    Type * const type = VectorType::get(IntegerType::get(value->getType()->getContext(), fieldWidth->value()), 0);
+    Type * const type = VectorType::get(IntegerType::get(value->getType()->getContext(), fieldWidth->value()/2), 0);
     return insertAtInsertionPoint(new (mAllocator) PackH(fieldWidth, value, name, type, mAllocator));
 }
 
 PackL * PabloBlock::createPackL(Integer * fieldWidth, PabloAST * value, const String * const name) {
     assert (fieldWidth && value);
-    Type * const type = VectorType::get(IntegerType::get(value->getType()->getContext(), fieldWidth->value()), 0);
+    Type * const type = VectorType::get(IntegerType::get(value->getType()->getContext(), fieldWidth->value()/2), 0);
     return insertAtInsertionPoint(new (mAllocator) PackL(fieldWidth, value, name, type, mAllocator));
 }
 

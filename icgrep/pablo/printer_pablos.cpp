@@ -17,6 +17,7 @@
 #include <pablo/pe_lookahead.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_ones.h>
+#include <pablo/pe_pack.h>
 #include <pablo/pe_repeat.h>
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_string.h>
@@ -145,6 +146,18 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             print(splat->getFieldWidth(), out);
             out << ", ";
             print(splat->getValue(), out);
+            out << ")";
+        } else if (const PackH * p = dyn_cast<PackH>(stmt)) {
+            out << " = PackH(";
+            print(p->getFieldWidth(), out);
+            out << ", ";
+            print(p->getValue(), out);
+            out << ")";
+        } else if (const PackL * p = dyn_cast<PackL>(stmt)) {
+            out << " = PackL(";
+            print(p->getFieldWidth(), out);
+            out << ", ";
+            print(p->getValue(), out);
             out << ")";
         } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
             out << " = pablo.InFile(";

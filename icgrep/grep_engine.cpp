@@ -50,6 +50,7 @@ using namespace llvm;
 using namespace cc;
 
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
+static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable experimental pablo transposition."));
 
 namespace grep {
 
@@ -118,7 +119,13 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     #endif
 
     StreamSetBuffer * BasisBits = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(encodingBits, 1), baseBufferSize);
-    kernel::Kernel * s2pk = mGrepDriver->addKernelInstance<kernel::S2PKernel>(idb);
+    kernel::Kernel * s2pk = nullptr;
+    if (PabloTransposition) {
+        s2pk = mGrepDriver->addKernelInstance<kernel::S2P_PabloKernel>(idb);
+    }
+    else {
+        s2pk = mGrepDriver->addKernelInstance<kernel::S2PKernel>(idb);
+    }
     mGrepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
     #ifndef USE_DIRECT_LF_BUILDER

@@ -1,10 +1,14 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
 #include "s2p_kernel.h"
 #include <kernels/kernel_builder.h>
+#include <pablo/pabloAST.h>
+#include <pablo/builder.hpp>
+#include <pablo/pe_pack.h>
+
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
@@ -211,32 +215,34 @@ S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, bool aligned)
         mStreamSetInputs[0].addAttribute(Misaligned());
     }
 }
-#ifdef PABLO_PACKING
 void S2P_PabloKernel::generatePabloMethod() {
-    auto pb = this->getEntryBlock();
+    pablo::PabloBlock * const pb = getEntryScope();
     const unsigned steps = std::log2(mCodeUnitWidth);
     std::vector<PabloAST *> streamSet[steps + 1];
-    streamSet[0].push_back(pb->createExtract(getInputStreamVar("codeUnitStream"), pb->getInteger(0)));
+    for (unsigned i = 0; i <= steps; i++) {
+        streamSet[i].resize(1<<i);
+    }
+    streamSet[0][0] = pb->createExtract(getInputStreamVar("codeUnitStream"), pb->getInteger(0));
     unsigned streamWidth = mCodeUnitWidth;
-    for (unsigned step = 1; step <= steps; step++) {
-        for (auto strm : streamSet[i-1]) {
-            streamSet[i].push_back(pb.createPackL(streamWidth, strm));
-            streamSet[i].push_back(pb.createPackH(streamWidth, strm));
+    for (unsigned i = 1; i <= steps; i++) {
+        for (unsigned j = 0; j < streamSet[i-1].size(); j++) {
+            auto strm = streamSet[i-1][j];
+            streamSet[i][2*j] = pb->createPackL(pb->getInteger(streamWidth), strm);
+            streamSet[i][2*j+1] = pb->createPackH(pb->getInteger(streamWidth), strm);
         }
         streamWidth = streamWidth/2;
     }
-    for (unsigned bit = 0; bit <= mCodeUnitWidth, bit++) {
-        pb.createAssign(pb.createExtract(getInputStreamVar("basisBits"), pb.getInteger(bit)), streamSet[steps][bit]);
+    for (unsigned bit = 0; bit < mCodeUnitWidth; bit++) {
+        pb->createAssign(pb->createExtract(getOutputStreamVar("basisBits"), pb->getInteger(bit)), streamSet[steps][mCodeUnitWidth-1-bit]);
     }
 }
 
 S2P_PabloKernel::S2P_PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth)
 : PabloKernel(b, "s2p_pablo" + std::to_string(codeUnitWidth),
     {Binding{b->getStreamSetTy(1, codeUnitWidth), "codeUnitStream"}},
-    {Binding{b->getStreamSetTy(codeUnitWidth, 1), "basisBits"}}, {}, {}, {}),
+    {Binding{b->getStreamSetTy(codeUnitWidth, 1), "basisBits"}}),
   mCodeUnitWidth(codeUnitWidth) {
 }
 
-#endif
 
 }
