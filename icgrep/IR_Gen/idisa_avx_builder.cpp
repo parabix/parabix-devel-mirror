@@ -57,7 +57,7 @@ std::string IDISA_AVX2_Builder::getBuilderUniqueName() {
 }
     
 Value * IDISA_AVX2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
-    if (fw <= 64) {        
+    if ((fw > 8) && (fw <= 64)) {
         Value * aVec = fwCast(fw / 2, a);
         Value * bVec = fwCast(fw / 2, b);
         const auto field_count = 2 * mBitBlockWidth / fw;
@@ -79,7 +79,7 @@ Value * IDISA_AVX2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
-    if (fw <= 64) {
+    if ((fw > 8) && (fw <= 64)) {
         Value * aVec = fwCast(fw / 2, a);
         Value * bVec = fwCast(fw / 2, b);
         const auto field_count = 2 * mBitBlockWidth / fw;
