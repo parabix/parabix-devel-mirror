@@ -5,6 +5,7 @@
  */
 
 #include <toolchain/toolchain.h>
+#include <pablo/pablo_toolchain.h>
 #include <UCD/UCD_Config.h>
 #include <llvm/CodeGen/CommandFlags.h>
 #include <llvm/Support/raw_ostream.h>
@@ -154,7 +155,8 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
     }
 #endif
     cl::ParseCommandLineOptions(argc, argv);
-    if (DebugOptions.getBits() || (ShowIROption != OmittedOption) || (ShowUnoptimizedIROption != OmittedOption) || (ShowASMOption != OmittedOption)) {
+    if (DebugOptions.getBits() || (ShowIROption != OmittedOption) || (ShowUnoptimizedIROption != OmittedOption) || (ShowASMOption != OmittedOption)
+        || (pablo::ShowPabloOption != OmittedOption) || (pablo::ShowOptimizedPabloOption != OmittedOption)) {
         EnableObjectCache = false;
     }
     ObjectCacheDir = ObjectCacheDirOption.empty() ? nullptr : ObjectCacheDirOption.data();
