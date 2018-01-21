@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -58,6 +58,7 @@ void RE_Compiler::addAlphabet(cc::Alphabet * a, pablo::Var * basis_set) {
 using MarkerType = RE_Compiler::MarkerType;
 
 PabloAST * RE_Compiler::compile(RE * const re, PabloAST * const initialCursors) {
+    pablo::PabloBuilder mPB(mKernel->getEntryScope());
     const auto markers = initialCursors ? compile(re, initialCursors, mPB) : compile(re, mPB);
     return markerVar(AdvanceMarker(markers, FinalPostPositionUnit, mPB));
 }
@@ -581,8 +582,8 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 , mFinal(nullptr)
 , mWhileTest(nullptr)
 , mStarDepth(0)
-, mPB(ccCompiler.getBuilder())
 , mCompiledName(&mBaseMap) {
+    PabloBuilder mPB(kernel->getEntryScope());
     Var * const linebreak = mKernel->getInputStreamVar("linebreak");
     mLineBreak = mPB.createExtract(linebreak, 0);
     Var * const crlf = mKernel->getInputStreamVar("cr+lf");

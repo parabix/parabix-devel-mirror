@@ -142,7 +142,6 @@ private:
     pablo::PabloAST *                               mFinal;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
-    pablo::PabloBuilder &                           mPB;
     NameMap *                                       mCompiledName;
     NameMap                                         mBaseMap;
 };

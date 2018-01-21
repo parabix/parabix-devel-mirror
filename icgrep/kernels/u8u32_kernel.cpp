@@ -18,16 +18,17 @@ using namespace pablo;
 using namespace llvm;
 
 void U8U32KernelBuilder::generatePabloMethod() {
+    PabloBuilder main(getEntryScope());
+    
     //  input: 8 basis bit streams
-    
     const auto u8bitSet = this->getInputStreamVar("u8bit");
-    
+    PabloAST * u8_bits[8];
+    for (int i = 0; i < 8; ++i) {
+        u8_bits[i] = main.createExtract(u8bitSet, main.getInteger(i));
+    }
     //  output: 32 u8-indexed streams, + delmask stream + error stream
     
     cc::CC_Compiler ccc(this, u8bitSet);
-    
-    PabloBuilder & main = ccc.getBuilder();
-    const auto u8_bits = ccc.getBasisBits();
     
     Zeroes * zeroes = main.createZeroes();
 

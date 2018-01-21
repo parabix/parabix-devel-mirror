@@ -35,16 +35,6 @@ public:
 
     pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBuilder & builder);
 
-    pablo::PabloBuilder & getBuilder();
-
-    const std::vector<pablo::PabloAST *> & getBasisBits() const {
-        return mBasisBit;
-    }
-
-    bool isUTF_16() const {
-        return mEncodingBits == 16;
-    }
-
 private:
     pablo::PabloAST * getBasisVar(const unsigned n) const;
     template<typename PabloBlockOrBuilder>
@@ -78,10 +68,6 @@ inline pablo::PabloAST * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBl
 
 inline pablo::PabloAST *CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBuilder & builder) {
     return compileCC(cc->canonicalName(re::CC_type::ByteClass), cc, builder);
-}
-
-inline pablo::PabloBuilder & CC_Compiler::getBuilder() {
-    return mBuilder;
 }
 
 pablo::PabloAST * compileCCfromCodeUnitStream(const re::CC *cc, pablo::PabloAST * codeUnitStream, pablo::PabloBuilder & pb);

@@ -40,9 +40,8 @@ inline static std::string sha1sum(const std::string & str) {
 }
 
 void RequiredStreams_UTF8::generatePabloMethod() {
-    
+    PabloBuilder pb(getEntryScope());
     cc::CC_Compiler ccc(this, getInput(0));
-    auto & pb = ccc.getBuilder();
     Zeroes * const ZEROES = pb.createZeroes();
     PabloAST * const u8pfx = ccc.compileCC(makeByte(0xC0, 0xFF));
 
@@ -134,9 +133,8 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 }
 
 void RequiredStreams_UTF16::generatePabloMethod() {
-    
+    PabloBuilder pb(getEntryScope());
     cc::CC_Compiler ccc(this, getInput(0));
-    auto & pb = ccc.getBuilder();
     
     PabloAST * u16hi_hi_surrogate = ccc.compileCC(makeCC(0xD800, 0xDBFF, &cc::UTF16));    //u16hi_hi_surrogate = [\xD8-\xDB]
     PabloAST * u16hi_lo_surrogate = ccc.compileCC(makeCC(0xDC00, 0xDFFF, &cc::UTF16));    //u16hi_lo_surrogate = [\xDC-\xDF]
@@ -208,6 +206,7 @@ std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuil
 }
 
 void ICGrepKernel::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
     Var * const basis = getInputStreamVar("basis");
     cc::CC_Compiler cc_compiler(this, basis);
     RE_Compiler re_compiler(this, cc_compiler);
@@ -216,19 +215,18 @@ void ICGrepKernel::generatePabloMethod() {
         re_compiler.addAlphabet(a, basis);
     }
     PabloAST * const matches = re_compiler.compile(mRE);
-    PabloBlock * const pb = getEntryScope();
     Var * const output = getOutputStreamVar("matches");
-    pb->createAssign(pb->createExtract(output, pb->getInteger(0)), matches);
+    pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
 }
 
 void MatchedLinesKernel::generatePabloMethod() {
-    auto pb = this->getEntryScope();
-    PabloAST * matchResults = pb->createExtract(getInputStreamVar("matchResults"), pb->getInteger(0));
-    PabloAST * lineBreaks = pb->createExtract(getInputStreamVar("lineBreaks"), pb->getInteger(0));
-    PabloAST * notLB = pb->createNot(lineBreaks);
-    PabloAST * match_follow = pb->createMatchStar(matchResults, notLB);
+    PabloBuilder pb(getEntryScope());
+    PabloAST * matchResults = pb.createExtract(getInputStreamVar("matchResults"), pb.getInteger(0));
+    PabloAST * lineBreaks = pb.createExtract(getInputStreamVar("lineBreaks"), pb.getInteger(0));
+    PabloAST * notLB = pb.createNot(lineBreaks);
+    PabloAST * match_follow = pb.createMatchStar(matchResults, notLB);
     Var * const matchedLines = getOutputStreamVar("matchedLines");
-    pb->createAssign(pb->createExtract(matchedLines, pb->getInteger(0)), pb->createAnd(match_follow, lineBreaks));
+    pb.createAssign(pb.createExtract(matchedLines, pb.getInteger(0)), pb.createAnd(match_follow, lineBreaks));
 }
 
 MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)

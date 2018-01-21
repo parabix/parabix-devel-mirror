@@ -239,7 +239,7 @@ void UCDCompiler::generateSubRanges(const codepoint_t lo, const codepoint_t hi, 
  * matching the sequences up to byte number byte_no have been generated.
  ** ------------------------------------------------------------------------------------------------------------- */
 PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsigned byte_no, PabloBuilder & builder, PabloAST * target, PabloAST * prefix) {
-	bool isUTF_16 = mCharacterClassCompiler.isUTF_16();
+    bool isUTF_16 = false;
 
     if (LLVM_LIKELY(ranges.size() > 0)) {
 
@@ -321,7 +321,7 @@ inline PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepo
  ** ------------------------------------------------------------------------------------------------------------- */
 PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t hi, const unsigned byte_no, PabloBuilder & builder, PabloAST * target) {
 
-	bool isUTF_16 = mCharacterClassCompiler.isUTF_16();
+	bool isUTF_16 = false;
     codepoint_t lo_byte = encodingByte(lo, byte_no, isUTF_16);
     codepoint_t hi_byte = encodingByte(hi, byte_no, isUTF_16);
     const bool at_lo_boundary = (lo == 0 || encodingByte(lo - 1, byte_no, isUTF_16) != lo_byte);
@@ -365,7 +365,7 @@ PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t h
 PabloAST * UCDCompiler::makePrefix(const codepoint_t cp, const unsigned byte_no, PabloBuilder & builder, PabloAST * prefix) {
     assert (byte_no >= 1 && byte_no <= 4);
     assert (byte_no == 1 || prefix != nullptr);
-    bool isUTF_16 = mCharacterClassCompiler.isUTF_16();
+    bool isUTF_16 = false;
     for (unsigned i = 1; i != byte_no; ++i) {
         const CC * const cc = makeByte(encodingByte(cp, i, isUTF_16));
         PabloAST * var = mCharacterClassCompiler.compileCC(cc, builder);

@@ -290,8 +290,8 @@ PreprocessKernel::PreprocessKernel(const std::unique_ptr<kernel::KernelBuilder> 
 }
 
 void PreprocessKernel::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
     cc::CC_Compiler ccc(this, getInputStreamVar("basis"));
-    PabloBuilder & pb = ccc.getBuilder();
     PabloAST * A = ccc.compileCC(re::makeCC(re::makeCC(0x41), re::makeCC(0x61)), pb);
     PabloAST * C = ccc.compileCC(re::makeCC(re::makeCC(0x43), re::makeCC(0x63)), pb);
     PabloAST * T = ccc.compileCC(re::makeCC(re::makeCC(0x54), re::makeCC(0x74)), pb);

@@ -35,12 +35,11 @@ LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::Kerne
 }
 
 void LineFeedKernelBuilder::generatePabloMethod() {
-    #ifdef USE_DIRECT_LF_BUILDER
     PabloBuilder pb(getEntryScope());
+    #ifdef USE_DIRECT_LF_BUILDER
     PabloAST * LF = compileCCfromCodeUnitStream(makeByte(0x0A), getInput(0), pb);
     #else
     CC_Compiler ccc(this, getInput(0));
-    auto & pb = ccc.getBuilder();
     PabloAST * LF = ccc.compileCC("LF", makeByte(0x0A), pb);
     #endif
     pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
@@ -58,8 +57,8 @@ LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<kernel::Ker
 }
 
 void LineBreakKernelBuilder::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
     CC_Compiler ccc(this, getInput(0));
-    auto & pb = ccc.getBuilder();
 
     Integer * const ZERO = pb.getInteger(0);
 

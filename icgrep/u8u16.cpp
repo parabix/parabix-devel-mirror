@@ -64,21 +64,17 @@ U8U16Kernel::U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b)
 }
 
 void U8U16Kernel::generatePabloMethod() {
-
+    PabloBuilder main(getEntryScope());
+    Zeroes * zeroes = main.createZeroes();
+    
     //  input: 8 basis bit streams
-
     const auto u8bitSet = getInputStreamVar("u8bit");
+    PabloAST * u8_bits[8];
+    for (int i = 0; i < 8; ++i) {
+        u8_bits[i] = main.createExtract(u8bitSet, main.getInteger(i));
+    }
 
     //  output: 16 u8-indexed streams, + delmask stream + error stream
-
-    cc::CC_Compiler ccc(this, u8bitSet);
-
-    PabloBuilder & main = ccc.getBuilder();
-    const auto u8_bits = ccc.getBasisBits();
-
-    Zeroes * zeroes = main.createZeroes();
-
-    // Outputs
     Var * u16_hi[8];
     for (int i = 0; i < 8; ++i) {
         u16_hi[i] = main.createVar("u16_hi" + std::to_string(i), zeroes);
@@ -87,8 +83,11 @@ void U8U16Kernel::generatePabloMethod() {
     for (int i = 0; i < 8; ++i) {
         u16_lo[i] = main.createVar("u16_lo" + std::to_string(i), zeroes);
     }
+    
     Var * delmask = main.createVar("delmask", zeroes);
     Var * error_mask = main.createVar("error_mask", zeroes);
+
+    cc::CC_Compiler ccc(this, u8bitSet);
 
     // The logic for processing non-ASCII bytes will be embedded within an if-hierarchy.
     PabloAST * nonASCII = ccc.compileCC(re::makeByte(0x80, 0xFF));

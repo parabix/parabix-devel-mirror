@@ -72,8 +72,9 @@ std::string CharClassesKernel::makeSignature(const std::unique_ptr<kernel::Kerne
 }
 
 void CharClassesKernel::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+
     CC_Compiler ccc(this, getInput(0));
-    auto & pb = ccc.getBuilder();
     unsigned n = mCCs.size();
 
     NameMap nameMap;
