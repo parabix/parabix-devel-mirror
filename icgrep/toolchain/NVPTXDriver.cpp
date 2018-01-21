@@ -21,7 +21,7 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/ToolOutputFile.h>
 #include <llvm/Target/TargetMachine.h>
-#if LLVM_VERSION_INTEGER >= LLVM_3_9_0
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
 #include <llvm/Transforms/Scalar/GVN.h>
 #endif
 
@@ -42,7 +42,7 @@ NVPTXDriver::NVPTXDriver(std::string && moduleName)
     initializeCodeGen(*Registry);
     initializeLoopStrengthReducePass(*Registry);
     initializeLowerIntrinsicsPass(*Registry);
-#if LLVM_VERSION_INTEGER < LLVM_3_9_0
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(3, 9, 0)
     initializeUnreachableBlockElimPass(*Registry);
 #else
     initializeUnreachableBlockElimLegacyPassPass(*Registry);

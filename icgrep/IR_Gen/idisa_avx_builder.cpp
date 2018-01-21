@@ -1,10 +1,11 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
 
 #include "idisa_avx_builder.h"
+#include <toolchain/toolchain.h>
 
 using namespace llvm;
 
@@ -101,7 +102,7 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
 }
     
 Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
-#if LLVM_VERSION_INTEGER < LLVM_6_0_0
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(6, 0, 0)
     if ((fw == 128) && (mBitBlockWidth == 256)) {
         Value * vperm2i128func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_vperm2i128);
         return CreateCall(vperm2i128func, {fwCast(64, a), fwCast(64, b), getInt8(0x31)});
@@ -112,7 +113,7 @@ Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_AVX2_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
-#if LLVM_VERSION_INTEGER < LLVM_6_0_0
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(6, 0, 0)
     if ((fw == 128) && (mBitBlockWidth == 256)) {
         Value * vperm2i128func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_vperm2i128);
         return CreateCall(vperm2i128func, {fwCast(64, a), fwCast(64, b), getInt8(0x20)});

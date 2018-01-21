@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016-7 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
@@ -12,7 +12,7 @@
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
-#if LLVM_VERSION_INTEGER < LLVM_4_0_0
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
 #include <llvm/Bitcode/ReaderWriter.h>
 #else
 #include <llvm/Bitcode/BitcodeWriter.h>

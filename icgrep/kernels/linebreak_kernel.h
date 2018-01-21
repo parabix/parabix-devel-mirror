@@ -7,8 +7,6 @@
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
 
-#define USE_DIRECT_LF_BUILDER
-
 namespace kernel { class KernelBuilder; }
 
 namespace kernel {

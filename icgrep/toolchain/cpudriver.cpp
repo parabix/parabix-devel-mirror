@@ -14,7 +14,7 @@
 #include <llvm/Target/TargetMachine.h>             // for TargetMachine, Tar...
 #include <llvm/Target/TargetOptions.h>             // for TargetOptions
 #include <llvm/Transforms/Scalar.h>
-#if LLVM_VERSION_INTEGER >= LLVM_3_9_0
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
 #include <llvm/Transforms/Scalar/GVN.h>
 #endif
 #include <llvm/Transforms/Utils/Local.h>
@@ -179,7 +179,7 @@ void ParabixDriver::finalizeObject() {
         PM.add(createPrintModulePass(*mIROutputStream));
     }
 
-#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
         if (codegen::ShowASMOption != "") {
             std::error_code error;

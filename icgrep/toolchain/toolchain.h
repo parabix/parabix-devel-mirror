@@ -13,17 +13,11 @@
 #include <llvm/Target/TargetMachine.h>
 
 // #defines for comparison with LLVM_VERSION_INTEGER
-#define LLVM_3_6_0 30600
-#define LLVM_3_7_0 30700
-#define LLVM_3_8_0 30800
-#define LLVM_3_9_0 30900
-#define LLVM_4_0_0 40000
-#define LLVM_5_0_0 50000
-#define LLVM_6_0_0 60000
+#define LLVM_VERSION_CODE(major, minor, point) ((10000 * major) + (100 * minor) + point)
 
 // From LLVM 4.0.0 the clEnumValEnd sentinel is no longer needed.
 // We define a macro to adapt to the CommandLine syntax based on LLVM version.
-#if LLVM_VERSION_INTEGER < LLVM_4_0_0
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
 #define CL_ENUM_VAL_SENTINEL , clEnumValEnd
 #else
 #define CL_ENUM_VAL_SENTINEL
@@ -59,7 +53,7 @@ extern bool SegmentPipelineParallel;
 const std::string OmittedOption = ".";
 extern std::string ShowUnoptimizedIROption;
 extern std::string ShowIROption;
-#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
 extern std::string ShowASMOption;
 #endif
 extern const char * ObjectCacheDir;

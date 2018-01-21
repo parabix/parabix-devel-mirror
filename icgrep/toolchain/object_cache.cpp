@@ -15,7 +15,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/range/iterator_range.hpp>
 #include <boost/container/flat_set.hpp>
-#if LLVM_VERSION_INTEGER < LLVM_4_0_0
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
 #include <llvm/Bitcode/ReaderWriter.h>
 #else
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -108,7 +108,7 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
 
         auto kernelBuffer = MemoryBuffer::getFile(fileName.c_str(), -1, false);
         if (kernelBuffer) {
-            #if LLVM_VERSION_INTEGER < LLVM_4_0_0
+            #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
             auto loadedFile = getLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
             #else
             auto loadedFile = getOwningLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
@@ -242,7 +242,7 @@ ParabixObjectCache::ParabixObjectCache(const StringRef dir)
 inline ParabixObjectCache::Path getDefaultPath() {
     // $HOME/.cache/parabix/
     ParabixObjectCache::Path cachePath;
-#if LLVM_VERSION_INTEGER < LLVM_3_7_0
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(3, 7, 0)
     sys::path::user_cache_directory(cachePath, "parabix");
 #else
     sys::path::home_directory(cachePath);

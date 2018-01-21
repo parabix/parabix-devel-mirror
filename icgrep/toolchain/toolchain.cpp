@@ -40,7 +40,7 @@ std::string ShowUnoptimizedIROption = OmittedOption;
 static cl::opt<std::string, true> UnoptimizedIROutputOption("ShowUnoptimizedIR", cl::location(ShowUnoptimizedIROption), cl::ValueOptional,
                                                          cl::desc("Print generated LLVM IR to stderr (by omitting =<filename> or a file"), cl::value_desc("filename"), cl::cat(CodeGenOptions));
 
-#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
 std::string ShowASMOption = OmittedOption;
 static cl::opt<std::string, true> ASMOutputFilenameOption("ShowASM", cl::location(ShowASMOption), cl::ValueOptional,
                                                          cl::desc("Print generated assembly code to stderr (by omitting =<filename> or a file"), cl::value_desc("filename"), cl::cat(CodeGenOptions));
@@ -149,7 +149,7 @@ std::string ProgramName;
 void ParseCommandLineOptions(int argc, const char * const *argv, std::initializer_list<const cl::OptionCategory *> hiding) {
     AddParabixVersionPrinter();
     codegen::ProgramName = argv[0];
-#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     if (hiding.size() != 0) {
         cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *>(hiding));
     }
@@ -161,7 +161,7 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
     }
     ObjectCacheDir = ObjectCacheDirOption.empty() ? nullptr : ObjectCacheDirOption.data();
     Options = InitTargetOptionsFromCodeGenFlags();
-#if LLVM_VERSION_INTEGER >= LLVM_3_7_0
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     Options.MCOptions.AsmVerbose = true;
 #endif
     switch (OptLevelOption) {
@@ -179,7 +179,7 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
 }
 
 }
-#if LLVM_VERSION_INTEGER < LLVM_6_0_0
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(6, 0, 0)
 void printParabixVersion () {
     outs() << "Unicode version " << UCD::UnicodeVersion << "\n";
     outs() << "Parabix (http://parabix.costar.sfu.ca/):\n  " << "Parabix revision " << PARABIX_VERSION << "\n";
