@@ -15,15 +15,11 @@
 
 namespace cc {
 
-class CC_NameMap;
-
 class CC_Compiler{
     friend class ParabixCharacterClassKernelBuilder;
 public:
-
-    using Vars = std::vector<pablo::Var *>;
-
-    CC_Compiler(pablo::PabloKernel * kernel, pablo::Var * basisBitSet);
+    
+    CC_Compiler(pablo::PabloKernel * kernel, std::vector<pablo::PabloAST *> basisBitSet);
     
     pablo::PabloAST * compileCC(const re::CC *cc);
 

@@ -45,6 +45,23 @@ public:
         return mBaseType;
     }
 
+    // Return the number of streams for a static stream set or 0 for an expandable stream set.
+    unsigned getNumOfStreams () const {
+        if (mBufferKind == BufferKind::ExpandableBuffer) return 0;
+        size_t numStreams = 1;
+        if (mBaseType->isArrayTy()) {
+            numStreams = mBaseType->getArrayNumElements();
+        }
+        return numStreams;
+    }
+    
+    unsigned getStreamFieldWidth () const {
+        if (mBaseType->isArrayTy()) {
+            return mBaseType->getArrayElementType()->getScalarSizeInBits();
+        }
+        return mBaseType->getScalarSizeInBits();
+    }
+    
     unsigned getAddressSpace() const {
         return mAddressSpace;
     }

@@ -21,13 +21,10 @@ using namespace llvm;
 
 namespace cc {
 
-CC_Compiler::CC_Compiler(pablo::PabloKernel * kernel, pablo::Var * basisBits)
+CC_Compiler::CC_Compiler(pablo::PabloKernel * kernel, std::vector<pablo::PabloAST *> basisBitSet)
 : mBuilder(kernel->getEntryScope())
-, mEncodingBits(basisBits->getType()->getArrayNumElements())
-, mBasisBit(mEncodingBits) {
-    for (unsigned i = 0; i != mEncodingBits; i++) {
-        mBasisBit[i] = mBuilder.createExtract(basisBits, mBuilder.getInteger(i)); assert (mBasisBit[i]);
-    }
+, mEncodingBits(basisBitSet.size())
+, mBasisBit(basisBitSet) {
     mEncodingMask = (static_cast<unsigned>(1) << mEncodingBits) - static_cast<unsigned>(1);
 }
 

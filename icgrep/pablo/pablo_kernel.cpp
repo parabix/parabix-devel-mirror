@@ -11,6 +11,7 @@
 #include <pablo/pe_ones.h>
 #include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
+#include <kernels/streamset.h>
 #include <llvm/IR/Module.h>
 
 #include <pablo/branch.h>
@@ -31,6 +32,19 @@ Var * PabloKernel::getInputStreamVar(const std::string & name) {
     assert (port == Port::Input);
     return mInputs[index];
 }
+
+std::vector<PabloAST *> PabloKernel::getInputStreamSet(const std::string & name) {
+    Port port; unsigned index;
+    std::tie(port, index) = getStreamPort(name);
+    assert (port == Port::Input);
+    auto numStreams = mStreamSetInputBuffers[index]->getNumOfStreams();
+    std::vector<PabloAST *> inputSet(numStreams);
+    for (unsigned i = 0; i < numStreams; i++) {
+        inputSet[i] = mEntryScope->createExtract(mInputs[index], mEntryScope->getInteger(i));
+    }
+    return inputSet;
+}
+
 
 Var * PabloKernel::getOutputStreamVar(const std::string & name) {
     Port port; unsigned index;

@@ -65,8 +65,8 @@ public:
     // Alphabets are added as needed using the addAlphabet method, giving both
     // the alphabet value and the set of parallel bit streams that comprise
     // a basis for the coded alphabet values.
-    
-    void addAlphabet(cc::Alphabet * a, pablo::Var * basis_set);
+
+    void addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST* > basis_set);
 
     pablo::PabloAST * compile(RE * re, pablo::PabloAST * const initialCursors = nullptr);
 

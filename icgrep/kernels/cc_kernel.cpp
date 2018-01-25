@@ -110,7 +110,7 @@ ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
 
 void ParabixCharacterClassKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    CC_Compiler ccc(this, getInput(0));
+    cc::CC_Compiler ccc(this, getInputStreamSet("basis"));
     for (unsigned i = 0; i < mCharClasses.size(); ++i) {
         pb.createAssign(getOutput(i), ccc.compileCC("cc", mCharClasses[i], pb));
     }

@@ -68,11 +68,7 @@ void U8U16Kernel::generatePabloMethod() {
     Zeroes * zeroes = main.createZeroes();
     
     //  input: 8 basis bit streams
-    const auto u8bitSet = getInputStreamVar("u8bit");
-    PabloAST * u8_bits[8];
-    for (int i = 0; i < 8; ++i) {
-        u8_bits[i] = main.createExtract(u8bitSet, main.getInteger(i));
-    }
+    std::vector<PabloAST *> u8_bits = getInputStreamSet("u8bit");
 
     //  output: 16 u8-indexed streams, + delmask stream + error stream
     Var * u16_hi[8];
@@ -87,7 +83,7 @@ void U8U16Kernel::generatePabloMethod() {
     Var * delmask = main.createVar("delmask", zeroes);
     Var * error_mask = main.createVar("error_mask", zeroes);
 
-    cc::CC_Compiler ccc(this, u8bitSet);
+    cc::CC_Compiler ccc(this, u8_bits);
 
     // The logic for processing non-ASCII bytes will be embedded within an if-hierarchy.
     PabloAST * nonASCII = ccc.compileCC(re::makeByte(0x80, 0xFF));

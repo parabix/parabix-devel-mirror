@@ -101,10 +101,10 @@ WordCountKernel::WordCountKernel (const std::unique_ptr<kernel::KernelBuilder> &
 void WordCountKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     //  input: 8 basis bit streams
-    const auto u8bitSet = getInputStreamVar("u8bit");
+    std::vector<PabloAST *> u8_bits = getInputStreamSet("u8bit");
     //  output: 3 counters
 
-    cc::CC_Compiler ccc(this, u8bitSet);
+    cc::CC_Compiler ccc(this, u8_bits);
 
     Var * lc = getOutputScalarVar("lineCount");
     Var * wc = getOutputScalarVar("wordCount");

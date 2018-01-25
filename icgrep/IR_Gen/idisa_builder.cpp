@@ -370,7 +370,7 @@ Value * IDISA_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
     if (fw <= 8) {
-        const unsigned fw_wkg = 64;
+        const unsigned fw_wkg = 32;
         Value * aLo = simd_srli(fw_wkg, a, fw/2);
         Value * bLo = simd_srli(fw_wkg, b, fw/2);
         return hsimd_packl(fw*2,

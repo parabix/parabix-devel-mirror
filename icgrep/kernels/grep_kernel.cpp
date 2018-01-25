@@ -41,7 +41,7 @@ inline static std::string sha1sum(const std::string & str) {
 
 void RequiredStreams_UTF8::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::CC_Compiler ccc(this, getInput(0));
+    cc::CC_Compiler ccc(this, getInputStreamSet("basis"));
     Zeroes * const ZEROES = pb.createZeroes();
     PabloAST * const u8pfx = ccc.compileCC(makeByte(0xC0, 0xFF));
 
@@ -134,7 +134,7 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 
 void RequiredStreams_UTF16::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::CC_Compiler ccc(this, getInput(0));
+    cc::CC_Compiler ccc(this, getInputStreamSet("basis"));
     
     PabloAST * u16hi_hi_surrogate = ccc.compileCC(makeCC(0xD800, 0xDBFF, &cc::UTF16));    //u16hi_hi_surrogate = [\xD8-\xDB]
     PabloAST * u16hi_lo_surrogate = ccc.compileCC(makeCC(0xDC00, 0xDFFF, &cc::UTF16));    //u16hi_lo_surrogate = [\xDC-\xDF]
@@ -207,12 +207,11 @@ std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuil
 
 void ICGrepKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    Var * const basis = getInputStreamVar("basis");
-    cc::CC_Compiler cc_compiler(this, basis);
+    cc::CC_Compiler cc_compiler(this, getInputStreamSet("basis"));
     RE_Compiler re_compiler(this, cc_compiler);
     for (auto a : mAlphabets) {
-        auto basis = getInputStreamVar(a->getName() + "_basis");
-        re_compiler.addAlphabet(a, basis);
+        auto mpx_basis = getInputStreamSet(a->getName() + "_basis");
+        re_compiler.addAlphabet(a, mpx_basis);
     }
     PabloAST * const matches = re_compiler.compile(mRE);
     Var * const output = getOutputStreamVar("matches");

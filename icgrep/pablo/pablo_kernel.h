@@ -62,6 +62,8 @@ public:
     }
     
     Var * getInputStreamVar(const std::string & name);
+    
+    std::vector<PabloAST *> getInputStreamSet(const std::string & name);
 
     Var * getInput(const unsigned index) {
         assert (index < mInputs.size() && mInputs[index]);

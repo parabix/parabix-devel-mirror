@@ -50,7 +50,7 @@ using FollowMap = std::map<re::CC *, re::CC*>;
 namespace re {
 
     
-void RE_Compiler::addAlphabet(cc::Alphabet * a, pablo::Var * basis_set) {
+void RE_Compiler::addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
     mAlphabetCompilers.push_back(make_unique<cc::CC_Compiler>(mKernel, basis_set));
 }
