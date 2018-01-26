@@ -6,7 +6,6 @@
 #include "cc_kernel.h"
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
-#include <pablo/builder.hpp>
 #include <kernels/kernel_builder.h>
 
 using namespace cc;
@@ -88,13 +87,6 @@ void DirectCharacterClassKernelBuilder::generateDoBlockMethod(const std::unique_
     }
 }
 
-inline std::vector<Binding> makeOutputBindings(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<CC *> & charClasses) {
-    std::vector<Binding> bindings;
-    for (CC * cc : charClasses) {
-        bindings.emplace_back(Binding(b->getStreamTy(), cc->canonicalName(re::CC_type::ByteClass)));
-    }
-    return bindings;
-}
 
 ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
         const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, const std::vector<CC *> & charClasses, unsigned codeUnitSize)
@@ -102,7 +94,7 @@ ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
 // stream inputs
 {Binding{b->getStreamSetTy(codeUnitSize), "basis"}}
 // stream outputs
-, makeOutputBindings(b, charClasses)
+, {Binding(b->getStreamSetTy((unsigned int)charClasses.size()), "outputStream")}
 )
 , mCharClasses(charClasses) {
 
@@ -111,7 +103,8 @@ ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
 void ParabixCharacterClassKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::CC_Compiler ccc(this, getInputStreamSet("basis"));
+    Var * outputVar = getOutputStreamVar("outputStream");
     for (unsigned i = 0; i < mCharClasses.size(); ++i) {
-        pb.createAssign(getOutput(i), ccc.compileCC("cc", mCharClasses[i], pb));
+        pb.createAssign(pb.createExtract(outputVar, i), ccc.compileCC("cc", mCharClasses[i], pb));
     }
 }
