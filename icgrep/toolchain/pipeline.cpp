@@ -97,6 +97,7 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
 
     StreamSetBufferMap<Value *> producedItemCount;
     StreamSetBufferMap<Value *> consumedItemCount;
+    StreamSetBufferMap<Kernel *> lastUsedKernel;
 
     Value * cycleCountStart = nullptr;
     Value * cycleCountEnd = nullptr;
@@ -107,6 +108,19 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
     Value * terminated = nullptr;
 
     const bool serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
+
+    for (Kernel * const kernel : kernels) {
+        const auto & inputs = kernel->getStreamInputs();
+        for (unsigned i = 0; i < inputs.size(); ++i) {
+            const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
+            auto f = lastUsedKernel.find(buffer);
+            if (f == lastUsedKernel.end()) {
+                lastUsedKernel.emplace(buffer, kernel);
+            } else {
+                f->second = kernel;
+            }
+        }
+    }
 
     for (unsigned k = 0; k < n; ++k) {
 
@@ -181,6 +195,25 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
             }
         }
 
+        for (auto i = lastUsedKernel.begin(); i != lastUsedKernel.end(); i++) {
+            if (i->second == kernel) {
+                const StreamSetBuffer * const buffer = i->first;
+                Kernel * const producerKernel = buffer->getProducer();
+                const auto & binding = producerKernel->getStreamOutput(buffer);
+                if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
+                    continue;
+                }
+                auto f = consumedItemCount.find(buffer);
+                if (f != consumedItemCount.end()) {
+                    const Kernel* tempKernel = b->getKernel();
+                    b->setKernel(producerKernel);
+                    b->setConsumedItemCount(binding.getName(), f->second);
+                    b->setKernel(tempKernel);
+                }
+            }
+        }
+
+
         if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
             cycleCountEnd = b->CreateReadCycleCounter();
             Value * counterPtr = b->getCycleCountPtr();
@@ -192,22 +225,6 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
     }
 
     exitThreadBlock->moveAfter(b->GetInsertBlock());
-    for (const auto consumed : consumedItemCount) {
-        const StreamSetBuffer * const buf = consumed.first;
-        Kernel * const k = buf->getProducer();
-        const auto & outputs = k->getStreamSetOutputBuffers();
-        for (unsigned i = 0; i < outputs.size(); ++i) {
-            if (outputs[i] == buf) {
-                const auto & binding = k->getStreamOutput(i);
-                if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
-                    continue;
-                }
-                b->setKernel(k);
-                b->setConsumedItemCount(binding.getName(), consumed.second);
-                break;
-            }
-        }
-    }
 
     segNo->addIncoming(b->CreateAdd(segNo, b->getSize(codegen::ThreadNum)), b->GetInsertBlock());
 
@@ -313,6 +330,7 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
 
     StreamSetBufferMap<Value *> producedItemCount;
     StreamSetBufferMap<Value *> consumedItemCount;
+    StreamSetBufferMap<Kernel *> lastUsedKernel;
 
     b->CreateBr(pipelineLoop);
     b->SetInsertPoint(pipelineLoop);
@@ -323,6 +341,19 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
         cycleCountStart = b->CreateReadCycleCounter();
     }
     Value * terminated = nullptr;
+
+    for (Kernel * const kernel : kernels) {
+        const auto & inputs = kernel->getStreamInputs();
+        for (unsigned i = 0; i < inputs.size(); ++i) {
+            const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
+            auto f = lastUsedKernel.find(buffer);
+            if (f == lastUsedKernel.end()) {
+                lastUsedKernel.emplace(buffer, kernel);
+            } else {
+                f->second = kernel;
+            }
+        }
+    }
 
     for (Kernel * const kernel : kernels) {
 
@@ -342,6 +373,7 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
 
         std::vector<Value *> args = {kernel->getInstance(), isFinal};
 
+        const auto name = kernel->getName();
         for (unsigned i = 0; i < inputs.size(); ++i) {
             const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
             const auto f = producedItemCount.find(buffer);
@@ -389,6 +421,24 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
             }
         }
 
+        for (auto i = lastUsedKernel.begin(); i != lastUsedKernel.end(); i++) {
+            if (i->second == kernel) {
+                const StreamSetBuffer * const buffer = i->first;
+                Kernel * const producerKernel = buffer->getProducer();
+                const auto & binding = producerKernel->getStreamOutput(buffer);
+                if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
+                    continue;
+                }
+                auto f = consumedItemCount.find(buffer);
+                if (f != consumedItemCount.end()) {
+                    const Kernel* tempKernel = b->getKernel();
+                    b->setKernel(producerKernel);
+                    b->setConsumedItemCount(binding.getName(), f->second);
+                    b->setKernel(tempKernel);
+                }
+            }
+        }
+
         if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
             cycleCountEnd = b->CreateReadCycleCounter();
             Value * counterPtr = b->getCycleCountPtr();
@@ -398,17 +448,6 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
 //        Value * const segNo = b->acquireLogicalSegmentNo();
 //        Value * nextSegNo = b->CreateAdd(segNo, b->getSize(1));
 //        b->releaseLogicalSegmentNo(nextSegNo);
-    }
-
-    for (const auto consumed : consumedItemCount) {
-        const StreamSetBuffer * const buffer = consumed.first;
-        Kernel * const kernel = buffer->getProducer();
-        const auto & binding = kernel->getStreamOutput(buffer);
-        if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
-            continue;
-        }
-        b->setKernel(kernel);
-        b->setConsumedItemCount(binding.getName(), consumed.second);
     }
 
     b->CreateCondBr(terminated, pipelineExit, pipelineLoop);
