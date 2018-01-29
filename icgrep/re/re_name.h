@@ -159,7 +159,7 @@ inline Name * makeName(const std::string & name, RE * cc) {
 }
 
 inline Name * makeName(CC * const cc) {
-    const std::string name = cc->canonicalName(CC_type::UnicodeClass);
+    const std::string name = cc->canonicalName();
     return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Unicode, cc);
 }
 

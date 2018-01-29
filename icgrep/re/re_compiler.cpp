@@ -52,7 +52,7 @@ namespace re {
     
 void RE_Compiler::addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
-    mAlphabetCompilers.push_back(make_unique<cc::CC_Compiler>(mKernel, basis_set));
+    mAlphabetCompilers.push_back(make_unique<cc::Parabix_CC_Compiler>(mKernel, basis_set));
 }
 
 using MarkerType = RE_Compiler::MarkerType;
@@ -64,7 +64,20 @@ PabloAST * RE_Compiler::compile(RE * const re, PabloAST * const initialCursors) 
 }
 
 inline MarkerType RE_Compiler::compile(RE * const re, PabloAST * const cursors, PabloBuilder & pb) {
-    return process(re, makeMarker(FinalMatchUnit, cursors), pb);
+    //  An important use case for an initial set of cursors to be passed in
+    //  is that the initial cursors are computed from a prefix of an RE such
+    //  that there is a high probability of all cursors remaining in a block
+    //  are zeroed.   We therefore embed processing logic in an if-test,
+    //  dependent on the initial cursors.
+    Var * m = pb.createVar("m", pb.createZeroes());
+    NameMap nestedMap(mCompiledName);
+    mCompiledName = &nestedMap;
+    auto nested = pb.createScope();
+    MarkerType m1 = process(re, makeMarker(FinalPostPositionUnit, cursors), nested);
+    nested.createAssign(m, markerVar(m1));
+    pb.createIf(cursors, nested);
+    mCompiledName = nestedMap.getParent();
+    return makeMarker(m1.pos, m);
 }
 
 inline MarkerType RE_Compiler::compile(RE * const re, PabloBuilder & pb) {

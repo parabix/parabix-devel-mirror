@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -10,14 +10,10 @@
 
 namespace re {
 
-std::string CC::canonicalName(const CC_type type) const {
+std::string CC::canonicalName() const {
     std::stringstream name;
+    name << mAlphabet->getName();
     name << std::hex;
-    if ((type == CC_type::ByteClass) && (max_codepoint() >= 0x80)) {
-        name << "BC";
-    } else {
-        name << "CC";
-    }
     char separator = '_';
     for (const interval_t i : *this) {
         name << separator;

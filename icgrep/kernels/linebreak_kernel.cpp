@@ -37,11 +37,11 @@ LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::Kerne
 void LineFeedKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     #ifdef USE_DIRECT_LF_BUILDER
-    PabloAST * LF = compileCCfromCodeUnitStream(makeByte(0x0A), getInput(0), pb);
+    cc::Direct_CC_Compiler ccc(this, pb.createExtract(getInputStreamVar("byteStream"), pb.getInteger(0)));
     #else
-    cc::CC_Compiler ccc(this, getInputStreamSet("basis"));
-    PabloAST * LF = ccc.compileCC("LF", makeByte(0x0A), pb);
+    cc::Parabix_CC_Compiler ccc(this, getInputStreamSet("basis"));
     #endif
+    PabloAST * LF = ccc.compileCC("LF", makeByte(0x0A), pb);
     pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
 }
 
@@ -58,7 +58,7 @@ LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<kernel::Ker
 
 void LineBreakKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::CC_Compiler ccc(this, getInputStreamSet("basis"));
+    cc::Parabix_CC_Compiler ccc(this, getInputStreamSet("basis"));
 
     Integer * const ZERO = pb.getInteger(0);
 

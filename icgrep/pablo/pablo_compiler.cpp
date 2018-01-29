@@ -680,7 +680,7 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                 Value * rhvStreamIndex = nullptr;
                 if (isa<Var>(rh)) {
                     rhvStreamIndex = b->getInt32(0);
-                } else if (isa<Extract>(lh)) {
+                } else if (isa<Extract>(rh)) {
                     rhvStreamIndex = compileExpression(b, cast<Extract>(rh)->getIndex());
                 } else {
                     baseRhv = compileExpression(b, rh);

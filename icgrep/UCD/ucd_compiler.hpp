@@ -80,7 +80,7 @@ protected:
     void makeTargets(PabloBuilder & entry, NameMap & names);
 
 private:
-    cc::CC_Compiler &       mCharacterClassCompiler;
+    cc::CC_Compiler &       mCodeUnitCompiler;
     PabloAST *              mSuffixVar;
     TargetMap               mTarget;
     ValueMap                mTargetValue;

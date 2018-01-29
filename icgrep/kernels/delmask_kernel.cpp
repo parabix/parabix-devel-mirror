@@ -24,7 +24,7 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     std::vector<PabloAST *> u8_bits = getInputStreamSet("u8bit");
     //  output: delmask stream + error stream
     
-    cc::CC_Compiler ccc(this, u8_bits);
+    cc::Parabix_CC_Compiler ccc(this, u8_bits);
     
     Zeroes * zeroes = main.createZeroes();
 

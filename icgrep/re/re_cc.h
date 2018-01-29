@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -30,7 +30,7 @@ public:
 
     const cc::Alphabet * getAlphabet() const { return mAlphabet;}
 
-    std::string canonicalName(const CC_type type) const;
+    std::string canonicalName() const;
 
     inline codepoint_t min_codepoint() const {
         return front().first;

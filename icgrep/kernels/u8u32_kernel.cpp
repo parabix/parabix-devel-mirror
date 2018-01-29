@@ -24,7 +24,7 @@ void U8U32KernelBuilder::generatePabloMethod() {
     std::vector<PabloAST *> u8_bits = getInputStreamSet("u8bit");
     //  output: 32 u8-indexed streams, + delmask stream + error stream
     
-    cc::CC_Compiler ccc(this, u8_bits);
+    cc::Parabix_CC_Compiler ccc(this, u8_bits);
     
     Zeroes * zeroes = main.createZeroes();
 

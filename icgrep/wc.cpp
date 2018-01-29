@@ -104,7 +104,7 @@ void WordCountKernel::generatePabloMethod() {
     std::vector<PabloAST *> u8_bits = getInputStreamSet("u8bit");
     //  output: 3 counters
 
-    cc::CC_Compiler ccc(this, u8_bits);
+    cc::Parabix_CC_Compiler ccc(this, u8_bits);
 
     Var * lc = getOutputScalarVar("lineCount");
     Var * wc = getOutputScalarVar("wordCount");

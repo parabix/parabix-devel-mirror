@@ -15,21 +15,39 @@
 
 namespace cc {
 
-class CC_Compiler{
-    friend class ParabixCharacterClassKernelBuilder;
+class CC_Compiler {
 public:
     
-    CC_Compiler(pablo::PabloKernel * kernel, std::vector<pablo::PabloAST *> basisBitSet);
+    virtual pablo::PabloAST * compileCC(const re::CC *cc) = 0;
     
-    pablo::PabloAST * compileCC(const re::CC *cc);
+    virtual pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBlock & block) = 0;
+    
+    virtual pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBuilder & builder) = 0;
+    
+    virtual pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBlock & block) = 0;
+    
+    virtual pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBuilder & builder) = 0;
 
-    pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBlock & block);
+protected:
+    CC_Compiler(pablo::PabloKernel * kernel);
+    pablo::PabloBuilder             mBuilder;
+};
+    
+    
+class Parabix_CC_Compiler : public CC_Compiler {
+public:
+    
+    Parabix_CC_Compiler(pablo::PabloKernel * kernel, std::vector<pablo::PabloAST *> basisBitSet);
+    
+    pablo::PabloAST * compileCC(const re::CC *cc) override;
+    
+    pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBlock & block) override;
+    
+    pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBuilder & builder) override;
+    
+    pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBlock & block) override;
 
-    pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBuilder & builder);
-
-    pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBlock & block);
-
-    pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBuilder & builder);
+    pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBuilder & builder) override;
 
 private:
     pablo::PabloAST * getBasisVar(const unsigned n) const;
@@ -48,23 +66,58 @@ private:
     template<typename PabloBlockOrBuilder>
     pablo::PabloAST * charset_expr(const re::CC *cc, PabloBlockOrBuilder & pb);
 private:    
-    pablo::PabloBuilder             mBuilder;
     const unsigned                  mEncodingBits;
     std::vector<pablo::PabloAST *>  mBasisBit;
     unsigned                        mEncodingMask;
 };
 
-inline pablo::PabloAST *CC_Compiler::compileCC(const re::CC *cc) {
+    inline pablo::PabloAST * Parabix_CC_Compiler::compileCC(const re::CC *cc) {
+        return compileCC(cc, mBuilder);
+    }
+    
+    inline pablo::PabloAST * Parabix_CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBlock & block) {
+        return compileCC(cc->canonicalName(), cc, block);
+    }
+    
+    inline pablo::PabloAST * Parabix_CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBuilder & builder) {
+        return compileCC(cc->canonicalName(), cc, builder);
+    }
+    
+    
+
+class Direct_CC_Compiler : public CC_Compiler {
+public:
+    
+    Direct_CC_Compiler(pablo::PabloKernel * kernel, pablo::PabloAST * codeUnitStream);
+    
+    pablo::PabloAST * compileCC(const re::CC *cc) override;
+    
+    pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBlock & block) override;
+    
+    pablo::PabloAST * compileCC(const re::CC *cc, pablo::PabloBuilder & builder) override;
+    
+    pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBlock & block) override;
+    
+    pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBuilder & builder) override;
+        
+private:
+    pablo::PabloAST *               mCodeUnitStream;
+};
+
+    
+inline pablo::PabloAST * Direct_CC_Compiler::compileCC(const re::CC *cc) {
     return compileCC(cc, mBuilder);
 }
 
-inline pablo::PabloAST * CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBlock & block) {
-    return compileCC(cc->canonicalName(re::CC_type::ByteClass), cc, block);
+inline pablo::PabloAST * Direct_CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBlock & block) {
+    return compileCC(cc->canonicalName(), cc, block);
 }
 
-inline pablo::PabloAST *CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBuilder & builder) {
-    return compileCC(cc->canonicalName(re::CC_type::ByteClass), cc, builder);
+inline pablo::PabloAST * Direct_CC_Compiler::compileCC(const re::CC *cc, pablo::PabloBuilder & builder) {
+    return compileCC(cc->canonicalName(), cc, builder);
 }
+
+
 
 pablo::PabloAST * compileCCfromCodeUnitStream(const re::CC *cc, pablo::PabloAST * codeUnitStream, pablo::PabloBuilder & pb);
     

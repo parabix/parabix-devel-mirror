@@ -65,7 +65,7 @@ RE * exclude_CC(RE * re, CC * cc) {
                 if (const CC * cc0 = dyn_cast<CC>(defn)) {
                     if (!intersects(cc0, cc)) return re;
                 }
-                std::string cc_name = n->getName() + "--" + cc->canonicalName(CC_type::UnicodeClass);
+                std::string cc_name = n->getName() + "--" + cc->canonicalName();
                 return makeName(cc_name, n->getType(), exclude_CC(defn, cc));
                 /*
                 return exclude_CC(defn, cc);

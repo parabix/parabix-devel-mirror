@@ -14,6 +14,7 @@
 #include <UCD/ucd_compiler.hpp>
 #include <UCD/resolve_properties.h>
 #include <boost/container/flat_set.hpp>
+#include <cc/alphabet.h>
 #include <cc/multiplex_CCs.h>
 #include <sstream>
 #include <iostream>
@@ -33,6 +34,7 @@ RE * multiplex(RE * const re,
 
     std::function<RE *(RE *)> multiplex = [&](RE * const re) -> RE * {
         if (CC * cc = dyn_cast<CC>(re)) {
+            if (cc->getAlphabet() != &cc::Unicode) return cc;
             const auto index = find(UnicodeSets.begin(), UnicodeSets.end(), cc) - UnicodeSets.begin();
             const auto exclusive_IDs = exclusiveSetIDs[index];
             CC * CC_union = makeCC();
@@ -45,6 +47,7 @@ RE * multiplex(RE * const re,
             if (f == memoizer.end()) {
                 if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
                     if (CC * cc = dyn_cast<CC>(name->getDefinition())) {
+                        if (cc->getAlphabet() != &cc::Unicode) return cc;
                         const auto index = find(UnicodeSets.begin(), UnicodeSets.end(), cc) - UnicodeSets.begin();
                         const auto exclusive_IDs = exclusiveSetIDs[index];
                         CC * CC_union = makeCC();
