@@ -236,7 +236,7 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
     Type * const fieldWidthTy = getIntNTy(fieldWidth);
 
-    Value * const n = buf->getStreamSetCount(this, getStreamHandle(name));
+    Value * n = buf->getStreamSetCount(this, getStreamHandle(name));
 
     if (isConstantOne(n) || fieldWidth == blockWidth || (isConstantZero(targetOffset) && isConstantZero(sourceOffset))) {
         if (isConstantOne(n)) {
@@ -259,6 +259,11 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
         CreateMemCpy(target, source, itemsToCopy, alignment);
 
     } else { // either the target offset or source offset is non-zero but not both
+        auto t = getIntNTy(fieldWidth * buf->getNumOfStreams());
+        PointerType * const ptrTy = t->getPointerTo();
+        target = CreateGEP(CreatePointerCast(target, ptrTy), targetOffset);
+        source = CreateGEP(CreatePointerCast(source, ptrTy), sourceOffset);
+        n = this->CreateUDiv(n, this->getSize(buf->getNumOfStreams()));
 
         VectorType * const blockTy = getBitBlockType();
         PointerType * const blockPtrTy = blockTy->getPointerTo();
