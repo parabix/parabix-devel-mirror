@@ -118,6 +118,7 @@ add_executable(wc wc.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp kernels/streams_merge.cpp kernels/cc_kernel.cpp)
 add_executable(lz4d lz4d.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4_index_decoder.cpp kernels/lz4_bytestream_decoder.cpp)
 add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/propGen.cpp combine/icgrep-test/icgrep-test.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
+add_executable(character_deletion character_deletion.cpp kernels/cc_kernel.cpp)
 
 #Exclude CoRE from default build.
 set_target_properties(core PROPERTIES EXCLUDE_FROM_ALL 1)
@@ -129,6 +130,7 @@ target_link_libraries (wc PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_L
 target_link_libraries (editd PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4d PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (core RegExpCompiler ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries (character_deletion PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 
 IF(ENABLE_MULTIPLEXING)
     message(STATUS "Enabling Multiplexing")
@@ -261,10 +263,16 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
   COMMAND python base64test.py ${CMAKE_BINARY_DIR}/base64)
 
+add_test(
+  NAME character_deletion_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deletion
+  COMMAND python character_deletion_test.py ${CMAKE_BINARY_DIR}/character_deletion
+)
+
 SET_PROPERTY(TEST greptest PROPERTY TIMEOUT 400)
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
-SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
+SET_PROPERTY(TEST u8u16_test editd_test base64_test character_deletion_test PROPERTY TIMEOUT 40)
 
 
 add_custom_target (greptest
@@ -290,6 +298,11 @@ add_custom_target (editd_test
 add_custom_target (base64_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
   COMMAND python base64test.py "${CMAKE_BINARY_DIR}/base64")
+
+add_custom_target(character_deletion_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deletion
+  COMMAND python character_deletion_test.py ${CMAKE_BINARY_DIR}/character_deletion
+)
 
 add_custom_target (abc_gen
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA

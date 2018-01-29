@@ -101,7 +101,8 @@ void SwizzledDeleteByPEXTkernel::generateFinalBlockMethod(const std::unique_ptr<
     for (unsigned i = 0; i < mSwizzleSetCount; i++) {
         Value * pendingData = iBuilder->getScalarField("pendingSwizzleData" + std::to_string(i));
         Value * outputStreamPtr = iBuilder->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), iBuilder->getInt32(0));
-        iBuilder->CreateBlockAlignedStore(pendingData, iBuilder->CreateGEP(outputStreamPtr, outputIndex));
+		// TODO it seems that we do not need to store pending data here
+        // iBuilder->CreateBlockAlignedStore(pendingData, iBuilder->CreateGEP(outputStreamPtr, outputIndex));
     }
     iBuilder->setProducedItemCount("outputSwizzle0", iBuilder->CreateAdd(pendingOffset, outputProduced));
 }
