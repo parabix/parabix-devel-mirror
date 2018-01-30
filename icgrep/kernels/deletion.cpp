@@ -83,26 +83,35 @@ void SwizzledDeleteByPEXTkernel::generateDoBlockMethod(const std::unique_ptr<Ker
 }
 
 void SwizzledDeleteByPEXTkernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder, Value * remainingBytes) {
+    const auto originalProducedItemCount = iBuilder->getProducedItemCount("outputSwizzle0");
     IntegerType * vecTy = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
     Value * remaining = iBuilder->CreateZExt(remainingBytes, vecTy);
     Value * EOF_del = iBuilder->bitCast(iBuilder->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
     Value * delMask = iBuilder->CreateOr(EOF_del, iBuilder->loadInputStreamBlock("delMaskSet", iBuilder->getInt32(0)));
     const auto masks = get_PEXT_masks(iBuilder, delMask);
     generateProcessingLoop(iBuilder, masks, delMask);
+
+    const auto newProducedItemCount = iBuilder->getProducedItemCount("outputSwizzle0");
     Constant * blockOffsetMask = iBuilder->getSize(iBuilder->getBitBlockWidth() - 1);
     Constant * outputIndexShift = iBuilder->getSize(std::log2(mDelCountFieldWidth));
     
     Value * outputProduced = iBuilder->getProducedItemCount("outputSwizzle0"); // All output groups have the same count.
     Value * producedOffset = iBuilder->CreateAnd(outputProduced, blockOffsetMask);
     Value * outputIndex = iBuilder->CreateLShr(producedOffset, outputIndexShift);
+
+    const auto deltaOutputIndex = iBuilder->CreateSub(
+            iBuilder->CreateUDiv(newProducedItemCount, iBuilder->getSize(iBuilder->getBitBlockWidth())),
+            iBuilder->CreateUDiv(originalProducedItemCount, iBuilder->getSize(iBuilder->getBitBlockWidth()))
+    );
+    outputIndex = iBuilder->CreateAdd(outputIndex, iBuilder->CreateMul(deltaOutputIndex, iBuilder->getSize(iBuilder->getBitBlockWidth() / mDelCountFieldWidth)));
+
     Value * pendingOffset = iBuilder->getScalarField("pendingOffset");
 
     // Write the pending data.
     for (unsigned i = 0; i < mSwizzleSetCount; i++) {
         Value * pendingData = iBuilder->getScalarField("pendingSwizzleData" + std::to_string(i));
         Value * outputStreamPtr = iBuilder->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), iBuilder->getInt32(0));
-		// TODO it seems that we do not need to store pending data here
-        // iBuilder->CreateBlockAlignedStore(pendingData, iBuilder->CreateGEP(outputStreamPtr, outputIndex));
+        iBuilder->CreateBlockAlignedStore(pendingData, iBuilder->CreateGEP(outputStreamPtr, outputIndex));
     }
     iBuilder->setProducedItemCount("outputSwizzle0", iBuilder->CreateAdd(pendingOffset, outputProduced));
 }

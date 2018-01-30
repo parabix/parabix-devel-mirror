@@ -1113,8 +1113,19 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
 
             b->SetInsertPoint(copyBack);
             Value * const baseAddress = b->getBaseAddress(name);
-            const auto copyAlignment = getItemAlignment(mStreamSetOutputs[i]);
-            b->CreateStreamCpy(name, baseAddress, ZERO, baseAddress, bufferSize, current, copyAlignment);
+            const StreamSetBuffer * const buf = this->getAnyStreamSetBuffer(name);
+            const auto numOfStreams = buf->getNumOfStreams();
+            const auto itemWidth = getItemWidth(this->getBinding(name));
+
+            const auto sizeByBit = b->CreateMul(b->CreateMul(b->getSize(itemWidth), bufferSize), b->getSize(numOfStreams));
+            const auto sizeByByte = b->CreateUDiv(sizeByBit, b->getSize(8));
+            const auto sourcePtr = b->CreateGEP(b->CreatePointerCast(baseAddress, b->getInt8PtrTy()), sizeByByte);
+            const auto targetPtr = b->CreatePointerCast(baseAddress, b->getInt8PtrTy());
+
+            const auto itemsToBeCopyByBit = b->CreateMul(b->CreateMul(b->getSize(itemWidth), current), b->getSize(numOfStreams));
+            const auto itemsToBeCopyByByte = b->CreateUDiv(itemsToBeCopyByBit, b->getSize(8));
+            b->CreateMemCpy(targetPtr, sourcePtr, itemsToBeCopyByByte, 8);
+
             b->CreateBr(done);
 
             b->SetInsertPoint(done);
