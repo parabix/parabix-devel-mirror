@@ -27,6 +27,8 @@ public:
     virtual pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBlock & block) = 0;
     
     virtual pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBuilder & builder) = 0;
+    
+    virtual ~CC_Compiler(){}
 
 protected:
     CC_Compiler(pablo::PabloKernel * kernel);
@@ -48,6 +50,8 @@ public:
     pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBlock & block) override;
 
     pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBuilder & builder) override;
+    
+    ~Parabix_CC_Compiler() {}
 
 private:
     pablo::PabloAST * getBasisVar(const unsigned n) const;
@@ -99,7 +103,9 @@ public:
     pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBlock & block) override;
     
     pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBuilder & builder) override;
-        
+    
+    ~Direct_CC_Compiler() {}
+    
 private:
     pablo::PabloAST *               mCodeUnitStream;
 };

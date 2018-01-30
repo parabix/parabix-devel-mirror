@@ -13,14 +13,15 @@ namespace re { class RE; class CC; }
 namespace kernel {
 
 struct CharClassesSignature {
-    CharClassesSignature(const std::vector<re::CC *> & ccs);
+    CharClassesSignature(const std::vector<re::CC *> & ccs, bool useDirectCC);
 protected:
+    const bool mUseDirectCC;
     const std::string mSignature;
 };
 
 class CharClassesKernel : public CharClassesSignature, public pablo::PabloKernel {
 public:
-    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs);
+    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, bool useDirectCC = false);
     bool hasSignature() const override { return true; }
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     bool isCachable() const override { return true; }
@@ -28,6 +29,7 @@ protected:
     void generatePabloMethod() override;
 protected:
     std::vector<re::CC *> mCCs;
+    
 };
 
 }

@@ -51,20 +51,24 @@ inline std::string signature(const std::vector<re::CC *> & ccs) {
     }
 }
 
-CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs)
-: mSignature(signature(ccs)) {
-
+CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, bool useDirectCC)
+: mUseDirectCC(useDirectCC), mSignature((useDirectCC ? "d" : "p") + signature(ccs)) {
 }
 
 
-CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<CC *> && ccs)
-: CharClassesSignature(ccs)
+CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<CC *> && ccs, bool useDirectCC)
+: CharClassesSignature(ccs, useDirectCC)
 , PabloKernel(iBuilder,
               "cc" + sha1sum(mSignature),
-              {Binding{iBuilder->getStreamSetTy(8), "basis"}},
+              {},
               {Binding{iBuilder->getStreamSetTy(ccs.size(), 1), "charclasses"}})
 , mCCs(std::move(ccs)) {
-
+    if (useDirectCC) {
+        mStreamSetInputs.push_back({Binding{iBuilder->getStreamSetTy(1, 8), "byteData"}});
+    }
+    else {
+        mStreamSetInputs.push_back({Binding{iBuilder->getStreamSetTy(8), "basis"}});
+    }
 }
 
 std::string CharClassesKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -73,8 +77,14 @@ std::string CharClassesKernel::makeSignature(const std::unique_ptr<kernel::Kerne
 
 void CharClassesKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
+    CC_Compiler * ccc;
+    if (mUseDirectCC) {
+        ccc = new Direct_CC_Compiler(this, pb.createExtract(getInputStreamVar("byteData"), pb.getInteger(0)));
+    }
+    else {
+        ccc = new Parabix_CC_Compiler(this, getInputStreamSet("basis"));
+    }
 
-    Parabix_CC_Compiler ccc(this, getInputStreamSet("basis"));
     unsigned n = mCCs.size();
 
     NameMap nameMap;
@@ -85,7 +95,7 @@ void CharClassesKernel::generatePabloMethod() {
         names.push_back(name);
     }
 
-    UCD::UCDCompiler ucdCompiler(ccc);
+    UCD::UCDCompiler ucdCompiler(*ccc);
     if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {
         ucdCompiler.generateWithoutIfHierarchy(nameMap, pb);
     } else {
@@ -103,6 +113,7 @@ void CharClassesKernel::generatePabloMethod() {
             llvm::report_fatal_error("Can't compile character classes.");
         }
     }
+    delete ccc;
 }
 
 
