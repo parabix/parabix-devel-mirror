@@ -30,6 +30,7 @@
 #include <kernels/p2s_kernel.h>
 #include <toolchain/cpudriver.h>
 #include <iostream>
+#include <fstream>
 #include <kernels/deletion.h>
 
 namespace re { class CC; }
