@@ -49,7 +49,7 @@ inline Value * partial_sum_popcount(const std::unique_ptr<KernelBuilder> & iBuil
 
 SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount, unsigned PEXT_width)
 : BlockOrientedKernel("PEXTdel" + std::to_string(fw) + "_" + std::to_string(streamCount),
-                  {Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"}, Binding{iBuilder->getStreamSetTy(), "delMaskSet"}},
+                  {Binding{iBuilder->getStreamSetTy(), "delMaskSet"}, Binding{iBuilder->getStreamSetTy(streamCount), "inputStreamSet"}},
                   {}, {}, {}, {})
 , mDelCountFieldWidth(fw)
 , mStreamCount(streamCount)

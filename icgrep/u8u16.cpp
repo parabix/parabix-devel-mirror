@@ -309,7 +309,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     // Apply a deletion algorithm to discard all but the final position of the UTF-8
     // sequences (bit streams) for each UTF-16 code unit. Also compresses and swizzles the result.
     Kernel * delK = pxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 64, 16);
-    pxDriver.makeKernelCall(delK, {U8u16Bits, DelMask}, {u16Swizzle0, u16Swizzle1, u16Swizzle2, u16Swizzle3});
+    pxDriver.makeKernelCall(delK, {DelMask, U8u16Bits}, {u16Swizzle0, u16Swizzle1, u16Swizzle2, u16Swizzle3});
 
     // Produce unswizzled UTF-16 bit streams
     StreamSetBuffer * u16bits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), segmentSize * bufferSegments);
