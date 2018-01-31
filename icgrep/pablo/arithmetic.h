@@ -42,8 +42,8 @@ protected:
         expr2->addUser(this);
     }
 private:
-    PabloAST *          mLH;
-    PabloAST *          mRH;
+    PabloAST * const    mLH;
+    PabloAST * const    mRH;
 };
 
 #define CREATE_OPERATOR_TYPE(Name) \

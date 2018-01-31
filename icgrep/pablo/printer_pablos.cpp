@@ -34,6 +34,7 @@ using TypeId = PabloAST::ClassTypeId;
 const unsigned BlockIndenting = 2;
 
 void PabloPrinter::print(const PabloKernel * kernel, raw_ostream & out) {
+    out << kernel->getName() << "\n\n";
     print(kernel->getEntryScope(), out, true);
 }
 
@@ -176,6 +177,8 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
 void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
     if (expr == nullptr) {
         out << "<null-expr>";
+    } else if (isa<Integer>(expr)) {
+        out << cast<Integer>(expr)->value();
     } else if (isa<Zeroes>(expr)) {
         out << "0";
     } else if (isa<Ones>(expr)) {
@@ -230,9 +233,10 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
         out << " != ";
         print(op->getRH(), out);
     } else if (const Statement * stmt = dyn_cast<Statement>(expr)) {
+        assert (stmt->getParent());
         out << stmt->getName();
-    } else if (isa<Integer>(expr)) {
-        out << cast<Integer>(expr)->value();
+    } else if (LLVM_UNLIKELY(isa<PabloKernel>(expr))) {
+        print(cast<PabloKernel>(expr), out);
     } else {
         out << "???";
     }
@@ -240,6 +244,7 @@ void PabloPrinter::print(const PabloAST * expr, llvm::raw_ostream & out) {
 
 void PabloPrinter::print(const PabloBlock * block, raw_ostream & strm, const bool expandNested, const unsigned indent) {
     for (const Statement * stmt : *block) {
+        assert (stmt->getParent() == block);
         print(stmt, strm, expandNested, indent);
         if (LLVM_LIKELY(!isa<Branch>(stmt) || !expandNested)) {
             strm << "\n";

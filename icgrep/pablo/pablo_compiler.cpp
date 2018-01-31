@@ -672,6 +672,7 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                     lhvStreamIndex = b->getInt32(0);
                 } else if (isa<Extract>(lh)) {
                     lhvStreamIndex = compileExpression(b, cast<Extract>(lh)->getIndex());
+                    lh = cast<Extract>(lh)->getArray();
                 } else {
                     baseLhv = compileExpression(b, lh);
                 }
@@ -682,6 +683,7 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                     rhvStreamIndex = b->getInt32(0);
                 } else if (isa<Extract>(rh)) {
                     rhvStreamIndex = compileExpression(b, cast<Extract>(rh)->getIndex());
+                    rh = cast<Extract>(rh)->getArray();
                 } else {
                     baseRhv = compileExpression(b, rh);
                 }
@@ -816,7 +818,7 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
 }
 
 Value * PabloCompiler::getPointerToVar(const std::unique_ptr<kernel::KernelBuilder> & b, const Var * var, Value * index1, Value * index2)  {
-    assert (var && index1 && (index2 == nullptr || index1->getType() == index2->getType()));
+    assert (var && index1);
     if (LLVM_LIKELY(var->isKernelParameter())) {
         if (LLVM_UNLIKELY(var->isScalar())) {
             std::string tmp;
