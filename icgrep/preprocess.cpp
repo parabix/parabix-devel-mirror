@@ -56,7 +56,7 @@ void preprocessPipeline(ParabixDriver & pxDriver){
     unsigned bufferSegments = codegen::BufferSegments;
 
     StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), segmentSize);
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy());
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
 

@@ -40,10 +40,6 @@ public:
         return k;
     }
 
-    void addKernelCall(kernel::Kernel & kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
-        return makeKernelCall(&kb, inputs, outputs);
-    }
-
     virtual void makeKernelCall(kernel::Kernel * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) = 0;
 
     virtual void generatePipelineIR() = 0;

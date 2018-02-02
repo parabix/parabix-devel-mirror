@@ -90,7 +90,7 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
 }
 
 void ParabixDriver::makeKernelCall(Kernel * kernel, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
-    assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kernel->getModule() == nullptr));
+    assert ("makeKernelCall was already run on this kernel." && (kernel->getModule() == nullptr));
     mPipeline.emplace_back(kernel);
     kernel->bindPorts(inputs, outputs);
     if (!mCache || !mCache->loadCachedObjectFile(iBuilder, kernel)) {

@@ -10,19 +10,18 @@
 #include <llvm/IR/Module.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
+#include <boost/graph/adjacency_list.hpp>
 #include <kernels/kernel_builder.h>
+
+#include <llvm/Support/raw_ostream.h>
 
 using namespace kernel;
 using namespace parabix;
 using namespace llvm;
+using namespace boost;
+using namespace boost::container;
 
 using Port = Kernel::Port;
-
-template <typename Value>
-using StreamSetBufferMap = boost::container::flat_map<const StreamSetBuffer *, Value>;
-
-template <typename Value>
-using FlatSet = boost::container::flat_set<Value>;
 
 Function * makeThreadFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const std::string & name) {
     Function * const f = Function::Create(FunctionType::get(b->getVoidTy(), {b->getVoidPtrTy()}, false), Function::InternalLinkage, name, b->getModule());
@@ -31,11 +30,43 @@ Function * makeThreadFunction(const std::unique_ptr<kernel::KernelBuilder> & b, 
     return f;
 }
 
-void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel);
+struct PipelineGenerator {
 
-void handleInsufficientData(const std::unique_ptr<KernelBuilder> & b, Value * const produced, Value * const final, BasicBlock * const entry, const Kernel * const consumer,  const Binding & input, const StreamSetBuffer * const buffer);
+    template <typename Value>
+    using StreamSetBufferMap = flat_map<const StreamSetBuffer *, Value>;
 
-bool requiresCopyBack(const Kernel * k, const ProcessingRate & rate);
+    using RateValue = ProcessingRate::RateValue;
+
+    struct Channel {
+        Channel() = default;
+        Channel(const RateValue & rate, const StreamSetBuffer * const buffer)
+        : rate(rate), buffer(buffer) { }
+
+        RateValue               rate;
+        const StreamSetBuffer * buffer;
+    };
+
+    using Graph = adjacency_list<vecS, vecS, bidirectionalS, const Kernel *, Channel, vecS>;
+
+    using Map = flat_map<const Kernel *, Graph::vertex_descriptor>;
+
+    void initialize(const std::vector<Kernel *> & kernels);
+
+    Value * executeKernel(const std::unique_ptr<KernelBuilder> & b, const Kernel * const kernel, PHINode * const segNo, Value * const finished);
+
+    void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel);
+
+    void updateProducedAndConsumedCounts(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel);
+
+private:
+
+    Graph   G;
+    Map     M;
+
+    StreamSetBufferMap<Value *>         producedItemCount;
+    StreamSetBufferMap<Value *>         consumedItemCount;
+    StreamSetBufferMap<const Kernel *>  lastConsumer;
+};
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateSegmentParallelPipeline
@@ -86,18 +117,16 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
     }
     Value * const segOffset = b->CreateLoad(b->CreateGEP(threadStruct, {b->getInt32(0), b->getInt32(1)}));
 
-    BasicBlock * const segmentLoop = BasicBlock::Create(b->getContext(), "segmentLoop", threadFunc);
+    PipelineGenerator G;
+
+    BasicBlock * const segmentLoop = b->CreateBasicBlock("segmentLoop");
     b->CreateBr(segmentLoop);
 
     b->SetInsertPoint(segmentLoop);
+    G.initialize(kernels);
     PHINode * const segNo = b->CreatePHI(b->getSizeTy(), 2, "segNo");
     segNo->addIncoming(segOffset, entryBlock);
-
-    BasicBlock * const exitThreadBlock = BasicBlock::Create(b->getContext(), "exitThread", threadFunc);
-
-    StreamSetBufferMap<Value *> producedItemCount;
-    StreamSetBufferMap<Value *> consumedItemCount;
-    StreamSetBufferMap<Kernel *> lastUsedKernel;
+    Value * finished = nullptr;
 
     Value * cycleCountStart = nullptr;
     Value * cycleCountEnd = nullptr;
@@ -105,114 +134,28 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
         cycleCountStart = b->CreateReadCycleCounter();
     }
 
-    Value * terminated = nullptr;
-
     const bool serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
-
-    for (Kernel * const kernel : kernels) {
-        const auto & inputs = kernel->getStreamInputs();
-        for (unsigned i = 0; i < inputs.size(); ++i) {
-            const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
-            auto f = lastUsedKernel.find(buffer);
-            if (f == lastUsedKernel.end()) {
-                lastUsedKernel.emplace(buffer, kernel);
-            } else {
-                f->second = kernel;
-            }
-        }
-    }
 
     for (unsigned k = 0; k < n; ++k) {
 
-        const auto & kernel = kernels[k];
+        const Kernel * const kernel = kernels[k];
 
-        BasicBlock * const kernelWait = BasicBlock::Create(b->getContext(), kernel->getName() + "Wait", threadFunc);
-
+        BasicBlock * const kernelWait = b->CreateBasicBlock(kernel->getName() + "Wait");
         b->CreateBr(kernelWait);
 
-        BasicBlock * const kernelCheck = BasicBlock::Create(b->getContext(), kernel->getName() + "Check", threadFunc);
-
-        BasicBlock * const kernelBody = BasicBlock::Create(b->getContext(), kernel->getName() + "Do", threadFunc);
-
-        BasicBlock * const kernelEnd = BasicBlock::Create(b->getContext(), kernel->getName() + "End", threadFunc);
-
         b->SetInsertPoint(kernelWait);
-
         b->setKernel(kernels[serialize ? (n - 1) : k]);
         Value * const processedSegmentCount = b->acquireLogicalSegmentNo();
         b->setKernel(kernel);
-
         assert (processedSegmentCount->getType() == segNo->getType());
-        Value * const ready = b->CreateICmpEQ(segNo, processedSegmentCount);        
+        Value * const ready = b->CreateICmpEQ(segNo, processedSegmentCount);
+
+        BasicBlock * const kernelCheck = b->CreateBasicBlock(kernel->getName() + "Check");
         b->CreateCondBr(ready, kernelCheck, kernelWait);
 
         b->SetInsertPoint(kernelCheck);
-        b->CreateUnlikelyCondBr(b->getTerminationSignal(), kernelEnd, kernelBody);
 
-        // Execute the kernel segment
-        b->SetInsertPoint(kernelBody);
-        const auto & inputs = kernel->getStreamInputs();
-        Value * const isFinal = b->CreateOr(terminated ? terminated : b->getFalse(), b->getTerminationSignal());
-        std::vector<Value *> args = {kernel->getInstance(), isFinal};
-        for (unsigned i = 0; i < inputs.size(); ++i) {
-            const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
-            const auto f = producedItemCount.find(buffer);
-            assert (f != producedItemCount.end());
-            Value * const produced = f->second;
-            args.push_back(produced);
-            handleInsufficientData(b, produced, isFinal, kernelEnd, kernel, inputs[i], buffer);
-        }
-
-        b->setKernel(kernel);
-        b->createDoSegmentCall(args);
-        b->CreateBr(kernelEnd);
-
-        b->SetInsertPoint(kernelEnd);
-
-        Value * const finished = b->getTerminationSignal();
-        if (terminated) { // all kernels must terminate
-            terminated = b->CreateAnd(terminated, finished);
-        } else {
-            terminated = finished;
-        }
-
-        const auto & outputs = kernel->getStreamOutputs();
-        for (unsigned i = 0; i < outputs.size(); ++i) {            
-            Value * const produced = b->getProducedItemCount(outputs[i].getName());
-            const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
-            assert (producedItemCount.count(buf) == 0);
-            producedItemCount.emplace(buf, produced);
-        }
-        for (unsigned i = 0; i < inputs.size(); ++i) {
-            Value * const processedItemCount = b->getProcessedItemCount(inputs[i].getName());
-            const StreamSetBuffer * const buf = kernel->getStreamSetInputBuffer(i);            
-            auto f = consumedItemCount.find(buf);
-            if (f == consumedItemCount.end()) {
-                consumedItemCount.emplace(buf, processedItemCount);
-            } else {
-                assert (f->second);
-                f->second = b->CreateUMin(processedItemCount, f->second);
-            }
-        }
-
-        for (auto i = lastUsedKernel.begin(); i != lastUsedKernel.end(); i++) {
-            if (i->second == kernel) {
-                const StreamSetBuffer * const buffer = i->first;
-                Kernel * const producerKernel = buffer->getProducer();
-                const auto & binding = producerKernel->getStreamOutput(buffer);
-                if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
-                    continue;
-                }
-                auto f = consumedItemCount.find(buffer);
-                if (f != consumedItemCount.end()) {
-                    const Kernel* tempKernel = b->getKernel();
-                    b->setKernel(producerKernel);
-                    b->setConsumedItemCount(binding.getName(), f->second);
-                    b->setKernel(tempKernel);
-                }
-            }
-        }
-
+        finished = G.executeKernel(b, kernel, segNo, finished);
 
         if (DebugOptionIsSet(codegen::EnableCycleCounter)) {
             cycleCountEnd = b->CreateReadCycleCounter();
@@ -224,20 +167,18 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
         b->releaseLogicalSegmentNo(b->CreateAdd(segNo, b->getSize(1)));
     }
 
-    exitThreadBlock->moveAfter(b->GetInsertBlock());
-
     segNo->addIncoming(b->CreateAdd(segNo, b->getSize(codegen::ThreadNum)), b->GetInsertBlock());
 
-    b->CreateUnlikelyCondBr(terminated, exitThreadBlock, segmentLoop);
+    BasicBlock * const segmentExit = b->CreateBasicBlock("segmentExit");
+    b->CreateUnlikelyCondBr(finished, segmentExit, segmentLoop);
 
-    b->SetInsertPoint(exitThreadBlock);
+    b->SetInsertPoint(segmentExit);
 
     // only call pthread_exit() within spawned threads; otherwise it'll be equivalent to calling exit() within the process
-    BasicBlock * const exitThread = BasicBlock::Create(b->getContext(), "ExitThread", threadFunc);
-    BasicBlock * const exitFunction = BasicBlock::Create(b->getContext(), "ExitProcessFunction", threadFunc);
+    BasicBlock * const exitThread = b->CreateBasicBlock("ExitThread");
+    BasicBlock * const exitFunction = b->CreateBasicBlock("ExitProcessFunction");
 
-    Value * const exitCond = b->CreateICmpEQ(segOffset, ConstantInt::getNullValue(segOffset->getType()));
-    b->CreateCondBr(exitCond, exitFunction, exitThread);
+    b->CreateCondBr(b->CreateIsNull(segOffset), exitFunction, exitThread);
     b->SetInsertPoint(exitThread);
     b->CreatePThreadExitCall(nullVoidPtrVal);
     b->CreateBr(exitFunction);
@@ -316,128 +257,38 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
     
 }
 
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generatePipelineLoop
  ** ------------------------------------------------------------------------------------------------------------- */
 void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::vector<Kernel *> & kernels) {
 
-    BasicBlock * entryBlock = b->GetInsertBlock();
-    Function * main = entryBlock->getParent();
-
     // Create the basic blocks for the loop.
-    BasicBlock * const pipelineLoop = BasicBlock::Create(b->getContext(), "pipelineLoop", main);
-    BasicBlock * const pipelineExit = BasicBlock::Create(b->getContext(), "pipelineExit", main);
+    BasicBlock * const entryBlock = b->GetInsertBlock();
+    BasicBlock * const pipelineLoop = b->CreateBasicBlock("pipelineLoop");
+    BasicBlock * const pipelineExit = b->CreateBasicBlock("pipelineExit");
 
-    StreamSetBufferMap<Value *> producedItemCount;
-    StreamSetBufferMap<Value *> consumedItemCount;
-    StreamSetBufferMap<Kernel *> lastUsedKernel;
+    PipelineGenerator G;
 
     b->CreateBr(pipelineLoop);
+
     b->SetInsertPoint(pipelineLoop);
-    
+    G.initialize(kernels);
+    PHINode * const segNo = b->CreatePHI(b->getSizeTy(), 2, "segNo");
+    segNo->addIncoming(b->getSize(0), entryBlock);
+    Value * finished = nullptr;
+
     Value * cycleCountStart = nullptr;
     Value * cycleCountEnd = nullptr;
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         cycleCountStart = b->CreateReadCycleCounter();
-    }
-    Value * terminated = nullptr;
-
-    for (Kernel * const kernel : kernels) {
-        const auto & inputs = kernel->getStreamInputs();
-        for (unsigned i = 0; i < inputs.size(); ++i) {
-            const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
-            auto f = lastUsedKernel.find(buffer);
-            if (f == lastUsedKernel.end()) {
-                lastUsedKernel.emplace(buffer, kernel);
-            } else {
-                f->second = kernel;
-            }
-        }
     }
 
     for (Kernel * const kernel : kernels) {
 
         b->setKernel(kernel);
 
-        BasicBlock * const entry = b->GetInsertBlock();
-        BasicBlock * const kernelCode = BasicBlock::Create(b->getContext(), kernel->getName(), main);
-        BasicBlock * const kernelExit = BasicBlock::Create(b->getContext(), kernel->getName() + "_exit", main);
-
-        b->CreateUnlikelyCondBr(b->getTerminationSignal(), kernelExit, kernelCode);
-
-        b->SetInsertPoint(kernelCode);
-        const auto & inputs = kernel->getStreamInputs();
-        const auto & outputs = kernel->getStreamOutputs();
-
-        Value * const isFinal = terminated ? terminated : b->getFalse();
-
-        std::vector<Value *> args = {kernel->getInstance(), isFinal};
-
-        const auto name = kernel->getName();
-        for (unsigned i = 0; i < inputs.size(); ++i) {
-            const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
-            const auto f = producedItemCount.find(buffer);
-            if (LLVM_UNLIKELY(f == producedItemCount.end())) {
-                report_fatal_error(kernel->getName() + " uses stream set " + inputs[i].getName() + " prior to its definition");
-            }
-            Value * const produced = f->second;
-            args.push_back(produced);
-            handleInsufficientData(b, produced, isFinal, pipelineLoop, kernel, inputs[i], buffer);
-        }
-
-        applyOutputBufferExpansions(b, kernel);
-
-        b->createDoSegmentCall(args);
-
-        BasicBlock * const kernelFinished = b->GetInsertBlock();
-        Value * const finished = b->getTerminationSignal();
-        b->CreateBr(kernelExit);
-
-        b->SetInsertPoint(kernelExit);
-        PHINode * const finishedPhi = b->CreatePHI(b->getInt1Ty(), 2);
-        finishedPhi->addIncoming(b->getTrue(), entry);
-        finishedPhi->addIncoming(finished, kernelFinished);
-        if (terminated) { // All kernels must agree that we've terminated.
-            terminated = b->CreateAnd(terminated, finishedPhi);
-        } else {
-            terminated = finishedPhi;
-        }
-
-        for (unsigned i = 0; i < outputs.size(); ++i) {
-            Value * const produced = b->getProducedItemCount(outputs[i].getName());
-            const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
-            assert (producedItemCount.count(buf) == 0);
-            producedItemCount.emplace(buf, produced);
-        }
-
-        for (unsigned i = 0; i < inputs.size(); ++i) {
-            Value * const processed = b->getProcessedItemCount(inputs[i].getName());
-            const StreamSetBuffer * const buf = kernel->getStreamSetInputBuffer(i);
-            auto f = consumedItemCount.find(buf);
-            if (f == consumedItemCount.end()) {
-                consumedItemCount.emplace(buf, processed);
-            } else {
-                f->second = b->CreateUMin(processed, f->second);
-            }
-        }
-
-        for (auto i = lastUsedKernel.begin(); i != lastUsedKernel.end(); i++) {
-            if (i->second == kernel) {
-                const StreamSetBuffer * const buffer = i->first;
-                Kernel * const producerKernel = buffer->getProducer();
-                const auto & binding = producerKernel->getStreamOutput(buffer);
-                if (LLVM_UNLIKELY(binding.getRate().isDerived())) {
-                    continue;
-                }
-                auto f = consumedItemCount.find(buffer);
-                if (f != consumedItemCount.end()) {
-                    const Kernel* tempKernel = b->getKernel();
-                    b->setKernel(producerKernel);
-                    b->setConsumedItemCount(binding.getName(), f->second);
-                    b->setKernel(tempKernel);
-                }
-            }
-        }
+        finished = G.executeKernel(b, kernel, segNo, finished);
 
         if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
             cycleCountEnd = b->CreateReadCycleCounter();
@@ -445,12 +296,10 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
             b->CreateStore(b->CreateAdd(b->CreateLoad(counterPtr), b->CreateSub(cycleCountEnd, cycleCountStart)), counterPtr);
             cycleCountStart = cycleCountEnd;
         }
-//        Value * const segNo = b->acquireLogicalSegmentNo();
-//        Value * nextSegNo = b->CreateAdd(segNo, b->getSize(1));
-//        b->releaseLogicalSegmentNo(nextSegNo);
     }
 
-    b->CreateCondBr(terminated, pipelineExit, pipelineLoop);
+    segNo->addIncoming(b->CreateAdd(segNo, b->getSize(1)), b->GetInsertBlock());
+    b->CreateCondBr(finished, pipelineExit, pipelineLoop);
 
     pipelineExit->moveAfter(b->GetInsertBlock());
 
@@ -480,84 +329,305 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief applyOutputBufferExpansions
+ * @brief initialize
  ** ------------------------------------------------------------------------------------------------------------- */
-void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const std::string & name, DynamicBuffer * const db, const uint64_t baseSize) {
-    BasicBlock * const doExpand = BasicBlock::Create(b->getContext(), name + "Expand", b->GetInsertBlock()->getParent());
-    BasicBlock * const nextBlock = b->GetInsertBlock()->getNextNode();
-    doExpand->moveAfter(b->GetInsertBlock());
-    BasicBlock * const bufferReady = b->CreateBasicBlock(name + "Ready");
-    bufferReady->moveAfter(doExpand);
-    if (nextBlock) nextBlock->moveAfter(bufferReady);
+void PipelineGenerator::initialize(const std::vector<Kernel *> & kernels) {
 
-    Value * const handle = db->getStreamSetHandle();
+    // Our goal when building G is *not* to model the dataflow of our program but instead to
+    // detetermine the minimum number of sufficient data tests needed to ensure each kernel has
+    // enough data to progress.
 
-    Value * const produced = b->getProducedItemCount(name);
-    Value * const consumed = b->getConsumedItemCount(name);
-    Value * const required = b->CreateAdd(b->CreateSub(produced, consumed), b->getSize(2 * baseSize));
+    // For example, suppose we have kernels A, B and C, and that B has a fixed input and fixed
+    // output rate. C also has a fixed input rate but A does *not* have a fixed output rate.
+    // C must test whether it has enough input from B as B is not guaranteed to have enough
+    // input from A. Moreover if C is depedent on B, C could be skipped entirely.
 
-    b->CreateCondBr(b->CreateICmpUGT(required, db->getCapacity(b.get(), handle)), doExpand, bufferReady);
+    // Note: we cannot simply test the output of A for both B and C. In a our data-parallel
+    // pipeline A's state may change by the time we process C.
 
-    b->SetInsertPoint(doExpand);
-    db->doubleCapacity(b.get(), handle);
-    // Ensure that capacity is sufficient by successive doubling, if necessary.
-    b->CreateCondBr(b->CreateICmpUGT(required, db->getBufferedSize(b.get(), handle)), doExpand, bufferReady);
+    for (const Kernel * const consumer : kernels) {
+        const auto v = add_vertex(consumer, G);
+        M.emplace(consumer, v);
+        const auto & inputs = consumer->getStreamInputs();
+        for (unsigned i = 0; i < inputs.size(); ++i) {
 
-    b->SetInsertPoint(bufferReady);
+            const auto buffer = consumer->getStreamSetInputBuffer(i);
+            const Kernel * const producer = buffer->getProducer();
+            const Binding & output = producer->getStreamOutput(buffer);
+            if (output.getRate().isRelative()) continue;
+
+            const Binding & input = inputs[i];
+            auto ub_in = consumer->getUpperBound(input.getRate()) * consumer->getStride();
+            if (input.hasLookahead()) {
+                ub_in += input.getLookahead();
+            }
+
+            const auto lb_out = producer->getLowerBound(output.getRate()) * producer->getStride();
+
+            const auto rate = lb_out / ub_in;
+            const auto f = M.find(producer); assert (f != M.end());
+            const auto u = f->second;
+            // If we have multiple inputs from the same kernel, we only need to consider the "slowest" one
+            bool slowest = true;
+            if (lb_out > 0) {
+                for (const auto e : make_iterator_range(in_edges(v, G))) {
+                    if (source(e, G) == u) {
+                        Channel & p = G[e];
+                        slowest = false;
+                        if (rate < p.rate) {
+                            p.rate = rate;
+                            p.buffer = buffer;
+                        }
+                        break;
+                    }
+                }
+            }
+            if (slowest) {
+                add_edge(u, v, Channel{rate, buffer}, G);
+            }
+        }
+    }
+
+    // Take a transitive closure of G but whenever we attempt to insert an edge into the closure
+    // that already exists, check instead whether the rate of our proposed edge is <= the existing
+    // edge's rate. If so, the data availability is transitively guaranteed.
+    for (const auto u : make_iterator_range(vertices(G))) {
+        for (auto ei : make_iterator_range(in_edges(u, G))) {
+            const auto v = source(ei, G);
+            const Channel & pu = G[ei];           
+            for (auto ej : make_iterator_range(out_edges(u, G))) {                
+                const auto w = target(ej, G);
+                const auto ratio = RateValue(G[u]->getStride(), G[w]->getStride());
+                const auto rate = pu.rate * ratio;
+                bool insert = true;
+                for (auto ek : make_iterator_range(in_edges(w, G))) {
+                    if (source(ek, G) == v) {
+                        Channel & pw = G[ek];
+                        if (rate <= pw.rate && pw.rate > 0) {
+                            pw.buffer = nullptr;
+                        }
+                        insert = false;
+                        break;
+                    }
+                }
+                if (insert) {
+                    add_edge(v, w, Channel{rate, nullptr}, G);
+                }
+            }
+        }
+    }
+
+    // remove any closure edges from G
+    remove_edge_if([&](const Graph::edge_descriptor e) { return G[e].buffer == nullptr; }, G);
+
+    // If a kernel has no 'necessary to check' inputs then we can remove every output with a rate >= 1 from G
+    for (const auto u : make_iterator_range(vertices(G))) {
+        if (in_degree(u, G) == 0) {
+            remove_out_edge_if(u, [&](const Graph::edge_descriptor e) { return G[e].rate >= RateValue{1, 1}; }, G);
+        }
+    }
+
+    // iterate through each kernel in order and determine which kernel last used a particular buffer
+    for (Kernel * const kernel : kernels) {
+        const auto & inputs = kernel->getStreamInputs();
+        for (unsigned i = 0; i < inputs.size(); ++i) {
+            lastConsumer[kernel->getStreamSetInputBuffer(i)] = kernel;
+        }
+    }
+
 }
 
-void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * k) {
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief executeKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value *PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & b, const Kernel * const kernel, PHINode * const segNo, Value * const finished) {
+
+    const auto & inputs = kernel->getStreamInputs();
+
+    std::vector<Value *> args(2 + inputs.size());
+
+    const auto f = M.find(kernel); assert (f != M.end());
+    const auto u = f->second;
+
+    BasicBlock * const kernelEntry = b->GetInsertBlock();
+    BasicBlock * const kernelCode = b->CreateBasicBlock(kernel->getName());
+    BasicBlock * const kernelExit = b->CreateBasicBlock(kernel->getName() + "_exit");
+
+    b->CreateUnlikelyCondBr(b->getTerminationSignal(), kernelExit, kernelCode);
+
+    b->SetInsertPoint(kernelExit);
+    PHINode * const terminated = b->CreatePHI(b->getInt1Ty(), 2);
+    // Since our initial "isFinal" state is equal to what the first kernel's termination signal state
+    terminated->addIncoming(finished ? finished : b->getTrue(), kernelEntry);
+    Value * isFinal = finished ? finished : b->getFalse();
+
+    b->SetInsertPoint(kernelCode);
+    for (unsigned i = 0; i < inputs.size(); ++i) {
+
+        const Binding & input = inputs[i];
+
+        const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
+
+        const auto name = input.getName();
+
+        const auto p = producedItemCount.find(buffer);
+        if (LLVM_UNLIKELY(p == producedItemCount.end())) {
+            report_fatal_error(kernel->getName() + " uses stream set " + name + " prior to its definition");
+        }
+        Value * const produced = p->second;
+        const auto ub = kernel->getUpperBound(input.getRate()); assert (ub > 0);
+        const auto strideLength = ceiling(ub * kernel->getStride()) ;
+        Constant * const segmentLength = b->getSize(strideLength * codegen::SegmentSize);
+
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+            b->CreateAssert(b->CreateICmpULE(segmentLength, b->getCapacity(name)),
+                            kernel->getName() + ": " + name + " upper bound of segment length exceeds buffer capacity");
+        }
+
+        Value * limit = nullptr;
+        if (input.getRate().isFixed()) {
+            // if the input is deferred, simply adding length to the processed item count may result in setting a limit
+            // that is too low for. instead just calculate the limit of all fixed rates from the segment no.
+            limit = b->CreateMul(b->CreateAdd(segNo, b->getSize(1)), segmentLength);
+        } else {
+            Value * const processed = b->getProcessedItemCount(name);
+            limit = b->CreateAdd(processed, segmentLength);
+        }
+
+        // TODO: currently, if we produce the exact amount as our limit states, we will have to process one additional segment
+        // before we can consider this kernel finished. We ought to be able to avoid doing in some cases but need to prove its
+        // always safe to do so.
+
+        Value * const consumingAll = b->CreateICmpULT(produced, limit);
+        args[i + 2] = b->CreateSelect(consumingAll, produced, limit);
+        isFinal = b->CreateAnd(isFinal, consumingAll);
+
+        // Check for available input (if it's both computable and not guaranteed to be sufficient by the processing rates)
+        for (auto e : make_iterator_range(in_edges(u, G))) {
+            const auto p = G[e];
+            if (p.buffer == buffer) {
+                BasicBlock * const sufficient = b->CreateBasicBlock(name + "_hasSufficientData");
+
+                Constant * const sl = b->getSize(strideLength);
+
+                Value * remaining = nullptr;
+                if (input.getRate().isFixed()) {
+                    remaining = b->CreateMul(segNo, sl);
+                } else {
+                    remaining = b->getProcessedItemCount(name);
+                }
+                remaining = b->CreateSub(produced, remaining);
+
+                Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGE(remaining, sl), isFinal);
+                terminated->addIncoming(b->getFalse(), b->GetInsertBlock());
+                b->CreateLikelyCondBr(hasSufficientData, sufficient, kernelExit);
+                b->SetInsertPoint(sufficient);
+            }
+        }
+    }
+
+    applyOutputBufferExpansions(b, kernel);
+
+    args[0] = kernel->getInstance();
+    args[1] = isFinal;
+
+    b->createDoSegmentCall(args);
+
+    if (inputs.empty() || kernel->canTerminateEarly()) {
+        isFinal = b->CreateOr(isFinal, b->getTerminationSignal());
+    }
+    b->setTerminationSignal(isFinal);
+//    b->CallPrintInt(kernel->getName() + "_finished", isFinal);
+    BasicBlock * const kernelFinished = b->GetInsertBlock();
+    kernelExit->moveAfter(kernelFinished);
+    b->CreateBr(kernelExit);
+
+    b->SetInsertPoint(kernelExit);
+    terminated->addIncoming(isFinal, kernelFinished);
+
+    updateProducedAndConsumedCounts(b, kernel);
+
+    return terminated;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief applyOutputBufferExpansions
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineGenerator::applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * k) {
     const auto & outputs = k->getStreamSetOutputBuffers();
     for (unsigned i = 0; i < outputs.size(); i++) {
         if (isa<DynamicBuffer>(outputs[i])) {
-            const auto ub = k->getUpperBound(k->getStreamOutput(i).getRate());
-            const auto baseSize = (ub.numerator() * k->getStride() + ub.denominator() - 1) / ub.denominator();
+            const auto baseSize = ceiling(k->getUpperBound(k->getStreamOutput(i).getRate()) * k->getStride() * codegen::SegmentSize);
             if (LLVM_LIKELY(baseSize > 0)) {
+
                 const auto & name = k->getStreamOutput(i).getName();
-                applyOutputBufferExpansions(b, name, cast<DynamicBuffer>(outputs[i]), baseSize);
+
+                BasicBlock * const doExpand = b->CreateBasicBlock(name + "Expand");
+                BasicBlock * const nextBlock = b->GetInsertBlock()->getNextNode();
+                doExpand->moveAfter(b->GetInsertBlock());
+                BasicBlock * const bufferReady = b->CreateBasicBlock(name + "Ready");
+                bufferReady->moveAfter(doExpand);
+                if (nextBlock) nextBlock->moveAfter(bufferReady);
+
+                Value * const produced = b->getProducedItemCount(name);
+                Value * const consumed = b->getConsumedItemCount(name);
+                Value * const required = b->CreateAdd(b->CreateSub(produced, consumed), b->getSize(2 * baseSize));
+
+                b->CreateCondBr(b->CreateICmpUGT(required, b->getBufferedSize(name)), doExpand, bufferReady);
+                b->SetInsertPoint(doExpand);
+
+                b->doubleCapacity(name);
+                // Ensure that capacity is sufficient by successive doubling, if necessary.
+                b->CreateCondBr(b->CreateICmpUGT(required, b->getBufferedSize(name)), doExpand, bufferReady);
+
+                b->SetInsertPoint(bufferReady);
+
             }
         }
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief handleInsufficientData
+ * @brief updateProducedAndConsumedCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void handleInsufficientData(const std::unique_ptr<KernelBuilder> & b, Value * const produced, Value * const final, BasicBlock * const insufficient,
-                                   const Kernel * const consumer,  const Binding & input, const StreamSetBuffer * const buffer) {
-    const Kernel * const producer = buffer->getProducer();
-    const Binding & output = producer->getStreamOutput(buffer);
-    const auto consumedRate = consumer->getUpperBound(input.getRate()) * consumer->getStride();
-    if (consumedRate > 0) {
-        auto producedRate = producer->getLowerBound(output.getRate()) * producer->getStride();
-        if (LLVM_UNLIKELY(input.hasLookahead())) {
-            producedRate -= input.getLookahead();
-        }
-        if (LLVM_UNLIKELY(producedRate < consumedRate)) {
-            const auto name = input.getName();
-            BasicBlock * const sufficient = BasicBlock::Create(b->getContext(), name + "IsSufficient", b->GetInsertBlock()->getParent());
-            Value * const processed = b->getProcessedItemCount(name);
+void PipelineGenerator::updateProducedAndConsumedCounts(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel) {
 
-            if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableAsserts))) {
-                b->CreateAssert(b->CreateICmpULE(processed, produced), input.getName() + ": processed cannot exceed produced");
-            }
-            Value * const unread = b->CreateSub(produced, processed);
-            Constant * const amount = ConstantInt::get(unread->getType(), ceiling(consumedRate));
-            Value * const cond = b->CreateOr(b->CreateICmpUGE(unread, amount), final);
-            b->CreateLikelyCondBr(cond, sufficient, insufficient);
-            b->SetInsertPoint(sufficient);
+    const auto & inputs = kernel->getStreamInputs();
+    for (unsigned i = 0; i < inputs.size(); ++i) {
+        Value * const processed = b->getProcessedItemCount(inputs[i].getName());
+
+        const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
+        auto f = consumedItemCount.find(buffer);
+        Value * consumed = processed;
+        if (f == consumedItemCount.end()) {
+            consumedItemCount.emplace(buffer, consumed);
+        } else {
+            consumed = b->CreateUMin(consumed, f->second);
+            f->second = consumed;
+        }
+
+        // If this kernel is the last consumer of a input buffer, update the consumed count for that buffer.
+        const auto c = lastConsumer.find(buffer);
+        assert (c != lastConsumer.end());
+        if (c->second == kernel) {
+            Kernel * const producer = buffer->getProducer();
+            const auto & output = producer->getStreamOutput(buffer);
+            if (output.getRate().isRelative()) continue;
+            b->setKernel(producer);
+
+            b->setConsumedItemCount(output.getName(), consumed);
+            b->setKernel(kernel);
         }
     }
+
+    const auto & outputs = kernel->getStreamOutputs();
+    for (unsigned i = 0; i < outputs.size(); ++i) {
+        Value * const produced = b->getProducedItemCount(outputs[i].getName());
+        const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
+        assert (producedItemCount.count(buf) == 0);
+        producedItemCount.emplace(buf, produced);
+    }
+
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief requiresCopyBack
- ** ------------------------------------------------------------------------------------------------------------- */
-bool requiresCopyBack(const Kernel * k, const ProcessingRate & rate) {
-    if (rate.isBounded() || rate.isUnknown()) {
-        return true;
-    } else if (rate.isRelative()) {
-        return requiresCopyBack(k, k->getBinding(rate.getReference()).getRate());
-    }
-    return false;
-}
+

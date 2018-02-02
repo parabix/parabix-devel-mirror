@@ -122,7 +122,7 @@ public:
     
     llvm::Value * getLinearlyWritableItems(const std::string & name, llvm::Value * fromPos, bool reverse = false);
     
-    void CreateStreamCpy(const std::string & name, llvm::Value * const target, llvm::Value * const targetOffset, llvm::Value * const source, llvm::Value * const sourceOffset, llvm::Value * const itemsToCopy, const unsigned itemAlignment);
+    void CreateStreamCpy(const std::string & name, llvm::Value * const target, llvm::Value * const targetOffset, llvm::Value * const source, llvm::Value * const sourceOffset, llvm::Value * const itemsToCopy, const unsigned itemAlignment);    
 
     llvm::BasicBlock * CreateConsumerWait();
 
@@ -145,6 +145,8 @@ public:
     }
 
     void protectOutputStream(const std::string & name, const bool readOnly);
+
+    void doubleCapacity(const std::string & name);
 
 protected:
 

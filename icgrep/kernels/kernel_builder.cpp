@@ -97,6 +97,7 @@ Value * KernelBuilder::getInternalItemCount(const std::string & name, const std:
 void KernelBuilder::setInternalItemCount(const std::string & name, const std::string & suffix, llvm::Value * const value) {
     const ProcessingRate & rate = mKernel->getBinding(name).getRate();
     if (LLVM_UNLIKELY(rate.isDerived())) {
+        assert (false);
         report_fatal_error("Cannot set item count: " + name + " is a Derived rate");
     }
     if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
@@ -236,21 +237,15 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
     Type * const fieldWidthTy = getIntNTy(fieldWidth);
 
-    Value * const n = buf->getStreamSetCount(this, getStreamHandle(name));
+    Value * n = buf->getStreamSetCount(this, getStreamHandle(name));
 
     if (isConstantOne(n) || fieldWidth == blockWidth || (isConstantZero(targetOffset) && isConstantZero(sourceOffset))) {
-        if (isConstantOne(n)) {
-            if (LLVM_LIKELY(itemWidth < 8)) {
-                itemsToCopy = CreateUDivCeil(itemsToCopy, getSize(8 / itemWidth));
-            } else if (LLVM_UNLIKELY(itemWidth > 8)) {
-                itemsToCopy = CreateMul(itemsToCopy, getSize(itemWidth / 8));
-            }
-        } else {
-            if (LLVM_LIKELY(blockWidth > (itemWidth * 8))) {
-                itemsToCopy = CreateUDivCeil(itemsToCopy, getSize(blockWidth / (8 * itemWidth)));
-            } else if (LLVM_LIKELY(blockWidth < (itemWidth * 8))) {
-                itemsToCopy = CreateUDivCeil(CreateMul(itemsToCopy, getSize(8)), getSize(blockWidth / itemWidth));
-            }
+        if (LLVM_LIKELY(itemWidth < 8)) {
+            itemsToCopy = CreateUDivCeil(itemsToCopy, getSize(8 / itemWidth));
+        } else if (LLVM_UNLIKELY(itemWidth > 8)) {
+            itemsToCopy = CreateMul(itemsToCopy, getSize(itemWidth / 8));
+        }
+        if (!isConstantOne(n)) {
             itemsToCopy = CreateMul(itemsToCopy, n);
         }
         PointerType * const ptrTy = fieldWidthTy->getPointerTo();
@@ -259,6 +254,7 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
         CreateMemCpy(target, source, itemsToCopy, alignment);
 
     } else { // either the target offset or source offset is non-zero but not both
+
         VectorType * const blockTy = getBitBlockType();
         PointerType * const blockPtrTy = blockTy->getPointerTo();
 
@@ -447,7 +443,22 @@ Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value *
 }
 
 StoreInst * KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, Value * toStore) {
-    return CreateBlockAlignedStore(toStore, getOutputStreamBlockPtr(name, streamIndex));
+    Value * const ptr = getOutputStreamBlockPtr(name, streamIndex);
+    Type * const storeTy = toStore->getType();
+    Type * const ptrElemTy = ptr->getType()->getPointerElementType();
+    if (LLVM_UNLIKELY(storeTy != ptrElemTy)) {
+        if (LLVM_LIKELY(storeTy->canLosslesslyBitCastTo(ptrElemTy))) {
+            toStore = CreateBitCast(toStore, ptrElemTy);
+        } else {
+            std::string tmp;
+            raw_string_ostream out(tmp);
+            out << "invalid type conversion when calling storeOutputStreamBlock on " <<  name << ": ";
+            ptrElemTy->print(out);
+            out << " vs. ";
+            storeTy->print(out);
+        }
+    }
+    return CreateBlockAlignedStore(toStore, ptr);
 }
 
 Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) {
@@ -462,7 +473,22 @@ Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * 
 }
 
 StoreInst * KernelBuilder::storeOutputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex, Value * toStore) {
-    return CreateBlockAlignedStore(toStore, getOutputStreamPackPtr(name, streamIndex, packIndex));
+    Value * const ptr = getOutputStreamPackPtr(name, streamIndex, packIndex);
+    Type * const storeTy = toStore->getType();
+    Type * const ptrElemTy = ptr->getType()->getPointerElementType();
+    if (LLVM_UNLIKELY(storeTy != ptrElemTy)) {
+        if (LLVM_LIKELY(storeTy->canLosslesslyBitCastTo(ptrElemTy))) {
+            toStore = CreateBitCast(toStore, ptrElemTy);
+        } else {
+            std::string tmp;
+            raw_string_ostream out(tmp);
+            out << "invalid type conversion when calling storeOutputStreamPack on " <<  name << ": ";
+            ptrElemTy->print(out);
+            out << " vs. ";
+            storeTy->print(out);
+        }
+    }
+    return CreateBlockAlignedStore(toStore, ptr);
 }
 
 Value * KernelBuilder::getOutputStreamSetCount(const std::string & name) {
@@ -545,6 +571,11 @@ Value * KernelBuilder::getAccumulator(const std::string & accumName) {
         }
         report_fatal_error(mKernel->getName() + " has no output scalar named " + accumName);
     }
+}
+
+void KernelBuilder::doubleCapacity(const std::string & name) {
+    const StreamSetBuffer * const buf = mKernel->getAnyStreamSetBuffer(name);
+    return buf->doubleCapacity(this, getStreamHandle(name));
 }
 
 BasicBlock * KernelBuilder::CreateConsumerWait() {

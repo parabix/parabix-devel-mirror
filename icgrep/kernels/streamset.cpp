@@ -117,6 +117,10 @@ Value * StreamSetBuffer::getStreamSetCount(IDISA::IDISA_Builder * const b, Value
     return b->getSize(count);
 }
 
+void StreamSetBuffer::doubleCapacity(IDISA::IDISA_Builder * const /* b */, Value */* handle */) const {
+    report_fatal_error("doubleCapacity is not supported by this buffer type");
+}
+
 /**
  * @brief getRawItemPointer
  *
@@ -701,7 +705,7 @@ void DynamicBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> &
 //  ensures that we have correct data.   TODO: consider optimizing based on actual
 //  consumer and producer positions.
 //
-void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * const handle) {
+void DynamicBuffer::doubleCapacity(IDISA::IDISA_Builder * const b, Value * const handle) const {
     size_t numStreams = 1;
     if (isa<ArrayType>(mBaseType)) {
         numStreams = mBaseType->getArrayNumElements();

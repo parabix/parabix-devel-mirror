@@ -76,6 +76,8 @@ void LineBreakKernelBuilder::generatePabloMethod() {
     crb.createAssign(CRLF, crlf);
     PabloAST * removedCRLF = crb.createAnd(LineBreak, crb.createNot(CRLF));
     crb.createAssign(LineBreak, removedCRLF);
+
+
     // Record the CR marker of any CR+LF
     pb.createAssign(pb.createExtract(getOutput(1), ZERO), CRLF);
 

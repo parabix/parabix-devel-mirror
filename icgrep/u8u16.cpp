@@ -283,7 +283,7 @@ void u8u16PipelineAVX2Gen(ParabixDriver & pxDriver) {
     // File data from mmap
     StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
     
-    Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder, segmentSize);
+    Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
     mmapK->setInitialArguments({fileDecriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
     
@@ -367,7 +367,7 @@ void u8u16PipelineGen(ParabixDriver & pxDriver) {
     // File data from mmap
     StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
     
-    Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder, segmentSize);
+    Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
     mmapK->setInitialArguments({fileDecriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
     

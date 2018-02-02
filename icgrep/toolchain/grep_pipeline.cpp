@@ -57,7 +57,7 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
     
     StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, 8));
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(idb, idb->getInt8PtrTy(), segmentSize);
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(idb, idb->getInt8PtrTy());
     sourceK->setInitialArguments({buffer, length});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
     

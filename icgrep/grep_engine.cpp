@@ -150,8 +150,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
         REs[i] = excludeUnicodeLineBreak(REs[i]);
         REs[i] = regular_expression_passes(REs[i]);
         if (CC_Multiplexing) {
-            const std::vector<const re::CC *> UnicodeSets = re::collectUnicodeSets(REs[i]);
-
+            const auto UnicodeSets = re::collectUnicodeSets(REs[i]);
             StreamSetBuffer * const MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
             if (UnicodeSets.size() <= 1) {
                 kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i]);
@@ -165,6 +164,8 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
                 StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), baseBufferSize);
                 kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis));
                 mGrepDriver->makeKernelCall(ccK, {BasisBits}, {CharClasses});
+//                kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis), true);
+//                mGrepDriver->makeKernelCall(ccK, {ByteStream}, {CharClasses});
                 kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i], std::vector<cc::Alphabet *>{mpx.get()});
                 mGrepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, CRLFStream, RequiredStreams, CharClasses}, {MatchResults});
                 MatchResultsBufs[i] = MatchResults;
@@ -218,9 +219,6 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs) {
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
 
-    const auto segmentSize = codegen::SegmentSize;
-    const auto bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
-
     const unsigned encodingBits = 8;
 
     Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), nullptr));
@@ -232,7 +230,7 @@ void GrepEngine::grepCodeGen(std::vector<re::RE *> REs) {
     fileDescriptor->setName("fileDescriptor");
 
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits));
-    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb, segmentSize * bufferSegments);
+    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb);
     sourceK->setInitialArguments({fileDescriptor});
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
 
@@ -314,8 +312,6 @@ void EmitMatchesEngine::grepCodeGen(std::vector<re::RE *> REs) {
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
 
-    const auto segmentSize = codegen::SegmentSize;
-    const auto bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
     const unsigned encodingBits = 8;
 
     Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), idb->getIntAddrTy(), nullptr));
@@ -329,7 +325,7 @@ void EmitMatchesEngine::grepCodeGen(std::vector<re::RE *> REs) {
     match_accumulator->setName("match_accumulator");
 
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits));
-    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb, segmentSize * bufferSegments);
+    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb);
     sourceK->setInitialArguments({fileDescriptor});
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
 

@@ -203,6 +203,8 @@ public:
 
     std::string getCacheName(const std::unique_ptr<KernelBuilder> & idb) const;
 
+    bool canTerminateEarly() const { return hasAttribute(Attribute::KindId::CanTerminateEarly); }
+
 protected:
 
     virtual void addInternalKernelProperties(const std::unique_ptr<KernelBuilder> & idb) { }
@@ -287,11 +289,12 @@ private:
 protected:
 
     llvm::Function *                    mCurrentMethod;
-    llvm::Value *                       mAvailablePrincipalItemCount;
-    bool                                mIsGenerated;
+    llvm::Value *                       mAvailablePrincipalItemCount;    
     unsigned                            mStride;
     llvm::Value *                       mIsFinal;
     llvm::Value *                       mOutputScalarResult;
+    mutable bool                        mIsGenerated;
+
     std::vector<llvm::Value *>          mAvailableItemCount;
 
     KernelFieldMap                      mKernelFieldMap;
@@ -299,6 +302,8 @@ protected:
 
     StreamMap                           mStreamMap;
 
+    // TODO: once the kernel no longer needs to be aware of what type of buffers its working with,
+    // these should be removed from the Kernel class and put into the Pipeline
     StreamSetBuffers                    mStreamSetInputBuffers;
     std::vector<llvm::Value *>          mStreamSetInputBaseAddress;
     StreamSetBuffers                    mStreamSetOutputBuffers;

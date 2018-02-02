@@ -257,7 +257,7 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     auto ChStream = pxDriver.addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(4));
-    auto mmapK = pxDriver.addKernelInstance<MemorySourceKernel>(idb, inputType, segmentSize);
+    auto mmapK = pxDriver.addKernelInstance<MemorySourceKernel>(idb, inputType);
     mmapK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
@@ -328,7 +328,7 @@ void preprocessPipeline(ParabixDriver & pxDriver) {
 
     auto ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
-    auto mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder, segmentSize);
+    auto mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
     mmapK->setInitialArguments({fileDescriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
@@ -370,7 +370,7 @@ void multiEditdPipeline(ParabixDriver & pxDriver) {
 
     auto ByteStream = pxDriver.addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, 8));
 
-    auto mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(idb, segmentSize);
+    auto mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(idb);
     mmapK->setInitialArguments({fileDescriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
@@ -436,7 +436,7 @@ void editdIndexPatternPipeline(ParabixDriver & pxDriver, unsigned patternLen) {
     idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     auto ChStream = pxDriver.addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(4));
-    auto mmapK = pxDriver.addKernelInstance<MemorySourceKernel>(idb, inputType, segmentSize);
+    auto mmapK = pxDriver.addKernelInstance<MemorySourceKernel>(idb, inputType);
     mmapK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
@@ -665,9 +665,6 @@ editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
     auto & iBuilder = pxDriver.getBuilder();
     Module * M = iBuilder->getModule();
 
-    const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
-
     Type * mBitBlockType = iBuilder->getBitBlockType();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const voidTy = Type::getVoidTy(M->getContext());
@@ -683,7 +680,7 @@ editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
     fileSize->setName("fileSize");
 
     StreamSetBuffer * MatchResults = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1));
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(iBuilder, inputType, segmentSize * bufferSegments);
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(iBuilder, inputType);
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {MatchResults});
 

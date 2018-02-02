@@ -102,17 +102,16 @@ int main(int argc, char *argv[]) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
 
-
     // GeneratePipeline
     StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
     StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), inputBufferBlocks);
 
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy(), codegen::SegmentSize);
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy());
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
+
     Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder, /*aligned = */ true);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
-
 
     StreamSetBuffer * const CharacterMarkerBuffer = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), inputBufferBlocks);
     Kernel * ccK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(characterToBeDeleted)}, 8);
@@ -150,6 +149,8 @@ int main(int argc, char *argv[]) {
 
 
     pxDriver.generatePipelineIR();
+
+    pxDriver.deallocateBuffers();
 
     iBuilder->CreateRetVoid();
 

@@ -111,6 +111,8 @@ public:
 
     virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const;
     
+    virtual void doubleCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle) const;
+
     bool supportsCopyBack() const {
         return mOverflowBlocks != 0;
     }
@@ -311,7 +313,7 @@ private:
 };
     
 // Dynamically allocated circular buffers: TODO: add copyback, swizzle support, dynamic allocation, producer, consumer, length
-class DynamicBuffer: public StreamSetBuffer {
+class DynamicBuffer final : public StreamSetBuffer {
 public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::DynamicBuffer;}
     
@@ -323,13 +325,13 @@ public:
     
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 
-    void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
+    void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) const override;
 
     llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * absolutePosition) const override;
     
     llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
     
-    void doubleCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle);
+    void doubleCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle)  const final;
 
 protected:
     llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;

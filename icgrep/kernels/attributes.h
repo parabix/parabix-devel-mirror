@@ -203,6 +203,11 @@ struct Attribute {
         // a MultiBlock kernel will select the *maximum* input item count as it's
         // principle item length and zero-extend the streams accordingly.
 
+        CanTerminateEarly,
+
+        // Indicates that this kernel can call setTerminationSignal() to terminate the
+        // kernel prior to processing all of its input streams.
+
     };
 
     bool isAdd() const {
@@ -254,6 +259,7 @@ protected:
     friend Attribute Misaligned();
     friend Attribute ConditionalRegionBegin();
     friend Attribute ConditionalRegionEnd();
+    friend Attribute CanTerminateEarly();
 
     Attribute(const KindId kind, const unsigned k) : mKind(kind), mAmount(k) { }
 
@@ -340,6 +346,10 @@ inline Attribute ConditionalRegionBegin() {
 
 inline Attribute ConditionalRegionEnd() {
     return Attribute(Attribute::KindId::ConditionalRegionEnd, 0);
+}
+
+inline Attribute CanTerminateEarly() {
+    return Attribute(Attribute::KindId::CanTerminateEarly, 0);
 }
 
 }
