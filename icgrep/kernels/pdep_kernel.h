@@ -7,6 +7,7 @@
 
 #include "kernel.h"
 #include <llvm/IR/Value.h>
+#include <string>
 namespace IDISA { class IDISA_Builder; }
 /*
 What this kernel does:
@@ -67,7 +68,7 @@ Value * next_swizzle_idx = kb->CreateUDiv(kb->CreateURem(kb->CreateAdd(pdepWidth
 namespace kernel {
 class PDEPkernel : public MultiBlockKernel {
 public:
-    PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsigned streamCount, unsigned swizzleFactor, unsigned PDEP_width = 64);
+    PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsigned streamCount, unsigned swizzleFactor, unsigned PDEP_width = 64, std::string name = "PDEPdel");
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
