@@ -10,6 +10,7 @@
 namespace kernel { class KernelBuilder; }
 
 namespace kernel {
+//#define USE_DIRECT_LF_BUILDER
 
 class LineFeedKernelBuilder final : public pablo::PabloKernel {
 public:

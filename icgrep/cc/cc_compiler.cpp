@@ -14,6 +14,7 @@
 #include <pablo/pablo_kernel.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace re;
 using namespace pablo;
@@ -236,7 +237,7 @@ PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream,
         llvm::report_fatal_error("compileCCfromCodeUnitStream must be applied to a CC with a CodeUnitAlphabet");
     }
     unsigned codeUnitWidth = cast<const CodeUnitAlphabet>(a)->getCodeUnitBitWidth();
-    unsigned topBit = 1 << codeUnitWidth;
+    unsigned topBit = 1 << (codeUnitWidth - 1);
     unsigned maxCodeVal = (topBit - 1) | topBit;
     PabloAST * ccStrm = pb.createZeroes();
     for (const auto & interval : *cc) {

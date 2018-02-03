@@ -22,15 +22,6 @@ using namespace llvm;
 
 namespace re {
   
-static inline CC * extractCC(RE * re) {
-    if (isa<CC>(re)) {
-        return cast<CC>(re);
-    } else if (isa<Name>(re)) {
-        return extractCC(cast<Name>(re)->getDefinition());
-    }
-    return nullptr;
-}
-
 struct NameResolver {
     RE * resolveUnicodeProperties(RE * re) {
         if (Name * name = dyn_cast<Name>(re)) {
