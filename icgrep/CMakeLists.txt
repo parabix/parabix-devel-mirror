@@ -271,6 +271,12 @@ add_test(
 #  COMMAND python character_deletion_test.py ${CMAKE_BINARY_DIR}/character_deletion
 #)
 
+#add_test(
+#  NAME character_deposit_test
+#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deposit
+#  COMMAND python character_deposit_test.py ${CMAKE_BINARY_DIR}/character_deposit
+#)
+
 SET_PROPERTY(TEST greptest PROPERTY TIMEOUT 400)
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
@@ -304,6 +310,11 @@ add_custom_target (base64_test
 #add_custom_target(character_deletion_test
 #  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deletion
 #  COMMAND python character_deletion_test.py ${CMAKE_BINARY_DIR}/character_deletion
+#)
+
+#add_custom_target(character_deposit_test
+#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deposit
+#  COMMAND python character_deposit_test.py ${CMAKE_BINARY_DIR}/character_deposit
 #)
 
 add_custom_target (abc_gen
