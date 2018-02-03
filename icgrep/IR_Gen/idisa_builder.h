@@ -15,6 +15,28 @@ namespace llvm { class Value; }
 
 namespace IDISA {
 
+    
+inline bool isStreamTy(llvm::Type * t) {
+    return t->isVectorTy() && (t->getVectorNumElements() == 0);
+}
+
+inline bool isStreamSetTy(llvm::Type * t) {
+    return t->isArrayTy() && (isStreamTy(t->getArrayElementType()));
+}
+
+inline unsigned getNumOfStreams (llvm::Type * t) {
+    if (isStreamTy(t)) return 1;
+    assert(isStreamSetTy(t));
+    return t->getArrayNumElements();
+}
+
+inline unsigned getStreamFieldWidth (llvm::Type * t) {
+    if (isStreamTy(t)) return t->getScalarSizeInBits();
+    assert(isStreamSetTy(t));
+    return t->getArrayElementType()->getScalarSizeInBits();
+}
+
+    
 class IDISA_Builder : public CBuilder {
 
 public:
@@ -167,7 +189,7 @@ public:
     llvm::ArrayType * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return getStreamSetTy(getContext(), NumElements, FieldWidth);
     }
-
+    
     void CallPrintRegister(const std::string & regName, llvm::Value * const value);
 
 protected:

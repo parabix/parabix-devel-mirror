@@ -77,14 +77,12 @@ std::string CharClassesKernel::makeSignature(const std::unique_ptr<kernel::Kerne
 
 void CharClassesKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    CC_Compiler * ccc;
+    std::unique_ptr<CC_Compiler> ccc;
     if (mUseDirectCC) {
-        ccc = new Direct_CC_Compiler(this, pb.createExtract(getInputStreamVar("byteData"), pb.getInteger(0)));
+        ccc = make_unique<cc::Direct_CC_Compiler>(this, pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = make_unique<cc::Parabix_CC_Compiler>(this, getInputStreamSet("basis"));
     }
-    else {
-        ccc = new Parabix_CC_Compiler(this, getInputStreamSet("basis"));
-    }
-
     unsigned n = mCCs.size();
 
     NameMap nameMap;
@@ -95,7 +93,7 @@ void CharClassesKernel::generatePabloMethod() {
         names.push_back(name);
     }
 
-    UCD::UCDCompiler ucdCompiler(*ccc);
+    UCD::UCDCompiler ucdCompiler(*ccc.get());
     if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {
         ucdCompiler.generateWithoutIfHierarchy(nameMap, pb);
     } else {
@@ -113,7 +111,6 @@ void CharClassesKernel::generatePabloMethod() {
             llvm::report_fatal_error("Can't compile character classes.");
         }
     }
-    delete ccc;
 }
 
 

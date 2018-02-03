@@ -48,6 +48,7 @@
 using namespace parabix;
 using namespace llvm;
 using namespace cc;
+using namespace kernel;
 
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
 static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable experimental pablo transposition."));
@@ -115,7 +116,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     StreamSetBuffer * LineFeedStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
 
     #ifdef USE_DIRECT_LF_BUILDER
-    kernel::Kernel * linefeedK = mGrepDriver->addKernelInstance<kernel::LineFeedKernelBuilder>(idb, encodingBits);
+    kernel::Kernel * linefeedK = mGrepDriver->addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(1, 8), "byteStream", FixedRate(), Principal()});
     mGrepDriver->makeKernelCall(linefeedK, {ByteStream}, {LineFeedStream});
     #endif
 
@@ -130,7 +131,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     mGrepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
     #ifndef USE_DIRECT_LF_BUILDER
-    kernel::Kernel * linefeedK = mGrepDriver->addKernelInstance<kernel::LineFeedKernelBuilder>(idb, encodingBits);
+    kernel::Kernel * linefeedK = mGrepDriver->addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(8), "basis", FixedRate(), Principal()});
     mGrepDriver->makeKernelCall(linefeedK, {BasisBits}, {LineFeedStream});
     #endif
 

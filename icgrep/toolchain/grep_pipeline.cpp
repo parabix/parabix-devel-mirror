@@ -25,6 +25,7 @@
 
 using namespace parabix;
 using namespace llvm;
+using namespace kernel;
 
 namespace grep {
 void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end) {
@@ -63,7 +64,7 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     
     StreamSetBuffer * LineFeedStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
     #ifdef USE_DIRECT_LF_BUILDER
-    kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, 8);
+    kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(1, 8), "byteStream", FixedRate(), Principal()});
     pxDriver.makeKernelCall(linefeedK, {ByteStream}, {LineFeedStream});
     #endif
 
@@ -72,7 +73,7 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
     #ifndef USE_DIRECT_LF_BUILDER
-    kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, 8);
+    kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(8), "basis", FixedRate(), Principal()});
     pxDriver.makeKernelCall(linefeedK, {BasisBits}, {LineFeedStream});
     #endif
 

@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
@@ -11,6 +11,7 @@
 #include <pablo/pe_zeroes.h>        // for Zeroes
 #include <cc/cc_compiler.h>
 #include <pablo/builder.hpp>
+#include <IR_Gen/idisa_builder.h>
 #include <kernels/kernel_builder.h>
 
 #include <llvm/Support/raw_ostream.h>
@@ -20,28 +21,27 @@ using namespace kernel;
 using namespace pablo;
 using namespace re;
 using namespace llvm;
+using namespace IDISA;
 
-LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth)
-: PabloKernel(b, "lf" + std::to_string(codeUnitWidth),
+LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, Binding && inputStreamSet)
+: PabloKernel(b, "lf" + std::to_string(getNumOfStreams(inputStreamSet.getType())) + "x" + std::to_string(getStreamFieldWidth(inputStreamSet.getType())),
 // input
-#ifdef USE_DIRECT_LF_BUILDER
-{Binding{b->getStreamSetTy(1, codeUnitWidth), "byteStream", FixedRate(), Principal()}},
-#else
-{Binding{b->getStreamSetTy(codeUnitWidth), "basis", FixedRate(), Principal()}},
-#endif
-// output
-{Binding{b->getStreamSetTy(1), "lf"}}) {
-
+{inputStreamSet},
+{Binding{b->getStreamSetTy(1), "lf"}}),
+    mNumOfStreams(getNumOfStreams(inputStreamSet.getType())),
+    mStreamFieldWidth(getStreamFieldWidth(inputStreamSet.getType()))
+{
 }
 
 void LineFeedKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    #ifdef USE_DIRECT_LF_BUILDER
-    cc::Direct_CC_Compiler ccc(this, pb.createExtract(getInputStreamVar("byteStream"), pb.getInteger(0)));
-    #else
-    cc::Parabix_CC_Compiler ccc(this, getInputStreamSet("basis"));
-    #endif
-    PabloAST * LF = ccc.compileCC("LF", makeByte(0x0A), pb);
+    std::unique_ptr<CC_Compiler> ccc;
+    if (mNumOfStreams == 1) {
+        ccc = make_unique<cc::Direct_CC_Compiler>(this, pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = make_unique<cc::Parabix_CC_Compiler>(this, getInputStreamSet("basis"));
+    }
+    PabloAST * LF = ccc->compileCC("LF", makeByte(0x0A), pb);
     pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
 }
 

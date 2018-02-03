@@ -41,7 +41,7 @@ static cl::list<CountOptions> wcOptions(
              clEnumValN(ByteOption, "c", "Report the number of bytes in each input file (override -m).")
              CL_ENUM_VAL_SENTINEL), cl::cat(wcFlags), cl::Grouping);
                                                  
-
+static std::string wc_modes = "";
 
 static int defaultFieldWidth = 7;  // default field width
 
@@ -82,16 +82,16 @@ extern "C" {
 
 class WordCountKernel final: public pablo::PabloKernel {
 public:
-    WordCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
+    WordCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Binding && inputStreamSet);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-WordCountKernel::WordCountKernel (const std::unique_ptr<kernel::KernelBuilder> & b)
-: PabloKernel(b, "wc",
-    {Binding{b->getStreamSetTy(8, 1), "u8bit"}},
+WordCountKernel::WordCountKernel (const std::unique_ptr<kernel::KernelBuilder> & b, Binding && inputStreamSet)
+: PabloKernel(b, "wc_" + wc_modes,
+    {inputStreamSet},
     {},
     {},
     {Binding{b->getSizeTy(), "lineCount"}, Binding{b->getSizeTy(), "wordCount"}, Binding{b->getSizeTy(), "charCount"}}) {
@@ -100,22 +100,24 @@ WordCountKernel::WordCountKernel (const std::unique_ptr<kernel::KernelBuilder> &
 
 void WordCountKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    //  input: 8 basis bit streams
-    std::vector<PabloAST *> u8_bits = getInputStreamSet("u8bit");
+    std::unique_ptr<cc::CC_Compiler> ccc;
+    if (CountWords || CountChars) {
+        ccc = make_unique<cc::Parabix_CC_Compiler>(this, getInputStreamSet("u8bit"));
+    } else {
+        ccc = make_unique<cc::Direct_CC_Compiler>(this, pb.createExtract(getInput(0), pb.getInteger(0)));
+    }
+
     //  output: 3 counters
-
-    cc::Parabix_CC_Compiler ccc(this, u8_bits);
-
     Var * lc = getOutputScalarVar("lineCount");
     Var * wc = getOutputScalarVar("wordCount");
     Var * cc = getOutputScalarVar("charCount");
 
     if (CountLines) {
-        PabloAST * LF = ccc.compileCC(re::makeCC(0x0A));
+        PabloAST * LF = ccc->compileCC(re::makeByte(0x0A));
         pb.createAssign(lc, pb.createCount(LF));
     }
     if (CountWords) {
-        PabloAST * WS = ccc.compileCC(re::makeCC(re::makeCC(0x09, 0x0D), re::makeCC(0x20)));
+        PabloAST * WS = ccc->compileCC(re::makeCC(re::makeByte(0x09, 0x0D), re::makeByte(0x20)));
         PabloAST * wordChar = pb.createNot(WS);
         // WS_follow_or_start = 1 past WS or at start of file
         PabloAST * WS_follow_or_start = pb.createNot(pb.createAdvance(wordChar, 1));
@@ -127,7 +129,7 @@ void WordCountKernel::generatePabloMethod() {
         // FIXME: This correctly counts characters assuming valid UTF-8 input.  But what if input is
         // not UTF-8, or is not valid?
         //
-        PabloAST * u8Begin = ccc.compileCC(re::makeCC(re::makeCC(0, 0x7F), re::makeCC(0xC2, 0xF4)));
+        PabloAST * u8Begin = ccc->compileCC(re::makeCC(re::makeByte(0, 0x7F), re::makeByte(0xC2, 0xF4)));
         pb.createAssign(cc, pb.createCount(u8Begin));
     }
 }
@@ -162,17 +164,25 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     StreamSetBuffer * const ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
-    StreamSetBuffer * const BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
 
     Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
     mmapK->setInitialArguments({fileDecriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
-
-    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder);
-    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
-    Kernel * wck = pxDriver.addKernelInstance<WordCountKernel>(iBuilder);
-    pxDriver.makeKernelCall(wck, {BasisBits}, {});
+    Kernel * wck  = nullptr;
+    if (CountWords || CountChars) {
+        StreamSetBuffer * const BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
+        Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder);
+        pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
+        
+        wck = pxDriver.addKernelInstance<WordCountKernel>(iBuilder, Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"});
+        pxDriver.makeKernelCall(wck, {BasisBits}, {});
+
+
+    } else {
+        wck = pxDriver.addKernelInstance<WordCountKernel>(iBuilder, Binding{iBuilder->getStreamSetTy(1, 8), "u8byte"});
+        pxDriver.makeKernelCall(wck, {ByteStream}, {});
+    }
 
     pxDriver.generatePipelineIR();
     
@@ -216,12 +226,16 @@ int main(int argc, char *argv[]) {
             switch (wcOptions[i]) {
                 case WordOption: CountWords = true; break;
                 case LineOption: CountLines = true; break;
-                case CharOption: CountBytes = true; CountChars = false; break;
-                case ByteOption: CountChars = true; CountBytes = false; break;
+                case CharOption: CountChars = true; CountBytes = false; break;
+                case ByteOption: CountBytes = true; CountChars = false; break;
             }
         }
     }
-    
+    if (CountLines) wc_modes += "l";
+    if (CountWords) wc_modes += "w";
+    if (CountChars) wc_modes += "m";
+    if (CountBytes) wc_modes += "c";
+
     ParabixDriver pxDriver("wc");
     wcPipelineGen(pxDriver);
     auto wordCountFunctionPtr = reinterpret_cast<WordCountFunctionType>(pxDriver.getMain());
@@ -241,6 +255,8 @@ int main(int argc, char *argv[]) {
     if (CountWords) maxCount = TotalWords;
     if (CountChars) maxCount = TotalChars;
     if (CountBytes) maxCount = TotalBytes;
+    
+    
     
     int fieldWidth = std::to_string(maxCount).size() + 1;
     if (fieldWidth < defaultFieldWidth) fieldWidth = defaultFieldWidth;
