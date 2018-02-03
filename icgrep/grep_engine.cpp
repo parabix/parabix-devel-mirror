@@ -162,8 +162,8 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
                 std::vector<re::CC *> mpx_basis = mpx->getMultiplexedCCs();
                 auto numOfCharacterClasses = mpx_basis.size();
                 StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), baseBufferSize);
-                kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis), true);
-                mGrepDriver->makeKernelCall(ccK, {ByteStream}, {CharClasses});
+                kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis));
+                mGrepDriver->makeKernelCall(ccK, {BasisBits}, {CharClasses});
 //                kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis), true);
 //                mGrepDriver->makeKernelCall(ccK, {ByteStream}, {CharClasses});
                 kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i], std::vector<cc::Alphabet *>{mpx.get()});
