@@ -99,6 +99,9 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     pxDriver.makeKernelCall(scanMatchK, {MatchedLines, LineBreakStream, ByteStream}, {});
     pxDriver.LinkFunction(*scanMatchK, "accumulate_match_wrapper", &accumulate_match_wrapper);
     pxDriver.LinkFunction(*scanMatchK, "finalize_match_wrapper", &finalize_match_wrapper);
+    
+    bool saveSegmentParallel = codegen::SegmentPipelineParallel;
+    codegen::SegmentPipelineParallel = false;
     pxDriver.generatePipelineIR();
     pxDriver.deallocateBuffers();
     idb->CreateRetVoid();
@@ -107,5 +110,6 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     typedef void (*GrepFunctionType)(const char * buffer, const size_t length);
     auto f = reinterpret_cast<GrepFunctionType>(pxDriver.getMain());
     f(search_buffer, bufferLength);
+    codegen::SegmentPipelineParallel = saveSegmentParallel;
 }
 }
