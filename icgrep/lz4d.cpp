@@ -25,8 +25,8 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/source_kernel.h>
 #include <kernels/stdout_kernel.h>
-#include <kernels/lz4_index_decoder.h>
-#include <kernels/lz4_bytestream_decoder.h>
+#include <kernels/lz4/lz4_index_decoder.h>
+#include <kernels/lz4/lz4_bytestream_decoder.h>
 
 #include <kernels/kernel_builder.h>
 #include <toolchain/cpudriver.h>

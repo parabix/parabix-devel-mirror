@@ -116,10 +116,11 @@ add_executable(u8u16 u8u16.cpp)
 add_executable(base64 base64.cpp kernels/radix64.cpp)
 add_executable(wc wc.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp kernels/streams_merge.cpp kernels/cc_kernel.cpp)
-add_executable(lz4d lz4d.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4_index_decoder.cpp kernels/lz4_bytestream_decoder.cpp)
+add_executable(lz4d lz4d.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4/lz4_index_decoder.cpp kernels/lz4/lz4_bytestream_decoder.cpp)
 add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/propGen.cpp combine/icgrep-test/icgrep-test.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
 add_executable(character_deletion character_deletion.cpp kernels/cc_kernel.cpp)
 add_executable(character_deposit character_deposit.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp)
+add_executable(lz4d_ext_dep lz4d_ext_dep.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4/lz4_block_decoder.cpp kernels/sequential_kernel.cpp kernels/lz4/lz4_extract_e_m0.cpp kernels/lz4/lz4_deposit_uncompressed.cpp kernels/lz4/lz4_generate_deposit_stream.cpp kernels/lz4/lz4_numbers_to_bitstream_kernel.cpp kernels/lz4/LZ4MarkerToMaskKernel.cpp kernels/lz4/lz4_bitstream_not_kernel.cpp kernels/pdep_kernel.cpp kernels/lz4/lz4_match_copy_kernel.cpp lz4/LZ4Generator.cpp)
 
 #Exclude CoRE from default build.
 set_target_properties(core PROPERTIES EXCLUDE_FROM_ALL 1)
@@ -133,6 +134,8 @@ target_link_libraries (lz4d PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost
 target_link_libraries (core RegExpCompiler ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
 target_link_libraries (character_deletion PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (character_deposit PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (lz4d_ext_dep PabloADT RegExpCompiler CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+
 
 IF(ENABLE_MULTIPLEXING)
     message(STATUS "Enabling Multiplexing")
@@ -277,6 +280,12 @@ add_test(
 #  COMMAND python character_deposit_test.py ${CMAKE_BINARY_DIR}/character_deposit
 #)
 
+#add_test(
+#  NAME lz4d_ext_dep_test
+#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d_ext_dep
+#  COMMAND python main.py ${CMAKE_BINARY_DIR}/lz4d_ext_dep
+#)
+
 SET_PROPERTY(TEST greptest PROPERTY TIMEOUT 400)
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
@@ -315,6 +324,11 @@ add_custom_target (base64_test
 #add_custom_target(character_deposit_test
 #  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deposit
 #  COMMAND python character_deposit_test.py ${CMAKE_BINARY_DIR}/character_deposit
+#)
+
+#add_custom_target(lz4d_ext_dep_test
+#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d_ext_dep_test
+#  COMMAND python main.py ${CMAKE_BINARY_DIR}/lz4d_ext_dep_test
 #)
 
 add_custom_target (abc_gen
