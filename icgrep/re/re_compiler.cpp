@@ -233,7 +233,7 @@ MarkerType RE_Compiler::compileAlt(Alt * const alt, const MarkerType base, Pablo
     if (isa<Zeroes>(accum[FinalPostPositionUnit])) {
         return makeMarker(InitialPostPositionUnit, combine);
     }
-    combine = pb.createOr(pb.createScanThru(pb.createAnd(mInitial, combine), mNonFinal), accum[FinalPostPositionUnit], "alt");
+    combine = pb.createOr(pb.createOr(pb.createAnd(combine, mFinal), pb.createScanThru(pb.createAnd(mNonFinal, combine), mNonFinal)), accum[FinalPostPositionUnit], "alt");
     return makeMarker(FinalPostPositionUnit, combine);
 }
 
@@ -566,7 +566,7 @@ inline MarkerType RE_Compiler::AdvanceMarker(MarkerType marker, const MarkerPosi
             marker.pos = InitialPostPositionUnit;
         }
         if (newpos == FinalPostPositionUnit) {
-            marker.stream = pb.createScanThru(pb.createAnd(mInitial, marker.stream), mNonFinal, "fpp");
+            marker.stream = pb.createOr(pb.createAnd(marker.stream, mFinal), pb.createScanThru(pb.createAnd(mNonFinal, marker.stream), mNonFinal, "fpp"));
             marker.pos = FinalPostPositionUnit;
         }
     }
@@ -590,7 +590,6 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 , mCCCompiler(ccCompiler)
 , mLineBreak(nullptr)
 , mCRLF(nullptr)
-, mInitial(nullptr)
 , mNonFinal(nullptr)
 , mFinal(nullptr)
 , mWhileTest(nullptr)
@@ -602,9 +601,8 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
     Var * const crlf = mKernel->getInputStreamVar("cr+lf");
     mCRLF = mPB.createExtract(crlf, 0);
     Var * const required = mKernel->getInputStreamVar("required");
-    mInitial = mPB.createExtract(required, 0);
-    mNonFinal = mPB.createExtract(required, 1);
-    mFinal = mPB.createExtract(required, 2);
+    mNonFinal = mPB.createExtract(required, 0);
+    mFinal = mPB.createNot(mNonFinal);
 }
 
 } // end of namespace re

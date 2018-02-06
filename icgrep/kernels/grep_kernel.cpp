@@ -108,19 +108,10 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const u8valid = it.createNot(u8invalid, "u8valid");
     //
     //
-    
-    it.createAssign(valid_pfx, it.createAnd(valid_pfx, u8valid));
     it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
-    
-    PabloAST * u8single = pb.createAnd(ccc.compileCC(makeByte(0x00, 0x7F)), pb.createNot(u8invalid));
-    PabloAST * const initial = pb.createOr(u8single, valid_pfx, "initial");
-    PabloAST * const final = pb.createNot(pb.createOr(nonFinal, u8invalid), "final");
 
     Var * const required = getOutputStreamVar("required");
-    pb.createAssign(pb.createExtract(required, pb.getInteger(0)), initial);
-    pb.createAssign(pb.createExtract(required, pb.getInteger(1)), nonFinal);
-    pb.createAssign(pb.createExtract(required, pb.getInteger(2)), final);
-
+    pb.createAssign(pb.createExtract(required, pb.getInteger(0)), nonFinal);
 }
 
 RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb)
@@ -128,7 +119,7 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 // input
 {Binding{kb->getStreamSetTy(8), "basis"}},
 // output
-{Binding{kb->getStreamSetTy(3), "required", FixedRate(), Add1()}}) {
+{Binding{kb->getStreamSetTy(1), "required", FixedRate()}}) {
 
 }
 
@@ -181,7 +172,7 @@ inline std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBui
         Binding{b->getStreamSetTy(8), "basis"},
         Binding{b->getStreamSetTy(1, 1), "linebreak"},
         Binding{b->getStreamSetTy(1, 1), "cr+lf"},
-        Binding{b->getStreamSetTy(3, 1), "required"}
+        Binding{b->getStreamSetTy(1, 1), "required"}
     };
     for (const auto & alphabet : alphabets) {
         unsigned basis_size = cast<cc::MultiplexedAlphabet>(alphabet)->getMultiplexedCCs().size();
