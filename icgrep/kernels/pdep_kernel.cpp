@@ -13,9 +13,9 @@ namespace kernel {
 
 PDEPkernel::PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsigned streamCount, unsigned swizzleFactor, unsigned PDEP_width, std::string name)
 : MultiBlockKernel(name + "",
-                  {Binding{kb->getStreamSetTy(), "PDEPmarkerStream", BoundedRate(0, 1)},
+                  {Binding{kb->getStreamSetTy(), "PDEPmarkerStream"},
                    Binding{kb->getStreamSetTy(streamCount), "sourceStreamSet", BoundedRate(0, 1)}},
-                  {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet", RateEqualTo("PDEPmarkerStream")}},
+                  {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"}},
                   {}, {}, {})
 , mSwizzleFactor(swizzleFactor)
 , mPDEPWidth(PDEP_width)
@@ -153,9 +153,9 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     kb->CreateBr(checkLoopCond);
 
     kb->SetInsertPoint(terminate);
-    Value * itemsDone = kb->CreateMul(blockOffsetPhi, blockWidth);
-    itemsDone = kb->CreateSelect(kb->CreateICmpULT(itemsToDo, itemsDone), itemsToDo, itemsDone);
-    kb->setProcessedItemCount("PDEPmarkerStream", kb->CreateAdd(itemsDone, kb->getProcessedItemCount("PDEPmarkerStream")));
+//    Value * itemsDone = kb->CreateMul(blockOffsetPhi, blockWidth);
+//    itemsDone = kb->CreateSelect(kb->CreateICmpULT(itemsToDo, itemsDone), itemsToDo, itemsDone);
+//    kb->setProcessedItemCount("PDEPmarkerStream", kb->CreateAdd(itemsDone, kb->getProcessedItemCount("PDEPmarkerStream")));
     kb->setProcessedItemCount("sourceStreamSet", updatedProcessedSourceBitsPhi);
 
 

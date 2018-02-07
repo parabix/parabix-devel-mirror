@@ -35,6 +35,8 @@ struct PipelineGenerator {
     template <typename Value>
     using StreamSetBufferMap = flat_map<const StreamSetBuffer *, Value>;
 
+    using CheckMap = flat_map<const Kernel *, std::vector<const StreamSetBuffer *>>;
+
     using RateValue = ProcessingRate::RateValue;
 
     struct Channel {
@@ -54,14 +56,24 @@ struct PipelineGenerator {
 
     Value * executeKernel(const std::unique_ptr<KernelBuilder> & b, const Kernel * const kernel, PHINode * const segNo, Value * const finished);
 
-    void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel);
+protected:
 
-    void updateProducedAndConsumedCounts(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel);
+    Graph makeInputGraph(const std::vector<Kernel *> & kernels);
+
+    Graph makeOutputGraph(const std::vector<Kernel *> & kernels);
+
+    Graph printGraph(const bool input, Graph && G);
+
+    Graph pruneGraph(Graph && G);
+
+    void addChecks(Graph && G, CheckMap & M);
+
+    void applyOutputBufferExpansions(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel);
 
 private:
 
-    Graph   G;
-    Map     M;
+    CheckMap                            inputAvailabilityChecks;
+    CheckMap                            outputSpaceChecks;
 
     StreamSetBufferMap<Value *>         producedItemCount;
     StreamSetBufferMap<Value *>         consumedItemCount;
@@ -342,26 +354,55 @@ void PipelineGenerator::initialize(const std::vector<Kernel *> & kernels) {
     // C must test whether it has enough input from B as B is not guaranteed to have enough
     // input from A. Moreover if C is depedent on B, C could be skipped entirely.
 
-    // Note: we cannot simply test the output of A for both B and C. In a our data-parallel
-    // pipeline A's state may change by the time we process C.
+    // Note: we cannot simply test the output of A for both B and C. In the data-parallel
+    // pipeline, A's state may change by the time we process C.
 
-    for (const Kernel * const consumer : kernels) {
-        const auto v = add_vertex(consumer, G);
+//    addChecks(printGraph(true, pruneGraph(printGraph(true, makeInputGraph(kernels)))), inputAvailabilityChecks);
+//    addChecks(printGraph(false, pruneGraph(printGraph(false, makeOutputGraph(kernels)))), outputSpaceChecks);
+
+    addChecks(pruneGraph(makeInputGraph(kernels)), inputAvailabilityChecks);
+    addChecks(pruneGraph(makeOutputGraph(kernels)), outputSpaceChecks);
+
+
+    // iterate through each kernel in order and determine which kernel last used a particular buffer
+    for (Kernel * const kernel : kernels) {
+        const auto & inputs = kernel->getStreamInputs();
+        for (unsigned i = 0; i < inputs.size(); ++i) {
+            lastConsumer[kernel->getStreamSetInputBuffer(i)] = kernel;
+        }
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeInputGraph
+ *
+ * The input graph models whether a kernel could *consume* more data than may be produced by a preceeding kernel.
+ ** ------------------------------------------------------------------------------------------------------------- */
+PipelineGenerator::Graph PipelineGenerator::makeInputGraph(const std::vector<Kernel *> & kernels) {
+
+    const auto n = kernels.size();
+    Graph   G(n);
+    Map     M;
+
+    for (Graph::vertex_descriptor v = 0; v < n; ++v) {
+
+        const Kernel * const consumer = kernels[v];
         M.emplace(consumer, v);
+        G[v] = consumer;
+
         const auto & inputs = consumer->getStreamInputs();
         for (unsigned i = 0; i < inputs.size(); ++i) {
 
-            const auto buffer = consumer->getStreamSetInputBuffer(i);
-            const Kernel * const producer = buffer->getProducer();
-            const Binding & output = producer->getStreamOutput(buffer);
-            if (output.getRate().isRelative()) continue;
-
             const Binding & input = inputs[i];
-            auto ub_in = consumer->getUpperBound(input.getRate()) * consumer->getStride();
+            auto ub_in = consumer->getUpperBound(input.getRate()) * consumer->getStride(); assert (ub_in > 0);
             if (input.hasLookahead()) {
                 ub_in += input.getLookahead();
             }
 
+            const auto buffer = consumer->getStreamSetInputBuffer(i);
+            const Kernel * const producer = buffer->getProducer();
+            const Binding & output = producer->getStreamOutput(buffer);
             const auto lb_out = producer->getLowerBound(output.getRate()) * producer->getStride();
 
             const auto rate = lb_out / ub_in;
@@ -387,15 +428,119 @@ void PipelineGenerator::initialize(const std::vector<Kernel *> & kernels) {
             }
         }
     }
+    return G;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeOutputGraph
+ *
+ * The output graph models whether a kernel could *produce* more data than may be consumed by a subsequent kernel.
+ ** ------------------------------------------------------------------------------------------------------------- */
+PipelineGenerator::Graph PipelineGenerator::makeOutputGraph(const std::vector<Kernel *> & kernels) {
+
+    const auto n = kernels.size();
+    Graph   G(n);
+    Map     M;
+
+    for (Graph::vertex_descriptor i = 0; i < n; ++i) {
+        const Kernel * const consumer = kernels[i];
+        const auto v = n - i - 1;
+        M.emplace(consumer, v);
+        G[v] = consumer;
+
+        const auto & inputs = consumer->getStreamInputs();
+        for (unsigned i = 0; i < inputs.size(); ++i) {
+            const auto buffer = consumer->getStreamSetInputBuffer(i);
+            if (isa<SourceBuffer>(buffer)) continue;
+            const Kernel * const producer = buffer->getProducer();
+            const Binding & output = producer->getStreamOutput(buffer);
+            auto ub_out = producer->getUpperBound(output.getRate()) * producer->getStride();
+            if (LLVM_UNLIKELY(ub_out > 0)) { // unknown output rates are handled by reallocating their buffers
+                const Binding & input = inputs[i];
+                if (input.hasLookahead()) {
+                    ub_out -= input.getLookahead();
+                }
+                const auto lb_in = consumer->getLowerBound(input.getRate()) * consumer->getStride();
+                const auto inverseRate = lb_in / ub_out;
+                const auto f = M.find(producer); assert (f != M.end());
+                const auto u = f->second;
+                // If we have multiple inputs from the same kernel, we only need to consider the "fastest" one
+                bool fastest = true;
+                if (ub_out > 0) {
+                    for (const auto e : make_iterator_range(in_edges(v, G))) {
+                        if (source(e, G) == u) {
+                            Channel & p = G[e];
+                            fastest = false;
+                            if (inverseRate < p.rate) {
+                                p.rate = inverseRate;
+                                p.buffer = buffer;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (fastest) {
+                    add_edge(v, u, Channel{inverseRate, buffer}, G);
+                }
+            }
+        }
+    }
+    return G;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief printGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+PipelineGenerator::Graph PipelineGenerator::printGraph(const bool input, Graph && G) {
+
+    auto & out = errs();
+
+    out << "digraph " << (input ? "I" : "O") << " {\n";
+    for (auto u : make_iterator_range(vertices(G))) {
+        out << "v" << u << " [label=\"" << u << ": "
+            << G[u]->getName() << "\"];\n";
+    }
+
+    for (auto e : make_iterator_range(edges(G))) {
+        const Channel & c = G[e];
+        const auto s = source(e, G);
+        const auto t = target(e, G);
+        const Kernel * const S = G[input ? s : t];
+        const Kernel * const T = G[input ? t : s];
+
+        out << "v" << s << " -> v" << t
+            << " [label=\"";
+
+        if (c.buffer) {
+            out << S->getStreamOutput(c.buffer).getName()
+                << " -> "
+                << T->getStreamInput(c.buffer).getName()
+                << "   ";
+        }
+
+        out << c.rate.numerator() << " / " << c.rate.denominator()
+            << "\"];\n";
+    }
+
+    out << "}\n\n";
+    out.flush();
+
+    return G;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief pruneGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+PipelineGenerator::Graph PipelineGenerator::pruneGraph(Graph && G) {
 
     // Take a transitive closure of G but whenever we attempt to insert an edge into the closure
     // that already exists, check instead whether the rate of our proposed edge is <= the existing
-    // edge's rate. If so, the data availability is transitively guaranteed.
+    // edge's rate. If so, the data availability/consumption is transitively guaranteed.
     for (const auto u : make_iterator_range(vertices(G))) {
         for (auto ei : make_iterator_range(in_edges(u, G))) {
             const auto v = source(ei, G);
-            const Channel & pu = G[ei];           
-            for (auto ej : make_iterator_range(out_edges(u, G))) {                
+            const Channel & pu = G[ei];
+            for (auto ej : make_iterator_range(out_edges(u, G))) {
                 const auto w = target(ej, G);
                 const auto ratio = RateValue(G[u]->getStride(), G[w]->getStride());
                 const auto rate = pu.rate * ratio;
@@ -403,7 +548,7 @@ void PipelineGenerator::initialize(const std::vector<Kernel *> & kernels) {
                 for (auto ek : make_iterator_range(in_edges(w, G))) {
                     if (source(ek, G) == v) {
                         Channel & pw = G[ek];
-                        if (rate <= pw.rate && pw.rate > 0) {
+                        if (rate <= pw.rate) {
                             pw.buffer = nullptr;
                         }
                         insert = false;
@@ -418,56 +563,116 @@ void PipelineGenerator::initialize(const std::vector<Kernel *> & kernels) {
     }
 
     // remove any closure edges from G
-    remove_edge_if([&](const Graph::edge_descriptor e) { return G[e].buffer == nullptr; }, G);
+    remove_edge_if([&G](const Graph::edge_descriptor e) { return G[e].buffer == nullptr; }, G);
 
-    // If a kernel has no 'necessary to check' inputs then we can remove every output with a rate >= 1 from G
+    // For any kernel, if we do not need to check any of its inputs, we can avoid checking any of its
+    // outputs that have a rate >= 1 (i.e., its production rates >= consumption rates.)
     for (const auto u : make_iterator_range(vertices(G))) {
         if (in_degree(u, G) == 0) {
-            remove_out_edge_if(u, [&](const Graph::edge_descriptor e) { return G[e].rate >= RateValue{1, 1}; }, G);
+            remove_out_edge_if(u, [&G](const Graph::edge_descriptor e) { return G[e].rate >= RateValue{1, 1}; }, G);
         }
     }
 
-    // iterate through each kernel in order and determine which kernel last used a particular buffer
-    for (Kernel * const kernel : kernels) {
-        const auto & inputs = kernel->getStreamInputs();
-        for (unsigned i = 0; i < inputs.size(); ++i) {
-            lastConsumer[kernel->getStreamSetInputBuffer(i)] = kernel;
-        }
-    }
+    return G;
+}
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addChecks
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineGenerator::addChecks(Graph && G, CheckMap & M) {
+    for (const auto u : make_iterator_range(vertices(G))) {
+        if (LLVM_LIKELY(in_degree(u, G) == 0)) continue;
+        flat_set<const StreamSetBuffer *> B;
+        for (auto e : make_iterator_range(in_edges(u, G))) {
+            B.insert(G[e].buffer);
+        }
+        M.emplace(G[u], std::vector<const StreamSetBuffer *>{B.begin(), B.end()});
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief executeKernel
  ** ------------------------------------------------------------------------------------------------------------- */
-Value *PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & b, const Kernel * const kernel, PHINode * const segNo, Value * const finished) {
+Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & b, const Kernel * const kernel, PHINode * const segNo, Value * const finished) {
 
     const auto & inputs = kernel->getStreamInputs();
 
     std::vector<Value *> args(2 + inputs.size());
 
-    const auto f = M.find(kernel); assert (f != M.end());
-    const auto u = f->second;
-
     BasicBlock * const kernelEntry = b->GetInsertBlock();
     BasicBlock * const kernelCode = b->CreateBasicBlock(kernel->getName());
-    BasicBlock * const kernelExit = b->CreateBasicBlock(kernel->getName() + "_exit");
+    BasicBlock * const kernelFinished = b->CreateBasicBlock(kernel->getName() + "Finished");
+    BasicBlock * const kernelExit = b->CreateBasicBlock(kernel->getName() + "Exit");
 
     b->CreateUnlikelyCondBr(b->getTerminationSignal(), kernelExit, kernelCode);
 
+    b->SetInsertPoint(kernelFinished);
+    PHINode * const final = b->CreatePHI(b->getInt1Ty(), 2);
+
     b->SetInsertPoint(kernelExit);
     PHINode * const terminated = b->CreatePHI(b->getInt1Ty(), 2);
-    // Since our initial "isFinal" state is equal to what the first kernel's termination signal state
+    // The initial "isFinal" state is equal to the first kernel's termination signal state
     terminated->addIncoming(finished ? finished : b->getTrue(), kernelEntry);
     Value * isFinal = finished ? finished : b->getFalse();
 
-    b->SetInsertPoint(kernelCode);
+    // Since it is possible that a sole consumer of some stream could terminate early, set the
+    // initial consumed amount to the amount produced in this iteration.
+    std::vector<PHINode *> consumedItemCountPhi(inputs.size());
+    std::vector<Value *> priorConsumedItemCount(inputs.size());
     for (unsigned i = 0; i < inputs.size(); ++i) {
-
-        const Binding & input = inputs[i];
-
         const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
+        auto c = consumedItemCount.find(buffer);
+        PHINode * const consumedPhi = b->CreatePHI(b->getSizeTy(), 2);
+        Value * consumed = nullptr;
+        if (c == consumedItemCount.end()) {
+            const auto p = producedItemCount.find(buffer);
+            assert (p != producedItemCount.end());
+            consumed = p->second;
+            consumedItemCount.emplace(buffer, consumedPhi);
+        } else {
+            consumed = c->second;
+            c->second = consumedPhi;
+        }
+        consumedPhi->addIncoming(consumed, kernelEntry);
+        consumedItemCountPhi[i] = consumedPhi;
+        priorConsumedItemCount[i] = consumed;
+    }
 
+    b->SetInsertPoint(kernelCode);
+
+    // Check for sufficient output space
+    const auto O = outputSpaceChecks.find(kernel);
+    if (O != outputSpaceChecks.end()) {
+        for (const StreamSetBuffer * buffer : O->second) {
+
+
+            const Binding & output = kernel->getStreamOutput(buffer);
+            const auto name = output.getName();
+            BasicBlock * const sufficient = b->CreateBasicBlock(name + "HasOutputSpace");
+            const auto ub = kernel->getUpperBound(output.getRate()); assert (ub > 0);
+            Constant * const strideLength = b->getSize(ceiling(ub * kernel->getStride()));
+            Value * const produced = b->getProducedItemCount(name);
+            Value * const consumed = b->getConsumedItemCount(name);
+            Value * const unused = b->CreateSub(produced, consumed);
+            Value * const potentialData = b->CreateAdd(unused, strideLength);
+            Value * const capacity = b->getBufferedSize(name);
+
+          //  b->CallPrintInt("< " + kernel->getName() + "_" + name + "_potential", potentialData);
+          //  b->CallPrintInt("< " + kernel->getName() + "_" + name + "_capacity", capacity);
+
+            Value * const hasSufficientSpace = b->CreateICmpULE(potentialData, capacity);
+
+          //  b->CallPrintInt("* < " + kernel->getName() + "_" + name + "_sufficientSpace", hasSufficientSpace);
+
+            final->addIncoming(b->getFalse(), b->GetInsertBlock());
+            b->CreateLikelyCondBr(hasSufficientSpace, sufficient, kernelFinished);
+            b->SetInsertPoint(sufficient);
+        }
+    }
+
+    for (unsigned i = 0; i < inputs.size(); ++i) {
+        const Binding & input = inputs[i];
+        const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
         const auto name = input.getName();
 
         const auto p = producedItemCount.find(buffer);
@@ -475,24 +680,33 @@ Value *PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & b
             report_fatal_error(kernel->getName() + " uses stream set " + name + " prior to its definition");
         }
         Value * const produced = p->second;
+
+      //  b->CallPrintInt("< " + kernel->getName() + "_" + name + "_produced", produced);
+
         const auto ub = kernel->getUpperBound(input.getRate()); assert (ub > 0);
         const auto strideLength = ceiling(ub * kernel->getStride()) ;
         Constant * const segmentLength = b->getSize(strideLength * codegen::SegmentSize);
 
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts) && !isa<SourceBuffer>(buffer))) {
             b->CreateAssert(b->CreateICmpULE(segmentLength, b->getCapacity(name)),
                             kernel->getName() + ": " + name + " upper bound of segment length exceeds buffer capacity");
         }
 
-        Value * limit = nullptr;
-        if (input.getRate().isFixed()) {
-            // if the input is deferred, simply adding length to the processed item count may result in setting a limit
-            // that is too low for. instead just calculate the limit of all fixed rates from the segment no.
-            limit = b->CreateMul(b->CreateAdd(segNo, b->getSize(1)), segmentLength);
-        } else {
-            Value * const processed = b->getProcessedItemCount(name);
-            limit = b->CreateAdd(processed, segmentLength);
-        }
+//        Value * limit = nullptr;
+//        if (input.getRate().isFixed()) {
+//            // if the input is deferred, simply adding length to the processed item count may result in setting a limit
+//            // that is too low for. instead just calculate the limit of all fixed rates from the segment no.
+//            limit = b->CreateMul(b->CreateAdd(segNo, b->getSize(1)), segmentLength);
+//        } else {
+//            Value * const processed = b->getProcessedItemCount(name);
+//            limit = b->CreateAdd(processed, segmentLength);
+//        }
+
+        // if the input is deferred, simply adding length to the processed item count may result in setting a limit
+        // that is too low for. instead just calculate the limit of all fixed rates from the segment no.
+        Value * const limit = b->CreateMul(b->CreateAdd(segNo, b->getSize(1)), segmentLength);
+
+     //  b->CallPrintInt("< " + kernel->getName() + "_" + name + "_limit", limit);
 
         // TODO: currently, if we produce the exact amount as our limit states, we will have to process one additional segment
         // before we can consider this kernel finished. We ought to be able to avoid doing in some cases but need to prove its
@@ -501,28 +715,37 @@ Value *PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & b
         Value * const consumingAll = b->CreateICmpULT(produced, limit);
         args[i + 2] = b->CreateSelect(consumingAll, produced, limit);
         isFinal = b->CreateAnd(isFinal, consumingAll);
+    }
 
-        // Check for available input (if it's both computable and not guaranteed to be sufficient by the processing rates)
-        for (auto e : make_iterator_range(in_edges(u, G))) {
-            const auto p = G[e];
-            if (p.buffer == buffer) {
-                BasicBlock * const sufficient = b->CreateBasicBlock(name + "_hasSufficientData");
+    // Check for available input
+    const auto I = inputAvailabilityChecks.find(kernel);
+    if (I != inputAvailabilityChecks.end()) {
+        for (const StreamSetBuffer * buffer : I->second) {
+            const Binding & input = kernel->getStreamInput(buffer);
+            const auto name = input.getName();
+            BasicBlock * const sufficient = b->CreateBasicBlock(name + "HasInputData");
+            const auto ub = kernel->getUpperBound(input.getRate()); assert (ub > 0);
+            Constant * const strideLength = b->getSize(ceiling(ub * kernel->getStride()));
+            Value * const processed = b->getProcessedItemCount(name);
+//            if (input.getRate().isFixed()) {
+//                processed = b->CreateMul(segNo, strideLength);
+//            } else {
+//                processed = b->getProcessedItemCount(name);
+//            }
+            const auto p = producedItemCount.find(buffer);
+            assert (p != producedItemCount.end());
+            Value * const produced = p->second;
+            Value * const unprocessed = b->CreateSub(produced, processed);
 
-                Constant * const sl = b->getSize(strideLength);
+          //  b->CallPrintInt("< " + kernel->getName() + "_" + name + "_unprocessed", unprocessed);
 
-                Value * remaining = nullptr;
-                if (input.getRate().isFixed()) {
-                    remaining = b->CreateMul(segNo, sl);
-                } else {
-                    remaining = b->getProcessedItemCount(name);
-                }
-                remaining = b->CreateSub(produced, remaining);
+            Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGE(unprocessed, strideLength), isFinal);
 
-                Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGE(remaining, sl), isFinal);
-                terminated->addIncoming(b->getFalse(), b->GetInsertBlock());
-                b->CreateLikelyCondBr(hasSufficientData, sufficient, kernelExit);
-                b->SetInsertPoint(sufficient);
-            }
+          //  b->CallPrintInt("* < " + kernel->getName() + "_" + name + "_sufficientData", hasSufficientData);
+
+            final->addIncoming(b->getFalse(), b->GetInsertBlock());
+            b->CreateLikelyCondBr(hasSufficientData, sufficient, kernelFinished);
+            b->SetInsertPoint(sufficient);
         }
     }
 
@@ -537,18 +760,66 @@ Value *PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & b
         isFinal = b->CreateOr(isFinal, b->getTerminationSignal());
     }
     b->setTerminationSignal(isFinal);
-//    b->CallPrintInt(kernel->getName() + "_finished", isFinal);
-    BasicBlock * const kernelFinished = b->GetInsertBlock();
-    kernelExit->moveAfter(kernelFinished);
+  //  b->CallPrintInt(kernel->getName() + "_finished", isFinal);
+    final->addIncoming(isFinal, b->GetInsertBlock());
+    b->CreateBr(kernelFinished);
+
+    b->SetInsertPoint(kernelFinished);
+
+    // update the consumed item counts
+    for (unsigned i = 0; i < inputs.size(); ++i) {
+        Value * const processed = b->getProcessedItemCount(inputs[i].getName());
+      //  b->CallPrintInt("> " + kernel->getName() + "_" + inputs[i].getName() + "_processed", processed);
+        Value * const consumed = b->CreateUMin(priorConsumedItemCount[i], processed);
+        consumedItemCountPhi[i]->addIncoming(consumed, kernelFinished);
+    }
     b->CreateBr(kernelExit);
 
-    b->SetInsertPoint(kernelExit);
-    terminated->addIncoming(isFinal, kernelFinished);
+    kernelExit->moveAfter(kernelFinished);
 
-    updateProducedAndConsumedCounts(b, kernel);
+    b->SetInsertPoint(kernelExit);
+    terminated->addIncoming(final, kernelFinished);
+
+
+    // If this kernel is the last consumer of a input buffer, update the consumed count for that buffer.
+    // NOTE: unless we can prove that this kernel cannot terminate before any prior consumer, we cannot
+    // put this code into the kernelFinished block.
+    for (unsigned i = 0; i < inputs.size(); ++i) {
+        const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
+        const auto c = lastConsumer.find(buffer);
+        assert (c != lastConsumer.end());
+        if (c->second == kernel) {
+            Kernel * const producer = buffer->getProducer();
+            const auto & output = producer->getStreamOutput(buffer);
+            if (output.getRate().isRelative()) continue;
+
+           // b->CallPrintInt("* " + producer->getName() + "_" + output.getName() + "_consumed", consumedItemCountPhi[i]);
+
+            b->setKernel(producer);
+            if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+                Value * const alreadyConsumed = b->getConsumedItemCount(output.getName());
+                b->CreateAssert(b->CreateICmpULE(alreadyConsumed, consumedItemCountPhi[i]),
+                                producer->getName() + ": " + output.getName() + " consumed item count is not monotonically non-decreasing!");
+            }
+            b->setConsumedItemCount(output.getName(), consumedItemCountPhi[i]);
+            b->setKernel(kernel);
+        }
+    }
+
+    const auto & outputs = kernel->getStreamOutputs();
+    for (unsigned i = 0; i < outputs.size(); ++i) {
+        Value * const produced = b->getProducedItemCount(outputs[i].getName());
+
+       // b->CallPrintInt("> " + kernel->getName() + "_" + outputs[i].getName() + "_produced", produced);
+
+        const StreamSetBuffer * const buffer = kernel->getStreamSetOutputBuffer(i);
+        assert (producedItemCount.count(buffer) == 0);
+        producedItemCount.emplace(buffer, produced);
+    }
 
     return terminated;
 }
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief applyOutputBufferExpansions
@@ -586,48 +857,4 @@ void PipelineGenerator::applyOutputBufferExpansions(const std::unique_ptr<Kernel
         }
     }
 }
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief updateProducedAndConsumedCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineGenerator::updateProducedAndConsumedCounts(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel) {
-
-    const auto & inputs = kernel->getStreamInputs();
-    for (unsigned i = 0; i < inputs.size(); ++i) {
-        Value * const processed = b->getProcessedItemCount(inputs[i].getName());
-
-        const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
-        auto f = consumedItemCount.find(buffer);
-        Value * consumed = processed;
-        if (f == consumedItemCount.end()) {
-            consumedItemCount.emplace(buffer, consumed);
-        } else {
-            consumed = b->CreateUMin(consumed, f->second);
-            f->second = consumed;
-        }
-
-        // If this kernel is the last consumer of a input buffer, update the consumed count for that buffer.
-        const auto c = lastConsumer.find(buffer);
-        assert (c != lastConsumer.end());
-        if (c->second == kernel) {
-            Kernel * const producer = buffer->getProducer();
-            const auto & output = producer->getStreamOutput(buffer);
-            if (output.getRate().isRelative()) continue;
-            b->setKernel(producer);
-
-            b->setConsumedItemCount(output.getName(), consumed);
-            b->setKernel(kernel);
-        }
-    }
-
-    const auto & outputs = kernel->getStreamOutputs();
-    for (unsigned i = 0; i < outputs.size(); ++i) {
-        Value * const produced = b->getProducedItemCount(outputs[i].getName());
-        const StreamSetBuffer * const buf = kernel->getStreamSetOutputBuffer(i);
-        assert (producedItemCount.count(buf) == 0);
-        producedItemCount.emplace(buf, produced);
-    }
-
-}
-
 

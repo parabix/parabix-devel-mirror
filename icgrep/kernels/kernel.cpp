@@ -213,9 +213,9 @@ void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & idb) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & idb) {
 
-    if (mStreamMap.empty()) {
-        prepareStreamSetNameMap();
-    }
+    assert (mStreamMap.empty());
+
+    prepareStreamSetNameMap();
 
     normalizeStreamProcessingRates();
 
@@ -289,10 +289,10 @@ std::string Kernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &
     assert ("KernelBuilder does not have a valid IDISA Builder" && idb.get());
     if (LLVM_UNLIKELY(hasSignature())) {
         generateKernel(idb);
-        std::string signature;
-        raw_string_ostream OS(signature);
-        WriteBitcodeToFile(getModule(), OS);
-        return signature;
+        std::string tmp;
+        raw_string_ostream signature(tmp);
+        WriteBitcodeToFile(getModule(), signature);
+        return signature.str();
     } else {
         return getModule()->getModuleIdentifier();
     }
@@ -303,23 +303,14 @@ std::string Kernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &
  * @brief generateKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::generateKernel(const std::unique_ptr<kernel::KernelBuilder> & idb) {
-    assert ("KernelBuilder does not have a valid IDISA Builder" && idb.get());
-    // If the module id cannot uniquely identify this kernel, "generateKernelSignature()" will have already
-    // generated the unoptimized IR.
-    if (!mIsGenerated) {
-        const auto m = idb->getModule();
-        const auto ip = idb->saveIP();
-        // const auto saveInstance = getInstance();
-        idb->setModule(mModule);
-        addKernelDeclarations(idb);
-        callGenerateInitializeMethod(idb);
-        callGenerateDoSegmentMethod(idb);
-        callGenerateFinalizeMethod(idb);
-        // setInstance(saveInstance);
-        idb->setModule(m);
-        idb->restoreIP(ip);
-        mIsGenerated = true;
-    }
+    assert ("Kernel does not have a valid IDISA Builder" && idb.get());
+    if (LLVM_UNLIKELY(mIsGenerated)) return;
+    idb->setModule(mModule);
+    addKernelDeclarations(idb);
+    callGenerateInitializeMethod(idb);
+    callGenerateDoSegmentMethod(idb);
+    callGenerateFinalizeMethod(idb);
+    mIsGenerated = true;
 }
 
 
@@ -684,6 +675,8 @@ llvm::Value * LLVM_READNONE MultiBlockKernel::getStrideSize(const std::unique_pt
     }
 }
 
+// #define DEBUG_LOG
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -709,6 +702,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         if (requiresTemporaryInputBuffer(input, rate)) {
             Type * const ty = mStreamSetInputBuffers[i]->getStreamSetBlockType();
             auto ub = getUpperBound(rate);
+            assert (ub != 0);
             if (LLVM_UNLIKELY(input.hasLookahead())) {
                 ub += RateValue(input.getLookahead(), mStride);
             }
@@ -726,14 +720,16 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         temporaryOutputBuffer[i] = nullptr;
         if (requiresTemporaryOutputBuffer(output, rate)) {
             auto ub = getUpperBound(rate);
-            if (LLVM_UNLIKELY(mStreamSetOutputBuffers[i]->supportsCopyBack() && requiresCopyBack(rate))) {
-                ub += mStreamSetOutputBuffers[i]->overflowSize();
+            if (ub > 0) {
+                if (LLVM_UNLIKELY(mStreamSetOutputBuffers[i]->supportsCopyBack() && requiresCopyBack(rate))) {
+                    ub += mStreamSetOutputBuffers[i]->overflowSize();
+                }
+                Type * const ty = mStreamSetOutputBuffers[i]->getStreamSetBlockType();
+                Constant * const arraySize = b->getInt64(ceiling(ub));
+                AllocaInst * const ptr = b->CreateAlignedAlloca(ty, blockAlignment, arraySize);
+                assert (ptr->isStaticAlloca());
+                temporaryOutputBuffer[i] = ptr;
             }
-            Type * const ty = mStreamSetOutputBuffers[i]->getStreamSetBlockType();
-            Constant * const arraySize = b->getInt64(ceiling(ub));
-            AllocaInst * const ptr = b->CreateAlignedAlloca(ty, blockAlignment, arraySize);
-            assert (ptr->isStaticAlloca());
-            temporaryOutputBuffer[i] = ptr;
         }
     }
 
@@ -761,9 +757,9 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
     mStreamSetInputBaseAddress.resize(inputSetCount);
 
     Value * const initiallyFinal = mIsFinal;
-
-//    b->CallPrintInt(getName() + "_initiallyFinal", initiallyFinal);
-
+    #ifdef DEBUG_LOG
+    b->CallPrintInt(getName() + "_initiallyFinal", initiallyFinal);
+    #endif
     // Now proceed with creation of the doSegment method.
     BasicBlock * const segmentLoop = b->CreateBasicBlock("SegmentLoop");
 
@@ -790,10 +786,10 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         const Binding & input = mStreamSetInputs[i];
         const auto & name = input.getName();
         Value * const processed = b->getProcessedItemCount(name);
-
-//        b->CallPrintInt(getName() + "_" + name + "_avail", mAvailableItemCount[i]);
-//        b->CallPrintInt(getName() + "_" + name + "_processed", processed);
-
+        #ifdef DEBUG_LOG
+        b->CallPrintInt(getName() + "_" + name + "_avail", mAvailableItemCount[i]);
+        b->CallPrintInt(getName() + "_" + name + "_processed", processed);
+        #endif
         mInitialProcessedItemCount[i] = processed;
         mStreamSetInputBaseAddress[i] = b->getBlockAddress(name, b->CreateLShr(processed, LOG_2_BLOCK_WIDTH));
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -801,14 +797,15 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
                             getName() + ": " + name + " processed item count exceeds its available item count");
         }
 
-        Value * const unprocessed = b->CreateSub(mAvailableItemCount[i], processed);        
-//        b->CallPrintInt(getName() + "_" + name + "_unprocessed", unprocessed);
-
+        Value * const unprocessed = b->CreateSub(mAvailableItemCount[i], processed);
+        #ifdef DEBUG_LOG
+        b->CallPrintInt(getName() + "_" + name + "_unprocessed", unprocessed);
+        #endif
         Value * const accessible = b->getLinearlyAccessibleItems(name, processed, unprocessed);
-//        b->CallPrintInt(getName() + "_" + name + "_accessible", accessible);
-
+        #ifdef DEBUG_LOG
+        b->CallPrintInt(getName() + "_" + name + "_accessible", accessible);
+        #endif
         mAvailableItemCount[i] = unprocessed;
-
         linearlyAccessible[i] = accessible;
         inputStrideSize[i] = getStrideSize(b, input.getRate());
         Value * const accessibleStrides = b->CreateUDiv(accessible, inputStrideSize[i]);
@@ -925,12 +922,13 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         const auto & output = mStreamSetOutputs[i];
         const auto & name = output.getName();
         Value * const produced = b->getProducedItemCount(name);
-//        b->CallPrintInt(getName() + "_" + name + "_produced", produced);
-
+        #ifdef DEBUG_LOG
+        b->CallPrintInt(getName() + "_" + name + "_produced", produced);
+        #endif
         Value * baseBuffer = b->getBlockAddress(name, b->CreateLShr(produced, LOG_2_BLOCK_WIDTH));
         mInitialProducedItemCount[i] = produced;
         mStreamSetOutputBaseAddress[i] = baseBuffer;
-
+        linearlyWritable[i] = nullptr;
         // Is the number of linearly writable items sufficient for a stride?
         outputStrideSize[i] = getStrideSize(b, output.getRate());
         if (outputStrideSize[i]) {
@@ -985,7 +983,6 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         const auto & input = mStreamSetInputs[i];
         const ProcessingRate & rate = input.getRate();
         if (rate.isFixed() && input.nonDeferred()) {
-//            b->CallPrintInt(getName() + "_" + input.getName() + "_processed (+)", mAvailableItemCount[i]);
             Value * const ic = b->CreateAdd(mInitialProcessedItemCount[i], mAvailableItemCount[i]);
             b->setProcessedItemCount(input.getName(), ic);
         }
@@ -997,7 +994,6 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         if (rate.isFixed()) {
             Value * const produced = b->CreateMul(numOfStrides, outputStrideSize[i]);
             Value * const ic = b->CreateAdd(mInitialProducedItemCount[i], produced);
-//            b->CallPrintInt(getName() + "_" + output.getName() + "_produced (+)", produced);
             b->setProducedItemCount(output.getName(), ic);
         }
     }
@@ -1025,12 +1021,10 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
 
     // Copy back data to the actual output buffers.
     for (unsigned i = 0; i < outputSetCount; i++) {
-
         AllocaInst * const tempBuffer = temporaryOutputBuffer[i];
         if (LLVM_UNLIKELY(tempBuffer == nullptr)) {
             continue;
         }
-
         const auto & name = mStreamSetOutputs[i].getName();
         Value * const produced = b->getProducedItemCount(name);
         Value * const baseBuffer = mStreamSetOutputBaseAddress[i];
@@ -1047,6 +1041,8 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         Value * const offset = b->CreateAnd(mInitialProducedItemCount[i], BLOCK_WIDTH_MASK);
         //Value * const newProducedItemCount = b->getProducedItemCount(name);
         Value * const newlyProduced = b->CreateSub(produced, mInitialProducedItemCount[i]);
+
+
         Value * const toWrite = b->CreateUMin(newlyProduced, linearlyWritable[i]);
         const auto alignment = getItemAlignment(mStreamSetOutputs[i]);
         b->CreateStreamCpy(name, baseBuffer, offset, tempBuffer, ZERO, toWrite, alignment);
@@ -1103,6 +1099,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         const ProcessingRate & rate = mStreamSetOutputs[i].getRate();
         const auto & name = mStreamSetOutputs[i].getName();
         Value * const produced = b->getProducedItemCount(name);
+
         // If this output has a Fixed/Bounded rate, determine whether we have room for another stride.
         if (LLVM_LIKELY(outputStrideSize[i] != nullptr)) {
             Value * const consumed = b->getConsumedItemCount(name);
@@ -1111,11 +1108,20 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
                                 getName() + ": " + name + " consumed data exceeds produced data");
             }
             Value * const unconsumed = b->CreateSub(produced, consumed);
+
+//            b->CallPrintInt(getName() + "_" + name + "_unconsumed", unconsumed);
+
             Value * const capacity = b->getBufferedSize(name);
+
+//            b->CallPrintInt(getName() + "_" + name + "_capacity", capacity);
+
             if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
                 b->CreateAssert(b->CreateICmpULE(unconsumed, capacity),
-                                getName() + ": " + name + " unconsumed data exceeds capacity");
+                                getName() + ": " + name + " more data was written than its capacity allows");
             }
+
+
+
             Value * const remaining = b->CreateSub(capacity, unconsumed);
             Value * const hasRemainingStrides = b->CreateICmpUGE(remaining, outputStrideSize[i]);
             hasMoreStrides = b->CreateAnd(hasMoreStrides, hasRemainingStrides);

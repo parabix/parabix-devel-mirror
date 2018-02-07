@@ -89,7 +89,7 @@ void LZ4Generator::generatePipeline(const std::string& outputFile) {
     this->generateMainFunc(iBuilder);
 
     StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
-    StreamSetBuffer * const FinalDecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
+  //  StreamSetBuffer * const FinalDecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
 
 
 

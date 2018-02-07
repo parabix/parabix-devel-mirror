@@ -148,6 +148,9 @@ public:
     
     virtual llvm::Value * mvmd_extract(unsigned fw, llvm::Value * a, unsigned fieldIndex);
     virtual llvm::Value * mvmd_insert(unsigned fw, llvm::Value * blk, llvm::Value * elt, unsigned fieldIndex);
+
+    virtual llvm::Value * mvmd_sll(unsigned fw, llvm::Value * value, llvm::Value * shift);
+    virtual llvm::Value * mvmd_srl(unsigned fw, llvm::Value * value, llvm::Value * shift);
     virtual llvm::Value * mvmd_slli(unsigned fw, llvm::Value * a, unsigned shift);
     virtual llvm::Value * mvmd_srli(unsigned fw, llvm::Value * a, unsigned shift);
     virtual llvm::Value * mvmd_dslli(unsigned fw, llvm::Value * a, llvm::Value * b, unsigned shift);

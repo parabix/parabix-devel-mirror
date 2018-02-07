@@ -8,10 +8,7 @@
 #include "PropertyObjects.h"
 #include "PropertyObjectTable.h"
 #include <llvm/Support/Casting.h>
-#include <algorithm>
-#include <assert.h>
 #include <sstream>
-#include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <toolchain/grep_pipeline.h>
 #include <util/aligned_allocator.h>

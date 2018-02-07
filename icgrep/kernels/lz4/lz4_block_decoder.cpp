@@ -42,12 +42,12 @@ LZ4BlockDecoderKernel::LZ4BlockDecoderKernel(const std::unique_ptr<kernel::Kerne
 }
 
 void LZ4BlockDecoderKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, Value * const numOfStrides) {
-    BasicBlock * entry_block = iBuilder->GetInsertBlock();
+//    BasicBlock * entry_block = iBuilder->GetInsertBlock();
 //    iBuilder->CallPrintInt("block_available", iBuilder->getAvailableItemCount("byteStream"));
     BasicBlock * exit_block = iBuilder->CreateBasicBlock("exit");
 
-    BasicBlock * assert_fail_block = iBuilder->CreateBasicBlock("assert_fail_block");
-    BasicBlock * real_entry_block = iBuilder->CreateBasicBlock("real_entry_block");
+//    BasicBlock * assert_fail_block = iBuilder->CreateBasicBlock("assert_fail_block");
+//    BasicBlock * real_entry_block = iBuilder->CreateBasicBlock("real_entry_block");
 
     Value* hasSkipHeader = iBuilder->getScalarField("hasSkipHeader");
     Value* skipLength = iBuilder->CreateSelect(hasSkipHeader, iBuilder->getSize(0), iBuilder->getScalarField("headerSize"));
@@ -151,7 +151,7 @@ void LZ4BlockDecoderKernel::generateMultiBlockLogic(const std::unique_ptr<Kernel
         return iBuilder->CreateLoad(targetPtr);
     }
 
-    Value* LZ4BlockDecoderKernel::appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, Value* isCompressed, Value* blockStart, Value* blockEnd) {
+    void LZ4BlockDecoderKernel::appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, Value* isCompressed, Value* blockStart, Value* blockEnd) {
         // TODO adjust output storing
         this->generateStoreCircularOutput(iBuilder, "isCompressed", iBuilder->getInt1Ty()->getPointerTo(), isCompressed);
         this->generateStoreCircularOutput(iBuilder, "blockStart", iBuilder->getInt64Ty()->getPointerTo(), iBuilder->CreateTruncOrBitCast(blockStart, iBuilder->getInt64Ty()));
@@ -175,7 +175,7 @@ void LZ4BlockDecoderKernel::generateMultiBlockLogic(const std::unique_ptr<Kernel
     }
 
     size_t LZ4BlockDecoderKernel::getOutputBufferSize(const unique_ptr<KernelBuilder> &iBuilder, const string& bufferName) {
-        size_t s = this->getOutputStreamSetBuffer(bufferName)->getBufferBlocks();
+//        size_t s = this->getOutputStreamSetBuffer(bufferName)->getBufferBlocks();
         return this->getOutputStreamSetBuffer(bufferName)->getBufferBlocks() * iBuilder->getStride();
     }
 }

@@ -167,6 +167,22 @@ Value * IDISA_Builder::simd_umin(unsigned fw, Value * a, Value * b) {
     return CreateSelect(CreateICmpULT(aVec, bVec), aVec, bVec);
 }
 
+Value * IDISA_Builder::mvmd_sll(unsigned fw, Value * value, Value * shift) {
+    VectorType * const vecTy = cast<VectorType>(value->getType());
+    IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
+    value = CreateBitCast(value, intTy);
+    shift = CreateZExtOrTrunc(CreateMul(shift, ConstantInt::get(shift->getType(), fw)), intTy);
+    return CreateBitCast(CreateShl(value, shift), vecTy);
+}
+
+Value * IDISA_Builder::mvmd_srl(unsigned fw, Value * value, Value * shift) {
+    VectorType * const vecTy = cast<VectorType>(value->getType());
+    IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
+    value = CreateBitCast(value, intTy);
+    shift = CreateZExtOrTrunc(CreateMul(shift, ConstantInt::get(shift->getType(), fw)), intTy);
+    return CreateBitCast(CreateLShr(value, shift), vecTy);
+}
+
 Value * IDISA_Builder::simd_slli(unsigned fw, Value * a, unsigned shift) {
     if (fw < 16) {
         Constant * value_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
@@ -578,7 +594,7 @@ Value * IDISA_Builder::simd_not(Value * a) {
     return simd_xor(a, Constant::getAllOnesValue(a->getType()));
 }
 
-IDISA_Builder::IDISA_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
+IDISA_Builder::IDISA_Builder(LLVMContext & C, unsigned vectorWidth, unsigned stride)
 : CBuilder(C)
 , mBitBlockWidth(vectorWidth)
 , mStride(stride)

@@ -37,7 +37,7 @@ void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
 }
 
 void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLength, MatchAccumulator * accum) {
-    const unsigned segmentSize = 8;
+    const unsigned segmentSize = codegen::BufferSegments * codegen::SegmentSize * codegen::ThreadNum;
 
     pattern = resolveCaseInsensitiveMode(pattern, false);
     pattern = regular_expression_passes(pattern);
@@ -100,8 +100,6 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     pxDriver.LinkFunction(*scanMatchK, "accumulate_match_wrapper", &accumulate_match_wrapper);
     pxDriver.LinkFunction(*scanMatchK, "finalize_match_wrapper", &finalize_match_wrapper);
     
-    bool saveSegmentParallel = codegen::SegmentPipelineParallel;
-    codegen::SegmentPipelineParallel = false;
     pxDriver.generatePipelineIR();
     pxDriver.deallocateBuffers();
     idb->CreateRetVoid();
@@ -110,6 +108,5 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     typedef void (*GrepFunctionType)(const char * buffer, const size_t length);
     auto f = reinterpret_cast<GrepFunctionType>(pxDriver.getMain());
     f(search_buffer, bufferLength);
-    codegen::SegmentPipelineParallel = saveSegmentParallel;
 }
 }

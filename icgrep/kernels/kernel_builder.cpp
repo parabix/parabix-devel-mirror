@@ -163,16 +163,9 @@ inline unsigned getItemWidth(const Type * ty) {
     return cast<IntegerType>(ty->getVectorElementType())->getBitWidth();
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getFieldWidth
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned getFieldWidth(const unsigned bitWidth, const unsigned blockWidth) {
-    for (unsigned k = 16; k <= blockWidth; k *= 2) {
-        if ((bitWidth & (k - 1)) != 0) {
-            return k / 2;
-        }
-    }
-    return blockWidth;
+inline static unsigned ceil_log2(const unsigned v) {
+    assert ("log2(0) is undefined!" && v != 0);
+    return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1U);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -185,26 +178,27 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
     assert (target->getType() == source->getType());
     assert (target->getType()->isPointerTy());
     assert (isConstantZero(targetOffset) || isConstantZero(sourceOffset));
-
-    const StreamSetBuffer * const buf = mKernel->getAnyStreamSetBuffer(name);
-
-    const auto itemWidth = getItemWidth(buf->getBaseType());
+    const StreamSetBuffer * const buffer = mKernel->getAnyStreamSetBuffer(name);
+    const auto itemWidth = getItemWidth(buffer->getBaseType());
     assert ("invalid item width" && is_power_2(itemWidth));
     const auto blockWidth = getBitBlockWidth();
     // Although our item width may be n bits, if we know we're always processing m items per block, our field width
     // (w.r.t the stream copy) would be n*m. By taking this into account we can optimize and simplify the copy code.
-    const auto fieldWidth = getFieldWidth(itemWidth * itemAlignment, blockWidth);
-    const auto alignment = (fieldWidth + 7) / 8;
+    const auto fieldWidth = std::min(1U << ceil_log2(itemWidth * itemAlignment), blockWidth);
+    assert ((blockWidth % fieldWidth) == 0);
 
     if (LLVM_LIKELY(itemWidth < fieldWidth)) {
         const auto factor = fieldWidth / itemWidth;
         Constant * const FACTOR = getSize(factor);
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            ConstantInt * const ALIGNMENT = getSize(alignment);
             const auto kernelName = mKernel->getName()+ ": " + name;
-            CreateAssertZero(CreateURem(CreatePtrToInt(target, getSizeTy()), ALIGNMENT), kernelName + " target is misaligned (" + std::to_string(alignment) + ")");
+            if (fieldWidth > 8) {
+                const auto alignment = (fieldWidth + 7) / 8;
+                ConstantInt * const ALIGNMENT = getSize(alignment);
+                CreateAssertZero(CreateURem(CreatePtrToInt(target, getSizeTy()), ALIGNMENT), kernelName + " target is misaligned (" + std::to_string(alignment) + ")");
+                CreateAssertZero(CreateURem(CreatePtrToInt(source, getSizeTy()), ALIGNMENT), kernelName + " source is misaligned (" + std::to_string(alignment) + ")");
+            }
             CreateAssertZero(CreateURem(targetOffset, FACTOR), kernelName + " target offset is misaligned (" + std::to_string(factor) + ")");
-            CreateAssertZero(CreateURem(CreatePtrToInt(source, getSizeTy()), ALIGNMENT), kernelName + " source is misaligned (" + std::to_string(alignment) + ")");
             CreateAssertZero(CreateURem(sourceOffset, FACTOR), kernelName + " source offset is misaligned (" + std::to_string(factor) + ")");
         }
         targetOffset = CreateUDiv(targetOffset, FACTOR);
@@ -235,11 +229,8 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
     */
 
-    Type * const fieldWidthTy = getIntNTy(fieldWidth);
-
-    Value * n = buf->getStreamSetCount(this, getStreamHandle(name));
-
-    if (isConstantOne(n) || fieldWidth == blockWidth || (isConstantZero(targetOffset) && isConstantZero(sourceOffset))) {
+    Value * const n = buffer->getStreamSetCount(this, getStreamHandle(name));
+    if (((isConstantOne(n) && fieldWidth >= 8) || fieldWidth == blockWidth || (isConstantZero(targetOffset) && isConstantZero(sourceOffset)))) {
         if (LLVM_LIKELY(itemWidth < 8)) {
             itemsToCopy = CreateUDivCeil(itemsToCopy, getSize(8 / itemWidth));
         } else if (LLVM_UNLIKELY(itemWidth > 8)) {
@@ -248,26 +239,28 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
         if (!isConstantOne(n)) {
             itemsToCopy = CreateMul(itemsToCopy, n);
         }
-        PointerType * const ptrTy = fieldWidthTy->getPointerTo();
+        PointerType * const ptrTy = getIntNTy(fieldWidth)->getPointerTo();
         target = CreateGEP(CreatePointerCast(target, ptrTy), targetOffset);
         source = CreateGEP(CreatePointerCast(source, ptrTy), sourceOffset);
+        const auto alignment = (fieldWidth + 7) / 8;
         CreateMemCpy(target, source, itemsToCopy, alignment);
 
     } else { // either the target offset or source offset is non-zero but not both
-
         VectorType * const blockTy = getBitBlockType();
         PointerType * const blockPtrTy = blockTy->getPointerTo();
-
-        target = CreatePointerCast(target, blockPtrTy, "target");
-        source = CreatePointerCast(source, blockPtrTy, "source");
-
-        assert ((blockWidth % fieldWidth) == 0);
-
-        VectorType * const shiftTy = VectorType::get(fieldWidthTy, blockWidth / fieldWidth);
-        Constant * const width = getSize(blockWidth / itemWidth);
+        Constant * const BLOCK_WIDTH = getSize(blockWidth);
+        target = CreatePointerCast(target, blockPtrTy);
+        target = CreateGEP(target, CreateUDiv(targetOffset, BLOCK_WIDTH));
+        source = CreatePointerCast(source, blockPtrTy);
+        source = CreateGEP(source, CreateUDiv(sourceOffset, BLOCK_WIDTH));
+        const auto alignment = blockWidth / 8;
         Constant * const ZERO = getSize(0);
         Constant * const ONE = getSize(1);
+
         BasicBlock * const entry = GetInsertBlock();
+
+        // TODO: this code isn't correct. I was hoping to shift by fieldwidth units to give LLVM
+        // the ability to better select
 
         if (isConstantZero(targetOffset)) {
 
@@ -284,42 +277,45 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
                TARGET STREAM        1  |BBaaa|CCbbb|DDccc|    d|
                                     2  |FFeee|GGfff|HHggg|    h|
                                     3  |JJiii|KKjjj|LLkkk|    l|
-             */
+            */
 
-            Value * const blocksToCopy = CreateMul(CreateUDiv(itemsToCopy, width), n);
-            Value * const offset = CreateURem(sourceOffset, width);
-            Value * const offsetVector = simd_fill(fieldWidth, CreateTrunc(offset, fieldWidthTy));
-            Value * const remaining = CreateSub(width, offset);
-            Value * const remainingVector = simd_fill(fieldWidth, CreateTrunc(remaining, fieldWidthTy));
+            sourceOffset = CreateURem(sourceOffset, BLOCK_WIDTH);
 
-            BasicBlock * const streamCopy = CreateBasicBlock(name + "PullCopy");
-            BasicBlock * const streamCopyRemaining = CreateBasicBlock(name + "PullCopyRemaining");
-            BasicBlock * const streamCopyEnd = CreateBasicBlock(name + "PullCopyEnd");
+            Value * const borrowOffset = CreateSub(BLOCK_WIDTH, sourceOffset);
+            BasicBlock * const streamCopy = CreateBasicBlock();
+            BasicBlock * const streamCopyRemainingCond = CreateBasicBlock();
+            BasicBlock * const streamCopyRemaining = CreateBasicBlock();
+            BasicBlock * const streamCopyEnd = CreateBasicBlock();
 
-            CreateCondBr(CreateICmpNE(blocksToCopy, ZERO), streamCopy, streamCopyRemaining);
+            Value * const blocksToCopy = CreateMul(CreateUDiv(itemsToCopy, BLOCK_WIDTH), n);
+            CreateCondBr(CreateICmpNE(blocksToCopy, ZERO), streamCopy, streamCopyRemainingCond);
 
             SetInsertPoint(streamCopy);
             PHINode * const i = CreatePHI(getSizeTy(), 2);
             i->addIncoming(n, entry);
-            Value * prior = CreateAlignedLoad(CreateGEP(source, CreateSub(i, n)), alignment);
-            prior = CreateBitCast(CreateLShr(CreateBitCast(prior, shiftTy), offsetVector), blockTy);
-            Value * value = CreateAlignedLoad(CreateGEP(source, i), alignment);
-            value = CreateBitCast(CreateShl(CreateBitCast(value, shiftTy), remainingVector), blockTy);
-            CreateAlignedStore(CreateOr(value, prior), CreateGEP(target, i), alignment);
+            Value * Ai = CreateAlignedLoad(CreateGEP(source, CreateSub(i, n)), alignment);
+            Ai = mvmd_srl(fieldWidth, Ai, borrowOffset);
+            Value * Bi = CreateAlignedLoad(CreateGEP(source, i), alignment);
+            Bi = mvmd_sll(fieldWidth, Bi, sourceOffset);
+            CreateAlignedStore(CreateOr(Bi, Ai), CreateGEP(target, i), alignment);
             Value * const next_i = CreateAdd(i, ONE);
             i->addIncoming(next_i, streamCopy);
-            CreateCondBr(CreateICmpNE(next_i, blocksToCopy), streamCopy, streamCopyRemaining);
+            CreateCondBr(CreateICmpNE(next_i, blocksToCopy), streamCopy, streamCopyRemainingCond);
+
+            SetInsertPoint(streamCopyRemainingCond);
+            Value * const partialBlocksToCopy = CreateAdd(blocksToCopy, n);
+            Value * const remainingItemsToCopy = CreateURem(itemsToCopy, BLOCK_WIDTH);
+            CreateLikelyCondBr(CreateIsNotNull(remainingItemsToCopy), streamCopyRemaining, streamCopyEnd);
 
             SetInsertPoint(streamCopyRemaining);
             PHINode * const j = CreatePHI(getSizeTy(), 2);
-            j->addIncoming(blocksToCopy, entry);
-            j->addIncoming(blocksToCopy, streamCopy);
-            Value * final = CreateAlignedLoad(CreateGEP(source, j), alignment);
-            final = CreateBitCast(CreateLShr(CreateBitCast(final, shiftTy), offsetVector), blockTy);
-            CreateAlignedStore(final, CreateGEP(target, j), alignment);
+            j->addIncoming(blocksToCopy, streamCopyRemainingCond);
+            Value * Aj = CreateAlignedLoad(CreateGEP(source, j), alignment);
+            Aj = mvmd_srl(fieldWidth, Aj, borrowOffset);
+            CreateAlignedStore(Aj, CreateGEP(target, j), alignment);
             Value * const next_j = CreateAdd(j, ONE);
             j->addIncoming(next_j, streamCopyRemaining);
-            CreateCondBr(CreateICmpNE(next_j, CreateAdd(blocksToCopy, n)), streamCopyRemaining, streamCopyEnd);
+            CreateCondBr(CreateICmpNE(next_j, partialBlocksToCopy), streamCopyRemaining, streamCopyEnd);
 
             SetInsertPoint(streamCopyEnd);
 
@@ -335,49 +331,52 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
 
                                           A     B     C     D
-               TARGET STREAM        1  |aa---|bbAAA|ccBBB| dCCC|
-                                    2  |ee---|ffEEE|ggFFF| hGGG|
-                                    3  |ii---|jjIII|kkJJJ| lKKK|
+               TARGET STREAM        1  |--XXX|-----|-----|-----|
+                                    2  |--YYY|-----|-----|-----|
+                                    3  |--ZZZ|-----|-----|-----|
+
+                                          A     B     C     D
+               OUTPUT STREAM        1  |aaXXX|bbAAA|ccBBB| dCCC|
+                                    2  |eeYYY|ffEEE|ggFFF| hGGG|
+                                    3  |iiZZZ|jjIII|kkJJJ| lKKK|
 
             */
 
-            BasicBlock * const streamCopy = CreateBasicBlock(name + "PushCopy");
-            BasicBlock * const streamCopyRemainingCond = CreateBasicBlock(name + "PushCopyRemainingCond");
-            BasicBlock * const streamCopyRemaining = CreateBasicBlock(name + "PushCopyRemaining");
-            BasicBlock * const streamCopyEnd = CreateBasicBlock(name + "PushCopyEnd");
+            BasicBlock * const streamCopy = CreateBasicBlock();
+            BasicBlock * const streamCopyRemainingCond = CreateBasicBlock();
+            BasicBlock * const streamCopyRemaining = CreateBasicBlock();
+            BasicBlock * const streamCopyEnd = CreateBasicBlock();
 
-            Value * const pos = CreateURem(targetOffset, width);
-            Value * const copied = CreateSub(width, pos);
-            Value * const copiedVector = simd_fill(fieldWidth, CreateTrunc(copied, fieldWidthTy));
-            Value * const mask = CreateLShr(Constant::getAllOnesValue(shiftTy), copiedVector);
-            Value * const offsetVector = simd_fill(fieldWidth, CreateTrunc(pos, fieldWidthTy));
+            targetOffset = CreateURem(targetOffset, BLOCK_WIDTH);
 
+            Value * const carryOffset = CreateSub(BLOCK_WIDTH, targetOffset);
+            Value * const mask = mvmd_srl(fieldWidth, Constant::getAllOnesValue(blockTy), carryOffset);
             CreateBr(streamCopy);
 
             SetInsertPoint(streamCopy);
             PHINode * const i = CreatePHI(getSizeTy(), 2);
             i->addIncoming(ZERO, entry);
-            Value * priorTargetValue = CreateAlignedLoad(CreateGEP(target, i), alignment);
-            priorTargetValue = CreateBitCast(CreateAnd(CreateBitCast(priorTargetValue, shiftTy), mask), blockTy);
-            Value * sourceValue = CreateAlignedLoad(CreateGEP(source, i), alignment);
-            sourceValue = CreateBitCast(CreateShl(CreateBitCast(sourceValue, shiftTy), offsetVector), blockTy);
-            CreateAlignedStore(CreateOr(sourceValue, priorTargetValue), CreateGEP(target, i), alignment);
+            Value * A0 = CreateAlignedLoad(CreateGEP(target, i), alignment);
+            A0 = CreateAnd(A0, mask);
+            Value * Ai = CreateAlignedLoad(CreateGEP(source, i), alignment);
+            Ai = mvmd_sll(fieldWidth, Ai, targetOffset);
+            CreateAlignedStore(CreateOr(Ai, A0), CreateGEP(target, i), alignment);
             Value * const next_i = CreateAdd(i, ONE);
             i->addIncoming(next_i, streamCopy);
             CreateCondBr(CreateICmpNE(next_i, n), streamCopy, streamCopyRemainingCond);
 
             SetInsertPoint(streamCopyRemainingCond);
-            Value * const blocksToCopy = CreateMul(CreateUDiv(CreateSub(itemsToCopy, copied), width), n);
-            CreateCondBr(CreateICmpULT(copied, itemsToCopy), streamCopyRemaining, streamCopyEnd);
+            Value * const blocksToCopy = CreateMul(CreateUDiv(itemsToCopy, BLOCK_WIDTH), n);
+            CreateCondBr(CreateICmpUGT(blocksToCopy, n), streamCopyRemaining, streamCopyEnd);
 
             SetInsertPoint(streamCopyRemaining);
             PHINode * const j = CreatePHI(getSizeTy(), 2);
             j->addIncoming(n, streamCopyRemainingCond);
-            Value * prior = CreateAlignedLoad(CreateGEP(source, CreateSub(j, n)), alignment);
-            prior = CreateBitCast(CreateShl(CreateBitCast(prior, shiftTy), offsetVector), blockTy);
-            Value * value = CreateAlignedLoad(CreateGEP(source, j), alignment);
-            value = CreateBitCast(CreateLShr(CreateBitCast(value, shiftTy), copiedVector), blockTy);
-            CreateAlignedStore(CreateOr(value, prior), CreateGEP(target, j), alignment);
+            Value * Aj = CreateAlignedLoad(CreateGEP(source, CreateSub(j, n)), alignment);
+            Aj = mvmd_srl(fieldWidth, Aj, carryOffset);
+            Value * Bj = CreateAlignedLoad(CreateGEP(source, j), alignment);
+            Bj = mvmd_sll(fieldWidth, Bj, targetOffset);
+            CreateAlignedStore(CreateOr(Bj, Aj), CreateGEP(target, j), alignment);
             Value * const next_j = CreateAdd(j, ONE);
             j->addIncoming(next_j, streamCopyRemaining);
             CreateCondBr(CreateICmpNE(next_j, blocksToCopy), streamCopyRemaining, streamCopyEnd);

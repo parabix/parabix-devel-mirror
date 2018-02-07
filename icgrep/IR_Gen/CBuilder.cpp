@@ -1322,8 +1322,8 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
     return IRBuilder<>::CreateMemCpy(Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
 }
 
-llvm::CallInst * CBuilder::CreateMemSet(llvm::Value * Ptr, llvm::Value * Val, llvm::Value * Size, unsigned Align,
-                       bool isVolatile, llvm::MDNode * TBAATag, llvm::MDNode * ScopeTag, llvm::MDNode * NoAliasTag) {
+CallInst * CBuilder::CreateMemSet(Value * Ptr, Value * Val, Value * Size, unsigned Align,
+                       bool isVolatile, MDNode * TBAATag, MDNode * ScopeTag, MDNode * NoAliasTag) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CHECK_ADDRESS(Ptr, Size, "CreateMemSet");
         if (Align > 1) {
