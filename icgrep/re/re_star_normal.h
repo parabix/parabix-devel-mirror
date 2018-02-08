@@ -19,7 +19,7 @@ class RE_Star_Normal {
 public:
 	static RE * star_normal(RE * re);
 private:
-    static RE * optimize(RE * re);
+    static RE * star_rule(RE * re);
 };
 
 }

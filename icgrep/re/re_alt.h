@@ -70,7 +70,7 @@ RE * makeAlt(iterator begin, iterator end) {
     };
 
     bool nullable = false;
-    RE * emptySeq = nullptr;
+    RE * nullableSeq = nullptr;
     for (auto i = begin; i != end; ++i) {
         if (CC * cc = llvm::dyn_cast<CC>(*i)) {
             combineCC(cc);
@@ -81,33 +81,42 @@ RE * makeAlt(iterator begin, iterator end) {
             for (RE * a : *alt) {
                 if (CC * cc = llvm::dyn_cast<CC>(a)) {
                     combineCC(cc);
-                } else if (isEmptySeq(a)) {
+                } else if (isEmptySeq(a) && !nullable) {
                     nullable = true;
-                    emptySeq = a;
+                    nullableSeq = a;
                 } else {
                     newAlt->push_back(a);
                 }
             }
         } else if (const Rep * rep = llvm::dyn_cast<Rep>(*i)) {
             if (rep->getLB() == 0) {
-                nullable = true;
-                newAlt->push_back(makeRep(rep->getRE(), 1, rep->getUB()));
+                if (nullable) {
+                    // Already have a nullable case.
+                    newAlt->push_back(makeRep(rep->getRE(), 1, rep->getUB()));
+                }
+                else {
+                    // This will be the nullable case.
+                    nullableSeq = *i;
+                    nullable = true;
+                }
             } else {
                 newAlt->push_back(*i);
             }
         } else if (isEmptySeq(*i)) {
-            nullable = true;
-            emptySeq = *i;
+            if (!nullable) {
+                nullable = true;
+                nullableSeq = *i;
+            }
         } else {
             newAlt->push_back(*i);
         }
     }
     newAlt->insert(newAlt->end(), CCs.begin(), CCs.end());
     if (nullable) {
-        if (emptySeq == nullptr) {
-            emptySeq = makeSeq();
+        if (nullableSeq == nullptr) {
+            nullableSeq = makeSeq();
         }
-        newAlt->push_back(emptySeq);
+        newAlt->push_back(nullableSeq);
     }
     return newAlt->size() == 1 ? newAlt->front() : newAlt;
 }
