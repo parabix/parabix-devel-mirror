@@ -42,6 +42,23 @@ inline static std::string sha1sum(const std::string & str) {
 void RequiredStreams_UTF8::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler ccc(this, getInputStreamSet("basis"));
+    
+    PabloAST * const LF = pb.createExtract(getInput(1), pb.getInteger(0), "LF");
+    PabloAST * const CR = ccc.compileCC(makeByte(0x0D));
+    PabloAST * const LF_VT_FF_CR = ccc.compileCC("LF,VT,FF,CR", makeByte(0x0A, 0x0D), pb);
+    Var * const LineBreak = pb.createVar("LineBreak", LF_VT_FF_CR);
+    
+    // Remove the CR of any CR+LF
+    Var * const CRLF = pb.createVar("CRLF", pb.createZeroes());
+    auto crb = pb.createScope();
+    pb.createIf(CR, crb);
+    PabloAST * const lookaheadLF = crb.createLookahead(LF, 1, "lookaheadLF");
+    PabloAST * const crlf = crb.createAnd(CR, lookaheadLF);
+    crb.createAssign(CRLF, crlf);
+    PabloAST * removedCRLF = crb.createAnd(LineBreak, crb.createNot(CRLF));
+    crb.createAssign(LineBreak, removedCRLF);
+
+    
     Zeroes * const ZEROES = pb.createZeroes();
     PabloAST * const u8pfx = ccc.compileCC(makeByte(0xC0, 0xFF));
 
@@ -63,6 +80,9 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     auto it2 = it.createScope();
     it.createIf(u8pfx2, it2);
     it2.createAssign(anyscope, it2.createAdvance(u8pfx2, 1));
+    PabloAST * NEL = it2.createAnd(it2.createAdvance(ccc.compileCC(makeByte(0xC2), it2), 1), ccc.compileCC(makeByte(0x85), it2), "NEL");
+    it2.createAssign(LineBreak, it2.createOr(LineBreak, NEL));
+
 
     //
     // Three-byte sequences    
@@ -78,7 +98,9 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeByte(0xED), it3), 1), ccc.compileCC(makeByte(0xA0, 0xBF), it3));
     PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
     it3.createAssign(EF_invalid, EX_invalid);
-
+    PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc.compileCC(makeByte(0xE2), it3), 1), ccc.compileCC(makeByte(0x80), it3));
+    PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc.compileCC(makeByte(0xA8,0xA9), it3), "LS_PS");
+    it3.createAssign(LineBreak, it3.createOr(LineBreak, LS_PS));
 
     //
     // Four-byte sequences
@@ -109,17 +131,21 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     //
     //
     it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
-
-    Var * const required = getOutputStreamVar("required");
+    pb.createAssign(nonFinal, pb.createOr(nonFinal, CRLF));
+    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1), "unterminatedLineAtEOF");
+    
+    Var * const required = getOutputStreamVar("nonFinal");
     pb.createAssign(pb.createExtract(required, pb.getInteger(0)), nonFinal);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("linebreak"), pb.getInteger(0)), pb.createOr(LineBreak, unterminatedLineAtEOF, "EOL"));
 }
 
 RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb)
 : PabloKernel(kb, "RequiredStreams_UTF8",
 // input
-{Binding{kb->getStreamSetTy(8), "basis"}},
+{Binding{kb->getStreamSetTy(8), "basis"}, Binding{kb->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
 // output
-{Binding{kb->getStreamSetTy(1), "required", FixedRate()}}) {
+{Binding{kb->getStreamSetTy(1), "nonFinal", FixedRate()},
+ Binding{kb->getStreamSetTy(1), "linebreak", FixedRate(), Add1()}}) {
 
 }
 
@@ -171,7 +197,6 @@ inline std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBui
     std::vector<Binding> streamSetInputs = {
         Binding{b->getStreamSetTy(8), "basis"},
         Binding{b->getStreamSetTy(1, 1), "linebreak"},
-        Binding{b->getStreamSetTy(1, 1), "cr+lf"},
         Binding{b->getStreamSetTy(1, 1), "required"}
     };
     for (const auto & alphabet : alphabets) {

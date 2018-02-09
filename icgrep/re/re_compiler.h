@@ -136,8 +136,6 @@ private:
     bool                                            mCountOnly;
     cc::CC_Compiler &                               mCCCompiler;
     pablo::PabloAST *                               mLineBreak;
-    pablo::PabloAST *                               mCRLF;
-    pablo::PabloAST *                               mInitial;
     pablo::PabloAST *                               mNonFinal;
     pablo::PabloAST *                               mFinal;
     pablo::PabloAST *                               mWhileTest;

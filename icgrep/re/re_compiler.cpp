@@ -20,8 +20,6 @@
 #include <re/re_end.h>
 #include <re/re_intersect.h>        // for Intersect
 #include <re/re_name.h>             // for Name, Name::Type, Name::Type::Zer...
-#include <re/re_name_resolve.h>     // for resolveNames
-#include <re/re_name_gather.h>      // for gatherNames
 #include <re/re_rep.h>              // for Rep, Rep::::UNBOUNDED_REP
 #include <re/re_seq.h>              // for Seq
 #include <re/re_start.h>
@@ -555,7 +553,8 @@ inline MarkerType RE_Compiler::compileStart(MarkerType marker, pablo::PabloBuild
 
 inline MarkerType RE_Compiler::compileEnd(MarkerType marker, pablo::PabloBuilder & pb) {
     PabloAST * const nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
-    PabloAST * const atEOL = pb.createOr(pb.createAnd(mLineBreak, nextPos), pb.createAdvance(pb.createAnd(nextPos, mCRLF), 1), "eol");
+    PabloAST * const atEOL = pb.createAnd(mLineBreak, nextPos, "eol");
+    //PabloAST * const atEOL = pb.createOr(pb.createAnd(mLineBreak, nextPos), pb.createAdvance(pb.createAnd(nextPos, mCRLF), 1), "eol");
     return makeMarker(FinalPostPositionUnit, atEOL);
 }
 
@@ -589,7 +588,6 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 : mKernel(kernel)
 , mCCCompiler(ccCompiler)
 , mLineBreak(nullptr)
-, mCRLF(nullptr)
 , mNonFinal(nullptr)
 , mFinal(nullptr)
 , mWhileTest(nullptr)
@@ -598,8 +596,6 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
     PabloBuilder mPB(kernel->getEntryScope());
     Var * const linebreak = mKernel->getInputStreamVar("linebreak");
     mLineBreak = mPB.createExtract(linebreak, 0);
-    Var * const crlf = mKernel->getInputStreamVar("cr+lf");
-    mCRLF = mPB.createExtract(crlf, 0);
     Var * const required = mKernel->getInputStreamVar("required");
     mNonFinal = mPB.createExtract(required, 0);
     mFinal = mPB.createNot(mNonFinal);
