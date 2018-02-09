@@ -74,7 +74,7 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     StreamSetBuffer * LineBreakStream = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
     
     kernel::Kernel * requiredStreamsK = pxDriver.addKernelInstance<kernel::RequiredStreams_UTF8>(idb);
-    StreamSetBuffer * RequiredStreams = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(2, 1), segmentSize);
+    StreamSetBuffer * RequiredStreams = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
     pxDriver.makeKernelCall(requiredStreamsK, {BasisBits, LineFeedStream}, {RequiredStreams, LineBreakStream});
     
     StreamSetBuffer * MatchResults = pxDriver.addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
