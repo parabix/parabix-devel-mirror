@@ -5,183 +5,182 @@
 #include "pdep_kernel.h"
 #include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
-#include <iostream>
+#include <toolchain/toolchain.h>
 
 using namespace llvm;
 
 namespace kernel {
 
-PDEPkernel::PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & kb, unsigned streamCount, unsigned swizzleFactor, unsigned PDEP_width, std::string name)
-: MultiBlockKernel(name + "",
-                  {Binding{kb->getStreamSetTy(), "PDEPmarkerStream"},
-                   Binding{kb->getStreamSetTy(streamCount), "sourceStreamSet", BoundedRate(0, 1)}},
-                  {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"}},
-                  {}, {}, {})
-, mSwizzleFactor(swizzleFactor)
-, mPDEPWidth(PDEP_width)
-{
-    assert((mSwizzleFactor == (kb->getBitBlockWidth() / PDEP_width)) && "swizzle factor must equal bitBlockWidth / PDEP_width");
-    assert((mPDEPWidth == 64 || mPDEPWidth == 32) && "PDEP width must be 32 or 64");
+PDEPkernel::PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned swizzleFactor, std::string name)
+: MultiBlockKernel(std::move(name),
+// input stream sets
+{Binding{b->getStreamSetTy(), "marker", FixedRate(), Principal()},
+Binding{b->getStreamSetTy(swizzleFactor), "source", FixedRate(), Deferred()}},
+// output stream set
+{Binding{b->getStreamSetTy(swizzleFactor), "output"}},
+{}, {},
+// internal scalars
+{Binding{b->getBitBlockType(), "buffer"},
+Binding{b->getSizeTy(), "buffered"},
+Binding{b->getSizeTy(), "sourceOffset"}})
+, mSwizzleFactor(swizzleFactor) {
+
 }
 
-void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfStrides) {
-    BasicBlock * entry = kb->GetInsertBlock();
-//    kb->CallPrintInt("--------------" + this->getName() + " doMultiBlock Start:", kb->getSize(0));
-    BasicBlock * checkLoopCond = kb->CreateBasicBlock("checkLoopCond");
-    BasicBlock * checkSourceCount = kb->CreateBasicBlock("checkSourceCount");
-    BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
-    BasicBlock * terminate = kb->CreateBasicBlock("terminate");
+void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfBlocks) {
+    BasicBlock * const entry = b->GetInsertBlock();
+    BasicBlock * const processBlock = b->CreateBasicBlock("processBlock");
+    BasicBlock * const finishedStrides = b->CreateBasicBlock("finishedStrides");
+    const auto pdepWidth = b->getBitBlockWidth() / mSwizzleFactor;
+    ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
+    ConstantInt * const PDEP_WIDTH = b->getSize(pdepWidth);
 
-    Value * itemsToDo = mAvailableItemCount[0];
-
-    Value * sourceItemsAvail = mAvailableItemCount[1];
-//    kb->CallPrintInt("itemsToDo:", itemsToDo);
-//    kb->CallPrintInt("sourceItemsAvail:", sourceItemsAvail);
-
-
-    Value * PDEPStrmPtr = kb->getInputStreamBlockPtr("PDEPmarkerStream", kb->getInt32(0)); // mStreamBufferPtr[0];
-    Value * inputSwizzlesPtr = kb->getInputStreamBlockPtr("sourceStreamSet", kb->getInt32(0)); // mStreamBufferPtr[1];
-    // Get pointer to start of the output StreamSetBlock we're currently writing to
-    Value * outputStreamPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(0)); // mStreamBufferPtr[2];
-
-//    kb->CallPrintInt("aaa", outputStreamPtr)
-
-    Constant * blockWidth = kb->getSize(kb->getBitBlockWidth()); // 256
-    Value * blocksToDo = kb->CreateUDivCeil(itemsToDo, blockWidth); // 1 if this is the final block TODO the assumption is incorrect here
-    Value * processedSourceBits = kb->getProcessedItemCount("sourceStreamSet");
-    Value * base_src_blk_idx = kb->CreateUDiv(processedSourceBits, blockWidth);
-        
-    Value * pdepWidth = kb->getSize(mPDEPWidth);
-    Value * pdepWidth_1 = kb->getSize(mPDEPWidth - 1);
-    Value * PDEP_func = nullptr;
-    if (mPDEPWidth == 64) {
-        PDEP_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pdep_64);
-    } else if (mPDEPWidth == 32) {
-        PDEP_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pdep_32);
+    Function * pdep = nullptr;
+    if (pdepWidth == 64) {
+        pdep = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_64);
+    } else if (pdepWidth == 32) {
+        pdep = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_32);
+    } else {
+        report_fatal_error(getName() + ": PDEP width must be 32 or 64");
     }
-    kb->CreateBr(checkLoopCond);
 
-    kb->SetInsertPoint(checkLoopCond);
-    // The following PHINodes' values can come from entry or processBlock
-    PHINode * blocksToDoPhi = kb->CreatePHI(kb->getSizeTy(), 2);
-    PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
-    PHINode * updatedProcessedSourceBitsPhi = kb->CreatePHI(kb->getSizeTy(), 2);
-    PHINode * sourceItemsRemaining = kb->CreatePHI(kb->getSizeTy(), 2);
-    blocksToDoPhi->addIncoming(blocksToDo, entry);
-    blockOffsetPhi->addIncoming(kb->getSize(0), entry);
-    updatedProcessedSourceBitsPhi->addIncoming(processedSourceBits, entry);
-    sourceItemsRemaining->addIncoming(sourceItemsAvail, entry);
+    // We store an internal source offset here because this kernel processes items in an unusual way.
+    // The pipeline and multiblock assume that if we report we're on the i-th bit of a stream we have
+    // fully processed all of the bits up to the i-th position.
 
-    Value * haveRemBlocks = kb->CreateICmpUGT(blocksToDoPhi, kb->getSize(0));
-    kb->CreateCondBr(haveRemBlocks, checkSourceCount, terminate);
+    //                                             v
+    //                |XXXXXXXXXXXX XXXXXXXXXXXX XX                       |
+    //                |XXXXXXXXXXXX XXXXXXXXXXXX XX                       |
+    //                |XXXXXXXXXXXX XXXXXXXXXXXX XX                       |
+    //                |XXXXXXXXXXXX XXXXXXXXXXXX XX                       |
 
-    kb->SetInsertPoint(checkSourceCount);
+    // However, this kernel divides the stream into K elements and fully consumes a single stream of
+    // the stream set before consuming the next one. So the same i-th position above is actually:
+
+    //                |XXXXXXXXXXXX|XXXXXXXXXXXX|XXXXXXXXXXXX|XXXXXXXXXXXX|
+    //                |XXXXXXXXXXXX|XXXXXXXXXXXX|XXXXXXXXXXXX|XXXXXXXXXXXX|
+    //                |XX          |XX          |XX          |XX          |
+    //                |            |            |            |            |
+
+    // In the future, we may want the pipeline and multiblock to understand this style of processing
+    // but for now, we hide it by delaying writing the actual processed offset until we've fully
+    // processed the entire block.
+
+    Value * const initialBuffer = b->getScalarField("buffer");
+    Value * const initialBufferSize = b->getScalarField("buffered");
+    Value * const initialSourceOffset = b->getScalarField("sourceOffset");
+    b->CreateBr(processBlock);
+
+    b->SetInsertPoint(processBlock);
+    PHINode * const strideIndex = b->CreatePHI(b->getSizeTy(), 2);
+    strideIndex->addIncoming(b->getSize(0), entry);
+    PHINode * const bufferPhi = b->CreatePHI(initialBuffer->getType(), 2);
+    bufferPhi->addIncoming(initialBuffer, entry);
+    PHINode * const sourceOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
+    sourceOffsetPhi->addIncoming(initialSourceOffset, entry);
+    PHINode * const bufferSizePhi = b->CreatePHI(b->getSizeTy(), 2);
+    bufferSizePhi->addIncoming(initialBufferSize, entry);
+
     // Extract the values we will use in the main processing loop
-    Value * updatedProcessedSourceBits = updatedProcessedSourceBitsPhi;
-    Value * updatedSourceItems = sourceItemsRemaining;
-    Value * PDEP_ms_blk = kb->CreateBlockAlignedLoad(kb->CreateGEP(PDEPStrmPtr, blockOffsetPhi));
+    Value * const markerStream = b->getInputStreamBlockPtr("marker", b->getInt32(0), strideIndex);
+    Value * const selectors = b->fwCast(pdepWidth, b->CreateBlockAlignedLoad(markerStream));
+    Value * const numOfSelectors = b->simd_popcount(pdepWidth, selectors);
 
-    const auto PDEP_masks = get_PDEP_masks(kb, PDEP_ms_blk, mPDEPWidth);    
-    const auto mask_popcounts = get_block_popcounts(kb, PDEP_ms_blk, mPDEPWidth);
-    
-    Value * total_count = mask_popcounts[0];
-    for (unsigned j = 1; j < mask_popcounts.size(); j++) {
-        total_count = kb->CreateAdd(total_count, mask_popcounts[j]);
+    // If we run out of source items here, it is a failure of the MultiBlockKernel and/or PipelineGenerator
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Value * requiredSourceItems = b->CreateExtractElement(numOfSelectors, b->getInt64(0));
+        for (unsigned i = 1; i < mSwizzleFactor; i++) {
+            requiredSourceItems = b->CreateAdd(requiredSourceItems, b->CreateExtractElement(numOfSelectors, b->getInt64(i)));
+        }
+        Value * const availableSourceItems = b->getAvailableItemCount("source");
+        Value * const unreadSourceItems = b->CreateSub(availableSourceItems, sourceOffsetPhi);
+        Value * const hasSufficientSourceItems = b->CreateICmpULE(requiredSourceItems, unreadSourceItems);
+        b->CreateAssert(hasSufficientSourceItems, getName() + " has insufficient source items for the given marker stream");
     }
-//    kb->CallPrintInt("total_count", total_count);
-//    kb->CallPrintInt("sourceItemsRemaining", sourceItemsRemaining);
-    kb->CreateCondBr(kb->CreateICmpULE(total_count, sourceItemsRemaining), processBlock, terminate);
-    kb->SetInsertPoint(processBlock);
 
-    // For each mask extracted from the PDEP marker block
+    // For each element of the marker block
+    Value * bufferSize = bufferSizePhi;
+    Value * sourceOffset = sourceOffsetPhi;
+    Value * buffer = bufferPhi;
     for (unsigned i = 0; i < mSwizzleFactor; i++) {
-        // Do block and swizzle index calculations, then combine the "current" and "next" swizzles
 
-        Value * current_blk_idx = kb->CreateSub(kb->CreateUDiv(updatedProcessedSourceBits, blockWidth), base_src_blk_idx); // blk index == stream set block index
-        Value * current_swizzle_idx = kb->CreateUDiv(kb->CreateURem(updatedProcessedSourceBits, blockWidth), pdepWidth);
-        Value * ahead_pdep_width_less_1 = kb->CreateAdd(pdepWidth_1, updatedProcessedSourceBits);
+        // How many bits will we deposit?
+        Value * const required = b->CreateExtractElement(numOfSelectors, b->getInt32(i));
 
-        Value * next_blk_idx = kb->CreateSub(kb->CreateUDiv(ahead_pdep_width_less_1, blockWidth), base_src_blk_idx);
-        Value * next_swizzle_idx = kb->CreateUDiv(kb->CreateURem(ahead_pdep_width_less_1, blockWidth), pdepWidth);
+        // Aggressively enqueue any additional bits
+        BasicBlock * const entry = b->GetInsertBlock();
+        BasicBlock * const enqueueBits = b->CreateBasicBlock();
+        b->CreateBr(enqueueBits);
 
-//        kb->CallPrintInt("current_blk_idx", current_blk_idx);
-//        kb->CallPrintInt("current_swizzle_idx", current_swizzle_idx);
+        b->SetInsertPoint(enqueueBits);
+        PHINode * const bufferSize2 = b->CreatePHI(bufferSize->getType(), 2);
+        bufferSize2->addIncoming(bufferSize, entry);
+        PHINode * const sourceOffset2 = b->CreatePHI(sourceOffset->getType(), 2);
+        sourceOffset2->addIncoming(sourceOffset, entry);
+        PHINode * const buffer2 = b->CreatePHI(buffer->getType(), 2);
+        buffer2->addIncoming(buffer, entry);
 
-        // Load current and next BitBlocks/swizzles
-        // TODO can not guarantee the two GEP is correct, need to check later
-        Value * current_swizzle_ptr = kb->CreateGEP(inputSwizzlesPtr, kb->CreateAdd(kb->CreateMul(current_blk_idx, kb->getSize(mSwizzleFactor)), current_swizzle_idx));
-        Value * next_swizzle_ptr = kb->CreateGEP(inputSwizzlesPtr, kb->CreateAdd(kb->CreateMul(next_blk_idx, kb->getSize(mSwizzleFactor)), next_swizzle_idx));
+        // Calculate the block and swizzle index of the "current" swizzle
+        Value * const block_index = b->CreateUDiv(sourceOffset2, BLOCK_WIDTH);
+        Value * const stream_index = b->CreateUDiv(b->CreateURem(sourceOffset2, BLOCK_WIDTH), PDEP_WIDTH);
+        Value * const ptr = b->getInputStreamBlockPtr("source", stream_index, block_index);
+        Value * const swizzle = b->CreateBlockAlignedLoad(ptr);
+        Value * const swizzleOffset = b->CreateURem(sourceOffset2, PDEP_WIDTH);
 
-        Value * current_swizzle = kb->CreateBlockAlignedLoad(current_swizzle_ptr);//Constant::getNullValue(cast<PointerType>(current_swizzle_ptr->getType())->getElementType());
-        Value * next_swizzle = kb->CreateBlockAlignedLoad(next_swizzle_ptr);//Constant::getNullValue(cast<PointerType>(current_swizzle_ptr->getType())->getElementType());
-//        kb->CallPrintInt("ptr", current_swizzle_ptr);
-//        kb->CallPrintRegister("current_swizzle", current_swizzle);
+        // Shift the swizzle to the right to clear off any used bits ...
+        Value * const swizzleShift = b->simd_fill(pdepWidth, swizzleOffset);
+        Value * const unreadBits = b->CreateLShr(swizzle, swizzleShift);
 
-        // Combine the two swizzles to guarantee we'll have enough source bits for the PDEP operation
-        Value * shift_amount = kb->CreateURem(updatedProcessedSourceBits, pdepWidth);
-        Value * remaining_bits = kb->CreateLShr(current_swizzle, kb->simd_fill(mPDEPWidth, shift_amount)); // shift away bits that have already been used
+        // ... then to the left to align the bits with the buffer and combine them.
+        Value * const bufferShift = b->simd_fill(pdepWidth, bufferSize2);
+        Value * const pendingBits = b->CreateShl(unreadBits, bufferShift);
+        buffer = b->CreateOr(buffer, pendingBits);
+        buffer2->addIncoming(buffer, enqueueBits);
 
-        Value * borrowed_bits = kb->CreateShl(next_swizzle,
-                                              kb->simd_fill(mPDEPWidth, kb->CreateSub(pdepWidth, shift_amount))); // shift next swizzle left by width of first swizzle
-        Value * combined = kb->CreateOr(remaining_bits, borrowed_bits); // combine current swizzle and next swizzle
+        // Update the buffer size by the number of bits we have actually enqueued
+        Value * const maxBufferSize = b->CreateAdd(b->CreateSub(PDEP_WIDTH, swizzleOffset), bufferSize2);
+        bufferSize = b->CreateUMin(maxBufferSize, PDEP_WIDTH);
+        // ... and increment the source offset by the number we actually inserted
+        sourceOffset = b->CreateAdd(sourceOffset2, b->CreateSub(bufferSize, bufferSize2));
+        bufferSize2->addIncoming(bufferSize, enqueueBits);
+        sourceOffset2->addIncoming(sourceOffset, enqueueBits);
+        BasicBlock * const depositBits = b->CreateBasicBlock();
+        b->CreateCondBr(b->CreateICmpULT(bufferSize, required), enqueueBits, depositBits);
 
-        Value * segments = kb->fwCast(mPDEPWidth, combined);
-        Value * result_swizzle = Constant::getNullValue(segments->getType());
-        // Apply PDEP to each mPDEPWidth segment of the combined swizzle using the current PDEP mask
-
-
-
-
-        Value * PDEP_mask = PDEP_masks[i];
+        b->SetInsertPoint(depositBits);
+        // Apply PDEP to each element of the combined swizzle using the current PDEP mask
+        Value * result = UndefValue::get(buffer->getType());
+        Value * const mask = b->CreateExtractElement(selectors, i);
         for (unsigned j = 0; j < mSwizzleFactor; j++) {
-            Value * source_field = kb->CreateExtractElement(segments, j);
-            Value * PDEP_field = kb->CreateCall(PDEP_func, {source_field, PDEP_mask});
-            result_swizzle = kb->CreateInsertElement(result_swizzle, PDEP_field, j); 
+            Value * source_field = b->CreateExtractElement(buffer, j);
+            Value * PDEP_field = b->CreateCall(pdep, {source_field, mask});
+            result = b->CreateInsertElement(result, PDEP_field, j);
         }
 
         // Store the result
-        auto outputPos = kb->CreateGEP(outputStreamPtr, kb->CreateAdd(kb->CreateMul(blockOffsetPhi, kb->getSize(mSwizzleFactor)), kb->getSize(i)));
-        kb->CreateBlockAlignedStore(result_swizzle, outputPos);
-        updatedProcessedSourceBits = kb->CreateAdd(updatedProcessedSourceBits, mask_popcounts[i]);
-        updatedSourceItems = kb->CreateSub(updatedSourceItems, mask_popcounts[i]);
+        Value * const outputStreamPtr = b->getOutputStreamBlockPtr("output", b->getInt32(i), strideIndex);
+        b->CreateBlockAlignedStore(result, outputStreamPtr);
+
+        // Shift away any used bits from the buffer and decrement our buffer size by the number we used
+        Value * const usedShift = b->simd_fill(pdepWidth, required);
+        buffer = b->CreateLShr(buffer, usedShift);
+        bufferSize = b->CreateSub(bufferSize, required);
     }
 
-    updatedProcessedSourceBitsPhi->addIncoming(updatedProcessedSourceBits, processBlock);
-    blocksToDoPhi->addIncoming(kb->CreateSub(blocksToDoPhi, kb->getSize(1)), processBlock);
-    blockOffsetPhi->addIncoming(kb->CreateAdd(blockOffsetPhi, kb->getSize(1)), processBlock);
-    sourceItemsRemaining->addIncoming(updatedSourceItems, processBlock);
-    kb->CreateBr(checkLoopCond);
+    BasicBlock * const finishedBlock = b->GetInsertBlock();
+    sourceOffsetPhi->addIncoming(sourceOffset, finishedBlock);
+    bufferSizePhi->addIncoming(bufferSize, finishedBlock);
+    bufferPhi->addIncoming(buffer, finishedBlock);
+    Value * const nextStrideIndex = b->CreateAdd(strideIndex, b->getSize(1));
+    strideIndex->addIncoming(nextStrideIndex, finishedBlock);
+    b->CreateLikelyCondBr(b->CreateICmpNE(nextStrideIndex, numOfBlocks), processBlock, finishedStrides);
 
-    kb->SetInsertPoint(terminate);
-//    Value * itemsDone = kb->CreateMul(blockOffsetPhi, blockWidth);
-//    itemsDone = kb->CreateSelect(kb->CreateICmpULT(itemsToDo, itemsDone), itemsToDo, itemsDone);
-//    kb->setProcessedItemCount("PDEPmarkerStream", kb->CreateAdd(itemsDone, kb->getProcessedItemCount("PDEPmarkerStream")));
-    kb->setProcessedItemCount("sourceStreamSet", updatedProcessedSourceBitsPhi);
-
-
-//    kb->CallPrintInt("itemsDone:", itemsDone);
-//    kb->CallPrintInt("produced:", kb->getProducedItemCount("outputStreamSet"));
-//    kb->CallPrintInt("--------------" + this->getName() + " doMultiBlock End:", kb->getSize(0));
+    b->SetInsertPoint(finishedStrides);
+    Value * const sourceItemsProcessed = b->CreateMul(b->CreateUDiv(sourceOffset, BLOCK_WIDTH), BLOCK_WIDTH);
+    b->setProcessedItemCount("source", b->CreateAdd(b->getProcessedItemCount("source"), sourceItemsProcessed));
+    b->setScalarField("buffer", buffer);
+    b->setScalarField("buffered", bufferSize);
+    b->setScalarField("sourceOffset", b->CreateURem(sourceOffset, BLOCK_WIDTH));
 }
 
-std::vector<Value *> PDEPkernel::get_block_popcounts(const std::unique_ptr<KernelBuilder> & kb, Value * blk, const unsigned field_width) {
-    Value * pop_counts = kb->simd_popcount(field_width, blk);
-    std::vector<Value *> counts;
-    for (unsigned i = 0; i < kb->getBitBlockWidth() / field_width ; i++) {
-    	// Store the pop counts for each blk_width field in blk
-        counts.push_back(kb->CreateExtractElement(pop_counts, i)); // Extract field i from SIMD register popCounts
-    }
-    return counts;
-}
-
-std::vector<Value *> PDEPkernel::get_PDEP_masks(const std::unique_ptr<KernelBuilder> & kb, Value * PDEP_ms_blk, const unsigned mask_width) {
-    // We apply the PDEP operation mPDEPWidth bits at a time (e.g. if block is 256 bits and mPDEPWidth is 64, apply 4 PDEP ops to full process swizzle).
-    // Split the PDEP marker stream block into mPDEPWidth segments.
-    Value * masks = kb->fwCast(mask_width, PDEP_ms_blk); 
-    std::vector<Value *> PDEP_masks;
-    for (unsigned i = 0; i < kb->getBitBlockWidth() / mask_width; i++) {
-        PDEP_masks.push_back(kb->CreateExtractElement(masks, i));
-    }
-    return PDEP_masks;
-}
 }
