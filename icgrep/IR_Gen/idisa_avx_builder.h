@@ -49,6 +49,18 @@ public:
 
     ~IDISA_AVX2_Builder() {}
 };
+ 
+class IDISA_AVX512BW_Builder : public virtual IDISA_Builder {
+public:
+    
+    IDISA_AVX512BW_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
+    : IDISA_Builder(C, vectorWidth, stride) {
+    }
+    
+    virtual std::string getBuilderUniqueName() override;
+
+};
+
     
 }
 #endif // IDISA_AVX_BUILDER_H

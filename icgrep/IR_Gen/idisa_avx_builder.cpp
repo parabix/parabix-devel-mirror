@@ -246,4 +246,9 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value *
     }
 }
 
+std::string IDISA_AVX512BW_Builder::getBuilderUniqueName() {
+    return mBitBlockWidth != 512 ? "AVX512BW_" + std::to_string(mBitBlockWidth) : "AVX512BW";
+}
+
+
 }
