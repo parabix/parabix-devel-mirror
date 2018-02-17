@@ -43,20 +43,18 @@ namespace re { class RE; }
 using namespace pablo;
 using namespace llvm;
 
-using FollowMap = std::map<re::CC *, re::CC*>;
-
 namespace re {
 
     
 void RE_Compiler::addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
-    mAlphabetCompilers.push_back(make_unique<cc::Parabix_CC_Compiler>(mKernel, basis_set));
+    mAlphabetCompilers.push_back(make_unique<cc::Parabix_CC_Compiler>(mEntryScope, basis_set));
 }
 
 using MarkerType = RE_Compiler::MarkerType;
 
 PabloAST * RE_Compiler::compile(RE * const re, PabloAST * const initialCursors) {
-    pablo::PabloBuilder mPB(mKernel->getEntryScope());
+    pablo::PabloBuilder mPB(mEntryScope);
     const auto markers = initialCursors ? compile(re, initialCursors, mPB) : compile(re, mPB);
     return markerVar(AdvanceMarker(markers, FinalPostPositionUnit, mPB));
 }
@@ -585,7 +583,7 @@ LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
 }
 
 RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
-: mKernel(kernel)
+: mEntryScope(kernel->getEntryScope())
 , mCCCompiler(ccCompiler)
 , mLineBreak(nullptr)
 , mNonFinal(nullptr)
@@ -593,10 +591,10 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 , mWhileTest(nullptr)
 , mStarDepth(0)
 , mCompiledName(&mBaseMap) {
-    PabloBuilder mPB(kernel->getEntryScope());
-    Var * const linebreak = mKernel->getInputStreamVar("linebreak");
+    PabloBuilder mPB(mEntryScope);
+    Var * const linebreak = kernel->getInputStreamVar("linebreak");
     mLineBreak = mPB.createExtract(linebreak, 0);
-    Var * const required = mKernel->getInputStreamVar("required");
+    Var * const required = kernel->getInputStreamVar("required");
     mNonFinal = mPB.createExtract(required, 0);
     mFinal = mPB.createNot(mNonFinal);
 }

@@ -129,7 +129,7 @@ private:
 
 private:
 
-    pablo::PabloKernel * const                      mKernel;
+    pablo::PabloBlock * const                       mEntryScope;
     std::vector<cc::Alphabet *>                     mAlphabets;
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
 

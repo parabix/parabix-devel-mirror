@@ -24,7 +24,7 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     std::vector<PabloAST *> u8_bits = getInputStreamSet("u8bit");
     //  output: delmask stream + error stream
     
-    cc::Parabix_CC_Compiler ccc(this, u8_bits);
+    cc::Parabix_CC_Compiler ccc(getEntryScope(), u8_bits);
     
     Zeroes * zeroes = main.createZeroes();
 
@@ -33,11 +33,8 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     Var * neg_delmask = main.createVar("neg_delmask", zeroes);
     Var * error_mask = main.createVar("error_mask", zeroes);
     
-    PabloAST * ASCII = ccc.compileCC("ASCII", re::makeCC(0x0, 0x7F), main);
-    auto ascii = main.createScope();
-    main.createIf(ASCII, ascii);
-    PabloAST * u8pfx = ccc.compileCC("u8pfx", re::makeCC(0xC0, 0xFF), main);
-    PabloAST * nonASCII = ccc.compileCC("u8pfx", re::makeCC(0x80, 0xFF), main);
+    PabloAST * u8pfx = ccc.compileCC(re::makeCC(0xC0, 0xFF));
+    PabloAST * nonASCII = ccc.compileCC(re::makeCC(0x80, 0xFF));
     auto it = main.createScope();
     main.createIf(nonASCII, it);
     Var * u8invalid = it.createVar("u8invalid", zeroes);

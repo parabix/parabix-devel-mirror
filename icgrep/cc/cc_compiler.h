@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -31,7 +31,7 @@ public:
     virtual ~CC_Compiler(){}
 
 protected:
-    CC_Compiler(pablo::PabloKernel * kernel);
+    CC_Compiler(pablo::PabloBlock * scope);
     pablo::PabloBuilder             mBuilder;
 };
     
@@ -39,7 +39,7 @@ protected:
 class Parabix_CC_Compiler : public CC_Compiler {
 public:
     
-    Parabix_CC_Compiler(pablo::PabloKernel * kernel, std::vector<pablo::PabloAST *> basisBitSet);
+    Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet);
     
     pablo::PabloAST * compileCC(const re::CC *cc) override;
     
@@ -92,7 +92,7 @@ private:
 class Direct_CC_Compiler : public CC_Compiler {
 public:
     
-    Direct_CC_Compiler(pablo::PabloKernel * kernel, pablo::PabloAST * codeUnitStream);
+    Direct_CC_Compiler(pablo::PabloBlock * scope, pablo::PabloAST * codeUnitStream);
     
     pablo::PabloAST * compileCC(const re::CC *cc) override;
     

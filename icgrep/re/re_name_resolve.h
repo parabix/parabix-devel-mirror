@@ -8,6 +8,7 @@ namespace re {
 
     RE * resolveUnicodeProperties(RE * re);
     RE * resolveNames(RE * re);
+    RE * resolveAnchors(RE * r, RE * breakRE);
 
 }
 #endif

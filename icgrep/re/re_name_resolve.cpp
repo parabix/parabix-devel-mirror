@@ -11,6 +11,9 @@
 #include <re/re_assertion.h>
 #include <re/re_analysis.h>
 #include <re/re_group.h>
+#include <re/re_start.h>
+#include <re/re_end.h>
+#include <re/re_any.h>
 #include <re/re_memoizer.hpp>
 #include <UCD/resolve_properties.h>
 #include <cc/alphabet.h>
@@ -114,4 +117,77 @@ private:
         return nameResolver.resolve(re);
     }
     
+    
+    
+bool hasAnchor(const RE * re) {
+    if (const Alt * alt = dyn_cast<Alt>(re)) {
+        for (const RE * re : *alt) {
+            if (hasAnchor(re)) {
+                return true;
+            }
+        }
+        return false;
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+        for (const RE * re : *seq) {
+            if (hasAnchor(re)) {
+                return true;
+            }
+        }
+        return false;
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
+        return hasAnchor(rep->getRE());
+    } else if (isa<Start>(re)) {
+        return true;
+    } else if (isa<End>(re)) {
+        return true;
+    } else if (const Assertion * a = dyn_cast<Assertion>(re)) {
+        return hasAnchor(a->getAsserted());
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
+        return hasAnchor(diff->getLH()) || hasAnchor(diff->getRH());
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
+        return hasAnchor(e->getLH()) || hasAnchor(e->getRH());
+    } else if (isa<Any>(re)) {
+        return false;
+    } else if (isa<CC>(re)) {
+        return false;
+    } else if (const Group * g = dyn_cast<Group>(re)) {
+        return hasAnchor(g->getRE());
+    } else if (const Name * n = dyn_cast<Name>(re)) {
+        return hasAnchor(n->getDefinition());
+    }
+    return false; // otherwise
+}
+
+RE * resolveAnchors(RE * r, RE * breakRE) {
+    if (!hasAnchor(r)) return r;
+    if (const Alt * alt = dyn_cast<Alt>(r)) {
+        std::vector<RE *> list;
+        list.reserve(alt->size());
+        for (RE * item : *alt) {
+            item = resolveAnchors(item, breakRE);
+            list.push_back(item);
+        }
+        return makeAlt(list.begin(), list.end());
+    } else if (const Seq * seq = dyn_cast<Seq>(r)) {
+        std::vector<RE *> list;
+        list.reserve(seq->size());
+        for (RE * item : *seq) {
+            item = resolveAnchors(item, breakRE);
+            list.push_back(item);
+        }
+        return makeSeq(list.begin(), list.end());
+    } else if (Assertion * a = dyn_cast<Assertion>(r)) {
+        return makeAssertion(resolveAnchors(a->getAsserted(), breakRE), a->getKind(), a->getSense());
+    } else if (Rep * rep = dyn_cast<Rep>(r)) {
+        return makeRep(resolveAnchors(rep->getRE(), breakRE), rep->getLB(), rep->getUB());
+    } else if (Diff * diff = dyn_cast<Diff>(r)) {
+        return makeDiff(resolveAnchors(diff->getLH(), breakRE), resolveAnchors(diff->getRH(), breakRE));
+    } else if (Intersect * e = dyn_cast<Intersect>(r)) {
+        return makeIntersect(resolveAnchors(e->getLH(), breakRE), resolveAnchors(e->getRH(), breakRE));
+    } else if (isa<Start>(r)) {
+        return makeAlt({r, makeLookBehindAssertion(breakRE)});
+    } else if (isa<End>(r)) {
+        return makeAlt({r, makeLookAheadAssertion(breakRE)});
+    }
+}
 }

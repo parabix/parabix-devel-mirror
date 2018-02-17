@@ -83,7 +83,7 @@ void U8U16Kernel::generatePabloMethod() {
     Var * delmask = main.createVar("delmask", zeroes);
     Var * error_mask = main.createVar("error_mask", zeroes);
 
-    cc::Parabix_CC_Compiler ccc(this, u8_bits);
+    cc::Parabix_CC_Compiler ccc(getEntryScope(), u8_bits);
 
     // The logic for processing non-ASCII bytes will be embedded within an if-hierarchy.
     PabloAST * nonASCII = ccc.compileCC(re::makeByte(0x80, 0xFF));

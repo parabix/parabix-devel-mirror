@@ -37,9 +37,9 @@ void LineFeedKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<CC_Compiler> ccc;
     if (mNumOfStreams == 1) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(this, pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(this, getInputStreamSet("basis"));
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
     }
     PabloAST * LF = ccc->compileCC("LF", makeByte(0x0A), pb);
     pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
@@ -58,7 +58,7 @@ LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<kernel::Ker
 
 void LineBreakKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(this, getInputStreamSet("basis"));
+    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
 
     Integer * const ZERO = pb.getInteger(0);
 

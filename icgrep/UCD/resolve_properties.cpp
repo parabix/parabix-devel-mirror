@@ -35,6 +35,11 @@ void UnicodePropertyExpressionError(std::string errmsg) {
 
 #define Behind(x) makeLookBehindAssertion(x)
 #define Ahead(x) makeLookAheadAssertion(x)
+    
+    
+RE * UnicodeBreakRE() {
+    return makeAlt({makeCC(0x0A, 0x0C), makeSeq({makeCC(0x0D), makeCC(0x0A)}), makeSeq({makeCC(0x0D), makeNegativeLookAheadAssertion(makeCC(0x0A))})});
+}
 
 void generateGraphemeClusterBoundaryRule(Name * const &property) {
     // 3.1.1 Grapheme Cluster Boundary Rules

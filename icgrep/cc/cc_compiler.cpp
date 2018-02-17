@@ -21,13 +21,13 @@ using namespace pablo;
 using namespace llvm;
 
 namespace cc {
-    CC_Compiler::CC_Compiler(pablo::PabloKernel * kernel)
-    : mBuilder(kernel->getEntryScope()) {
+    CC_Compiler::CC_Compiler(pablo::PabloBlock * scope)
+    : mBuilder(scope) {
     }
     
 
-Parabix_CC_Compiler::Parabix_CC_Compiler(pablo::PabloKernel * kernel, std::vector<pablo::PabloAST *> basisBitSet)
-: CC_Compiler(kernel)
+Parabix_CC_Compiler::Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet)
+: CC_Compiler(scope)
 , mEncodingBits(basisBitSet.size())
 , mBasisBit(basisBitSet) {
     mEncodingMask = (static_cast<unsigned>(1) << mEncodingBits) - static_cast<unsigned>(1);
@@ -267,8 +267,8 @@ PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream,
     return ccStrm;
 }
     
-Direct_CC_Compiler::Direct_CC_Compiler(pablo::PabloKernel * kernel, pablo::PabloAST * codeUnitStream)
-: CC_Compiler(kernel)
+Direct_CC_Compiler::Direct_CC_Compiler(pablo::PabloBlock * scope, pablo::PabloAST * codeUnitStream)
+: CC_Compiler(scope)
 , mCodeUnitStream(codeUnitStream) {
 }
 

@@ -102,9 +102,9 @@ void WordCountKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<cc::CC_Compiler> ccc;
     if (CountWords || CountChars) {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(this, getInputStreamSet("u8bit"));
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("u8bit"));
     } else {
-        ccc = make_unique<cc::Direct_CC_Compiler>(this, pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     }
 
     //  output: 3 counters

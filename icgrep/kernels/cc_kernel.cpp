@@ -102,9 +102,9 @@ ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
 
 void ParabixCharacterClassKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(this, getInputStreamSet("basis"));
+    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
     Var * outputVar = getOutputStreamVar("outputStream");
     for (unsigned i = 0; i < mCharClasses.size(); ++i) {
-        pb.createAssign(pb.createExtract(outputVar, i), ccc.compileCC("cc", mCharClasses[i], pb));
+        pb.createAssign(pb.createExtract(outputVar, i), ccc.compileCC(mCharClasses[i]));
     }
 }

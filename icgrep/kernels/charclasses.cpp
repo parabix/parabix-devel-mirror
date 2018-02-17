@@ -79,9 +79,9 @@ void CharClassesKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<CC_Compiler> ccc;
     if (mUseDirectCC) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(this, pb.createExtract(getInput(0), pb.getInteger(0)));
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(this, getInputStreamSet("basis"));
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
     }
     unsigned n = mCCs.size();
 
