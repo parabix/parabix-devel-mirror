@@ -69,6 +69,10 @@ struct Binding : public AttributeSet {
         return hasAttribute(AttributeId::Misaligned);
     }
 
+    bool isSwizzled() const {
+        return hasAttribute(AttributeId::Swizzled);
+    }
+
     unsigned const getLookahead() const {
         return findAttribute(AttributeId::LookAhead).amount();
     }

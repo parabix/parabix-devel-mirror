@@ -22,7 +22,7 @@ def run_tests(test_dir, output_dir, python_output_dir):
         output_file_full_path = os.path.join(output_dir, output_file)
         python_output_file_full_path = os.path.join(python_output_dir, output_file)
 
-        character_deposit_cmd = "%s b %s %s" % (lz4d_program_under_test, test_file_full_path, output_file_full_path)
+        character_deposit_cmd = "%s b -buffer-segments=2 %s %s" % (lz4d_program_under_test, test_file_full_path, output_file_full_path)
 
         if options.verbose:
             print("Doing: " + character_deposit_cmd)

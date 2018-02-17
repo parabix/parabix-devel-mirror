@@ -131,7 +131,9 @@ struct Attribute {
         // something ambigious after we've found its end position in some prior kernel.
 
 
+        Swizzled,
 
+        // Whether the input streamset is in swizzled form
 
 
 //        Here is a revised definition of SegmentedReverse:
@@ -259,6 +261,7 @@ protected:
     friend Attribute Misaligned();
     friend Attribute ConditionalRegionBegin();
     friend Attribute ConditionalRegionEnd();
+    friend Attribute Swizzled();
     friend Attribute CanTerminateEarly();
 
     Attribute(const KindId kind, const unsigned k) : mKind(kind), mAmount(k) { }
@@ -352,7 +355,10 @@ inline Attribute CanTerminateEarly() {
     return Attribute(Attribute::KindId::CanTerminateEarly, 0);
 }
 
+inline Attribute Swizzled() {
+    return Attribute(Attribute::KindId::Swizzled, 0);
 }
 
+}
 
 #endif // ATTRIBUTES_H

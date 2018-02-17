@@ -119,8 +119,8 @@ add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_
 add_executable(lz4d lz4d.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4/lz4_index_decoder.cpp kernels/lz4/lz4_bytestream_decoder.cpp)
 add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/propGen.cpp combine/icgrep-test/icgrep-test.cpp grep_interface.cpp grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
 add_executable(character_deletion character_deletion.cpp kernels/cc_kernel.cpp)
-add_executable(character_deposit character_deposit.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp)
-add_executable(lz4d_ext_dep lz4d_ext_dep.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4/lz4_block_decoder.cpp kernels/sequential_kernel.cpp kernels/lz4/lz4_extract_e_m0.cpp kernels/lz4/lz4_deposit_uncompressed.cpp kernels/lz4/lz4_generate_deposit_stream.cpp kernels/lz4/lz4_numbers_to_bitstream_kernel.cpp kernels/lz4/LZ4MarkerToMaskKernel.cpp kernels/lz4/lz4_bitstream_not_kernel.cpp kernels/pdep_kernel.cpp kernels/lz4/lz4_match_copy_kernel.cpp lz4/LZ4Generator.cpp)
+add_executable(character_deposit character_deposit.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp kernels/lz4/lz4_multiple_pdep_kernel.cpp)
+add_executable(lz4d_ext_dep lz4d_ext_dep.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4/lz4_block_decoder.cpp kernels/sequential_kernel.cpp kernels/lz4/lz4_extract_e_m0.cpp kernels/lz4/lz4_deposit_uncompressed.cpp kernels/lz4/lz4_generate_deposit_stream.cpp kernels/lz4/lz4_numbers_to_bitstream_kernel.cpp kernels/lz4/LZ4MarkerToMaskKernel.cpp kernels/lz4/lz4_bitstream_not_kernel.cpp kernels/pdep_kernel.cpp kernels/lz4/lz4_match_copy_kernel.cpp lz4/LZ4Generator.cpp kernels/lz4/lz4_multiple_pdep_kernel.cpp)
 
 #Exclude CoRE from default build.
 set_target_properties(core PROPERTIES EXCLUDE_FROM_ALL 1)

@@ -33,6 +33,7 @@
 #include <fstream>
 #include <kernels/deletion.h>
 #include <kernels/pdep_kernel.h>
+#include <kernels/lz4/lz4_multiple_pdep_kernel.h>
 
 namespace re { class CC; }
 
@@ -130,13 +131,25 @@ int main(int argc, char *argv[]) {
     pxDriver.makeKernelCall(delK, {CharacterMarkerBuffer, BasisBits}, {u16Swizzle0, u16Swizzle1});
 
     StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputBufferBlocks, 1);
+    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputBufferBlocks, 1);
+
+    /*
     Kernel * pdep0K = pxDriver.addKernelInstance<PDEPkernel>(iBuilder, 4, 4, 64, "pdep0");
     pxDriver.makeKernelCall(pdep0K, {CharacterMarkerBuffer, u16Swizzle0}, {depositedSwizzle0});
 
-
-    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputBufferBlocks, 1);
     Kernel * pdep1K = pxDriver.addKernelInstance<PDEPkernel>(iBuilder, 4, 4, 64, "pdep1");
-    pxDriver.makeKernelCall(pdep1K, {CharacterMarkerBuffer, u16Swizzle1}, {depositedSwizzle1});
+    pxDriver.makeKernelCall(pdep1K, {CharacterMarkerBuffer, u16Swizzle1}, {u16Swizzle1});
+    */
+
+    Kernel * multiplePdepK = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 2, 4);
+    pxDriver.makeKernelCall(multiplePdepK, {CharacterMarkerBuffer, u16Swizzle0, u16Swizzle1}, {depositedSwizzle0, depositedSwizzle1});
+
+    /*
+    Kernel * multiplePdepK1 = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 1, 4);
+    pxDriver.makeKernelCall(multiplePdepK1, {CharacterMarkerBuffer, u16Swizzle0}, {depositedSwizzle0});
+    Kernel * multiplePdepK2 = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 1, 4);
+    pxDriver.makeKernelCall(multiplePdepK2, {CharacterMarkerBuffer, u16Swizzle1}, {depositedSwizzle1});
+    */
 
     // Produce unswizzled bit streams
     StreamSetBuffer * resultbits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), outputBufferBlocks);

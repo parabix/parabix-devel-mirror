@@ -706,7 +706,14 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             if (LLVM_UNLIKELY(input.hasLookahead())) {
                 ub += RateValue(input.getLookahead(), mStride);
             }
-            Constant * const arraySize = b->getInt64(ceiling(ub));
+            Value * arraySize = b->getInt64(ceiling(ub));
+
+            auto name = input.getName();
+            if (input.isSwizzled()) {
+                // TODO workaround to use larger temporary buffer size for swizzled buffer
+                arraySize = b->CreateMul(arraySize, b->getSize(codegen::BufferSegments * codegen::ThreadNum * codegen::SegmentSize));
+            }
+
             AllocaInst * const ptr = b->CreateAlignedAlloca(ty, blockAlignment, arraySize);
             assert (ptr->isStaticAlloca());
             temporaryInputBuffer[i] = ptr;
@@ -833,36 +840,114 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             Value * const accessible = linearlyAccessible[i];
 
             BasicBlock * const entry = b->GetInsertBlock();
-            BasicBlock * const copyFromBack = b->CreateBasicBlock(name + "CopyFromBack");
-            BasicBlock * const copyFromFront = b->CreateBasicBlock(name + "CopyFromFront");
-            BasicBlock * const resume = b->CreateBasicBlock(name + "Resume");
 
             Value * strideSize = inputStrideSize[i];
             if (LLVM_UNLIKELY(input.hasLookahead())) {
                 Constant * const lookahead = b->getSize(input.getLookahead());
                 strideSize = b->CreateAdd(strideSize, lookahead);
             }
+
             Value * const requiresCopy = b->CreateICmpULT(accessible, strideSize);
-            b->CreateUnlikelyCondBr(requiresCopy, copyFromBack, resume);
 
-            b->SetInsertPoint(copyFromBack);
-            Value * const arraySize = b->CreateZExt(tempBuffer->getArraySize(), b->getInt64Ty());
-            Value * const temporarySize = b->CreateTrunc(b->CreateMul(arraySize, b->getInt64(mStride)), accessible->getType());
-            Value * const copyable = b->CreateUMin(unprocessed, temporarySize); // <- we only really need strideSize items
-            Value * const offset = b->CreateAnd(processed, BLOCK_WIDTH_MASK);
-            Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(tempBuffer->getAllocatedType()), arraySize);
-            b->CreateMemZero(tempBuffer, bufferSize, blockAlignment);
-            b->CreateStreamCpy(name, tempBuffer, ZERO, mStreamSetInputBaseAddress[i], offset, accessible, getItemAlignment(input));
-            BasicBlock * const copyToBackEnd = b->GetInsertBlock();
-            b->CreateCondBr(b->CreateICmpNE(copyable, accessible), copyFromFront, resume);
+            BasicBlock * const resume = b->CreateBasicBlock(name + "Resume");
 
-            b->SetInsertPoint(copyFromFront);
-            Value * const remaining = b->CreateSub(copyable, accessible);
-            Value * const baseAddress = b->getBaseAddress(name);
-            b->CreateStreamCpy(name, tempBuffer, accessible, baseAddress, ZERO, remaining, getItemAlignment(input));
-            Value * const isPartialStride = b->CreateICmpUGE(copyable, strideSize);
-            BasicBlock * const copyToFrontEnd = b->GetInsertBlock();
-            b->CreateBr(resume);
+            BasicBlock * copyToBackEnd = NULL;
+            BasicBlock * copyToFrontEnd = NULL;
+            Value * isPartialStride = NULL;
+            Value * newAvailable = NULL;
+
+            if (input.isSwizzled()) {
+                // Copy at least one whole block for Swizzled input stream
+                BasicBlock * const copyFromBack = b->CreateBasicBlock(name + "CopyFromBack");
+                BasicBlock * const copyFromFront = b->CreateBasicBlock(name + "CopyFromFront");
+
+                b->CreateUnlikelyCondBr(requiresCopy, copyFromBack, resume);
+
+                b->SetInsertPoint(copyFromBack);
+
+
+                Value * const arraySize = b->CreateZExt(tempBuffer->getArraySize(), b->getInt64Ty());
+                Value * const temporarySize = b->CreateTrunc(b->CreateMul(arraySize, b->getInt64(mStride)), accessible->getType());
+
+                Value * const processedOffset = b->CreateAnd(processed, BLOCK_WIDTH_MASK);
+                Value * const copyable = b->CreateUMin(b->CreateAdd(unprocessed, processedOffset), temporarySize); // <- we only really need strideSize items
+                newAvailable = b->CreateSub(copyable, processedOffset);
+//                b->CallPrintInt("newAvailable", newAvailable);
+
+                Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(tempBuffer->getAllocatedType()), arraySize);
+                b->CreateMemZero(tempBuffer, bufferSize, blockAlignment);
+
+//                b->CallPrintInt("temporarySize", temporarySize);
+//                b->CallPrintInt("processed", processed);
+//                b->CallPrintInt("unprocessed", unprocessed);
+//                b->CallPrintInt("processedOffset", processedOffset);
+//                b->CallPrintInt("copyable", copyable);
+
+//                b->CallPrintInt("streamCpy1", b->getSize(0));
+                Value* BIT_BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
+
+                Value* copyAmount1 = b->CreateAdd(accessible, processedOffset);
+                Value* roundCopyAmount = b->CreateMul(b->CreateUDivCeil(copyAmount1, BIT_BLOCK_WIDTH), BIT_BLOCK_WIDTH);
+                b->CreateStreamCpy(name, tempBuffer, ZERO, mStreamSetInputBaseAddress[i], ZERO, roundCopyAmount, getItemAlignment(input));
+
+                copyToBackEnd = b->GetInsertBlock();
+
+                b->CreateCondBr(b->CreateICmpNE(copyable, b->CreateAdd(accessible, processedOffset)), copyFromFront, resume);
+
+                b->SetInsertPoint(copyFromFront);
+                Value * const remaining = b->CreateSub(copyable, b->CreateAdd(accessible, processedOffset));
+                Value * const baseAddress = b->getBaseAddress(name);
+//                b->CallPrintInt("streamCpy2", b->getSize(0));
+
+                auto castedTempBuffer = b->CreatePointerCast(tempBuffer, b->getBitBlockType()->getPointerTo());
+
+                auto p = b->CreateGEP(
+                        castedTempBuffer,
+                        b->CreateMul(
+                                b->CreateUDiv(b->CreateAdd(accessible, processedOffset), BIT_BLOCK_WIDTH),
+                                b->getSize(this->getAnyStreamSetBuffer(name)->getNumOfStreams())
+                        )
+                );
+//                b->CreateStreamCpy(name, tempBuffer, b->CreateAdd(accessible, processedOffset), baseAddress, ZERO, remaining, getItemAlignment(input));
+
+
+                b->CreateStreamCpy(name, p, ZERO, baseAddress, ZERO, b->CreateMul(b->CreateUDivCeil(remaining, BIT_BLOCK_WIDTH), BIT_BLOCK_WIDTH), getItemAlignment(input));
+                isPartialStride = b->CreateICmpUGE(copyable, strideSize);
+                copyToFrontEnd = b->GetInsertBlock();
+
+
+
+                b->CreateBr(resume);
+            } else {
+                BasicBlock * const copyFromBack = b->CreateBasicBlock(name + "CopyFromBack");
+                BasicBlock * const copyFromFront = b->CreateBasicBlock(name + "CopyFromFront");
+
+                b->CreateUnlikelyCondBr(requiresCopy, copyFromBack, resume);
+
+                b->SetInsertPoint(copyFromBack);
+                Value * const arraySize = b->CreateZExt(tempBuffer->getArraySize(), b->getInt64Ty());
+                Value * const temporarySize = b->CreateTrunc(b->CreateMul(arraySize, b->getInt64(mStride)), accessible->getType());
+                Value * const copyable = b->CreateUMin(unprocessed, temporarySize); // <- we only really need strideSize items
+                newAvailable = copyable;
+                Value * const offset = b->CreateAnd(processed, BLOCK_WIDTH_MASK);
+
+                Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(tempBuffer->getAllocatedType()), arraySize);
+                b->CreateMemZero(tempBuffer, bufferSize, blockAlignment);
+
+                b->CreateStreamCpy(name, tempBuffer, ZERO, mStreamSetInputBaseAddress[i], offset, accessible, getItemAlignment(input));
+//            b->CallPrintInt("gep", b->CreateGEP(mStreamSetInputBaseAddress[i], b->CreateUDiv(offset, b->getSize(this->getAnyStreamSetBuffer(name)->getNumOfStreams()))));
+//            b->CallPrintRegister(name + "_tempBuffer", b->CreateLoad(tempBuffer));
+                copyToBackEnd = b->GetInsertBlock();
+                b->CreateCondBr(b->CreateICmpNE(copyable, accessible), copyFromFront, resume);
+
+                b->SetInsertPoint(copyFromFront);
+                Value * const remaining = b->CreateSub(copyable, accessible);
+                Value * const baseAddress = b->getBaseAddress(name);
+                b->CreateStreamCpy(name, tempBuffer, accessible, baseAddress, ZERO, remaining, getItemAlignment(input));
+                isPartialStride = b->CreateICmpUGE(copyable, strideSize);
+                copyToFrontEnd = b->GetInsertBlock();
+                b->CreateBr(resume);
+            }
 
             b->SetInsertPoint(resume);
             PHINode * const address = b->CreatePHI(tempBuffer->getType(), 3);
@@ -872,8 +957,8 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             selectedInputBuffer[i] = address;
             PHINode * const available = b->CreatePHI(accessible->getType(), 3);
             available->addIncoming(accessible, entry);
-            available->addIncoming(copyable, copyToBackEnd);
-            available->addIncoming(copyable, copyToFrontEnd);
+            available->addIncoming(newAvailable, copyToBackEnd);
+            available->addIncoming(newAvailable, copyToFrontEnd);
             linearlyCopyable[i] = available;
             PHINode * const finalStride = b->CreatePHI(b->getInt1Ty(), 3);
             finalStride->addIncoming(mIsFinal, entry);
