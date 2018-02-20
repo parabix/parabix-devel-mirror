@@ -27,6 +27,7 @@ public:
 
     void generatePipeline(const std::string& outputFile);
     void generateExtractOnlyPipeline(const std::string& outputFile);
+    void generateExtractAndDepositOnlyPipeline(const std::string& outputFile);
 
 private:
     //// Private Method
@@ -35,7 +36,6 @@ private:
     inline void generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     inline void generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     inline std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*> generateSwizzleExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    inline parabix::StreamSetBuffer* generateDepositData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, parabix::StreamSetBuffer* swizzleBuffer);
 
     // BufferSize related Helper Function
     inline int getInputBufferBlocks();

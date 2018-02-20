@@ -40,6 +40,7 @@ static cl::opt<bool> overwriteOutput("f", cl::desc("Overwrite existing output fi
 
 static cl::OptionCategory lz4dDebugFlags("LZ4D Debug Flags", "lz4d debug options");
 static cl::opt<bool> extractOnly("extract-only", cl::desc("Only extract literal data to output file"), cl::init(false), cl::cat(lz4dDebugFlags));
+static cl::opt<bool> extractAndDepositOnly("extract-and-deposit-only", cl::desc("Only extract and deposit literal data to output file"), cl::init(false), cl::cat(lz4dDebugFlags));
 
 
 int main(int argc, char *argv[]) {
@@ -81,6 +82,8 @@ int main(int argc, char *argv[]) {
 
     if (extractOnly) {
         g.generateExtractOnlyPipeline(outputFile);
+    } else if (extractAndDepositOnly) {
+        g.generateExtractAndDepositOnlyPipeline(outputFile);
     } else {
         g.generatePipeline(outputFile);
     }
