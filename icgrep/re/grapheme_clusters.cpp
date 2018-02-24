@@ -14,6 +14,7 @@
 #include <re/re_end.h>
 #include <re/re_range.h>
 #include <re/printer_re.h>
+#include <re/re_name_resolve.h>
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa
 #include <llvm/Support/ErrorHandling.h>
@@ -38,7 +39,7 @@ bool hasGraphemeClusterBoundary(const RE * re) {
     } else if (const Name * n = dyn_cast<Name>(re)) {
         if (n->getType() == Name::Type::ZeroWidth) {
             const std::string nameString = n->getName();
-            return (nameString == "\\b{g}") || (nameString == "\\B{g}");
+            return nameString == "\\b{g}";
         }
         return false;
     } else if (const Alt * alt = dyn_cast<Alt>(re)) {
@@ -70,8 +71,11 @@ bool hasGraphemeClusterBoundary(const RE * re) {
     
 RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
     if (isa<Name>(re)) {
-        if (inGraphemeMode && (cast<Name>(re)->getName() == "."))
-            return makeSeq({makeAny(), makeRep(makeSeq({makeZeroWidth("\\B{g}"), makeAny()}), 0, Rep::UNBOUNDED_REP), makeZeroWidth("\\b{g}")});
+        if (inGraphemeMode && (cast<Name>(re)->getName() == ".")) {
+            RE * GCB = makeZeroWidth("\\b{g}");
+            RE * nonGCB = makeDiff(makeSeq({}), GCB);
+            return makeSeq({makeAny(), makeRep(makeSeq({nonGCB, makeAny()}), 0, Rep::UNBOUNDED_REP), GCB});
+        }
         else return re;
     }
     else if (isa<CC>(re) || isa<Range>(re)) {
@@ -119,6 +123,55 @@ RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
     } else if (isa<Start>(re) || isa<End>(re)) {
         return re;
     } else llvm_unreachable("Unknown RE type");
+}
+
+
+#define Behind(x) makeLookBehindAssertion(x)
+#define Ahead(x) makeLookAheadAssertion(x)
+
+void generateGraphemeClusterBoundaryRule(Name * const &property) {
+    // 3.1.1 Grapheme Cluster Boundary Rules
+    
+    //    RE * GCB_Control = makeName("gcb", "cn", Name::Type::UnicodeProperty);
+    RE * GCB_CR = makeName("gcb", "cr", Name::Type::UnicodeProperty);
+    RE * GCB_LF = makeName("gcb", "lf", Name::Type::UnicodeProperty);
+    RE * GCB_Control_CR_LF = makeAlt({GCB_CR, GCB_LF});
+    
+    // Break at the start and end of text.
+    RE * GCB_1 = makeStart();
+    RE * GCB_2 = makeEnd();
+    // Do not break between a CR and LF.
+    RE * GCB_3 = makeSeq({Behind(GCB_CR), Ahead(GCB_LF)});
+    // Otherwise, break before and after controls.
+    RE * GCB_4 = Behind(GCB_Control_CR_LF);
+    RE * GCB_5 = Ahead(GCB_Control_CR_LF);
+    RE * GCB_1_5 = makeAlt({GCB_1, GCB_2, makeDiff(makeAlt({GCB_4, GCB_5}), GCB_3)});
+    
+    RE * GCB_L = makeName("gcb", "l", Name::Type::UnicodeProperty);
+    RE * GCB_V = makeName("gcb", "v", Name::Type::UnicodeProperty);
+    RE * GCB_LV = makeName("gcb", "lv", Name::Type::UnicodeProperty);
+    RE * GCB_LVT = makeName("gcb", "lvt", Name::Type::UnicodeProperty);
+    RE * GCB_T = makeName("gcb", "t", Name::Type::UnicodeProperty);
+    RE * GCB_RI = makeName("gcb", "ri", Name::Type::UnicodeProperty);
+    // Do not break Hangul syllable sequences.
+    RE * GCB_6 = makeSeq({Behind(GCB_L), Ahead(makeAlt({GCB_L, GCB_V, GCB_LV, GCB_LVT}))});
+    RE * GCB_7 = makeSeq({Behind(makeAlt({GCB_LV, GCB_V})), Ahead(makeAlt({GCB_V, GCB_T}))});
+    RE * GCB_8 = makeSeq({Behind(makeAlt({GCB_LVT, GCB_T})), Ahead(GCB_T)});
+    // Do not break between regional indicator symbols.
+    RE * GCB_8a = makeSeq({Behind(GCB_RI), Ahead(GCB_RI)});
+    // Do not break before extending characters.
+    RE * GCB_9 = Ahead(makeName("gcb", "ex", Name::Type::UnicodeProperty));
+    // Do not break before SpacingMarks, or after Prepend characters.
+    RE * GCB_9a = Ahead(makeName("gcb", "sm", Name::Type::UnicodeProperty));
+    RE * GCB_9b = Behind(makeName("gcb", "pp", Name::Type::UnicodeProperty));
+    RE * GCB_6_9b = makeAlt({GCB_6, GCB_7, GCB_8, GCB_8a, GCB_9, GCB_9a, GCB_9b});
+    // Otherwise, break everywhere.
+    RE * GCB_10 = makeSeq({Behind(makeAny()), Ahead(makeAny())});
+    
+    //Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
+    RE * gcb = makeAlt({GCB_1_5, makeDiff(GCB_10, GCB_6_9b)});
+    gcb = resolveUnicodeProperties(gcb);
+    property->setDefinition(gcb);
 }
 
 }

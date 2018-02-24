@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014-6 International Characters.
+ *  Copyright (c) 2014-8 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -203,6 +203,8 @@ protected:
     Name * parseNamePatternExpression();
 
     RE * makeComplement(RE * s);
+    RE * makeZerowidthComplement(RE * s);
+
     RE * makeWordBoundary();
     RE * makeWordNonBoundary();
     RE * makeReBoundary(RE * wordC);
@@ -240,8 +242,6 @@ protected:
     CC * createCC(const codepoint_t cp);
 
     static std::string canonicalize(const cursor_t begin, const cursor_t end);
-
-    bool isCharAhead(char c);
 
     LLVM_ATTRIBUTE_NORETURN void InvalidUTF8Encoding();
 

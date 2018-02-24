@@ -159,9 +159,6 @@ inline MarkerType RE_Compiler::compileName(Name * const name, MarkerType marker,
         MarkerType zero = compile(zerowidth, pb);
         AlignMarkers(marker, zero, pb);
         PabloAST * ze = markerVar(zero);
-        if (nameString == "\\B{g}") {
-            ze = pb.createNot(ze);
-        }
         return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), ze, "zerowidth"));
     } else {
         return process(name->getDefinition(), marker, pb);

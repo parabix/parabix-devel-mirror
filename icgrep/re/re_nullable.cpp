@@ -165,7 +165,8 @@ bool RE_Nullable::isNullable(const RE * re) {
     } else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
         return (re_rep->getLB() == 0) || isNullable(re_rep->getRE());
     } else if (const Diff * diff = dyn_cast<const Diff>(re)) {
-        return isNullable(diff->getLH()) && !isNullable(diff->getRH());
+        // a Diff of Seq({}) and an Assertion represents a complemented assertion.
+        return false;
     } else if (const Intersect * e = dyn_cast<const Intersect>(re)) {
         return isNullable(e->getLH()) && isNullable(e->getRH());
     } else if (const Group * g = dyn_cast<const Group>(re)) {

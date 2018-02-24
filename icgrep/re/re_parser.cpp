@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -349,96 +349,65 @@ RE * RE_Parser::parse_escaped() {
 }
     
 RE * RE_Parser::parseEscapedSet() {
-    bool complemented = false;
+    bool complemented = atany("BDSWQP");
+    char escapeCh = get1();
+    if (complemented) escapeCh = tolower(escapeCh);
     RE * re = nullptr;
-    switch (*mCursor) {
-        case 'B': complemented = true;
+    switch (escapeCh) {
         case 'b':
-            if (*++mCursor != '{') {
-                return complemented ? makeWordNonBoundary() : makeWordBoundary();
+            if (accept('{')) {
+                if (accept("g}")) {
+                    re = makeZeroWidth("\\b{g}");
+                    return complemented ? makeZerowidthComplement(re) : re;
+                } else if (accept("w}")) {
+                    ParseFailure("\\b{w} not yet supported.");
+                    //return complemented ? makeZerowidthComplement(re) : re;
+                } else if (accept("l}")) {
+                    ParseFailure("\\b{l} not yet supported.");
+                    //return complemented ? makeZerowidthComplement(re) : re;
+                } else if (accept("s}")) {
+                    ParseFailure("\\b{s} not yet supported.");
+                    //return complemented ? makeZerowidthComplement(re) : re;
+                } else {
+                    re = parsePropertyExpression();
+                    require('}');
+                    return complemented ? makeReNonBoundary(re) : makeReBoundary(re);
+                }
             } else {
-                ++mCursor;
-                if (isCharAhead('}')) {
-                    switch (*mCursor) {
-                        case 'g':
-                            re = complemented ? makeZeroWidth("\\B{g}") : makeZeroWidth("\\b{g}");
-                            ++mCursor;
-                            ++mCursor;
-                            break;
-                        case 'w': ParseFailure("\\b{w} not yet supported.");
-                        case 'l': ParseFailure("\\b{l} not yet supported.");
-                        case 's': ParseFailure("\\b{s} not yet supported.");
-//                        default: ParseFailure("Unrecognized boundary assertion");
-                    }
-                }
-                if (!re) {
-                    auto propExpr = parsePropertyExpression();
-                    if (*mCursor++ != '}') {
-                        ParseFailure("Malformed boundary assertion");
-                    }
-                    re = complemented ? makeReNonBoundary(propExpr) : makeReBoundary(propExpr);
-                }
-                return re;
+                return complemented ? makeWordNonBoundary() : makeWordBoundary();
             }
         case 'd':
-            ++mCursor;
-            return makeDigitSet();
-        case 'D':
-            ++mCursor;
-            return makeComplement(makeDigitSet());
+            re = makeDigitSet();
+            return complemented ? makeComplement(re) : re;
         case 's':
-            ++mCursor;
-            return makeWhitespaceSet();
-        case 'S':
-            ++mCursor;
-            return makeComplement(makeWhitespaceSet());
+            re = makeWhitespaceSet();
+            return complemented ? makeComplement(re) : re;
         case 'w':
-            ++mCursor;
-            return makeWordSet();
-        case 'W':
-            ++mCursor;
-            return makeComplement(makeWordSet());
-        case 'Q':
-            complemented = true;
+            re = makeWordSet();
+            return complemented ? makeComplement(re) : re;
         case 'q':
-            if (*++mCursor != '{') {
-                ParseFailure("Malformed grapheme cluster expression");
-            }
-            ++mCursor;
+            require('{');
             ParseFailure("Literal grapheme cluster expressions not yet supported.");
-            if (*mCursor != '}') {
-                ParseFailure("Malformed grapheme cluster expression");
-            }
-            ++mCursor;
+            require('}');
             return complemented ? makeComplement(re) : re;
-        case 'P':
-            complemented = true;
         case 'p':
-            if (*++mCursor != '{') {
-                ParseFailure("Malformed property expression");
-            }
-            ++mCursor;
+            require('{');
             re = parsePropertyExpression();
-            if (*mCursor != '}') {
-                ParseFailure("Malformed property expression");
-            }
-            ++mCursor;
+            require('}');
             return complemented ? makeComplement(re) : re;
-        case 'X':
+        case 'X': {
             // \X is equivalent to ".+?\b{g}"; proceed the minimal number of characters (but at least one)
             // to get to the next extended grapheme cluster boundary.
-            ++mCursor;
-            return makeSeq({makeAny(), makeRep(makeSeq({makeZeroWidth("\\B{g}"), makeAny()}), 0, Rep::UNBOUNDED_REP), makeZeroWidth("\\b{g}")});
+            RE * GCB = makeZeroWidth("\\b{g}");
+            return makeSeq({makeAny(), makeRep(makeSeq({makeZerowidthComplement(GCB), makeAny()}), 0, Rep::UNBOUNDED_REP), GCB});
+        }
         case 'N':
-            ++mCursor;
             re = parseNamePatternExpression();
             assert (re);
             return re;
         case '<':
-            ++mCursor;
             return makeWordBegin();
         case '>':
-            ++mCursor;
             return makeWordEnd();
         default:
             ParseFailure("Internal error");
@@ -506,14 +475,6 @@ std::string RE_Parser::canonicalize(const cursor_t begin, const cursor_t end) {
         }
     }
     return s.str();
-}
-
-bool RE_Parser::isCharAhead(char c) {
-    if (mCursor.remaining() < 2) {
-        return false;
-    }
-    auto nextCursor = mCursor.pos() + 1;
-    return *nextCursor == c;
 }
 
 RE * RE_Parser::parsePropertyExpression() {
@@ -808,6 +769,10 @@ CC * RE_Parser::createCC(const codepoint_t cp) {
 
 RE * RE_Parser::makeComplement(RE * s) {
   return makeDiff(makeAny(), s);
+}
+
+RE * RE_Parser::makeZerowidthComplement(RE * s) {
+    return makeDiff(makeSeq({}), s);
 }
 
 RE * RE_Parser::makeWordBoundary() {

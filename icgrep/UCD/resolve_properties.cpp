@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -16,6 +16,7 @@
 #include <re/re_assertion.h>
 #include <re/re_parser.h>
 #include <re/re_name_resolve.h>
+#include <re/grapheme_clusters.h>
 #include <re/re_compiler.h>
 #include "UCD/PropertyAliases.h"
 #include "UCD/PropertyObjects.h"
@@ -32,56 +33,10 @@ namespace UCD {
 void UnicodePropertyExpressionError(std::string errmsg) {
     llvm::report_fatal_error(errmsg);
 }
-
-#define Behind(x) makeLookBehindAssertion(x)
-#define Ahead(x) makeLookAheadAssertion(x)
     
     
 RE * UnicodeBreakRE() {
     return makeAlt({makeCC(0x0A, 0x0C), makeSeq({makeCC(0x0D), makeCC(0x0A)}), makeSeq({makeCC(0x0D), makeNegativeLookAheadAssertion(makeCC(0x0A))})});
-}
-
-void generateGraphemeClusterBoundaryRule(Name * const &property) {
-    // 3.1.1 Grapheme Cluster Boundary Rules
-
-//    RE * GCB_Control = makeName("gcb", "cn", Name::Type::UnicodeProperty);
-    RE * GCB_CR = makeName("gcb", "cr", Name::Type::UnicodeProperty);
-    RE * GCB_LF = makeName("gcb", "lf", Name::Type::UnicodeProperty);
-    RE * GCB_Control_CR_LF = makeAlt({GCB_CR, GCB_LF});
-
-    // Break at the start and end of text.
-    RE * GCB_1 = makeStart();
-    RE * GCB_2 = makeEnd();
-    // Do not break between a CR and LF.
-    RE * GCB_3 = makeSeq({Behind(GCB_CR), Ahead(GCB_LF)});
-    // Otherwise, break before and after controls.
-    RE * GCB_4 = Behind(GCB_Control_CR_LF);
-    RE * GCB_5 = Ahead(GCB_Control_CR_LF);
-    RE * GCB_1_5 = makeAlt({GCB_1, GCB_2, makeDiff(makeAlt({GCB_4, GCB_5}), GCB_3)});
-
-    RE * GCB_L = makeName("gcb", "l", Name::Type::UnicodeProperty);
-    RE * GCB_V = makeName("gcb", "v", Name::Type::UnicodeProperty);
-    RE * GCB_LV = makeName("gcb", "lv", Name::Type::UnicodeProperty);
-    RE * GCB_LVT = makeName("gcb", "lvt", Name::Type::UnicodeProperty);
-    RE * GCB_T = makeName("gcb", "t", Name::Type::UnicodeProperty);
-    RE * GCB_RI = makeName("gcb", "ri", Name::Type::UnicodeProperty);
-    // Do not break Hangul syllable sequences.
-    RE * GCB_6 = makeSeq({Behind(GCB_L), Ahead(makeAlt({GCB_L, GCB_V, GCB_LV, GCB_LVT}))});
-    RE * GCB_7 = makeSeq({Behind(makeAlt({GCB_LV, GCB_V})), Ahead(makeAlt({GCB_V, GCB_T}))});
-    RE * GCB_8 = makeSeq({Behind(makeAlt({GCB_LVT, GCB_T})), Ahead(GCB_T)});
-    // Do not break between regional indicator symbols.
-    RE * GCB_8a = makeSeq({Behind(GCB_RI), Ahead(GCB_RI)});
-    // Do not break before extending characters.
-    RE * GCB_9 = Ahead(makeName("gcb", "ex", Name::Type::UnicodeProperty));
-    // Do not break before SpacingMarks, or after Prepend characters.
-    RE * GCB_9a = Ahead(makeName("gcb", "sm", Name::Type::UnicodeProperty));
-    RE * GCB_9b = Behind(makeName("gcb", "pp", Name::Type::UnicodeProperty));
-    RE * GCB_6_9b = makeAlt({GCB_6, GCB_7, GCB_8, GCB_8a, GCB_9, GCB_9a, GCB_9b});
-    // Otherwise, break everywhere.
-    RE * GCB_10 = makeSeq({Behind(makeAny()), Ahead(makeAny())});
-
-    //Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
-    property->setDefinition(makeAlt({GCB_1_5, makeDiff(GCB_10, GCB_6_9b)}));
 }
 
 bool resolvePropertyDefinition(Name * const property) {
@@ -114,7 +69,7 @@ bool resolvePropertyDefinition(Name * const property) {
             Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
             property->setDefinition(makeDiff(makeAny(), unassigned));
             return true;
-        } else if (value == "\\b{g}" || value == "\\B{g}") {
+        } else if (value == "\\b{g}") {
             generateGraphemeClusterBoundaryRule(property);
             return true;
         } else if (value == "^s") {  // "start anchor (^) in single-line mode"
