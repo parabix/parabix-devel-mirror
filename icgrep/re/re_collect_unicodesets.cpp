@@ -22,6 +22,7 @@ struct SetCollector {
 public:
     std::vector<const CC *> UnicodeSets;
     boost::container::flat_set<const RE *>  Visited;
+    std::set<Name *> ignoredExternals;
 };
 
 void SetCollector::collect(RE * const re) {
@@ -33,6 +34,7 @@ void SetCollector::collect(RE * const re) {
                 if (index == UnicodeSets.size()) UnicodeSets.push_back(cc);
             }
         } else if (isa<Name>(re)) {
+            if (ignoredExternals.find(cast<Name>(re)) != ignoredExternals.end()) return;
             auto def = cast<Name>(re)->getDefinition();
             if (def != nullptr)
                 collect(def);
@@ -58,8 +60,9 @@ void SetCollector::collect(RE * const re) {
     }
 }
 
-std::vector<const CC *> collectUnicodeSets(RE * const re) {
+std::vector<const CC *> collectUnicodeSets(RE * const re, std::set<Name *> external) {
     SetCollector collector;
+    collector.ignoredExternals = external;
     collector.collect(re);
     return collector.UnicodeSets;
 }

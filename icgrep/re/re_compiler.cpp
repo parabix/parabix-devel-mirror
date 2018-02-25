@@ -29,7 +29,6 @@
 #include <cc/alphabet.h>
 #include <cc/cc_compiler.h>
 #include "pablo/builder.hpp"        // for PabloBuilder
-#include <IR_Gen/idisa_target.h>    // for AVX2_available
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
@@ -49,6 +48,18 @@ namespace re {
 void RE_Compiler::addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
     mAlphabetCompilers.push_back(make_unique<cc::Parabix_CC_Compiler>(mEntryScope, basis_set));
+}
+
+void RE_Compiler::addPrecompiled(std::string precompiledName, PabloAST * precompiledStream) {
+    PabloBuilder pb(mEntryScope);
+    mExternalNameMap.insert(std::make_pair(precompiledName, precompiledStream));
+    if (precompiledName == "UTF8_nonfinal") {
+        mNonFinal = precompiledStream;
+        mFinal = pb.createNot(precompiledStream);
+    }
+    if (precompiledName == "UTF8_LB") {
+        mLineBreak = precompiledStream;
+    }
 }
 
 using MarkerType = RE_Compiler::MarkerType;
@@ -155,6 +166,13 @@ inline MarkerType RE_Compiler::compileName(Name * const name, MarkerType marker,
         nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
         return nameMarker;
     } else if (name->getType() == Name::Type::ZeroWidth) {
+        auto f = mExternalNameMap.find(nameString);
+        if (f != mExternalNameMap.end()) {
+            MarkerType z = makeMarker(FinalPostPositionUnit, f->second);
+            AlignMarkers(marker, z, pb);
+            PabloAST * ze = markerVar(z);
+            return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), ze, "zerowidth"));
+        }
         RE * zerowidth = name->getDefinition();
         MarkerType zero = compile(zerowidth, pb);
         AlignMarkers(marker, zero, pb);
@@ -178,6 +196,7 @@ inline MarkerType RE_Compiler::compileName(Name * const name, PabloBuilder & pb)
 }
 
 MarkerType RE_Compiler::compileSeq(Seq * const seq, MarkerType marker, PabloBuilder & pb) {
+
     // if-hierarchies are not inserted within unbounded repetitions
     if (mStarDepth > 0) {
         for (RE * re : *seq) {
@@ -588,12 +607,10 @@ RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
 , mWhileTest(nullptr)
 , mStarDepth(0)
 , mCompiledName(&mBaseMap) {
-    PabloBuilder mPB(mEntryScope);
-    Var * const linebreak = kernel->getInputStreamVar("linebreak");
-    mLineBreak = mPB.createExtract(linebreak, 0);
-    Var * const required = kernel->getInputStreamVar("required");
-    mNonFinal = mPB.createExtract(required, 0);
-    mFinal = mPB.createNot(mNonFinal);
+    PabloBuilder pb(mEntryScope);
+    mLineBreak = pb.createZeroes();  // default so "^/$" matches start/end of text only
+    mNonFinal = pb.createZeroes();
+    mFinal = pb.createOnes();
 }
 
 } // end of namespace re

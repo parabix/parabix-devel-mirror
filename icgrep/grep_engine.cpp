@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-
+#include <set>
 #include "grep_engine.h"
 #include "grep_interface.h"
 #include <llvm/IR/Module.h>
@@ -12,6 +12,7 @@
 #include <kernels/charclasses.h>
 #include <kernels/cc_kernel.h>
 #include <kernels/grep_kernel.h>
+#include <kernels/grapheme_kernel.h>
 #include <kernels/linebreak_kernel.h>
 #include <kernels/streams_merge.h>
 #include <kernels/source_kernel.h>
@@ -22,6 +23,7 @@
 #include <kernels/kernel_builder.h>
 #include <pablo/pablo_kernel.h>
 #include <re/re_cc.h>
+#include <re/re_name.h>
 #include <re/casing.h>
 #include <re/exclude_CC.h>
 #include <re/re_toolchain.h>
@@ -52,7 +54,7 @@ using namespace kernel;
 
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
 static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable experimental pablo transposition."));
-static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(true));
+static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
 
 namespace grep {
 
@@ -146,13 +148,27 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     for(unsigned i = 0; i < n; ++i) {
         REs[i] = resolveModesAndExternalSymbols(REs[i]);
         REs[i] = excludeUnicodeLineBreak(REs[i]);
+        //re::Name * unicodeLB = re::makeName("UTF8_LB", re::Name::Type::Unicode);
+        //unicodeLB->setDefinition(re::makeCC(0x0A));
+        //REs[i] = resolveAnchors(REs[i], unicodeLB);
         REs[i] = regular_expression_passes(REs[i]);
+        bool hasGCB = hasGraphemeClusterBoundary(REs[i]);
+        StreamSetBuffer * GCB_stream = nullptr;
+        std::vector<std::string> externalStreamNames = std::vector<std::string>{"UTF8_LB", "UTF8_nonfinal"};
+        std::vector<StreamSetBuffer *> icgrepInputSets = {BasisBits, LineBreakStream, RequiredStreams};
+        if (hasGCB) {
+            GCB_stream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+            kernel::Kernel * gcbK = mGrepDriver->addKernelInstance<kernel::GraphemeClusterBreakKernel>(idb);
+            mGrepDriver->makeKernelCall(gcbK, {BasisBits, RequiredStreams}, {GCB_stream});
+            externalStreamNames.push_back("\\b{g}");
+            icgrepInputSets.push_back(GCB_stream);
+        }
         if (CC_Multiplexing) {
-            const auto UnicodeSets = re::collectUnicodeSets(REs[i]);
+            const auto UnicodeSets = re::collectUnicodeSets(REs[i], std::set<re::Name *>({re::makeZeroWidth("\\b{g}")}));
             StreamSetBuffer * const MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
             if (UnicodeSets.size() <= 1) {
-                kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i]);
-                mGrepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, RequiredStreams}, {MatchResults});
+                kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i], externalStreamNames);
+                mGrepDriver->makeKernelCall(icgrepK, icgrepInputSets, {MatchResults});
                 MatchResultsBufs[i] = MatchResults;
             } else {
                 mpx = make_unique<MultiplexedAlphabet>("mpx", UnicodeSets);
@@ -164,14 +180,15 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
                 mGrepDriver->makeKernelCall(ccK, {BasisBits}, {CharClasses});
 //                kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis), true);
 //                mGrepDriver->makeKernelCall(ccK, {ByteStream}, {CharClasses});
-                kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i], std::vector<cc::Alphabet *>{mpx.get()});
-                mGrepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, RequiredStreams, CharClasses}, {MatchResults});
+                kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()});
+                icgrepInputSets.push_back(CharClasses);
+                mGrepDriver->makeKernelCall(icgrepK, icgrepInputSets, {MatchResults});
                 MatchResultsBufs[i] = MatchResults;
             }
         } else {
             StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
-            kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i]);
-            mGrepDriver->makeKernelCall(icgrepK, {BasisBits, LineBreakStream, RequiredStreams}, {MatchResults});
+            kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, REs[i], externalStreamNames);
+            mGrepDriver->makeKernelCall(icgrepK, icgrepInputSets, {MatchResults});
             MatchResultsBufs[i] = MatchResults;
         }
     }

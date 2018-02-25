@@ -15,28 +15,19 @@
 #include <UCD/ucd_compiler.hpp>
 #include <UCD/resolve_properties.h>
 #include <boost/container/flat_set.hpp>
-#include <sstream>
+#include <llvm/Support/Casting.h>
+#include <llvm/Support/raw_ostream.h>
 
-using NameMap = UCD::UCDCompiler::NameMap;
-
-using namespace boost::container;
 using namespace llvm;
-
 namespace re {
-
 struct NameGather {
 
     void gather(RE * re) {
         assert ("RE object cannot be null!" && re);
         if (isa<Name>(re)) {
-            if (mVisited.insert(cast<Name>(re)).second) {
-                RE * defn = cast<Name>(re)->getDefinition();
-                if (isa<CC>(defn)) {
-                    if (cast<CC>(defn)->getAlphabet() == &cc::Unicode)
-                        mNameMap.emplace(cast<Name>(re), nullptr);
-                } else {
-                    gather(defn);
-                }
+            RE * defn = cast<Name>(re)->getDefinition();
+            if (defn == nullptr) {
+                mNameSet.emplace(cast<Name>(re));
             }
         } else if (isa<Seq>(re)) {
             for (RE * item : *cast<Seq>(re)) {
@@ -63,23 +54,23 @@ struct NameGather {
             gather(cast<Group>(re)->getRE());
         }
     }
-    NameGather(NameMap & nameMap)
-    : mNameMap(nameMap) {
+    NameGather(std::set<Name *> & nameSet)
+    : mNameSet(nameSet) {
 
     }
 
 private:
 
-    NameMap &               mNameMap;
-    flat_set<Name *>        mVisited;
+    std::set<Name *> &               mNameSet;
 
 };
     
-NameMap gatherNames(RE *& re) {
-    NameMap nameMap;
-    NameGather nameGather(nameMap);
+std::set<Name *> gatherExternalNames(RE * re) {
+    std::set<Name *> nameSet;
+    
+    NameGather nameGather(nameSet);
     nameGather.gather(re);
-    return nameMap;
+    return nameSet;
     
 }
 

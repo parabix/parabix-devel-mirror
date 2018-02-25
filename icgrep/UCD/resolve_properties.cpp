@@ -70,7 +70,8 @@ bool resolvePropertyDefinition(Name * const property) {
             property->setDefinition(makeDiff(makeAny(), unassigned));
             return true;
         } else if (value == "\\b{g}") {
-            generateGraphemeClusterBoundaryRule(property);
+            RE * gcb = generateGraphemeClusterBoundaryRule();
+            property->setDefinition(resolveUnicodeProperties(gcb));
             return true;
         } else if (value == "^s") {  // "start anchor (^) in single-line mode"
             property->setDefinition(makeNegativeLookBehindAssertion(makeCC(0, 0x10FFFF)));

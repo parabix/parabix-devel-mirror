@@ -136,7 +136,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     
     Var * const required = getOutputStreamVar("nonFinal");
     pb.createAssign(pb.createExtract(required, pb.getInteger(0)), nonFinal);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("linebreak"), pb.getInteger(0)), pb.createOr(LineBreak, unterminatedLineAtEOF, "EOL"));
+    pb.createAssign(pb.createExtract(getOutputStreamVar("UnicodeLB"), pb.getInteger(0)), pb.createOr(LineBreak, unterminatedLineAtEOF, "EOL"));
 }
 
 RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb)
@@ -145,7 +145,7 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 {Binding{kb->getStreamSetTy(8), "basis"}, Binding{kb->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
 // output
 {Binding{kb->getStreamSetTy(1), "nonFinal", FixedRate()},
- Binding{kb->getStreamSetTy(1), "linebreak", FixedRate(), Add1()}}) {
+ Binding{kb->getStreamSetTy(1), "UnicodeLB", FixedRate(), Add1()}}) {
 
 }
 
@@ -193,12 +193,14 @@ ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
 
 // Helper to compute stream set inputs to pass into PabloKernel constructor.
 inline std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                         const std::vector<std::string> & externals,
                                          const std::vector<cc::Alphabet *> & alphabets) {
     std::vector<Binding> streamSetInputs = {
         Binding{b->getStreamSetTy(8), "basis"},
-        Binding{b->getStreamSetTy(1, 1), "linebreak"},
-        Binding{b->getStreamSetTy(1, 1), "required"}
     };
+    for (auto & e : externals) {
+        streamSetInputs.push_back(Binding{b->getStreamSetTy(1, 1), e});
+    }
     for (const auto & alphabet : alphabets) {
         unsigned basis_size = cast<cc::MultiplexedAlphabet>(alphabet)->getMultiplexedCCs().size();
         streamSetInputs.push_back(Binding{b->getStreamSetTy(basis_size, 1), alphabet->getName() + "_basis"});
@@ -206,15 +208,15 @@ inline std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBui
     return streamSetInputs;
 }
 
-ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<cc::Alphabet *> alphabets)
+ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<std::string> externals, std::vector<cc::Alphabet *> alphabets)
 : ICGrepSignature(re)
 , PabloKernel(b, "ic" + sha1sum(mSignature),
 // inputs
-icGrepInputs(b, alphabets),
+icGrepInputs(b, externals, alphabets),
 // output
 {Binding{b->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}})
+, mExternals(externals)
 , mAlphabets(alphabets) {
-
 }
 
 std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -225,6 +227,9 @@ void ICGrepKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
     RE_Compiler re_compiler(this, ccc);
+    for (auto & e : mExternals) {
+        re_compiler.addPrecompiled(e, pb.createExtract(getInputStreamVar(e), pb.getInteger(0)));
+    }
     for (auto a : mAlphabets) {
         auto mpx_basis = getInputStreamSet(a->getName() + "_basis");
         re_compiler.addAlphabet(a, mpx_basis);

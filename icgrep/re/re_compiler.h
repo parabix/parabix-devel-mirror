@@ -67,6 +67,8 @@ public:
     // a basis for the coded alphabet values.
 
     void addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST* > basis_set);
+    
+    void addPrecompiled(std::string precompiledName, pablo::PabloAST * precompiledStream);
 
     pablo::PabloAST * compile(RE * re, pablo::PabloAST * const initialCursors = nullptr);
 
@@ -142,6 +144,8 @@ private:
     int                                             mStarDepth;
     NameMap *                                       mCompiledName;
     NameMap                                         mBaseMap;
+    std::map<std::string, pablo::PabloAST *>        mExternalNameMap;
+
 };
 
 }

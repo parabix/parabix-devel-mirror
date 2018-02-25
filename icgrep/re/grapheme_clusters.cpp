@@ -129,7 +129,7 @@ RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
 #define Behind(x) makeLookBehindAssertion(x)
 #define Ahead(x) makeLookAheadAssertion(x)
 
-void generateGraphemeClusterBoundaryRule(Name * const &property) {
+RE * generateGraphemeClusterBoundaryRule() {
     // 3.1.1 Grapheme Cluster Boundary Rules
     
     //    RE * GCB_Control = makeName("gcb", "cn", Name::Type::UnicodeProperty);
@@ -170,8 +170,7 @@ void generateGraphemeClusterBoundaryRule(Name * const &property) {
     
     //Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
     RE * gcb = makeAlt({GCB_1_5, makeDiff(GCB_10, GCB_6_9b)});
-    gcb = resolveUnicodeProperties(gcb);
-    property->setDefinition(gcb);
+    return gcb;
 }
 
 }
