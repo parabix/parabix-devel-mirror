@@ -707,8 +707,6 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
                 ub += RateValue(input.getLookahead(), mStride);
             }
             Value * arraySize = b->getInt64(ceiling(ub));
-
-            auto name = input.getName();
             if (input.isSwizzled()) {
                 // TODO workaround to use larger temporary buffer size for swizzled buffer
                 arraySize = b->CreateMul(arraySize, b->getSize(codegen::BufferSegments * codegen::ThreadNum * codegen::SegmentSize));
@@ -795,7 +793,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         Value * const processed = b->getProcessedItemCount(name);
         #ifdef DEBUG_LOG
         b->CallPrintInt(getName() + "_" + name + "_avail", mAvailableItemCount[i]);
-        b->CallPrintInt(getName() + "_" + name + "_processed", processed);
+        b->CallPrintInt(getName() + "_" + name + "_processed0", processed);
         #endif
         mInitialProcessedItemCount[i] = processed;
         mStreamSetInputBaseAddress[i] = b->getBlockAddress(name, b->CreateLShr(processed, LOG_2_BLOCK_WIDTH));
@@ -814,8 +812,20 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         #endif
         mAvailableItemCount[i] = unprocessed;
         linearlyAccessible[i] = accessible;
-        inputStrideSize[i] = getStrideSize(b, input.getRate());
-        Value * const accessibleStrides = b->CreateUDiv(accessible, inputStrideSize[i]);
+
+        const auto ub = getUpperBound(input.getRate());
+        inputStrideSize[i] = b->getSize(ceiling(ub * mStride));
+        Value * accessibleStrides = b->CreateUDiv(accessible, inputStrideSize[i]);
+
+        if (LLVM_UNLIKELY(input.hasAttribute(Attribute::KindId::AlwaysConsume))) {
+            const auto lb = getLowerBound(input.getRate());
+            Value * const lowerbound = b->getSize(ceiling(lb * mStride));
+            Value * const lowerboundStrides = b->CreateZExt(b->CreateICmpUGE(unprocessed, lowerbound), b->getSizeTy());
+            Value * const tryLowerbound = b->CreateICmpULT(accessibleStrides, lowerboundStrides);
+            inputStrideSize[i] = b->CreateSelect(tryLowerbound, lowerbound, inputStrideSize[i]);
+            accessibleStrides = b->CreateSelect(tryLowerbound, lowerboundStrides, accessibleStrides);
+        }
+
         numOfStrides = b->CreateUMin(numOfStrides, accessibleStrides);
     }
 
@@ -1008,7 +1018,7 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         const auto & name = output.getName();
         Value * const produced = b->getProducedItemCount(name);
         #ifdef DEBUG_LOG
-        b->CallPrintInt(getName() + "_" + name + "_produced", produced);
+        b->CallPrintInt(getName() + "_" + name + "_produced0", produced);
         #endif
         Value * baseBuffer = b->getBlockAddress(name, b->CreateLShr(produced, LOG_2_BLOCK_WIDTH));
         mInitialProducedItemCount[i] = produced;
@@ -1018,6 +1028,9 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
         outputStrideSize[i] = getStrideSize(b, output.getRate());
         if (outputStrideSize[i]) {
             linearlyWritable[i] = b->getLinearlyWritableItems(name, produced);
+            #ifdef DEBUG_LOG
+            b->CallPrintInt(getName() + "_" + name + "_writable", linearlyWritable[i]);
+            #endif
             Value * writableStrides = b->CreateUDiv(linearlyWritable[i], outputStrideSize[i]);
             numOfStrides = b->CreateUMin(numOfStrides, writableStrides);
             // Do we require a temporary buffer to write to?
@@ -1059,6 +1072,9 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             linearlyAccessible[i] = b->CreateSelect(mIsFinal, linearlyAccessible[i], processable);
         }
         mAvailableItemCount[i] = linearlyAccessible[i];
+        #ifdef DEBUG_LOG
+        b->CallPrintInt(getName() + "_" + input.getName() + "_accessible", linearlyAccessible[i]);
+        #endif
     }
 
     //  We have one or more strides of input data and output buffer space for all stream sets.
@@ -1071,6 +1087,9 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             Value * const ic = b->CreateAdd(mInitialProcessedItemCount[i], mAvailableItemCount[i]);
             b->setProcessedItemCount(input.getName(), ic);
         }
+        #ifdef DEBUG_LOG
+        b->CallPrintInt(getName() + "_" + input.getName() + "_processed", b->getProcessedItemCount(input.getName()));
+        #endif
     }
 
     for (unsigned i = 0; i < outputSetCount; ++i) {
@@ -1081,6 +1100,9 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
             Value * const ic = b->CreateAdd(mInitialProducedItemCount[i], produced);
             b->setProducedItemCount(output.getName(), ic);
         }
+        #ifdef DEBUG_LOG
+        b->CallPrintInt(getName() + "_" + output.getName() + "_produced", b->getProducedItemCount(output.getName()));
+        #endif
     }
 
     BasicBlock * const handleFinalBlock = b->CreateBasicBlock("HandleFinalBlock");
@@ -1286,10 +1308,12 @@ void MultiBlockKernel::reviseFinalProducedItemCounts(const std::unique_ptr<Kerne
     unsigned first = 0;
     unsigned last = inputSetCount;
 
+    bool hasFixedRateInput = false; // <- temporary workaround
     for (unsigned i = 0; i < inputSetCount; ++i) {
         const ProcessingRate & pr = mStreamSetInputs[i].getRate();
         if (pr.isFixed()) {
             rateLCM = lcm(rateLCM, pr.getRate());
+            hasFixedRateInput = true;
             if (mStreamSetInputs[i].isPrincipal()) {
                 assert ("A kernel cannot have multiple principle input streams" && (first == 0 && last == inputSetCount));
                 first = i;
@@ -1356,7 +1380,7 @@ void MultiBlockKernel::reviseFinalProducedItemCounts(const std::unique_ptr<Kerne
         const auto name = output.getName();
         const ProcessingRate & pr = output.getRate();
         Value * produced = nullptr;
-        if (pr.isFixed() && output.nonDeferred()) {
+        if (hasFixedRateInput && pr.isFixed() && output.nonDeferred()) {
             assert (baseInitialProcessedItemCount && scaledInverseOfAvailItemCount);
             const auto rate = pr.getRate();
             Value * p = baseInitialProcessedItemCount;
@@ -1368,6 +1392,9 @@ void MultiBlockKernel::reviseFinalProducedItemCounts(const std::unique_ptr<Kerne
             }
             Value * const ic = CreateUDivCeil(b, scaledInverseOfAvailItemCount, rateLCM / pr.getRate());
             produced = b->CreateAdd(p, ic);
+            #ifdef DEBUG_LOG
+            b->CallPrintInt(getName() + "_" + name + "_produced'", produced);
+            #endif            
         } else { // check if we have an attribute; if so, get the current produced count and adjust it
             bool noAttributes = true;
             for (const Attribute & attr : output.getAttributes()) {
@@ -1388,6 +1415,9 @@ void MultiBlockKernel::reviseFinalProducedItemCounts(const std::unique_ptr<Kerne
                 produced = b->CreateRoundUp(produced, b->getSize(attr.amount()));
             }
         }
+        #ifdef DEBUG_LOG
+        b->CallPrintInt(getName() + "_" + name + "_produced\"", produced);
+        #endif
         b->setProducedItemCount(name, produced);
     }
 
@@ -1651,6 +1681,9 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(const std::unique_ptr<Ker
         b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
     }
 
+    #ifdef DEBUG_LOG
+    b->CallPrintInt(getName() + "_remainingItems", remainingItems);
+    #endif
     generateFinalBlockMethod(b, remainingItems); // may be implemented by the BlockOrientedKernel subtype
 
     if (!b->supportsIndirectBr()) {

@@ -90,6 +90,11 @@ struct Attribute {
         // out" the input streams. Otherwise a MultiBlock will use temporary buffers for all
         // uses of the streams and zero out any non-regions from the data.
 
+        AlwaysConsume,
+
+        // Always consume the input (i.e., use the lowerbound to determine whether to there
+        // is enough data to execute a stride rather than the upper bound.)
+
         /** OUTPUT STREAM ATTRIBUTES **/
 
         Add,
@@ -212,6 +217,10 @@ struct Attribute {
 
     };
 
+    KindId getKind() const {
+        return mKind;
+    }
+
     bool isAdd() const {
         return mKind == KindId::Add;
     }
@@ -246,14 +255,11 @@ struct Attribute {
 
 protected:
 
-    KindId getKind() const {
-        return mKind;
-    }
-
     friend struct AttributeSet;
     friend struct Binding;
     friend Attribute Add1();
     friend Attribute Principal();
+    friend Attribute AlwaysConsume();
     friend Attribute RoundUpTo(const unsigned);
     friend Attribute LookAhead(const unsigned);
     friend Attribute LookBehind(const unsigned);
@@ -321,6 +327,10 @@ inline Attribute Add1() {
 
 inline Attribute RoundUpTo(const unsigned k) {
     return Attribute(Attribute::KindId::RoundUpTo, k);
+}
+
+inline Attribute AlwaysConsume() {
+    return Attribute(Attribute::KindId::AlwaysConsume, 0);
 }
 
 inline Attribute Principal() {

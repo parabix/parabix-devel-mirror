@@ -683,6 +683,7 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
 
       //  b->CallPrintInt("< " + kernel->getName() + "_" + name + "_produced", produced);
 
+
         const auto ub = kernel->getUpperBound(input.getRate()); assert (ub > 0);
         const auto strideLength = ceiling(ub * kernel->getStride()) ;
         Constant * const segmentLength = b->getSize(strideLength * codegen::SegmentSize);
@@ -724,8 +725,16 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
             const Binding & input = kernel->getStreamInput(buffer);
             const auto name = input.getName();
             BasicBlock * const sufficient = b->CreateBasicBlock(name + "HasInputData");
-            const auto ub = kernel->getUpperBound(input.getRate()); assert (ub > 0);
-            Constant * const strideLength = b->getSize(ceiling(ub * kernel->getStride()));
+
+            Constant * strideLength = nullptr;
+            if (LLVM_UNLIKELY(input.hasAttribute(kernel::Attribute::KindId::AlwaysConsume))) {
+                const auto lb = kernel->getLowerBound(input.getRate());
+                strideLength = b->getSize(ceiling(lb * kernel->getStride()));
+            } else {
+                const auto ub = kernel->getUpperBound(input.getRate()); assert (ub > 0);
+                strideLength = b->getSize(ceiling(ub * kernel->getStride()) - 1);
+            }
+
             Value * const processed = b->getProcessedItemCount(name);
 //            if (input.getRate().isFixed()) {
 //                processed = b->CreateMul(segNo, strideLength);
@@ -739,7 +748,7 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
 
           //  b->CallPrintInt("< " + kernel->getName() + "_" + name + "_unprocessed", unprocessed);
 
-            Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGE(unprocessed, strideLength), isFinal);
+            Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGT(unprocessed, strideLength), isFinal);
 
           //  b->CallPrintInt("* < " + kernel->getName() + "_" + name + "_sufficientData", hasSufficientData);
 
