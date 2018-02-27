@@ -765,10 +765,15 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
 
     b->createDoSegmentCall(args);
 
-    if (inputs.empty() || kernel->canTerminateEarly()) {
-        isFinal = b->CreateOr(isFinal, b->getTerminationSignal());
+    if (kernel->hasAttribute(kernel::Attribute::KindId::MustExplicitlyTerminate)) {
+        isFinal = b->getTerminationSignal();
+    } else {
+        if (kernel->hasAttribute(kernel::Attribute::KindId::CanTerminateEarly)) {
+            isFinal = b->CreateOr(isFinal, b->getTerminationSignal());
+        }
+        b->setTerminationSignal(isFinal);
     }
-    b->setTerminationSignal(isFinal);
+
   //  b->CallPrintInt(kernel->getName() + "_finished", isFinal);
     final->addIncoming(isFinal, b->GetInsertBlock());
     b->CreateBr(kernelFinished);

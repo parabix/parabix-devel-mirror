@@ -303,7 +303,7 @@ MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 {Binding{b->getSizeTy(), "fileSize"}}, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}})
 , mCodeUnitWidth(codeUnitWidth)
 , mFileSizeFunction(nullptr) {
-    addAttribute(CanTerminateEarly());
+    addAttribute(MustExplicitlyTerminate());
 }
 
 
@@ -315,7 +315,7 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 , {}
 , {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}})
 , mCodeUnitWidth(codeUnitWidth) {
-    addAttribute(CanTerminateEarly());
+    addAttribute(MustExplicitlyTerminate());
 }
 
 
@@ -328,7 +328,7 @@ FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & kb
 , {Binding{kb->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}, Binding{kb->getSizeTy(), "fileSize"}})
 , mCodeUnitWidth(codeUnitWidth)
 , mFileSizeFunction(nullptr) {
-    addAttribute(CanTerminateEarly());
+    addAttribute(MustExplicitlyTerminate());
 }
 
 MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, Type * const type, const unsigned codeUnitWidth)
@@ -337,7 +337,7 @@ MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuild
     {Binding{kb->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
     {Binding{cast<PointerType>(type), "fileSource"}, Binding{kb->getSizeTy(), "fileSize"}}, {}, {})
 , mCodeUnitWidth(codeUnitWidth) {
-    addAttribute(CanTerminateEarly());
+    addAttribute(MustExplicitlyTerminate());
 }
 
 }

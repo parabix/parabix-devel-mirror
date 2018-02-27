@@ -203,8 +203,6 @@ public:
 
     std::string getCacheName(const std::unique_ptr<KernelBuilder> & idb) const;
 
-    bool canTerminateEarly() const { return hasAttribute(Attribute::KindId::CanTerminateEarly); }
-
 protected:
 
     virtual void addInternalKernelProperties(const std::unique_ptr<KernelBuilder> & idb) { }

@@ -215,6 +215,12 @@ struct Attribute {
         // Indicates that this kernel can call setTerminationSignal() to terminate the
         // kernel prior to processing all of its input streams.
 
+        MustExplicitlyTerminate,
+
+        // This kernel terminates *only* after the programmer calls setTerminationSignal()
+        // and will be called even when there is no new input data when the prior kernels
+        // in the pipeline have also terminated.
+
     };
 
     KindId getKind() const {
@@ -269,6 +275,7 @@ protected:
     friend Attribute ConditionalRegionEnd();
     friend Attribute Swizzled();
     friend Attribute CanTerminateEarly();
+    friend Attribute MustExplicitlyTerminate();
 
     Attribute(const KindId kind, const unsigned k) : mKind(kind), mAmount(k) { }
 
@@ -363,6 +370,10 @@ inline Attribute ConditionalRegionEnd() {
 
 inline Attribute CanTerminateEarly() {
     return Attribute(Attribute::KindId::CanTerminateEarly, 0);
+}
+
+inline Attribute MustExplicitlyTerminate() {
+    return Attribute(Attribute::KindId::MustExplicitlyTerminate, 0);
 }
 
 inline Attribute Swizzled() {

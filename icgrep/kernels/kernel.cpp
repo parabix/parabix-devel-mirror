@@ -1168,9 +1168,11 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
     //  We've dealt with the partial block processing and copied information back into the
     //  actual buffers.  If this isn't the final block, loop back for more multiblock processing.
     BasicBlock * const segmentDone = b->CreateBasicBlock("SegmentDone");
-    if (canTerminateEarly()) {
+
+    if (hasAttribute(Attribute::KindId::MustExplicitlyTerminate) || hasAttribute(Attribute::KindId::CanTerminateEarly)) {
         mIsFinal = b->CreateOr(mIsFinal, b->getTerminationSignal());
     }
+
     b->CreateCondBr(mIsFinal, segmentDone, strideDone);
 
     /// STRIDE DONE
