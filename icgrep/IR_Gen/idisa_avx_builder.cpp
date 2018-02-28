@@ -28,11 +28,6 @@ Value * IDISA_AVX_Builder::hsimd_signmask(unsigned fw, Value * a) {
             Type * bitBlock_f32type = VectorType::get(getFloatTy(), mBitBlockWidth/32);
             Value * a_as_ps = CreateBitCast(a, bitBlock_f32type);
             return CreateCall(signmask_f32func, a_as_ps);
-        } else if (fw == 8) {
-            Value * signmask_f8func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_pmovmskb);
-            Type * bitBlock_i8type = VectorType::get(getInt8Ty(), mBitBlockWidth/8);
-            Value * a_as_ps = CreateBitCast(a, bitBlock_i8type);
-            return CreateCall(signmask_f8func, a_as_ps);
         }
     } else if (mBitBlockWidth == 512) {
         if (fw == 64) {
@@ -244,6 +239,20 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value *
         }
         return std::pair<Value *, Value *>{bitCast(carryOut), bitCast(result)};
     }
+}
+    
+Value * IDISA_AVX2_Builder::hsimd_signmask(unsigned fw, Value * a) {
+    // AVX2 special cases
+    if (mBitBlockWidth == 256) {
+        if (fw == 8) {
+            Value * signmask_f8func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_pmovmskb);
+            Type * bitBlock_i8type = VectorType::get(getInt8Ty(), mBitBlockWidth/8);
+            Value * a_as_ps = CreateBitCast(a, bitBlock_i8type);
+            return CreateCall(signmask_f8func, a_as_ps);
+        }
+    }
+    // Otherwise use default SSE logic.
+    return IDISA_AVX_Builder::hsimd_signmask(fw, a);
 }
 
 std::string IDISA_AVX512BW_Builder::getBuilderUniqueName() {

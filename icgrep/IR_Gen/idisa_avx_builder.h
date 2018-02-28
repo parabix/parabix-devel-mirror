@@ -46,6 +46,7 @@ public:
     llvm::Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, llvm::Value * a, llvm::Value * b) override;
     std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin) override;
     std::pair<llvm::Value *, llvm::Value *> bitblock_indexed_advance(llvm::Value * a, llvm::Value * index_strm, llvm::Value * shiftin, unsigned shift) override;
+    llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
 
     ~IDISA_AVX2_Builder() {}
 };
