@@ -46,11 +46,6 @@ namespace kernel {
         Value * itemsToDo = mAvailableItemCount[0];
 
         Value * sourceItemsAvail = mAvailableItemCount[1]; //TODO need to be calculated from numOfStrides
-//    kb->CallPrintInt("itemsToDo:", itemsToDo);
-//        kb->CallPrintInt("sourceItemsAvail:", sourceItemsAvail);
-//        kb->getProcessedItemCount("")
-//        kb->CallPrintInt("sourceItemsAvail2:", sourceItemsAvail2);
-
 
         Value * PDEPStrmPtr = kb->getInputStreamBlockPtr("PDEPmarkerStream", kb->getInt32(0)); // mStreamBufferPtr[0];
 
@@ -108,7 +103,8 @@ namespace kernel {
         }
 //    kb->CallPrintInt("total_count", total_count);
 //    kb->CallPrintInt("sourceItemsRemaining", sourceItemsRemaining);
-        kb->CreateCondBr(kb->CreateICmpULE(total_count, sourceItemsRemaining), processBlock, terminate);
+        // Do not check popcount in final block, since there may be some useless pdep marker in the end
+        kb->CreateCondBr(kb->CreateOr(kb->CreateICmpULE(total_count, sourceItemsRemaining), mIsFinal), processBlock, terminate);
         kb->SetInsertPoint(processBlock);
 
         // For each mask extracted from the PDEP marker block

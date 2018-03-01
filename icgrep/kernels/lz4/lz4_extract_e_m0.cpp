@@ -6,6 +6,8 @@
 #include <iostream>
 
 //#define APPLY_64PACK_ACCELERATION
+// TODO May be we can change it to 256 PACK Acceleration based on SIMD instruction
+
 #define ACCELERATION_LOOP_COUNT (20)
 
 using namespace llvm;
@@ -603,6 +605,13 @@ BasicBlock* LZ4ExtractEM0Kernel::generateHandleCompressedBlock(const std::unique
     // HandleM0Else
     iBuilder->SetInsertPoint(handleM0ElseBlock);
     this->advanceCursorUntilPos(iBuilder, "extender", iBuilder->getScalarField("offsetPos"));
+
+    // Store final M0 pos to make sure the bit stream will be long enough
+    Value* finalM0OutputPos = iBuilder->getScalarField("m0OutputPos");
+    this->generateStoreCircularOutput(iBuilder, "m0Start", iBuilder->getInt64Ty()->getPointerTo(), finalM0OutputPos);
+    this->generateStoreCircularOutput(iBuilder, "m0End", iBuilder->getInt64Ty()->getPointerTo(), finalM0OutputPos);
+    this->generateStoreCircularOutput(iBuilder, "matchOffset", iBuilder->getInt64Ty()->getPointerTo(), iBuilder->getInt64(0));
+
     iBuilder->CreateBr(compressedBlockLoopFinal);
 
     // final
