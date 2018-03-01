@@ -9,49 +9,56 @@ global lz4d_program_under_test
 
 failure_count = 0
 
+# TODO Only test extract-only and extract-and-deposit-only now
+test_options = [
+    ('extract_only', '-extract-only', {'extract_only' : True}),
+    ('extract_and_deposit', '-extract-and-deposit-only', {'extract_and_deposit_only': True}),
+    # ('normal', '', {}),
+]
+
+def run_test(test_file, lz4_option, python_lz4_option, test_file_full_path, output_file_full_path, python_output_file_full_path):
+    global failure_count
+    lz4d_cmd = "%s %s --thread-num=1 -segment-size=8 -f %s %s" % (
+    lz4d_program_under_test, lz4_option, test_file_full_path, output_file_full_path, )
+
+    if options.verbose:
+        print("Doing: " + lz4d_cmd)
+    try:
+        lz4d_out = subprocess.check_output(lz4d_cmd.encode('utf-8'), cwd=options.exec_dir, shell=True)
+    except subprocess.CalledProcessError as e:
+        lz4d_out = e.output
+
+    lz4Decoder = lz4d.LZ4Decoder()
+
+    lz4Decoder.decode(test_file_full_path, python_output_file_full_path, python_lz4_option)
+
+    with codecs.open(output_file_full_path, mode='rb') as inf:
+        output_content = inf.read()
+    with codecs.open(python_output_file_full_path, mode='rb') as inf:
+        expected_output_content = inf.read()
+
+    if output_content != expected_output_content:
+        print("Test failure: datafile {%s} option:{%s}" % (test_file, lz4_option))
+        failure_count += 1
+    else:
+        if options.verbose:
+            print("Test success: datafile {%s} option:{%s}" % (test_file, lz4_option))
+
+
 def run_tests(test_dir, output_dir, python_output_dir):
     global options
     global failure_count
 
     test_files = os.listdir(test_dir)
+
     for test_file in test_files:
         if test_file.endswith('.lz4'):
             output_file = test_file.replace('.lz4', '')
-
             test_file_full_path = os.path.join(test_dir, test_file)
-            output_file_full_path = os.path.join(output_dir, output_file)
-            python_output_file_full_path = os.path.join(python_output_dir, output_file)
-
-            # TODO Only test extract-only now
-            #-EnableCycleCounter --thread-num=1 -segment-size=8 -f /Users/wxy325/developer/lz4-dev/e.txt.lz4 /Users/wxy325/developer/lz4-dev/e_txt/parallel_e_d_test.txt
-            lz4d_cmd = "%s -extract-only --thread-num=1 -segment-size=8 -f %s %s" % (lz4d_program_under_test, test_file_full_path, output_file_full_path)
-
-            if options.verbose:
-                print("Doing: " + lz4d_cmd)
-
-            try:
-                lz4d_out = subprocess.check_output(lz4d_cmd.encode('utf-8'), cwd=options.exec_dir, shell=True)
-            except subprocess.CalledProcessError as e:
-                lz4d_out = e.output
-
-            lz4Decoder = lz4d.LZ4Decoder()
-            # lz4Decoder.decode(test_file_full_path, python_output_file_full_path, {'extract_only' : True})
-            lz4Decoder.decode(test_file_full_path, python_output_file_full_path, {'extract_only': True})
-            # lz4Decoder.decode(test_file_full_path, python_output_file_full_path, {})
-
-            # with codecs.open(output_file_full_path, encoding='utf-8', mode='r') as inf:
-            with codecs.open(output_file_full_path, mode='rb') as inf:
-                output_content = inf.read()
-            # with codecs.open(python_output_file_full_path, encoding='utf-8', mode='r') as inf:
-            with codecs.open(python_output_file_full_path, mode='rb') as inf:
-                expected_output_content = inf.read()
-
-            if output_content != expected_output_content:
-                print("Test failure: datafile {%s}" % test_file)
-                failure_count += 1
-            else:
-                if options.verbose:
-                    print("Test success: datafile {%s}" % test_file)
+            for test_opt in test_options:
+                output_file_full_path = os.path.join(output_dir, test_opt[0], output_file)
+                python_output_file_full_path = os.path.join(python_output_dir, test_opt[0], output_file)
+                run_test(test_file, test_opt[1], test_opt[2], test_file_full_path, output_file_full_path, python_output_file_full_path)
 
     if failure_count > 0:
         print("Test Failure")
@@ -92,11 +99,15 @@ if __name__ == '__main__':
     if os.path.exists(options.output_dir):
         shutil.rmtree(options.output_dir)
     os.mkdir(options.output_dir)
-
+    for opt in test_options:
+        os.mkdir(os.path.join(options.output_dir, opt[0]))
 
     if os.path.exists(options.python_output_dir):
         shutil.rmtree(options.python_output_dir)
+
     os.mkdir(options.python_output_dir)
+    for opt in test_options:
+        os.mkdir(os.path.join(options.python_output_dir, opt[0]))
 
     lz4d_program_under_test = args[0]
 
