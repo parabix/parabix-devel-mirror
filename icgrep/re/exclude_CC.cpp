@@ -66,7 +66,7 @@ RE * exclude_CC(RE * re, CC * cc) {
                     if (!intersects(cc0, cc)) return re;
                 }
                 std::string cc_name = n->getName() + "--" + cc->canonicalName();
-                return makeName(cc_name, n->getType(), exclude_CC(defn, cc));
+                return makeName(cc_name, Name::Type::Unicode, exclude_CC(defn, cc));
                 /*
                 return exclude_CC(defn, cc);
                 */

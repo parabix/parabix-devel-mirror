@@ -12,6 +12,7 @@
 #include <kernels/charclasses.h>
 #include <kernels/cc_kernel.h>
 #include <kernels/grep_kernel.h>
+#include <kernels/UCD_property_kernel.h>
 #include <kernels/grapheme_kernel.h>
 #include <kernels/linebreak_kernel.h>
 #include <kernels/streams_merge.h>
@@ -29,6 +30,7 @@
 #include <re/re_toolchain.h>
 #include <toolchain/toolchain.h>
 #include <re/re_name_resolve.h>
+#include <re/re_name_gather.h>
 #include <re/re_collect_unicodesets.h>
 #include <re/re_multiplex.h>
 #include <re/grapheme_clusters.h>
@@ -55,6 +57,7 @@ using namespace kernel;
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
 static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable experimental pablo transposition."));
 static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
+static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable Unicode property kernels."), cl::init(false));
 
 namespace grep {
 
@@ -114,7 +117,27 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     // TODO: until we automate stream buffer sizing, use this calculation to determine how large our matches buffer needs to be.
     const unsigned baseBufferSize = segmentSize * (MaxCountFlag > 0 ? (std::max(bufferSegments, calculateMaxCountRate(idb))) : bufferSegments);
     const unsigned encodingBits = 8;
-
+    
+    
+    //  Regular Expression Processing and Analysis Phase
+    const auto nREs = REs.size();
+    bool hasGCB[nREs];
+    bool anyGCB = false;
+    
+    std::set<re::Name *> UnicodeProperties;
+    
+    for(unsigned i = 0; i < nREs; ++i) {
+        REs[i] = resolveModesAndExternalSymbols(REs[i]);
+        REs[i] = excludeUnicodeLineBreak(REs[i]);
+        re::gatherUnicodeProperties(REs[i], UnicodeProperties);
+       //re::Name * unicodeLB = re::makeName("UTF8_LB", re::Name::Type::Unicode);
+        //unicodeLB->setDefinition(re::makeCC(0x0A));
+        //REs[i] = resolveAnchors(REs[i], unicodeLB);
+        REs[i] = regular_expression_passes(REs[i]);
+        hasGCB[i] = hasGraphemeClusterBoundary(REs[i]);
+        anyGCB |= hasGCB[i];
+    }
+    
     StreamSetBuffer * LineFeedStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
 
     #ifdef USE_DIRECT_LF_BUILDER
@@ -143,23 +166,46 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     StreamSetBuffer * RequiredStreams = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
     mGrepDriver->makeKernelCall(requiredStreamsK, {BasisBits, LineFeedStream}, {RequiredStreams, LineBreakStream});
 
-    const auto n = REs.size();
-    std::vector<StreamSetBuffer *> MatchResultsBufs(n);
-    for(unsigned i = 0; i < n; ++i) {
+    
+    std::map<std::string, StreamSetBuffer *> propertyStream;
+    if (PropertyKernels) {
+        for (auto p : UnicodeProperties) {
+            auto name = p->getFullName();
+            StreamSetBuffer * s = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+            propertyStream.emplace(std::make_pair(name, s));
+            kernel::Kernel * propertyK = mGrepDriver->addKernelInstance<kernel::UnicodePropertyKernelBuilder>(idb, p);
+            mGrepDriver->makeKernelCall(propertyK, {BasisBits}, {s});
+        }
+    }
+    StreamSetBuffer * GCB_stream = nullptr;
+    if (anyGCB) {
+        GCB_stream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+        kernel::Kernel * gcbK = mGrepDriver->addKernelInstance<kernel::GraphemeClusterBreakKernel>(idb);
+        mGrepDriver->makeKernelCall(gcbK, {BasisBits, RequiredStreams}, {GCB_stream});
+    }
+
+    std::vector<StreamSetBuffer *> MatchResultsBufs(nREs);
+    for(unsigned i = 0; i < nREs; ++i) {
         REs[i] = resolveModesAndExternalSymbols(REs[i]);
         REs[i] = excludeUnicodeLineBreak(REs[i]);
         //re::Name * unicodeLB = re::makeName("UTF8_LB", re::Name::Type::Unicode);
         //unicodeLB->setDefinition(re::makeCC(0x0A));
         //REs[i] = resolveAnchors(REs[i], unicodeLB);
         REs[i] = regular_expression_passes(REs[i]);
-        bool hasGCB = hasGraphemeClusterBoundary(REs[i]);
-        StreamSetBuffer * GCB_stream = nullptr;
         std::vector<std::string> externalStreamNames = std::vector<std::string>{"UTF8_LB", "UTF8_nonfinal"};
         std::vector<StreamSetBuffer *> icgrepInputSets = {BasisBits, LineBreakStream, RequiredStreams};
-        if (hasGCB) {
-            GCB_stream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
-            kernel::Kernel * gcbK = mGrepDriver->addKernelInstance<kernel::GraphemeClusterBreakKernel>(idb);
-            mGrepDriver->makeKernelCall(gcbK, {BasisBits, RequiredStreams}, {GCB_stream});
+        std::set<re::Name *> UnicodeProperties;
+        if (PropertyKernels) {
+            re::gatherUnicodeProperties(REs[i], UnicodeProperties);
+            for (auto p : UnicodeProperties) {
+                auto name = p->getFullName();
+                auto f = propertyStream.find(name);
+                if (f == propertyStream.end()) report_fatal_error(name + " not found\n");
+                externalStreamNames.push_back(name);
+                icgrepInputSets.push_back(f->second);
+            }
+        }
+        if (hasGCB[i]) {
             externalStreamNames.push_back("\\b{g}");
             icgrepInputSets.push_back(GCB_stream);
         }

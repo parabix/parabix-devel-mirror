@@ -20,58 +20,37 @@
 
 using namespace llvm;
 namespace re {
-struct NameGather {
-
-    void gather(RE * re) {
-        assert ("RE object cannot be null!" && re);
-        if (isa<Name>(re)) {
-            RE * defn = cast<Name>(re)->getDefinition();
-            if (defn == nullptr) {
-                mNameSet.emplace(cast<Name>(re));
-            }
-        } else if (isa<Seq>(re)) {
-            for (RE * item : *cast<Seq>(re)) {
-                gather(item);
-            }
-        } else if (isa<Alt>(re)) {
-            for (RE * item : *cast<Alt>(re)) {
-                gather(item);
-            }
-        } else if (isa<Rep>(re)) {
-            gather(cast<Rep>(re)->getRE());
-        } else if (isa<Assertion>(re)) {
-            gather(cast<Assertion>(re)->getAsserted());
-        } else if (Range * rg = dyn_cast<Range>(re)) {
-            gather(rg->getLo());
-            gather(rg->getHi());
-        } else if (isa<Diff>(re)) {
-            gather(cast<Diff>(re)->getLH());
-            gather(cast<Diff>(re)->getRH());
-        } else if (isa<Intersect>(re)) {
-            gather(cast<Intersect>(re)->getLH());
-            gather(cast<Intersect>(re)->getRH());
-        } else if (isa<Group>(re)) {
-            gather(cast<Group>(re)->getRE());
+    
+    
+void gatherUnicodeProperties (RE * re, std::set<Name *> & nameSet) {
+    if (isa<Name>(re)) {
+        if (cast<Name>(re)->getType() == Name::Type::UnicodeProperty) {
+            nameSet.emplace(cast<Name>(re));
         }
+    } else if (isa<Seq>(re)) {
+        for (RE * item : *cast<Seq>(re)) {
+            gatherUnicodeProperties(item, nameSet);
+        }
+    } else if (isa<Alt>(re)) {
+        for (RE * item : *cast<Alt>(re)) {
+            gatherUnicodeProperties(item, nameSet);
+        }
+    } else if (isa<Rep>(re)) {
+        gatherUnicodeProperties(cast<Rep>(re)->getRE(), nameSet);
+    } else if (isa<Assertion>(re)) {
+        gatherUnicodeProperties(cast<Assertion>(re)->getAsserted(), nameSet);
+    } else if (Range * rg = dyn_cast<Range>(re)) {
+        gatherUnicodeProperties(rg->getLo(), nameSet);
+        gatherUnicodeProperties(rg->getHi(), nameSet);
+    } else if (isa<Diff>(re)) {
+        gatherUnicodeProperties(cast<Diff>(re)->getLH(), nameSet);
+        gatherUnicodeProperties(cast<Diff>(re)->getRH(), nameSet);
+    } else if (isa<Intersect>(re)) {
+        gatherUnicodeProperties(cast<Intersect>(re)->getLH(), nameSet);
+        gatherUnicodeProperties(cast<Intersect>(re)->getRH(), nameSet);
+    } else if (isa<Group>(re)) {
+        gatherUnicodeProperties(cast<Group>(re)->getRE(), nameSet);
     }
-    NameGather(std::set<Name *> & nameSet)
-    : mNameSet(nameSet) {
-
-    }
-
-private:
-
-    std::set<Name *> &               mNameSet;
-
-};
-    
-std::set<Name *> gatherExternalNames(RE * re) {
-    std::set<Name *> nameSet;
-    
-    NameGather nameGather(nameSet);
-    nameGather.gather(re);
-    return nameSet;
-    
 }
 
 }

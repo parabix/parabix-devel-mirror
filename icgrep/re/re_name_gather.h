@@ -8,7 +8,7 @@ namespace re {
 
     class RE; class Name;
 
-    std::set<Name *> gatherExternalNames(RE * re);
+    void gatherUnicodeProperties (RE * r, std::set<Name *> & nameSet);
 
 }
 #endif

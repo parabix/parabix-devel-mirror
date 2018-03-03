@@ -31,6 +31,7 @@ public:
     std::string getNamespace() const;
     bool hasNamespace() const;
     std::string getName() const;
+    std::string getFullName() const;
     Type getType() const;
     RE * getDefinition() const;
     bool operator<(const Name & other) const;
@@ -86,7 +87,12 @@ inline bool Name::hasNamespace() const {
 inline std::string Name::getName() const {
     return std::string(mName, mNameLength);
 }
-    
+
+inline std::string Name::getFullName() const {
+    if (hasNamespace()) return getNamespace() + "=" + getName();
+    else return getName();
+}
+
 inline Name::Type Name::getType() const {
     return mType;
 }
