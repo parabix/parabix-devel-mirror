@@ -598,8 +598,8 @@ LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
     llvm::report_fatal_error(errmsg);
 }
 
-RE_Compiler::RE_Compiler(PabloKernel * kernel, cc::CC_Compiler & ccCompiler)
-: mEntryScope(kernel->getEntryScope())
+RE_Compiler::RE_Compiler(PabloBlock * scope, cc::CC_Compiler & ccCompiler)
+: mEntryScope(scope)
 , mCCCompiler(ccCompiler)
 , mLineBreak(nullptr)
 , mNonFinal(nullptr)

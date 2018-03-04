@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -13,8 +13,7 @@
 #include <vector>       // for vector<>::iterator
 namespace cc { class CC_Compiler; class Alphabet;}
 namespace pablo { class PabloAST; }
-namespace pablo { class PabloBuilder; }
-namespace pablo { class PabloKernel; }
+namespace pablo { class PabloBlock; }
 namespace pablo { class Var; }
 namespace re { class Alt; }
 namespace re { class Assertion; }
@@ -50,7 +49,7 @@ public:
         MarkerType & operator =(const MarkerType &) = default;
     };
 
-    RE_Compiler(pablo::PabloKernel * kernel, cc::CC_Compiler & ccCompiler);
+    RE_Compiler(pablo::PabloBlock * scope, cc::CC_Compiler & ccCompiler);
     
     //
     // The CCs (character classes) within a regular expression are generally
@@ -135,7 +134,6 @@ private:
     std::vector<cc::Alphabet *>                     mAlphabets;
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
 
-    bool                                            mCountOnly;
     cc::CC_Compiler &                               mCCCompiler;
     pablo::PabloAST *                               mLineBreak;
     pablo::PabloAST *                               mNonFinal;

@@ -226,7 +226,7 @@ std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuil
 void ICGrepKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
-    RE_Compiler re_compiler(this, ccc);
+    RE_Compiler re_compiler(getEntryScope(), ccc);
     for (auto & e : mExternals) {
         re_compiler.addPrecompiled(e, pb.createExtract(getInputStreamVar(e), pb.getInteger(0)));
     }
