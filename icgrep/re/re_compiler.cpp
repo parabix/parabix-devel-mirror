@@ -67,7 +67,7 @@ using MarkerType = RE_Compiler::MarkerType;
 PabloAST * RE_Compiler::compile(RE * const re, PabloAST * const initialCursors) {
     pablo::PabloBuilder mPB(mEntryScope);
     const auto markers = initialCursors ? compile(re, initialCursors, mPB) : compile(re, mPB);
-    return markerVar(AdvanceMarker(markers, FinalPostPositionUnit, mPB));
+    return markerVar(markers);
 }
 
 inline MarkerType RE_Compiler::compile(RE * const re, PabloAST * const cursors, PabloBuilder & pb) {
@@ -80,7 +80,7 @@ inline MarkerType RE_Compiler::compile(RE * const re, PabloAST * const cursors, 
     NameMap nestedMap(mCompiledName);
     mCompiledName = &nestedMap;
     auto nested = pb.createScope();
-    MarkerType m1 = process(re, makeMarker(FinalPostPositionUnit, cursors), nested);
+    MarkerType m1 = process(re, makeMarker(FinalMatchUnit, cursors), nested);
     nested.createAssign(m, markerVar(m1));
     pb.createIf(cursors, nested);
     mCompiledName = nestedMap.getParent();

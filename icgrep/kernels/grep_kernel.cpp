@@ -147,7 +147,7 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 {Binding{kb->getStreamSetTy(8), "basis"}, Binding{kb->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
 // output
 {Binding{kb->getStreamSetTy(1), "nonFinal", FixedRate()},
- Binding{kb->getStreamSetTy(1), "UnicodeLB", FixedRate(), Add1()}}) {
+ Binding{kb->getStreamSetTy(1), "UnicodeLB", FixedRate()}}) {
 
 }
 
@@ -307,7 +307,7 @@ void ByteBitGrepKernel::generatePabloMethod() {
     
     cc::Parabix_CC_Compiler ccc(scope1, basis);
     RE_Compiler re_compiler(scope1, ccc);
-    PabloAST * const matches = re_compiler.compile(mSuffixRE);
+    PabloAST * const matches = re_compiler.compile(mSuffixRE, prefixMatches);
     Var * const output = getOutputStreamVar("matches");
     pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
 }
@@ -321,8 +321,9 @@ void MatchedLinesKernel::generatePabloMethod() {
     PabloAST * lineBreaks = pb.createExtract(getInputStreamVar("lineBreaks"), pb.getInteger(0));
     PabloAST * notLB = pb.createNot(lineBreaks);
     PabloAST * match_follow = pb.createMatchStar(matchResults, notLB);
+    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(notLB, 1), "unterminatedLineAtEOF");
     Var * const matchedLines = getOutputStreamVar("matchedLines");
-    pb.createAssign(pb.createExtract(matchedLines, pb.getInteger(0)), pb.createAnd(match_follow, lineBreaks));
+    pb.createAssign(pb.createExtract(matchedLines, pb.getInteger(0)), pb.createAnd(match_follow, pb.createOr(lineBreaks, unterminatedLineAtEOF)));
 }
 
 MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
@@ -331,7 +332,7 @@ MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuil
 {Binding{iBuilder->getStreamSetTy(1), "matchResults"}
 ,Binding{iBuilder->getStreamSetTy(1), "lineBreaks"}},
 // output
-{Binding{iBuilder->getStreamSetTy(1), "matchedLines"}}) {
+{Binding{iBuilder->getStreamSetTy(1), "matchedLines", FixedRate(), Add1()}}) {
 
 }
 
