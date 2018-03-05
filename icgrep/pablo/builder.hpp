@@ -32,7 +32,7 @@ public:
     }
 
     PabloBuilder createScope() noexcept {
-        return PabloBuilder(&mPb->createScope(), this);
+        return PabloBuilder(mPb->createScope(), this);
     }
 
     Zeroes * createZeroes(llvm::Type * const type = nullptr) {
@@ -156,6 +156,19 @@ public:
     }
 
     PabloAST * createRepeat(not_null<Integer *> fieldWidth, PabloAST * value, const llvm::StringRef & prefix);
+    
+    PabloAST * createPackL(const int64_t fieldWidth, PabloAST * value) {
+        return createPackL(mPb->getInteger(fieldWidth), value);
+    }
+    
+    PabloAST * createPackH(const int64_t fieldWidth, PabloAST * value) {
+        return createPackH(mPb->getInteger(fieldWidth), value);
+    }
+    
+    PabloAST * createPackL(not_null<Integer *> fieldWidth, PabloAST * value);
+    
+    PabloAST * createPackH(not_null<Integer *> fieldWidth, PabloAST * value);
+
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2);
 

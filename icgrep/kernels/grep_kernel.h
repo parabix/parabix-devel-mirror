@@ -51,6 +51,25 @@ protected:
     std::vector<cc::Alphabet *> mAlphabets;
 };
 
+struct ByteBitGrepSignature {
+    ByteBitGrepSignature(re::RE * prefix, re::RE * suffix);
+protected:
+    re::RE * const  mPrefixRE;
+    re::RE * const  mSuffixRE;
+    std::string     mSignature;
+};
+
+    
+class ByteBitGrepKernel : public ByteBitGrepSignature, public pablo::PabloKernel {
+public:
+    ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const prefix, re::RE * const suffix, std::vector<std::string> externals = {});
+    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    bool isCachable() const override { return true; }
+protected:
+    void generatePabloMethod() override;
+    std::vector<std::string> mExternals;
+};
+
 class MatchedLinesKernel : public pablo::PabloKernel {
 public:
     MatchedLinesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder);

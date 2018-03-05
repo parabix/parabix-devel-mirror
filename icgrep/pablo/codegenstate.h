@@ -68,7 +68,7 @@ public:
         return false;
     }
 
-    PabloBlock & createScope() noexcept;
+    PabloBlock * createScope() noexcept;
 
     Advance * createAdvance(PabloAST * expr, Integer * shiftAmount) {
         return createAdvance(expr, shiftAmount, nullptr);

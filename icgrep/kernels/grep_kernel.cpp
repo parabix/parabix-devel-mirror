@@ -8,6 +8,7 @@
 #include <re/printer_re.h>
 #include <re/re_toolchain.h>
 #include <re/re_reverse.h>
+#include <pablo/codegenstate.h>
 #include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
 #include <pablo/builder.hpp>
@@ -17,6 +18,7 @@
 #include <pablo/boolean.h>
 #include <pablo/pe_count.h>
 #include <pablo/pe_matchstar.h>
+#include <pablo/pe_pack.h>
 #include <cc/cc_compiler.h>         // for CC_Compiler
 #include <cc/alphabet.h>
 #include <cc/multiplex_CCs.h>
@@ -238,6 +240,80 @@ void ICGrepKernel::generatePabloMethod() {
     Var * const output = getOutputStreamVar("matches");
     pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
 }
+
+// Helper to compute stream set inputs to pass into PabloKernel constructor.
+inline std::vector<Binding> byteBitGrepInputs(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                         const std::vector<std::string> & externals) {
+    std::vector<Binding> streamSetInputs = {
+        Binding{b->getStreamSetTy(1, 8), "bytedata"},
+    };
+    for (auto & e : externals) {
+        streamSetInputs.push_back(Binding{b->getStreamSetTy(1, 1), e});
+    }
+    return streamSetInputs;
+}
+
+
+ByteBitGrepSignature::ByteBitGrepSignature(RE * prefix, RE * suffix)
+: mPrefixRE(prefix)
+, mSuffixRE(suffix)
+, mSignature(Printer_RE::PrintRE(mPrefixRE) + Printer_RE::PrintRE(mSuffixRE) ) {
+    
+}
+
+ByteBitGrepKernel::ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const prefixRE, RE * const suffixRE, std::vector<std::string> externals)
+: ByteBitGrepSignature(prefixRE, suffixRE)
+, PabloKernel(b, "bBc" + sha1sum(mSignature),
+              // inputs
+              byteBitGrepInputs(b, externals),
+              // output
+{Binding{b->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}})
+, mExternals(externals) {
+}
+
+std::string ByteBitGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
+    return mSignature;
+}
+
+
+void ByteBitGrepKernel::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    PabloAST * u8bytes = pb.createExtract(getInput(0), pb.getInteger(0));
+    cc::Direct_CC_Compiler dcc(getEntryScope(), u8bytes);
+    RE_Compiler re_byte_compiler(getEntryScope(), dcc);
+    for (auto & e : mExternals) {
+        re_byte_compiler.addPrecompiled(e, pb.createExtract(getInputStreamVar(e), pb.getInteger(0)));
+    }
+    PabloAST * const prefixMatches = re_byte_compiler.compile(mPrefixRE);
+    
+    PabloBlock * scope1 = getEntryScope()->createScope();
+    pb.createIf(prefixMatches, scope1);
+    
+    PabloAST * nybbles[2];
+    nybbles[0] = scope1->createPackL(scope1->getInteger(8), u8bytes);
+    nybbles[1] = scope1->createPackH(scope1->getInteger(8), u8bytes);
+    
+    PabloAST * bitpairs[4];
+    for (unsigned i = 0; i < 2; i++) {
+        bitpairs[2*i] = scope1->createPackL(scope1->getInteger(4), nybbles[i]);
+        bitpairs[2*i + 1] = scope1->createPackH(scope1->getInteger(4), nybbles[i]);
+    }
+    
+    std::vector<PabloAST *> basis(8);
+    for (unsigned i = 0; i < 4; i++) {
+        basis[7-2*i] = scope1->createPackL(scope1->getInteger(2), bitpairs[i]);
+        basis[7-(2*i + 1)] = scope1->createPackH(scope1->getInteger(2), bitpairs[i]);
+    }
+    
+    cc::Parabix_CC_Compiler ccc(scope1, basis);
+    RE_Compiler re_compiler(scope1, ccc);
+    PabloAST * const matches = re_compiler.compile(mSuffixRE);
+    Var * const output = getOutputStreamVar("matches");
+    pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
+}
+
+
+
 
 void MatchedLinesKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());

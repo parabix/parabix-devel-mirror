@@ -252,8 +252,8 @@ IndexedAdvance * PabloBlock::createIndexedAdvance(PabloAST * expr, PabloAST * in
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief createScope
  ** ------------------------------------------------------------------------------------------------------------- */
-PabloBlock & PabloBlock::createScope() noexcept {
-    return *new (mAllocator) PabloBlock(mParent, mAllocator);
+PabloBlock * PabloBlock::createScope() noexcept {
+    return new (mAllocator) PabloBlock(mParent, mAllocator);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

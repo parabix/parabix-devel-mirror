@@ -149,6 +149,8 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::ScanThru:
             case PabloAST::ClassTypeId::MatchStar:
             case PabloAST::ClassTypeId::Assign:
+            case PabloAST::ClassTypeId::PackL:
+            case PabloAST::ClassTypeId::PackH:
             case PabloAST::ClassTypeId::Extract:
             case PabloAST::ClassTypeId::Repeat:
                 return mBinary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1));

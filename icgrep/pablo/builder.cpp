@@ -7,6 +7,7 @@
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_repeat.h>
+#include <pablo/pe_pack.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_count.h>
 #include <pablo/pe_integer.h>
@@ -213,6 +214,18 @@ PabloAST * PabloBuilder::createRepeat(not_null<Integer *> fieldWidth, PabloAST *
     MAKE_NAMED_BINARY(createRepeat, TypeId::Repeat, prefix, fieldWidth.get(), value);
     return result;
 }
+
+    
+PabloAST * PabloBuilder::createPackL(not_null<Integer *> fieldWidth, PabloAST * value) {
+    MAKE_BINARY(createPackL, TypeId::PackL, fieldWidth.get(), value);
+    return result;
+}
+
+PabloAST * PabloBuilder::createPackH(not_null<Integer *> fieldWidth, PabloAST * value) {
+    MAKE_BINARY(createPackH, TypeId::PackH, fieldWidth.get(), value);
+    return result;
+}
+
 
 PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
