@@ -164,7 +164,7 @@ bool RE_Nullable::isNullable(const RE * re) {
         }
     } else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
         return (re_rep->getLB() == 0) || isNullable(re_rep->getRE());
-    } else if (const Diff * diff = dyn_cast<const Diff>(re)) {
+    } else if (isa<Diff>(re)) {
         // a Diff of Seq({}) and an Assertion represents a complemented assertion.
         return false;
     } else if (const Intersect * e = dyn_cast<const Intersect>(re)) {

@@ -18,6 +18,7 @@
 #include <cc/multiplex_CCs.h>
 #include <limits.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
@@ -391,6 +392,59 @@ bool hasAssertion(const RE * re) {
     }
     else llvm_unreachable("Unknown RE type");
 }
+
+struct ByteTestComplexity {
+    
+    void gatherTests(RE * re);
+    
+    UCD::UnicodeSet equalityTests;
+    UCD::UnicodeSet lessThanTests;
+};
+
+void ByteTestComplexity::gatherTests(RE * re) {
+    if (CC * cc = dyn_cast<CC>(re)) {
+        if (cc->getAlphabet() != &cc::Byte) report_fatal_error("ByteTestComplexity: non Byte alphabet");
+        for (const auto range : *cc) {
+            const auto lo = re::lo_codepoint(range);
+            const auto hi = re::hi_codepoint(range);
+            if (lo == hi) {
+                equalityTests.insert(lo);
+            } else {
+                if (lo > 0) lessThanTests.insert(lo);
+                if (hi < 0xFF) lessThanTests.insert(hi+1);
+            }
+        }
+    } else if (const Name * n = dyn_cast<Name>(re)) {
+        gatherTests(n->getDefinition());
+    } else if (Alt * alt = dyn_cast<Alt>(re)) {
+        for (RE * item : *alt) {
+            gatherTests(item);
+        }
+    } else if (Seq * seq = dyn_cast<Seq>(re)) {
+        for (RE * item : *seq) {
+            gatherTests(item);
+        }
+    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
+        gatherTests(a->getAsserted());
+    } else if (Rep * rep = dyn_cast<Rep>(re)) {
+        gatherTests(rep->getRE());
+    } else if (Diff * diff = dyn_cast<Diff>(re)) {
+        gatherTests(diff->getLH());
+        gatherTests(diff->getRH());
+    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
+        gatherTests(e->getLH());
+        gatherTests(e->getRH());
+    } else if (Group * g = dyn_cast<Group>(re)) {
+        gatherTests(g->getRE());
+    }
+}
+
+size_t byteTestComplexity(RE * re) {
+    ByteTestComplexity btc_object;
+    btc_object.gatherTests(re);
+    return btc_object.equalityTests.count() + btc_object.lessThanTests.count();
+}
+
 
 void UndefinedNameError(const Name * n) {
     report_fatal_error("Error: Undefined name in regular expression: \"" + n->getName() + "\".");
