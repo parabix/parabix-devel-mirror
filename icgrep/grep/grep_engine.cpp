@@ -145,6 +145,7 @@ GrepEngine::GrepEngine() :
     mNextFileToGrep(0),
     mNextFileToPrint(0),
     grepMatchFound(false),
+    mGrepRecordBreak(GrepRecordBreakKind::Unicode),
     mMoveMatchesToEOL(true),
     mEngineThread(pthread_self()) {}
 
@@ -169,6 +170,11 @@ CountOnlyEngine::CountOnlyEngine() : GrepEngine() {
 EmitMatchesEngine::EmitMatchesEngine() : GrepEngine() {
     mFileSuffix = InitialTabFlag ? "\t:" : ":";
     if (LineRegexpFlag) mMoveMatchesToEOL = false;
+}
+
+    
+void GrepEngine::setRecordBreak(GrepRecordBreakKind b) {
+    mGrepRecordBreak = b;
 }
 
 void GrepEngine::initFileResult(std::vector<std::string> & filenames) {
@@ -203,25 +209,31 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     
     std::set<re::Name *> UnicodeProperties;
     
+    re::CC * breakCC = nullptr;
+    std::string breakName;
+    if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
+        breakCC = re::makeCC(re::makeCC(0x0A, 0x0D), re::makeCC(re::makeCC(0x85), re::makeCC(0x2028, 0x2029)));
+        breakName = "UTF8_LB";
+    } else if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
+        breakCC = re::makeByte(0);  // Null
+        breakName = "NULL";
+    } else {
+        breakCC = re::makeByte(0x0A); // LF
+        breakName = "LF";
+    }
+
     for(unsigned i = 0; i < nREs; ++i) {
         REs[i] = resolveModesAndExternalSymbols(REs[i]);
-        REs[i] = excludeUnicodeLineBreak(REs[i]);
+        REs[i] = re::exclude_CC(REs[i], breakCC);
+        if (mGrepRecordBreak != GrepRecordBreakKind::Unicode) {
+            REs[i] = resolveAnchors(REs[i], breakCC);
+        }
         re::gatherUnicodeProperties(REs[i], UnicodeProperties);
-       //re::Name * unicodeLB = re::makeName("UTF8_LB", re::Name::Type::Unicode);
-        //unicodeLB->setDefinition(re::makeCC(0x0A));
-        //REs[i] = resolveAnchors(REs[i], unicodeLB);
         REs[i] = regular_expression_passes(REs[i]);
         hasGCB[i] = hasGraphemeClusterBoundary(REs[i]);
         anyGCB |= hasGCB[i];
     }
     
-    StreamSetBuffer * LineFeedStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
-
-    #ifdef USE_DIRECT_LF_BUILDER
-    kernel::Kernel * linefeedK = mGrepDriver->addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(1, 8), "byteStream", FixedRate(), Principal()});
-    mGrepDriver->makeKernelCall(linefeedK, {ByteStream}, {LineFeedStream});
-    #endif
-
     StreamSetBuffer * BasisBits = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(encodingBits, 1), baseBufferSize);
     kernel::Kernel * s2pk = nullptr;
     if (PabloTransposition) {
@@ -232,17 +244,25 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     }
     mGrepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
-    #ifndef USE_DIRECT_LF_BUILDER
+    StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+    StreamSetBuffer * RequiredStreams = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+    StreamSetBuffer * UnicodeLB = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+
+    StreamSetBuffer * LineFeedStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
     kernel::Kernel * linefeedK = mGrepDriver->addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(8), "basis", FixedRate(), Principal()});
     mGrepDriver->makeKernelCall(linefeedK, {BasisBits}, {LineFeedStream});
-    #endif
-
-    StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
-
+    
     kernel::Kernel * requiredStreamsK = mGrepDriver->addKernelInstance<kernel::RequiredStreams_UTF8>(idb);
-    StreamSetBuffer * RequiredStreams = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
-    mGrepDriver->makeKernelCall(requiredStreamsK, {BasisBits, LineFeedStream}, {RequiredStreams, LineBreakStream});
+    mGrepDriver->makeKernelCall(requiredStreamsK, {BasisBits, LineFeedStream}, {RequiredStreams, UnicodeLB});
 
+    if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
+        LineBreakStream = LineFeedStream;
+    } else if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
+        kernel::Kernel * breakK = mGrepDriver->addKernelInstance<kernel::ParabixCharacterClassKernelBuilder>(idb, "Null", std::vector<re::CC *>{breakCC}, 8);
+        mGrepDriver->makeKernelCall(breakK, {BasisBits}, {LineBreakStream});
+    } else {
+        LineBreakStream = UnicodeLB;
+    }
     
     std::map<std::string, StreamSetBuffer *> propertyStream;
     if (PropertyKernels) {
@@ -263,12 +283,6 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
 
     std::vector<StreamSetBuffer *> MatchResultsBufs(nREs);
     for(unsigned i = 0; i < nREs; ++i) {
-        REs[i] = resolveModesAndExternalSymbols(REs[i]);
-        REs[i] = excludeUnicodeLineBreak(REs[i]);
-        //re::Name * unicodeLB = re::makeName("UTF8_LB", re::Name::Type::Unicode);
-        //unicodeLB->setDefinition(re::makeCC(0x0A));
-        //REs[i] = resolveAnchors(REs[i], unicodeLB);
-        REs[i] = regular_expression_passes(REs[i]);
         std::vector<std::string> externalStreamNames = std::vector<std::string>{"UTF8_LB", "UTF8_nonfinal"};
         std::vector<StreamSetBuffer *> icgrepInputSets = {BasisBits, LineBreakStream, RequiredStreams};
         std::set<re::Name *> UnicodeProperties;

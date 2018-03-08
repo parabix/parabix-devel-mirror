@@ -36,6 +36,7 @@ using namespace llvm;
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input file ...>"), cl::OneOrMore);
 
+static cl::opt<bool> UnixBreaks("Unix-line-breaks", cl::desc("Enable Unix line breaks"));
 static cl::opt<bool> ByteMode("enable-byte-mode", cl::desc("Process regular expressions in byte mode"));
 
 static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"));
@@ -196,6 +197,12 @@ int main(int argc, char *argv[]) {
         default: llvm_unreachable("Invalid grep mode!");
     }
                
+    if (UnixBreaks) {
+        grepEngine->setRecordBreak(grep::GrepRecordBreakKind::LF);
+    } else if (grep::NullDataFlag) {
+        grepEngine->setRecordBreak(grep::GrepRecordBreakKind::Null);
+    }
+    
     grepEngine->grepCodeGen(REs);
 
     grepEngine->initFileResult(allFiles);

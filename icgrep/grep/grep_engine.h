@@ -20,18 +20,21 @@ class Driver;
 
 
 namespace grep {
-    class MatchAccumulator {
-    public:
-        MatchAccumulator() {}
-        virtual void accumulate_match(const size_t lineNum, char * line_start, char * line_end) = 0;
-        virtual void finalize_match(char * buffer_end) {}  // default: no op
-    };
     
-    void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end);
-    
-    void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
-    
-    void grepBuffer(re::RE * pattern, const char * buffer, size_t bufferLength, MatchAccumulator * accum);
+enum class GrepRecordBreakKind {Null, LF, Unicode};
+
+class MatchAccumulator {
+public:
+    MatchAccumulator() {}
+    virtual void accumulate_match(const size_t lineNum, char * line_start, char * line_end) = 0;
+    virtual void finalize_match(char * buffer_end) {}  // default: no op
+};
+
+void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end);
+
+void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
+
+void grepBuffer(re::RE * pattern, const char * buffer, size_t bufferLength, MatchAccumulator * accum);
 
 class GrepEngine {
     enum class FileStatus {Pending, GrepComplete, PrintComplete};
@@ -40,6 +43,7 @@ public:
     GrepEngine();
     virtual ~GrepEngine();
     
+    void setRecordBreak(GrepRecordBreakKind b);
     void initFileResult(std::vector<std::string> & filenames);
     virtual void grepCodeGen(std::vector<re::RE *> REs);
     bool searchAllFiles();
@@ -60,6 +64,7 @@ protected:
     std::vector<std::ostringstream> mResultStrs;
     std::vector<FileStatus> mFileStatus;
     bool grepMatchFound;
+    GrepRecordBreakKind mGrepRecordBreak;
 
     std::unique_ptr<cc::MultiplexedAlphabet> mpx;
     std::string mFileSuffix;
