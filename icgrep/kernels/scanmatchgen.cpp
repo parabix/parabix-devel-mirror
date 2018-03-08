@@ -9,7 +9,7 @@
 #include <kernels/kernel_builder.h>
 #include <IR_Gen/FunctionTypeBuilder.h>
 #include <llvm/Support/raw_ostream.h>
-#include <grep_engine.h>
+#include <grep/grep_engine.h>
 
 using namespace llvm;
 

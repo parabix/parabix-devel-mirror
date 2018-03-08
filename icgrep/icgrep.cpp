@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014-7 International Characters.
+ *  Copyright (c) 2014-8 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -16,7 +16,7 @@
 #include <re/re_end.h>
 #include <re/re_parser.h>
 #include <re/re_utility.h>
-#include <grep_engine.h>
+#include <grep/grep_engine.h>
 #include <grep_interface.h>
 #include <fstream>
 #include <string>

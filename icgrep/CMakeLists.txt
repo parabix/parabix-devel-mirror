@@ -58,7 +58,7 @@ link_directories(${Boost_LIBRARY_DIR})
 
 SET(OBJECT_CACHE_SRC toolchain/object_cache.cpp)
 
-SET(GREP_CORE_SRC toolchain/grep_pipeline.cpp kernels/linebreak_kernel.cpp kernels/grep_kernel.cpp kernels/scanmatchgen.cpp )
+SET(GREP_CORE_SRC kernels/linebreak_kernel.cpp kernels/grep_kernel.cpp kernels/scanmatchgen.cpp )
 
 SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/pipeline.cpp)
 
@@ -96,8 +96,9 @@ add_library(PabloADT ${PABLO_SRC})
 add_library(CCADT re/re_re.cpp re/re_cc.cpp cc/cc_compiler.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp UCD/unicode_set.cpp)
 # RegExpADT is the core library for representing, parsing and printing regular expressions
 add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_range.cpp re/re_assertion.cpp re/printer_re.cpp re/re_parser_pcre.cpp re/re_parser_ere.cpp re/re_parser_bre.cpp re/re_parser_prosite.cpp re/parse_fixed_strings.cpp)
-add_library(RegExpCompiler re/casing.cpp re/to_utf8.cpp re/re_parser.cpp re/re_memoizer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/re_collect_unicodesets.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp ${GREP_CORE_SRC})
+add_library(RegExpCompiler re/casing.cpp re/to_utf8.cpp re/re_parser.cpp re/re_memoizer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/re_collect_unicodesets.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp)
 add_library(UCDlib UCD/CaseFolding.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp)
+add_library(GrepEngine  ${GREP_CORE_SRC} grep/grep_engine.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/streams_merge.cpp kernels/until_n.cpp kernels/UCD_property_kernel.cpp kernels/grapheme_kernel.cpp)
 
 # force the compiler to compile the object cache to ensure that the versioning information is up to date
 add_custom_target(RecompileObjectCache ALL touch ${CMAKE_CURRENT_SOURCE_DIR}/${OBJECT_CACHE_SRC})
@@ -108,10 +109,11 @@ target_link_libraries (CodeGen ${REQ_LLVM_LIBRARIES})
 target_link_libraries (PabloADT CodeGen)
 target_link_libraries (CCADT PabloADT)
 target_link_libraries (RegExpADT PabloADT CCADT)
-target_link_libraries (UCDlib RegExpCompiler RegExpADT PabloADT CCADT)
+target_link_libraries (UCDlib GrepEngine RegExpCompiler RegExpADT PabloADT CCADT)
 target_link_libraries (RegExpCompiler UCDlib CCADT RegExpADT)
+target_link_libraries (GrepEngine RegExpCompiler CodeGen)
 
-add_executable(icgrep icgrep.cpp grep_interface.cpp grep_engine.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp kernels/UCD_property_kernel.cpp kernels/grapheme_kernel.cpp)
+add_executable(icgrep icgrep.cpp grep_interface.cpp)
 add_executable(u8u16 u8u16.cpp)
 add_executable(base64 base64.cpp kernels/radix64.cpp)
 add_executable(wc wc.cpp)
@@ -125,7 +127,7 @@ add_executable(lz4d_ext_dep lz4d_ext_dep.cpp lz4FrameDecoder.cpp kernels/cc_kern
 #Exclude CoRE from default build.
 set_target_properties(core PROPERTIES EXCLUDE_FROM_ALL 1)
 
-target_link_libraries (icgrep UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (icgrep GrepEngine UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u8u16 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (base64 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (wc PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})

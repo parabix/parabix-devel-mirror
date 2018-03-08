@@ -439,7 +439,7 @@ void ByteTestComplexity::gatherTests(RE * re) {
     }
 }
 
-size_t byteTestComplexity(RE * re) {
+unsigned byteTestComplexity(RE * re) {
     ByteTestComplexity btc_object;
     btc_object.gatherTests(re);
     return btc_object.equalityTests.count() + btc_object.lessThanTests.count();

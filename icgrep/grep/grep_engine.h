@@ -7,7 +7,6 @@
 #define GREP_ENGINE_H
 #include <grep_interface.h>
 #include <kernels/streamset.h>
-#include <toolchain/grep_pipeline.h>
 #include <cc/multiplex_CCs.h>
 #include <string>
 #include <vector>
@@ -21,6 +20,18 @@ class Driver;
 
 
 namespace grep {
+    class MatchAccumulator {
+    public:
+        MatchAccumulator() {}
+        virtual void accumulate_match(const size_t lineNum, char * line_start, char * line_end) = 0;
+        virtual void finalize_match(char * buffer_end) {}  // default: no op
+    };
+    
+    void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end);
+    
+    void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
+    
+    void grepBuffer(re::RE * pattern, const char * buffer, size_t bufferLength, MatchAccumulator * accum);
 
 class GrepEngine {
     enum class FileStatus {Pending, GrepComplete, PrintComplete};

@@ -10,7 +10,7 @@
 #include <llvm/Support/Casting.h>
 #include <sstream>
 #include <llvm/Support/ErrorHandling.h>
-#include <toolchain/grep_pipeline.h>
+#include <grep/grep_engine.h>
 #include <util/aligned_allocator.h>
 #include <re/re_analysis.h>
 #include <re/re_cc.h>
