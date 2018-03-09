@@ -89,6 +89,12 @@ inline RE * makeNegativeBoundaryAssertion(RE * r) {
     return makeAssertion(r, Assertion::Kind::Boundary, Assertion::Sense::Negative);
 }
 
+// Start-of-text boundary assertion.
+RE * makeSOT();
+    
+// End-of-text boundary assertion.
+RE * makeEOT();
+    
 RE * expandBoundaryAssertion(RE * r);
 }
 

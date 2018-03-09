@@ -138,8 +138,8 @@ RE * generateGraphemeClusterBoundaryRule() {
     RE * GCB_Control_CR_LF = makeAlt({GCB_CR, GCB_LF});
     
     // Break at the start and end of text.
-    RE * GCB_1 = makeStart();
-    RE * GCB_2 = makeEnd();
+    RE * GCB_1 = makeSOT();
+    RE * GCB_2 = makeEOT();
     // Do not break between a CR and LF.
     RE * GCB_3 = makeSeq({Behind(GCB_CR), Ahead(GCB_LF)});
     // Otherwise, break before and after controls.

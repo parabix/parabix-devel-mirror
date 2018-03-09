@@ -5,6 +5,7 @@
  */
 
 #include "re_assertion.h"
+#include "re_cc.h"
 #include "re_seq.h"
 #include "re_alt.h"
 #include "re_nullable.h"
@@ -12,6 +13,14 @@
 using namespace llvm;
 
 namespace re {
+    
+RE * makeSOT () {
+    return makeNegativeLookBehindAssertion(makeByte(0x00,0xFF));
+}
+
+RE * makeEOT () {
+    return makeNegativeLookAheadAssertion(makeByte(0x00,0xFF));
+}
 
 RE * expandBoundaryAssertion (RE * re) {
     if (Assertion * a = dyn_cast<Assertion>(re)) {
