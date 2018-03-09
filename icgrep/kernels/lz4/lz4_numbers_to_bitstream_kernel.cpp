@@ -37,16 +37,13 @@ namespace kernel {
         Constant *SIZE_BIT_BLOCK_WIDTH = iBuilder->getSize(BIT_BLOCK_WIDTH);
 
 
-        size_t outputBufferSize = this->getAnyBufferSize(iBuilder, OUTPUT_BIT_STREAM_NAME) / iBuilder->getStride();
+        size_t outputBufferBlocks = this->getAnyBufferSize(iBuilder, OUTPUT_BIT_STREAM_NAME) / iBuilder->getStride();
         Value *outputRawBeginPtr = iBuilder->CreatePointerCast(
                 iBuilder->getRawOutputPointer(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO),
                 iBuilder->getBitBlockType()->getPointerTo());
         Value *outputCurrentPtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO);
-//        outputRawBeginPtr->getType()->print(outs());
-//        outputCurrentPtr->getType()->print(outs());
-
         Value *offset = iBuilder->CreatePtrDiff(outputCurrentPtr, outputRawBeginPtr);
-        Value *remainSpace = iBuilder->CreateSub(iBuilder->getSize(outputBufferSize), offset);
+        Value *remainSpace = iBuilder->CreateSub(iBuilder->getSize(outputBufferBlocks), offset);
 //        iBuilder->CallPrintInt("remainSpace",
 //                               remainSpace); //TODO workaround here, kernel infrastructure should provide the information about how much data we can produced
 

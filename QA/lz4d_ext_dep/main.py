@@ -9,11 +9,10 @@ global lz4d_program_under_test
 
 failure_count = 0
 
-# TODO Only test extract-only and extract-and-deposit-only now
 test_options = [
     ('extract_only', '-extract-only', {'extract_only' : True}),
     ('extract_and_deposit', '-extract-and-deposit-only', {'extract_and_deposit_only': True}),
-    # ('normal', '', {}),
+    ('normal', '', {}),
 ]
 
 def run_test(test_file, lz4_option, python_lz4_option, test_file_full_path, output_file_full_path, python_output_file_full_path):

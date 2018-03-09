@@ -22,8 +22,10 @@ namespace kernel {
 
         size_t getInputBufferSize(const std::unique_ptr<KernelBuilder> &iBuilder, std::string bufferName);
         size_t getOutputBufferSize(const std::unique_ptr<KernelBuilder> &iBuilder, std::string bufferName);
-        void generateOutputCopy(const std::unique_ptr<KernelBuilder> &iBuilder);
-        llvm::Value* generateMatchCopy(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value* currentProcessIndex);
+        void generateOutputCopy(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value* outputBlocks);
+
+        llvm::Value* getMaximumMatchCopyBlock(const std::unique_ptr<KernelBuilder> &iBuilder);
+        llvm::Value* mIsFinalBlock;
     };
 }
 

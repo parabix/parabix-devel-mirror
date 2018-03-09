@@ -340,7 +340,7 @@ int LZ4Generator::getInputBufferBlocks() {
 }
 
 int LZ4Generator::getDecompressedBufferBlocks() {
-    const unsigned decompressBufBlocks = 256U * 256U / codegen::BlockSize * 2 * 2;
+    const unsigned decompressBufBlocks = 256U * 256U / codegen::BlockSize * 2 * 2; // TODO at least *2 since we need to leave 1 for match copy window
     return decompressBufBlocks;
 }
 
