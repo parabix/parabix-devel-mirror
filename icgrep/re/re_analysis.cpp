@@ -154,7 +154,14 @@ bool isUnicodeUnitLength(const RE * re) {
         }
         return true;
     } else if (const Seq * seq = dyn_cast<Seq>(re)) {
-        return (seq->size() == 1) && isUnicodeUnitLength(&seq[0]);
+        bool unitLengthSeen = false;
+        for (const RE * e : *seq) {
+            if (isa<Assertion>(e)) continue;
+            else if (unitLengthSeen) return false;
+            else if (isUnicodeUnitLength(e)) unitLengthSeen = true;
+            else return false;
+        }
+        return unitLengthSeen;
     } else if (const Rep * rep = dyn_cast<Rep>(re)) {
         return (rep->getLB() == 1) && (rep->getUB() == 1) && isUnicodeUnitLength(rep->getRE());
     } else if (isa<Assertion>(re)) {
@@ -171,10 +178,10 @@ bool isUnicodeUnitLength(const RE * re) {
         // Eventually names might be set up for not unit length items.
         if (n->getType() == Name::Type::Unicode || n->getType() == Name::Type::UnicodeProperty) {
             return true;
-        } else if (n->getType() == Name::Type::Capture || n->getType() == Name::Type::Reference) {
-            return isUnicodeUnitLength(n->getDefinition());
+        } else if (n->getType() == Name::Type::ZeroWidth) {
+            return false;
         }
-        return false;
+        return isUnicodeUnitLength(n->getDefinition());
     }
     return false; // otherwise
 }
