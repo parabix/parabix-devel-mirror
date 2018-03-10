@@ -76,8 +76,9 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     
     pattern = resolveCaseInsensitiveMode(pattern, false);
     pattern = regular_expression_passes(pattern);
-    
-    
+    pattern = re::exclude_CC(pattern, re::makeByte(0x0A));
+    pattern = resolveAnchors(pattern, re::makeByte(0x0A));
+
     ParabixDriver pxDriver("codepointEngine");
     auto & idb = pxDriver.getBuilder();
     Module * M = idb->getModule();
@@ -213,21 +214,22 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     std::string breakName;
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         breakCC = re::makeCC(re::makeCC(0x0A, 0x0D), re::makeCC(re::makeCC(0x85), re::makeCC(0x2028, 0x2029)));
-        breakName = "UTF8_LB";
     } else if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
         breakCC = re::makeByte(0);  // Null
-        breakName = "NULL";
     } else {
         breakCC = re::makeByte(0x0A); // LF
-        breakName = "LF";
+    }
+    re::RE * anchorRE = breakCC;
+    if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
+        re::Name * anchorName = re::makeName("UTF8_LB", re::Name::Type::Unicode);
+        anchorName->setDefinition(UCD::UnicodeBreakRE());
+        anchorRE = anchorName;
     }
 
     for(unsigned i = 0; i < nREs; ++i) {
         REs[i] = resolveModesAndExternalSymbols(REs[i]);
         REs[i] = re::exclude_CC(REs[i], breakCC);
-        if (mGrepRecordBreak != GrepRecordBreakKind::Unicode) {
-            REs[i] = resolveAnchors(REs[i], breakCC);
-        }
+        REs[i] = resolveAnchors(REs[i], anchorRE);
         re::gatherUnicodeProperties(REs[i], UnicodeProperties);
         REs[i] = regular_expression_passes(REs[i]);
         hasGCB[i] = hasGraphemeClusterBoundary(REs[i]);

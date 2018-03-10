@@ -18,7 +18,8 @@
 #include <UCD/resolve_properties.h>
 #include <cc/alphabet.h>
 #include <boost/container/flat_set.hpp>
-#include <sstream>
+#include <llvm/Support/ErrorHandling.h>
+
 
 using namespace boost::container;
 using namespace llvm;
@@ -158,13 +159,19 @@ bool hasAnchor(const RE * re) {
     return false; // otherwise
 }
 
-RE * resolveAnchors(RE * r, RE * breakRE) {
+struct AnchorResolution {
+    RE * mAnchorRE;
+    bool mIsNegated;
+    RE * resolve(RE * r);
+};
+    
+RE * AnchorResolution::resolve(RE * r) {
     if (!hasAnchor(r)) return r;
     if (const Alt * alt = dyn_cast<Alt>(r)) {
         std::vector<RE *> list;
         list.reserve(alt->size());
         for (RE * item : *alt) {
-            item = resolveAnchors(item, breakRE);
+            item = resolve(item);
             list.push_back(item);
         }
         return makeAlt(list.begin(), list.end());
@@ -172,22 +179,45 @@ RE * resolveAnchors(RE * r, RE * breakRE) {
         std::vector<RE *> list;
         list.reserve(seq->size());
         for (RE * item : *seq) {
-            item = resolveAnchors(item, breakRE);
+            item = resolve(item);
             list.push_back(item);
         }
         return makeSeq(list.begin(), list.end());
     } else if (Assertion * a = dyn_cast<Assertion>(r)) {
-        return makeAssertion(resolveAnchors(a->getAsserted(), breakRE), a->getKind(), a->getSense());
+        return makeAssertion(resolve(a->getAsserted()), a->getKind(), a->getSense());
     } else if (Rep * rep = dyn_cast<Rep>(r)) {
-        return makeRep(resolveAnchors(rep->getRE(), breakRE), rep->getLB(), rep->getUB());
+        return makeRep(resolve(rep->getRE()), rep->getLB(), rep->getUB());
     } else if (Diff * diff = dyn_cast<Diff>(r)) {
-        return makeDiff(resolveAnchors(diff->getLH(), breakRE), resolveAnchors(diff->getRH(), breakRE));
+        return makeDiff(resolve(diff->getLH()), resolve(diff->getRH()));
     } else if (Intersect * e = dyn_cast<Intersect>(r)) {
-        return makeIntersect(resolveAnchors(e->getLH(), breakRE), resolveAnchors(e->getRH(), breakRE));
+        return makeIntersect(resolve(e->getLH()), resolve(e->getRH()));
     } else if (isa<Start>(r)) {
-        return makeAlt({r, makeLookBehindAssertion(breakRE)});
+        if (mIsNegated) return makeNegativeLookBehindAssertion(mAnchorRE);
+        else return makeAlt({makeSOT(),
+                             makeLookBehindAssertion(mAnchorRE)});
     } else if (isa<End>(r)) {
-        return makeAlt({r, makeLookAheadAssertion(breakRE)});
+        if (mIsNegated) return makeNegativeLookAheadAssertion(mAnchorRE);
+        else return makeAlt({makeEOT(),
+                             makeLookAheadAssertion(mAnchorRE)});
     }
 }
+
+RE * resolveAnchors(RE * r, RE * breakRE) {
+    AnchorResolution a;
+    if (const CC * cc = dyn_cast<CC>(breakRE)) {
+        a.mIsNegated = true;
+        if (cc->getAlphabet() == &cc::Unicode) {
+            a.mAnchorRE = makeDiff(makeCC(0, 0x10FFFF), breakRE);
+        } else if (cc->getAlphabet() == &cc::Byte) {
+            a.mAnchorRE = makeDiff(makeByte(0, 0xFF), breakRE);
+        } else {
+            llvm::report_fatal_error("resolveAnchors: unexpected alphabet " + cc->getAlphabet()->getName());
+        }
+    } else {
+        a.mIsNegated = false;
+        a.mAnchorRE = breakRE;
+    }
+    return a.resolve(r);
+}
+                                                        
 }

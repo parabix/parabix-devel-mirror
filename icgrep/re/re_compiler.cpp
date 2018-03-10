@@ -57,9 +57,6 @@ void RE_Compiler::addPrecompiled(std::string precompiledName, PabloAST * precomp
         mNonFinal = precompiledStream;
         mFinal = pb.createNot(precompiledStream);
     }
-    if (precompiledName == "UTF8_LB") {
-        mLineBreak = precompiledStream;
-    }
 }
 
 using MarkerType = RE_Compiler::MarkerType;
@@ -153,41 +150,38 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
 }
 
 inline MarkerType RE_Compiler::compileName(Name * const name, MarkerType marker, PabloBuilder & pb) {
+    if (name->getType() == Name::Type::Capture) {
+        return process(name->getDefinition(), marker, pb);
+    } else if (name->getType() == Name::Type::Reference) {
+        llvm::report_fatal_error("back references not supported in icgrep.");
+    }
     const auto & nameString = name->getName();
-    if (nameString == ".") {
-        return compileAny(marker, pb);
-    } else if (nameString == "^"){
-        return compileStart(marker, pb);
-    } else if (nameString == "$"){
-        return compileEnd(marker, pb);
-    } else if (isUnicodeUnitLength(name)) {
-        MarkerType nameMarker = compileName(name, pb);
+    MarkerType nameMarker = compileName(name, pb);
+    if (isUnicodeUnitLength(name)) {
         MarkerType nextPos = AdvanceMarker(marker, FinalPostPositionUnit, pb);
         nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
         return nameMarker;
     } else if (name->getType() == Name::Type::ZeroWidth) {
-        auto f = mExternalNameMap.find(nameString);
-        if (f != mExternalNameMap.end()) {
-            MarkerType z = makeMarker(FinalPostPositionUnit, f->second);
-            AlignMarkers(marker, z, pb);
-            PabloAST * ze = markerVar(z);
-            return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), ze, "zerowidth"));
-        }
-        RE * zerowidth = name->getDefinition();
-        MarkerType zero = compile(zerowidth, pb);
-        AlignMarkers(marker, zero, pb);
-        PabloAST * ze = markerVar(zero);
+        AlignMarkers(marker, nameMarker, pb);
+        PabloAST * ze = markerVar(nameMarker);
         return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), ze, "zerowidth"));
     } else {
-        return process(name->getDefinition(), marker, pb);
+        llvm::report_fatal_error(nameString + " is neither Unicode unit length nor ZeroWidth.");
     }
 }
 
 inline MarkerType RE_Compiler::compileName(Name * const name, PabloBuilder & pb) {
+    const auto & nameString = name->getName();
     MarkerType m;
     if (LLVM_LIKELY(mCompiledName->get(name, m))) {
         return m;
-    } else if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+    }
+    auto f = mExternalNameMap.find(nameString);
+    if (f != mExternalNameMap.end()) {
+        if (name->getType() == Name::Type::ZeroWidth) return makeMarker(FinalPostPositionUnit, f->second);
+        else return makeMarker(FinalMatchUnit, f->second);
+    }
+    if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
         m = compile(name->getDefinition(), pb);
         mCompiledName->add(name, m);
         return m;
@@ -568,7 +562,6 @@ inline MarkerType RE_Compiler::compileStart(MarkerType marker, pablo::PabloBuild
 inline MarkerType RE_Compiler::compileEnd(MarkerType marker, pablo::PabloBuilder & pb) {
     PabloAST * const nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
     PabloAST * const atEOL = pb.createAnd(mLineBreak, nextPos, "eol");
-    //PabloAST * const atEOL = pb.createOr(pb.createAnd(mLineBreak, nextPos), pb.createAdvance(pb.createAnd(nextPos, mCRLF), 1), "eol");
     return makeMarker(FinalPostPositionUnit, atEOL);
 }
 

@@ -103,6 +103,8 @@ RE * transformCCs(cc::MultiplexedAlphabet * mpx, RE * re) {
             RE * xfrm = transformCCs(mpx, name->getDefinition());
             if (name->getType() == Name::Type::ZeroWidth)
                 re = makeZeroWidth(name->getName(), xfrm);
+            else if (name->getType() == Name::Type::Capture)
+                re = makeCapture(name->getName(), xfrm);
             else
                 re = makeName(name->getName(), xfrm);
         } else {
