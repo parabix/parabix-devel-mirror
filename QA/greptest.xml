@@ -370,10 +370,10 @@ alshat@emirates.net.ae
 <datafile id = "CRLF">line with CRLF &#13;&#10;two lines with LFCR &#10;&#13;final line 
 </datafile>
 
-<grepcase regexp="^$" datafile="CRLF" grepcount="1"/>
-<grepcase regexp="^$" datafile="CRLF" flags="-v" grepcount="3"/>
-<grepcase regexp="^.*$" datafile="CRLF" grepcount="4"/>
-<grepcase regexp="" datafile="CRLF" grepcount="4"/>
+<grepcase regexp="^$" datafile="CRLF" flags="-Unicode-lines" grepcount="1"/>
+<grepcase regexp="^$" datafile="CRLF" flags="-v -Unicode-lines" grepcount="3"/>
+<grepcase regexp="^.*$" datafile="CRLF" flags="-Unicode-lines" grepcount="4"/>
+<grepcase regexp="" datafile="CRLF" flags="-Unicode-lines" grepcount="4"/>
 
  <datafile id = "LU_test">
 The following line has LATIN CAPITAL LETTER G WITH MACRON in single quotes.
@@ -583,16 +583,17 @@ LS1&#x2028;LS2&#x2028;LS3&#x2028;PS1&#x2029;PS2&#x2029;PS3&#x2029;&#x2003;
 PS4&#x2029;CRLF4&#13;&#10;LS4&#x2028;LS5&#x2028;CRLF5&#13;&#10;LS6&#x2028;&#x2003;
 Unterminated</datafile>
 
-<grepcase regexp="^.*$" datafile="LineBreaking" grepcount="19"/>
-<grepcase regexp="^\X*$" datafile="LineBreaking" grepcount="19"/>
-<grepcase regexp="(?g)^.*$" datafile="LineBreaking" grepcount="19"/>
-<grepcase regexp="Unterminated$" datafile="LineBreaking" grepcount="1"/>
-<grepcase regexp="^CRLF.$" datafile="LineBreaking" grepcount="5"/>
-<grepcase regexp="LS[0-9]*" datafile="LineBreaking" grepcount="6"/>
-<grepcase regexp="PS" datafile="LineBreaking" grepcount="4"/>
-<grepcase regexp="\S" datafile="LineBreaking" grepcount="16"/>
-<grepcase regexp="$" datafile="LineBreaking" grepcount="19"/>
-<grepcase regexp="\p{ascii}" datafile="LineBreaking" grepcount="16"/>
+<grepcase regexp="^.*$" datafile="LineBreaking" flags="-Unicode-lines" grepcount="19"/>
+<grepcase regexp="^\X*$" datafile="LineBreaking" flags="-Unicode-lines" grepcount="19"/>
+<grepcase regexp="(?g)^.*$" datafile="LineBreaking" flags="-Unicode-lines" grepcount="19"/>
+<grepcase regexp="Unterminated$" datafile="LineBreaking" flags="-Unicode-lines" grepcount="1"/>
+<grepcase regexp="^CRLF.$" datafile="LineBreaking" flags="-Unicode-lines" grepcount="5"/>
+<grepcase regexp="LS[0-9]*" datafile="LineBreaking" flags="-Unicode-lines" grepcount="6"/>
+<grepcase regexp="PS" datafile="LineBreaking" flags="-Unicode-lines" grepcount="4"/>
+<grepcase regexp="\S" datafile="LineBreaking" flags="-Unicode-lines" grepcount="16"/>
+<grepcase regexp="$" datafile="LineBreaking" flags="-Unicode-lines" grepcount="19"/>
+<grepcase regexp="$" datafile="LineBreaking" grepcount="9"/>
+<grepcase regexp="\p{ascii}" datafile="LineBreaking" flags="-Unicode-lines" grepcount="16"/>
 
 <grepcase regexp="[a-z]{20}" datafile="4KiB-onepage" grepcount="77"/>
 <grepcase regexp="[a-z]{15}" datafile="4KiB-onepage" grepcount="78"/>
@@ -815,7 +816,7 @@ Unterminated</datafile>
 &#x0646;&#x200D;&#x0020;
 </datafile>
 
-<grepcase regexp="^\X$" datafile="graphemebreaktest" grepcount="55"/>
+<grepcase regexp="^\X$" datafile="graphemebreaktest" flags="-Unicode-lines" grepcount="55"/>
 <!--<grepcase regexp="^\X\X$" datafile="graphemebreaktest" grepcount="153"/>
 <grepcase regexp="^\X{3}$" datafile="graphemebreaktest" grepcount="2"/>-->
 <grepcase regexp="^\X{4,}$" datafile="graphemebreaktest" grepcount="0"/>
@@ -853,6 +854,7 @@ Unterminated</datafile>
 <grepcase regexp="(?:\p{greek}\p{greek}\p{greek})" datafile="upper_lower_greek" grepcount="3"/>
 
 <grepcase regexp="\p{name=/AIRPLANE/}" datafile="../All_good" flags="-enable-object-cache=0 -enable-segment-pipeline-parallel" grepcount="8"/>
-<grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" grepcount="5"/>
+<grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" flags="-Unicode-lines" grepcount="5"/>
+<grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" flags="-Unicode-lines=0" grepcount="6"/>
 <grepcase regexp="[\N{GREEK CAPITAL LETTER ALPHA}-\N{Greek capital letter UPSILON with DIALYTIKA}]" datafile="../All_good" grepcount="27"/>
 </greptest>

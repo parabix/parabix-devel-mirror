@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
@@ -134,11 +134,11 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     //
     it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
     pb.createAssign(nonFinal, pb.createOr(nonFinal, CRLF));
-    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1), "unterminatedLineAtEOF");
+    //PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1), "unterminatedLineAtEOF");
     
     Var * const required = getOutputStreamVar("nonFinal");
     pb.createAssign(pb.createExtract(required, pb.getInteger(0)), nonFinal);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("UnicodeLB"), pb.getInteger(0)), pb.createOr(LineBreak, unterminatedLineAtEOF, "EOL"));
+    pb.createAssign(pb.createExtract(getOutputStreamVar("UnicodeLB"), pb.getInteger(0)), LineBreak);//pb.createOr(LineBreak, unterminatedLineAtEOF, "EOL"));
 }
 
 RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb)

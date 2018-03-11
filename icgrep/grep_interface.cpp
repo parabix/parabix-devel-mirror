@@ -91,6 +91,9 @@ bool NullDataFlag;
 static cl::opt<bool, true> NullDataOption("z", cl::location(NullDataFlag), cl::desc("Use the NUL character (codepoint 00) as the line-break character for input."), cl::cat(Input_Options), cl::Grouping);
 static cl::alias NullDataAlias("null-data", cl::desc("Alias for -z"), cl::aliasopt(NullDataOption));
 
+bool UnicodeLinesFlag;
+static cl::opt<bool, true> UnicodeLinesOption("Unicode-lines", cl::location(UnicodeLinesFlag), cl::desc("Enable Unicode line breaks (LF/VT/FF/CR/NEL/LS/PS/CRLF)"), cl::cat(Input_Options));
+
 bool MmapFlag;
 static cl::opt<bool, true> MmapOption("mmap", cl::location(MmapFlag), cl::desc("Use mmap for file input."), cl::cat(Input_Options));
 

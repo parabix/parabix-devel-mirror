@@ -85,7 +85,7 @@ inline MarkerType RE_Compiler::compile(RE * const re, PabloAST * const cursors, 
 }
 
 inline MarkerType RE_Compiler::compile(RE * const re, PabloBuilder & pb) {
-    return process(re, makeMarker(FinalPostPositionUnit, pb.createOnes()), pb);
+    return process(re, makeMarker(InitialPostPositionUnit, pb.createOnes()), pb);
 }
     
 MarkerType RE_Compiler::process(RE * const re, MarkerType marker, PabloBuilder & pb) {

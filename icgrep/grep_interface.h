@@ -49,7 +49,10 @@ extern bool DereferenceRecursiveFlag; // -R
 extern bool TextFlag; // -a
 extern bool BinaryFlag; // -U
 extern bool NullDataFlag; // -z
+extern bool UnicodeLinesFlag; // -Unicode-lines
+
 extern bool MmapFlag; // -mmap
+
 extern std::string ExcludeFlag; // -exclude
 extern std::string ExcludeFromFlag; // -exclude-from
 extern std::string ExcludeDirFlag; // -exclude-dir

@@ -146,7 +146,7 @@ GrepEngine::GrepEngine() :
     mNextFileToGrep(0),
     mNextFileToPrint(0),
     grepMatchFound(false),
-    mGrepRecordBreak(GrepRecordBreakKind::Unicode),
+    mGrepRecordBreak(GrepRecordBreakKind::LF),
     mMoveMatchesToEOL(true),
     mEngineThread(pthread_self()) {}
 
