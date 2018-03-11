@@ -129,7 +129,7 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
         if (marker.pos == FinalMatchUnit) {
             nextPos = pb.createAdvance(nextPos, 1);
         }
-        return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, mCCCompiler.compileCC(cc, pb)));
+        return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, pb.createInFile(mCCCompiler.compileCC(cc, pb))));
     } else if (a == &cc::Unicode) {
         MarkerType m = compile(toUTF8(cc), pb);
         nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
@@ -265,6 +265,16 @@ MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker,
             return makeMarker(FinalPostPositionUnit, pb.createAnd(markerVar(fbyte), boundaryCond, "boundary"));
         }
         else UnsupportedRE("Unsupported boundary assertion");
+    } else if (isByteLength(asserted)) {
+        MarkerType lookahead = compile(asserted, pb);
+        if (LLVM_LIKELY(markerPos(lookahead) == FinalMatchUnit)) {
+            PabloAST * la = markerVar(lookahead);
+            if (a->getSense() == Assertion::Sense::Negative) {
+                la = pb.createNot(la);
+            }
+            MarkerType fbyte = AdvanceMarker(marker, InitialPostPositionUnit, pb);
+            return makeMarker(InitialPostPositionUnit, pb.createAnd(markerVar(fbyte), la, "lookahead"));
+        }
     } else if (isUnicodeUnitLength(asserted)) {
         MarkerType lookahead = compile(asserted, pb);
         if (LLVM_LIKELY(markerPos(lookahead) == FinalMatchUnit)) {

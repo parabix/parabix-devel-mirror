@@ -114,7 +114,14 @@ bool isByteLength(const RE * re) {
         }
         return true;
     } else if (const Seq * seq = dyn_cast<Seq>(re)) {
-        return (seq->size() == 1) && isByteLength(&seq[0]);
+        bool byteLengthSeen = false;
+        for (const RE * e : *seq) {
+            if (isa<Assertion>(e)) continue;
+            else if (byteLengthSeen) return false;
+            else if (isByteLength(e)) byteLengthSeen = true;
+            else return false;
+        }
+        return byteLengthSeen;
     } else if (const Rep * rep = dyn_cast<Rep>(re)) {
         return (rep->getLB() == 1) && (rep->getUB() == 1) && isByteLength(rep->getRE());
     } else if (const Diff * diff = dyn_cast<Diff>(re)) {
