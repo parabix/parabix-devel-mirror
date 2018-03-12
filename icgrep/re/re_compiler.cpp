@@ -28,6 +28,7 @@
 #include <re/re_toolchain.h>        // for AlgorithmOptionIsSet, RE_Algorith...
 #include <cc/alphabet.h>
 #include <cc/cc_compiler.h>
+#include <UCD/ucd_compiler.hpp>
 #include "pablo/builder.hpp"        // for PabloBuilder
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <llvm/Support/raw_ostream.h>
@@ -53,10 +54,6 @@ void RE_Compiler::addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST *> b
 void RE_Compiler::addPrecompiled(std::string precompiledName, PabloAST * precompiledStream) {
     PabloBuilder pb(mEntryScope);
     mExternalNameMap.insert(std::make_pair(precompiledName, precompiledStream));
-    if (precompiledName == "UTF8_nonfinal") {
-        mNonFinal = precompiledStream;
-        mFinal = pb.createNot(precompiledStream);
-    }
 }
 
 using MarkerType = RE_Compiler::MarkerType;
@@ -239,7 +236,7 @@ MarkerType RE_Compiler::compileAlt(Alt * const alt, const MarkerType base, Pablo
     if (isa<Zeroes>(accum[FinalPostPositionUnit])) {
         return makeMarker(InitialPostPositionUnit, combine);
     }
-    combine = pb.createOr(pb.createOr(pb.createAnd(combine, mFinal), pb.createScanThru(pb.createAnd(mNonFinal, combine), mNonFinal)), accum[FinalPostPositionUnit], "alt");
+    combine = pb.createOr(pb.createOr(pb.createAnd(combine, u8Final(pb)), pb.createScanThru(pb.createAnd(u8NonFinal(pb), combine), u8NonFinal(pb))), accum[FinalPostPositionUnit], "alt");
     return makeMarker(FinalPostPositionUnit, combine);
 }
 
@@ -403,9 +400,9 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
         }
         else if (isUnicodeUnitLength(repeated)) {
             PabloAST * cc = markerVar(compile(repeated, pb));
-            PabloAST * cc_lb = consecutive_matches(cc, 1, lb, mFinal, pb);
+            PabloAST * cc_lb = consecutive_matches(cc, 1, lb, u8Final(pb), pb);
             const auto pos = markerPos(marker) == FinalMatchUnit ? lb : lb - 1;
-            PabloAST * marker_fwd = pb.createIndexedAdvance(markerVar(marker), mFinal, pos);
+            PabloAST * marker_fwd = pb.createIndexedAdvance(markerVar(marker), u8Final(pb), pos);
             return makeMarker(FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
         else if (isTypeForLocal(repeated)) {
@@ -466,16 +463,16 @@ MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Mar
             PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask);
             // MatchStar deposits any cursors on the post position. However those cursors may may land on the initial "byte" of a
             // "multi-byte" character. Combine the masked range with any nonFinals.
-            PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, mNonFinal), "bounded");
+            PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, u8NonFinal(pb)), "bounded");
             return makeMarker(FinalPostPositionUnit, bounded);
         }
         else if (isUnicodeUnitLength(repeated)) {
-            // For a regexp which represent a single Unicode codepoint, we can use the mFinal stream
+            // For a regexp which represent a single Unicode codepoint, we can use the u8Final(pb) stream
             // as an index stream for an indexed advance operation.
             PabloAST * cursor = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
-            PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, mFinal, pb);
+            PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, u8Final(pb), pb);
             PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask, "masked");
-            PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, mNonFinal), "bounded");
+            PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, u8NonFinal(pb)), "bounded");
             return makeMarker(FinalPostPositionUnit, bounded);
         }
         else if (isTypeForLocal(repeated)) {
@@ -485,7 +482,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Mar
                 PabloAST * cursor = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
                 PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, firstCCstream, pb);
                 PabloAST * masked = pb.createAnd(markerVar(AdvanceMarker(compile(repeated, pb), FinalPostPositionUnit, pb)), upperLimitMask, "masked");
-                PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, mNonFinal), "bounded");
+                PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, u8NonFinal(pb)), "bounded");
                 return makeMarker(FinalPostPositionUnit, bounded);
             }
         }
@@ -518,14 +515,14 @@ MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType mark
     if (isByteLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar))) {
         PabloAST * mask = markerVar(compile(repeated, pb));
         // The post position character may land on the initial byte of a multi-byte character. Combine them with the masked range.
-        mask = pb.createOr(mask, mNonFinal);
+        mask = pb.createOr(mask, u8NonFinal(pb));
         PabloAST * unbounded = pb.createMatchStar(base, mask, "unbounded");
         return makeMarker(FinalPostPositionUnit, unbounded);
     } else if (isUnicodeUnitLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar) && !AlgorithmOptionIsSet(DisableUnicodeMatchStar))) {
         PabloAST * mask = markerVar(compile(repeated, pb));
-        mask = pb.createOr(mask, mNonFinal);
+        mask = pb.createOr(mask, u8NonFinal(pb));
         PabloAST * unbounded = pb.createMatchStar(base, mask);
-        return makeMarker(FinalPostPositionUnit, pb.createAnd(unbounded, mFinal, "unbounded"));
+        return makeMarker(FinalPostPositionUnit, pb.createAnd(unbounded, u8Final(pb), "unbounded"));
     } else if (mStarDepth > 0){
         PabloBuilder * const outer = pb.getParent();
         Var * starPending = outer->createVar("pending", outer->createZeroes());
@@ -582,7 +579,7 @@ inline MarkerType RE_Compiler::AdvanceMarker(MarkerType marker, const MarkerPosi
             marker.pos = InitialPostPositionUnit;
         }
         if (newpos == FinalPostPositionUnit) {
-            marker.stream = pb.createOr(pb.createAnd(marker.stream, mFinal), pb.createScanThru(pb.createAnd(mNonFinal, marker.stream), mNonFinal, "fpp"));
+            marker.stream = pb.createOr(pb.createAnd(marker.stream, u8Final(pb)), pb.createScanThru(pb.createAnd(u8NonFinal(pb), marker.stream), u8NonFinal(pb), "fpp"));
             marker.pos = FinalPostPositionUnit;
         }
     }
@@ -596,6 +593,25 @@ inline void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBui
         m2 = AdvanceMarker(m2, m1.pos, pb);
     }
 }
+
+pablo::PabloAST * RE_Compiler::u8NonFinal(pablo::PabloBuilder & pb) {
+    MarkerType m;
+    auto f = mExternalNameMap.find("UTF8_nonfinal");
+    if (f!= mExternalNameMap.end()) {
+        return f->second;
+    }
+    if (LLVM_LIKELY(mCompiledName->get(mNonFinalName, m))) {
+        return markerVar(m);
+    }
+    m = compile(mNonFinalName->getDefinition(), pb);
+    mCompiledName->add(mNonFinalName, m);
+    return markerVar(m);
+}
+
+pablo::PabloAST * RE_Compiler::u8Final(pablo::PabloBuilder & pb) {
+    return pb.createNot(u8NonFinal(pb));
+}
+
     
 LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
     llvm::report_fatal_error(errmsg);
@@ -605,15 +621,14 @@ RE_Compiler::RE_Compiler(PabloBlock * scope, cc::CC_Compiler & ccCompiler)
 : mEntryScope(scope)
 , mCCCompiler(ccCompiler)
 , mLineBreak(nullptr)
-, mNonFinal(nullptr)
-, mFinal(nullptr)
 , mWhileTest(nullptr)
 , mStarDepth(0)
 , mCompiledName(&mBaseMap) {
     PabloBuilder pb(mEntryScope);
     mLineBreak = pb.createZeroes();  // default so "^/$" matches start/end of text only
-    mNonFinal = pb.createZeroes();
-    mFinal = pb.createOnes();
+    mNonFinalName = makeName("u8NonFinal", makeAlt({makeByte(0xC0, 0xFF), 
+                               makeSeq({makeByte(0xE0, 0xFF), makeByte(0x00, 0xFF)}),
+                               makeSeq({makeByte(0xF0, 0xFF), makeByte(0x00, 0xFF), makeByte(0x00, 0xFF)})}));
 }
 
 } // end of namespace re

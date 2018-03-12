@@ -123,6 +123,9 @@ private:
 
     MarkerType AdvanceMarker(MarkerType marker, const MarkerPosition newpos, pablo::PabloBuilder & pb);
     void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBuilder & pb);
+    
+    pablo::PabloAST * u8NonFinal(pablo::PabloBuilder & pb);
+    pablo::PabloAST * u8Final(pablo::PabloBuilder & pb);
 
     static inline MarkerPosition markerPos(const MarkerType & m) {return m.pos; }
     static inline pablo::PabloAST * markerVar(const MarkerType & m) {return m.stream; }
@@ -136,8 +139,7 @@ private:
 
     cc::CC_Compiler &                               mCCCompiler;
     pablo::PabloAST *                               mLineBreak;
-    pablo::PabloAST *                               mNonFinal;
-    pablo::PabloAST *                               mFinal;
+    re::Name *                                      mNonFinalName;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
     NameMap *                                       mCompiledName;
