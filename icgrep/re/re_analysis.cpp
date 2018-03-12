@@ -13,6 +13,7 @@
 #include <re/re_assertion.h>
 #include <re/re_group.h>
 #include <re/re_nullable.h>
+#include <re/to_utf8.h>
 #include <re/printer_re.h>
 #include <cc/alphabet.h>
 #include <cc/multiplex_CCs.h>
@@ -413,19 +414,38 @@ struct ByteTestComplexity {
     
     UCD::UnicodeSet equalityTests;
     UCD::UnicodeSet lessThanTests;
+    unsigned testCount;
+    unsigned testLimit;
 };
 
 void ByteTestComplexity::gatherTests(RE * re) {
     if (CC * cc = dyn_cast<CC>(re)) {
-        if (cc->getAlphabet() != &cc::Byte) report_fatal_error("ByteTestComplexity: non Byte alphabet");
-        for (const auto range : *cc) {
-            const auto lo = re::lo_codepoint(range);
-            const auto hi = re::hi_codepoint(range);
-            if (lo == hi) {
-                equalityTests.insert(lo);
-            } else {
-                if (lo > 0) lessThanTests.insert(lo);
-                if (hi < 0xFF) lessThanTests.insert(hi+1);
+        if (cc->getAlphabet() == &cc::Unicode) {
+            gatherTests(toUTF8(re));
+        } else {
+            for (const auto range : *cc) {
+                const auto lo = re::lo_codepoint(range);
+                const auto hi = re::hi_codepoint(range);
+                if (lo == hi) {
+                    if (!equalityTests.contains(lo)) {
+                        equalityTests.insert(lo);
+                        testCount++;
+                    }
+                } else {
+                    if (lo > 0) {
+                        if (!lessThanTests.contains(lo)) {
+                            lessThanTests.insert(lo);
+                            testCount++;
+                        }
+                    }
+                    if (hi < 0xFF) {
+                        if (!lessThanTests.contains(hi+1)) {
+                            lessThanTests.insert(hi+1);
+                            testCount++;
+                        }
+                    }
+                }
+                if (testCount > testLimit) return;
             }
         }
     } else if (const Name * n = dyn_cast<Name>(re)) {
@@ -453,10 +473,12 @@ void ByteTestComplexity::gatherTests(RE * re) {
     }
 }
 
-unsigned byteTestComplexity(RE * re) {
+bool byteTestsWithinLimit(RE * re, unsigned limit) {
     ByteTestComplexity btc_object;
+    btc_object.testCount = 0;
+    btc_object.testLimit = limit;
     btc_object.gatherTests(re);
-    return btc_object.equalityTests.count() + btc_object.lessThanTests.count();
+    return btc_object.testCount <= btc_object.testLimit;
 }
 
 

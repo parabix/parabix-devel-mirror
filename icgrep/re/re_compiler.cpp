@@ -626,9 +626,9 @@ RE_Compiler::RE_Compiler(PabloBlock * scope, cc::CC_Compiler & ccCompiler)
 , mCompiledName(&mBaseMap) {
     PabloBuilder pb(mEntryScope);
     mLineBreak = pb.createZeroes();  // default so "^/$" matches start/end of text only
-    mNonFinalName = makeName("u8NonFinal", makeAlt({makeByte(0xC0, 0xFF), 
-                               makeSeq({makeByte(0xE0, 0xFF), makeByte(0x00, 0xFF)}),
-                               makeSeq({makeByte(0xF0, 0xFF), makeByte(0x00, 0xFF), makeByte(0x00, 0xFF)})}));
+    mNonFinalName = makeName("u8NonFinal", makeAlt({makeByte(0xC2, 0xF4),
+                               makeSeq({makeByte(0xE0, 0xF4), makeByte(0x80, 0xBF)}),
+                               makeSeq({makeByte(0xF0, 0xF4), makeByte(0x80, 0xBF), makeByte(0x80, 0xBF)})}));
 }
 
 } // end of namespace re

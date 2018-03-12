@@ -7,6 +7,7 @@
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
 #include <kernels/kernel_builder.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace cc;
 using namespace kernel;
@@ -22,7 +23,7 @@ DirectCharacterClassKernelBuilder::DirectCharacterClassKernelBuilder(
               {}, {}, {})
 , mCharClasses(charClasses)
 , mCodeUnitSize(codeUnitSize) {
-
+    if (codeUnitSize > 4) errs() << "codeUnitsize of " << codeUnitSize << " too large!\n";
 }
 
 void DirectCharacterClassKernelBuilder::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {

@@ -13,6 +13,24 @@ namespace cc { class Alphabet; }
 namespace kernel {
 
     
+class UnicodeNonFinalKernel : public pablo::PabloKernel {
+public:
+    UnicodeNonFinalKernel(const std::unique_ptr<kernel::KernelBuilder> & kb);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
+class UnicodeLineBreakKernel : public pablo::PabloKernel {
+public:
+    UnicodeLineBreakKernel(const std::unique_ptr<kernel::KernelBuilder> & kb);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
 class RequiredStreams_UTF8 : public pablo::PabloKernel {
 public:
     RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb);
@@ -51,6 +69,24 @@ protected:
     std::vector<cc::Alphabet *> mAlphabets;
 };
 
+struct ByteGrepSignature {
+    ByteGrepSignature(re::RE * re);
+protected:
+    re::RE * const  mRE;
+    std::string     mSignature;
+};
+
+
+class ByteGrepKernel : public ByteGrepSignature, public pablo::PabloKernel {
+public:
+    ByteGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re, std::vector<std::string> externals = {});
+    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    bool isCachable() const override { return true; }
+protected:
+    void generatePabloMethod() override;
+    std::vector<std::string> mExternals;
+};
+    
 struct ByteBitGrepSignature {
     ByteBitGrepSignature(re::RE * prefix, re::RE * suffix);
 protected:

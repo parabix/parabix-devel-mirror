@@ -29,7 +29,7 @@ bool isTypeForLocal(const RE * re);
     
 bool hasAssertion(const RE * re);
     
-unsigned byteTestComplexity(RE * re);
+bool byteTestsWithinLimit(RE * re, unsigned limit);
     
 void UndefinedNameError (const Name * n);
 }

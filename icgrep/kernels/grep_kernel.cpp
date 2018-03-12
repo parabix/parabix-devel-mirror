@@ -6,6 +6,8 @@
 #include "grep_kernel.h"
 #include <boost/uuid/sha1.hpp>
 #include <re/printer_re.h>
+#include <re/re_cc.h>
+#include <re/re_name.h>
 #include <re/re_toolchain.h>
 #include <re/re_reverse.h>
 #include <pablo/codegenstate.h>
@@ -23,6 +25,7 @@
 #include <cc/alphabet.h>
 #include <cc/multiplex_CCs.h>
 #include <re/re_compiler.h>
+#include <UCD/ucd_compiler.hpp>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace kernel;
@@ -39,6 +42,38 @@ inline static std::string sha1sum(const std::string & str) {
     snprintf(buffer, sizeof(buffer), "%.8x%.8x%.8x%.8x%.8x",
              digest[0], digest[1], digest[2], digest[3], digest[4]);
     return std::string(buffer);
+}
+
+
+UnicodeLineBreakKernel::UnicodeLineBreakKernel(const std::unique_ptr<kernel::KernelBuilder> & kb)
+: PabloKernel(kb,
+              "UTF8_LB",
+              {Binding{kb->getStreamSetTy(8), "basis"}, Binding{kb->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
+              {Binding{kb->getStreamSetTy(1, 1), "UTF8_LB", FixedRate()}}) {
+}
+
+void UnicodeLineBreakKernel::generatePabloMethod() {
+        PabloBuilder pb(getEntryScope());
+        cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
+        UCD::UCDCompiler ucdCompiler(ccc);
+    
+    Name * breakChars = re::makeName("breakChars", makeCC(makeCC(makeCC(0x0A, 0x0D), makeCC(0x85)), makeCC(0x2028,0x2029)));
+    UCD::UCDCompiler::NameMap nameMap;
+    nameMap.emplace(breakChars, nullptr);
+    ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
+    auto f = nameMap.find(breakChars);
+    if (f == nameMap.end()) llvm::report_fatal_error("UnicodeLineBreakKernel compilation failure");
+    PabloAST * breakStream = f-> second;
+    PabloAST * const LF = pb.createExtract(getInput(1), pb.getInteger(0), "LF");
+    PabloAST * const CR = ccc.compileCC(makeByte(0x0D));
+    Var * const CR_before_LF = pb.createVar("CR_before_LFCR_before_LF", pb.createZeroes());
+    auto crb = pb.createScope();
+    pb.createIf(CR, crb);
+    PabloAST * const lookaheadLF = crb.createLookahead(LF, 1, "lookaheadLF");
+    crb.createAssign(CR_before_LF, crb.createAnd(CR, lookaheadLF));
+    breakStream = pb.createXor(breakStream, CR_before_LF);  // Remove CR_before_LF from breakStream
+    Var * const UTF8_LB = getOutputStreamVar("UTF8_LB");
+    pb.createAssign(pb.createExtract(UTF8_LB, pb.getInteger(0)), breakStream);
 }
 
 void RequiredStreams_UTF8::generatePabloMethod() {
@@ -241,9 +276,47 @@ void ICGrepKernel::generatePabloMethod() {
     pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
 }
 
+
+ByteGrepSignature::ByteGrepSignature(RE * re)
+: mRE(re)
+, mSignature(Printer_RE::PrintRE(re) ) {
+}
+
+ByteGrepKernel::ByteGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<std::string> externals)
+: ByteGrepSignature(re)
+, PabloKernel(b, "bBc" + sha1sum(mSignature),
+              // inputs
+{Binding{b->getStreamSetTy(1, 8), "byteData"}},
+              // output
+{Binding{b->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}})
+, mExternals(externals) {
+    for (auto & e : externals) {
+        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(1, 1), e});
+    }
+}
+
+std::string ByteGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
+    return mSignature;
+}
+
+
+void ByteGrepKernel::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    PabloAST * u8bytes = pb.createExtract(getInput(0), pb.getInteger(0));
+    cc::Direct_CC_Compiler dcc(getEntryScope(), u8bytes);
+    RE_Compiler re_byte_compiler(getEntryScope(), dcc);
+    for (auto & e : mExternals) {
+        re_byte_compiler.addPrecompiled(e, pb.createExtract(getInputStreamVar(e), pb.getInteger(0)));
+    }
+    PabloAST * const matches = re_byte_compiler.compile(mRE);
+    
+    Var * const output = getOutputStreamVar("matches");
+    pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
+}
+
 // Helper to compute stream set inputs to pass into PabloKernel constructor.
 inline std::vector<Binding> byteBitGrepInputs(const std::unique_ptr<kernel::KernelBuilder> & b,
-                                         const std::vector<std::string> & externals) {
+                                              const std::vector<std::string> & externals) {
     std::vector<Binding> streamSetInputs = {
         Binding{b->getStreamSetTy(1, 8), "bytedata"},
     };
@@ -253,12 +326,10 @@ inline std::vector<Binding> byteBitGrepInputs(const std::unique_ptr<kernel::Kern
     return streamSetInputs;
 }
 
-
 ByteBitGrepSignature::ByteBitGrepSignature(RE * prefix, RE * suffix)
 : mPrefixRE(prefix)
 , mSuffixRE(suffix)
 , mSignature(Printer_RE::PrintRE(mPrefixRE) + Printer_RE::PrintRE(mSuffixRE) ) {
-    
 }
 
 ByteBitGrepKernel::ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const prefixRE, RE * const suffixRE, std::vector<std::string> externals)
