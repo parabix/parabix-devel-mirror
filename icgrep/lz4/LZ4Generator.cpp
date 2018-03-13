@@ -28,6 +28,7 @@
 #include <kernels/pdep_kernel.h>
 #include <kernels/lz4/lz4_multiple_pdep_kernel.h>
 #include <kernels/lz4/lz4_match_copy_kernel.h>
+#include <kernels/lz4/lz4_swizzled_match_copy_kernel.h>
 
 namespace re { class CC; }
 
@@ -136,8 +137,7 @@ void LZ4Generator::generatePipeline(const std::string& outputFile) {
     this->generateMainFunc(iBuilder);
 
     StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
-    StreamSetBuffer * const FinalDecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
-
+//    StreamSetBuffer * const FinalDecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
 
 
     // GeneratePipeline
@@ -146,16 +146,26 @@ void LZ4Generator::generatePipeline(const std::string& outputFile) {
 
     auto swizzle = this->generateSwizzleExtractData(iBuilder);
 
+    //TODO buffer blocks should be decompressedBufferBlocks
     StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
     StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
     Kernel * multiplePdepK = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 2, 4);
     pxDriver.makeKernelCall(multiplePdepK, {DepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
 
+
+    StreamSetBuffer * matchCopiedSwizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+
+    Kernel * swizzledMatchCopyK = pxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
+    pxDriver.makeKernelCall(swizzledMatchCopyK, {M0_Start, M0_End, Match_Offset, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
+
+
     // Produce unswizzled bit streams
     StreamSetBuffer * extractedbits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
     Kernel * unSwizzleK = pxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
-    pxDriver.makeKernelCall(unSwizzleK, {depositedSwizzle0, depositedSwizzle1}, {extractedbits});
+    pxDriver.makeKernelCall(unSwizzleK, {matchCopiedSwizzle0, matchCopiedSwizzle1}, {extractedbits});
+//    pxDriver.makeKernelCall(unSwizzleK, {depositedSwizzle0, depositedSwizzle1}, {extractedbits});
 
 //    pxDriver.makeKernelCall(unSwizzleK, {u16Swizzle0, u16Swizzle1}, {extractedbits});
 
@@ -164,14 +174,15 @@ void LZ4Generator::generatePipeline(const std::string& outputFile) {
     Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(iBuilder);
     pxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
 
-    Kernel * matchCopyK = pxDriver.addKernelInstance<LZ4MatchCopyKernel>(iBuilder);
-    pxDriver.makeKernelCall(matchCopyK, {DecompressedByteStream, M0_Start, M0_End, Match_Offset}, {FinalDecompressedByteStream});
+//    Kernel * matchCopyK = pxDriver.addKernelInstance<LZ4MatchCopyKernel>(iBuilder);
+//    pxDriver.makeKernelCall(matchCopyK, {DecompressedByteStream, M0_Start, M0_End, Match_Offset}, {FinalDecompressedByteStream});
 
     // --------------------------------------------------------
     // End
     Kernel * outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 8);
     outK->setInitialArguments({iBuilder->GetString(outputFile)});
-    pxDriver.makeKernelCall(outK, {FinalDecompressedByteStream}, {});
+    pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
+//    pxDriver.makeKernelCall(outK, {FinalDecompressedByteStream}, {});
 
     pxDriver.generatePipelineIR();
     pxDriver.deallocateBuffers();
@@ -340,7 +351,10 @@ int LZ4Generator::getInputBufferBlocks() {
 }
 
 int LZ4Generator::getDecompressedBufferBlocks() {
-    const unsigned decompressBufBlocks = 256U * 256U / codegen::BlockSize * 2 * 2; // TODO at least *2 since we need to leave 1 for match copy window
+    const unsigned copyBackWindowBlocks = 256U * 256U / codegen::BlockSize;
+    // At least * 2 since we need to leave 1 window as source of match copy,
+    // while the other window as the destination for match copy
+    const unsigned decompressBufBlocks = copyBackWindowBlocks * 2;
     return decompressBufBlocks;
 }
 
