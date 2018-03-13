@@ -129,7 +129,13 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
         return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, pb.createInFile(mCCCompiler.compileCC(cc, pb))));
     } else if (a == &cc::Unicode) {
         MarkerType m = compile(toUTF8(cc), pb);
-        nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
+        if (isByteLength(cc)) {
+            if (marker.pos == FinalMatchUnit) {
+                nextPos = pb.createAdvance(nextPos, 1);
+            }
+        } else {
+            nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
+        }
         return makeMarker(FinalMatchUnit, pb.createAnd(markerVar(m), nextPos));
     } else {
         if (isByteLength(cc)) {
