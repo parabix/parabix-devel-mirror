@@ -356,7 +356,7 @@ void ByteBitGrepKernel::generatePabloMethod() {
         re_byte_compiler.addPrecompiled(e, pb.createExtract(getInputStreamVar(e), pb.getInteger(0)));
     }
     PabloAST * const prefixMatches = re_byte_compiler.compile(mPrefixRE);
-    
+    Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
     PabloBlock * scope1 = getEntryScope()->createScope();
     pb.createIf(prefixMatches, scope1);
     
@@ -372,18 +372,19 @@ void ByteBitGrepKernel::generatePabloMethod() {
     
     std::vector<PabloAST *> basis(8);
     for (unsigned i = 0; i < 4; i++) {
+        // The subtraction 7-bit is because of the confusion between
+        // little-endian and big-endian bit numbering of bytes.
+        // We should fix this, switching to little-endian numbering throughout.
         basis[7-2*i] = scope1->createPackL(scope1->getInteger(2), bitpairs[i]);
         basis[7-(2*i + 1)] = scope1->createPackH(scope1->getInteger(2), bitpairs[i]);
     }
     
     cc::Parabix_CC_Compiler ccc(scope1, basis);
     RE_Compiler re_compiler(scope1, ccc);
-    PabloAST * const matches = re_compiler.compile(mSuffixRE, prefixMatches);
+    scope1->createAssign(final_matches, re_compiler.compile(mSuffixRE, prefixMatches));
     Var * const output = getOutputStreamVar("matches");
-    pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
+    pb.createAssign(pb.createExtract(output, pb.getInteger(0)), final_matches);
 }
-
-
 
 
 void MatchedLinesKernel::generatePabloMethod() {

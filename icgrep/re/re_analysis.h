@@ -31,6 +31,9 @@ bool hasAssertion(const RE * re);
     
 bool byteTestsWithinLimit(RE * re, unsigned limit);
     
+bool hasTriCCwithinLimit(RE * r, unsigned byteCClimit, RE * & prefixRE, RE * & suffixRE);
+
+    
 void UndefinedNameError (const Name * n);
 }
 

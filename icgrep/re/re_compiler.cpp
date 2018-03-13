@@ -289,7 +289,7 @@ MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker,
             return makeMarker(FinalPostPositionUnit, pb.createAnd(markerVar(fbyte), la, "lookahead"));
         }
     }
-    UnsupportedRE("Unsupported lookahead assertion.");
+    UnsupportedRE("Unsupported lookahead assertion:" + Printer_RE::PrintRE(a));
 }
 
 inline bool alignedUnicodeLength(const RE * const lh, const RE * const rh) {

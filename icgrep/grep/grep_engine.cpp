@@ -61,6 +61,10 @@ static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable exp
 static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
 static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable Unicode property kernels."), cl::init(false));
 
+const unsigned DefaultByteCClimit = 6;
+
+static cl::opt<unsigned> ByteCClimit("byte-CC-limit", cl::desc("Max number of CCs for byte CC pipeline."), cl::init(DefaultByteCClimit));
+
 
 namespace grep {
     
@@ -195,7 +199,7 @@ unsigned LLVM_READNONE calculateMaxCountRate(const std::unique_ptr<kernel::Kerne
     const unsigned packSize = b->getSizeTy()->getBitWidth();
     return (packSize * packSize) / b->getBitBlockWidth();
 }
-
+    
 std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::vector<re::RE *> & REs, StreamSetBuffer * ByteStream) {
     auto & idb = mGrepDriver->getBuilder();
     const unsigned segmentSize = codegen::SegmentSize;
@@ -241,14 +245,27 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(std::ve
     StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
     std::vector<StreamSetBuffer *> MatchResultsBufs(nREs);
     
+    re::RE * prefixRE;
+    re::RE * suffixRE;
     // For simple regular expressions with a small number of characters, we
     // can bypass transposition and use the Direct CC compiler.
-    if ((nREs == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) && (!anyGCB) && byteTestsWithinLimit(REs[0], 6)) {
+    bool isSimple = (nREs == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) && (!anyGCB);
+    if (isSimple) {
+        REs[0] = toUTF8(REs[0]);
+    }
+    if (isSimple && byteTestsWithinLimit(REs[0], ByteCClimit)) {
         StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
         kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ByteGrepKernel>(idb, REs[0]);
         mGrepDriver->makeKernelCall(icgrepK, {ByteStream}, {MatchResults});
         MatchResultsBufs[0] = MatchResults;
-        kernel::Kernel * breakK = mGrepDriver->addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(idb, "Null", std::vector<re::CC *>{breakCC}, 1);
+        kernel::Kernel * breakK = mGrepDriver->addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(idb, "breakCC", std::vector<re::CC *>{breakCC}, 1);
+        mGrepDriver->makeKernelCall(breakK, {ByteStream}, {LineBreakStream});
+    } else if (isSimple && hasTriCCwithinLimit(REs[0], ByteCClimit, prefixRE, suffixRE)) {
+        StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+        kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ByteBitGrepKernel>(idb, prefixRE, suffixRE);
+        mGrepDriver->makeKernelCall(icgrepK, {ByteStream}, {MatchResults});
+        MatchResultsBufs[0] = MatchResults;
+        kernel::Kernel * breakK = mGrepDriver->addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(idb, "breakCC", std::vector<re::CC *>{breakCC}, 1);
         mGrepDriver->makeKernelCall(breakK, {ByteStream}, {LineBreakStream});
     } else {
         StreamSetBuffer * BasisBits = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(encodingBits, 1), baseBufferSize);

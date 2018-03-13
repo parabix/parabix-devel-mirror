@@ -481,6 +481,18 @@ bool byteTestsWithinLimit(RE * re, unsigned limit) {
     return btc_object.testCount <= btc_object.testLimit;
 }
 
+bool hasTriCCwithinLimit(RE * r, unsigned byteCClimit, RE * & prefixRE, RE * & suffixRE) {
+    if (Seq * seq = dyn_cast<Seq>(r)) {
+        if (seq->size() < 4) return false;
+        prefixRE = makeSeq(seq->begin(), seq->begin()+3);
+        if (byteTestsWithinLimit(prefixRE, byteCClimit)) {
+            suffixRE = makeSeq(seq->begin()+3, seq->end());
+            return true;
+        }
+        return false;
+    }
+    return false;
+}
 
 void UndefinedNameError(const Name * n) {
     report_fatal_error("Error: Undefined name in regular expression: \"" + n->getName() + "\".");

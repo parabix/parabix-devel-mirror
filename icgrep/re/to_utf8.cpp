@@ -7,6 +7,7 @@
 #include <re/to_utf8.h>
 #include <UCD/unicode_set.h>
 #include <UCD/UTF.h>
+#include <cc/alphabet.h>
 #include <re/re_name.h>
 #include <re/re_start.h>
 #include <re/re_end.h>
@@ -65,6 +66,7 @@ RE * toUTF8(RE * r) {
     if (isa<Name>(r) || isa<Start>(r) || isa<End>(r)) {
         return r;
     } else if (const CC * cc = dyn_cast<CC>(r)) {
+        if (cc->getAlphabet() != &cc::Unicode) return r;
         std::vector<RE *> alt;
         for (const interval_t & i : *cc) {
             alt.push_back(rangeToUTF8(lo_codepoint(i), hi_codepoint(i)));
