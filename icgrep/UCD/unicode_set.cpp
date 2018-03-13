@@ -23,6 +23,9 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
 #include <llvm/ADT/SmallVector.h>
+#ifndef NDEBUG
+#include <llvm/Support/ErrorHandling.h>
+#endif
 
 namespace UCD {
 
@@ -48,7 +51,7 @@ SlabAllocator<> UnicodeSet::GlobalAllocator;
 const auto QUAD_BITS = (8 * sizeof(bitquad_t));
 const auto QUAD_LIMIT = (QUAD_BITS - 1);
 const auto UNICODE_QUAD_COUNT = (UNICODE_MAX + 1) / QUAD_BITS;
-const bitquad_t FULL_QUAD_MASK = ~static_cast<bitquad_t>(0);
+const auto FULL_QUAD_MASK = std::numeric_limits<bitquad_t>::max();
 
 inline run_type_t typeOf(const run_t & run) {
     return run.first;
@@ -115,7 +118,7 @@ inline void append_quad(const bitquad_t quad, QuadVector & quads, RunVector & ru
     run_type_t type = Empty;
     if (LLVM_UNLIKELY(quad == 0)) {
         type = Empty;
-    } else if (LLVM_UNLIKELY(~quad == 0)) {
+    } else if (LLVM_UNLIKELY(quad == FULL_QUAD_MASK)) {
         type = Full;
     } else {
         quads.emplace_back(quad);
@@ -136,12 +139,12 @@ inline bool verify(const run_t * const runs, const uint32_t runLength, const bit
     for (unsigned i = 0; i < runLength; ++i) {
         const auto type = typeOf(runs[i]);
         if (LLVM_UNLIKELY(type != Empty && type != Mixed && type != Full)) {
-            llvm::errs() << "illegal run type " << type << " found\n";
+            report_fatal_error("illegal run type " + std::to_string(type) + " found");
             return false;
         }
         const auto l = lengthOf(runs[i]);
         if (LLVM_UNLIKELY(l == 0)) {
-            llvm::errs() << "zero-length quad found\n";
+            report_fatal_error("zero-length quad found");
             return false;
         }
         if (type == Mixed) {
@@ -150,16 +153,16 @@ inline bool verify(const run_t * const runs, const uint32_t runLength, const bit
         sum += l;
     }
     if (LLVM_UNLIKELY(sum != UNICODE_QUAD_COUNT)) {
-        llvm::errs() << "found " << sum << " quads but expected " << UNICODE_QUAD_COUNT << "\n";
+        report_fatal_error("found " + std::to_string(sum) + " quads but expected " + std::to_string(UNICODE_QUAD_COUNT));
         return false;
     }
     if (LLVM_UNLIKELY(mixedQuads != quadLength)) {
-        llvm::errs() << "found " << quadLength << " mixed quad(s) but expected " << mixedQuads << "\n";
+        report_fatal_error("found " + std::to_string(quadLength) + " mixed quad(s) but expected " + std::to_string(mixedQuads));
         return false;
     }
     for (unsigned i = 0; i < quadLength; ++i) {
-        if (LLVM_UNLIKELY((quads[i] == 0) || (~quads[i] == 0))) {
-            llvm::errs() << "Empty or Full quad found in Mixed quad array\n";
+        if (LLVM_UNLIKELY((quads[i] == 0) || (quads[i] == FULL_QUAD_MASK))) {
+            report_fatal_error("Empty or Full quad found in Mixed quad array");
             return false;
         }
     }
@@ -593,13 +596,13 @@ void UnicodeSet::insert(const codepoint_t cp) {
         ++runIndex;
     }
 
-    if (LLVM_LIKELY(type == Mixed)) {        
+    if (LLVM_LIKELY(type == Mixed)) {
         quadIndex += offset;
         if (LLVM_UNLIKELY(mQuadCapacity == 0)) {
             bitquad_t * const quads = GlobalAllocator.allocate<bitquad_t>(mQuadLength - 1);
             std::memcpy(quads, mQuads, (quadIndex - 1) * sizeof(bitquad_t));
             quads[quadIndex] = mQuads[quadIndex] | value;
-            const unsigned offset = (~quads[quadIndex] == 0) ? 1 : 0;
+            const unsigned offset = (quads[quadIndex] == FULL_QUAD_MASK) ? 1 : 0;
             mQuadCapacity = mQuadLength;
             mQuadLength -= offset;
             ++quadIndex;
@@ -613,13 +616,12 @@ void UnicodeSet::insert(const codepoint_t cp) {
 
         } else { // reuse the buffer
             mQuads[quadIndex] |= value;
-            if (LLVM_LIKELY(~mQuads[quadIndex] != 0)) { // no change to runs needed
+            if (LLVM_LIKELY(mQuads[quadIndex] == FULL_QUAD_MASK)) { // no change to runs needed
                 assert (verify(mRuns, mRunLength, mQuads, mQuadLength));
                 assert (contains(cp));
                 return;
             }
             --mQuadLength;
-            ++quadIndex;
             std::memmove(mQuads + quadIndex, mQuads + quadIndex + 1, (mQuadLength - quadIndex) * sizeof(bitquad_t));
         }
 
