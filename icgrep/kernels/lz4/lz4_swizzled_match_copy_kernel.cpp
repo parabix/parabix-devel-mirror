@@ -183,7 +183,7 @@ void LZ4SwizzledMatchCopyKernel::generateMultiBlockLogic(const std::unique_ptr<K
             ),
             iBuilder->CreateShl(SIZE_ONE, matchCopyFromBlockOffset)
     );
-    Value* fullMask = iBuilder->simd_fill(64, singleMask);
+    Value* fullMask = iBuilder->simd_fill(mPDEPWidth, singleMask);
 
 //    iBuilder->CallPrintInt("phiMatchPos", phiMatchPos);
 //    iBuilder->CallPrintInt("currentCopySize", currentCopySize);
@@ -208,9 +208,9 @@ void LZ4SwizzledMatchCopyKernel::generateMultiBlockLogic(const std::unique_ptr<K
                 iBuilder->CreateShl(
                         iBuilder->CreateLShr(
                                 copiedValue,
-                                iBuilder->simd_fill(64, matchCopyFromBlockOffset)
+                                iBuilder->simd_fill(mPDEPWidth, matchCopyFromBlockOffset)
                         ),
-                        iBuilder->simd_fill(64, matchCopyTargetBlockOffset)
+                        iBuilder->simd_fill(mPDEPWidth, matchCopyTargetBlockOffset)
                 )
         );
 
