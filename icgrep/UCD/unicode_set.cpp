@@ -140,12 +140,10 @@ inline bool verify(const run_t * const runs, const uint32_t runLength, const bit
         const auto type = typeOf(runs[i]);
         if (LLVM_UNLIKELY(type != Empty && type != Mixed && type != Full)) {
             report_fatal_error("illegal run type " + std::to_string(type) + " found");
-            return false;
         }
         const auto l = lengthOf(runs[i]);
         if (LLVM_UNLIKELY(l == 0)) {
             report_fatal_error("zero-length quad found");
-            return false;
         }
         if (type == Mixed) {
             mixedQuads += l;
@@ -154,16 +152,13 @@ inline bool verify(const run_t * const runs, const uint32_t runLength, const bit
     }
     if (LLVM_UNLIKELY(sum != UNICODE_QUAD_COUNT)) {
         report_fatal_error("found " + std::to_string(sum) + " quads but expected " + std::to_string(UNICODE_QUAD_COUNT));
-        return false;
     }
     if (LLVM_UNLIKELY(mixedQuads != quadLength)) {
         report_fatal_error("found " + std::to_string(quadLength) + " mixed quad(s) but expected " + std::to_string(mixedQuads));
-        return false;
     }
     for (unsigned i = 0; i < quadLength; ++i) {
         if (LLVM_UNLIKELY((quads[i] == 0) || (quads[i] == FULL_QUAD_MASK))) {
             report_fatal_error("Empty or Full quad found in Mixed quad array");
-            return false;
         }
     }
     return true;
@@ -602,21 +597,20 @@ void UnicodeSet::insert(const codepoint_t cp) {
             bitquad_t * const quads = GlobalAllocator.allocate<bitquad_t>(mQuadLength - 1);
             std::memcpy(quads, mQuads, (quadIndex - 1) * sizeof(bitquad_t));
             quads[quadIndex] = mQuads[quadIndex] | value;
-            const unsigned offset = (quads[quadIndex] == FULL_QUAD_MASK) ? 1 : 0;
+            const unsigned quadOffset = (quads[quadIndex] == FULL_QUAD_MASK) ? 1 : 0;
             mQuadCapacity = mQuadLength;
-            mQuadLength -= offset;
+            mQuadLength -= quadOffset;
             ++quadIndex;
-            std::memcpy(quads + quadIndex, mQuads + quadIndex + offset, (mQuadLength - quadIndex) * sizeof(bitquad_t));
+            std::memcpy(quads + quadIndex, mQuads + quadIndex + quadOffset, (mQuadLength - quadIndex) * sizeof(bitquad_t));
             mQuads = quads;
-            if (LLVM_LIKELY(offset == 0)) {  // no change to runs needed
+            if (LLVM_LIKELY(quadOffset == 0)) {  // no change to runs needed
                 assert (verify(mRuns, mRunLength, mQuads, mQuadLength));
                 assert (contains(cp));
                 return;
             }
-
         } else { // reuse the buffer
             mQuads[quadIndex] |= value;
-            if (LLVM_LIKELY(mQuads[quadIndex] == FULL_QUAD_MASK)) { // no change to runs needed
+            if (LLVM_LIKELY(mQuads[quadIndex] != FULL_QUAD_MASK)) { // no change to runs needed
                 assert (verify(mRuns, mRunLength, mQuads, mQuadLength));
                 assert (contains(cp));
                 return;
