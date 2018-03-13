@@ -5,8 +5,9 @@
 #include <kernels/kernel_builder.h>
 #include <kernels/streamset.h>
 #include <toolchain/toolchain.h>
+#include <llvm/Support/raw_ostream.h>
 
-#define OUTPUT_BIT_STREAM_NAME "outputStream"
+#define OUTPUT_STREAM_NAME "outputStream"
 
 using namespace llvm;
 using namespace kernel;
@@ -19,32 +20,23 @@ void LZ4MatchCopyKernel::generateOutputCopy(const std::unique_ptr<KernelBuilder>
 
     Value *previousProcessed = iBuilder->getProcessedItemCount("decompressedStream");
 
-//    BasicBlock *entryBlock = iBuilder->GetInsertBlock();
     Value *inputBasePtr = iBuilder->getInputStreamBlockPtr("decompressedStream", SIZE_ZERO);
 
-    Value *outputBasePtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO);
+    Value *outputBasePtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_STREAM_NAME, SIZE_ZERO);
     Value *itemsToDo = mAvailableItemCount[0];
-    Value *copySize = iBuilder->CreateUMin(
-            itemsToDo,
-            iBuilder->CreateMul(outputBlocks, SIZE_BIT_BLOCK_WIDTH)
-    );
-//    iBuilder->CallPrintInt("itemsToDo", itemsToDo);
-//    iBuilder->CallPrintInt("itemsToDo1", mAvailableItemCount[1]);
-//    iBuilder->CallPrintInt("itemsToDo2", mAvailableItemCount[2]);
-//    iBuilder->CallPrintInt("itemsToDo3", mAvailableItemCount[3]);
-//    iBuilder->CallPrintInt("copySize", copySize);
+    Value *copySize = iBuilder->CreateMul(outputBlocks, SIZE_BIT_BLOCK_WIDTH);
+    Value* actualCopySize = iBuilder->CreateUMin(itemsToDo, copySize);
 
     iBuilder->CreateMemCpy(
             outputBasePtr,
             inputBasePtr,
             copySize,
-            1 // Not align guaranteed in final block
-    );
-//    iBuilder->CallPrintInt("outputCpyPtr", outputBasePtr);
-//    iBuilder->CallPrintInt("outputBlocks", outputBlocks);
-    Value *newProcessed = iBuilder->CreateAdd(previousProcessed, copySize);
+            iBuilder->getBitBlockWidth()
+    ); //It will be ok to always copy by full block
+
+    Value *newProcessed = iBuilder->CreateAdd(previousProcessed, actualCopySize);
     iBuilder->setProcessedItemCount("decompressedStream", newProcessed);
-    iBuilder->setProducedItemCount(OUTPUT_BIT_STREAM_NAME, newProcessed);
+    iBuilder->setProducedItemCount(OUTPUT_STREAM_NAME, newProcessed);
 
 }
 
@@ -68,7 +60,6 @@ Value *LZ4MatchCopyKernel::getMaximumMatchCopyBlock(const unique_ptr<KernelBuild
     );
     Value *lastDepositPosition = iBuilder->CreateAdd(lastM0, SIZE_ONE);
 
-    // TODO maybe we can not use mIsFinal here
     Value *currentMaxBlock = iBuilder->CreateSelect(
             this->mIsFinalBlock,
             iBuilder->CreateUDivCeil(lastDepositPosition, SIZE_BIT_BLOCK_WIDTH),
@@ -77,7 +68,7 @@ Value *LZ4MatchCopyKernel::getMaximumMatchCopyBlock(const unique_ptr<KernelBuild
 
     // Produced Item Count will always be full bitblock except for final block
     Value *previousProducedBlocks = iBuilder->CreateUDiv(
-            iBuilder->getProducedItemCount(OUTPUT_BIT_STREAM_NAME),
+            iBuilder->getProducedItemCount(OUTPUT_STREAM_NAME),
             SIZE_BIT_BLOCK_WIDTH
     );
 
@@ -93,32 +84,21 @@ void LZ4MatchCopyKernel::generateMultiBlockLogic(const unique_ptr<KernelBuilder>
 
     Value *itemsToDo = mAvailableItemCount[0];
 
-    Value *isFinalBlock =
-            iBuilder->CreateOr(
-                    iBuilder->CreateICmpULT(itemsToDo, iBuilder->CreateMul(numOfStrides, SIZE_BIT_BLOCK_WIDTH)),
-                    iBuilder->CreateICmpEQ(itemsToDo, iBuilder->getSize(0))
-            );
 
-    this->mIsFinalBlock = isFinalBlock;
 //    iBuilder->CallPrintInt("isFinalBlock", isFinalBlock);
-    iBuilder->setTerminationSignal(isFinalBlock);
 
+//    iBuilder->CallPrintInt("matchCopy:isFinalBlock", isFinalBlock);
 
-
-
-    Value *previousProducedItemCount = iBuilder->getProducedItemCount(OUTPUT_BIT_STREAM_NAME);
+    Value *previousProducedItemCount = iBuilder->getProducedItemCount(OUTPUT_STREAM_NAME);
 
 
     // Space Calculation
     Value *outputBufferBlocks = iBuilder->getSize(
-            this->getAnyStreamSetBuffer(OUTPUT_BIT_STREAM_NAME)->getBufferBlocks());
-    // TODO need to take previous produced size into account
+            this->getAnyStreamSetBuffer(OUTPUT_STREAM_NAME)->getBufferBlocks());
 
-
+    Value *outputCurrentPtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_STREAM_NAME, SIZE_ZERO); // [8 x <4 x i64>]*
     Value *outputRawBeginPtr = iBuilder->CreatePointerCast(
-            iBuilder->getRawOutputPointer(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO),
-            iBuilder->getBitBlockType()->getPointerTo());
-    Value *outputCurrentPtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO);
+            iBuilder->getRawOutputPointer(OUTPUT_STREAM_NAME, SIZE_ZERO), outputCurrentPtr->getType());
     Value *producedOffset = iBuilder->CreatePtrDiff(outputCurrentPtr, outputRawBeginPtr);
     Value *remainSpace = iBuilder->CreateSub(outputBufferBlocks, producedOffset);
     Value *matchCopyWindowBlock = iBuilder->getSize(256 * 256 / codegen::BlockSize);
@@ -133,23 +113,32 @@ void LZ4MatchCopyKernel::generateMultiBlockLogic(const unique_ptr<KernelBuilder>
 //    iBuilder->CallPrintInt("writableBlocks", writableBlocks);
     Value *outputBlocks = iBuilder->CreateUMin(writableBlocks, numOfStrides);
     // outputBlock === min(writableBlocks, numOfStrides, (matchOffsetPosition + matchLength - producedItemCount) / bitBlockWidth )
+//    iBuilder->CallPrintInt("outputBlocks1", outputBlocks);
 
-    outputBlocks = iBuilder->CreateUMin(outputBlocks, this->getMaximumMatchCopyBlock(iBuilder));
-
+//    outputBlocks = iBuilder->CreateUMin(outputBlocks, this->getMaximumMatchCopyBlock(iBuilder)); //TODO need to handle final block, otherwise it may be deadloop when there is not match copy in final block
+//    iBuilder->CallPrintInt("outputBlocks2", outputBlocks);
 
 //    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
 
+
+    Value *isFinalBlock =
+            iBuilder->CreateOr(
+                    iBuilder->CreateICmpULT(itemsToDo, iBuilder->CreateMul(outputBlocks, SIZE_BIT_BLOCK_WIDTH)),
+                    iBuilder->CreateICmpEQ(itemsToDo, iBuilder->getSize(0))
+            );
+
+    this->mIsFinalBlock = isFinalBlock;
+    iBuilder->setTerminationSignal(isFinalBlock);
     // Output Copy
     this->generateOutputCopy(iBuilder, outputBlocks);
-//    return;
 
-    Value *newProducedItemCount = iBuilder->getProducedItemCount(OUTPUT_BIT_STREAM_NAME);
+    Value *newProducedItemCount = iBuilder->getProducedItemCount(OUTPUT_STREAM_NAME);
 
     BasicBlock *copyEndBlock = iBuilder->CreateBasicBlock("copyEnd");
     iBuilder->CreateBr(copyEndBlock);
     iBuilder->SetInsertPoint(copyEndBlock);
 
-    // TODO match Copy
+    // Match Copy
     BasicBlock *exitBlock = iBuilder->CreateBasicBlock("exit_block");
 
     Value *initM0StartProcessIndex = iBuilder->getProcessedItemCount("m0Start");
@@ -237,30 +226,35 @@ void LZ4MatchCopyKernel::generateMultiBlockLogic(const unique_ptr<KernelBuilder>
 
     iBuilder->SetInsertPoint(matchCopyBodyBlock);
     Value* matchCopyFromPos = iBuilder->CreateSub(phiMatchPos, phiMatchOffset);
-    Value* rawOutputBasePtr = iBuilder->CreatePointerCast(iBuilder->getRawOutputPointer(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO), iBuilder->getInt8PtrTy());
-//    iBuilder->CallPrintInt("rawOutputBasePtr", rawOutputBasePtr);
-//    iBuilder->CallPrintInt("rawOutputBasePtr1", iBuilder->CreateGEP(
-//            rawOutputBasePtr,
-//            iBuilder->CreateURem(matchCopyFromPos, iBuilder->CreateMul(outputBufferBlocks, SIZE_BIT_BLOCK_WIDTH))
-//    ));
-    Value* matchCopyFromValue = iBuilder->CreateLoad(
-            iBuilder->CreateGEP(
-                    rawOutputBasePtr,
-                    iBuilder->CreateURem(matchCopyFromPos, iBuilder->CreateMul(outputBufferBlocks, SIZE_BIT_BLOCK_WIDTH))
-            ));
+    Value* rawOutputBasePtr = iBuilder->CreatePointerCast(iBuilder->getRawOutputPointer(OUTPUT_STREAM_NAME, SIZE_ZERO), iBuilder->getInt8PtrTy());
+
+    Value* outputBufferSize = iBuilder->CreateMul(outputBufferBlocks, SIZE_BIT_BLOCK_WIDTH);
+    Value* matchCopyFromOffset = iBuilder->CreateURem(matchCopyFromPos, outputBufferSize);
+    Value* matchCopyFromPtr = iBuilder->CreateGEP(rawOutputBasePtr, matchCopyFromOffset);
 
     // Output is guranteed to be full bit block except for final block
-    Value* outputBlockBasePtr = iBuilder->CreatePointerCast(iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO), iBuilder->getInt8PtrTy());
+    Value* outputBlockBasePtr = iBuilder->CreatePointerCast(iBuilder->getOutputStreamBlockPtr(OUTPUT_STREAM_NAME, SIZE_ZERO), iBuilder->getInt8PtrTy());
     Value* outputTargetPtr = iBuilder->CreateGEP(outputBlockBasePtr, iBuilder->CreateSub(phiMatchPos, previousProducedItemCount));
-//    iBuilder->CallPrintInt("matchCopyFromValue", matchCopyFromValue);
-//    iBuilder->CallPrintInt("phiMatchPos", phiMatchPos);
-//    iBuilder->CallPrintInt("aa", iBuilder->CreateSub(phiMatchPos, previousProducedItemCount));
-    iBuilder->CreateStore(matchCopyFromValue, outputTargetPtr);
+
+    Value* matchCopyFromRemain = iBuilder->CreateSub(outputBufferSize, matchCopyFromOffset);
+    // phiMatchOffset
+    // phiMatchLength
+    Value* currentCopySize = iBuilder->CreateUMin(matchCopyFromRemain, phiMatchOffset);
+    currentCopySize = iBuilder->CreateUMin(currentCopySize, phiMatchLength);
+    currentCopySize = iBuilder->CreateUMin(currentCopySize, iBuilder->CreateSub(newProducedItemCount, phiMatchPos));
+
+    currentCopySize = iBuilder->CreateSelect(iBuilder->CreateICmpEQ(currentCopySize, SIZE_ZERO), SIZE_ONE, currentCopySize); //Workaround for the last byte
+
+//    currentCopySize = SIZE_ONE;
+    iBuilder->CreateMemCpy(outputTargetPtr, matchCopyFromPtr, currentCopySize, 0);
+
+//    iBuilder->CallPrintInt("outputTargetPtr", iBuilder->CreateGEP(iBuilder->CreateLoad(outputTargetPtr), iBuilder->CreateSub(currentCopySize, SIZE_ONE)));
+//    iBuilder->CallPrintInt("matchCopyFromPtr", iBuilder->CreateGEP(iBuilder->CreateLoad(matchCopyFromPtr), iBuilder->CreateSub(currentCopySize, SIZE_ONE)));
 
     phiProcessIndex->addIncoming(phiProcessIndex, iBuilder->GetInsertBlock());
     phiMatchOffset->addIncoming(phiMatchOffset, iBuilder->GetInsertBlock());
-    phiMatchPos->addIncoming(iBuilder->CreateAdd(phiMatchPos, SIZE_ONE), iBuilder->GetInsertBlock());
-    phiMatchLength->addIncoming(iBuilder->CreateSub(phiMatchLength, SIZE_ONE), iBuilder->GetInsertBlock());
+    phiMatchPos->addIncoming(iBuilder->CreateAdd(phiMatchPos, currentCopySize), iBuilder->GetInsertBlock());
+    phiMatchLength->addIncoming(iBuilder->CreateSub(phiMatchLength, currentCopySize), iBuilder->GetInsertBlock());
 
     iBuilder->CreateBr(matchCopyLoopCon);
 
@@ -275,51 +269,6 @@ void LZ4MatchCopyKernel::generateMultiBlockLogic(const unique_ptr<KernelBuilder>
     iBuilder->setProcessedItemCount("matchOffset", phiProcessIndex);
 }
 
-
-void LZ4MatchCopyKernel::generateStoreCircularOutput(const unique_ptr<KernelBuilder> &iBuilder, string outputBufferName,
-                                                     Value *offset, Type *pointerType, Value *value) {
-    size_t inputSize = this->getOutputBufferSize(iBuilder, outputBufferName);
-    Value *offsetMask = iBuilder->getSize(inputSize - 1);
-    Value *maskedOffset = iBuilder->CreateAnd(offsetMask, offset);
-
-    Value *outputBufferPtr = iBuilder->getRawOutputPointer(outputBufferName, iBuilder->getSize(0));
-
-    outputBufferPtr = iBuilder->CreatePointerCast(outputBufferPtr, pointerType);
-    iBuilder->CreateStore(value, iBuilder->CreateGEP(outputBufferPtr, maskedOffset));
-}
-
-Value *LZ4MatchCopyKernel::generateLoadCircularOutput(const unique_ptr<KernelBuilder> &iBuilder, string inputBufferName,
-                                                      Value *offset, Type *pointerType) {
-    size_t inputSize = this->getOutputBufferSize(iBuilder, inputBufferName);
-    Value *offsetMask = iBuilder->getSize(inputSize - 1);
-    Value *maskedOffset = iBuilder->CreateAnd(offsetMask, offset);
-
-    Value *inputBufferPtr = iBuilder->getRawOutputPointer(inputBufferName, iBuilder->getSize(0));
-
-    inputBufferPtr = iBuilder->CreatePointerCast(inputBufferPtr, pointerType);
-    return iBuilder->CreateLoad(iBuilder->CreateGEP(inputBufferPtr, maskedOffset));
-}
-
-Value *LZ4MatchCopyKernel::generateLoadCircularInput(const unique_ptr<KernelBuilder> &iBuilder, string inputBufferName,
-                                                     Value *offset, Type *pointerType) {
-    size_t inputSize = this->getInputBufferSize(iBuilder, inputBufferName);
-    Value *offsetMask = iBuilder->getSize(inputSize - 1);
-    Value *maskedOffset = iBuilder->CreateAnd(offsetMask, offset);
-
-    Value *inputBufferPtr = iBuilder->getRawInputPointer(inputBufferName, iBuilder->getSize(0));
-
-    inputBufferPtr = iBuilder->CreatePointerCast(inputBufferPtr, pointerType);
-    return iBuilder->CreateLoad(iBuilder->CreateGEP(inputBufferPtr, maskedOffset));
-}
-
-size_t LZ4MatchCopyKernel::getInputBufferSize(const unique_ptr<KernelBuilder> &iBuilder, string bufferName) {
-    return this->getInputStreamSetBuffer(bufferName)->getBufferBlocks() * iBuilder->getStride();
-}
-
-size_t LZ4MatchCopyKernel::getOutputBufferSize(const unique_ptr<KernelBuilder> &iBuilder, string bufferName) {
-    return this->getOutputStreamSetBuffer(bufferName)->getBufferBlocks() * iBuilder->getStride();
-}
-
 LZ4MatchCopyKernel::LZ4MatchCopyKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder)
         : MultiBlockKernel("lz4MatchCopyKernel",
         // Inputs
@@ -331,7 +280,7 @@ LZ4MatchCopyKernel::LZ4MatchCopyKernel(const std::unique_ptr<kernel::KernelBuild
 
                            },
         // Outputs
-                           {Binding{iBuilder->getStreamSetTy(1, 8), OUTPUT_BIT_STREAM_NAME, BoundedRate(0, 1)}},
+                           {Binding{iBuilder->getStreamSetTy(1, 8), OUTPUT_STREAM_NAME, BoundedRate(0, 1)}},
         // Arguments
                            {},
                            {},

@@ -5,7 +5,7 @@
 #include <kernels/streamset.h>
 #include <iostream>
 
-//#define APPLY_64PACK_ACCELERATION
+#define APPLY_64PACK_ACCELERATION
 // TODO May be we can change it to 256 PACK Acceleration based on SIMD instruction
 
 #define ACCELERATION_LOOP_COUNT (20)
@@ -686,7 +686,4 @@ LZ4ExtractEM0Kernel::LZ4ExtractEM0Kernel(const std::unique_ptr<kernel::KernelBui
                 }
         ) {
     this->initBufferCursor(iBuilder, {"extender"});
-    this->configIndexBits(iBuilder, inputIndexMap);
-//    this->configOutputBufferToBeClear({{"byteStream", "e1Marker"}});
-//    setNoTerminateAttribute(true);
 }
