@@ -166,40 +166,46 @@ struct AnchorResolution {
 };
     
 RE * AnchorResolution::resolve(RE * r) {
-    if (!hasAnchor(r)) return r;
-    if (const Alt * alt = dyn_cast<Alt>(r)) {
-        std::vector<RE *> list;
-        list.reserve(alt->size());
-        for (RE * item : *alt) {
-            item = resolve(item);
-            list.push_back(item);
+    if (hasAnchor(r)) {
+        if (const Alt * alt = dyn_cast<Alt>(r)) {
+            std::vector<RE *> list;
+            list.reserve(alt->size());
+            for (RE * item : *alt) {
+                item = resolve(item);
+                list.push_back(item);
+            }
+            return makeAlt(list.begin(), list.end());
+        } else if (const Seq * seq = dyn_cast<Seq>(r)) {
+            std::vector<RE *> list;
+            list.reserve(seq->size());
+            for (RE * item : *seq) {
+                item = resolve(item);
+                list.push_back(item);
+            }
+            return makeSeq(list.begin(), list.end());
+        } else if (Assertion * a = dyn_cast<Assertion>(r)) {
+            return makeAssertion(resolve(a->getAsserted()), a->getKind(), a->getSense());
+        } else if (Rep * rep = dyn_cast<Rep>(r)) {
+            return makeRep(resolve(rep->getRE()), rep->getLB(), rep->getUB());
+        } else if (Diff * diff = dyn_cast<Diff>(r)) {
+            return makeDiff(resolve(diff->getLH()), resolve(diff->getRH()));
+        } else if (Intersect * e = dyn_cast<Intersect>(r)) {
+            return makeIntersect(resolve(e->getLH()), resolve(e->getRH()));
+        } else if (isa<Start>(r)) {
+            if (mIsNegated) {
+                return makeNegativeLookBehindAssertion(mAnchorRE);
+            } else {
+                return makeAlt({makeSOT(), makeLookBehindAssertion(mAnchorRE)});
+            }
+        } else if (isa<End>(r)) {
+            if (mIsNegated) {
+                return makeNegativeLookAheadAssertion(mAnchorRE);
+            } else {
+                return makeAlt({makeEOT(), makeLookAheadAssertion(mAnchorRE)});
+            }
         }
-        return makeAlt(list.begin(), list.end());
-    } else if (const Seq * seq = dyn_cast<Seq>(r)) {
-        std::vector<RE *> list;
-        list.reserve(seq->size());
-        for (RE * item : *seq) {
-            item = resolve(item);
-            list.push_back(item);
-        }
-        return makeSeq(list.begin(), list.end());
-    } else if (Assertion * a = dyn_cast<Assertion>(r)) {
-        return makeAssertion(resolve(a->getAsserted()), a->getKind(), a->getSense());
-    } else if (Rep * rep = dyn_cast<Rep>(r)) {
-        return makeRep(resolve(rep->getRE()), rep->getLB(), rep->getUB());
-    } else if (Diff * diff = dyn_cast<Diff>(r)) {
-        return makeDiff(resolve(diff->getLH()), resolve(diff->getRH()));
-    } else if (Intersect * e = dyn_cast<Intersect>(r)) {
-        return makeIntersect(resolve(e->getLH()), resolve(e->getRH()));
-    } else if (isa<Start>(r)) {
-        if (mIsNegated) return makeNegativeLookBehindAssertion(mAnchorRE);
-        else return makeAlt({makeSOT(),
-                             makeLookBehindAssertion(mAnchorRE)});
-    } else if (isa<End>(r)) {
-        if (mIsNegated) return makeNegativeLookAheadAssertion(mAnchorRE);
-        else return makeAlt({makeEOT(),
-                             makeLookAheadAssertion(mAnchorRE)});
     }
+    return r;
 }
 
 RE * resolveAnchors(RE * r, RE * breakRE) {

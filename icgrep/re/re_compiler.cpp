@@ -179,10 +179,10 @@ inline MarkerType RE_Compiler::compileName(Name * const name, PabloBuilder & pb)
     if (LLVM_LIKELY(mCompiledName->get(name, m))) {
         return m;
     }
-    auto f = mExternalNameMap.find(nameString);
+    const auto f = mExternalNameMap.find(nameString);
     if (f != mExternalNameMap.end()) {
-        if (name->getType() == Name::Type::ZeroWidth) return makeMarker(FinalPostPositionUnit, f->second);
-        else return makeMarker(FinalMatchUnit, f->second);
+        const auto pos = (name->getType() == Name::Type::ZeroWidth) ? FinalPostPositionUnit : FinalMatchUnit;
+        return makeMarker(pos, f->second);
     }
     if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
         m = compile(name->getDefinition(), pb);
