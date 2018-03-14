@@ -494,6 +494,30 @@ bool hasTriCCwithinLimit(RE * r, unsigned byteCClimit, RE * & prefixRE, RE * & s
     return false;
 }
 
+    
+bool hasEndAnchor(const RE * re) {
+    if (const Alt * alt = dyn_cast<Alt>(re)) {
+        for (const RE * re : *alt) {
+            if (!hasEndAnchor(re)) {
+                return false;
+            }
+        }
+        return true;
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+        return (!seq->empty()) && isa<End>(seq->back());
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
+        return hasEndAnchor(rep->getRE());
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
+        return hasEndAnchor(diff->getLH()) && !hasEndAnchor(diff->getRH());
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
+        return hasEndAnchor(e->getLH()) && hasEndAnchor(e->getRH());
+    } else if (isa<End>(re)) {
+        return true;
+    }
+    return false; // otherwise
+}
+    
+
 void UndefinedNameError(const Name * n) {
     report_fatal_error("Error: Undefined name in regular expression: \"" + n->getName() + "\".");
 }
