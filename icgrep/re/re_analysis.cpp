@@ -484,9 +484,14 @@ bool byteTestsWithinLimit(RE * re, unsigned limit) {
 bool hasTriCCwithinLimit(RE * r, unsigned byteCClimit, RE * & prefixRE, RE * & suffixRE) {
     if (Seq * seq = dyn_cast<Seq>(r)) {
         if (seq->size() < 4) return false;
+        if (!isa<CC>(*seq->begin())) return false;
+        if (!isa<CC>(*seq->begin()+1)) return false;
+        if (!isa<CC>(*seq->begin()+2)) return false;
         prefixRE = makeSeq(seq->begin(), seq->begin()+3);
         if (byteTestsWithinLimit(prefixRE, byteCClimit)) {
             suffixRE = makeSeq(seq->begin()+3, seq->end());
+            errs() << "prefixRE: " << Printer_RE::PrintRE(prefixRE) << "\n";
+            errs() << "suffixRE: " << Printer_RE::PrintRE(suffixRE) << "\n";
             return true;
         }
         return false;
