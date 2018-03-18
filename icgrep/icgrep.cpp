@@ -171,7 +171,7 @@ int main(int argc, char *argv[]) {
 
     grep::InitializeCommandLineInterface(argc, argv);
     
-    const auto REs = readExpressions();
+    auto REs = readExpressions();
 
     std::vector<std::string> allFiles = getFullFileList(inputFiles);
     if (allFiles.empty()) {
@@ -203,13 +203,10 @@ int main(int argc, char *argv[]) {
     } else {
         grepEngine->setRecordBreak(grep::GrepRecordBreakKind::LF);
     }
-    
-    grepEngine->grepCodeGen(REs);
-
+    grepEngine->initREs(REs);
+    grepEngine->grepCodeGen();
     grepEngine->initFileResult(allFiles);
-    
     bool matchFound = grepEngine->searchAllFiles();
-    
     delete(grepEngine);
     
     return matchFound ? grep::MatchFoundExitCode : grep::MatchNotFoundExitCode;

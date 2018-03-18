@@ -30,9 +30,9 @@ public:
     virtual void finalize_match(char * buffer_end) {}  // default: no op
 };
 
-void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end);
+extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end);
 
-void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
+extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
 
 void grepBuffer(re::RE * pattern, const char * buffer, size_t bufferLength, MatchAccumulator * accum);
 
@@ -45,12 +45,13 @@ public:
     
     void setRecordBreak(GrepRecordBreakKind b);
     void initFileResult(std::vector<std::string> & filenames);
-    virtual void grepCodeGen(std::vector<re::RE *> REs);
+    void initREs(std::vector<re::RE *> & REs);
+    virtual void grepCodeGen();
     bool searchAllFiles();
     void * DoGrepThreadMethod();
 
 protected:
-    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> & REs, parabix::StreamSetBuffer * ByteStream);
+    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(parabix::StreamSetBuffer * ByteStream);
 
     virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
     std::string linePrefix(std::string fileName);
@@ -65,7 +66,10 @@ protected:
     std::vector<FileStatus> mFileStatus;
     bool grepMatchFound;
     GrepRecordBreakKind mGrepRecordBreak;
-
+    
+    std::vector<re:: RE *> mREs;
+    std::set<re::Name *> mUnicodeProperties;
+    re::CC * mBreakCC;
     std::unique_ptr<cc::MultiplexedAlphabet> mpx;
     std::string mFileSuffix;
     bool mMoveMatchesToEOL;
@@ -75,7 +79,7 @@ protected:
 class EmitMatchesEngine : public GrepEngine {
 public:
     EmitMatchesEngine();
-    void grepCodeGen(std::vector<re::RE *> REs) override;
+    void grepCodeGen() override;
 private:
     uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
 };

@@ -1,6 +1,7 @@
 #ifndef CPUDRIVER_H
 #define CPUDRIVER_H
 #include "driver.h"
+#include <llvm/IR/LegacyPassManager.h>             // for PassManager
 
 namespace llvm { class ExecutionEngine; }
 namespace llvm { class TargetMachine; }
@@ -28,11 +29,13 @@ public:
     void performIncrementalCacheCleanupStep() override;
 
 private:
+    void preparePassManager();
 
     llvm::Function * addLinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const override;
 
 private:
     llvm::TargetMachine *                                   mTarget;
+    llvm::legacy::PassManager                               mPassManager;
     llvm::ExecutionEngine *                                 mEngine;
     ParabixObjectCache *                                    mCache;
     std::vector<kernel::Kernel *>                           mUncachedKernel;

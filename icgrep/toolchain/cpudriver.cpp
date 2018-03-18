@@ -2,6 +2,9 @@
 
 #include <IR_Gen/idisa_target.h>
 #include <toolchain/toolchain.h>
+#include <llvm/Support/DynamicLibrary.h>           // for LoadLibraryPermanently
+#include <llvm/ExecutionEngine/RuntimeDyld.h>
+#include <llvm/ExecutionEngine/RTDyldMemoryManager.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for EngineBuilder
 #include <llvm/IR/LegacyPassManager.h>             // for PassManager
 #include <llvm/IR/IRPrintingPasses.h>
@@ -46,11 +49,9 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
+    llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
 
-    PassRegistry * Registry = PassRegistry::getPassRegistry();
-    initializeCore(*Registry);
-    initializeCodeGen(*Registry);
-    initializeLowerIntrinsicsPass(*Registry);
+    preparePassManager();
 
     std::string errMessage;
     EngineBuilder builder{std::unique_ptr<Module>(mMainModule)};
@@ -142,9 +143,12 @@ Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, Fu
     return f;
 }
 
-void ParabixDriver::finalizeObject() {
-
-    legacy::PassManager PM;
+void ParabixDriver::preparePassManager() {
+    PassRegistry * Registry = PassRegistry::getPassRegistry();
+    initializeCore(*Registry);
+    initializeCodeGen(*Registry);
+    initializeLowerIntrinsicsPass(*Registry);
+    
     if (LLVM_UNLIKELY(codegen::ShowUnoptimizedIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (codegen::ShowUnoptimizedIROption != "") {
@@ -154,19 +158,19 @@ void ParabixDriver::finalizeObject() {
                 mIROutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
             }
         }
-        PM.add(createPrintModulePass(*mIROutputStream));
+        mPassManager.add(createPrintModulePass(*mIROutputStream));
     }
     if (IN_DEBUG_MODE || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
-        PM.add(createVerifierPass());
+        mPassManager.add(createVerifierPass());
     }
-    PM.add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
-    PM.add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
-    PM.add(createEarlyCSEPass());                   // Simple common subexpression elimination pass
-    PM.add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.
-    PM.add(createReassociatePass());                // Canonicalizes commutative expressions
-    PM.add(createGVNPass());                        // Global value numbering redundant expression elimination pass
-    PM.add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
-
+    mPassManager.add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
+    mPassManager.add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
+    mPassManager.add(createEarlyCSEPass());                   // Simple common subexpression elimination pass
+    mPassManager.add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.
+    mPassManager.add(createReassociatePass());                // Canonicalizes commutative expressions
+    mPassManager.add(createGVNPass());                        // Global value numbering redundant expression elimination pass
+    mPassManager.add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
+    
     if (LLVM_UNLIKELY(codegen::ShowIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (codegen::ShowIROption != "") {
@@ -176,9 +180,9 @@ void ParabixDriver::finalizeObject() {
                 mIROutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
             }
         }
-        PM.add(createPrintModulePass(*mIROutputStream));
+        mPassManager.add(createPrintModulePass(*mIROutputStream));
     }
-
+    
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
         if (codegen::ShowASMOption != "") {
@@ -187,11 +191,15 @@ void ParabixDriver::finalizeObject() {
         } else {
             mASMOutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
         }
-        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(mPassManager, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
             report_fatal_error("LLVM error: could not add emit assembly pass");
         }
     }
 #endif
+}
+
+
+void ParabixDriver::finalizeObject() {
 
     Module * module = nullptr;
     try {
@@ -200,11 +208,11 @@ void ParabixDriver::finalizeObject() {
             kernel->generateKernel(iBuilder);
             module = kernel->getModule(); assert (module);
             module->setTargetTriple(mMainModule->getTargetTriple());
-            PM.run(*module);
+            mPassManager.run(*module);
         }
         module = mMainModule;
         iBuilder->setKernel(nullptr);
-        PM.run(*mMainModule);
+        mPassManager.run(*mMainModule);
         for (Kernel * const kernel : mPipeline) {
             if (LLVM_UNLIKELY(kernel->getModule() == nullptr)) {
                 report_fatal_error(kernel->getName() + " was neither loaded from cache nor generated prior to finalizeObject");
@@ -219,7 +227,7 @@ void ParabixDriver::finalizeObject() {
 }
 
 bool ParabixDriver::hasExternalFunction(llvm::StringRef functionName) const {
-    return mEngine->getPointerToNamedFunction(functionName, false) != nullptr;
+    return RTDyldMemoryManager::getSymbolAddressInProcess(functionName);
 }
 
 void * ParabixDriver::getMain() {
