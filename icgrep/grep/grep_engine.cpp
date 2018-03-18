@@ -209,13 +209,16 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     }
     
     mREs = REs;
+    bool allAnchored = true;
     for(unsigned i = 0; i < mREs.size(); ++i) {
+        if (!hasEndAnchor(mREs[i])) allAnchored = false;
         mREs[i] = resolveModesAndExternalSymbols(mREs[i]);
         mREs[i] = re::exclude_CC(mREs[i], mBreakCC);
         mREs[i] = resolveAnchors(mREs[i], anchorRE);
         re::gatherUnicodeProperties(mREs[i], mUnicodeProperties);
         mREs[i] = regular_expression_passes(mREs[i]);
     }
+    if (allAnchored && (mGrepRecordBreak != GrepRecordBreakKind::Unicode)) mMoveMatchesToEOL = false;
 
 }
 

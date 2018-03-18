@@ -546,7 +546,6 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm
     else {
         // The shift amount is greater than the total popcount.   We will consume popcount
         // bits from the shiftIn value only, and produce a carry out value of the selected bits.
-        // elements that we deal with.   This simplifies some of the logic.
         Value * carry = CreateBitCast(shiftIn, iBitBlock);
         Value * result = UndefValue::get(vecTy);
         Value * carryOut = ConstantInt::getNullValue(iBitBlock);
