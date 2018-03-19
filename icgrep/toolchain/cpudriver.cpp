@@ -39,7 +39,11 @@
 #include <llvm/ExecutionEngine/Orc/IRCompileLayer.h>
 #include <llvm/ExecutionEngine/Orc/IRTransformLayer.h>
 #include <llvm/ExecutionEngine/Orc/LambdaResolver.h>
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
 #include <llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h>
+#else
+#include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
+#endif
 #include <llvm/ExecutionEngine/Orc/GlobalMappingLayer.h>
 #endif
 
@@ -68,7 +72,6 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
-
     preparePassManager();
     
 
@@ -121,7 +124,11 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
             mCache = new ParabixObjectCache();
         }
 #ifdef ORCJIT
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
         mCompileLayer->setObjectCache(mCache);
+#else
+        mCompileLayer->getCompiler().setObjectCache(mCache);
+#endif
 #else
         mEngine->setObjectCache(mCache);
 #endif
@@ -214,7 +221,6 @@ Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, Fu
     if (LLVM_UNLIKELY(f == nullptr)) {
         f = Function::Create(type, Function::ExternalLinkage, name, mod);
 #ifdef ORCJIT
-        mCompileLayer->setObjectCache(mCache);
 #else
         mEngine->updateGlobalMapping(f, functionPtr);
 #endif
@@ -285,34 +291,26 @@ void ParabixDriver::finalizeObject() {
     std::vector<std::unique_ptr<Module>> moduleSet;
     auto Resolver = llvm::orc::createLambdaResolver(
             [&](const std::string &Name) {
-                                                        if (auto Sym = mCompileLayer->findSymbol(Name, false)) {
+                auto Sym = mCompileLayer->findSymbol(Name, false);
 #if LLVM_VERSION_INTEGER <= LLVM_VERSION_CODE(3, 9, 1)
-                                                            return Sym.toRuntimeDyldSymbol();
+                if (Sym) return Sym.toRuntimeDyldSymbol();
+                return RuntimeDyld::SymbolInfo(nullptr);
 #else
-                                                            return Sym;
+                if (Sym) return Sym;
+                return JITSymbol(nullptr);
 #endif
-                                                        }
+            },
+            [&](const std::string &Name) {
+                auto SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(Name);
+                if (!SymAddr) SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(iBuilder->getMangledName(Name));
 #if LLVM_VERSION_INTEGER <= LLVM_VERSION_CODE(3, 9, 1)
-                                                        return RuntimeDyld::SymbolInfo(nullptr);
+                if (SymAddr) return RuntimeDyld::SymbolInfo(SymAddr, JITSymbolFlags::Exported);
+                return RuntimeDyld::SymbolInfo(nullptr);
 #else
-                                                        return JITSymbol(nullptr);
+                if (SymAddr) return JITSymbol(SymAddr, JITSymbolFlags::Exported);
+                return JITSymbol(nullptr);
 #endif
-                                                    },
-                                                    [](const std::string &Name) {
-                                                        if (auto SymAddr =
-                                                            RTDyldMemoryManager::getSymbolAddressInProcess(Name)) {
-#if LLVM_VERSION_INTEGER <= LLVM_VERSION_CODE(3, 9, 1)
-                                                            return RuntimeDyld::SymbolInfo(SymAddr, JITSymbolFlags::Exported);
-#else
-                                                            return JITSymbol(SymAddr, JITSymbolFlags::Exported);
-#endif
-                                                        }
-#if LLVM_VERSION_INTEGER <= LLVM_VERSION_CODE(3, 9, 1)
-                                                        return RuntimeDyld::SymbolInfo(nullptr);
-#else
-                                                        return JITSymbol(nullptr);
-#endif                                                        
-                                                    });
+            });
 #endif
     
     Module * module = nullptr;
@@ -359,12 +357,7 @@ void * ParabixDriver::getMain() {
 #ifndef ORCJIT
     return mEngine->getPointerToNamedFunction("Main");
 #else
-    std::string MangledName;
-    raw_string_ostream MangledNameStream(MangledName);
-    llvm::Mangler::getNameWithPrefix(MangledNameStream, "Main", mTarget->createDataLayout());
-    //errs() << "Mangled main: " << MangledNameStream.str() << "\n";
-    auto MainSym = mCompileLayer->findSymbol(MangledNameStream.str(), false);
-    
+    auto MainSym = mCompileLayer->findSymbol(iBuilder->getMangledName("Main"), false);
     assert (MainSym && "Main not found");
     
     intptr_t main = (intptr_t) MainSym.getAddress();
