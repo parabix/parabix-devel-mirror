@@ -48,6 +48,8 @@ public:
         ClearInsertionPoint();
     }
     
+    std::string getMangledName(std::string s);
+    
     // UDiv and URem with optimization for division by power-of-2 constants
     llvm::Value * CreateUDiv(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
     llvm::Value * CreateURem(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");

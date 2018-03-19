@@ -5,6 +5,7 @@
  */
 
 #include "CBuilder.h"
+#include <llvm/IR/Mangler.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
@@ -50,6 +51,15 @@ using namespace llvm;
 inline static bool is_power_2(const uint64_t n) {
     return ((n & (n - 1)) == 0) && n;
 }
+
+std::string CBuilder::getMangledName(std::string s) {
+    DataLayout DL(getModule());
+    std::string MangledName;
+    raw_string_ostream MangledNameStream(MangledName);
+    Mangler::getNameWithPrefix(MangledNameStream, s, DL);
+    return MangledName;
+}
+
 
 #ifdef HAS_ADDRESS_SANITIZER
 Value * checkHeapAddress(CBuilder * const b, Value * const Ptr, Value * const Size) {
