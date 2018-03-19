@@ -12,7 +12,7 @@
 
 using namespace llvm;
 
-uint64_t file_size(const uint32_t fd) {
+extern "C" uint64_t file_size(const uint32_t fd) {
     struct stat st;
     if (LLVM_UNLIKELY(fstat(fd, &st) != 0)) {
         st.st_size = 0;

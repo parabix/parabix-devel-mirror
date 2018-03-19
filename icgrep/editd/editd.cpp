@@ -222,7 +222,7 @@ void PatternKernel::generatePabloMethod() {
 }
 
 std::mutex store_mutex;
-void wrapped_report_pos(size_t match_pos, int dist) {
+extern "C" void wrapped_report_pos(size_t match_pos, int dist) {
     struct matchPosition curMatch;
     curMatch.pos = match_pos;
     curMatch.dist = dist;

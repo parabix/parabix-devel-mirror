@@ -51,7 +51,7 @@ LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<kernel::Ker
 {Binding{b->getStreamSetTy(basisBitsCount), "basis", FixedRate(), Principal()}
 ,Binding{b->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
 // outputs
-{Binding{b->getStreamSetTy(1), "linebreak", FixedRate(), Add1()}
+{Binding{b->getStreamSetTy(1), "linebreak", FixedRate()}
 ,Binding{b->getStreamSetTy(1), "cr+lf"}}) {
 
 }
