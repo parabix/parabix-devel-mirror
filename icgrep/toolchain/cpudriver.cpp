@@ -26,8 +26,8 @@
 #include <kernels/kernel_builder.h>
 #include <kernels/kernel.h>
 #include <llvm/IR/Verifier.h>
-#ifdef ORCJIT
 #include "llvm/IR/Mangler.h"
+#ifdef ORCJIT
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
 #include <llvm/ExecutionEngine/Orc/JITSymbol.h>
 #else
@@ -106,11 +106,6 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     
 #ifdef ORCJIT
     mCompileLayer = make_unique<CompileLayerT>(mObjectLayer, orc::SimpleCompiler(*mTarget));
-    /*
-    mOptimizeLayer = make_unique<OptimizeLayerT>
-                        (mCompileLayer,
-                         [this](std::unique_ptr<Module> M) {mPassManager.run(M.get()); return M;});
-     */
 #else
     mEngine = builder.create();
     if (mEngine == nullptr) {
@@ -181,37 +176,6 @@ void ParabixDriver::generatePipelineIR() {
     }
 }
 
-#if 0 //def ORCJIT
-OptimizeLayerT::ModuleSetHandleT ParabixDriver::addModule(std::unique_ptr<Module> M) {
-    // Build our symbol resolver:
-    // Lambda 1: Look back into the JIT itself to find symbols that are part of
-    //           the same "logical dylib".
-    // Lambda 2: Search for external symbols in the host process.
-    auto Resolver = orc::createLambdaResolver(
-                                         [&](const std::string &Name) {
-                                             if (auto Sym = mOptimizeLayer->findSymbol(Name, false))
-                                                 return Sym;
-                                             return orc::JITSymbol(nullptr);
-                                         },
-                                         [](const std::string &Name) {
-                                             if (auto SymAddr =
-                                                 RTDyldMemoryManager::getSymbolAddressInProcess(Name))
-                                                 return orc::JITSymbol(SymAddr, JITSymbolFlags::Exported);
-                                             return orc::JITSymbol(nullptr);
-                                         });
-    
-    // Build a singleton module set to hold our module.
-    std::vector<std::unique_ptr<Module>> Ms;
-    Ms.push_back(std::move(M));
-    
-    // Add the set to the JIT with the resolver we created above and a newly
-    // created SectionMemoryManager.
-    return mOptimizeLayer->addModuleSet(std::move(Ms),
-                                      make_unique<SectionMemoryManager>(),
-                                      std::move(Resolver));
-}
-#endif
-
 
 Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
     if (LLVM_UNLIKELY(mod == nullptr)) {
@@ -230,8 +194,6 @@ Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, Fu
     return f;
 }
 
-
-
 std::string ParabixDriver::getMangledName(std::string s) {
     DataLayout DL(mTarget->createDataLayout());    
     std::string MangledName;
@@ -239,7 +201,6 @@ std::string ParabixDriver::getMangledName(std::string s) {
     Mangler::getNameWithPrefix(MangledNameStream, s, DL);
     return MangledName;
 }
-
 
 void ParabixDriver::preparePassManager() {
     PassRegistry * Registry = PassRegistry::getPassRegistry();
@@ -330,9 +291,7 @@ void ParabixDriver::finalizeObject() {
             kernel->generateKernel(iBuilder);
             module = kernel->getModule(); assert (module);
             module->setTargetTriple(mMainModule->getTargetTriple());
-#ifndef ORCJIT
             mPassManager.run(*module);
-#endif
         }
         module = mMainModule;
         iBuilder->setKernel(nullptr);
