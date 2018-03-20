@@ -29,17 +29,18 @@ public:
     void generateExtractOnlyPipeline(const std::string& outputFile);
     void generateExtractAndDepositOnlyPipeline(const std::string& outputFile);
 
-private:
-    //// Private Method
+protected:
+    //// Protected Method
     inline void generateMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     // Pipeline
-    inline void generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    inline void generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    inline std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*> generateSwizzleExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual void generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual void generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*> generateSwizzleExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
     // BufferSize related Helper Function
-    inline int getInputBufferBlocks();
-    inline int getDecompressedBufferBlocks();
+    virtual int getInputBufferBlocks();
+    virtual int getDecompressedBufferBlocks();
+
 
     //// Data Member
     // Driver

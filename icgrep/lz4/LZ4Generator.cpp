@@ -19,7 +19,6 @@
 #include <kernels/lz4/lz4_extract_e_m0.h>
 #include <kernels/lz4/lz4_generate_deposit_stream.h>
 #include <kernels/lz4/lz4_numbers_to_bitstream_kernel.h>
-//#include <kernels/LZ4MarkerToMaskKernel.h>
 #include <kernels/lz4/lz4_bitstream_not_kernel.h>
 #include <kernels/kernel_builder.h>
 #include <kernels/lz4/lz4_block_decoder.h>
@@ -29,6 +28,8 @@
 #include <kernels/lz4/lz4_multiple_pdep_kernel.h>
 #include <kernels/lz4/lz4_match_copy_kernel.h>
 #include <kernels/lz4/lz4_swizzled_match_copy_kernel.h>
+#include <kernels/lz4/lz4_block_decoder_new.h>
+#include <kernels/lz4/lz4_index_builder.h>
 
 namespace re { class CC; }
 
@@ -113,8 +114,6 @@ void LZ4Generator::generateExtractAndDepositOnlyPipeline(const std::string &outp
 
 //    pxDriver.makeKernelCall(unSwizzleK, {u16Swizzle0, u16Swizzle1}, {extractedbits});
 
-    // TODO MatchCopy before p2s
-
     Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(iBuilder);
     pxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
 
@@ -169,7 +168,6 @@ void LZ4Generator::generatePipeline(const std::string& outputFile) {
 
 //    pxDriver.makeKernelCall(unSwizzleK, {u16Swizzle0, u16Swizzle1}, {extractedbits});
 
-    // TODO MatchCopy before p2s
 
     Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(iBuilder);
     pxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
@@ -357,6 +355,7 @@ int LZ4Generator::getDecompressedBufferBlocks() {
     const unsigned decompressBufBlocks = copyBackWindowBlocks * 2;
     return decompressBufBlocks;
 }
+
 
 
 

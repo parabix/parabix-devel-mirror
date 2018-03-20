@@ -99,6 +99,7 @@ add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_ran
 add_library(RegExpCompiler re/casing.cpp re/to_utf8.cpp re/re_parser.cpp re/re_memoizer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/re_collect_unicodesets.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp)
 add_library(UCDlib UCD/CaseFolding.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp)
 add_library(GrepEngine  ${GREP_CORE_SRC} grep/grep_engine.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/streams_merge.cpp kernels/until_n.cpp kernels/UCD_property_kernel.cpp kernels/grapheme_kernel.cpp)
+add_library(LZ4_Lib lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4/lz4_block_decoder.cpp kernels/sequential_kernel.cpp kernels/lz4/lz4_extract_e_m0.cpp kernels/lz4/lz4_deposit_uncompressed.cpp kernels/lz4/lz4_generate_deposit_stream.cpp kernels/lz4/lz4_numbers_to_bitstream_kernel.cpp kernels/lz4/LZ4MarkerToMaskKernel.cpp kernels/lz4/lz4_bitstream_not_kernel.cpp kernels/pdep_kernel.cpp kernels/lz4/lz4_match_copy_kernel.cpp lz4/LZ4Generator.cpp kernels/lz4/lz4_multiple_pdep_kernel.cpp kernels/lz4/lz4_swizzled_match_copy_kernel.cpp kernels/lz4/lz4_block_decoder_new.cpp kernels/lz4/lz4_index_builder.cpp lz4/LZ4GeneratorNew.cpp)
 
 # force the compiler to compile the object cache to ensure that the versioning information is up to date
 add_custom_target(RecompileObjectCache ALL touch ${CMAKE_CURRENT_SOURCE_DIR}/${OBJECT_CACHE_SRC})
@@ -122,7 +123,8 @@ add_executable(lz4d lz4d.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/l
 add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/propGen.cpp combine/icgrep-test/icgrep-test.cpp grep_interface.cpp grep/grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
 add_executable(character_deletion character_deletion.cpp kernels/cc_kernel.cpp)
 add_executable(character_deposit character_deposit.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp kernels/lz4/lz4_multiple_pdep_kernel.cpp)
-add_executable(lz4d_ext_dep lz4d_ext_dep.cpp lz4FrameDecoder.cpp kernels/cc_kernel.cpp kernels/lz4/lz4_block_decoder.cpp kernels/sequential_kernel.cpp kernels/lz4/lz4_extract_e_m0.cpp kernels/lz4/lz4_deposit_uncompressed.cpp kernels/lz4/lz4_generate_deposit_stream.cpp kernels/lz4/lz4_numbers_to_bitstream_kernel.cpp kernels/lz4/LZ4MarkerToMaskKernel.cpp kernels/lz4/lz4_bitstream_not_kernel.cpp kernels/pdep_kernel.cpp kernels/lz4/lz4_match_copy_kernel.cpp lz4/LZ4Generator.cpp kernels/lz4/lz4_multiple_pdep_kernel.cpp kernels/lz4/lz4_swizzled_match_copy_kernel.cpp)
+add_executable(lz4d_ext_dep lz4d_ext_dep.cpp)
+
 
 #Exclude CoRE from default build.
 set_target_properties(core PROPERTIES EXCLUDE_FROM_ALL 1)
@@ -136,7 +138,8 @@ target_link_libraries (lz4d PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost
 target_link_libraries (core RegExpCompiler ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
 target_link_libraries (character_deletion PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (character_deposit PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (lz4d_ext_dep PabloADT RegExpCompiler CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (lz4d_ext_dep LZ4_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+
 
 
 IF(ENABLE_MULTIPLEXING)

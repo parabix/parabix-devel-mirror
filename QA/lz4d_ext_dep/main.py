@@ -13,7 +13,11 @@ test_options = [
     ('extract_only', '-extract-only', {'extract_only' : True}),
     ('extract_and_deposit', '-extract-and-deposit-only', {'extract_and_deposit_only': True}),
     ('normal', '', {}),
+    ('extract_only_new_approach', '-new-approach -extract-only', {'extract_only' : True}),
+    ('extract_and_deposit_new_approach', '-new-approach -extract-and-deposit-only', {'extract_and_deposit_only': True}),
+    ('normal_new_approach', '-new-approach', {}),
 ]
+
 
 def run_test(test_file, lz4_option, python_lz4_option, test_file_full_path, output_file_full_path, python_output_file_full_path):
     global failure_count

@@ -5,7 +5,7 @@
 #include <kernels/streamset.h>
 #include <iostream>
 
-#define APPLY_64PACK_ACCELERATION
+//#define APPLY_64PACK_ACCELERATION
 // TODO May be we can change it to 256 PACK Acceleration based on SIMD instruction
 
 #define ACCELERATION_LOOP_COUNT (20)
@@ -422,8 +422,9 @@ BasicBlock* LZ4ExtractEM0Kernel::generateHandleCompressedBlock(const std::unique
 
 //    iBuilder->CallPrintInt("tokenPos", this->getCursorValue(iBuilder, "extender"));
     Value* token = this->generateLoadSourceInputByte(iBuilder, "byteStream", this->getCursorValue(iBuilder, "extender"));
+
+    iBuilder->CallPrintInt("tokenPos", this->getCursorValue(iBuilder, "extender"));
 //    iBuilder->CallPrintInt("token", token);
-//    iBuilder->CallPrintInt("tokenPos", this->getCursorValue(iBuilder, "extender"));
 
 //    iBuilder->CreateAssert(iBuilder->CreateICmpULT(this->getCursorValue(iBuilder, "extender"), iBuilder->getSize(0xcb32a)), "ee");
     iBuilder->setScalarField("token", token);
@@ -450,6 +451,7 @@ BasicBlock* LZ4ExtractEM0Kernel::generateHandleCompressedBlock(const std::unique
     // ----May be in a different segment now
     Value* literalLengthEndPos = this->getCursorValue(iBuilder, "extender");
     Value* literalExtensionSize = iBuilder->CreateSub(literalLengthEndPos, iBuilder->getScalarField("tokenPos"));
+//    iBuilder->CallPrintInt("literalExtensionSize", literalExtensionSize);
     Value* finalLengthByte = this->generateLoadSourceInputByte(iBuilder, "byteStream", this->getCursorValue(iBuilder, "extender"));
 
     finalLengthByte = iBuilder->CreateZExt(finalLengthByte, iBuilder->getSizeTy());
@@ -470,14 +472,13 @@ BasicBlock* LZ4ExtractEM0Kernel::generateHandleCompressedBlock(const std::unique
     Value* literalLength = iBuilder->CreateAdd(literalLengthBase, literalLengthExtendValue);
 
 
-    Value* previousOffsetPos = iBuilder->getScalarField("offsetPos");
-
     Value* offsetPos = iBuilder->CreateAdd(
             iBuilder->CreateAdd(
                     literalLengthEndPos,
                     literalLength),
             iBuilder->getSize(1));
     iBuilder->setScalarField("offsetPos", offsetPos);
+//    iBuilder->CallPrintInt("offsetPos", offsetPos);
 //    iBuilder->CallPrintInt("literalStart", iBuilder->CreateAdd(literalLengthEndPos, iBuilder->getSize(1)));
 //    iBuilder->CallPrintInt("literalLength", literalLength);
     this->markCircularOutputBitstream(iBuilder, "e1Marker", iBuilder->getProducedItemCount("e1Marker"), iBuilder->CreateAdd(literalLengthEndPos, iBuilder->getSize(1)), false);
@@ -527,6 +528,7 @@ BasicBlock* LZ4ExtractEM0Kernel::generateHandleCompressedBlock(const std::unique
     iBuilder->SetInsertPoint(extendMatchExitBlock);
     matchLengthStartPos = iBuilder->getScalarField("matchLengthStartPos");
     Value* oldMatchExtensionSize = iBuilder->CreateSub(this->getCursorValue(iBuilder, "extender"), matchLengthStartPos);
+    iBuilder->CallPrintInt("aaa", oldMatchExtensionSize);
 
     token = iBuilder->getScalarField("token");
     extendedMatchValue = iBuilder->CreateICmpEQ(iBuilder->CreateAnd(token, iBuilder->getInt8(0xf)), iBuilder->getInt8(0xf));
@@ -599,6 +601,7 @@ BasicBlock* LZ4ExtractEM0Kernel::generateHandleCompressedBlock(const std::unique
 
     this->increaseScalarField(iBuilder, "m0OutputPos", matchLength);
     this->advanceCursor(iBuilder, "extender", iBuilder->getSize(1));
+//    iBuilder->CallPrintInt("bbb", this->getCursorValue(iBuilder, "extender"));
 
     iBuilder->CreateBr(compressedBlockLoopFinal);
 

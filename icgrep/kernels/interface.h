@@ -73,6 +73,10 @@ struct Binding : public AttributeSet {
         return hasAttribute(AttributeId::Swizzled);
     }
 
+    bool isConstantStrideLengthOne() const {
+        return hasAttribute(AttributeId::ConstantStrideLengthOne);
+    }
+
     unsigned const getLookahead() const {
         return findAttribute(AttributeId::LookAhead).amount();
     }

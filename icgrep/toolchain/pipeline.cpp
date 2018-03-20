@@ -735,6 +735,11 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
                 strideLength = b->getSize(ceiling(ub * kernel->getStride()) - 1);
             }
 
+            if (input.isConstantStrideLengthOne()) {
+                // TODO workaround here
+                strideLength = b->getSize(1);
+            }
+
             Value * const processed = b->getProcessedItemCount(name);
 //            if (input.getRate().isFixed()) {
 //                processed = b->CreateMul(segNo, strideLength);
@@ -748,7 +753,11 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
 
           //  b->CallPrintInt("< " + kernel->getName() + "_" + name + "_unprocessed", unprocessed);
 
-            Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGT(unprocessed, strideLength), isFinal);
+            Value * const hasSufficientData = input.isConstantStrideLengthOne() ?
+                                              b->CreateOr(b->CreateICmpUGE(unprocessed, strideLength), isFinal) :
+                                              b->CreateOr(b->CreateICmpUGT(unprocessed, strideLength), isFinal);
+//            Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGT(unprocessed, strideLength), isFinal);
+//            Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGE(unprocessed, strideLength), isFinal);
 
           //  b->CallPrintInt("* < " + kernel->getName() + "_" + name + "_sufficientData", hasSufficientData);
 

@@ -140,6 +140,10 @@ struct Attribute {
 
         // Whether the input streamset is in swizzled form
 
+        ConstantStrideLengthOne,
+
+        // TODO: Workaround here, the Pack Size is always one
+
 
 //        Here is a revised definition of SegmentedReverse:
 
@@ -274,6 +278,7 @@ protected:
     friend Attribute ConditionalRegionBegin();
     friend Attribute ConditionalRegionEnd();
     friend Attribute Swizzled();
+    friend Attribute ConstantStrideLengthOne();
     friend Attribute CanTerminateEarly();
     friend Attribute MustExplicitlyTerminate();
 
@@ -379,6 +384,12 @@ inline Attribute MustExplicitlyTerminate() {
 inline Attribute Swizzled() {
     return Attribute(Attribute::KindId::Swizzled, 0);
 }
+
+inline Attribute ConstantStrideLengthOne() {
+    return Attribute(Attribute::KindId::ConstantStrideLengthOne, 0);
+}
+
+
 
 }
 
