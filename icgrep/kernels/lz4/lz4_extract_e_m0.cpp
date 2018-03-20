@@ -423,7 +423,7 @@ BasicBlock* LZ4ExtractEM0Kernel::generateHandleCompressedBlock(const std::unique
 //    iBuilder->CallPrintInt("tokenPos", this->getCursorValue(iBuilder, "extender"));
     Value* token = this->generateLoadSourceInputByte(iBuilder, "byteStream", this->getCursorValue(iBuilder, "extender"));
 
-    iBuilder->CallPrintInt("tokenPos", this->getCursorValue(iBuilder, "extender"));
+//    iBuilder->CallPrintInt("tokenPos", this->getCursorValue(iBuilder, "extender"));
 //    iBuilder->CallPrintInt("token", token);
 
 //    iBuilder->CreateAssert(iBuilder->CreateICmpULT(this->getCursorValue(iBuilder, "extender"), iBuilder->getSize(0xcb32a)), "ee");
@@ -528,7 +528,7 @@ BasicBlock* LZ4ExtractEM0Kernel::generateHandleCompressedBlock(const std::unique
     iBuilder->SetInsertPoint(extendMatchExitBlock);
     matchLengthStartPos = iBuilder->getScalarField("matchLengthStartPos");
     Value* oldMatchExtensionSize = iBuilder->CreateSub(this->getCursorValue(iBuilder, "extender"), matchLengthStartPos);
-    iBuilder->CallPrintInt("aaa", oldMatchExtensionSize);
+//    iBuilder->CallPrintInt("aaa", oldMatchExtensionSize);
 
     token = iBuilder->getScalarField("token");
     extendedMatchValue = iBuilder->CreateICmpEQ(iBuilder->CreateAnd(token, iBuilder->getInt8(0xf)), iBuilder->getInt8(0xf));
