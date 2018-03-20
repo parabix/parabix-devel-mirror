@@ -231,6 +231,16 @@ Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, Fu
 }
 
 
+
+std::string ParabixDriver::getMangledName(std::string s) {
+    DataLayout DL(mTarget->createDataLayout());    
+    std::string MangledName;
+    raw_string_ostream MangledNameStream(MangledName);
+    Mangler::getNameWithPrefix(MangledNameStream, s, DL);
+    return MangledName;
+}
+
+
 void ParabixDriver::preparePassManager() {
     PassRegistry * Registry = PassRegistry::getPassRegistry();
     initializeCore(*Registry);
@@ -302,7 +312,7 @@ void ParabixDriver::finalizeObject() {
             },
             [&](const std::string &Name) {
                 auto SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(Name);
-                if (!SymAddr) SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(iBuilder->getMangledName(Name));
+                if (!SymAddr) SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(getMangledName(Name));
 #if LLVM_VERSION_INTEGER <= LLVM_VERSION_CODE(3, 9, 1)
                 if (SymAddr) return RuntimeDyld::SymbolInfo(SymAddr, JITSymbolFlags::Exported);
                 return RuntimeDyld::SymbolInfo(nullptr);
@@ -357,7 +367,7 @@ void * ParabixDriver::getMain() {
 #ifndef ORCJIT
     return mEngine->getPointerToNamedFunction("Main");
 #else
-    auto MainSym = mCompileLayer->findSymbol(iBuilder->getMangledName("Main"), false);
+    auto MainSym = mCompileLayer->findSymbol(getMangledName("Main"), false);
     assert (MainSym && "Main not found");
     
     intptr_t main = (intptr_t) MainSym.getAddress();

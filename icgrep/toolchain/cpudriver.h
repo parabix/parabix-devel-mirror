@@ -55,6 +55,8 @@ public:
     void performIncrementalCacheCleanupStep() override;
 
 private:
+    std::string getMangledName(std::string s);
+    
     void preparePassManager();
 
     llvm::Function * addLinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const override;
