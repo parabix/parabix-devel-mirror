@@ -427,10 +427,6 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
             FunctionType * const fty = FunctionType::get(getInt32Ty(), {voidPtrTy->getPointerTo(), sizeTy, sizeTy}, false);
             f = Function::Create(fty, Function::ExternalLinkage, "posix_memalign", m);
             f->setCallingConv(CallingConv::C);
-            f->setReturnDoesNotAlias();
-            #if LLVM_VERSION_INTEGER <LLVM_VERSION_CODE(5, 0, 0)
-            f->setDoesNotAlias(1);
-            #endif
         }
         Value * handle = CreateAlloca(voidPtrTy);
         CallInst * success = CreateCall(f, {handle, align, size});
