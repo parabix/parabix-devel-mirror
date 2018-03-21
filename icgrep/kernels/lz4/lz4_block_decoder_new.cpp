@@ -47,6 +47,14 @@ namespace kernel{
         addAttribute(MustExplicitlyTerminate());
 }
 
+void LZ4BlockDecoderNewKernel::resetPreviousProducedMap(const std::unique_ptr<KernelBuilder> &iBuilder,
+                                                        std::vector<std::string> outputList) {
+    previousProducedMap.clear();
+    for (auto iter = outputList.begin(); iter != outputList.end(); ++iter) {
+        previousProducedMap.insert(std::make_pair(*iter, iBuilder->getProducedItemCount(*iter)));
+    }
+}
+
 void LZ4BlockDecoderNewKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, Value * const numOfStrides) {
     // Constant
     Constant* INT8_0 = iBuilder->getInt8(0);
@@ -56,6 +64,8 @@ void LZ4BlockDecoderNewKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
 
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * exitBlock = iBuilder->CreateBasicBlock("exit");
+
+    this->resetPreviousProducedMap(iBuilder, {"isCompressed", "blockStart", "blockEnd"});
 
     // Skip Header
     Value* hasSkipHeader = iBuilder->getScalarField("hasSkipHeader");
@@ -184,6 +194,7 @@ void LZ4BlockDecoderNewKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
 
 
     Value* LZ4BlockDecoderNewKernel::generateLoadInput(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* offset) {
+        // The external buffer is always linear accessible, so the GEP here is safe
         Value * inputBufferBasePtr = iBuilder->getRawInputPointer("byteStream", iBuilder->getSize(0));
         Value* targetPtr = iBuilder->CreateGEP(inputBufferBasePtr, offset);
         return iBuilder->CreateLoad(targetPtr);
@@ -191,25 +202,34 @@ void LZ4BlockDecoderNewKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
 
     void LZ4BlockDecoderNewKernel::appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, Value* isCompressed, Value* blockStart, Value* blockEnd) {
         // Constant
-        this->generateStoreCircularOutput(iBuilder, "isCompressed", iBuilder->getInt8Ty()->getPointerTo(), isCompressed);
-        this->generateStoreCircularOutput(iBuilder, "blockStart", iBuilder->getInt64Ty()->getPointerTo(), blockStart);
-        this->generateStoreCircularOutput(iBuilder, "blockEnd", iBuilder->getInt64Ty()->getPointerTo(), blockEnd);
+        this->generateStoreNumberOutput(iBuilder, "isCompressed", iBuilder->getInt8Ty()->getPointerTo(), isCompressed);
+        this->generateStoreNumberOutput(iBuilder, "blockStart", iBuilder->getInt64Ty()->getPointerTo(), blockStart);
+        this->generateStoreNumberOutput(iBuilder, "blockEnd", iBuilder->getInt64Ty()->getPointerTo(), blockEnd);
     }
 
-    void LZ4BlockDecoderNewKernel::generateStoreCircularOutput(const unique_ptr<KernelBuilder> &iBuilder, const string& outputBufferName, Type* pointerType, Value* value) {
-        Value* offset = iBuilder->getProducedItemCount(outputBufferName);
+    void LZ4BlockDecoderNewKernel::generateStoreNumberOutput(const unique_ptr<KernelBuilder> &iBuilder,
+                                                             const string &outputBufferName, Type *pointerType,
+                                                             Value *value) {
+        Value* SIZE_BIT_BLOCK_WIDTH = iBuilder->getSize(iBuilder->getBitBlockWidth());
+        Value* SIZE_ZERO = iBuilder->getSize(0);
+        Value* SIZE_ONE = iBuilder->getSize(1);
 
-        size_t inputSize = this->getOutputBufferSize(iBuilder, outputBufferName);
-        Value* offsetMask = iBuilder->getSize(inputSize - 1);
-        Value* maskedOffset = iBuilder->CreateAnd(offsetMask, offset);
+        Value* previousProduced = previousProducedMap.find(outputBufferName)->second;
 
-        Value* outputBufferPtr = iBuilder->getRawOutputPointer(outputBufferName, iBuilder->getSize(0));
+        Value* blockIndexBase = iBuilder->CreateUDiv(previousProduced, SIZE_BIT_BLOCK_WIDTH);
+        Value* outputOffset = iBuilder->getProducedItemCount(outputBufferName);
+        Value* blockIndex = iBuilder->CreateUDiv(outputOffset, SIZE_BIT_BLOCK_WIDTH);
 
-        outputBufferPtr = iBuilder->CreatePointerCast(outputBufferPtr, pointerType);
-        iBuilder->CreateStore(value, iBuilder->CreateGEP(outputBufferPtr, maskedOffset));
+        Value* blockOffset = iBuilder->CreateURem(outputOffset, SIZE_BIT_BLOCK_WIDTH);
 
-        offset = iBuilder->CreateAdd(offset, iBuilder->getSize(1));
-        iBuilder->setProducedItemCount(outputBufferName, offset);
+        // i8, [8 x <4 x i64>]*
+        // i64, [64 x <4 x i64>]*
+        Value* ptr = iBuilder->getOutputStreamBlockPtr(outputBufferName, SIZE_ZERO, iBuilder->CreateSub(blockIndex, blockIndexBase));
+        ptr = iBuilder->CreatePointerCast(ptr, pointerType);
+        // GEP here is safe
+        iBuilder->CreateStore(value, iBuilder->CreateGEP(ptr, blockOffset));
+
+        iBuilder->setProducedItemCount(outputBufferName, iBuilder->CreateAdd(outputOffset, SIZE_ONE));
     }
 
     size_t LZ4BlockDecoderNewKernel::getOutputBufferSize(const unique_ptr<KernelBuilder> &iBuilder, const string& bufferName) {

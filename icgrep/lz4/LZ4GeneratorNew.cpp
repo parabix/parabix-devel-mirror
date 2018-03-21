@@ -56,7 +56,7 @@ int LZ4GeneratorNew::getDecompressedBufferBlocks() {
 
 void LZ4GeneratorNew::generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     //// Decode Block Information
-    StreamSetBuffer * const BlockData_IsCompressed = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->get4MbBufferBlocks());
+    StreamSetBuffer * const BlockData_IsCompressed = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->get4MbBufferBlocks());
     StreamSetBuffer * const BlockData_BlockStart = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->get4MbBufferBlocks());
     StreamSetBuffer * const BlockData_BlockEnd = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->get4MbBufferBlocks());
 
