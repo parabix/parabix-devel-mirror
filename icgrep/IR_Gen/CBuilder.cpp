@@ -679,7 +679,8 @@ IntegerType * LLVM_READNONE CBuilder::getIntAddrTy() const {
 }
 
 PointerType * LLVM_READNONE CBuilder::getVoidPtrTy(const unsigned AddressSpace) const {
-    return PointerType::get(Type::getVoidTy(getContext()), AddressSpace);
+    //return PointerType::get(Type::getVoidTy(getContext()), AddressSpace);
+    return PointerType::get(Type::getInt8Ty(getContext()), AddressSpace);
 }
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {

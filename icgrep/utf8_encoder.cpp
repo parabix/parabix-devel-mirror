@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <algorithm>
 #include <stdexcept>
+#include <string>
 
 using namespace UCD;
 

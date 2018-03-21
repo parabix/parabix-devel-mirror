@@ -22,7 +22,7 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/kernel_builder.h>
 #include <toolchain/cpudriver.h>
-
+#include <llvm/Support/raw_ostream.h>
 #include <iostream>
 #include <lz4/LZ4Generator.h>
 #include <lz4/LZ4GeneratorNew.h>
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
     std::string fileName = inputFile;
     LZ4FrameDecoder lz4Frame(fileName);
     if (!lz4Frame.isValid()) {
-        errs() << "Invalid LZ4 file.\n";
+        llvm::errs() << "Invalid LZ4 file.\n";
         return -1;
     }
 
@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
         if (overwriteOutput) {
             boost::filesystem::remove(outputFile);
         } else {
-            errs() << outputFile + " existed. Use -f argument to overwrite.\n";
+            llvm::errs() << outputFile + " existed. Use -f argument to overwrite.\n";
             return -1;
         }
     }

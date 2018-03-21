@@ -92,8 +92,9 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     if (sys::getHostCPUFeatures(HostCPUFeatures)) {
         std::vector<std::string> attrs;
         for (auto &flag : HostCPUFeatures) {
-            auto enabled = flag.second ? "+" : "-";
-            attrs.push_back(enabled + flag.first().str());
+            if (flag.second) {
+                attrs.push_back("+" + flag.first().str());
+            }
         }
         builder.setMAttrs(attrs);
     }
@@ -138,7 +139,7 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
 }
 
 void ParabixDriver::makeKernelCall(Kernel * kernel, const std::vector<StreamSetBuffer *> & inputs, const std::vector<StreamSetBuffer *> & outputs) {
-    assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kernel->getModule() == nullptr));
+    assert ("makeKernelCall was already run on this kernel." && (kernel->getModule() == nullptr));
     mPipeline.emplace_back(kernel);
     kernel->bindPorts(inputs, outputs);
     if (!mCache || !mCache->loadCachedObjectFile(iBuilder, kernel)) {
@@ -263,6 +264,7 @@ void ParabixDriver::finalizeObject() {
     auto Resolver = llvm::orc::createLambdaResolver(
             [&](const std::string &Name) {
                 auto Sym = mCompileLayer->findSymbol(Name, false);
+                if (!Sym) Sym = mCompileLayer->findSymbol(getMangledName(Name), false);
 #if LLVM_VERSION_INTEGER <= LLVM_VERSION_CODE(3, 9, 1)
                 if (Sym) return Sym.toRuntimeDyldSymbol();
                 return RuntimeDyld::SymbolInfo(nullptr);

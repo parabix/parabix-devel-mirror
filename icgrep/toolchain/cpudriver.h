@@ -7,7 +7,7 @@ namespace llvm { class TargetMachine; }
 namespace llvm { class raw_fd_ostream; }
 
 #include <llvm/IR/LegacyPassManager.h>
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
 #define ORCJIT
 #endif
 

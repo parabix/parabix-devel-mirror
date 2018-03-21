@@ -28,7 +28,7 @@ using namespace llvm;
 
 static cl::OptionCategory wcFlags("Command Flags", "wc options");
 
-static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(wcFlags));
+cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(wcFlags));
 
 enum CountOptions {
     LineOption, WordOption, CharOption, ByteOption
