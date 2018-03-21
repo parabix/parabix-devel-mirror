@@ -1,12 +1,13 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
 
 #include <iostream>
 #include <iomanip>
-#include <sstream>
+#include <vector>
+#include <string>
 #include <toolchain/toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
@@ -23,12 +24,15 @@
 #include <pablo/pablo_toolchain.h>
 #include <toolchain/cpudriver.h>
 #include <fcntl.h>
+#include <boost/filesystem.hpp>
 
 using namespace llvm;
 
 static cl::OptionCategory wcFlags("Command Flags", "wc options");
 
-cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(wcFlags));
+static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(wcFlags));
+
+std::vector<std::string> allFiles;
 
 enum CountOptions {
     LineOption, WordOption, CharOption, ByteOption
@@ -43,7 +47,82 @@ static cl::list<CountOptions> wcOptions(
                                                  
 static std::string wc_modes = "";
 
-static int defaultFieldWidth = 7;  // default field width
+static int defaultDisplayColumnWidth = 7;  // default field width
+
+
+bool RecursiveFlag;
+static cl::opt<bool, true> RecursiveOption("r", cl::location(RecursiveFlag), cl::desc("Recursively process files within directories, (but follow only top-level symlinks unless -R)."), cl::cat(wcFlags), cl::Grouping);
+static cl::alias RecursiveAlias("recursive", cl::desc("Alias for -r"), cl::aliasopt(RecursiveOption));
+
+bool DereferenceRecursiveFlag;
+static cl::opt<bool, true> DereferenceRecursiveOption("R", cl::location(DereferenceRecursiveFlag), cl::desc("Recursively process files within directories, following symlinks at all levels."), cl::cat(wcFlags), cl::Grouping);
+static cl::alias DereferenceRecursiveAlias("dereference-recursive", cl::desc("Alias for -R"), cl::aliasopt(DereferenceRecursiveOption));
+
+
+// This is a stub, to be expanded later.
+bool excludeDirectory(boost::filesystem::path dirpath) { return dirpath.filename() == ".svn";}
+
+// Determine whether to skip a path based on -D skip or -d skip settings.
+bool skip_path(boost::filesystem::path p) {
+    using namespace boost::filesystem;
+    switch (status(p).type()) {
+        case directory_file: return !(RecursiveFlag|DereferenceRecursiveFlag);
+        case block_file:
+        case character_file:
+        case fifo_file:
+        case socket_file:
+            return true;
+        default:
+            return false;
+    }
+}
+
+
+std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
+    using namespace boost::filesystem;
+    symlink_option follow_symlink = DereferenceRecursiveFlag ? symlink_option::recurse : symlink_option::none;
+    std::vector<std::string> expanded_paths;
+    boost::system::error_code errc;
+    for (const std::string & f : inputFiles) {
+        //        if (f == "-") {
+        //            continue;
+        //        }
+        path p(f);
+        if (skip_path(p)) {
+            continue;
+        }
+        if (LLVM_UNLIKELY((RecursiveFlag || DereferenceRecursiveFlag) && is_directory(p))) {
+            if (!excludeDirectory(p)) {
+                recursive_directory_iterator di(p, follow_symlink, errc), end;
+                if (errc) {
+                    // If we cannot enter the directory, keep it in the list of files.
+                    expanded_paths.push_back(f);
+                    continue;
+                }
+                while (di != end) {
+                    auto & e = di->path();
+                    if (is_directory(e)) {
+                        if (LLVM_UNLIKELY(excludeDirectory(e))) {
+                            di.no_push();
+                        }
+                    } else {
+                        if (!skip_path(e)) expanded_paths.push_back(e.string());
+                    }
+                    di.increment(errc);
+                    if (errc) {
+                        expanded_paths.push_back(e.string());
+                    }
+                }
+            }
+        } else {
+            expanded_paths.push_back(p.string());
+        }
+    }
+    return expanded_paths;
+}
+
+
+
 
 
 bool CountLines = false;
@@ -201,7 +280,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 }
 
 void wc(WordCountFunctionType fn_ptr, const int64_t fileIdx) {
-    std::string fileName = inputFiles[fileIdx];
+    std::string fileName = allFiles[fileIdx];
     const int fd = open(fileName.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
         std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
@@ -240,7 +319,8 @@ int main(int argc, char *argv[]) {
     wcPipelineGen(pxDriver);
     auto wordCountFunctionPtr = reinterpret_cast<WordCountFunctionType>(pxDriver.getMain());
 
-    const auto fileCount = inputFiles.size();
+    allFiles = getFullFileList(inputFiles);
+    const auto fileCount = allFiles.size();
     lineCount.resize(fileCount);
     wordCount.resize(fileCount);
     charCount.resize(fileCount);
@@ -258,35 +338,35 @@ int main(int argc, char *argv[]) {
     
     
     
-    int fieldWidth = std::to_string(maxCount).size() + 1;
-    if (fieldWidth < defaultFieldWidth) fieldWidth = defaultFieldWidth;
+    int displayColumnWidth = std::to_string(maxCount).size() + 1;
+    if (displayColumnWidth < defaultDisplayColumnWidth) displayColumnWidth = defaultDisplayColumnWidth;
 
-    for (unsigned i = 0; i < inputFiles.size(); ++i) {
-        std::cout << std::setw(fieldWidth-1);
+    for (unsigned i = 0; i < fileCount; ++i) {
+        std::cout << std::setw(displayColumnWidth-1);
         if (CountLines) {
-            std::cout << lineCount[i] << std::setw(fieldWidth);
+            std::cout << lineCount[i] << std::setw(displayColumnWidth);
         }
         if (CountWords) {
-            std::cout << wordCount[i] << std::setw(fieldWidth);
+            std::cout << wordCount[i] << std::setw(displayColumnWidth);
         }
         if (CountChars) {
-            std::cout << charCount[i] << std::setw(fieldWidth);
+            std::cout << charCount[i] << std::setw(displayColumnWidth);
         }
         if (CountBytes) {
             std::cout << byteCount[i];
         }
-        std::cout << " " << inputFiles[i] << std::endl;
+        std::cout << " " << allFiles[i] << std::endl;
     }
     if (inputFiles.size() > 1) {
-        std::cout << std::setw(fieldWidth-1);
+        std::cout << std::setw(displayColumnWidth-1);
         if (CountLines) {
-            std::cout << TotalLines << std::setw(fieldWidth);
+            std::cout << TotalLines << std::setw(displayColumnWidth);
         }
         if (CountWords) {
-            std::cout << TotalWords << std::setw(fieldWidth);
+            std::cout << TotalWords << std::setw(displayColumnWidth);
         }
         if (CountChars) {
-            std::cout << TotalChars << std::setw(fieldWidth);
+            std::cout << TotalChars << std::setw(displayColumnWidth);
         }
         if (CountBytes) {
             std::cout << TotalBytes;
