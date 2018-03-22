@@ -19,22 +19,31 @@ using namespace std;
 
 namespace kernel {
 
+    Value* LZ4NumbersToBitstreamKernel::loadInt64NumberInput(const unique_ptr<KernelBuilder> &iBuilder, string bufferName, Value* offset) {
+        // GEP here is safe
+        Value* SIZE_BIT_BLOCK_WIDTH = iBuilder->getSize(iBuilder->getBitBlockWidth());
+        Value* inputLocalBlockIndex = iBuilder->CreateUDiv(offset, SIZE_BIT_BLOCK_WIDTH);
+        Value* inputLocalBlockOffset = iBuilder->CreateURem(offset, SIZE_BIT_BLOCK_WIDTH);
+
+        Value* blockBasePtr = iBuilder->getInputStreamBlockPtr(bufferName, iBuilder->getSize(0), inputLocalBlockIndex);
+        blockBasePtr = iBuilder->CreatePointerCast(blockBasePtr, iBuilder->getInt64Ty()->getPointerTo());
+        // GEP here is safe
+        return iBuilder->CreateLoad(iBuilder->CreateGEP(blockBasePtr, inputLocalBlockOffset));
+    }
+
     void LZ4NumbersToBitstreamKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder,
                                                                llvm::Value *const numOfStrides) {
-
-//        iBuilder->CallPrintInt("======Entry", iBuilder->getSize(0));
-//        iBuilder->CallPrintInt("mIsFinal", mIsFinal);
-//        iBuilder->CallPrintInt("numOfStrides", numOfStrides);
-
         // Const
         Constant *SIZE_ZERO = iBuilder->getSize(0);
         Constant *SIZE_ONE = iBuilder->getSize(1);
         Constant *INT64_ZERO = iBuilder->getInt64(0);
         Constant *INT64_ONE = iBuilder->getInt64(1);
-        Constant *BIT_BLOCK_ZERO = llvm::ConstantVector::get(
-                {INT64_ZERO, INT64_ZERO, INT64_ZERO, INT64_ZERO}); // TODO Assumed bit block type is always <4 * i64>
+
         unsigned int BIT_BLOCK_WIDTH = iBuilder->getBitBlockWidth();
+        Type * const INT_BIT_BLOCK_TY = iBuilder->getIntNTy(BIT_BLOCK_WIDTH);
         Constant *SIZE_BIT_BLOCK_WIDTH = iBuilder->getSize(BIT_BLOCK_WIDTH);
+        Constant* INT_BIT_BLOCK_ZERO = ConstantInt::get(INT_BIT_BLOCK_TY, 0);
+        Value* BIT_BLOCK_ZERO = iBuilder->CreateBitCast(INT_BIT_BLOCK_ZERO, iBuilder->getBitBlockType());
 
 
         size_t outputBufferBlocks = this->getAnyBufferSize(iBuilder, OUTPUT_BIT_STREAM_NAME) / iBuilder->getStride();
@@ -61,27 +70,17 @@ namespace kernel {
         Value *oldProducedOutputBlockIndex = iBuilder->CreateUDiv(oldProducedItemCount,
                                                                   SIZE_BIT_BLOCK_WIDTH); // always produce full block except for final block
 
-
-//        Value *initCurrentItemIndex = iBuilder->CreateSelect(
-//                isFinalBlock,
-//                SIZE_ZERO,
-//                iBuilder->CreateURem(itemProcessed, SIZE_BIT_BLOCK_WIDTH)
-//        );
-
         Value *initCurrentItemIndex = iBuilder->CreateURem(itemProcessed, SIZE_BIT_BLOCK_WIDTH);
 
         Value *initOutputIndex = SIZE_ZERO;
 
-//        Value *availableOutputBlocks = iBuilder->CreateSelect(mIsFinal, iBuilder->getSize(32), numOfStrides); //TODO workaround here
-//        Value *availableOutputBlocks = numOfStrides;
-//        Value *availableOutputBlocks = remainSpace;
+
         Value *availableOutputBlocks = iBuilder->CreateUMin(remainSpace, numOfStrides);
 
-        // TODO handle input pointer
-        Value *inputStartBasePtr = iBuilder->getInputStreamBlockPtr(START_NUM_STREAM_NAME, SIZE_ZERO);
-        inputStartBasePtr = iBuilder->CreatePointerCast(inputStartBasePtr, iBuilder->getInt64Ty()->getPointerTo());
-        Value *inputEndBasePtr = iBuilder->getInputStreamBlockPtr(END_NUM_STREAM_NAME, SIZE_ZERO);
-        inputEndBasePtr = iBuilder->CreatePointerCast(inputEndBasePtr, iBuilder->getInt64Ty()->getPointerTo());
+//        Value *inputStartBasePtr = iBuilder->getInputStreamBlockPtr(START_NUM_STREAM_NAME, SIZE_ZERO);
+//        inputStartBasePtr = iBuilder->CreatePointerCast(inputStartBasePtr, iBuilder->getInt64Ty()->getPointerTo());
+//        Value *inputEndBasePtr = iBuilder->getInputStreamBlockPtr(END_NUM_STREAM_NAME, SIZE_ZERO);
+//        inputEndBasePtr = iBuilder->CreatePointerCast(inputEndBasePtr, iBuilder->getInt64Ty()->getPointerTo());
         Value *outputBasePtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO);
         Value *initCarryBit = iBuilder->getScalarField("carryBit");
 
@@ -115,15 +114,10 @@ namespace kernel {
         PHINode *phiCarryBit = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2);
         phiCarryBit->addIncoming(initCarryBit, entryBlock);
 
-
-        // TODO It is possible that in final block, not all items have been processed, while the output buffer is not enough. This situation need to be verified later
-        // phiCurrentItemIndex < itemsToDo && currentOutputIndex < availableOutputBlocks
-//        iBuilder->CallPrintInt("phiCurrentItemIndex", phiCurrentItemIndex);
-//        iBuilder->CallPrintInt("aaa", iBuilder->CreateAdd(itemsToDo, initCurrentItemIndex));
         iBuilder->CreateCondBr(
                 iBuilder->CreateAnd(
                         iBuilder->CreateICmpULT(phiCurrentItemIndex, iBuilder->CreateAdd(itemsToDo,
-                                                                                         initCurrentItemIndex)), //TODO should not be itemsToDo here, may be itemsToDo + initCurrentItemIndex
+                                                                                         initCurrentItemIndex)),
                         iBuilder->CreateICmpULT(phiCurrentOutputIndex, availableOutputBlocks)
                 ),
                 multiBlockLoopBodyBlock,
@@ -134,14 +128,9 @@ namespace kernel {
         iBuilder->SetInsertPoint(multiBlockLoopBodyBlock);
 
         Value *currentOutputGlobalIndex = iBuilder->CreateAdd(phiCurrentOutputIndex, oldProducedOutputBlockIndex);
-
         // StartBits
-        Value *currentStartPos = iBuilder->CreateLoad(iBuilder->CreateGEP(inputStartBasePtr, phiCurrentItemIndex));
+        Value *currentStartPos = this->loadInt64NumberInput(iBuilder, START_NUM_STREAM_NAME, phiCurrentItemIndex);
         Value *currentStartGlobalBlockIndex = iBuilder->CreateUDiv(currentStartPos, SIZE_BIT_BLOCK_WIDTH);
-//        Value *currentStartLocalBlockIndex = iBuilder->CreateSub(currentStartGlobalBlockIndex,
-//                                                                 oldProducedOutputBlockIndex);
-//        iBuilder->CallPrintInt("currentStartLocalBlockIndex", currentStartLocalBlockIndex); //TODO overflow here
-
 
         Value *currentStartLocalBlockOffset = iBuilder->CreateURem(currentStartPos,
                                                                    SIZE_BIT_BLOCK_WIDTH); // 0 ~ BIT_BLOCK_WIDTH
@@ -150,16 +139,10 @@ namespace kernel {
                                                             currentStartLocalBlockOffset,
                                                             iBuilder->CreateICmpEQ(currentStartGlobalBlockIndex,
                                                                                    currentOutputGlobalIndex));
-//        iBuilder->CallPrintRegister("phiCurrentBlockStartData", phiCurrentBlockStartData);
-//        iBuilder->CallPrintRegister("newBlockStartData", newBlockStartData);
-//        iBuilder->CallPrintInt("currentStartPos", currentStartPos);
-//        iBuilder->CallPrintInt("----", SIZE_ZERO);
-
 
         // EndBits
-        Value *currentEndPos = iBuilder->CreateLoad(iBuilder->CreateGEP(inputEndBasePtr, phiCurrentItemIndex));
+        Value *currentEndPos = this->loadInt64NumberInput(iBuilder, END_NUM_STREAM_NAME, phiCurrentItemIndex);
         Value *currentEndGlobalBlockIndex = iBuilder->CreateUDiv(currentEndPos, SIZE_BIT_BLOCK_WIDTH);
-//        Value *currentEndLocalBlockIndex = iBuilder->CreateSub(currentEndGlobalBlockIndex, oldProducedOutputBlockIndex);
 
         Value *currentEndLocalBlockOffset = iBuilder->CreateURem(currentEndPos,
                                                                  SIZE_BIT_BLOCK_WIDTH); // 0 ~ BIT_BLOCK_WIDTH
@@ -168,9 +151,6 @@ namespace kernel {
         Value *newBlockEndData = this->setIntVectorBitOne(iBuilder, phiCurrentBlockEndData, currentEndLocalBlockOffset,
                                                           iBuilder->CreateICmpEQ(currentEndGlobalBlockIndex,
                                                                                  currentOutputGlobalIndex));
-//            iBuilder->CallPrintInt("%%%currentEndPos", currentEndPos);
-//            iBuilder->CallPrintRegister("%%%newBlockEndData", newBlockEndData);
-//        iBuilder->CallPrintInt("currentEndPos", currentEndPos);
 
         Value *enterNewOutputBlock = iBuilder->CreateOr(
                 iBuilder->CreateICmpUGT(currentStartGlobalBlockIndex, currentOutputGlobalIndex),
@@ -184,13 +164,8 @@ namespace kernel {
 
         // Avoid branch mis-prediction by always storing output block
         Value *outputData = iBuilder->simd_sub(BIT_BLOCK_WIDTH, newBlockEndData, newBlockStartWithCarry);
-//        iBuilder->CallPrintInt("----store", iBuilder->getSize(0));
-//        iBuilder->CallPrintInt("carry", phiCarryBit);
-//        iBuilder->CallPrintRegister("newBlockEndData", newBlockEndData);
-//        iBuilder->CallPrintRegister("newBlockStartWithCarry", newBlockStartWithCarry);
-//        iBuilder->CallPrintInt("----outputPtr", iBuilder->CreateGEP(outputBasePtr, phiCurrentOutputIndex));
-//        iBuilder->CallPrintRegister("outputData", outputData);
-        iBuilder->CreateBlockAlignedStore(outputData, iBuilder->CreateGEP(outputBasePtr, phiCurrentOutputIndex));
+
+        iBuilder->CreateBlockAlignedStore(outputData, iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO, phiCurrentOutputIndex));
 
         // Handle PHINodes
 
@@ -262,8 +237,6 @@ namespace kernel {
                 phiCurrentBlockEndData,
                 iBuilder->simd_add(BIT_BLOCK_WIDTH, phiCurrentBlockStartData, carryBitIntVec)
         );
-//        iBuilder->CallPrintRegister("%%%phiCurrentBlockEndData", phiCurrentBlockEndData);
-//            iBuilder->CallPrintInt("----outputPtrFinal", iBuilder->CreateGEP(outputBasePtr, phiCurrentOutputIndex));
 
         BasicBlock *storeFinalBlock = iBuilder->CreateBasicBlock("storeFinalBlock");
         BasicBlock *storeFinalBlockEnd = iBuilder->CreateBasicBlock("storeFinalBlockEnd");
@@ -272,8 +245,7 @@ namespace kernel {
         iBuilder->SetInsertPoint(storeFinalBlock);
 
 //        iBuilder->CallPrintRegister("finalOutputData", finalOutputData);
-        iBuilder->CreateBlockAlignedStore(finalOutputData, iBuilder->CreateGEP(outputBasePtr,
-                                                                   phiCurrentOutputIndex)); //Possible overflow here if this store always happen
+        iBuilder->CreateBlockAlignedStore(finalOutputData, iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO, phiCurrentOutputIndex)); //Possible overflow here if this store always happen
         iBuilder->CreateBr(storeFinalBlockEnd);
         iBuilder->SetInsertPoint(storeFinalBlockEnd);
 
@@ -286,9 +258,7 @@ namespace kernel {
         iBuilder->setProcessedItemCount(START_NUM_STREAM_NAME, newProcessedItemCount);
         iBuilder->setProcessedItemCount(END_NUM_STREAM_NAME, newProcessedItemCount);
 
-        Value *lastEndPos = iBuilder->CreateLoad(
-                iBuilder->CreateGEP(inputEndBasePtr, iBuilder->CreateSub(phiCurrentItemIndex, SIZE_ONE)));
-//        iBuilder->CallPrintInt("lastEndPos", lastEndPos);
+        Value *lastEndPos = this->loadInt64NumberInput(iBuilder, END_NUM_STREAM_NAME, iBuilder->CreateSub(phiCurrentItemIndex, SIZE_ONE));
 
         iBuilder->setProducedItemCount(OUTPUT_BIT_STREAM_NAME,
                                        iBuilder->CreateSelect(
@@ -311,24 +281,22 @@ namespace kernel {
 
     /*
      * iBuilder: kernel builder
-     * intVec: BitBlockType, <4 * i64>
-     * pos: size_t, 0 - 256, position of bit 1
+     * intVec: BitBlockType
+     * pos: size_t, 0 - bitBlockWidth, position of bit 1
      * isSet: i1, when isSet == true, bit 1 will be set, otherwise this function do nothing
      * */
     Value *LZ4NumbersToBitstreamKernel::setIntVectorBitOne(const std::unique_ptr<KernelBuilder> &iBuilder,
                                                             llvm::Value *intVec, llvm::Value *pos, llvm::Value *isSet) {
-        Value *SIZE_64 = iBuilder->getSize(64); //TODO assume bit block type will always be <4 * i64>
-        Value *blockIndex = iBuilder->CreateUDiv(pos, SIZE_64);
-        Value *blockOffset = iBuilder->CreateURem(pos, SIZE_64);
+        Type* BIT_BLOCK_TYPE = iBuilder->getBitBlockType();
+        Type* BIT_BLOCK_WIDTH_INT_TYPE = iBuilder->getIntNTy(iBuilder->getBitBlockWidth());
 
-        Value *oldValue = iBuilder->CreateExtractElement(intVec, blockIndex);
-        // Use select to avoid branch misprediction
-        Value *bitOneValue = iBuilder->CreateShl(
-                iBuilder->CreateSelect(isSet, iBuilder->getInt64(1), iBuilder->getInt64(0)),
-                blockOffset
+        Value* sourceInt = iBuilder->CreateBitCast(intVec, BIT_BLOCK_WIDTH_INT_TYPE);
+        Value *oneBit = iBuilder->CreateShl(
+                iBuilder->CreateSelect(isSet, ConstantInt::get(BIT_BLOCK_WIDTH_INT_TYPE, 1),
+                                       ConstantInt::get(BIT_BLOCK_WIDTH_INT_TYPE, 0)),
+                iBuilder->CreateZExt(pos, BIT_BLOCK_WIDTH_INT_TYPE)
         );
-        Value *newValue = iBuilder->CreateOr(oldValue, bitOneValue);
-        return iBuilder->CreateInsertElement(intVec, newValue, blockIndex);
+        return iBuilder->CreateBitCast(iBuilder->CreateOr(sourceInt, oneBit), BIT_BLOCK_TYPE);
     }
 
     Value *LZ4NumbersToBitstreamKernel::intVecGT(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *intVec1,

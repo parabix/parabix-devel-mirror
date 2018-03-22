@@ -110,8 +110,8 @@ void SwizzledDeleteByPEXTkernel::generateFinalBlockMethod(const std::unique_ptr<
     // Write the pending data.
     for (unsigned i = 0; i < mSwizzleSetCount; i++) {
         Value * pendingData = iBuilder->getScalarField("pendingSwizzleData" + std::to_string(i));
-        Value * outputStreamPtr = iBuilder->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), iBuilder->getInt32(0));
-        iBuilder->CreateBlockAlignedStore(pendingData, iBuilder->CreateGEP(outputStreamPtr, outputIndex));
+        Value * outputStreamPtr = iBuilder->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), iBuilder->getInt32(0), outputIndex);
+        iBuilder->CreateBlockAlignedStore(pendingData, outputStreamPtr);
     }
     iBuilder->setProducedItemCount("outputSwizzle0", iBuilder->CreateAdd(pendingOffset, outputProduced));
 }
@@ -184,11 +184,9 @@ void SwizzledDeleteByPEXTkernel::generatePEXTAndSwizzleLoop(const std::unique_pt
     Value * pendingOffset = iBuilder->getScalarField("pendingOffset");
     // There is a separate vector of pending data for each swizzle group.
     std::vector<Value *> pendingData;
-    std::vector<Value *> outputStreamPtr;
 
     for (unsigned i = 0; i < mSwizzleSetCount; i++) {
         pendingData.push_back(iBuilder->getScalarField("pendingSwizzleData" + std::to_string(i)));
-        outputStreamPtr.push_back(iBuilder->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), iBuilder->getInt32(0)));
     }
 
     // For each row i
@@ -209,8 +207,8 @@ void SwizzledDeleteByPEXTkernel::generatePEXTAndSwizzleLoop(const std::unique_pt
             Value * combinedGroup = iBuilder->CreateOr(pendingData[j], iBuilder->CreateShl(newItems, iBuilder->simd_fill(mDelCountFieldWidth,
                 pendingOffset)));
 	    //iBuilder->CallPrintRegister("ComBineDGROUP", combinedGroup);
-            // To avoid an unpredictable branch, always store the combined group, whether full or not.             
-            iBuilder->CreateBlockAlignedStore(combinedGroup, iBuilder->CreateGEP(outputStreamPtr[j], outputIndex));
+            // To avoid an unpredictable branch, always store the combined group, whether full or not.
+            iBuilder->CreateBlockAlignedStore(combinedGroup, iBuilder->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(j), outputIndex));
             
             // Any items in excess of the space available in the current pending group overflow for the next group.
             Value * overFlowGroup = iBuilder->CreateLShr(newItems, iBuilder->simd_fill(mDelCountFieldWidth, pendingSpace));

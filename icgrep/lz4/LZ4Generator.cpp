@@ -316,7 +316,7 @@ void LZ4Generator::generateExtractAndDepositMarkers(const std::unique_ptr<kernel
 
 
     Kernel * generateDepositK = pxDriver.addKernelInstance<LZ4GenerateDepositStreamKernel>(iBuilder);
-    pxDriver.makeKernelCall(generateDepositK, {M0Marker}, {DepositMarker}); // TODO deposit
+    pxDriver.makeKernelCall(generateDepositK, {M0Marker}, {DepositMarker});
 
 }
 

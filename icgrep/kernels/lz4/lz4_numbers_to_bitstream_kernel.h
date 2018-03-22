@@ -22,6 +22,7 @@ class LZ4NumbersToBitstreamKernel final : public MultiBlockKernel {
         inline size_t getAnyBufferSize(const std::unique_ptr<KernelBuilder> &iBuilder, std::string bufferName);
         llvm::Value* setIntVectorBitOne(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value* intVec, llvm::Value* pos, llvm::Value* isSet);
         inline llvm::Value* intVecGT(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value* intVec1, llvm::Value* intVec2);
+        inline llvm::Value* loadInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder, std::string bufferName, llvm::Value* offset);
     };
 }
 

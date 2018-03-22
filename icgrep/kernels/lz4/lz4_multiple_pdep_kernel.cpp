@@ -47,18 +47,6 @@ namespace kernel {
 
         Value * sourceItemsAvail = mAvailableItemCount[1]; //TODO need to be calculated from numOfStrides
 
-        Value * PDEPStrmPtr = kb->getInputStreamBlockPtr("PDEPmarkerStream", kb->getInt32(0)); // mStreamBufferPtr[0];
-
-
-        std::vector<Value*> inputSwizzlesPtrs = std::vector<Value*>(mStreamSize, NULL);
-        std::vector<Value*> outputStreamPtrs = std::vector<Value*>(mStreamSize, NULL);
-        for (int i = 0; i < mStreamSize; i++) {
-            inputSwizzlesPtrs[i] = kb->getInputStreamBlockPtr("sourceStreamSet" + std::to_string(i), kb->getInt32(0));
-//            kb->CallPrintInt("@@inputSwizzlesPtrs_" + std::to_string(i), inputSwizzlesPtrs[i]);
-            // Get pointer to start of the output StreamSetBlock we're currently writing to
-            outputStreamPtrs[i] = kb->getOutputStreamBlockPtr("outputStreamSet" + std::to_string(i), kb->getInt32(0));
-        }
-
         Constant * blockWidth = kb->getSize(kb->getBitBlockWidth());
         Value * blocksToDo = kb->CreateSelect(mIsFinal, kb->CreateUDivCeil(itemsToDo, blockWidth), kb->CreateUDiv(itemsToDo, blockWidth));
         Value * processedSourceBits = kb->getProcessedItemCount("sourceStreamSet0");
@@ -92,7 +80,7 @@ namespace kernel {
         // Extract the values we will use in the main processing loop
         Value * updatedProcessedSourceBits = updatedProcessedSourceBitsPhi;
         Value * updatedSourceItems = sourceItemsRemaining;
-        Value * PDEP_ms_blk = kb->CreateBlockAlignedLoad(kb->CreateGEP(PDEPStrmPtr, blockOffsetPhi));
+        Value * PDEP_ms_blk = kb->CreateBlockAlignedLoad(kb->getInputStreamBlockPtr("PDEPmarkerStream", kb->getInt32(0), blockOffsetPhi));
 
         const auto PDEP_masks = get_PDEP_masks(kb, PDEP_ms_blk, mPDEPWidth);
         const auto mask_popcounts = get_block_popcounts(kb, PDEP_ms_blk, mPDEPWidth);
@@ -123,10 +111,12 @@ namespace kernel {
                 Value * next_swizzle_idx = kb->CreateUDiv(kb->CreateURem(ahead_pdep_width_less_1, blockWidth), pdepWidth);
 
                 // Load current and next BitBlocks/swizzles
-                Value * current_swizzle_ptr = kb->CreateGEP(inputSwizzlesPtrs[iStreamIndex], kb->CreateAdd(kb->CreateMul(current_blk_idx, kb->getSize(mSwizzleFactor)), current_swizzle_idx));
+                Value* current_swizzle_ptr = kb->getInputStreamBlockPtr("sourceStreamSet" + std::to_string(iStreamIndex), current_swizzle_idx, current_blk_idx);
+
                 Value * current_swizzle = kb->CreateBlockAlignedLoad(current_swizzle_ptr);//Constant::getNullValue(cast<PointerType>(current_swizzle_ptr->getType())->getElementType());
 
-                Value * next_swizzle_ptr = kb->CreateGEP(inputSwizzlesPtrs[iStreamIndex], kb->CreateAdd(kb->CreateMul(next_blk_idx, kb->getSize(mSwizzleFactor)), next_swizzle_idx));
+
+                Value* next_swizzle_ptr = kb->getInputStreamBlockPtr("sourceStreamSet" + std::to_string(iStreamIndex), next_swizzle_idx, next_blk_idx);
                 Value * next_swizzle = kb->CreateBlockAlignedLoad(next_swizzle_ptr);//Constant::getNullValue(cast<PointerType>(current_swizzle_ptr->getType())->getElementType());
 
                 // Combine the two swizzles to guarantee we'll have enough source bits for the PDEP operation
@@ -160,11 +150,7 @@ namespace kernel {
                 }
 
                 // Store the result
-                auto outputPos = kb->CreateGEP(outputStreamPtrs[iStreamIndex], kb->CreateAdd(kb->CreateMul(blockOffsetPhi, kb->getSize(mSwizzleFactor)), kb->getSize(i)));
-//                if (iStreamIndex == 0) {
-//                    kb->CallPrintInt("dataPtr_" + std::to_string(iStreamIndex) + "_" + std::to_string(i), outputPos);
-//                    kb->CallPrintRegister("data_" + std::to_string(iStreamIndex) + "_" + std::to_string(i), result_swizzle);
-//                }
+                Value* outputPos = kb->getOutputStreamBlockPtr("outputStreamSet" + std::to_string(iStreamIndex), kb->getSize(i), blockOffsetPhi);
 
                 kb->CreateBlockAlignedStore(result_swizzle, outputPos);
             }

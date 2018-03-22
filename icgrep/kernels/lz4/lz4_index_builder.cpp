@@ -412,6 +412,7 @@ namespace kernel{
     }
 
     Value * LZ4IndexBuilderKernel::generateLoadInt64NumberInput(const unique_ptr<KernelBuilder> &iBuilder, string inputBufferName, Value *globalOffset) {
+        // Stride Size here is Constant 1 instead of BitBlockWidth
         Constant* SIZE_BIT_BLOCK_WIDTH = iBuilder->getSize(iBuilder->getBitBlockWidth());
         Constant* SIZE_ZERO = iBuilder->getSize(0);
 
