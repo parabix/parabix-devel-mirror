@@ -72,7 +72,6 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     InitializeNativeTargetAsmPrinter();
     InitializeNativeTargetAsmParser();
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
-    preparePassManager();
     
 
 #ifdef ORCJIT
@@ -104,7 +103,8 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     if (mTarget == nullptr) {
         throw std::runtime_error("Could not selectTarget");
     }
-    
+    preparePassManager();
+
 #ifdef ORCJIT
     mCompileLayer = make_unique<CompileLayerT>(mObjectLayer, orc::SimpleCompiler(*mTarget));
 #else
