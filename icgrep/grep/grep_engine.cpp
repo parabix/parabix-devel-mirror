@@ -422,17 +422,19 @@ void GrepEngine::grepCodeGen() {
 
     const unsigned encodingBits = 8;
 
-    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), nullptr));
+    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt8Ty(), idb->getInt32Ty(), nullptr));
     mainFunc->setCallingConv(CallingConv::C);
     idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
     auto args = mainFunc->arg_begin();
 
+    Value * const useMMap = &*(args++);
+    useMMap->setName("useMMap");
     Value * const fileDescriptor = &*(args++);
     fileDescriptor->setName("fileDescriptor");
 
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits));
     kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb);
-    sourceK->setInitialArguments({fileDescriptor});
+    sourceK->setInitialArguments({useMMap, fileDescriptor});
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
 
     StreamSetBuffer * LineBreakStream;
@@ -515,11 +517,13 @@ void EmitMatchesEngine::grepCodeGen() {
 
     const unsigned encodingBits = 8;
 
-    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt32Ty(), idb->getIntAddrTy(), nullptr));
+    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt8Ty(), idb->getInt32Ty(), idb->getIntAddrTy(), nullptr));
     mainFunc->setCallingConv(CallingConv::C);
     idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
     auto args = mainFunc->arg_begin();
 
+    Value * const useMMap = &*(args++);
+    useMMap->setName("useMMap");
     Value * const fileDescriptor = &*(args++);
     fileDescriptor->setName("fileDescriptor");
     Value * match_accumulator = &*(args++);
@@ -527,7 +531,7 @@ void EmitMatchesEngine::grepCodeGen() {
 
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits));
     kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb);
-    sourceK->setInitialArguments({fileDescriptor});
+    sourceK->setInitialArguments({useMMap, fileDescriptor});
     mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
 
     StreamSetBuffer * LineBreakStream;
@@ -552,13 +556,19 @@ void EmitMatchesEngine::grepCodeGen() {
 //  differently based on the engine type.
 
 uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
-    typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor);
+    typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor);
+    using namespace boost::filesystem;
+    path p(fileName);
+    bool useMMap = grep::MmapFlag;
+    if (p == "-") useMMap = false;
+    if (!is_regular_file(p)) useMMap = false;
+
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
 
     int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx]);
     if (fileDescriptor == -1) return 0;
 
-    uint64_t grepResult = f(fileDescriptor);
+    uint64_t grepResult = f(useMMap, fileDescriptor);
     close(fileDescriptor);
     return grepResult;
 }
@@ -588,13 +598,17 @@ uint64_t MatchOnlyEngine::doGrep(const std::string & fileName, const uint32_t fi
 }
 
 uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
-    typedef uint64_t (*GrepFunctionType)(int32_t fileDescriptor, intptr_t accum_addr);
+    typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, intptr_t accum_addr);
+    using namespace boost::filesystem;
+    path p(fileName);
+    bool useMMap = grep::MmapFlag;
+    if (p == "-") useMMap = false;
+    if (!is_regular_file(p)) useMMap = false;
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
-
     int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx]);
     if (fileDescriptor == -1) return 0;
     EmitMatch accum(linePrefix(fileName), mResultStrs[fileIdx]);
-    f(fileDescriptor, reinterpret_cast<intptr_t>(&accum));
+    f(useMMap, fileDescriptor, reinterpret_cast<intptr_t>(&accum));
     close(fileDescriptor);
     if (accum.mLineCount > 0) grepMatchFound = true;
     return accum.mLineCount;

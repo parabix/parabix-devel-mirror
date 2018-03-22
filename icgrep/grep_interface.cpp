@@ -95,7 +95,7 @@ bool UnicodeLinesFlag;
 static cl::opt<bool, true> UnicodeLinesOption("Unicode-lines", cl::location(UnicodeLinesFlag), cl::desc("Enable Unicode line breaks (LF/VT/FF/CR/NEL/LS/PS/CRLF)"), cl::cat(Input_Options));
 
 bool MmapFlag;
-static cl::opt<bool, true> MmapOption("mmap", cl::location(MmapFlag), cl::desc("Use mmap for file input."), cl::cat(Input_Options));
+static cl::opt<bool, true> MmapOption("mmap", cl::location(MmapFlag),  cl::init(1), cl::desc("Use mmap for file input (default)."), cl::cat(Input_Options));
 
 std::string ExcludeFlag;
 static cl::opt<std::string, true> ExcludeOption("exclude", cl::location(ExcludeFlag), cl::desc("Exclude files matching the given filename GLOB pattern."), cl::cat(Input_Options));
@@ -265,9 +265,6 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
     }
     if (BinaryFlag) {
         llvm::report_fatal_error("Sorry, -U is not yet supported.\n");
-    }
-    if (NullDataFlag) {
-        llvm::report_fatal_error("Sorry, -z is not yet supported.\n");
     }
     if (ExcludeFlag!="") {
         llvm::report_fatal_error("Sorry, -exclude is not yet supported.\n");

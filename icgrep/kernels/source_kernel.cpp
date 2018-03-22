@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 #include "source_kernel.h"
@@ -42,8 +42,8 @@ void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod,
     kb->SetInsertPoint(nonEmptyFile);
     PointerType * const codeUnitPtrTy = kb->getIntNTy(codeUnitWidth)->getPointerTo();
     Value * const fileBuffer = kb->CreatePointerCast(kb->CreateFileSourceMMap(fd, fileSize), codeUnitPtrTy);
-    kb->setScalarField("buffer", fileBuffer);    
-    kb->setBaseAddress("sourceBuffer", fileBuffer);    
+    kb->setScalarField("buffer", fileBuffer);
+    kb->setBaseAddress("sourceBuffer", fileBuffer);
     kb->CreateMAdvise(fileBuffer, fileSize, CBuilder::ADVICE_WILLNEED);
     if (codeUnitWidth > 8) {
         fileSize = kb->CreateUDiv(fileSize, kb->getSize(codeUnitWidth / 8));
@@ -236,28 +236,42 @@ void FDSourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder>
     BasicBlock * finalizeRead = kb->CreateBasicBlock("finalizeRead");
     BasicBlock * finalizeMMap = kb->CreateBasicBlock("finalizeMMap");
     BasicBlock * finalizeDone = kb->CreateBasicBlock("finalizeDone");
-    // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic, otherwise use mmap logic.
-    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(STDIN_FILENO)), finalizeRead, finalizeMMap);
-    kb->SetInsertPoint(finalizeRead);
-    ReadSourceKernel::freeBuffer(kb);
-    kb->CreateBr(finalizeDone);
+    kb->CreateCondBr(kb->CreateTrunc(kb->getScalarField("useMMap"), kb->getInt1Ty()), finalizeMMap, finalizeRead);
     kb->SetInsertPoint(finalizeMMap);
     MMapSourceKernel::unmapSourceBuffer(kb);
+    kb->CreateBr(finalizeDone);
+    kb->SetInsertPoint(finalizeRead);
+    ReadSourceKernel::freeBuffer(kb);
     kb->CreateBr(finalizeDone);
     kb->SetInsertPoint(finalizeDone);
 }
 
 void FDSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & kb) {
     BasicBlock * initializeRead = kb->CreateBasicBlock("initializeRead");
+    BasicBlock * tryMMap = kb->CreateBasicBlock("tryMMap");
     BasicBlock * initializeMMap = kb->CreateBasicBlock("initializeMMap");
     BasicBlock * initializeDone = kb->CreateBasicBlock("initializeDone");
-    // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic, otherwise use MMap logic.
-    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(STDIN_FILENO)), initializeRead, initializeMMap);
-    kb->SetInsertPoint(initializeRead);
-    ReadSourceKernel::generateInitializeMethod(mCodeUnitWidth, getStride(), kb);
-    kb->CreateBr(initializeDone);
+    // The source will use MMapSource or readSoure kernel logic depending on the useMMap
+    // parameter, possibly overridden.
+    Value * useMMap = kb->CreateTrunc(kb->getScalarField("useMMap"), kb->getInt1Ty());
+    // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic.
+    Value * fd = kb->getScalarField("fileDescriptor");
+    useMMap = kb->CreateAnd(useMMap, kb->CreateICmpNE(fd, kb->getInt32(STDIN_FILENO)));
+    kb->CreateCondBr(useMMap, tryMMap, initializeRead);
+    
+    kb->SetInsertPoint(tryMMap);
+    // If the fileSize is 0, we may have a virtual file such as /proc/cpuinfo
+    Value * fileSize = kb->CreateZExtOrTrunc(kb->CreateCall(mFileSizeFunction, fd), kb->getSizeTy());
+    useMMap = kb->CreateICmpNE(fileSize, kb->getSize(0));
+    kb->CreateCondBr(useMMap, initializeMMap, initializeRead);
     kb->SetInsertPoint(initializeMMap);
     MMapSourceKernel::generateInitializeMethod(mFileSizeFunction, mCodeUnitWidth, kb);
+    kb->CreateBr(initializeDone);
+
+    kb->SetInsertPoint(initializeRead);
+    // Ensure that readSource logic is used throughout.
+    kb->setScalarField("useMMap", kb->getInt8(0));
+    ReadSourceKernel::generateInitializeMethod(mCodeUnitWidth, getStride(), kb);
     kb->CreateBr(initializeDone);
     kb->SetInsertPoint(initializeDone);
 }
@@ -266,17 +280,15 @@ void FDSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder
     BasicBlock * DoSegmentRead = kb->CreateBasicBlock("DoSegmentRead");
     BasicBlock * DoSegmentMMap = kb->CreateBasicBlock("DoSegmentMMap");
     BasicBlock * DoSegmentDone = kb->CreateBasicBlock("DoSegmentDone");
-    // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic, otherwise use MMap logic.
-    kb->CreateCondBr(kb->CreateICmpEQ(kb->getScalarField("fileDescriptor"), kb->getInt32(STDIN_FILENO)), DoSegmentRead, DoSegmentMMap);
-    kb->SetInsertPoint(DoSegmentRead);
-    ReadSourceKernel::generateDoSegmentMethod(mCodeUnitWidth, getStride(), kb);
-    kb->CreateBr(DoSegmentDone);
+    kb->CreateCondBr(kb->CreateTrunc(kb->getScalarField("useMMap"), kb->getInt1Ty()), DoSegmentMMap, DoSegmentRead);
     kb->SetInsertPoint(DoSegmentMMap);
     MMapSourceKernel::generateDoSegmentMethod(mCodeUnitWidth, kb);
     kb->CreateBr(DoSegmentDone);
+    kb->SetInsertPoint(DoSegmentRead);
+    ReadSourceKernel::generateDoSegmentMethod(mCodeUnitWidth, getStride(), kb);
+    kb->CreateBr(DoSegmentDone);
     kb->SetInsertPoint(DoSegmentDone);
 }
-
 
 /// MEMORY SOURCE KERNEL
 
@@ -323,7 +335,7 @@ FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & kb
 : SegmentOrientedKernel("FD_source@" + std::to_string(codeUnitWidth)
 , {}
 , {Binding{kb->getStreamSetTy(1, codeUnitWidth), "sourceBuffer", FixedRate(), Deferred()}}
-, {Binding{kb->getInt32Ty(), "fileDescriptor"}}
+, {Binding{kb->getInt8Ty(), "useMMap"}, Binding{kb->getInt32Ty(), "fileDescriptor"}}
 , {}
 , {Binding{kb->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}, Binding{kb->getSizeTy(), "fileSize"}})
 , mCodeUnitWidth(codeUnitWidth)
