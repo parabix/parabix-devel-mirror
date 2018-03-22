@@ -25,7 +25,45 @@ using namespace llvm;
 
 namespace re {
 
+bool mayMatchCC(RE * re, CC * cc) {
+    if (CC * cc0 = dyn_cast<CC>(re)) {
+        return intersects(cc0, cc);
+    } else if (Seq * seq = dyn_cast<Seq>(re)) {
+        for (auto s : * seq) {
+            if (mayMatchCC(s, cc)) return true;
+        }
+        return false;
+    } else if (Alt * alt = dyn_cast<Alt>(re)) {
+        for (auto a : * alt) {
+            if (mayMatchCC(a, cc)) return true;
+        }
+        return false;
+    } else if (Rep * rep = dyn_cast<Rep>(re)) {
+        return mayMatchCC(rep->getRE(), cc);
+    } else if (Group * g = dyn_cast<Group>(re)) {
+        return mayMatchCC(g->getRE(), cc);
+    } else if (Diff * diff = dyn_cast<Diff>(re)) {
+        // We only need exclude from the LH operand.
+        return mayMatchCC(diff->getLH(), cc);
+    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
+        // We only need check  one of the operands.
+        return mayMatchCC(e->getLH(), cc);
+    } else if (isa<Start>(re) || isa<End>(re) || isa<Assertion>(re)) {
+        return false;
+    } else if (Name * n = dyn_cast<Name>(re)) {
+        if (n->getType() ==  Name::Type::ZeroWidth) {
+            return false;
+        }
+        RE * defn = n->getDefinition();
+        return mayMatchCC(defn, cc);
+    } else {
+        report_fatal_error("exclude_CC: unhandled regexp type");
+    }
+}
+ 
+    
 RE * exclude_CC(RE * re, CC * cc) {
+    if (!mayMatchCC(re, cc)) return re;
     if (CC * cc0 = dyn_cast<CC>(re)) {
         if (intersects(cc0, cc)) return subtractCC(cc0, cc);
         else return cc0;
