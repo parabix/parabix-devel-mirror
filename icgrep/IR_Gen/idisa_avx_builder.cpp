@@ -10,7 +10,7 @@
 using namespace llvm;
 
 namespace IDISA {
-    
+
 std::string IDISA_AVX_Builder::getBuilderUniqueName() {
     return mBitBlockWidth != 256 ? "AVX_" + std::to_string(mBitBlockWidth) : "AVX";
 }
@@ -51,7 +51,7 @@ Value * IDISA_AVX_Builder::hsimd_signmask(unsigned fw, Value * a) {
 std::string IDISA_AVX2_Builder::getBuilderUniqueName() {
     return mBitBlockWidth != 256 ? "AVX2_" + std::to_string(mBitBlockWidth) : "AVX2";
 }
-    
+
 Value * IDISA_AVX2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
     if ((fw > 8) && (fw <= 64)) {
         Value * aVec = fwCast(fw / 2, a);
@@ -95,7 +95,7 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::hsimd_packl(fw, a, b);
 }
-    
+
 Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(6, 0, 0)
     if ((fw == 128) && (mBitBlockWidth == 256)) {
@@ -139,7 +139,7 @@ Value * IDISA_AVX2_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Va
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::hsimd_packh_in_lanes(lanes, fw, a, b);
 }
-    
+
 std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * e1, Value * e2, Value * carryin) {
     // using LONG_ADD
     Type * carryTy = carryin->getType();
@@ -163,7 +163,7 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * 
     }
     return std::pair<Value *, Value *>{carry_out, bitCast(sum)};
 }
-    
+
 std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value * strm, Value * index_strm, Value * shiftIn, unsigned shiftAmount) {
     Value * const popcount = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, getSizeTy());
     Value * PEXT_f = nullptr;
@@ -240,7 +240,7 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_indexed_advance(Value *
         return std::pair<Value *, Value *>{bitCast(carryOut), bitCast(result)};
     }
 }
-    
+
 Value * IDISA_AVX2_Builder::hsimd_signmask(unsigned fw, Value * a) {
     // AVX2 special cases
     if (mBitBlockWidth == 256) {
@@ -257,6 +257,59 @@ Value * IDISA_AVX2_Builder::hsimd_signmask(unsigned fw, Value * a) {
 
 std::string IDISA_AVX512BW_Builder::getBuilderUniqueName() {
     return mBitBlockWidth != 512 ? "AVX512BW_" + std::to_string(mBitBlockWidth) : "AVX512BW";
+}
+
+llvm::Value * IDISA_AVX512BW_Builder::hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) {
+    if ((mBitBlockWidth == 512) && (fw == 16)) {
+
+        const unsigned int field_count = 64;
+        Constant * Idxs[field_count];
+
+        for (unsigned int i = 0; i < field_count; i++) {
+            Idxs[i] = getInt32(i);
+        }
+
+        llvm::Value * pmovfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmov_wb_512);
+        llvm::Value * mask = getInt32(-1);
+        llvm::Constant * shuffleMask = ConstantVector::get({Idxs, 64});
+
+        a = fwCast(fw, a);
+        a = IDISA_Builder::simd_srai(fw, a, fw/2);
+        a = CreateCall(pmovfunc, {a, a, mask});
+        b = fwCast(fw, b);
+        b = IDISA_Builder::simd_srai(fw, b, fw/2);
+        b = CreateCall(pmovfunc, {b, b, mask});
+
+        llvm::Value * c = CreateShuffleVector(a, b, shuffleMask);
+        c = bitCast(c);
+        return c;
+    }
+return IDISA_Builder::hsimd_packh(fw, a, b);
+}
+
+llvm::Value * IDISA_AVX512BW_Builder::hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) {
+    if ((mBitBlockWidth == 512) && (fw == 16)) {
+
+        const unsigned int field_count = 64;
+        Constant * Idxs[field_count];
+        for (unsigned int i = 0; i < field_count; i++) {
+            Idxs[i] = getInt32(i);
+        }
+
+        llvm::Value * pmovfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmov_wb_512);
+        llvm::Value * mask = getInt32(-1);
+        llvm::Constant * shuffleMask = ConstantVector::get({Idxs, 64});
+
+        a = fwCast(fw, a);
+        a = CreateCall(pmovfunc, {a, a, mask});
+        b = fwCast(fw, b);
+        b = CreateCall(pmovfunc, {b, b, mask});
+
+        llvm::Value * c = CreateShuffleVector(a, b, shuffleMask);
+        c = bitCast(c);
+        return c;
+    }
+return IDISA_Builder::hsimd_packl(fw, a, b);
 }
 
 
