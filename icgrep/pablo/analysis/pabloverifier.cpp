@@ -338,7 +338,7 @@ struct AssignmentSet {
         const auto n = getNumOfElements(expr);
         auto f = mAssignment.find(expr);
         if (LLVM_LIKELY(f == mAssignment.end())) {
-            mAssignment.insert(std::move(std::make_pair(expr, SmallBitVector(n, true))));
+            mAssignment.insert(std::make_pair(expr, SmallBitVector(n, true)));
         } else {
             f->second.resize(n, true);
         }

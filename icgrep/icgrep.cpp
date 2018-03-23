@@ -38,8 +38,7 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<regex> <input
 
 static cl::opt<bool> ByteMode("enable-byte-mode", cl::desc("Process regular expressions in byte mode"));
 
-static cl::opt<bool> MultiGrepKernels("enable-multigrep-kernels", cl::desc("Construct separated kernels for each regular expression"));
-static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expressions processed by each kernel."), cl::init(1));
+static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expressions processed by each kernel."), cl::init(0));
 
 static re::ModeFlagSet globalFlags = re::MULTILINE_MODE_FLAG;
 
@@ -73,7 +72,15 @@ std::vector<re::RE *> readExpressions() {
         REs.push_back(re_ast);
     }
 
-    if (MultiGrepKernels) {
+    
+    // If there are multiple REs, combine them into groups.
+    // A separate kernel will be created for each group.
+    if (REs.size() > 1) {
+        codegen::SegmentPipelineParallel = true;
+        if (REsPerGroup == 0) {
+            // If no grouping factor is specified, we use a default formula.
+            REsPerGroup = (REs.size() + codegen::ThreadNum) / (codegen::ThreadNum + 1);
+        }
         std::vector<re::RE *> groups;
         auto start = REs.begin();
         auto end = start + REsPerGroup;
@@ -87,11 +94,8 @@ std::vector<re::RE *> readExpressions() {
         } else {
             groups.push_back(*start);
         }
-        REs.swap(groups);
-    } else if (REs.size() > 1) {
-        REs.assign({re::makeAlt(REs.begin(), REs.end())});
+    REs.swap(groups);
     }
-
     for (re::RE *& re_ast : REs) {
         assert (re_ast);
         if (grep::WordRegexpFlag) {

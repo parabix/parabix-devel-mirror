@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -20,6 +20,8 @@ using namespace llvm;
 
 namespace codegen {
 
+const unsigned DEFAULT_SEGMENT_SIZE = 64;
+    
 static cl::OptionCategory CodeGenOptions("Code Generation Options", "These options control code generation.");
 
 static cl::bits<DebugFlags>
@@ -65,7 +67,7 @@ static cl::opt<unsigned, true> BlockSizeOption("BlockSize", cl::location(BlockSi
                                           cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 
 
-static cl::opt<unsigned, true> SegmentSizeOption("segment-size", cl::location(SegmentSize), cl::init(8),
+static cl::opt<unsigned, true> SegmentSizeOption("segment-size", cl::location(SegmentSize), cl::init(DEFAULT_SEGMENT_SIZE),
                                             cl::desc("Segment Size"), cl::value_desc("positive integer"));
 
 static cl::opt<unsigned, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::init(1),
