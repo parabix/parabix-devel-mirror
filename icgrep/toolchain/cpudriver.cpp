@@ -65,6 +65,7 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
 , mEngine(nullptr)
 #endif
 , mCache(nullptr)
+, mUnoptimizedIROutputStream(nullptr)
 , mIROutputStream(nullptr)
 , mASMOutputStream(nullptr) {
 
@@ -213,12 +214,12 @@ void ParabixDriver::preparePassManager() {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (codegen::ShowUnoptimizedIROption != "") {
                 std::error_code error;
-                mIROutputStream = new raw_fd_ostream(codegen::ShowUnoptimizedIROption, error, sys::fs::OpenFlags::F_None);
+                mUnoptimizedIROutputStream = make_unique<raw_fd_ostream>(codegen::ShowUnoptimizedIROption, error, sys::fs::OpenFlags::F_None);
             } else {
-                mIROutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
+                mUnoptimizedIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
             }
         }
-        mPassManager.add(createPrintModulePass(*mIROutputStream));
+        mPassManager.add(createPrintModulePass(*mUnoptimizedIROutputStream));
     }
     if (IN_DEBUG_MODE || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
         mPassManager.add(createVerifierPass());
@@ -235,9 +236,9 @@ void ParabixDriver::preparePassManager() {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (codegen::ShowIROption != "") {
                 std::error_code error;
-                mIROutputStream = new raw_fd_ostream(codegen::ShowIROption, error, sys::fs::OpenFlags::F_None);
+                mIROutputStream = make_unique<raw_fd_ostream>(codegen::ShowIROption, error, sys::fs::OpenFlags::F_None);
             } else {
-                mIROutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
+                mIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
             }
         }
         mPassManager.add(createPrintModulePass(*mIROutputStream));
@@ -247,9 +248,9 @@ void ParabixDriver::preparePassManager() {
     if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
         if (codegen::ShowASMOption != "") {
             std::error_code error;
-            mASMOutputStream = new raw_fd_ostream(codegen::ShowASMOption, error, sys::fs::OpenFlags::F_None);
+            mASMOutputStream = make_unique<raw_fd_ostream>(codegen::ShowASMOption, error, sys::fs::OpenFlags::F_None);
         } else {
-            mASMOutputStream = new raw_fd_ostream(STDERR_FILENO, false, true);
+            mASMOutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
         }
         if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(mPassManager, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
             report_fatal_error("LLVM error: could not add emit assembly pass");
@@ -346,6 +347,4 @@ ParabixDriver::~ParabixDriver() {
 #endif
     delete mCache;
     delete mTarget;
-    delete mIROutputStream;
-    delete mASMOutputStream;
  }

@@ -79,6 +79,8 @@ extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
 
 void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLength, MatchAccumulator * accum) {
     const unsigned segmentSize = codegen::BufferSegments * codegen::SegmentSize * codegen::ThreadNum;
+    auto segParallelModeSave = codegen::SegmentPipelineParallel;
+    codegen::SegmentPipelineParallel = false;
     
     pattern = resolveCaseInsensitiveMode(pattern, false);
     pattern = regular_expression_passes(pattern);
@@ -140,6 +142,7 @@ void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLengt
     typedef void (*GrepFunctionType)(const char * buffer, const size_t length);
     auto f = reinterpret_cast<GrepFunctionType>(pxDriver.getMain());
     f(search_buffer, bufferLength);
+    codegen::SegmentPipelineParallel = segParallelModeSave;
 }
 
 
