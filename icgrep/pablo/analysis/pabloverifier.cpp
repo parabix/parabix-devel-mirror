@@ -12,6 +12,7 @@
 #include <llvm/ADT/DenseMap.h>
 #include <llvm/ADT/SmallBitVector.h>
 #include <llvm/IR/Type.h>
+#include <llvm/IR/DerivedTypes.h>  // for get getArrayNumElements
 
 using namespace llvm;
 

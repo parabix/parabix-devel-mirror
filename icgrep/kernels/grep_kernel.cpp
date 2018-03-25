@@ -285,7 +285,7 @@ ByteGrepSignature::ByteGrepSignature(RE * re)
 
 ByteGrepKernel::ByteGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<std::string> externals)
 : ByteGrepSignature(re)
-, PabloKernel(b, "bBc" + sha1sum(mSignature),
+, PabloKernel(b, "byteGrep" + sha1sum(mSignature),
               // inputs
 {Binding{b->getStreamSetTy(1, 8), "byteData"}},
               // output

@@ -7,6 +7,7 @@
 #define STREAMSET_H
 
 #include <llvm/IR/Type.h>  // for Type
+#include <llvm/IR/DerivedTypes.h>  // for Type
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Value; }
 namespace kernel { class Kernel; }

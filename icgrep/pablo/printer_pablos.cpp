@@ -25,6 +25,7 @@
 #include <pablo/pe_zeroes.h>
 #include <pablo/ps_assign.h>
 #include <llvm/IR/Type.h>
+#include <llvm/IR/DerivedTypes.h>  // for get getSequentialElementType
 #include <llvm/Support/raw_os_ostream.h>
 
 using namespace pablo;
