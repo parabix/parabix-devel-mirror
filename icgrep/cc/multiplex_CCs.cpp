@@ -30,7 +30,7 @@ namespace cc {
 // status changes at the breakpoint.
 //
 
-std::map<UCD::codepoint_t, boost::dynamic_bitset<>> computeBreakpoints(const std::vector<const re::CC *> & CCs) {
+std::map<UCD::codepoint_t, boost::dynamic_bitset<>> computeBreakpoints(const std::vector<re::CC *> & CCs) {
     std::map<UCD::codepoint_t, boost::dynamic_bitset<>> breakpoints;
     for (unsigned i = 0; i < CCs.size(); i++) {
         for (const auto range : *CCs[i]) {
@@ -51,7 +51,7 @@ std::map<UCD::codepoint_t, boost::dynamic_bitset<>> computeBreakpoints(const std
     return breakpoints;
 }
 
-void doMultiplexCCs(const std::vector<const re::CC *> & CCs,
+void doMultiplexCCs(const std::vector<re::CC *> & CCs,
                     std::vector<std::vector<unsigned>> & exclusiveSetIDs,
                     std::vector<re::CC *> & multiplexedCCs) {
     
@@ -112,7 +112,7 @@ void doMultiplexCCs(const std::vector<const re::CC *> & CCs,
 
 
 
-MultiplexedAlphabet::MultiplexedAlphabet(std::string alphabetName, const std::vector<const re::CC *> CCs) 
+MultiplexedAlphabet::MultiplexedAlphabet(std::string alphabetName, const std::vector<re::CC *> CCs) 
     : Alphabet(alphabetName, ClassTypeId::MultiplexedAlphabet), mUnicodeSets(CCs) {
         if (CCs.size() > 0) {
             mSourceAlphabet = CCs[0]->getAlphabet();

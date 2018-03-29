@@ -1,4 +1,5 @@
-#include "re_collect_unicodesets.h"
+#include "collect_ccs.h"
+#include <cc/alphabet.h>
 #include <re/re_name.h>
 #include <re/re_any.h>
 #include <re/re_alt.h>
@@ -20,7 +21,8 @@ namespace re {
 struct SetCollector {
     void collect(RE * const re);
 public:
-    std::vector<const CC *> UnicodeSets;
+    const cc::Alphabet * alphabet;
+    std::vector<CC *> theSets;
     boost::container::flat_set<const RE *>  Visited;
     std::set<Name *> ignoredExternals;
 };
@@ -29,9 +31,9 @@ void SetCollector::collect(RE * const re) {
     assert ("RE object cannot be null!" && re);
     if (Visited.insert(re).second) {
         if (CC * cc = dyn_cast<CC>(re)) {
-            if (cc->getAlphabet() == &cc::Unicode) {
-                const auto index = find(UnicodeSets.begin(), UnicodeSets.end(), cc) - UnicodeSets.begin();
-                if (index == UnicodeSets.size()) UnicodeSets.push_back(cc);
+            if (cc->getAlphabet() == alphabet) {
+                const auto index = find(theSets.begin(), theSets.end(), cc) - theSets.begin();
+                if (index == theSets.size()) theSets.push_back(cc);
             }
         } else if (isa<Name>(re)) {
             if (ignoredExternals.find(cast<Name>(re)) != ignoredExternals.end()) return;
@@ -60,11 +62,12 @@ void SetCollector::collect(RE * const re) {
     }
 }
 
-std::vector<const CC *> collectUnicodeSets(RE * const re, std::set<Name *> external) {
+std::vector<CC *> collectCCs(RE * const re, const cc::Alphabet * a, std::set<Name *> external) {
     SetCollector collector;
+    collector.alphabet = a;
     collector.ignoredExternals = external;
     collector.collect(re);
-    return collector.UnicodeSets;
+    return collector.theSets;
 }
 
 

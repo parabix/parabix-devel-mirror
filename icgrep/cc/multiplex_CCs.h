@@ -14,7 +14,7 @@ namespace cc {
 
 class MultiplexedAlphabet : public Alphabet {
 public:
-    MultiplexedAlphabet(std::string alphabetName, const std::vector<const re::CC *> CCs);
+    MultiplexedAlphabet(std::string alphabetName, const std::vector<re::CC *> CCs);
     static inline bool classof(const Alphabet * a) {
         return a->getClassTypeId() == ClassTypeId::MultiplexedAlphabet;
     }
@@ -39,7 +39,7 @@ public:
     re::CC * invertCC(const re::CC * transformedCC) const;
 private:
     const Alphabet * mSourceAlphabet;
-    const std::vector<const re::CC *> mUnicodeSets;
+    const std::vector<re::CC *> mUnicodeSets;
     std::vector<std::vector<unsigned>> mExclusiveSetIDs;
     std::vector<re::CC *> mMultiplexedCCs;
 };

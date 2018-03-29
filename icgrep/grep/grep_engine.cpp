@@ -23,6 +23,7 @@
 #include <kernels/until_n.h>
 #include <kernels/kernel_builder.h>
 #include <pablo/pablo_kernel.h>
+#include <cc/alphabet.h>
 #include <re/re_cc.h>
 #include <re/re_name.h>
 #include <re/casing.h>
@@ -33,7 +34,8 @@
 #include <re/re_analysis.h>
 #include <re/re_name_resolve.h>
 #include <re/re_name_gather.h>
-#include <re/re_collect_unicodesets.h>
+#include <re/collect_ccs.h>
+#include <re/replaceCC.h>
 #include <re/re_multiplex.h>
 #include <re/grapheme_clusters.h>
 #include <re/printer_re.h>
@@ -60,7 +62,7 @@ static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(
 static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable experimental pablo transposition."));
 static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
 static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable Unicode property kernels."), cl::init(false));
-
+static cl::opt<bool> MultithreadedSimpleRE("enable-simple-RE-kernels", cl::desc("Enable individual CC kernels for simple REs."), cl::init(false));
 const unsigned DefaultByteCClimit = 6;
 
 static cl::opt<unsigned> ByteCClimit("byte-CC-limit", cl::desc("Max number of CCs for byte CC pipeline."), cl::init(DefaultByteCClimit));
@@ -266,9 +268,25 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamS
         mREs[0] = toUTF8(mREs[0]);
     }
     if (isSimple && byteTestsWithinLimit(mREs[0], ByteCClimit)) {
+        std::vector<std::string> externalStreamNames;
+        std::vector<StreamSetBuffer *> icgrepInputSets = {ByteStream};
+        if (MultithreadedSimpleRE) {
+            auto CCs = re::collectCCs(mREs[0], &cc::Byte);
+            for (auto cc : CCs) {
+                auto ccName = makeName(cc);
+                mREs[0] = re::replaceCC(mREs[0], cc, ccName);
+                std::string ccNameStr = ccName->getFullName();
+                errs () << "Replacing: " << ccNameStr << "\n";
+                StreamSetBuffer * ccStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+                kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(idb, ccNameStr, std::vector<re::CC *>{cc}, 1);
+                mGrepDriver->makeKernelCall(ccK, {ByteStream}, {ccStream});
+                externalStreamNames.push_back(ccNameStr);
+                icgrepInputSets.push_back(ccStream);
+            }
+        }
         StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
-        kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ByteGrepKernel>(idb, mREs[0]);
-        mGrepDriver->makeKernelCall(icgrepK, {ByteStream}, {MatchResults});
+        kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ByteGrepKernel>(idb, mREs[0], externalStreamNames);
+        mGrepDriver->makeKernelCall(icgrepK, icgrepInputSets, {MatchResults});
         MatchResultsBufs[0] = MatchResults;
         kernel::Kernel * breakK = mGrepDriver->addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(idb, "breakCC", std::vector<re::CC *>{mBreakCC}, 1);
         mGrepDriver->makeKernelCall(breakK, {ByteStream}, {LineBreakStream});
@@ -352,7 +370,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamS
                 icgrepInputSets.push_back(GCB_stream);
             }
             if (CC_Multiplexing) {
-                const auto UnicodeSets = re::collectUnicodeSets(mREs[i], std::set<re::Name *>({re::makeZeroWidth("\\b{g}")}));
+                const auto UnicodeSets = re::collectCCs(mREs[i], &cc::Unicode, std::set<re::Name *>({re::makeZeroWidth("\\b{g}")}));
                 StreamSetBuffer * const MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
                 if (UnicodeSets.size() <= 1) {
                     kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[i], externalStreamNames);
