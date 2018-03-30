@@ -160,7 +160,11 @@ inline MarkerType RE_Compiler::compileName(Name * const name, MarkerType marker,
     }
     const auto & nameString = name->getName();
     MarkerType nameMarker = compileName(name, pb);
-    if (isUnicodeUnitLength(name)) {
+    if (isByteLength(name)) {
+        MarkerType nextPos = AdvanceMarker(marker, InitialPostPositionUnit, pb);
+        nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
+        return nameMarker;
+    } else if (isUnicodeUnitLength(name)) {
         MarkerType nextPos = AdvanceMarker(marker, FinalPostPositionUnit, pb);
         nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
         return nameMarker;
