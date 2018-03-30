@@ -379,7 +379,7 @@ void multiEditdPipeline(ParabixDriver & pxDriver) {
         std::vector<re::CC *>{re::makeCC(re::makeCC(0x41), re::makeCC(0x61)),
                               re::makeCC(re::makeCC(0x43), re::makeCC(0x63)),
                               re::makeCC(re::makeCC(0x54), re::makeCC(0x74)),
-                              re::makeCC(re::makeCC(0x47), re::makeCC(0x67))}, 1);
+                              re::makeCC(re::makeCC(0x47), re::makeCC(0x67))});
     pxDriver.makeKernelCall(ccck, {ByteStream}, {ChStream});
 
     const auto n = pattGroups.size();

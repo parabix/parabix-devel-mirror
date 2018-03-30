@@ -138,7 +138,9 @@ public:
     PabloAST * createNot(PabloAST * expr, const llvm::StringRef & prefix);
 
     PabloAST * createRepeat(const int64_t fieldWidth, const int64_t value) {
-        return createRepeat(mPb->getInteger(fieldWidth), mPb->getInteger(value));
+        std::stringstream name;
+        name << "repeating<" << fieldWidth << ">(" << std::hex << value << ")";
+        return createRepeat(mPb->getInteger(fieldWidth), mPb->getInteger(value), name.str());
     }
 
     PabloAST * createRepeat(const int64_t fieldWidth, PabloAST * value) {

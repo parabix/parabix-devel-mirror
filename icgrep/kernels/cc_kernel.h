@@ -12,21 +12,18 @@ namespace re { class CC; }
 
 namespace kernel {
 
-class DirectCharacterClassKernelBuilder final : public BlockOrientedKernel {
+class DirectCharacterClassKernelBuilder final : public pablo::PabloKernel {
 public:    
-    DirectCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, unsigned codeUnitSize);
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-    bool isCachable() const override { return true;}
-    bool hasSignature() const override { return false; }
+    DirectCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses);
+protected:
+    void generatePabloMethod() override;
 private:
     const std::vector<re::CC *> mCharClasses;
-    const unsigned              mCodeUnitSize;
-    
 };
 
 class ParabixCharacterClassKernelBuilder final : public pablo::PabloKernel {
 public:
-    ParabixCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, const std::vector<re::CC *> & charClasses, unsigned codeUnitSize);
+    ParabixCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, const std::vector<re::CC *> & charClasses, unsigned codeUnitWidth);
 protected:
     void generatePabloMethod() override;
 private:

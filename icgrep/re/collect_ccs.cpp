@@ -11,6 +11,8 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <cc/alphabet.h>
+#include <re/re_memoizer.hpp>
+
 #include <boost/container/flat_set.hpp>
 #include <llvm/Support/raw_ostream.h>
 
@@ -18,47 +20,46 @@ using namespace llvm;
 
 namespace re {
     
-struct SetCollector {
+struct SetCollector : private Memoizer {
     void collect(RE * const re);
 public:
     const cc::Alphabet * alphabet;
     std::vector<CC *> theSets;
-    boost::container::flat_set<const RE *>  Visited;
     std::set<Name *> ignoredExternals;
 };
 
 void SetCollector::collect(RE * const re) {
     assert ("RE object cannot be null!" && re);
-    if (Visited.insert(re).second) {
-        if (CC * cc = dyn_cast<CC>(re)) {
-            if (cc->getAlphabet() == alphabet) {
-                const auto index = find(theSets.begin(), theSets.end(), cc) - theSets.begin();
-                if (index == theSets.size()) theSets.push_back(cc);
+    if (CC * cc = dyn_cast<CC>(re)) {
+        if (cc->getAlphabet() == alphabet) {
+            if (find(cc) == end()) {
+                cc = memoize(cc);
+                theSets.push_back(cc);
             }
-        } else if (isa<Name>(re)) {
-            if (ignoredExternals.find(cast<Name>(re)) != ignoredExternals.end()) return;
-            auto def = cast<Name>(re)->getDefinition();
-            if (def != nullptr)
-                collect(def);
-        } else if (isa<Seq>(re)) {
-            for (auto item : *cast<Seq>(re)) {
-                collect(item);
-            }
-        } else if (isa<Alt>(re)) {
-            for (auto item : *cast<Alt>(re)) {
-                collect(item);
-            }
-        } else if (isa<Rep>(re)) {
-            collect(cast<Rep>(re)->getRE());
-        } else if (isa<Assertion>(re)) {
-            collect(cast<Assertion>(re)->getAsserted());
-        } else if (isa<Diff>(re)) {
-            collect(cast<Diff>(re)->getLH());
-            collect(cast<Diff>(re)->getRH());
-        } else if (isa<Intersect>(re)) {
-            collect(cast<Intersect>(re)->getLH());
-            collect(cast<Intersect>(re)->getRH());
         }
+    } else if (isa<Name>(re)) {
+        if (ignoredExternals.find(cast<Name>(re)) != ignoredExternals.end()) return;
+        auto def = cast<Name>(re)->getDefinition();
+        if (def != nullptr)
+            collect(def);
+    } else if (isa<Seq>(re)) {
+        for (auto item : *cast<Seq>(re)) {
+            collect(item);
+        }
+    } else if (isa<Alt>(re)) {
+        for (auto item : *cast<Alt>(re)) {
+            collect(item);
+        }
+    } else if (isa<Rep>(re)) {
+        collect(cast<Rep>(re)->getRE());
+    } else if (isa<Assertion>(re)) {
+        collect(cast<Assertion>(re)->getAsserted());
+    } else if (isa<Diff>(re)) {
+        collect(cast<Diff>(re)->getLH());
+        collect(cast<Diff>(re)->getRH());
+    } else if (isa<Intersect>(re)) {
+        collect(cast<Intersect>(re)->getLH());
+        collect(cast<Intersect>(re)->getRH());
     }
 }
 

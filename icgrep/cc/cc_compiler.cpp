@@ -239,8 +239,12 @@ PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream,
     unsigned codeUnitWidth = cast<const CodeUnitAlphabet>(a)->getCodeUnitBitWidth();
     unsigned topBit = 1 << (codeUnitWidth - 1);
     unsigned maxCodeVal = (topBit - 1) | topBit;
+    //
+    // Optimization if there are isolated codepoints that are not in the set.
+    UCD::UnicodeSet negatedIsolates = (~(*cc)).isolates();
+    UCD::UnicodeSet withNegatedIsolates = (*cc + negatedIsolates);
     PabloAST * ccStrm = pb.createZeroes();
-    for (const auto & interval : *cc) {
+    for (const auto & interval : withNegatedIsolates) {
         unsigned lo = re::lo_codepoint(interval);
         unsigned hi = re::hi_codepoint(interval);
         if (lo == hi) {
@@ -263,6 +267,14 @@ PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream,
             ccStrm = pb.createOr(ccStrm, pb.createAnd(pb.createNot(pb.createLessThan(codeUnitStream, testVal_lo)),
                                                       pb.createLessThan(codeUnitStream, testVal_hi)));
         }
+    }
+    if (!negatedIsolates.empty()) {
+        PabloAST * toExclude = pb.createZeroes();
+        for (const auto & interval : negatedIsolates) {
+            PabloAST * testVal = pb.createRepeat(codeUnitWidth, re::lo_codepoint(interval));
+            toExclude = pb.createOr(toExclude, pb.createEquals(codeUnitStream, testVal));
+        }
+        ccStrm = pb.createAnd(ccStrm, pb.createNot(toExclude));
     }
     return ccStrm;
 }

@@ -323,6 +323,19 @@ UnicodeSet UnicodeSet::operator~() const noexcept {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isolates
+ ** ------------------------------------------------------------------------------------------------------------- */
+UnicodeSet UnicodeSet::isolates() const noexcept {
+    UnicodeSet theIsolates;
+    for (auto range : *this) {
+        if (range.first == range.second) {
+            theIsolates.insert(range.first);
+        }
+    }
+    return theIsolates;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief intersection
  ** ------------------------------------------------------------------------------------------------------------- */
 UnicodeSet UnicodeSet::operator&(const UnicodeSet & other) const noexcept {
