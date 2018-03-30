@@ -270,8 +270,8 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamS
     if (isSimple && byteTestsWithinLimit(mREs[0], ByteCClimit)) {
         std::vector<std::string> externalStreamNames;
         std::vector<StreamSetBuffer *> icgrepInputSets = {ByteStream};
-        if (MultithreadedSimpleRE) {
-            auto CCs = re::collectCCs(mREs[0], &cc::Byte);
+        if (MultithreadedSimpleRE && hasTriCCwithinLimit(mREs[0], ByteCClimit, prefixRE, suffixRE)) {
+            auto CCs = re::collectCCs(prefixRE, &cc::Byte);
             for (auto cc : CCs) {
                 auto ccName = makeName(cc);
                 mREs[0] = re::replaceCC(mREs[0], cc, ccName);
@@ -290,9 +290,24 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamS
         kernel::Kernel * breakK = mGrepDriver->addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(idb, "breakCC", std::vector<re::CC *>{mBreakCC});
         mGrepDriver->makeKernelCall(breakK, {ByteStream}, {LineBreakStream});
     } else if (isSimple && hasTriCCwithinLimit(mREs[0], ByteCClimit, prefixRE, suffixRE)) {
+        std::vector<std::string> externalStreamNames;
+        std::vector<StreamSetBuffer *> icgrepInputSets = {ByteStream};
+        if (MultithreadedSimpleRE) {
+            auto CCs = re::collectCCs(prefixRE, &cc::Byte);
+            for (auto cc : CCs) {
+                auto ccName = makeName(cc);
+                mREs[0] = re::replaceCC(mREs[0], cc, ccName);
+                std::string ccNameStr = ccName->getFullName();
+                StreamSetBuffer * ccStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+                kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(idb, ccNameStr, std::vector<re::CC *>{cc});
+                mGrepDriver->makeKernelCall(ccK, {ByteStream}, {ccStream});
+                externalStreamNames.push_back(ccNameStr);
+                icgrepInputSets.push_back(ccStream);
+            }
+        }
         StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
-        kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ByteBitGrepKernel>(idb, prefixRE, suffixRE);
-        mGrepDriver->makeKernelCall(icgrepK, {ByteStream}, {MatchResults});
+        kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ByteBitGrepKernel>(idb, prefixRE, suffixRE, externalStreamNames);
+        mGrepDriver->makeKernelCall(icgrepK, icgrepInputSets, {MatchResults});
         MatchResultsBufs[0] = MatchResults;
         kernel::Kernel * breakK = mGrepDriver->addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(idb, "breakCC", std::vector<re::CC *>{mBreakCC});
         mGrepDriver->makeKernelCall(breakK, {ByteStream}, {LineBreakStream});
