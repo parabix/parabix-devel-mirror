@@ -63,7 +63,6 @@ int main(int argc, char *argv[]) {
 
 
     std::string fileName = inputFile;
-    char targetCharacter = characterToBeDeleted;
 
     std::ifstream f(fileName, std::ios::binary | std::ios::ate);
     if (f.fail()) {

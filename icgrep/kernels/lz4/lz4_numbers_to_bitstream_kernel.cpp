@@ -81,7 +81,7 @@ namespace kernel {
 //        inputStartBasePtr = iBuilder->CreatePointerCast(inputStartBasePtr, iBuilder->getInt64Ty()->getPointerTo());
 //        Value *inputEndBasePtr = iBuilder->getInputStreamBlockPtr(END_NUM_STREAM_NAME, SIZE_ZERO);
 //        inputEndBasePtr = iBuilder->CreatePointerCast(inputEndBasePtr, iBuilder->getInt64Ty()->getPointerTo());
-        Value *outputBasePtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO);
+//        Value *outputBasePtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO);
         Value *initCarryBit = iBuilder->getScalarField("carryBit");
 
 //        iBuilder->CallPrintInt("itemProcessed", itemProcessed);

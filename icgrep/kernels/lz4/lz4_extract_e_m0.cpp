@@ -15,7 +15,6 @@ using namespace kernel;
 using namespace std;
 
 void LZ4ExtractEM0Kernel::generateDoSequentialSegmentMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
-    BasicBlock* entryBlock = iBuilder->GetInsertBlock();
 
     BasicBlock* blockDataLoopCon = iBuilder->CreateBasicBlock("block_data_loop_con");
     BasicBlock* blockDataLoopProcess = iBuilder->CreateBasicBlock("block_data_loop_process");
@@ -60,7 +59,6 @@ void LZ4ExtractEM0Kernel::generateDoSequentialSegmentMethod(const std::unique_pt
 }
 
 BasicBlock* LZ4ExtractEM0Kernel::generateHandleCompressedBlock(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
-    BasicBlock* entryBlock = iBuilder->GetInsertBlock();
     BasicBlock* exitBlock = iBuilder->CreateBasicBlock("block_data_loop_handle_compressed_exit");
 
     Value* blockStart = this->loadCurrentBlockData(iBuilder, "blockStart");
@@ -484,7 +482,7 @@ BasicBlock* LZ4ExtractEM0Kernel::generateHandleCompressedBlock(const std::unique
     this->markCircularOutputBitstream(iBuilder, "e1Marker", iBuilder->getProducedItemCount("e1Marker"), iBuilder->CreateAdd(literalLengthEndPos, iBuilder->getSize(1)), false);
     this->markCircularOutputBitstream(iBuilder, "e1Marker", iBuilder->CreateAdd(literalLengthEndPos, iBuilder->getSize(1)), offsetPos, true);
 
-    Value* basePtr = iBuilder->CreatePointerCast(iBuilder->getRawOutputPointer("e1Marker", iBuilder->getSize(0)), iBuilder->getInt64Ty()->getPointerTo());
+//    Value* basePtr = iBuilder->CreatePointerCast(iBuilder->getRawOutputPointer("e1Marker", iBuilder->getSize(0)), iBuilder->getInt64Ty()->getPointerTo());
 
     this->increaseScalarField(iBuilder, "m0OutputPos", literalLength);
 

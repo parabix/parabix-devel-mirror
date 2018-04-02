@@ -275,8 +275,6 @@ namespace kernel{
 
 
     void LZ4IndexBuilderKernel::generateProcessCompressedBlock(const std::unique_ptr<KernelBuilder> &iBuilder, Value* blockStart, Value* blockEnd) {
-        // Constant
-        Constant* INT64_ONE = iBuilder->getInt64(1);
 
         BasicBlock* entryBlock = iBuilder->GetInsertBlock();
         //TODO use memset to clear output buffer
@@ -356,7 +354,6 @@ namespace kernel{
         unsigned int bitBlockWidth = iBuilder->getBitBlockWidth();
         Constant* INT64_BIT_BLOCK_WIDTH = iBuilder->getInt64(bitBlockWidth);
         Constant* SIZE_ZERO = iBuilder->getSize(0);
-        Type* bitBlockType = iBuilder->getBitBlockType();
         Type* bitBlockWidthIntTy = iBuilder->getIntNTy(bitBlockWidth);
 
         Value* baseInputBlockIndex = iBuilder->CreateUDiv(iBuilder->getProcessedItemCount(inputName), INT64_BIT_BLOCK_WIDTH);

@@ -15,7 +15,6 @@ using namespace std;
 namespace kernel{
 
     void LZ4DepositUncompressedKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
-        BasicBlock* entryBlock = iBuilder->GetInsertBlock();
         BasicBlock* exitBlock = iBuilder->CreateBasicBlock("exit_block");
 
         BasicBlock* uncompressedDataLoopCon = iBuilder->CreateBasicBlock("uncompressed_data_loop_con");
