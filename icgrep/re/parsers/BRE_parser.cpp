@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/re_parser_bre.h>
+#include "BRE_parser.h"
 #include <re/re_alt.h>
 #include <re/re_any.h>
 #include <re/re_seq.h>
@@ -18,7 +18,7 @@
 namespace re {
 
 
-RE * RE_Parser_BRE::parse_alt() {
+RE * BRE_Parser::parse_alt() {
     std::vector<RE *> alt;
     do {
         alt.push_back(parse_seq());
@@ -27,7 +27,7 @@ RE * RE_Parser_BRE::parse_alt() {
     return makeAlt(alt.begin(), alt.end());
 }
 
-RE * RE_Parser_BRE::parse_seq() {
+RE * BRE_Parser::parse_seq() {
     std::vector<RE *> seq;
     if (!mCursor.more() || at("\\|") || at("\\)")) return makeSeq();
     for (;;) {
@@ -42,7 +42,7 @@ RE * RE_Parser_BRE::parse_seq() {
 }
 
 
-RE * RE_Parser_BRE::parse_next_item() {
+RE * BRE_Parser::parse_next_item() {
     if (mCursor.noMore() || at('*') || at("\\?") || at("\\{") || at("\\|")) return nullptr;
     else if ((mGroupsOpen > 0) && at("\\)")) return nullptr;
     else if (accept('^')) return makeStart();
@@ -55,7 +55,7 @@ RE * RE_Parser_BRE::parse_next_item() {
 }
 
 // A parenthesized capture group.  Input precondition: the opening \( has been consumed
-RE * RE_Parser_BRE::parse_group() {
+RE * BRE_Parser::parse_group() {
     mGroupsOpen++;
     RE * captured = parse_capture_body();
     require("\\)");
@@ -64,7 +64,7 @@ RE * RE_Parser_BRE::parse_group() {
 }
 
 // Extend a RE item with one or more quantifiers
-RE * RE_Parser_BRE::extend_item(RE * re) {
+RE * BRE_Parser::extend_item(RE * re) {
     int lb, ub;
     if (accept('*')) {lb = 0; ub = Rep::UNBOUNDED_REP;}
     else if (accept("\\?")) {lb = 0; ub = 1;}
@@ -79,7 +79,7 @@ RE * RE_Parser_BRE::extend_item(RE * re) {
     return extend_item(re);
 }
 
-std::pair<int, int> RE_Parser_BRE::parse_range_bound() {
+std::pair<int, int> BRE_Parser::parse_range_bound() {
     int lb, ub;
     if (accept(',')) {
         lb = 0;

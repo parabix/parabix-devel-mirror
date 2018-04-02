@@ -1,12 +1,12 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
 
-#ifndef PARSE_FIXED_STRINGS_H
-#define PARSE_FIXED_STRINGS_H
-#include <re/re_parser.h>
+#ifndef PARSE_FIXED_STRING_PARSER_H
+#define PARSE_FIXED_STRING_PARSER_H
+#include <re/parsers/parser.h>
 
 namespace re {
     class FixedStringParser : public RE_Parser {
@@ -19,4 +19,4 @@ namespace re {
     };
 }
 
-#endif //PARSE_FIXED_STRINGS_H
+#endif

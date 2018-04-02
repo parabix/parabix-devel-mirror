@@ -9,13 +9,13 @@
 
 #include <map>
 #include <re/re_memoizer.hpp>
-#include "re/re_cc.h"
+#include <re/re_cc.h>
 
 namespace re { class Name; }
 
 namespace re {
 
-enum RE_Syntax {FixedStrings, BRE, ERE, PCRE, PROSITE};
+enum RE_Syntax {FixedStrings, BRE, ERE, FileGLOB, PCRE, PROSITE};
 
 enum ModeFlagType : unsigned {
     DEFAULT_MODE = 0,

@@ -14,7 +14,7 @@
 #include <re/re_cc.h> 
 #include <re/re_seq.h> 
 #include <re/re_assertion.h>
-#include <re/re_parser.h>
+#include <re/parsers/parser.h>
 #include <re/re_name_resolve.h>
 #include <re/grapheme_clusters.h>
 #include <re/re_compiler.h>

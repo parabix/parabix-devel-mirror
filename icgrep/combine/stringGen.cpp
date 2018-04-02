@@ -18,7 +18,7 @@
 #include <sstream>
 #include <algorithm>
 #include <iostream>
-#include <re/re_parser.h>
+#include <re/parsers/parser.h>
 #include <functional>
 #include <locale>
 #include <codecvt>

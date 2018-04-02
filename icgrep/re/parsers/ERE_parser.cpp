@@ -1,10 +1,10 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/re_parser_ere.h>
+#include "ERE_parser.h"
 #include <re/re_start.h>
 #include <re/re_end.h>
 #include <re/re_any.h>
@@ -14,7 +14,7 @@
 namespace re {
 
 
-RE * RE_Parser_ERE::parse_next_item() {
+RE * ERE_Parser::parse_next_item() {
     if (mCursor.noMore() || atany("*?+{|")) return nullptr;
     else if ((mGroupsOpen > 0) && at(')')) return nullptr;
     else if (accept('^')) return makeStart();
@@ -27,7 +27,7 @@ RE * RE_Parser_ERE::parse_next_item() {
 }
 
 // A parenthesized capture group.  Input precondition: the opening ( has been consumed
-RE * RE_Parser_ERE::parse_group() {
+RE * ERE_Parser::parse_group() {
     mGroupsOpen++;
     RE * captured = parse_capture_body();
     require(')');
@@ -35,7 +35,7 @@ RE * RE_Parser_ERE::parse_group() {
     return captured;
 }
 
-RE * RE_Parser_ERE::parse_escaped() {
+RE * ERE_Parser::parse_escaped() {
     if (accept('b')) return makeWordBoundary();
     if (accept('B')) return makeWordNonBoundary();
     if (accept('s')) return makeWhitespaceSet();
@@ -53,7 +53,7 @@ RE * RE_Parser_ERE::parse_escaped() {
 // Items represent individual characters or sets of characters.
 // Ranges may be formed by individual character items separated by '-'.
 // Note that there are no backslash escapes for ERE or BRE bracket expressions.
-RE * RE_Parser_ERE::parse_bracket_expr () {
+RE * ERE_Parser::parse_bracket_expr () {
     bool negated = accept('^');
     std::vector<RE *> items;
     do {

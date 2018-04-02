@@ -14,7 +14,7 @@
 #include <re/re_seq.h>
 #include <re/re_start.h>
 #include <re/re_end.h>
-#include <re/re_parser.h>
+#include <re/parsers/parser.h>
 #include <re/re_utility.h>
 #include <grep/grep_engine.h>
 #include <grep_interface.h>
@@ -24,11 +24,6 @@
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <boost/filesystem.hpp>
-#include <iostream> // MEEE
-#ifdef PRINT_TIMING_INFORMATION
-#include <hrtime.h>
-#include <util/papi_helper.hpp>
-#endif
 #include <sys/stat.h>
 #include <fcntl.h>
 

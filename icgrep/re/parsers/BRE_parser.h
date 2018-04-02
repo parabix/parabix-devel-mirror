@@ -1,19 +1,19 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
 
-#ifndef ICGREP_RE_PARSER_BRE_H
-#define ICGREP_RE_PARSER_BRE_H
+#ifndef BRE_PARSER_H
+#define BRE_PARSER_H
 
-#include <re/re_parser.h>
-#include <re/re_parser_ere.h>
+#include <re/parsers/parser.h>
+#include <re/parsers/ERE_parser.h>
 
 namespace re {
-    class RE_Parser_BRE : public RE_Parser_ERE  {
+    class BRE_Parser : public ERE_Parser  {
     public:
-        RE_Parser_BRE(const std::string & regular_expression) : RE_Parser_ERE(regular_expression) {
+        BRE_Parser(const std::string & regular_expression) : ERE_Parser(regular_expression) {
             mReSyntax = RE_Syntax::BRE;
         }
 
@@ -27,5 +27,4 @@ namespace re {
     };
 }
 
-
-#endif //ICGREP_RE_PARSER_BRE_H
+#endif

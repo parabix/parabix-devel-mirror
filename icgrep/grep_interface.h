@@ -12,7 +12,7 @@
  
 #include <string>       // for string
 #include <vector>
-#include <re/re_parser.h>  // for re::RE_Syntax
+#include <re/parsers/parser.h>  // for re::RE_Syntax
 
 namespace re { class CC; }
 namespace re { class RE; }

@@ -1,11 +1,11 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/re_parser.h>
-#include <re/parse_fixed_strings.h>
+#include <re/parsers/parser.h>
+#include "fixed_string_parser.h"
 #include <re/re_alt.h>
 #include <re/re_seq.h>
 

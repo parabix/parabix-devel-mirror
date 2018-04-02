@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 #include <re/re_cc.h>
-#include <re/re_parser.h>
+#include <re/parsers/parser.h>
 
 namespace re {
     class RE;

@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <string>
-#include <re/re_parser.h>
+#include <re/parsers/parser.h>
 
 using namespace std;
 

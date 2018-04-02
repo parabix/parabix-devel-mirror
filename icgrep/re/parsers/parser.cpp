@@ -4,13 +4,14 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/re_parser.h>
-#include <re/re_parser_helper.h>
-#include <re/re_parser_pcre.h>
-#include <re/re_parser_ere.h>
-#include <re/re_parser_bre.h>
-#include <re/re_parser_prosite.h>
-#include <re/parse_fixed_strings.h>
+#include <re/parsers/parser.h>
+#include <re/parsers/parser_helper.h>
+#include <re/parsers/PCRE_parser.h>
+#include <re/parsers/ERE_parser.h>
+#include <re/parsers/BRE_parser.h>
+#include <re/parsers/GLOB_parser.h>
+#include <re/parsers/Prosite_parser.h>
+#include <re/parsers/fixed_string_parser.h>
 #include <re/re_name.h>
 #include <re/re_alt.h>
 #include <re/re_any.h>
@@ -43,13 +44,16 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
     std::unique_ptr<RE_Parser> parser = nullptr;
     switch (syntax) {
         case RE_Syntax::PCRE:
-            parser = make_unique<RE_Parser_PCRE>(regular_expression);
+            parser = make_unique<PCRE_Parser>(regular_expression);
             break;
         case RE_Syntax::ERE:
-            parser = make_unique<RE_Parser_ERE>(regular_expression);
+            parser = make_unique<ERE_Parser>(regular_expression);
             break;
-        case RE_Syntax ::BRE:
-            parser = make_unique<RE_Parser_BRE>(regular_expression);
+        case RE_Syntax::BRE:
+            parser = make_unique<BRE_Parser>(regular_expression);
+            break;
+        case RE_Syntax::FileGLOB:
+            parser = make_unique<FileGLOB_Parser>(regular_expression);
             break;
         case RE_Syntax ::PROSITE:
             parser = make_unique<RE_Parser_PROSITE>(regular_expression);
