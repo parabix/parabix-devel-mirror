@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -10,7 +10,12 @@
 #include <llvm/Support/Signals.h>
 #include <llvm/Support/raw_ostream.h>
 #include <toolchain/toolchain.h>
+#include <re/parsers/parser.h>
+#include <re/re_alt.h>
 #include <re/re_toolchain.h>
+#include <fstream>
+#include <string>
+
 #include <pablo/pablo_toolchain.h>
 
 using namespace llvm;
@@ -34,6 +39,7 @@ static cl::opt<re::RE_Syntax, true> RegexpSyntaxOption(cl::desc("Regular express
         clEnumValN(re::RE_Syntax::FixedStrings, "fixed-strings", "Alias for -F"),
         clEnumValN(re::RE_Syntax::BRE, "basic-regexp", "Alias for -G"),
         clEnumValN(re::RE_Syntax::PCRE, "perl-regexp", "Alias for -P"),
+        clEnumValN(re::RE_Syntax::FileGLOB, "GLOB", "Posix GLOB syntax for file name patterns"),
         clEnumValN(re::RE_Syntax::PROSITE, "PROSITE", "PROSITE protein patterns syntax")
         CL_ENUM_VAL_SENTINEL), cl::cat(RE_Options), cl::Grouping, cl::location(RegexpSyntax), cl::init(re::RE_Syntax::PCRE));
 
@@ -130,6 +136,53 @@ static cl::opt<BinaryFilesMode, true> BinaryFilesOption("binary-files", cl::desc
                                                                 clEnumValN(WithoutMatch, "without-match", "Always report as non-matching."),
                                                                 clEnumValN(Text, "text", "Treat binary files as text.")
                                                                 CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(BinaryFilesFlag), cl::init(Binary));
+    
+
+    
+re::RE * getFileExcludePattern() {
+    std::vector<re::RE *> patterns;
+    if (grep::ExcludeFlag != "") {
+        re::RE * glob = re::RE_Parser::parse(grep::ExcludeFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
+        patterns.push_back(glob);
+    }
+    
+    if (grep::ExcludeFromFlag != "") {
+        std::ifstream globFile(grep::ExcludeFromFlag.c_str());
+        std::string r;
+        if (globFile.is_open()) {
+            while (std::getline(globFile, r)) {
+                re::RE * glob = re::RE_Parser::parse(r, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
+                patterns.push_back(glob);
+            }
+            globFile.close();
+        }
+    }
+    if (patterns.empty()) return nullptr;
+    return re::makeAlt(patterns.begin(), patterns.end());
+}
+
+re::RE * getDirectoryExcludePattern() {
+    if (grep::ExcludeDirFlag != "") {
+        return re::RE_Parser::parse(grep::ExcludeDirFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
+    }
+    return nullptr;
+}
+
+re::RE * getFileIncludePattern() {
+    if (grep::IncludeFlag != "") {
+        return re::RE_Parser::parse(grep::IncludeFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
+    }
+    return nullptr;
+}
+
+// Include is the default unless a -include= option exists and is prior to any -exclude
+// or -exclude-dir option.
+bool includeIsDefault() {
+    if (IncludeFlag == "") return true;
+    if ((ExcludeFlag != "") && (ExcludeOption.getPosition() < IncludeOption.getPosition())) return true;
+    if ((ExcludeDirFlag != "") && (ExcludeDirOption.getPosition() < IncludeOption.getPosition())) return true;
+    return false;
+}
     
 /*
  *  C.  Grep output modes and options.

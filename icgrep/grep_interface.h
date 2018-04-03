@@ -58,6 +58,19 @@ extern std::string ExcludeFromFlag; // -exclude-from
 extern std::string ExcludeDirFlag; // -exclude-dir
 extern std::string IncludeFlag; // -include
 
+// File exclude pattern parsed from ExcludeFlag and ExcludeFromFlag
+re::RE * getFileExcludePattern();
+
+// File exclude pattern parsed from ExcludeDirFlag.
+re::RE * getDirectoryExcludePattern();
+
+// File include pattern parsed from InludeFlag
+re::RE * getFileIncludePattern();
+
+// Determine whether include is the default for files that do not match any pattern.
+bool includeIsDefault();
+
+
 /*
  *  C.  Grep output modes and options.
  */
