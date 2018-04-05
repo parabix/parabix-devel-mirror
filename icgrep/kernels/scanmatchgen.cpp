@@ -198,6 +198,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 
     iBuilder->SetInsertPoint(callFinalizeScan);
     Value * bufSize = iBuilder->getBufferedSize("InputStream");
+    iBuilder->setProcessedItemCount("InputStream", bufSize);
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
     Value * const buffer_base = iBuilder->getRawInputPointer("InputStream", iBuilder->getInt32(0));
     Value * buffer_end_address = iBuilder->CreateGEP(buffer_base, bufSize);
