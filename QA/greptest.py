@@ -77,7 +77,7 @@ def start_element_do_test(name, attrs):
 		regexp = None
 		datafile = None
 		expected_count = None
-		extra_flags = None
+		flags = None
 		for a in attrs:
 			if a == 'regexp':
 				regexp = attrs[a]
@@ -86,14 +86,12 @@ def start_element_do_test(name, attrs):
 			elif a == 'grepcount':
 				expected_count = attrs[a]
 			elif a == 'flags':
-				extra_flags = attrs[a]
+				flags = attrs[a]
 		if regexp == None or datafile == None or expected_count == None:
 			print("Bad grepcase: missing regexp and/or datafile attributes.")
 			return
+		if flags == None: flags = "-c" # Our default is counting if flags not set explicitly
 		#execute grep test
-		flags = "-c"
-		if extra_flags != None:
-                    flags += " " + extra_flags
                 grep_cmd = "%s %s '%s' %s" % (grep_program_under_test, flags, escape_quotes(regexp), os.path.join(options.datafile_dir, datafile))
                 if options.verbose:
                     print("Doing: " + grep_cmd)
