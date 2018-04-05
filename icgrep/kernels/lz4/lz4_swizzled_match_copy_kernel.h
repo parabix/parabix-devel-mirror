@@ -29,6 +29,7 @@ namespace kernel {
 
         llvm::Value* getMaximumMatchCopyBlock(const std::unique_ptr<KernelBuilder> &iBuilder);
         llvm::Value* mIsFinalBlock;
+        llvm::Value* loadInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder, std::string bufferName, llvm::Value* offset);
     };
 }
 

@@ -12,6 +12,18 @@ using namespace llvm;
 using namespace kernel;
 using namespace std;
 
+Value* LZ4SwizzledMatchCopyKernel::loadInt64NumberInput(const unique_ptr<KernelBuilder> &iBuilder, string bufferName, Value* offset) {
+    // GEP here is safe
+    Value* SIZE_BIT_BLOCK_WIDTH = iBuilder->getSize(iBuilder->getBitBlockWidth());
+    Value* inputLocalBlockIndex = iBuilder->CreateUDiv(offset, SIZE_BIT_BLOCK_WIDTH);
+    Value* inputLocalBlockOffset = iBuilder->CreateURem(offset, SIZE_BIT_BLOCK_WIDTH);
+
+    Value* blockBasePtr = iBuilder->getInputStreamBlockPtr(bufferName, iBuilder->getSize(0), inputLocalBlockIndex);
+    blockBasePtr = iBuilder->CreatePointerCast(blockBasePtr, iBuilder->getInt64Ty()->getPointerTo());
+    // GEP here is safe
+    return iBuilder->CreateLoad(iBuilder->CreateGEP(blockBasePtr, inputLocalBlockOffset));
+}
+
 void LZ4SwizzledMatchCopyKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value * const numOfStrides)  {
     // Const
     Constant *SIZE_ZERO = iBuilder->getSize(0);
@@ -19,49 +31,32 @@ void LZ4SwizzledMatchCopyKernel::generateMultiBlockLogic(const std::unique_ptr<K
     Constant *SIZE_BIT_BLOCK_WIDTH = iBuilder->getSize(iBuilder->getBitBlockWidth());
     Constant *SIZE_PDEP_WIDTH = iBuilder->getSize(mPDEPWidth);
 
+    BasicBlock* exitBlock = iBuilder->CreateBasicBlock("exitBlock");
+
     Value *itemsToDo = mAvailableItemCount[3];
-
-
+    Value *processedItemCount = mInitialProcessedItemCount[3];
+    Value *totalItemCount = iBuilder->CreateAdd(itemsToDo, processedItemCount);
+    Value *isFinalBlock = iBuilder->CreateICmpULT(itemsToDo, iBuilder->getSize(4 * 1024 * 1024));
+    this->mIsFinalBlock = isFinalBlock;
+    iBuilder->setTerminationSignal(isFinalBlock);
 
     Value *previousProducedItemCount = iBuilder->getProducedItemCount("outputStreamSet0");
 
     // Space Calculation
     Value *outputBufferBlocks = iBuilder->getSize(
             this->getAnyStreamSetBuffer("outputStreamSet0")->getBufferBlocks());
-    Value *outputRawBeginPtr = iBuilder->CreatePointerCast(
-            iBuilder->getRawOutputPointer("outputStreamSet0", SIZE_ZERO),
-            iBuilder->getBitBlockType()->getPointerTo()); // TODO it is possible the pointer cast here is not necessary
-    Value *outputCurrentPtr = iBuilder->getOutputStreamBlockPtr("outputStreamSet0", SIZE_ZERO);
-    Value *producedOffset = iBuilder->CreatePtrDiff(outputCurrentPtr, outputRawBeginPtr);
-    producedOffset = iBuilder->CreateUDiv(producedOffset, iBuilder->getSize(mStreamCount));
 
-    Value *remainSpace = iBuilder->CreateSub(outputBufferBlocks, producedOffset);
-    Value *matchCopyWindowBlock = iBuilder->getSize(256 * 256 / codegen::BlockSize);
-    Value *remainWindowBlock = iBuilder->CreateSelect(
-            iBuilder->CreateICmpUGE(producedOffset, matchCopyWindowBlock),
-            iBuilder->getSize(0),
-            iBuilder->CreateSub(matchCopyWindowBlock, producedOffset)
-    );
-    Value *writableBlocks = iBuilder->CreateSub(remainSpace,
-                                                remainWindowBlock); //TODO handle beginning, if producedItemCount / bitblockWidth < windowBlock, there is no need for the substraction here
-
-    Value *outputBlocks = iBuilder->CreateUMin(writableBlocks, numOfStrides);
-//    outputBlocks = iBuilder->CreateUMin(outputBlocks, this->getMaximumMatchCopyBlock(iBuilder));
+    Value *outputBlocks = iBuilder->getSize(4 * 1024 * 1024 / iBuilder->getBitBlockWidth()); // Always be 4MB
 
 
-    Value *isFinalBlock =
-            iBuilder->CreateOr(
-                    iBuilder->CreateICmpULT(itemsToDo, iBuilder->CreateMul(outputBlocks, SIZE_BIT_BLOCK_WIDTH)),
-                    iBuilder->CreateICmpEQ(itemsToDo, iBuilder->getSize(0))
-            );
+    BasicBlock* processBlock = iBuilder->CreateBasicBlock("processBlock");
+    Value* isInputEnough = iBuilder->CreateOr(isFinalBlock, iBuilder->CreateICmpUGE(itemsToDo, iBuilder->getSize(4 * 1024 * 1024)));
 
-    this->mIsFinalBlock = isFinalBlock;
-    iBuilder->setTerminationSignal(isFinalBlock);
+    iBuilder->CreateCondBr(isInputEnough, processBlock, exitBlock);
 
+    iBuilder->SetInsertPoint(processBlock);
     // Output Copy
     this->generateOutputCopy(iBuilder, outputBlocks);
-
-
 
     Value *newProducedItemCount = iBuilder->getProducedItemCount("outputStreamSet0");
 
@@ -70,7 +65,7 @@ void LZ4SwizzledMatchCopyKernel::generateMultiBlockLogic(const std::unique_ptr<K
     iBuilder->SetInsertPoint(copyEndBlock);
 
     // Match Copy
-    BasicBlock *exitBlock = iBuilder->CreateBasicBlock("exit_block");
+    BasicBlock *processExitBlock = iBuilder->CreateBasicBlock("exit_block");
 
     Value *initM0StartProcessIndex = iBuilder->getProcessedItemCount("m0Start");
     Value *totalM0StartItemsCount = iBuilder->CreateAdd(initM0StartProcessIndex, mAvailableItemCount[0]);
@@ -114,29 +109,21 @@ void LZ4SwizzledMatchCopyKernel::generateMultiBlockLogic(const std::unique_ptr<K
     iBuilder->SetInsertPoint(loadNextMatchInfoConBlock);
 
     Value *hasMoreMatchInfo = iBuilder->CreateICmpULT(phiProcessIndex, totalM0StartItemsCount);
-    iBuilder->CreateCondBr(hasMoreMatchInfo, loadNextMatchInfoBodyBlock, exitBlock);
+    iBuilder->CreateCondBr(hasMoreMatchInfo, loadNextMatchInfoBodyBlock, processExitBlock);
 
     iBuilder->SetInsertPoint(loadNextMatchInfoBodyBlock);
 
-    Value *m0StartBasePtr = iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("m0Start", SIZE_ZERO), iBuilder->getInt64Ty()->getPointerTo());
-    Value *m0EndBasePtr = iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("m0End", SIZE_ZERO), iBuilder->getInt64Ty()->getPointerTo());
-    Value *matchOffsetBasePtr = iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("matchOffset", SIZE_ZERO), iBuilder->getInt64Ty()->getPointerTo());
-
 
     Value *m0StartBaseOffset = iBuilder->CreateURem(initM0StartProcessIndex, SIZE_BIT_BLOCK_WIDTH);
-//    iBuilder->CallPrintInt("rawPtr", iBuilder->getRawInputPointer("m0Start", SIZE_ZERO));
-//    iBuilder->CallPrintInt("ptr", m0StartBasePtr);
-//    iBuilder->CallPrintInt("initM0StartProcessIndex", initM0StartProcessIndex);
     Value *m0StartLoadOffset = iBuilder->CreateAdd(m0StartBaseOffset,
                                                    iBuilder->CreateSub(phiProcessIndex, initM0StartProcessIndex));
 
-    Value *newM0Start = iBuilder->CreateLoad(iBuilder->CreateGEP(m0StartBasePtr, m0StartLoadOffset));
-    Value *newM0End = iBuilder->CreateLoad(iBuilder->CreateGEP(m0EndBasePtr, m0StartLoadOffset));
-    Value *newMatchOffset = iBuilder->CreateLoad(iBuilder->CreateGEP(matchOffsetBasePtr, m0StartLoadOffset));
+
+    Value *newM0Start = this->loadInt64NumberInput(iBuilder, "m0Start", m0StartLoadOffset);
+    Value *newM0End = this->loadInt64NumberInput(iBuilder, "m0End", m0StartLoadOffset);
+    Value *newMatchOffset = this->loadInt64NumberInput(iBuilder, "matchOffset", m0StartLoadOffset);
 
     Value *depositStart = newM0Start;
-//    iBuilder->CallPrintInt("depositStart", depositStart);
-//    iBuilder->CallPrintInt("newMatchLength", newMatchLength);
 
     Value *depositEnd = iBuilder->CreateAdd(newM0End, iBuilder->getInt64(1));
     Value *newMatchLength = iBuilder->CreateSub(depositEnd, depositStart);
@@ -152,7 +139,7 @@ void LZ4SwizzledMatchCopyKernel::generateMultiBlockLogic(const std::unique_ptr<K
     iBuilder->SetInsertPoint(matchCopyConBlock);
     Value *hasNotReachEnd = iBuilder->CreateICmpULT(phiMatchPos, newProducedItemCount);
 //    iBuilder->CallPrintInt("newProducedItemCount", newProducedItemCount);
-    iBuilder->CreateCondBr(hasNotReachEnd, matchCopyBodyBlock, exitBlock);
+    iBuilder->CreateCondBr(hasNotReachEnd, matchCopyBodyBlock, processExitBlock);
 
     iBuilder->SetInsertPoint(matchCopyBodyBlock);
 
@@ -184,11 +171,6 @@ void LZ4SwizzledMatchCopyKernel::generateMultiBlockLogic(const std::unique_ptr<K
             iBuilder->CreateShl(SIZE_ONE, matchCopyFromBlockOffset)
     );
     Value* fullMask = iBuilder->simd_fill(mPDEPWidth, singleMask);
-
-//    iBuilder->CallPrintInt("phiMatchPos", phiMatchPos);
-//    iBuilder->CallPrintInt("currentCopySize", currentCopySize);
-//    iBuilder->CallPrintInt("aaa", iBuilder->CreateShl(SIZE_ONE, iBuilder->CreateAdd(matchCopyFromBlockOffset, currentCopySize)));
-//    iBuilder->CallPrintRegister("fullMask", fullMask);
 
     for (int i = 0; i < mStreamSize; i++) {
         Value* rawOutputBasePtr = iBuilder->getRawOutputPointer("outputStreamSet" + std::to_string(i), SIZE_ZERO);
@@ -229,15 +211,16 @@ void LZ4SwizzledMatchCopyKernel::generateMultiBlockLogic(const std::unique_ptr<K
 
     iBuilder->CreateBr(matchCopyLoopCon);
 
-    iBuilder->SetInsertPoint(exitBlock);
-//    iBuilder->CallPrintInt("test", SIZE_ZERO);
+    iBuilder->SetInsertPoint(processExitBlock);
     iBuilder->setScalarField("pendingMatchOffset", phiMatchOffset);
     iBuilder->setScalarField("pendingMatchLength", phiMatchLength);
     iBuilder->setScalarField("pendingMatchPos", phiMatchPos);
-//    iBuilder->CallPrintInt("pendingMatchLength", phiMatchLength);
     iBuilder->setProcessedItemCount("m0Start", phiProcessIndex);
     iBuilder->setProcessedItemCount("m0End", phiProcessIndex);
     iBuilder->setProcessedItemCount("matchOffset", phiProcessIndex);
+
+    iBuilder->CreateBr(exitBlock);
+    iBuilder->SetInsertPoint(exitBlock);
 }
 
 void LZ4SwizzledMatchCopyKernel::generateOutputCopy(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value* outputBlocks) {
@@ -249,9 +232,7 @@ void LZ4SwizzledMatchCopyKernel::generateOutputCopy(const std::unique_ptr<Kernel
 
 
     Value *itemsToDo = mAvailableItemCount[3];
-//    iBuilder->CallPrintInt("swizzledMatchCopy:itemsToDo", itemsToDo);
     Value *copySize = iBuilder->CreateMul(outputBlocks, SIZE_BIT_BLOCK_WIDTH);
-//    iBuilder->CallPrintInt("swizzledMatchCopy:copySize", copySize);
     Value* actualCopySize = iBuilder->CreateUMin(itemsToDo, copySize);
     Value* copyByte = iBuilder->CreateUDivCeil(iBuilder->CreateMul(copySize, iBuilder->getSize(mStreamCount)), iBuilder->getSize(8)); // i8
 
@@ -312,7 +293,6 @@ LZ4SwizzledMatchCopyKernel::LZ4SwizzledMatchCopyKernel(const std::unique_ptr<ker
         : MultiBlockKernel("LZ4SwizzledMatchCopyKernel",
         // Inputs
                            {
-                                   //TODO add swizzled attribute
                                    Binding{iBuilder->getStreamSetTy(1, 64), "m0Start", BoundedRate(0, 1), AlwaysConsume()},
                                    Binding{iBuilder->getStreamSetTy(1, 64), "m0End", BoundedRate(0, 1), AlwaysConsume()},
                                    Binding{iBuilder->getStreamSetTy(1, 64), "matchOffset", BoundedRate(0, 1), AlwaysConsume()},
@@ -321,7 +301,9 @@ LZ4SwizzledMatchCopyKernel::LZ4SwizzledMatchCopyKernel(const std::unique_ptr<ker
         // Outputs
                            {},
         // Arguments
-                           {},
+                           {
+                                   Binding{iBuilder->getSizeTy(), "fileSize"} //TODO remove
+                           },
                            {},
                            {
                                    Binding{iBuilder->getSizeTy(), "currentProcessIndex"},
@@ -336,15 +318,14 @@ LZ4SwizzledMatchCopyKernel::LZ4SwizzledMatchCopyKernel(const std::unique_ptr<ker
 
     assert((mSwizzleFactor == (iBuilder->getBitBlockWidth() / PDEP_width)) && "swizzle factor must equal bitBlockWidth / PDEP_width");
     assert((mPDEPWidth == 64 || mPDEPWidth == 32) && "PDEP width must be 32 or 64");
-
+    this->setStride(4 * 1024 * 1024);
     addAttribute(MustExplicitlyTerminate());
 
-
-    mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(streamCount), "sourceStreamSet0", BoundedRate(0, 1), {AlwaysConsume(), Swizzled()}});
-    mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet0", BoundedRate(0, 1)});
+    mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(streamCount), "sourceStreamSet0", BoundedRate(0, 1), {Swizzled(), DisableTemporaryBuffer()}});
+    mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet0", BoundedRate(0, 1), DisableTemporaryBuffer()});
 
     for (int i = 1; i < streamSize; i++) {
-        mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(streamCount), "sourceStreamSet" + std::to_string(i), RateEqualTo("sourceStreamSet0"), {AlwaysConsume(), Swizzled()}});
-        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet" + std::to_string(i), RateEqualTo("outputStreamSet0")});
+        mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(streamCount), "sourceStreamSet" + std::to_string(i), RateEqualTo("sourceStreamSet0"), {Swizzled(), DisableTemporaryBuffer()}});
+        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamCount), "outputStreamSet" + std::to_string(i), RateEqualTo("outputStreamSet0"), DisableTemporaryBuffer()});
     }
 }

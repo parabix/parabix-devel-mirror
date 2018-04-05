@@ -44,7 +44,6 @@ namespace kernel {
         BasicBlock * terminate = kb->CreateBasicBlock("terminate");
 
         Value * itemsToDo = mAvailableItemCount[0];
-
         Value * sourceItemsAvail = mAvailableItemCount[1]; //TODO need to be calculated from numOfStrides
 
         Constant * blockWidth = kb->getSize(kb->getBitBlockWidth());
@@ -179,6 +178,7 @@ namespace kernel {
                                                    kb->CreateAdd(kb->getProcessedItemCount("PDEPmarkerStream"),kb->CreateMul(processedBlock, blockWidth))
                                   )
         );
+
     }
 
     std::vector<Value *> LZ4MultiplePDEPkernel::get_block_popcounts(const std::unique_ptr<KernelBuilder> & kb, Value * blk, const unsigned field_width) {

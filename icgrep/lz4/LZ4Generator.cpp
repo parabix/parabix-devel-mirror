@@ -157,6 +157,7 @@ void LZ4Generator::generatePipeline(const std::string& outputFile) {
     StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
     Kernel * swizzledMatchCopyK = pxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
+    swizzledMatchCopyK->setInitialArguments({fileSize});
     pxDriver.makeKernelCall(swizzledMatchCopyK, {M0_Start, M0_End, Match_Offset, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
 
 

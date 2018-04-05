@@ -17,6 +17,7 @@ using namespace llvm;
 using namespace kernel;
 using namespace std;
 
+
 namespace kernel {
 
     Value* LZ4NumbersToBitstreamKernel::loadInt64NumberInput(const unique_ptr<KernelBuilder> &iBuilder, string bufferName, Value* offset) {
@@ -61,9 +62,9 @@ namespace kernel {
 
 
         Value *itemsToDo = mAvailableItemCount[0];
-//        iBuilder->CallPrintInt("itemsToDo", itemsToDo);
-        Value *isFinalBlock = iBuilder->CreateICmpEQ(itemsToDo, iBuilder->getSize(0));
-        iBuilder->setTerminationSignal(isFinalBlock);
+//        Value *isFinalBlock = iBuilder->CreateICmpEQ(itemsToDo, iBuilder->getSize(0));
+        Value *isFinalBlock = mIsFinal;
+//        iBuilder->setTerminationSignal(isFinalBlock);
 
         Value *itemProcessed = iBuilder->getProcessedItemCount(START_NUM_STREAM_NAME);
         Value *oldProducedItemCount = iBuilder->getProducedItemCount(OUTPUT_BIT_STREAM_NAME);
@@ -76,12 +77,13 @@ namespace kernel {
 
 
         Value *availableOutputBlocks = iBuilder->CreateUMin(remainSpace, numOfStrides);
+        availableOutputBlocks = remainSpace; //TODO workaround here
 
 //        Value *inputStartBasePtr = iBuilder->getInputStreamBlockPtr(START_NUM_STREAM_NAME, SIZE_ZERO);
 //        inputStartBasePtr = iBuilder->CreatePointerCast(inputStartBasePtr, iBuilder->getInt64Ty()->getPointerTo());
 //        Value *inputEndBasePtr = iBuilder->getInputStreamBlockPtr(END_NUM_STREAM_NAME, SIZE_ZERO);
 //        inputEndBasePtr = iBuilder->CreatePointerCast(inputEndBasePtr, iBuilder->getInt64Ty()->getPointerTo());
-//        Value *outputBasePtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO);
+        Value *outputBasePtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_BIT_STREAM_NAME, SIZE_ZERO);
         Value *initCarryBit = iBuilder->getScalarField("carryBit");
 
 //        iBuilder->CallPrintInt("itemProcessed", itemProcessed);
@@ -174,7 +176,7 @@ namespace kernel {
         phiCurrentItemIndex->addIncoming(
                 iBuilder->CreateSelect(
                         enterNewOutputBlock,
-                        phiCurrentItemIndex,
+                        iBuilder->CreateSelect(iBuilder->CreateICmpEQ(currentEndLocalBlockOffset, SIZE_ZERO), iBuilder->CreateAdd(phiCurrentItemIndex, SIZE_ONE), phiCurrentItemIndex),
                         iBuilder->CreateAdd(phiCurrentItemIndex, SIZE_ONE)
                 ),
                 iBuilder->GetInsertBlock()
@@ -252,7 +254,7 @@ namespace kernel {
         // Processed Item Count and Produced Item Count
         Value *newProcessedItemCount = iBuilder->CreateAdd(iBuilder->getProcessedItemCount(START_NUM_STREAM_NAME),
                                                            iBuilder->CreateSub(phiCurrentItemIndex,
-                                                                               initCurrentItemIndex));
+                                                                               initCurrentItemIndex)); //TODO bug here
 
 
         iBuilder->setProcessedItemCount(START_NUM_STREAM_NAME, newProcessedItemCount);
@@ -314,9 +316,9 @@ namespace kernel {
             // Inputs
                                {
                                        Binding{iBuilder->getStreamSetTy(1, 64), START_NUM_STREAM_NAME,
-                                               BoundedRate(0, 1), AlwaysConsume()},
-                                       Binding{iBuilder->getStreamSetTy(1, 64), END_NUM_STREAM_NAME, BoundedRate(0, 1),
-                                               AlwaysConsume()}
+                                               BoundedRate(0, 1)/*, AlwaysConsume()*/},
+                                       Binding{iBuilder->getStreamSetTy(1, 64), END_NUM_STREAM_NAME, BoundedRate(0, 1)/*,
+                                               AlwaysConsume()*/}
                                },
             //Outputs
                                {
@@ -337,6 +339,6 @@ namespace kernel {
             }) {
 //        addAttribute(CanTerminateEarly());
 //        setNoTerminateAttribute(true);
-        addAttribute(MustExplicitlyTerminate());
+//        addAttribute(MustExplicitlyTerminate());
     }
 }

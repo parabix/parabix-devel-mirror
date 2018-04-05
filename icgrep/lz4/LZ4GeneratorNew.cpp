@@ -47,23 +47,23 @@ int LZ4GeneratorNew::get4MbBufferBlocks() {
 }
 
 int LZ4GeneratorNew::getInputBufferBlocks() {
-    return this->get4MbBufferBlocks();
+    return this->get4MbBufferBlocks() * 2;
 }
 int LZ4GeneratorNew::getDecompressedBufferBlocks() {
-    return this->get4MbBufferBlocks();
+    return this->get4MbBufferBlocks() * 2;
 }
 
 
 void LZ4GeneratorNew::generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     //// Decode Block Information
-    StreamSetBuffer * const BlockData_IsCompressed = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->get4MbBufferBlocks());
-    StreamSetBuffer * const BlockData_BlockStart = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->get4MbBufferBlocks());
-    StreamSetBuffer * const BlockData_BlockEnd = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->get4MbBufferBlocks());
+    StreamSetBuffer * const BlockData_IsCompressed = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getInputBufferBlocks());
+    StreamSetBuffer * const BlockData_BlockStart = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks());
+    StreamSetBuffer * const BlockData_BlockEnd = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks());
 
     //// Generate Helper Markers Extenders, FX, XF
-    StreamSetBuffer * const Extenders = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->get4MbBufferBlocks());
-    StreamSetBuffer * const CC_0xFX = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->get4MbBufferBlocks());
-    StreamSetBuffer * const CC_0xXF = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->get4MbBufferBlocks());
+    StreamSetBuffer * const Extenders = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
+    StreamSetBuffer * const CC_0xFX = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
+    StreamSetBuffer * const CC_0xXF = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
 
 
     Kernel * extenderK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
@@ -92,9 +92,9 @@ void LZ4GeneratorNew::generateExtractAndDepositMarkers(const std::unique_ptr<ker
     M0_End = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks());
 
     //TODO handle uncompressed part
-    StreamSetBuffer * const UncompressedStartPos = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->get4MbBufferBlocks());
-    StreamSetBuffer * const UncompressedLength = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->get4MbBufferBlocks());
-    StreamSetBuffer * const UncompressedOutputPos = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->get4MbBufferBlocks());
+    StreamSetBuffer * const UncompressedStartPos = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks());
+    StreamSetBuffer * const UncompressedLength = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks());
+    StreamSetBuffer * const UncompressedOutputPos = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks());
 
     EMarker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), e1BufferSize);
     StreamSetBuffer * const M0Marker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), m0BufferSize);
@@ -103,19 +103,20 @@ void LZ4GeneratorNew::generateExtractAndDepositMarkers(const std::unique_ptr<ker
 
 
     Kernel * blockDecoderK = pxDriver.addKernelInstance<LZ4BlockDecoderNewKernel>(iBuilder);
-    blockDecoderK->setInitialArguments({iBuilder->CreateTrunc(hasBlockChecksum, iBuilder->getInt1Ty()), headerSize});
+    blockDecoderK->setInitialArguments({iBuilder->CreateTrunc(hasBlockChecksum, iBuilder->getInt1Ty()), headerSize, fileSize});
     pxDriver.makeKernelCall(blockDecoderK, {ByteStream, Extenders}, {BlockData_IsCompressed, BlockData_BlockStart, BlockData_BlockEnd});
 
 
 
     Kernel* Lz4IndexBuilderK = pxDriver.addKernelInstance<LZ4IndexBuilderKernel>(iBuilder);
+    Lz4IndexBuilderK->setInitialArguments({fileSize});
     pxDriver.makeKernelCall(
             Lz4IndexBuilderK,
             {
                     ByteStream,
                     Extenders,
-                    CC_0xFX,
-                    CC_0xXF,
+//                    CC_0xFX,
+//                    CC_0xXF,
 
                     // Block Data
                     BlockData_IsCompressed,
@@ -130,15 +131,16 @@ void LZ4GeneratorNew::generateExtractAndDepositMarkers(const std::unique_ptr<ker
                     EMarker,
                     M0_Start,
                     M0_End,
-                    Match_Offset
+                    Match_Offset,
+                    M0Marker
             });
 
 
-    Kernel * buildM0StartMarkerK = pxDriver.addKernelInstance<LZ4NumbersToBitstreamKernel>("buildM0Marker", iBuilder);
-    pxDriver.makeKernelCall(buildM0StartMarkerK, {M0_Start, M0_End}, {M0Marker});
+//    Kernel * buildM0StartMarkerK = pxDriver.addKernelInstance<LZ4NumbersToBitstreamKernel>("buildM0Marker", iBuilder);
+//    pxDriver.makeKernelCall(buildM0StartMarkerK, {M0_Start, M0_End}, {M0Marker});
 
 
     Kernel * generateDepositK = pxDriver.addKernelInstance<LZ4GenerateDepositStreamKernel>(iBuilder);
-    pxDriver.makeKernelCall(generateDepositK, {M0Marker}, {DepositMarker}); // TODO deposit
+    pxDriver.makeKernelCall(generateDepositK, {M0Marker}, {DepositMarker});
 
 }

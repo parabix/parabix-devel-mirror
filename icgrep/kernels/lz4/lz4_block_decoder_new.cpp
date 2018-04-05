@@ -31,7 +31,8 @@ namespace kernel{
     //Arguments
     {
         Binding{iBuilder->getInt1Ty(), "hasBlockChecksum"},
-        Binding{iBuilder->getSizeTy(), "headerSize"}
+        Binding{iBuilder->getSizeTy(), "headerSize"},
+        Binding{iBuilder->getSizeTy(), "fileSize"}
     },
     {},
     //Internal states:
@@ -81,10 +82,9 @@ void LZ4BlockDecoderNewKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
     Value* availableItemCount = iBuilder->getAvailableItemCount("byteStream");
     Value* processedItemCount = iBuilder->getProcessedItemCount("byteStream");
 
-    Value* mIsFinalBlock = iBuilder->CreateICmpEQ(availableItemCount, INT64_0);
-    iBuilder->setTerminationSignal(mIsFinalBlock);
-
     Value* totalItemCount = iBuilder->CreateAdd(availableItemCount, processedItemCount);
+    Value* mIsFinalBlock = iBuilder->CreateICmpEQ(totalItemCount, iBuilder->getScalarField("fileSize"));
+    iBuilder->setTerminationSignal(mIsFinalBlock);
 
     Value* totalItemCount2 = iBuilder->CreateAdd(iBuilder->getAvailableItemCount("extender"), iBuilder->getProcessedItemCount("extender"));
 

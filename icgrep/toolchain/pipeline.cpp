@@ -647,6 +647,11 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
 
 
             const Binding & output = kernel->getStreamOutput(buffer);
+
+            if (output.isDisableSufficientChecking()) {
+                continue;
+            }
+
             const auto name = output.getName();
             BasicBlock * const sufficient = b->CreateBasicBlock(name + "HasOutputSpace");
             const auto ub = kernel->getUpperBound(output.getRate()); assert (ub > 0);
@@ -723,6 +728,10 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
     if (I != inputAvailabilityChecks.end()) {
         for (const StreamSetBuffer * buffer : I->second) {
             const Binding & input = kernel->getStreamInput(buffer);
+            if (input.isDisableSufficientChecking()) {
+                continue;
+            }
+
             const auto name = input.getName();
             BasicBlock * const sufficient = b->CreateBasicBlock(name + "HasInputData");
 
@@ -733,11 +742,6 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
             } else {
                 const auto ub = kernel->getUpperBound(input.getRate()); assert (ub > 0);
                 strideLength = b->getSize(ceiling(ub * kernel->getStride()) - 1);
-            }
-
-            if (input.isConstantStrideLengthOne()) {
-                // TODO workaround here
-                strideLength = b->getSize(1);
             }
 
             Value * const processed = b->getProcessedItemCount(name);
@@ -753,11 +757,7 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
 
           //  b->CallPrintInt("< " + kernel->getName() + "_" + name + "_unprocessed", unprocessed);
 
-            Value * const hasSufficientData = input.isConstantStrideLengthOne() ?
-                                              b->CreateOr(b->CreateICmpUGE(unprocessed, strideLength), isFinal) :
-                                              b->CreateOr(b->CreateICmpUGT(unprocessed, strideLength), isFinal);
-//            Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGT(unprocessed, strideLength), isFinal);
-//            Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGE(unprocessed, strideLength), isFinal);
+            Value * const hasSufficientData = b->CreateOr(b->CreateICmpUGT(unprocessed, strideLength), isFinal);
 
           //  b->CallPrintInt("* < " + kernel->getName() + "_" + name + "_sufficientData", hasSufficientData);
 

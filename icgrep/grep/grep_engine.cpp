@@ -487,22 +487,6 @@ void GrepEngine::grepCodeGen() {
     mGrepDriver->finalizeObject();
 }
 
-//
-// The EmitMatches engine uses an EmitMatchesAccumulator object to concatenate together
-// matched lines.
-
-class EmitMatch : public MatchAccumulator {
-    friend class EmitMatchesEngine;
-public:
-    EmitMatch(std::string linePrefix, std::ostringstream & strm) : mLinePrefix(linePrefix), mLineCount(0), mTerminated(true), mResultStr(strm) {}
-    void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
-    void finalize_match(char * buffer_end) override;
-protected:
-    std::string mLinePrefix;
-    size_t mLineCount;
-    bool mTerminated;
-    std::ostringstream & mResultStr;
-};
 
 //
 //  Default Report Match:  lines are emitted with whatever line terminators are found in the
