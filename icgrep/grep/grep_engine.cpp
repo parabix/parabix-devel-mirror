@@ -45,6 +45,7 @@
 #include <cc/multiplex_CCs.h>
 #include <llvm/Support/raw_ostream.h>
 #include <util/aligned_allocator.h>
+#include <util/file_select.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -578,7 +579,7 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx
     typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor);
     using namespace boost::filesystem;
     path p(fileName);
-    bool useMMap = grep::MmapFlag;
+    bool useMMap = argv::MmapFlag;
     if (p == "-") useMMap = false;
     if (!is_regular_file(p)) useMMap = false;
 
@@ -620,7 +621,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, const uint32_t 
     typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, intptr_t accum_addr);
     using namespace boost::filesystem;
     path p(fileName);
-    bool useMMap = grep::MmapFlag;
+    bool useMMap = argv::MmapFlag;
     if (p == "-") useMMap = false;
     if (!is_regular_file(p)) useMMap = false;
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());

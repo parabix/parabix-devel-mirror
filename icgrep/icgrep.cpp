@@ -23,7 +23,7 @@
 #include <toolchain/toolchain.h>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
-#include <boost/filesystem.hpp>
+#include <util/file_select.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
@@ -105,74 +105,13 @@ std::vector<re::RE *> readExpressions() {
 }
 
 
-// This is a stub, to be expanded later.
-bool excludeDirectory(boost::filesystem::path dirpath) { return dirpath.filename() == ".svn";}
-
-// Determine whether to skip a path based on -D skip or -d skip settings.
-bool skip_path(boost::filesystem::path p) {
-    using namespace boost::filesystem;
-    switch (status(p).type()) {
-        case directory_file: return grep::DirectoriesFlag == grep::Skip;
-        case block_file:
-        case character_file:
-        case fifo_file:
-        case socket_file:
-            return grep::DevicesFlag == grep::Skip;
-        default:
-            return false;
-    }
-}
-
-std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
-    using namespace boost::filesystem;
-    symlink_option follow_symlink = grep::DereferenceRecursiveFlag ? symlink_option::recurse : symlink_option::none;
-    std::vector<std::string> expanded_paths;
-    boost::system::error_code errc;
-    for (const std::string & f : inputFiles) {
-        //        if (f == "-") {
-        //            continue;
-        //        }
-        path p(f);
-        if (skip_path(p)) {
-            continue;
-        }
-        if (LLVM_UNLIKELY((grep::DirectoriesFlag == grep::Recurse) && is_directory(p))) {
-            if (!excludeDirectory(p)) {
-                recursive_directory_iterator di(p, follow_symlink, errc), end;
-                if (errc) {
-                    // If we cannot enter the directory, keep it in the list of files.
-                    expanded_paths.push_back(f);
-                    continue;
-                }
-                while (di != end) {
-                    auto & e = di->path();
-                    if (is_directory(e)) {
-                        if (LLVM_UNLIKELY(excludeDirectory(e))) {
-                            di.no_push();
-                        }
-                    } else {
-                        if (!skip_path(e)) expanded_paths.push_back(e.string());
-                    }
-                    di.increment(errc);
-                    if (errc) {
-                        expanded_paths.push_back(e.string());
-                    }
-                }
-            }
-        } else {
-            expanded_paths.push_back(p.string());
-        }
-    }
-    return expanded_paths;
-}
-
 int main(int argc, char *argv[]) {
 
     grep::InitializeCommandLineInterface(argc, argv);
     
     auto REs = readExpressions();
 
-    std::vector<std::string> allFiles = getFullFileList(inputFiles);
+    std::vector<std::string> allFiles = argv::getFullFileList(inputFiles);
     if (allFiles.empty()) {
         allFiles = { "-" };
     }

@@ -9,6 +9,7 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/Signals.h>
 #include <llvm/Support/raw_ostream.h>
+#include <util/file_select.h>
 #include <toolchain/toolchain.h>
 #include <re/parsers/parser.h>
 #include <re/re_alt.h>
@@ -73,14 +74,6 @@ static cl::alias FileAlias("file", cl::desc("Alias for -f"), cl::aliasopt(FileOp
     
 static cl::OptionCategory Input_Options("B. Input Options", "These options control the input.");
 
-bool RecursiveFlag;
-static cl::opt<bool, true> RecursiveOption("r", cl::location(RecursiveFlag), cl::desc("Recursively process files within directories, (but follow only top-level symlinks unless -R)."), cl::cat(Input_Options), cl::Grouping);
-static cl::alias RecursiveAlias("recursive", cl::desc("Alias for -r"), cl::aliasopt(RecursiveOption));
-
-bool DereferenceRecursiveFlag;
-static cl::opt<bool, true> DereferenceRecursiveOption("R", cl::location(DereferenceRecursiveFlag), cl::desc("Recursively process files within directories, following symlinks at all levels."), cl::cat(Input_Options), cl::Grouping);
-static cl::alias DereferenceRecursiveAlias("dereference-recursive", cl::desc("Alias for -R"), cl::aliasopt(DereferenceRecursiveOption));
-
 bool TextFlag;
 static cl::opt<bool, true> TextOption("a", cl::location(TextFlag), cl::desc("Treat each input file as text, even if it is a binary file."), cl::cat(Input_Options), cl::Grouping);
 static cl::alias TextAlias("text", cl::desc("Alias for -a"), cl::aliasopt(TextOption));
@@ -100,36 +93,6 @@ static cl::alias NullDataAlias("null-data", cl::desc("Alias for -z"), cl::aliaso
 bool UnicodeLinesFlag;
 static cl::opt<bool, true> UnicodeLinesOption("Unicode-lines", cl::location(UnicodeLinesFlag), cl::desc("Enable Unicode line breaks (LF/VT/FF/CR/NEL/LS/PS/CRLF)"), cl::cat(Input_Options));
 
-bool MmapFlag;
-static cl::opt<bool, true> MmapOption("mmap", cl::location(MmapFlag),  cl::init(1), cl::desc("Use mmap for file input (default)."), cl::cat(Input_Options));
-
-std::string ExcludeFlag;
-static cl::opt<std::string, true> ExcludeOption("exclude", cl::location(ExcludeFlag), cl::desc("Exclude files matching the given filename GLOB pattern."), cl::cat(Input_Options));
-
-std::string ExcludeFromFlag;
-static cl::opt<std::string, true> ExcludeFromOption("exclude-from", cl::location(ExcludeFromFlag), cl::desc("Exclude files matching filename GLOB patterns from the given file."), cl::cat(Input_Options));
-
-std::string ExcludeDirFlag;
-static cl::opt<std::string, true> ExcludeDirOption("exclude-dir", cl::location(ExcludeDirFlag), cl::desc("Exclude directories matching the given pattern."), cl::cat(Input_Options));
-
-std::string IncludeFlag;
-static cl::opt<std::string, true> IncludeOption("include", cl::location(IncludeFlag), cl::desc("Include only files matching the given filename GLOB pattern."), cl::cat(Input_Options));
-
-DevDirAction DevicesFlag;
-static cl::opt<DevDirAction, true> DevicesOption("D", cl::desc("Processing mode for devices:"),
-                                                 cl::values(clEnumValN(Read, "read", "Treat devices as files to be searched."),
-                                                            clEnumValN(Skip, "skip", "Silently skip devices.")
-                                                            CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(DevicesFlag), cl::init(Read));
-static cl::alias DevicesAlias("devices", cl::desc("Alias for -D"), cl::aliasopt(DevicesOption));
-
-DevDirAction DirectoriesFlag;
-static cl::opt<DevDirAction, true> DirectoriesOption("d", cl::desc("Processing mode for directories:"),
-                                                     cl::values(clEnumValN(Read, "read", "Print an error message for any listed directories."),
-                                                                clEnumValN(Skip, "skip", "Silently skip directories."),
-                                                                clEnumValN(Recurse, "recurse", "Recursive process directories, equivalent to -r.")
-                                                                CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(DirectoriesFlag), cl::init(Read));
-static cl::alias DirectoriesAlias("directories", cl::desc("Alias for -d"), cl::aliasopt(DirectoriesOption));
-
 BinaryFilesMode BinaryFilesFlag;
 static cl::opt<BinaryFilesMode, true> BinaryFilesOption("binary-files", cl::desc("Processing mode for binary files:"),
                                                      cl::values(clEnumValN(Binary, "binary", "Report match/non-match without printing matches."),
@@ -138,51 +101,6 @@ static cl::opt<BinaryFilesMode, true> BinaryFilesOption("binary-files", cl::desc
                                                                 CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(BinaryFilesFlag), cl::init(Binary));
     
 
-    
-re::RE * getFileExcludePattern() {
-    std::vector<re::RE *> patterns;
-    if (grep::ExcludeFlag != "") {
-        re::RE * glob = re::RE_Parser::parse(grep::ExcludeFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-        patterns.push_back(glob);
-    }
-    
-    if (grep::ExcludeFromFlag != "") {
-        std::ifstream globFile(grep::ExcludeFromFlag.c_str());
-        std::string r;
-        if (globFile.is_open()) {
-            while (std::getline(globFile, r)) {
-                re::RE * glob = re::RE_Parser::parse(r, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-                patterns.push_back(glob);
-            }
-            globFile.close();
-        }
-    }
-    if (patterns.empty()) return nullptr;
-    return re::makeAlt(patterns.begin(), patterns.end());
-}
-
-re::RE * getDirectoryExcludePattern() {
-    if (grep::ExcludeDirFlag != "") {
-        return re::RE_Parser::parse(grep::ExcludeDirFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-    }
-    return nullptr;
-}
-
-re::RE * getFileIncludePattern() {
-    if (grep::IncludeFlag != "") {
-        return re::RE_Parser::parse(grep::IncludeFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-    }
-    return nullptr;
-}
-
-// Include is the default unless a -include= option exists and is prior to any -exclude
-// or -exclude-dir option.
-bool includeIsDefault() {
-    if (IncludeFlag == "") return true;
-    if ((ExcludeFlag != "") && (ExcludeOption.getPosition() < IncludeOption.getPosition())) return true;
-    if ((ExcludeDirFlag != "") && (ExcludeDirOption.getPosition() < IncludeOption.getPosition())) return true;
-    return false;
-}
     
 /*
  *  C.  Grep output modes and options.
@@ -300,8 +218,8 @@ static void icgrep_error_handler(void *UserData, const std::string &Message, boo
 void InitializeCommandLineInterface(int argc, char *argv[]) {
     llvm::install_fatal_error_handler(&icgrep_error_handler);
     codegen::ParseCommandLineOptions(argc, argv, {&RE_Options, &Input_Options, &Output_Options, re::re_toolchain_flags(), pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
-    if (RecursiveFlag || DereferenceRecursiveFlag) {
-        DirectoriesFlag = Recurse;
+    if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
+        argv::DirectoriesFlag = argv::Recurse;
     }
     
     if (TextFlag) {
@@ -319,16 +237,16 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
     if (BinaryFlag) {
         llvm::report_fatal_error("Sorry, -U is not yet supported.\n");
     }
-    if (ExcludeFlag!="") {
+    if (argv::ExcludeFlag!="") {
         llvm::report_fatal_error("Sorry, -exclude is not yet supported.\n");
     }
-    if (ExcludeFromFlag!="") {
+    if (argv::ExcludeFromFlag!="") {
         llvm::report_fatal_error("Sorry, -exclude-from is not yet supported.\n");
     }
-    if (ExcludeDirFlag!="") {
+    if (argv::ExcludeDirFlag!="") {
         llvm::report_fatal_error("Sorry, -exclude-dir is not yet supported.\n");
     }
-    if (IncludeFlag!="") {
+    if (argv::IncludeFlag!="") {
         llvm::report_fatal_error("Sorry, -include is not yet supported.\n");
     }    
     if (ByteOffsetFlag) {
