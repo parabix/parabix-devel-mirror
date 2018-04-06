@@ -44,7 +44,7 @@
 #include <cc/multiplex_CCs.h>
 #include <llvm/Support/raw_ostream.h>
 #include <util/file_select.h>
-#include <util/aligned_allocator.h>
+#include <boost/align/aligned_allocator.hpp>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
