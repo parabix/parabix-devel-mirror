@@ -23,6 +23,7 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_toolchain.h>
 #include <toolchain/cpudriver.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <util/file_select.h>
 
@@ -205,19 +206,41 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     pxDriver.finalizeObject();
 }
 
+
+
 void wc(WordCountFunctionType fn_ptr, const int64_t fileIdx) {
     std::string fileName = allFiles[fileIdx];
+    struct stat sb;
     const int fd = open(fileName.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
-        std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
-    } else {
-        fn_ptr(fd, fileIdx);
-        close(fd);
+        if (errno == EACCES) {
+            std::cerr << "wc: " << fileName << ": Permission denied.\n";
+        }
+        else if (errno == ENOENT) {
+            std::cerr << "wc: " << fileName << ": No such file.\n";
+        }
+        else {
+            std::cerr << "wc: " << fileName << ": Failed.\n";
+        }
+        return;
     }
+    if (stat(fileName.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) {
+        std::cerr << "wc: " << fileName << ": Is a directory.\n";
+        close(fd);
+        return;
+    }
+    fn_ptr(fd, fileIdx);
+    close(fd);
 }
 
 int main(int argc, char *argv[]) {
     codegen::ParseCommandLineOptions(argc, argv, {&wcFlags, pablo_toolchain_flags(), codegen::codegen_flags()});
+    if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
+        argv::DirectoriesFlag = argv::Recurse;
+    }
+    allFiles = argv::getFullFileList(inputFiles);
+    
+    const auto fileCount = allFiles.size();
     if (wcOptions.size() == 0) {
         CountLines = true;
         CountWords = true;
@@ -244,14 +267,11 @@ int main(int argc, char *argv[]) {
     ParabixDriver pxDriver("wc");
     wcPipelineGen(pxDriver);
     auto wordCountFunctionPtr = reinterpret_cast<WordCountFunctionType>(pxDriver.getMain());
-
-    allFiles = argv::getFullFileList(inputFiles);
-    const auto fileCount = allFiles.size();
     lineCount.resize(fileCount);
     wordCount.resize(fileCount);
     charCount.resize(fileCount);
     byteCount.resize(fileCount);
-    
+
     for (unsigned i = 0; i < fileCount; ++i) {
         wc(wordCountFunctionPtr, i);
     }
@@ -261,8 +281,6 @@ int main(int argc, char *argv[]) {
     if (CountWords) maxCount = TotalWords;
     if (CountChars) maxCount = TotalChars;
     if (CountBytes) maxCount = TotalBytes;
-    
-    
     
     int displayColumnWidth = std::to_string(maxCount).size() + 1;
     if (displayColumnWidth < defaultDisplayColumnWidth) displayColumnWidth = defaultDisplayColumnWidth;
