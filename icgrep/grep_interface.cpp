@@ -21,7 +21,7 @@
 
 using namespace llvm;
 
-namespace grep {
+namespace argv {
 
 /*
  *  A.  Regular expression syntax, interpretation and processing.

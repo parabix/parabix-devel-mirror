@@ -14,6 +14,7 @@
 #include <re/parsers/parser.h>
 #include <re/re_alt.h>
 #include <re/re_toolchain.h>
+#include <grep/grep_engine.h>
 #include <fstream>
 #include <string>
 

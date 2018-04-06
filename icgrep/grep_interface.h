@@ -19,7 +19,7 @@ namespace re { class RE; }
 namespace llvm { namespace cl { class OptionCategory; } }
 
 
-namespace grep {
+namespace argv {
     
 
 void InitializeCommandLineInterface(int argc, char *argv[]);

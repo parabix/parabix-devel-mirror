@@ -39,12 +39,12 @@ static re::ModeFlagSet globalFlags = re::MULTILINE_MODE_FLAG;
 
 std::vector<re::RE *> readExpressions() {
   
-    if (grep::FileFlag != "") {
-        std::ifstream regexFile(grep::FileFlag.c_str());
+    if (argv::FileFlag != "") {
+        std::ifstream regexFile(argv::FileFlag.c_str());
         std::string r;
         if (regexFile.is_open()) {
             while (std::getline(regexFile, r)) {
-                grep::RegexpVector.push_back(r);
+                argv::RegexpVector.push_back(r);
             }
             regexFile.close();
         }
@@ -53,17 +53,17 @@ std::vector<re::RE *> readExpressions() {
     // if there are no regexes specified through -e or -f, the first positional argument
     // must be a regex, not an input file.
     
-    if (grep::RegexpVector.size() == 0) {
-        grep::RegexpVector.push_back(inputFiles[0]);
+    if (argv::RegexpVector.size() == 0) {
+        argv::RegexpVector.push_back(inputFiles[0]);
         inputFiles.erase(inputFiles.begin());
     }
-    if (grep::IgnoreCaseFlag) {
+    if (argv::IgnoreCaseFlag) {
         globalFlags |= re::CASE_INSENSITIVE_MODE_FLAG;
     }
 
     std::vector<re::RE *> REs;
-    for (unsigned i = 0; i < grep::RegexpVector.size(); i++) {
-        re::RE * re_ast = re::RE_Parser::parse(grep::RegexpVector[i], globalFlags, grep::RegexpSyntax, ByteMode);
+    for (unsigned i = 0; i < argv::RegexpVector.size(); i++) {
+        re::RE * re_ast = re::RE_Parser::parse(argv::RegexpVector[i], globalFlags, argv::RegexpSyntax, ByteMode);
         REs.push_back(re_ast);
     }
 
@@ -93,10 +93,10 @@ std::vector<re::RE *> readExpressions() {
     }
     for (re::RE *& re_ast : REs) {
         assert (re_ast);
-        if (grep::WordRegexpFlag) {
+        if (argv::WordRegexpFlag) {
             re_ast = re::makeSeq({re::makeWordBoundary(), re_ast, re::makeWordBoundary()});
         }
-        if (grep::LineRegexpFlag) {
+        if (argv::LineRegexpFlag) {
             re_ast = re::makeSeq({re::makeStart(), re_ast, re::makeEnd()});
         }
     }
@@ -107,7 +107,7 @@ std::vector<re::RE *> readExpressions() {
 
 int main(int argc, char *argv[]) {
 
-    grep::InitializeCommandLineInterface(argc, argv);
+    argv::InitializeCommandLineInterface(argc, argv);
     
     auto REs = readExpressions();
 
@@ -115,37 +115,50 @@ int main(int argc, char *argv[]) {
     if (allFiles.empty()) {
         allFiles = { "-" };
     }
-    else if ((allFiles.size() > 1) && !grep::NoFilenameFlag) {
-        grep::WithFilenameFlag = true;
+    else if ((allFiles.size() > 1) && !argv::NoFilenameFlag) {
+        argv::WithFilenameFlag = true;
     }
 
     grep::GrepEngine * grepEngine = nullptr;
     
-    switch (grep::Mode) {
-        case grep::NormalMode:
-            grepEngine = new grep::EmitMatchesEngine(); break;
-        case grep::CountOnly:
-            grepEngine = new grep::CountOnlyEngine(); break;
-        case grep::FilesWithMatch:
-        case grep::FilesWithoutMatch:
-            grepEngine = new grep::MatchOnlyEngine(grep::Mode == grep::FilesWithoutMatch); break;
-        case grep::QuietMode:
+    switch (argv::Mode) {
+        case argv::NormalMode:
+            grepEngine = new grep::EmitMatchesEngine();
+            if (argv::MaxCountFlag) grepEngine->setMaxCount(argv::MaxCountFlag);
+            if (argv::WithFilenameFlag) grepEngine->showFileNames();
+            if (argv::LineNumberFlag) grepEngine->showLineNumbers();
+            if (argv::InitialTabFlag) grepEngine->setInitialTab();
+           break;
+        case argv::CountOnly:
+            grepEngine = new grep::CountOnlyEngine();
+            if (argv::WithFilenameFlag) grepEngine->showFileNames();
+            if (argv::MaxCountFlag) grepEngine->setMaxCount(argv::MaxCountFlag);
+           break;
+        case argv::FilesWithMatch:
+        case argv::FilesWithoutMatch:
+            grepEngine = new grep::MatchOnlyEngine(argv::Mode == argv::FilesWithoutMatch, argv::NullFlag);
+            break;
+        case argv::QuietMode:
             grepEngine = new grep::QuietModeEngine(); break;
         default: llvm_unreachable("Invalid grep mode!");
     }
-               
-    if (grep::UnicodeLinesFlag) {
+    if (argv::IgnoreCaseFlag) grepEngine->setCaseInsensitive();
+    if (argv::InvertMatchFlag) grepEngine->setInvertMatches();
+    if (argv::UnicodeLinesFlag) {
         grepEngine->setRecordBreak(grep::GrepRecordBreakKind::Unicode);
-    } else if (grep::NullDataFlag) {
+    } else if (argv::NullDataFlag) {
         grepEngine->setRecordBreak(grep::GrepRecordBreakKind::Null);
     } else {
         grepEngine->setRecordBreak(grep::GrepRecordBreakKind::LF);
     }
+    grepEngine->setStdinLabel(argv::LabelFlag);
+    if (argv::NoMessagesFlag) grepEngine->suppressFileMessages();
+    if (argv::MmapFlag) grepEngine->setPreferMMap();
     grepEngine->initREs(REs);
     grepEngine->grepCodeGen();
     grepEngine->initFileResult(allFiles);
     bool matchFound = grepEngine->searchAllFiles();
     delete(grepEngine);
     
-    return matchFound ? grep::MatchFoundExitCode : grep::MatchNotFoundExitCode;
+    return matchFound ? argv::MatchFoundExitCode : argv::MatchNotFoundExitCode;
 }

@@ -61,7 +61,7 @@ static cl::opt<int, true>
                          cl::desc("minimum number of nonempty elements between inserted if short-circuit tests"), 
                          cl::cat(RegexOptions));
 
-RE * resolveModesAndExternalSymbols(RE * r) {
+RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowREs)) {
         errs() << "Parser:\n" << Printer_RE::PrintRE(r) << '\n';
     }
@@ -73,7 +73,7 @@ RE * resolveModesAndExternalSymbols(RE * r) {
     if (PrintOptions.isSet(ShowAllREs)) {
         errs() << "resolveUnicodeProperties:\n" << Printer_RE::PrintRE(r) << '\n';
     }
-    r = resolveCaseInsensitiveMode(r, grep::IgnoreCaseFlag);
+    r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
     if (PrintOptions.isSet(ShowAllREs)) {
         errs() << "resolveCaseInsensitiveMode:\n" << Printer_RE::PrintRE(r) << '\n';
     }

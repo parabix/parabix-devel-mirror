@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -28,7 +28,7 @@ extern int IfInsertionGap;
 
 const llvm::cl::OptionCategory * LLVM_READONLY re_toolchain_flags();
 
-RE * resolveModesAndExternalSymbols(RE * r);
+RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive = false);
 
 RE * excludeUnicodeLineBreak(RE * r);
 

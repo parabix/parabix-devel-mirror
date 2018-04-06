@@ -34,6 +34,23 @@ extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineN
 
 extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
 
+    
+#define MAX_SIMD_WIDTH_SUPPORTED 512
+#define INITIAL_CAPACITY 1024
+    
+class SearchableBuffer  {
+    SearchableBuffer();
+    void addSearchCandidate(char * string_ptr, size_t length);
+    ~SearchableBuffer();
+private:
+    static const unsigned BUFFER_ALIGNMENT = MAX_SIMD_WIDTH_SUPPORTED/8;
+    size_t allocated_capacity;
+    char * buffer_base;
+    alignas(BUFFER_ALIGNMENT) char initial_buffer[INITIAL_CAPACITY];
+    size_t space_used;
+    size_t entries;
+};
+
 void grepBuffer(re::RE * pattern, const char * buffer, size_t bufferLength, MatchAccumulator * accum);
 
 class GrepEngine {
@@ -43,6 +60,19 @@ public:
     GrepEngine();
     virtual ~GrepEngine();
     
+    void setPreferMMap() {mPreferMMap = true;}
+    
+    void showFileNames() {mShowFileNames = true;}
+    void setStdinLabel(std::string lbl) {mStdinLabel = lbl;}
+    void showLineNumbers() {mShowLineNumbers = true;}
+    void setInitialTab() {mInitialTab = true;}
+
+    void setMaxCount(int m) {mMaxCount = m;}
+    void setInvertMatches() {mInvertMatches = true;}
+    void setCaseInsensitive()  {mCaseInsensitive = true;}
+
+    void suppressFileMessages() {mSuppressFileMessages = true;}
+
     void setRecordBreak(GrepRecordBreakKind b);
     void initFileResult(std::vector<std::string> & filenames);
     void initREs(std::vector<re::RE *> & REs);
@@ -54,9 +84,23 @@ protected:
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(parabix::StreamSetBuffer * ByteStream);
 
     virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
-    std::string linePrefix(std::string fileName);
     int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
 
+    enum class EngineKind {QuietMode, MatchOnly, CountOnly, EmitMatches};
+    EngineKind mEngineKind;
+    
+    std::string linePrefix(std::string fileName);
+
+    bool mSuppressFileMessages;
+    bool mPreferMMap;
+    bool mShowFileNames;
+    std::string mStdinLabel;
+    bool mShowLineNumbers;
+    bool mInitialTab;
+    bool mCaseInsensitive;
+    bool mInvertMatches;
+    int mMaxCount;
+    
     Driver * mGrepDriver;
 
     std::atomic<unsigned> mNextFileToGrep;
@@ -84,11 +128,18 @@ protected:
 class EmitMatch : public MatchAccumulator {
     friend class EmitMatchesEngine;
 public:
-    EmitMatch(std::string linePrefix, std::ostringstream & strm) : mLinePrefix(linePrefix), mLineCount(0), mTerminated(true), mResultStr(strm) {}
+    EmitMatch(std::string linePrefix, bool showLineNumbers, bool initialTab, std::ostringstream & strm) : mLinePrefix(linePrefix),
+        mShowLineNumbers(showLineNumbers),
+        mInitialTab(initialTab),
+        mLineCount(0),
+        mTerminated(true),
+        mResultStr(strm) {}
     void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
     void finalize_match(char * buffer_end) override;
 protected:
     std::string mLinePrefix;
+    bool mShowLineNumbers;
+    bool mInitialTab;
     size_t mLineCount;
     bool mTerminated;
     std::ostringstream & mResultStr;
@@ -111,7 +162,7 @@ private:
 
 class MatchOnlyEngine : public GrepEngine {
 public:
-    MatchOnlyEngine(bool showFilesWithoutMatch);
+    MatchOnlyEngine(bool showFilesWithoutMatch, bool useNullSeparators);
 private:
     uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
     unsigned mRequiredCount;
