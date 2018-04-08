@@ -41,14 +41,15 @@ extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
 class SearchableBuffer  {
     SearchableBuffer();
     void addSearchCandidate(char * string_ptr, size_t length);
+    size_t getCandidateCount() {return mEntries;}
     ~SearchableBuffer();
 private:
     static const unsigned BUFFER_ALIGNMENT = MAX_SIMD_WIDTH_SUPPORTED/8;
-    size_t allocated_capacity;
-    char * buffer_base;
-    alignas(BUFFER_ALIGNMENT) char initial_buffer[INITIAL_CAPACITY];
-    size_t space_used;
-    size_t entries;
+    size_t mAllocated_capacity;
+    char * mBuffer_base;
+    alignas(BUFFER_ALIGNMENT) char mInitial_buffer[INITIAL_CAPACITY];
+    size_t mSpace_used;
+    size_t mEntries;
 };
 
 void grepBuffer(re::RE * pattern, const char * buffer, size_t bufferLength, MatchAccumulator * accum);

@@ -44,7 +44,7 @@
 #include <cc/multiplex_CCs.h>
 #include <llvm/Support/raw_ostream.h>
 #include <util/file_select.h>
-#include <boost/align/aligned_allocator.hpp>
+#include <util/aligned_allocator.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -80,38 +80,41 @@ extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
     reinterpret_cast<MatchAccumulator *>(accum_addr)->finalize_match(buffer_end);
 }
     
+
 inline static size_t ceil_log2(const size_t v) {
     assert ("log2(0) is undefined!" && v != 0);
-    return (sizeof(size_t) * CHAR_BIT) - __builtin_clzll(v - 1U);
+    assert ("sizeof(size_t) == sizeof(ulong)" && sizeof(size_t) == sizeof(ulong));
+    return (sizeof(size_t) * CHAR_BIT) - __builtin_clzl(v - 1UL);
 }
 
-void SearchableBuffer::addSearchCandidate(char * string_ptr, size_t length) {
-    if (space_used + length >= allocated_capacity) {
-        size_t new_capacity = size_t{1} << (ceil_log2(space_used + length + 1));
-        char * new_buffer = (char *) boost::alignment::aligned_alloc(BUFFER_ALIGNMENT, new_capacity);
-        memcpy(new_buffer, buffer_base, space_used);
-        memset(&new_buffer[space_used], 0, new_capacity-space_used);
-        if (buffer_base != initial_buffer) {
-            free(buffer_base);
+void SearchableBuffer::addSearchCandidate(char * C_string_ptr, size_t length) {
+    if (mSpace_used + length >= mAllocated_capacity) {
+        size_t new_capacity = size_t{1} << (ceil_log2(mSpace_used + length + 1));
+        AlignedAllocator<char, BUFFER_ALIGNMENT> alloc;
+        char * new_buffer = alloc.allocate(new_capacity, 0);
+        memcpy(new_buffer, mBuffer_base, mSpace_used);
+        memset(&new_buffer[mSpace_used], 0, new_capacity-mSpace_used);
+        if (mBuffer_base != mInitial_buffer) {
+            alloc.deallocate(mBuffer_base, 0);
         }
-        buffer_base = new_buffer;
-        allocated_capacity = new_capacity;
+        mBuffer_base = new_buffer;
+        mAllocated_capacity = new_capacity;
     }
-    memcpy((void * ) &buffer_base[space_used], string_ptr, length);
-    space_used += length;
-    buffer_base[space_used] = '\0';
-    space_used++;
-    entries++;
+    memcpy((void * ) &mBuffer_base[mSpace_used], C_string_ptr, length+1);
+    mSpace_used += length+1;
+    assert("Search candidate not null terminated" && (buffer_base[mSpace_used] == '\0'));
+    mEntries++;
 }
 
 SearchableBuffer::SearchableBuffer() :
-allocated_capacity(INITIAL_CAPACITY), buffer_base(initial_buffer) {
-    memset(buffer_base, 0, INITIAL_CAPACITY);
+    mAllocated_capacity(INITIAL_CAPACITY), mBuffer_base(mInitial_buffer) {
+    memset(mBuffer_base, 0, INITIAL_CAPACITY);
 }
 
 SearchableBuffer::~SearchableBuffer() {
-    if (buffer_base != initial_buffer) {
-        free(buffer_base);
+    if (mBuffer_base != mInitial_buffer) {
+        AlignedAllocator<char, BUFFER_ALIGNMENT> alloc;
+        alloc.deallocate(mBuffer_base, 0);
     }
 }
 
