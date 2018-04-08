@@ -20,7 +20,7 @@
 #include <limits.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
-
+#include <set>
 using namespace llvm;
 
 namespace re {
@@ -235,13 +235,14 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
     } else if (isa<Assertion>(re) || isa<Start>(re) || isa<End>(re)) {
         return std::make_pair(0, 0);
     } else if (const Diff * diff = dyn_cast<Diff>(re)) {
-        const auto r1 = getUnicodeUnitLengthRange(diff->getLH());
-        const auto r2 = getUnicodeUnitLengthRange(diff->getRH());
-        return std::make_pair(std::min(r1.first, r2.first), std::max(r1.second, r2.second));
+        // The range is determined by the first operand only.
+        return getUnicodeUnitLengthRange(diff->getLH());
     } else if (const Intersect * i = dyn_cast<Intersect>(re)) {
         const auto r1 = getUnicodeUnitLengthRange(i->getLH());
         const auto r2 = getUnicodeUnitLengthRange(i->getRH());
-        return std::make_pair(std::min(r1.first, r2.first), std::max(r1.second, r2.second));
+        // The matched string cannot be shorter than the largest of the min lengths
+        // nor can it be longer than the smallest of the max lengths.
+        return std::make_pair(std::max(r1.first, r2.first), std::min(r1.second, r2.second));
     } else if (isa<CC>(re)) {
         return std::make_pair(1, 1);
     } else if (const Name * n = dyn_cast<Name>(re)) {
@@ -261,28 +262,52 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
     } 
     return std::make_pair(1, 1);
 }
+    
+bool isFixedLength(const RE * re) {
+    if (isa<Alt>(re)) {
+        auto range = getUnicodeUnitLengthRange(re);
+        return range.first == range.second;
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+        for (const RE * e : *seq) {
+            if (!isFixedLength(e)) return false;
+        }
+        return true;
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
+        return (rep->getLB() == rep->getUB()) && isFixedLength(rep->getRE());
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
+        return isFixedLength(diff->getLH());
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
+        return isFixedLength(e->getLH()) || isFixedLength(e->getRH());
+    } else if (const Group * g = dyn_cast<Group>(re)) {
+        return isFixedLength(g->getRE());
+    } else if (const Name * n = dyn_cast<Name>(re)) {
+        return isFixedLength(n->getDefinition());
+    }
+    return true; // otherwise = CC, Any, Start, End, Range, Assertion
+}
+
    
-int minMatchLength(RE * re) {
-    if (Alt * alt = dyn_cast<Alt>(re)) {
+int minMatchLength(const RE * re) {
+    if (const Alt * alt = dyn_cast<Alt>(re)) {
         int minAltLength = INT_MAX;
         for (RE * re : *alt) {
             minAltLength = std::min(minAltLength, minMatchLength(re));
         }
         return minAltLength;
-    } else if (Seq * seq = dyn_cast<Seq>(re)) {
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
         int minSeqLength = 0;
         for (RE * re : *seq) {
             minSeqLength += minMatchLength(re);
         }
         return minSeqLength;
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
         if (rep->getLB() == 0) return 0;
         else return (rep->getLB()) * minMatchLength(rep->getRE());
     } else if (isa<Assertion>(re)) {
         return 0;
-    } else if (Diff * diff = dyn_cast<Diff>(re)) {
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
         return minMatchLength(diff->getLH());
-    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         return std::min(minMatchLength(e->getLH()), minMatchLength(e->getRH()));
     } else if (isa<Any>(re)) {
         return 1;
@@ -419,7 +444,7 @@ struct ByteTestComplexity {
 };
 
 void ByteTestComplexity::gatherTests(RE * re) {
-    if (CC * cc = dyn_cast<CC>(re)) {
+    if (const CC * cc = dyn_cast<CC>(re)) {
         if (cc->getAlphabet() == &cc::Unicode) {
             gatherTests(toUTF8(re));
         } else {
@@ -450,25 +475,25 @@ void ByteTestComplexity::gatherTests(RE * re) {
         }
     } else if (const Name * n = dyn_cast<Name>(re)) {
         gatherTests(n->getDefinition());
-    } else if (Alt * alt = dyn_cast<Alt>(re)) {
+    } else if (const Alt * alt = dyn_cast<Alt>(re)) {
         for (RE * item : *alt) {
             gatherTests(item);
         }
-    } else if (Seq * seq = dyn_cast<Seq>(re)) {
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
         for (RE * item : *seq) {
             gatherTests(item);
         }
-    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
+    } else if (const Assertion * a = dyn_cast<Assertion>(re)) {
         gatherTests(a->getAsserted());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
         gatherTests(rep->getRE());
-    } else if (Diff * diff = dyn_cast<Diff>(re)) {
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
         gatherTests(diff->getLH());
         gatherTests(diff->getRH());
-    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         gatherTests(e->getLH());
         gatherTests(e->getRH());
-    } else if (Group * g = dyn_cast<Group>(re)) {
+    } else if (const Group * g = dyn_cast<Group>(re)) {
         gatherTests(g->getRE());
     }
 }
@@ -482,7 +507,7 @@ bool byteTestsWithinLimit(RE * re, unsigned limit) {
 }
 
 bool hasTriCCwithinLimit(RE * r, unsigned byteCClimit, RE * & prefixRE, RE * & suffixRE) {
-    if (Seq * seq = dyn_cast<Seq>(r)) {
+    if (const Seq * seq = dyn_cast<Seq>(r)) {
         if (seq->size() < 4) return false;
         if (!isa<CC>(*seq->begin())) return false;
         if (!isa<CC>(*seq->begin()+1)) return false;
@@ -522,6 +547,75 @@ bool hasEndAnchor(const RE * re) {
     return false; // otherwise
 }
     
+//
+//  Back Reference Analysis
+//
+//  The definite-length back-reference implementation strategy requires that
+//  each capture that has a back-reference be fixed in length and that
+//  that each back-reference is a fixed length from its corresponding capture.
+//
+//   In analyzing a sequences of regular expression elements
+//   e_0, e_1, ..., e_i, ..., e_j, ..., e_n
+//   we say that e_j is within fixed-length range of e_i if
+//   for all k: i < k < j, e_k is fixed length.
+//
+
+bool DefiniteLengthBackReferencesOnly(const RE * re) {
+    if (const Alt * alt = dyn_cast<Alt>(re)) {
+        for (const RE * a : *alt) {
+            if (!DefiniteLengthBackReferencesOnly(a)) return false;
+        }
+        return true;
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+        // As we iterate through sequence elements, we keep track of captures
+        // that are encountered and are still reachable through a series of
+        // fixed length elements back from the current position.  As soon as
+        // a variable length element is encounterd, the list of available_captures
+        // is cleared.
+        //
+        std::set<const Name *> available_captures;
+        for (const RE * e : *seq) {
+            if (const Name * n = dyn_cast<Name>(e)) {
+                auto T = n->getType();
+                auto defn = n->getDefinition();
+                if (T == Name::Type::Reference) {
+                    if (available_captures.find(cast<Name>(defn)) == available_captures.end()) {
+                        // Capture is not available.
+                        return false;
+                    } else {
+                        continue;
+                    }
+                } else {
+                    if (!DefiniteLengthBackReferencesOnly(defn)) return false;
+                    if (isFixedLength(defn)) {
+                        if (T == Name::Type::Capture) {
+                            available_captures.emplace(n);
+                        }
+                    } else {
+                        available_captures.clear();
+                    }
+                }
+            }
+            if (!DefiniteLengthBackReferencesOnly(e)) return false;
+            if (!isFixedLength(e)) available_captures.clear();
+        }
+        return true;
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
+        return DefiniteLengthBackReferencesOnly(rep->getRE());
+    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
+        return DefiniteLengthBackReferencesOnly(diff->getLH()) && DefiniteLengthBackReferencesOnly(diff->getRH());
+    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
+        return DefiniteLengthBackReferencesOnly(e->getLH()) && DefiniteLengthBackReferencesOnly(e->getRH());
+    } else if (const Assertion * a = dyn_cast<Assertion>(re)) {
+        return DefiniteLengthBackReferencesOnly(a->getAsserted());
+    } else if (const Group * g = dyn_cast<Group>(re)) {
+        return DefiniteLengthBackReferencesOnly(g->getRE());
+    } else if (const Name * n = dyn_cast<Name>(re)) {
+        if (n->getType() == Name::Type::Reference) return false;
+        return DefiniteLengthBackReferencesOnly(n->getDefinition());
+    }
+    return true; // otherwise = CC, Any, Start, End, Range
+}
 
 void UndefinedNameError(const Name * n) {
     report_fatal_error("Error: Undefined name in regular expression: \"" + n->getName() + "\".");

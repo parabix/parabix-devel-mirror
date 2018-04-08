@@ -21,7 +21,9 @@ bool isUnicodeUnitLength(const RE * re);
 
 std::pair<int, int> getUnicodeUnitLengthRange(const RE * re);
 
-int minMatchLength(RE * re);
+bool isFixedLength(const RE * re);
+
+int minMatchLength(const RE * re);
 
 bool unitBoundedRep(const RE * re);
 
@@ -34,6 +36,8 @@ bool byteTestsWithinLimit(RE * re, unsigned limit);
 bool hasTriCCwithinLimit(RE * r, unsigned byteCClimit, RE * & prefixRE, RE * & suffixRE);
 
 bool hasEndAnchor(const RE * r);
+    
+bool DefiniteLengthBackReferencesOnly(const RE * re);
     
 void UndefinedNameError (const Name * n);
 }

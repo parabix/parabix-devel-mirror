@@ -23,6 +23,7 @@
 #include <re/re_name_resolve.h>
 #include <re/grapheme_clusters.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <toolchain/toolchain.h>
 
 using namespace pablo;
@@ -118,6 +119,9 @@ RE * regular_expression_passes(RE * r) {
         errs() << "Simplifier:\n" << Printer_RE::PrintRE(r) << '\n';
     }
 
+    if (!DefiniteLengthBackReferencesOnly(r)) {
+        llvm::report_fatal_error("Future back reference support: references must be within a fixed distance from a fixed-length capture.");
+    }
     return r;
 }
 
