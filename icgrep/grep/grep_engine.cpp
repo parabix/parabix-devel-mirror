@@ -118,6 +118,9 @@ SearchableBuffer::~SearchableBuffer() {
     }
 }
 
+    
+
+    
 void grepBuffer(re::RE * pattern, const char * search_buffer, size_t bufferLength, MatchAccumulator * accum) {
     const unsigned segmentSize = codegen::BufferSegments * codegen::SegmentSize * codegen::ThreadNum;
     auto segParallelModeSave = codegen::SegmentPipelineParallel;
@@ -793,6 +796,116 @@ void * GrepEngine::DoGrepThreadMethod() {
         mGrepDriver->performIncrementalCacheCleanupStep();
     }
     return nullptr;
+}
+
+    
+    
+InternalSearchEngine::InternalSearchEngine() :
+    mGrepRecordBreak(GrepRecordBreakKind::LF),
+    mCaseInsensitive(false),
+    mGrepDriver(nullptr),
+    grepMatchFound(false) {}
+    
+InternalSearchEngine::~InternalSearchEngine() {
+    delete mGrepDriver;
+}
+
+void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE, MatchAccumulator * accum) {
+    mGrepDriver = new ParabixDriver("InternalEngine");
+    auto & idb = mGrepDriver->getBuilder();
+    Module * M = idb->getModule();
+    
+    const unsigned encodingBits = 8;
+    const unsigned segmentSize = codegen::BufferSegments * codegen::SegmentSize * codegen::ThreadNum;
+    auto segParallelModeSave = codegen::SegmentPipelineParallel;
+    codegen::SegmentPipelineParallel = false;
+    
+    re::CC * breakCC = nullptr;
+    if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
+        breakCC = re::makeByte(0);
+    } else {// if (mGrepRecordBreak == GrepRecordBreakKind::LF)
+        breakCC = re::makeByte(0x0A);
+    }
+    
+    if (matchingRE) {
+        matchingRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
+        matchingRE = regular_expression_passes(matchingRE);
+        matchingRE = re::exclude_CC(excludedRE, breakCC);
+        matchingRE = resolveAnchors(excludedRE, breakCC);
+    }
+    
+    if (excludedRE) {
+        excludedRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
+        excludedRE = regular_expression_passes(matchingRE);
+        excludedRE = re::exclude_CC(excludedRE, breakCC);
+        excludedRE = resolveAnchors(excludedRE, breakCC);
+    }
+    
+    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getVoidTy(), idb->getInt8PtrTy(), idb->getSizeTy(), nullptr));
+    mainFunc->setCallingConv(CallingConv::C);
+    auto args = mainFunc->arg_begin();
+    Value * const buffer = &*(args++);
+    buffer->setName("buffer");
+    Value * length = &*(args++);
+    length->setName("length");
+    
+    idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
+    StreamSetBuffer * ByteStream = mGrepDriver->addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, 8));
+    kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::MemorySourceKernel>(idb, idb->getInt8PtrTy());
+    sourceK->setInitialArguments({buffer, length});
+    mGrepDriver->makeKernelCall(sourceK, {}, {ByteStream});
+    
+    StreamSetBuffer * BasisBits = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(8, 1), segmentSize);
+    kernel::Kernel * s2pk = mGrepDriver->addKernelInstance<kernel::S2PKernel>(idb);
+    mGrepDriver->makeKernelCall(s2pk, {ByteStream}, {BasisBits});
+    
+    StreamSetBuffer * RecordBreakStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
+    std::string RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
+    kernel::Kernel * breakK = mGrepDriver->addKernelInstance<kernel::ParabixCharacterClassKernelBuilder>(idb, RBname, std::vector<re::CC *>{breakCC}, 8);
+    mGrepDriver->makeKernelCall(breakK, {BasisBits}, {RecordBreakStream});
+    
+    StreamSetBuffer * MatchingRecords = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
+    
+    std::vector<std::string> externalStreamNames;
+    if (matchingRE) {
+        kernel::Kernel * includeK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, matchingRE, externalStreamNames);
+        mGrepDriver->makeKernelCall(includeK, {BasisBits}, {MatchingRecords});
+    }
+    
+    if (excludedRE) {
+        StreamSetBuffer * ExcludedRecords = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
+        kernel::Kernel * excludeK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, excludedRE, externalStreamNames);
+        mGrepDriver->makeKernelCall(excludeK, {BasisBits}, {ExcludedRecords});
+        
+        kernel::Kernel * invertK = mGrepDriver->addKernelInstance<kernel::InvertMatchesKernel>(idb);
+        if (matchingRE) {
+            StreamSetBuffer * nonExcluded = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), segmentSize);
+            mGrepDriver->makeKernelCall(invertK, {ExcludedRecords, RecordBreakStream}, {nonExcluded});
+            StreamSetBuffer * included = MatchingRecords;
+            kernel::Kernel * streamsMergeK = mGrepDriver->addKernelInstance<kernel::StreamsMerge>(idb, 1, 2);
+            mGrepDriver->makeKernelCall(streamsMergeK, {included, nonExcluded}, {MatchingRecords});
+        }
+        else {
+            mGrepDriver->makeKernelCall(invertK, {ExcludedRecords, RecordBreakStream}, {MatchingRecords});
+        }
+    }
+    
+    kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance<kernel::ScanMatchKernel>(idb);
+    scanMatchK->setInitialArguments({ConstantInt::get(idb->getIntAddrTy(), reinterpret_cast<intptr_t>(accum))});
+    mGrepDriver->makeKernelCall(scanMatchK, {MatchingRecords, RecordBreakStream, ByteStream}, {});
+    mGrepDriver->LinkFunction(*scanMatchK, "accumulate_match_wrapper", &accumulate_match_wrapper);
+    mGrepDriver->LinkFunction(*scanMatchK, "finalize_match_wrapper", &finalize_match_wrapper);
+    
+    mGrepDriver->generatePipelineIR();
+    mGrepDriver->deallocateBuffers();
+    idb->CreateRetVoid();
+    mGrepDriver->finalizeObject();
+}
+
+void InternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLength) {
+    typedef void (*GrepFunctionType)(const char * buffer, const size_t length);
+    auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
+    f(search_buffer, bufferLength);
 }
 
 }

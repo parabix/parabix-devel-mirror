@@ -174,6 +174,29 @@ public:
     QuietModeEngine();
 };
 
+    
+    
+class InternalSearchEngine {
+public:
+    InternalSearchEngine();
+    ~InternalSearchEngine();
+    
+    void setRecordBreak(GrepRecordBreakKind b) {mGrepRecordBreak = b;}
+    void setCaseInsensitive()  {mCaseInsensitive = true;}
+    
+    void grepCodeGen(re::RE * matchingRE, re::RE * invertedRE, MatchAccumulator * accum);
+    
+    void doGrep(const char * search_buffer, size_t bufferLength);
+    
+private:
+    GrepRecordBreakKind mGrepRecordBreak;
+    bool mCaseInsensitive;
+
+    Driver * mGrepDriver;
+    bool grepMatchFound;
+};
+    
+
 }
 
 #endif
