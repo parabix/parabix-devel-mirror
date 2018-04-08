@@ -178,7 +178,6 @@ namespace kernel {
                                                    kb->CreateAdd(kb->getProcessedItemCount("PDEPmarkerStream"),kb->CreateMul(processedBlock, blockWidth))
                                   )
         );
-
     }
 
     std::vector<Value *> LZ4MultiplePDEPkernel::get_block_popcounts(const std::unique_ptr<KernelBuilder> & kb, Value * blk, const unsigned field_width) {

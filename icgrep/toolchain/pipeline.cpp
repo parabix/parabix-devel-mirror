@@ -774,6 +774,26 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
 
     b->createDoSegmentCall(args);
 
+    if (kernel->hasAttribute(kernel::Attribute::KindId::MustConsumeAll)) {
+        // workaround to modify is final
+        for (unsigned i = 0; i < inputs.size(); ++i) {
+            const Binding &input = inputs[i];
+            const StreamSetBuffer *const buffer = kernel->getStreamSetInputBuffer(i);
+            const auto name = input.getName();
+
+            auto processed = b->getProcessedItemCount(name);
+            const auto p = producedItemCount.find(buffer);
+            assert (p != producedItemCount.end());
+            Value * const available = p->second;
+//            auto available = b->getAvailableItemCount(name);
+            isFinal = b->CreateAnd(isFinal, b->CreateICmpEQ(processed, available));
+
+
+//            Value * const unprocessed = b->CreateSub(produced, processed);
+        }
+    }
+
+
     if (kernel->hasAttribute(kernel::Attribute::KindId::MustExplicitlyTerminate)) {
         isFinal = b->getTerminationSignal();
     } else {

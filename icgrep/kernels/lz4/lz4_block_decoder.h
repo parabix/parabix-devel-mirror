@@ -1,11 +1,12 @@
-//
-// Created by wxy325 on 2017/6/25.
-//
 
-#ifndef ICGREP_LZ4D_E_D_H
-#define ICGREP_LZ4D_E_D_H
+#ifndef ICGREP_LZ4_BLOCK_DECODER_NEW_H
+#define ICGREP_LZ4_BLOCK_DECODER_NEW_H
+
 
 #include "kernels/kernel.h"
+#include <map>
+#include <vector>
+#include <string>
 
 namespace llvm {
     class Module;
@@ -18,30 +19,29 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class LZ4BlockDecoderKernel final : public MultiBlockKernel {
+class LZ4BlockDecoderNewKernel final : public MultiBlockKernel {
 
 public:
-    LZ4BlockDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder);
+    LZ4BlockDecoderNewKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder);
 
 protected:
     void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value * const numOfStrides) override;
-//    virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-//    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBuilder) override;
 
 private:
-    const size_t wordWidth;
-
     llvm::Value *generateLoadInput(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *offset);
 
     void appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value *isCompressed, llvm::Value *blockStart, llvm::Value *blockEnd);
 
-    void generateStoreCircularOutput(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string& outputBufferName,
-                                     llvm::Type *pointerType, llvm::Value *value);
+    void generateStoreNumberOutput(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string &outputBufferName,
+                                   llvm::Type *pointerType, llvm::Value *value);
     size_t getOutputBufferSize(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string& bufferName);
+
+    std::map<std::string, llvm::Value*> previousProducedMap;
+
+    void resetPreviousProducedMap(const std::unique_ptr<KernelBuilder> &iBuilder, std::vector<std::string> outputList);
 };
 
 }
 
 
-
-#endif //ICGREP_LZ4D_E_D_H
+#endif //ICGREP_LZ4_BLOCK_DECODER_NEW_H

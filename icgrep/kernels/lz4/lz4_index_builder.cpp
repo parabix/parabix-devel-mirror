@@ -44,7 +44,7 @@ namespace kernel{
                                        Binding{iBuilder->getStreamSetTy(1, 64), "uncompressedOutputPos",
                                                BoundedRate(0, 1)},
 
-                                       Binding{iBuilder->getStreamSetTy(1, 1), "e1Marker", BoundedRate(0, 1), {DisableTemporaryBuffer(), DisableSufficientChecking()}},
+                                       Binding{iBuilder->getStreamSetTy(1, 1), "deletionMarker", BoundedRate(0, 1), {DisableTemporaryBuffer(), DisableSufficientChecking()}},
                                        Binding{iBuilder->getStreamSetTy(1, 64), "m0Start", BoundedRate(0, 1), DisableSufficientChecking()}, //TODO disable temporary buffer for all output streams
                                        Binding{iBuilder->getStreamSetTy(1, 64), "m0End", BoundedRate(0, 1), DisableSufficientChecking()},
                                        Binding{iBuilder->getStreamSetTy(1, 64), "matchOffset", BoundedRate(0, 1), DisableSufficientChecking()},
@@ -65,24 +65,22 @@ namespace kernel{
     }
 
     void LZ4IndexBuilderKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *const numOfStrides) {
-
-
         BasicBlock* exitBlock = iBuilder->CreateBasicBlock("exitBlock");
         BasicBlock* blockEndConBlock = iBuilder->CreateBasicBlock("blockEndConBlock");
 
-        this->resetPreviousProducedMap(iBuilder, {"e1Marker", "m0Start", "m0End", "matchOffset"});
+        this->resetPreviousProducedMap(iBuilder, {"deletionMarker", "m0Start", "m0End", "matchOffset", "M0Marker"});
 
         Value* blockDataIndex = iBuilder->getScalarField("blockDataIndex");
 
         Value* totalNumber = iBuilder->CreateAdd(iBuilder->getAvailableItemCount("blockEnd"), iBuilder->getProcessedItemCount("blockEnd"));
         Value* totalExtender = iBuilder->CreateAdd(iBuilder->getAvailableItemCount("extender"), iBuilder->getProcessedItemCount("extender"));
-//        iBuilder->CallPrintInt("blockDataIndex", blockDataIndex);
 
+        Value* blockEnd = this->generateLoadInt64NumberInput(iBuilder, "blockEnd", blockDataIndex);
 
         iBuilder->CreateCondBr(iBuilder->CreateICmpULT(blockDataIndex, totalNumber), blockEndConBlock, exitBlock);
 
         iBuilder->SetInsertPoint(blockEndConBlock);
-        Value* blockEnd = this->generateLoadInt64NumberInput(iBuilder, "blockEnd", blockDataIndex);
+
 
         Value* blockStart = this->generateLoadInt64NumberInput(iBuilder, "blockStart", blockDataIndex);
 
@@ -91,8 +89,8 @@ namespace kernel{
 //        iBuilder->CallPrintInt("----blockStart", blockStart);
 //        iBuilder->CallPrintInt("----blockEnd", blockEnd);
 
-//        iBuilder->CreateCondBr(iBuilder->CreateICmpULE(blockEnd, totalExtender), processBlock, exitBlock);
-        iBuilder->CreateBr(processBlock);
+        iBuilder->CreateCondBr(iBuilder->CreateICmpULE(blockEnd, totalExtender), processBlock, exitBlock);
+//        iBuilder->CreateBr(processBlock);
 
         iBuilder->SetInsertPoint(processBlock);
 
@@ -168,10 +166,10 @@ namespace kernel{
                 iBuilder->getSize(1));
 
         // TODO Clear Output Buffer at the beginning instead of marking 0
-        this->markCircularOutputBitstream(iBuilder, "e1Marker", iBuilder->getProducedItemCount("e1Marker"), iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)), false);
+        this->markCircularOutputBitstream(iBuilder, "deletionMarker", iBuilder->getProducedItemCount("deletionMarker"), iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)), true);
 //        iBuilder->CallPrintInt("markStart", iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)));
 //        iBuilder->CallPrintInt("phiCursorPosAfterLiteral", phiCursorPosAfterLiteral);
-        this->markCircularOutputBitstream(iBuilder, "e1Marker", iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)), offsetPos, true);
+        this->markCircularOutputBitstream(iBuilder, "deletionMarker", iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)), offsetPos, false);
         this->increaseScalarField(iBuilder, "m0OutputPos", literalLength); //TODO m0OutputPos may be removed from scalar fields
         return offsetPos;
     }
@@ -271,7 +269,6 @@ namespace kernel{
 
 
         Value* isTerminal = iBuilder->CreateICmpEQ(blockEnd, iBuilder->getScalarField("fileSize"));
-
         iBuilder->setTerminationSignal(isTerminal);
 
         //TODO use memset to clear output buffer for extract marker

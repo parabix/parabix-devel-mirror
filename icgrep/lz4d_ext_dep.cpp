@@ -25,7 +25,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <iostream>
 #include <lz4/LZ4Generator.h>
-#include <lz4/LZ4GeneratorNew.h>
 
 namespace re { class CC; }
 
@@ -79,7 +78,7 @@ int main(int argc, char *argv[]) {
         codegen::SegmentSize = 2;
     }
 
-    std::unique_ptr<LZ4Generator> g = newApproach? llvm::make_unique<LZ4GeneratorNew>(): llvm::make_unique<LZ4Generator>();
+    std::unique_ptr<LZ4Generator> g = llvm::make_unique<LZ4Generator>();
 
     if (extractOnly) {
         g->generateExtractOnlyPipeline(outputFile);

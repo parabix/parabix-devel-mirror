@@ -233,6 +233,10 @@ struct Attribute {
         // and will be called even when there is no new input data when the prior kernels
         // in the pipeline have also terminated.
 
+        MustConsumeAll,
+
+        //Workaround, the kernel will finish only when all of the inputs are consumed
+
     };
 
     KindId getKind() const {
@@ -291,6 +295,7 @@ protected:
     friend Attribute Swizzled();
     friend Attribute CanTerminateEarly();
     friend Attribute MustExplicitlyTerminate();
+    friend Attribute MustConsumeAll();
 
     Attribute(const KindId kind, const unsigned k) : mKind(kind), mAmount(k) { }
 
@@ -401,6 +406,10 @@ inline Attribute CanTerminateEarly() {
 
 inline Attribute MustExplicitlyTerminate() {
     return Attribute(Attribute::KindId::MustExplicitlyTerminate, 0);
+}
+
+inline Attribute MustConsumeAll() {
+    return Attribute(Attribute::KindId::MustConsumeAll, 0);
 }
 
 inline Attribute Swizzled() {

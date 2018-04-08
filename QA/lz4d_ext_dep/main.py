@@ -12,10 +12,7 @@ failure_count = 0
 test_options = [
     # ('extract_only', '-extract-only', {'extract_only' : True}),
     # ('extract_and_deposit', '-extract-and-deposit-only', {'extract_and_deposit_only': True}),
-    # ('normal', '', {}),
-    ('extract_only_new_approach', '-new-approach -extract-only', {'extract_only' : True}),
-    ('extract_and_deposit_new_approach', '-new-approach -extract-and-deposit-only', {'extract_and_deposit_only': True}),
-    ('normal_new_approach', '-new-approach', {}),
+    ('normal', '', {}),
 ]
 
 

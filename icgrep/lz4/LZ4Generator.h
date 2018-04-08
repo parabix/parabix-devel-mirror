@@ -40,6 +40,7 @@ protected:
     // BufferSize related Helper Function
     virtual int getInputBufferBlocks();
     virtual int getDecompressedBufferBlocks();
+    int get4MbBufferBlocks();
 
 
     //// Data Member
@@ -56,7 +57,7 @@ protected:
     // StreamSetBuffers
     parabix::StreamSetBuffer * ByteStream;
     parabix::StreamSetBuffer * BasisBits;
-    parabix::StreamSetBuffer * EMarker; //TODO rename to ExtarctMarker
+    parabix::StreamSetBuffer * DeletionMarker; //TODO rename to ExtarctMarker
     parabix::StreamSetBuffer * DepositMarker;
     parabix::StreamSetBuffer * Match_Offset;
 
