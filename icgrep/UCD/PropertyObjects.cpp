@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017 International Characters, Inc.
+ *  Copyright (c) 2018 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -89,11 +89,17 @@ const UnicodeSet EnumeratedPropertyObject::GetCodepointSetMatchingPattern(re::RE
     std::memset(aligned + n, 0, m);
     
     PropertyValueAccumulator accum(accumulatedValues);
-    grepBuffer(pattern, aligned, n, & accum);
+    
+    grep::InternalSearchEngine engine;
+    engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+    engine.grepCodeGen(pattern, nullptr, & accum);
+    engine.doGrep(aligned, n);
+    //grepBuffer(pattern, aligned, n, & accum);
     alloc.deallocate(aligned, 0);
     
     UnicodeSet a;
     for (const auto & v : accumulatedValues) {
+        
         int e = GetPropertyValueEnumCode(v);
         a.insert(GetCodepointSet(e));
     }
@@ -212,7 +218,10 @@ const UnicodeSet ExtensionPropertyObject::GetCodepointSetMatchingPattern(re::RE 
     std::memset(aligned + n, 0, m);
     
     PropertyValueAccumulator accum(accumulatedValues);
-    grepBuffer(pattern, aligned, n, & accum);
+    grep::InternalSearchEngine engine;
+    engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+    engine.grepCodeGen(pattern, nullptr, & accum);
+    engine.doGrep(aligned, n);
     alloc.deallocate(aligned, 0);
     
     UnicodeSet a;
@@ -334,7 +343,11 @@ const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & valu
 
 const UnicodeSet NumericPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
     SetByLineNumberAccumulator accum(mExplicitCps, mNaNCodepointSet);
-    grepBuffer(pattern, mStringBuffer, mBufSize, &accum);
+    grep::InternalSearchEngine engine;
+    engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+    engine.grepCodeGen(pattern, nullptr, & accum);
+    engine.doGrep(mStringBuffer, mBufSize);
+    //grepBuffer(pattern, mStringBuffer, mBufSize, &accum);
     return accum.getAccumulatedSet();
 }
 
@@ -373,7 +386,11 @@ const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * p
         matched.insert(mNullCodepointSet);
     }
     SetByLineNumberAccumulator accum(mExplicitCps, mNullCodepointSet);
-    grepBuffer(pattern, mStringBuffer, mBufSize, & accum);    
+    grep::InternalSearchEngine engine;
+    engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+    engine.grepCodeGen(pattern, nullptr, & accum);
+    engine.doGrep(mStringBuffer, mBufSize);
+
     matched.insert(accum.getAccumulatedSet());
     return matched;
 }
@@ -406,7 +423,10 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSet(const std::string
 const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
     UnicodeSet base_set = mBaseObject.GetCodepointSetMatchingPattern(pattern) - mOverriddenSet;
     SetByLineNumberAccumulator accum(mExplicitCps, UnicodeSet());
-    grepBuffer(pattern, mStringBuffer, mBufSize, & accum);
+    grep::InternalSearchEngine engine;
+    engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
+    engine.grepCodeGen(pattern, nullptr, & accum);
+    engine.doGrep(mStringBuffer, mBufSize);
     base_set.insert(accum.getAccumulatedSet());
     return base_set;
 }
