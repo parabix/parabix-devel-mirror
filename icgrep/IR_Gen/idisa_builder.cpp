@@ -444,7 +444,9 @@ Value * IDISA_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value *
 Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
     if (fw < 8) report_fatal_error("Unsupported field width: hsimd_signmask " + std::to_string(fw));
     Value * mask = CreateICmpSLT(fwCast(fw, a), ConstantAggregateZero::get(fwVectorType(fw)));
-    return CreateZExt(CreateBitCast(mask, getIntNTy(mBitBlockWidth/fw)), getInt32Ty());
+    mask = CreateBitCast(mask, getIntNTy(mBitBlockWidth/fw));
+    if (mBitBlockWidth/fw < 32) return CreateZExt(mask, getInt32Ty());
+    else return mask;
 }
 
 Value * IDISA_Builder::mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex) {
