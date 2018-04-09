@@ -139,7 +139,6 @@ void LZ4Generator::generatePipeline(const std::string& outputFile) {
 
     auto swizzle = this->generateSwizzleExtractData(iBuilder);
 
-    //TODO buffer blocks should be decompressedBufferBlocks
     StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
     StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
