@@ -70,8 +70,10 @@ namespace kernel{
 
         Value * blockDataIndex = iBuilder->getScalarField("blockDataIndex");
 
-        Value * totalNumber = iBuilder->CreateAdd(iBuilder->getAvailableItemCount("blockEnd"), iBuilder->getProcessedItemCount("blockEnd"));
-        Value * totalExtender = iBuilder->CreateAdd(iBuilder->getAvailableItemCount("extender"), iBuilder->getProcessedItemCount("extender"));
+        // In MultiblockKernel, availableItemCount + processedItemCount == producedItemCount from previous kernel
+        // While in SegmentOrigentedKernel, availableItemCount == producedItemCount from previous kernel
+        Value * totalNumber = iBuilder->getAvailableItemCount("blockEnd");
+        Value * totalExtender = iBuilder->getAvailableItemCount("extender");
 
         Value * blockEnd = this->generateLoadInt64NumberInput(iBuilder, "blockEnd", blockDataIndex);
 
@@ -148,7 +150,8 @@ namespace kernel{
 
         // TODO Clear Output Buffer at the beginning instead of marking 0
         this->markCircularOutputBitstream(iBuilder, "deletionMarker", iBuilder->getProducedItemCount("deletionMarker"), iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)), true);
-        this->markCircularOutputBitstream(iBuilder, "deletionMarker", iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)), offsetPos, false);
+//        this->markCircularOutputBitstream(iBuilder, "deletionMarker", iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)), offsetPos, false);
+        iBuilder->setProducedItemCount("deletionMarker", offsetPos);
         this->increaseScalarField(iBuilder, "m0OutputPos", literalLength); //TODO m0OutputPos may be removed from scalar fields
         return offsetPos;
     }
@@ -237,6 +240,8 @@ namespace kernel{
 
     void LZ4IndexBuilderKernel::generateProcessCompressedBlock(const std::unique_ptr<KernelBuilder> &iBuilder, Value* blockStart, Value* blockEnd) {
         // Constant
+        this->markCircularOutputBitstream(iBuilder, "deletionMarker", blockStart, blockEnd, false, false);
+
         BasicBlock* entryBlock = iBuilder->GetInsertBlock();
 
         Value* m0OutputBlockPtr = iBuilder->getOutputStreamBlockPtr("M0Marker", iBuilder->getSize(0));
