@@ -175,7 +175,7 @@ void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Va
 
     assert (target && targetOffset);
     assert (source && sourceOffset);
-    assert (target->getType() == source->getType());
+    // assert (target->getType() == source->getType());
     assert (target->getType()->isPointerTy());
     assert (isConstantZero(targetOffset) || isConstantZero(sourceOffset));
     const StreamSetBuffer * const buffer = mKernel->getAnyStreamSetBuffer(name);

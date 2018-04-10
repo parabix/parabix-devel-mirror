@@ -31,7 +31,7 @@ public:
 
 protected:
     //// Protected Method
-    inline void generateMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    void generateMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     // Pipeline
     virtual void generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual void generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);

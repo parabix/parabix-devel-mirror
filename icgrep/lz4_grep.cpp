@@ -86,7 +86,6 @@ int main(int argc, char *argv[]) {
     boost::iostreams::mapped_file_source mappedFile;
     // Since mmap offset has to be multiples of pages, we can't use it to skip headers.
     mappedFile.open(fileName , lz4Frame.getBlocksLength() + lz4Frame.getBlocksStart());
-    size_t headerLength = lz4Frame.getBlocksStart();
     //char *fileBuffer = const_cast<char *>(mappedFile.data()) + lz4Frame.getBlocksStart();
     char *fileBuffer = const_cast<char *>(mappedFile.data());
 

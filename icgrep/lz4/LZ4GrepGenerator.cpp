@@ -140,9 +140,7 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerat
     auto & idb = mGrepDriver->getBuilder();
     // TODO: until we automate stream buffer sizing, use this calculation to determine how large our matches buffer needs to be.
     const unsigned baseBufferSize = this->getInputBufferBlocks();
-    const unsigned encodingBits = 8;
     bool MultithreadedSimpleRE = false;
-    bool PabloTransposition = false;
     bool PropertyKernels = false;
     bool CC_Multiplexing = false;
     bool InvertMatchFlag = false;
@@ -337,7 +335,7 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerat
 
     return std::pair<StreamSetBuffer *, StreamSetBuffer *>(LineBreakStream, Matches);
 
-};
+}
 
 
 
@@ -349,7 +347,7 @@ void LZ4GrepGenerator::invokeScanMatchGrep(char* fileBuffer, size_t blockStart, 
 
     main(fileBuffer, blockStart, blockEnd, hasBlockChecksum, reinterpret_cast<intptr_t>(&accum));
     llvm::outs() << s.str();
-};
+}
 
 void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
     auto & iBuilder = pxDriver.getBuilder();
@@ -424,8 +422,6 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
 void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE* regex) {
     auto & iBuilder = pxDriver.getBuilder();
     this->generateMainFunc(iBuilder);
-
-    StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);

@@ -102,7 +102,7 @@ void SearchableBuffer::addSearchCandidate(char * C_string_ptr, size_t length) {
     }
     memcpy((void * ) &mBuffer_base[mSpace_used], C_string_ptr, length+1);
     mSpace_used += length+1;
-    assert("Search candidate not null terminated" && (buffer_base[mSpace_used] == '\0'));
+    assert("Search candidate not null terminated" && (mBuffer_base[mSpace_used] == '\0'));
     mEntries++;
 }
 
@@ -744,7 +744,6 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE,
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
     
-    const unsigned encodingBits = 8;
     const unsigned segmentSize = codegen::BufferSegments * codegen::SegmentSize * codegen::ThreadNum;
     
     re::CC * breakCC = nullptr;

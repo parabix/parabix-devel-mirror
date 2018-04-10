@@ -13,7 +13,7 @@
 #include <vector>
 #include <sstream>
 #include <atomic>
-#import <grep/grep_engine.h>
+#include <grep/grep_engine.h>
 
 typedef void (*ScanMatchGrepMainFunctionType)(char * byte_data, size_t headerSize, size_t filesize, bool hasBlockChecksum, intptr_t match_accumulator);
 

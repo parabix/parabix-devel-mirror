@@ -89,7 +89,6 @@ void LZ4Generator::generateExtractAndDepositOnlyPipeline(const std::string &outp
     this->generateMainFunc(iBuilder);
 
     StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
-    StreamSetBuffer * const FinalDecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);
@@ -222,9 +221,6 @@ void LZ4Generator::generateExtractAndDepositMarkers(const std::unique_ptr<kernel
 
     //// Generate Helper Markers Extenders, FX, XF
     StreamSetBuffer * const Extenders = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
-    StreamSetBuffer * const CC_0xFX = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
-    StreamSetBuffer * const CC_0xXF = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
-
 
     Kernel * extenderK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
     extenderK->addAttribute(MustConsumeAll());
@@ -234,19 +230,6 @@ void LZ4Generator::generateExtractAndDepositMarkers(const std::unique_ptr<kernel
     Kernel * blockDecoderK = pxDriver.addKernelInstance<LZ4BlockDecoderNewKernel>(iBuilder);
     blockDecoderK->setInitialArguments({iBuilder->CreateTrunc(hasBlockChecksum, iBuilder->getInt1Ty()), headerSize, fileSize});
     pxDriver.makeKernelCall(blockDecoderK, {ByteStream}, {BlockData_IsCompressed, BlockData_BlockStart, BlockData_BlockEnd});
-
-//    re::CC* xfCC = re::makeCC(0x0f);
-//    re::CC* fxCC = re::makeCC(0xf0);
-//    for (re::codepoint_t i = 1; i <= 0xf; i++) {
-//        xfCC = re::makeCC(xfCC, re::makeCC(i * 0x10 + 0x0f));
-//        fxCC = re::makeCC(fxCC, re::makeCC(0xf0 + i));
-//    }
-
-//    Kernel * CC_0xFXKernel = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "CC_0xFX", std::vector<re::CC *>{fxCC}, 8);
-//    pxDriver.makeKernelCall(CC_0xFXKernel, {BasisBits}, {CC_0xFX});
-
-//    Kernel * CC_0xXFKernel = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "CC_0xXF", std::vector<re::CC *>{xfCC}, 8);
-//    pxDriver.makeKernelCall(CC_0xXFKernel, {BasisBits}, {CC_0xXF});
 
     //// Generate Extract/Deposit Markers, M0_Start, M0_End, MatchOffset
 
@@ -263,9 +246,6 @@ void LZ4Generator::generateExtractAndDepositMarkers(const std::unique_ptr<kernel
     DepositMarker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getDecompressedBufferBlocks());
     Match_Offset = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks());
 
-
-
-
     Kernel* Lz4IndexBuilderK = pxDriver.addKernelInstance<LZ4IndexBuilderKernel>(iBuilder);
     Lz4IndexBuilderK->setInitialArguments({fileSize});
     pxDriver.makeKernelCall(
@@ -273,8 +253,6 @@ void LZ4Generator::generateExtractAndDepositMarkers(const std::unique_ptr<kernel
             {
                     ByteStream,
                     Extenders,
-//                    CC_0xFX,
-//                    CC_0xXF,
 
                     // Block Data
                     BlockData_IsCompressed,

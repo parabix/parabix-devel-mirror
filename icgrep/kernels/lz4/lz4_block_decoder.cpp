@@ -57,10 +57,7 @@ void LZ4BlockDecoderNewKernel::resetPreviousProducedMap(const std::unique_ptr<Ke
 
 void LZ4BlockDecoderNewKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, Value * const numOfStrides) {
     // Constant
-    Constant* INT8_0 = iBuilder->getInt8(0);
-    Constant* INT8_1 = iBuilder->getInt8(1);
     Constant* INT64_0 = iBuilder->getInt64(0);
-
 
     BasicBlock * entryBlock = iBuilder->GetInsertBlock();
     BasicBlock * exitBlock = iBuilder->CreateBasicBlock("exit");
@@ -93,10 +90,10 @@ void LZ4BlockDecoderNewKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
 
     iBuilder->SetInsertPoint(processCon);
 
-    PHINode* phiIsCompressed = iBuilder->CreatePHI(iBuilder->getInt8Ty(), 3);
-    PHINode* phiBlockStart = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 3);
-    PHINode* phiBlockEnd = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 3);
-    PHINode* sOffset = iBuilder->CreatePHI(iBuilder->getSizeTy(), 3);
+    PHINode* phiIsCompressed = iBuilder->CreatePHI(initIsCompressed->getType(), 3);
+    PHINode* phiBlockStart = iBuilder->CreatePHI(initBlockStart->getType(), 3);
+    PHINode* phiBlockEnd = iBuilder->CreatePHI(initBlockEnd->getType(), 3);
+    PHINode* sOffset = iBuilder->CreatePHI(previousOffset->getType(), 3);
 
     phiIsCompressed->addIncoming(initIsCompressed, entryBlock);
     phiBlockStart->addIncoming(initBlockStart, entryBlock);
@@ -118,7 +115,7 @@ void LZ4BlockDecoderNewKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
 
     iBuilder->SetInsertPoint(storeOutputBlock);
     this->appendOutput(iBuilder, phiIsCompressed, phiBlockStart, phiBlockEnd);
-    phiIsCompressed->addIncoming(INT8_0, storeOutputBlock);
+    phiIsCompressed->addIncoming(iBuilder->getFalse(), storeOutputBlock);
     phiBlockStart->addIncoming(INT64_0, storeOutputBlock);
     phiBlockEnd->addIncoming(INT64_0, storeOutputBlock);
     sOffset->addIncoming(sOffset, storeOutputBlock);
@@ -176,7 +173,7 @@ void LZ4BlockDecoderNewKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
     ); // Block Checksum
 
     sOffset->addIncoming(newOffset, iBuilder->GetInsertBlock());
-    phiIsCompressed->addIncoming(iBuilder->CreateSelect(isCompressed, INT8_1, INT8_0), iBuilder->GetInsertBlock());
+    phiIsCompressed->addIncoming(isCompressed, iBuilder->GetInsertBlock());
     phiBlockStart->addIncoming(blockStart, iBuilder->GetInsertBlock());
     phiBlockEnd->addIncoming(blockEnd, iBuilder->GetInsertBlock());
     iBuilder->CreateBr(processCon);
@@ -203,7 +200,7 @@ void LZ4BlockDecoderNewKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
 
     void LZ4BlockDecoderNewKernel::appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, Value* isCompressed, Value* blockStart, Value* blockEnd) {
         // Constant
-        this->generateStoreNumberOutput(iBuilder, "isCompressed", iBuilder->getInt8Ty()->getPointerTo(), isCompressed);
+        this->generateStoreNumberOutput(iBuilder, "isCompressed", iBuilder->getInt1Ty()->getPointerTo(), isCompressed);
         this->generateStoreNumberOutput(iBuilder, "blockStart", iBuilder->getInt64Ty()->getPointerTo(), blockStart);
         this->generateStoreNumberOutput(iBuilder, "blockEnd", iBuilder->getInt64Ty()->getPointerTo(), blockEnd);
     }

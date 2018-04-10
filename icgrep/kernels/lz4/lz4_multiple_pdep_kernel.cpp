@@ -29,7 +29,7 @@ namespace kernel {
         mStreamSetInputs.push_back(Binding{kb->getStreamSetTy(streamCount), "sourceStreamSet0", BoundedRate(0, 1), Swizzled()});
         mStreamSetOutputs.push_back(Binding{kb->getStreamSetTy(streamCount), "outputStreamSet0", RateEqualTo("PDEPmarkerStream")});
 
-        for (int i = 1; i < streamSize; i++) {
+        for (unsigned i = 1; i < streamSize; i++) {
             mStreamSetInputs.push_back(Binding{kb->getStreamSetTy(streamCount), "sourceStreamSet" + std::to_string(i), BoundedRate(0, 1), Swizzled()});
             mStreamSetOutputs.push_back(Binding{kb->getStreamSetTy(streamCount), "outputStreamSet" + std::to_string(i), RateEqualTo("outputStreamSet0")});
         }
@@ -105,7 +105,7 @@ namespace kernel {
 
             Value * shift_amount = kb->CreateURem(updatedProcessedSourceBits, pdepWidth);
 
-            for (int iStreamIndex = 0; iStreamIndex < mStreamSize; iStreamIndex++) {
+            for (unsigned iStreamIndex = 0; iStreamIndex < mStreamSize; iStreamIndex++) {
                 Value * next_blk_idx = kb->CreateSub(kb->CreateUDiv(ahead_pdep_width_less_1, blockWidth), base_src_blk_idx);
                 Value * next_swizzle_idx = kb->CreateUDiv(kb->CreateURem(ahead_pdep_width_less_1, blockWidth), pdepWidth);
 
@@ -165,7 +165,7 @@ namespace kernel {
         kb->CreateBr(checkLoopCond);
 
         kb->SetInsertPoint(terminate);
-        for (int i = 0; i < mStreamSize; i++) {
+        for (unsigned i = 0; i < mStreamSize; i++) {
             kb->setProcessedItemCount("sourceStreamSet" + std::to_string(i), updatedProcessedSourceBitsPhi);
         }
 
