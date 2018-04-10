@@ -20,13 +20,12 @@ namespace llvm {
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
-    class LZ4IndexBuilderKernel final : public MultiBlockKernel {
+    class LZ4IndexBuilderKernel final : public SegmentOrientedKernel {
     public:
         LZ4IndexBuilderKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder);
 
     protected:
-        void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder,
-                                     llvm::Value *const numOfStrides) override;
+        void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
 
     private:
         llvm::Value *
@@ -40,12 +39,6 @@ namespace kernel {
 
         llvm::Value *advanceUntilNextZero(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputName,
                                           llvm::Value *startPos, llvm::Value *maxPos = nullptr);
-
-        llvm::Value *advanceUntilNextOne(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputName,
-                                         llvm::Value *startPos, llvm::Value *maxPos = nullptr);
-
-        llvm::Value *advanceUntilNextValue(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputName,
-                                           llvm::Value *startPos, bool isNextZero, llvm::Value *maxPos = nullptr);
 
         void increaseScalarField(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string &fieldName,
                                  llvm::Value *value);
@@ -67,11 +60,9 @@ namespace kernel {
                                                       bool setProduced = true);
 
         void generateStoreNumberOutput(const std::unique_ptr<KernelBuilder> &iBuilder,
-                                       const std::string &outputBufferName, llvm::Type *pointerType,
+                                       const std::string &outputBufferName,
                                        llvm::Value *value);
 
-        void resetPreviousProducedMap(const std::unique_ptr<KernelBuilder> &iBuilder, std::vector<std::string> outputList);
-        std::map<std::string, llvm::Value*> previousProducedMap;
     };
 }
 
