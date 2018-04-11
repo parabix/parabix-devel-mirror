@@ -11,11 +11,12 @@ namespace IDISA { class IDISA_Builder; }
 
 
 namespace kernel {
-    class LZ4SwizzledMatchCopyKernel: public MultiBlockKernel {
+    class LZ4SwizzledMatchCopyKernel final: public SegmentOrientedKernel {
     public:
         LZ4SwizzledMatchCopyKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamCount, unsigned streamSize, unsigned swizzleFactor, unsigned PDEP_width = 64);
     protected:
-        void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value * const numOfStrides) override;
+//        void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value * const numOfStrides) override;
+        void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
     private:
 
         const unsigned mSwizzleFactor;
@@ -27,7 +28,6 @@ namespace kernel {
 
         void generateOutputCopy(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value* outputBlocks);
 
-        llvm::Value* getMaximumMatchCopyBlock(const std::unique_ptr<KernelBuilder> &iBuilder);
         llvm::Value* mIsFinalBlock;
         llvm::Value* loadInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder, std::string bufferName, llvm::Value* offset);
     };
