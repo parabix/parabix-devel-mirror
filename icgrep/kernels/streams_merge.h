@@ -24,6 +24,20 @@ private:
     const unsigned mInputSets;
 };
 
+class StreamsIntersect : public BlockOrientedKernel {
+public:
+    
+    StreamsIntersect(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamsPerSet=1, unsigned inputSets = 1);
+    
+protected:
+    
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    
+private:
+    const unsigned mStreamsPerSet;
+    const unsigned mInputSets;
+};
+
 }
     
 #endif
