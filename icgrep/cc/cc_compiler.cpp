@@ -10,6 +10,7 @@
 #include <pablo/boolean.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
+#include <pablo/pe_infile.h>
 #include <pablo/builder.hpp>
 #include <pablo/pablo_kernel.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -89,7 +90,7 @@ PabloAST * Parabix_CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder 
         PabloAST * temp = char_or_range_expr(lo_codepoint(i), hi_codepoint(i), pb);
         expr = (expr == nullptr) ? temp : pb.createOr(expr, temp);
     }
-    return expr;
+    return pb.createInFile(expr);
     
 }
 
@@ -276,7 +277,7 @@ PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream,
         }
         ccStrm = pb.createAnd(ccStrm, pb.createNot(toExclude));
     }
-    return ccStrm;
+    return pb.createInFile(ccStrm);
 }
     
 Direct_CC_Compiler::Direct_CC_Compiler(pablo::PabloBlock * scope, pablo::PabloAST * codeUnitStream)
