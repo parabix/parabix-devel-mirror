@@ -23,6 +23,7 @@
 #include <toolchain/toolchain.h>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
+#include <boost/filesystem.hpp>
 #include <util/file_select.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -104,6 +105,7 @@ std::vector<re::RE *> readExpressions() {
     return REs;
 }
 
+namespace fs = boost::filesystem;
 
 int main(int argc, char *argv[]) {
 
@@ -111,9 +113,9 @@ int main(int argc, char *argv[]) {
     
     auto REs = readExpressions();
 
-    std::vector<std::string> allFiles = argv::getFullFileList(inputFiles);
-    if (allFiles.empty()) {
-        allFiles = { "-" };
+    std::vector<fs::path> allFiles = argv::getFullFileList(inputFiles);
+    if (inputFiles.empty()) {
+        argv::UseStdIn = true;
     }
     else if ((allFiles.size() > 1) && !argv::NoFilenameFlag) {
         argv::WithFilenameFlag = true;
@@ -152,6 +154,7 @@ int main(int argc, char *argv[]) {
         grepEngine->setRecordBreak(grep::GrepRecordBreakKind::LF);
     }
     grepEngine->setStdinLabel(argv::LabelFlag);
+    if (argv::UseStdIn) grepEngine->setGrepStdIn();
     if (argv::NoMessagesFlag) grepEngine->suppressFileMessages();
     if (argv::MmapFlag) grepEngine->setPreferMMap();
     grepEngine->initREs(REs);

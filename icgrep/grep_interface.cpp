@@ -237,18 +237,6 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
     if (BinaryFlag) {
         llvm::report_fatal_error("Sorry, -U is not yet supported.\n");
     }
-    if (argv::ExcludeFlag!="") {
-        llvm::report_fatal_error("Sorry, -exclude is not yet supported.\n");
-    }
-    if (argv::ExcludeFromFlag!="") {
-        llvm::report_fatal_error("Sorry, -exclude-from is not yet supported.\n");
-    }
-    if (argv::ExcludeDirFlag!="") {
-        llvm::report_fatal_error("Sorry, -exclude-dir is not yet supported.\n");
-    }
-    if (argv::IncludeFlag!="") {
-        llvm::report_fatal_error("Sorry, -include is not yet supported.\n");
-    }    
     if (ByteOffsetFlag) {
         llvm::report_fatal_error("Sorry, -b is not yet supported.\n");
     }

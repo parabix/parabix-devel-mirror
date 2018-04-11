@@ -26,6 +26,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <util/file_select.h>
+#include <boost/filesystem.hpp>
+namespace fs = boost::filesystem;
 
 using namespace llvm;
 
@@ -33,7 +35,7 @@ static cl::OptionCategory wcFlags("Command Flags", "wc options");
 
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(wcFlags));
 
-std::vector<std::string> allFiles;
+std::vector<fs::path> allFiles;
 
 enum CountOptions {
     LineOption, WordOption, CharOption, ByteOption
@@ -209,7 +211,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
 
 void wc(WordCountFunctionType fn_ptr, const int64_t fileIdx) {
-    std::string fileName = allFiles[fileIdx];
+    std::string fileName = allFiles[fileIdx].string();
     struct stat sb;
     const int fd = open(fileName.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
@@ -299,7 +301,7 @@ int main(int argc, char *argv[]) {
         if (CountBytes) {
             std::cout << byteCount[i];
         }
-        std::cout << " " << allFiles[i] << std::endl;
+        std::cout << " " << allFiles[i].string() << std::endl;
     }
     if (inputFiles.size() > 1) {
         std::cout << std::setw(displayColumnWidth-1);

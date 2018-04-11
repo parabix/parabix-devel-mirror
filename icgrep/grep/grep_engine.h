@@ -14,6 +14,7 @@
 #include <sstream>
 #include <atomic>
 #include <util/aligned_allocator.h>
+#include <boost/filesystem.hpp>
 
 namespace re { class CC; }
 namespace re { class RE; }
@@ -52,13 +53,14 @@ public:
     void setInitialTab() {mInitialTab = true;}
 
     void setMaxCount(int m) {mMaxCount = m;}
+    void setGrepStdIn() {mGrepStdIn = true;}
     void setInvertMatches() {mInvertMatches = true;}
     void setCaseInsensitive()  {mCaseInsensitive = true;}
 
     void suppressFileMessages() {mSuppressFileMessages = true;}
 
     void setRecordBreak(GrepRecordBreakKind b);
-    void initFileResult(std::vector<std::string> & filenames);
+    void initFileResult(std::vector<boost::filesystem::path> & filenames);
     void initREs(std::vector<re::RE *> & REs);
     virtual void grepCodeGen();
     bool searchAllFiles();
@@ -67,7 +69,7 @@ public:
 protected:
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(parabix::StreamSetBuffer * ByteStream);
 
-    virtual uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx);
+    virtual uint64_t doGrep(const std::string & fileName, std::ostringstream & strm);
     int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
 
     enum class EngineKind {QuietMode, MatchOnly, CountOnly, EmitMatches};
@@ -84,12 +86,13 @@ protected:
     bool mCaseInsensitive;
     bool mInvertMatches;
     int mMaxCount;
+    bool mGrepStdIn;
     
     Driver * mGrepDriver;
 
     std::atomic<unsigned> mNextFileToGrep;
     std::atomic<unsigned> mNextFileToPrint;
-    std::vector<std::string> inputFiles;
+    std::vector<boost::filesystem::path> inputPaths;
     std::vector<std::ostringstream> mResultStrs;
     std::vector<FileStatus> mFileStatus;
     bool grepMatchFound;
@@ -134,21 +137,21 @@ public:
     EmitMatchesEngine();
     void grepCodeGen() override;
 private:
-    uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
+    uint64_t doGrep(const std::string & fileName, std::ostringstream & strm) override;
 };
 
 class CountOnlyEngine : public GrepEngine {
 public:
     CountOnlyEngine();
 private:
-    uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
+    uint64_t doGrep(const std::string & fileName, std::ostringstream & strm) override;
 };
 
 class MatchOnlyEngine : public GrepEngine {
 public:
     MatchOnlyEngine(bool showFilesWithoutMatch, bool useNullSeparators);
 private:
-    uint64_t doGrep(const std::string & fileName, const uint32_t fileIdx) override;
+    uint64_t doGrep(const std::string & fileName, std::ostringstream & strm) override;
     unsigned mRequiredCount;
 };
 
@@ -176,7 +179,6 @@ private:
     bool mCaseInsensitive;
 
     Driver * mGrepDriver;
-    bool grepMatchFound;
 };
     
     

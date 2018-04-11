@@ -135,6 +135,7 @@ GrepEngine::GrepEngine() :
     mCaseInsensitive(false),
     mInvertMatches(false),
     mMaxCount(0),
+    mGrepStdIn(false),
     mGrepDriver(nullptr),
     mNextFileToGrep(0),
     mNextFileToPrint(0),
@@ -179,11 +180,11 @@ void GrepEngine::setRecordBreak(GrepRecordBreakKind b) {
     
 
     
-void GrepEngine::initFileResult(std::vector<std::string> & filenames) {
-    const unsigned n = filenames.size();
+void GrepEngine::initFileResult(std::vector<boost::filesystem::path> & paths) {
+    const unsigned n = paths.size();
     mResultStrs.resize(n);
     mFileStatus.resize(n, FileStatus::Pending);
-    inputFiles = filenames;
+    inputPaths = paths;
 }
 
 void GrepEngine::initREs(std::vector<re::RE *> & REs) {
@@ -560,7 +561,7 @@ void EmitMatchesEngine::grepCodeGen() {
 //  The doGrep methods apply a GrepEngine to a single file, processing the results
 //  differently based on the engine type.
 
-uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
+uint64_t GrepEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
     typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor);
     using namespace boost::filesystem;
     path p(fileName);
@@ -570,7 +571,7 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx
 
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
 
-    int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx]);
+    int32_t fileDescriptor = openFile(fileName, strm);
     if (fileDescriptor == -1) return 0;
 
     uint64_t grepResult = f(useMMap, fileDescriptor);
@@ -578,10 +579,10 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, const uint32_t fileIdx
     return grepResult;
 }
 
-uint64_t CountOnlyEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
-    uint64_t grepResult = GrepEngine::doGrep(fileName, fileIdx);
-    if (mShowFileNames) mResultStrs[fileIdx] << linePrefix(fileName);
-    mResultStrs[fileIdx] << grepResult << "\n";
+uint64_t CountOnlyEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
+    uint64_t grepResult = GrepEngine::doGrep(fileName, strm);
+    if (mShowFileNames) strm << linePrefix(fileName);
+    strm << grepResult << "\n";
     return grepResult;
 }
 
@@ -595,15 +596,15 @@ std::string GrepEngine::linePrefix(std::string fileName) {
     }
 }
 
-uint64_t MatchOnlyEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
-    uint64_t grepResult = GrepEngine::doGrep(fileName, fileIdx);
+uint64_t MatchOnlyEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
+    uint64_t grepResult = GrepEngine::doGrep(fileName, strm);
     if (grepResult == mRequiredCount) {
-       mResultStrs[fileIdx] << linePrefix(fileName);
+       strm << linePrefix(fileName);
     }
     return grepResult;
 }
 
-uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, const uint32_t fileIdx) {
+uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
     typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, intptr_t accum_addr);
     using namespace boost::filesystem;
     path p(fileName);
@@ -611,9 +612,9 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, const uint32_t 
     if (p == "-") useMMap = false;
     if (!is_regular_file(p)) useMMap = false;
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
-    int32_t fileDescriptor = openFile(fileName, mResultStrs[fileIdx]);
+    int32_t fileDescriptor = openFile(fileName, strm);
     if (fileDescriptor == -1) return 0;
-    EmitMatch accum(linePrefix(fileName), mShowLineNumbers, mInitialTab, mResultStrs[fileIdx]);
+    EmitMatch accum(linePrefix(fileName), mShowLineNumbers, mInitialTab, strm);
     f(useMMap, fileDescriptor, reinterpret_cast<intptr_t>(&accum));
     close(fileDescriptor);
     if (accum.mLineCount > 0) grepMatchFound = true;
@@ -661,7 +662,7 @@ void * DoGrepThreadFunction(void *args) {
 }
 
 bool GrepEngine::searchAllFiles() {
-    const unsigned numOfThreads = std::min(static_cast<unsigned>(Threads), static_cast<unsigned>(inputFiles.size())); 
+    const unsigned numOfThreads = std::min(static_cast<unsigned>(Threads), static_cast<unsigned>(inputPaths.size()));
     std::vector<pthread_t> threads(numOfThreads);
 
     for(unsigned long i = 1; i < numOfThreads; ++i) {
@@ -687,11 +688,11 @@ bool GrepEngine::searchAllFiles() {
 void * GrepEngine::DoGrepThreadMethod() {
 
     unsigned fileIdx = mNextFileToGrep++;
-    while (fileIdx < inputFiles.size()) {
+    while (fileIdx < inputPaths.size()) {
         if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
-            errs() << "Tracing " << inputFiles[fileIdx] << "\n";
+            errs() << "Tracing " << inputPaths[fileIdx].string() << "\n";
         }
-        const auto grepResult = doGrep(inputFiles[fileIdx], fileIdx);
+        const auto grepResult = doGrep(inputPaths[fileIdx].string(), mResultStrs[fileIdx]);
         mFileStatus[fileIdx] = FileStatus::GrepComplete;
         if (grepResult > 0) {
             grepMatchFound = true;
@@ -706,7 +707,7 @@ void * GrepEngine::DoGrepThreadMethod() {
     }
 
     unsigned printIdx = mNextFileToPrint++;
-    while (printIdx < inputFiles.size()) {
+    while (printIdx < inputPaths.size()) {
         const bool readyToPrint = ((printIdx == 0) || (mFileStatus[printIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[printIdx] == FileStatus::GrepComplete);
         if (readyToPrint) {
             const auto output = mResultStrs[printIdx].str();
@@ -726,6 +727,12 @@ void * GrepEngine::DoGrepThreadMethod() {
     } else {
         // Always perform one final cache cleanup step.
         mGrepDriver->performIncrementalCacheCleanupStep();
+        if (mGrepStdIn) {
+            std::ostringstream s;
+            const auto grepResult = doGrep("-", s);
+            llvm::outs() << s.str();
+            if (grepResult) grepMatchFound = true;
+        }
     }
     return nullptr;
 }
@@ -735,8 +742,7 @@ void * GrepEngine::DoGrepThreadMethod() {
 InternalSearchEngine::InternalSearchEngine() :
     mGrepRecordBreak(GrepRecordBreakKind::LF),
     mCaseInsensitive(false),
-    mGrepDriver(nullptr),
-    grepMatchFound(false) {}
+    mGrepDriver(nullptr) {}
     
 InternalSearchEngine::~InternalSearchEngine() {
     delete mGrepDriver;
@@ -747,7 +753,6 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE,
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
     
-    const unsigned encodingBits = 8;
     const unsigned segmentSize = codegen::BufferSegments * codegen::SegmentSize * codegen::ThreadNum;
     
     re::CC * breakCC = nullptr;

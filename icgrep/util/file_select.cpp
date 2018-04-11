@@ -63,7 +63,8 @@ static cl::opt<DevDirAction, true> DirectoriesOption("d", cl::desc("Processing m
                                                                 CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(DirectoriesFlag), cl::init(Read));
 static cl::alias DirectoriesAlias("directories", cl::desc("Alias for -d"), cl::aliasopt(DirectoriesOption));
 
-    
+bool UseStdIn;
+
 re::RE * getFileExcludePattern() {
     std::vector<re::RE *> patterns;
     if (ExcludeFlag != "") {
@@ -130,13 +131,13 @@ bool skip_path(fs::path p) {
     }
 }
 
-void getSubdirectoryFiles(fs::path dirpath, std::vector<std::string> & collectedFiles) {
+    void getSubdirectoryFiles(fs::path dirpath, std::vector<fs::path> & collectedFiles) {
     boost::system::error_code errc;
     fs::directory_iterator di(dirpath, errc);
     fs::directory_iterator di_end;
     if (errc) {
         // If we cannot enter the directory, keep it in the list of files.
-        collectedFiles.push_back(dirpath.string());
+        collectedFiles.push_back(dirpath);
         return;
     }
     //FileAccumulator accum(dirpath, collectedFiles);
@@ -151,23 +152,24 @@ void getSubdirectoryFiles(fs::path dirpath, std::vector<std::string> & collected
             }
         } else {
             if (!skip_path(e)) {
-                collectedFiles.push_back(e.string());
+                collectedFiles.push_back(e);
             }
         }
         di.increment(errc);
         if (errc) {
-            collectedFiles.push_back(e.string());
+            collectedFiles.push_back(e);
         }
     }
 }
 
-std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
-    std::vector<std::string> expanded_paths;
+std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
+    std::vector<fs::path> expanded_paths;
     boost::system::error_code errc;
     for (const std::string & f : inputFiles) {
-        //        if (f == "-") {
-        //            continue;
-        //        }
+        if (f == "-") {
+            argv::UseStdIn = true;
+            continue;
+        }
         fs::path p(f);
         if (skip_path(p)) {
             continue;
@@ -177,7 +179,7 @@ std::vector<std::string> getFullFileList(cl::list<std::string> & inputFiles) {
                 getSubdirectoryFiles(p, expanded_paths);
             }
         } else {
-            expanded_paths.push_back(p.string());
+            expanded_paths.push_back(p);
         }
     }
     return expanded_paths;

@@ -13,6 +13,8 @@
 #include <string>       // for string
 #include <vector>
 #include <llvm/Support/CommandLine.h>
+#include <boost/filesystem.hpp>
+
 namespace re {class RE;}
 
 namespace argv {
@@ -45,6 +47,8 @@ re::RE * getFileIncludePattern();
 // Determine whether include is the default for files that do not match any pattern.
 bool includeIsDefault();
 
-std::vector<std::string> getFullFileList(llvm::cl::list<std::string> & inputFiles);
+extern bool UseStdIn;
+    
+std::vector<boost::filesystem::path> getFullFileList(llvm::cl::list<std::string> & inputFiles);
 }
 #endif
