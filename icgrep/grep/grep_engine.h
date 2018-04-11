@@ -1,3 +1,4 @@
+
 /*
  *  Copyright (c) 2017 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
@@ -12,6 +13,7 @@
 #include <vector>
 #include <sstream>
 #include <atomic>
+#include <util/aligned_allocator.h>
 
 namespace re { class CC; }
 namespace re { class RE; }
@@ -181,21 +183,23 @@ private:
 #define MAX_SIMD_WIDTH_SUPPORTED 512
 #define INITIAL_CAPACITY 1024
     
-    class SearchableBuffer  {
-        SearchableBuffer();
-        void addSearchCandidate(char * string_ptr, size_t length);
-        size_t getCandidateCount() {return mEntries;}
-        char * getBufferBase() {return mBuffer_base;}
-        size_t getBufferSize() {return mSpace_used;}
-        ~SearchableBuffer();
-    private:
-        static const unsigned BUFFER_ALIGNMENT = MAX_SIMD_WIDTH_SUPPORTED/8;
-        size_t mAllocated_capacity;
-        char * mBuffer_base;
-        alignas(BUFFER_ALIGNMENT) char mInitial_buffer[INITIAL_CAPACITY];
-        size_t mSpace_used;
-        size_t mEntries;
-    };
+class SearchableBuffer  {
+public:
+    SearchableBuffer();
+    void addSearchCandidate(const char * string_ptr);
+    size_t getCandidateCount() {return mEntries;}
+    char * getBufferBase() {return mBuffer_base;}
+    size_t getBufferSize() {return mSpace_used;}
+    ~SearchableBuffer();
+private:
+    static const unsigned BUFFER_ALIGNMENT = MAX_SIMD_WIDTH_SUPPORTED/8;
+    AlignedAllocator<char, BUFFER_ALIGNMENT> mAllocator;
+    size_t mAllocated_capacity;
+    size_t mSpace_used;
+    size_t mEntries;
+    char * mBuffer_base;
+    alignas(BUFFER_ALIGNMENT) char mInitial_buffer[INITIAL_CAPACITY];
+};
 
 }
 
