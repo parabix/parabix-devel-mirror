@@ -148,9 +148,8 @@ namespace kernel{
                         literalLength),
                 iBuilder->getSize(1));
 
-        // TODO Clear Output Buffer at the beginning instead of marking 0
-        this->markCircularOutputBitstream(iBuilder, "deletionMarker", iBuilder->getProducedItemCount("deletionMarker"), iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)), true);
-//        this->markCircularOutputBitstream(iBuilder, "deletionMarker", iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)), offsetPos, false);
+        this->setCircularOutputBitstream(iBuilder, "deletionMarker", iBuilder->getProducedItemCount("deletionMarker"), iBuilder->CreateAdd(phiCursorPosAfterLiteral, iBuilder->getSize(1)));
+
         iBuilder->setProducedItemCount("deletionMarker", offsetPos);
         this->increaseScalarField(iBuilder, "m0OutputPos", literalLength); //TODO m0OutputPos may be removed from scalar fields
         return offsetPos;
@@ -233,14 +232,15 @@ namespace kernel{
         this->generateStoreNumberOutput(iBuilder, "m0End", outputEndPos);
         this->generateStoreNumberOutput(iBuilder, "matchOffset", matchOffset);
         this->increaseScalarField(iBuilder, "m0OutputPos", matchLength);
-        this->markCircularOutputBitstream(iBuilder, "M0Marker", outputPos, outputEndPos, true, false);
+        this->setCircularOutputBitstream(iBuilder, "M0Marker", outputPos, outputEndPos);
 
         return iBuilder->CreateAdd(phiCursorPosAfterMatch, INT64_ONE);
     }
 
     void LZ4IndexBuilderKernel::generateProcessCompressedBlock(const std::unique_ptr<KernelBuilder> &iBuilder, Value* blockStart, Value* blockEnd) {
         // Constant
-        this->markCircularOutputBitstream(iBuilder, "deletionMarker", blockStart, blockEnd, false, false);
+
+        this->clearCircularOutputBitstream(iBuilder, "deletionMarker", blockStart, blockEnd);
 
         BasicBlock* entryBlock = iBuilder->GetInsertBlock();
 
@@ -387,88 +387,6 @@ namespace kernel{
         iBuilder->setScalarField(fieldName, fieldValue);
     }
 
-    size_t LZ4IndexBuilderKernel::getOutputBufferSize(const unique_ptr<KernelBuilder> &iBuilder, string bufferName) {
-        return this->getOutputStreamSetBuffer(bufferName)->getBufferBlocks() * iBuilder->getStride();
-    }
-
-    // Assume we have enough output buffer
-    llvm::BasicBlock *LZ4IndexBuilderKernel::markCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder,
-                                                                         const std::string &bitstreamName,
-                                                                         llvm::Value *start, llvm::Value *end, bool isOne,
-                                                                         bool setProduced) {
-        const unsigned int bitBlockWidth = iBuilder->getBitBlockWidth();
-        Value* SIZE_BIT_BLOCK_WIDTH = iBuilder->getSize(bitBlockWidth);
-        Value* SIZE_ONE = iBuilder->getSize(1);
-        Type * const INT_BIT_BLOCK_TY = iBuilder->getIntNTy(bitBlockWidth);
-        Type * const BIT_BLOCK_TY = iBuilder->getBitBlockType();
-        Constant* INT_BIT_BLOCK_ONE = ConstantInt::get(INT_BIT_BLOCK_TY, 1);
-        Constant* INT_BIT_BLOCK_ZERO = ConstantInt::get(INT_BIT_BLOCK_TY, 0);
-
-        BasicBlock *entryBlock = iBuilder->GetInsertBlock();
-        BasicBlock *conBlock = iBuilder->CreateBasicBlock("mark_bit_one_con");
-        BasicBlock *bodyBlock = iBuilder->CreateBasicBlock("mark_bit_one_body");
-        BasicBlock *exitBlock = iBuilder->CreateBasicBlock("mark_bit_one_exit");
-
-        Value * startBlockLocalIndex = iBuilder->CreateUDiv(start, SIZE_BIT_BLOCK_WIDTH);
-
-        iBuilder->CreateBr(conBlock);
-
-        // Con
-        iBuilder->SetInsertPoint(conBlock);
-
-        PHINode *curBlockLocalIndex = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
-        curBlockLocalIndex->addIncoming(startBlockLocalIndex, entryBlock);
-
-
-        iBuilder->CreateCondBr(
-                iBuilder->CreateICmpULT(iBuilder->CreateMul(curBlockLocalIndex, SIZE_BIT_BLOCK_WIDTH), end),
-                bodyBlock,
-                exitBlock
-        );
-
-        // Body
-        iBuilder->SetInsertPoint(bodyBlock);
-
-        Value * const currentPosition = iBuilder->CreateMul(curBlockLocalIndex, SIZE_BIT_BLOCK_WIDTH);
-        Value * lowestBitPosition = iBuilder->CreateURem(start, SIZE_BIT_BLOCK_WIDTH);
-        lowestBitPosition = iBuilder->CreateZExt(lowestBitPosition, INT_BIT_BLOCK_TY);
-        Value * outputLowestBitValue = iBuilder->CreateShl(INT_BIT_BLOCK_ONE, lowestBitPosition);
-        Value * const hasNotReachedStart = iBuilder->CreateICmpULE(currentPosition, start);
-        outputLowestBitValue = iBuilder->CreateSelect(hasNotReachedStart, outputLowestBitValue, INT_BIT_BLOCK_ONE);
-
-        Value * const nextPosition = iBuilder->CreateMul(iBuilder->CreateAdd(curBlockLocalIndex, SIZE_ONE), SIZE_BIT_BLOCK_WIDTH);
-        Value * const hasNotReachEnd = iBuilder->CreateICmpULE(nextPosition, end);
-        Value * producedItemsCount = iBuilder->CreateSelect(hasNotReachEnd, nextPosition, end);
-        Value * highestBitPosition = iBuilder->CreateURem(end, SIZE_BIT_BLOCK_WIDTH);
-        highestBitPosition = iBuilder->CreateZExt(highestBitPosition, INT_BIT_BLOCK_TY);
-        Value * outputHighestBitValue = iBuilder->CreateShl(INT_BIT_BLOCK_ONE, highestBitPosition);
-        outputHighestBitValue = iBuilder->CreateSelect(hasNotReachEnd, INT_BIT_BLOCK_ZERO, outputHighestBitValue);
-        Value * bitMask = iBuilder->CreateSub(outputHighestBitValue, outputLowestBitValue);
-        bitMask = iBuilder->CreateBitCast(bitMask, BIT_BLOCK_TY);
-
-        Value * targetPtr = iBuilder->CreatePointerCast(iBuilder->getRawOutputPointer(bitstreamName, currentPosition), iBuilder->getBitBlockType()->getPointerTo());
-        Value * oldValue = iBuilder->CreateBlockAlignedLoad(targetPtr);
-        Value * newValue = nullptr;
-        if (isOne) {
-            newValue = iBuilder->CreateOr(oldValue, bitMask);
-        } else {
-            newValue = iBuilder->CreateAnd(oldValue, iBuilder->CreateNot(bitMask));
-        }
-        iBuilder->CreateStore(newValue, targetPtr);
-
-        if (setProduced) {
-            iBuilder->setProducedItemCount(bitstreamName, producedItemsCount);
-        }
-
-        curBlockLocalIndex->addIncoming(iBuilder->CreateAdd(curBlockLocalIndex, SIZE_ONE), bodyBlock);
-        iBuilder->CreateBr(conBlock);
-
-        // Exit
-        iBuilder->SetInsertPoint(exitBlock);
-        return exitBlock;
-    }
-
-
     void LZ4IndexBuilderKernel::generateStoreNumberOutput(const unique_ptr<KernelBuilder> &iBuilder,
                                                           const string & outputBufferName,
                                                           Value * value) {
@@ -477,6 +395,169 @@ namespace kernel{
         Value * outputRawPtr = iBuilder->getRawOutputPointer(outputBufferName, outputOffset);
         iBuilder->CreateStore(value, outputRawPtr);
         iBuilder->setProducedItemCount(outputBufferName, iBuilder->CreateAdd(outputOffset, iBuilder->getSize(1)));
+    }
+
+
+    void LZ4IndexBuilderKernel::clearCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder,
+                                                             const std::string &bitstreamName,
+                                                             llvm::Value *start, llvm::Value *end) {
+        //TODO currently we assume that start/end pos is not in the same byte
+        Value* SIZE_0 = iBuilder->getSize(0);
+        Value* SIZE_8 = iBuilder->getSize(8);
+        Value* INT8_0 = iBuilder->getInt8(0);
+        Type* INT8_PTR_TY = iBuilder->getInt8PtrTy();
+
+        Value* outputBufferBytes = iBuilder->CreateUDiv(iBuilder->getSize(this->getAnyStreamSetBuffer(bitstreamName)->getBufferBlocks() * iBuilder->getBitBlockWidth()), SIZE_8);
+        Value* rawOutputPtr = iBuilder->CreatePointerCast(iBuilder->getRawOutputPointer(bitstreamName, SIZE_0), INT8_PTR_TY);
+
+        Value* startRemain = iBuilder->CreateURem(start, SIZE_8);
+        Value* startBytePos = iBuilder->CreateUDiv(start, SIZE_8);
+        Value* endRemain = iBuilder->CreateURem(end, SIZE_8);
+        Value* endBytePos = iBuilder->CreateUDiv(end, SIZE_8);
+
+        BasicBlock* startByteCpyBlock = iBuilder->CreateBasicBlock("startByteCpyBlock");
+        BasicBlock* endByteCpyConBlock = iBuilder->CreateBasicBlock("endByteCpyConBlock");
+        BasicBlock* endByteCpyBlock = iBuilder->CreateBasicBlock("endByteCpyBlock");
+        BasicBlock* memsetBlock = iBuilder->CreateBasicBlock("memsetBlock");
+
+        iBuilder->CreateCondBr(iBuilder->CreateICmpNE(startRemain, SIZE_0), startByteCpyBlock, endByteCpyConBlock);
+
+        // Clear highest {startShiftAmount} bits
+        iBuilder->SetInsertPoint(startByteCpyBlock);
+        Value* startPtr = iBuilder->CreateGEP(rawOutputPtr, iBuilder->CreateURem(startBytePos, outputBufferBytes));
+        Value* startValue = iBuilder->CreateLoad(startPtr);
+
+        Value* startShiftAmount = iBuilder->CreateSub(SIZE_8, startRemain);
+        startValue = iBuilder->CreateLShr(iBuilder->CreateShl(startValue, startShiftAmount), startShiftAmount);
+
+        iBuilder->CreateStore(startValue, startPtr);
+        iBuilder->CreateBr(endByteCpyConBlock);
+
+        iBuilder->SetInsertPoint(endByteCpyConBlock);
+        iBuilder->CreateCondBr(iBuilder->CreateICmpNE(endBytePos, SIZE_0), endByteCpyBlock, memsetBlock);
+
+        // Clear lowest {endRemain} bits
+        iBuilder->SetInsertPoint(endByteCpyBlock);
+        Value* endPtr = iBuilder->CreateGEP(rawOutputPtr, iBuilder->CreateURem(endBytePos, outputBufferBytes));
+        Value* endValue = iBuilder->CreateLoad(endPtr);
+        endValue = iBuilder->CreateShl(iBuilder->CreateLShr(endValue, endRemain), endRemain);
+        iBuilder->CreateStore(endValue, endPtr);
+        iBuilder->CreateBr(memsetBlock);
+
+        iBuilder->SetInsertPoint(memsetBlock);
+        Value* memsetStartByte = iBuilder->CreateUDivCeil(start, SIZE_8);
+        Value* memsetEndByte = endBytePos;
+
+        Value* memsetSize = iBuilder->CreateSub(memsetEndByte, memsetStartByte);
+
+        memsetSize = iBuilder->CreateUMin(memsetSize, outputBufferBytes);
+        // We always assume that  (memsetEndByte - memsetStartByte) < outputBufferBytes
+
+        Value* memsetStartByteRem = iBuilder->CreateURem(memsetStartByte, outputBufferBytes);
+
+        Value* memsetSize1 = iBuilder->CreateUMin(iBuilder->CreateSub(outputBufferBytes, memsetStartByteRem), memsetSize);
+        Value* memsetSize2 = iBuilder->CreateSub(memsetSize, memsetSize1);
+
+        iBuilder->CreateMemSet(iBuilder->CreateGEP(rawOutputPtr, memsetStartByteRem), INT8_0, memsetSize1, true);
+        iBuilder->CreateMemSet(rawOutputPtr, INT8_0, memsetSize2, true);
+    }
+
+    void LZ4IndexBuilderKernel::setCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder,
+                                                             const std::string &bitstreamName,
+                                                             llvm::Value *start, llvm::Value *end) {
+        BasicBlock* exitBlock = iBuilder->CreateBasicBlock("exitBlock");
+
+        Value* SIZE_0 = iBuilder->getSize(0);
+        Value* SIZE_8 = iBuilder->getSize(8);
+        Value* INT8_0 = iBuilder->getInt8(0);
+        Value* INT8_1 = iBuilder->getInt8(1);
+        Type* INT8_PTR_TY = iBuilder->getInt8PtrTy();
+
+        Value* outputBufferBytes = iBuilder->CreateUDiv(iBuilder->getSize(this->getAnyStreamSetBuffer(bitstreamName)->getBufferBlocks() * iBuilder->getBitBlockWidth()), SIZE_8);
+        Value* rawOutputPtr = iBuilder->CreatePointerCast(iBuilder->getRawOutputPointer(bitstreamName, SIZE_0), INT8_PTR_TY);
+
+        Value* startRemain = iBuilder->CreateURem(start, SIZE_8);
+        Value* startBytePos = iBuilder->CreateUDiv(start, SIZE_8);
+        Value* endRemain = iBuilder->CreateURem(end, SIZE_8);
+        Value* endBytePos = iBuilder->CreateUDiv(end, SIZE_8);
+        Value* startShiftAmount = iBuilder->CreateSub(SIZE_8, startRemain);
+
+        BasicBlock* shortSetBlock = iBuilder->CreateBasicBlock("shortSetBlock");
+        BasicBlock* longSetBlock = iBuilder->CreateBasicBlock("longSetBlock");
+
+//        iBuilder->CreateBr(startByteCpyBlock);
+        iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(startBytePos, endBytePos), shortSetBlock, longSetBlock);
+
+        // When startPos and endPos are in the same byte
+        iBuilder->SetInsertPoint(shortSetBlock);
+        Value* targetPtr = iBuilder->CreateGEP(rawOutputPtr, iBuilder->CreateURem(startBytePos, outputBufferBytes));
+        Value* targetValue = iBuilder->CreateLoad(targetPtr);
+        targetValue = iBuilder->CreateOr(iBuilder->CreateSub(
+                iBuilder->CreateShl(INT8_1, endRemain),
+                iBuilder->CreateShl(INT8_1, startRemain)
+        ), targetValue);
+//        targetValue = iBuilder->CreateNot(iBuilder->CreateLShr(iBuilder->CreateShl(iBuilder->CreateNot(targetValue), startShiftAmount), startShiftAmount));
+//        targetValue = iBuilder->CreateShl(iBuilder->CreateLShr(targetValue, endRemain), endRemain);
+        iBuilder->CreateStore(targetValue, targetPtr);
+        iBuilder->CreateBr(exitBlock);
+
+        iBuilder->SetInsertPoint(longSetBlock);
+
+        BasicBlock* startByteCpyBlock = iBuilder->CreateBasicBlock("startByteCpyBlock");
+        BasicBlock* endByteCpyConBlock = iBuilder->CreateBasicBlock("endByteCpyConBlock");
+        BasicBlock* endByteCpyBlock = iBuilder->CreateBasicBlock("endByteCpyBlock");
+        BasicBlock* memsetBlock = iBuilder->CreateBasicBlock("memsetBlock");
+
+        iBuilder->CreateCondBr(iBuilder->CreateICmpNE(startRemain, SIZE_0), startByteCpyBlock, endByteCpyConBlock);
+        // Clear highest {startShiftAmount} bits
+        iBuilder->SetInsertPoint(startByteCpyBlock);
+        Value* startPtr = iBuilder->CreateGEP(rawOutputPtr, iBuilder->CreateURem(startBytePos, outputBufferBytes));
+        Value* startValue = iBuilder->CreateLoad(startPtr);
+        startValue = iBuilder->CreateNot(iBuilder->CreateLShr(iBuilder->CreateShl(iBuilder->CreateNot(startValue), startShiftAmount), startShiftAmount));
+
+        iBuilder->CreateStore(startValue, startPtr);
+        iBuilder->CreateBr(endByteCpyConBlock);
+
+        iBuilder->SetInsertPoint(endByteCpyConBlock);
+        iBuilder->CreateCondBr(iBuilder->CreateICmpNE(endBytePos, SIZE_0), endByteCpyBlock, memsetBlock);
+
+        // Clear lowest {endRemain} bits
+        iBuilder->SetInsertPoint(endByteCpyBlock);
+        Value* endPtr = iBuilder->CreateGEP(rawOutputPtr, iBuilder->CreateURem(endBytePos, outputBufferBytes));
+        Value* endValue = iBuilder->CreateLoad(endPtr);
+        endValue = iBuilder->CreateNot(iBuilder->CreateShl(iBuilder->CreateLShr(iBuilder->CreateNot(endValue), endRemain), endRemain));
+        iBuilder->CreateStore(endValue, endPtr);
+        iBuilder->CreateBr(memsetBlock);
+
+        iBuilder->SetInsertPoint(memsetBlock);
+        Value* memsetStartByte = iBuilder->CreateUDivCeil(start, SIZE_8);
+        Value* memsetEndByte = endBytePos;
+
+        Value* memsetSize = iBuilder->CreateSub(memsetEndByte, memsetStartByte);
+        // TODO bug here when start end in the same byte
+//        iBuilder->CallPrintInt("memsetEndByte", memsetEndByte);
+//        iBuilder->CallPrintInt("memsetStartByte", memsetStartByte);
+//        iBuilder->CallPrintInt("memsetSize1_1", memsetSize);
+
+
+        memsetSize = iBuilder->CreateUMin(memsetSize, outputBufferBytes);
+
+        // We always assume that  (memsetEndByte - memsetStartByte) < outputBufferBytes
+
+        Value* memsetStartByteRem = iBuilder->CreateURem(memsetStartByte, outputBufferBytes);
+
+        Value* memsetSize1 = iBuilder->CreateUMin(iBuilder->CreateSub(outputBufferBytes, memsetStartByteRem), memsetSize);
+        Value* memsetSize2 = iBuilder->CreateSub(memsetSize, memsetSize1);
+//        iBuilder->CallPrintInt("memset1Ptr", iBuilder->CreateGEP(rawOutputPtr, memsetStartByteRem));
+//        iBuilder->CallPrintInt("memsetSize1", memsetSize1);
+
+//        iBuilder->CallPrintInt("memset2Ptr", rawOutputPtr);
+//        iBuilder->CallPrintInt("memsetSize2", memsetSize2);
+        iBuilder->CreateMemSet(iBuilder->CreateGEP(rawOutputPtr, memsetStartByteRem), iBuilder->getInt8(0xff), memsetSize1, true);
+        iBuilder->CreateMemSet(rawOutputPtr, iBuilder->getInt8(0xff), memsetSize2, true);
+        iBuilder->CreateBr(exitBlock);
+
+        iBuilder->SetInsertPoint(exitBlock);
     }
 
 }

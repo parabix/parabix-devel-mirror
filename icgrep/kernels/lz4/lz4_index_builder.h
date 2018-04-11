@@ -51,18 +51,17 @@ namespace kernel {
         processMatch(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *offsetPos, llvm::Value *token,
                      llvm::Value *blockEnd);
 
-
-        size_t getOutputBufferSize(const std::unique_ptr<KernelBuilder> &iBuilder, std::string bufferName);
-
-        llvm::BasicBlock *markCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder,
-                                                      const std::string &bitstreamName,
-                                                      llvm::Value *start, llvm::Value *end, bool isOne,
-                                                      bool setProduced = true);
-
         void generateStoreNumberOutput(const std::unique_ptr<KernelBuilder> &iBuilder,
                                        const std::string &outputBufferName,
                                        llvm::Value *value);
 
+        void clearCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder,
+                                                                 const std::string &bitstreamName,
+                                                                 llvm::Value *start, llvm::Value *end);
+
+        void setCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder,
+                                                               const std::string &bitstreamName,
+                                                               llvm::Value *start, llvm::Value *end);
     };
 }
 
