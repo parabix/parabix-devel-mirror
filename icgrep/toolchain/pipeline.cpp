@@ -693,10 +693,10 @@ Value * PipelineGenerator::executeKernel(const std::unique_ptr<KernelBuilder> & 
         const auto strideLength = ceiling(ub * kernel->getStride()) ;
         Constant * const segmentLength = b->getSize(strideLength * codegen::SegmentSize);
 
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts) && !isa<SourceBuffer>(buffer))) {
-            b->CreateAssert(b->CreateICmpULE(segmentLength, b->getCapacity(name)),
-                            kernel->getName() + ": " + name + " upper bound of segment length exceeds buffer capacity");
-        }
+//        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts) && !isa<SourceBuffer>(buffer))) {
+//            b->CreateAssert(b->CreateICmpULE(segmentLength, b->getCapacity(name)),
+//                            kernel->getName() + ": " + name + " upper bound of segment length exceeds buffer capacity");
+//        }
 
 //        Value * limit = nullptr;
 //        if (input.getRate().isFixed()) {

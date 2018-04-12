@@ -95,18 +95,10 @@ struct Attribute {
         // Always consume the input (i.e., use the lowerbound to determine whether to there
         // is enough data to execute a stride rather than the upper bound.)
 
-        DisableTemporaryBuffer,
-
-        // Workaround attribute, force disable temporary buffer
-
         DisableSufficientChecking,
 
         // Workaround attribute, force disable sufficient data or sufficient space checking in pipelilne, always assume that
         // the data or space is sufficient
-
-        DisableAvailableItemCountAdjustment,
-
-        // Workaround attribute, keep original availableItemCount in multiblock kernel (do not replace it by linear available item count)
 
         /** OUTPUT STREAM ATTRIBUTES **/
 
@@ -282,9 +274,7 @@ protected:
     friend Attribute Add1();
     friend Attribute Principal();
     friend Attribute AlwaysConsume();
-    friend Attribute DisableTemporaryBuffer();
     friend Attribute DisableSufficientChecking();
-    friend Attribute DisableAvailableItemCountAdjustment();
     friend Attribute RoundUpTo(const unsigned);
     friend Attribute LookAhead(const unsigned);
     friend Attribute LookBehind(const unsigned);
@@ -358,14 +348,6 @@ inline Attribute RoundUpTo(const unsigned k) {
 
 inline Attribute AlwaysConsume() {
     return Attribute(Attribute::KindId::AlwaysConsume, 0);
-}
-
-inline Attribute DisableTemporaryBuffer() {
-    return Attribute(Attribute::KindId::DisableTemporaryBuffer, 0);
-}
-
-inline Attribute DisableAvailableItemCountAdjustment() {
-    return Attribute(Attribute::KindId::DisableAvailableItemCountAdjustment, 0);
 }
 
 inline Attribute DisableSufficientChecking() {

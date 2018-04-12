@@ -71,7 +71,7 @@ public:
     // use in implementing kernels.
 
     llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex) {
-        return getInputStreamBlockPtr(name, streamIndex, getInt32(0));
+        return getInputStreamBlockPtr(name, streamIndex, nullptr);
     }
 
     llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);
@@ -85,7 +85,7 @@ public:
     llvm::Value * getInputStreamSetCount(const std::string & name);
 
     llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex) {
-        return getOutputStreamBlockPtr(name, streamIndex, getInt32(0));
+        return getOutputStreamBlockPtr(name, streamIndex, nullptr);
     }
 
     llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);

@@ -73,16 +73,8 @@ struct Binding : public AttributeSet {
         return hasAttribute(AttributeId::Swizzled);
     }
 
-    bool isDisableTemporaryBuffer() const {
-        return hasAttribute(AttributeId::DisableTemporaryBuffer);
-    }
-
     bool isDisableSufficientChecking() const {
         return hasAttribute(AttributeId::DisableSufficientChecking);
-    }
-
-    bool isDisableAvailableItemCountAdjustment() const {
-        return hasAttribute(AttributeId::DisableAvailableItemCountAdjustment);
     }
 
     unsigned const getLookahead() const {

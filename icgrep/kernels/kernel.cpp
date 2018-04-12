@@ -617,9 +617,6 @@ bool LLVM_READNONE MultiBlockKernel::isTransitivelyUnknownRate(const ProcessingR
  * @brief requiresTemporaryInputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool LLVM_READNONE MultiBlockKernel::requiresTemporaryInputBuffer(const Binding & binding, const ProcessingRate & rate) const {
-    if (binding.isDisableTemporaryBuffer()) {
-        return false;
-    }
     if (requiresBufferedFinalStride(binding)) {
         return true;
     } else if (LLVM_UNLIKELY(isTransitivelyUnknownRate(rate))) {
@@ -633,9 +630,6 @@ inline bool LLVM_READNONE MultiBlockKernel::requiresTemporaryInputBuffer(const B
  * @brief requiresTemporaryOutputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool LLVM_READNONE MultiBlockKernel::requiresTemporaryOutputBuffer(const Binding & binding, const ProcessingRate & rate) const {
-    if (binding.isDisableTemporaryBuffer()) {
-        return false;
-    }
     if (requiresBufferedFinalStride(binding)) {
         return true;
     } else {
@@ -1073,10 +1067,6 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
     // Update the locally available item count to reflect the current state
     for (unsigned i = 0; i < inputSetCount; i++) {
         const Binding & input = mStreamSetInputs[i];
-        if (input.isDisableAvailableItemCountAdjustment()) {
-            continue;
-        }
-
         if (input.getRate().isFixed() && input.nonDeferred()) {
             Value * const processable = b->CreateMul(numOfStrides, inputStrideSize[i]);
             linearlyAccessible[i] = b->CreateSelect(mIsFinal, linearlyAccessible[i], processable);

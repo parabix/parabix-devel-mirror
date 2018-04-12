@@ -428,6 +428,7 @@ namespace kernel{
         Value* startValue = iBuilder->CreateLoad(startPtr);
 
         Value* startShiftAmount = iBuilder->CreateSub(SIZE_8, startRemain);
+        startShiftAmount = iBuilder->CreateZExtOrTrunc(startShiftAmount, startValue->getType());
         startValue = iBuilder->CreateLShr(iBuilder->CreateShl(startValue, startShiftAmount), startShiftAmount);
 
         iBuilder->CreateStore(startValue, startPtr);
@@ -440,6 +441,7 @@ namespace kernel{
         iBuilder->SetInsertPoint(endByteCpyBlock);
         Value* endPtr = iBuilder->CreateGEP(rawOutputPtr, iBuilder->CreateURem(endBytePos, outputBufferBytes));
         Value* endValue = iBuilder->CreateLoad(endPtr);
+        endRemain = iBuilder->CreateZExtOrTrunc(endRemain, endValue->getType());
         endValue = iBuilder->CreateShl(iBuilder->CreateLShr(endValue, endRemain), endRemain);
         iBuilder->CreateStore(endValue, endPtr);
         iBuilder->CreateBr(memsetBlock);
@@ -468,9 +470,10 @@ namespace kernel{
         BasicBlock* exitBlock = iBuilder->CreateBasicBlock("exitBlock");
 
         Value* SIZE_0 = iBuilder->getSize(0);
+        Value* SIZE_1 = iBuilder->getSize(1);
         Value* SIZE_8 = iBuilder->getSize(8);
-        Value* INT8_0 = iBuilder->getInt8(0);
-        Value* INT8_1 = iBuilder->getInt8(1);
+//        Value* INT8_0 = iBuilder->getInt8(0);
+//        Value* INT8_1 = iBuilder->getInt8(1);
         Type* INT8_PTR_TY = iBuilder->getInt8PtrTy();
 
         Value* outputBufferBytes = iBuilder->CreateUDiv(iBuilder->getSize(this->getAnyStreamSetBuffer(bitstreamName)->getBufferBlocks() * iBuilder->getBitBlockWidth()), SIZE_8);
@@ -492,10 +495,10 @@ namespace kernel{
         iBuilder->SetInsertPoint(shortSetBlock);
         Value* targetPtr = iBuilder->CreateGEP(rawOutputPtr, iBuilder->CreateURem(startBytePos, outputBufferBytes));
         Value* targetValue = iBuilder->CreateLoad(targetPtr);
-        targetValue = iBuilder->CreateOr(iBuilder->CreateSub(
-                iBuilder->CreateShl(INT8_1, endRemain),
-                iBuilder->CreateShl(INT8_1, startRemain)
-        ), targetValue);
+        Value* rangeMask = iBuilder->CreateSub(iBuilder->CreateShl(SIZE_1, endRemain), iBuilder->CreateShl(SIZE_1, startRemain));
+        rangeMask = iBuilder->CreateZExtOrTrunc(rangeMask, targetValue->getType());
+        targetValue = iBuilder->CreateOr(rangeMask, targetValue);
+
 //        targetValue = iBuilder->CreateNot(iBuilder->CreateLShr(iBuilder->CreateShl(iBuilder->CreateNot(targetValue), startShiftAmount), startShiftAmount));
 //        targetValue = iBuilder->CreateShl(iBuilder->CreateLShr(targetValue, endRemain), endRemain);
         iBuilder->CreateStore(targetValue, targetPtr);
@@ -513,7 +516,9 @@ namespace kernel{
         iBuilder->SetInsertPoint(startByteCpyBlock);
         Value* startPtr = iBuilder->CreateGEP(rawOutputPtr, iBuilder->CreateURem(startBytePos, outputBufferBytes));
         Value* startValue = iBuilder->CreateLoad(startPtr);
-        startValue = iBuilder->CreateNot(iBuilder->CreateLShr(iBuilder->CreateShl(iBuilder->CreateNot(startValue), startShiftAmount), startShiftAmount));
+
+        Value* startShiftAmount2 = iBuilder->CreateZExtOrTrunc(startShiftAmount, startValue->getType());
+        startValue = iBuilder->CreateNot(iBuilder->CreateLShr(iBuilder->CreateShl(iBuilder->CreateNot(startValue), startShiftAmount2), startShiftAmount2));
 
         iBuilder->CreateStore(startValue, startPtr);
         iBuilder->CreateBr(endByteCpyConBlock);
@@ -525,7 +530,8 @@ namespace kernel{
         iBuilder->SetInsertPoint(endByteCpyBlock);
         Value* endPtr = iBuilder->CreateGEP(rawOutputPtr, iBuilder->CreateURem(endBytePos, outputBufferBytes));
         Value* endValue = iBuilder->CreateLoad(endPtr);
-        endValue = iBuilder->CreateNot(iBuilder->CreateShl(iBuilder->CreateLShr(iBuilder->CreateNot(endValue), endRemain), endRemain));
+        Value* endRemain2 = iBuilder->CreateZExtOrTrunc(endRemain, endValue->getType());
+        endValue = iBuilder->CreateNot(iBuilder->CreateShl(iBuilder->CreateLShr(iBuilder->CreateNot(endValue), endRemain2), endRemain2));
         iBuilder->CreateStore(endValue, endPtr);
         iBuilder->CreateBr(memsetBlock);
 

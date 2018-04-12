@@ -81,13 +81,6 @@ Value * KernelBuilder::getInternalItemCount(const std::string & name, const std:
         if (r.denominator() != 1) {
             itemCount = CreateExactUDiv(itemCount, ConstantInt::get(itemCount->getType(), r.denominator()));
         }
-    } else if (LLVM_UNLIKELY(rate.isPopCount())) {
-        Port port; unsigned index;
-        std::tie(port, index) = mKernel->getStreamPort(rate.getReference());
-
-
-
-
     } else {
         itemCount = getScalarField(name + suffix);
     }
@@ -421,11 +414,14 @@ Value * KernelBuilder::getInputStreamSetCount(const std::string & name) {
 Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * const streamIndex, Value * const blockOffset) {
     Value * const addr = mKernel->getStreamSetInputAddress(name);
     if (addr) {
-        return CreateGEP(addr, {blockOffset, streamIndex});
+        return CreateGEP(addr, {blockOffset ? blockOffset : getInt32(0), streamIndex});
     } else {
         const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
         Value * blockIndex = CreateLShr(getProcessedItemCount(name), std::log2(getBitBlockWidth()));
-        blockIndex = CreateAdd(blockIndex, blockOffset);
+        if (blockOffset) {
+            assert (blockIndex->getType() == blockOffset->getType());
+            blockIndex = CreateAdd(blockIndex, blockOffset);
+        }
         return buf->getStreamBlockPtr(this, getStreamHandle(name), getBaseAddress(name), streamIndex, blockIndex, true);
     }
 }
@@ -433,10 +429,14 @@ Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * 
 Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value * streamIndex, Value * const blockOffset) {
     Value * const addr = mKernel->getStreamSetOutputAddress(name);
     if (addr) {
-        return CreateGEP(addr, {blockOffset, streamIndex});
+        return CreateGEP(addr, {blockOffset ? blockOffset : getInt32(0), streamIndex});
     } else {
         const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-        Value * const blockIndex = CreateLShr(getProducedItemCount(name), std::log2(getBitBlockWidth()));
+        Value * blockIndex = CreateLShr(getProducedItemCount(name), std::log2(getBitBlockWidth()));
+        if (blockOffset) {
+            assert (blockIndex->getType() == blockOffset->getType());
+            blockIndex = CreateAdd(blockIndex, blockOffset);
+        }
         return buf->getStreamBlockPtr(this, getStreamHandle(name), getBaseAddress(name), streamIndex, blockIndex, false);
     }
 }
