@@ -464,7 +464,9 @@ abcdefghijklmno</datafile>
 <grepcase regexp="^user|^I|our$" datafile="StartEndAlt" grepcount="5"/>
 
 <grepcase regexp="fe|si" datafile="simple1" grepcount="3"/>
+<grepcase regexp="fe|si" datafile="." flags="-c -r -include=simpl*" grepcount="3"/>
 <grepcase regexp="in" datafile="simple1" grepcount="2"/>
+<grepcase regexp="in" datafile="." flags="-c -r -include=s* -exclude=s[A-Za-hj-z]*" grepcount="2"/>
 <grepcase regexp="[A-Z]" datafile="simple1" grepcount="1"/>
 <grepcase regexp="fodder|simple" datafile="simple1" grepcount="2"/>
 <grepcase regexp="(?g)fodder|simple" datafile="simple1" grepcount="2"/>
