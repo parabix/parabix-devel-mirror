@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
            break;
         case argv::FilesWithMatch:
         case argv::FilesWithoutMatch:
-            grepEngine = new grep::MatchOnlyEngine(argv::Mode == argv::FilesWithoutMatch, argv::NullFlag);
+            grepEngine = new grep::MatchOnlyEngine(argv::Mode == argv::FilesWithMatch, argv::NullFlag);
             break;
         case argv::QuietMode:
             grepEngine = new grep::QuietModeEngine(); break;

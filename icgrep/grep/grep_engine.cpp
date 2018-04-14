@@ -154,12 +154,13 @@ QuietModeEngine::QuietModeEngine() : GrepEngine() {
     mMaxCount = 1;
 }
 
-MatchOnlyEngine::MatchOnlyEngine(bool showFilesWithoutMatch, bool useNullSeparators) :
-    GrepEngine(), mRequiredCount(showFilesWithoutMatch) {
+MatchOnlyEngine::MatchOnlyEngine(bool showFilesWithMatch, bool useNullSeparators) :
+    GrepEngine(), mRequiredCount(showFilesWithMatch) {
     mEngineKind = EngineKind::MatchOnly;
     mFileSuffix = useNullSeparators ? std::string("\0", 1) : "\n";
     mMoveMatchesToEOL = false;
     mMaxCount = 1;
+    mShowFileNames = true;
 }
 
 CountOnlyEngine::CountOnlyEngine() : GrepEngine() {
@@ -473,6 +474,7 @@ void GrepEngine::grepCodeGen() {
     matchedLineCount = idb->CreateZExt(matchedLineCount, idb->getInt64Ty());
     mGrepDriver->deallocateBuffers();
     idb->CreateRet(matchedLineCount);
+    
     mGrepDriver->finalizeObject();
 }
 
@@ -753,6 +755,8 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE,
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
     
+    mSaveSegmentPipelineParallel = codegen::SegmentPipelineParallel;
+    codegen::SegmentPipelineParallel = false;
     const unsigned segmentSize = codegen::BufferSegments * codegen::SegmentSize * codegen::ThreadNum;
     
     re::CC * breakCC = nullptr;
@@ -845,6 +849,7 @@ void InternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLengt
     typedef void (*GrepFunctionType)(const char * buffer, const size_t length);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
     f(search_buffer, bufferLength);
+    codegen::SegmentPipelineParallel = mSaveSegmentPipelineParallel;
 }
 
 }
