@@ -255,11 +255,11 @@ Value * IDISA_AVX2_Builder::hsimd_signmask(unsigned fw, Value * a) {
     return IDISA_AVX_Builder::hsimd_signmask(fw, a);
 }
 
-std::string IDISA_AVX512BW_Builder::getBuilderUniqueName() {
-    return mBitBlockWidth != 512 ? "AVX512BW_" + std::to_string(mBitBlockWidth) : "AVX512BW";
+std::string IDISA_AVX512F_Builder::getBuilderUniqueName() {
+    return mBitBlockWidth != 512 ? "AVX512F_" + std::to_string(mBitBlockWidth) : "AVX512BW";
 }
 
-llvm::Value * IDISA_AVX512BW_Builder::hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) {
+llvm::Value * IDISA_AVX512F_Builder::hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) {
     if ((mBitBlockWidth == 512) && (fw == 16)) {
 
         const unsigned int field_count = 64;
@@ -287,7 +287,7 @@ llvm::Value * IDISA_AVX512BW_Builder::hsimd_packh(unsigned fw, llvm::Value * a, 
 return IDISA_Builder::hsimd_packh(fw, a, b);
 }
 
-llvm::Value * IDISA_AVX512BW_Builder::hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) {
+llvm::Value * IDISA_AVX512F_Builder::hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) {
     if ((mBitBlockWidth == 512) && (fw == 16)) {
 
         const unsigned int field_count = 64;

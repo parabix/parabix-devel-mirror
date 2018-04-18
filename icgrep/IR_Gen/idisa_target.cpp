@@ -21,8 +21,8 @@ using namespace llvm;
 struct Features {
     bool hasAVX;
     bool hasAVX2;
-    bool hasAVX512BW;
-    Features() : hasAVX(0), hasAVX2(0), hasAVX512BW(0) { }
+    bool hasAVX512F;
+    Features() : hasAVX(0), hasAVX2(0), hasAVX512F(0) { }
 };
 
 Features getHostCPUFeatures() {
@@ -31,8 +31,7 @@ Features getHostCPUFeatures() {
     if (sys::getHostCPUFeatures(features)) {
         hostCPUFeatures.hasAVX = features.lookup("avx");
         hostCPUFeatures.hasAVX2 = features.lookup("avx2");
-        hostCPUFeatures.hasAVX512BW = features.lookup("avx512bw");
-        //if (hostCPUFeatures.hasAVX512BW) errs() << "AVX512BW detected.\n";
+        hostCPUFeatures.hasAVX512F = features.lookup("avx512f");
     }
     return hostCPUFeatures;
 }
@@ -54,12 +53,12 @@ bool AVX512BW_available() {
 }
 
 namespace IDISA {
-    
+
 KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C) {
     const auto hostCPUFeatures = getHostCPUFeatures();
     if (LLVM_LIKELY(codegen::BlockSize == 0)) {  // No BlockSize override: use processor SIMD width
-        
-        if (hostCPUFeatures.hasAVX512BW) codegen::BlockSize = 512;
+
+        if (hostCPUFeatures.hasAVX512F) codegen::BlockSize = 512;
         else if (hostCPUFeatures.hasAVX2) codegen::BlockSize = 256;
         else codegen::BlockSize = 128;
     }
@@ -68,8 +67,8 @@ KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C) {
     }
     if (codegen::BlockSize >= 512) {
         // AVX512BW builder can only be used for BlockSize multiples of 512
-        if (hostCPUFeatures.hasAVX512BW) {
-            return new KernelBuilderImpl<IDISA_AVX512BW_Builder>(C, codegen::BlockSize, codegen::BlockSize);
+        if (hostCPUFeatures.hasAVX512F) {
+            return new KernelBuilderImpl<IDISA_AVX512F_Builder>(C, codegen::BlockSize, codegen::BlockSize);
         }
     }
     if (codegen::BlockSize >= 256) {

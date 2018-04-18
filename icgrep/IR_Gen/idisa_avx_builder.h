@@ -51,10 +51,10 @@ public:
     ~IDISA_AVX2_Builder() {}
 };
 
-class IDISA_AVX512BW_Builder : public IDISA_AVX2_Builder {
+class IDISA_AVX512F_Builder : public IDISA_AVX2_Builder {
 public:
 
-    IDISA_AVX512BW_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
+    IDISA_AVX512F_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
     : IDISA_Builder(C, vectorWidth, stride)
     , IDISA_AVX2_Builder(C, vectorWidth, stride) {
     }
@@ -63,7 +63,7 @@ public:
     llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     
-    ~IDISA_AVX512BW_Builder() {}
+    ~IDISA_AVX512F_Builder() {}
 };
 
 
