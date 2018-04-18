@@ -287,6 +287,26 @@ Value * IDISA_Builder::simd_pdep(unsigned fieldwidth, Value * v, Value * deposit
     return w;
 }
 
+Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
+    if (fw == 1) {
+        return a;
+    } else if (fw == 2) {
+        // For each 2-bit field ab we can use the subtraction ab - 0a to generate
+        // the popcount without carry/borrow from the neighbouring 2-bit field.
+        // case 00:  ab - 0a = 00 - 00 = 00
+        // case 01:  ab - 0a = 01 - 00 = 01
+        // case 10:  ab - 0a = 10 - 01 = 01 (no borrow)
+        // case 11:  ab - 0a = 11 - 01 = 10
+        return simd_sub(64, a, simd_srli(64, simd_and(simd_himask(2), a), 1));
+    } else if (fw == 4) {
+        Value * c = simd_popcount(fw/2, a);
+        c = simd_add(64, simd_and(c, simd_lomask(fw)), simd_srli(fw, c, fw/2));
+        return c;
+    } else {
+        return CreatePopcount(fwCast(fw, a));
+    }
+}
+
 Value * IDISA_Builder::simd_bitreverse(unsigned fw, Value * a) {
     /*  Pure sequential solution too slow!
      Value * func = Intrinsic::getDeclaration(getModule(), Intrinsic::bitreverse, fwVectorType(fw));
@@ -566,17 +586,30 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm
 
 
 Value * IDISA_Builder::bitblock_mask_from(Value * pos) {
-    Type * const ty = getIntNTy(getBitBlockWidth());
-    Constant * const ONES = ConstantInt::getAllOnesValue(ty);
-    Constant * const ZEROES = ConstantInt::getNullValue(ty);
-    Constant * const BIT_BLOCK_WIDTH = ConstantInt::get(pos->getType(), getBitBlockWidth());
-    Value * const mask = CreateSelect(CreateICmpULT(pos, BIT_BLOCK_WIDTH), CreateShl(ONES, CreateZExt(pos, ty)), ZEROES);
-    return bitCast(mask);
+    Value * p = CreateZExtOrTrunc(pos, getSizeTy());
+    const unsigned fw = getSizeTy()->getBitWidth();
+    const auto field_count = mBitBlockWidth / fw;
+    Constant * fwVal = ConstantInt::get(getSizeTy(), fw);
+    Constant * poaBase[field_count];
+    for (unsigned i = 0; i < field_count; i++) {
+        poaBase[i] = ConstantInt::get(getSizeTy(), fw * i);
+    }
+    Value * posBaseVec = ConstantVector::get({poaBase, field_count});
+    Value * mask1 = CreateSExt(CreateICmpUGT(posBaseVec, simd_fill(fw, pos)), fwVectorType(fw));
+    Value * bitField = CreateShl(ConstantInt::getAllOnesValue(getSizeTy()), CreateURem(p, fwVal));
+    Value * inBitBlock = CreateICmpULT(p, getSize(mBitBlockWidth));
+    Value * fieldNo = CreateUDiv(p, fwVal);
+    Value * const final_mask = CreateSelect(inBitBlock, CreateInsertElement(mask1, bitField, fieldNo), mask1);
+    return bitCast(final_mask);
 }
 
 Value * IDISA_Builder::bitblock_set_bit(Value * pos) {
-    Type * const ty = getIntNTy(getBitBlockWidth());
-    return bitCast(CreateShl(ConstantInt::get(ty, 1), CreateZExt(pos, ty)));
+    Value * p = CreateZExtOrTrunc(pos, getSizeTy());
+    const unsigned fw = getSizeTy()->getBitWidth();
+    Constant * fwVal = ConstantInt::get(getSizeTy(), fw);
+    Value * bitField = CreateShl(ConstantInt::get(getSizeTy(), 1), CreateURem(p, fwVal));
+    Value * fieldNo = CreateUDiv(p, fwVal);
+    return bitCast(CreateInsertElement(Constant::getNullValue(fwVectorType(fw)), bitField, fieldNo));
 }
 
 Value * IDISA_Builder::simd_and(Value * a, Value * b) {

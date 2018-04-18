@@ -125,13 +125,7 @@ public:
     virtual llvm::Value * simd_pext(unsigned fw, llvm::Value * v, llvm::Value * extract_mask);
     virtual llvm::Value * simd_pdep(unsigned fw, llvm::Value * v, llvm::Value * deposit_mask);
     
-    llvm::Value * simd_popcount(unsigned fw, llvm::Value * a) {
-        if (LLVM_UNLIKELY(fw < 8)) {
-            assert ("field width is less than 8" && false);
-            llvm::report_fatal_error("Unsupported field width: popcount " + std::to_string(fw));
-        }
-        return CreatePopcount(fwCast(fw, a));
-    }
+    virtual llvm::Value * simd_popcount(unsigned fw, llvm::Value * a);
 
     virtual llvm::Value * simd_bitreverse(unsigned fw, llvm::Value * a);
     

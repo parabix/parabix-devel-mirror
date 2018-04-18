@@ -751,19 +751,20 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                         switch (typeId) {
                             case TypeId::GreaterThanEquals:
                             case TypeId::LessThan:
-                                comp = b->simd_ult(n, lhv, rhv);
+                                //comp = b->simd_ult(n, lhv, rhv);
+                                comp = b->CreateICmpULT(b->fwCast(n, lhv), b->fwCast(n, rhv));
                                 break;
                             case TypeId::Equals:
                             case TypeId::NotEquals:
-                                comp = b->simd_eq(n, lhv, rhv);
+                                comp = b->CreateICmpEQ(b->fwCast(n, lhv), b->fwCast(n, rhv));
                                 break;
                             case TypeId::LessThanEquals:
                             case TypeId::GreaterThan:
-                                comp = b->simd_ugt(n, lhv, rhv);
+                                comp = b->CreateICmpUGT(b->fwCast(n, lhv), b->fwCast(n, rhv));
                                 break;
                             default: llvm_unreachable("invalid vector operator id");
                         }
-                        Value * const mask = b->CreateZExtOrTrunc(b->hsimd_signmask(n, comp), fw);
+                        Value * const mask = b->CreateBitCast(comp, b->getIntNTy(m));
                         value = b->mvmd_insert(m, value, mask, i);
                     }
 
