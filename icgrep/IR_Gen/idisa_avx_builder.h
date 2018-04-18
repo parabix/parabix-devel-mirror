@@ -57,14 +57,30 @@ public:
     IDISA_AVX512F_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
     : IDISA_Builder(C, vectorWidth, stride)
     , IDISA_AVX2_Builder(C, vectorWidth, stride) {
+        getAVX512Features();
     }
 
     virtual std::string getBuilderUniqueName() override;
+    void getAVX512Features();
     llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
-    llvm::Value * esimd_bitspread(unsigned fw, llvm::Value * bitmask);
+    llvm::Value * esimd_bitspread(unsigned fw, llvm::Value * bitmask) override;
+    llvm::Value * simd_popcount(unsigned fw, llvm::Value * a) override;
 
-    ~IDISA_AVX512F_Builder() {}
+    ~IDISA_AVX512F_Builder() {
+    }
+private:
+    struct Features {
+        //not an exhaustive list, can be extended if needed
+        bool hasAVX512CD = false;
+        bool hasAVX512BW = false;
+        bool hasAVX512DQ = false;
+        bool hasAVX512VL = false;
+        bool hasAVX512VBMI = false;
+        bool hasAVX512VBMI2 = false;
+        bool hasAVX512VPOPCNTDQ = false;
+    };
+    Features hostCPUFeatures;
 };
 
 

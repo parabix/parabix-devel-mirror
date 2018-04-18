@@ -6,6 +6,7 @@
 
 #include "idisa_avx_builder.h"
 #include <toolchain/toolchain.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
@@ -338,6 +339,85 @@ llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * 
     return IDISA_Builder::esimd_bitspread(fw, bitmask);
 }
 
+llvm::Value * IDISA_AVX512F_Builder::simd_popcount(unsigned fw, llvm::Value * a) {
+     if (fw == 512) {
+         Constant * zero16xi8 = Constant::getNullValue(VectorType::get(getInt8Ty(), 16));
+         Constant * zeroInt32 = Constant::getNullValue(getInt32Ty());
+         Value * c = simd_popcount(64, a);
+         //  Should probably use _mm512_reduce_add_epi64, but not found in LLVM 3.8
+         Value * pack64_8_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmov_qb_512);
+         // popcounts of 64 bit fields will always fit in 8 bit fields.
+         // We don't need the masked version of this, but the unmasked intrinsic was not found.
+         c = CreateCall(pack64_8_func, {c, zero16xi8, Constant::getAllOnesValue(getInt8Ty())});
+         Value * horizSADfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse2_psad_bw);
+         c = CreateCall(horizSADfunc, {c, zero16xi8});
+         return CreateInsertElement(allZeroes(), CreateExtractElement(c, zeroInt32), zeroInt32);
+    }
+    if (hostCPUFeatures.hasAVX512VPOPCNTDQ && (fw == 32 || fw == 64)){
+        //llvm should use vpopcntd or vpopcntq instructions
+        return CreatePopcount(fwCast(fw, a));
+    }
+    if (hostCPUFeatures.hasAVX512BW && (fw == 64)) {
+        Value * horizSADfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_psad_bw_512);
+        return bitCast(CreateCall(horizSADfunc, {fwCast(8, simd_popcount(8, a)), fwCast(8, allZeroes())}));
+    }
+    //https://en.wikipedia.org/wiki/Hamming_weight#Efficient_implementation
+    if((fw == 64) && (mBitBlockWidth == 512)){
+        Constant * m1Arr[8];
+        llvm::Constant * m1;
+        for (unsigned int i = 0; i < 8; i++) {
+            m1Arr[i] = getInt64(0x5555555555555555);
+        }
+        m1 = ConstantVector::get({m1Arr, 8});
+        
+        Constant * m2Arr[8];
+        llvm::Constant * m2;
+        for (unsigned int i = 0; i < 8; i++) {
+            m2Arr[i] = getInt64(0x3333333333333333);
+        }
+        m2 = ConstantVector::get({m2Arr, 8});
+        
+        Constant * m4Arr[8];
+        llvm::Constant * m4;
+        for (unsigned int i = 0; i < 8; i++) {
+            m4Arr[i] = getInt64(0x0f0f0f0f0f0f0f0f);
+        }
+        m4 = ConstantVector::get({m4Arr, 8});
+        
+        Constant * h01Arr[8];
+        llvm::Constant * h01;
+        for (unsigned int i = 0; i < 8; i++) {
+            h01Arr[i] = getInt64(0x0101010101010101);
+        }
+        h01 = ConstantVector::get({h01Arr, 8});
+        
+        a = simd_sub(fw, a, simd_and(simd_srli(fw, a, 1), m1));
+        a = simd_add(fw, simd_and(a, m2), simd_and(simd_srli(fw, a, 2), m2));
+        a = simd_and(simd_add(fw, a, simd_srli(fw, a, 4)), m4);
+        return simd_srli(fw, simd_mult(fw, a, h01), 56);
+        
+    }
+    return IDISA_Builder::simd_popcount(fw, a);
+}
+
+
+void IDISA_AVX512F_Builder::getAVX512Features() {
+    llvm::StringMap<bool> features;
+    if (llvm::sys::getHostCPUFeatures(features)) {
+        hostCPUFeatures.hasAVX512CD = features.lookup("avx512cd");
+        hostCPUFeatures.hasAVX512BW = features.lookup("avx512bw");
+        hostCPUFeatures.hasAVX512DQ = features.lookup("avx512dq");
+        hostCPUFeatures.hasAVX512VL = features.lookup("avx512vl");
+        
+        //hostCPUFeatures.hasAVX512VBMI, hostCPUFeatures.hasAVX512VBMI2,
+        //hostCPUFeatures.hasAVX512VPOPCNTDQ have not been tested as we
+        //did not have hardware support. It should work in theory (tm)
+        
+        hostCPUFeatures.hasAVX512VBMI = features.lookup("avx512_vbmi");
+        hostCPUFeatures.hasAVX512VBMI2 = features.lookup("avx512_vbmi2");
+        hostCPUFeatures.hasAVX512VPOPCNTDQ = features.lookup("avx512_vpopcntdq");
+    }
+}
 
 
 }

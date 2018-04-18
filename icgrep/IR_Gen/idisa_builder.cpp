@@ -298,7 +298,7 @@ Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
         // case 10:  ab - 0a = 10 - 01 = 01 (no borrow)
         // case 11:  ab - 0a = 11 - 01 = 10
         return simd_sub(64, a, simd_srli(64, simd_and(simd_himask(2), a), 1));
-    } else if (fw == 4) {
+    } else if (fw <= 8) {
         Value * c = simd_popcount(fw/2, a);
         c = simd_add(64, simd_and(c, simd_lomask(fw)), simd_srli(fw, c, fw/2));
         return c;

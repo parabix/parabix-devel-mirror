@@ -505,13 +505,8 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             const auto alignment = getPointerElementAlignment(ptr);
             Value * const countSoFar = b->CreateAlignedLoad(ptr, alignment, c->getName() + "_accumulator");
             const auto fieldWidth = b->getSizeTy()->getBitWidth();
-            auto fields = (b->getBitBlockWidth() / fieldWidth);
-            Value * fieldCounts = b->simd_popcount(fieldWidth, to_count);
-            while (fields > 1) {
-                fields /= 2;
-                fieldCounts = b->CreateAdd(fieldCounts, b->mvmd_srli(fieldWidth, fieldCounts, fields));
-            }
-            value = b->CreateAdd(b->mvmd_extract(fieldWidth, fieldCounts, 0), countSoFar, "countSoFar");
+            Value * bitBlockCount = b->simd_popcount(b->getBitBlockWidth(), to_count);
+            value = b->CreateAdd(b->mvmd_extract(fieldWidth, bitBlockCount, 0), countSoFar, "countSoFar");
             b->CreateAlignedStore(value, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             PabloAST * stream = l->getExpression();
