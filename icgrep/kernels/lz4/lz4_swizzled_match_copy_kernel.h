@@ -28,6 +28,11 @@ namespace kernel {
         const unsigned mPDEPWidth;
         const unsigned mStreamSize;
         const unsigned mStreamCount;
+        llvm::Value* loadNextMatchOffset(const std::unique_ptr<KernelBuilder> &iBuilder);
+        std::pair<llvm::Value*, llvm::Value*> loadNextM0StartEnd(const std::unique_ptr<KernelBuilder> &iBuilder);
+        llvm::Value *advanceUntilNextBit(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputName,
+                                          llvm::Value *startPos, bool isNextOne);
+
     };
 }
 

@@ -62,6 +62,8 @@ namespace kernel {
         void setCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder,
                                                                const std::string &bitstreamName,
                                                                llvm::Value *start, llvm::Value *end);
+
+        void markCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string &bitstreamName, llvm::Value *pos);
     };
 }
 

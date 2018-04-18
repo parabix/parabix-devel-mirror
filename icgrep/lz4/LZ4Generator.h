@@ -59,10 +59,11 @@ protected:
     parabix::StreamSetBuffer * BasisBits;
     parabix::StreamSetBuffer * DeletionMarker; //TODO rename to ExtarctMarker
     parabix::StreamSetBuffer * DepositMarker;
-    parabix::StreamSetBuffer * Match_Offset;
+    parabix::StreamSetBuffer * MatchOffsetMarker;
 
-    parabix::StreamSetBuffer * M0_Start;  // TODO M0_Start and M0_End should be changed to Deposit_Start and Deposit_End
-    parabix::StreamSetBuffer * M0_End;
+    // M0CountMarker will not contain anything, it will only be used to pass producedItemCount and manage processedItemCount between different kernel
+    parabix::StreamSetBuffer * M0CountMarker;
+    parabix::StreamSetBuffer * M0Marker;
 };
 
 

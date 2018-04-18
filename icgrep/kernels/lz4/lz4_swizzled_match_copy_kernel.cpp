@@ -4,13 +4,88 @@
 
 #include "lz4_swizzled_match_copy_kernel.h"
 #include <kernels/kernel_builder.h>
+#include <kernels/streamset.h>
+#include <toolchain/toolchain.h>
+#include <vector>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
-
+using namespace std;
 namespace kernel {
 
-void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+Value *LZ4SwizzledMatchCopyKernel::advanceUntilNextBit(const std::unique_ptr<KernelBuilder> &iBuilder, string inputName, Value *startPos, bool isNextOne) {
+    BasicBlock* entryBlock = iBuilder->GetInsertBlock();
 
+    Constant* SIZE_0 = iBuilder->getSize(0);
+    Constant* SIZE_1 = iBuilder->getSize(1);
+    Value* SIZE_64 = iBuilder->getSize(64); // maybe need to handle 32 bit machine
+    Value* SIZE_INPUT_64_COUNT = iBuilder->getSize(this->getInputStreamSetBuffer(inputName)->getBufferBlocks() * iBuilder->getBitBlockWidth() / 64);
+
+    Value* initCurrentPos = startPos;
+
+    Value* offsetMarkerRawPtr = iBuilder->CreatePointerCast(iBuilder->getRawInputPointer(inputName, SIZE_0), iBuilder->getInt64Ty()->getPointerTo());
+
+    BasicBlock* findNextMatchOffsetConBlock = iBuilder->CreateBasicBlock("findNextMatchOffsetConBlock");
+    BasicBlock* findNextMatchOffsetBodyBlock = iBuilder->CreateBasicBlock("findNextMatchOffsetBodyBlock");
+
+    iBuilder->CreateBr(findNextMatchOffsetConBlock);
+    iBuilder->SetInsertPoint(findNextMatchOffsetConBlock);
+    // Find position marker bit of next 1 bit
+
+    PHINode* phiCurrentPos = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
+    phiCurrentPos->addIncoming(initCurrentPos, entryBlock);
+
+    Value* currentPosGlobalBlockIndex = iBuilder->CreateUDiv(phiCurrentPos, SIZE_64);
+    Value* currentPosLocalBlockIndex = iBuilder->CreateURem(currentPosGlobalBlockIndex, SIZE_INPUT_64_COUNT);
+    Value* currentPosBlockOffset = iBuilder->CreateURem(phiCurrentPos, SIZE_64);
+    Value* currentValue = iBuilder->CreateLoad(iBuilder->CreateGEP(offsetMarkerRawPtr, currentPosLocalBlockIndex));
+
+    Value* countValue = iBuilder->CreateLShr(currentValue, currentPosBlockOffset);
+    if (!isNextOne) {
+        countValue = iBuilder->CreateNot(countValue);
+    }
+    Value* forwardZero = iBuilder->CreateCountForwardZeroes(countValue);
+    Value* realForwardZero = iBuilder->CreateAdd(currentPosBlockOffset, forwardZero);
+
+    // If targetMarker == 0, move to next block, otherwise count forward zero
+    phiCurrentPos->addIncoming(iBuilder->CreateMul(SIZE_64, iBuilder->CreateAdd(currentPosGlobalBlockIndex, SIZE_1)), iBuilder->GetInsertBlock());
+    iBuilder->CreateCondBr(iBuilder->CreateICmpUGE(realForwardZero, SIZE_64), findNextMatchOffsetConBlock, findNextMatchOffsetBodyBlock);
+
+    iBuilder->SetInsertPoint(findNextMatchOffsetBodyBlock);
+
+    Value* newPosition = iBuilder->CreateAdd(iBuilder->CreateMul(currentPosGlobalBlockIndex, SIZE_64), realForwardZero);
+
+    return newPosition;
+}
+
+Value* LZ4SwizzledMatchCopyKernel::loadNextMatchOffset(const unique_ptr<KernelBuilder> &iBuilder) {
+    Value* initCurrentPos = iBuilder->CreateAdd(iBuilder->getScalarField("currentOffsetMarkerPos"), iBuilder->getSize(1));
+    Value* newPosition = this->advanceUntilNextBit(iBuilder, "MatchOffsetMarker", initCurrentPos, true);
+
+    // Load Match Offset from newPosition
+    iBuilder->setScalarField("currentOffsetMarkerPos", newPosition);
+    iBuilder->setProcessedItemCount("MatchOffsetMarker", newPosition);
+
+    Value* matchOffsetPtr = iBuilder->getRawInputPointer("byteStream", newPosition);
+    // For now, it is safe to cast matchOffset pointer into i16 since the input byte stream is always linear available
+    matchOffsetPtr = iBuilder->CreatePointerCast(matchOffsetPtr, iBuilder->getInt16Ty()->getPointerTo());
+    Value* matchOffset = iBuilder->CreateZExt(iBuilder->CreateLoad(matchOffsetPtr), iBuilder->getSizeTy());
+
+    return matchOffset;
+}
+
+pair<Value*, Value*> LZ4SwizzledMatchCopyKernel::loadNextM0StartEnd(const unique_ptr<KernelBuilder> &iBuilder) {
+    Value* initCurrentPos = iBuilder->getScalarField("currentM0MarkerPos");
+    Value* m0Start = this->advanceUntilNextBit(iBuilder, "M0Marker", initCurrentPos, true);
+    Value* m0End = this->advanceUntilNextBit(iBuilder, "M0Marker", m0Start, false);
+    iBuilder->setScalarField("currentM0MarkerPos", m0End);
+    return std::make_pair(m0Start, m0End);
+};
+
+
+
+
+void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     ConstantInt * const SIZE_ZERO = iBuilder->getSize(0);
     ConstantInt * const SIZE_ONE = iBuilder->getSize(1);
     ConstantInt * const SIZE_PDEP_WIDTH = iBuilder->getSize(mPDEPWidth);
@@ -23,7 +98,6 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
     Value * const processed = iBuilder->getProcessedItemCount("sourceStreamSet0");
 
     Value * const itemsToDo = iBuilder->CreateUMin(iBuilder->CreateSub(available, processed), SIZE_4_MEGS);
-
     iBuilder->setTerminationSignal(iBuilder->CreateICmpULT(itemsToDo, SIZE_4_MEGS));
 
     Value * previousProducedItemCount = iBuilder->getProducedItemCount("outputStreamSet0");
@@ -34,8 +108,8 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
     Value * const toProcessItemCount = iBuilder->CreateAdd(processed, itemsToDo);
 
     // Match Copy
-    Value * const initM0StartProcessIndex = iBuilder->getProcessedItemCount("m0Start");
-    Value * const totalM0StartItemsCount = iBuilder->getAvailableItemCount("m0Start");
+    Value *initM0StartProcessIndex = iBuilder->getProcessedItemCount("M0CountMarker");
+    Value *totalM0StartItemsCount = iBuilder->getAvailableItemCount("M0CountMarker");
 
     Value * const initMatchOffset = iBuilder->getScalarField("pendingMatchOffset");
     Value * const initMatchLength = iBuilder->getScalarField("pendingMatchLength");
@@ -69,16 +143,21 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
 
     iBuilder->SetInsertPoint(loadNextMatchInfoBodyBlock);
 
-    Value * const newM0Start = loadOffset(iBuilder, "m0Start", phiProcessIndex);
-    Value * const newM0End = loadOffset(iBuilder, "m0End", phiProcessIndex);
-    Value * const newMatchOffset = loadOffset(iBuilder, "matchOffset", phiProcessIndex);
+    auto ret = this->loadNextM0StartEnd(iBuilder);
+    Value *newM0Start = ret.first;
+    Value *newM0End = ret.second;
+    iBuilder->setProcessedItemCount("M0Marker", newM0End);
+    Value *newMatchOffset = this->loadNextMatchOffset(iBuilder);
+
+
+
     Value * const newMatchLength = iBuilder->CreateAdd(iBuilder->CreateSub(newM0End, newM0Start), iBuilder->getInt64(1));
 
-    phiProcessIndex->addIncoming(iBuilder->CreateAdd(phiProcessIndex, SIZE_ONE), loadNextMatchInfoBodyBlock);
+    phiProcessIndex->addIncoming(iBuilder->CreateAdd(phiProcessIndex, SIZE_ONE), iBuilder->GetInsertBlock());
 
-    phiMatchPos->addIncoming(newM0Start, loadNextMatchInfoBodyBlock);
-    phiMatchOffset->addIncoming(newMatchOffset, loadNextMatchInfoBodyBlock);
-    phiMatchLength->addIncoming(newMatchLength, loadNextMatchInfoBodyBlock);
+    phiMatchPos->addIncoming(newM0Start, iBuilder->GetInsertBlock());
+    phiMatchOffset->addIncoming(newMatchOffset, iBuilder->GetInsertBlock());
+    phiMatchLength->addIncoming(newMatchLength, iBuilder->GetInsertBlock());
 
     iBuilder->CreateBr(matchCopyLoopCon);
 
@@ -139,9 +218,7 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
     iBuilder->setScalarField("pendingMatchOffset", phiMatchOffset);
     iBuilder->setScalarField("pendingMatchLength", phiMatchLength);
     iBuilder->setScalarField("pendingMatchPos", phiMatchPos);
-    iBuilder->setProcessedItemCount("m0Start", phiProcessIndex);
-    iBuilder->setProcessedItemCount("m0End", phiProcessIndex);
-    iBuilder->setProcessedItemCount("matchOffset", phiProcessIndex);
+    iBuilder->setProcessedItemCount("M0CountMarker", phiProcessIndex);
     iBuilder->setProcessedItemCount("sourceStreamSet0", toProcessItemCount);
 }
 
@@ -163,15 +240,15 @@ LZ4SwizzledMatchCopyKernel::LZ4SwizzledMatchCopyKernel(const std::unique_ptr<ker
 : SegmentOrientedKernel("LZ4SwizzledMatchCopyKernel",
 // Inputs
 {
-       Binding{iBuilder->getStreamSetTy(1, 64), "m0Start", BoundedRate(0, 1), DisableSufficientChecking()},
-       Binding{iBuilder->getStreamSetTy(1, 64), "m0End", BoundedRate(0, 1), DisableSufficientChecking()},
-       Binding{iBuilder->getStreamSetTy(1, 64), "matchOffset", BoundedRate(0, 1), DisableSufficientChecking()},
+                                   Binding{iBuilder->getStreamSetTy(1, 1), "MatchOffsetMarker", BoundedRate(0, 1), {DisableSufficientChecking()}},
+                                   Binding{iBuilder->getStreamSetTy(1, 1), "M0Marker", BoundedRate(0, 1), {DisableSufficientChecking()}},
+                                   Binding{iBuilder->getStreamSetTy(1, 1), "M0CountMarker", BoundedRate(0, 1), {DisableSufficientChecking()}},
+                                   Binding{iBuilder->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)}
 },
 // Outputs
 {},
 // Arguments
 {
-       Binding{iBuilder->getSizeTy(), "fileSize"} //TODO remove
 },
 {},
 {
@@ -179,6 +256,8 @@ LZ4SwizzledMatchCopyKernel::LZ4SwizzledMatchCopyKernel(const std::unique_ptr<ker
        Binding{iBuilder->getSizeTy(), "pendingMatchPos"},
        Binding{iBuilder->getSizeTy(), "pendingMatchOffset"},
        Binding{iBuilder->getSizeTy(), "pendingMatchLength"},
+       Binding(iBuilder->getSizeTy(), "currentOffsetMarkerPos"),
+       Binding(iBuilder->getSizeTy(), "currentM0MarkerPos")
 })
 , mSwizzleFactor(swizzleFactor)
 , mPDEPWidth(PDEP_width)
