@@ -62,7 +62,8 @@ public:
     virtual std::string getBuilderUniqueName() override;
     llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
-    
+    llvm::Value * esimd_bitspread(unsigned fw, llvm::Value * bitmask);
+
     ~IDISA_AVX512F_Builder() {}
 };
 

@@ -312,5 +312,32 @@ llvm::Value * IDISA_AVX512F_Builder::hsimd_packl(unsigned fw, llvm::Value * a, l
 return IDISA_Builder::hsimd_packl(fw, a, b);
 }
 
+llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * bitmask) {
+    
+    if (mBitBlockWidth == 512 && fw == 64) {
+        Value * broadcastFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_broadcasti64x4_512);
+        Value * broadcastMask = CreateZExtOrTrunc(bitmask, getInt8Ty());
+        
+        const unsigned int srcFieldCount = 8;
+        Constant * srcArr[srcFieldCount];
+        for (unsigned int i = 0; i < srcFieldCount; i++) {
+            srcArr[i] = getInt64(0);
+        }
+        Constant * src = ConstantVector::get({srcArr, srcFieldCount});
+        
+        const unsigned int aFieldCount = 4;
+        Constant * aArr[aFieldCount];
+        for (unsigned int i = 0; i < aFieldCount; i++) {
+            aArr[i] = getInt64(1);
+        }
+        Constant * a = ConstantVector::get({aArr, aFieldCount});
+        
+        return CreateCall(broadcastFunc, {a, src, broadcastMask});
+    }
+    
+    return IDISA_Builder::esimd_bitspread(fw, bitmask);
+}
+
+
 
 }
