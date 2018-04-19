@@ -66,6 +66,7 @@ public:
     llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * esimd_bitspread(unsigned fw, llvm::Value * bitmask) override;
     llvm::Value * simd_popcount(unsigned fw, llvm::Value * a) override;
+    llvm::Value * mvmd_slli(unsigned fw, llvm::Value * a, unsigned shift) override;
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
 
     ~IDISA_AVX512F_Builder() {

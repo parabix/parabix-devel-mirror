@@ -338,6 +338,35 @@ llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * 
     
     return IDISA_Builder::esimd_bitspread(fw, bitmask);
 }
+
+Value * IDISA_AVX512F_Builder:: mvmd_slli(unsigned fw, llvm::Value * a, unsigned shift) {
+    if (shift == 0) return a;
+    if (fw > 32) {
+        return mvmd_slli(32, a, shift * (fw/32));
+    } else if (((shift % 2) == 0) && (fw < 32)) {
+        return mvmd_slli(2 * fw, a, shift / 2);
+    }
+    const unsigned field_count = mBitBlockWidth/fw;
+    if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
+        // Mask with 1 bit per field indicating which fields are not zeroed out.
+        Type * fwTy = getIntNTy(fw);
+        Constant * fieldMask = ConstantInt::get(getIntNTy(field_count), (1 << field_count) - (1 << shift));
+        Value * permute_func = nullptr;
+        if (fw == 32) permute_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_maskz_vpermt2var_d_512);
+        else permute_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_maskz_vpermt2var_hi_512);
+        Constant * indices[field_count];
+        for (unsigned i = 0; i < field_count; i++) {
+            indices[i] = i < shift ? UndefValue::get(fwTy) : ConstantInt::get(fwTy, i - shift);
+        }
+        Value * args[4] = {ConstantVector::get({indices, field_count}), fwCast(fw, a), UndefValue::get(fwVectorType(fw)), fieldMask};
+        return bitCast(CreateCall(permute_func, args));
+    } else {
+        unsigned field32_shift = (shift * fw) / 32;
+        unsigned bit_shift = (shift * fw) % 32;
+        return simd_or(simd_slli(32, mvmd_slli(32, a, field32_shift), bit_shift),
+                       simd_srli(32, mvmd_slli(32, a, field32_shift + 1), 32-bit_shift));
+    }
+}
 llvm::Value * IDISA_AVX512F_Builder::simd_popcount(unsigned fw, llvm::Value * a) {
      if (fw == 512) {
          Constant * zero16xi8 = Constant::getNullValue(VectorType::get(getInt8Ty(), 16));

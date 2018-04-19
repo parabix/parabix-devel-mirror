@@ -481,13 +481,14 @@ Value * IDISA_Builder::mvmd_insert(unsigned fw, Value * blk, Value * elt, unsign
 
 Value * IDISA_Builder::mvmd_slli(unsigned fw, Value * a, unsigned shift) {
     if (fw < 8) report_fatal_error("Unsupported field width: mvmd_slli " + std::to_string(fw));
-    const auto field_count = mBitBlockWidth / fw;
-    return mvmd_dslli(fw, a, Constant::getNullValue(fwVectorType(fw)), field_count - shift);
+    Value * shifted = mvmd_dslli(fw, a, Constant::getNullValue(fwVectorType(fw)), shift);
+    return shifted;
 }
 
 Value * IDISA_Builder::mvmd_srli(unsigned fw, Value * a, unsigned shift) {
     if (fw < 8) report_fatal_error("Unsupported field width: mvmd_srli " + std::to_string(fw));
-    return mvmd_dslli(fw, Constant::getNullValue(fwVectorType(fw)), a, shift);
+    const auto field_count = mBitBlockWidth / fw;
+    return mvmd_dslli(fw, Constant::getNullValue(fwVectorType(fw)), a, field_count - shift);
 }
 
 Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift) {
@@ -495,7 +496,7 @@ Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned sh
     const auto field_count = mBitBlockWidth/fw;
     Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count; i++) {
-        Idxs[i] = getInt32(i + shift);
+        Idxs[i] = getInt32(i + field_count - shift);
     }
     return CreateShuffleVector(fwCast(fw, b), fwCast(fw, a), ConstantVector::get({Idxs, field_count}));
 }
