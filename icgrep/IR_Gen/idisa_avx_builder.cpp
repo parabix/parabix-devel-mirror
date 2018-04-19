@@ -273,19 +273,20 @@ llvm::Value * IDISA_AVX512F_Builder::hsimd_packh(unsigned fw, llvm::Value * a, l
         llvm::Value * pmovfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmov_wb_512);
         llvm::Value * mask = getInt32(-1);
         llvm::Constant * shuffleMask = ConstantVector::get({Idxs, 64});
+        llvm::Constant * src = UndefValue::get(VectorType::get(getInt8Ty(), 32));
 
         a = fwCast(fw, a);
-        a = IDISA_Builder::simd_srai(fw, a, fw/2);
-        a = CreateCall(pmovfunc, {a, a, mask});
+        a = IDISA_Builder::simd_srli(fw, a, fw/2);
+        a = CreateCall(pmovfunc, {a, src, mask});
         b = fwCast(fw, b);
-        b = IDISA_Builder::simd_srai(fw, b, fw/2);
-        b = CreateCall(pmovfunc, {b, b, mask});
+        b = IDISA_Builder::simd_srli(fw, b, fw/2);
+        b = CreateCall(pmovfunc, {b, src, mask});
 
         llvm::Value * c = CreateShuffleVector(a, b, shuffleMask);
         c = bitCast(c);
         return c;
     }
-return IDISA_Builder::hsimd_packh(fw, a, b);
+    return IDISA_Builder::hsimd_packh(fw, a, b);
 }
 
 llvm::Value * IDISA_AVX512F_Builder::hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) {
@@ -300,17 +301,17 @@ llvm::Value * IDISA_AVX512F_Builder::hsimd_packl(unsigned fw, llvm::Value * a, l
         llvm::Value * pmovfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmov_wb_512);
         llvm::Value * mask = getInt32(-1);
         llvm::Constant * shuffleMask = ConstantVector::get({Idxs, 64});
-
+        llvm::Constant * src = UndefValue::get(VectorType::get(getInt8Ty(), 32));
         a = fwCast(fw, a);
-        a = CreateCall(pmovfunc, {a, a, mask});
+        a = CreateCall(pmovfunc, {a, src, mask});
         b = fwCast(fw, b);
-        b = CreateCall(pmovfunc, {b, b, mask});
+        b = CreateCall(pmovfunc, {b, src, mask});
 
         llvm::Value * c = CreateShuffleVector(a, b, shuffleMask);
         c = bitCast(c);
         return c;
     }
-return IDISA_Builder::hsimd_packl(fw, a, b);
+    return IDISA_Builder::hsimd_packl(fw, a, b);
 }
 
 llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * bitmask) {
