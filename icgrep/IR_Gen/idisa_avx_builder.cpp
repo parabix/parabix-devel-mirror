@@ -338,7 +338,6 @@ llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * 
     
     return IDISA_Builder::esimd_bitspread(fw, bitmask);
 }
-
 llvm::Value * IDISA_AVX512F_Builder::simd_popcount(unsigned fw, llvm::Value * a) {
      if (fw == 512) {
          Constant * zero16xi8 = Constant::getNullValue(VectorType::get(getInt8Ty(), 16));
@@ -400,6 +399,11 @@ llvm::Value * IDISA_AVX512F_Builder::simd_popcount(unsigned fw, llvm::Value * a)
     return IDISA_Builder::simd_popcount(fw, a);
 }
 
+llvm::Value * IDISA_AVX512F_Builder::hsimd_signmask(unsigned fw, llvm::Value * a) {
+    //IDISA_Builder::hsimd_signmask outperforms IDISA_AVX2_Builder::hsimd_signmask
+    //when run with BlockSize=512
+    return IDISA_Builder::hsimd_signmask(fw, a);
+}
 
 void IDISA_AVX512F_Builder::getAVX512Features() {
     llvm::StringMap<bool> features;
