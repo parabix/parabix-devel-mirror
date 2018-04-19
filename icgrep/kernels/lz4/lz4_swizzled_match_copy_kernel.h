@@ -15,12 +15,8 @@ namespace kernel {
     public:
         LZ4SwizzledMatchCopyKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamCount, unsigned streamSize, unsigned swizzleFactor, unsigned PDEP_width = 64);
     protected:
-
         void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
-
         void generateOutputCopy(const std::unique_ptr<KernelBuilder> & iBuilder);
-
-        llvm::Value * loadOffset(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string & bufferName, llvm::Value* offset);
 
     private:
 
@@ -28,10 +24,12 @@ namespace kernel {
         const unsigned mPDEPWidth;
         const unsigned mStreamSize;
         const unsigned mStreamCount;
-        llvm::Value* loadNextMatchOffset(const std::unique_ptr<KernelBuilder> &iBuilder);
+        std::pair<llvm::Value*, llvm::Value*> loadNextMatchOffset(const std::unique_ptr<KernelBuilder> &iBuilder);
         std::pair<llvm::Value*, llvm::Value*> loadNextM0StartEnd(const std::unique_ptr<KernelBuilder> &iBuilder);
         llvm::Value *advanceUntilNextBit(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputName,
                                           llvm::Value *startPos, bool isNextOne);
+
+        llvm::Value* doMatchCopy(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* matchPos, llvm::Value* matchOffset, llvm::Value* matchLength);
 
     };
 }
