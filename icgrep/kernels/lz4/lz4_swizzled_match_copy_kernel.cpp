@@ -187,36 +187,45 @@ llvm::Value* LZ4SwizzledMatchCopyKernel::doMatchCopy(const std::unique_ptr<Kerne
 
     Value * const matchCopyFromPos = iBuilder->CreateSub(phiMatchPos, phiMatchOffset);
 
+
     Value* matchCopyFromLocalBlockIndex = iBuilder->CreateURem(iBuilder->CreateUDiv(matchCopyFromPos, SIZE_BLOCK_WIDTH), outputBufferBlocks);
     Value * const matchCopyFromStreamIndex = iBuilder->CreateURem(iBuilder->CreateUDiv(matchCopyFromPos, SIZE_PDEP_WIDTH), iBuilder->getSize(mStreamCount));
     Value * const matchCopyFromBlockOffset = iBuilder->CreateURem(matchCopyFromPos, SIZE_PDEP_WIDTH);
+
+    Value* fromBlockRemain = iBuilder->CreateSub(SIZE_PDEP_WIDTH, matchCopyFromBlockOffset);
 
     Value * currentCopySize = iBuilder->CreateSub(SIZE_PDEP_WIDTH, iBuilder->CreateUMax(matchCopyFromBlockOffset, matchCopyTargetBlockOffset));
     currentCopySize = iBuilder->CreateUMin(currentCopySize, phiMatchOffset);
     currentCopySize = iBuilder->CreateUMin(currentCopySize, phiMatchLength);
     currentCopySize = iBuilder->CreateSelect(iBuilder->CreateICmpEQ(currentCopySize, SIZE_ZERO), SIZE_ONE, currentCopySize); //Workaround for the last byte
 
-    Value * const shiftOffset = iBuilder->CreateAdd(matchCopyFromBlockOffset, currentCopySize);
-    Value * highOffset = iBuilder->CreateShl(SIZE_ONE, shiftOffset);
-    highOffset = iBuilder->CreateSelect(iBuilder->CreateICmpEQ(currentCopySize, SIZE_PDEP_WIDTH), SIZE_ZERO, highOffset); // When currentCopySize == SIZE_PDEP_WIDTH, shl will overflow
-    Value * const lowOffset = iBuilder->CreateShl(SIZE_ONE, matchCopyFromBlockOffset);
-    Value * const maskVector = iBuilder->simd_fill(mPDEPWidth, iBuilder->CreateSub(highOffset, lowOffset));
+    Value * newCurrentCopySize = iBuilder->CreateSub(SIZE_PDEP_WIDTH, matchCopyTargetBlockOffset);
+    newCurrentCopySize = iBuilder->CreateUMin(newCurrentCopySize, phiMatchOffset);
+    newCurrentCopySize = iBuilder->CreateUMin(newCurrentCopySize, phiMatchLength);
+
     Value * const fromBlockOffsetVector = iBuilder->simd_fill(mPDEPWidth, matchCopyFromBlockOffset);
-    Value * const targetBlockOffsetVector = iBuilder->simd_fill(mPDEPWidth, matchCopyTargetBlockOffset);
+    Value * const fromBlockRemainVector = iBuilder->simd_fill(mPDEPWidth, fromBlockRemain);
+
+    Value * const targetLeftShiftVector = iBuilder->simd_fill(mPDEPWidth, iBuilder->CreateSub(SIZE_PDEP_WIDTH, newCurrentCopySize));
+    Value * const targetRightShiftVector = iBuilder->simd_fill(mPDEPWidth, iBuilder->CreateSub(SIZE_PDEP_WIDTH, iBuilder->CreateAdd(newCurrentCopySize, matchCopyTargetBlockOffset)));
 
     for (unsigned i = 0; i < mStreamSize; i++) {
         Value* basePtr = iBuilder->CreatePointerCast(iBuilder->getRawOutputPointer("outputStreamSet" + std::to_string(i), SIZE_ZERO), iBuilder->getBitBlockType()->getPointerTo());
 
         Value * const matchCopyFromBlockPtr = iBuilder->CreateGEP(basePtr, iBuilder->CreateAdd(iBuilder->CreateMul(matchCopyFromLocalBlockIndex, iBuilder->getSize(mStreamCount)), matchCopyFromStreamIndex));
         Value * const fromBlockValue = iBuilder->CreateBlockAlignedLoad(matchCopyFromBlockPtr);
+        Value * const fromNextBlockValue = iBuilder->CreateBlockAlignedLoad(iBuilder->CreateGEP(matchCopyFromBlockPtr, iBuilder->CreateSelect(iBuilder->CreateICmpULE(newCurrentCopySize, fromBlockRemain), SIZE_ZERO, SIZE_ONE)));
+
+        Value * allFromValue = iBuilder->CreateOr(
+                iBuilder->CreateLShr(fromBlockValue, fromBlockOffsetVector),
+                iBuilder->CreateShl(fromNextBlockValue, fromBlockRemainVector)
+        );
+        Value * allTargetValue = iBuilder->CreateLShr(iBuilder->CreateShl(allFromValue, targetLeftShiftVector), targetRightShiftVector);
 
         Value * const outputTargetBlockPtr = iBuilder->CreateGEP(basePtr, iBuilder->CreateAdd(iBuilder->CreateMul(matchPosLocalBlockIndex, iBuilder->getSize(mStreamCount)), matchCopyTargetStreamIndex));
         Value * const targetOriginalValue = iBuilder->CreateBlockAlignedLoad(outputTargetBlockPtr);
 
-        Value * copiedValue = iBuilder->simd_and(fromBlockValue, maskVector);
-        copiedValue = iBuilder->CreateLShr(copiedValue, fromBlockOffsetVector);
-        copiedValue = iBuilder->CreateShl(copiedValue, targetBlockOffsetVector);
-        Value * const finalValue = iBuilder->CreateOr(targetOriginalValue, copiedValue);
+        Value * const finalValue = iBuilder->CreateOr(targetOriginalValue, allTargetValue);
 
         iBuilder->CreateStore(finalValue, outputTargetBlockPtr);
     }
