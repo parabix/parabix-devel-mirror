@@ -117,15 +117,16 @@ namespace kernel{
 
         iBuilder->SetInsertPoint(extendLiteralLengthCon);
 
-        iBuilder->CreateLikelyCondBr(iBuilder->CreateICmpNE(iBuilder->CreateLoad(
-                iBuilder->getRawInputPointer("byteStream", iBuilder->CreateAdd(tokenPos, iBuilder->getInt64(1)))),
-                                                            iBuilder->getInt8(0xff)), extendLiteralLengthExit,
-                                     extendLiteralLengthBody);
+        Value * const nextTokenPos = iBuilder->CreateAdd(tokenPos, iBuilder->getInt64(1));
+        Value * const nextToken = iBuilder->CreateLoad(iBuilder->getRawInputPointer("byteStream", nextTokenPos));
+        Value * const isExitToken = iBuilder->CreateICmpNE(nextToken, iBuilder->getInt8(0xff));
+        iBuilder->CreateLikelyCondBr(isExitToken, extendLiteralLengthExit, extendLiteralLengthBody);
 
 
         iBuilder->SetInsertPoint(extendLiteralLengthBody);
         Value* newCursorPos2 = this->advanceUntilNextZero(iBuilder, "extender", iBuilder->CreateAdd(tokenPos, iBuilder->getInt64(1)), blockEnd);
         BasicBlock* advanceFinishBlock = iBuilder->GetInsertBlock();
+
 
         iBuilder->CreateBr(extendLiteralLengthExit);
 
@@ -135,7 +136,7 @@ namespace kernel{
 //        newCursorPos->addIncoming(newCursorPos2, advanceFinishBlock);
 
         PHINode* phiCursorPosAfterLiteral = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 3);
-        phiCursorPosAfterLiteral->addIncoming(iBuilder->CreateAdd(tokenPos, iBuilder->getInt64(1)), extendLiteralLengthCon);
+        phiCursorPosAfterLiteral->addIncoming(nextTokenPos, extendLiteralLengthCon);
         phiCursorPosAfterLiteral->addIncoming(newCursorPos2, advanceFinishBlock);
         phiCursorPosAfterLiteral->addIncoming(tokenPos, entryBlock);
 
