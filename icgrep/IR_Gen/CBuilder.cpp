@@ -21,6 +21,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <boost/format.hpp>
 
 #if defined(__i386__)
 typedef uint32_t unw_word_t;
@@ -90,11 +91,18 @@ static AllocaInst * resolveStackAddress(Value * Ptr) {
     }
 }
 
+static inline bool notConstantZeroArraySize(const AllocaInst * const Base) {
+    if (const Constant * const as = dyn_cast_or_null<Constant>(Base->getArraySize())) {
+        return !as->isNullValue();
+    }
+    return false;
+}
+
 static Value * checkStackAddress(CBuilder * const b, Value * const Ptr, Value * const Size, AllocaInst * const Base) {
     DataLayout DL(b->getModule());
     IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
     Value * sz = ConstantExpr::getBitCast(ConstantExpr::getSizeOf(Base->getAllocatedType()), intPtrTy);
-    if (dyn_cast_or_null<Constant>(Base->getArraySize()) && !cast<Constant>(Base->getArraySize())->isNullValue()) {
+    if (notConstantZeroArraySize(Base)) {
         sz = b->CreateMul(sz, b->CreateZExtOrTrunc(Base->getArraySize(), intPtrTy));
     }
     Value * const p = b->CreatePtrToInt(Ptr, intPtrTy);
@@ -140,7 +148,7 @@ Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const 
     return Insert(BinaryOperator::CreateUDiv(number, divisor), Name);
 }
 
-Value * CBuilder::CreateUDivCeil(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateCeilUDiv(Value * const number, Value * const divisor, const Twine & Name) {
     assert (number->getType() == divisor->getType());
     Type * const t = number->getType();
     Value * const n = CreateAdd(number, CreateSub(divisor, ConstantInt::get(t, 1)));
@@ -154,12 +162,12 @@ Value * CBuilder::CreateUDivCeil(Value * const number, Value * const divisor, co
             }
         }
     }
-    CreateAssert(divisor, "CreateUDivCeil divisor cannot be 0!");
+    CreateAssert(divisor, "CreateCeilUDiv divisor cannot be 0!");
     return CreateUDiv(n, divisor, Name);
 }
 
 Value * CBuilder::CreateRoundUp(Value * const number, Value * const divisor, const Twine &Name) {
-    return CreateMul(CreateUDivCeil(number, divisor), divisor, Name);
+    return CreateMul(CreateCeilUDiv(number, divisor), divisor, Name);
 }
 
 Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) {
@@ -834,6 +842,7 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
 }
 
 void __report_failure(const char * msg, const uintptr_t * trace, const uint32_t n) {
+    // TODO: look into boost stacktrace, available from version 1.65
     raw_fd_ostream out(STDERR_FILENO, false);
     if (trace) {
         SmallVector<char, 4096> tmp;
@@ -841,16 +850,22 @@ void __report_failure(const char * msg, const uintptr_t * trace, const uint32_t 
         for (uint32_t i = 0; i < n; ++i) {
             const auto pc = trace[i];
             trace_string << format_hex(pc, 16) << "   ";
-            const auto len = codegen::ProgramName.length() + 32;
-            char cmd[len];
-            snprintf(cmd, len,"addr2line -fpCe %s %p", codegen::ProgramName.data(), reinterpret_cast<void *>(pc));
-            FILE * f = popen(cmd, "r");
+            #ifdef __APPLE__
+            const auto translator = "atos -o %s %p";
+            #else
+            const auto translator = "addr2line -fpCe %s %p";
+            #endif
+            const auto cmd = boost::format(translator) % codegen::ProgramName.data() % pc;
+            FILE * const f = popen(cmd.str().data(), "r");
             if (f) {
                 char buffer[1024] = {0};
                 while(fgets(buffer, sizeof(buffer), f)) {
                     trace_string << buffer;
                 }
                 pclose(f);
+            } else { // TODO: internal default
+
+
             }
         }
         out.changeColor(raw_fd_ostream::WHITE, true);

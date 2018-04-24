@@ -185,7 +185,7 @@ UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & b)
 // inputs
 {Binding{b->getStreamSetTy(), "bits"}},
 // outputs
-{Binding{b->getStreamSetTy(), "uptoN", BoundedRate(0, 1)}},
+{Binding{b->getStreamSetTy(), "uptoN", FixedRate(), Deferred()}},
 // input scalar
 {Binding{b->getSizeTy(), "N"}}, {},
 // internal state

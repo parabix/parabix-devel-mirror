@@ -144,12 +144,49 @@ void PabloKernel::beginConditionalRegion(const std::unique_ptr<KernelBuilder> & 
 }
 #endif
 
-void PabloKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, Value * const remainingBytes) {
+void PabloKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * const remainingBytes) {
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
-    iBuilder->setScalarField("EOFbit", iBuilder->bitblock_set_bit(remainingBytes));
-    iBuilder->setScalarField("EOFmask", iBuilder->bitblock_mask_from(remainingBytes));
-    CreateDoBlockMethodCall(iBuilder);
+    b->setScalarField("EOFbit", b->bitblock_set_bit(remainingBytes));
+    b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
+    CreateDoBlockMethodCall(b);
+
+//    // TODO: clean this up. what if we have a subclass of block oriented kernels that has hooks for inserting code
+//    // before/after calling the do block logic? it would simplify the logic and hopefully allow easier use. Moreover
+//    // we may be able to convert some of the final block only scalars to stack oriented ones
+
+//    Value * const baseOutputItems = getRemainingItems(b);
+//    // clear all of the outputs past the EOF mark
+//    for (unsigned i = 0; i < mStreamSetOutputs.size(); ++i) {
+//        const Binding & output = mStreamSetOutputs[i];
+//        // TODO: test if this is a bitstream output
+//        Value * outputItems = baseOutputItems;
+//        for (const kernel::Attribute & attr : output.getAttributes()) {
+//            if (attr.isAdd()) {
+//                outputItems = b->CreateAdd(outputItems, b->getSize(attr.amount()));
+//                break;
+//            }
+//        }
+//        Value * const inFileMask = b->CreateNot(b->bitblock_mask_from(outputItems));
+//        BasicBlock * const zeroOutEntry = b->GetInsertBlock();
+//        BasicBlock * const zeroOutLoop = b->CreateBasicBlock();
+//        BasicBlock * const zeroOutExit = b->CreateBasicBlock();
+//        Value * const n = b->getOutputStreamSetCount(output.getName());
+//        b->CreateBr(zeroOutLoop);
+
+//        b->SetInsertPoint(zeroOutLoop);
+//        PHINode * const streamIndex = b->CreatePHI(b->getSizeTy(), 2);
+//        streamIndex->addIncoming(b->getSize(0), zeroOutEntry);
+//        Value * const ptr = b->getOutputStreamBlockPtr(output.getName(), streamIndex);
+//        Value * const value = b->CreateBlockAlignedLoad(ptr);
+//        b->CreateBlockAlignedStore(b->CreateAnd(value, inFileMask), ptr);
+//        Value * const nextStreamIndex = b->CreateAdd(streamIndex, b->getSize(1));
+//        streamIndex->addIncoming(nextStreamIndex, zeroOutLoop);
+//        b->CreateCondBr(b->CreateICmpNE(nextStreamIndex, n), zeroOutLoop, zeroOutExit);
+
+//        b->SetInsertPoint(zeroOutExit);
+//    }
+
 }
 
 void PabloKernel::generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {

@@ -247,9 +247,9 @@ LZ4SwizzledMatchCopyKernel::LZ4SwizzledMatchCopyKernel(const std::unique_ptr<ker
 : SegmentOrientedKernel("LZ4SwizzledMatchCopyKernel",
 // Inputs
 {
-                                   Binding{iBuilder->getStreamSetTy(1, 1), "MatchOffsetMarker", BoundedRate(0, 1), {DisableSufficientChecking()}},
-                                   Binding{iBuilder->getStreamSetTy(1, 1), "M0Marker", BoundedRate(0, 1), {DisableSufficientChecking()}},
-                                   Binding{iBuilder->getStreamSetTy(1, 1), "M0CountMarker", BoundedRate(0, 1), {DisableSufficientChecking()}},
+                                   Binding{iBuilder->getStreamSetTy(1, 1), "MatchOffsetMarker", BoundedRate(0, 1)},
+                                   Binding{iBuilder->getStreamSetTy(1, 1), "M0Marker", BoundedRate(0, 1)},
+                                   Binding{iBuilder->getStreamSetTy(1, 1), "M0CountMarker", BoundedRate(0, 1)},
                                    Binding{iBuilder->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)}
 },
 // Outputs

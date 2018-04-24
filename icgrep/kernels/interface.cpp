@@ -11,15 +11,14 @@
 #include <llvm/IR/Module.h>
 #include <kernels/kernel_builder.h>
 
-static const auto INIT_SUFFIX = "_Init";
-
-static const auto DO_SEGMENT_SUFFIX = "_DoSegment";
-
-static const auto TERMINATE_SUFFIX = "_Terminate";
 
 using namespace llvm;
 
 namespace kernel {
+
+const static auto INIT_SUFFIX = "_Init";
+const static auto DO_SEGMENT_SUFFIX = "_DoSegment";
+const static auto TERMINATE_SUFFIX = "_Terminate";
 
 void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::KernelBuilder> & idb) {
 
@@ -65,15 +64,9 @@ void KernelInterface::addKernelDeclarations(const std::unique_ptr<kernel::Kernel
     doSegment->setDoesNotThrow();
     args = doSegment->arg_begin();
     args->setName("self");
-    (++args)->setName("doFinal");
-//    if (mHasPrincipalItemCount) {
-//        (++args)->setName("principleAvailableItemCount");
-//    }
+    (++args)->setName("isFinal");
     for (const Binding & input : mStreamSetInputs) {
-        //const ProcessingRate & r = input.getRate();
-        //if (!r.isDerived()) {
-            (++args)->setName(input.getName() + "AvailableItems");
-        //}
+        (++args)->setName(input.getName() + "AvailableItems");
     }
 
     // Create the terminate function prototype

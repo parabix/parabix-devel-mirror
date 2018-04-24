@@ -2,6 +2,8 @@
 #define ATTRIBUTES_H
 
 #include <vector>
+#include <llvm/Support/Compiler.h>
+#include <assert.h>
 
 namespace kernel {
 
@@ -63,6 +65,13 @@ struct Attribute {
         // as Deferred provides the pipeline with a stronger guarantee when it comes to
         // buffer size calculations.
 
+        ZeroExtend, /// NOT DONE
+
+        // If the available item count of an input stream it less than some other input
+        // stream(s), it will be zero-extended to the length of the larger stream. If
+        // this option is not set and the kernel does not have a MustExplicitlyTerminate
+        // attribute, it will end once any input has been exhausted.
+
         IndependentRegionBegin, IndependentRegionEnd, /// NOT DONE
 
         // Some kernels can divide their processing into concrete non-overlapping regions
@@ -95,11 +104,6 @@ struct Attribute {
         // Always consume the input (i.e., use the lowerbound to determine whether to there
         // is enough data to execute a stride rather than the upper bound.)
 
-        DisableSufficientChecking,
-
-        // Workaround attribute, force disable sufficient data or sufficient space checking in pipelilne, always assume that
-        // the data or space is sufficient
-
         /** OUTPUT STREAM ATTRIBUTES **/
 
         Add,
@@ -119,18 +123,30 @@ struct Attribute {
         // Assume that we cannot statically compute the alignment of this stream set and
         // perform any operations accordingly
 
-        BlockSize, /// NOT DONE
+        BlockSize,
 
-        // A BlockSize(K) attribute, where K=2^k for some value of k>=4 declares
-        // that the layout of stream data items within the corresponding input
-        // or output buffer is arranged in blocks of K items each.   In each
-        // block, the data buffer contains K items of the first stream in the
-        // set, followed by K items of the next stream in the set and so on,
-        // up to and including K items of the last stream in the set.
+        // Typically a kernel assumes that each stream of a stream set is a linear sequence
+        // of items. The BlockSize(K) attribute informs the kernel is actually divided into
+        // (BlockWidth / K) elements and each "stream" actually contains K items of the
+        // first stream followed by K elements of the second stream and so on. The notion
+        // of produced/processed item count changes to suite. I.e., when typical kernels
+        // report that they've processed/produced up to the i-th position, it means:
 
-        // (Note: this replaces the concept of swizzling and anticipates that
-        // the pipeline will take on the role of automatically inserting the
-        // swizzling code necessary).
+        //                                         v
+        //                 ...|AAAAAAAA AAAAAAAA AA*              |...
+        //                 ...|BBBBBBBB BBBBBBBB BB*              |...
+        //                 ...|CCCCCCCC CCCCCCCC CC*              |...
+        //                 ...|DDDDDDDD DDDDDDDD DD*              |...
+
+        // However, if (BlockWidth / K) is 4, the same i-th position above is actually:
+
+        //                 ...|AAAAAAAA|BBBBBBBB|CCCCCCCC|DDDDDDDD|...
+        //                 ...|AAAAAAAA|BBBBBBBB|CCCCCCCC|DDDDDDDD|...
+        //                 ...|AA*     |BB*     |CC*     |DD*     |...
+        //                 ...|        |        |        |        |...
+
+        // (Note: this replaces the concept of swizzling and anticipates that the pipeline
+        // will take on the role of automatically inserting the swizzling code necessary).
 
         ReverseRegionBegin, ReverseRegionEnd, /// NOT DONE
 
@@ -140,10 +156,6 @@ struct Attribute {
         // text parsing, we're almost always searching for the true starting position of
         // something ambigious after we've found its end position in some prior kernel.
 
-
-        Swizzled,
-
-        // Whether the input streamset is in swizzled form
 
 //        Here is a revised definition of SegmentedReverse:
 
@@ -197,6 +209,46 @@ struct Attribute {
 //        That seems to have disappeared in the current system.
 
 
+        RequiresLinearAccess, PermitsNonLinearAccess,
+
+        // Indicates whether all unprocessed / consumed space is safely accessible by the
+        // MultiBlockKernel code. By default, input streams and any output stream in which
+        // we know a priori exactly how much data will be written into the overflow buffer
+        // are opt-out and all others are opt-in. The reason is that writing non-linear
+        // output at a non-Fixed rate be costly to manage. E.g.,
+
+        //                             BUFFER          v   OVERFLOW
+        //                |?????############...........###|#####???|
+        //                                 n           p  k    m
+
+        // Suppose from a given offset p, we write n items but only have space for k items
+        // in the stream set buffer. Assuming we wrote more than one stride, we know that
+        // there are (m - k) items in the overflow but may not know what our value of m is
+        // unless we can derive the relationship between m and n a priori. The problem is
+        // that the kernel will write the second stride's output at the (m - k)-th position
+        // of the 0-th block and but final reported count will be n. We can safely mitigate
+        // this in many ways:
+
+        // (1) when we detect that we could write into the overflow region of the buffer,
+        // we can zero out the memory of both the overflow *and* the 0-th block of the
+        // buffer then combine both by OR-ing the streams and writing them to the 0-th
+        // block. The advantage is we require no extra memory but the disadvantage is that
+        // the kernel is now relies on the pipeline to ensure that whenever we may write
+        // into the overflow that the 0-th block is fully consumed.
+
+        // (2) the overflow region is equal to the size of the buffer (i.e., employ double
+        // buffering.) The advantage of this is the kernel makes no assumptions about the
+        // pipeline itself. The disadvantage is we could have to copy a lot of data if k
+        // is very small and the amount we will copy is variable.
+
+        // (3) use stack allocated temporary buffers. This method has similar advantages /
+        // disadvantages to 2 but trades heap space allocations for stack based ones.
+
+        // (4) force people writing kernels to record the number of items written each
+        // stride. The advantage of this is it would be as cheap as (1) but requires the
+        // kernel writer maintain the current stride index and that the kernel logic has
+        // a natural breakpoint in the algorithm in which to record the number.
+
         /** KERNEL ATTRIBUTES **/
 
         SelectMinimumInputLength, /// NOT DONE
@@ -225,7 +277,7 @@ struct Attribute {
         // and will be called even when there is no new input data when the prior kernels
         // in the pipeline have also terminated.
 
-        MustConsumeAll,
+        MustProcessAll,
 
         //Workaround, the kernel will finish only when all of the inputs are consumed
 
@@ -272,9 +324,9 @@ protected:
     friend struct AttributeSet;
     friend struct Binding;
     friend Attribute Add1();
+    friend Attribute BlockSize(const unsigned k);
     friend Attribute Principal();
     friend Attribute AlwaysConsume();
-    friend Attribute DisableSufficientChecking();
     friend Attribute RoundUpTo(const unsigned);
     friend Attribute LookAhead(const unsigned);
     friend Attribute LookBehind(const unsigned);
@@ -282,10 +334,10 @@ protected:
     friend Attribute Misaligned();
     friend Attribute ConditionalRegionBegin();
     friend Attribute ConditionalRegionEnd();
-    friend Attribute Swizzled();
     friend Attribute CanTerminateEarly();
     friend Attribute MustExplicitlyTerminate();
-    friend Attribute MustConsumeAll();
+    friend Attribute RequiresLinearAccess();
+    friend Attribute PermitsNonLinearAccess();
 
     Attribute(const KindId kind, const unsigned k) : mKind(kind), mAmount(k) { }
 
@@ -317,11 +369,11 @@ struct AttributeSet : public std::vector<Attribute> {
 
     Attribute & addAttribute(Attribute attribute);
 
-    bool hasAttributes() const {
+    bool LLVM_READNONE hasAttributes() const {
         return !empty();
     }
 
-    bool hasAttribute(const AttributeId id) const {
+    bool LLVM_READNONE hasAttribute(const AttributeId id) const {
         return __findAttribute(id) != nullptr;
     }
 
@@ -337,7 +389,6 @@ private:
 
 };
 
-
 inline Attribute Add1() {
     return Attribute(Attribute::KindId::Add, 1);
 }
@@ -348,10 +399,6 @@ inline Attribute RoundUpTo(const unsigned k) {
 
 inline Attribute AlwaysConsume() {
     return Attribute(Attribute::KindId::AlwaysConsume, 0);
-}
-
-inline Attribute DisableSufficientChecking() {
-    return Attribute(Attribute::KindId::DisableSufficientChecking, 0);
 }
 
 inline Attribute Principal() {
@@ -368,6 +415,23 @@ inline Attribute LookBehind(const unsigned k) {
 
 inline Attribute Deferred() {
     return Attribute(Attribute::KindId::Deferred, 0);
+}
+
+inline Attribute BlockSize(const unsigned k) {
+    assert (k && ((k & (k - 1)) == 0));
+    return Attribute(Attribute::KindId::BlockSize, k);
+}
+
+inline Attribute Swizzled() {
+    return BlockSize(64);
+}
+
+inline Attribute RequiresLinearAccess() {
+    return Attribute(Attribute::KindId::RequiresLinearAccess, 0);
+}
+
+inline Attribute PermitsNonLinearAccess() {
+    return Attribute(Attribute::KindId::PermitsNonLinearAccess, 0);
 }
 
 inline Attribute Misaligned() {
@@ -390,14 +454,5 @@ inline Attribute MustExplicitlyTerminate() {
     return Attribute(Attribute::KindId::MustExplicitlyTerminate, 0);
 }
 
-inline Attribute MustConsumeAll() {
-    return Attribute(Attribute::KindId::MustConsumeAll, 0);
 }
-
-inline Attribute Swizzled() {
-    return Attribute(Attribute::KindId::Swizzled, 0);
-}
-
-}
-
 #endif // ATTRIBUTES_H

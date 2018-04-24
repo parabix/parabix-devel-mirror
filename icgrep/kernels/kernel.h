@@ -9,6 +9,7 @@
 #include "interface.h"
 #include <boost/container/flat_map.hpp>
 
+namespace llvm { class AllocaInst; }
 namespace llvm { class BasicBlock; }
 namespace llvm { class Constant; }
 namespace llvm { class Function; }
@@ -26,20 +27,6 @@ class KernelBuilder;
 
 class Kernel : public KernelInterface {
     friend class KernelBuilder;
-protected:
-
-    static const std::string DO_BLOCK_SUFFIX;
-    static const std::string FINAL_BLOCK_SUFFIX;
-    static const std::string MULTI_BLOCK_SUFFIX;
-    static const std::string LOGICAL_SEGMENT_NO_SCALAR;
-    static const std::string PROCESSED_ITEM_COUNT_SUFFIX;
-    static const std::string CONSUMED_ITEM_COUNT_SUFFIX;
-    static const std::string PRODUCED_ITEM_COUNT_SUFFIX;
-    static const std::string TERMINATION_SIGNAL;
-    static const std::string BUFFER_PTR_SUFFIX;
-    static const std::string CONSUMER_SUFFIX;
-    static const std::string CYCLECOUNT_SCALAR;
-
 public:
     
     enum class Port { Input, Output };
@@ -116,6 +103,16 @@ public:
     ProcessingRate::RateValue getLowerBound(const ProcessingRate &rate) const;
 
     ProcessingRate::RateValue getUpperBound(const ProcessingRate & rate) const;
+
+    bool requiresCopyBack(const Binding & binding) const;
+
+    bool strideOffsetIsTriviallyCalculable(const Binding & binding) const;
+
+    bool permitsNonLinearAccess(const Binding & binding) const;
+
+    bool requiresLinearAccess(const Binding & binding) const;
+
+    bool anyBindingRequiresLinearSpace() const;
 
     const StreamSetBuffers & getStreamSetInputBuffers() const {
         return mStreamSetInputBuffers;
@@ -197,15 +194,23 @@ public:
     
     virtual ~Kernel() = 0;
 
-    void prepareKernel(const std::unique_ptr<KernelBuilder> & idb);
+    void prepareKernel(const std::unique_ptr<KernelBuilder> & b);
 
-    void prepareCachedKernel(const std::unique_ptr<KernelBuilder> & idb);
+    void prepareCachedKernel(const std::unique_ptr<KernelBuilder> & b);
 
-    std::string getCacheName(const std::unique_ptr<KernelBuilder> & idb) const;
+    std::string getCacheName(const std::unique_ptr<KernelBuilder> & b) const;
+
+    bool mayTerminateEarly() const {
+        return hasAttribute(kernel::Attribute::KindId::CanTerminateEarly);
+    }
+
+    bool mustExplicitlyTerminate() const {
+        return hasAttribute(kernel::Attribute::KindId::MustExplicitlyTerminate);
+    }
 
 protected:
 
-    virtual void addInternalKernelProperties(const std::unique_ptr<KernelBuilder> & idb) { }
+    virtual void addInternalKernelProperties(const std::unique_ptr<KernelBuilder> &) { }
 
     void getDoSegmentFunctionArguments(const std::vector<llvm::Value *> & availItems) const;
 
@@ -216,21 +221,15 @@ protected:
           Bindings && scalar_outputs,
           Bindings && internal_scalars);
 
-    llvm::Value * getPrincipalItemCount() const {
-        return mAvailablePrincipalItemCount;
-    }
-
     unsigned getScalarIndex(const std::string & name) const;
 
-    void prepareStreamSetNameMap();
-    
     void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> &) override { }
 
-    virtual void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) { }
+    virtual void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> &) { }
     
-    virtual void generateKernelMethod(const std::unique_ptr<KernelBuilder> & iBuilder) = 0;
+    virtual void generateKernelMethod(const std::unique_ptr<KernelBuilder> &) = 0;
 
-    virtual void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & iBuilder) { }
+    virtual void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> &) { }
 
     // Add an additional scalar field to the KernelState struct.
     // Must occur before any call to addKernelDeclarations or createKernelModule.
@@ -238,57 +237,46 @@ protected:
 
     unsigned addUnnamedScalar(llvm::Type * type);
 
-    void callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & idb);
+    void callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b);
 
-    void callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & idb);
+    void callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b);
 
-    void callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & idb);
+    void callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b);
 
     const parabix::StreamSetBuffer * getAnyStreamSetBuffer(const std::string & name) const {
         unsigned index; Port port;
         std::tie(port, index) = getStreamPort(name);
         if (port == Port::Input) {
-            assert (index < mStreamSetInputBuffers.size());
-            assert (mStreamSetInputBuffers[index]);
-            return mStreamSetInputBuffers[index];
+            return getStreamSetInputBuffer(index);
         } else {
-            assert (index < mStreamSetOutputBuffers.size());
-            assert (mStreamSetOutputBuffers[index]);
-            return mStreamSetOutputBuffers[index];
+            return getStreamSetOutputBuffer(index);
         }
     }
 
     void setStride(unsigned stride) { mStride = stride; }
 
+    bool treatUnsafeKernelOperationsAsErrors() const { return mTreatUnsafeKernelOperationsAsErrors; }
+
+    bool mustClearOverflowPriorToCopyback(const Binding & binding) const;
+
 private:
 
-    void addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & idb);
-
-    llvm::Value * getStreamSetInputAddress(const std::string & name) const {
-        const Kernel::StreamPort p = getStreamPort(name);
-        assert (p.first == Port::Input);
-        return mStreamSetInputBaseAddress[p.second];
-    }
-
-    llvm::Value * getStreamSetOutputAddress(const std::string & name) const {
-        const Kernel::StreamPort p = getStreamPort(name);
-        assert (p.first == Port::Output);
-        return mStreamSetOutputBaseAddress[p.second];
-    }
+    void addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b);
 
     llvm::Value * getAvailableItemCount(const unsigned i) const {
+        assert (i < mAvailableItemCount.size());
         return mAvailableItemCount[i];
     }
 
-    void normalizeStreamProcessingRates();
+    bool verifyBufferSize(const Binding & binding, const parabix::StreamSetBuffer * const buffer) const;
 
-    bool normalizeRelativeToFixedProcessingRate(const ProcessingRate & base, ProcessingRate & toUpdate);
+    void verifyStreamSetDefinitions() const;
 
 protected:
 
-    llvm::Function *                    mCurrentMethod;
-    llvm::Value *                       mAvailablePrincipalItemCount;    
+    llvm::Function *                    mCurrentMethod; 
     unsigned                            mStride;
+    bool                                mTreatUnsafeKernelOperationsAsErrors;
     llvm::Value *                       mIsFinal;
     llvm::Value *                       mOutputScalarResult;
     mutable bool                        mIsGenerated;
@@ -300,12 +288,8 @@ protected:
 
     StreamMap                           mStreamMap;
 
-    // TODO: once the kernel no longer needs to be aware of what type of buffers its working with,
-    // these should be removed from the Kernel class and put into the Pipeline
     StreamSetBuffers                    mStreamSetInputBuffers;
-    std::vector<llvm::Value *>          mStreamSetInputBaseAddress;
     StreamSetBuffers                    mStreamSetOutputBuffers;
-    std::vector<llvm::Value *>          mStreamSetOutputBaseAddress;
 };
 
 using Kernels = std::vector<Kernel *>;
@@ -419,6 +403,7 @@ exact or MaxRatio processing constraints.   The following restrictions apply.
 */
 
 class MultiBlockKernel : public Kernel {
+    friend class BlockOrientedKernel;
 protected:
 
     MultiBlockKernel(std::string && kernelName,
@@ -444,28 +429,48 @@ private:
     // to translate doSegment calls into a minimal sequence of doMultiBlock calls.
     void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
-    unsigned getItemAlignment(const Binding & binding) const;
+    void writeMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b);
 
-    unsigned getCopyAlignment(const Binding & binding) const;
+    void checkInputStream(const std::unique_ptr<KernelBuilder> & b, const unsigned index);
 
-    bool isTransitivelyUnknownRate(const ProcessingRate & rate) const;
+    void checkOutputStream(const std::unique_ptr<KernelBuilder> & b, const unsigned index);
 
-    bool requiresTemporaryInputBuffer(const Binding & binding, const ProcessingRate & rate) const;
+    llvm::Value * computePopCountRate(const std::unique_ptr<KernelBuilder> & b, const ProcessingRate & rate, llvm::Value * const maxItems);
 
-    bool requiresTemporaryOutputBuffer(const Binding & binding, const ProcessingRate & rate) const;
+    llvm::Value * getPopCountRateItems(const std::unique_ptr<KernelBuilder> & b, const ProcessingRate & rate, llvm::Value * const strideIndex);
 
-    llvm::Value * getStrideSize(const std::unique_ptr<KernelBuilder> & b, const ProcessingRate & rate);
+    void prepareOverflowBuffers(const std::unique_ptr<KernelBuilder> & b);
 
-    bool requiresCopyBack(const ProcessingRate & rate) const;
+    void writeCopyBackLogic(const std::unique_ptr<KernelBuilder> & b);
 
-    void reviseFinalProducedItemCounts(const std::unique_ptr<KernelBuilder> & b);
+    void calculateDerivedItemCounts(const std::unique_ptr<KernelBuilder> & b);
+
+    void updateDerivedItemCounts(const std::unique_ptr<KernelBuilder> & b);
+
+    llvm::Value * hasAnotherStride(const std::unique_ptr<KernelBuilder> & b);
+
+    void updateFinalDerivedItemCounts(const std::unique_ptr<KernelBuilder> & b);
+
+    void checkTerminationSignal(const std::unique_ptr<KernelBuilder> & b);
+
+    static bool hasDerivedItemCount(const Binding & binding);
 
 protected:
 
-    std::vector<llvm::Value *>      mInitialAvailableItemCount;
-    std::vector<llvm::Value *>      mInitialProcessedItemCount;
-    std::vector<llvm::Value *>      mInitialProducedItemCount;
+    llvm::Value *                   mInitiallyFinal;
+    llvm::Value *                   mNumOfStrides;
+    llvm::Value *                   mNumOfStridesInFinalSegment;
 
+    std::vector<llvm::Value *>      mInitialAvailableItemCount;
+
+    std::vector<llvm::Value *>      mInitialProcessedItemCount;
+    std::vector<llvm::Value *>      mAccessibleInputItems;
+    std::vector<llvm::Value *>      mInputStrideLength;
+    std::vector<llvm::Value *>      mPopCountRateArray;
+
+    std::vector<llvm::Value *>      mInitialProducedItemCount;
+    std::vector<llvm::Value *>      mWritableOutputItems;
+    std::vector<llvm::Value *>      mOutputStrideLength;
 };
 
 
@@ -494,6 +499,8 @@ protected:
                         Bindings && scalar_outputs,
                         Bindings && internal_scalars);
 
+    llvm::Value * getRemainingItems(const std::unique_ptr<KernelBuilder> & b);
+
 private:
 
     void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
@@ -502,7 +509,7 @@ private:
 
     void writeFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * remainingItems);
 
-    llvm::Value * getRemainingItems(const std::unique_ptr<KernelBuilder> & b);
+    llvm::Value * incrementDerivedItemCounts(const std::unique_ptr<KernelBuilder> & b);
 
 private:
 

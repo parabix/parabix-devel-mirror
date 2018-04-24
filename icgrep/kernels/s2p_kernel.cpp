@@ -130,7 +130,7 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
     Value * basisBitsPtr = &*(args++);
     
     Constant * blockWidth = kb->getSize(kb->getBitBlockWidth());
-    Value * blocksToDo = kb->CreateUDivCeil(itemsToDo, blockWidth); // 1 if this is the final block
+    Value * blocksToDo = kb->CreateCeilUDiv(itemsToDo, blockWidth); // 1 if this is the final block
     
     kb->CreateBr(processBlock);
     

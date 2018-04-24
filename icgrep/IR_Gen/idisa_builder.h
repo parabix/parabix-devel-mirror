@@ -159,6 +159,9 @@ public:
     virtual llvm::Value * bitblock_mask_from(llvm::Value * pos);
     virtual llvm::Value * bitblock_set_bit(llvm::Value * pos);
 
+    // returns a scalar with the popcount of this block
+    llvm::Value * bitblock_popcount(llvm::Value * const to_count);
+
     virtual void CreateBaseFunctions() {}
     
     llvm::Value * simd_and(llvm::Value * a, llvm::Value * b);
@@ -171,11 +174,11 @@ public:
         return mBitBlockType;
     }
 
-    static llvm::VectorType * getStreamTy(llvm::LLVMContext & C, const unsigned FieldWidth = 1) {
+    static llvm::VectorType * LLVM_READNONE getStreamTy(llvm::LLVMContext & C, const unsigned FieldWidth = 1) {
         return llvm::VectorType::get(llvm::IntegerType::getIntNTy(C, FieldWidth), 0);
     }
 
-    static llvm::ArrayType * getStreamSetTy(llvm::LLVMContext & C, const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
+    static llvm::ArrayType * LLVM_READNONE getStreamSetTy(llvm::LLVMContext & C, const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return llvm::ArrayType::get(getStreamTy(C, FieldWidth), NumElements);
     }
 

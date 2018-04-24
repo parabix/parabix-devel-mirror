@@ -170,6 +170,12 @@ Value * IDISA_Builder::simd_umin(unsigned fw, Value * a, Value * b) {
 Value * IDISA_Builder::mvmd_sll(unsigned fw, Value * value, Value * shift) {
     VectorType * const vecTy = cast<VectorType>(value->getType());
     IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Type * const ty = shift->getType();
+        Value * const scaled = CreateMul(shift, ConstantInt::get(ty, fw));
+        Value * const inbounds = CreateICmpULE(scaled, ConstantInt::get(ty, vecTy->getBitWidth()));
+        CreateAssert(inbounds, "shift exceeds vector width");
+    }
     value = CreateBitCast(value, intTy);
     shift = CreateZExtOrTrunc(CreateMul(shift, ConstantInt::get(shift->getType(), fw)), intTy);
     return CreateBitCast(CreateShl(value, shift), vecTy);
@@ -178,6 +184,12 @@ Value * IDISA_Builder::mvmd_sll(unsigned fw, Value * value, Value * shift) {
 Value * IDISA_Builder::mvmd_srl(unsigned fw, Value * value, Value * shift) {
     VectorType * const vecTy = cast<VectorType>(value->getType());
     IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Type * const ty = shift->getType();
+        Value * const scaled = CreateMul(shift, ConstantInt::get(ty, fw));
+        Value * const inbounds = CreateICmpULE(scaled, ConstantInt::get(ty, vecTy->getBitWidth()));
+        CreateAssert(inbounds, "shift exceeds vector width");
+    }
     value = CreateBitCast(value, intTy);
     shift = CreateZExtOrTrunc(CreateMul(shift, ConstantInt::get(shift->getType(), fw)), intTy);
     return CreateBitCast(CreateLShr(value, shift), vecTy);
@@ -611,6 +623,17 @@ Value * IDISA_Builder::bitblock_set_bit(Value * pos) {
     Value * bitField = CreateShl(ConstantInt::get(getSizeTy(), 1), CreateURem(p, fwVal));
     Value * fieldNo = CreateUDiv(p, fwVal);
     return bitCast(CreateInsertElement(Constant::getNullValue(fwVectorType(fw)), bitField, fieldNo));
+}
+
+Value * IDISA_Builder::bitblock_popcount(Value * const to_count) {
+    const auto fieldWidth = getSizeTy()->getBitWidth();
+    auto fields = (getBitBlockWidth() / fieldWidth);
+    Value * fieldCounts = simd_popcount(fieldWidth, to_count);
+    while (fields > 1) {
+        fields /= 2;
+        fieldCounts = CreateAdd(fieldCounts, mvmd_srli(fieldWidth, fieldCounts, fields));
+    }
+    return mvmd_extract(fieldWidth, fieldCounts, 0);
 }
 
 Value * IDISA_Builder::simd_and(Value * a, Value * b) {

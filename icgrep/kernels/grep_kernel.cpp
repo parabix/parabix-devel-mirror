@@ -180,7 +180,8 @@ void RequiredStreams_UTF8::generatePabloMethod() {
 RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb)
 : PabloKernel(kb, "RequiredStreams_UTF8",
 // input
-{Binding{kb->getStreamSetTy(8), "basis"}, Binding{kb->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
+{Binding{kb->getStreamSetTy(8), "basis"},
+ Binding{kb->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
 // output
 {Binding{kb->getStreamSetTy(1), "nonFinal", FixedRate()},
  Binding{kb->getStreamSetTy(1), "UnicodeLB", FixedRate()}}) {

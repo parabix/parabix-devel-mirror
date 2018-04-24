@@ -78,20 +78,17 @@ int main(int argc, char *argv[]) {
         codegen::SegmentSize = 2;
     }
 
-    std::unique_ptr<LZ4Generator> g = llvm::make_unique<LZ4Generator>();
-
+    LZ4Generator g;
     if (extractOnly) {
-        g->generateExtractOnlyPipeline(outputFile);
+        g.generateExtractOnlyPipeline(outputFile);
     } else if (extractAndDepositOnly) {
-        g->generateExtractAndDepositOnlyPipeline(outputFile);
+        g.generateExtractAndDepositOnlyPipeline(outputFile);
     } else {
-        g->generatePipeline(outputFile);
+        g.generatePipeline(outputFile);
     }
-
-    auto main = g->getMainFunc();
-
+    auto main = g.getMainFunc();
     main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
-
     mappedFile.close();
+
     return 0;
 }

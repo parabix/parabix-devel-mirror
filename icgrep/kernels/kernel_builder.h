@@ -33,30 +33,46 @@ public:
     // segment number must be incremented and stored using releaseLogicalSegmentNo.
     llvm::LoadInst * acquireLogicalSegmentNo();
 
-    void releaseLogicalSegmentNo(llvm::Value * nextSegNo);
+    void releaseLogicalSegmentNo(llvm::Value * const nextSegNo);
 
     llvm::Value * getProducedItemCount(const std::string & name) {
-        return getInternalItemCount(name, Kernel::PRODUCED_ITEM_COUNT_SUFFIX);
+        return getNamedItemCount(name, PRODUCED_ITEM_COUNT_SUFFIX);
     }
 
     void setProducedItemCount(const std::string & name, llvm::Value * value) {
-        setInternalItemCount(name, Kernel::PRODUCED_ITEM_COUNT_SUFFIX, value);
+        setNamedItemCount(name, PRODUCED_ITEM_COUNT_SUFFIX, value);
     }
 
     llvm::Value * getProcessedItemCount(const std::string & name) {        
-        return getInternalItemCount(name, Kernel::PROCESSED_ITEM_COUNT_SUFFIX);
+        return getNamedItemCount(name, PROCESSED_ITEM_COUNT_SUFFIX);
     }
 
     void setProcessedItemCount(const std::string & name, llvm::Value * value) {
-        setInternalItemCount(name, Kernel::PROCESSED_ITEM_COUNT_SUFFIX, value);
+        setNamedItemCount(name, PROCESSED_ITEM_COUNT_SUFFIX, value);
     }
 
     llvm::Value * getConsumedItemCount(const std::string & name) {
-        return getInternalItemCount(name, Kernel::CONSUMED_ITEM_COUNT_SUFFIX);
+        return getNamedItemCount(name, CONSUMED_ITEM_COUNT_SUFFIX);
     }
 
     void setConsumedItemCount(const std::string & name, llvm::Value * value) {
-        setInternalItemCount(name, Kernel::CONSUMED_ITEM_COUNT_SUFFIX, value);
+        setNamedItemCount(name, CONSUMED_ITEM_COUNT_SUFFIX, value);
+    }
+
+    llvm::Value * getNonDeferredProcessedItemCount(const Binding & input) {
+        return getNamedItemCount(input.getName(), input.isDeferred() ? NON_DEFERRED_ITEM_COUNT_SUFFIX : PROCESSED_ITEM_COUNT_SUFFIX);
+    }
+
+    void setNonDeferredProcessedItemCount(const Binding & input, llvm::Value * value) {
+        setNamedItemCount(input.getName(), input.isDeferred() ? NON_DEFERRED_ITEM_COUNT_SUFFIX : PROCESSED_ITEM_COUNT_SUFFIX, value);
+    }
+
+    llvm::Value * getNonDeferredProducedItemCount(const Binding & output) {
+        return getNamedItemCount(output.getName(), output.isDeferred() ? NON_DEFERRED_ITEM_COUNT_SUFFIX : PRODUCED_ITEM_COUNT_SUFFIX);
+    }
+
+    void setNonDeferredProducedItemCount(const Binding & output, llvm::Value * value) {
+        setNamedItemCount(output.getName(), output.isDeferred() ? NON_DEFERRED_ITEM_COUNT_SUFFIX : PRODUCED_ITEM_COUNT_SUFFIX, value);
     }
 
     llvm::Value * getTerminationSignal();
@@ -76,11 +92,23 @@ public:
 
     llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);
 
-    llvm::Value * loadInputStreamBlock(const std::string & name, llvm::Value * streamIndex);
+    llvm::Value * loadInputStreamBlock(const std::string & name, llvm::Value * streamIndex) {
+        return loadInputStreamBlock(name, streamIndex, nullptr);
+    }
 
-    llvm::Value * getInputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex);
+    llvm::Value * loadInputStreamBlock(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);
 
-    llvm::Value * loadInputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex);
+    llvm::Value * getInputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) {
+        return getInputStreamPackPtr(name, streamIndex, packIndex, nullptr);
+    }
+
+    llvm::Value * getInputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * blockOffset);
+
+    llvm::Value * loadInputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) {
+        return loadInputStreamPack(name, streamIndex, packIndex, nullptr);
+    }
+
+    llvm::Value * loadInputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * blockOffset);
 
     llvm::Value * getInputStreamSetCount(const std::string & name);
 
@@ -90,11 +118,23 @@ public:
 
     llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);
 
-    llvm::StoreInst * storeOutputStreamBlock(const std::string & name, llvm::Value * streamIndex, llvm::Value * toStore);
+    llvm::StoreInst * storeOutputStreamBlock(const std::string & name, llvm::Value * streamIndex, llvm::Value * toStore) {
+        return storeOutputStreamBlock(name, streamIndex, nullptr, toStore);
+    }
 
-    llvm::Value * getOutputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex);
+    llvm::StoreInst * storeOutputStreamBlock(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset, llvm::Value * toStore);
 
-    llvm::StoreInst * storeOutputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * toStore);
+    llvm::Value * getOutputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex) {
+        return getOutputStreamPackPtr(name, streamIndex, packIndex, nullptr);
+    }
+
+    llvm::Value * getOutputStreamPackPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * blockOffset);
+
+    llvm::StoreInst * storeOutputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * toStore) {
+        return storeOutputStreamPack(name, streamIndex, packIndex, nullptr, toStore);
+    }
+
+    llvm::StoreInst * storeOutputStreamPack(const std::string & name, llvm::Value * streamIndex, llvm::Value * packIndex, llvm::Value * blockOffset, llvm::Value * toStore);
 
     llvm::Value * getOutputStreamSetCount(const std::string & name);
 
@@ -104,7 +144,13 @@ public:
 
     llvm::Value * getBaseAddress(const std::string & name);
 
-    llvm::Value * getBlockAddress(const std::string & name, llvm::Value * const blockIndex);
+    void CreatePrepareOverflow(const std::string & name);
+
+    void CreateNonLinearCopyFromOverflow(const Binding & output, llvm::Value * itemsToCopy, llvm::Value * overflowOffset);
+
+    void CreateCopyFromOverflow(const Binding & output, llvm::Value * itemsToCopy);
+
+    void CreateCopyToOverflow(const std::string & name);
 
     void setBaseAddress(const std::string & name, llvm::Value * addr);
 
@@ -119,10 +165,8 @@ public:
     llvm::Value * getAvailableItemCount(const std::string & name);
 
     llvm::Value * getLinearlyAccessibleItems(const std::string & name, llvm::Value * fromPos, llvm::Value * avail, bool reverse = false);
-    
+
     llvm::Value * getLinearlyWritableItems(const std::string & name, llvm::Value * fromPos, bool reverse = false);
-    
-    void CreateStreamCpy(const std::string & name, llvm::Value * const target, llvm::Value * const targetOffset, llvm::Value * const source, llvm::Value * const sourceOffset, llvm::Value * const itemsToCopyFromOffset, const unsigned itemAlignment);
 
     llvm::BasicBlock * CreateConsumerWait();
 
@@ -148,6 +192,15 @@ public:
 
     void doubleCapacity(const std::string & name);
 
+    // overloading wrongly subsitutes this for CBuilder function. renamed for now until I can investigate why.
+    llvm::Value * CreateUDiv2(llvm::Value * const number, const ProcessingRate::RateValue & divisor, const llvm::Twine & Name = "");
+
+    llvm::Value * CreateCeilUDiv2(llvm::Value * const number, const ProcessingRate::RateValue & divisor, const llvm::Twine & Name = "");
+
+    llvm::Value * CreateMul2(llvm::Value * const number, const ProcessingRate::RateValue & factor, const llvm::Twine & Name = "");
+
+    llvm::Value * CreateCeilUMul2(llvm::Value * const number, const ProcessingRate::RateValue & factor, const llvm::Twine & Name = "");
+
 protected:
 
     KernelBuilder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
@@ -160,9 +213,9 @@ protected:
 
     llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & fieldName);
 
-    llvm::Value * getInternalItemCount(const std::string & name, const std::string & suffix);
+    llvm::Value * getNamedItemCount(const std::string & name, const std::string & suffix);
 
-    void setInternalItemCount(const std::string & name, const std::string & suffix, llvm::Value * const value);
+    void setNamedItemCount(const std::string & name, const std::string & suffix, llvm::Value * const value);
 
 protected:
     const Kernel * mKernel;

@@ -45,7 +45,7 @@ public:
     bool hasSignature() const override { return false; }
 private:
     virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-    virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
+    virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * remainingBytes) override;
     llvm::Value* processPackData(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* packData) const;
 };
 

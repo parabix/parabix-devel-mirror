@@ -26,13 +26,13 @@ public:
         generateDoSegmentMethod(mCodeUnitWidth, iBuilder);
     }
     void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
-        unmapSourceBuffer(iBuilder);
+        unmapSourceBuffer(mCodeUnitWidth, iBuilder);
     }
 protected:
-    static llvm::Function * linkFileSizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    static void generateInitializeMethod(llvm::Function * fileSize, const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    static void generateDoSegmentMethod(const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    static void unmapSourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    static llvm::Function * linkFileSizeMethod(const std::unique_ptr<kernel::KernelBuilder> & b);
+    static void generateInitializeMethod(llvm::Function * fileSize, const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & b);
+    static void generateDoSegmentMethod(const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & b);
+    static void unmapSourceBuffer(const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 protected:
     const unsigned mCodeUnitWidth;
     llvm::Function * mFileSizeFunction;

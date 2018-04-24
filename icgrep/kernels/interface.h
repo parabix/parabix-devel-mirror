@@ -25,6 +25,16 @@ namespace llvm { class Type; }
 
 namespace kernel {
 
+const static std::string LOGICAL_SEGMENT_NO_SCALAR = "segmentNo";
+const static std::string PROCESSED_ITEM_COUNT_SUFFIX = "_processedItemCount";
+const static std::string PRODUCED_ITEM_COUNT_SUFFIX = "_producedItemCount";
+const static std::string CONSUMED_ITEM_COUNT_SUFFIX = "_consumedItemCount";
+const static std::string NON_DEFERRED_ITEM_COUNT_SUFFIX = "_nonDeferredItemCount";
+const static std::string TERMINATION_SIGNAL = "terminationSignal";
+const static std::string BUFFER_SUFFIX = "_buffer";
+const static std::string CONSUMER_SUFFIX = "_consumerLocks";
+const static std::string CYCLECOUNT_SCALAR = "CPUcycles";
+
 struct Binding : public AttributeSet {
 
     Binding(llvm::Type * type, const std::string & name, ProcessingRate r = FixedRate(1))
@@ -65,24 +75,12 @@ struct Binding : public AttributeSet {
         return hasAttribute(AttributeId::LookAhead);
     }
 
-    bool isMisaligned() const {
-        return hasAttribute(AttributeId::Misaligned);
-    }
-
-    bool isSwizzled() const {
-        return hasAttribute(AttributeId::Swizzled);
-    }
-
-    bool isDisableSufficientChecking() const {
-        return hasAttribute(AttributeId::DisableSufficientChecking);
-    }
-
     unsigned const getLookahead() const {
         return findAttribute(AttributeId::LookAhead).amount();
     }
 
-    bool nonDeferred() const {
-        return !hasAttribute(AttributeId::Deferred);
+    bool isDeferred() const {
+        return hasAttribute(AttributeId::Deferred);
     }
 
 private:

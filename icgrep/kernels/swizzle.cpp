@@ -29,7 +29,7 @@ SwizzleGenerator::SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> 
         mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(inputStreamsPerSet, 1), "inputGroup" + std::to_string(i)});
     }
     for (unsigned i = 0; i < mOutputSets; i++) {
-        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(outputStreamsPerSet, 1), "outputGroup" + std::to_string(i)});
+        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(outputStreamsPerSet, 1), "outputGroup" + std::to_string(i), FixedRate(1), BlockSize(fieldWidth)});
     }
 }
 

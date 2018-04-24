@@ -44,7 +44,7 @@ void KernelBuilder::setScalarField(const std::string & fieldName, Value * value)
 }
 
 Value * KernelBuilder::getStreamHandle(const std::string & name) {
-    Value * const ptr = getScalarField(name + Kernel::BUFFER_PTR_SUFFIX);
+    Value * const ptr = getScalarField(name + BUFFER_SUFFIX);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(ptr, name + " handle cannot be null!");
     }
@@ -52,18 +52,18 @@ Value * KernelBuilder::getStreamHandle(const std::string & name) {
 }
 
 LoadInst * KernelBuilder::acquireLogicalSegmentNo() {
-    return CreateAtomicLoadAcquire(getScalarFieldPtr(Kernel::LOGICAL_SEGMENT_NO_SCALAR));
+    return CreateAtomicLoadAcquire(getScalarFieldPtr(LOGICAL_SEGMENT_NO_SCALAR));
 }
 
-void KernelBuilder::releaseLogicalSegmentNo(Value * nextSegNo) {
-    CreateAtomicStoreRelease(nextSegNo, getScalarFieldPtr(Kernel::LOGICAL_SEGMENT_NO_SCALAR));
+void KernelBuilder::releaseLogicalSegmentNo(Value * const nextSegNo) {
+    CreateAtomicStoreRelease(nextSegNo, getScalarFieldPtr(LOGICAL_SEGMENT_NO_SCALAR));
 }
 
 Value * KernelBuilder::getCycleCountPtr() {
-    return getScalarFieldPtr(Kernel::CYCLECOUNT_SCALAR);
+    return getScalarFieldPtr(CYCLECOUNT_SCALAR);
 }
 
-Value * KernelBuilder::getInternalItemCount(const std::string & name, const std::string & suffix) {
+Value * KernelBuilder::getNamedItemCount(const std::string & name, const std::string & suffix) {
     const ProcessingRate & rate = mKernel->getBinding(name).getRate();
     Value * itemCount = nullptr;
     if (LLVM_UNLIKELY(rate.isRelative())) {
@@ -74,27 +74,25 @@ Value * KernelBuilder::getInternalItemCount(const std::string & name, const std:
         } else {
             itemCount = getProducedItemCount(rate.getReference());
         }
-        const auto & r = rate.getRate();
-        if (r.numerator() != 1) {
-            itemCount = CreateMul(itemCount, ConstantInt::get(itemCount->getType(), r.numerator()));
-        }
-        if (r.denominator() != 1) {
-            itemCount = CreateExactUDiv(itemCount, ConstantInt::get(itemCount->getType(), r.denominator()));
-        }
+        itemCount = CreateMul2(itemCount, rate.getRate());
     } else {
         itemCount = getScalarField(name + suffix);
     }
     return itemCount;
 }
 
-void KernelBuilder::setInternalItemCount(const std::string & name, const std::string & suffix, llvm::Value * const value) {
+void KernelBuilder::setNamedItemCount(const std::string & name, const std::string & suffix, llvm::Value * const value) {
     const ProcessingRate & rate = mKernel->getBinding(name).getRate();
-    if (LLVM_UNLIKELY(rate.isDerived())) {
-        assert (false);
-        report_fatal_error("Cannot set item count: " + name + " is a Derived rate");
+    const auto safetyCheck = mKernel->treatUnsafeKernelOperationsAsErrors();
+    if (LLVM_UNLIKELY(rate.isDerived() && safetyCheck)) {
+        report_fatal_error("Cannot set item count: " + name + " is a derived rate stream");
     }
     if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
         CallPrintIntToStderr(mKernel->getName() + ": " + name + suffix, value);
+    }
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts) && safetyCheck)) {
+        Value * const current = getScalarField(name + suffix);
+        CreateAssert(CreateICmpUGE(value, current), name + " " + suffix + " must be monotonically non-decreasing");
     }
     setScalarField(name + suffix, value);
 }
@@ -111,7 +109,7 @@ Value * KernelBuilder::getAvailableItemCount(const std::string & name) {
 }
 
 Value * KernelBuilder::getTerminationSignal() {
-    return CreateICmpNE(getScalarField(Kernel::TERMINATION_SIGNAL), getSize(0));
+    return CreateICmpNE(getScalarField(TERMINATION_SIGNAL), getSize(0));
 }
 
 void KernelBuilder::setTerminationSignal(llvm::Value * const value) {
@@ -119,7 +117,7 @@ void KernelBuilder::setTerminationSignal(llvm::Value * const value) {
     if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
         CallPrintIntToStderr(mKernel->getName() + ": setTerminationSignal", value);
     }
-    setScalarField(Kernel::TERMINATION_SIGNAL, CreateZExt(value, getSizeTy()));
+    setScalarField(TERMINATION_SIGNAL, CreateZExt(value, getSizeTy()));
 }
 
 Value * KernelBuilder::getLinearlyAccessibleItems(const std::string & name, Value * fromPosition, Value * avail, bool reverse) {
@@ -133,277 +131,206 @@ Value * KernelBuilder::getLinearlyWritableItems(const std::string & name, Value 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isConstantZero
+ * @brief CreatePrepareOverflow
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isConstantZero(Value * const v) {
-    return isa<ConstantInt>(v) && cast<ConstantInt>(v)->isNullValue();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isConstantOne
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isConstantOne(Value * const v) {
-    return isa<ConstantInt>(v) && cast<ConstantInt>(v)->isOne();
+void KernelBuilder::CreatePrepareOverflow(const std::string & name) {
+    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
+    assert (buf->supportsCopyBack());
+    Constant * const overflowSize = ConstantExpr::getSizeOf(buf->getType());
+    Value * const handle = getStreamHandle(name);
+    // TODO: handle non constant stream set counts
+    assert (isa<Constant>(buf->getStreamSetCount(this, handle)));
+    Value * const base = buf->getBaseAddress(this, handle);
+    Value * const overflow = buf->getOverflowAddress(this, handle);
+    const auto blockSize = getBitBlockWidth() / 8;
+    CreateMemZero(overflow, overflowSize, blockSize);
+    CreateMemZero(base, overflowSize, blockSize);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getItemWidth
  ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned getItemWidth(const Type * ty) {
+inline unsigned LLVM_READNONE getItemWidth(const Type * ty ) {
     if (LLVM_LIKELY(isa<ArrayType>(ty))) {
         ty = ty->getArrayElementType();
     }
     return cast<IntegerType>(ty->getVectorElementType())->getBitWidth();
 }
 
-inline static unsigned ceil_log2(const unsigned v) {
-    assert ("log2(0) is undefined!" && v != 0);
-    return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1U);
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateNonLinearCopyFromOverflow
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelBuilder::CreateNonLinearCopyFromOverflow(const Binding & output, llvm::Value * const itemsToCopy, Value * overflowOffset) {
+
+    Value * const handle = getStreamHandle(output.getName());
+    Type * const bitBlockPtrTy = getBitBlockType()->getPointerTo();
+    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(output.getName());
+    assert (buf->supportsCopyBack());
+    Value * const target = CreatePointerCast(buf->getBaseAddress(this, handle), bitBlockPtrTy);
+    Value * const source = CreatePointerCast(buf->getOverflowAddress(this, handle), bitBlockPtrTy);
+    const auto blockSize = getBitBlockWidth() / 8;
+    Constant * const BLOCK_WIDTH = getSize(getBitBlockWidth());
+    Constant * const ITEM_WIDTH = getSize(getItemWidth(buf->getBaseType()));
+    Value * const streamCount = buf->getStreamSetCount(this, handle);
+
+    // If we have a computed overflow position, the base and overflow regions were not speculatively zeroed out prior
+    // to the kernel writing over them. To handle them, we compute a mask of valid items and exclude any bit not in
+    // them before OR-ing together the streams.
+    if (overflowOffset) {
+
+        overflowOffset = CreateMul(overflowOffset, ITEM_WIDTH);
+        Value * targetMask = bitblock_mask_from(CreateURem(overflowOffset, BLOCK_WIDTH));
+        Value * sourceMask = CreateNot(targetMask);
+        Value * const overflowBlockCount = CreateUDiv(overflowOffset, BLOCK_WIDTH);
+        Value * const blockOffset = CreateMul(overflowBlockCount, streamCount);
+        Value * const fullCopyLength = CreateMul(blockOffset, getSize(blockSize));
+        CreateMemCpy(target, source, fullCopyLength, blockSize);
+
+        BasicBlock * const partialCopyEntry = GetInsertBlock();
+        BasicBlock * const partialCopyLoop = CreateBasicBlock();
+        BasicBlock * const partialCopyExit = CreateBasicBlock();
+
+        Value * const partialBlockCount = CreateAdd(blockOffset, streamCount);
+        CreateBr(partialCopyLoop);
+
+        SetInsertPoint(partialCopyLoop);
+        PHINode * const blockIndex = CreatePHI(getSizeTy(), 2);
+        blockIndex->addIncoming(blockOffset, partialCopyEntry);
+        Value * const sourcePtr = CreateGEP(source, blockIndex);
+        Value * sourceValue = CreateBlockAlignedLoad(sourcePtr);
+        sourceValue = CreateAnd(sourceValue, sourceMask);
+        Value * const targetPtr = CreateGEP(target, blockIndex);
+        Value * targetValue = CreateBlockAlignedLoad(targetPtr);
+        targetValue = CreateAnd(targetValue, targetMask);
+        targetValue = CreateOr(targetValue, sourceValue);
+        CreateBlockAlignedStore(targetValue, targetPtr);
+        Value * const nextBlockIndex = CreateAdd(blockIndex, getSize(1));
+        blockIndex->addIncoming(nextBlockIndex, partialCopyLoop);
+        CreateCondBr(CreateICmpNE(nextBlockIndex, partialBlockCount), partialCopyLoop, partialCopyExit);
+
+        SetInsertPoint(partialCopyExit);
+
+    } else {
+
+        BasicBlock * const mergeCopyEntry = GetInsertBlock();
+        BasicBlock * const mergeCopyLoop = CreateBasicBlock();
+        BasicBlock * const mergeCopyExit = CreateBasicBlock();
+
+        Value * blocksToCopy = CreateCeilUDiv(itemsToCopy, BLOCK_WIDTH);
+        blocksToCopy = CreateMul(blocksToCopy, ITEM_WIDTH);
+        blocksToCopy = CreateMul(blocksToCopy, streamCount);
+
+        CreateBr(mergeCopyLoop);
+
+        SetInsertPoint(mergeCopyLoop);
+        PHINode * const blockIndex = CreatePHI(getSizeTy(), 2);
+        blockIndex->addIncoming(getSize(0), mergeCopyEntry);
+        Value * const sourcePtr = CreateGEP(source, blockIndex);
+        Value * const sourceValue = CreateBlockAlignedLoad(sourcePtr);
+        Value * const targetPtr = CreateGEP(target, blockIndex);
+        Value * targetValue = CreateBlockAlignedLoad(targetPtr);
+        targetValue = CreateOr(targetValue, sourceValue);
+        CreateBlockAlignedStore(targetValue, targetPtr);
+        Value * const nextBlockIndex = CreateAdd(blockIndex, getSize(1));
+        blockIndex->addIncoming(nextBlockIndex, mergeCopyLoop);
+        CreateCondBr(CreateICmpNE(nextBlockIndex, blocksToCopy), mergeCopyLoop, mergeCopyExit);
+
+        SetInsertPoint(mergeCopyExit);
+    }
+
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateStreamCpy
+ * @brief CreateCopyFromOverflow
  ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::CreateStreamCpy(const std::string & name, Value * target, Value * targetOffset, Value * source, Value * sourceOffset, Value * itemsToCopy, const unsigned itemAlignment) {
+void KernelBuilder::CreateCopyFromOverflow(const Binding & output, llvm::Value * const itemsToCopy) {
 
-    assert (target && targetOffset);
-    assert (source && sourceOffset);
-    // assert (target->getType() == source->getType());
-    assert (target->getType()->isPointerTy());
-    assert (isConstantZero(targetOffset) || isConstantZero(sourceOffset));
-    const StreamSetBuffer * const buffer = mKernel->getAnyStreamSetBuffer(name);
-    const auto itemWidth = getItemWidth(buffer->getBaseType());
-    assert ("invalid item width" && is_power_2(itemWidth));
-    const auto blockWidth = getBitBlockWidth();
-    // Although our item width may be n bits, if we know we're always processing m items per block, our field width
-    // (w.r.t the stream copy) would be n*m. By taking this into account we can optimize and simplify the copy code.
-    const auto fieldWidth = std::min(1U << ceil_log2(itemWidth * itemAlignment), blockWidth);
-    assert ((blockWidth % fieldWidth) == 0);
+    Value * const handle = getStreamHandle(output.getName());
+    Type * const bitBlockPtrTy = getBitBlockType()->getPointerTo();
+    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(output.getName());
+    assert (buf->supportsCopyBack());
+    Value * const target = CreatePointerCast(buf->getBaseAddress(this, handle), bitBlockPtrTy);
+    Value * const source = CreatePointerCast(buf->getOverflowAddress(this, handle), bitBlockPtrTy);
+    Constant * const BLOCK_WIDTH = getSize(getBitBlockWidth());
+    Constant * const ITEM_WIDTH = getSize(getItemWidth(buf->getBaseType()));
+    Value * const streamCount = buf->getStreamSetCount(this, handle);
 
-    if (LLVM_LIKELY(itemWidth < fieldWidth)) {
-        const auto factor = fieldWidth / itemWidth;
-        Constant * const FACTOR = getSize(factor);
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            const auto kernelName = mKernel->getName()+ ": " + name;
-            if (fieldWidth > 8) {
-                const auto alignment = (fieldWidth + 7) / 8;
-                ConstantInt * const ALIGNMENT = getSize(alignment);
-                CreateAssertZero(CreateURem(CreatePtrToInt(target, getSizeTy()), ALIGNMENT), kernelName + " target is misaligned (" + std::to_string(alignment) + ")");
-                CreateAssertZero(CreateURem(CreatePtrToInt(source, getSizeTy()), ALIGNMENT), kernelName + " source is misaligned (" + std::to_string(alignment) + ")");
-            }
-            CreateAssertZero(CreateURem(targetOffset, FACTOR), kernelName + " target offset is misaligned (" + std::to_string(factor) + ")");
-            CreateAssertZero(CreateURem(sourceOffset, FACTOR), kernelName + " source offset is misaligned (" + std::to_string(factor) + ")");
-        }
-        targetOffset = CreateUDiv(targetOffset, FACTOR);
-        sourceOffset = CreateUDiv(sourceOffset, FACTOR);
-    }
+    BasicBlock * const mergeCopyEntry = GetInsertBlock();
+    BasicBlock * const mergeCopyLoop = CreateBasicBlock();
+    BasicBlock * const mergeCopyExit = CreateBasicBlock();
 
-    /*
-       Streams are conceptually modelled as:
+    Value * blocksToCopy = CreateCeilUDiv(itemsToCopy, BLOCK_WIDTH);
+    blocksToCopy = CreateMul(blocksToCopy, ITEM_WIDTH);
+    blocksToCopy = CreateMul(blocksToCopy, streamCount);
 
-                                            BLOCKS
+    CreateBr(mergeCopyLoop);
 
-                                      A     B     C     D
-           STREAM SET ELEMENT   1  |aaaaa|bbbbb|ccccc|dddd |
-                                2  |eeeee|fffff|ggggg|hhhh |
-                                3  |iiiii|jjjjj|kkkkk|llll |
+    SetInsertPoint(mergeCopyLoop);
+    PHINode * const blockIndex = CreatePHI(getSizeTy(), 2);
+    blockIndex->addIncoming(getSize(0), mergeCopyEntry);
+    Value * const sourcePtr = CreateGEP(source, blockIndex);
+    Value * const sourceValue = CreateBlockAlignedLoad(sourcePtr);
+    Value * const targetPtr = CreateGEP(target, blockIndex);
+    CreateBlockAlignedStore(sourceValue, targetPtr);
+    Value * const nextBlockIndex = CreateAdd(blockIndex, getSize(1));
+    blockIndex->addIncoming(nextBlockIndex, mergeCopyLoop);
+    CreateCondBr(CreateICmpNE(nextBlockIndex, blocksToCopy), mergeCopyLoop, mergeCopyExit);
 
-       But the memory layout is actually:
-
-           A_1   A_2   A_3   B_1   B_2   B_3   C_1   C_2   C_3   D_1   D_2   D_3
-
-         |aaaaa|eeeee|iiiii|bbbbb|fffff|jjjjj|ccccc|ggggg|kkkkk|dddd |hhhh |llll |
+    SetInsertPoint(mergeCopyExit);
+}
 
 
-       So if we're copying the entire stream set block or our stream set has one element, we can use memcpy.
-
-       One compilication here is when the BlockSize of a stream is not equal to the BitBlockWidth.
-
-
-    */
-
-    Value * const n = buffer->getStreamSetCount(this, getStreamHandle(name));
-    if (((isConstantOne(n) && fieldWidth >= 8) || fieldWidth == blockWidth || (isConstantZero(targetOffset) && isConstantZero(sourceOffset)))) {
-        if (LLVM_LIKELY(itemWidth < 8)) {
-            itemsToCopy = CreateUDivCeil(itemsToCopy, getSize(8 / itemWidth));
-        } else if (LLVM_UNLIKELY(itemWidth > 8)) {
-            itemsToCopy = CreateMul(itemsToCopy, getSize(itemWidth / 8));
-        }
-        if (!isConstantOne(n)) {
-            itemsToCopy = CreateMul(itemsToCopy, n);
-        }
-        PointerType * const ptrTy = getIntNTy(fieldWidth)->getPointerTo();
-        target = CreateGEP(CreatePointerCast(target, ptrTy), targetOffset);
-        source = CreateGEP(CreatePointerCast(source, ptrTy), sourceOffset);
-        const auto alignment = (fieldWidth + 7) / 8;
-        CreateMemCpy(target, source, itemsToCopy, alignment);
-
-    } else { // either the target offset or source offset is non-zero but not both
-        VectorType * const blockTy = getBitBlockType();
-        PointerType * const blockPtrTy = blockTy->getPointerTo();
-        Constant * const BLOCK_WIDTH = getSize(blockWidth);
-        target = CreatePointerCast(target, blockPtrTy);
-        target = CreateGEP(target, CreateUDiv(targetOffset, BLOCK_WIDTH));
-        source = CreatePointerCast(source, blockPtrTy);
-        source = CreateGEP(source, CreateUDiv(sourceOffset, BLOCK_WIDTH));
-        const auto alignment = blockWidth / 8;
-        Constant * const ZERO = getSize(0);
-        Constant * const ONE = getSize(1);
-
-        BasicBlock * const entry = GetInsertBlock();
-
-        // TODO: this code isn't correct. I was hoping to shift by fieldwidth units to give LLVM
-        // the ability to better select
-
-        if (isConstantZero(targetOffset)) {
-
-            /*
-                                                BLOCKS
-
-                                          A     B     C     D
-               SOURCE STREAM        1  |aaa--|bbbBB|cccCC|  dDD|
-                                    2  |eee--|fffFF|gggGG|  hHH|
-                                    3  |iii--|jjjJJ|kkkKK|  lLL|
-
-
-                                          A     B     C     D
-               TARGET STREAM        1  |BBaaa|CCbbb|DDccc|    d|
-                                    2  |FFeee|GGfff|HHggg|    h|
-                                    3  |JJiii|KKjjj|LLkkk|    l|
-            */
-
-            sourceOffset = CreateURem(sourceOffset, BLOCK_WIDTH);
-
-            Value * const borrowOffset = CreateSub(BLOCK_WIDTH, sourceOffset);
-            BasicBlock * const streamCopy = CreateBasicBlock();
-            BasicBlock * const streamCopyRemainingCond = CreateBasicBlock();
-            BasicBlock * const streamCopyRemaining = CreateBasicBlock();
-            BasicBlock * const streamCopyEnd = CreateBasicBlock();
-
-            Value * const blocksToCopy = CreateMul(CreateUDiv(itemsToCopy, BLOCK_WIDTH), n);
-            CreateCondBr(CreateICmpNE(blocksToCopy, ZERO), streamCopy, streamCopyRemainingCond);
-
-            SetInsertPoint(streamCopy);
-            PHINode * const i = CreatePHI(getSizeTy(), 2);
-            i->addIncoming(n, entry);
-            Value * Ai = CreateAlignedLoad(CreateGEP(source, CreateSub(i, n)), alignment);
-            Ai = mvmd_srl(fieldWidth, Ai, borrowOffset);
-            Value * Bi = CreateAlignedLoad(CreateGEP(source, i), alignment);
-            Bi = mvmd_sll(fieldWidth, Bi, sourceOffset);
-            CreateAlignedStore(CreateOr(Bi, Ai), CreateGEP(target, i), alignment);
-            Value * const next_i = CreateAdd(i, ONE);
-            i->addIncoming(next_i, streamCopy);
-            CreateCondBr(CreateICmpNE(next_i, blocksToCopy), streamCopy, streamCopyRemainingCond);
-
-            SetInsertPoint(streamCopyRemainingCond);
-            Value * const partialBlocksToCopy = CreateAdd(blocksToCopy, n);
-            Value * const remainingItemsToCopy = CreateURem(itemsToCopy, BLOCK_WIDTH);
-            CreateLikelyCondBr(CreateIsNotNull(remainingItemsToCopy), streamCopyRemaining, streamCopyEnd);
-
-            SetInsertPoint(streamCopyRemaining);
-            PHINode * const j = CreatePHI(getSizeTy(), 2);
-            j->addIncoming(blocksToCopy, streamCopyRemainingCond);
-            Value * Aj = CreateAlignedLoad(CreateGEP(source, j), alignment);
-            Aj = mvmd_srl(fieldWidth, Aj, borrowOffset);
-            CreateAlignedStore(Aj, CreateGEP(target, j), alignment);
-            Value * const next_j = CreateAdd(j, ONE);
-            j->addIncoming(next_j, streamCopyRemaining);
-            CreateCondBr(CreateICmpNE(next_j, partialBlocksToCopy), streamCopyRemaining, streamCopyEnd);
-
-            SetInsertPoint(streamCopyEnd);
-
-        } else if (isConstantZero(sourceOffset)) {
-
-            /*
-                                                BLOCKS
-
-                                          A     B     C     D
-               SOURCE STREAM        1  |AAAaa|BBBaa|CCCcc|    d|
-                                    2  |EEEee|FFFff|GGGgg|    h|
-                                    3  |IIIii|JJJjj|KKKkk|    l|
-
-
-                                          A     B     C     D
-               TARGET STREAM        1  |--XXX|-----|-----|-----|
-                                    2  |--YYY|-----|-----|-----|
-                                    3  |--ZZZ|-----|-----|-----|
-
-                                          A     B     C     D
-               OUTPUT STREAM        1  |aaXXX|bbAAA|ccBBB| dCCC|
-                                    2  |eeYYY|ffEEE|ggFFF| hGGG|
-                                    3  |iiZZZ|jjIII|kkJJJ| lKKK|
-
-            */
-
-            BasicBlock * const streamCopy = CreateBasicBlock();
-            BasicBlock * const streamCopyRemainingCond = CreateBasicBlock();
-            BasicBlock * const streamCopyRemaining = CreateBasicBlock();
-            BasicBlock * const streamCopyEnd = CreateBasicBlock();
-
-            targetOffset = CreateURem(targetOffset, BLOCK_WIDTH);
-
-            Value * const carryOffset = CreateSub(BLOCK_WIDTH, targetOffset);
-            Value * const mask = mvmd_srl(fieldWidth, Constant::getAllOnesValue(blockTy), carryOffset);
-            CreateBr(streamCopy);
-
-            SetInsertPoint(streamCopy);
-            PHINode * const i = CreatePHI(getSizeTy(), 2);
-            i->addIncoming(ZERO, entry);
-            Value * A0 = CreateAlignedLoad(CreateGEP(target, i), alignment);
-            A0 = CreateAnd(A0, mask);
-            Value * Ai = CreateAlignedLoad(CreateGEP(source, i), alignment);
-            Ai = mvmd_sll(fieldWidth, Ai, targetOffset);
-            CreateAlignedStore(CreateOr(Ai, A0), CreateGEP(target, i), alignment);
-            Value * const next_i = CreateAdd(i, ONE);
-            i->addIncoming(next_i, streamCopy);
-            CreateCondBr(CreateICmpNE(next_i, n), streamCopy, streamCopyRemainingCond);
-
-            SetInsertPoint(streamCopyRemainingCond);
-            Value * const blocksToCopy = CreateMul(CreateUDiv(itemsToCopy, BLOCK_WIDTH), n);
-            CreateCondBr(CreateICmpUGT(blocksToCopy, n), streamCopyRemaining, streamCopyEnd);
-
-            SetInsertPoint(streamCopyRemaining);
-            PHINode * const j = CreatePHI(getSizeTy(), 2);
-            j->addIncoming(n, streamCopyRemainingCond);
-            Value * Aj = CreateAlignedLoad(CreateGEP(source, CreateSub(j, n)), alignment);
-            Aj = mvmd_srl(fieldWidth, Aj, carryOffset);
-            Value * Bj = CreateAlignedLoad(CreateGEP(source, j), alignment);
-            Bj = mvmd_sll(fieldWidth, Bj, targetOffset);
-            CreateAlignedStore(CreateOr(Bj, Aj), CreateGEP(target, j), alignment);
-            Value * const next_j = CreateAdd(j, ONE);
-            j->addIncoming(next_j, streamCopyRemaining);
-            CreateCondBr(CreateICmpNE(next_j, blocksToCopy), streamCopyRemaining, streamCopyEnd);
-
-            SetInsertPoint(streamCopyEnd);
-        }
-    }
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateCopyToOverflow
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelBuilder::CreateCopyToOverflow(const std::string & name) {
+    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
+    assert (buf->supportsCopyBack());
+    Value * const handle = getStreamHandle(name);
+    // TODO: handle non constant stream set counts
+    assert (isa<Constant>(buf->getStreamSetCount(this, handle)));
+    Value * const target = buf->getBaseAddress(this, handle);
+    Value * const source = buf->getOverflowAddress(this, handle);
+    Constant * const overflowSize = ConstantExpr::getSizeOf(buf->getType());
+    CreateMemCpy(target, source, overflowSize, getBitBlockWidth() / 8);
 }
 
 Value * KernelBuilder::getConsumerLock(const std::string & name) {
-    return getScalarField(name + Kernel::CONSUMER_SUFFIX);
+    return getScalarField(name + CONSUMER_SUFFIX);
 }
 
-void KernelBuilder::setConsumerLock(const std::string & name, Value * value) {
-    setScalarField(name + Kernel::CONSUMER_SUFFIX, value);
+void KernelBuilder::setConsumerLock(const std::string & name, Value * const value) {
+    setScalarField(name + CONSUMER_SUFFIX, value);
 }
 
-Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * streamIndex) {
-    return CreateBlockAlignedLoad(getInputStreamBlockPtr(name, streamIndex));
-}
-
-Value * KernelBuilder::getInputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) {
-    Value * const addr = mKernel->getStreamSetInputAddress(name);
-    if (addr) {
-        return CreateGEP(addr, {getInt32(0), streamIndex, packIndex});
-    } else {
-        const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-        Value * const blockIndex = CreateLShr(getProcessedItemCount(name), std::log2(getBitBlockWidth()));
-        return buf->getStreamPackPtr(this, getStreamHandle(name), getBaseAddress(name), streamIndex, blockIndex, packIndex, true);
+Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * const streamIndex, Value * const blockOffset) {
+    const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
+    Value * blockIndex = CreateLShr(getProcessedItemCount(name), std::log2(getBitBlockWidth()));
+    if (blockOffset) {
+        assert (blockOffset->getType() == blockIndex->getType());
+        blockIndex = CreateAdd(blockIndex, blockOffset);
     }
+    return buf->getStreamBlockPtr(this, getStreamHandle(name), streamIndex, blockIndex, true);
 }
 
-Value * KernelBuilder::loadInputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex) {
-    return CreateBlockAlignedLoad(getInputStreamPackPtr(name, streamIndex, packIndex));
+Value * KernelBuilder::getInputStreamPackPtr(const std::string & name, Value * const streamIndex, Value * const packIndex, Value * const blockOffset) {
+    const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
+    Value * blockIndex = CreateLShr(getProcessedItemCount(name), std::log2(getBitBlockWidth()));
+    if (blockOffset) {
+        assert (blockOffset->getType() == blockIndex->getType());
+        blockIndex = CreateAdd(blockIndex, blockOffset);
+    }
+    return buf->getStreamPackPtr(this, getStreamHandle(name), streamIndex, blockIndex, packIndex, true);
+}
+
+Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * const streamIndex, Value * const blockOffset) {
+    return CreateBlockAlignedLoad(getInputStreamBlockPtr(name, streamIndex, blockOffset));
+}
+
+Value * KernelBuilder::loadInputStreamPack(const std::string & name, Value * const streamIndex, Value * const packIndex, Value * const blockOffset) {
+    return CreateBlockAlignedLoad(getInputStreamPackPtr(name, streamIndex, packIndex, blockOffset));
 }
 
 Value * KernelBuilder::getInputStreamSetCount(const std::string & name) {
@@ -411,38 +338,29 @@ Value * KernelBuilder::getInputStreamSetCount(const std::string & name) {
     return buf->getStreamSetCount(this, getStreamHandle(name));
 }
 
-Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * const streamIndex, Value * const blockOffset) {
-    Value * const addr = mKernel->getStreamSetInputAddress(name);
-    if (addr) {
-        return CreateGEP(addr, {blockOffset ? blockOffset : getInt32(0), streamIndex});
-    } else {
-        const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-        Value * blockIndex = CreateLShr(getProcessedItemCount(name), std::log2(getBitBlockWidth()));
-        if (blockOffset) {
-            assert (blockIndex->getType() == blockOffset->getType());
-            blockIndex = CreateAdd(blockIndex, blockOffset);
-        }
-        return buf->getStreamBlockPtr(this, getStreamHandle(name), getBaseAddress(name), streamIndex, blockIndex, true);
-    }
-}
-
 Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value * streamIndex, Value * const blockOffset) {
-    Value * const addr = mKernel->getStreamSetOutputAddress(name);
-    if (addr) {
-        return CreateGEP(addr, {blockOffset ? blockOffset : getInt32(0), streamIndex});
-    } else {
-        const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-        Value * blockIndex = CreateLShr(getProducedItemCount(name), std::log2(getBitBlockWidth()));
-        if (blockOffset) {
-            assert (blockIndex->getType() == blockOffset->getType());
-            blockIndex = CreateAdd(blockIndex, blockOffset);
-        }
-        return buf->getStreamBlockPtr(this, getStreamHandle(name), getBaseAddress(name), streamIndex, blockIndex, false);
+    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
+    Value * blockIndex = CreateLShr(getProducedItemCount(name), std::log2(getBitBlockWidth()));
+    if (blockOffset) {
+        assert (blockOffset->getType() == blockIndex->getType());
+        blockIndex = CreateAdd(blockIndex, blockOffset);
     }
+    return buf->getStreamBlockPtr(this, getStreamHandle(name), streamIndex, blockIndex, false);
 }
 
-StoreInst * KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, Value * toStore) {
-    Value * const ptr = getOutputStreamBlockPtr(name, streamIndex);
+Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex, llvm::Value * blockOffset) {
+    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
+    Value * blockIndex = CreateLShr(getProducedItemCount(name), std::log2(getBitBlockWidth()));
+    if (blockOffset) {
+        assert (blockOffset->getType() == blockIndex->getType());
+        blockIndex = CreateAdd(blockIndex, blockOffset);
+    }
+    return buf->getStreamPackPtr(this, getStreamHandle(name), streamIndex, blockIndex, packIndex, false);
+}
+
+
+StoreInst * KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, llvm::Value * blockOffset, Value * toStore) {
+    Value * const ptr = getOutputStreamBlockPtr(name, streamIndex, blockOffset);
     Type * const storeTy = toStore->getType();
     Type * const ptrElemTy = ptr->getType()->getPointerElementType();
     if (LLVM_UNLIKELY(storeTy != ptrElemTy)) {
@@ -460,19 +378,8 @@ StoreInst * KernelBuilder::storeOutputStreamBlock(const std::string & name, Valu
     return CreateBlockAlignedStore(toStore, ptr);
 }
 
-Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex) {
-    Value * const addr = mKernel->getStreamSetOutputAddress(name);
-    if (addr) {
-        return CreateGEP(addr, {getInt32(0), streamIndex, packIndex});
-    } else {
-        const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-        Value * const blockIndex = CreateLShr(getProducedItemCount(name), std::log2(getBitBlockWidth()));
-        return buf->getStreamPackPtr(this, getStreamHandle(name), getBaseAddress(name), streamIndex, blockIndex, packIndex, false);
-    }
-}
-
-StoreInst * KernelBuilder::storeOutputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex, Value * toStore) {
-    Value * const ptr = getOutputStreamPackPtr(name, streamIndex, packIndex);
+StoreInst * KernelBuilder::storeOutputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex, llvm::Value * blockOffset, Value * toStore) {
+    Value * const ptr = getOutputStreamPackPtr(name, streamIndex, packIndex, blockOffset);
     Type * const storeTy = toStore->getType();
     Type * const ptrElemTy = ptr->getType()->getPointerElementType();
     if (LLVM_UNLIKELY(storeTy != ptrElemTy)) {
@@ -527,11 +434,6 @@ Value * KernelBuilder::getCapacity(const std::string & name) {
 
 void KernelBuilder::setCapacity(const std::string & name, Value * c) {
     mKernel->getAnyStreamSetBuffer(name)->setCapacity(this, getStreamHandle(name), c);
-}
-
-Value * KernelBuilder::getBlockAddress(const std::string & name, Value * blockIndex) {
-    const StreamSetBuffer * const buf = mKernel->getAnyStreamSetBuffer(name);
-    return buf->getBlockAddress(this, getStreamHandle(name), blockIndex);
 }
 
 void KernelBuilder::protectOutputStream(const std::string & name, const bool readOnly) {
@@ -627,6 +529,70 @@ BasicBlock * KernelBuilder::CreateConsumerWait() {
         SetInsertPoint(exit);
         return exit;
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateUDiv2
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::CreateUDiv2(Value * const number, const ProcessingRate::RateValue & divisor, const Twine & Name) {
+    if (divisor.numerator() == 1 && divisor.denominator() == 1) {
+        return number;
+    }
+    Constant * const n = ConstantInt::get(number->getType(), divisor.numerator());
+    if (LLVM_LIKELY(divisor.denominator() == 1)) {
+        return CreateUDiv(number, n, Name);
+    } else {
+        Constant * const d = ConstantInt::get(number->getType(), divisor.denominator());
+        return CreateUDiv(CreateMul(number, d), n);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateCeilUDiv2
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::CreateCeilUDiv2(Value * const number, const ProcessingRate::RateValue & divisor, const Twine & Name) {
+    if (divisor.numerator() == 1 && divisor.denominator() == 1) {
+        return number;
+    }
+    Constant * const n = ConstantInt::get(number->getType(), divisor.numerator());
+    if (LLVM_LIKELY(divisor.denominator() == 1)) {
+        return CreateCeilUDiv(number, n, Name);
+    } else {
+        //   ⌊(num + ratio - 1) / ratio⌋
+        // = ⌊(num - 1) / (n/d)⌋ + (ratio/ratio)
+        // = ⌊(d * (num - 1)) / n⌋ + 1
+        Constant * const ONE = ConstantInt::get(number->getType(), 1);
+        Constant * const d = ConstantInt::get(number->getType(), divisor.denominator());
+        return CreateAdd(CreateUDiv(CreateMul(CreateSub(number, ONE), d), n), ONE, Name);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateMul2
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::CreateMul2(Value * const number, const ProcessingRate::RateValue & factor, const Twine & Name) {
+    if (factor.numerator() == 1 && factor.denominator() == 1) {
+        return number;
+    }
+    Constant * const n = ConstantInt::get(number->getType(), factor.numerator());
+    if (LLVM_LIKELY(factor.denominator() == 1)) {
+        return CreateMul(number, n, Name);
+    } else {
+        Constant * const d = ConstantInt::get(number->getType(), factor.denominator());
+        return CreateUDiv(CreateMul(number, n), d, Name);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateMulCeil2
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::CreateCeilUMul2(Value * const number, const ProcessingRate::RateValue & factor, const Twine & Name) {
+    if (factor.denominator() == 1) {
+        return CreateMul2(number, factor, Name);
+    }
+    Constant * const n = ConstantInt::get(number->getType(), factor.numerator());
+    Constant * const d = ConstantInt::get(number->getType(), factor.denominator());
+    return CreateCeilUDiv(CreateMul(number, n), d, Name);
 }
 
 }

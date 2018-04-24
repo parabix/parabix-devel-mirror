@@ -17,7 +17,7 @@ namespace kernel {
 void StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
     Value * codeUnitBuffer = b->getInputStreamBlockPtr("codeUnitBuffer", b->getInt32(0));
     codeUnitBuffer = b->CreatePointerCast(codeUnitBuffer, b->getInt8PtrTy());
-    Value * bytesToDo = mAvailableItemCount[0];
+    Value * bytesToDo = mAccessibleInputItems[0];
     if (LLVM_UNLIKELY(mCodeUnitWidth > 8)) {
         bytesToDo = b->CreateMul(bytesToDo, b->getSize(mCodeUnitWidth / 8));
     } else if (LLVM_UNLIKELY(mCodeUnitWidth < 8)) {
@@ -27,7 +27,11 @@ void StdOutKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
 }
 
 StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned codeUnitWidth)
-: MultiBlockKernel("stdout", {Binding{b->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}}, {}, {}, {}, {})
+: MultiBlockKernel("stdout",
+// input
+{Binding{b->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer", FixedRate(), RequiresLinearAccess()}}
+// output & scalars
+, {}, {}, {}, {})
 , mCodeUnitWidth(codeUnitWidth) {
     // setKernelStride(getpagesize());
 }
@@ -66,7 +70,7 @@ void FileSink::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b,
     Value * const fileDes = b->getScalarField("fileDes");
     Value * codeUnitBuffer = b->getInputStreamBlockPtr("codeUnitBuffer", b->getInt32(0));
     codeUnitBuffer = b->CreatePointerCast(codeUnitBuffer, b->getInt8PtrTy());
-    Value * bytesToDo = mAvailableItemCount[0];
+    Value * bytesToDo = mAccessibleInputItems[0];
     if (LLVM_UNLIKELY(mCodeUnitWidth > 8)) {
         bytesToDo = b->CreateMul(bytesToDo, b->getSize(mCodeUnitWidth / 8));
     } else if (LLVM_UNLIKELY(mCodeUnitWidth < 8)) {
@@ -86,8 +90,11 @@ void FileSink::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) 
 
 FileSink::FileSink(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned codeUnitWidth)
 : MultiBlockKernel("filesink" + std::to_string(codeUnitWidth),
-{Binding{b->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer"}},
+// input
+{Binding{b->getStreamSetTy(1, codeUnitWidth), "codeUnitBuffer", FixedRate(), RequiresLinearAccess()}},
+// output
 {},
+// scalars
 {Binding{b->getInt8PtrTy(), "fileName"}}, {}, {Binding{b->getInt8PtrTy(), "tmpFileName"}, Binding{b->getInt32Ty(), "fileDes"}})
 , mCodeUnitWidth(codeUnitWidth) {
     // setKernelStride(getpagesize());

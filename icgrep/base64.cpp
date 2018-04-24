@@ -20,6 +20,7 @@
 #include <kernels/kernel_builder.h>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/anonymous_shared_memory.hpp>
+#include <boost/math/common_factor_rt.hpp>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <mutex>
@@ -61,20 +62,19 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
     //Round up to a multiple of 3.
-    const auto bufferSize = ((codegen::SegmentSize * codegen::BufferSegments * codegen::ThreadNum + 2) / 3) * 3;
+    const auto bufferSize = (codegen::SegmentSize * codegen::BufferSegments);
+    const auto expandedSize = boost::lcm(boost::lcm(bufferSize, 3U), 4U);
 
     StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
     Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
     mmapK->setInitialArguments({fileDescriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
     
-    const auto outputBufferSize = ((bufferSize + 2) / 3) * 4;
-
-    StreamSetBuffer * Expanded3_4Out = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), outputBufferSize);
+    StreamSetBuffer * Expanded3_4Out = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), expandedSize);
     Kernel * expandK = pxDriver.addKernelInstance<expand3_4Kernel>(iBuilder);
     pxDriver.makeKernelCall(expandK, {ByteStream}, {Expanded3_4Out});
     
-    StreamSetBuffer * Radix64out = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), outputBufferSize);
+    StreamSetBuffer * Radix64out = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferSize);
     Kernel * radix64K = pxDriver.addKernelInstance<radix64Kernel>(iBuilder);
     pxDriver.makeKernelCall(radix64K, {Expanded3_4Out}, {Radix64out});
     
@@ -83,7 +83,7 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
         Kernel * base64K = pxDriver.addKernelInstance<base64Kernel>(iBuilder);
         pxDriver.makeKernelCall(base64K, {Radix64out}, {Base64out});
     } else {
-        StreamSetBuffer * Base64out = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), outputBufferSize);
+        StreamSetBuffer * Base64out = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferSize);
         Kernel * base64K = pxDriver.addKernelInstance<base64Kernel>(iBuilder);
         pxDriver.makeKernelCall(base64K, {Radix64out}, {Base64out});        
         Kernel * outK = pxDriver.addKernelInstance<StdOutKernel>(iBuilder, 8);

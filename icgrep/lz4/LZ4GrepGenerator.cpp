@@ -362,15 +362,14 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
     auto swizzle = this->generateSwizzleExtractData(iBuilder);
 
     //TODO buffer blocks should be decompressedBufferBlocks
-    StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
     Kernel * multiplePdepK = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 2, 4);
     pxDriver.makeKernelCall(multiplePdepK, {DepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
 
-
-    StreamSetBuffer * matchCopiedSwizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * matchCopiedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
     Kernel * swizzledMatchCopyK = pxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
     pxDriver.makeKernelCall(swizzledMatchCopyK, {MatchOffsetMarker, M0Marker, M0CountMarker, ByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
@@ -384,20 +383,7 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
 
 
     Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(iBuilder);
-    p2sK->addAttribute(MustConsumeAll());
     pxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
-
-/*
-    Kernel * outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 8);
-    outK->setInitialArguments({iBuilder->GetString("/Users/wxy325/Desktop/c.txt")});
-    pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
-*/
-
-//    StreamSetBuffer * const Extenders = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->get4MbBufferBlocks());
-
-
-//    Kernel * extenderK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
-//    pxDriver.makeKernelCall(extenderK, {extractedbits}, {Extenders});
 
     StreamSetBuffer * LineBreakStream;
     StreamSetBuffer * Matches;
@@ -420,7 +406,6 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
 
 void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE* regex) {
     auto & iBuilder = pxDriver.getBuilder();
-    this->generateMainFunc(iBuilder);
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);
@@ -428,15 +413,15 @@ void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE* regex) {
 
     auto swizzle = this->generateSwizzleExtractData(iBuilder);
 
-    StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
     Kernel * multiplePdepK = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 2, 4);
     pxDriver.makeKernelCall(multiplePdepK, {DepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
 
 
-    StreamSetBuffer * matchCopiedSwizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * matchCopiedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
     Kernel * swizzledMatchCopyK = pxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
     pxDriver.makeKernelCall(swizzledMatchCopyK, {MatchOffsetMarker, M0Marker, M0CountMarker, ByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
@@ -446,20 +431,6 @@ void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE* regex) {
     StreamSetBuffer * extractedbits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
     Kernel * unSwizzleK = pxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
     pxDriver.makeKernelCall(unSwizzleK, {matchCopiedSwizzle0, matchCopiedSwizzle1}, {extractedbits});
-
-/*
-    Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(iBuilder);
-    pxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
-    Kernel * outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 8);
-    outK->setInitialArguments({iBuilder->GetString("/Users/wxy325/Desktop/c.txt")});
-    pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
-*/
-
-//    StreamSetBuffer * const Extenders = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->get4MbBufferBlocks());
-
-
-//    Kernel * extenderK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
-//    pxDriver.makeKernelCall(extenderK, {extractedbits}, {Extenders});
 
     StreamSetBuffer * LineBreakStream;
     StreamSetBuffer * Matches;

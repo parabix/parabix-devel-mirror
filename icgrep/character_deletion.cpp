@@ -61,8 +61,7 @@ int main(int argc, char *argv[]) {
     llvm_shutdown_obj shutdown;
     codegen::ParseCommandLineOptions(argc, argv, {&lz4dFlags, codegen::codegen_flags()});
 
-
-    std::string fileName = inputFile;
+    const std::string fileName = inputFile;
 
     std::ifstream f(fileName, std::ios::binary | std::ios::ate);
     if (f.fail()) {
@@ -117,11 +116,9 @@ int main(int argc, char *argv[]) {
     pxDriver.makeKernelCall(ccK, {BasisBits}, {CharacterMarkerBuffer});
 
 
-//    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks);
-//    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks);
-    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1);
-    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1);
-    Kernel * delK = pxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 64, 8);
+    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1);
+    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1);
+    Kernel * delK = pxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 8);
     pxDriver.makeKernelCall(delK, {CharacterMarkerBuffer, BasisBits}, {u16Swizzle0, u16Swizzle1});
 
     // Produce unswizzled bit streams
@@ -140,13 +137,6 @@ int main(int argc, char *argv[]) {
     Kernel * outK = pxDriver.addKernelInstance<StdOutKernel>(iBuilder, 8);
     pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
 
-    /*
-    Kernel * outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 8);
-    outK->setInitialArguments({iBuilder->GetString(outputFile)});
-    pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
-    */
-
-
     pxDriver.generatePipelineIR();
 
     pxDriver.deallocateBuffers();
@@ -157,7 +147,6 @@ int main(int argc, char *argv[]) {
 
 
     auto mainFunc = reinterpret_cast<MainFunctionType>(pxDriver.getMain());
-
 
     mainFunc(fileBuffer, mFilesize);
 

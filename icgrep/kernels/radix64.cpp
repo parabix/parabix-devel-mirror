@@ -38,15 +38,108 @@ namespace kernel {
 // relying on the MultiBlockKernel builder to only copy the correct number
 // of bytes to the actual output stream.
 
-void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, Value * const numOfStrides) {
+//void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &b, Value * const numOfStrides) {
 
-    BasicBlock * expand2_3entry = iBuilder->GetInsertBlock();
-    BasicBlock * expand_3_4_loop = iBuilder->CreateBasicBlock("expand_3_4_loop");
-    BasicBlock * expand3_4_exit = iBuilder->CreateBasicBlock("expand3_4_exit");
-    
+//    BasicBlock * expand2_3entry = b->GetInsertBlock();
+//    BasicBlock * expand_3_4_loop = b->CreateBasicBlock("expand_3_4_loop");
+//    BasicBlock * expand3_4_exit = b->CreateBasicBlock("expand3_4_exit");
+
+//    // Determine the require shufflevector constants.
+//    const unsigned PACK_SIZE = b->getBitBlockWidth()/8;
+
+//    ConstantInt * const ZERO = b->getSize(0);
+//    ConstantInt * const ONE = b->getSize(1);
+//    ConstantInt * const THREE = b->getSize(3);
+//    ConstantInt * const FOUR = b->getSize(4);
+//    ConstantInt * const SEVEN = b->getSize(7);
+
+//    // Construct a list of indexes in  the form
+//    // 0, 1, 2, 2, 3, 4, 5, 5, 6, 7, 8, 8, ...
+//    unsigned sourceByteIndex = 0;
+//    unsigned expand3_4_index[PACK_SIZE];
+//    for (unsigned i = 0; i < PACK_SIZE; i++) {
+//        expand3_4_index[i] = sourceByteIndex;
+//        if (i % 4 != 2) sourceByteIndex++;
+//    }
+//    unsigned const expand3_4_offset[4] = {PACK_SIZE, 3*PACK_SIZE/4, PACK_SIZE/2, PACK_SIZE/4};
+//    Value * expand_3_4_shuffle[4];
+//    for (unsigned j = 0; j < 4; j++) {
+//        std::vector<Constant *> Idxs;
+//        for (unsigned i = 0; i < PACK_SIZE; i++) {
+//            Idxs.push_back(ConstantInt::get(b->getInt32Ty(), expand3_4_offset[j] + expand3_4_index[i]));
+//        }
+//        expand_3_4_shuffle[j] = ConstantVector::get(Idxs);
+//    }
+
+
+
+//    Constant * triplePackSize = b->getSize(3 * PACK_SIZE); // 3 packs per loop.
+//    UndefValue * undefPack = UndefValue::get(b->fwVectorType(8));
+
+//    Value * const numOfBlocks = b->CreateMul(numOfStrides, b->getSize(8));
+
+//    Value * itemsToDo = mAvailableItemCount[0];
+
+//    // The main loop processes 3 packs of data at a time.
+//    b->CreateBr(expand_3_4_loop);
+
+//    b->SetInsertPoint(expand_3_4_loop);
+//    PHINode * loopItemsRemain = b->CreatePHI(b->getSizeTy(), 2);
+//    PHINode * strideOffset = b->CreatePHI(b->getSizeTy(), 2);
+//    loopItemsRemain->addIncoming(itemsToDo, expand2_3entry);
+//    strideOffset->addIncoming(ZERO, expand2_3entry);
+
+//    Value * const baseInputOffset = b->CreateMul(strideOffset, THREE);
+//    Value * const baseOutputOffset = b->CreateMul(strideOffset, FOUR);
+//    Value * carryOver = undefPack;
+//    for (unsigned i = 0; i < 3; ++i) {
+//        ConstantInt * const index = b->getSize(i);
+//        Value * const inputOffset = b->CreateAdd(baseInputOffset, index);
+//        Value * const inputPackIndex = b->CreateAnd(inputOffset, SEVEN);
+//        Value * const inputBlockOffset = b->CreateLShr(inputOffset, THREE);
+//        Value * const input = b->fwCast(8, b->loadInputStreamPack("sourceStream", ZERO, inputPackIndex, inputBlockOffset));
+//        Value * const expanded = b->CreateShuffleVector(carryOver, input, expand_3_4_shuffle[i]);
+//        Value * const outputOffset = b->CreateAdd(baseOutputOffset, index);
+//        Value * const outputPackIndex = b->CreateAnd(outputOffset, SEVEN);
+//        Value * const outputBlockOffset = b->CreateLShr(outputOffset, THREE);
+//        b->storeOutputStreamPack("expand34Stream", ZERO, outputPackIndex, outputBlockOffset, b->bitCast(expanded));
+//        carryOver = input;
+//    }
+//    Value * expanded = b->CreateShuffleVector(carryOver, undefPack, expand_3_4_shuffle[3]);
+//    Value * outputOffset = b->CreateAdd(baseOutputOffset, THREE);
+//    Value * const outputPackIndex = b->CreateAnd(outputOffset, SEVEN);
+//    Value * const outputBlockOffset = b->CreateLShr(outputOffset, THREE);
+//    b->storeOutputStreamPack("expand34Stream", ZERO, outputPackIndex, outputBlockOffset, b->bitCast(expanded));
+
+//    Value * remainingItems = b->CreateSub(loopItemsRemain, triplePackSize);
+
+//    loopItemsRemain->addIncoming(remainingItems, expand_3_4_loop);
+//    Value * const nextStrideOffset = b->CreateAdd(strideOffset, ONE);
+//    strideOffset->addIncoming(nextStrideOffset, expand_3_4_loop);
+
+//    //Value * continueLoop = b->CreateICmpSGT(remainingItems, ZERO);
+//    Value * continueLoop = b->CreateICmpULT(nextStrideOffset, numOfBlocks);
+//    b->CreateCondBr(continueLoop, expand_3_4_loop, expand3_4_exit);
+
+//    b->SetInsertPoint(expand3_4_exit);
+
+//}
+
+void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &b, Value * const numOfStrides) {
+
+    BasicBlock * expand2_3entry = b->GetInsertBlock();
+    BasicBlock * expand_3_4_loop = b->CreateBasicBlock("expand_3_4_loop");
+    BasicBlock * expand3_4_exit = b->CreateBasicBlock("expand3_4_exit");
+
     // Determine the require shufflevector constants.
-    const unsigned PACK_SIZE = iBuilder->getBitBlockWidth()/8;
-    
+    const unsigned PACK_SIZE = b->getBitBlockWidth()/8;
+
+    ConstantInt * const ZERO = b->getSize(0);
+    ConstantInt * const ONE = b->getSize(1);
+    ConstantInt * const THREE = b->getSize(3);
+    ConstantInt * const FOUR = b->getSize(4);
+    ConstantInt * const SEVEN = b->getSize(7);
+
     // Construct a list of indexes in  the form
     // 0, 1, 2, 2, 3, 4, 5, 5, 6, 7, 8, 8, ...
     unsigned sourceByteIndex = 0;
@@ -60,76 +153,48 @@ void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     for (unsigned j = 0; j < 4; j++) {
         std::vector<Constant *> Idxs;
         for (unsigned i = 0; i < PACK_SIZE; i++) {
-            Idxs.push_back(ConstantInt::get(iBuilder->getInt32Ty(), expand3_4_offset[j] + expand3_4_index[i]));
+            Idxs.push_back(ConstantInt::get(b->getInt32Ty(), expand3_4_offset[j] + expand3_4_index[i]));
         }
         expand_3_4_shuffle[j] = ConstantVector::get(Idxs);
     }
 
-    Constant * triplePackSize = iBuilder->getSize(3 * PACK_SIZE); // 3 packs per loop.
-    UndefValue * undefPack = UndefValue::get(iBuilder->fwVectorType(8));
-    
-    const unsigned packAlign = iBuilder->getBitBlockWidth()/8;
-
-    Value * itemsToDo = mAvailableItemCount[0];
-
-    Value * sourceStream = iBuilder->getInputStreamBlockPtr("sourceStream", iBuilder->getInt32(0));
-    Value * expandedStream = iBuilder->getOutputStreamBlockPtr("expand34Stream", iBuilder->getInt32(0));
-
+    UndefValue * undefPack = UndefValue::get(b->fwVectorType(8));
+    Value * const numOfBlocks = b->CreateMul(numOfStrides, b->getSize(8));
     // The main loop processes 3 packs of data at a time.
-    // The initial pack offsets may be nonzero.
-    sourceStream = iBuilder->CreatePointerCast(sourceStream, iBuilder->getInt8PtrTy());
-    expandedStream = iBuilder->CreatePointerCast(expandedStream, iBuilder->getInt8PtrTy());
-    Value * offset = iBuilder->CreateURem(iBuilder->getProcessedItemCount("sourceStream"), iBuilder->getSize(iBuilder->getBitBlockWidth()));
-    Value * sourcePackPtr = iBuilder->CreatePointerCast(iBuilder->CreateGEP(sourceStream, offset), iBuilder->getBitBlockType()->getPointerTo());
-    offset = iBuilder->CreateURem(iBuilder->getProducedItemCount("expand34Stream"), iBuilder->getSize(iBuilder->getBitBlockWidth()));
-    Value * outputPackPtr = iBuilder->CreatePointerCast(iBuilder->CreateGEP(expandedStream, offset), iBuilder->getBitBlockType()->getPointerTo());
-    iBuilder->CreateCondBr(iBuilder->CreateICmpSGT(itemsToDo, iBuilder->getSize(0)), expand_3_4_loop, expand3_4_exit);
-    
-    iBuilder->SetInsertPoint(expand_3_4_loop);
-    PHINode * loopInput_ptr = iBuilder->CreatePHI(sourcePackPtr->getType(), 2);
-    PHINode * loopOutput_ptr = iBuilder->CreatePHI(outputPackPtr->getType(), 2);
-    PHINode * loopItemsRemain = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
+    b->CreateBr(expand_3_4_loop);
 
-    loopInput_ptr->addIncoming(sourcePackPtr, expand2_3entry);
-    loopOutput_ptr->addIncoming(outputPackPtr, expand2_3entry);
-    loopItemsRemain->addIncoming(itemsToDo, expand2_3entry);
+    b->SetInsertPoint(expand_3_4_loop);
+    PHINode * strideOffset = b->CreatePHI(b->getSizeTy(), 2);
+    strideOffset->addIncoming(ZERO, expand2_3entry);
 
+    Value * const baseInputOffset = b->CreateMul(strideOffset, THREE);
+    Value * const baseOutputOffset = b->CreateMul(strideOffset, FOUR);
+    Value * carryOver = undefPack;
+    for (unsigned i = 0; i < 3; ++i) {
+        ConstantInt * const index = b->getSize(i);
+        Value * const inputOffset = b->CreateAdd(baseInputOffset, index);
+        Value * const inputPackIndex = b->CreateAnd(inputOffset, SEVEN);
+        Value * const inputBlockOffset = b->CreateLShr(inputOffset, THREE);
+        Value * const input = b->fwCast(8, b->loadInputStreamPack("sourceStream", ZERO, inputPackIndex, inputBlockOffset));
+        Value * const expanded = b->CreateShuffleVector(carryOver, input, expand_3_4_shuffle[i]);
+        Value * const outputOffset = b->CreateAdd(baseOutputOffset, index);
+        Value * const outputPackIndex = b->CreateAnd(outputOffset, SEVEN);
+        Value * const outputBlockOffset = b->CreateLShr(outputOffset, THREE);
+        b->storeOutputStreamPack("expand34Stream", ZERO, outputPackIndex, outputBlockOffset, b->bitCast(expanded));
+        carryOver = input;
+    }
+    Value * expanded = b->CreateShuffleVector(carryOver, undefPack, expand_3_4_shuffle[3]);
+    Value * outputOffset = b->CreateAdd(baseOutputOffset, THREE);
+    Value * const outputPackIndex = b->CreateAnd(outputOffset, SEVEN);
+    Value * const outputBlockOffset = b->CreateLShr(outputOffset, THREE);
+    b->storeOutputStreamPack("expand34Stream", ZERO, outputPackIndex, outputBlockOffset, b->bitCast(expanded));
 
-    // Step 1 of the main loop.
-    Value * pack0 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(loopInput_ptr, packAlign));
-    Value * expand0 = iBuilder->bitCast(iBuilder->CreateShuffleVector(undefPack, pack0, expand_3_4_shuffle[0]));
-    iBuilder->CreateBlockAlignedStore(expand0, loopOutput_ptr);
-    // Step 2 of the main loop.
-    Value * inPack1_ptr = iBuilder->CreateGEP(loopInput_ptr, iBuilder->getInt32(1));
-    Value * outPack1_ptr = iBuilder->CreateGEP(loopOutput_ptr, iBuilder->getInt32(1));
-    Value * pack1 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(inPack1_ptr, packAlign));
-    Value * expand1 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack0, pack1, expand_3_4_shuffle[1]));
-    iBuilder->CreateBlockAlignedStore(expand1, outPack1_ptr);
-    // Step 3 of the main loop.
-    Value * inPack2_ptr = iBuilder->CreateGEP(loopInput_ptr, iBuilder->getInt32(2));
-    Value * outPack2_ptr = iBuilder->CreateGEP(loopOutput_ptr, iBuilder->getInt32(2));
-    Value * pack2 = iBuilder->fwCast(8, iBuilder->CreateAlignedLoad(inPack2_ptr, packAlign));
-    Value * expand2 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack1, pack2, expand_3_4_shuffle[2]));
-    iBuilder->CreateBlockAlignedStore(expand2, outPack2_ptr);
-    Value * outPack3_ptr = iBuilder->CreateGEP(loopOutput_ptr, iBuilder->getInt32(3));
-    Value * expand3 = iBuilder->bitCast(iBuilder->CreateShuffleVector(pack2, undefPack, expand_3_4_shuffle[3]));
-    iBuilder->CreateBlockAlignedStore(expand3, outPack3_ptr);
+    Value * const nextStrideOffset = b->CreateAdd(strideOffset, ONE);
+    strideOffset->addIncoming(nextStrideOffset, expand_3_4_loop);
+    Value * continueLoop = b->CreateICmpULT(nextStrideOffset, numOfBlocks);
+    b->CreateCondBr(continueLoop, expand_3_4_loop, expand3_4_exit);
 
-    Value * loopNextInputPack = iBuilder->CreateGEP(loopInput_ptr, iBuilder->getInt32(3));
-    Value * remainingItems = iBuilder->CreateSub(loopItemsRemain, triplePackSize);
-
-    Value * loopNextOutputPack;
-    loopNextOutputPack = iBuilder->CreateGEP(loopOutput_ptr, iBuilder->getInt32(4));
-
-    loopInput_ptr->addIncoming(loopNextInputPack, expand_3_4_loop);
-    loopOutput_ptr->addIncoming(loopNextOutputPack, expand_3_4_loop);
-    loopItemsRemain->addIncoming(remainingItems, expand_3_4_loop);
-
-    Value * continueLoop = iBuilder->CreateICmpSGT(remainingItems, iBuilder->getSize(0));
-    iBuilder->CreateCondBr(continueLoop, expand_3_4_loop, expand3_4_exit);
-    
-    iBuilder->SetInsertPoint(expand3_4_exit);
-
+    b->SetInsertPoint(expand3_4_exit);
 }
 
 
@@ -242,52 +307,56 @@ void base64Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & 
 // Special processing for the base 64 format.   The output must always contain a multiple
 // of 4 bytes.   When the number of radix 64 values is not a multiple of 4
 // number of radix 64 values
-void base64Kernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, Value * remainingBytes) {
+void base64Kernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * remainingBytes) {
 
-    BasicBlock * entry = iBuilder->GetInsertBlock();
-    BasicBlock * base64_loop = iBuilder->CreateBasicBlock("base64_loop");
-    BasicBlock * loopExit = iBuilder->CreateBasicBlock("loopExit");
-    BasicBlock * doPadding = iBuilder->CreateBasicBlock("doPadding");
-    BasicBlock * doPadding2 = iBuilder->CreateBasicBlock("doPadding2");
-    BasicBlock * fbExit = iBuilder->CreateBasicBlock("fbExit");
+    BasicBlock * entry = b->GetInsertBlock();
+    BasicBlock * base64_loop = b->CreateBasicBlock("base64_loop");
+    BasicBlock * loopExit = b->CreateBasicBlock("loopExit");
+    BasicBlock * doPadding = b->CreateBasicBlock("doPadding");
+    BasicBlock * doPadding2 = b->CreateBasicBlock("doPadding2");
+    BasicBlock * fbExit = b->CreateBasicBlock("fbExit");
 
-    Value * remainMod4 = iBuilder->CreateAnd(remainingBytes, iBuilder->getSize(3));
-    Value * padBytes = iBuilder->CreateSub(iBuilder->getSize(4), remainMod4);
-    padBytes = iBuilder->CreateAnd(padBytes, iBuilder->getSize(3));
+    Constant * const ZERO = b->getSize(0);
+    Constant * const ONE = b->getSize(1);
+    Constant * const THREE = b->getSize(3);
+    Constant * const PADDING = b->getInt8('=');
 
-    Constant * packSize = iBuilder->getSize(iBuilder->getStride() / 8);
+    Value * remainMod4 = b->CreateAnd(remainingBytes, THREE);
+    Value * padBytes = b->CreateAnd(b->CreateSub(b->getSize(4), remainMod4), THREE);
+
+    Constant * const PACK_SIZE = b->getSize(b->getStride() / 8);
 
     // Enter the loop only if there is at least one byte remaining to process.
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainingBytes, iBuilder->getSize(0)), fbExit, base64_loop);
+    b->CreateCondBr(b->CreateICmpEQ(remainingBytes, ZERO), fbExit, base64_loop);
 
-    iBuilder->SetInsertPoint(base64_loop);
-    PHINode * idx = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2);
-    PHINode * loopRemain = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
-    idx->addIncoming(ConstantInt::getNullValue(iBuilder->getInt32Ty()), entry);
+    b->SetInsertPoint(base64_loop);
+    PHINode * idx = b->CreatePHI(b->getSizeTy(), 2);
+    PHINode * loopRemain = b->CreatePHI(b->getSizeTy(), 2);
+    idx->addIncoming(ZERO, entry);
     loopRemain->addIncoming(remainingBytes, entry);
-    Value * bytepack = iBuilder->loadInputStreamPack("radix64stream", iBuilder->getInt32(0), idx);
-    Value * base64pack = processPackData(iBuilder, bytepack);
-    iBuilder->storeOutputStreamPack("base64stream", iBuilder->getInt32(0), idx, base64pack);
-    idx->addIncoming(iBuilder->CreateAdd(idx, ConstantInt::get(iBuilder->getInt32Ty(), 1)), base64_loop);
-    Value* remainAfterLoop = iBuilder->CreateSub(loopRemain, packSize);
+    Value * bytepack = b->loadInputStreamPack("radix64stream", ZERO, idx);
+    Value * base64pack = processPackData(b, bytepack);
+    b->storeOutputStreamPack("base64stream", ZERO, idx, base64pack);
+    idx->addIncoming(b->CreateAdd(idx, ONE), base64_loop);
+    Value * remainAfterLoop = b->CreateSub(loopRemain, PACK_SIZE);
     loopRemain->addIncoming(remainAfterLoop, base64_loop);
+    Value * continueLoop = b->CreateICmpUGT(loopRemain, PACK_SIZE);
+    b->CreateCondBr(continueLoop, base64_loop, loopExit);
 
-    Value* continueLoop = iBuilder->CreateICmpSGT(remainAfterLoop, iBuilder->getSize(0));
-    iBuilder->CreateCondBr(continueLoop, base64_loop, loopExit);
+    b->SetInsertPoint(loopExit);
+    b->CreateCondBr(b->CreateICmpEQ(padBytes, ZERO), fbExit, doPadding);
 
-    iBuilder->SetInsertPoint(loopExit);
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(padBytes, iBuilder->getSize(0)), fbExit, doPadding);
+    b->SetInsertPoint(doPadding);
+    Value * i8output_ptr = b->getOutputStreamBlockPtr("base64stream", ZERO);
+    i8output_ptr = b->CreatePointerCast(i8output_ptr, b->getInt8PtrTy());
+    b->CreateStore(PADDING, b->CreateGEP(i8output_ptr, remainingBytes));
+    b->CreateCondBr(b->CreateICmpEQ(remainMod4, THREE), fbExit, doPadding2);
 
-    iBuilder->SetInsertPoint(doPadding);
-    Value * i8output_ptr = iBuilder->getOutputStreamBlockPtr("base64stream", iBuilder->getInt32(0));
-    i8output_ptr = iBuilder->CreatePointerCast(i8output_ptr, iBuilder->getInt8PtrTy());
-    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, remainingBytes));
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainMod4, iBuilder->getSize(3)), fbExit, doPadding2);
-    iBuilder->SetInsertPoint(doPadding2);
-    Value * finalPadPos = iBuilder->CreateAdd(remainingBytes, iBuilder->getSize(1));
-    iBuilder->CreateStore(ConstantInt::get(iBuilder->getInt8Ty(), '='), iBuilder->CreateGEP(i8output_ptr, finalPadPos));
-    iBuilder->CreateBr(fbExit);
-    iBuilder->SetInsertPoint(fbExit);
+    b->SetInsertPoint(doPadding2);
+    Value * finalPadPos = b->CreateAdd(remainingBytes, ONE);
+    b->CreateStore(PADDING, b->CreateGEP(i8output_ptr, finalPadPos));
+    b->CreateBr(fbExit);
+    b->SetInsertPoint(fbExit);
 }
 
 expand3_4Kernel::expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)

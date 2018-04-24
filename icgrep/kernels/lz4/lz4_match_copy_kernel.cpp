@@ -23,7 +23,7 @@ void LZ4MatchCopyKernel::generateOutputCopy(const std::unique_ptr<KernelBuilder>
     Value *inputBasePtr = iBuilder->getInputStreamBlockPtr("decompressedStream", SIZE_ZERO);
 
     Value *outputBasePtr = iBuilder->getOutputStreamBlockPtr(OUTPUT_STREAM_NAME, SIZE_ZERO);
-    Value *itemsToDo = mAvailableItemCount[0];
+    Value *itemsToDo = mAccessibleInputItems[0];
     Value *copySize = iBuilder->CreateMul(outputBlocks, SIZE_BIT_BLOCK_WIDTH);
     Value* actualCopySize = iBuilder->CreateUMin(itemsToDo, copySize);
 
@@ -45,7 +45,7 @@ Value *LZ4MatchCopyKernel::getMaximumMatchCopyBlock(const unique_ptr<KernelBuild
     Value *SIZE_ZERO = iBuilder->getSize(0);
     Value *SIZE_ONE = iBuilder->getSize(1);
     Value *m0EndInitOffset = iBuilder->CreateURem(iBuilder->getProcessedItemCount("m0End"), SIZE_BIT_BLOCK_WIDTH);
-    Value *m0EndItemsToDo = mAvailableItemCount[2];
+    Value *m0EndItemsToDo = mAccessibleInputItems[2];
     Value *m0EndBasePtr = iBuilder->getInputStreamBlockPtr("m0End", SIZE_ZERO);
     m0EndBasePtr = iBuilder->CreatePointerCast(m0EndBasePtr, iBuilder->getInt64Ty()->getPointerTo());
     Value *lastM0 = iBuilder->CreateLoad(
@@ -82,7 +82,7 @@ void LZ4MatchCopyKernel::generateMultiBlockLogic(const unique_ptr<KernelBuilder>
     Constant *SIZE_ONE = iBuilder->getSize(1);
     Constant *SIZE_BIT_BLOCK_WIDTH = iBuilder->getSize(iBuilder->getBitBlockWidth());
 
-    Value *itemsToDo = mAvailableItemCount[0];
+    Value *itemsToDo = mAccessibleInputItems[0];
 
 
 //    iBuilder->CallPrintInt("isFinalBlock", isFinalBlock);
@@ -142,7 +142,7 @@ void LZ4MatchCopyKernel::generateMultiBlockLogic(const unique_ptr<KernelBuilder>
     BasicBlock *exitBlock = iBuilder->CreateBasicBlock("exit_block");
 
     Value *initM0StartProcessIndex = iBuilder->getProcessedItemCount("m0Start");
-    Value *totalM0StartItemsCount = iBuilder->CreateAdd(initM0StartProcessIndex, mAvailableItemCount[1]);
+    Value *totalM0StartItemsCount = iBuilder->CreateAdd(initM0StartProcessIndex, mAccessibleInputItems[1]);
 
     Value *initMatchOffset = iBuilder->getScalarField("pendingMatchOffset");
     Value *initMatchLength = iBuilder->getScalarField("pendingMatchLength");

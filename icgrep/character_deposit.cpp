@@ -122,22 +122,19 @@ int main(int argc, char *argv[]) {
     pxDriver.makeKernelCall(ccK, {BasisBits}, {CharacterMarkerBuffer});
 
 
-//    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1);
-//    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1);
+    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1);
+    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1);
 
-    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1, 2);
-    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1, 2);
+//    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1, 2);
+//    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1, 2);
     Kernel * delK = pxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 64, 8);
     pxDriver.makeKernelCall(delK, {CharacterMarkerBuffer, BasisBits}, {u16Swizzle0, u16Swizzle1});
 
     StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputBufferBlocks, 1);
-    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputBufferBlocks, 1);
-
-    /*
-    Kernel * pdep0K = pxDriver.addKernelInstance<PDEPkernel>(iBuilder, 4, 4, 64, "pdep0");
+    Kernel * pdep0K = pxDriver.addKernelInstance<PDEPkernel>(iBuilder, 4, "pdep0");
     pxDriver.makeKernelCall(pdep0K, {CharacterMarkerBuffer, u16Swizzle0}, {depositedSwizzle0});
 
-    Kernel * pdep1K = pxDriver.addKernelInstance<PDEPkernel>(iBuilder, 4, 4, 64, "pdep1");
+    Kernel * pdep1K = pxDriver.addKernelInstance<PDEPkernel>(iBuilder, 4, "pdep1");
     pxDriver.makeKernelCall(pdep1K, {CharacterMarkerBuffer, u16Swizzle1}, {u16Swizzle1});
     */
 

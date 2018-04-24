@@ -157,7 +157,6 @@ void ParabixDriver::generatePipelineIR() {
     for (Kernel * const kernel : mUncachedKernel) {
         kernel->prepareKernel(iBuilder);
     }
-
     // note: instantiation of all kernels must occur prior to initialization
     for (Kernel * const k : mPipeline) {
         k->addKernelDeclarations(iBuilder);
@@ -197,11 +196,15 @@ Function * ParabixDriver::addLinkFunction(Module * mod, llvm::StringRef name, Fu
 }
 
 std::string ParabixDriver::getMangledName(std::string s) {
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
     DataLayout DL(mTarget->createDataLayout());    
     std::string MangledName;
     raw_string_ostream MangledNameStream(MangledName);
     Mangler::getNameWithPrefix(MangledNameStream, s, DL);
     return MangledName;
+    #else
+    return s;
+    #endif
 }
 
 void ParabixDriver::preparePassManager() {

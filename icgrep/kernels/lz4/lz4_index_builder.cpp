@@ -25,12 +25,9 @@ namespace kernel{
            Binding{iBuilder->getStreamSetTy(1, 1), "extender", RateEqualTo("byteStream")},
 
            // block data
-           Binding{iBuilder->getStreamSetTy(1, 1), "isCompressed", BoundedRate(0, 1),
-                   AlwaysConsume()},
-           Binding{iBuilder->getStreamSetTy(1, 64), "blockStart", BoundedRate(0, 1),
-                   AlwaysConsume()},
-           Binding{iBuilder->getStreamSetTy(1, 64), "blockEnd", BoundedRate(0, 1),
-                   AlwaysConsume()}
+           Binding{iBuilder->getStreamSetTy(1, 1), "isCompressed", BoundedRate(0, 1), AlwaysConsume()},
+           Binding{iBuilder->getStreamSetTy(1, 64), "blockStart", RateEqualTo("isCompressed"), AlwaysConsume()},
+           Binding{iBuilder->getStreamSetTy(1, 64), "blockEnd", RateEqualTo("isCompressed"), AlwaysConsume()}
 
     },
     //Outputs
@@ -93,9 +90,9 @@ namespace kernel{
 
         Value * newBlockDataIndex = iBuilder->CreateAdd(blockDataIndex, iBuilder->getInt64(1));
         iBuilder->setScalarField("blockDataIndex", newBlockDataIndex);
-        iBuilder->setProcessedItemCount("blockEnd", newBlockDataIndex);
-        iBuilder->setProcessedItemCount("blockStart", newBlockDataIndex);
         iBuilder->setProcessedItemCount("isCompressed", newBlockDataIndex);
+//        iBuilder->setProcessedItemCount("blockEnd", newBlockDataIndex);
+//        iBuilder->setProcessedItemCount("blockStart", newBlockDataIndex);
 
         iBuilder->setProcessedItemCount("byteStream", blockEnd);
         iBuilder->CreateBr(exitBlock);
@@ -131,10 +128,6 @@ namespace kernel{
         iBuilder->CreateBr(extendLiteralLengthExit);
 
         iBuilder->SetInsertPoint(extendLiteralLengthExit);
-//        PHINode* newCursorPos = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
-//        newCursorPos->addIncoming(a, extendLiteralLengthCon);
-//        newCursorPos->addIncoming(newCursorPos2, advanceFinishBlock);
-
         PHINode* phiCursorPosAfterLiteral = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 3);
         phiCursorPosAfterLiteral->addIncoming(nextTokenPos, extendLiteralLengthCon);
         phiCursorPosAfterLiteral->addIncoming(newCursorPos2, advanceFinishBlock);
@@ -240,16 +233,9 @@ namespace kernel{
                 iBuilder->getInt64(1)
         );
 
-        Value* matchOffset = iBuilder->CreateAdd(
-                iBuilder->CreateZExt(this->generateLoadSourceInputByte(iBuilder, offsetPos), iBuilder->getSizeTy()),
-                iBuilder->CreateShl(iBuilder->CreateZExt(this->generateLoadSourceInputByte(iBuilder, iBuilder->CreateAdd(offsetPos, iBuilder->getSize(1))), iBuilder->getSizeTy()), iBuilder->getSize(8))
-        );
+
         iBuilder->setProducedItemCount("M0CountMarker", iBuilder->CreateAdd(iBuilder->getProducedItemCount("M0CountMarker"), iBuilder->getSize(1)));
         this->markCircularOutputBitstream(iBuilder, "MatchOffsetMarker", offsetPos);
-//        iBuilder->CallPrintInt("offsetPos", offsetPos);
-//        iBuilder->CallPrintInt("matchOffset", matchOffset);
-
-
         this->increaseScalarField(iBuilder, "m0OutputPos", matchLength);
         this->setCircularOutputBitstream(iBuilder, "M0Marker", outputPos, outputEndPos);
 
@@ -592,12 +578,6 @@ namespace kernel{
         Value* targetValue = iBuilder->CreateLoad(outputTargetPtr);
         targetValue = iBuilder->CreateOr(targetValue, iBuilder->CreateShl(INT8_1, byteOffset));
         iBuilder->CreateStore(targetValue, outputTargetPtr);
-
-        Value* a = iBuilder->CreateURem(iBuilder->CreateUDiv(pos, iBuilder->getSize(iBuilder->getBitBlockWidth())), iBuilder->getSize(this->getOutputStreamSetBuffer(bitstreamName)->getBufferBlocks()));
-        Value* p = iBuilder->CreatePointerCast(iBuilder->getRawOutputPointer(bitstreamName, SIZE_0), iBuilder->getBitBlockType()->getPointerTo());
-//        iBuilder->CallPrintInt("--pos", pos);
-//        iBuilder->CallPrintRegister("aa", iBuilder->CreateLoad(iBuilder->CreateGEP(p, a)));
-
     }
 
 }
