@@ -19,26 +19,18 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class LZ4BlockDecoderNewKernel final : public MultiBlockKernel {
-
+class LZ4BlockDecoderNewKernel final : public SegmentOrientedKernel {
 public:
     LZ4BlockDecoderNewKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder);
-
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value * const numOfStrides) override;
-
+    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
 private:
     llvm::Value *generateLoadInput(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *offset);
 
     void appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value *isCompressed, llvm::Value *blockStart, llvm::Value *blockEnd);
 
-    void generateStoreNumberOutput(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string &outputBufferName,
-                                   llvm::Type *pointerType, llvm::Value *value);
-    size_t getOutputBufferSize(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string& bufferName);
+    void generateStoreNumberOutput(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string &outputBufferName, llvm::Value *offset, llvm::Value *value);
 
-    std::map<std::string, llvm::Value*> previousProducedMap;
-
-    void resetPreviousProducedMap(const std::unique_ptr<KernelBuilder> &iBuilder, std::vector<std::string> outputList);
 };
 
 }
