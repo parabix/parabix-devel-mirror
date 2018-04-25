@@ -33,7 +33,6 @@
 #include <fstream>
 #include <kernels/deletion.h>
 #include <kernels/pdep_kernel.h>
-#include <kernels/lz4/lz4_multiple_pdep_kernel.h>
 
 namespace re { class CC; }
 
@@ -83,8 +82,7 @@ int main(int argc, char *argv[]) {
         codegen::SegmentSize = 2;
     }
 
-    const int inputBufferBlocks = codegen::BufferSegments * codegen::ThreadNum * codegen::SegmentSize;
-    const int outputBufferBlocks = inputBufferBlocks; // * 2;
+    const auto bufferSize = codegen::ThreadNum * codegen::SegmentSize;
 
     ParabixDriver pxDriver("character_deletion");
     auto & iBuilder = pxDriver.getBuilder();
@@ -108,63 +106,43 @@ int main(int argc, char *argv[]) {
 
     // GeneratePipeline
     StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), inputBufferBlocks);
+    StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), bufferSize);
 
     kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy());
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
-    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder, /*aligned = */ true);
+    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
-
-    StreamSetBuffer * const CharacterMarkerBuffer = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), inputBufferBlocks);
+    StreamSetBuffer * const CharacterMarkerBuffer = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), bufferSize);
     Kernel * ccK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(characterToBeDeposit)}, 8);
     pxDriver.makeKernelCall(ccK, {BasisBits}, {CharacterMarkerBuffer});
 
 
-    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1);
-    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1);
-
-//    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1, 2);
-//    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(4), inputBufferBlocks, 1, 2);
-    Kernel * delK = pxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 64, 8);
+    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize);
+    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize);
+    Kernel * delK = pxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 8);
     pxDriver.makeKernelCall(delK, {CharacterMarkerBuffer, BasisBits}, {u16Swizzle0, u16Swizzle1});
 
-    StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<SwizzledCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), outputBufferBlocks, 1);
+    StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
     Kernel * pdep0K = pxDriver.addKernelInstance<PDEPkernel>(iBuilder, 4, "pdep0");
     pxDriver.makeKernelCall(pdep0K, {CharacterMarkerBuffer, u16Swizzle0}, {depositedSwizzle0});
 
+
+    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
     Kernel * pdep1K = pxDriver.addKernelInstance<PDEPkernel>(iBuilder, 4, "pdep1");
-    pxDriver.makeKernelCall(pdep1K, {CharacterMarkerBuffer, u16Swizzle1}, {u16Swizzle1});
-    */
-
-    Kernel * multiplePdepK = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 2, 4);
-    pxDriver.makeKernelCall(multiplePdepK, {CharacterMarkerBuffer, u16Swizzle0, u16Swizzle1}, {depositedSwizzle0, depositedSwizzle1});
-
-    /*
-    Kernel * multiplePdepK1 = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 1, 4);
-    pxDriver.makeKernelCall(multiplePdepK1, {CharacterMarkerBuffer, u16Swizzle0}, {depositedSwizzle0});
-    Kernel * multiplePdepK2 = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 1, 4);
-    pxDriver.makeKernelCall(multiplePdepK2, {CharacterMarkerBuffer, u16Swizzle1}, {depositedSwizzle1});
-    */
+    pxDriver.makeKernelCall(pdep1K, {CharacterMarkerBuffer, u16Swizzle1}, {depositedSwizzle1});
 
     // Produce unswizzled bit streams
-    StreamSetBuffer * resultbits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), outputBufferBlocks);
+    StreamSetBuffer * resultbits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferSize);
     Kernel * unSwizzleK = pxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
 
     pxDriver.makeKernelCall(unSwizzleK, {depositedSwizzle0, depositedSwizzle1}, {resultbits});
-//    pxDriver.makeKernelCall(unSwizzleK, {u16Swizzle0, u16Swizzle1}, {resultbits});
 
-    StreamSetBuffer * const ResultBytes = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), outputBufferBlocks);
+    StreamSetBuffer * const ResultBytes = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferSize);
     Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(iBuilder);
     pxDriver.makeKernelCall(p2sK, {resultbits}, {ResultBytes});
 
-    // --------------------------------------------------------
-    // End
-/*
-    Kernel * outK = pxDriver.addKernelInstance<StdOutKernel>(iBuilder, 8);
-    pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
-*/
     Kernel * outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 8);
     outK->setInitialArguments({iBuilder->GetString(outputFile)});
     pxDriver.makeKernelCall(outK, {ResultBytes}, {});
