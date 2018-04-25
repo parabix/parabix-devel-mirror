@@ -111,6 +111,8 @@ public:
         return CreateMemSet(ptr, getInt8(0), size, alignment);
     }
 
+    llvm::Value * CreateMemChr(llvm::Value * ptr, llvm::Value * byteVal, llvm::Value * num);
+    
     llvm::AllocaInst * CreateAlignedAlloca(llvm::Type * const Ty, const unsigned alignment, llvm::Value * const ArraySize = nullptr) {
         llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
         instr->setAlignment(alignment);

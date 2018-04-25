@@ -1290,6 +1290,19 @@ StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Alig
     return SI;
 }
 
+Value * CBuilder::CreateMemChr(llvm::Value * ptr, llvm::Value * byteVal, llvm::Value * num) {
+    Module * const m = getModule();
+    Function * memchrFn = m->getFunction("memchr");
+    if (memchrFn == nullptr) {
+        IntegerType * const int32Ty = getInt32Ty();
+        IntegerType * const sizeTy = getSizeTy();
+        PointerType * const voidPtrTy = getVoidPtrTy();
+        memchrFn = cast<Function>(m->getOrInsertFunction("memchr",
+                                                         voidPtrTy, voidPtrTy, int32Ty, sizeTy, nullptr));
+    }
+    return CreateCall(memchrFn, {ptr, byteVal, num});
+}
+
 CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsigned Align, bool isVolatile,
                                    MDNode *TBAATag, MDNode *ScopeTag, MDNode *NoAliasTag) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
