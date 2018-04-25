@@ -130,6 +130,14 @@ public:
 protected:
     void generatePabloMethod() override;    
 };
+
+class AbortOnNull final : public MultiBlockKernel {
+public:
+    AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+private:
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
     
+};
+
 }
 #endif

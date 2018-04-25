@@ -10,6 +10,7 @@
 #include <re/re_name.h>
 #include <re/re_toolchain.h>
 #include <re/re_reverse.h>
+#include <grep/grep_engine.h>
 #include <pablo/codegenstate.h>
 #include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
@@ -27,6 +28,7 @@
 #include <cc/multiplex_CCs.h>
 #include <re/re_compiler.h>
 #include <UCD/ucd_compiler.hpp>
+#include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace kernel;
@@ -445,4 +447,114 @@ PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & i
 {},
 {Binding{iBuilder->getSizeTy(), "countResult"}}) {
 
+}
+
+
+void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
+    Module * const m = b->getModule();
+    DataLayout DL(m);
+    IntegerType * const intPtrTy = DL.getIntPtrType(m->getContext());
+    Type * voidPtrTy = b->getVoidPtrTy();
+    const auto blocksPerStride = getStride() / b->getBitBlockWidth();
+    Constant * const BLOCKS_PER_STRIDE = b->getSize(blocksPerStride);
+    BasicBlock * const entry = b->GetInsertBlock();
+    BasicBlock * const strideLoop = b->CreateBasicBlock("strideLoop");
+    BasicBlock * const stridesDone = b->CreateBasicBlock("stridesDone");
+    BasicBlock * const nullByteDetection = b->CreateBasicBlock("nullByteDetection");
+    BasicBlock * const nullByteFound = b->CreateBasicBlock("nullByteFound");
+    BasicBlock * const finalStride = b->CreateBasicBlock("finalStride");
+    BasicBlock * const segmentDone = b->CreateBasicBlock("segmentDone");
+
+    Value * const numOfBlocks = b->CreateMul(numOfStrides, BLOCKS_PER_STRIDE);
+    Value * availItems = b->getAvailableItemCount("bytedata");
+    //
+    // Fast loop to prove that there are no null bytes in a multiblock region.
+    // We repeatedly combine byte packs using a SIMD unsigned min operation
+    // (implemented as a Select/ICmpULT combination).
+    //
+    Value * byteStreamBasePtr = b->getInputStreamBlockPtr("bytedata", b->getSize(0), b->getSize(0));
+    Value * outputStreamBasePtr = b->getOutputStreamBlockPtr("untilNull", b->getSize(0), b->getSize(0));
+
+    //
+    // We set up a a set of eight accumulators to accumulate the minimum byte
+    // values seen at each position in a block.   The initial min value at
+    // each position is 0xFF (all ones).
+    Value * blockMin[8];
+    for (unsigned i = 0; i < 8; i++) {
+        blockMin[i] = b->fwCast(8, b->allOnes());
+    }
+    // If we're in the final block bypass the fast loop.
+    b->CreateCondBr(mIsFinal, finalStride, strideLoop);
+    
+    b->SetInsertPoint(strideLoop);
+    PHINode * const baseBlockIndex = b->CreatePHI(b->getSizeTy(), 2);
+    baseBlockIndex->addIncoming(ConstantInt::get(baseBlockIndex->getType(), 0), entry);
+    PHINode * const blocksRemaining = b->CreatePHI(b->getSizeTy(), 2);
+    blocksRemaining->addIncoming(numOfBlocks, entry);
+    for (unsigned i = 0; i < 8; i++) {
+        Value * next = b->CreateBlockAlignedLoad(b->CreateGEP(byteStreamBasePtr, {baseBlockIndex, b->getSize(i)}));
+        b->CreateBlockAlignedStore(next, b->CreateGEP(outputStreamBasePtr, {baseBlockIndex, b->getSize(i)}));
+        next = b->fwCast(8, next);
+        blockMin[i] = b->CreateSelect(b->CreateICmpULT(next, blockMin[i]), next, blockMin[i]);
+    }
+    Value * nextBlockIndex = b->CreateAdd(baseBlockIndex, ConstantInt::get(baseBlockIndex->getType(), 1));
+    Value * nextRemaining = b->CreateSub(blocksRemaining, ConstantInt::get(blocksRemaining->getType(), 1));
+    baseBlockIndex->addIncoming(nextBlockIndex, strideLoop);
+    blocksRemaining->addIncoming(nextRemaining, strideLoop);
+    b->CreateCondBr(b->CreateICmpUGT(nextRemaining, ConstantInt::getNullValue(blocksRemaining->getType())), strideLoop, stridesDone);
+    
+    b->SetInsertPoint(stridesDone);
+    // Combine the 8 blockMin values.
+    for (unsigned i = 0; i < 4; i++) {
+        blockMin[i] = b->CreateSelect(b->CreateICmpULT(blockMin[i], blockMin[i+4]), blockMin[i], blockMin[i+4]);
+    }
+    for (unsigned i = 0; i < 2; i++) {
+        blockMin[i] = b->CreateSelect(b->CreateICmpULT(blockMin[i], blockMin[i+4]), blockMin[i], blockMin[i+2]);
+    }
+    blockMin[0] = b->CreateSelect(b->CreateICmpULT(blockMin[0], blockMin[1]), blockMin[0], blockMin[1]);
+    Value * anyNull = b->bitblock_any(b->simd_eq(8, blockMin[0], b->allZeroes()));
+    
+    b->CreateCondBr(anyNull, nullByteDetection, segmentDone);
+    
+    
+    b->SetInsertPoint(finalStride);
+    b->CreateMemCpy(b->CreatePointerCast(outputStreamBasePtr, voidPtrTy), b->CreatePointerCast(byteStreamBasePtr, voidPtrTy), availItems, 1);
+    b->CreateBr(nullByteDetection);
+    
+    b->SetInsertPoint(nullByteDetection);
+    //  Find the exact location using memchr, which should be fast enough.
+    //
+    Value * ptrToNull = b->CreateMemChr(b->CreatePointerCast(byteStreamBasePtr, voidPtrTy), b->getInt32(0), availItems);
+    Value * ptrAddr = b->CreatePtrToInt(ptrToNull, intPtrTy);
+    b->CreateCondBr(b->CreateICmpEQ(ptrAddr, ConstantInt::getNullValue(intPtrTy)), segmentDone, nullByteFound);
+    
+    // A null byte has been located; set the termination code and call the signal handler.
+    b->SetInsertPoint(nullByteFound);
+    Value * nullPosn = b->CreateSub(b->CreatePtrToInt(ptrToNull, intPtrTy), b->CreatePtrToInt(byteStreamBasePtr, intPtrTy));
+    b->setTerminationSignal();
+    Function * const dispatcher = m->getFunction("signal_dispatcher"); assert (dispatcher);
+    Value * handler = b->getScalarField("handler_address");
+    b->CreateCall(dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), static_cast<unsigned>(grep::GrepSignal::BinaryFile))});
+    b->CreateBr(segmentDone);
+    
+    b->SetInsertPoint(segmentDone);
+    PHINode * const produced = b->CreatePHI(b->getSizeTy(), 3);
+    produced->addIncoming(nullPosn, nullByteFound);
+    produced->addIncoming(availItems, stridesDone);
+    produced->addIncoming(availItems, nullByteDetection);
+    Value * producedCount = b->getProducedItemCount("untilNull");
+    producedCount = b->CreateAdd(producedCount, produced);
+    b->setProducedItemCount("untilNull", producedCount);
+}
+
+AbortOnNull::AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> & b)
+: MultiBlockKernel("AbortOnNull",
+                   // inputs
+{Binding{b->getStreamSetTy(1, 8), "bytedata"}},
+                   // outputs
+{Binding{b->getStreamSetTy(1, 8), "untilNull", FixedRate(), Deferred()}},
+                   // input scalars
+{Binding{b->getIntAddrTy(), "handler_address"}},
+{}, {}) {
+    addAttribute(CanTerminateEarly());
 }

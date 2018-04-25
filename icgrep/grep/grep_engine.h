@@ -26,17 +26,29 @@ namespace grep {
     
 enum class GrepRecordBreakKind {Null, LF, Unicode};
 
-class MatchAccumulator {
+enum GrepSignal : unsigned {BinaryFile};
+
+class GrepCallBackObject {
+public:
+    GrepCallBackObject() : mBinaryFile(false) {}
+    virtual void handle_signal(unsigned signal);
+    bool binaryFileSignalled() {return mBinaryFile;}
+private:
+    bool mBinaryFile;
+};
+    
+class MatchAccumulator : public GrepCallBackObject {
 public:
     MatchAccumulator() {}
     virtual void accumulate_match(const size_t lineNum, char * line_start, char * line_end) = 0;
     virtual void finalize_match(char * buffer_end) {}  // default: no op
 };
 
+extern "C" void signal_dispatcher(intptr_t callback_object_addr, unsigned signal);
+    
 extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end);
 
 extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
-
 
 class GrepEngine {
     enum class FileStatus {Pending, GrepComplete, PrintComplete};
@@ -65,9 +77,10 @@ public:
     virtual void grepCodeGen();
     bool searchAllFiles();
     void * DoGrepThreadMethod();
+    virtual void showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm);
 
 protected:
-    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(parabix::StreamSetBuffer * ByteStream);
+    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(parabix::StreamSetBuffer * ByteStream, llvm::Value * callback_object_addr);
 
     virtual uint64_t doGrep(const std::string & fileName, std::ostringstream & strm);
     int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
@@ -144,14 +157,14 @@ class CountOnlyEngine : public GrepEngine {
 public:
     CountOnlyEngine();
 private:
-    uint64_t doGrep(const std::string & fileName, std::ostringstream & strm) override;
+    void showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) override;
 };
 
 class MatchOnlyEngine : public GrepEngine {
 public:
     MatchOnlyEngine(bool showFilesWithoutMatch, bool useNullSeparators);
 private:
-    uint64_t doGrep(const std::string & fileName, std::ostringstream & strm) override;
+    void showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) override;
     unsigned mRequiredCount;
 };
 
@@ -183,7 +196,7 @@ private:
 };
     
     
-#define MAX_SIMD_WIDTH_SUPPORTED 256
+#define MAX_SIMD_WIDTH_SUPPORTED 512
 #define INITIAL_CAPACITY 64
     
 class SearchableBuffer  {

@@ -73,6 +73,17 @@ static cl::opt<unsigned> ByteCClimit("byte-CC-limit", cl::desc("Max number of CC
 
 namespace grep {
     
+extern "C" void signal_dispatcher(intptr_t callback_object_addr, unsigned signal) {
+    reinterpret_cast<GrepCallBackObject *>(callback_object_addr)->handle_signal(signal);
+}
+    
+void GrepCallBackObject::handle_signal(unsigned s) {
+    if (static_cast<GrepSignal>(s) == GrepSignal::BinaryFile) {
+        mBinaryFile = true;
+    } else {
+        llvm::report_fatal_error("Unknown GrepSignal");
+    }
+}
 
 extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end) {
     reinterpret_cast<MatchAccumulator *>(accum_addr)->accumulate_match(lineNum, line_start, line_end);
@@ -230,7 +241,7 @@ unsigned LLVM_READNONE calculateMaxCountRate(const std::unique_ptr<kernel::Kerne
     return (packSize * packSize) / b->getBitBlockWidth();
 }
     
-std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamSetBuffer * ByteStream) {
+std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamSetBuffer * ByteStream, Value * callback_object_addr) {
     auto & idb = mGrepDriver->getBuilder();
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
@@ -248,6 +259,13 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamS
         hasGCB[i] = hasGraphemeClusterBoundary(mREs[i]);
         anyGCB |= hasGCB[i];
     }
+    StreamSetBuffer * SourceStream = ByteStream;
+    ByteStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 8), baseBufferSize);
+    kernel::Kernel * binaryCheckK = mGrepDriver->addKernelInstance<kernel::AbortOnNull>(idb);
+    binaryCheckK->setInitialArguments({ConstantInt::get(idb->getIntAddrTy(), reinterpret_cast<intptr_t>(callback_object_addr))});
+    mGrepDriver->makeKernelCall(binaryCheckK, {SourceStream}, {ByteStream});
+    mGrepDriver->LinkFunction(*binaryCheckK, "signal_dispatcher", &signal_dispatcher);
+
     StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
     std::vector<StreamSetBuffer *> MatchResultsBufs(nREs);
     
@@ -449,7 +467,7 @@ void GrepEngine::grepCodeGen() {
 
     const unsigned encodingBits = 8;
 
-    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt8Ty(), idb->getInt32Ty(), nullptr));
+    Function * mainFunc = cast<Function>(M->getOrInsertFunction("Main", idb->getInt64Ty(), idb->getInt8Ty(), idb->getInt32Ty(), idb->getIntAddrTy(), nullptr));
     mainFunc->setCallingConv(CallingConv::C);
     idb->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", mainFunc, 0));
     auto args = mainFunc->arg_begin();
@@ -458,6 +476,8 @@ void GrepEngine::grepCodeGen() {
     useMMap->setName("useMMap");
     Value * const fileDescriptor = &*(args++);
     fileDescriptor->setName("fileDescriptor");
+    Value * call_back_object = &*(args++);
+    call_back_object->setName("call_back_object");
 
     StreamSetBuffer * ByteStream = mGrepDriver->addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(1, encodingBits));
     kernel::Kernel * sourceK = mGrepDriver->addKernelInstance<kernel::FDSourceKernel>(idb);
@@ -466,7 +486,7 @@ void GrepEngine::grepCodeGen() {
 
     StreamSetBuffer * LineBreakStream;
     StreamSetBuffer * Matches;
-    std::tie(LineBreakStream, Matches) = grepPipeline(ByteStream);
+    std::tie(LineBreakStream, Matches) = grepPipeline(ByteStream, call_back_object);
 
     kernel::Kernel * matchCountK = mGrepDriver->addKernelInstance<kernel::PopcountKernel>(idb);
     mGrepDriver->makeKernelCall(matchCountK, {Matches}, {});
@@ -479,7 +499,6 @@ void GrepEngine::grepCodeGen() {
     
     mGrepDriver->finalizeObject();
 }
-
 
 //
 //  Default Report Match:  lines are emitted with whatever line terminators are found in the
@@ -546,7 +565,7 @@ void EmitMatchesEngine::grepCodeGen() {
 
     StreamSetBuffer * LineBreakStream;
     StreamSetBuffer * Matches;
-    std::tie(LineBreakStream, Matches) = grepPipeline(ByteStream);
+    std::tie(LineBreakStream, Matches) = grepPipeline(ByteStream, match_accumulator);
 
     kernel::Kernel * scanMatchK = mGrepDriver->addKernelInstance<kernel::ScanMatchKernel>(idb);
     scanMatchK->setInitialArguments({match_accumulator});
@@ -566,7 +585,7 @@ void EmitMatchesEngine::grepCodeGen() {
 //  differently based on the engine type.
 
 uint64_t GrepEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
-    typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor);
+    typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, intptr_t callback_addr);
     using namespace boost::filesystem;
     path p(fileName);
     bool useMMap = mPreferMMap;
@@ -577,17 +596,16 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, std::ostringstream & s
 
     int32_t fileDescriptor = openFile(fileName, strm);
     if (fileDescriptor == -1) return 0;
-
-    uint64_t grepResult = f(useMMap, fileDescriptor);
+    GrepCallBackObject handler;
+    uint64_t grepResult = f(useMMap, fileDescriptor, reinterpret_cast<intptr_t>(&handler));
     close(fileDescriptor);
-    return grepResult;
-}
-
-uint64_t CountOnlyEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
-    uint64_t grepResult = GrepEngine::doGrep(fileName, strm);
-    if (mShowFileNames) strm << linePrefix(fileName);
-    strm << grepResult << "\n";
-    return grepResult;
+    if (handler.binaryFileSignalled()) {
+        return 0;
+    }
+    else {
+        showResult(grepResult, fileName, strm);
+        return grepResult;
+    }
 }
 
 std::string GrepEngine::linePrefix(std::string fileName) {
@@ -600,12 +618,19 @@ std::string GrepEngine::linePrefix(std::string fileName) {
     }
 }
 
-uint64_t MatchOnlyEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
-    uint64_t grepResult = GrepEngine::doGrep(fileName, strm);
+// Default: do not show anything
+void GrepEngine::showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) {
+}
+    
+void CountOnlyEngine::showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) {
+    if (mShowFileNames) strm << linePrefix(fileName);
+    strm << grepResult << "\n";
+}
+    
+void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) {
     if (grepResult == mRequiredCount) {
        strm << linePrefix(fileName);
     }
-    return grepResult;
 }
 
 uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
@@ -621,6 +646,9 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, std::ostringstr
     EmitMatch accum(linePrefix(fileName), mShowLineNumbers, mInitialTab, strm);
     f(useMMap, fileDescriptor, reinterpret_cast<intptr_t>(&accum));
     close(fileDescriptor);
+    if (accum.binaryFileSignalled()) {
+        accum.mResultStr.clear();
+    }
     if (accum.mLineCount > 0) grepMatchFound = true;
     return accum.mLineCount;
 }
