@@ -406,6 +406,8 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
 
 void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE* regex) {
     auto & iBuilder = pxDriver.getBuilder();
+    this->generateMainFunc(iBuilder);
+
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);
