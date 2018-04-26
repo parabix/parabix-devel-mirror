@@ -262,7 +262,7 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamS
     StreamSetBuffer * SourceStream = ByteStream;
     ByteStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 8), baseBufferSize);
     kernel::Kernel * binaryCheckK = mGrepDriver->addKernelInstance<kernel::AbortOnNull>(idb);
-    binaryCheckK->setInitialArguments({ConstantInt::get(idb->getIntAddrTy(), reinterpret_cast<intptr_t>(callback_object_addr))});
+    binaryCheckK->setInitialArguments({callback_object_addr});
     mGrepDriver->makeKernelCall(binaryCheckK, {SourceStream}, {ByteStream});
     mGrepDriver->LinkFunction(*binaryCheckK, "signal_dispatcher", &signal_dispatcher);
 

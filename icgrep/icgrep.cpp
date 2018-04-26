@@ -8,7 +8,9 @@
 #include <vector>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/PrettyStackTrace.h>
 #include <llvm/Support/Signals.h>
+#include <llvm/Support/ManagedStatic.h>
 #include <llvm/Support/raw_ostream.h>
 #include <re/re_alt.h>
 #include <re/re_seq.h>
@@ -108,6 +110,9 @@ std::vector<re::RE *> readExpressions() {
 namespace fs = boost::filesystem;
 
 int main(int argc, char *argv[]) {
+    sys::PrintStackTraceOnErrorSignal(argv[0]);
+    llvm::PrettyStackTraceProgram X(argc, argv);
+    llvm_shutdown_obj shutdown;
 
     argv::InitializeCommandLineInterface(argc, argv);
     
