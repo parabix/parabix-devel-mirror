@@ -69,7 +69,7 @@ private:
 private:
 
     PabloKernel * const             mKernel;
-    CarryManager * const            mCarryManager;
+    std::unique_ptr<CarryManager> const mCarryManager;
     TranslationMap                  mMarker;
     TranslationMap                  mAccumulator;
     unsigned                        mBranchCount;

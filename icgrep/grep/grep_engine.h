@@ -70,7 +70,7 @@ public:
     void setCaseInsensitive()  {mCaseInsensitive = true;}
 
     void suppressFileMessages() {mSuppressFileMessages = true;}
-
+    void setBinaryFilesOption(argv::BinaryFilesMode mode) {mBinaryFilesMode = mode;}
     void setRecordBreak(GrepRecordBreakKind b);
     void initFileResult(std::vector<boost::filesystem::path> & filenames);
     void initREs(std::vector<re::RE *> & REs);
@@ -91,6 +91,7 @@ protected:
     std::string linePrefix(std::string fileName);
 
     bool mSuppressFileMessages;
+    argv::BinaryFilesMode mBinaryFilesMode;
     bool mPreferMMap;
     bool mShowFileNames;
     std::string mStdinLabel;
@@ -100,8 +101,7 @@ protected:
     bool mInvertMatches;
     int mMaxCount;
     bool mGrepStdIn;
-    
-    Driver * mGrepDriver;
+    std::unique_ptr<Driver> mGrepDriver;
 
     std::atomic<unsigned> mNextFileToGrep;
     std::atomic<unsigned> mNextFileToPrint;
@@ -192,7 +192,7 @@ private:
     bool mCaseInsensitive;
     bool mSaveSegmentPipelineParallel;
 
-    Driver * mGrepDriver;
+    std::unique_ptr<Driver> mGrepDriver;
 };
     
     

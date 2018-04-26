@@ -140,6 +140,7 @@ SearchableBuffer::~SearchableBuffer() {
 
 GrepEngine::GrepEngine() :
     mSuppressFileMessages(false),
+    mBinaryFilesMode(argv::Text),
     mPreferMMap(true),
     mShowFileNames(false),
     mStdinLabel("(stdin)"),
@@ -149,7 +150,7 @@ GrepEngine::GrepEngine() :
     mInvertMatches(false),
     mMaxCount(0),
     mGrepStdIn(false),
-    mGrepDriver(nullptr),
+    mGrepDriver(make_unique<ParabixDriver>("engine")),
     mNextFileToGrep(0),
     mNextFileToPrint(0),
     grepMatchFound(false),
@@ -158,7 +159,7 @@ GrepEngine::GrepEngine() :
     mEngineThread(pthread_self()) {}
 
 GrepEngine::~GrepEngine() {
-    delete mGrepDriver;
+    //delete mGrepDriver;
 }
 
 QuietModeEngine::QuietModeEngine() : GrepEngine() {
@@ -241,7 +242,7 @@ unsigned LLVM_READNONE calculateMaxCountRate(const std::unique_ptr<kernel::Kerne
     return (packSize * packSize) / b->getBitBlockWidth();
 }
     
-std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamSetBuffer * ByteStream, Value * callback_object_addr) {
+std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamSetBuffer * SourceStream, Value * callback_object_addr) {
     auto & idb = mGrepDriver->getBuilder();
     const unsigned segmentSize = codegen::SegmentSize;
     const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
@@ -259,13 +260,18 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamS
         hasGCB[i] = hasGraphemeClusterBoundary(mREs[i]);
         anyGCB |= hasGCB[i];
     }
-    StreamSetBuffer * SourceStream = ByteStream;
-    ByteStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 8), baseBufferSize);
-    kernel::Kernel * binaryCheckK = mGrepDriver->addKernelInstance<kernel::AbortOnNull>(idb);
-    binaryCheckK->setInitialArguments({callback_object_addr});
-    mGrepDriver->makeKernelCall(binaryCheckK, {SourceStream}, {ByteStream});
-    mGrepDriver->LinkFunction(*binaryCheckK, "signal_dispatcher", &signal_dispatcher);
-
+    StreamSetBuffer * ByteStream = nullptr;
+    if (mBinaryFilesMode == argv::Text) {
+        ByteStream = SourceStream;
+    } else if (mBinaryFilesMode == argv::WithoutMatch) {
+        ByteStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 8), baseBufferSize);
+        kernel::Kernel * binaryCheckK = mGrepDriver->addKernelInstance<kernel::AbortOnNull>(idb);
+        binaryCheckK->setInitialArguments({callback_object_addr});
+        mGrepDriver->makeKernelCall(binaryCheckK, {SourceStream}, {ByteStream});
+        mGrepDriver->LinkFunction(*binaryCheckK, "signal_dispatcher", &signal_dispatcher);
+    } else {
+        llvm::report_fatal_error("Binary mode not supported.");
+    }
     StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<CircularBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
     std::vector<StreamSetBuffer *> MatchResultsBufs(nREs);
     
@@ -459,9 +465,6 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamS
 //
 
 void GrepEngine::grepCodeGen() {
-
-    assert (mGrepDriver == nullptr);
-    mGrepDriver = new ParabixDriver("engine");
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
 
@@ -539,8 +542,6 @@ void EmitMatch::finalize_match(char * buffer_end) {
 }
 
 void EmitMatchesEngine::grepCodeGen() {
-    assert (mGrepDriver == nullptr);
-    mGrepDriver = new ParabixDriver("engine");
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
 
@@ -774,14 +775,12 @@ void * GrepEngine::DoGrepThreadMethod() {
 InternalSearchEngine::InternalSearchEngine() :
     mGrepRecordBreak(GrepRecordBreakKind::LF),
     mCaseInsensitive(false),
-    mGrepDriver(nullptr) {}
+    mGrepDriver(make_unique<ParabixDriver>("InternalEngine")) {}
     
 InternalSearchEngine::~InternalSearchEngine() {
-    delete mGrepDriver;
 }
 
 void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE, MatchAccumulator * accum) {
-    mGrepDriver = new ParabixDriver("InternalEngine");
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
     

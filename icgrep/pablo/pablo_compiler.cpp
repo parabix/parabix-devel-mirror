@@ -855,13 +855,12 @@ Value * PabloCompiler::getPointerToVar(const std::unique_ptr<kernel::KernelBuild
 
 PabloCompiler::PabloCompiler(PabloKernel * const kernel)
 : mKernel(kernel)
-, mCarryManager(new CarryManager)
+, mCarryManager(make_unique<CarryManager>())
 , mBranchCount(0) {
     assert ("PabloKernel cannot be null!" && kernel);
 }
 
 PabloCompiler::~PabloCompiler() {
-    delete mCarryManager;
 }
 
 }

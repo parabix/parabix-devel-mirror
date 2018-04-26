@@ -29,6 +29,7 @@
 #include <util/file_select.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <llvm/ADT/STLExtras.h> // for make_unique
 
 using namespace llvm;
 
@@ -110,9 +111,6 @@ std::vector<re::RE *> readExpressions() {
 namespace fs = boost::filesystem;
 
 int main(int argc, char *argv[]) {
-    sys::PrintStackTraceOnErrorSignal(argv[0]);
-    llvm::PrettyStackTraceProgram X(argc, argv);
-    llvm_shutdown_obj shutdown;
 
     argv::InitializeCommandLineInterface(argc, argv);
     
@@ -126,27 +124,28 @@ int main(int argc, char *argv[]) {
         argv::WithFilenameFlag = true;
     }
 
-    grep::GrepEngine * grepEngine = nullptr;
+    std::unique_ptr<grep::GrepEngine> grepEngine;
     
     switch (argv::Mode) {
         case argv::NormalMode:
-            grepEngine = new grep::EmitMatchesEngine();
+            grepEngine = make_unique<grep::EmitMatchesEngine>();
             if (argv::MaxCountFlag) grepEngine->setMaxCount(argv::MaxCountFlag);
             if (argv::WithFilenameFlag) grepEngine->showFileNames();
             if (argv::LineNumberFlag) grepEngine->showLineNumbers();
             if (argv::InitialTabFlag) grepEngine->setInitialTab();
            break;
         case argv::CountOnly:
-            grepEngine = new grep::CountOnlyEngine();
+            grepEngine = make_unique<grep::CountOnlyEngine>();
             if (argv::WithFilenameFlag) grepEngine->showFileNames();
             if (argv::MaxCountFlag) grepEngine->setMaxCount(argv::MaxCountFlag);
            break;
         case argv::FilesWithMatch:
         case argv::FilesWithoutMatch:
-            grepEngine = new grep::MatchOnlyEngine(argv::Mode == argv::FilesWithMatch, argv::NullFlag);
+            grepEngine = make_unique<grep::MatchOnlyEngine>(argv::Mode == argv::FilesWithMatch, argv::NullFlag);
             break;
         case argv::QuietMode:
-            grepEngine = new grep::QuietModeEngine(); break;
+            grepEngine = make_unique<grep::QuietModeEngine>();
+            break;
         default: llvm_unreachable("Invalid grep mode!");
     }
     if (argv::IgnoreCaseFlag) grepEngine->setCaseInsensitive();
@@ -162,11 +161,11 @@ int main(int argc, char *argv[]) {
     if (argv::UseStdIn) grepEngine->setGrepStdIn();
     if (argv::NoMessagesFlag) grepEngine->suppressFileMessages();
     if (argv::MmapFlag) grepEngine->setPreferMMap();
+    grepEngine->setBinaryFilesOption(argv::BinaryFilesFlag);
     grepEngine->initREs(REs);
     grepEngine->grepCodeGen();
     grepEngine->initFileResult(allFiles);
     bool matchFound = grepEngine->searchAllFiles();
-    delete(grepEngine);
     
     return matchFound ? argv::MatchFoundExitCode : argv::MatchNotFoundExitCode;
 }
