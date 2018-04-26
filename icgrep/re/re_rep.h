@@ -26,7 +26,7 @@ public:
     void setLB(const int lb);
     int getUB() const;
     void setUB(const int ub);
-    virtual ~Rep();
+    virtual ~Rep() {}
 protected:
     friend RE * makeRep(RE *, const int, const int);
     Rep(RE * re, const int lb, const int ub);
@@ -43,10 +43,6 @@ inline Rep::Rep(RE * re, const int lb, const int ub)
 , mUB(ub)
 {
 
-}
-
-inline Rep::~Rep() {
-    delete mRE;
 }
 
 inline RE * Rep::getRE() const {
