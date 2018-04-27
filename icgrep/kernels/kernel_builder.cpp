@@ -265,7 +265,7 @@ void KernelBuilder::CreateCopyFromOverflow(const Binding & output, llvm::Value *
     blocksToCopy = CreateMul(blocksToCopy, ITEM_WIDTH);
     blocksToCopy = CreateMul(blocksToCopy, streamCount);
 
-    CreateBr(mergeCopyLoop);
+    CreateCondBr(CreateICmpEQ(blocksToCopy, getSize(0)), mergeCopyExit, mergeCopyLoop);
 
     SetInsertPoint(mergeCopyLoop);
     PHINode * const blockIndex = CreatePHI(getSizeTy(), 2);
