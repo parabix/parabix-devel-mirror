@@ -197,7 +197,7 @@ private:
     
     
 #define MAX_SIMD_WIDTH_SUPPORTED 512
-#define INITIAL_CAPACITY 64
+#define INITIAL_CAPACITY (MAX_SIMD_WIDTH_SUPPORTED * 4)
     
 class SearchableBuffer  {
 public:
