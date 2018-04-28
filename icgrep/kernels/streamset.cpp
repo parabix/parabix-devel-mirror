@@ -86,7 +86,7 @@ Value * StreamSetBuffer::getStreamPackPtr(IDISA::IDISA_Builder * const b, Value 
     return b->CreateGEP(getBaseAddress(b, handle), {modBufferSize(b, blockIndex), streamIndex, packIndex});
 }
 
-void StreamSetBuffer::setBaseAddress(IDISA::IDISA_Builder * const /* b */, Value * /* handle */, Value * /* addr */) const {
+void StreamSetBuffer::setBaseAddress(IDISA::IDISA_Builder * const /* b */, Value * /* addr */, Value * /* handle */) const {
     report_fatal_error("setBaseAddress is not supported by this buffer type");
 }
 
@@ -534,33 +534,6 @@ Value * DynamicBuffer::getRawItemPointer(IDISA::IDISA_Builder * const b, Value *
     return b->CreateGEP(blockPtr, blockPos);
 }
 
-//Value * DynamicBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value * availItems, bool reverse) const {
-//    Value * const bufferSize = getBufferedSize(b, handle);
-//    assert (bufferSize->getType() == fromPosition->getType());
-//    Value * itemsFromBase = b->CreateURem(fromPosition, bufferSize);
-//    if (reverse) {
-//        Value * bufAvail = b->CreateSelect(b->CreateIsNull(itemsFromBase), bufferSize, itemsFromBase);
-//        return b->CreateSelect(b->CreateICmpULT(bufAvail, availItems), bufAvail, availItems);
-//    } else {
-//        Constant * const overflow = ConstantInt::get(bufBlocks->getType(), mOverflowBlocks * b->getBitBlockWidth() - 1);
-//        Value * const linearSpace = b->CreateAdd(bufferSize, overflow);
-//        Value * remaining = b->CreateSub(linearSpace, itemsFromBase);
-//        return b->CreateSelect(b->CreateICmpULT(availItems, remaining), availItems, remaining);
-//    }
-//}
-
-//Value * DynamicBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value * consumed, bool reverse) const {
-//    Value * const bufferSize = getBufferedSize(b, handle);
-//    assert (bufferSize->getType() == fromPosition->getType());
-//    Value * bufRem = b->CreateURem(fromPosition, bufferSize);
-//    if (reverse) {
-//        return b->CreateSelect(b->CreateIsNull(bufRem), bufferSize, bufRem);
-//    }
-//    Constant * const overflow = ConstantInt::get(bufBlocks->getType(), mOverflowBlocks * b->getBitBlockWidth() - 1);
-//    Value * const linearSpace = b->CreateAdd(bufferSize, overflow);
-//    return b->CreateSub(linearSpace, bufRem);
-//}
-
 Value * DynamicBuffer::getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, Value * const handle, Value * fromPosition, Value * availItems, bool reverse) const {
     Value * const bufferSize = getBufferedSize(b, handle);
     Value * const itemsFromBase = b->CreateURem(fromPosition, bufferSize);
@@ -593,8 +566,6 @@ Value * DynamicBuffer::getLinearlyWritableItems(IDISA::IDISA_Builder * const b, 
     Value * const limit = b->CreateSelect(b->CreateICmpULE(consumed, fromPosition), capacity, consumed);
     return b->CreateSub(limit, fromPosition);
 }
-
-
 
 Value * DynamicBuffer::getBufferedSize(IDISA::IDISA_Builder * const b, Value * const handle) const {
     Value * ptr = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(WorkingBlocks)});

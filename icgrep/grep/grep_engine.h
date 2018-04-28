@@ -54,8 +54,11 @@ class GrepEngine {
     enum class FileStatus {Pending, GrepComplete, PrintComplete};
 public:
 
+    enum class EngineKind {QuietMode, MatchOnly, CountOnly, EmitMatches};
+
     GrepEngine();
-    virtual ~GrepEngine();
+
+    virtual ~GrepEngine() = 0;
     
     void setPreferMMap() {mPreferMMap = true;}
     
@@ -85,11 +88,11 @@ protected:
     virtual uint64_t doGrep(const std::string & fileName, std::ostringstream & strm);
     int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
 
-    enum class EngineKind {QuietMode, MatchOnly, CountOnly, EmitMatches};
-    EngineKind mEngineKind;
-    
     std::string linePrefix(std::string fileName);
 
+protected:
+
+    EngineKind mEngineKind;
     bool mSuppressFileMessages;
     argv::BinaryFilesMode mBinaryFilesMode;
     bool mPreferMMap;

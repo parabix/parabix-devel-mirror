@@ -166,7 +166,15 @@ Value * CBuilder::CreateCeilUDiv(Value * const number, Value * const divisor, co
     return CreateUDiv(n, divisor, Name);
 }
 
-Value * CBuilder::CreateRoundUp(Value * const number, Value * const divisor, const Twine &Name) {
+Value * CBuilder::CreateRoundUp(Value * const number, Value * const divisor, const Twine & Name) {
+    if (isa<ConstantInt>(divisor)) {
+        const auto d = cast<ConstantInt>(divisor)->getZExtValue();
+        if (is_power_2(d)) {
+            Constant * const ONE = ConstantInt::get(divisor->getType(), 1);
+            Constant * const toAdd = ConstantExpr::getSub(cast<ConstantInt>(divisor), ONE);
+            return CreateAnd(CreateAdd(number, toAdd), ConstantExpr::getNeg(cast<ConstantInt>(divisor)));
+        }
+    }
     return CreateMul(CreateCeilUDiv(number, divisor), divisor, Name);
 }
 

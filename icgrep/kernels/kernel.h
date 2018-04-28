@@ -27,6 +27,7 @@ class KernelBuilder;
 
 class Kernel : public KernelInterface {
     friend class KernelBuilder;
+    friend class PipelineGenerator;
 public:
     
     enum class Port { Input, Output };

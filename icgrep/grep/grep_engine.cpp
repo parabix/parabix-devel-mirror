@@ -39,6 +39,7 @@
 #include <re/replaceCC.h>
 #include <re/re_multiplex.h>
 #include <re/grapheme_clusters.h>
+#include <re/re_utility.h>
 #include <re/printer_re.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>
@@ -158,10 +159,6 @@ GrepEngine::GrepEngine() :
     mMoveMatchesToEOL(true),
     mEngineThread(pthread_self()) {}
 
-GrepEngine::~GrepEngine() {
-    //delete mGrepDriver;
-}
-
 QuietModeEngine::QuietModeEngine() : GrepEngine() {
     mEngineKind = EngineKind::QuietMode;
     mMoveMatchesToEOL = false;
@@ -213,7 +210,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     re::RE * anchorRE = mBreakCC;
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         re::Name * anchorName = re::makeName("UTF8_LB", re::Name::Type::Unicode);
-        anchorName->setDefinition(UCD::UnicodeBreakRE());
+        anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
     }
     
@@ -777,9 +774,6 @@ InternalSearchEngine::InternalSearchEngine() :
     mCaseInsensitive(false),
     mGrepDriver(make_unique<ParabixDriver>("InternalEngine")) {}
     
-InternalSearchEngine::~InternalSearchEngine() {
-}
-
 void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE, MatchAccumulator * accum) {
     auto & idb = mGrepDriver->getBuilder();
     Module * M = idb->getModule();
@@ -892,5 +886,9 @@ void InternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLengt
     f(search_buffer, bufferLength);
     codegen::SegmentPipelineParallel = mSaveSegmentPipelineParallel;
 }
+
+GrepEngine::~GrepEngine() { }
+
+InternalSearchEngine::~InternalSearchEngine() { }
 
 }

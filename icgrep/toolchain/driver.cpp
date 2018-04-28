@@ -22,3 +22,5 @@ void Driver::deallocateBuffers() {
         b->releaseBuffer(iBuilder);
     }
 }
+
+Driver::~Driver() {}

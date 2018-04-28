@@ -57,5 +57,8 @@ RE * makeWordEnd() {
     return makeNegativeLookAheadAssertion(wordC);
 }
 
+RE * makeUnicodeBreak() {
+    return makeAlt({makeCC(0x0A, 0x0C), makeCC(0x85), makeCC(0x2028,0x2029), makeSeq({makeCC(0x0D), makeNegativeLookAheadAssertion(makeCC(0x0A))})});
+}
     
 }

@@ -491,7 +491,7 @@ inline void MultiBlockKernel::updateDerivedItemCounts(const std::unique_ptr<Kern
         b->CallPrintInt(getName() + "_" + input.getName() + "_processed'", b->getProcessedItemCount(input.getName()));
         #endif
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            Value * const processed = b->getProcessedItemCount(input.getName());
+            Value * const processed = b->getNonDeferredProcessedItemCount(input);
             Value * const newlyProcessed = b->CreateSub(processed, mInitialProcessedItemCount[i]);
             Value * const withinCapacity = b->CreateICmpULE(newlyProcessed, mAccessibleInputItems[i]);
             std::string tmp;

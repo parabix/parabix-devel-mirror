@@ -17,8 +17,6 @@ class Driver {
 public:
     Driver(std::string && moduleName);
 
-    virtual ~Driver() = default;
-
     const std::unique_ptr<kernel::KernelBuilder> & getBuilder() {
         return iBuilder;
     }
@@ -56,6 +54,8 @@ public:
     virtual void * getMain() = 0; // "main" exists until the driver is deleted
     
     virtual void performIncrementalCacheCleanupStep() = 0;
+
+    virtual ~Driver() = 0;
 
 protected:
 

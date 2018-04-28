@@ -152,6 +152,8 @@ public:
 
     void CreateCopyToOverflow(const std::string & name);
 
+    std::pair<llvm::Value *, llvm::Value *> AcquireTemporaryBuffer(const std::string & name, llvm::Value * const offset, llvm::Value * const itemsToCopy);
+
     void setBaseAddress(const std::string & name, llvm::Value * addr);
 
     llvm::Value * getBufferedSize(const std::string & name);

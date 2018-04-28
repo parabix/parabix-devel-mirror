@@ -21,6 +21,7 @@ Name * makeDigitSet();
 Name * makeAlphaNumeric();
 Name * makeWhitespaceSet();
 Name * makeWordSet();
+RE * makeUnicodeBreak();
 
 }
 

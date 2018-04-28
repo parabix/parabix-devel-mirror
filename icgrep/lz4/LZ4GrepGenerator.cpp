@@ -62,8 +62,8 @@
 #include <re/re_analysis.h>
 #include <re/re_name_resolve.h>
 #include <re/re_name_gather.h>
-//#include <re/re_collect_unicodesets.h>
 #include <re/re_multiplex.h>
+#include <re/re_utility.h>
 #include <re/grapheme_clusters.h>
 #include <re/printer_re.h>
 #include <toolchain/toolchain.h>
@@ -110,7 +110,7 @@ void LZ4GrepGenerator::initREs(std::vector<re::RE *> & REs) {
     re::RE * anchorRE = mBreakCC;
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         re::Name * anchorName = re::makeName("UTF8_LB", re::Name::Type::Unicode);
-        anchorName->setDefinition(UCD::UnicodeBreakRE());
+        anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
     }
 
