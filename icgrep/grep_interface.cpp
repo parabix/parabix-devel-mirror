@@ -124,10 +124,6 @@ static cl::opt<GrepModeType, true> GrepModeOption(cl::desc("Abbreviated output m
         clEnumValN(QuietMode, "silent", "Alias for -q")
         CL_ENUM_VAL_SENTINEL), cl::cat(Output_Options), cl::Grouping, cl::location(Mode), cl::init(NormalMode));
 
-bool NoMessagesFlag;
-static cl::opt<bool, true> NoMessagesOption("s", cl::location(NoMessagesFlag), cl::desc("Suppress messages for file errors."), cl::cat(Output_Options), cl::Grouping);
-static cl::alias NoMessagesAlias("no-messages", cl::desc("Alias for -s"), cl::aliasopt(NoMessagesOption));
-
 bool WithFilenameFlag;
 static cl::opt<bool, true> WithFilenameOption("H", cl::location(WithFilenameFlag), cl::desc("Show the file name with each matching line."), cl::cat(Output_Options), cl::Grouping);
 static cl::alias WithFilenameAlias("with-filename", cl::desc("Alias for -H"), cl::aliasopt(WithFilenameOption));
@@ -260,9 +256,6 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
     }
     if (ColorFlag!=neverColor) {
         llvm::report_fatal_error("Sorry, -color is not yet supported.\n");
-    }
-    if (Mode == QuietMode) {
-        NoMessagesFlag = true;
     }
     if ((Mode == QuietMode) | (Mode == FilesWithMatch) | (Mode == FilesWithoutMatch)) {
         MaxCountFlag = 1;

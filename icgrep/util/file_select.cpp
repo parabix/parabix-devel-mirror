@@ -29,6 +29,10 @@ namespace argv {
     
 static cl::OptionCategory Input_Options("File Selection Options", "These options control the input sources.");
 
+bool NoMessagesFlag;
+static cl::opt<bool, true> NoMessagesOption("s", cl::location(NoMessagesFlag), cl::desc("Suppress messages for file errors."), cl::cat(Input_Options), cl::Grouping);
+static cl::alias NoMessagesAlias("no-messages", cl::desc("Alias for -s"), cl::aliasopt(NoMessagesOption));
+
 bool RecursiveFlag;
 static cl::opt<bool, true> RecursiveOption("r", cl::location(RecursiveFlag), cl::desc("Recursively process files within directories, (but follow only top-level symlinks unless -R)."), cl::cat(Input_Options), cl::Grouping);
 static cl::alias RecursiveAlias("recursive", cl::desc("Alias for -r"), cl::aliasopt(RecursiveOption));
@@ -191,6 +195,9 @@ void FileSelectAccumulator::accumulate_match(const size_t fileIdx, char * name_s
         mCollectedPaths.emplace_back(mDirectoryList[mDirectoryIndex]/std::string(name_start, name_end - name_start));
     }
 }
+
+
+
     
 std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
     // The vector to accumulate the full list of collected files to be searched.
@@ -211,15 +218,17 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
                 continue;
             }
             fs::path p(f);
+            errs() << "path: " << p.string() << "\n";
+            fs::file_status s = fs::status(p, errc);
             if (errc) {
                 // If there was an error, we leave the file in the fileCandidates
                 // list for later error processing.
-                collectedPaths.push_back(p);
-            } else if (fs::is_directory(p)) {
+                if (!NoMessagesFlag) collectedPaths.push_back(p);
+            } else if (fs::is_directory(s)) {
                 if (DirectoriesFlag == Read) {
                     collectedPaths.push_back(p);
                 }
-            } else if (fs::is_regular_file(p)) {
+            } else if (fs::is_regular_file(s)) {
                 collectedPaths.push_back(p);
             } else {
                 // Devices and unknown file types
@@ -249,17 +258,18 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
             continue;
         }
         fs::path p(f);
+        fs::file_status s = fs::status(p, errc);
         if (errc) {
             // If there was an error, we leave the file in the fileCandidates
             // list for later error processing.
-            fileCandidates.addSearchCandidate(p.c_str());
-        } else if (fs::is_directory(p)) {
+            if (!NoMessagesFlag) fileCandidates.addSearchCandidate(p.c_str());
+        } else if (fs::is_directory(s)) {
             if (DirectoriesFlag == Recurse) {
                 dirCandidates.addSearchCandidate(p.c_str());
             } else if (DirectoriesFlag == Read) {
                 fileCandidates.addSearchCandidate(p.c_str());
             }
-        } else if (fs::is_regular_file(p)) {
+        } else if (fs::is_regular_file(s)) {
             fileCandidates.addSearchCandidate(p.c_str());
         } else {
             // Devices and unknown file types
@@ -308,18 +318,23 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
                 if (errc) {
                     // If we cannot enter the directory, keep it in the list of files,
                     // for possible error reporting.
-                    fileCandidates.addSearchCandidate(dirpath.filename().c_str());
+                    if (!NoMessagesFlag) fileCandidates.addSearchCandidate(dirpath.filename().c_str());
                     continue;
                 }
                 while (di != di_end) {
                     auto & e = di->path();
-                    if (fs::is_directory(e)) {
-                        if (fs::is_symlink(e) && !DereferenceRecursiveFlag) {
+                    fs::file_status s = fs::status(e, errc);
+                    if (errc) {
+                        // If there was an error, we leave the file in the fileCandidates
+                        // list for later error processing.
+                        if (!NoMessagesFlag) fileCandidates.addSearchCandidate(e.filename().c_str());
+                    } else if (fs::is_directory(s)) {
+                        if (fs::is_symlink(s) && !DereferenceRecursiveFlag) {
                             di.increment(errc);
                             continue;
                         }
                         subdirCandidates.addSearchCandidate(e.filename().c_str());
-                    } else if (fs::is_regular_file(e)) {
+                    } else if (fs::is_regular_file(s)) {
                         fileCandidates.addSearchCandidate(e.filename().c_str());
                     } else {
                         // Devices and unknown file types

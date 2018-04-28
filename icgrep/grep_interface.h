@@ -67,7 +67,6 @@ extern GrepModeType Mode;
 enum ColoringType {alwaysColor, autoColor, neverColor};
 extern ColoringType ColorFlag;
 
-extern bool NoMessagesFlag; // -s  (also set by QuietMode/-q)
 extern bool WithFilenameFlag; // -H
 extern bool NoFilenameFlag; // -h
 extern bool NullFlag; // -Z

@@ -19,6 +19,8 @@ namespace re {class RE;}
 
 namespace argv {
 
+extern bool NoMessagesFlag;  // -s
+    
 enum DevDirAction {Read, Skip, Recurse};
 extern DevDirAction DevicesFlag;
 extern DevDirAction DirectoriesFlag;

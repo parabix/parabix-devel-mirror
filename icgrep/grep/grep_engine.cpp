@@ -582,13 +582,19 @@ void EmitMatchesEngine::grepCodeGen() {
 //  The doGrep methods apply a GrepEngine to a single file, processing the results
 //  differently based on the engine type.
 
+bool canMMap(const std::string & fileName) {
+    if (fileName == "-") return false;
+    namespace fs = boost::filesystem;
+    fs::path p(fileName);
+    boost::system::error_code errc;
+    fs::file_status s = fs::status(p, errc);
+    return !errc && is_regular_file(s);
+}
+
+
 uint64_t GrepEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
     typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, intptr_t callback_addr);
-    using namespace boost::filesystem;
-    path p(fileName);
-    bool useMMap = mPreferMMap;
-    if (p == "-") useMMap = false;
-    if (!is_regular_file(p)) useMMap = false;
+    bool useMMap = mPreferMMap && canMMap(fileName);
 
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
 
@@ -633,11 +639,7 @@ void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
 
 uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
     typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, intptr_t accum_addr);
-    using namespace boost::filesystem;
-    path p(fileName);
-    bool useMMap = mPreferMMap;
-    if (p == "-") useMMap = false;
-    if (!is_regular_file(p)) useMMap = false;
+    bool useMMap = mPreferMMap && canMMap(fileName);
     auto f = reinterpret_cast<GrepFunctionType>(mGrepDriver->getMain());
     int32_t fileDescriptor = openFile(fileName, strm);
     if (fileDescriptor == -1) return 0;
