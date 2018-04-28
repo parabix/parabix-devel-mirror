@@ -195,13 +195,45 @@ void FileSelectAccumulator::accumulate_match(const size_t fileIdx, char * name_s
 std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
     // The vector to accumulate the full list of collected files to be searched.
     std::vector<fs::path> collectedPaths;
-    FileSelectAccumulator fileAccum(collectedPaths);
-
+    
     // In this pass through command line arguments and the file hierarchy,
     // we are just gathering file and subdirectory entries, so we silently
     // ignore errors.  We use the boost::filesystem operations that set
     // error codes rather than raise exceptions.
     boost::system::error_code errc;
+    
+    // In non-recursive greps with no include/exclude processing, we simply assemble the
+    // paths.
+    if ((DirectoriesFlag != Recurse) && (ExcludeFlag == "") && (IncludeFlag == "") && (ExcludeFromFlag == "")) {
+        for (const std::string & f : inputFiles) {
+            if (f == "-") {  // stdin, will always be searched.
+                argv::UseStdIn = true;
+                continue;
+            }
+            fs::path p(f);
+            if (errc) {
+                // If there was an error, we leave the file in the fileCandidates
+                // list for later error processing.
+                collectedPaths.push_back(p);
+            } else if (fs::is_directory(p)) {
+                if (DirectoriesFlag == Read) {
+                    collectedPaths.push_back(p);
+                }
+            } else if (fs::is_regular_file(p)) {
+                collectedPaths.push_back(p);
+            } else {
+                // Devices and unknown file types
+                if (DevicesFlag == Read) {
+                    collectedPaths.push_back(p);
+                }
+            }
+        }
+        return collectedPaths;
+    }
+    
+    // Otherwise we need to filter paths according to some include/exclude rules.
+    
+    FileSelectAccumulator fileAccum(collectedPaths);
     
     // At each level we gather candidate file and directory names and then
     // filter the names based on -include, -exclude, -include-dir, -excclude-dir,
