@@ -218,7 +218,6 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
                 continue;
             }
             fs::path p(f);
-            errs() << "path: " << p.string() << "\n";
             fs::file_status s = fs::status(p, errc);
             if (errc) {
                 // If there was an error, we leave the file in the fileCandidates
