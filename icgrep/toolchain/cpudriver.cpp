@@ -301,7 +301,7 @@ void ParabixDriver::finalizeObject() {
         }
         module = mMainModule;
         iBuilder->setKernel(nullptr);
-        //mPassManager.run(*mMainModule);
+        mPassManager.run(*mMainModule);
         for (Kernel * const kernel : mPipeline) {
             if (LLVM_UNLIKELY(kernel->getModule() == nullptr)) {
                 report_fatal_error(kernel->getName() + " was neither loaded from cache nor generated prior to finalizeObject");

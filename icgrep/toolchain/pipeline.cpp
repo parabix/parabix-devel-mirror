@@ -674,26 +674,38 @@ void PipelineGenerator::execute(const std::unique_ptr<KernelBuilder> & b, const 
 
     // Since it is possible that a sole consumer of some stream could terminate early, set the
     // initial consumed amount to the amount produced in this iteration.
-    std::vector<PHINode *> consumedItemCountPhi(inputs.size());
+
+    // First determine the priorConsumedItemCounts, making sure
+    // that none of them are previous input buffers of this kernel!
     std::vector<Value *> priorConsumedItemCount(inputs.size());
 
     for (unsigned i = 0; i < inputs.size(); ++i) {
         const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
         auto c = consumedItemCount.find(buffer);
-        PHINode * const consumedPhi = b->CreatePHI(b->getSizeTy(), 2);
-        Value * consumed = nullptr;
         if (c == consumedItemCount.end()) {
             const auto p = producedItemCount.find(buffer);
             assert (p != producedItemCount.end());
-            consumed = p->second;
+            priorConsumedItemCount[i] = p->second;
+        } else {
+            priorConsumedItemCount[i] = c->second;
+        }
+    }
+
+    std::vector<PHINode *> consumedItemCountPhi(inputs.size());
+
+    for (unsigned i = 0; i < inputs.size(); ++i) {
+        const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
+        PHINode * const consumedPhi = b->CreatePHI(b->getSizeTy(), 2);
+        auto c = consumedItemCount.find(buffer);
+        if (c == consumedItemCount.end()) {
+            const auto p = producedItemCount.find(buffer);
+            assert (p != producedItemCount.end());
             consumedItemCount.emplace(buffer, consumedPhi);
         } else {
-            consumed = c->second;
             c->second = consumedPhi;
         }
-        consumedPhi->addIncoming(consumed, kernelEntry);
+        consumedPhi->addIncoming(priorConsumedItemCount[i], kernelEntry);
         consumedItemCountPhi[i] = consumedPhi;
-        priorConsumedItemCount[i] = consumed;
     }
 
     b->SetInsertPoint(kernelCode);
