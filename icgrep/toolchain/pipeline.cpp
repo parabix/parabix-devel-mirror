@@ -523,7 +523,7 @@ PipelineGenerator::ChannelGraph PipelineGenerator::makeInputGraph() const {
         }
     }
 
-    return pruneGraph(std::move(G), std::move(make_iterator_range(vertices(G))));
+    return pruneGraph(std::move(G), make_iterator_range(vertices(G)));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -583,7 +583,7 @@ PipelineGenerator::ChannelGraph PipelineGenerator::makeOutputGraph() const {
         }
     }
 
-    return pruneGraph(std::move(G), std::move(boost::adaptors::reverse(make_iterator_range(vertices(G)))));
+    return pruneGraph(std::move(G), boost::adaptors::reverse(make_iterator_range(vertices(G))));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -698,8 +698,6 @@ void PipelineGenerator::execute(const std::unique_ptr<KernelBuilder> & b, const 
         PHINode * const consumedPhi = b->CreatePHI(b->getSizeTy(), 2);
         auto c = consumedItemCount.find(buffer);
         if (c == consumedItemCount.end()) {
-            const auto p = producedItemCount.find(buffer);
-            assert (p != producedItemCount.end());
             consumedItemCount.emplace(buffer, consumedPhi);
         } else {
             c->second = consumedPhi;
