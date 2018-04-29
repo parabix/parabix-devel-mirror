@@ -117,40 +117,29 @@ void generateS2P_16Kernel(const std::unique_ptr<KernelBuilder> & iBuilder, Kerne
 #endif
 #ifdef S2P_MULTIBLOCK
 
-void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb) {
+void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
     BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
     BasicBlock * s2pDone = kb->CreateBasicBlock("s2pDone");
-    
-    Function::arg_iterator args = mCurrentMethod->arg_begin();
-    args++; //self
-    Value * itemsToDo = &*(args++);
-    // Get pointer to start of the StreamSetBlock containing unprocessed input items.
-    Value * byteStreamPtr = &*(args++);
-    Value * basisBitsPtr = &*(args++);
-    
-    Constant * blockWidth = kb->getSize(kb->getBitBlockWidth());
-    Value * blocksToDo = kb->CreateCeilUDiv(itemsToDo, blockWidth); // 1 if this is the final block
-    
+    Constant * const ZERO = kb->getSize(0);
+
     kb->CreateBr(processBlock);
     
     kb->SetInsertPoint(processBlock);
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
     blockOffsetPhi->addIncoming(kb->getSize(0), entry);
 
-    Value * bytePackPtr = kb->CreateGEP(byteStreamPtr, {blockOffsetPhi, kb->getInt32(0), kb->getInt32(0)});
-    Value * basisBlockPtr = kb->CreateGEP(basisBitsPtr, blockOffsetPhi);
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        bytepack[i] = kb->CreateBlockAlignedLoad(kb->CreateGEP(bytePackPtr, kb->getInt32(i)));
+        bytepack[i] = kb->loadInputStreamPack("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
     }
     Value * basisbits[8];
     s2p(kb, bytepack, basisbits);
     for (unsigned basis_idx = 0; basis_idx < 8; ++basis_idx) {
-        kb->CreateBlockAlignedStore(basisbits[basis_idx], kb->CreateGEP(basisBlockPtr, {kb->getSize(0), kb->getInt32(basis_idx)}));
+        kb->storeOutputStreamBlock("basisBits", kb->getInt32(basis_idx), blockOffsetPhi, basisbits[basis_idx]);
     }
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
-    Value * moreToDo = kb->CreateICmpULT(blockOffsetPhi, blocksToDo);
+    Value * moreToDo = kb->CreateICmpULT(blockOffsetPhi, numOfBlocks);
     blockOffsetPhi->addIncoming(nextBlk, processBlock);
     kb->CreateCondBr(moreToDo, processBlock, s2pDone);
     kb->SetInsertPoint(s2pDone);

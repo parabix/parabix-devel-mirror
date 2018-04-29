@@ -12,7 +12,7 @@
 namespace IDISA { class IDISA_Builder; }  // lines 14-14
 namespace llvm { class Value; }
 
-//#define S2P_MULTIBLOCK
+#define S2P_MULTIBLOCK
 namespace kernel {
 #ifdef S2P_MULTIBLOCK
     class S2PKernel final : public MultiBlockKernel {
@@ -25,7 +25,7 @@ public:
     bool hasSignature() const override { return false; }
 protected:
 #ifdef S2P_MULTIBLOCK
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb) override;
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
 #else
     void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
     void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
