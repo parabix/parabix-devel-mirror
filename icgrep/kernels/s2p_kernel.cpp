@@ -115,7 +115,6 @@ void generateS2P_16Kernel(const std::unique_ptr<KernelBuilder> & iBuilder, Kerne
     }
 }    
 #endif
-#ifdef S2P_MULTIBLOCK
 
 void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
@@ -127,7 +126,7 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
     
     kb->SetInsertPoint(processBlock);
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
-    blockOffsetPhi->addIncoming(kb->getSize(0), entry);
+    blockOffsetPhi->addIncoming(ZERO, entry);
 
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
@@ -135,68 +134,18 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
     }
     Value * basisbits[8];
     s2p(kb, bytepack, basisbits);
-    for (unsigned basis_idx = 0; basis_idx < 8; ++basis_idx) {
-        kb->storeOutputStreamBlock("basisBits", kb->getInt32(basis_idx), blockOffsetPhi, basisbits[basis_idx]);
+    for (unsigned i = 0; i < 8; ++i) {
+        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits[i]);
     }
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
-    Value * moreToDo = kb->CreateICmpULT(blockOffsetPhi, numOfBlocks);
     blockOffsetPhi->addIncoming(nextBlk, processBlock);
+    Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
     kb->CreateCondBr(moreToDo, processBlock, s2pDone);
     kb->SetInsertPoint(s2pDone);
 }
-#else
-void S2PKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
-    Value * bytepack[8];
-    for (unsigned i = 0; i < 8; i++) {
-        if (mAligned) {
-            bytepack[i] = iBuilder->loadInputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
-        } else {
-            Value * ptr = iBuilder->getInputStreamPackPtr("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
-            // CreateLoad defaults to aligned here, so we need to force the alignment to 1 byte.
-            bytepack[i] = iBuilder->CreateAlignedLoad(ptr, 1);            
-        }
-    }
-    Value * basisbits[8];
-    s2p(iBuilder, bytepack, basisbits);
-    for (unsigned i = 0; i < 8; ++i) {
-        iBuilder->storeOutputStreamBlock("basisBits", iBuilder->getInt32(i), basisbits[i]);
-    }
-}
-
-void S2PKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, Value * remainingBytes) {
-    // Prepare the s2p final block function:
-    // assumption: if remaining bytes is greater than 0, it is safe to read a full block of bytes.
-    //  if remaining bytes is zero, no read should be performed (e.g. for mmapped buffer).
- 
-    BasicBlock * finalPartialBlock = iBuilder->CreateBasicBlock("partial");
-    BasicBlock * finalEmptyBlock = iBuilder->CreateBasicBlock("empty");
-    BasicBlock * exitBlock = iBuilder->CreateBasicBlock("exit");
-    
-    Value * emptyBlockCond = iBuilder->CreateICmpEQ(remainingBytes, iBuilder->getSize(0));
-    iBuilder->CreateCondBr(emptyBlockCond, finalEmptyBlock, finalPartialBlock);
-    iBuilder->SetInsertPoint(finalPartialBlock);
-    CreateDoBlockMethodCall(iBuilder);
-    
-    iBuilder->CreateBr(exitBlock);
-    
-    iBuilder->SetInsertPoint(finalEmptyBlock);
-
-    for (unsigned i = 0; i < 8; ++i) {
-        iBuilder->storeOutputStreamBlock("basisBits", iBuilder->getInt32(i), Constant::getNullValue(iBuilder->getBitBlockType()));
-    }
-
-    iBuilder->CreateBr(exitBlock);
-    
-    iBuilder->SetInsertPoint(exitBlock);
-}
-#endif
 
 S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, bool aligned)
-#ifdef S2P_MULTIBLOCK
-    : MultiBlockKernel(aligned ? "s2p" : "s2p_unaligned",
-#else
-	: BlockOrientedKernel(aligned ? "s2p" : "s2p_unaligned",
-#endif
+: MultiBlockKernel(aligned ? "s2p" : "s2p_unaligned",
     {Binding{b->getStreamSetTy(1, 8), "byteStream", FixedRate(), Principal()}},
     {Binding{b->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
   mAligned(aligned) {
