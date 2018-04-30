@@ -44,6 +44,7 @@ public:
     : kernels(kernels)
     , terminated(nullptr)
     , noMore(nullptr)
+    , requiresTemporaryBuffers(nullptr)
     , deadLockCounter(nullptr)
     , anyProgress(nullptr)
     , madeProgress(nullptr) {
@@ -101,9 +102,9 @@ protected:
 
     void runKernel(const std::unique_ptr<KernelBuilder> & b, const Kernel * const kernel);
 
-    void allocateTemporaryBuffers(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel, Value * const requiresTemporaryBuffers);
+    void allocateTemporaryBuffers(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel);
 
-    void freeTemporaryBuffers(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel, Value * const requiresTemporaryBuffers);
+    void freeTemporaryBuffers(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel);
 
     Value * getFullyProcessedItemCount(const std::unique_ptr<KernelBuilder> & b, const Binding & binding, Value * const final) const;
 
@@ -117,6 +118,7 @@ private:
     PHINode *                           terminated;
 
     Value *                             noMore;
+    Value *                             requiresTemporaryBuffers;
 
     DependencyGraph                     dependencyGraph;
     ChannelGraph                        inputGraph;
@@ -817,7 +819,8 @@ void PipelineGenerator::checkIfAllInputKernelsHaveFinished(const std::unique_ptr
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineGenerator::checkAvailableInputData(const std::unique_ptr<KernelBuilder> & b, const unsigned index) {
     const Kernel * const kernel = kernels[index];
-    b->setKernel(kernel);   
+    b->setKernel(kernel);
+    requiresTemporaryBuffers = nullptr;
     for (auto e : make_iterator_range(in_edges(index, inputGraph))) {
         const Channel & c = inputGraph[e];
         const Binding & input = kernel->getStreamInput(c.operand);
@@ -842,6 +845,14 @@ void PipelineGenerator::checkAvailableInputData(const std::unique_ptr<KernelBuil
         Value * const check = b->CreateOr(hasEnough, noMore);
         b->CreateLikelyCondBr(check, hasSufficientInput, kernelFinished);
         b->SetInsertPoint(hasSufficientInput);
+        if (isPotentiallyUnsafeInputBuffer(c.buffer)) {
+            Value * const notEnough = b->CreateNot(hasEnough);
+            if (requiresTemporaryBuffers) {
+                requiresTemporaryBuffers = b->CreateOr(requiresTemporaryBuffers, notEnough);
+            } else {
+                requiresTemporaryBuffers = notEnough;
+            }
+        }
     }
 }
 
@@ -892,7 +903,7 @@ Value * PipelineGenerator::getStrideLength(const std::unique_ptr<KernelBuilder> 
         strideLength = b->bitblock_popcount(markers);
     } else if (binding.hasAttribute(kernel::Attribute::KindId::AlwaysConsume)) {
         const auto lb = kernel->getLowerBound(rate);
-        strideLength = b->getSize(ceiling(lb * kernel->getStride()));
+        strideLength = b->getSize(std::max(ceiling(lb * kernel->getStride()), 1U));
     } else {
         const auto ub = kernel->getUpperBound(rate); assert (ub > 0);
         strideLength = b->getSize(ceiling(ub * kernel->getStride()));
@@ -975,8 +986,6 @@ void PipelineGenerator::runKernel(const std::unique_ptr<KernelBuilder> & b, cons
 
     Value * isFinal = noMore;
 
-    Value * requiresTemporaryBuffers = nullptr;
-
     for (unsigned i = 0; i < n; ++i) {
         const Binding & input = inputs[i];
         const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
@@ -995,13 +1004,6 @@ void PipelineGenerator::runKernel(const std::unique_ptr<KernelBuilder> & b, cons
             Value * const hasPartial = b->CreateICmpULT(produced, limit);
             arguments[i + 2] = b->CreateSelect(hasPartial, produced, limit);
             isFinal = b->CreateAnd(isFinal, hasPartial);
-            if (!temporaryBufferPtrs.empty() && temporaryBufferPtrs[i]) {
-                if (requiresTemporaryBuffers) {
-                    requiresTemporaryBuffers = b->CreateOr(requiresTemporaryBuffers, hasPartial);
-                } else {
-                    requiresTemporaryBuffers = hasPartial;
-                }
-            }
         }
     }
 
@@ -1012,13 +1014,13 @@ void PipelineGenerator::runKernel(const std::unique_ptr<KernelBuilder> & b, cons
     arguments[1] = isFinal;
 
     if (requiresTemporaryBuffers) {
-        allocateTemporaryBuffers(b, kernel, requiresTemporaryBuffers);
+        allocateTemporaryBuffers(b, kernel);
     }
 
     b->createDoSegmentCall(arguments);
 
     if (requiresTemporaryBuffers) {
-        freeTemporaryBuffers(b, kernel, requiresTemporaryBuffers);
+        freeTemporaryBuffers(b, kernel);
     }
 }
 
@@ -1030,7 +1032,6 @@ void PipelineGenerator::applyOutputBufferExpansions(const std::unique_ptr<Kernel
     const auto & outputs = kernel->getStreamSetOutputBuffers();
     for (unsigned i = 0; i < outputs.size(); i++) {
         if (isa<DynamicBuffer>(outputs[i])) {
-
 
             const auto baseSize = ceiling(kernel->getUpperBound(kernel->getStreamOutput(i).getRate()) * kernel->getStride() * codegen::SegmentSize);
             if (LLVM_LIKELY(baseSize > 0)) {
@@ -1069,24 +1070,22 @@ void PipelineGenerator::allocateTemporaryBufferPointerArray(const std::unique_pt
     // TODO: whenever two kernels are using the same "unsafe" buffer, they'll both create and destroy their own
     // temporary copies of it. This could be optimized to have it done at production and deleted after the last
     // consuming kernel utilizes it.
-    temporaryBufferPtrs.clear();
-
-    const auto & inputs = kernel->getStreamInputs();
-    for (unsigned i = 0; i < inputs.size(); ++i) {
-        const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
-        if (LLVM_UNLIKELY(isPotentiallyUnsafeInputBuffer(buffer))) {
-            if (temporaryBufferPtrs.empty()) {
-                temporaryBufferPtrs.resize(inputs.size(), nullptr);
+    if (requiresTemporaryBuffers) {
+        const auto & inputs = kernel->getStreamInputs();
+        temporaryBufferPtrs.resize(inputs.size());
+        std::fill(temporaryBufferPtrs.begin(), temporaryBufferPtrs.end(), nullptr);
+        for (unsigned i = 0; i < inputs.size(); ++i) {
+            const StreamSetBuffer * const buffer = kernel->getStreamSetInputBuffer(i);
+            if (LLVM_UNLIKELY(isPotentiallyUnsafeInputBuffer(buffer))) {
+                assert (temporaryBufferPtrs[i] == nullptr);
+                PointerType * const ptrTy = buffer->getStreamSetPointerType();
+                StructType * const structTy = StructType::create(b->getContext(), {ptrTy, ptrTy});
+                AllocaInst * const tempBuffer = b->CreateAlloca(structTy);
+                b->CreateStore(Constant::getNullValue(structTy), tempBuffer);
+                temporaryBufferPtrs[i] = tempBuffer;
             }
-            assert (temporaryBufferPtrs[i] == nullptr);
-            PointerType * const ptrTy = buffer->getStreamSetPointerType();
-            StructType * const structTy = StructType::create(b->getContext(), {ptrTy, ptrTy});
-            AllocaInst * const tempBuffer = b->CreateAlloca(structTy);
-            b->CreateStore(Constant::getNullValue(structTy), tempBuffer);
-            temporaryBufferPtrs[i] = tempBuffer;
         }
     }
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1103,7 +1102,7 @@ inline bool PipelineGenerator::isPotentiallyUnsafeInputBuffer(const StreamSetBuf
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief allocateTemporaryBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineGenerator::allocateTemporaryBuffers(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel, Value * const requiresTemporaryBuffers) {
+void PipelineGenerator::allocateTemporaryBuffers(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel) {
     ConstantInt * const ZERO = b->getInt32(0);
     ConstantInt * const ONE = b->getInt32(1);
     BasicBlock * const allocateBuffers = b->CreateBasicBlock();
@@ -1132,7 +1131,7 @@ void PipelineGenerator::allocateTemporaryBuffers(const std::unique_ptr<KernelBui
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief freeTemporaryBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineGenerator::freeTemporaryBuffers(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel, Value * const requiresTemporaryBuffers) {
+void PipelineGenerator::freeTemporaryBuffers(const std::unique_ptr<KernelBuilder> & b, const Kernel * kernel) {
     ConstantInt * const ZERO = b->getInt32(0);
     ConstantInt * const ONE = b->getInt32(1);
 
