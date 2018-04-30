@@ -130,7 +130,13 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
 
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        bytepack[i] = kb->loadInputStreamPack("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
+        if (mAligned) {
+            bytepack[i] = kb->loadInputStreamPack("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
+        } else {
+            Value * ptr = kb->getInputStreamPackPtr("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
+            // CreateLoad defaults to aligned here, so we need to force the alignment to 1 byte.
+            bytepack[i] = kb->CreateAlignedLoad(ptr, 1);
+        }
     }
     Value * basisbits[8];
     s2p(kb, bytepack, basisbits);
