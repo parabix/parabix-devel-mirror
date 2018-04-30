@@ -50,9 +50,19 @@ void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) 
     }
 }
 
+inline Value * partial_sum_popcounts(const std::unique_ptr<KernelBuilder> & iBuilder, const unsigned fw, Value * popcounts) {
+    Value * summed_counts = popcounts;
+    const auto count = iBuilder->getBitBlockWidth() / fw;
+    for (unsigned move = 1; move < count; move *= 2) {
+        summed_counts = iBuilder->simd_add(fw, summed_counts, iBuilder->mvmd_slli(fw, summed_counts, move));
+    }
+    return summed_counts;
+}
+
 void P2SKernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
     IntegerType * i32 = b->getInt32Ty();
     PointerType * bitBlockPtrTy = PointerType::get(b->getBitBlockType(), 0);
+    unsigned const unitsPerRegister = b->getBitBlockWidth()/8;
 
     Value * basisBits[8];
     for (unsigned i = 0; i < 8; i++) {
@@ -61,16 +71,15 @@ void P2SKernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<
     Value * bytePack[8];
     p2s(b, basisBits, bytePack);
 
-    unsigned units_per_register = b->getBitBlockWidth()/8;
-    Value * delCountBlock_ptr = b->getInputStreamBlockPtr("deletionCounts", b->getInt32(0));
-    Value * unit_counts = b->fwCast(units_per_register, b->CreateBlockAlignedLoad(delCountBlock_ptr));
+    Value * const fieldCounts = b->loadInputStreamBlock("fieldCounts", b->getInt32(0));
+    Value * unitCounts = partial_sum_popcounts(b, unitsPerRegister, fieldCounts);
 
     Value * output_ptr = b->getOutputStreamBlockPtr("byteStream", b->getInt32(0));
     output_ptr = b->CreatePointerCast(output_ptr, b->getInt8PtrTy());
     Value * offset = b->getInt32(0);
     for (unsigned j = 0; j < 8; ++j) {
         b->CreateStore(bytePack[j], b->CreateBitCast(b->CreateGEP(output_ptr, offset), bitBlockPtrTy));
-        offset = b->CreateZExt(b->CreateExtractElement(unit_counts, b->getInt32(j)), i32);
+        offset = b->CreateZExt(b->CreateExtractElement(unitCounts, b->getInt32(j)), i32);
     }
 
     Value * unitsGenerated = b->getProducedItemCount("byteStream"); // units generated to buffer
@@ -98,13 +107,14 @@ void P2S16Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
         b->storeOutputStreamPack("i16Stream", b->getInt32(0), b->getInt32(2 * j + 1), merge1);
     }
 }
-        
+    
 void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
     IntegerType * i32Ty = b->getInt32Ty();
     PointerType * int16PtrTy = b->getInt16Ty()->getPointerTo();
     PointerType * bitBlockPtrTy = b->getBitBlockType()->getPointerTo();
     ConstantInt * blockMask = b->getSize(b->getBitBlockWidth() - 1);
-
+    unsigned const unitsPerRegister = b->getBitBlockWidth()/16;
+    
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
         hi_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(j));
@@ -119,8 +129,9 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     Value * lo_bytes[8];
     p2s(b, lo_input, lo_bytes);
 
-    Value * const delCount = b->loadInputStreamBlock("deletionCounts", b->getInt32(0));
-    Value * const unitCounts = b->fwCast(b->getBitBlockWidth() / 16, delCount);
+    Value * const fieldCounts = b->loadInputStreamBlock("fieldCounts", b->getInt32(0));
+    Value * unitCounts = partial_sum_popcounts(b, unitsPerRegister, fieldCounts);
+    
     Value * outputPtr = b->getOutputStreamBlockPtr("i16Stream", b->getInt32(0));
     outputPtr = b->CreatePointerCast(outputPtr, int16PtrTy);
     Value * const i16UnitsGenerated = b->getProducedItemCount("i16Stream"); // units generated to buffer
@@ -157,7 +168,7 @@ P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
 
 P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b)
 : BlockOrientedKernel("p2s_compress",
-              {Binding{b->getStreamSetTy(8, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "deletionCounts"}},
+              {Binding{b->getStreamSetTy(8, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "fieldCounts"}},
               {Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)}},
               {}, {}, {}) {
 }
@@ -172,7 +183,7 @@ P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b)
 
 P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b)
 : BlockOrientedKernel("p2s_16_compress",
-              {Binding{b->getStreamSetTy(16, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "deletionCounts"}},
+              {Binding{b->getStreamSetTy(16, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "fieldCounts"}},
               {Binding{b->getStreamSetTy(1, 16), "i16Stream", BoundedRate(0, 1)}},
               {},
               {},

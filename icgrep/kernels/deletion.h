@@ -9,18 +9,30 @@
 #include <llvm/IR/Value.h>
 namespace IDISA { class IDISA_Builder; }
 
+namespace kernel {
+
 //
-// Parallel Prefix Deletion 
+// Parallel Prefix Deletion Kernel
 // see Parallel Prefix Compress in Henry S. Warren, Hacker's Delight, Chapter 7
-// 
+//
 // Given that we want to delete bits within fields of width fw, moving
 // nondeleted bits to the right, the parallel prefix compress method can
-// be applied.   This requires a preprocessing step to compute log2(fw) 
+// be applied.   This requires a preprocessing step to compute log2(fw)
 // masks that can be used to select bits to be moved in each step of the
 // algorithm.
 //
-
-namespace kernel {
+class DeletionKernel final : public BlockOrientedKernel {
+public:
+    DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
+private:
+    const unsigned mDeletionFieldWidth;
+    const unsigned mStreamCount;
+};
 
 /*
 Input: a set of bitstreams
@@ -42,19 +54,6 @@ private:
     const unsigned mSwizzleFactor;
     const unsigned mSwizzleSetCount;
     const unsigned mPEXTWidth;
-};
-
-class DeletionKernel final : public BlockOrientedKernel {
-public:
-    DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
-private:
-    const unsigned mDeletionFieldWidth;
-    const unsigned mStreamCount;
 };
 
 class DeleteByPEXTkernel final : public BlockOrientedKernel {
