@@ -513,6 +513,10 @@ Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned sh
     return CreateShuffleVector(fwCast(fw, b), fwCast(fw, a), ConstantVector::get({Idxs, field_count}));
 }
 
+llvm::Value * IDISA_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
+    report_fatal_error("Unsupported field width: mvmd_compress " + std::to_string(fw));
+}
+
 Value * IDISA_Builder::bitblock_any(Value * a) {
     Type * iBitBlock = getIntNTy(mBitBlockWidth);
     return CreateICmpNE(CreateBitCast(a, iBitBlock),  ConstantInt::getNullValue(iBitBlock));

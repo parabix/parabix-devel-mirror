@@ -148,7 +148,8 @@ public:
     virtual llvm::Value * mvmd_slli(unsigned fw, llvm::Value * a, unsigned shift);
     virtual llvm::Value * mvmd_srli(unsigned fw, llvm::Value * a, unsigned shift);
     virtual llvm::Value * mvmd_dslli(unsigned fw, llvm::Value * a, llvm::Value * b, unsigned shift);
-    
+    virtual llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask);
+
     
     virtual llvm::Value * bitblock_any(llvm::Value * a);
     // full add producing {carryout, sum}
