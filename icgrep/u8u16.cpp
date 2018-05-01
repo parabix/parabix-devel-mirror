@@ -253,7 +253,7 @@ void U8U16Kernel::generatePabloMethod() {
     for (unsigned i = 0; i < 8; i++) {
         main.createAssign(main.createExtract(output, i + 8), u16_lo[i]);
     }
-    main.createAssign(main.createExtract(delmask_out, main.getInteger(0)), delmask);
+    main.createAssign(main.createExtract(delmask_out, main.getInteger(0)), main.createInFile(main.createNot(delmask)));
 }
 
 void generatePipeline(ParabixDriver & pxDriver) {
@@ -332,7 +332,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
         pxDriver.makeKernelCall(p2sk, {u16bits}, {u16bytes});
     } else {
         StreamSetBuffer * DeletionCounts = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), bufferSize);
-        Kernel * delK = pxDriver.addKernelInstance<DeletionKernel>(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
+        Kernel * delK = pxDriver.addKernelInstance<FieldCompressKernel>(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
         pxDriver.makeKernelCall(delK, {u8bits, DelMask}, {u16bits, DeletionCounts});
         Kernel * p2sk = pxDriver.addKernelInstance<P2S16KernelWithCompressedOutput>(iBuilder);
         pxDriver.makeKernelCall(p2sk, {u16bits, DeletionCounts}, {u16bytes});

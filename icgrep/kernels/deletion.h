@@ -34,6 +34,19 @@ private:
     const unsigned mStreamCount;
 };
 
+    class FieldCompressKernel final : public MultiBlockKernel {
+    public:
+        FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+        bool isCachable() const override { return true; }
+        bool hasSignature() const override { return false; }
+    protected:
+        void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+    private:
+        const unsigned mCompressFieldWidth;
+        const unsigned mStreamCount;
+    };
+    
+
 /*
 Input: a set of bitstreams
 Output: swizzles containing the input bitstreams with the specified bits deleted
