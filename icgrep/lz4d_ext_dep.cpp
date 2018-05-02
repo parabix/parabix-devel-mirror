@@ -73,11 +73,6 @@ int main(int argc, char *argv[]) {
     mappedFile.open(fileName , lz4Frame.getBlocksLength() + lz4Frame.getBlocksStart());
     //char *fileBuffer = const_cast<char *>(mappedFile.data()) + lz4Frame.getBlocksStart();
     char *fileBuffer = const_cast<char *>(mappedFile.data());
-
-    if (codegen::SegmentSize < 2) {
-        codegen::SegmentSize = 2;
-    }
-
     LZ4Generator g;
     if (extractOnly) {
         g.generateExtractOnlyPipeline(outputFile);

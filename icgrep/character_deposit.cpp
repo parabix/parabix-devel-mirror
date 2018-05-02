@@ -78,10 +78,6 @@ int main(int argc, char *argv[]) {
 
     char *fileBuffer = const_cast<char *>(mappedFile.data());
 
-    if (codegen::SegmentSize < 2) {
-        codegen::SegmentSize = 2;
-    }
-
     const auto bufferSize = codegen::ThreadNum * codegen::SegmentSize;
 
     ParabixDriver pxDriver("character_deletion");
@@ -108,7 +104,7 @@ int main(int argc, char *argv[]) {
     StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
     StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), bufferSize);
 
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy());
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
     Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder);

@@ -88,18 +88,8 @@ int main(int argc, char *argv[]) {
     mappedFile.open(fileName , lz4Frame.getBlocksLength() + lz4Frame.getBlocksStart());
     //char *fileBuffer = const_cast<char *>(mappedFile.data()) + lz4Frame.getBlocksStart();
     char *fileBuffer = const_cast<char *>(mappedFile.data());
-
-    if (codegen::SegmentSize < 2) {
-        codegen::SegmentSize = 2;
-    }
-
-
     re::RE * re_ast = re::RE_Parser::parse(regexString, re::MULTILINE_MODE_FLAG);
-
-
-
     LZ4GrepGenerator g;
-
     if (countOnly) {
         g.generateCountOnlyGrepPipeline(re_ast);
         auto main = g.getMainFunc();

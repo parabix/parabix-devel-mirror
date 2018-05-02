@@ -81,7 +81,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
     StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), decompressBufBlocks);
 
     
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy());
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
 
@@ -140,11 +140,6 @@ int main(int argc, char *argv[]) {
     // Since mmap offset has to be multiples of pages, we can't use it to skip headers.
     mappedFile.open(fileName, lz4Frame.getBlocksLength() + lz4Frame.getBlocksStart());
     char *fileBuffer = const_cast<char *>(mappedFile.data()) + lz4Frame.getBlocksStart();
-
-    if (codegen::SegmentSize < 2) {
-        codegen::SegmentSize = 2;
-    }
-
     ParabixDriver pxDriver("lz4d");
     generatePipeline(pxDriver);
     auto main = reinterpret_cast<MainFunctionType>(pxDriver.getMain());

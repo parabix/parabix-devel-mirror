@@ -240,7 +240,7 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     Module * const m = idb->getModule();
     Type * const sizeTy = idb->getSizeTy();
     Type * const voidTy = idb->getVoidTy();
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(idb->getBitBlockType(), 8), 1), 0);
+    Type * const inputType = idb->getIntNTy(1)->getPointerTo();
 
     idb->LinkFunction("wrapped_report_pos", &wrapped_report_pos);
 
@@ -257,7 +257,7 @@ void editdPipeline(ParabixDriver & pxDriver, const std::vector<std::string> & pa
     idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     auto ChStream = pxDriver.addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(4));
-    auto mmapK = pxDriver.addKernelInstance<MemorySourceKernel>(idb, inputType);
+    auto mmapK = pxDriver.addKernelInstance<MemorySourceKernel>(idb, 4, 1);
     mmapK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
@@ -416,7 +416,7 @@ void editdIndexPatternPipeline(ParabixDriver & pxDriver, unsigned patternLen) {
     Module * const m = idb->getModule();
     Type * const sizeTy = idb->getSizeTy();
     Type * const voidTy = idb->getVoidTy();
-    Type * const inputType = PointerType::get(ArrayType::get(ArrayType::get(idb->getBitBlockType(), 8), 1), 0);
+    Type * const inputType = idb->getIntNTy(1)->getPointerTo();
     Type * const patternPtrTy = PointerType::get(idb->getInt8Ty(), 0);
 
     idb->LinkFunction("wrapped_report_pos", &wrapped_report_pos);
@@ -436,7 +436,7 @@ void editdIndexPatternPipeline(ParabixDriver & pxDriver, unsigned patternLen) {
     idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
     auto ChStream = pxDriver.addBuffer<SourceBuffer>(idb, idb->getStreamSetTy(4));
-    auto mmapK = pxDriver.addKernelInstance<MemorySourceKernel>(idb, inputType);
+    auto mmapK = pxDriver.addKernelInstance<MemorySourceKernel>(idb, 4, 1);
     mmapK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(mmapK, {}, {ChStream});
 
@@ -679,8 +679,8 @@ editdFunctionType editdScanCPUCodeGen(ParabixDriver & pxDriver) {
     Value * const fileSize = &*(args++);
     fileSize->setName("fileSize");
 
-    StreamSetBuffer * MatchResults = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance+1));
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(iBuilder, inputType);
+    StreamSetBuffer * MatchResults = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(editDistance + 1));
+    kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(iBuilder, editDistance + 1, 8);
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {MatchResults});
 

@@ -297,47 +297,6 @@ void KernelBuilder::CreateCopyToOverflow(const std::string & name) {
     CreateMemCpy(target, source, overflowSize, getBitBlockWidth() / 8);
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief AcquireTemporaryBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-std::pair<Value *, Value *> KernelBuilder::AcquireTemporaryBuffer(const std::string & name, Value * offset, Value * itemsToCopy) {
-    const StreamSetBuffer * const buf = mKernel->getAnyStreamSetBuffer(name);
-    const auto itemWidth = getItemWidth(buf->getBaseType());
-    const Binding & binding = mKernel->getBinding(name);
-    if (LLVM_UNLIKELY(!binding.getRate().isFixed())) {
-        Constant * const BIT_BLOCK_WIDTH = ConstantInt::get(offset->getType(), getBitBlockWidth());
-        Value * const alignedOffset = CreateAnd(offset, CreateNeg(BIT_BLOCK_WIDTH));
-        itemsToCopy = CreateAdd(itemsToCopy, CreateSub(offset, alignedOffset));
-        offset = alignedOffset;
-    }
-    Value * bytesToCopy = itemsToCopy;
-    if (itemWidth < 8) {
-        bytesToCopy = CreateCeilUDiv(itemsToCopy, getSize(8 / itemWidth));
-    } else if (itemWidth > 8) {
-        bytesToCopy = CreateMul(itemsToCopy, getSize(itemWidth / 8));
-    }
-    Constant * const baseSize = ConstantExpr::getTrunc(ConstantExpr::getSizeOf(buf->getStreamSetBlockType()), getSizeTy());
-    Constant * const itemsConsumedPerIteration = getSize(std::max(ceiling(mKernel->getUpperBound(binding.getRate())), 1U));
-    Constant * const paddedSize =  ConstantExpr::getMul(baseSize, itemsConsumedPerIteration);
-
-    // one is added to bytes to copy to ensure that the stream is "zero-extended" by one block to properly handle any
-    // final block processing.o
-    Value * const size = CreateRoundUp(CreateAdd(bytesToCopy, getSize(1)), paddedSize);
-    Value * const handle = getStreamHandle(name);
-    Value * const base = buf->getBaseAddress(this, handle);
-    Value * const buffer = CreateAlignedMalloc(size, getCacheAlignment());
-    // TODO: handle split copy? currently no SourceBuffers could support it and I'm not sure how useful it'd be to do so.
-    Value * const from = buf->getRawItemPointer(this, handle, offset);
-    CreateMemCpy(buffer, from, bytesToCopy, 1);
-    CreateMemZero(CreateGEP(buffer, bytesToCopy), CreateSub(size, bytesToCopy), 1);
-    // get the difference between our base and from position then compute an offsetted temporary buffer address
-    Value * const diff = CreatePtrDiff(CreatePointerCast(base, from->getType()), from);
-    Value * const offsettedBuffer = CreatePointerCast(CreateGEP(buffer, diff), base->getType());
-    buf->setBaseAddress(this, handle, offsettedBuffer);
-    Value * const tempBuffer = CreatePointerCast(buffer, base->getType());
-    return std::make_pair(base, tempBuffer);
-}
-
 Value * KernelBuilder::getConsumerLock(const std::string & name) {
     return getScalarField(name + CONSUMER_SUFFIX);
 }

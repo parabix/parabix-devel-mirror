@@ -69,6 +69,7 @@ void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod,
     b->SetInsertPoint(exit);
 }
 
+
 void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const std::unique_ptr<KernelBuilder> & b) {
 
     BasicBlock * const dropPages = b->CreateBasicBlock("dropPages");
@@ -76,11 +77,13 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     BasicBlock * const setTermination = b->CreateBasicBlock("setTermination");
     BasicBlock * const exit = b->CreateBasicBlock("mmapSourceExit");
 
-    Value * const fileSize = b->getScalarField("fileSize");
     Constant * const PAGE_SIZE = b->getSize(getpagesize());
+    Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
+    Constant * const CODE_UNIT_BYTES = b->getSize(codeUnitWidth / 8);
 
+    Value * const fileItems = b->getScalarField("fileSize");
     Value * const consumedItems = b->getConsumedItemCount("sourceBuffer");
-    Value * const consumedBytes = b->CreateMul(consumedItems, b->getSize(codeUnitWidth / 8));
+    Value * const consumedBytes = b->CreateMul(consumedItems, CODE_UNIT_BYTES);
     Value * const consumedPageOffset = b->CreateAnd(consumedBytes, ConstantExpr::getNeg(PAGE_SIZE));
     Value * const consumedBuffer = b->getRawOutputPointer("sourceBuffer", consumedPageOffset);
     Value * const readableBuffer = b->getScalarField("buffer");
@@ -98,29 +101,46 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     // determine whether or not we've exhausted the file buffer
     b->SetInsertPoint(checkRemaining);
     Value * const producedItems = b->getProducedItemCount("sourceBuffer");
-    Value * const pageItems = b->CreateUDiv(PAGE_SIZE, b->getSize(codeUnitWidth / 8));
-    Value * const nextProducedItems = b->CreateAdd(producedItems, pageItems);
-    Value * const lastPage = b->CreateICmpULE(fileSize, nextProducedItems);
+    Value * const nextProducedItems = b->CreateAdd(producedItems, PAGE_SIZE);
+    Value * const lastPage = b->CreateICmpULE(fileItems, nextProducedItems);
     b->CreateUnlikelyCondBr(lastPage, setTermination, exit);
 
+    // If this is the last page, create a temporary buffer of up to two pages size, copy the unconsumed data
+    // and zero any bytes that are not used.
     b->SetInsertPoint(setTermination);
+    Value * const consumedOffset = b->CreateAnd(consumedItems, ConstantExpr::getNeg(BLOCK_WIDTH));
+    Value * const readStart = b->getRawOutputPointer("sourceBuffer", consumedOffset);
+    Value * const readEnd = b->getRawOutputPointer("sourceBuffer", fileItems);
+    Value * const unconsumedBytes = b->CreatePtrDiff(readEnd, readStart);
+    Value * const bufferSize = b->CreateRoundUp(b->CreateAdd(unconsumedBytes, BLOCK_WIDTH), PAGE_SIZE);
+    Value * const buffer = b->CreateAlignedMalloc(bufferSize, b->getCacheAlignment());
+    b->CreateMemCpy(buffer, readStart, unconsumedBytes, 1);
+    b->CreateMemZero(b->CreateGEP(buffer, unconsumedBytes), b->CreateSub(bufferSize, unconsumedBytes), 1);
+    // get the difference between our base and from position then compute an offsetted temporary buffer address
+    Value * const base = b->getBaseAddress("sourceBuffer");
+    Value * const diff = b->CreatePtrDiff(b->CreatePointerCast(base, readStart->getType()), readStart);
+    Value * const offsettedBuffer = b->CreateGEP(buffer, diff);
+    b->CreateConsumerWait();
+    // Unmap the file buffer and set the temporary buffer as the new source buffer
+    Value * const fileSize = b->CreateMul(fileItems, CODE_UNIT_BYTES);
+    b->CreateMUnmap(base, fileSize);
+    PointerType * const codeUnitPtrTy = b->getIntNTy(codeUnitWidth)->getPointerTo();
+    b->setScalarField("buffer", b->CreatePointerCast(buffer, codeUnitPtrTy));
+    b->setBaseAddress("sourceBuffer", b->CreatePointerCast(offsettedBuffer, codeUnitPtrTy));
     b->setTerminationSignal();
+    BasicBlock * const terminationExit = b->GetInsertBlock();
     b->CreateBr(exit);
 
     // finally, set the "produced" count to reflect current position in the file
     b->SetInsertPoint(exit);
     PHINode * const newProducedItems = b->CreatePHI(b->getSizeTy(), 2);
     newProducedItems->addIncoming(nextProducedItems, checkRemaining);
-    newProducedItems->addIncoming(fileSize, setTermination);
+    newProducedItems->addIncoming(fileItems, terminationExit);
     b->setProducedItemCount("sourceBuffer", newProducedItems);
 }
 
-void MMapSourceKernel::unmapSourceBuffer(const unsigned codeUnitWidth, const std::unique_ptr<KernelBuilder> & b) {
-    Value * fileSize = b->getBufferedSize("sourceBuffer");
-    if (LLVM_UNLIKELY(codeUnitWidth > 8)) {
-        fileSize = b->CreateMul(fileSize, b->getSize(codeUnitWidth / 8));
-    }
-    b->CreateMUnmap(b->getBaseAddress("sourceBuffer"), fileSize);
+void MMapSourceKernel::freeBuffer(const std::unique_ptr<KernelBuilder> & b) {
+    b->CreateFree(b->getScalarField("buffer"));
 }
 
 /// READ SOURCE KERNEL
@@ -256,7 +276,7 @@ void FDSourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder>
     BasicBlock * finalizeDone = b->CreateBasicBlock("finalizeDone");
     b->CreateCondBr(b->CreateTrunc(b->getScalarField("useMMap"), b->getInt1Ty()), finalizeMMap, finalizeRead);
     b->SetInsertPoint(finalizeMMap);
-    MMapSourceKernel::unmapSourceBuffer(mCodeUnitWidth, b);
+    MMapSourceKernel::freeBuffer(b);
     b->CreateBr(finalizeDone);
     b->SetInsertPoint(finalizeRead);
     ReadSourceKernel::freeBuffer(b);
@@ -315,15 +335,66 @@ void MemorySourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBu
     Value * const fileSource = b->getScalarField("fileSource");
     b->setBaseAddress("sourceBuffer", fileSource);
     Value * const fileSize = b->getScalarField("fileSize");
-    Value * const fileItems = b->CreateUDiv(fileSize, b->getSize(mCodeUnitWidth / 8));
-    b->setBufferedSize("sourceBuffer", fileItems);
-    b->setCapacity("sourceBuffer", fileItems);
-    b->setProducedItemCount("sourceBuffer", fileItems);
-    b->setTerminationSignal();
+    b->setBufferedSize("sourceBuffer", fileSize);
+    b->setCapacity("sourceBuffer", fileSize);
+    if (mStreamSetCount > 1) {
+        b->setProducedItemCount("sourceBuffer", fileSize);
+        b->setTerminationSignal();
+    }
 }
 
 void MemorySourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
+    if (mStreamSetCount == 1) {
+        Constant * const PAGE_SIZE = b->getSize(getStride());
+        Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
 
+        BasicBlock * const entry = b->GetInsertBlock();
+        BasicBlock * const createTemporary = b->CreateBasicBlock("createTemporary");
+        BasicBlock * const exit = b->CreateBasicBlock("exit");
+
+        Value * const fileItems = b->getScalarField("fileSize");
+        Value * const producedItems = b->getProducedItemCount("sourceBuffer");
+        Value * const nextProducedItems = b->CreateAdd(producedItems, PAGE_SIZE);
+        Value * const lastPage = b->CreateICmpULE(fileItems, nextProducedItems);
+        b->CreateUnlikelyCondBr(lastPage, createTemporary, exit);
+
+        b->SetInsertPoint(createTemporary);
+        Value * const consumedItems = b->getConsumedItemCount("sourceBuffer");
+        Value * const consumedOffset = b->CreateAnd(consumedItems, ConstantExpr::getNeg(BLOCK_WIDTH));
+        Value * const readStart = b->getRawOutputPointer("sourceBuffer", consumedOffset);
+        Value * const readEnd = b->getRawOutputPointer("sourceBuffer", fileItems);
+        Value * const unconsumedBytes = b->CreatePtrDiff(readEnd, readStart);
+        Value * const bufferSize = b->CreateRoundUp(b->CreateAdd(unconsumedBytes, BLOCK_WIDTH), PAGE_SIZE);
+        Value * const buffer = b->CreateAlignedMalloc(bufferSize, b->getCacheAlignment());
+        b->CreateMemCpy(buffer, readStart, unconsumedBytes, 1);
+        b->CreateMemZero(b->CreateGEP(buffer, unconsumedBytes), b->CreateSub(bufferSize, unconsumedBytes), 1);
+
+        // get the difference between our base and from position then compute an offsetted temporary buffer address
+        Value * const base = b->getBaseAddress("sourceBuffer");
+        Value * const diff = b->CreatePtrDiff(b->CreatePointerCast(base, readStart->getType()), readStart);
+        Value * const offsettedBuffer = b->CreateGEP(buffer, diff);
+        b->CreateConsumerWait();
+
+        // set the temporary buffer as the new source buffer
+        PointerType * const codeUnitPtrTy = b->getIntNTy(mCodeUnitWidth)->getPointerTo();
+        b->setScalarField("buffer", b->CreatePointerCast(buffer, codeUnitPtrTy));
+        b->setBaseAddress("sourceBuffer", b->CreatePointerCast(offsettedBuffer, codeUnitPtrTy));
+        b->setTerminationSignal();
+        BasicBlock * const terminationExit = b->GetInsertBlock();
+        b->CreateBr(exit);
+
+        b->SetInsertPoint(exit);
+        PHINode * const newProducedItems = b->CreatePHI(b->getSizeTy(), 2);
+        newProducedItems->addIncoming(nextProducedItems, entry);
+        newProducedItems->addIncoming(fileItems, terminationExit);
+        b->setProducedItemCount("sourceBuffer", newProducedItems);
+    }
+}
+
+void MemorySourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
+    if (mStreamSetCount == 1) {
+        b->CreateFree(b->getScalarField("buffer"));
+    }
 }
 
 MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth)
@@ -336,7 +407,7 @@ MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 , mCodeUnitWidth(codeUnitWidth)
 , mFileSizeFunction(nullptr) {
     addAttribute(MustExplicitlyTerminate());
-    setStride((8 * getpagesize()) / codeUnitWidth);
+    setStride(getpagesize());
 }
 
 ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth)
@@ -348,32 +419,40 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 , {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}})
 , mCodeUnitWidth(codeUnitWidth) {
     addAttribute(MustExplicitlyTerminate());
-    setStride((8 * getpagesize()) / codeUnitWidth);
+    setStride(getpagesize());
 }
 
 
 FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth)
 : SegmentOrientedKernel("FD_source@" + std::to_string(codeUnitWidth)
 , {}
-// output
+// output stream
 , {Binding{b->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}
 // input scalar
 , {Binding{b->getInt8Ty(), "useMMap"}, Binding{b->getInt32Ty(), "fileDescriptor"}}
 , {}
+// internal scalar
 , {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}, Binding{b->getSizeTy(), "fileSize"}})
 , mCodeUnitWidth(codeUnitWidth)
 , mFileSizeFunction(nullptr) {
     addAttribute(MustExplicitlyTerminate());
-    setStride((8 * getpagesize()) / codeUnitWidth);
+    setStride(getpagesize());
 }
 
-MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Type * const type, const unsigned codeUnitWidth)
-: SegmentOrientedKernel("memory_source",
-    {},
-    {Binding{b->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}},
-    {Binding{cast<PointerType>(type), "fileSource"}, Binding{b->getSizeTy(), "fileSize"}}, {}, {})
+MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned streamSetCount, const unsigned codeUnitWidth)
+: SegmentOrientedKernel("memory_source@" + std::to_string(streamSetCount) + ":" + std::to_string(codeUnitWidth),
+{},
+// output stream
+{Binding{b->getStreamSetTy(streamSetCount, codeUnitWidth), "sourceBuffer"}},
+// input scalar
+{Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "fileSource"}, Binding{b->getSizeTy(), "fileSize"}},
+{},
+// internal scalar
+{Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}})
+, mStreamSetCount(streamSetCount)
 , mCodeUnitWidth(codeUnitWidth) {
     addAttribute(MustExplicitlyTerminate());
+    setStride(getpagesize());
 }
 
 }

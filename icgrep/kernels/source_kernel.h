@@ -26,13 +26,13 @@ public:
         generateDoSegmentMethod(mCodeUnitWidth, iBuilder);
     }
     void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
-        unmapSourceBuffer(mCodeUnitWidth, iBuilder);
+        freeBuffer(iBuilder);
     }
 protected:
     static llvm::Function * linkFileSizeMethod(const std::unique_ptr<kernel::KernelBuilder> & b);
     static void generateInitializeMethod(llvm::Function * fileSize, const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & b);
     static void generateDoSegmentMethod(const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & b);
-    static void unmapSourceBuffer(const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    static void freeBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 protected:
     const unsigned mCodeUnitWidth;
     llvm::Function * mFileSizeFunction;
@@ -77,12 +77,14 @@ protected:
     
 class MemorySourceKernel final : public SegmentOrientedKernel {
 public:
-    MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Type * const type, const unsigned codeUnitWidth = 8);
+    MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const unsigned streamSetCount = 1, const unsigned codeUnitWidth = 8);
     bool hasSignature() const override { return false; }
 protected:
     void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:
+    const unsigned mStreamSetCount;
     const unsigned mCodeUnitWidth;
 };
 
