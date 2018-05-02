@@ -111,7 +111,7 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     Value * const consumedOffset = b->CreateAnd(consumedItems, ConstantExpr::getNeg(BLOCK_WIDTH));
     Value * const readStart = b->getRawOutputPointer("sourceBuffer", consumedOffset);
     Value * const readEnd = b->getRawOutputPointer("sourceBuffer", fileItems);
-    Value * const unconsumedBytes = b->CreatePtrDiff(readEnd, readStart);
+    Value * const unconsumedBytes = b->CreateTrunc(b->CreatePtrDiff(readEnd, readStart), b->getSizeTy());
     Value * const bufferSize = b->CreateRoundUp(b->CreateAdd(unconsumedBytes, BLOCK_WIDTH), PAGE_SIZE);
     Value * const buffer = b->CreateAlignedMalloc(bufferSize, b->getCacheAlignment());
     b->CreateMemCpy(buffer, readStart, unconsumedBytes, 1);
@@ -363,7 +363,7 @@ void MemorySourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBui
         Value * const consumedOffset = b->CreateAnd(consumedItems, ConstantExpr::getNeg(BLOCK_WIDTH));
         Value * const readStart = b->getRawOutputPointer("sourceBuffer", consumedOffset);
         Value * const readEnd = b->getRawOutputPointer("sourceBuffer", fileItems);
-        Value * const unconsumedBytes = b->CreatePtrDiff(readEnd, readStart);
+        Value * const unconsumedBytes = b->CreateTrunc(b->CreatePtrDiff(readEnd, readStart), b->getSizeTy());
         Value * const bufferSize = b->CreateRoundUp(b->CreateAdd(unconsumedBytes, BLOCK_WIDTH), PAGE_SIZE);
         Value * const buffer = b->CreateAlignedMalloc(bufferSize, b->getCacheAlignment());
         b->CreateMemCpy(buffer, readStart, unconsumedBytes, 1);
