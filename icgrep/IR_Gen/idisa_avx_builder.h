@@ -47,6 +47,7 @@ public:
     std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin) override;
     std::pair<llvm::Value *, llvm::Value *> bitblock_indexed_advance(llvm::Value * a, llvm::Value * index_strm, llvm::Value * shiftin, unsigned shift) override;
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
+    llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) override;
 
     ~IDISA_AVX2_Builder() {}
 };
@@ -68,7 +69,7 @@ public:
     llvm::Value * simd_popcount(unsigned fw, llvm::Value * a) override;
     llvm::Value * mvmd_slli(unsigned fw, llvm::Value * a, unsigned shift) override;
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
-    virtual llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) override;
+    llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) override;
 
     ~IDISA_AVX512F_Builder() {
     }

@@ -255,6 +255,37 @@ Value * IDISA_AVX2_Builder::hsimd_signmask(unsigned fw, Value * a) {
     // Otherwise use default SSE logic.
     return IDISA_AVX_Builder::hsimd_signmask(fw, a);
 }
+    
+llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
+    if (mBitBlockWidth == 256 && fw == 32) {
+        Type * v1xi32Ty = VectorType::get(getInt32Ty(), 1);
+        Type * v8xi32Ty = VectorType::get(getInt32Ty(), 8);
+        Type * v8xi1Ty = VectorType::get(getInt1Ty(), 8);
+        Value * shuf32Func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
+        Value * PEXT_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pext_32);
+        Value * PDEP_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pdep_32);
+        Value * const popcount_func = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, getInt32Ty());
+        // First duplicate each mask bit to select 4-bit fields
+        Value * mask = CreateZExt(select_mask, getInt32Ty());
+        Value * field_count = CreateCall(popcount_func, mask);
+        Value * spread = CreateCall(PDEP_func, {mask, getInt32(0x11111111)});
+        Value * ext_mask = CreateMul(spread, getInt32(0xF));
+        // Now extract the 4-bit index values for the required fields.
+        Value * indexes = CreateCall(PEXT_func, {getInt32(0x76543210), ext_mask});
+        // Broadcast to all fields
+        Value * bdcst = CreateShuffleVector(CreateBitCast(indexes, v1xi32Ty),
+                                            UndefValue::get(v1xi32Ty),
+                                            ConstantVector::getNullValue(v8xi32Ty));
+        Constant * Shifts[8];
+        for (unsigned int i = 0; i < 8; i++) {
+            Shifts[i] = getInt32(i*4);
+        }
+        Value * compress = CreateCall(shuf32Func, {a, CreateLShr(bdcst, ConstantVector::get({Shifts, 8}))});
+        Value * selectf = CreateBitCast(CreateSub(CreateShl(getInt32(1), field_count), getInt32(1)), v8xi1Ty);
+        return CreateSelect(selectf, ConstantVector::getNullValue(v8xi32Ty), compress);
+    }
+    return IDISA_Builder::mvmd_compress(fw, a, select_mask);
+}
 
 std::string IDISA_AVX512F_Builder::getBuilderUniqueName() {
     return mBitBlockWidth != 512 ? "AVX512F_" + std::to_string(mBitBlockWidth) : "AVX512BW";
