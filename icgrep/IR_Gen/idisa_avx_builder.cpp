@@ -311,7 +311,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, ll
             Shifts[i] = getInt32(i*4);
         }
         Value * compress = CreateCall(shuf32Func, {a, CreateLShr(bdcst, ConstantVector::get({Shifts, 8}))});
-        Value * selectf = CreateBitCast(CreateSub(CreateShl(getInt32(1), field_count), getInt32(1)), v8xi1Ty);
+        Value * selectf = CreateBitCast(CreateTrunc(CreateSub(CreateShl(getInt32(1), field_count), getInt32(1)), getInt8Ty()), v8xi1Ty);
         return CreateSelect(selectf, ConstantVector::getNullValue(v8xi32Ty), compress);
     }
     return IDISA_Builder::mvmd_compress(fw, a, select_mask);

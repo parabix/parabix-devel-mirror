@@ -419,16 +419,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     size = CreateSelect(CreateIsNull(offset), size, CreateAdd(size, CreateXor(offset, alignMask)));
     CreateAssertZero(CreateURem(size, align), "CreateAlignedMalloc: size must be an integral multiple of alignment.");
     Value * ptr = nullptr;
-    if (hasAlignedAlloc()) {
-        Function * f = m->getFunction("aligned_alloc");
-        if (LLVM_UNLIKELY(f == nullptr)) {
-            FunctionType * const fty = FunctionType::get(voidPtrTy, {sizeTy, sizeTy}, false);
-            f = Function::Create(fty, Function::ExternalLinkage, "aligned_alloc", m);
-            f->setCallingConv(CallingConv::C);
-            f->setReturnDoesNotAlias();
-        }
-        ptr = CreateCall(f, {align, size});
-    } else if (hasPosixMemalign()) {
+    if (hasPosixMemalign()) {
         Function * f = m->getFunction("posix_memalign");
         if (LLVM_UNLIKELY(f == nullptr)) {
             FunctionType * const fty = FunctionType::get(getInt32Ty(), {voidPtrTy->getPointerTo(), sizeTy, sizeTy}, false);
@@ -441,6 +432,15 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
             CreateAssertZero(success, "CreateAlignedMalloc: posix_memalign reported bad allocation");
         }
         ptr = CreateLoad(handle);
+    } else if (hasAlignedAlloc()) {
+        Function * f = m->getFunction("aligned_alloc");
+        if (LLVM_UNLIKELY(f == nullptr)) {
+            FunctionType * const fty = FunctionType::get(voidPtrTy, {sizeTy, sizeTy}, false);
+            f = Function::Create(fty, Function::ExternalLinkage, "aligned_alloc", m);
+            f->setCallingConv(CallingConv::C);
+            f->setReturnDoesNotAlias();
+        }
+        ptr = CreateCall(f, {align, size});
     } else {
         report_fatal_error("stdlib.h does not contain either aligned_alloc or posix_memalign");
     }
