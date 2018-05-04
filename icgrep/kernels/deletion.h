@@ -34,18 +34,32 @@ private:
     const unsigned mStreamCount;
 };
 
-    class FieldCompressKernel final : public MultiBlockKernel {
-    public:
-        FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
-        bool isCachable() const override { return true; }
-        bool hasSignature() const override { return false; }
-    protected:
-        void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
-    private:
-        const unsigned mCompressFieldWidth;
-        const unsigned mStreamCount;
-    };
-    
+class FieldCompressKernel final : public MultiBlockKernel {
+public:
+    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+private:
+    const unsigned mCompressFieldWidth;
+    const unsigned mStreamCount;
+};
+
+//
+//  Given streams that are compreseed within fields, produced fully
+//  compressed streams.
+class StreamCompressKernel final : public MultiBlockKernel {
+public:
+    StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) override;
+private:
+    const unsigned mCompressedFieldWidth;
+    const unsigned mStreamCount;
+};
 
 /*
 Input: a set of bitstreams

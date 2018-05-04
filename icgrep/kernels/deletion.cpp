@@ -117,6 +117,179 @@ FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBui
 , mStreamCount(streamCount) {
 }
 
+StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
+: MultiBlockKernel("streamCompress" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
+                   {Binding{kb->getStreamSetTy(streamCount), "sourceStreamSet"},
+                       Binding{kb->getStreamSetTy(), "unitCounts"}},
+                   {Binding{kb->getStreamSetTy(streamCount), "compressedOutput", BoundedRate(0, 1)}},
+                   {}, {}, {})
+, mCompressedFieldWidth(fieldWidth)
+, mStreamCount(streamCount) {
+    addScalar(kb->getSizeTy(), "pendingItemCount");
+    for (unsigned i = 0; i < streamCount; i++) {
+        addScalar(kb->getBitBlockType(), "pendingOutputBlock_" + std::to_string(i));
+    }
+
+}
+    
+void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfBlocks) {
+    const unsigned fw = mCompressedFieldWidth;
+    Type * fwTy = b->getIntNTy(fw);
+    Type * sizeTy = b->getSizeTy();
+    const unsigned numFields = b->getBitBlockWidth()/fw;
+    Constant * zeroSplat = Constant::getNullValue(b->fwVectorType(fw));
+    Constant * fwSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, fw));
+    Constant * numFieldConst = ConstantInt::get(sizeTy, numFields);
+    Constant * fwMaskSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, fw-1));
+    Constant * bitBlockWidthConst = ConstantInt::get(sizeTy, b->getBitBlockWidth());
+    BasicBlock * entry = b->GetInsertBlock();
+    BasicBlock * segmentLoop = b->CreateBasicBlock("segmentLoop");
+    BasicBlock * segmentDone = b->CreateBasicBlock("segmentDone");
+    Constant * const ZERO = b->getSize(0);
+    
+    Value * pendingItemCount = b->getScalarField("pendingItemCount");
+    std::vector<Value *> pendingData(mStreamCount);
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        pendingData[i] = b->getScalarField("pendingOutputBlock_" + std::to_string(i));
+    }
+    
+    b->CreateBr(segmentLoop);
+    // Main Loop
+    b->SetInsertPoint(segmentLoop);
+    PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
+    PHINode * outputBlockPhi = b->CreatePHI(b->getSizeTy(), 2);
+    PHINode * pendingItemsPhi = b->CreatePHI(b->getSizeTy(), 2);
+    PHINode * pendingDataPhi[mStreamCount];
+    blockOffsetPhi->addIncoming(ZERO, entry);
+    outputBlockPhi->addIncoming(ZERO, entry);
+    pendingItemsPhi->addIncoming(pendingItemCount, entry);
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        pendingDataPhi[i] = b->CreatePHI(b->getBitBlockType(), 2);
+        pendingDataPhi[i]->addIncoming(pendingData[i], entry);
+    }
+    Value * fieldPopCounts = b->loadInputStreamBlock("unitCounts", ZERO, blockOffsetPhi);
+    // For each field determine the (partial) sum popcount of all fields up to and
+    // including the current field.
+    Value * partialSum = fieldPopCounts;
+    for (unsigned i = 1; i < numFields; i *= 2) {
+        partialSum = b->simd_add(fw, partialSum, b->mvmd_slli(fw, partialSum, i));
+    }
+    Value * blockPopCount = b->CreateZExtOrTrunc(b->CreateExtractElement(partialSum, numFields-1), sizeTy);
+    //
+    // Now determine for each source field the output offset of the first bit.
+    // Note that this depends on the number of pending bits.
+    //
+    Value * pendingOffset = b->CreateURem(pendingItemsPhi, ConstantInt::get(sizeTy, fw));
+    Value * splatPending = b->simd_fill(fw, b->CreateZExtOrTrunc(pendingOffset, fwTy));
+    Value * pendingFieldIdx = b->CreateUDiv(pendingItemsPhi, ConstantInt::get(sizeTy, fw));
+    Value * offsets = b->simd_add(fw, b->mvmd_slli(fw, partialSum, 1), splatPending);
+    offsets = b->simd_and(offsets, fwMaskSplat); // parallel URem fw
+   //
+    // Determine the relative field number for each output field.   Note that the total
+    // number of fields involved is numFields + 1.   However, the first field always
+    // be immediately combined into the current pending data field, so we calculate
+    // field numbers for all subsequent fields, (the fields that receive overflow bits).
+    Value * fieldNo = b->simd_srli(fw, b->simd_add(fw, partialSum, splatPending), std::log2(fw));
+  //
+    // Now process the input data block of each stream in the input stream set.
+    //
+    // First load all the stream set blocks and the pending data.
+    std::vector<Value *> sourceBlock(mStreamCount);
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        sourceBlock[i] = b->loadInputStreamBlock("sourceStreamSet", b->getInt32(i), blockOffsetPhi);
+
+    }
+    // Now separate the bits of each field into ones that go into the current field
+    // and ones that go into the overflow field.   Extract the first field separately,
+    // and then shift and combine subsequent fields.
+    std::vector<Value *> pendingOutput(mStreamCount);
+    std::vector<Value *> outputFields(mStreamCount);
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        Value * currentFieldBits = b->simd_sllv(fw, sourceBlock[i], offsets);
+        Value * nextFieldBits = b->simd_srlv(fw, sourceBlock[i], b->simd_sub(fw, fwSplat, offsets));
+        Value * firstField = b->mvmd_extract(fw, currentFieldBits, 0);
+        Value * vec1 = b->CreateInsertElement(zeroSplat, firstField, pendingFieldIdx);
+        pendingOutput[i] = b->simd_or(pendingDataPhi[i], vec1);
+        // shift back currentFieldBits to combine with nextFieldBits.
+        outputFields[i] = b->simd_or(b->mvmd_srli(fw, currentFieldBits, 1), nextFieldBits);
+    }
+    // We may have filled the current field of the pendingOutput update the
+    // pendingFieldIndex.
+    Value * newPendingTotal = b->CreateZExtOrTrunc(b->mvmd_extract(fw, fieldPopCounts, 0), sizeTy);
+    pendingFieldIdx = b->CreateUDiv(newPendingTotal, ConstantInt::get(sizeTy, fw));
+    // Now combine forward all fields with the same field number.  This may require
+    // up to log2 numFields steps.
+    for (unsigned j = 1; j < numFields; j*=2) {
+        Value * select = b->simd_eq(fw, fieldNo, b->mvmd_slli(fw, fieldNo, j));
+        for (unsigned i = 0; i < mStreamCount; i++) {
+            Value * fields_fwd = b->mvmd_slli(fw, outputFields[i], j);
+            outputFields[i] = b->simd_or(outputFields[i], b->simd_and(select, fields_fwd));
+        }
+    }
+    // Now compress the data fields, eliminating all but the last field from
+    // each run of consecutive field having the same field number.
+    // same field number as a subsequent field.
+    Value * eqNext = b->simd_eq(fw, fieldNo, b->mvmd_srli(fw, fieldNo, 1));
+    Value * compressMask = b->hsimd_signmask(fw, b->simd_not(eqNext));
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        outputFields[i] = b->mvmd_compress(fw, outputFields[i], compressMask);
+   }
+    //
+    // Finally combine the pendingOutput and outputField data.
+    // (a) shift forward outputField data to fill the pendingOutput values.
+    // (b) shift back outputField data to clear data added to pendingOutput.
+    Value * shftBack = b->CreateSub(numFieldConst, pendingFieldIdx);
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        Value * outputFwd = b->mvmd_sll(fw, outputFields[i], pendingFieldIdx);
+        pendingOutput[i] = b->simd_or(pendingOutput[i], outputFwd);
+        outputFields[i] = b->mvmd_srl(fw, outputFields[i], shftBack);
+  }
+    //
+    // Write the pendingOutput data to outputStream.
+    // Note: this data may be overwritten later, but we avoid branching.
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        b->storeOutputStreamBlock("compressedOutput", b->getInt32(i), outputBlockPhi, pendingOutput[i]);
+    }
+    // Now determine the total amount of pending items and whether
+    // the pending data all fits within the pendingOutput.
+    Value * newPending = b->CreateAdd(pendingItemsPhi, blockPopCount);
+    Value * doesFit = b->CreateICmpULT(newPending, bitBlockWidthConst);
+    newPending = b->CreateSelect(doesFit, newPending, b->CreateSub(newPending, bitBlockWidthConst));
+    //
+    // Prepare Phi nodes for the next iteration.
+    //
+    Value * nextBlk = b->CreateAdd(blockOffsetPhi, b->getSize(1));
+    blockOffsetPhi->addIncoming(nextBlk, segmentLoop);
+    Value * nextOutputBlk = b->CreateAdd(outputBlockPhi, b->getSize(1));
+    // But don't advance the output if all the data does fit into pendingOutput.
+    nextOutputBlk = b->CreateSelect(doesFit, outputBlockPhi, nextOutputBlk);
+    outputBlockPhi->addIncoming(nextOutputBlk, segmentLoop);
+    pendingItemsPhi->addIncoming(newPending, segmentLoop);
+
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        pendingOutput[i] = b->CreateSelect(doesFit, b->fwCast(fw, pendingOutput[i]), b->fwCast(fw, outputFields[i]));
+        pendingDataPhi[i]->addIncoming(b->bitCast(pendingOutput[i]), segmentLoop);
+    }
+    //
+    // Now continue the loop if there are more blocks to process.
+    Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
+    b->CreateCondBr(moreToDo, segmentLoop, segmentDone);
+    
+    b->SetInsertPoint(segmentDone);
+    // Save kernel state.
+    b->setScalarField("pendingItemCount", newPending);
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        b->setScalarField("pendingOutputBlock_" + std::to_string(i), b->bitCast(pendingOutput[i]));
+    }
+    Value * produced = b->getProducedItemCount("compressedOutput");
+    produced = b->CreateAdd(produced, b->CreateMul(nextOutputBlk, bitBlockWidthConst));
+    produced = b->CreateSelect(mIsFinal, b->CreateAdd(produced, blockPopCount), produced);
+    b->setProducedItemCount("compressedOutput", produced);
+}
+    
+    
+    
+
 SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned streamCount, unsigned PEXT_width)
 : BlockOrientedKernel("PEXTdel" + std::to_string(PEXT_width) + "_" + std::to_string(streamCount),
                   {Binding{b->getStreamSetTy(), "delMaskSet"}, Binding{b->getStreamSetTy(streamCount), "inputStreamSet"}},
