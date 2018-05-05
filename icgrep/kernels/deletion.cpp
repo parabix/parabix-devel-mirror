@@ -145,6 +145,8 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * segmentLoop = b->CreateBasicBlock("segmentLoop");
     BasicBlock * segmentDone = b->CreateBasicBlock("segmentDone");
+    BasicBlock * finalWrite = b->CreateBasicBlock("finalWrite");
+    BasicBlock * updateProducedCount = b->CreateBasicBlock("updateProducedCount");
     Constant * const ZERO = b->getSize(0);
     
     Value * pendingItemCount = b->getScalarField("pendingItemCount");
@@ -197,26 +199,22 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     std::vector<Value *> sourceBlock(mStreamCount);
     for (unsigned i = 0; i < mStreamCount; i++) {
         sourceBlock[i] = b->loadInputStreamBlock("sourceStreamSet", b->getInt32(i), blockOffsetPhi);
-
     }
     // Now separate the bits of each field into ones that go into the current field
     // and ones that go into the overflow field.   Extract the first field separately,
     // and then shift and combine subsequent fields.
     std::vector<Value *> pendingOutput(mStreamCount);
     std::vector<Value *> outputFields(mStreamCount);
+    Value * backShift = b->simd_sub(fw, fwSplat, offsets);
     for (unsigned i = 0; i < mStreamCount; i++) {
         Value * currentFieldBits = b->simd_sllv(fw, sourceBlock[i], offsets);
-        Value * nextFieldBits = b->simd_srlv(fw, sourceBlock[i], b->simd_sub(fw, fwSplat, offsets));
+        Value * nextFieldBits = b->simd_srlv(fw, sourceBlock[i], backShift);
         Value * firstField = b->mvmd_extract(fw, currentFieldBits, 0);
         Value * vec1 = b->CreateInsertElement(zeroSplat, firstField, pendingFieldIdx);
         pendingOutput[i] = b->simd_or(pendingDataPhi[i], vec1);
         // shift back currentFieldBits to combine with nextFieldBits.
         outputFields[i] = b->simd_or(b->mvmd_srli(fw, currentFieldBits, 1), nextFieldBits);
     }
-    // We may have filled the current field of the pendingOutput update the
-    // pendingFieldIndex.
-    Value * newPendingTotal = b->CreateZExtOrTrunc(b->mvmd_extract(fw, fieldPopCounts, 0), sizeTy);
-    pendingFieldIdx = b->CreateUDiv(newPendingTotal, ConstantInt::get(sizeTy, fw));
     // Now combine forward all fields with the same field number.  This may require
     // up to log2 numFields steps.
     for (unsigned j = 1; j < numFields; j*=2) {
@@ -238,12 +236,23 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     // Finally combine the pendingOutput and outputField data.
     // (a) shift forward outputField data to fill the pendingOutput values.
     // (b) shift back outputField data to clear data added to pendingOutput.
+    //
+    // However, we may need to increment pendingFieldIndex if we previously
+    // filled the field with the extracted firstField value.  The first
+    // value of the fieldNo vector will be 0 or 1.
+    // It is possible that pendingFieldIndex will reach the total number
+    // of fields held in register.  mvmd_sll may not handle this if it
+    // translates to an LLVM shl.
+    Value * increment = b->CreateZExtOrTrunc(b->mvmd_extract(fw, fieldNo, 0), sizeTy);
+    pendingFieldIdx = b->CreateAdd(pendingFieldIdx, increment);
+    Value * const pendingSpaceFilled = b->CreateICmpEQ(pendingFieldIdx, numFieldConst);
     Value * shftBack = b->CreateSub(numFieldConst, pendingFieldIdx);
     for (unsigned i = 0; i < mStreamCount; i++) {
         Value * outputFwd = b->mvmd_sll(fw, outputFields[i], pendingFieldIdx);
+        outputFwd = b->CreateSelect(pendingSpaceFilled, zeroSplat, outputFwd);
         pendingOutput[i] = b->simd_or(pendingOutput[i], outputFwd);
         outputFields[i] = b->mvmd_srl(fw, outputFields[i], shftBack);
-  }
+    }
     //
     // Write the pendingOutput data to outputStream.
     // Note: this data may be overwritten later, but we avoid branching.
@@ -281,14 +290,20 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     for (unsigned i = 0; i < mStreamCount; i++) {
         b->setScalarField("pendingOutputBlock_" + std::to_string(i), b->bitCast(pendingOutput[i]));
     }
-    Value * produced = b->getProducedItemCount("compressedOutput");
+    b->CreateCondBr(mIsFinal, finalWrite, updateProducedCount);
+    b->SetInsertPoint(finalWrite);
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        //Value * pending = b->getScalarField("pendingOutputBlock_" + std::to_string(i));
+        Value * pending = b->bitCast(pendingOutput[i]);
+        b->storeOutputStreamBlock("compressedOutput", b->getInt32(i), nextOutputBlk, pending);
+    }
+    b->CreateBr(updateProducedCount);
+    b->SetInsertPoint(updateProducedCount);
+     Value * produced = b->getProducedItemCount("compressedOutput");
     produced = b->CreateAdd(produced, b->CreateMul(nextOutputBlk, bitBlockWidthConst));
-    produced = b->CreateSelect(mIsFinal, b->CreateAdd(produced, blockPopCount), produced);
+    produced = b->CreateSelect(mIsFinal, b->CreateAdd(produced, newPending), produced);
     b->setProducedItemCount("compressedOutput", produced);
 }
-    
-    
-    
 
 SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned streamCount, unsigned PEXT_width)
 : BlockOrientedKernel("PEXTdel" + std::to_string(PEXT_width) + "_" + std::to_string(streamCount),

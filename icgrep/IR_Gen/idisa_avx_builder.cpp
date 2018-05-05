@@ -291,6 +291,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, ll
         Type * v1xi32Ty = VectorType::get(getInt32Ty(), 1);
         Type * v8xi32Ty = VectorType::get(getInt32Ty(), 8);
         Type * v8xi1Ty = VectorType::get(getInt1Ty(), 8);
+        Constant * mask0000000Fsplaat = ConstantVector::getSplat(8, ConstantInt::get(getInt32Ty(), 0xF));
         Value * shuf32Func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
         Value * PEXT_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pext_32);
         Value * PDEP_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pdep_32);
@@ -310,9 +311,12 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, ll
         for (unsigned int i = 0; i < 8; i++) {
             Shifts[i] = getInt32(i*4);
         }
-        Value * compress = CreateCall(shuf32Func, {a, CreateLShr(bdcst, ConstantVector::get({Shifts, 8}))});
-        Value * selectf = CreateBitCast(CreateTrunc(CreateSub(CreateShl(getInt32(1), field_count), getInt32(1)), getInt8Ty()), v8xi1Ty);
-        return CreateSelect(selectf, ConstantVector::getNullValue(v8xi32Ty), compress);
+        Value * shuf = CreateAnd(CreateLShr(bdcst, ConstantVector::get({Shifts, 8})), mask0000000Fsplaat);
+        Value * compress = CreateCall(shuf32Func, {a, shuf});
+        Value * field_mask = CreateTrunc(CreateSub(CreateShl(getInt32(1), field_count), getInt32(1)), getInt8Ty());
+        Value * selectf = CreateBitCast(field_mask, v8xi1Ty);
+        Value * result = CreateSelect(selectf, compress, ConstantVector::getNullValue(v8xi32Ty));
+        return result;
     }
     return IDISA_Builder::mvmd_compress(fw, a, select_mask);
 }
