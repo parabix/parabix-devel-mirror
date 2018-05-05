@@ -285,7 +285,7 @@ Value * IDISA_AVX2_Builder::hsimd_signmask(unsigned fw, Value * a) {
     // Otherwise use default SSE logic.
     return IDISA_AVX_Builder::hsimd_signmask(fw, a);
 }
-    
+
 llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
     if (mBitBlockWidth == 256 && fw == 32) {
         Type * v1xi32Ty = VectorType::get(getInt32Ty(), 1);
@@ -404,6 +404,51 @@ llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * 
     
     return IDISA_Builder::esimd_bitspread(fw, bitmask);
 }
+
+llvm::Value * IDISA_AVX512F_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift) {
+    const unsigned fieldCount = mBitBlockWidth/fw;
+    Type * fieldTy = getIntNTy(fw);
+    Constant * indexes[fieldCount];
+    for (unsigned int i = 0; i < fieldCount; i++) {
+        indexes[i] = ConstantInt::get(fieldTy, i);
+    }
+    Constant * indexVec = ConstantVector::get({indexes, fieldCount});
+    Value * permuteVec = CreateAdd(indexVec, simd_fill(fw, CreateZExtOrTrunc(shift, fieldTy)));
+    Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+    if (mBitBlockWidth == 512) {
+        Value * permuteFunc = nullptr;
+        if (fw == 64) permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_vpermt2var_q_512);
+        else if (fw == 32) permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_vpermt2var_d_512);
+        if (permuteFunc) {
+            Value * shifted = CreateCall(permuteFunc, {permuteVec, fwCast(fw, a), fwCast(fw, allZeroes()), mask});
+            return shifted;
+        }
+    }
+    return IDISA_Builder::mvmd_srl(fw, a, shift);
+}
+ 
+llvm::Value * IDISA_AVX512F_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift) {
+    const unsigned fieldCount = mBitBlockWidth/fw;
+    Type * fieldTy = getIntNTy(fw);
+    Constant * indexes[fieldCount];
+    for (unsigned int i = 0; i < fieldCount; i++) {
+        indexes[i] = ConstantInt::get(fieldTy, fieldCount + i);
+    }
+    Constant * indexVec = ConstantVector::get({indexes, fieldCount});
+    Value * permuteVec = CreateSub(indexVec, simd_fill(fw, CreateZExtOrTrunc(shift, fieldTy)));
+    Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+    if (mBitBlockWidth == 512) {
+        Value * permuteFunc = nullptr;
+        if (fw == 64) permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_vpermt2var_q_512);
+        else if (fw == 32) permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_vpermt2var_d_512);
+        if (permuteFunc) {
+            Value * shifted = CreateCall(permuteFunc, {permuteVec, fwCast(fw, allZeroes()), fwCast(fw, a), mask});
+            return shifted;
+        }
+    }
+    return IDISA_Builder::mvmd_sll(fw, a, shift);
+}
+
 
 llvm::Value * IDISA_AVX512F_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
     
