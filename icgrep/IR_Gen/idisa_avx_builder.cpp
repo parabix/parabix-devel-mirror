@@ -409,11 +409,11 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_compress(unsigned fw, llvm::Value * a,
     
     if (mBitBlockWidth == 512 && fw == 32) {
         Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress_d_512);
-        return CreateCall(compressFunc, {fwCast(32, a), fwCast(32, allZeroes()), select_mask});
+        return CreateCall(compressFunc, {fwCast(32, a), fwCast(32, allZeroes()), CreateZExtOrTrunc(select_mask, getInt16Ty())});
     }
     if (mBitBlockWidth == 512 && fw == 64) {
         Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress_q_512);
-        return CreateCall(compressFunc, {fwCast(64, a), fwCast(64, allZeroes()), select_mask});
+        return CreateCall(compressFunc, {fwCast(64, a), fwCast(64, allZeroes()), CreateZExtOrTrunc(select_mask, getInt8Ty())});
     }
     return IDISA_Builder::mvmd_compress(fw, a, select_mask);
 }
