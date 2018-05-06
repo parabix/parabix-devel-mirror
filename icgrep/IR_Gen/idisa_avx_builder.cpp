@@ -318,7 +318,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::V
     // Intrinsic::x86_avx2_permd) allows an efficient implementation for field width 32.
     // Translate larger field widths to 32 bits.
     if (fw > 32) {
-        return fwCast(fw, mvmd_srl(32, a, CreateMul(shift, ConstantInt::get(shift->getType(), fw/32))));
+        return fwCast(fw, mvmd_sll(32, a, CreateMul(shift, ConstantInt::get(shift->getType(), fw/32))));
     }
     if ((mBitBlockWidth == 256) && (fw == 32)) {
         Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
@@ -343,6 +343,13 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::V
 }
 
 llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
+    if (mBitBlockWidth == 256 && fw == 64) {
+        Value * PDEP_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pdep_32);
+        Value * mask = CreateZExt(select_mask, getInt32Ty());
+        Value * mask32 = CreateMul(CreateCall(PDEP_func, {mask, getInt32(0x55)}), getInt32(3));
+        Value * result = fwCast(fw, mvmd_compress(32, fwCast(32, a), CreateTrunc(mask32, getInt8Ty())));
+        return result;
+    }
     if (mBitBlockWidth == 256 && fw == 32) {
         Type * v1xi32Ty = VectorType::get(getInt32Ty(), 1);
         Type * v8xi32Ty = VectorType::get(getInt32Ty(), 8);
@@ -370,8 +377,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, ll
         Value * shuf = CreateAnd(CreateLShr(bdcst, ConstantVector::get({Shifts, 8})), mask0000000Fsplaat);
         Value * compress = CreateCall(shuf32Func, {a, shuf});
         Value * field_mask = CreateTrunc(CreateSub(CreateShl(getInt32(1), field_count), getInt32(1)), getInt8Ty());
-        Value * selectf = CreateBitCast(field_mask, v8xi1Ty);
-        Value * result = CreateSelect(selectf, compress, ConstantVector::getNullValue(v8xi32Ty));
+        Value * result = CreateAnd(compress, CreateSExt(CreateBitCast(field_mask, v8xi1Ty), v8xi32Ty));
         return result;
     }
     return IDISA_Builder::mvmd_compress(fw, a, select_mask);
