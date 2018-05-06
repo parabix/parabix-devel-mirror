@@ -117,6 +117,65 @@ FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBui
 , mStreamCount(streamCount) {
 }
 
+void PEXTFieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
+    Type * fieldTy = kb->getIntNTy(mPEXTWidth);
+    Type * fieldPtrTy = PointerType::get(fieldTy, 0);
+    Constant * PEXT_func = nullptr;
+    Constant * popc_func = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, fieldTy);
+    if (mPEXTWidth == 64) {
+        PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_64);
+    } else if (mPEXTWidth == 32) {
+        PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_32);
+    }
+    BasicBlock * entry = kb->GetInsertBlock();
+    BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
+    BasicBlock * done = kb->CreateBasicBlock("done");
+    Constant * const ZERO = kb->getSize(0);
+    const unsigned fieldsPerBlock = kb->getBitBlockWidth()/mPEXTWidth;
+    kb->CreateBr(processBlock);
+    kb->SetInsertPoint(processBlock);
+    PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
+    blockOffsetPhi->addIncoming(ZERO, entry);
+    std::vector<Value *> mask(fieldsPerBlock);
+    Value * extractionMaskPtr = kb->getInputStreamBlockPtr("extractionMask", ZERO, blockOffsetPhi);
+    extractionMaskPtr = kb->CreatePointerCast(extractionMaskPtr, fieldPtrTy);
+    Value * unitCountPtr = kb->getOutputStreamBlockPtr("unitCounts", ZERO, blockOffsetPhi);
+    unitCountPtr = kb->CreatePointerCast(unitCountPtr, fieldPtrTy);
+    for (unsigned i = 0; i < fieldsPerBlock; i++) {
+        mask[i] = kb->CreateLoad(kb->CreateGEP(extractionMaskPtr, kb->getInt32(i)));
+        Value * popc = kb->CreateCall(popc_func, mask[i]);
+        kb->CreateStore(popc, kb->CreateGEP(unitCountPtr, kb->getInt32(i)));
+    }
+    for (unsigned j = 0; j < mStreamCount; ++j) {
+        Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
+        inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
+        Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);
+        outputPtr = kb->CreatePointerCast(outputPtr, fieldPtrTy);
+        for (unsigned i = 0; i < fieldsPerBlock; i++) {
+            Value * field = kb->CreateLoad(kb->CreateGEP(inputPtr, kb->getInt32(i)));
+            Value * compressed = kb->CreateCall(PEXT_func, {field, mask[i]});
+            kb->CreateStore(compressed, kb->CreateGEP(outputPtr, kb->getInt32(i)));
+        }
+    }
+    Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
+    blockOffsetPhi->addIncoming(nextBlk, processBlock);
+    Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
+    kb->CreateCondBr(moreToDo, processBlock, done);
+    kb->SetInsertPoint(done);
+}
+
+PEXTFieldCompressKernel::PEXTFieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
+: MultiBlockKernel("PEXTfieldCompress" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
+                   {Binding{kb->getStreamSetTy(streamCount), "inputStreamSet"},
+                       Binding{kb->getStreamSetTy(), "extractionMask"}},
+                   {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"},
+                       Binding{kb->getStreamSetTy(), "unitCounts", FixedRate(), RoundUpTo(kb->getBitBlockWidth())}},
+                   {}, {}, {})
+, mPEXTWidth(fieldWidth)
+, mStreamCount(streamCount) {
+    if ((fieldWidth != 32) && (fieldWidth != 64)) llvm::report_fatal_error("Unsupported PEXT width for PEXTFieldCompressKernel");
+}
+    
 StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
 : MultiBlockKernel("streamCompress" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
                    {Binding{kb->getStreamSetTy(streamCount), "sourceStreamSet"},

@@ -46,6 +46,18 @@ private:
     const unsigned mStreamCount;
 };
 
+class PEXTFieldCompressKernel final : public MultiBlockKernel {
+public:
+    PEXTFieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+private:
+    const unsigned mPEXTWidth;
+    const unsigned mStreamCount;
+};
+
 //
 //  Given streams that are compreseed within fields, produced fully
 //  compressed streams.
