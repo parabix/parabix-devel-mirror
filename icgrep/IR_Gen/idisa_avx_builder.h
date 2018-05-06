@@ -47,6 +47,8 @@ public:
     std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin) override;
     std::pair<llvm::Value *, llvm::Value *> bitblock_indexed_advance(llvm::Value * a, llvm::Value * index_strm, llvm::Value * shiftin, unsigned shift) override;
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
+    llvm::Value * mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift) override;
+    llvm::Value * mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift) override;
     llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) override;
     llvm::Value * simd_pext(unsigned fw, llvm::Value * v, llvm::Value * extract_mask) override;
     llvm::Value * simd_pdep(unsigned fw, llvm::Value * v, llvm::Value * deposit_mask) override;
