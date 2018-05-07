@@ -289,8 +289,17 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
         Value * threadId = b->CreateLoad(threadIdPtr[i]);
         b->CreatePThreadJoinCall(threadId, status);
     }
-    
+
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
+        Value* FP_100 = ConstantFP::get(b->getDoubleTy(), 100.0);
+        Value* totalCycles = b->getSize(0);
+        for (const Kernel * kernel : kernels) {
+            b->setKernel(kernel);
+            Value * cycles = b->CreateLoad(b->getCycleCountPtr());
+            totalCycles = b->CreateAdd(totalCycles, cycles);
+        }
+        Value* fTotalCycle = b->CreateUIToFP(totalCycles, b->getDoubleTy());
+
         for (const Kernel * kernel : kernels) {
             b->setKernel(kernel);
             const auto & inputs = kernel->getStreamInputs();
@@ -304,9 +313,11 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
             Value * fItems = b->CreateUIToFP(items, b->getDoubleTy());
             Value * cycles = b->CreateLoad(b->getCycleCountPtr());
             Value * fCycles = b->CreateUIToFP(cycles, b->getDoubleTy());
-            const auto formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
+            Value * percentage = b->CreateFDiv(b->CreateFMul(fCycles, FP_100), fTotalCycle);
+
+            const auto formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item,  %2.2f%% of Total CPU Cycles. \n ";
             Value * stringPtr = b->CreatePointerCast(b->GetString(formatString), b->getInt8PtrTy());
-            b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fItems, fCycles, b->CreateFDiv(fCycles, fItems)});
+            b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fItems, fCycles, b->CreateFDiv(fCycles, fItems), percentage});
         }
     }
     
@@ -359,9 +370,18 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
     b->CreateCondBr(finished, pipelineExit, pipelineLoop);
 
     b->SetInsertPoint(pipelineExit);
+
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
-        for (unsigned k = 0; k < kernels.size(); k++) {
-            auto & kernel = kernels[k];
+        Value* FP_100 = ConstantFP::get(b->getDoubleTy(), 100.0);
+        Value* totalCycles = b->getSize(0);
+        for (const Kernel * kernel : kernels) {
+            b->setKernel(kernel);
+            Value * cycles = b->CreateLoad(b->getCycleCountPtr());
+            totalCycles = b->CreateAdd(totalCycles, cycles);
+        }
+        Value* fTotalCycle = b->CreateUIToFP(totalCycles, b->getDoubleTy());
+
+        for (const Kernel * kernel : kernels) {
             b->setKernel(kernel);
             const auto & inputs = kernel->getStreamInputs();
             const auto & outputs = kernel->getStreamOutputs();
@@ -374,9 +394,11 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
             Value * fItems = b->CreateUIToFP(items, b->getDoubleTy());
             Value * cycles = b->CreateLoad(b->getCycleCountPtr());
             Value * fCycles = b->CreateUIToFP(cycles, b->getDoubleTy());
-            const auto formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item.\n";
+            Value * percentage = b->CreateFDiv(b->CreateFMul(fCycles, FP_100), fTotalCycle);
+
+            const auto formatString = kernel->getName() + ": %7.2e items processed; %7.2e CPU cycles,  %6.2f cycles per item,  %2.2f%% of Total CPU Cycles. \n ";
             Value * stringPtr = b->CreatePointerCast(b->GetString(formatString), b->getInt8PtrTy());
-            b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fItems, fCycles, b->CreateFDiv(fCycles, fItems)});
+            b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fItems, fCycles, b->CreateFDiv(fCycles, fItems), percentage});
         }
     }
 
