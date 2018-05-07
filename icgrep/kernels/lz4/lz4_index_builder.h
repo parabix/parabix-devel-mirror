@@ -19,7 +19,7 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel {
     class LZ4IndexBuilderKernel final : public SegmentOrientedKernel {
     public:
-        LZ4IndexBuilderKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder);
+        LZ4IndexBuilderKernel(const std::unique_ptr<kernel::KernelBuilder> &b);
 
     protected:
         void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
@@ -41,7 +41,7 @@ namespace kernel {
                                  llvm::Value *value);
 
         llvm::Value *
-        processLiteral(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *token, llvm::Value *tokenPos,
+        processLiteral(const std::unique_ptr<KernelBuilder> &b, llvm::Value *token, llvm::Value *tokenPos,
                        llvm::Value *blockEnd);
 
         llvm::Value *
@@ -58,6 +58,12 @@ namespace kernel {
                                                                llvm::Value *start, llvm::Value *end);
 
         void markCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string &bitstreamName, llvm::Value *pos);
+
+
+        void appendM0Output(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *start, llvm::Value *end);
+        void storeM0(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value* blockIndex, llvm::Value* value);
+        void storePendingM0(const std::unique_ptr<KernelBuilder> &iBuilder);
+
     };
 }
 
