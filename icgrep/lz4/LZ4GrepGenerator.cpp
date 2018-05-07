@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2018/3/15.
-//
 
 #include "LZ4GrepGenerator.h"
 
@@ -372,7 +369,7 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
     StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
     Kernel * swizzledMatchCopyK = pxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
-    pxDriver.makeKernelCall(swizzledMatchCopyK, {MatchOffsetMarker, M0Marker, M0CountMarker, ByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
+    pxDriver.makeKernelCall(swizzledMatchCopyK, {MatchOffsetMarker, M0Marker, ByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
 
 
     // Produce unswizzled bit streams
@@ -426,8 +423,7 @@ void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE* regex) {
     StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
     Kernel * swizzledMatchCopyK = pxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
-    pxDriver.makeKernelCall(swizzledMatchCopyK, {MatchOffsetMarker, M0Marker, M0CountMarker, ByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
-
+    pxDriver.makeKernelCall(swizzledMatchCopyK, {MatchOffsetMarker, M0Marker, ByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
 
     // Produce unswizzled bit streams
     StreamSetBuffer * extractedbits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());

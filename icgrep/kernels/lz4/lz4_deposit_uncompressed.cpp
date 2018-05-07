@@ -1,6 +1,4 @@
-//
-// Created by wxy325 on 2017/7/9.
-//
+
 
 #include "lz4_deposit_uncompressed.h"
 #include <kernels/kernel_builder.h>

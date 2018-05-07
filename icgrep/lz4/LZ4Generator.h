@@ -62,7 +62,6 @@ protected:
     parabix::StreamSetBuffer * MatchOffsetMarker;
 
     // M0CountMarker will not contain anything, it will only be used to pass producedItemCount and manage processedItemCount between different kernel
-    parabix::StreamSetBuffer * M0CountMarker;
     parabix::StreamSetBuffer * M0Marker;
 };
 

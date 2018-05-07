@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2018/3/16.
-//
 
 #include "lz4_index_builder.h"
 
@@ -42,7 +39,6 @@ namespace kernel{
 
            Binding{iBuilder->getStreamSetTy(1, 1), "deletionMarker", BoundedRate(0, 1)},
            Binding{iBuilder->getStreamSetTy(1, 1), "M0Marker", BoundedRate(0, 1)},
-           Binding{iBuilder->getStreamSetTy(1, 1), "M0CountMarker", BoundedRate(0, 1)},
            Binding{iBuilder->getStreamSetTy(1, 1), "MatchOffsetMarker", RateEqualTo("byteStream")}
     },
     //Arguments
@@ -61,8 +57,6 @@ namespace kernel{
     }
 
     void LZ4IndexBuilderKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
-//        iBuilder->CallPrintInt("IndexBuilder:entry", iBuilder->getSize(0));
-
         BasicBlock* exitBlock = iBuilder->CreateBasicBlock("exitBlock");
         BasicBlock* blockEndConBlock = iBuilder->CreateBasicBlock("blockEndConBlock");
 
@@ -169,7 +163,7 @@ namespace kernel{
 
         BasicBlock* entryBlock = iBuilder->GetInsertBlock();
 
-        Value* matchLengthStartPos = iBuilder->CreateAdd(offsetPos, INT64_ONE);
+        Value* extendMatchStartPos = iBuilder->CreateAdd(offsetPos, INT64_ONE);
         Value* extendedMatchValue = iBuilder->CreateICmpEQ(iBuilder->CreateAnd(token, iBuilder->getInt8(0xf)), iBuilder->getInt8(0xf));
 
         BasicBlock* extendMatchBodyBlock = iBuilder->CreateBasicBlock("block_data_loop_handle_compressed_block_loop_extend_match_body");
@@ -180,25 +174,20 @@ namespace kernel{
         iBuilder->SetInsertPoint(extendMatchBodyBlock);
 
         //ExtendMatchBodyBlock
-        Value* newCursorPos = this->advanceUntilNextZero(iBuilder, "extender", iBuilder->CreateAdd(matchLengthStartPos, INT64_ONE), blockEnd);
+        Value* newCursorPos = this->advanceUntilNextZero(iBuilder, "extender", iBuilder->CreateAdd(extendMatchStartPos, INT64_ONE), blockEnd);
         BasicBlock* advanceFinishBlock = iBuilder->GetInsertBlock();
 
-        // ----May be in a different segment now
         iBuilder->CreateBr(extendMatchExitBlock);
 
         //ExtendMatchExitBlock
         iBuilder->SetInsertPoint(extendMatchExitBlock);
         PHINode* phiCursorPosAfterMatch = iBuilder->CreatePHI(iBuilder->getInt64Ty(), 2);
         phiCursorPosAfterMatch->addIncoming(newCursorPos, advanceFinishBlock);
-        phiCursorPosAfterMatch->addIncoming(matchLengthStartPos, entryBlock);
+        phiCursorPosAfterMatch->addIncoming(extendMatchStartPos, entryBlock);
 
-        Value* oldMatchExtensionSize = iBuilder->CreateSub(phiCursorPosAfterMatch, matchLengthStartPos);
-        extendedMatchValue = iBuilder->CreateICmpEQ(iBuilder->CreateAnd(token, iBuilder->getInt8(0xf)), iBuilder->getInt8(0xf));
-        Value* matchExtensionSize = iBuilder->CreateSelect(
-                iBuilder->CreateICmpEQ(extendedMatchValue, iBuilder->getInt1(true)),
-                oldMatchExtensionSize,
-                iBuilder->getSize(0)
-        );
+        Value* oldMatchExtensionSize = iBuilder->CreateSub(phiCursorPosAfterMatch, extendMatchStartPos);
+//        extendedMatchValue = iBuilder->CreateICmpEQ(iBuilder->CreateAnd(token, iBuilder->getInt8(0xf)), iBuilder->getInt8(0xf));
+        Value* matchExtensionSize = iBuilder->CreateSelect(extendedMatchValue, oldMatchExtensionSize, iBuilder->getSize(0));
         Value* matchLengthBase = iBuilder->CreateZExt(iBuilder->CreateAnd(token, iBuilder->getInt8(0x0f)), iBuilder->getInt64Ty());
         Value* matchLength = iBuilder->CreateAdd(matchLengthBase, iBuilder->getInt64(4));
 
@@ -234,7 +223,7 @@ namespace kernel{
         );
 
 
-        iBuilder->setProducedItemCount("M0CountMarker", iBuilder->CreateAdd(iBuilder->getProducedItemCount("M0CountMarker"), iBuilder->getSize(1)));
+
         this->markCircularOutputBitstream(iBuilder, "MatchOffsetMarker", offsetPos);
         this->increaseScalarField(iBuilder, "m0OutputPos", matchLength);
         this->setCircularOutputBitstream(iBuilder, "M0Marker", outputPos, outputEndPos);
@@ -243,7 +232,6 @@ namespace kernel{
     }
 
     void LZ4IndexBuilderKernel::generateProcessCompressedBlock(const std::unique_ptr<KernelBuilder> &iBuilder, Value* blockStart, Value* blockEnd) {
-        // Constant
         Value* clearPos = iBuilder->getScalarField("compressedSpaceClearPos");
         // We can not only clear [blockStart, blockEnd), since there are 4 bytes between blockEnd and nextBlockStart
         this->clearCircularOutputBitstream(iBuilder, "deletionMarker", clearPos, blockEnd);
@@ -371,7 +359,8 @@ namespace kernel{
     }
 
     Value * LZ4IndexBuilderKernel::generateLoadInt64NumberInput(const unique_ptr<KernelBuilder> &iBuilder, string inputBufferName, Value * globalOffset) {
-        Constant* SIZE_STRIDE_SIZE = iBuilder->getSize(getStride());
+//        Constant* SIZE_STRIDE_SIZE = iBuilder->getSize(getStride());
+        Constant* SIZE_STRIDE_SIZE = iBuilder->getSize(this->getInputStreamSetBuffer(inputBufferName)->getBufferBlocks() * iBuilder->getBitBlockWidth());
         Value * processed = iBuilder->getProcessedItemCount(inputBufferName);
         processed = iBuilder->CreateAnd(processed, ConstantExpr::getNeg(SIZE_STRIDE_SIZE));
         Value * offset = iBuilder->CreateSub(globalOffset, processed);
@@ -388,16 +377,6 @@ namespace kernel{
         Value *fieldValue = iBuilder->getScalarField(fieldName);
         fieldValue = iBuilder->CreateAdd(fieldValue, value);
         iBuilder->setScalarField(fieldName, fieldValue);
-    }
-
-    void LZ4IndexBuilderKernel::generateStoreNumberOutput(const unique_ptr<KernelBuilder> &iBuilder,
-                                                          const string & outputBufferName,
-                                                          Value * value) {
-
-        Value * outputOffset = iBuilder->getProducedItemCount(outputBufferName);
-        Value * outputRawPtr = iBuilder->getRawOutputPointer(outputBufferName, outputOffset);
-        iBuilder->CreateStore(value, outputRawPtr);
-        iBuilder->setProducedItemCount(outputBufferName, iBuilder->CreateAdd(outputOffset, iBuilder->getSize(1)));
     }
 
 

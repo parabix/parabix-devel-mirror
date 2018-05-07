@@ -136,18 +136,18 @@ void LZ4Generator::generatePipeline(const std::string& outputFile) {
 
     auto swizzle = this->generateSwizzleExtractData(iBuilder);
 
-    StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
+    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
 
     Kernel * multiplePdepK = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 2, 4);
     pxDriver.makeKernelCall(multiplePdepK, {DepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
 
 
-    StreamSetBuffer * matchCopiedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * matchCopiedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
+    StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
 
     Kernel * swizzledMatchCopyK = pxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
-    pxDriver.makeKernelCall(swizzledMatchCopyK, {MatchOffsetMarker, M0Marker, M0CountMarker, ByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
+    pxDriver.makeKernelCall(swizzledMatchCopyK, {MatchOffsetMarker, M0Marker, ByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
 
 
     // Produce unswizzled bit streams
@@ -194,6 +194,8 @@ void LZ4Generator::generateMainFunc(const std::unique_ptr<kernel::KernelBuilder>
 
     hasBlockChecksum = &*(args++);
     hasBlockChecksum->setName("hasBlockChecksum");
+    // TODO for now, we do not handle blockCheckSum
+    hasBlockChecksum = iBuilder->getInt1(false);
 
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
 }
@@ -254,7 +256,6 @@ void LZ4Generator::generateExtractAndDepositMarkers(const std::unique_ptr<kernel
 
     DeletionMarker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
     M0Marker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getDecompressedBufferBlocks());
-    M0CountMarker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
     DepositMarker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getDecompressedBufferBlocks());
 
     Kernel* Lz4IndexBuilderK = pxDriver.addKernelInstance<LZ4IndexBuilderKernel>(iBuilder);
@@ -279,7 +280,6 @@ void LZ4Generator::generateExtractAndDepositMarkers(const std::unique_ptr<kernel
 
                     DeletionMarker,
                     M0Marker,
-                    M0CountMarker,
                     MatchOffsetMarker
             });
 

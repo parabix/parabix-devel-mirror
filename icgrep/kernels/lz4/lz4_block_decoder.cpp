@@ -1,6 +1,4 @@
-//
-// Created by wxy325 on 2018/3/16.
-//
+
 
 #include "lz4_block_decoder.h"
 

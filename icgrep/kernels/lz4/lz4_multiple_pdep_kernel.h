@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2018/2/9.
-//
 
 #ifndef ICGREP_LZ4_MULTIPLE_PDEP_KERNEL_H
 #define ICGREP_LZ4_MULTIPLE_PDEP_KERNEL_H

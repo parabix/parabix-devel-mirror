@@ -1,6 +1,4 @@
-//
-// Created by wxy325 on 2018/2/9.
-//
+
 
 #include "lz4_multiple_pdep_kernel.h"
 #include <kernels/kernel_builder.h>

@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2018/3/16.
-//
 
 #ifndef ICGREP_LZ4_INDEX_BUILDER_H
 #define ICGREP_LZ4_INDEX_BUILDER_H
@@ -51,9 +48,6 @@ namespace kernel {
         processMatch(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *offsetPos, llvm::Value *token,
                      llvm::Value *blockEnd);
 
-        void generateStoreNumberOutput(const std::unique_ptr<KernelBuilder> &iBuilder,
-                                       const std::string &outputBufferName,
-                                       llvm::Value *value);
 
         void clearCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder,
                                                                  const std::string &bitstreamName,

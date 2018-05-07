@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2017/7/9.
-//
 
 #ifndef ICGREP_LZ4_DEPOSIT_UNCOMPRESSED_H
 #define ICGREP_LZ4_DEPOSIT_UNCOMPRESSED_H

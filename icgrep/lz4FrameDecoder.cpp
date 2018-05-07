@@ -10,16 +10,23 @@
 #include <lz4FrameDecoder.h>
 
 namespace {
-const size_t minFilesize = 
-    4 +         // Magic number
-    3 +         // Frame descriptor (3-11 bytes)
-    4;          // End mark
+
 
 // Little-endian.
 const uint32_t magicNumber = 0x184D2204;
 }
 
+LZ4FrameDecoder::LZ4FrameDecoder() {
+
+}
+
 LZ4FrameDecoder::LZ4FrameDecoder(const std::string & filename) {
+    this->init(filename);
+}
+
+void LZ4FrameDecoder::init(const std::string &filename) {
+    const size_t minFilesize = this->getMinFileSize();
+
     std::ifstream f(filename, std::ios::binary | std::ios::ate);
     if (f.fail()) {
         return;
@@ -43,7 +50,7 @@ LZ4FrameDecoder::LZ4FrameDecoder(const std::string & filename) {
     }
 
     mBlocksStart = 4 + mFDLength;       // MagicNb & FD
-    long long blocksEnd = mFilesize - 4 - (mHasContentChecksum ? 4 : 0);      // EndMark & checksum
+    long long blocksEnd = mFilesize - this->endMarkSize() - (mHasContentChecksum ? this->contentChecksumSize() : 0);      // EndMark & checksum
     if (blocksEnd > 0 && mBlocksStart <= static_cast<size_t>(blocksEnd)) {
         mBlocksLength = blocksEnd - mBlocksStart;
         mValid = true;
@@ -51,6 +58,8 @@ LZ4FrameDecoder::LZ4FrameDecoder(const std::string & filename) {
 }
 
 bool LZ4FrameDecoder::decodeFrameDescriptor(std::ifstream & f) {
+    const size_t minFilesize = this->getMinFileSize();
+
     char flag, blockDescriptor, headerChecksum;
     f.get(flag);
     f.get(blockDescriptor);
@@ -64,7 +73,7 @@ bool LZ4FrameDecoder::decodeFrameDescriptor(std::ifstream & f) {
     }
 
     if (mFilesize < minFilesize +
-            (mHasContentChecksum ? 4 : 0) +
+            (mHasContentChecksum ? this->contentChecksumSize() : 0) +
             (hasContentSize ? 8 : 0)
        ) {
         return false;
@@ -80,3 +89,12 @@ bool LZ4FrameDecoder::decodeFrameDescriptor(std::ifstream & f) {
     f.get(headerChecksum);
     return true;
 }
+
+size_t LZ4FrameDecoder::endMarkSize() const {
+    return 4;
+}
+
+size_t LZ4FrameDecoder::contentChecksumSize() const {
+    return 4;
+}
+

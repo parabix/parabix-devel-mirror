@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2018/3/15.
-//
 
 #ifndef ICGREP_LZ4GREPGENERATOR_H
 #define ICGREP_LZ4GREPGENERATOR_H

@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2017/7/10.
-//
 
 #include <pablo/builder.hpp>
 #include "lz4_generate_deposit_stream.h"
