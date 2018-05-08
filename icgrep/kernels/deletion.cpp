@@ -197,6 +197,7 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     Type * sizeTy = b->getSizeTy();
     const unsigned numFields = b->getBitBlockWidth()/fw;
     Constant * zeroSplat = Constant::getNullValue(b->fwVectorType(fw));
+    Constant * oneSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, 1));
     Constant * fwSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, fw));
     Constant * numFieldConst = ConstantInt::get(sizeTy, numFields);
     Constant * fwMaskSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fwTy, fw-1));
@@ -281,16 +282,18 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
         for (unsigned i = 0; i < mStreamCount; i++) {
             Value * fields_fwd = b->mvmd_slli(fw, outputFields[i], j);
             outputFields[i] = b->simd_or(outputFields[i], b->simd_and(select, fields_fwd));
-        }
+       }
     }
     // Now compress the data fields, eliminating all but the last field from
-    // each run of consecutive field having the same field number.
-    // same field number as a subsequent field.
-    Value * eqNext = b->simd_eq(fw, fieldNo, b->mvmd_srli(fw, fieldNo, 1));
+    // each run of consecutive field having the same field number as a subsequent field.
+    // But it may be that last field number is 0 which will compare equal to a 0 shifted in.
+    // So we add 1 to field numbers first.
+    Value * nonZeroFieldNo = b->simd_add(fw, fieldNo, oneSplat);
+    Value * eqNext = b->simd_eq(fw, nonZeroFieldNo, b->mvmd_srli(fw, nonZeroFieldNo, 1));
     Value * compressMask = b->hsimd_signmask(fw, b->simd_not(eqNext));
     for (unsigned i = 0; i < mStreamCount; i++) {
         outputFields[i] = b->mvmd_compress(fw, outputFields[i], compressMask);
-   }
+    }
     //
     // Finally combine the pendingOutput and outputField data.
     // (a) shift forward outputField data to fill the pendingOutput values.

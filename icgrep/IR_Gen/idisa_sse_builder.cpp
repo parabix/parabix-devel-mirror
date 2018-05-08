@@ -152,4 +152,20 @@ std::pair<Value *, Value *> IDISA_SSE2_Builder::bitblock_advance(Value * a, Valu
     return std::pair<Value *, Value *>(shiftout, shifted);
 }
 
+Value * IDISA_SSE_Builder::mvmd_compress(unsigned fw, Value * a, Value * selector) {
+    if ((mBitBlockWidth == 128) && (fw == 64)) {
+        Constant * keep[2] = {ConstantInt::get(getInt64Ty(), 1), ConstantInt::get(getInt64Ty(), 3)};
+        Constant * keep_mask = ConstantVector::get({keep, 2});
+        Constant * shift[2] = {ConstantInt::get(getInt64Ty(), 2), ConstantInt::get(getInt64Ty(), 0)};
+        Constant * shifted_mask = ConstantVector::get({shift, 2});
+        Value * a_srli1 = mvmd_srli(64, a, 1);
+        Value * bdcst = simd_fill(64, CreateZExt(selector, getInt64Ty()));
+        Value * kept = simd_and(simd_eq(64, simd_and(keep_mask, bdcst), keep_mask), a);
+        Value * shifted = simd_and(a_srli1, simd_eq(64, shifted_mask, bdcst));
+        return simd_or(kept, shifted);
+    }
+    return IDISA_Builder::mvmd_compress(fw, a, selector);
+}
+
+
 }

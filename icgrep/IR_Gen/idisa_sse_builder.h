@@ -2,7 +2,7 @@
 #define IDISA_SSE_BUILDER_H
 
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -21,6 +21,7 @@ public:
 
     virtual std::string getBuilderUniqueName() override;
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
+    llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) override;
     ~IDISA_SSE_Builder() {}
 };
 
