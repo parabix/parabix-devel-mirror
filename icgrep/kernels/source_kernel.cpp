@@ -34,6 +34,11 @@ void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod,
     BasicBlock * const nonEmptyFile = b->CreateBasicBlock("NonEmptyFile");
     BasicBlock * const exit = b->CreateBasicBlock("Exit");
     IntegerType * const sizeTy = b->getSizeTy();
+
+    ConstantInt * const PAGE_SIZE = b->getSize(getpagesize());
+    ConstantInt * const ZERO = b->getSize(0);
+
+
     Value * const fd = b->getScalarField("fileDescriptor");
     assert (fileSizeMethod);
     Value * fileSize = b->CreateZExtOrTrunc(b->CreateCall(fileSizeMethod, fd), sizeTy);
@@ -50,13 +55,11 @@ void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod,
     }
     b->setBufferedSize("sourceBuffer", fileSize);
     b->setScalarField("fileSize", fileSize);
-    b->setProducedItemCount("sourceBuffer", fileSize);
+    b->setProducedItemCount("sourceBuffer", ZERO);
     b->setCapacity("sourceBuffer", fileSize);
     b->CreateBr(exit);
 
     b->SetInsertPoint(emptyFile);
-    ConstantInt * const PAGE_SIZE = b->getSize(getpagesize());
-    ConstantInt * const ZERO = b->getSize(0);
     Value * const emptyFilePtr = b->CreatePointerCast(b->CreateAnonymousMMap(PAGE_SIZE), codeUnitPtrTy);
     b->setScalarField("buffer", emptyFilePtr);
     b->setBaseAddress("sourceBuffer", emptyFilePtr);
