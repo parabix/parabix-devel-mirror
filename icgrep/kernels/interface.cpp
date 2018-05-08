@@ -130,7 +130,7 @@ Function * KernelInterface::getTerminateFunction(Module * const module) const {
 
 CallInst * KernelInterface::makeDoSegmentCall(kernel::KernelBuilder & idb, const std::vector<llvm::Value *> & args) const {
     Function * const doSegment = getDoSegmentFunction(idb.getModule());
-    assert (doSegment->getArgumentList().size() <= args.size());
+    assert (doSegment->arg_size() <= args.size());
     return idb.CreateCall(doSegment, args);
 }
 
