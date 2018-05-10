@@ -6,9 +6,7 @@
 
 
 #include <llvm/IR/Module.h>
-#include <llvm/IR/Function.h>
 #include <llvm/Linker/Linker.h>
-#include <llvm/Support/CommandLine.h>
 #include <llvm/Support/PrettyStackTrace.h>
 #include <llvm/Support/Signals.h>
 #include <llvm/Support/ManagedStatic.h>
@@ -30,8 +28,6 @@
 
 #include <kernels/kernel_builder.h>
 #include <toolchain/cpudriver.h>
-#include <llvm/Support/raw_ostream.h>
-#include <string>
 #include <iostream>
 namespace re { class CC; }
 

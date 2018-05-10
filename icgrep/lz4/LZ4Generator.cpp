@@ -4,13 +4,9 @@
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/PrettyStackTrace.h>
 
 #include <cc/cc_compiler.h>
 
-#include <lz4FrameDecoder.h>
-#include <kernels/streamset.h>
 #include <kernels/cc_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/p2s_kernel.h>
@@ -21,8 +17,7 @@
 #include <kernels/deletion.h>
 #include <kernels/swizzle.h>
 #include <kernels/pdep_kernel.h>
-#include <kernels/lz4/lz4_multiple_pdep_kernel.h>
-#include <kernels/lz4/lz4_match_copy_kernel.h>
+#include <kernels/swizzled_multiple_pdep_kernel.h>
 #include <kernels/lz4/lz4_swizzled_match_copy_kernel.h>
 #include <kernels/lz4/lz4_block_decoder.h>
 #include <kernels/lz4/lz4_index_builder.h>
@@ -33,21 +28,21 @@ using namespace llvm;
 using namespace parabix;
 using namespace kernel;
 
-LZ4Generator::LZ4Generator():pxDriver("lz4d") {
+LZ4Generator::LZ4Generator():mPxDriver("lz4d") {
 
 }
 
 MainFunctionType LZ4Generator::getMainFunc() {
-    return reinterpret_cast<MainFunctionType>(pxDriver.getMain());
+    return reinterpret_cast<MainFunctionType>(mPxDriver.getMain());
 }
 
 
 
 void LZ4Generator::generateExtractOnlyPipeline(const std::string& outputFile) {
-    auto & iBuilder = pxDriver.getBuilder();
+    auto & iBuilder = mPxDriver.getBuilder();
     this->generateMainFunc(iBuilder);
 
-    StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
+    StreamSetBuffer * const DecompressedByteStream = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);
@@ -60,35 +55,35 @@ void LZ4Generator::generateExtractOnlyPipeline(const std::string& outputFile) {
 
 
     // Produce unswizzled bit streams
-    StreamSetBuffer * extractedbits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
-    Kernel * unSwizzleK = pxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
+    StreamSetBuffer * extractedbits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
+    Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
 
-    pxDriver.makeKernelCall(unSwizzleK, {swizzle.first, swizzle.second}, {extractedbits});
+    mPxDriver.makeKernelCall(unSwizzleK, {swizzle.first, swizzle.second}, {extractedbits});
 
 
-    Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(iBuilder);
-    pxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
+    Kernel * p2sK = mPxDriver.addKernelInstance<P2SKernel>(iBuilder);
+    mPxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
 
     // --------------------------------------------------------
     // End
-    Kernel * outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 8);
+    Kernel * outK = mPxDriver.addKernelInstance<FileSink>(iBuilder, 8);
 
     outK->setInitialArguments({iBuilder->GetString(outputFile)});
-    pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
+    mPxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
 
-    pxDriver.generatePipelineIR();
-    pxDriver.deallocateBuffers();
+    mPxDriver.generatePipelineIR();
+    mPxDriver.deallocateBuffers();
 
     iBuilder->CreateRetVoid();
 
-    pxDriver.finalizeObject();
+    mPxDriver.finalizeObject();
 }
 
 void LZ4Generator::generateExtractAndDepositOnlyPipeline(const std::string &outputFile) {
-    auto & iBuilder = pxDriver.getBuilder();
+    auto & iBuilder = mPxDriver.getBuilder();
     this->generateMainFunc(iBuilder);
 
-    StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
+    StreamSetBuffer * const DecompressedByteStream = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);
@@ -96,39 +91,39 @@ void LZ4Generator::generateExtractAndDepositOnlyPipeline(const std::string &outp
 
     auto swizzle = this->generateSwizzleExtractData(iBuilder);
 
-    StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * depositedSwizzle0 = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * depositedSwizzle1 = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
-    Kernel * multiplePdepK = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 2, 4);
-    pxDriver.makeKernelCall(multiplePdepK, {DepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
+    Kernel * multiplePdepK = mPxDriver.addKernelInstance<SwizzledMultiplePDEPkernel>(iBuilder, 4, 2);
+    mPxDriver.makeKernelCall(multiplePdepK, {mDepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
 
     // Produce unswizzled bit streams
-    StreamSetBuffer * extractedbits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
-    Kernel * unSwizzleK = pxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
-    pxDriver.makeKernelCall(unSwizzleK, {depositedSwizzle0, depositedSwizzle1}, {extractedbits});
+    StreamSetBuffer * extractedbits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
+    Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
+    mPxDriver.makeKernelCall(unSwizzleK, {depositedSwizzle0, depositedSwizzle1}, {extractedbits});
 
-    Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(iBuilder);
-    pxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
+    Kernel * p2sK = mPxDriver.addKernelInstance<P2SKernel>(iBuilder);
+    mPxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
 
     // --------------------------------------------------------
     // End
-    Kernel * outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 8);
+    Kernel * outK = mPxDriver.addKernelInstance<FileSink>(iBuilder, 8);
     outK->setInitialArguments({iBuilder->GetString(outputFile)});
-    pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
+    mPxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
 
-    pxDriver.generatePipelineIR();
-    pxDriver.deallocateBuffers();
+    mPxDriver.generatePipelineIR();
+    mPxDriver.deallocateBuffers();
 
     iBuilder->CreateRetVoid();
 
-    pxDriver.finalizeObject();
+    mPxDriver.finalizeObject();
 }
 
 void LZ4Generator::generatePipeline(const std::string& outputFile) {
-    auto & iBuilder = pxDriver.getBuilder();
+    auto & iBuilder = mPxDriver.getBuilder();
     this->generateMainFunc(iBuilder);
 
-    StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
+    StreamSetBuffer * const DecompressedByteStream = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);
@@ -136,41 +131,40 @@ void LZ4Generator::generatePipeline(const std::string& outputFile) {
 
     auto swizzle = this->generateSwizzleExtractData(iBuilder);
 
-    StreamSetBuffer * depositedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
-    StreamSetBuffer * depositedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
+    StreamSetBuffer * depositedSwizzle0 = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
+    StreamSetBuffer * depositedSwizzle1 = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
 
-    Kernel * multiplePdepK = pxDriver.addKernelInstance<LZ4MultiplePDEPkernel>(iBuilder, 4, 2, 4);
-    pxDriver.makeKernelCall(multiplePdepK, {DepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
+    Kernel * multiplePdepK = mPxDriver.addKernelInstance<SwizzledMultiplePDEPkernel>(iBuilder, 4, 2);
+    mPxDriver.makeKernelCall(multiplePdepK, {mDepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
 
+    StreamSetBuffer * matchCopiedSwizzle0 = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
+    StreamSetBuffer * matchCopiedSwizzle1 = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
 
-    StreamSetBuffer * matchCopiedSwizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
-    StreamSetBuffer * matchCopiedSwizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
-
-    Kernel * swizzledMatchCopyK = pxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
-    pxDriver.makeKernelCall(swizzledMatchCopyK, {MatchOffsetMarker, M0Marker, ByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
+    Kernel * swizzledMatchCopyK = mPxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
+    mPxDriver.makeKernelCall(swizzledMatchCopyK, {mMatchOffsetMarker, mM0Marker, mCompressedByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
 
 
     // Produce unswizzled bit streams
-    StreamSetBuffer * extractedbits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
-    Kernel * unSwizzleK = pxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
-    pxDriver.makeKernelCall(unSwizzleK, {matchCopiedSwizzle0, matchCopiedSwizzle1}, {extractedbits});
+    StreamSetBuffer * extractedbits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
+    Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
+    mPxDriver.makeKernelCall(unSwizzleK, {matchCopiedSwizzle0, matchCopiedSwizzle1}, {extractedbits});
 
 
-    Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(iBuilder);
-    pxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
+    Kernel * p2sK = mPxDriver.addKernelInstance<P2SKernel>(iBuilder);
+    mPxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
 
     // --------------------------------------------------------
     // End
-    Kernel * outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 8);
+    Kernel * outK = mPxDriver.addKernelInstance<FileSink>(iBuilder, 8);
     outK->setInitialArguments({iBuilder->GetString(outputFile)});
-    pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
+    mPxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
 
-    pxDriver.generatePipelineIR();
-    pxDriver.deallocateBuffers();
+    mPxDriver.generatePipelineIR();
+    mPxDriver.deallocateBuffers();
 
     iBuilder->CreateRetVoid();
 
-    pxDriver.finalizeObject();
+    mPxDriver.finalizeObject();
 }
 
 void LZ4Generator::generateMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
@@ -183,56 +177,56 @@ void LZ4Generator::generateMainFunc(const std::unique_ptr<kernel::KernelBuilder>
     Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputType, sizeTy, sizeTy, boolTy, nullptr));
     main->setCallingConv(CallingConv::C);
     Function::arg_iterator args = main->arg_begin();
-    inputStream = &*(args++);
-    inputStream->setName("input");
+    mInputStream = &*(args++);
+    mInputStream->setName("input");
 
-    headerSize = &*(args++);
-    headerSize->setName("headerSize");
+    mHeaderSize = &*(args++);
+    mHeaderSize->setName("mHeaderSize");
 
-    fileSize = &*(args++);
-    fileSize->setName("fileSize");
+    mFileSize = &*(args++);
+    mFileSize->setName("mFileSize");
 
-    hasBlockChecksum = &*(args++);
-    hasBlockChecksum->setName("hasBlockChecksum");
+    mHasBlockChecksum = &*(args++);
+    mHasBlockChecksum->setName("mHasBlockChecksum");
     // TODO for now, we do not handle blockCheckSum
-    hasBlockChecksum = iBuilder->getInt1(false);
+    mHasBlockChecksum = iBuilder->getInt1(false);
 
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
 }
 
 void LZ4Generator::generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
-    ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getInputBufferBlocks());
+    mCompressedByteStream = mPxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    mCompressedBasisBits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getInputBufferBlocks());
 
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);
-    sourceK->setInitialArguments({inputStream, fileSize});
-    pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
-    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder, /*aligned = */ true);
+    kernel::Kernel * sourceK = mPxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);
+    sourceK->setInitialArguments({mInputStream, mFileSize});
+    mPxDriver.makeKernelCall(sourceK, {}, {mCompressedByteStream});
+    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, /*aligned = */ true);
 //    s2pk->addAttribute(MustConsumeAll());
-    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
+    mPxDriver.makeKernelCall(s2pk, {mCompressedByteStream}, {mCompressedBasisBits});
 }
 
 void LZ4Generator::generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     //// Decode Block Information
-    StreamSetBuffer * const BlockData_IsCompressed = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * const BlockData_BlockStart = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * const BlockData_BlockEnd = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * const BlockData_IsCompressed = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * const BlockData_BlockStart = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * const BlockData_BlockEnd = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
 
     //// Generate Helper Markers Extenders, FX, XF
-    StreamSetBuffer * const Extenders = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks(), 1);
-    MatchOffsetMarker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
+    StreamSetBuffer * const Extenders = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks(), 1);
+    mMatchOffsetMarker = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
 	// FX and XF streams will be added to IndexBuilderKernel in the future
-//    StreamSetBuffer * const CC_0xFX = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
-//    StreamSetBuffer * const CC_0xXF = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
+//    StreamSetBuffer * const CC_0xFX = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
+//    StreamSetBuffer * const CC_0xXF = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
 
-    Kernel * extenderK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
+    Kernel * extenderK = mPxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
 //    extenderK->addAttribute(MustConsumeAll());
-    pxDriver.makeKernelCall(extenderK, {BasisBits}, {Extenders});
+    mPxDriver.makeKernelCall(extenderK, {mCompressedBasisBits}, {Extenders});
 
 
-    Kernel * blockDecoderK = pxDriver.addKernelInstance<LZ4BlockDecoderNewKernel>(iBuilder);
-    blockDecoderK->setInitialArguments({iBuilder->CreateTrunc(hasBlockChecksum, iBuilder->getInt1Ty()), headerSize, fileSize});
-    pxDriver.makeKernelCall(blockDecoderK, {ByteStream}, {BlockData_IsCompressed, BlockData_BlockStart, BlockData_BlockEnd});
+    Kernel * blockDecoderK = mPxDriver.addKernelInstance<LZ4BlockDecoderNewKernel>(iBuilder);
+    blockDecoderK->setInitialArguments({iBuilder->CreateTrunc(mHasBlockChecksum, iBuilder->getInt1Ty()), mHeaderSize, mFileSize});
+    mPxDriver.makeKernelCall(blockDecoderK, {mCompressedByteStream}, {BlockData_IsCompressed, BlockData_BlockStart, BlockData_BlockEnd});
 
 //    re::CC* xfCC = re::makeCC(0x0f);
 //    re::CC* fxCC = re::makeCC(0xf0);
@@ -241,29 +235,29 @@ void LZ4Generator::generateExtractAndDepositMarkers(const std::unique_ptr<kernel
 //        fxCC = re::makeCC(fxCC, re::makeCC(0xf0 + i));
 //    }
 
-//    Kernel * CC_0xFXKernel = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "CC_0xFX", std::vector<re::CC *>{fxCC}, 8);
-//    pxDriver.makeKernelCall(CC_0xFXKernel, {BasisBits}, {CC_0xFX});
+//    Kernel * CC_0xFXKernel = mPxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "CC_0xFX", std::vector<re::CC *>{fxCC}, 8);
+//    mPxDriver.makeKernelCall(CC_0xFXKernel, {mCompressedBasisBits}, {CC_0xFX});
 
-//    Kernel * CC_0xXFKernel = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "CC_0xXF", std::vector<re::CC *>{xfCC}, 8);
-//    pxDriver.makeKernelCall(CC_0xXFKernel, {BasisBits}, {CC_0xXF});
+//    Kernel * CC_0xXFKernel = mPxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "CC_0xXF", std::vector<re::CC *>{xfCC}, 8);
+//    mPxDriver.makeKernelCall(CC_0xXFKernel, {mCompressedBasisBits}, {CC_0xXF});
 
     //// Generate Extract/Deposit Markers, M0_Start, M0_End, MatchOffset
 
     //TODO handle uncompressed part
-    StreamSetBuffer * const UncompressedStartPos = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * const UncompressedLength = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * const UncompressedOutputPos = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * const UncompressedStartPos = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * const UncompressedLength = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * const UncompressedOutputPos = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
 
-    DeletionMarker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
-    M0Marker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getDecompressedBufferBlocks());
-    DepositMarker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getDecompressedBufferBlocks());
+    mDeletionMarker = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
+    mM0Marker = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getDecompressedBufferBlocks());
+    mDepositMarker = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getDecompressedBufferBlocks());
 
-    Kernel* Lz4IndexBuilderK = pxDriver.addKernelInstance<LZ4IndexBuilderKernel>(iBuilder);
-    Lz4IndexBuilderK->setInitialArguments({fileSize});
-    pxDriver.makeKernelCall(
+    Kernel* Lz4IndexBuilderK = mPxDriver.addKernelInstance<LZ4IndexBuilderKernel>(iBuilder);
+    Lz4IndexBuilderK->setInitialArguments({mFileSize});
+    mPxDriver.makeKernelCall(
             Lz4IndexBuilderK,
             {
-                    ByteStream,
+                    mCompressedByteStream,
                     Extenders,
 //                    CC_0xFX,
 //                    CC_0xXF,
@@ -278,22 +272,22 @@ void LZ4Generator::generateExtractAndDepositMarkers(const std::unique_ptr<kernel
                     UncompressedLength,
                     UncompressedOutputPos,
 
-                    DeletionMarker,
-                    M0Marker,
-                    MatchOffsetMarker
+                    mDeletionMarker,
+                    mM0Marker,
+                    mMatchOffsetMarker
             });
 
-    Kernel * generateDepositK = pxDriver.addKernelInstance<LZ4GenerateDepositStreamKernel>(iBuilder);
-    pxDriver.makeKernelCall(generateDepositK, {M0Marker}, {DepositMarker});
+    Kernel * generateDepositK = mPxDriver.addKernelInstance<LZ4GenerateDepositStreamKernel>(iBuilder);
+    mPxDriver.makeKernelCall(generateDepositK, {mM0Marker}, {mDepositMarker});
 
 }
 
 std::pair<StreamSetBuffer*, StreamSetBuffer*> LZ4Generator::generateSwizzleExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
-    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * u16Swizzle0 = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * u16Swizzle1 = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
-    Kernel * delK = pxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 8, 64);
-    pxDriver.makeKernelCall(delK, {DeletionMarker, BasisBits}, {u16Swizzle0, u16Swizzle1});
+    Kernel * delK = mPxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 8, 64);
+    mPxDriver.makeKernelCall(delK, {mDeletionMarker, mCompressedBasisBits}, {u16Swizzle0, u16Swizzle1});
     return std::make_pair(u16Swizzle0, u16Swizzle1);
 }
 

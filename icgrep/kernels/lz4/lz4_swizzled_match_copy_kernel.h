@@ -11,7 +11,7 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel {
     class LZ4SwizzledMatchCopyKernel: public SegmentOrientedKernel {
     public:
-        LZ4SwizzledMatchCopyKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamCount, unsigned streamSize, unsigned swizzleFactor, unsigned PDEP_width = 64);
+        LZ4SwizzledMatchCopyKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamCount, unsigned streamSize, unsigned swizzleFactor, unsigned PDEP_width = 64, std::string name = "LZ4SwizzledMatchCopyKernel");
     protected:
         void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
 

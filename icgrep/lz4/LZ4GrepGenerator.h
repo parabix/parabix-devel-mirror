@@ -16,15 +16,20 @@ typedef void (*ScanMatchGrepMainFunctionType)(char * byte_data, size_t headerSiz
 
 class LZ4GrepGenerator : public LZ4Generator{
 public:
-    LZ4GrepGenerator();
+    LZ4GrepGenerator(bool enableMultiplexing = false);
     void generateCountOnlyGrepPipeline(re::RE* regex);
     void generateScanMatchGrepPipeline(re::RE* regex);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> &REs,
-                                                                                   parabix::StreamSetBuffer *ByteStream);
+                                                                                   parabix::StreamSetBuffer *decompressedBasisBits);
+    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrepPipeline(std::vector<re::RE *> &REs,
+                                                                                   parabix::StreamSetBuffer *matchCopiedBasisBits);
+
 
     void invokeScanMatchGrep(char* fileBuffer, size_t blockStart, size_t blockEnd, bool hasBlockChecksum);
 
 private:
+    bool mEnableMultiplexing;
+
     grep::GrepRecordBreakKind mGrepRecordBreak;
     void initREs(std::vector<re::RE *> & REs);
 
@@ -46,6 +51,9 @@ private:
     ScanMatchGrepMainFunctionType getScanMatchGrepMainFunction();
 
     std::unique_ptr<cc::MultiplexedAlphabet> mpx;
+
+    parabix::StreamSetBuffer * linefeedStreamFromDecompressedBits(parabix::StreamSetBuffer *decompressedBasisBits);
+    parabix::StreamSetBuffer * linefeedStreamFromCompressedBits();
 };
 
 

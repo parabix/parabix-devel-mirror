@@ -45,24 +45,24 @@ protected:
 
     //// Data Member
     // Driver
-    ParabixDriver pxDriver;
+    ParabixDriver mPxDriver;
 
     // Runtime Arguments
-    llvm::Value * inputStream;
-    llvm::Value * headerSize;
-    llvm::Value * fileSize;
-    llvm::Value * hasBlockChecksum;
+    llvm::Value * mInputStream;
+    llvm::Value * mHeaderSize;
+    llvm::Value * mFileSize;
+    llvm::Value * mHasBlockChecksum;
 
 
     // StreamSetBuffers
-    parabix::StreamSetBuffer * ByteStream;
-    parabix::StreamSetBuffer * BasisBits;
-    parabix::StreamSetBuffer * DeletionMarker; //TODO rename to ExtarctMarker
-    parabix::StreamSetBuffer * DepositMarker;
-    parabix::StreamSetBuffer * MatchOffsetMarker;
+    parabix::StreamSetBuffer * mCompressedByteStream;
+    parabix::StreamSetBuffer * mCompressedBasisBits;
+    parabix::StreamSetBuffer * mDeletionMarker; //TODO rename to ExtarctMarker
+    parabix::StreamSetBuffer * mDepositMarker;
+    parabix::StreamSetBuffer * mMatchOffsetMarker;
 
     // M0CountMarker will not contain anything, it will only be used to pass producedItemCount and manage processedItemCount between different kernel
-    parabix::StreamSetBuffer * M0Marker;
+    parabix::StreamSetBuffer * mM0Marker;
 };
 
 

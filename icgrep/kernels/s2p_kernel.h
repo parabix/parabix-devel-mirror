@@ -8,6 +8,7 @@
 #include "kernel.h"  // for KernelBuilder
 
 #include <pablo/pablo_kernel.h>
+#include <string>
 
 namespace IDISA { class IDISA_Builder; }  // lines 14-14
 namespace llvm { class Value; }
@@ -16,7 +17,7 @@ namespace kernel {
 
 class S2PKernel final : public MultiBlockKernel {
 public:
-    S2PKernel(const std::unique_ptr<kernel::KernelBuilder> & b, bool aligned = true);
+    S2PKernel(const std::unique_ptr<kernel::KernelBuilder> & b, bool aligned = true, std::string prefix = "");
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

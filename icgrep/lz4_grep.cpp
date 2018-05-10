@@ -27,26 +27,12 @@
 #include <lz4/LZ4GrepGenerator.h>
 
 
-#include <cstdio>
-#include <vector>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/ErrorHandling.h>
-#include <llvm/Support/Signals.h>
-#include <llvm/Support/raw_ostream.h>
 #include <re/re_alt.h>
-#include <re/re_seq.h>
 #include <re/re_start.h>
 #include <re/re_end.h>
-#include <re/parsers/parser.h>
 #include <re/re_utility.h>
-#include <grep/grep_engine.h>
-#include <grep_interface.h>
-#include <fstream>
-#include <string>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
-#include <boost/filesystem.hpp>
-#include <iostream> // MEEE
 
 
 namespace re { class CC; }
@@ -59,6 +45,9 @@ static cl::OptionCategory lz4GrepFlags("Command Flags", "lz4d options");
 static cl::opt<std::string> regexString(cl::Positional, cl::desc("<regex>"), cl::Required, cl::cat(lz4GrepFlags));
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(lz4GrepFlags));
 static cl::opt<bool> countOnly("count-only", cl::desc("Only count the match result"), cl::init(false), cl::cat(lz4GrepFlags));
+static cl::opt<bool> enableMultiplexing("enable-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false), cl::cat(lz4GrepFlags));
+
+
 //static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::Required, cl::cat(lz4GrepFlags));
 //static cl::opt<bool> overwriteOutput("f", cl::desc("Overwrite existing output file."), cl::init(false), cl::cat(lz4GrepFlags));
 
@@ -89,7 +78,7 @@ int main(int argc, char *argv[]) {
     //char *fileBuffer = const_cast<char *>(mappedFile.data()) + lz4Frame.getBlocksStart();
     char *fileBuffer = const_cast<char *>(mappedFile.data());
     re::RE * re_ast = re::RE_Parser::parse(regexString, re::MULTILINE_MODE_FLAG);
-    LZ4GrepGenerator g;
+    LZ4GrepGenerator g(enableMultiplexing);
     if (countOnly) {
         g.generateCountOnlyGrepPipeline(re_ast);
         auto main = g.getMainFunc();

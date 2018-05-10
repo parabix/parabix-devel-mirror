@@ -5,13 +5,13 @@
 
 #include "swizzle.h"
 #include <kernels/kernel_builder.h>
+#include <string>
 
 using namespace llvm;
 
 namespace kernel {
-
-SwizzleGenerator::SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned bitStreamCount, unsigned outputSets, unsigned inputSets, unsigned fieldWidth)
-: BlockOrientedKernel("swizzle" + std::to_string(fieldWidth) + ":" + std::to_string(bitStreamCount), {}, {}, {}, {}, {})
+SwizzleGenerator::SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned bitStreamCount, unsigned outputSets, unsigned inputSets, unsigned fieldWidth, std::string prefix)
+: BlockOrientedKernel(prefix + "swizzle" + std::to_string(fieldWidth) + ":" + std::to_string(bitStreamCount) + "_" + std::to_string(outputSets) + "_" + std::to_string(inputSets) , {}, {}, {}, {}, {})
 , mBitStreamCount(bitStreamCount)
 , mFieldWidth(fieldWidth)
 , mSwizzleFactor(iBuilder->getBitBlockWidth() / fieldWidth)

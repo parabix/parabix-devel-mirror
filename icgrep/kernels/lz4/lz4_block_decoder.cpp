@@ -14,8 +14,8 @@ using namespace std;
 
 namespace kernel{
 
-LZ4BlockDecoderNewKernel::LZ4BlockDecoderNewKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder)
-: SegmentOrientedKernel("LZ4BlockDecoderNewKernel",
+LZ4BlockDecoderNewKernel::LZ4BlockDecoderNewKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, std::string&& kernelName)
+: SegmentOrientedKernel(std::string(kernelName),
 // Inputs
 {
     Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"},

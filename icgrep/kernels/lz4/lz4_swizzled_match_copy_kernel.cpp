@@ -373,8 +373,8 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
 
 }
 
-LZ4SwizzledMatchCopyKernel::LZ4SwizzledMatchCopyKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, unsigned streamCount/*=4*/, unsigned streamSize/*=2*/, unsigned swizzleFactor/*=4*/, unsigned PDEP_width/*64*/)
-: SegmentOrientedKernel("LZ4SwizzledMatchCopyKernel",
+LZ4SwizzledMatchCopyKernel::LZ4SwizzledMatchCopyKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, unsigned streamCount, unsigned streamSize, unsigned swizzleFactor, unsigned PDEP_width, std::string name)
+: SegmentOrientedKernel(std::move(name),
 // Inputs
 {
                                    Binding{iBuilder->getStreamSetTy(1, 1), "MatchOffsetMarker", BoundedRate(0, 1)},

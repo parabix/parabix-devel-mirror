@@ -149,9 +149,8 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
     kb->CreateCondBr(moreToDo, processBlock, s2pDone);
     kb->SetInsertPoint(s2pDone);
 }
-
-S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, bool aligned)
-: MultiBlockKernel(aligned ? "s2p" : "s2p_unaligned",
+S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, bool aligned, std::string prefix)
+: MultiBlockKernel(aligned ? prefix + "s2p" : prefix + "s2p_unaligned",
     {Binding{b->getStreamSetTy(1, 8), "byteStream", FixedRate(), Principal()}},
     {Binding{b->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {}),
   mAligned(aligned) {
