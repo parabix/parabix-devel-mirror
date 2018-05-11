@@ -21,6 +21,7 @@
 #include <kernels/lz4/lz4_swizzled_match_copy_kernel.h>
 #include <kernels/lz4/lz4_block_decoder.h>
 #include <kernels/lz4/lz4_index_builder.h>
+#include <kernels/bitstream_pdep_kernel.h>
 
 namespace re { class CC; }
 
@@ -89,7 +90,17 @@ void LZ4Generator::generateExtractAndDepositOnlyPipeline(const std::string &outp
     this->generateLoadByteStreamAndBitStream(iBuilder);
     this->generateExtractAndDepositMarkers(iBuilder);
 
-    auto swizzle = this->generateSwizzleExtractData(iBuilder);
+    auto swizzle = this->generateSwizzleExtractData(iBuilder); // TODO: use compression kernel instead
+
+    StreamSetBuffer * extractedBits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
+    Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
+    mPxDriver.makeKernelCall(unSwizzleK, {swizzle.first, swizzle.second}, {extractedBits});
+
+    StreamSetBuffer * depositedBits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getDecompressedBufferBlocks());
+    Kernel * bitStreamPDEPk = mPxDriver.addKernelInstance<BitStreamPDEPKernel>(iBuilder, 8);
+    mPxDriver.makeKernelCall(bitStreamPDEPk, {mDepositMarker, extractedBits}, {depositedBits});
+
+    /*
 
     StreamSetBuffer * depositedSwizzle0 = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
     StreamSetBuffer * depositedSwizzle1 = mPxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
@@ -98,12 +109,13 @@ void LZ4Generator::generateExtractAndDepositOnlyPipeline(const std::string &outp
     mPxDriver.makeKernelCall(multiplePdepK, {mDepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
 
     // Produce unswizzled bit streams
-    StreamSetBuffer * extractedbits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
+    StreamSetBuffer * depositedBits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
     Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
-    mPxDriver.makeKernelCall(unSwizzleK, {depositedSwizzle0, depositedSwizzle1}, {extractedbits});
+    mPxDriver.makeKernelCall(unSwizzleK, {depositedSwizzle0, depositedSwizzle1}, {depositedBits});
+     */
 
     Kernel * p2sK = mPxDriver.addKernelInstance<P2SKernel>(iBuilder);
-    mPxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
+    mPxDriver.makeKernelCall(p2sK, {depositedBits}, {DecompressedByteStream});
 
     // --------------------------------------------------------
     // End

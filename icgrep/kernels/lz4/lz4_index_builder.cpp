@@ -256,8 +256,6 @@ namespace kernel{
         Value* isTerminal = iBuilder->CreateICmpEQ(blockEnd, iBuilder->getScalarField("fileSize"));
         iBuilder->setTerminationSignal(isTerminal);
 
-        //TODO use memset to clear output buffer for extract marker
-
         BasicBlock* exitBlock = iBuilder->CreateBasicBlock("processCompressedExitBlock");
 
         BasicBlock* processCon = iBuilder->CreateBasicBlock("processCompressedConBlock");
