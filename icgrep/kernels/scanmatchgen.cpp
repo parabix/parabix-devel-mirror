@@ -59,8 +59,8 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 
     Value * const blockNo = b->getScalarField("BlockNo");
     Value * const scanwordPos = b->CreateShl(blockNo, floor_log2(b->getBitBlockWidth()));
-    Value * const lastRecordStart = b->getProcessedItemCount("InputStream");
-    Value * const lastRecordNum = b->getScalarField("LineNum");
+    Value * const consumed = b->getProcessedItemCount("InputStream");
+    Value * const consumedLines = b->getScalarField("LineNum");
     b->CreateBr(scanWordIteration);
 
     b->SetInsertPoint(scanWordIteration);
@@ -70,10 +70,10 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
         phiIndex->addIncoming(ZERO, initialBlock);
         PHINode * const phiScanwordPos = b->CreatePHI(scanwordPos->getType(), 2, "pos");
         phiScanwordPos->addIncoming(scanwordPos, initialBlock);
-        PHINode * const phiLineStart = b->CreatePHI(lastRecordStart->getType(), 2, "recordstart");
-        phiLineStart->addIncoming(lastRecordStart, initialBlock);
-        PHINode * const phiLineNum = b->CreatePHI(lastRecordNum->getType(), 2, "recordnum");
-        phiLineNum->addIncoming(lastRecordNum, initialBlock);
+        PHINode * const phiLineStart = b->CreatePHI(consumed->getType(), 2, "recordstart");
+        phiLineStart->addIncoming(consumed, initialBlock);
+        PHINode * const phiLineNum = b->CreatePHI(consumedLines->getType(), 2, "recordnum");
+        phiLineNum->addIncoming(consumedLines, initialBlock);
 
         Value * const matchWord = b->CreateExtractElement(matches, phiIndex);
         Value * const recordBreaks = b->CreateExtractElement(linebreaks, phiIndex);
@@ -196,11 +196,11 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     b->CreateCondBr(mIsFinal, callFinalizeScan, scanReturn);
 
     b->SetInsertPoint(callFinalizeScan);
-    Value * bufSize = b->getBufferedSize("InputStream");
-    b->setProcessedItemCount("InputStream", bufSize);
+    Value * avail = b->getAvailableItemCount("InputStream");
+    b->setProcessedItemCount("InputStream", b->CreateAdd(avail, scanwordPos));
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
     Value * const buffer_base = b->getRawInputPointer("InputStream", ZERO);
-    Value * buffer_end_address = b->CreateGEP(buffer_base, bufSize);
+    Value * buffer_end_address = b->CreateGEP(buffer_base, avail);
     b->CreateCall(finalizer, {accumulator, buffer_end_address});
     b->CreateBr(scanReturn);
 
