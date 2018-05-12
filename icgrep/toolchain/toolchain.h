@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -22,10 +22,6 @@
 #else
 #define CL_ENUM_VAL_SENTINEL
 #endif
-
-// FIXME: llvm/CodeGen/CommandFlags.h can only be included once or the various cl::opt causes multiple definition
-// errors. To bypass for now, the relevant options and functions are accessible from here. Re-evaluate with later
-// versions of LLVM.
 
 namespace llvm { namespace cl { class OptionCategory; } }
 
@@ -67,18 +63,7 @@ extern bool EnableObjectCache;
 extern bool NVPTX;
 extern unsigned GroupNum;
 extern std::string ProgramName;
-extern llvm::TargetOptions Options;
-extern const llvm::Reloc::Model RelocModel;
-extern const llvm::CodeModel::Model CMModel;
-extern const std::string MArch;
-extern const std::string RunPass;
-extern const llvm::TargetMachine::CodeGenFileType FileType;
-extern const std::string StopAfter;
-extern const std::string StartAfter;
-
-std::string getCPUStr();
-std::string getFeaturesStr();
-void setFunctionAttributes(llvm::StringRef CPU, llvm::StringRef Features, llvm::Module &M);
+extern llvm::TargetOptions target_Options;
 
 void ParseCommandLineOptions(int argc, const char *const *argv, std::initializer_list<const llvm::cl::OptionCategory *> hiding = {});
 

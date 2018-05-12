@@ -7,7 +7,7 @@
 #include <toolchain/toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <UCD/UCD_Config.h>
-#include <llvm/CodeGen/CommandFlags.h>
+#include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
@@ -116,15 +116,7 @@ bool NVPTX = [](const bool nvptx) {
 
 unsigned GroupNum;
 
-const llvm::Reloc::Model RelocModel = ::RelocModel;
-
-const llvm::CodeModel::Model CMModel = ::CMModel;
-
-const std::string MArch = ::MArch;
-
-const llvm::TargetMachine::CodeGenFileType FileType = ::FileType;
-
-TargetOptions Options;
+TargetOptions target_Options;
 
 const cl::OptionCategory * LLVM_READONLY codegen_flags() {
     return &CodeGenOptions;
@@ -134,17 +126,6 @@ bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag) {
     return DebugOptions.isSet(flag);
 }
 
-std::string getCPUStr() {
-    return ::getCPUStr();
-}
-
-std::string getFeaturesStr() {
-    return ::getFeaturesStr();
-}
-
-void setFunctionAttributes(llvm::StringRef CPU, llvm::StringRef Features, llvm::Module &M) {
-    return ::setFunctionAttributes(CPU, Features, M);
-}
 
 std::string ProgramName;
 
@@ -162,9 +143,8 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
         EnableObjectCache = false;
     }
     ObjectCacheDir = ObjectCacheDirOption.empty() ? nullptr : ObjectCacheDirOption.data();
-    Options = InitTargetOptionsFromCodeGenFlags();
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
-    Options.MCOptions.AsmVerbose = true;
+    target_Options.MCOptions.AsmVerbose = true;
 #endif
     switch (OptLevelOption) {
         case '0': OptLevel = CodeGenOpt::None; break;

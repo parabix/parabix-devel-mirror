@@ -85,7 +85,7 @@ ParabixDriver::ParabixDriver(std::string && moduleName)
     builder.setVerifyModules(false);
     builder.setEngineKind(EngineKind::JIT);
 #endif
-    builder.setTargetOptions(codegen::Options);
+    builder.setTargetOptions(codegen::target_Options);
     builder.setOptLevel(codegen::OptLevel);
 
     StringMap<bool> HostCPUFeatures;
