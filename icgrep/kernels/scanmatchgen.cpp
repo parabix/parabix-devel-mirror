@@ -135,7 +135,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
             Value * matchRecordEnd = b->CreateAdd(phiScanwordPos, b->CreateCountForwardZeroes(phiMatchWord, true));
             // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
             // to access past EOF.
-            Value * const bufLimit = b->CreateSub(b->getBufferedSize("InputStream"), ONE);
+            Value * const bufLimit = b->CreateSub(b->CreateAdd(scanwordPos, b->getAvailableItemCount("InputStream")), ONE);
             matchRecordEnd = b->CreateUMin(matchRecordEnd, bufLimit);
             Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
             Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
