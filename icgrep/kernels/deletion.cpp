@@ -636,9 +636,9 @@ void DeleteByPEXTkernel::generateProcessingLoop(const std::unique_ptr<KernelBuil
         PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_32);
     }
     std::vector<Value *> masks(mSwizzleFactor);
-    Value * const m = kb->fwCast(mSwizzleFactor, kb->simd_not(delMask));
+    Value * const m = kb->fwCast(mPEXTWidth, kb->simd_not(delMask));
     for (unsigned i = 0; i < mSwizzleFactor; i++) {
-        masks.push_back(kb->CreateExtractElement(m, i));
+        masks[i] = kb->CreateExtractElement(m, i);
     }
 
     for (unsigned i = 0; i < mStreamCount; ++i) {

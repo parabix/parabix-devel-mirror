@@ -59,7 +59,7 @@ private:
 };
 
 //
-//  Given streams that are compreseed within fields, produced fully
+//  Given streams that are compressed within fields, produced fully
 //  compressed streams.
 class StreamCompressKernel final : public MultiBlockKernel {
 public:
