@@ -120,6 +120,7 @@ FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBui
 void PEXTFieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
     Type * fieldTy = kb->getIntNTy(mPEXTWidth);
     Type * fieldPtrTy = PointerType::get(fieldTy, 0);
+    Constant * fieldTyZero = kb->getIntN(mPEXTWidth, 0);
     Constant * PEXT_func = nullptr;
     Constant * popc_func = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, fieldTy);
     if (mPEXTWidth == 64) {
@@ -141,10 +142,26 @@ void PEXTFieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<Kern
     extractionMaskPtr = kb->CreatePointerCast(extractionMaskPtr, fieldPtrTy);
     Value * unitCountPtr = kb->getOutputStreamBlockPtr("unitCounts", ZERO, blockOffsetPhi);
     unitCountPtr = kb->CreatePointerCast(unitCountPtr, fieldPtrTy);
+
+    Value* remainingMask = kb->getAvailableItemCount("extractionMask");
+    Value* PEXTWidth = kb->getSize(mPEXTWidth);
     for (unsigned i = 0; i < fieldsPerBlock; i++) {
         mask[i] = kb->CreateLoad(kb->CreateGEP(extractionMaskPtr, kb->getInt32(i)));
-        Value * popc = kb->CreateCall(popc_func, mask[i]);
+        Value* hasFullMask = kb->CreateICmpUGE(remainingMask, PEXTWidth);
+        Value* shiftAmount = kb->CreateSub(PEXTWidth, remainingMask);
+        Value * targetMask = kb->CreateSelect(
+                hasFullMask,
+                mask[i],
+                kb->CreateShl(mask[i], shiftAmount)
+        );
+        targetMask = kb->CreateSelect(kb->CreateICmpEQ(remainingMask, kb->getSize(0)), fieldTyZero, targetMask);
+        Value * popc = kb->CreateCall(popc_func, targetMask);
         kb->CreateStore(popc, kb->CreateGEP(unitCountPtr, kb->getInt32(i)));
+        remainingMask = kb->CreateSelect(
+                hasFullMask,
+                kb->CreateSub(remainingMask, kb->getSize(mPEXTWidth)),
+                kb->getSize(0)
+        );
     }
     for (unsigned j = 0; j < mStreamCount; ++j) {
         Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
