@@ -29,6 +29,7 @@
 #include <kernels/kernel_builder.h>
 #include <toolchain/cpudriver.h>
 #include <iostream>
+#include <llvm/Support/raw_ostream.h>
 namespace re { class CC; }
 
 using namespace llvm;

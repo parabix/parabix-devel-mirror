@@ -33,7 +33,7 @@
 #include <re/re_utility.h>
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
-
+#include <llvm/Support/raw_ostream.h>
 
 namespace re { class CC; }
 
