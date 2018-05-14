@@ -22,6 +22,7 @@
 #include <kernels/lz4/lz4_bitstream_match_copy_kernel.h>
 #include <kernels/lz4/lz4_bitstream_not_kernel.h>
 #include <kernels/bitstream_pdep_kernel.h>
+#include <kernels/bitstream_gather_pdep_kernel.h>
 #include <re/re_toolchain.h>
 
 #include <re/collect_ccs.h>
@@ -612,7 +613,7 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
     mPxDriver.finalizeObject();
 }
 
-void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE *regex) {
+void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE *regex, bool enableGather) {
     auto & iBuilder = mPxDriver.getBuilder();
     this->generateMainFunc(iBuilder);
 
@@ -623,7 +624,7 @@ void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE *regex) {
     StreamSetBuffer * const extractedBits = this->generateBitStreamExtractData(iBuilder);
 
     StreamSetBuffer * depositedBits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getDecompressedBufferBlocks());
-    Kernel * bitStreamPDEPk = mPxDriver.addKernelInstance<BitStreamPDEPKernel>(iBuilder, 8);
+    Kernel * bitStreamPDEPk = enableGather ? mPxDriver.addKernelInstance<BitStreamGatherPDEPKernel>(iBuilder, 8) : mPxDriver.addKernelInstance<BitStreamPDEPKernel>(iBuilder, 8);
     mPxDriver.makeKernelCall(bitStreamPDEPk, {mDepositMarker, extractedBits}, {depositedBits});
 
     StreamSetBuffer * matchCopiedBits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());

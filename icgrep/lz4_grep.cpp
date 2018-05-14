@@ -49,6 +49,7 @@ static cl::opt<bool> enableMultiplexing("enable-multiplexing", cl::desc("Enable 
 
 static cl::OptionCategory lz4GrepDebugFlags("LZ4 Grep Debug Flags", "lz4d debug options");
 static cl::opt<bool> swizzledDecompression("swizzled-decompression", cl::desc("Use swizzle approach for decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
+static cl::opt<bool> enableGather("enable-gather", cl::desc("Enable gather intrinsics for bitstream PDEP"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 
 
 int main(int argc, char *argv[]) {
@@ -77,7 +78,7 @@ int main(int argc, char *argv[]) {
         if (swizzledDecompression) {
             g.generateSwizzledCountOnlyGrepPipeline(re_ast);
         } else {
-            g.generateCountOnlyGrepPipeline(re_ast);
+            g.generateCountOnlyGrepPipeline(re_ast, enableGather);
         }
 
         auto main = g.getMainFunc();

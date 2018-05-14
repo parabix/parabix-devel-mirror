@@ -18,7 +18,7 @@ class LZ4GrepGenerator : public LZ4Generator{
 public:
     LZ4GrepGenerator(bool enableMultiplexing = false);
     void generateSwizzledCountOnlyGrepPipeline(re::RE *regex);
-    void generateCountOnlyGrepPipeline(re::RE *regex);
+    void generateCountOnlyGrepPipeline(re::RE *regex, bool enableGather = true);
 
     void generateScanMatchGrepPipeline(re::RE* regex);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> &REs,
