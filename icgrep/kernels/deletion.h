@@ -7,9 +7,24 @@
 
 #include "kernel.h"
 #include <llvm/IR/Value.h>
+#include <toolchain/driver.h>
+
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
+
+class StreamFilterCompiler {
+public:
+    StreamFilterCompiler(Driver & driver, llvm::Type * streamSetType, unsigned bufferBlocks = 0) :
+    mDriver(driver), ssType(streamSetType), mBufferBlocks(bufferBlocks), mIntraFieldCompressionWidth(64) {}
+    void setIntraFieldCompressionWidth(unsigned fw) {mIntraFieldCompressionWidth = fw;}
+    void makeCall(parabix::StreamSetBuffer * mask, parabix::StreamSetBuffer * inputs, parabix::StreamSetBuffer * outputs);
+private:
+    Driver & mDriver;
+    llvm::Type * ssType;
+    unsigned mBufferBlocks;
+    unsigned mIntraFieldCompressionWidth;
+};
 
 //
 // Parallel Prefix Deletion Kernel

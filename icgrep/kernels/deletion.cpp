@@ -4,8 +4,11 @@
  */
 
 #include "deletion.h"
+#include <toolchain/driver.h>
+#include <toolchain/cpudriver.h>
 #include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
+#include <IR_Gen/idisa_target.h>
 
 using namespace llvm;
 
@@ -797,4 +800,30 @@ void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(const std::uniqu
     }
     kb->setProducedItemCount("outputSwizzle0", kb->CreateAdd(pendingOffset, outputProduced));
 }
+    
+void StreamFilterCompiler::makeCall(parabix::StreamSetBuffer * mask, parabix::StreamSetBuffer * inputs, parabix::StreamSetBuffer * outputs) {
+    if (mBufferBlocks == 0) {
+        llvm::report_fatal_error("StreamFilterCompiler needs a non-zero bufferBlocks parameter (for now).");
+    }
+    auto & iBuilder = mDriver.getBuilder();
+    unsigned N = IDISA::getNumOfStreams(ssType);
+    if (IDISA::getStreamFieldWidth(ssType) != 1) {
+        llvm::report_fatal_error("StreamFilterCompiler only compresses bit streams (for now)");
+    }
+    Kernel * compressK = nullptr;
+    if (AVX2_available()) {
+        compressK = mDriver.addKernelInstance<PEXTFieldCompressKernel>(iBuilder, mIntraFieldCompressionWidth, N);
+    } else {
+        compressK = mDriver.addKernelInstance<FieldCompressKernel>(iBuilder, mIntraFieldCompressionWidth, N);
+    }
+    parabix::StreamSetBuffer * compressedFields = mDriver.addBuffer<parabix::CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(N), mBufferBlocks);
+    parabix::StreamSetBuffer * unitCounts = mDriver.addBuffer<parabix::CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), mBufferBlocks);
+    
+    mDriver.makeKernelCall(compressK, {inputs, mask}, {compressedFields, unitCounts});
+    
+    Kernel * streamK = mDriver.addKernelInstance<StreamCompressKernel>(iBuilder, mIntraFieldCompressionWidth, N);
+    mDriver.makeKernelCall(streamK, {compressedFields, unitCounts}, {outputs});
+}
+
+
 }

@@ -118,16 +118,9 @@ StreamSetBuffer * generateDeletionByCompression(ParabixDriver & pxDriver, Stream
     Kernel * ccK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "deletionMarker", std::vector<re::CC *>{re::subtractCC(re::makeByte(0, 255), re::makeCC(characterToBeDeleted))}, 8);
     pxDriver.makeKernelCall(ccK, {BasisBits}, {CharacterMarkerBuffer});
 
-    StreamSetBuffer * deletedBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), inputBufferBlocks);
-    StreamSetBuffer * deletionCounts = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), inputBufferBlocks);
-
-    Kernel * delK = pxDriver.addKernelInstance<PEXTFieldCompressKernel>(iBuilder, 64, 8);
-    pxDriver.makeKernelCall(delK, {BasisBits, CharacterMarkerBuffer}, {deletedBits, deletionCounts});
-
     StreamSetBuffer * compressedBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), inputBufferBlocks);
-    Kernel * streamCompressionK = pxDriver.addKernelInstance<StreamCompressKernel>(iBuilder, 64, 8);
-    pxDriver.makeKernelCall(streamCompressionK, {deletedBits, deletionCounts}, {compressedBits});
-
+    StreamFilterCompiler filterCompiler(pxDriver, iBuilder->getStreamSetTy(8), inputBufferBlocks);
+    filterCompiler.makeCall(CharacterMarkerBuffer, BasisBits, compressedBits);
     return compressedBits;
 }
 
