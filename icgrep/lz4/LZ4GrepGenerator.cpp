@@ -19,6 +19,9 @@
 #include <kernels/pdep_kernel.h>
 #include <kernels/swizzled_multiple_pdep_kernel.h>
 #include <kernels/lz4/lz4_swizzled_match_copy_kernel.h>
+#include <kernels/lz4/lz4_bitstream_match_copy_kernel.h>
+#include <kernels/lz4/lz4_bitstream_not_kernel.h>
+#include <kernels/bitstream_pdep_kernel.h>
 #include <re/re_toolchain.h>
 
 #include <re/collect_ccs.h>
@@ -45,6 +48,7 @@
 #include <re/printer_re.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Debug.h>
+
 
 
 namespace re { class CC; }
@@ -548,9 +552,6 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerat
 
 }
 
-
-
-
 void LZ4GrepGenerator::invokeScanMatchGrep(char* fileBuffer, size_t blockStart, size_t blockEnd, bool hasBlockChecksum) {
     auto main = this->getScanMatchGrepMainFunction();
     std::ostringstream s;
@@ -584,13 +585,10 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
     Kernel * swizzledMatchCopyK = mPxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
     mPxDriver.makeKernelCall(swizzledMatchCopyK, {mMatchOffsetMarker, mM0Marker, mCompressedByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
 
-
     // Produce unswizzled bit streams
     StreamSetBuffer * extractedbits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
     Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
     mPxDriver.makeKernelCall(unSwizzleK, {matchCopiedSwizzle0, matchCopiedSwizzle1}, {extractedbits});
-
-
 
     Kernel * p2sK = mPxDriver.addKernelInstance<P2SKernel>(iBuilder);
     mPxDriver.makeKernelCall(p2sK, {extractedbits}, {DecompressedByteStream});
@@ -614,7 +612,54 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
     mPxDriver.finalizeObject();
 }
 
-void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE* regex) {
+void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE *regex) {
+    auto & iBuilder = mPxDriver.getBuilder();
+    this->generateMainFunc(iBuilder);
+
+    // GeneratePipeline
+    this->generateLoadByteStreamAndBitStream(iBuilder);
+    this->generateExtractAndDepositMarkers(iBuilder);
+
+    StreamSetBuffer * const extractedBits = this->generateBitStreamExtractData(iBuilder);
+
+    StreamSetBuffer * depositedBits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getDecompressedBufferBlocks());
+    Kernel * bitStreamPDEPk = mPxDriver.addKernelInstance<BitStreamPDEPKernel>(iBuilder, 8);
+    mPxDriver.makeKernelCall(bitStreamPDEPk, {mDepositMarker, extractedBits}, {depositedBits});
+
+    StreamSetBuffer * matchCopiedBits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
+    Kernel * bitStreamMatchCopyK = mPxDriver.addKernelInstance<LZ4BitStreamMatchCopyKernel>(iBuilder, 8);
+    mPxDriver.makeKernelCall(bitStreamMatchCopyK, {mMatchOffsetMarker, mM0Marker, mCompressedByteStream, depositedBits}, {matchCopiedBits});
+
+    StreamSetBuffer * LineBreakStream;
+    StreamSetBuffer * Matches;
+    std::vector<re::RE*> res = {regex};
+    if (mEnableMultiplexing) {
+        std::tie(LineBreakStream, Matches) = multiplexingGrepPipeline(res, matchCopiedBits);
+    } else {
+        std::tie(LineBreakStream, Matches) = grepPipeline(res, matchCopiedBits);
+    };
+
+    kernel::Kernel * matchCountK = mPxDriver.addKernelInstance<kernel::PopcountKernel>(iBuilder);
+    mPxDriver.makeKernelCall(matchCountK, {Matches}, {});
+    mPxDriver.generatePipelineIR();
+
+    iBuilder->setKernel(matchCountK);
+    Value * matchedLineCount = iBuilder->getAccumulator("countResult");
+    matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
+    iBuilder->CallPrintInt("aaa", matchedLineCount);
+
+    mPxDriver.deallocateBuffers();
+
+    // TODO return matchedLineCount
+//        idb->CreateRet(matchedLineCount);
+
+    iBuilder->CreateRetVoid();
+
+    mPxDriver.finalizeObject();
+}
+
+
+void LZ4GrepGenerator::generateSwizzledCountOnlyGrepPipeline(re::RE *regex) {
     auto & iBuilder = mPxDriver.getBuilder();
     this->generateMainFunc(iBuilder);
 
@@ -661,12 +706,9 @@ void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE* regex) {
         std::tie(LineBreakStream, Matches) = grepPipeline(res, matchCopiedbits);
     };
 
-
-
     kernel::Kernel * matchCountK = mPxDriver.addKernelInstance<kernel::PopcountKernel>(iBuilder);
     mPxDriver.makeKernelCall(matchCountK, {Matches}, {});
     mPxDriver.generatePipelineIR();
-
 
     iBuilder->setKernel(matchCountK);
     Value * matchedLineCount = iBuilder->getAccumulator("countResult");
@@ -677,7 +719,6 @@ void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE* regex) {
 
     // TODO return matchedLineCount
 //        idb->CreateRet(matchedLineCount);
-
 
     iBuilder->CreateRetVoid();
 

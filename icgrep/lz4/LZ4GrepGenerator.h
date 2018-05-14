@@ -17,7 +17,9 @@ typedef void (*ScanMatchGrepMainFunctionType)(char * byte_data, size_t headerSiz
 class LZ4GrepGenerator : public LZ4Generator{
 public:
     LZ4GrepGenerator(bool enableMultiplexing = false);
-    void generateCountOnlyGrepPipeline(re::RE* regex);
+    void generateSwizzledCountOnlyGrepPipeline(re::RE *regex);
+    void generateCountOnlyGrepPipeline(re::RE *regex);
+
     void generateScanMatchGrepPipeline(re::RE* regex);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> &REs,
                                                                                    parabix::StreamSetBuffer *decompressedBasisBits);

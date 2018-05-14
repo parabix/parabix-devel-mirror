@@ -25,9 +25,12 @@ public:
 
     MainFunctionType getMainFunc();
 
-    void generatePipeline(const std::string& outputFile);
-    void generateExtractOnlyPipeline(const std::string& outputFile);
-    void generateExtractAndDepositOnlyPipeline(const std::string& outputFile);
+    void generatePipeline(const std::string &outputFile);
+    void generateSwizzledPipeline(const std::string &outputFile);
+    void generateExtractOnlyPipeline(const std::string &outputFile);
+    void generateSwizzledExtractOnlyPipeline(const std::string &outputFile);
+    void generateExtractAndDepositOnlyPipeline(const std::string &outputFile);
+    void generateSwizzledExtractAndDepositOnlyPipeline(const std::string &outputFile);
 
 protected:
     //// Protected Method
@@ -36,6 +39,7 @@ protected:
     virtual void generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual void generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*> generateSwizzleExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual parabix::StreamSetBuffer* generateBitStreamExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
     // BufferSize related Helper Function
     virtual int getInputBufferBlocks();

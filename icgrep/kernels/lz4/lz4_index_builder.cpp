@@ -14,6 +14,9 @@ using namespace std;
 
 namespace kernel{
 
+    // TODO IndexBuilderKernel is responsible to clear the output buffer for final produced block
+    // e.g. when produce item count is 0x120, IndexBuilderKernel needs to set 0x121 ~ 0x200 to 0
+
     LZ4IndexBuilderKernel::LZ4IndexBuilderKernel(const std::unique_ptr<kernel::KernelBuilder> &b)
     : SegmentOrientedKernel("LZ4IndexBuilderKernel",
     // Inputs

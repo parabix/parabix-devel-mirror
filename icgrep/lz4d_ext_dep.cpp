@@ -41,7 +41,7 @@ static cl::opt<bool> overwriteOutput("f", cl::desc("Overwrite existing output fi
 static cl::OptionCategory lz4dDebugFlags("LZ4D Debug Flags", "lz4d debug options");
 static cl::opt<bool> extractOnly("extract-only", cl::desc("Only extract literal data to output file"), cl::init(false), cl::cat(lz4dDebugFlags));
 static cl::opt<bool> extractAndDepositOnly("extract-and-deposit-only", cl::desc("Only extract and deposit literal data to output file"), cl::init(false), cl::cat(lz4dDebugFlags));
-static cl::opt<bool> newApproach("new-approach", cl::desc("Use new approach"), cl::init(false), cl::cat(lz4dDebugFlags));
+static cl::opt<bool> swizzledDecompression("swizzled-decompression", cl::desc("Use swizzle approach for decompression"), cl::init(false), cl::cat(lz4dDebugFlags));
 
 
 int main(int argc, char *argv[]) {
@@ -75,11 +75,24 @@ int main(int argc, char *argv[]) {
     char *fileBuffer = const_cast<char *>(mappedFile.data());
     LZ4Generator g;
     if (extractOnly) {
-        g.generateExtractOnlyPipeline(outputFile);
+        if (swizzledDecompression) {
+            g.generateSwizzledExtractOnlyPipeline(outputFile);
+        } else {
+            g.generateExtractOnlyPipeline(outputFile);
+        }
     } else if (extractAndDepositOnly) {
-        g.generateExtractAndDepositOnlyPipeline(outputFile);
+        if (swizzledDecompression) {
+            g.generateSwizzledExtractAndDepositOnlyPipeline(outputFile);
+        } else {
+            g.generateExtractAndDepositOnlyPipeline(outputFile);
+        }
     } else {
-        g.generatePipeline(outputFile);
+        if (swizzledDecompression) {
+            g.generateSwizzledPipeline(outputFile);
+        } else {
+            g.generatePipeline(outputFile);
+        }
+
     }
     auto main = g.getMainFunc();
     main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());

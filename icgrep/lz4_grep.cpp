@@ -47,14 +47,8 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 static cl::opt<bool> countOnly("count-only", cl::desc("Only count the match result"), cl::init(false), cl::cat(lz4GrepFlags));
 static cl::opt<bool> enableMultiplexing("enable-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false), cl::cat(lz4GrepFlags));
 
-
-//static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::Required, cl::cat(lz4GrepFlags));
-//static cl::opt<bool> overwriteOutput("f", cl::desc("Overwrite existing output file."), cl::init(false), cl::cat(lz4GrepFlags));
-
-
 static cl::OptionCategory lz4GrepDebugFlags("LZ4 Grep Debug Flags", "lz4d debug options");
-//static cl::opt<bool> extractOnly("extract-only", cl::desc("Only extract literal data to output file"), cl::init(false), cl::cat(lz4GrepDebugFlags));
-//static cl::opt<bool> extractAndDepositOnly("extract-and-deposit-only", cl::desc("Only extract and deposit literal data to output file"), cl::init(false), cl::cat(lz4GrepDebugFlags));
+static cl::opt<bool> swizzledDecompression("swizzled-decompression", cl::desc("Use swizzle approach for decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 
 
 int main(int argc, char *argv[]) {
@@ -80,7 +74,12 @@ int main(int argc, char *argv[]) {
     re::RE * re_ast = re::RE_Parser::parse(regexString, re::MULTILINE_MODE_FLAG);
     LZ4GrepGenerator g(enableMultiplexing);
     if (countOnly) {
-        g.generateCountOnlyGrepPipeline(re_ast);
+        if (swizzledDecompression) {
+            g.generateSwizzledCountOnlyGrepPipeline(re_ast);
+        } else {
+            g.generateCountOnlyGrepPipeline(re_ast);
+        }
+
         auto main = g.getMainFunc();
         main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
     } else {
