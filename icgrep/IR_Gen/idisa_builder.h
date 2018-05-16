@@ -148,6 +148,9 @@ public:
     virtual llvm::Value * mvmd_slli(unsigned fw, llvm::Value * a, unsigned shift);
     virtual llvm::Value * mvmd_srli(unsigned fw, llvm::Value * a, unsigned shift);
     virtual llvm::Value * mvmd_dslli(unsigned fw, llvm::Value * a, llvm::Value * b, unsigned shift);
+    virtual llvm::Value * mvmd_dsll(unsigned fw, llvm::Value * a, llvm::Value * b, llvm::Value * shift);
+    virtual llvm::Value * mvmd_shuffle(unsigned fw, llvm::Value * a, llvm::Value * shuffle_table);
+    virtual llvm::Value * mvmd_shuffle2(unsigned fw, llvm::Value * a, llvm::Value *b, llvm::Value * shuffle_table);
     virtual llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask);
 
     

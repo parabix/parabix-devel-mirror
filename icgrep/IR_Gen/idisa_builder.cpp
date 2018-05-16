@@ -181,6 +181,19 @@ Value * IDISA_Builder::mvmd_sll(unsigned fw, Value * value, Value * shift) {
     return CreateBitCast(CreateShl(value, shift), vecTy);
 }
 
+Value * IDISA_Builder::mvmd_dsll(unsigned fw, Value * a, Value * b, Value * shift) {
+    if (fw < 8) report_fatal_error("Unsupported field width: mvmd_dsll " + std::to_string(fw));
+    const auto field_count = mBitBlockWidth/fw;
+    Type * fwTy = getIntNTy(fw);
+    
+    Constant * Idxs[field_count];
+    for (unsigned i = 0; i < field_count; i++) {
+        Idxs[i] = ConstantInt::get(fwTy, i + field_count);
+    }
+    Value * shuffle = simd_add(fw, simd_fill(fw, shift), ConstantVector::get({Idxs, field_count}));
+    return mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), shuffle);
+}
+
 Value * IDISA_Builder::mvmd_srl(unsigned fw, Value * value, Value * shift) {
     VectorType * const vecTy = cast<VectorType>(value->getType());
     IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
@@ -512,6 +525,21 @@ Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned sh
     }
     return CreateShuffleVector(fwCast(fw, b), fwCast(fw, a), ConstantVector::get({Idxs, field_count}));
 }
+
+Value * IDISA_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * shuffle_table) {
+    report_fatal_error("Unsupported field width: mvmd_shuffle " + std::to_string(fw));
+}
+    
+Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * a, Value *b, Value * shuffle_table) {
+    //  Use two shuffles, with selection by the bit value within the shuffle_table.
+    const auto field_count = mBitBlockWidth/fw;
+    Constant * selectorSplat = ConstantVector::getSplat(field_count, ConstantInt::get(getIntNTy(fw), 1<<field_count));
+    Value * selectMask = simd_eq(fw, simd_and(shuffle_table, selectorSplat), selectorSplat);
+    Value * negSelect = simd_not(selectMask);
+    Value * tbl = simd_and(shuffle_table, negSelect);
+    return simd_or(simd_and(mvmd_shuffle(fw, a, tbl), negSelect), simd_and(mvmd_shuffle(fw, b, tbl), selectMask));
+}
+    
 
 llvm::Value * IDISA_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
     report_fatal_error("Unsupported field width: mvmd_compress " + std::to_string(fw));

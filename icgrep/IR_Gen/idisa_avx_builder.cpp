@@ -342,6 +342,28 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::V
     return IDISA_Builder::mvmd_sll(fw, a, shift);
 }
 
+    
+llvm::Value * IDISA_AVX2_Builder::mvmd_shuffle(unsigned fw, llvm::Value * a, llvm::Value * shuffle_table) {
+    if (mBitBlockWidth == 256 && fw > 32) {
+        // Create a table for shuffling with smaller field widths.
+        unsigned half_fw = fw/2;
+        unsigned field_count = mBitBlockWidth/half_fw;
+        // Build a ConstantVector of alternating 0 and 1 values.
+        Constant * Idxs[field_count];
+        for (unsigned int i = 0; i < field_count; i++) {
+            Idxs[i] = getInt32(i & 1);
+        }
+        Constant * splat01 = ConstantVector::get({Idxs, field_count});
+        Value * half_shuffle_table = simd_add(fw, simd_add(fw, shuffle_table, shuffle_table), splat01);
+        return mvmd_shuffle(half_fw, a, half_shuffle_table);
+    }
+    if (mBitBlockWidth == 256 && fw == 32) {
+        Value * shuf32Func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
+        return CreateCall(shuf32Func, {fwCast(32, a), fwCast(32, shuffle_table)});
+    }
+    return IDISA_Builder::mvmd_shuffle(fw, a, shuffle_table);
+}
+
 llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
     if (mBitBlockWidth == 256 && fw == 64) {
         Value * PDEP_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pdep_32);
@@ -355,7 +377,6 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, ll
         Type * v8xi32Ty = VectorType::get(getInt32Ty(), 8);
         Type * v8xi1Ty = VectorType::get(getInt1Ty(), 8);
         Constant * mask0000000Fsplaat = ConstantVector::getSplat(8, ConstantInt::get(getInt32Ty(), 0xF));
-        Value * shuf32Func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
         Value * PEXT_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pext_32);
         Value * PDEP_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pdep_32);
         Value * const popcount_func = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, getInt32Ty());
@@ -375,7 +396,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, ll
             Shifts[i] = getInt32(i*4);
         }
         Value * shuf = CreateAnd(CreateLShr(bdcst, ConstantVector::get({Shifts, 8})), mask0000000Fsplaat);
-        Value * compress = CreateCall(shuf32Func, {a, shuf});
+        Value * compress = mvmd_shuffle(32, a, shuf);
         Value * field_mask = CreateTrunc(CreateSub(CreateShl(getInt32(1), field_count), getInt32(1)), getInt8Ty());
         Value * result = CreateAnd(compress, CreateSExt(CreateBitCast(field_mask, v8xi1Ty), v8xi32Ty));
         return result;
@@ -511,9 +532,47 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm
     return IDISA_Builder::mvmd_sll(fw, a, shift);
 }
 
+llvm::Value * IDISA_AVX512F_Builder::mvmd_shuffle(unsigned fw, llvm::Value * a, llvm::Value * shuffle_table) {
+    const unsigned fieldCount = mBitBlockWidth/fw;
+    if (mBitBlockWidth == 512 && fw == 32) {
+        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_vpermt2var_d_512);
+        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+        return CreateCall(permuteFunc, {fwCast(fw, shuffle_table), fwCast(fw, a), UndefValue::get(fwVectorType(fw)), mask});
+    }
+    if (mBitBlockWidth == 512 && fw == 64) {
+        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_vpermt2var_q_512);
+        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+        return CreateCall(permuteFunc, {fwCast(fw, shuffle_table), fwCast(fw, a), UndefValue::get(fwVectorType(fw)), mask});
+    }
+    if (mBitBlockWidth == 512 && fw == 16 && hostCPUFeatures.hasAVX512BW) {
+        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_maskz_vpermt2var_hi_512);
+        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+        return CreateCall(permuteFunc, {fwCast(fw, shuffle_table), fwCast(fw, a), UndefValue::get(fwVectorType(fw)), mask});
+    }
+    return IDISA_Builder::mvmd_shuffle(fw, a, shuffle_table);
+}
+
+llvm::Value * IDISA_AVX512F_Builder::mvmd_shuffle2(unsigned fw, Value * a, Value * b, llvm::Value * shuffle_table) {
+    const unsigned fieldCount = mBitBlockWidth/fw;
+    if (mBitBlockWidth == 512 && fw == 32) {
+        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_vpermt2var_d_512);
+        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+        return CreateCall(permuteFunc, {fwCast(fw, shuffle_table), fwCast(fw, a), fwCast(fw, b), mask});
+    }
+    if (mBitBlockWidth == 512 && fw == 64) {
+        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_vpermt2var_q_512);
+        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+        return CreateCall(permuteFunc, {fwCast(fw, shuffle_table), fwCast(fw, a), fwCast(fw, b), mask});
+    }
+    if (mBitBlockWidth == 512 && fw == 16 && hostCPUFeatures.hasAVX512BW) {
+        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_maskz_vpermt2var_hi_512);
+        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+        return CreateCall(permuteFunc, {fwCast(fw, shuffle_table), fwCast(fw, a), fwCast(fw, b), mask});
+    }
+    return IDISA_Builder::mvmd_shuffle(fw, a, shuffle_table);
+}
 
 llvm::Value * IDISA_AVX512F_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
-    
     if (mBitBlockWidth == 512 && fw == 32) {
         Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress_d_512);
         return CreateCall(compressFunc, {fwCast(32, a), fwCast(32, allZeroes()), CreateZExtOrTrunc(select_mask, getInt16Ty())});
@@ -553,6 +612,35 @@ Value * IDISA_AVX512F_Builder:: mvmd_slli(unsigned fw, llvm::Value * a, unsigned
                        simd_srli(32, mvmd_slli(32, a, field32_shift + 1), 32-bit_shift));
     }
 }
+
+Value * IDISA_AVX512F_Builder:: mvmd_dslli(unsigned fw, llvm::Value * a, llvm::Value * b, unsigned shift) {
+    if (shift == 0) return a;
+    if (fw > 32) {
+        return mvmd_dslli(32, a, b, shift * (fw/32));
+    } else if (((shift % 2) == 0) && (fw < 32)) {
+        return mvmd_dslli(2 * fw, a, b, shift / 2);
+    }
+    const unsigned field_count = mBitBlockWidth/fw;
+    if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
+        Type * fwTy = getIntNTy(fw);
+        Value * permute_func = nullptr;
+        if (fw == 32) permute_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_maskz_vpermt2var_d_512);
+        else permute_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_maskz_vpermt2var_hi_512);
+        Constant * indices[field_count];
+        for (unsigned i = 0; i < field_count; i++) {
+            indices[i] = ConstantInt::get(fwTy, i + field_count - shift);
+        }
+        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(field_count));
+        Value * args[4] = {ConstantVector::get({indices, field_count}), fwCast(fw, a), fwCast(fw, b), mask};
+        return bitCast(CreateCall(permute_func, args));
+    } else {
+        unsigned field32_shift = (shift * fw) / 32;
+        unsigned bit_shift = (shift * fw) % 32;
+        return simd_or(simd_slli(32, mvmd_slli(32, a, field32_shift), bit_shift),
+                       simd_srli(32, mvmd_slli(32, a, field32_shift + 1), 32-bit_shift));
+    }
+}
+
 llvm::Value * IDISA_AVX512F_Builder::simd_popcount(unsigned fw, llvm::Value * a) {
      if (fw == 512) {
          Constant * zero16xi8 = Constant::getNullValue(VectorType::get(getInt8Ty(), 16));

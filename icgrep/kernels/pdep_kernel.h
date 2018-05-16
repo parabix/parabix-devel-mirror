@@ -8,6 +8,7 @@
 #include "kernel.h"
 #include <llvm/IR/Value.h>
 #include <string>
+#include <toolchain/driver.h>
 
 /*
 
@@ -49,6 +50,55 @@ private:
     const unsigned mSwizzleFactor;
 };   
 
+class StreamExpandKernel final : public MultiBlockKernel {
+public:
+    StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) override;
+private:
+    const unsigned mFieldWidth;
+    const unsigned mStreamCount;
+};
+
+class FieldDepositKernel final : public MultiBlockKernel {
+public:
+    FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+private:
+    const unsigned mFieldWidth;
+    const unsigned mStreamCount;
+};
+
+class PDEPFieldDepositKernel final : public MultiBlockKernel {
+public:
+    PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+private:
+    const unsigned mPDEPWidth;
+    const unsigned mStreamCount;
+};
+
+class StreamDepositCompiler {
+public:
+    StreamDepositCompiler(Driver & driver, llvm::Type * streamSetType, unsigned bufferBlocks = 0) :
+    mDriver(driver), ssType(streamSetType), mBufferBlocks(bufferBlocks), mFieldWidth(64) {}
+    void setDepositFieldWidth(unsigned fw) {mFieldWidth = fw;}
+    void makeCall(parabix::StreamSetBuffer * mask, parabix::StreamSetBuffer * inputs, parabix::StreamSetBuffer * outputs);
+private:
+    Driver & mDriver;
+    llvm::Type * ssType;
+    unsigned mBufferBlocks;
+    unsigned mFieldWidth;
+};
+
 }
-    
+
 #endif
