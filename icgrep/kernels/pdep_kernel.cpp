@@ -120,13 +120,8 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
         b->SetInsertPoint(depositBits);
 
         // Apply PDEP to each element of the combined swizzle using the current PDEP mask
-        Value * result = UndefValue::get(buffer->getType());
         Value * const mask = b->CreateExtractElement(selectors, i);
-        for (unsigned j = 0; j < mSwizzleFactor; j++) {
-            Value * source_field = b->CreateExtractElement(buffer, j);
-            Value * PDEP_field = b->CreateCall(pdep, {source_field, mask});
-            result = b->CreateInsertElement(result, PDEP_field, j);
-        }
+        Value* result = b->simd_pdep(pdepWidth, buffer, b->simd_fill(pdepWidth, mask));
 
         // Store the result
         Value * const outputStreamPtr = b->getOutputStreamBlockPtr("output", b->getSize(i), strideIndex);

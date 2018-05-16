@@ -143,12 +143,7 @@ void SwizzledMultiplePDEPkernel::generateMultiBlockLogic(const std::unique_ptr<K
         Value * const mask = b->CreateExtractElement(selectors, i);
         Value * const usedShift = b->simd_fill(pdepWidth, required);
         for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
-            Value * result = UndefValue::get(bufferArray[iStreamSetIndex]->getType());
-            for (unsigned j = 0; j < mSwizzleFactor; j++) {
-                Value * source_field = b->CreateExtractElement(bufferArray[iStreamSetIndex], j);
-                Value * PDEP_field = b->CreateCall(pdep, {source_field, mask});
-                result = b->CreateInsertElement(result, PDEP_field, j);
-            }
+            Value* result = b->simd_pdep(pdepWidth, bufferArray[iStreamSetIndex], b->simd_fill(pdepWidth, mask));
             // Store the result
             Value * const outputStreamPtr = b->getOutputStreamBlockPtr("output" + std::to_string(iStreamSetIndex), b->getSize(i), strideIndex);
             b->CreateBlockAlignedStore(result, outputStreamPtr);
