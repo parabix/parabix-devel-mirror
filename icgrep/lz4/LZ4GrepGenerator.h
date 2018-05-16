@@ -23,8 +23,7 @@ public:
     void generateScanMatchGrepPipeline(re::RE* regex);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> &REs,
                                                                                    parabix::StreamSetBuffer *decompressedBasisBits);
-    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrepPipeline(std::vector<re::RE *> &REs,
-                                                                                   parabix::StreamSetBuffer *matchCopiedBasisBits);
+    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrepPipeline(std::vector<re::RE *> &REs);
 
 
     void invokeScanMatchGrep(char* fileBuffer, size_t blockStart, size_t blockEnd, bool hasBlockChecksum);
@@ -56,6 +55,8 @@ private:
 
     parabix::StreamSetBuffer * linefeedStreamFromDecompressedBits(parabix::StreamSetBuffer *decompressedBasisBits);
     parabix::StreamSetBuffer * linefeedStreamFromCompressedBits();
+
+    parabix::StreamSetBuffer * convertCompressedBitsStream(parabix::StreamSetBuffer* compressedBitStream, int numberOfStream, std::string prefix);
 };
 
 

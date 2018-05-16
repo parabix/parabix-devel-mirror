@@ -387,17 +387,23 @@ std::pair<StreamSetBuffer*, StreamSetBuffer*> LZ4Generator::generateSwizzleExtra
     return std::make_pair(u16Swizzle0, u16Swizzle1);
 }
 
+void LZ4Generator::generateCompressionMarker(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
+    if (!mCompressionMarker) {
+        mCompressionMarker = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
+        Kernel * bitstreamNotK = mPxDriver.addKernelInstance<LZ4BitStreamNotKernel>(iBuilder);
+        mPxDriver.makeKernelCall(bitstreamNotK, {mDeletionMarker}, {mCompressionMarker});
+    }
+}
+
 parabix::StreamSetBuffer* LZ4Generator::generateBitStreamExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
-    StreamSetBuffer * const compressionMarker = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
-    Kernel * bitstreamNotK = mPxDriver.addKernelInstance<LZ4BitStreamNotKernel>(iBuilder);
-    mPxDriver.makeKernelCall(bitstreamNotK, {mDeletionMarker}, {compressionMarker});
+    this->generateCompressionMarker(iBuilder);
 
     // Deletion
     StreamSetBuffer * deletedBits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
-    StreamSetBuffer * deletionCounts = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
+    StreamSetBuffer * deletionCounts = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), this->getInputBufferBlocks());
 
     Kernel * delK = mPxDriver.addKernelInstance<PEXTFieldCompressKernel>(iBuilder, 64, 8);
-    mPxDriver.makeKernelCall(delK, {mCompressedBasisBits, compressionMarker}, {deletedBits, deletionCounts});
+    mPxDriver.makeKernelCall(delK, {mCompressedBasisBits, mCompressionMarker}, {deletedBits, deletionCounts});
 
     StreamSetBuffer * compressedBits = mPxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
     Kernel * streamCompressionK = mPxDriver.addKernelInstance<StreamCompressKernel>(iBuilder, 64, 8);

@@ -16,7 +16,8 @@ public:
     BitStreamPDEPKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned numberOfStream = 8, std::string name = "BitStreamPDEPKernel");
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
-private:
+
+protected:
     void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
 private:
     const unsigned mNumberOfStream;

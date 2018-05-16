@@ -119,12 +119,9 @@ namespace kernel {
                 Value *addresses = ConstantVector::get(
                         {b->getInt32(0), b->getInt32(32), b->getInt32(64), b->getInt32(96)});
 
-                Value *nullAddress = ConstantVector::getNullValue(addresses->getType());
-                for (int i = 0; i < 4; i++) {
-                    nullAddress = b->CreateInsertElement(nullAddress,
-                                                         b->CreateMul(b->CreateTrunc(swizzleIndex, b->getInt32Ty()),
-                                                                      b->getInt32(8)), i);
-                };
+                Value *nullAddress = this->fill_address(b, 32, 4, b->CreateMul(b->CreateTrunc(swizzleIndex, b->getInt32Ty()),
+                                                                        b->getInt32(8)));
+
                 addresses = b->CreateAdd(addresses, nullAddress);
 
                 Value *gather_result = b->CreateCall(
@@ -200,4 +197,9 @@ namespace kernel {
         b->SetInsertPoint(finishedStrides);
     }
 
+    llvm::Value* BitStreamGatherPDEPKernel::fill_address(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned field_count, Value * a) {
+        Type * singleFieldVecTy = VectorType::get(b->getIntNTy(fw), 1);
+        Value * aVec = b->CreateBitCast(a, singleFieldVecTy);
+        return b->CreateShuffleVector(aVec, UndefValue::get(singleFieldVecTy), Constant::getNullValue(VectorType::get(b->getInt32Ty(), field_count)));
+    }
 }

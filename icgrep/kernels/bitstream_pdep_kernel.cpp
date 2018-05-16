@@ -113,7 +113,6 @@ namespace kernel {
             Value * const swizzleOffset = b->CreateURem(updatedSourceOffset, PDEP_WIDTH);
 
             for (int iStreamIndex = 0; iStreamIndex < mNumberOfStream; iStreamIndex++) {
-                // TODO improve the performance of these load instructions by gather
                 Value * const swizzleBlock = b->CreateBlockAlignedLoad(b->getInputStreamBlockPtr("source", b->getSize(iStreamIndex), blockOffset));
 
                 Value * const swizzle = b->CreateExtractElement(swizzleBlock, swizzleIndex);

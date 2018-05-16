@@ -41,6 +41,8 @@ protected:
     virtual std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*> generateSwizzleExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual parabix::StreamSetBuffer* generateBitStreamExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
+    void generateCompressionMarker(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+
     // BufferSize related Helper Function
     virtual int getInputBufferBlocks();
     virtual int getDecompressedBufferBlocks();
@@ -61,7 +63,8 @@ protected:
     // StreamSetBuffers
     parabix::StreamSetBuffer * mCompressedByteStream;
     parabix::StreamSetBuffer * mCompressedBasisBits;
-    parabix::StreamSetBuffer * mDeletionMarker; //TODO rename to ExtarctMarker
+    parabix::StreamSetBuffer * mDeletionMarker;
+    parabix::StreamSetBuffer * mCompressionMarker;
     parabix::StreamSetBuffer * mDepositMarker;
     parabix::StreamSetBuffer * mMatchOffsetMarker;
 
