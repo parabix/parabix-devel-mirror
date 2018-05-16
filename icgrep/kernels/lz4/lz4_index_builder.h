@@ -48,22 +48,20 @@ namespace kernel {
         processMatch(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *offsetPos, llvm::Value *token,
                      llvm::Value *blockEnd);
 
+        // MatchOffset Marker Output
+        void appendMatchOffsetMarkerOutput(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *position);
+        void storeMatchOffsetMarker(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value* blockIndex, llvm::Value* value);
+        void storePendingMatchOffsetMarker(const std::unique_ptr<KernelBuilder> &iBuilder);
 
-        void clearCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder,
-                                                                 const std::string &bitstreamName,
-                                                                 llvm::Value *start, llvm::Value *end);
+        // Deletion Marker Output
+        void appendDeletionMarkerOutput(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *start, llvm::Value *end);
+        void storeDeletionMarker(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value* blockIndex, llvm::Value* value);
+        void storePendingDeletionMarker(const std::unique_ptr<KernelBuilder> &iBuilder);
 
-        void setCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder,
-                                                               const std::string &bitstreamName,
-                                                               llvm::Value *start, llvm::Value *end);
-
-        void markCircularOutputBitstream(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string &bitstreamName, llvm::Value *pos);
-
-
+        // M0 Output
         void appendM0Output(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *start, llvm::Value *end);
         void storeM0(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value* blockIndex, llvm::Value* value);
         void storePendingM0(const std::unique_ptr<KernelBuilder> &iBuilder);
-
     };
 }
 
