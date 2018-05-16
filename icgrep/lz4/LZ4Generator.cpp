@@ -32,7 +32,7 @@ using namespace parabix;
 using namespace kernel;
 
 LZ4Generator::LZ4Generator():mPxDriver("lz4d") {
-
+    mCompressionMarker = NULL;
 }
 
 MainFunctionType LZ4Generator::getMainFunc() {

@@ -6,6 +6,8 @@
 #define STREAMSMERGE_H
 
 #include "kernel.h"
+#include <vector>
+
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
@@ -22,6 +24,24 @@ protected:
 private:
     const unsigned mStreamsPerSet;
     const unsigned mInputSets;
+};
+
+class StreamsCombineKernel : public BlockOrientedKernel {
+public:
+    StreamsCombineKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<unsigned> streamsNumOfSets);
+protected:
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+private:
+    const std::vector<unsigned> mStreamsNumOfSets;
+};
+
+class StreamsSplitKernel : public BlockOrientedKernel {
+public:
+    StreamsSplitKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<unsigned> streamsNumOfSets);
+protected:
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+private:
+    const std::vector<unsigned> mStreamsNumOfSets;
 };
 
 class StreamsIntersect : public BlockOrientedKernel {

@@ -65,6 +65,62 @@ void StreamsIntersect::generateDoBlockMethod(const std::unique_ptr<KernelBuilder
         iBuilder->storeOutputStreamBlock("output", iBuilder->getInt32(j), resultStreams[j]);
     }
 }
-    
 
+StreamsCombineKernel::StreamsCombineKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder,
+                                                     std::vector<unsigned> streamsNumOfSets)
+        : BlockOrientedKernel("StreamsCombineKernel" , {}, {}, {}, {}, {}),
+          mStreamsNumOfSets(streamsNumOfSets) {
+    int total = 0;
+    for (unsigned i = 0; i < streamsNumOfSets.size(); i++) {
+        total += streamsNumOfSets[i];
+        mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(streamsNumOfSets[i], 1), "inputGroup" + std::to_string(i)});
+    }
+    mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(total, 1), "output"});
+}
+
+void StreamsCombineKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {
+    unsigned outputIndex = 0;
+    for (unsigned i = 0; i < mStreamsNumOfSets.size(); i++) {
+        int streamNum = mStreamsNumOfSets[i];
+        for (unsigned j = 0; j < streamNum; j++) {
+            iBuilder->storeOutputStreamBlock(
+                    "output",
+                    iBuilder->getInt32(outputIndex),
+                    iBuilder->loadInputStreamBlock(
+                            "inputGroup" + std::to_string(i),
+                            iBuilder->getInt32(j)
+                    )
+            );
+            ++outputIndex;
+        }
+    }
+}
+
+
+StreamsSplitKernel::StreamsSplitKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder,
+                                       std::vector<unsigned> streamsNumOfSets)
+        : BlockOrientedKernel("StreamsSplitKernel" , {}, {}, {}, {}, {}),
+          mStreamsNumOfSets(streamsNumOfSets){
+    int total = 0;
+    for (unsigned i = 0; i < streamsNumOfSets.size(); i++) {
+        total += streamsNumOfSets[i];
+        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamsNumOfSets[i], 1), "outputGroup" + std::to_string(i)});
+    }
+    mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(total, 1), "input"});
+}
+
+void StreamsSplitKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {
+    unsigned inputIndex = 0;
+    for (unsigned i = 0; i < mStreamsNumOfSets.size(); i++) {
+        int streamNum = mStreamsNumOfSets[i];
+        for (unsigned j = 0; j < streamNum; j++) {
+            iBuilder->storeOutputStreamBlock(
+                    "outputGroup" + std::to_string(i),
+                    iBuilder->getInt32(j),
+                    iBuilder->loadInputStreamBlock("input", iBuilder->getInt32(inputIndex))
+            );
+            ++inputIndex;
+        }
+    }
+}
 }
