@@ -70,12 +70,12 @@ void generatePipeline(ParabixDriver & pxDriver) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
 
-    StreamSetBuffer * const ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    StreamSetBuffer * const BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
-    StreamSetBuffer * const Extenders = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
-    StreamSetBuffer * const LiteralIndexes = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments);
-    StreamSetBuffer * const MatchIndexes = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments);
-    StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), decompressBufBlocks);
+    StreamSetBuffer * const ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    StreamSetBuffer * const BasisBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
+    StreamSetBuffer * const Extenders = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+    StreamSetBuffer * const LiteralIndexes = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments);
+    StreamSetBuffer * const MatchIndexes = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments);
+    StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), decompressBufBlocks);
 
     
     kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);

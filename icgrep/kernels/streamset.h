@@ -10,6 +10,7 @@
 #include <llvm/IR/DerivedTypes.h>  // for Type
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Value; }
+namespace llvm { class Constant; }
 namespace kernel { class Kernel; }
 namespace kernel { class KernelBuilder; }
 
@@ -21,11 +22,8 @@ class StreamSetBuffer {
 public:
 
     enum class BufferKind : unsigned {
-        SourceBuffer
-        , ExternalBuffer
-        , CircularBuffer
-        , CircularCopybackBuffer
-        , ExpandableBuffer
+        ExternalBuffer
+        , StaticBuffer
         , DynamicBuffer
     };
 
@@ -45,9 +43,7 @@ public:
         return mBaseType;
     }
 
-    // Return the number of streams for a static stream set or 0 for an expandable stream set.
     unsigned getNumOfStreams () const {
-        if (mBufferKind == BufferKind::ExpandableBuffer) return 0;
         size_t numStreams = 1;
         if (mBaseType->isArrayTy()) {
             numStreams = mBaseType->getArrayNumElements();
@@ -70,24 +66,12 @@ public:
         return getType()->getPointerTo(getAddressSpace());
     }
 
-    size_t getBufferBlocks() const {
-        return mBufferBlocks;
-    }
-
-    llvm::Value * getStreamSetHandle() const {
-        return mStreamSetBufferPtr;
-    }
-
-    bool supportsCopyBack() const {
-        return mOverflowBlocks != 0;
+    virtual bool supportsCopyBack() const {
+        return false;
     }
 
     virtual bool isUnbounded() const {
         return false;
-    }
-
-    size_t overflowSize() const {
-        return mOverflowBlocks;
     }
 
     virtual ~StreamSetBuffer() = 0;
@@ -100,17 +84,15 @@ public:
         return mConsumers;
     }
 
-    virtual void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb);
+    virtual void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) = 0;
 
-    virtual void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const;
+    virtual void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const = 0;
 
     llvm::PointerType * getStreamSetPointerType() const {
-        return getStreamSetBlockType()->getPointerTo(mAddressSpace);
+        return mType->getPointerTo(mAddressSpace);
     }
 
 protected:
-
-    virtual llvm::Type * getStreamSetBlockType() const;
 
     virtual llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * streamIndex, llvm::Value * blockIndex, const bool readOnly) const;
 
@@ -118,37 +100,23 @@ protected:
     
     virtual llvm::Value * getStreamSetCount(IDISA::IDISA_Builder * const b, llvm::Value * handle) const;
 
-    virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * absolutePosition) const;
+    virtual llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const = 0;
 
-    virtual void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * addr) const;
+    virtual void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * addr) const = 0;
 
-    virtual void setBufferedSize(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * size) const;
+    virtual llvm::Value * getOverflowAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const = 0;
+
+    virtual void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * size, llvm::Value *) const = 0;
     
-    virtual llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const b, llvm::Value * handle) const;
-    
-    virtual void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * size, llvm::Value *) const;
-    
-    virtual llvm::Value * getCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle) const;
-    
+    virtual llvm::Value * getCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle) const = 0;
+
+    virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * absolutePosition) const = 0;
+
     // The number of items that cam be linearly accessed from a given logical stream position.
-    virtual llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPos, llvm::Value * avail, bool reverse = false) const;
+    virtual llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPos, llvm::Value * avail, bool reverse = false) const = 0;
 
-    void createBlockCopy(IDISA::IDISA_Builder * const b, llvm::Value * targetBlockPtr, llvm::Value * sourceBlockPtr, llvm::Value * blocksToCopy) const;
-
-    virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const;
+    virtual llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const = 0;
     
-    virtual void doubleCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle) const;
-
-    StreamSetBuffer(BufferKind k, llvm::Type * baseType, llvm::Type * resolvedType, unsigned BufferBlocks, unsigned OverflowBlocks, unsigned AddressSpace);
-
-    bool isCapacityGuaranteed(const llvm::Value * const index, const size_t capacity) const;
-
-    llvm::Value * modBufferSize(IDISA::IDISA_Builder * const b, llvm::Value * const offset) const;
-
-    virtual llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const;
-
-    virtual llvm::Value * getOverflowAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const;
-
     void setProducer(kernel::Kernel * const producer) {
         assert (producer);
         mProducer = producer;
@@ -159,59 +127,22 @@ protected:
         mConsumers.push_back(consumer);
     }
 
+    llvm::Value * getStreamSetHandle() const {
+        return mStreamSetHandle;
+    }
+
+    StreamSetBuffer(const BufferKind k, const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * baseType, unsigned AddressSpace);
+
 protected:
     const BufferKind                 mBufferKind;
     llvm::Type * const               mType;
-    const size_t                     mBufferBlocks;
-    size_t                           mOverflowBlocks;    /* Number of data blocks of additional space at the end of the buffer for writing only. */
     const unsigned                   mAddressSpace;
-    llvm::Value *                    mStreamSetBufferPtr;
+    llvm::Value *                    mStreamSetHandle;
     llvm::Type * const               mBaseType;
     std::string                      mUniqueID;
     kernel::Kernel *                 mProducer;
     std::vector<kernel::Kernel *>    mConsumers;
 };   
-
-class SourceBuffer final : public StreamSetBuffer {
-    friend class kernel::KernelBuilder;
-public:
-    static inline bool classof(const StreamSetBuffer * b) {
-        return b->getBufferKind() == BufferKind::SourceBuffer;
-    }
-
-    SourceBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, unsigned MemoryAddressSpace = 0, unsigned StructAddressSpace = 0);
-
-    bool isUnbounded() const override {
-        return true;
-    }
-
-protected:
-
-    void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * addr) const override;
-
-    void setBufferedSize(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * size) const override;
-
-    void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * c) const override;
-
-    llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
-    
-    llvm::Value * getCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
-    
-    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
-
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
-
-    llvm::Type * getStreamSetBlockType() const override;
-
-    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) override;
-
-    void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
-
-    enum Field {BaseAddress, BufferedSize, Capacity};
-
-    llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
-
-};
 
 class ExternalBuffer final : public StreamSetBuffer {
     friend class kernel::KernelBuilder;
@@ -220,142 +151,143 @@ public:
         return b->getBufferKind() == BufferKind::ExternalBuffer;
     }
 
-    ExternalBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, llvm::Value * addr, unsigned AddressSpace = 0);
+    enum Field {BaseAddress, Capacity};
+
+    ExternalBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * const type,
+                   llvm::Value * const externalAddress = nullptr, const unsigned AddressSpace = 0);
+
+    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+
+    void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 
     bool isUnbounded() const override {
         return true;
     }
 
-    void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
-
-    void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
-
 protected:
+
+    llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+
+    void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * addr) const override;
+
+    llvm::Value * getOverflowAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+
+    void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * size, llvm::Value * capacity) const override;
+
+    llvm::Value * getCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+
+    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * absolutePosition) const override;
 
     llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
     
     llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
 
-    llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+private:
 
-    llvm::Value * getCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+    llvm::Value * mExternalAddress;
+
 };
 
-class CircularBuffer : public StreamSetBuffer {
+class StaticBuffer final : public StreamSetBuffer {
     friend class kernel::KernelBuilder;
 public:
     static inline bool classof(const StreamSetBuffer * b) {
-        return b->getBufferKind() == BufferKind::CircularBuffer;
+        return b->getBufferKind() == BufferKind::StaticBuffer;
     }
     
-    CircularBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
-
-protected:
-
-    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * absolutePosition) const final;
-
-    CircularBuffer(const BufferKind kind, const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks, unsigned AddressSpace);
-
-};
-    
-
-//
-//  A CircularCopybackBuffer operates as a circular buffer buffer with an overflow area
-//  for temporary use by the kernel that writes to it.   If the kernel uses the overflow
-//  area, it must perform the doCopyBack action before releasing the buffer for use by
-//  subsequent kernels.
-//  Kernels that read from a CircularCopybackBuffer must not access the overflow area.
-//
-class CircularCopybackBuffer final : public CircularBuffer {
-    friend class kernel::KernelBuilder;
-public:
-    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::CircularCopybackBuffer;}
-    
-    CircularCopybackBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, size_t overflowBlocks = 1, unsigned AddressSpace = 0);
-       
-};
-
-// ExpandableBuffers do not allow access to the base stream set but will automatically increase the number of streams
-// within their set whenever the index exceeds its capacity
-//
-class ExpandableBuffer final : public StreamSetBuffer {
-    friend class kernel::KernelBuilder;
-public:
-    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::ExpandableBuffer;}
-
-    ExpandableBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t bufferBlocks, unsigned AddressSpace = 0);
+    StaticBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * const type,
+                 const size_t capacity, const size_t overflowBlocks = 0, const unsigned AddressSpace = 0);
 
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 
     void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & kb) const override;
 
+    bool supportsCopyBack() const override {
+        return mOverflow > 0;
+    }
+
 protected:
+
+    llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+
+    void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * addr) const override;
+
+    llvm::Value * getOverflowAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+
+    llvm::Value * getCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+
+    void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * size, llvm::Value *) const override;
 
     llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * streamIndex, llvm::Value * blockIndex, const bool readOnly) const override;
 
     llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex, const bool readOnly) const override;
 
+    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * absolutePosition) const override;
+
     llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
-    
-    llvm::Value * getStreamSetCount(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
 
-    llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
 
 private:
 
-    std::pair<llvm::Value *, llvm::Value *> getInternalStreamBuffer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * streamIndex, llvm::Value * blockIndex, const bool readOnly) const;
+    llvm::Value * modByCapacity(IDISA::IDISA_Builder * const b, llvm::Value * const offset) const;
 
 private:
 
-    const uint64_t  mInitialCapacity;
+    const size_t    mCapacity;
+    const size_t    mOverflow;
 
 };
-    
+        
 // Dynamically allocated circular buffers: TODO: add copyback, swizzle support, dynamic allocation, producer, consumer, length
 class DynamicBuffer final : public StreamSetBuffer {
 
     friend class kernel::KernelBuilder;
 
-    /* Dynamic data fields stored in the buffer struct */
-    enum Field {BaseAddress, PriorBaseAddress, AllocatedCapacity, WorkingBlocks, Length, ProducedPosition, ConsumedPosition, FieldCount};
-
-    /* BaseAddress - the physical base address of the memory area for stream set data.
-     PriorBaseAddress - the physical base address of the previous memory area for stream set data
-     (the immediately prior memory area is preserved in case any users in other threads
-     are accessing it).
-     WorkingBlocks - the physical size of the buffer for use in reading and writing data.
-     AllocatedCapacity - physical size available for expansion in place
-     Length - actual final length of stream set or -1 for unknown
-     ProducedPosition - the total number of items ever generated and stored in the buffer
-     ConsumedPosition - the number of buffer items that are known to have been fully processed by all users
-     */
+    enum Field {BaseAddress, PriorBaseAddress, Capacity};
 
 public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::DynamicBuffer;}
     
-    DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t initialCapacity, size_t overflowBlocks = 0, unsigned swizzleFactor = 1, unsigned addrSpace = 0);
+    DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * type, size_t initialCapacity, size_t overflowBlocks = 0, unsigned AddressSpace = 0);
 
     void allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 
     void releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) const override;
     
+    bool supportsCopyBack() const override {
+        return mOverflow > 0;
+    }
+
 protected:
 
-    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
-    
-    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
-
-    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * absolutePosition) const override;
-    
-    llvm::Value * getBufferedSize(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
-    
-    void doubleCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle)  const final;
-
     llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
-    
-    llvm::Value * getBlockAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * blockIndex) const;
+
+    void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * addr) const override;
 
     llvm::Value * getOverflowAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+    
+    llvm::Value * getCapacity(IDISA::IDISA_Builder * const b, llvm::Value * handle) const override;
+    
+    void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * size, llvm::Value *) const override;
+
+    llvm::Value * getBlockAddress(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * blockIndex) const;
+
+    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * absolutePosition) const override;
+
+    llvm::Value * getLinearlyAccessibleItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * avail, bool reverse = false) const override;
+
+    llvm::Value * getLinearlyWritableItems(IDISA::IDISA_Builder * const b, llvm::Value * handle, llvm::Value * fromPosition, llvm::Value * consumed, bool reverse = false) const override;
+
+private:
+
+    llvm::Value * getAllocationSize(IDISA::IDISA_Builder * const b, llvm::Value * const handle, llvm::Value * const requiredItemCapacity) const;
+
+private:
+
+    const size_t    mInitialCapacity;
+    const size_t    mOverflow;
+
 };
 
 

@@ -36,15 +36,6 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
     ConstantInt * const PDEP_WIDTH = b->getSize(pdepWidth);
 
-    Function * pdep = nullptr;
-    if (pdepWidth == 64) {
-        pdep = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_64);
-    } else if (pdepWidth == 32) {
-        pdep = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_32);
-    } else {
-        report_fatal_error(getName() + ": PDEP width must be 32 or 64");
-    }
-
     Constant * const ZERO = b->getSize(0);
     Value * const sourceItemCount = b->getProcessedItemCount("source");
 
@@ -366,7 +357,7 @@ void StreamDepositCompiler::makeCall(parabix::StreamSetBuffer * depositMask, par
     if (IDISA::getStreamFieldWidth(ssType) != 1) {
         llvm::report_fatal_error("StreamDepositCompiler only compresses bit streams (for now)");
     }
-    parabix::StreamSetBuffer * expandedStreams = mDriver.addBuffer<parabix::CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(N), mBufferBlocks);
+    parabix::StreamSetBuffer * expandedStreams = mDriver.addBuffer<parabix::StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(N), mBufferBlocks);
     Kernel * streamK = mDriver.addKernelInstance<StreamExpandKernel>(iBuilder, mFieldWidth, N);
     mDriver.makeKernelCall(streamK, {depositMask, inputs}, {expandedStreams});
 

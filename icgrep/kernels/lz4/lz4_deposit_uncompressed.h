@@ -20,9 +20,8 @@ namespace kernel {
     protected:
         virtual void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &iBuilder) override;
     private:
-        inline llvm::Value* loadCurrentUncompressedData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const std::string& name);
-        inline llvm::Value* generateLoadCircularInput(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputBufferName, llvm::Value* offset, llvm::Type* pointerType);
-        inline size_t getInputBufferSize(const std::unique_ptr<KernelBuilder> &iBuilder, std::string bufferName);
+        inline llvm::Value* loadCurrentUncompressedData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const std::string & name);
+        inline llvm::Value* generateLoadCircularInput(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string & bufferName, llvm::Value* offset, llvm::Type* pointerType);
         inline void increaseCurrentUncompressedDataIndex(const std::unique_ptr<KernelBuilder> &iBuilder);
         inline void generateDepositUncompressed(const std::unique_ptr<KernelBuilder> &iBuilder);
     };

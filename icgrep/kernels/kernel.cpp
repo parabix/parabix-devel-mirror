@@ -615,42 +615,6 @@ void Kernel::verifyStreamSetDefinitions() const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief verifyBufferSize
- ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::verifyBufferSize(const Binding & binding, const StreamSetBuffer * const buffer) const {
-    if (LLVM_UNLIKELY(isa<SourceBuffer>(buffer) || isa<ExternalBuffer>(buffer))) {
-        return true;
-    }
-    const ProcessingRate & rate = binding.getRate();
-    if (requiresCopyBack(binding)) {
-        const auto minOverflow = ceiling(rate.getUpperBound());
-        if (LLVM_UNLIKELY(buffer->overflowSize() < minOverflow)) {
-            report_fatal_error(getName() + ": " + binding.getName() + " requires " +
-                               std::to_string(minOverflow) + " overflow blocks");
-        }
-    } else if (rate.isFixed() || binding.hasAttribute(Attribute::KindId::BlockSize)) {
-        const auto r = rate.getUpperBound();
-        if (LLVM_LIKELY(r.denominator() == 1)) {
-            if (LLVM_UNLIKELY((buffer->getBufferBlocks() % r.numerator())) != 0) {
-                report_fatal_error(getName() + ": " + binding.getName() + " requires a multiple of " +
-                                   std::to_string(r.numerator()) + " buffer blocks");
-                return false;
-            }
-        } else { // if (b % (n/d) != 0)
-            const auto b = buffer->getBufferBlocks();
-            const auto x = (b * r.denominator()) / r.numerator();
-            if (LLVM_UNLIKELY((b * r.denominator()) != (r.numerator() * x))) {
-                report_fatal_error(getName() + ": " + binding.getName() + " requires a multiple of " +
-                                   std::to_string(r.numerator()) + "/" + std::to_string(r.denominator()) + " buffer blocks");
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief requiresCopyBack
  ** ------------------------------------------------------------------------------------------------------------- */
 bool Kernel::requiresCopyBack(const Binding & binding) const {

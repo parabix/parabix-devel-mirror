@@ -153,10 +153,6 @@ public:
     void CreateCopyToOverflow(const std::string & name);
 
     void setBaseAddress(const std::string & name, llvm::Value * addr);
-
-    llvm::Value * getBufferedSize(const std::string & name);
-    
-    void setBufferedSize(const std::string & name, llvm::Value * size);
     
     llvm::Value * getCapacity(const std::string & name);
     
@@ -187,10 +183,6 @@ public:
     void setKernel(const Kernel * const kernel) {
         mKernel = kernel;
     }
-
-    void protectOutputStream(const std::string & name, const bool readOnly);
-
-    void doubleCapacity(const std::string & name);
 
     // overloading wrongly subsitutes this for CBuilder function. renamed for now until I can investigate why.
     llvm::Value * CreateUDiv2(llvm::Value * const number, const ProcessingRate::RateValue & divisor, const llvm::Twine & Name = "");

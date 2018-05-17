@@ -55,12 +55,12 @@ void preprocessPipeline(ParabixDriver & pxDriver){
     const unsigned segmentSize = codegen::SegmentSize;
     unsigned bufferSegments = codegen::BufferSegments;
 
-    StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
     kernel::Kernel * sourceK = pxDriver.addKernelInstance<kernel::MemorySourceKernel>(iBuilder, iBuilder->getInt8PtrTy());
     sourceK->setInitialArguments({inputStream, fileSize});
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
 
-    StreamSetBuffer * MatchResults = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
+    StreamSetBuffer * MatchResults = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
     kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(iBuilder, "linefeed", std::vector<re::CC *>{re::makeCC(0x0A)}, 1);
     pxDriver.makeKernelCall(linefeedK, {ByteStream}, {MatchResults});
     

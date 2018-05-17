@@ -336,7 +336,8 @@ namespace kernel{
         iBuilder->SetInsertPoint(advanceBodyBlock);
 
         Value * currentBlockGlobalPos = iBuilder->CreateUDiv(phiCurrentPos, SIZE_64);
-        Value * currentBlockLocalPos = iBuilder->CreateURem(currentBlockGlobalPos, iBuilder->getSize(this->getAnyStreamSetBuffer(inputName)->getBufferBlocks() * iBuilder->getBitBlockWidth() / 64));
+        Value * currentBlockCapacity = iBuilder->CreateUDiv(iBuilder->getCapacity(inputName), iBuilder->getSize(64));
+        Value * currentBlockLocalPos = iBuilder->CreateURem(currentBlockGlobalPos, currentBlockCapacity);
         Value * currentPosBitBlockOffset = iBuilder->CreateURem(phiCurrentPos, SIZE_64);
 
         Value * ptr = iBuilder->CreatePointerCast(iBuilder->getRawInputPointer(inputName, iBuilder->getSize(0)), iBuilder->getInt64Ty()->getPointerTo());
@@ -366,10 +367,9 @@ namespace kernel{
     }
 
     Value * LZ4IndexBuilderKernel::generateLoadInt64NumberInput(const unique_ptr<KernelBuilder> &iBuilder, string inputBufferName, Value * globalOffset) {
-//        Constant* SIZE_STRIDE_SIZE = iBuilder->getSize(getStride());
-        Constant* SIZE_STRIDE_SIZE = iBuilder->getSize(this->getInputStreamSetBuffer(inputBufferName)->getBufferBlocks() * iBuilder->getBitBlockWidth());
+        Value * capacity = iBuilder->getCapacity(inputBufferName);
         Value * processed = iBuilder->getProcessedItemCount(inputBufferName);
-        processed = iBuilder->CreateAnd(processed, ConstantExpr::getNeg(SIZE_STRIDE_SIZE));
+        processed = iBuilder->CreateAnd(processed, iBuilder->CreateNeg(capacity));
         Value * offset = iBuilder->CreateSub(globalOffset, processed);
         Value * valuePtr = iBuilder->getRawInputPointer(inputBufferName, offset);
         return iBuilder->CreateLoad(valuePtr);
@@ -454,7 +454,7 @@ namespace kernel{
 
     void LZ4IndexBuilderKernel::storeM0(const std::unique_ptr<KernelBuilder> &b, llvm::Value* blockIndex, llvm::Value* value) {
         int fw = 64;
-        Value* m0BufferBlocks = b->getSize(this->getOutputStreamSetBuffer("M0Marker")->getBufferBlocks() * b->getBitBlockWidth() / fw);
+        Value* m0BufferBlocks = b->CreateUDiv(b->getCapacity("M0Marker"), b->getSize(fw));
         Value* indexRem = b->CreateURem(blockIndex, m0BufferBlocks);
         Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("M0Marker", b->getSize(0)), b->getIntNTy(fw)->getPointerTo());
         b->CreateStore(value, b->CreateGEP(outputBasePtr, indexRem));
@@ -539,12 +539,10 @@ namespace kernel{
     }
 
     void
-    LZ4IndexBuilderKernel::storeDeletionMarker(const std::unique_ptr<KernelBuilder> &b, llvm::Value *blockIndex,
-                                               llvm::Value *value) {
+    LZ4IndexBuilderKernel::storeDeletionMarker(const std::unique_ptr<KernelBuilder> &b, llvm::Value *blockIndex, llvm::Value *value) {
         int fw = 64;
-        Value* m0BufferBlocks = b->getSize(this->getOutputStreamSetBuffer("deletionMarker")->getBufferBlocks() * b->getBitBlockWidth() / fw);
+        Value* m0BufferBlocks = b->CreateUDiv(b->getCapacity("deletionMarker"), b->getSize(fw));
         Value* indexRem = b->CreateURem(blockIndex, m0BufferBlocks);
-
         Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("deletionMarker", b->getSize(0)), b->getIntNTy(fw)->getPointerTo());
         b->CreateStore(value, b->CreateGEP(outputBasePtr, indexRem));
     }
@@ -606,12 +604,10 @@ namespace kernel{
         b->setScalarField("pendingMatchOffsetMarkerBits", finalEndBits);
     }
 
-    void LZ4IndexBuilderKernel::storeMatchOffsetMarker(const std::unique_ptr<KernelBuilder> &b,
-                                                       llvm::Value *blockIndex, llvm::Value *value) {
+    void LZ4IndexBuilderKernel::storeMatchOffsetMarker(const std::unique_ptr<KernelBuilder> &b, llvm::Value *blockIndex, llvm::Value *value) {
         int fw = 64;
-        Value* m0BufferBlocks = b->getSize(this->getOutputStreamSetBuffer("MatchOffsetMarker")->getBufferBlocks() * b->getBitBlockWidth() / fw);
+        Value* m0BufferBlocks = b->CreateUDiv(b->getCapacity("MatchOffsetMarker"), b->getSize(fw));
         Value* indexRem = b->CreateURem(blockIndex, m0BufferBlocks);
-
         Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("MatchOffsetMarker", b->getSize(0)), b->getIntNTy(fw)->getPointerTo());
         b->CreateStore(value, b->CreateGEP(outputBasePtr, indexRem));
     }

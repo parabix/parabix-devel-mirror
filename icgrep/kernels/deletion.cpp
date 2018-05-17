@@ -799,8 +799,8 @@ void StreamFilterCompiler::makeCall(parabix::StreamSetBuffer * mask, parabix::St
     } else {
         compressK = mDriver.addKernelInstance<FieldCompressKernel>(iBuilder, mIntraFieldCompressionWidth, N);
     }
-    parabix::StreamSetBuffer * compressedFields = mDriver.addBuffer<parabix::CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(N), mBufferBlocks);
-    parabix::StreamSetBuffer * unitCounts = mDriver.addBuffer<parabix::CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), mBufferBlocks);
+    parabix::StreamSetBuffer * compressedFields = mDriver.addBuffer<parabix::StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(N), mBufferBlocks);
+    parabix::StreamSetBuffer * unitCounts = mDriver.addBuffer<parabix::StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(), mBufferBlocks);
     
     mDriver.makeKernelCall(compressK, {inputs, mask}, {compressedFields, unitCounts});
     

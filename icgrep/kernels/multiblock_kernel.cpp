@@ -205,7 +205,7 @@ inline void MultiBlockKernel::checkOutputStream(const std::unique_ptr<KernelBuil
     if (LLVM_UNLIKELY(permitsNonLinearAccess(output))) {
         Value * const consumed = b->getConsumedItemCount(name);
         Value * const unconsumed = b->CreateSub(produced, consumed);
-        Value * const capacity = b->getBufferedSize(name);
+        Value * const capacity = b->getCapacity(name);
         writable = b->CreateSub(capacity, unconsumed);
     } else {
         writable = b->getLinearlyWritableItems(name, produced);
@@ -324,10 +324,10 @@ inline void MultiBlockKernel::writeCopyBackLogic(const std::unique_ptr<KernelBui
             const auto & name = output.getName();
             BasicBlock * const copyBack = b->CreateBasicBlock(name + "CopyBack");
             BasicBlock * const done = b->CreateBasicBlock(name + "CopyBackDone");
-            Value * const bufferSize = b->getBufferedSize(name);
-            Value * const priorOffset = b->CreateURem(mInitialProducedItemCount[i], bufferSize);
+            Value * const capacity = b->getCapacity(name);
+            Value * const priorOffset = b->CreateURem(mInitialProducedItemCount[i], capacity);
             Value * const produced = b->getProducedItemCount(name);
-            Value * const currentOffset = b->CreateURem(produced, bufferSize);
+            Value * const currentOffset = b->CreateURem(produced, capacity);
             b->CreateUnlikelyCondBr(b->CreateICmpULT(currentOffset, priorOffset), copyBack, done);
 
             b->SetInsertPoint(copyBack);
@@ -336,7 +336,7 @@ inline void MultiBlockKernel::writeCopyBackLogic(const std::unique_ptr<KernelBui
                 // if we can compute the overflowPosition, do so
                 const ProcessingRate & rate = output.getRate();
                 if (rate.isPopCount() || rate.isNegatedPopCount()) {
-                    Value * const limit = b->CreateSub(bufferSize, priorOffset);
+                    Value * const limit = b->CreateSub(capacity, priorOffset);
                     BasicBlock * const popCountLoop = b->CreateBasicBlock();
                     BasicBlock * const popCountDone = b->CreateBasicBlock();
                     b->CreateBr(popCountLoop);
@@ -411,7 +411,7 @@ inline Value * MultiBlockKernel::hasAnotherStride(const std::unique_ptr<KernelBu
         Value * const produced = b->getNonDeferredProducedItemCount(output);
         Value * const consumed = b->getConsumedItemCount(name);
         Value * const unconsumed = b->CreateSub(produced, consumed);
-        Value * const capacity = b->getBufferedSize(name);
+        Value * const capacity = b->getCapacity(name);
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             b->CreateAssert(b->CreateICmpULE(consumed, produced),
                             getName() + ": " + name + " consumed data exceeds produced data");

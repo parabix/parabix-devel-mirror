@@ -37,7 +37,7 @@ namespace kernel {
         Constant* SIZE_0 = iBuilder->getSize(0);
         Constant* SIZE_1 = iBuilder->getSize(1);
         Value* SIZE_64 = iBuilder->getSize(64); // maybe need to handle 32 bit machine
-        Value* SIZE_INPUT_64_COUNT = iBuilder->getSize(this->getInputStreamSetBuffer(inputName)->getBufferBlocks() * iBuilder->getBitBlockWidth() / 64);
+        Value* SIZE_INPUT_64_COUNT = iBuilder->CreateUDiv(iBuilder->getCapacity(inputName), iBuilder->getSize(64));
 
         Value* initCurrentPos = startPos;
 

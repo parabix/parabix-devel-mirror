@@ -25,9 +25,7 @@ public:
     parabix::StreamSetBuffer * addBuffer(Args &&... args) {
         BufferType * const b = new BufferType(std::forward<Args>(args) ...);
         mOwnedBuffers.emplace_back(b);
-        if (!std::is_same<BufferType, parabix::ExternalBuffer>::value) {
-            mOwnedBuffers.back()->allocateBuffer(iBuilder);
-        }
+        mOwnedBuffers.back()->allocateBuffer(iBuilder);
         return b;
     }
 

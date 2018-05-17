@@ -567,7 +567,7 @@ PipelineGenerator::ChannelGraph PipelineGenerator::makeOutputGraph() const {
         const auto & inputs = consumer->getStreamInputs();
         for (unsigned i = 0; i < inputs.size(); ++i) {
             const auto buffer = consumer->getStreamSetInputBuffer(i);
-            if (isa<SourceBuffer>(buffer)) continue;
+            if (isa<ExternalBuffer>(buffer)) continue;
             const Kernel * const producer = buffer->getProducer();
             assert (consumer != producer);
             const Binding & output = producer->getStreamOutput(buffer);
@@ -871,7 +871,7 @@ void PipelineGenerator::checkAvailableOutputSpace(const std::unique_ptr<KernelBu
         Value * const consumed = b->getConsumedItemCount(name);
         Value * const unconsumed = b->CreateSub(produced, consumed);
         requiredSpace = b->CreateAdd(requiredSpace, unconsumed);
-        Value * const capacity = b->getBufferedSize(name);
+        Value * const capacity = b->getCapacity(name);
         Value * const check = b->CreateICmpULE(requiredSpace, capacity);
         terminated->addIncoming(b->getFalse(), b->GetInsertBlock());
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -952,7 +952,7 @@ Value * PipelineGenerator::callKernel(const std::unique_ptr<KernelBuilder> & b, 
         const Binding & output = outputs[i];
         const auto & name = output.getName();
         if (initiallyProducedItemCount[i]) {
-            Value * const bufferSize = b->getBufferedSize(name);
+            Value * const bufferSize = b->getCapacity(name);
             Value * const prior = initiallyProducedItemCount[i];
             Value * const offset = b->CreateURem(prior, bufferSize);
             Value * const produced = b->getNonDeferredProducedItemCount(output);
@@ -1020,32 +1020,15 @@ void PipelineGenerator::applyOutputBufferExpansions(const std::unique_ptr<Kernel
     const auto & outputs = kernel->getStreamSetOutputBuffers();
     for (unsigned i = 0; i < outputs.size(); i++) {
         if (isa<DynamicBuffer>(outputs[i])) {
-
-            const auto baseSize = ceiling(kernel->getUpperBound(kernel->getStreamOutput(i).getRate()) * kernel->getStride() * codegen::SegmentSize);
+            const auto & output = kernel->getStreamOutput(i);
+            const auto baseSize = ceiling(kernel->getUpperBound(output.getRate()) * kernel->getStride() * codegen::SegmentSize);
             if (LLVM_LIKELY(baseSize > 0)) {
-
-                const auto & name = kernel->getStreamOutput(i).getName();
-
-                BasicBlock * const doExpand = b->CreateBasicBlock(name + "Expand");
-                BasicBlock * const nextBlock = b->GetInsertBlock()->getNextNode();
-                doExpand->moveAfter(b->GetInsertBlock());
-                BasicBlock * const bufferReady = b->CreateBasicBlock(name + "Ready");
-                bufferReady->moveAfter(doExpand);
-                if (nextBlock) nextBlock->moveAfter(bufferReady);
-
+                const auto & name = output.getName();
                 Value * const produced = b->getProducedItemCount(name);
                 Value * const consumed = b->getConsumedItemCount(name);
-                Value * const required = b->CreateAdd(b->CreateSub(produced, consumed), b->getSize(2 * baseSize));
-
-                b->CreateCondBr(b->CreateICmpUGT(required, b->getBufferedSize(name)), doExpand, bufferReady);
-                b->SetInsertPoint(doExpand);
-
-                b->doubleCapacity(name);
-                // Ensure that capacity is sufficient by successive doubling, if necessary.
-                b->CreateCondBr(b->CreateICmpUGT(required, b->getBufferedSize(name)), doExpand, bufferReady);
-
-                b->SetInsertPoint(bufferReady);
-
+                Value * const unconsumed = b->CreateSub(produced, consumed);
+                Value * const required = b->CreateAdd(unconsumed, b->getSize(2 * baseSize));
+                b->setCapacity(name, required);
             }
         }
     }

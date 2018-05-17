@@ -281,27 +281,27 @@ void generatePipeline(ParabixDriver & pxDriver) {
     iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
 
     // File data from mmap
-    StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
     Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
     mmapK->setInitialArguments({fileDecriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
 
     // Transposed bits from s2p
-    StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), bufferSize);
+    StreamSetBuffer * BasisBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), bufferSize);
 
     Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
 
     // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
-    StreamSetBuffer * u8bits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), bufferSize);
-    StreamSetBuffer * DelMask = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), bufferSize);
+    StreamSetBuffer * u8bits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(16), bufferSize);
+    StreamSetBuffer * DelMask = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(), bufferSize);
 
     Kernel * u8u16k = pxDriver.addKernelInstance<U8U16Kernel>(iBuilder);
     pxDriver.makeKernelCall(u8u16k, {BasisBits}, {u8bits, DelMask});
 
-    StreamSetBuffer * u16bits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(16), bufferSize);
+    StreamSetBuffer * u16bits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(16), bufferSize);
 
     const auto avx2 = enableAVXdel && AVX2_available() && codegen::BlockSize==256;
 
@@ -310,17 +310,17 @@ void generatePipeline(ParabixDriver & pxDriver) {
     if (mMapBuffering || memAlignBuffering) {
         u16bytes = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), outputStream);
     } else if (avx2) {
-        u16bytes = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), bufferSize);
+        u16bytes = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), bufferSize);
     } else {
-        u16bytes = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), bufferSize, 1);
+        u16bytes = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), bufferSize, 1);
     }
 
     if (avx2) {
         // Allocate space for fully compressed swizzled UTF-16 bit streams
-        StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
-        StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
-        StreamSetBuffer * u16Swizzle2 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
-        StreamSetBuffer * u16Swizzle3 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
+        StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
+        StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
+        StreamSetBuffer * u16Swizzle2 = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
+        StreamSetBuffer * u16Swizzle3 = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
         // Apply a deletion algorithm to discard all but the final position of the UTF-8
         // sequences (bit streams) for each UTF-16 code unit. Also compresses and swizzles the result.
         Kernel * delK = pxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 16);
@@ -331,7 +331,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
         Kernel * p2sk = pxDriver.addKernelInstance<P2S16Kernel>(iBuilder);
         pxDriver.makeKernelCall(p2sk, {u16bits}, {u16bytes});
     } else {
-        StreamSetBuffer * DeletionCounts = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(), bufferSize);
+        StreamSetBuffer * DeletionCounts = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(), bufferSize);
         Kernel * delK = pxDriver.addKernelInstance<FieldCompressKernel>(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
         pxDriver.makeKernelCall(delK, {u8bits, DelMask}, {u16bits, DeletionCounts});
         Kernel * p2sk = pxDriver.addKernelInstance<P2S16KernelWithCompressedOutput>(iBuilder);

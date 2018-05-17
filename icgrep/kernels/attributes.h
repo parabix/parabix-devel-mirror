@@ -249,6 +249,10 @@ struct Attribute {
         // kernel writer maintain the current stride index and that the kernel logic has
         // a natural breakpoint in the algorithm in which to record the number.
 
+        Expandable, /// NOT DONE
+
+        // Indicates that the number of stream sets in this buffer can increase.
+
         /** KERNEL ATTRIBUTES **/
 
         SelectMinimumInputLength, /// NOT DONE

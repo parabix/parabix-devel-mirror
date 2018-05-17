@@ -420,30 +420,12 @@ void KernelBuilder::setBaseAddress(const std::string & name, Value * const addr)
     return mKernel->getAnyStreamSetBuffer(name)->setBaseAddress(this, getStreamHandle(name), addr);
 }
 
-Value * KernelBuilder::getBufferedSize(const std::string & name) {
-    return mKernel->getAnyStreamSetBuffer(name)->getBufferedSize(this, getStreamHandle(name));
-}
-
-void KernelBuilder::setBufferedSize(const std::string & name, Value * size) {
-    mKernel->getAnyStreamSetBuffer(name)->setBufferedSize(this, getStreamHandle(name), size);
-}
-
 Value * KernelBuilder::getCapacity(const std::string & name) {
     return mKernel->getAnyStreamSetBuffer(name)->getCapacity(this, getStreamHandle(name));
 }
 
 void KernelBuilder::setCapacity(const std::string & name, Value * c) {
     mKernel->getAnyStreamSetBuffer(name)->setCapacity(this, getStreamHandle(name), c);
-}
-
-void KernelBuilder::protectOutputStream(const std::string & name, const bool readOnly) {
-    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-    Value * const handle = getStreamHandle(name);
-    Value * const base = buf->getBaseAddress(this, handle);
-    Value * sz = ConstantExpr::getSizeOf(buf->getType());
-    sz = CreateMul(sz, getInt64(buf->getBufferBlocks()));
-    sz = CreateMul(sz, CreateZExt(buf->getStreamSetCount(this, handle), getInt64Ty()));
-    CreateMProtect(base, sz, readOnly ? CBuilder::READ : (CBuilder::READ | CBuilder::WRITE));
 }
     
 CallInst * KernelBuilder::createDoSegmentCall(const std::vector<Value *> & args) {
@@ -472,11 +454,6 @@ Value * KernelBuilder::getAccumulator(const std::string & accumName) {
         }
         report_fatal_error(mKernel->getName() + " has no output scalar named " + accumName);
     }
-}
-
-void KernelBuilder::doubleCapacity(const std::string & name) {
-    const StreamSetBuffer * const buf = mKernel->getAnyStreamSetBuffer(name);
-    return buf->doubleCapacity(this, getStreamHandle(name));
 }
 
 BasicBlock * KernelBuilder::CreateConsumerWait() {

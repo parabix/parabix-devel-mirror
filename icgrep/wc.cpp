@@ -170,7 +170,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
 
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
 
-    StreamSetBuffer * const ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    StreamSetBuffer * const ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
 
 
     Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
@@ -179,7 +179,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     
     Kernel * wck  = nullptr;
     if (CountWords || CountChars) {
-        StreamSetBuffer * const BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
+        StreamSetBuffer * const BasisBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
         Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder);
         pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
         

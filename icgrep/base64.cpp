@@ -65,16 +65,16 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
     const auto bufferSize = (codegen::SegmentSize * codegen::BufferSegments);
     const auto expandedSize = boost::lcm(boost::lcm(bufferSize, 3U), 4U);
 
-    StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
     Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
     mmapK->setInitialArguments({fileDescriptor});
     pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
     
-    StreamSetBuffer * Expanded3_4Out = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), expandedSize);
+    StreamSetBuffer * Expanded3_4Out = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), expandedSize);
     Kernel * expandK = pxDriver.addKernelInstance<expand3_4Kernel>(iBuilder);
     pxDriver.makeKernelCall(expandK, {ByteStream}, {Expanded3_4Out});
     
-    StreamSetBuffer * Radix64out = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferSize);
+    StreamSetBuffer * Radix64out = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferSize);
     Kernel * radix64K = pxDriver.addKernelInstance<radix64Kernel>(iBuilder);
     pxDriver.makeKernelCall(radix64K, {Expanded3_4Out}, {Radix64out});
     
@@ -83,7 +83,7 @@ void base64PipelineGen(ParabixDriver & pxDriver) {
         Kernel * base64K = pxDriver.addKernelInstance<base64Kernel>(iBuilder);
         pxDriver.makeKernelCall(base64K, {Radix64out}, {Base64out});
     } else {
-        StreamSetBuffer * Base64out = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferSize);
+        StreamSetBuffer * Base64out = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferSize);
         Kernel * base64K = pxDriver.addKernelInstance<base64Kernel>(iBuilder);
         pxDriver.makeKernelCall(base64K, {Radix64out}, {Base64out});        
         Kernel * outK = pxDriver.addKernelInstance<StdOutKernel>(iBuilder, 8);

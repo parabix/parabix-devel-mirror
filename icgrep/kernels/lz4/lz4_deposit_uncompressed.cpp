@@ -46,11 +46,8 @@ namespace kernel{
 
         Value* inputBufferBasePtr = iBuilder->getRawInputPointer("byteStream", iBuilder->getSize(0));
         Value* outputBufferBasePtr = iBuilder->getRawOutputPointer("outputStream", iBuilder->getSize(0));
-
-
-        size_t outputBufferSize = this->getOutputStreamSetBuffer("outputStream")->getBufferBlocks() * iBuilder->getStride();
-        Value* outputBufferSizeValue = iBuilder->getSize(outputBufferSize);
-        Value* outputBufferSizeMask = iBuilder->getSize(outputBufferSize - 1);
+        Value* outputBufferSizeValue = iBuilder->getCapacity("outputStream");
+        Value* outputBufferSizeMask = iBuilder->CreateSub(outputBufferSizeValue, iBuilder->getSize(1));
 
         Value* maskedOutputOffset = iBuilder->CreateAnd(uncompressedOutputPos, outputBufferSizeMask);
         Value* remainBuffer = iBuilder->CreateSub(outputBufferSizeValue, maskedOutputOffset);
@@ -84,17 +81,10 @@ namespace kernel{
         return this->generateLoadCircularInput(iBuilder, name, blockDataIndex, iBuilder->getInt64Ty());
     }
 
-    size_t LZ4DepositUncompressedKernel::getInputBufferSize(const unique_ptr<KernelBuilder> &iBuilder, string bufferName) {
-        return this->getInputStreamSetBuffer(bufferName)->getBufferBlocks() * iBuilder->getStride();
-    }
-
-    Value* LZ4DepositUncompressedKernel::generateLoadCircularInput(const unique_ptr<KernelBuilder> &iBuilder, string inputBufferName, Value* offset, Type* pointerType) {
-        size_t inputSize = this->getInputBufferSize(iBuilder, inputBufferName);
-        Value* offsetMask = iBuilder->getSize(inputSize - 1);
+    Value* LZ4DepositUncompressedKernel::generateLoadCircularInput(const unique_ptr<KernelBuilder> &iBuilder, const string & bufferName, Value* offset, Type* pointerType) {
+        Value* offsetMask =  iBuilder->CreateSub(iBuilder->getCapacity(bufferName), iBuilder->getSize(1));
         Value* maskedOffset = iBuilder->CreateAnd(offsetMask, offset);
-
-        Value* inputBufferPtr = iBuilder->getRawInputPointer(inputBufferName, iBuilder->getSize(0));
-
+        Value* inputBufferPtr = iBuilder->getRawInputPointer(bufferName, iBuilder->getSize(0));
         inputBufferPtr = iBuilder->CreatePointerCast(inputBufferPtr, pointerType);
         return iBuilder->CreateLoad(iBuilder->CreateGEP(inputBufferPtr, maskedOffset));
     }

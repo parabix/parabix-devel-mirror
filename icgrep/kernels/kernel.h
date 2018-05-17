@@ -269,8 +269,6 @@ private:
         return mAvailableItemCount[i];
     }
 
-    bool verifyBufferSize(const Binding & binding, const parabix::StreamSetBuffer * const buffer) const;
-
     void verifyStreamSetDefinitions() const;
 
 protected:

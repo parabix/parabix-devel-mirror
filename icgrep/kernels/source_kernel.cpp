@@ -34,11 +34,7 @@ void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod,
     BasicBlock * const nonEmptyFile = b->CreateBasicBlock("NonEmptyFile");
     BasicBlock * const exit = b->CreateBasicBlock("Exit");
     IntegerType * const sizeTy = b->getSizeTy();
-
     ConstantInt * const PAGE_SIZE = b->getSize(getpagesize());
-    ConstantInt * const ZERO = b->getSize(0);
-
-
     Value * const fd = b->getScalarField("fileDescriptor");
     assert (fileSizeMethod);
     Value * fileSize = b->CreateZExtOrTrunc(b->CreateCall(fileSizeMethod, fd), sizeTy);
@@ -53,19 +49,14 @@ void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod,
     if (LLVM_UNLIKELY(codeUnitWidth > 8)) {
         fileSize = b->CreateUDiv(fileSize, b->getSize(codeUnitWidth / 8));
     }
-    b->setBufferedSize("sourceBuffer", fileSize);
     b->setScalarField("fileSize", fileSize);
-    b->setProducedItemCount("sourceBuffer", ZERO);
-    b->setCapacity("sourceBuffer", fileSize);
     b->CreateBr(exit);
 
     b->SetInsertPoint(emptyFile);
     Value * const emptyFilePtr = b->CreatePointerCast(b->CreateAnonymousMMap(PAGE_SIZE), codeUnitPtrTy);
     b->setScalarField("buffer", emptyFilePtr);
     b->setBaseAddress("sourceBuffer", emptyFilePtr);
-    b->setScalarField("fileSize", ZERO);
-    b->setBufferedSize("sourceBuffer", PAGE_SIZE);
-    b->setCapacity("sourceBuffer", PAGE_SIZE);
+    b->setScalarField("fileSize", PAGE_SIZE);
     b->setTerminationSignal();
     b->CreateBr(exit);
 
@@ -159,6 +150,7 @@ void ReadSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, co
     b->setBaseAddress("sourceBuffer", buffer);
     b->setScalarField("buffer", buffer);
     b->setCapacity("sourceBuffer", bufferItems);
+    b->setScalarField("fileSize", b->getSize(0));
 }
 
 void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, const std::unique_ptr<KernelBuilder> & b) {
@@ -178,7 +170,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
 
     // Do we have enough unread data to support one segment?
     Value * const produced = b->getProducedItemCount("sourceBuffer");
-    Value * const buffered = b->getBufferedSize("sourceBuffer");
+    Value * const buffered = b->getScalarField("fileSize");
     Value * const itemsPending = b->CreateAdd(produced, itemsPerSegment);
 
     b->CreateLikelyCondBr(b->CreateICmpULT(itemsPending, buffered), readExit, checkData);
@@ -244,7 +236,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     Value * const bytesRead = b->CreateReadCall(fd, sourceBuffer, bytesToRead);
     Value * const itemsRead = b->CreateUDiv(bytesRead, codeUnitBytes);
     Value * const itemsBuffered = b->CreateAdd(buffered, itemsRead);
-    b->setBufferedSize("sourceBuffer", itemsBuffered);
+    b->setScalarField("fileSize", itemsBuffered);
     b->CreateUnlikelyCondBr(b->CreateICmpULT(itemsBuffered, itemsPending), setTermination, readExit);
 
     // ... set the termination signal.
@@ -254,7 +246,6 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->setTerminationSignal();
     b->CreateBr(readExit);
 
-    readExit->moveAfter(setTermination);
     b->SetInsertPoint(readExit);
     PHINode * const itemsProduced = b->CreatePHI(itemsPending->getType(), 3);
     itemsProduced->addIncoming(itemsPending, entry);
@@ -338,7 +329,6 @@ void MemorySourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBu
     Value * const fileSource = b->getScalarField("fileSource");
     b->setBaseAddress("sourceBuffer", fileSource);
     Value * const fileSize = b->getScalarField("fileSize");
-    b->setBufferedSize("sourceBuffer", fileSize);
     b->setCapacity("sourceBuffer", fileSize);
     if (mStreamSetCount > 1) {
         b->setProducedItemCount("sourceBuffer", fileSize);
@@ -402,11 +392,17 @@ void MemorySourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuil
 
 MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth)
 : SegmentOrientedKernel("mmap_source@" + std::to_string(codeUnitWidth)
+// input streams
 , {}
+// output streams
 , {Binding{b->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}
+// input scalars
 , {Binding{b->getInt32Ty(), "fileDescriptor"}}
-, {Binding{b->getSizeTy(), "fileSize"}}
-, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}})
+// output scalars
+, {}
+// internal scalars
+, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}
+,  Binding{b->getSizeTy(), "fileSize"}})
 , mCodeUnitWidth(codeUnitWidth)
 , mFileSizeFunction(nullptr) {
     addAttribute(MustExplicitlyTerminate());
@@ -415,11 +411,17 @@ MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 
 ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth)
 : SegmentOrientedKernel("read_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(codeUnitWidth)
+// input streams
 , {}
+// output streams
 , {Binding{b->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}
+// input scalars
 , {Binding{b->getInt32Ty(), "fileDescriptor"}}
+// output scalars
 , {}
-, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}})
+// internal scalars
+, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}
+,  Binding{b->getSizeTy(), "fileSize"}})
 , mCodeUnitWidth(codeUnitWidth) {
     addAttribute(MustExplicitlyTerminate());
     setStride(getpagesize());
@@ -428,14 +430,16 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 
 FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth)
 : SegmentOrientedKernel("FD_source@" + std::to_string(codeUnitWidth)
+// input streams
 , {}
 // output stream
 , {Binding{b->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}
 // input scalar
 , {Binding{b->getInt8Ty(), "useMMap"}, Binding{b->getInt32Ty(), "fileDescriptor"}}
 , {}
-// internal scalar
-, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}, Binding{b->getSizeTy(), "fileSize"}})
+// internal scalars
+, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"},
+   Binding{b->getSizeTy(), "fileSize"}})
 , mCodeUnitWidth(codeUnitWidth)
 , mFileSizeFunction(nullptr) {
     addAttribute(MustExplicitlyTerminate());
@@ -444,6 +448,7 @@ FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 
 MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned streamSetCount, const unsigned codeUnitWidth)
 : SegmentOrientedKernel("memory_source@" + std::to_string(streamSetCount) + ":" + std::to_string(codeUnitWidth),
+// input streams
 {},
 // output stream
 {Binding{b->getStreamSetTy(streamSetCount, codeUnitWidth), "sourceBuffer"}},

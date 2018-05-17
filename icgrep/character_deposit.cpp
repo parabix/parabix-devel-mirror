@@ -64,8 +64,8 @@ typedef void (*MainFunctionType)(char * byte_data, size_t filesize);
 StreamSetBuffer * loadBasisBits(ParabixDriver & pxDriver, Value* inputStream, Value* fileSize, int bufferBlocks) {
     auto & iBuilder = pxDriver.getBuilder();
 
-    StreamSetBuffer * ByteStream = pxDriver.addBuffer<SourceBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    StreamSetBuffer * BasisBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), bufferBlocks);
+    StreamSetBuffer * ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    StreamSetBuffer * BasisBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), bufferBlocks);
 
     kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);
     sourceK->setInitialArguments({inputStream, fileSize});
@@ -79,13 +79,13 @@ StreamSetBuffer * loadBasisBits(ParabixDriver & pxDriver, Value* inputStream, Va
 StreamSetBuffer * generateSwizzledDeposit(ParabixDriver & pxDriver, StreamSetBuffer * BasisBits, int bufferBlocks) {
     auto & iBuilder = pxDriver.getBuilder();
 
-    StreamSetBuffer * const CharacterMarkerBuffer = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), bufferBlocks);
+    StreamSetBuffer * const CharacterMarkerBuffer = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), bufferBlocks);
     Kernel * ccK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(characterToBeDeposit)}, 8);
     pxDriver.makeKernelCall(ccK, {BasisBits}, {CharacterMarkerBuffer});
 
 
-    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferBlocks);
-    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<CircularCopybackBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferBlocks);
+    StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferBlocks, 1);
+    StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferBlocks, 1);
     Kernel * delK = pxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 8);
     pxDriver.makeKernelCall(delK, {CharacterMarkerBuffer, BasisBits}, {u16Swizzle0, u16Swizzle1});
 
@@ -99,7 +99,7 @@ StreamSetBuffer * generateSwizzledDeposit(ParabixDriver & pxDriver, StreamSetBuf
     pxDriver.makeKernelCall(pdep1K, {CharacterMarkerBuffer, u16Swizzle1}, {depositedSwizzle1});
 
     // Produce unswizzled bit streams
-    StreamSetBuffer * resultbits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks);
+    StreamSetBuffer * resultbits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks);
     Kernel * unSwizzleK = pxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
 
     pxDriver.makeKernelCall(unSwizzleK, {depositedSwizzle0, depositedSwizzle1}, {resultbits});
@@ -109,22 +109,22 @@ StreamSetBuffer * generateSwizzledDeposit(ParabixDriver & pxDriver, StreamSetBuf
 StreamSetBuffer * generateBitStreamDeposit(ParabixDriver & pxDriver, StreamSetBuffer * BasisBits, int bufferBlocks) {
     auto & iBuilder = pxDriver.getBuilder();
 
-    StreamSetBuffer * const deletionMarker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), bufferBlocks);
+    StreamSetBuffer * const deletionMarker = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), bufferBlocks);
     Kernel * ccK1 = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "deletionMarker", std::vector<re::CC *>{re::subtractCC(re::makeByte(0, 255), re::makeCC(characterToBeDeposit))}, 8);
     pxDriver.makeKernelCall(ccK1, {BasisBits}, {deletionMarker});
 
-    StreamSetBuffer * const depositMarker = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), bufferBlocks);
+    StreamSetBuffer * const depositMarker = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), bufferBlocks);
     Kernel * ccK2 = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(characterToBeDeposit)}, 8);
     pxDriver.makeKernelCall(ccK2, {BasisBits}, {depositMarker});
 
     // Deletion
-    StreamSetBuffer * deletedBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks);
-    StreamSetBuffer * deletionCounts = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks);
+    StreamSetBuffer * deletedBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks);
+    StreamSetBuffer * deletionCounts = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks);
 
     Kernel * delK = pxDriver.addKernelInstance<PEXTFieldCompressKernel>(iBuilder, 64, 8);
     pxDriver.makeKernelCall(delK, {BasisBits, deletionMarker}, {deletedBits, deletionCounts});
 
-    StreamSetBuffer * compressedBits = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks);
+    StreamSetBuffer * compressedBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks);
     Kernel * streamCompressionK = pxDriver.addKernelInstance<StreamCompressKernel>(iBuilder, 64, 8);
     pxDriver.makeKernelCall(streamCompressionK, {deletedBits, deletionCounts}, {compressedBits});
 
@@ -188,7 +188,7 @@ int main(int argc, char *argv[]) {
         resultbits = generateBitStreamDeposit(pxDriver, BasisBits, bufferBlocks);
     }
 
-    StreamSetBuffer * const ResultBytes = pxDriver.addBuffer<CircularBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferBlocks);
+    StreamSetBuffer * const ResultBytes = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), bufferBlocks);
     Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(iBuilder);
     pxDriver.makeKernelCall(p2sK, {resultbits}, {ResultBytes});
 
