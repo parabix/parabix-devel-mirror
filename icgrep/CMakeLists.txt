@@ -10,6 +10,7 @@ set (icgrep_VERSION_MINOR 6)
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
+option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
 find_package(LLVM REQUIRED CONFIG)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in: ${LLVM_DIR}")
@@ -237,11 +238,12 @@ SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -
 SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
 UNSET(HAS_ADDRESS_SANITIZER)
+IF (USE_ADDRESS_SANITIZER)
 CHECK_INCLUDE_FILE_CXX("sanitizer/asan_interface.h" HAS_ADDRESS_SANITIZER)
 IF (HAS_ADDRESS_SANITIZER)
 SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DHAS_ADDRESS_SANITIZER -fsanitize=address")
 ENDIF()
-
+ENDIF()
 
 add_test(
   NAME greptest
