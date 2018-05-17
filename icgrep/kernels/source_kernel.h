@@ -45,17 +45,17 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
     void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
-        generateInitializeMethod(mCodeUnitWidth, getStride(), iBuilder);
+        generateInitializeMethod(mCodeUnitWidth, iBuilder);
     }
     void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
-        generateDoSegmentMethod(mCodeUnitWidth, getStride(), iBuilder);
+        generateDoSegmentMethod(mCodeUnitWidth, iBuilder);
     }
     void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
         freeBuffer(iBuilder);
     }
 protected:
-    static void generateInitializeMethod(const unsigned codeUnitWidth, const unsigned stride, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    static void generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    static void generateInitializeMethod(const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    static void generateDoSegmentMethod(const unsigned codeUnitWidth, const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     static void freeBuffer(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 private:
     const unsigned mCodeUnitWidth;

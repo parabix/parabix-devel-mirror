@@ -139,29 +139,24 @@ void MMapSourceKernel::freeBuffer(const std::unique_ptr<KernelBuilder> & b) {
 
 /// READ SOURCE KERNEL
 
-void ReadSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, const unsigned stride, const std::unique_ptr<KernelBuilder> & b) {
+void ReadSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, const std::unique_ptr<KernelBuilder> & b) {
     const unsigned pageSize = getpagesize();
-    const auto bufferSize = std::max(pageSize * 8, codegen::SegmentSize * stride  * 4);
-    ConstantInt * const bufferItems = b->getSize(bufferSize);
+    ConstantInt * const bufferItems = b->getSize(pageSize * 4);
     const auto codeUnitSize = codeUnitWidth / 8;
-    ConstantInt * const bufferBytes = b->getSize(bufferSize * codeUnitSize);
+    ConstantInt * const bufferBytes = b->getSize(pageSize * 4 * codeUnitSize);
     PointerType * const codeUnitPtrTy = b->getIntNTy(codeUnitWidth)->getPointerTo();
     Value * const buffer = b->CreatePointerCast(b->CreateCacheAlignedMalloc(bufferBytes), codeUnitPtrTy);
     b->setBaseAddress("sourceBuffer", buffer);
     b->setScalarField("buffer", buffer);
     b->setCapacity("sourceBuffer", bufferItems);
-    b->setScalarField("fileSize", b->getSize(0));
 }
 
-void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, const std::unique_ptr<KernelBuilder> & b) {
+void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const std::unique_ptr<KernelBuilder> & b) {
 
     const unsigned pageSize = getpagesize();
-    ConstantInt * const itemsToRead = b->getSize(std::max(pageSize, codegen::SegmentSize * stride * 2));
+    ConstantInt * const itemsToRead = b->getSize(pageSize);
     ConstantInt * const codeUnitBytes = b->getSize(codeUnitWidth / 8);
-    ConstantInt * const itemsPerSegment = b->getSize(codegen::SegmentSize * stride);
 
-    BasicBlock * const entry = b->GetInsertBlock();
-    BasicBlock * const checkData = b->CreateBasicBlock("CheckData");
     BasicBlock * const moveData = b->CreateBasicBlock("MoveData");
     BasicBlock * const prepareBuffer = b->CreateBasicBlock("PrepareBuffer");
     BasicBlock * const readData = b->CreateBasicBlock("ReadData");
@@ -170,15 +165,11 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
 
     // Do we have enough unread data to support one segment?
     Value * const produced = b->getProducedItemCount("sourceBuffer");
-    Value * const buffered = b->getScalarField("fileSize");
-    Value * const itemsPending = b->CreateAdd(produced, itemsPerSegment);
-
-    b->CreateLikelyCondBr(b->CreateICmpULT(itemsPending, buffered), readExit, checkData);
+    Value * const itemsPending = b->CreateAdd(produced, itemsToRead);
 
     // Can we append to our existing buffer without impacting any subsequent kernel?
-    b->SetInsertPoint(checkData);
     Value * const capacity = b->getCapacity("sourceBuffer");
-    Value * const readEnd = b->getRawOutputPointer("sourceBuffer", b->CreateAdd(buffered, itemsToRead));
+    Value * const readEnd = b->getRawOutputPointer("sourceBuffer", itemsPending);
     Value * const baseBuffer = b->getScalarField("buffer");
     Value * const bufferLimit = b->CreateGEP(baseBuffer, capacity);
     b->CreateLikelyCondBr(b->CreateICmpULE(readEnd, bufferLimit), readData, moveData);
@@ -197,7 +188,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     Value * const consumed = b->getConsumedItemCount("sourceBuffer");
     Value * const offset = b->CreateAnd(consumed, blockSizeAlignmentMask);
     Value * const unreadData = b->getRawOutputPointer("sourceBuffer", offset);
-    Value * const remainingItems = b->CreateSub(buffered, offset);
+    Value * const remainingItems = b->CreateSub(produced, offset);
     Value * const remainingBytes = b->CreateMul(remainingItems, codeUnitBytes);
 
     // Have we consumed enough data that we can safely copy back the unconsumed data without needing a temporary buffer?
@@ -221,7 +212,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->CreateBr(prepareBuffer);
 
     b->SetInsertPoint(prepareBuffer);
-    PHINode * newBaseBuffer = b->CreatePHI(baseBuffer->getType(), 2);
+    PHINode * const newBaseBuffer = b->CreatePHI(baseBuffer->getType(), 2);
     newBaseBuffer->addIncoming(baseBuffer, copyBack);
     newBaseBuffer->addIncoming(expandedBuffer, expandAndCopyBack);
     b->setBaseAddress("sourceBuffer", b->CreateGEP(newBaseBuffer, b->CreateNeg(offset)));
@@ -230,13 +221,12 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     // Regardless of whether we're simply appending data or had to allocate a new buffer, read a new page
     // of data into the input source buffer. If we fail to read a full page ...
     b->SetInsertPoint(readData);
-    Value * const sourceBuffer = b->getRawOutputPointer("sourceBuffer", buffered);
+    Value * const sourceBuffer = b->getRawOutputPointer("sourceBuffer", produced);
     Value * const fd = b->getScalarField("fileDescriptor");
     Constant * const bytesToRead = ConstantExpr::getMul(itemsToRead, codeUnitBytes);
     Value * const bytesRead = b->CreateReadCall(fd, sourceBuffer, bytesToRead);
     Value * const itemsRead = b->CreateUDiv(bytesRead, codeUnitBytes);
-    Value * const itemsBuffered = b->CreateAdd(buffered, itemsRead);
-    b->setScalarField("fileSize", itemsBuffered);
+    Value * const itemsBuffered = b->CreateAdd(produced, itemsRead);
     b->CreateUnlikelyCondBr(b->CreateICmpULT(itemsBuffered, itemsPending), setTermination, readExit);
 
     // ... set the termination signal.
@@ -247,8 +237,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->CreateBr(readExit);
 
     b->SetInsertPoint(readExit);
-    PHINode * const itemsProduced = b->CreatePHI(itemsPending->getType(), 3);
-    itemsProduced->addIncoming(itemsPending, entry);
+    PHINode * const itemsProduced = b->CreatePHI(itemsPending->getType(), 2);
     itemsProduced->addIncoming(itemsPending, readData);
     itemsProduced->addIncoming(itemsBuffered, setTermination);
     b->setProducedItemCount("sourceBuffer", itemsProduced);
@@ -304,7 +293,7 @@ void FDSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilde
     b->SetInsertPoint(initializeRead);
     // Ensure that readSource logic is used throughout.
     b->setScalarField("useMMap", b->getInt8(0));
-    ReadSourceKernel::generateInitializeMethod(mCodeUnitWidth, getStride(), b);
+    ReadSourceKernel::generateInitializeMethod(mCodeUnitWidth,b);
     b->CreateBr(initializeDone);
     b->SetInsertPoint(initializeDone);
 }
@@ -318,7 +307,7 @@ void FDSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder
     MMapSourceKernel::generateDoSegmentMethod(mCodeUnitWidth, b);
     b->CreateBr(DoSegmentDone);
     b->SetInsertPoint(DoSegmentRead);
-    ReadSourceKernel::generateDoSegmentMethod(mCodeUnitWidth, getStride(), b);
+    ReadSourceKernel::generateDoSegmentMethod(mCodeUnitWidth, b);
     b->CreateBr(DoSegmentDone);
     b->SetInsertPoint(DoSegmentDone);
 }
@@ -420,8 +409,7 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 // output scalars
 , {}
 // internal scalars
-, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}
-,  Binding{b->getSizeTy(), "fileSize"}})
+, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}})
 , mCodeUnitWidth(codeUnitWidth) {
     addAttribute(MustExplicitlyTerminate());
     setStride(getpagesize());
