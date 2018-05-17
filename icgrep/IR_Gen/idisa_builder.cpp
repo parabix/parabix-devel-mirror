@@ -190,8 +190,9 @@ Value * IDISA_Builder::mvmd_dsll(unsigned fw, Value * a, Value * b, Value * shif
     for (unsigned i = 0; i < field_count; i++) {
         Idxs[i] = ConstantInt::get(fwTy, i + field_count);
     }
-    Value * shuffle = simd_add(fw, simd_fill(fw, shift), ConstantVector::get({Idxs, field_count}));
-    return mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), shuffle);
+    Value * shuffle = simd_sub(fw, ConstantVector::get({Idxs, field_count}), simd_fill(fw, shift));
+    Value * rslt = mvmd_shuffle2(fw, fwCast(fw, a), fwCast(fw, b), shuffle);
+    return rslt;
 }
 
 Value * IDISA_Builder::mvmd_srl(unsigned fw, Value * value, Value * shift) {
@@ -533,11 +534,11 @@ Value * IDISA_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * shuffle_tabl
 Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * a, Value *b, Value * shuffle_table) {
     //  Use two shuffles, with selection by the bit value within the shuffle_table.
     const auto field_count = mBitBlockWidth/fw;
-    Constant * selectorSplat = ConstantVector::getSplat(field_count, ConstantInt::get(getIntNTy(fw), 1<<field_count));
+    Constant * selectorSplat = ConstantVector::getSplat(field_count, ConstantInt::get(getIntNTy(fw), field_count));
     Value * selectMask = simd_eq(fw, simd_and(shuffle_table, selectorSplat), selectorSplat);
-    Value * negSelect = simd_not(selectMask);
-    Value * tbl = simd_and(shuffle_table, negSelect);
-    return simd_or(simd_and(mvmd_shuffle(fw, a, tbl), negSelect), simd_and(mvmd_shuffle(fw, b, tbl), selectMask));
+    Value * tbl = simd_and(shuffle_table, simd_not(selectorSplat));
+    Value * rslt= simd_or(simd_and(mvmd_shuffle(fw, a, tbl), simd_not(selectMask)), simd_and(mvmd_shuffle(fw, b, tbl), selectMask));
+    return rslt;
 }
     
 

@@ -354,8 +354,10 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_shuffle(unsigned fw, llvm::Value * a, llv
             Idxs[i] = getInt32(i & 1);
         }
         Constant * splat01 = ConstantVector::get({Idxs, field_count});
-        Value * half_shuffle_table = simd_add(fw, simd_add(fw, shuffle_table, shuffle_table), splat01);
-        return mvmd_shuffle(half_fw, a, half_shuffle_table);
+        Value * half_shuffle_table = simd_or(shuffle_table, mvmd_slli(half_fw, shuffle_table, 1));
+        half_shuffle_table = simd_add(fw, simd_add(fw, half_shuffle_table, half_shuffle_table), splat01);
+        Value * rslt = mvmd_shuffle(half_fw, a, half_shuffle_table);
+        return rslt;
     }
     if (mBitBlockWidth == 256 && fw == 32) {
         Value * shuf32Func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
@@ -569,7 +571,7 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_shuffle2(unsigned fw, Value * a, Value
         Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
         return CreateCall(permuteFunc, {fwCast(fw, shuffle_table), fwCast(fw, a), fwCast(fw, b), mask});
     }
-    return IDISA_Builder::mvmd_shuffle(fw, a, shuffle_table);
+    return IDISA_Builder::mvmd_shuffle2(fw, a, b, shuffle_table);
 }
 
 llvm::Value * IDISA_AVX512F_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {

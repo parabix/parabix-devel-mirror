@@ -209,16 +209,16 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     
     // Calculate the field values and offsets we need for assembling a
     // a full block of source bits.  Assembly will use the following operations.
-    // A = b->simd_srli(fw, b->mvmd_dslli(fw, source, pending, field_offset_lo), bit_offset);
-    // B = b->simd_slli(fw, b->mvmd_dslli(fw, source, pending, field_offset_hi), shift_fwd);
+    // A = b->simd_srl(fw, b->mvmd_dsll(fw, source, pending, field_offset_lo), bit_offset);
+    // B = b->simd_sll(fw, b->mvmd_dsll(fw, source, pending, field_offset_hi), shift_fwd);
     // all_source_bits = simd_or(A, B);
     Value * pendingOffset = b->CreateURem(pendingBlockEnd, bwConst);
-    Value * field_offset_lo =  b->simd_fill(fw, b->CreateUDiv(pendingOffset, fwConst));
+    Value * field_offset_lo =  b->CreateUDiv(pendingOffset, fwConst);
     Value * bit_offset = b->simd_fill(fw, b->CreateURem(pendingOffset, fwConst));
     
     // Carefully avoid a shift by the full fieldwith (which gives a poison value).
     // field_offset_lo + 1 unless the bit_offset is 0, in which case it is just field_offset_lo.
-    Value * field_offset_hi =  b->simd_fill(fw, b->CreateUDiv(b->CreateAdd(pendingOffset, fw_sub1Const), fwConst));
+    Value * field_offset_hi =  b->CreateUDiv(b->CreateAdd(pendingOffset, fw_sub1Const), fwConst);
     // fw - bit_offset, unless bit_offset is 0, in which case, the shift_fwd is 0.
     Value * shift_fwd = b->CreateURem(b->CreateSub(fwSplat, bit_offset), fwSplat);
     
@@ -272,7 +272,6 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     for (unsigned i = 0; i < mStreamCount; i++) {
         b->setScalarField("pendingSourceBlock_" + std::to_string(i), b->bitCast(pendingDataPhi[i]));
     }
-    b->getModule()->dump();
 }
 
 FieldDepositKernel::FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
@@ -337,6 +336,9 @@ void PDEPFieldDepositKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     std::vector<Value *> mask(fieldsPerBlock);
     Value * extractionMaskPtr = kb->getInputStreamBlockPtr("depositMask", ZERO, blockOffsetPhi);
     extractionMaskPtr = kb->CreatePointerCast(extractionMaskPtr, fieldPtrTy);
+    for (unsigned i = 0; i < fieldsPerBlock; i++) {
+        mask[i] = kb->CreateLoad(kb->CreateGEP(extractionMaskPtr, kb->getInt32(i)));
+    }
     for (unsigned j = 0; j < mStreamCount; ++j) {
         Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
         inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
