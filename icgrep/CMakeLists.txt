@@ -69,7 +69,7 @@ SET(DRIVER_SRC ${DRIVER_SRC} toolchain/NVPTXDriver.cpp)
 endif()
 
 SET(KERNEL_SRC kernels/attributes.cpp kernels/processing_rate.cpp kernels/interface.cpp kernels/kernel.cpp kernels/multiblock_kernel.cpp kernels/block_kernel.cpp kernels/streamset.cpp kernels/kernel_builder.cpp)
-SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/hex_convert.cpp)
 
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp)
 SET(IDISA_SRC ${IDISA_SRC} IR_Gen/idisa_target.cpp)
@@ -129,6 +129,7 @@ add_executable(character_deletion character_deletion.cpp kernels/cc_kernel.cpp)
 add_executable(character_deposit character_deposit.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp kernels/bitstream_pdep_kernel.cpp)
 add_executable(lz4d_ext_dep lz4d_ext_dep.cpp)
 add_executable(lz4_grep grep_interface.cpp util/file_select.cpp lz4_grep.cpp lz4/LZ4GrepGenerator.cpp)
+add_executable(idisa_test idisa_test.cpp)
 
 
 #Exclude CoRE from default build.
@@ -145,7 +146,7 @@ target_link_libraries (character_deletion PabloADT RegExpCompiler CCADT CodeGen 
 target_link_libraries (character_deposit PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4d_ext_dep LZ4_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4_grep LZ4_Lib GrepEngine UCDlib PabloADT RegExpCompiler CodeGen CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-
+target_link_libraries (idisa_test CodeGen PabloADT ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 
 
 IF(ENABLE_MULTIPLEXING)

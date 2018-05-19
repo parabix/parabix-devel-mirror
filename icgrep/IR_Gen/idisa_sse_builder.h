@@ -39,6 +39,7 @@ public:
     llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift) override;
+    llvm::Value * mvmd_shuffle(unsigned fw, llvm::Value * a, llvm::Value * shuffle_table) override;
     ~IDISA_SSE2_Builder() {}
 };
 

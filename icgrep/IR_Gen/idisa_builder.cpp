@@ -139,6 +139,16 @@ Value * IDISA_Builder::simd_ult(unsigned fw, Value * a, Value * b) {
     return CreateSExt(CreateICmpULT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
+Value * IDISA_Builder::simd_ule(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: ult " + std::to_string(fw));
+    return CreateSExt(CreateICmpULE(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+}
+
+Value * IDISA_Builder::simd_uge(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) report_fatal_error("Unsupported field width: ult " + std::to_string(fw));
+    return CreateSExt(CreateICmpUGE(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+}
+
 Value * IDISA_Builder::simd_max(unsigned fw, Value * a, Value * b) {
     if (fw < 8) report_fatal_error("Unsupported field width: max " + std::to_string(fw));
     Value * aVec = fwCast(fw, a);
@@ -374,7 +384,12 @@ Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) 
 }
     
 Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {    
-    if (fw < 8) report_fatal_error("Unsupported field width: mergeh " + std::to_string(fw));
+    if (fw == 4) {
+        Value * abh = simd_or(simd_and(simd_himask(fw*2), a), simd_srli(32, simd_and(simd_himask(fw*2), b), fw));
+        Value * abl = simd_or(simd_slli(32, simd_and(simd_lomask(fw*2), a), fw), simd_and(simd_lomask(fw*2), b));
+        return esimd_mergeh(fw * 2, abh, abl);
+    }
+    if (fw < 4) report_fatal_error("Unsupported field width: mergeh " + std::to_string(fw));
     const auto field_count = mBitBlockWidth / fw;
     Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count / 2; i++) {
@@ -384,8 +399,13 @@ Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     return CreateShuffleVector(fwCast(fw, a), fwCast(fw, b), ConstantVector::get({Idxs, field_count}));
 }
 
-Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {    
-    if (fw < 8) report_fatal_error("Unsupported field width: mergel " + std::to_string(fw));
+Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
+    if (fw == 4) {
+        Value * abh = simd_or(simd_and(simd_himask(fw*2), a), simd_srli(32, simd_and(simd_himask(fw*2), b), fw));
+        Value * abl = simd_or(simd_slli(32, simd_and(simd_lomask(fw*2), a), fw), simd_and(simd_lomask(fw*2), b));
+        return esimd_mergel(fw * 2, abh, abl);
+    }
+    if (fw < 4) report_fatal_error("Unsupported field width: mergel " + std::to_string(fw));
     const auto field_count = mBitBlockWidth / fw;
     Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count / 2; i++) {

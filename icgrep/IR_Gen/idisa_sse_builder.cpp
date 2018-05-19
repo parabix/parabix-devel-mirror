@@ -151,6 +151,22 @@ std::pair<Value *, Value *> IDISA_SSE2_Builder::bitblock_advance(Value * a, Valu
     //CallPrintRegister("shiftout", shiftout);
     return std::pair<Value *, Value *>(shiftout, shifted);
 }
+    
+Value * IDISA_SSE2_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * shuffle_table) {
+    if ((mBitBlockWidth == 128) && (fw == 64)) {
+        // First create a vector with exchanged values of the 2 fields.
+        Constant * idx[2] = {ConstantInt::get(getInt32Ty(), 1), ConstantInt::get(getInt32Ty(), 0)};
+        Value * exchanged = CreateShuffleVector(a, UndefValue::get(fwVectorType(fw)), ConstantVector::get({idx, 2}));
+        // bits that change if we the value in a needs to be exchanged.
+        Value * changed = simd_xor(a, exchanged);
+        // Now create a mask to select between original and exchanged values.
+        Constant * xchg[2] = {ConstantInt::get(getInt64Ty(), 1), ConstantInt::get(getInt64Ty(), 0)};
+        Value * exchange_mask = simd_eq(fw, shuffle_table, ConstantVector::get({xchg, 2}));
+        Value * rslt = simd_xor(simd_and(changed, exchange_mask), a);
+        return rslt;
+    }
+    return IDISA_Builder::mvmd_shuffle(fw, a, shuffle_table);
+}
 
 Value * IDISA_SSE_Builder::mvmd_compress(unsigned fw, Value * a, Value * selector) {
     if ((mBitBlockWidth == 128) && (fw == 64)) {

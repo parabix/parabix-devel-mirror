@@ -110,6 +110,8 @@ public:
     virtual llvm::Value * simd_ugt(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_lt(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_ult(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_ule(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_uge(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_max(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_umax(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_min(unsigned fw, llvm::Value * a, llvm::Value * b);
