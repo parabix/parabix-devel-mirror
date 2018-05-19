@@ -32,8 +32,6 @@ void HexToBinary::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
         Value * hexPack[2];
         hexPack[0] = b->loadInputStreamPack("hexdata", ZERO, b->getInt32(2*i));
         hexPack[1] = b->loadInputStreamPack("hexdata", ZERO, b->getInt32(2*i + 1));
-        b->CallPrintRegister("hexPack[0]", hexPack[0]);
-        b->CallPrintRegister("hexPack[1]", hexPack[1]);
         Value * base_val[2];
         for (unsigned j = 0; j < 2; j++) {
             Value * lc_hex = b->simd_or(hexPack[j], case_shift); // valid only for [A-Za-z]=>[a-z]
@@ -45,7 +43,6 @@ void HexToBinary::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
         //b->CallPrintInt("binary_pack ptr", b->CreateGEP(outputStreamBasePtr, b->CreateUDiv(packNumPhi, TWO)));
         Value * binary_pack = b->bitCast(b->hsimd_packl(8, base_val[0], base_val[1]));
         b->storeOutputStreamBlock("binary_data", ZERO, b->getInt32(i), binary_pack); 
-        b->CallPrintRegister("binary_pack", binary_pack);
     }
 }
 

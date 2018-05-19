@@ -68,8 +68,6 @@ void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<kern
     blockOffsetPhi->addIncoming(ZeroConst, entry);
     Value * operand1 = kb->fwCast(mTestFw, kb->loadInputStreamBlock("operand1", ZeroConst, blockOffsetPhi));
     Value * operand2 = kb->fwCast(mTestFw, kb->loadInputStreamBlock("operand2", ZeroConst, blockOffsetPhi));
-    kb->CallPrintRegister("operand1", operand1);
-    kb->CallPrintRegister("operand2", operand2);
     Value * result = nullptr;
     if (mIdisaOperation == "simd_add") {
         result = kb->simd_add(mTestFw, operand1, operand2);
@@ -118,7 +116,6 @@ void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<kern
     } else {
         llvm::report_fatal_error("Binary operation " + mIdisaOperation + " is unknown to the IdisaBinaryOpTestKernel kernel.");
     }
-    kb->CallPrintRegister("result", result);
     kb->storeOutputStreamBlock("result", ZeroConst, blockOffsetPhi, kb->bitCast(result));
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
     blockOffsetPhi->addIncoming(nextBlk, processBlock);
