@@ -140,11 +140,22 @@ Value * IDISA_Builder::simd_ult(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::simd_ule(unsigned fw, Value * a, Value * b) {
-    if (fw < 8) report_fatal_error("Unsupported field width: ult " + std::to_string(fw));
+    if (fw == 1) return simd_or(simd_not(a), b);
+    if (fw < 8) {
+        Value * hi_rslt = simd_and(simd_himask(2*fw), simd_ule(2*fw, simd_and(simd_himask(2*fw), a), b));
+        Value * lo_rslt = simd_and(simd_lomask(2*fw), simd_ule(2*fw, simd_and(simd_lomask(2*fw), a), simd_and(simd_lomask(2*fw), b)));
+        return simd_or(hi_rslt, lo_rslt);
+    }
     return CreateSExt(CreateICmpULE(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
 
 Value * IDISA_Builder::simd_uge(unsigned fw, Value * a, Value * b) {
+    if (fw == 1) return simd_or(a, simd_not(b));
+    if (fw < 8) {
+        Value * hi_rslt = simd_and(simd_himask(2*fw), simd_uge(2*fw, a, simd_and(simd_himask(2*fw), b)));
+        Value * lo_rslt = simd_and(simd_lomask(2*fw), simd_uge(2*fw, simd_and(simd_lomask(2*fw), a), simd_and(simd_lomask(2*fw), b)));
+        return simd_or(hi_rslt, lo_rslt);
+    }
     if (fw < 8) report_fatal_error("Unsupported field width: ult " + std::to_string(fw));
     return CreateSExt(CreateICmpUGE(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
@@ -157,7 +168,12 @@ Value * IDISA_Builder::simd_max(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::simd_umax(unsigned fw, Value * a, Value * b) {
-    if (fw < 8) report_fatal_error("Unsupported field width: umax " + std::to_string(fw));
+    if (fw == 1) return simd_or(a, b);
+    if (fw < 8) {
+        Value * hi_rslt = simd_and(simd_himask(2*fw), simd_umax(2*fw, a, b));
+        Value * lo_rslt = simd_umax(2*fw, simd_and(simd_lomask(2*fw), a), simd_and(simd_lomask(2*fw), b));
+        return simd_or(hi_rslt, lo_rslt);
+    }
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
     return CreateSelect(CreateICmpUGT(aVec, bVec), aVec, bVec);
@@ -171,7 +187,12 @@ Value * IDISA_Builder::simd_min(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::simd_umin(unsigned fw, Value * a, Value * b) {
-    if (fw < 8) report_fatal_error("Unsupported field width: umin " + std::to_string(fw));
+    if (fw == 1) return simd_and(a, b);
+    if (fw < 8) {
+        Value * hi_rslt = simd_and(simd_himask(2*fw), simd_umin(2*fw, a, b));
+        Value * lo_rslt = simd_umin(2*fw, simd_and(simd_lomask(2*fw), a), simd_and(simd_lomask(2*fw), b));
+        return simd_or(hi_rslt, lo_rslt);
+    }
     Value * aVec = fwCast(fw, a);
     Value * bVec = fwCast(fw, b);
     return CreateSelect(CreateICmpULT(aVec, bVec), aVec, bVec);
@@ -307,7 +328,6 @@ Value * IDISA_Builder::simd_pdep(unsigned fieldwidth, Value * v, Value * deposit
     // Now reverse the pext process.  First reverse the final shift_back.
     Value * pext_shift_back_amts = simd_and(simd_lomask(fieldwidth), delcounts.back());
     Value * w = simd_sllv(fieldwidth, v, pext_shift_back_amts);
-    
     //
     // No work through the smaller field widths.
     for (unsigned fw = fieldwidth/2; fw >= 2; fw = fw/2) {
@@ -320,7 +340,7 @@ Value * IDISA_Builder::simd_pdep(unsigned fieldwidth, Value * v, Value * deposit
         w = simd_or(simd_srlv(fw, simd_and(w, pext_shift_fwd_field_mask), pext_shift_fwd_amts),
                     simd_sllv(fw, simd_and(w, pext_shift_back_field_mask), pext_shift_back_amts));
     }
-    return w;
+    return CreateAnd(w, deposit_mask);
 }
 
 Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
@@ -516,13 +536,25 @@ Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
 }
 
 Value * IDISA_Builder::mvmd_extract(unsigned fw, Value * a, unsigned fieldIndex) {
-    if (fw < 8) report_fatal_error("Unsupported field width: mvmd_extract " + std::to_string(fw));
+    if (fw < 8) {
+        unsigned byte_no = (fieldIndex * fw) / 8;
+        unsigned intrabyte_shift = (fieldIndex * fw) % 8;
+        Value * byte = CreateExtractElement(fwCast(8, a), getInt32(byte_no));
+        return CreateTrunc(CreateLShr(byte, getInt8(intrabyte_shift)), getIntNTy(fw));
+    }
     return CreateExtractElement(fwCast(fw, a), getInt32(fieldIndex));
 }
 
-Value * IDISA_Builder::mvmd_insert(unsigned fw, Value * blk, Value * elt, unsigned fieldIndex) {
-    if (fw < 8) report_fatal_error("Unsupported field width: mvmd_insert " + std::to_string(fw));
-    return CreateInsertElement(fwCast(fw, blk), elt, getInt32(fieldIndex));
+Value * IDISA_Builder::mvmd_insert(unsigned fw, Value * a, Value * elt, unsigned fieldIndex) {
+    if (fw < 8) {
+        unsigned byte_no = (fieldIndex * fw) / 8;
+        unsigned intrabyte_shift = (fieldIndex * fw) % 8;
+        unsigned field_mask = ((1 << fw) - 1) << intrabyte_shift;
+        Value * byte = CreateAnd(CreateExtractElement(fwCast(8, a), getInt32(byte_no)), getInt8(0xFF &~ field_mask));
+        byte = CreateOr(byte, CreateShl(CreateZExtOrTrunc(elt, getInt8Ty()), getInt8(intrabyte_shift)));
+        return CreateInsertElement(fwCast(8, a), byte, getInt32(byte_no));
+    }
+    return CreateInsertElement(fwCast(fw, a), elt, getInt32(fieldIndex));
 }
 
 Value * IDISA_Builder::mvmd_slli(unsigned fw, Value * a, unsigned shift) {

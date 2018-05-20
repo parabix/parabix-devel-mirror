@@ -35,8 +35,38 @@ static cl::opt<std::string> TestOperation(cl::Positional, cl::desc("Operation to
 static cl::opt<int> TestFieldWidth(cl::Positional, cl::desc("Test field width (default 64)."), cl::init(64), cl::Required, cl::cat(testFlags));
 
 static cl::opt<std::string> Operand1TestFile(cl::Positional, cl::desc("Operand 1 data file."), cl::Required, cl::cat(testFlags));
-static cl::opt<std::string> Operand2TestFile(cl::Positional, cl::desc("Operand 1 data file."), cl::Required, cl::cat(testFlags));
-static cl::opt<std::string> TestOutputFile(cl::Positional, cl::desc("Test output file."), cl::cat(testFlags));
+static cl::opt<std::string> Operand2TestFile(cl::Positional, cl::desc("Operand 2 data file."), cl::Required, cl::cat(testFlags));
+static cl::opt<std::string> TestOutputFile("o", cl::desc("Test output file."), cl::cat(testFlags));
+
+static cl::opt<int> ShiftLimit("ShiftLimit", cl::desc("Upper limit for the shift operand (2nd operand) of sllv, srlv, srav."), cl::init(0));
+
+class ShiftLimitKernel : public kernel::BlockOrientedKernel {
+public:
+    ShiftLimitKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned limit);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & kb) override;
+private:
+    const unsigned mTestFw;
+    const unsigned mShiftLimit;
+};
+
+ShiftLimitKernel::ShiftLimitKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned limit)
+: kernel::BlockOrientedKernel("shiftLimit" + std::to_string(fw) + "_" + std::to_string(limit),
+                              {kernel::Binding{b->getStreamSetTy(1, fw), "shiftOperand"}},
+                              {kernel::Binding{b->getStreamSetTy(1, fw), "limitedShift"}},
+                              {}, {}, {}),
+mTestFw(fw), mShiftLimit(limit) {}
+
+void ShiftLimitKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & kb) {
+    Type * fwTy = kb->getIntNTy(mTestFw);
+    Constant * const ZeroConst = kb->getSize(0);
+    Value * shiftOperand = kb->loadInputStreamBlock("shiftOperand", ZeroConst);
+    unsigned fieldCount = kb->getBitBlockWidth()/mTestFw;
+    Value * limited = kb->simd_umin(mTestFw, shiftOperand, ConstantVector::getSplat(fieldCount, ConstantInt::get(fwTy, mShiftLimit)));
+    kb->storeOutputStreamBlock("limitedShift", ZeroConst, limited);
+}
 
 class IdisaBinaryOpTestKernel : public kernel::MultiBlockKernel {
 public:
@@ -66,8 +96,8 @@ void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<kern
     kb->SetInsertPoint(processBlock);
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
     blockOffsetPhi->addIncoming(ZeroConst, entry);
-    Value * operand1 = kb->fwCast(mTestFw, kb->loadInputStreamBlock("operand1", ZeroConst, blockOffsetPhi));
-    Value * operand2 = kb->fwCast(mTestFw, kb->loadInputStreamBlock("operand2", ZeroConst, blockOffsetPhi));
+    Value * operand1 = kb->loadInputStreamBlock("operand1", ZeroConst, blockOffsetPhi);
+    Value * operand2 = kb->loadInputStreamBlock("operand2", ZeroConst, blockOffsetPhi);
     Value * result = nullptr;
     if (mIdisaOperation == "simd_add") {
         result = kb->simd_add(mTestFw, operand1, operand2);
@@ -81,10 +111,14 @@ void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<kern
         result = kb->simd_gt(mTestFw, operand1, operand2);
     } else if (mIdisaOperation == "simd_ugt") {
         result = kb->simd_ugt(mTestFw, operand1, operand2);
+    } else if (mIdisaOperation == "simd_uge") {
+        result = kb->simd_uge(mTestFw, operand1, operand2);
     } else if (mIdisaOperation == "simd_lt") {
         result = kb->simd_lt(mTestFw, operand1, operand2);
     } else if (mIdisaOperation == "simd_ult") {
         result = kb->simd_ult(mTestFw, operand1, operand2);
+    } else if (mIdisaOperation == "simd_ule") {
+        result = kb->simd_ule(mTestFw, operand1, operand2);
     } else if (mIdisaOperation == "simd_max") {
         result = kb->simd_max(mTestFw, operand1, operand2);
     } else if (mIdisaOperation == "simd_min") {
@@ -122,6 +156,137 @@ void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<kern
     Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
     kb->CreateCondBr(moreToDo, processBlock, done);
     kb->SetInsertPoint(done);
+}
+
+class IdisaBinaryOpCheckKernel : public kernel::BlockOrientedKernel {
+public:
+    IdisaBinaryOpCheckKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & kb) override;
+private:
+    const std::string mIdisaOperation;
+    const unsigned mTestFw;
+};
+
+IdisaBinaryOpCheckKernel::IdisaBinaryOpCheckKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw)
+: kernel::BlockOrientedKernel(idisa_op + std::to_string(fw) + "_check",
+                           {kernel::Binding{b->getStreamSetTy(1, 1), "operand1"},
+                            kernel::Binding{b->getStreamSetTy(1, 1), "operand2"},
+                            kernel::Binding{b->getStreamSetTy(1, 1), "test_result"}},
+                           {kernel::Binding{b->getStreamSetTy(1, 1), "expected_result"}},
+                           {}, {}, {}),
+mIdisaOperation(idisa_op), mTestFw(fw) {}
+
+void IdisaBinaryOpCheckKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & kb) {
+    Type * fwTy = kb->getIntNTy(mTestFw);
+    BasicBlock * reportFailure = kb->CreateBasicBlock("reportFailure");
+    BasicBlock * continueTest = kb->CreateBasicBlock("continueTest");
+    Constant * const ZeroConst = kb->getSize(0);
+    Value * operand1Block = kb->loadInputStreamBlock("operand1", ZeroConst);
+    Value * operand2Block = kb->loadInputStreamBlock("operand2", ZeroConst);
+    Value * resultBlock = kb->loadInputStreamBlock("test_result", ZeroConst);
+    unsigned fieldCount = kb->getBitBlockWidth()/mTestFw;
+    Value * expectedBlock = kb->allZeroes();
+    for (unsigned i = 0; i < fieldCount; i++) {
+        Value * operand1 = kb->mvmd_extract(mTestFw, operand1Block, i);
+        Value * operand2 = kb->mvmd_extract(mTestFw, operand2Block, i);
+        Value * expected = nullptr;
+        if (mIdisaOperation.substr(0,5) == "simd_") {
+            if (mIdisaOperation == "simd_add") {
+                expected = kb->CreateAdd(operand1, operand2);
+            } else if (mIdisaOperation == "simd_sub") {
+                expected = kb->CreateSub(operand1, operand2);
+            } else if (mIdisaOperation == "simd_mult") {
+                expected = kb->CreateMul(operand1, operand2);
+            } else if (mIdisaOperation == "simd_eq") {
+                expected = kb->CreateSExt(kb->CreateICmpEQ(operand1, operand2), fwTy);
+            } else if (mIdisaOperation == "simd_gt") {
+                expected = kb->CreateSExt(kb->CreateICmpSGT(operand1, operand2), fwTy);
+            } else if (mIdisaOperation == "simd_ugt") {
+                expected = kb->CreateSExt(kb->CreateICmpUGT(operand1, operand2), fwTy);
+            } else if (mIdisaOperation == "simd_uge") {
+                expected = kb->CreateSExt(kb->CreateICmpUGE(operand1, operand2), fwTy);
+            } else if (mIdisaOperation == "simd_lt") {
+                expected = kb->CreateSExt(kb->CreateICmpSLT(operand1, operand2), fwTy);
+            } else if (mIdisaOperation == "simd_ult") {
+                expected = kb->CreateSExt(kb->CreateICmpULT(operand1, operand2), fwTy);
+            } else if (mIdisaOperation == "simd_ule") {
+                expected = kb->CreateSExt(kb->CreateICmpULE(operand1, operand2), fwTy);
+            } else if (mIdisaOperation == "simd_max") {
+                expected = kb->CreateSelect(kb->CreateICmpSGT(operand1, operand2), operand1, operand2);
+            } else if (mIdisaOperation == "simd_min") {
+                expected = kb->CreateSelect(kb->CreateICmpSLT(operand1, operand2), operand1, operand2);
+            } else if (mIdisaOperation == "simd_umax") {
+                expected = kb->CreateSelect(kb->CreateICmpUGT(operand1, operand2), operand1, operand2);
+            } else if (mIdisaOperation == "simd_umin") {
+                expected = kb->CreateSelect(kb->CreateICmpULT(operand1, operand2), operand1, operand2);
+            } else if (mIdisaOperation == "simd_sllv") {
+                expected = kb->CreateShl(operand1, operand2);
+            } else if (mIdisaOperation == "simd_srlv") {
+                expected = kb->CreateLShr(operand1, operand2);
+            } else if (mIdisaOperation == "simd_pext") {
+                Constant * zeroConst = ConstantInt::getNullValue(fwTy);
+                Constant * oneConst = ConstantInt::get(fwTy, 1);
+                expected = zeroConst;
+                Value * out_bit = oneConst;
+                for (unsigned i = 0; i < mTestFw; i++) {
+                    Value * i_bit = Constant::getIntegerValue(fwTy, APInt::getOneBitSet(mTestFw, i));
+                    Value * operand_i_isSet = kb->CreateICmpEQ(kb->CreateAnd(operand1, i_bit), i_bit);
+                    Value * mask_i_isSet = kb->CreateICmpEQ(kb->CreateAnd(operand2, i_bit), i_bit);
+                    expected = kb->CreateSelect(kb->CreateAnd(operand_i_isSet, mask_i_isSet), kb->CreateOr(expected, out_bit), expected);
+                    out_bit = kb->CreateSelect(mask_i_isSet, kb->CreateAdd(out_bit, out_bit), out_bit);
+                }
+            } else if (mIdisaOperation == "simd_pdep") {
+                Constant * zeroConst = ConstantInt::getNullValue(fwTy);
+                Constant * oneConst = ConstantInt::get(fwTy, 1);
+                expected = zeroConst;
+                Value * shft = zeroConst;
+                Value * select_bit = oneConst;
+                for (unsigned i = 0; i < mTestFw; i++) {
+                    expected = kb->CreateOr(kb->CreateAnd(operand2, kb->CreateShl(kb->CreateAnd(operand1, select_bit), shft)), expected);
+                    Value * i_bit = Constant::getIntegerValue(fwTy, APInt::getOneBitSet(mTestFw, i));
+                    Value * mask_i_isSet = kb->CreateICmpEQ(kb->CreateAnd(operand2, i_bit), i_bit);
+                    select_bit = kb->CreateSelect(mask_i_isSet, kb->CreateAdd(select_bit, select_bit), select_bit);
+                    shft = kb->CreateSelect(mask_i_isSet, shft, kb->CreateAdd(shft, oneConst));
+                }
+            } else {
+                llvm::report_fatal_error("Unknown SIMD vertical operation: " + mIdisaOperation);
+            }
+            expectedBlock = kb->bitCast(kb->mvmd_insert(mTestFw, expectedBlock, expected, i));
+        } else if (mIdisaOperation == "hsimd_packh") {
+            operand1 = kb->CreateTrunc(kb->CreateLShr(operand1, mTestFw/2), kb->getIntNTy(mTestFw/2));
+            operand2 = kb->CreateTrunc(kb->CreateLShr(operand2, mTestFw/2), kb->getIntNTy(mTestFw/2));
+            expectedBlock = kb->mvmd_insert(mTestFw/2, expectedBlock, operand1, i);
+            expectedBlock = kb->bitCast(kb->mvmd_insert(mTestFw/2, expectedBlock, operand2, fieldCount + i));
+        } else if (mIdisaOperation == "hsimd_packl") {
+            operand1 = kb->CreateTrunc(operand1, kb->getIntNTy(mTestFw/2));
+            operand2 = kb->CreateTrunc(operand2, kb->getIntNTy(mTestFw/2));
+            expectedBlock = kb->mvmd_insert(mTestFw/2, expectedBlock, operand1, i);
+            expectedBlock = kb->bitCast(kb->mvmd_insert(mTestFw/2, expectedBlock, operand2, fieldCount + i));
+        } else if (mIdisaOperation == "esimd_mergeh") {
+            if (i >= fieldCount/2) {
+                expectedBlock = kb->mvmd_insert(mTestFw, expectedBlock, operand1, 2*(i - fieldCount/2));
+                expectedBlock = kb->bitCast(kb->mvmd_insert(mTestFw, expectedBlock, operand2, 2*(i - fieldCount/2) + 1));
+            }
+        } else if (mIdisaOperation == "esimd_mergel") {
+            if (i < fieldCount/2) {
+                expectedBlock = kb->mvmd_insert(mTestFw, expectedBlock, operand1, 2*i);
+                expectedBlock = kb->bitCast(kb->mvmd_insert(mTestFw, expectedBlock, operand2, 2*i + 1));
+            }
+        }
+    }
+    kb->storeOutputStreamBlock("expected_result", ZeroConst, expectedBlock);
+    Value * failure = kb->bitblock_any(kb->CreateXor(resultBlock, expectedBlock));
+    kb->CreateCondBr(failure, reportFailure, continueTest);
+    kb->SetInsertPoint(reportFailure);
+    kb->CallPrintRegister("operand1", kb->bitCast(operand1Block));
+    kb->CallPrintRegister("operand2", kb->bitCast(operand2Block));
+    kb->CallPrintRegister(mIdisaOperation + "(" + std::to_string(mTestFw) + ", operand1, operand2)", resultBlock);
+    kb->CallPrintRegister("expecting", expectedBlock);
+    kb->CreateBr(continueTest);
+    kb->SetInsertPoint(continueTest);
 }
 
 // Open a file and return its file desciptor.
@@ -195,24 +360,31 @@ void pipelineGen(ParabixDriver & pxDriver) {
     StreamSetBuffer * Operand2BitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
     kernel::Kernel * hexbinK2 = pxDriver.addKernelInstance<kernel::HexToBinary>(idb);
     pxDriver.makeKernelCall(hexbinK2, {Operand2HexStream}, {Operand2BitStream});
+    
+    if (ShiftLimit > 0) {
+        StreamSetBuffer * PreLimitBitStream = Operand2BitStream;
+        Operand2BitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
+        kernel::Kernel * limitK = pxDriver.addKernelInstance<ShiftLimitKernel>(idb, TestFieldWidth, ShiftLimit);
+        pxDriver.makeKernelCall(limitK, {PreLimitBitStream}, {Operand2BitStream});
+    }
 
     StreamSetBuffer * ResultBitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
     kernel::Kernel * testK = pxDriver.addKernelInstance<IdisaBinaryOpTestKernel>(idb, TestOperation, TestFieldWidth);
     pxDriver.makeKernelCall(testK, {Operand1BitStream, Operand2BitStream}, {ResultBitStream});
     
-    StreamSetBuffer * ResultHexStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 8), bufferSize);
-    kernel::Kernel * binhexK = pxDriver.addKernelInstance<kernel::BinaryToHex>(idb);
-    pxDriver.makeKernelCall(binhexK, {ResultBitStream}, {ResultHexStream});
-    
-    kernel::Kernel * outK = nullptr;
-    if (TestOutputFile.empty()) {
-        outK = pxDriver.addKernelInstance<kernel::StdOutKernel>(idb, 8);
-    } else {
-        outK = pxDriver.addKernelInstance<kernel::FileSink>(idb, 8);
+    StreamSetBuffer * ExpectedResultBitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
+    kernel::Kernel * checkK = pxDriver.addKernelInstance<IdisaBinaryOpCheckKernel>(idb, TestOperation, TestFieldWidth);
+    pxDriver.makeKernelCall(checkK, {Operand1BitStream, Operand2BitStream, ResultBitStream}, {ExpectedResultBitStream});
+
+    if (!TestOutputFile.empty()) {
+        StreamSetBuffer * ResultHexStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 8), bufferSize);
+        kernel::Kernel * binhexK = pxDriver.addKernelInstance<kernel::BinaryToHex>(idb);
+        pxDriver.makeKernelCall(binhexK, {ResultBitStream}, {ResultHexStream});
+        kernel::Kernel * outK = pxDriver.addKernelInstance<kernel::FileSink>(idb, 8);
         Value * fName = idb->CreatePointerCast(idb->GetString(TestOutputFile.c_str()), idb->getInt8PtrTy());
         outK->setInitialArguments({fName});
-    }
-    pxDriver.makeKernelCall(outK, {ResultHexStream}, {});
+        pxDriver.makeKernelCall(outK, {ResultHexStream}, {});
+   }
     
     pxDriver.generatePipelineIR();
     pxDriver.deallocateBuffers();
