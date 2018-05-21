@@ -405,8 +405,8 @@ Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) 
     
 Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {    
     if (fw == 4) {
-        Value * abh = simd_or(simd_and(simd_himask(fw*2), a), simd_srli(32, simd_and(simd_himask(fw*2), b), fw));
-        Value * abl = simd_or(simd_slli(32, simd_and(simd_lomask(fw*2), a), fw), simd_and(simd_lomask(fw*2), b));
+        Value * abh = simd_or(simd_and(simd_himask(fw*2), b), simd_srli(32, simd_and(simd_himask(fw*2), a), fw));
+        Value * abl = simd_or(simd_slli(32, simd_and(simd_lomask(fw*2), b), fw), simd_and(simd_lomask(fw*2), a));
         return esimd_mergeh(fw * 2, abl, abh);
     }
     if (fw < 4) report_fatal_error("Unsupported field width: mergeh " + std::to_string(fw));
@@ -421,8 +421,8 @@ Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
     if (fw == 4) {
-        Value * abh = simd_or(simd_and(simd_himask(fw*2), a), simd_srli(32, simd_and(simd_himask(fw*2), b), fw));
-        Value * abl = simd_or(simd_slli(32, simd_and(simd_lomask(fw*2), a), fw), simd_and(simd_lomask(fw*2), b));
+        Value * abh = simd_or(simd_and(simd_himask(fw*2), b), simd_srli(32, simd_and(simd_himask(fw*2), a), fw));
+        Value * abl = simd_or(simd_slli(32, simd_and(simd_lomask(fw*2), b), fw), simd_and(simd_lomask(fw*2), a));
         return esimd_mergel(fw * 2, abl, abh);
     }
     if (fw < 4) report_fatal_error("Unsupported field width: mergel " + std::to_string(fw));

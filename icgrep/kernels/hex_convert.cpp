@@ -62,8 +62,8 @@ void BinaryToHex::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
     Constant * splatCh_a = ConstantVector::getSplat(bytesPerBlock, ConstantInt::get(i8Ty, 'a'-10));
     for (unsigned i = 0; i < 4; i++) {
         Value * bit_data = b->loadInputStreamBlock("binary_data", ZERO, b->getInt32(i));
-        Value * nybble_0 = b->fwCast(8, b->esimd_mergel(4, b->allZeroes(), bit_data));
-        Value * nybble_1 = b->fwCast(8, b->esimd_mergeh(4, b->allZeroes(), bit_data));
+        Value * nybble_0 = b->fwCast(8, b->esimd_mergel(4, bit_data, b->allZeroes()));
+        Value * nybble_1 = b->fwCast(8, b->esimd_mergeh(4, bit_data, b->allZeroes()));
         Value * data_09 = b->simd_add(8, nybble_0, splatCh_0);
         Value * data_af = b->simd_add(8, nybble_0, splatCh_a);
         Value * hex_data = b->bitCast(b->CreateSelect(b->CreateICmpULE(nybble_0, splat_9), data_09, data_af));
