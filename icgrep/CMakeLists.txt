@@ -281,6 +281,11 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
   COMMAND python base64test.py ${CMAKE_BINARY_DIR}/base64)
 
+add_test(
+  NAME pdep64_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/IDISA_test
+  COMMAND ${CMAKE_BINARY_DIR}/idisa_test simd_pdep 64 randhex65536a randhex65536b)
+
 #add_test(
 #  NAME character_deletion_test
 #  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deletion
