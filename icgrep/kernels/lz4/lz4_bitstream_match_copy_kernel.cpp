@@ -6,6 +6,7 @@
 #include <toolchain/toolchain.h>
 #include <vector>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/IR/Intrinsics.h>
 
 
 using namespace llvm;
@@ -23,7 +24,7 @@ namespace kernel {
         Value* bitBlockIndex = b->CreateUDiv(i64PackIndex, b->getSize(4));
         Value* extractIndex = b->CreateURem(i64PackIndex, b->getSize(4));
 
-        for (int i = 0; i < mNumberOfStreams; i++) {
+        for (unsigned i = 0; i < mNumberOfStreams; i++) {
             Value* bitBlockPtr =  b->CreateGEP(basePtr, b->CreateAdd(b->CreateMul(bitBlockIndex, b->getSize(mNumberOfStreams)), b->getSize(i)));
             bitBlockPtr = b->CreatePointerCast(bitBlockPtr, b->getInt64Ty()->getPointerTo());
             v.push_back(b->CreateLoad(b->CreateGEP(bitBlockPtr, extractIndex)));
@@ -188,7 +189,7 @@ namespace kernel {
         vector<Value*> initSourceDataWithCarry = this->loadAllI64BitStreamValues(b, outputStreamPtr,
                                                                                  carryCopyFromBlockIndex);
 
-        for (int i = 0; i < mNumberOfStreams; i++) {
+        for (unsigned i = 0; i < mNumberOfStreams; i++) {
             Value* v = initSourceDataWithCarry[i];
             v = b->CreateLShr(v, carryCopyFromOffset);
             v = b->CreateAnd(v, INT64_1);
@@ -209,7 +210,7 @@ namespace kernel {
         phiRemainingM0Marker->addIncoming(currentInitM0, carryBitProcessBlock);
 
         std::vector<PHINode*> outputData;
-        for (int i = 0; i < mNumberOfStreams; i++) {
+        for (unsigned i = 0; i < mNumberOfStreams; i++) {
             PHINode* outputValue = b->CreatePHI(b->getInt64Ty(), 3);
             outputValue->addIncoming(initSourceData[i], processLoopBody);
             outputValue->addIncoming(initSourceDataWithCarry[i], carryBitProcessBlock);
@@ -284,7 +285,7 @@ namespace kernel {
         vector<Value*> fromNextBlockValues = this->loadAllI64BitStreamValues(b, outputStreamPtr, matchCopyFromNextBlockIndex);
 
         vector<Value*> pdepSourceData;
-        for (int i = 0; i < mNumberOfStreams; i++) {
+        for (unsigned i = 0; i < mNumberOfStreams; i++) {
             Value* fromBlockValue = fromBlockValues[i];
             // when dataBlockIndex == matchCopyFromBlockIndex, we need to use current output value as input
             fromBlockValue = b->CreateSelect(b->CreateICmpEQ(dataBlockIndex, matchCopyFromBlockIndex), outputData[i], fromBlockValue);
@@ -344,7 +345,7 @@ namespace kernel {
         // ---- doubleSourceDataExit
         b->SetInsertPoint(doubleSourceDataExit);
         // At this point, we can guarantee we have enough data for pdep
-        for (int i = 0; i < mNumberOfStreams; i++) {
+        for (unsigned i = 0; i < mNumberOfStreams; i++) {
             // Do Match Copy by PDEP
             Value* source_field = phiPdepSourceData[i];
             Value * newValue = b->CreateCall(PDEP_func, {source_field, depositMarker});
@@ -390,7 +391,7 @@ namespace kernel {
         Value* bitBlockIndex = b->CreateUDiv(i64PackIndex, b->getSize(4));
         Value* extractIndex = b->CreateURem(i64PackIndex, b->getSize(4));
 
-        for (int i = 0; i < mNumberOfStreams; i++) {
+        for (unsigned i = 0; i < mNumberOfStreams; i++) {
             Value* bitBlockPtr =  b->CreateGEP(basePtr, b->CreateAdd(b->CreateMul(bitBlockIndex, b->getSize(mNumberOfStreams)), b->getSize(i)));
             bitBlockPtr = b->CreatePointerCast(bitBlockPtr, b->getInt64Ty()->getPointerTo());
             b->CreateStore(values[i], b->CreateGEP(bitBlockPtr, extractIndex));

@@ -7,6 +7,7 @@
 */
 
 #include <IR_Gen/idisa_sse_builder.h>
+#include <toolchain/toolchain.h>
 
 namespace IDISA {
 
@@ -58,6 +59,7 @@ public:
     ~IDISA_AVX2_Builder() {}
 };
 
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
 class IDISA_AVX512F_Builder : public IDISA_AVX2_Builder {
 public:
 
@@ -97,7 +99,7 @@ private:
     };
     Features hostCPUFeatures;
 };
-
+#endif
 
 }
 #endif // IDISA_AVX_BUILDER_H

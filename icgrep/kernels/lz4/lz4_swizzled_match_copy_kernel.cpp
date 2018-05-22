@@ -6,6 +6,7 @@
 #include <toolchain/toolchain.h>
 #include <vector>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/IR/Intrinsics.h>
 
 
 using namespace llvm;

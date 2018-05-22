@@ -7,6 +7,7 @@
 #include "idisa_avx_builder.h"
 #include <toolchain/toolchain.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/IR/Intrinsics.h>
 
 using namespace llvm;
 
@@ -406,6 +407,8 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_compress(unsigned fw, llvm::Value * a, ll
     return IDISA_Builder::mvmd_compress(fw, a, select_mask);
 }
 
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
+
 std::string IDISA_AVX512F_Builder::getBuilderUniqueName() {
     return mBitBlockWidth != 512 ? "AVX512F_" + std::to_string(mBitBlockWidth) : "AVX512BW";
 }
@@ -727,6 +730,7 @@ void IDISA_AVX512F_Builder::getAVX512Features() {
         hostCPUFeatures.hasAVX512VPOPCNTDQ = features.lookup("avx512_vpopcntdq");
     }
 }
+#endif
 
 
 }

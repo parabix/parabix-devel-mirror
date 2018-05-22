@@ -29,6 +29,7 @@
 #include <kernels/p2s_kernel.h>
 #include <toolchain/cpudriver.h>
 #include <iostream>
+#include <fstream>
 #include <kernels/deletion.h>
 #include <kernels/pdep_kernel.h>
 #include <kernels/bitstream_pdep_kernel.h>
@@ -130,8 +131,12 @@ StreamSetBuffer * generateBitStreamDeposit(ParabixDriver & pxDriver, StreamSetBu
 
     // Deposit
     StreamSetBuffer * depositedBits = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks, 1);
-    Kernel * pdepK = pxDriver.addKernelInstance<BitStreamPDEPKernel>(iBuilder, 8);
-    pxDriver.makeKernelCall(pdepK, {depositMarker, compressedBits}, {depositedBits});
+    // Kernel * pdepK = pxDriver.addKernelInstance<BitStreamPDEPKernel>(iBuilder, 8);
+    //pxDriver.makeKernelCall(pdepK, {depositMarker, compressedBits}, {depositedBits});
+    
+    StreamDepositCompiler depositCompiler(pxDriver, iBuilder->getStreamSetTy(8), bufferBlocks);
+    depositCompiler.makeCall(depositMarker, compressedBits, depositedBits);
+
 
     return depositedBits;
 }

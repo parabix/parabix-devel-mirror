@@ -6,6 +6,7 @@
 #include "swizzled_multiple_pdep_kernel.h"
 #include <kernels/kernel_builder.h>
 #include <toolchain/toolchain.h>
+#include <llvm/IR/Intrinsics.h>
 
 using namespace llvm;
 
@@ -20,7 +21,7 @@ Binding{b->getStreamSetTy(swizzleFactor), "source0", PopcountOf("marker"), Block
 {Binding{b->getStreamSetTy(swizzleFactor), "output0", FixedRate(), BlockSize(b->getBitBlockWidth() / swizzleFactor)}},
 {}, {}, {})
 , mSwizzleFactor(swizzleFactor), mNumberOfStreamSet(numberOfStreamSet) {
-    for (int i = 1; i < numberOfStreamSet; i++) {
+    for (unsigned i = 1; i < numberOfStreamSet; i++) {
         mStreamSetInputs.push_back(Binding{b->getStreamSetTy(swizzleFactor), "source" + std::to_string(i), RateEqualTo("source0"), BlockSize(b->getBitBlockWidth() / swizzleFactor) });
         mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(swizzleFactor), "output" + std::to_string(i), RateEqualTo("output0"), BlockSize(b->getBitBlockWidth() / swizzleFactor)});
     }
@@ -55,7 +56,7 @@ void SwizzledMultiplePDEPkernel::generateMultiBlockLogic(const std::unique_ptr<K
 
     std::vector<PHINode*> bufferPhiArray(mNumberOfStreamSet, NULL);
     std::vector<Value*> bufferArray(mNumberOfStreamSet, NULL);
-    for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
+    for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
         PHINode * const bufferPhi = b->CreatePHI(b->getBitBlockType(), 2);
         bufferPhi->addIncoming(Constant::getNullValue(b->getBitBlockType()), entry);
         bufferPhiArray[iStreamSetIndex] = bufferPhi;
@@ -93,7 +94,7 @@ void SwizzledMultiplePDEPkernel::generateMultiBlockLogic(const std::unique_ptr<K
         updatedSourceOffset->addIncoming(sourceOffset, entry);
 
         std::vector<PHINode * > updatedBufferArray(mNumberOfStreamSet, NULL);
-        for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
+        for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
             Value* buffer = bufferArray[iStreamSetIndex];
             PHINode * const updatedBuffer = b->CreatePHI(buffer->getType(), 2);
             updatedBuffer->addIncoming(buffer, entry);
@@ -106,7 +107,7 @@ void SwizzledMultiplePDEPkernel::generateMultiBlockLogic(const std::unique_ptr<K
 
         Value * const swizzleOffset = b->CreateURem(updatedSourceOffset, PDEP_WIDTH);
 
-        for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
+        for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
             Value * const swizzle = b->CreateBlockAlignedLoad(b->getInputStreamBlockPtr("source" + std::to_string(iStreamSetIndex), swizzleIndex, blockOffset));
 
             // Shift the swizzle to the right to clear off any used bits ...
@@ -142,7 +143,7 @@ void SwizzledMultiplePDEPkernel::generateMultiBlockLogic(const std::unique_ptr<K
         // Apply PDEP to each element of the combined swizzle using the current PDEP mask
         Value * const mask = b->CreateExtractElement(selectors, i);
         Value * const usedShift = b->simd_fill(pdepWidth, required);
-        for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
+        for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
             Value* result = b->simd_pdep(pdepWidth, bufferArray[iStreamSetIndex], b->simd_fill(pdepWidth, mask));
             // Store the result
             Value * const outputStreamPtr = b->getOutputStreamBlockPtr("output" + std::to_string(iStreamSetIndex), b->getSize(i), strideIndex);
@@ -158,7 +159,7 @@ void SwizzledMultiplePDEPkernel::generateMultiBlockLogic(const std::unique_ptr<K
     BasicBlock * const finishedBlock = b->GetInsertBlock();
     sourceOffsetPhi->addIncoming(sourceOffset, finishedBlock);
     bufferSizePhi->addIncoming(bufferSize, finishedBlock);
-    for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
+    for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStreamSet; iStreamSetIndex++) {
         bufferPhiArray[iStreamSetIndex]->addIncoming(bufferArray[iStreamSetIndex], finishedBlock);
     }
 

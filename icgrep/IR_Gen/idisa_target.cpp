@@ -58,19 +58,24 @@ KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C) {
     const auto hostCPUFeatures = getHostCPUFeatures();
     if (LLVM_LIKELY(codegen::BlockSize == 0)) {  // No BlockSize override: use processor SIMD width
 
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
         if (hostCPUFeatures.hasAVX512F) codegen::BlockSize = 512;
-        else if (hostCPUFeatures.hasAVX2) codegen::BlockSize = 256;
+        else
+#endif
+        if (hostCPUFeatures.hasAVX2) codegen::BlockSize = 256;
         else codegen::BlockSize = 128;
     }
     else if (((codegen::BlockSize & (codegen::BlockSize - 1)) != 0) || (codegen::BlockSize < 64)) {
         llvm::report_fatal_error("BlockSize must be a power of 2 and >=64");
     }
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
     if (codegen::BlockSize >= 512) {
         // AVX512BW builder can only be used for BlockSize multiples of 512
         if (hostCPUFeatures.hasAVX512F) {
             return new KernelBuilderImpl<IDISA_AVX512F_Builder>(C, codegen::BlockSize, codegen::BlockSize);
         }
     }
+#endif
     if (codegen::BlockSize >= 256) {
         // AVX2 or AVX builders can only be used for BlockSize multiples of 256
         if (hostCPUFeatures.hasAVX2) {

@@ -9,6 +9,7 @@
 #include <toolchain/driver.h>
 #include <toolchain/cpudriver.h>
 #include <IR_Gen/idisa_target.h>
+#include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
 
 

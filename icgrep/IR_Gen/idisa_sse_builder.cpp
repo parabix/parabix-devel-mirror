@@ -5,6 +5,7 @@
  */
 
 #include "idisa_sse_builder.h"
+#include <llvm/IR/Intrinsics.h>
 
 using namespace llvm;
 

@@ -3,6 +3,7 @@
 #include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <toolchain/toolchain.h>
+#include <llvm/IR/Intrinsics.h>
 
 using namespace llvm;
 
@@ -50,7 +51,7 @@ namespace kernel {
 
         std::vector<PHINode*> bufferVecPhiArray(mNumberOfStream / 4, NULL);
         std::vector<Value*> bufferVecArray(mNumberOfStream / 4, NULL);
-        for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
+        for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
             PHINode * const bufferPhi = b->CreatePHI(b->getBitBlockType(), 2, "bufferPhi");
             bufferPhi->addIncoming(Constant::getNullValue(b->getBitBlockType()), entry);
             bufferVecPhiArray[iStreamSetIndex / 4] = bufferPhi;
@@ -96,7 +97,7 @@ namespace kernel {
             updatedSourceOffset->addIncoming(sourceOffset, entry);
 
             std::vector<PHINode * > updatedBufferVecArray(mNumberOfStream / 4, NULL);
-            for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
+            for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
                 Value* buffer = bufferVecArray[iStreamSetIndex / 4];
                 PHINode * const updatedBuffer = b->CreatePHI(buffer->getType(), 2);
                 updatedBuffer->addIncoming(buffer, entry);
@@ -110,7 +111,7 @@ namespace kernel {
             Value * const swizzleOffset = b->CreateURem(updatedSourceOffset, PDEP_WIDTH);
 
 
-            for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
+            for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
                 // gather instruction can process 4 streams each time
                 Value *streamSetBlockBasePtr = b->getInputStreamBlockPtr("source", b->getSize(iStreamSetIndex),
                                                                          blockOffset);
@@ -164,9 +165,9 @@ namespace kernel {
             // Apply PDEP to each element of the combined swizzle using the current PDEP mask
             Value * const mask = b->CreateExtractElement(selectors, i);
 
-            for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
+            for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
                 Value * source_field = bufferVecArray[iStreamSetIndex / 4];
-                for (int iStreamIndex = iStreamSetIndex; iStreamIndex < iStreamSetIndex + 4; iStreamIndex++) {
+                for (unsigned iStreamIndex = iStreamSetIndex; iStreamIndex < iStreamSetIndex + 4; iStreamIndex++) {
                     Value * PDEP_field = b->CreateCall(pdep, {b->CreateExtractElement(source_field, iStreamIndex - iStreamSetIndex), mask});
                     resultArray[iStreamIndex] = b->CreateInsertElement(resultArray[iStreamIndex], PDEP_field, i);
                 }
@@ -176,7 +177,7 @@ namespace kernel {
             bufferSize = b->CreateSub(bufferSize, required);
         }
 
-        for (int iStreamIndex = 0; iStreamIndex < mNumberOfStream; iStreamIndex++) {
+        for (unsigned iStreamIndex = 0; iStreamIndex < mNumberOfStream; iStreamIndex++) {
             // Store the result
             Value * const outputStreamPtr = b->getOutputStreamBlockPtr("output", b->getSize(iStreamIndex), strideIndex);
             b->CreateBlockAlignedStore(resultArray[iStreamIndex], outputStreamPtr);
@@ -186,7 +187,7 @@ namespace kernel {
         sourceOffsetPhi->addIncoming(sourceOffset, finishedBlock);
         bufferSizePhi->addIncoming(bufferSize, finishedBlock);
 
-        for (int iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
+        for (unsigned iStreamSetIndex = 0; iStreamSetIndex < mNumberOfStream; iStreamSetIndex += 4) {
             bufferVecPhiArray[iStreamSetIndex / 4]->addIncoming(bufferVecArray[iStreamSetIndex / 4], finishedBlock);
         }
 

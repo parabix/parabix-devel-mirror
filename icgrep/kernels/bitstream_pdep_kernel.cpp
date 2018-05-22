@@ -7,6 +7,7 @@
 #include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <toolchain/toolchain.h>
+#include <llvm/IR/Intrinsics.h>
 
 using namespace llvm;
 
