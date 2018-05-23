@@ -298,7 +298,7 @@ void IdisaBinaryOpCheckKernel::generateDoBlockMethod(const std::unique_ptr<kerne
         }
     }
     kb->storeOutputStreamBlock("expected_result", ZeroConst, expectedBlock);
-    Value * failures = kb->simd_ugt(mTestFw, kb->CreateXor(resultBlock, expectedBlock), kb->allZeroes());
+    Value * failures = kb->simd_ugt(mTestFw, kb->simd_xor(resultBlock, expectedBlock), kb->allZeroes());
     Value * anyFailure = kb->bitblock_any(failures);
     Value * failure_count = kb->CreateUDiv(kb->bitblock_popcount(failures), kb->getSize(mTestFw));
     kb->setScalarField("totalFailures", kb->CreateAdd(kb->getScalarField("totalFailures"), failure_count));

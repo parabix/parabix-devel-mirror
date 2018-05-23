@@ -42,7 +42,7 @@ void HexToBinary::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
         }
         //b->CallPrintInt("binary_pack ptr", b->CreateGEP(outputStreamBasePtr, b->CreateUDiv(packNumPhi, TWO)));
         Value * binary_pack = b->bitCast(b->hsimd_packl(8, base_val[0], base_val[1]));
-        b->storeOutputStreamBlock("binary_data", ZERO, b->getInt32(i), binary_pack); 
+        b->storeOutputStreamBlock("binary_data", ZERO, b->getSize(i), binary_pack); 
     }
 }
 
