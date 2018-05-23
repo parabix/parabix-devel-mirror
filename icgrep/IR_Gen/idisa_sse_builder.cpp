@@ -158,11 +158,13 @@ Value * IDISA_SSE2_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * shuffle
         // First create a vector with exchanged values of the 2 fields.
         Constant * idx[2] = {ConstantInt::get(getInt32Ty(), 1), ConstantInt::get(getInt32Ty(), 0)};
         Value * exchanged = CreateShuffleVector(a, UndefValue::get(fwVectorType(fw)), ConstantVector::get({idx, 2}));
-        // bits that change if we the value in a needs to be exchanged.
+        // bits that change if the value in a needs to be exchanged.
         Value * changed = simd_xor(a, exchanged);
         // Now create a mask to select between original and exchanged values.
         Constant * xchg[2] = {ConstantInt::get(getInt64Ty(), 1), ConstantInt::get(getInt64Ty(), 0)};
-        Value * exchange_mask = simd_eq(fw, shuffle_table, ConstantVector::get({xchg, 2}));
+        Value * xchg_vec = ConstantVector::get({xchg, 2});
+        Constant * oneSplat = ConstantVector::getSplat(2, ConstantInt::get(getInt64Ty(), 1));
+        Value * exchange_mask = simd_eq(fw, simd_and(shuffle_table, oneSplat), xchg_vec);
         Value * rslt = simd_xor(simd_and(changed, exchange_mask), a);
         return rslt;
     }
