@@ -39,6 +39,7 @@ static cl::opt<std::string> Operand2TestFile(cl::Positional, cl::desc("Operand 2
 static cl::opt<std::string> TestOutputFile("o", cl::desc("Test output file."), cl::cat(testFlags));
 static cl::opt<bool> QuietMode("q", cl::desc("Suppress output, set the return code only."), cl::cat(testFlags));
 static cl::opt<int> ShiftLimit("ShiftLimit", cl::desc("Upper limit for the shift operand (2nd operand) of sllv, srlv, srav."), cl::init(0));
+static cl::opt<int> Immediate("i", cl::desc("Immediate value for mvmd_dslli"), cl::init(1));
 
 class ShiftLimitKernel : public kernel::BlockOrientedKernel {
 public:
@@ -70,7 +71,7 @@ void ShiftLimitKernel::generateDoBlockMethod(const std::unique_ptr<kernel::Kerne
 
 class IdisaBinaryOpTestKernel : public kernel::MultiBlockKernel {
 public:
-    IdisaBinaryOpTestKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw);
+    IdisaBinaryOpTestKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm=0);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -78,14 +79,15 @@ protected:
 private:
     const std::string mIdisaOperation;
     const unsigned mTestFw;
+    const unsigned mImmediateShift;
 };
 
-IdisaBinaryOpTestKernel::IdisaBinaryOpTestKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw)
+IdisaBinaryOpTestKernel::IdisaBinaryOpTestKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm)
 : kernel::MultiBlockKernel(idisa_op + std::to_string(fw) + "_test",
      {kernel::Binding{b->getStreamSetTy(1, 1), "operand1"}, kernel::Binding{b->getStreamSetTy(1, 1), "operand2"}},
      {kernel::Binding{b->getStreamSetTy(1, 1), "result"}},
      {}, {}, {}),
-mIdisaOperation(idisa_op), mTestFw(fw) {}
+mIdisaOperation(idisa_op), mTestFw(fw), mImmediateShift(imm) {}
 
 void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
@@ -147,6 +149,8 @@ void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<kern
         result = kb->mvmd_shuffle(mTestFw, operand1, operand2);
     } else if (mIdisaOperation == "mvmd_compress") {
         result = kb->mvmd_compress(mTestFw, operand1, operand2);
+    } else if (mIdisaOperation == "mvmd_dslli") {
+        result = kb->mvmd_dslli(mTestFw, operand1, operand2, mImmediateShift);
     } else {
         llvm::report_fatal_error("Binary operation " + mIdisaOperation + " is unknown to the IdisaBinaryOpTestKernel kernel.");
     }
@@ -160,7 +164,7 @@ void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<kern
 
 class IdisaBinaryOpCheckKernel : public kernel::BlockOrientedKernel {
 public:
-    IdisaBinaryOpCheckKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw);
+    IdisaBinaryOpCheckKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm=0);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -168,16 +172,17 @@ protected:
 private:
     const std::string mIdisaOperation;
     const unsigned mTestFw;
+    const unsigned mImmediateShift;
 };
 
-IdisaBinaryOpCheckKernel::IdisaBinaryOpCheckKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw)
+IdisaBinaryOpCheckKernel::IdisaBinaryOpCheckKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm)
 : kernel::BlockOrientedKernel(idisa_op + std::to_string(fw) + "_check" + std::to_string(QuietMode),
                            {kernel::Binding{b->getStreamSetTy(1, 1), "operand1"},
                             kernel::Binding{b->getStreamSetTy(1, 1), "operand2"},
                             kernel::Binding{b->getStreamSetTy(1, 1), "test_result"}},
                            {kernel::Binding{b->getStreamSetTy(1, 1), "expected_result"}},
                            {}, {kernel::Binding{b->getSizeTy(), "totalFailures"}}, {}),
-mIdisaOperation(idisa_op), mTestFw(fw) {}
+mIdisaOperation(idisa_op), mTestFw(fw), mImmediateShift(imm) {}
 
 void IdisaBinaryOpCheckKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & kb) {
     Type * fwTy = kb->getIntNTy(mTestFw);
@@ -190,10 +195,17 @@ void IdisaBinaryOpCheckKernel::generateDoBlockMethod(const std::unique_ptr<kerne
     unsigned fieldCount = kb->getBitBlockWidth()/mTestFw;
     Value * expectedBlock = kb->allZeroes();
     if (mIdisaOperation == "mvmd_shuffle") {
-        for (unsigned i = 0; i < mTestFw; i++) {
-            Value * iConst = ConstantInt::get(kb->getInt32Ty(), i);
-            Value * idx = kb->CreateExtractElement(operand2Block, iConst);
-            expectedBlock = kb->CreateInsertElement(expectedBlock, kb->CreateExtractElement(operand1Block, idx), iConst);
+        for (unsigned i = 0; i < fieldCount; i++) {
+            Value * idx = kb->CreateURem(kb->mvmd_extract(mTestFw, operand2Block, i), ConstantInt::get(fwTy, fieldCount));
+            Value * elt = kb->CreateExtractElement(kb->fwCast(mTestFw, operand1Block), kb->CreateZExtOrTrunc(idx, kb->getInt32Ty()));
+            expectedBlock = kb->mvmd_insert(mTestFw, expectedBlock, elt, i);
+        }
+    } else if (mIdisaOperation == "mvmd_dslli") {
+        for (unsigned i = 0; i < fieldCount; i++) {
+            Value * elt = nullptr;
+            if (i < mImmediateShift) elt = kb->mvmd_extract(mTestFw, operand2Block, fieldCount - mImmediateShift + i);
+            else elt = kb->mvmd_extract(mTestFw, operand1Block, i - mImmediateShift);
+            expectedBlock = kb->mvmd_insert(mTestFw, expectedBlock, elt, i);
         }
     } else {
         for (unsigned i = 0; i < fieldCount; i++) {
@@ -382,11 +394,11 @@ void pipelineGen(ParabixDriver & pxDriver) {
     }
 
     StreamSetBuffer * ResultBitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
-    kernel::Kernel * testK = pxDriver.addKernelInstance<IdisaBinaryOpTestKernel>(idb, TestOperation, TestFieldWidth);
+    kernel::Kernel * testK = pxDriver.addKernelInstance<IdisaBinaryOpTestKernel>(idb, TestOperation, TestFieldWidth, Immediate);
     pxDriver.makeKernelCall(testK, {Operand1BitStream, Operand2BitStream}, {ResultBitStream});
     
     StreamSetBuffer * ExpectedResultBitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
-    kernel::Kernel * checkK = pxDriver.addKernelInstance<IdisaBinaryOpCheckKernel>(idb, TestOperation, TestFieldWidth);
+    kernel::Kernel * checkK = pxDriver.addKernelInstance<IdisaBinaryOpCheckKernel>(idb, TestOperation, TestFieldWidth, Immediate);
     pxDriver.makeKernelCall(checkK, {Operand1BitStream, Operand2BitStream, ResultBitStream}, {ExpectedResultBitStream});
     
     if (!TestOutputFile.empty()) {
