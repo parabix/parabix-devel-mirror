@@ -126,6 +126,7 @@ inline void MultiBlockKernel::writeMultiBlockLogic(const std::unique_ptr<KernelB
         checkInputStream(b, i);
     }
     mIsFinal = b->CreateICmpEQ(mNumOfStrides, b->getSize(0));
+	mIsFinal = b->CreateAnd(mIsFinal, mInitiallyFinal);
     mNumOfStrides = b->CreateSelect(mIsFinal, mNumOfStridesInFinalSegment, mNumOfStrides);
     for (unsigned i = 0; i < mStreamSetOutputs.size(); i++) {
         checkOutputStream(b, i);

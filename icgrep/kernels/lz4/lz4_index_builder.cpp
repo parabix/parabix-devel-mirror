@@ -565,12 +565,12 @@ namespace kernel{
         int fw = 64;
         BasicBlock* entryBlock = b->GetInsertBlock();
         Value* SIZE_1 = b->getSize(1);
-        Value* SIZE_256 = b->getSize(fw);
-        Value* INT256_0 = b->getIntN(fw, 0);
-        Value* INT256_1 = b->getIntN(fw, 1);
+        Value* SIZE_FW = b->getSize(fw);
+        Value* INT_FW_0 = b->getIntN(fw, 0);
+        Value* INT_FW_1 = b->getIntN(fw, 1);
 
-        Value* endBlockIndex = b->CreateUDiv(position, SIZE_256);
-        Value* endOffset = b->CreateZExt(b->CreateURem(position, SIZE_256), b->getIntNTy(fw));
+        Value* endBlockIndex = b->CreateUDiv(position, SIZE_FW);
+        Value* endOffset = b->CreateZExt(b->CreateURem(position, SIZE_FW), b->getIntNTy(fw));
 
         BasicBlock* appendMatchOffsetMarkerCon = b->CreateBasicBlock("appendMatchOffsetMarkerCon");
         BasicBlock* appendMatchOffsetMarkerBody = b->CreateBasicBlock("appendMatchOffsetMarkerBody");
@@ -593,13 +593,13 @@ namespace kernel{
         b->SetInsertPoint(appendMatchOffsetMarkerBody);
         this->storeMatchOffsetMarker(b, phiCurrentIndex, phiEndBits);
         phiCurrentIndex->addIncoming(b->CreateAdd(phiCurrentIndex, SIZE_1), b->GetInsertBlock());
-        phiEndBits->addIncoming(INT256_0, b->GetInsertBlock());
+        phiEndBits->addIncoming(INT_FW_0, b->GetInsertBlock());
 
         b->CreateBr(appendMatchOffsetMarkerCon);
 
         // ---- AppendM0Exit
         b->SetInsertPoint(appendMatchOffsetMarkerExit);
-        Value* finalEndBits = b->CreateOr(phiEndBits, b->CreateShl(INT256_1, endOffset));
+        Value* finalEndBits = b->CreateOr(phiEndBits, b->CreateShl(INT_FW_1, endOffset));
         b->setScalarField("pendingMarchOffsetMarkerIndex", phiCurrentIndex);
         b->setScalarField("pendingMatchOffsetMarkerBits", finalEndBits);
     }

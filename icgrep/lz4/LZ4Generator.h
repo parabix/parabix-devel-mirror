@@ -27,6 +27,7 @@ public:
 
     void generatePipeline(const std::string &outputFile);
     void generateSwizzledPipeline(const std::string &outputFile);
+    void generateNewExtractOnlyPipeline(const std::string &outputFile);
     void generateExtractOnlyPipeline(const std::string &outputFile);
     void generateSwizzledExtractOnlyPipeline(const std::string &outputFile);
     void generateExtractAndDepositOnlyPipeline(const std::string &outputFile);
@@ -38,6 +39,8 @@ protected:
     // Pipeline
     virtual void generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual void generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual parabix::StreamSetBuffer * generateAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual parabix::StreamSetBuffer * generateSwizzledAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*> generateSwizzleExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual parabix::StreamSetBuffer* generateBitStreamExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 

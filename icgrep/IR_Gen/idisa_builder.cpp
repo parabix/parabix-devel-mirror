@@ -28,6 +28,18 @@ Value * IDISA_Builder::fwCast(const unsigned fw, Value * const a) {
     return CreateBitCast(a, ty);
 }
 
+void IDISA_Builder::CallPrintRegisterCond(const std::string & regName, llvm::Value * const value, llvm::Value * const cond) {
+    BasicBlock* callBlock = this->CreateBasicBlock("callBlock");
+    BasicBlock* exitBlock = this->CreateBasicBlock("exitBlock");
+    this->CreateCondBr(cond, callBlock, exitBlock);
+
+    this->SetInsertPoint(callBlock);
+    this->CallPrintRegister(regName, value);
+
+    this->CreateBr(exitBlock);
+    this->SetInsertPoint(exitBlock);
+}
+
 void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const value) {
     Module * const m = getModule();
     Constant * printRegister = m->getFunction("PrintRegister");

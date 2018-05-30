@@ -195,7 +195,8 @@ public:
     llvm::ArrayType * getStreamSetTy(const unsigned NumElements = 1, const unsigned FieldWidth = 1) {
         return getStreamSetTy(getContext(), NumElements, FieldWidth);
     }
-    
+
+    void CallPrintRegisterCond(const std::string & regName, llvm::Value * const value, llvm::Value * const cond);
     void CallPrintRegister(const std::string & regName, llvm::Value * const value);
 
 protected:

@@ -209,7 +209,9 @@ public:
     
     //  Create a call to:  int pthread_join(pthread_t thread, void **value_ptr);
     llvm::Value * CreatePThreadJoinCall(llvm::Value * thread, llvm::Value * value_ptr);
-    
+
+    void CallPrintIntCond(const std::string & name, llvm::Value * const value, llvm::Value * const cond);
+
     void CallPrintInt(const std::string & name, llvm::Value * const value);
     
     void CallPrintIntToStderr(const std::string & name, llvm::Value * const value);

@@ -296,6 +296,18 @@ Function * CBuilder::GetDprintf() {
     return dprintf;
 }
 
+void CBuilder::CallPrintIntCond(const std::string & name, llvm::Value * const value, llvm::Value * const cond) {
+    BasicBlock* callBlock = this->CreateBasicBlock("callBlock");
+    BasicBlock* exitBlock = this->CreateBasicBlock("exitBlock");
+    this->CreateCondBr(cond, callBlock, exitBlock);
+
+    this->SetInsertPoint(callBlock);
+    this->CallPrintInt(name, value);
+
+    this->CreateBr(exitBlock);
+    this->SetInsertPoint(exitBlock);
+}
+
 void CBuilder::CallPrintInt(const std::string & name, Value * const value) {
     Module * const m = getModule();
     Constant * printRegister = m->getFunction("PrintInt");

@@ -23,10 +23,19 @@ public:
     void generateScanMatchGrepPipeline(re::RE* regex);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> &REs,
                                                                                    parabix::StreamSetBuffer *decompressedBasisBits);
-    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrepPipeline(std::vector<re::RE *> &REs);
+
+    void generateMultiplexingCompressedBitStream(std::vector<re::RE *> &REs);
+    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrepPipeline(std::vector<re::RE *> &REs, bool useAio = false);
 
 
     void invokeScanMatchGrep(char* fileBuffer, size_t blockStart, size_t blockEnd, bool hasBlockChecksum);
+
+    void generateMultiplexingSwizzledAioPipeline(re::RE* regex);
+    void generateMultiplexingSwizzledAioPipeline2(re::RE* regex);
+
+    void generateSwizzledAioPipeline(re::RE* regex);
+
+    void generateAioPipeline(re::RE* regex);
 
 private:
     bool mEnableMultiplexing;
@@ -56,6 +65,9 @@ private:
     parabix::StreamSetBuffer * linefeedStreamFromDecompressedBits(parabix::StreamSetBuffer *decompressedBasisBits);
     parabix::StreamSetBuffer * linefeedStreamFromCompressedBits();
 
+
+    parabix::StreamSetBuffer * convertCompressedBitsStreamWithSwizzledApproach(parabix::StreamSetBuffer* compressedBitStream, int numberOfStream, std::string prefix);
+    parabix::StreamSetBuffer * convertCompressedBitsStreamWithAioApproach(parabix::StreamSetBuffer* compressedBitStream, int numberOfStream, std::string prefix);
     parabix::StreamSetBuffer * convertCompressedBitsStream(parabix::StreamSetBuffer* compressedBitStream, int numberOfStream, std::string prefix);
 };
 

@@ -50,7 +50,8 @@
 #include <re/printer_re.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Debug.h>
-
+#include <kernels/lz4/lz4_block_decoder.h>
+#include <kernels/lz4/lz4_swizzled_aio.h>
 
 
 namespace re { class CC; }
@@ -105,7 +106,92 @@ parabix::StreamSetBuffer * LZ4GrepGenerator::linefeedStreamFromDecompressedBits(
     return LineFeedStream;
 }
 
+StreamSetBuffer * LZ4GrepGenerator::convertCompressedBitsStreamWithAioApproach(parabix::StreamSetBuffer* compressedBitStream, int numberOfStream, std::string prefix) {
+    auto mGrepDriver = &mPxDriver;
+    auto & iBuilder = mGrepDriver->getBuilder();
+
+    //// Decode Block Information
+    StreamSetBuffer * const BlockData_IsCompressed = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * const BlockData_BlockStart = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * const BlockData_BlockEnd = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(), 1);
+
+    //// Generate Helper Markers Extenders, FX, XF
+    StreamSetBuffer * const Extenders = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks(), 1);
+    mMatchOffsetMarker = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks());
+    Kernel * extenderK = mPxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
+    mPxDriver.makeKernelCall(extenderK, {mCompressedBasisBits}, {Extenders});
+
+
+    Kernel * blockDecoderK = mPxDriver.addKernelInstance<LZ4BlockDecoderNewKernel>(iBuilder);
+    blockDecoderK->setInitialArguments({iBuilder->CreateTrunc(mHasBlockChecksum, iBuilder->getInt1Ty()), mHeaderSize, mFileSize});
+    mPxDriver.makeKernelCall(blockDecoderK, {mCompressedByteStream}, {BlockData_IsCompressed, BlockData_BlockStart, BlockData_BlockEnd});
+
+
+    // Produce unswizzled bit streams
+    StreamSetBuffer * u16Swizzle0 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 4, 1, 1, 64, "source");
+    mPxDriver.makeKernelCall(unSwizzleK, {compressedBitStream}, {u16Swizzle0});
+
+    StreamSetBuffer * decompressedSwizzled0 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+
+
+    Kernel* lz4AioK = mPxDriver.addKernelInstance<LZ4SwizzledAioKernel>(iBuilder, 4, 1, 4);
+    lz4AioK->setInitialArguments({mFileSize});
+    mPxDriver.makeKernelCall(
+            lz4AioK,
+            {
+                    mCompressedByteStream,
+                    Extenders,
+
+                    // Block Data
+                    BlockData_IsCompressed,
+                    BlockData_BlockStart,
+                    BlockData_BlockEnd,
+
+                    u16Swizzle0,
+            }, {
+                    decompressedSwizzled0,
+            });
+
+
+
+    StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks());
+    // TODO deadloop when add unswizzled kernel
+    Kernel * unSwizzleK2 = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 4, 1, 1, 64, "dst");
+    mPxDriver.makeKernelCall(unSwizzleK2, {decompressedSwizzled0}, {decompressionBitStream});
+
+    return decompressionBitStream;
+
+}
+
+StreamSetBuffer * LZ4GrepGenerator::convertCompressedBitsStreamWithSwizzledApproach(parabix::StreamSetBuffer* compressedBitStream, int numberOfStream, std::string prefix) {
+    auto mGrepDriver = &mPxDriver;
+    auto & idb = mGrepDriver->getBuilder();
+
+    StreamSetBuffer * u16Swizzle0 = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    Kernel * delK = mPxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(idb, 4, 64);
+    mPxDriver.makeKernelCall(delK, {mDeletionMarker, compressedBitStream}, {u16Swizzle0});
+
+    StreamSetBuffer * depositedSwizzle0 = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    Kernel * multiplePdepK = mPxDriver.addKernelInstance<SwizzledMultiplePDEPkernel>(idb, 4, 1);
+    mPxDriver.makeKernelCall(multiplePdepK, {mDepositMarker, u16Swizzle0}, {depositedSwizzle0});
+
+    StreamSetBuffer * matchCopiedSwizzle0 = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(4), this->getDecompressedBufferBlocks(), 1);
+    Kernel * swizzledMatchCopyK = mPxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(idb, 4, 1, 4);
+    mPxDriver.makeKernelCall(swizzledMatchCopyK, {mMatchOffsetMarker, mM0Marker, mCompressedByteStream, depositedSwizzle0}, {matchCopiedSwizzle0});
+
+    // Produce unswizzled bit streams
+    StreamSetBuffer * matchCopiedBits = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), this->getInputBufferBlocks());
+    Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(idb, 4, 1, 1);
+    mPxDriver.makeKernelCall(unSwizzleK, {matchCopiedSwizzle0}, {matchCopiedBits});
+
+    return matchCopiedBits;
+}
 parabix::StreamSetBuffer * LZ4GrepGenerator::convertCompressedBitsStream(parabix::StreamSetBuffer* compressedBitStream, int numberOfStream, std::string prefix) {
+    if (numberOfStream == 4) {
+        return this->convertCompressedBitsStreamWithSwizzledApproach(compressedBitStream, numberOfStream, prefix);
+    }
+
     auto mGrepDriver = &mPxDriver;
     auto & idb = mGrepDriver->getBuilder();
 
@@ -146,8 +232,93 @@ parabix::StreamSetBuffer * LZ4GrepGenerator::linefeedStreamFromCompressedBits() 
     return this->convertCompressedBitsStream(CompressedLineFeedStream, 1, "LineFeed");
 }
 
+void LZ4GrepGenerator::generateMultiplexingCompressedBitStream(std::vector<re::RE *> &REs) {
+    this->initREs(REs);
+    auto mGrepDriver = &mPxDriver;
 
-std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerator::multiplexingGrepPipeline(std::vector<re::RE *> &REs) {
+    auto & idb = mGrepDriver->getBuilder();
+    // TODO: until we automate stream buffer sizing, use this calculation to determine how large our matches buffer needs to be.
+    const unsigned baseBufferSize = this->getInputBufferBlocks();
+    bool CC_Multiplexing = true;
+    int MaxCountFlag = 0;
+
+
+    //  Regular Expression Processing and Analysis Phase
+    const auto nREs = mREs.size();
+
+    std::vector<StreamSetBuffer *> MatchResultsBufs(nREs);
+
+    std::map<std::string, StreamSetBuffer *> propertyStream;
+
+    std::vector<std::string> externalStreamNames;
+    std::set<re::Name *> UnicodeProperties;
+
+    const auto UnicodeSets = re::collectCCs(mREs[0], &cc::Unicode, std::set<re::Name *>({re::makeZeroWidth("\\b{g}")}));
+    StreamSetBuffer * const MatchResults = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+
+    mpx = make_unique<cc::MultiplexedAlphabet>("mpx", UnicodeSets);
+    mREs[0] = transformCCs(mpx.get(), mREs[0]);
+    std::vector<re::CC *> mpx_basis = mpx->getMultiplexedCCs();
+    auto numOfCharacterClasses = mpx_basis.size();
+    StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), baseBufferSize);
+
+    kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis));
+    mGrepDriver->makeKernelCall(ccK, {mCompressedBasisBits}, {CharClasses});
+
+    StreamSetBuffer * CompressedLineFeedStream = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+    kernel::Kernel * linefeedK = mPxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(8), "basis", FixedRate(), Principal()});
+    mPxDriver.makeKernelCall(linefeedK, {mCompressedBasisBits}, {CompressedLineFeedStream});
+
+    StreamSetBuffer * combinedStream = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses + 1), baseBufferSize);
+    kernel::Kernel* streamCombineKernel = mPxDriver.addKernelInstance<StreamsCombineKernel>(idb, std::vector<unsigned>({1, (unsigned)numOfCharacterClasses}));
+    mPxDriver.makeKernelCall(streamCombineKernel, {CompressedLineFeedStream, CharClasses}, {combinedStream});
+    StreamSetBuffer * decompressedCombinedStream = nullptr;
+
+    decompressedCombinedStream = this->convertCompressedBitsStreamWithAioApproach(combinedStream, 1 + numOfCharacterClasses, "combined");
+
+/*
+    StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), baseBufferSize);
+    StreamSetBuffer * decompressedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), baseBufferSize);
+    kernel::Kernel* streamSplitKernel = mPxDriver.addKernelInstance<StreamsSplitKernel>(idb, std::vector<unsigned>({1, (unsigned)numOfCharacterClasses}));
+    mPxDriver.makeKernelCall(streamSplitKernel, {decompressedCombinedStream}, {LineBreakStream, decompressedCharClasses});
+
+
+
+    StreamSetBuffer * fakeMatchCopiedBits = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), this->getInputBufferBlocks());
+    Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<LZ4FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, 8);
+    mPxDriver.makeKernelCall(fakeStreamGeneratorK, {decompressedCharClasses}, {fakeMatchCopiedBits});
+
+    kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[0], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()});
+    mGrepDriver->makeKernelCall(icgrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {MatchResults});
+    MatchResultsBufs[0] = MatchResults;
+
+    StreamSetBuffer * MergedResults = MatchResultsBufs[0];
+    if (mREs.size() > 1) {
+        MergedResults = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+        kernel::Kernel * streamsMergeK = mGrepDriver->addKernelInstance<kernel::StreamsMerge>(idb, 1, mREs.size());
+        mGrepDriver->makeKernelCall(streamsMergeK, MatchResultsBufs, {MergedResults});
+    }
+    StreamSetBuffer * Matches = MergedResults;
+    if (mMoveMatchesToEOL) {
+        StreamSetBuffer * OriginalMatches = Matches;
+        kernel::Kernel * matchedLinesK = mGrepDriver->addKernelInstance<kernel::MatchedLinesKernel>(idb);
+        Matches = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+        mGrepDriver->makeKernelCall(matchedLinesK, {OriginalMatches, LineBreakStream}, {Matches});
+    }
+
+    if (MaxCountFlag > 0) {
+        kernel::Kernel * untilK = mGrepDriver->addKernelInstance<kernel::UntilNkernel>(idb);
+        untilK->setInitialArguments({idb->getSize(MaxCountFlag)});
+        StreamSetBuffer * const AllMatches = Matches;
+        Matches = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+        mGrepDriver->makeKernelCall(untilK, {AllMatches}, {Matches});
+    }
+
+    return std::pair<StreamSetBuffer *, StreamSetBuffer *>(LineBreakStream, Matches);
+    */
+
+};
+std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerator::multiplexingGrepPipeline(std::vector<re::RE *> &REs, bool useAio) {
 
     this->initREs(REs);
     auto mGrepDriver = &mPxDriver;
@@ -187,7 +358,7 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerat
     StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), baseBufferSize);
 
     kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis));
-    mGrepDriver->makeKernelCall(ccK, {mCompressedBasisBits}, {CharClasses}); //TODO get it from compression space
+    mGrepDriver->makeKernelCall(ccK, {mCompressedBasisBits}, {CharClasses});
 
     StreamSetBuffer * CompressedLineFeedStream = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
     kernel::Kernel * linefeedK = mPxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(8), "basis", FixedRate(), Principal()});
@@ -196,8 +367,14 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerat
     StreamSetBuffer * combinedStream = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses + 1), baseBufferSize);
     kernel::Kernel* streamCombineKernel = mPxDriver.addKernelInstance<StreamsCombineKernel>(idb, std::vector<unsigned>({1, (unsigned)numOfCharacterClasses}));
     mPxDriver.makeKernelCall(streamCombineKernel, {CompressedLineFeedStream, CharClasses}, {combinedStream});
+    StreamSetBuffer * decompressedCombinedStream = nullptr;
 
-    StreamSetBuffer * decompressedCombinedStream = this->convertCompressedBitsStream(combinedStream, 1 + numOfCharacterClasses, "combined");
+    if (useAio) {
+        decompressedCombinedStream = this->convertCompressedBitsStreamWithAioApproach(combinedStream, 1 + numOfCharacterClasses, "combined");
+    } else {
+        decompressedCombinedStream = this->convertCompressedBitsStream(combinedStream, 1 + numOfCharacterClasses, "combined");
+    }
+
     StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), baseBufferSize);
     StreamSetBuffer * decompressedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), baseBufferSize);
     kernel::Kernel* streamSplitKernel = mPxDriver.addKernelInstance<StreamsSplitKernel>(idb, std::vector<unsigned>({1, (unsigned)numOfCharacterClasses}));
@@ -255,37 +432,17 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerat
     //  Regular Expression Processing and Analysis Phase
     const auto nREs = mREs.size();
 
-    StreamSetBuffer * LineBreakStream = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
     std::vector<StreamSetBuffer *> MatchResultsBufs(nREs);
 
-    StreamSetBuffer * RequiredStreams = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
-    StreamSetBuffer * UnicodeLB = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
+    StreamSetBuffer * LineBreakStream = LineBreakStream = this->linefeedStreamFromDecompressedBits(decompressedBasisBits);
 
-    StreamSetBuffer * LineFeedStream = this->linefeedStreamFromDecompressedBits(decompressedBasisBits);
-
-    kernel::Kernel * requiredStreamsK = mGrepDriver->addKernelInstance<kernel::RequiredStreams_UTF8>(idb);
-    mGrepDriver->makeKernelCall(requiredStreamsK, {decompressedBasisBits, LineFeedStream}, {RequiredStreams, UnicodeLB});
-
-    if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
-        LineBreakStream = LineFeedStream;
-    } else if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
-        kernel::Kernel * breakK = mGrepDriver->addKernelInstance<kernel::ParabixCharacterClassKernelBuilder>(idb, "Null", std::vector<re::CC *>{mBreakCC}, 8);
-        mGrepDriver->makeKernelCall(breakK, {decompressedBasisBits}, {LineBreakStream});
-    } else {
-        LineBreakStream = UnicodeLB;
-    }
 
     std::map<std::string, StreamSetBuffer *> propertyStream;
 
     for(unsigned i = 0; i < nREs; ++i) {
         std::vector<std::string> externalStreamNames;
         std::vector<StreamSetBuffer *> icgrepInputSets = {decompressedBasisBits};
-        if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
-            externalStreamNames.push_back("UTF8_LB");
-            icgrepInputSets.push_back(LineBreakStream);
-            externalStreamNames.push_back("UTF8_nonfinal");
-            icgrepInputSets.push_back(RequiredStreams);
-        }
+
         std::set<re::Name *> UnicodeProperties;
 
         StreamSetBuffer * MatchResults = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
@@ -379,6 +536,142 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
 
     mPxDriver.finalizeObject();
 }
+
+void LZ4GrepGenerator::generateMultiplexingSwizzledAioPipeline(re::RE* regex) {
+    auto & iBuilder = mPxDriver.getBuilder();
+    this->generateMainFunc(iBuilder);
+
+    // GeneratePipeline
+    this->generateLoadByteStreamAndBitStream(iBuilder);
+
+    std::vector<re::RE*> res = {regex};
+    this->generateMultiplexingCompressedBitStream(res);
+
+    mPxDriver.generatePipelineIR();
+    mPxDriver.deallocateBuffers();
+
+    iBuilder->CreateRetVoid();
+
+    mPxDriver.finalizeObject();
+}
+
+void LZ4GrepGenerator::generateMultiplexingSwizzledAioPipeline2(re::RE* regex) {
+    auto & iBuilder = mPxDriver.getBuilder();
+    this->generateMainFunc(iBuilder);
+
+    // GeneratePipeline
+    this->generateLoadByteStreamAndBitStream(iBuilder);
+//    this->generateExtractAndDepositMarkers(iBuilder);
+
+    StreamSetBuffer * LineBreakStream;
+    StreamSetBuffer * Matches;
+    std::vector<re::RE*> res = {regex};
+    std::tie(LineBreakStream, Matches) = multiplexingGrepPipeline(res, true);
+
+    kernel::Kernel * matchCountK = mPxDriver.addKernelInstance<kernel::PopcountKernel>(iBuilder);
+    mPxDriver.makeKernelCall(matchCountK, {Matches}, {});
+    mPxDriver.generatePipelineIR();
+
+    iBuilder->setKernel(matchCountK);
+    Value * matchedLineCount = iBuilder->getAccumulator("countResult");
+    matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
+    iBuilder->CallPrintInt("aaa", matchedLineCount);
+
+    mPxDriver.deallocateBuffers();
+
+    // TODO return matchedLineCount
+//        idb->CreateRet(matchedLineCount);
+
+    iBuilder->CreateRetVoid();
+
+    mPxDriver.finalizeObject();
+}
+
+void LZ4GrepGenerator::generateSwizzledAioPipeline(re::RE* regex) {
+    auto & iBuilder = mPxDriver.getBuilder();
+    this->generateMainFunc(iBuilder);
+
+    // GeneratePipeline
+    this->generateLoadByteStreamAndBitStream(iBuilder);
+
+    StreamSetBuffer * const decompressionBitStream = this->generateSwizzledAIODecompression(iBuilder);
+
+    StreamSetBuffer * LineBreakStream;
+    StreamSetBuffer * Matches;
+    std::vector<re::RE*> res = {regex};
+    std::tie(LineBreakStream, Matches) = grepPipeline(res, decompressionBitStream);
+/*
+    StreamSetBuffer * const decompressionByteStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks());
+    Kernel * p2sK = mPxDriver.addKernelInstance<P2SKernel>(iBuilder);
+    mPxDriver.makeKernelCall(p2sK, {decompressionBitStream}, {decompressionByteStream});
+
+    Kernel * outK = mPxDriver.addKernelInstance<FileSink>(iBuilder, 8);
+    outK->setInitialArguments({iBuilder->GetString("/Users/wxy325/developer/LZ4-sample-files/workspace/lz4d-normal/8k_.txt")});
+    mPxDriver.makeKernelCall(outK, {decompressionByteStream}, {});
+*/
+    kernel::Kernel * matchCountK = mPxDriver.addKernelInstance<kernel::PopcountKernel>(iBuilder);
+
+    mPxDriver.makeKernelCall(matchCountK, {Matches}, {});
+    mPxDriver.generatePipelineIR();
+
+    iBuilder->setKernel(matchCountK);
+    Value * matchedLineCount = iBuilder->getAccumulator("countResult");
+    matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
+    iBuilder->CallPrintInt("aaa", matchedLineCount);
+    mPxDriver.deallocateBuffers();
+
+    // TODO return matchedLineCount
+//        idb->CreateRet(matchedLineCount);
+
+    iBuilder->CreateRetVoid();
+
+    mPxDriver.finalizeObject();
+}
+
+void LZ4GrepGenerator::generateAioPipeline(re::RE *regex) {
+    auto & iBuilder = mPxDriver.getBuilder();
+    this->generateMainFunc(iBuilder);
+
+    // GeneratePipeline
+    this->generateLoadByteStreamAndBitStream(iBuilder);
+    parabix::StreamSetBuffer * decompressedByteStream = this->generateAIODecompression(iBuilder);
+
+
+    StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks());
+    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, /*aligned = */ true, "a");
+    mPxDriver.makeKernelCall(s2pk, {decompressedByteStream}, {decompressionBitStream});
+
+
+    StreamSetBuffer * LineBreakStream;
+    StreamSetBuffer * Matches;
+    std::vector<re::RE*> res = {regex};
+    std::tie(LineBreakStream, Matches) = grepPipeline(res, decompressionBitStream);
+
+
+//    Kernel * outK = mPxDriver.addKernelInstance<FileSink>(iBuilder, 8);
+//    outK->setInitialArguments({iBuilder->GetString("/Users/wxy325/developer/LZ4-sample-files/workspace/lz4d-normal/8k_.txt")});
+//    mPxDriver.makeKernelCall(outK, {decompressedStream}, {});
+
+    kernel::Kernel * matchCountK = mPxDriver.addKernelInstance<kernel::PopcountKernel>(iBuilder);
+    mPxDriver.makeKernelCall(matchCountK, {Matches}, {});
+    mPxDriver.generatePipelineIR();
+
+    iBuilder->setKernel(matchCountK);
+    Value * matchedLineCount = iBuilder->getAccumulator("countResult");
+    matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
+    iBuilder->CallPrintInt("aaa", matchedLineCount);
+
+    mPxDriver.deallocateBuffers();
+
+    // TODO return matchedLineCount
+//        idb->CreateRet(matchedLineCount);
+
+    iBuilder->CreateRetVoid();
+
+    mPxDriver.finalizeObject();
+
+}
+
 
 void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE *regex, bool enableGather) {
     auto & iBuilder = mPxDriver.getBuilder();
