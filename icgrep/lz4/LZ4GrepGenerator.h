@@ -13,9 +13,11 @@
 #include <grep/grep_engine.h>
 
 typedef void (*ScanMatchGrepMainFunctionType)(char * byte_data, size_t headerSize, size_t filesize, bool hasBlockChecksum, intptr_t match_accumulator);
+typedef uint64_t (*CountOnlyGrepMainFunctionType)(char * byte_data, size_t headerSize, size_t filesize, bool hasBlockChecksum);
 
 class LZ4GrepGenerator : public LZ4Generator{
 public:
+
     LZ4GrepGenerator(bool enableMultiplexing = false);
     void generateSwizzledCountOnlyGrepPipeline(re::RE *regex);
     void generateCountOnlyGrepPipeline(re::RE *regex, bool enableGather = true);
@@ -37,6 +39,9 @@ public:
 
     void generateAioPipeline(re::RE* regex);
 
+    ScanMatchGrepMainFunctionType getScanMatchGrepMainFunction();
+    CountOnlyGrepMainFunctionType getCountOnlyGrepMainFunction();
+
 private:
     bool mEnableMultiplexing;
 
@@ -52,13 +57,13 @@ private:
 
     std::vector<std::ostringstream> mResultStrs;
 
-
+    void generateCountOnlyMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     void generateScanMatchMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
 
     llvm::Value * match_accumulator;
 
-    ScanMatchGrepMainFunctionType getScanMatchGrepMainFunction();
+
 
     std::unique_ptr<cc::MultiplexedAlphabet> mpx;
 

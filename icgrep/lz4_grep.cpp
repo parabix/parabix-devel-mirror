@@ -84,8 +84,9 @@ int main(int argc, char *argv[]) {
             g.generateAioPipeline(re_ast);
         }
 
-        auto main = g.getMainFunc();
-        main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
+        auto main = g.getCountOnlyGrepMainFunction();
+        uint64_t countResult = main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
+        llvm::outs() << countResult << "\n";
     } else if (countOnly) {
         if (swizzledDecompression) {
             g.generateSwizzledCountOnlyGrepPipeline(re_ast);

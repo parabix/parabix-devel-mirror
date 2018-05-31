@@ -156,7 +156,6 @@ StreamSetBuffer * LZ4GrepGenerator::convertCompressedBitsStreamWithAioApproach(p
 
 
     StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks());
-    // TODO deadloop when add unswizzled kernel
     Kernel * unSwizzleK2 = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 4, 1, 1, 64, "dst");
     mPxDriver.makeKernelCall(unSwizzleK2, {decompressedSwizzled0}, {decompressionBitStream});
 
@@ -334,14 +333,6 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerat
 
     std::vector<StreamSetBuffer *> MatchResultsBufs(nREs);
 
-
-
-    if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
-    } else if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
-        // TODO fix here
-//        kernel::Kernel * breakK = mGrepDriver->addKernelInstance<kernel::ParabixCharacterClassKernelBuilder>(idb, "Null", std::vector<re::CC *>{mBreakCC}, 8);
-//        mGrepDriver->makeKernelCall(breakK, {matchCopiedBasisBits}, {LineBreakStream});
-    }
 
     std::map<std::string, StreamSetBuffer *> propertyStream;
 
@@ -557,7 +548,7 @@ void LZ4GrepGenerator::generateMultiplexingSwizzledAioPipeline(re::RE* regex) {
 
 void LZ4GrepGenerator::generateMultiplexingSwizzledAioPipeline2(re::RE* regex) {
     auto & iBuilder = mPxDriver.getBuilder();
-    this->generateMainFunc(iBuilder);
+    this->generateCountOnlyMainFunc(iBuilder);
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);
@@ -575,21 +566,18 @@ void LZ4GrepGenerator::generateMultiplexingSwizzledAioPipeline2(re::RE* regex) {
     iBuilder->setKernel(matchCountK);
     Value * matchedLineCount = iBuilder->getAccumulator("countResult");
     matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
-    iBuilder->CallPrintInt("aaa", matchedLineCount);
 
     mPxDriver.deallocateBuffers();
 
-    // TODO return matchedLineCount
-//        idb->CreateRet(matchedLineCount);
+    iBuilder->CreateRet(matchedLineCount);
 
-    iBuilder->CreateRetVoid();
 
     mPxDriver.finalizeObject();
 }
 
 void LZ4GrepGenerator::generateSwizzledAioPipeline(re::RE* regex) {
     auto & iBuilder = mPxDriver.getBuilder();
-    this->generateMainFunc(iBuilder);
+    this->generateCountOnlyMainFunc(iBuilder);
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);
@@ -617,20 +605,16 @@ void LZ4GrepGenerator::generateSwizzledAioPipeline(re::RE* regex) {
     iBuilder->setKernel(matchCountK);
     Value * matchedLineCount = iBuilder->getAccumulator("countResult");
     matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
-    iBuilder->CallPrintInt("aaa", matchedLineCount);
     mPxDriver.deallocateBuffers();
 
-    // TODO return matchedLineCount
-//        idb->CreateRet(matchedLineCount);
-
-    iBuilder->CreateRetVoid();
+    iBuilder->CreateRet(matchedLineCount);
 
     mPxDriver.finalizeObject();
 }
 
 void LZ4GrepGenerator::generateAioPipeline(re::RE *regex) {
     auto & iBuilder = mPxDriver.getBuilder();
-    this->generateMainFunc(iBuilder);
+    this->generateCountOnlyMainFunc(iBuilder);
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);
@@ -639,6 +623,7 @@ void LZ4GrepGenerator::generateAioPipeline(re::RE *regex) {
 
     StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks());
     Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, /*aligned = */ true, "a");
+//    Kernel * s2pk = mPxDriver.addKernelInstance<S2PByPextKernel>(iBuilder, "a");
     mPxDriver.makeKernelCall(s2pk, {decompressedByteStream}, {decompressionBitStream});
 
 
@@ -659,14 +644,10 @@ void LZ4GrepGenerator::generateAioPipeline(re::RE *regex) {
     iBuilder->setKernel(matchCountK);
     Value * matchedLineCount = iBuilder->getAccumulator("countResult");
     matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
-    iBuilder->CallPrintInt("aaa", matchedLineCount);
 
     mPxDriver.deallocateBuffers();
 
-    // TODO return matchedLineCount
-//        idb->CreateRet(matchedLineCount);
-
-    iBuilder->CreateRetVoid();
+    iBuilder->CreateRet(matchedLineCount);
 
     mPxDriver.finalizeObject();
 
@@ -675,7 +656,7 @@ void LZ4GrepGenerator::generateAioPipeline(re::RE *regex) {
 
 void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE *regex, bool enableGather) {
     auto & iBuilder = mPxDriver.getBuilder();
-    this->generateMainFunc(iBuilder);
+    this->generateCountOnlyMainFunc(iBuilder);
 
     // GeneratePipeline
     this->generateLoadByteStreamAndBitStream(iBuilder);
@@ -706,14 +687,10 @@ void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE *regex, bool enableG
     iBuilder->setKernel(matchCountK);
     Value * matchedLineCount = iBuilder->getAccumulator("countResult");
     matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
-    iBuilder->CallPrintInt("aaa", matchedLineCount);
 
     mPxDriver.deallocateBuffers();
 
-    // TODO return matchedLineCount
-//        idb->CreateRet(matchedLineCount);
-
-    iBuilder->CreateRetVoid();
+    iBuilder->CreateRet(matchedLineCount);
 
     mPxDriver.finalizeObject();
 }
@@ -721,7 +698,7 @@ void LZ4GrepGenerator::generateCountOnlyGrepPipeline(re::RE *regex, bool enableG
 
 void LZ4GrepGenerator::generateSwizzledCountOnlyGrepPipeline(re::RE *regex) {
     auto & iBuilder = mPxDriver.getBuilder();
-    this->generateMainFunc(iBuilder);
+    this->generateCountOnlyMainFunc(iBuilder);
 
 
     // GeneratePipeline
@@ -773,20 +750,47 @@ void LZ4GrepGenerator::generateSwizzledCountOnlyGrepPipeline(re::RE *regex) {
     iBuilder->setKernel(matchCountK);
     Value * matchedLineCount = iBuilder->getAccumulator("countResult");
     matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
-    iBuilder->CallPrintInt("aaa", matchedLineCount);
 
     mPxDriver.deallocateBuffers();
 
-    // TODO return matchedLineCount
-//        idb->CreateRet(matchedLineCount);
-
-    iBuilder->CreateRetVoid();
+    iBuilder->CreateRet(matchedLineCount);
 
     mPxDriver.finalizeObject();
 }
 
 ScanMatchGrepMainFunctionType LZ4GrepGenerator::getScanMatchGrepMainFunction() {
     return reinterpret_cast<ScanMatchGrepMainFunctionType>(mPxDriver.getMain());
+}
+CountOnlyGrepMainFunctionType LZ4GrepGenerator::getCountOnlyGrepMainFunction() {
+    return reinterpret_cast<CountOnlyGrepMainFunctionType>(mPxDriver.getMain());
+}
+
+void LZ4GrepGenerator::generateCountOnlyMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
+    Module * M = iBuilder->getModule();
+    Type * const int64Ty = iBuilder->getInt64Ty();
+    Type * const sizeTy = iBuilder->getSizeTy();
+    Type * const boolTy = iBuilder->getIntNTy(sizeof(bool) * 8);
+    Type * const voidTy = iBuilder->getVoidTy();
+    Type * const inputType = iBuilder->getInt8PtrTy();
+
+    Function * const main = cast<Function>(M->getOrInsertFunction("Main", int64Ty, inputType, sizeTy, sizeTy, boolTy, nullptr));
+    main->setCallingConv(CallingConv::C);
+    Function::arg_iterator args = main->arg_begin();
+    mInputStream = &*(args++);
+    mInputStream->setName("input");
+
+    mHeaderSize = &*(args++);
+    mHeaderSize->setName("mHeaderSize");
+
+    mFileSize = &*(args++);
+    mFileSize->setName("mFileSize");
+
+    mHasBlockChecksum = &*(args++);
+    mHasBlockChecksum->setName("mHasBlockChecksum");
+    // TODO for now, we do not handle blockCheckSum
+    mHasBlockChecksum = iBuilder->getInt1(false);
+
+    iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
 }
 
 void LZ4GrepGenerator::generateScanMatchMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
