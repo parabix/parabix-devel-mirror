@@ -99,6 +99,27 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
+    if ((fw == 1) && (mBitBlockWidth == 256)) {
+        // Bit interleave using shuffle.   
+        Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx2_pshuf_b);
+        // Make a shuffle table that translates the lower 4 bits of each byte in
+        // order to spread out the bits: xxxxdcba => .d.c.b.a
+        // We use two copies of the table for the AVX2 _mm256_shuffle_epi8 
+        Constant * bit_interleave[32];
+        for (unsigned i = 0; i < 32; i++) {
+            bit_interleave[i] = getInt8((i & 1) | ((i & 2) << 1) | ((i & 4) << 2) | ((i & 8) << 3));
+        }
+        Constant * interleave_table = ConstantVector::get({bit_interleave, 32});
+        // Merge the bytes.
+        Value * byte_merge = esimd_mergeh(8, a, b);
+        Value * low_bits = CreateCall(shufFn, {interleave_table,  fwCast(8, simd_and(byte_merge, simd_lomask(8)))});
+        Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), 1);
+        // For each 16-bit field, interleave the low bits of the two bytes.
+        low_bits = simd_or(simd_and(low_bits, simd_lomask(16)), simd_srli(16, low_bits, 7));
+        // For each 16-bit field, interleave the high bits of the two bytes.
+        high_bits = simd_or(simd_and(high_bits, simd_himask(16)), simd_slli(16, high_bits, 7));
+        return simd_or(low_bits, high_bits);
+    }
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(6, 0, 0)
     if ((fw == 128) && (mBitBlockWidth == 256)) {
         Value * vperm2i128func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_vperm2i128);
@@ -110,6 +131,27 @@ Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_AVX2_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
+    if ((fw == 1) && (mBitBlockWidth == 256)) {
+        // Bit interleave using shuffle.   
+        Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx2_pshuf_b);
+        // Make a shuffle table that translates the lower 4 bits of each byte in
+        // order to spread out the bits: xxxxdcba => .d.c.b.a
+        // We use two copies of the table for the AVX2 _mm256_shuffle_epi8 
+        Constant * bit_interleave[32];
+        for (unsigned i = 0; i < 32; i++) {
+            bit_interleave[i] = getInt8((i & 1) | ((i & 2) << 1) | ((i & 4) << 2) | ((i & 8) << 3));
+        }
+        Constant * interleave_table = ConstantVector::get({bit_interleave, 32});
+        // Merge the bytes.
+        Value * byte_merge = esimd_mergel(8, a, b);
+        Value * low_bits = CreateCall(shufFn, {interleave_table,  fwCast(8, simd_and(byte_merge, simd_lomask(8)))});
+        Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), 1);
+        // For each 16-bit field, interleave the low bits of the two bytes.
+        low_bits = simd_or(simd_and(low_bits, simd_lomask(16)), simd_srli(16, low_bits, 7));
+        // For each 16-bit field, interleave the high bits of the two bytes.
+        high_bits = simd_or(simd_and(high_bits, simd_himask(16)), simd_slli(16, high_bits, 7));
+        return simd_or(low_bits, high_bits);
+    }
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(6, 0, 0)
     if ((fw == 128) && (mBitBlockWidth == 256)) {
         Value * vperm2i128func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_vperm2i128);

@@ -137,6 +137,7 @@ Value * IDISA_Builder::simd_gt(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::simd_ugt(unsigned fw, Value * a, Value * b) {
+    if (fw == 1) return simd_and(a, simd_not(b));
     if (fw < 8) report_fatal_error("Unsupported field width: ugt " + std::to_string(fw));
     return CreateSExt(CreateICmpUGT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
