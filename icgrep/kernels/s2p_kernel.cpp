@@ -188,4 +188,37 @@ S2P_PabloKernel::S2P_PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & 
 }
 
 
+S2PByPextKernel::S2PByPextKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string prefix)
+        : BlockOrientedKernel(prefix + "s2pByPext",
+                           {Binding{b->getStreamSetTy(1, 8), "byteStream", FixedRate(), Principal()}},
+                           {Binding{b->getStreamSetTy(8, 1), "basisBits"}}, {}, {}, {})
+{
+
+}
+
+void S2PByPextKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &b) {
+    Value* inputBasePtr = b->CreatePointerCast(b->getInputStreamBlockPtr("byteStream", b->getSize(0)), b->getInt64Ty()->getPointerTo());
+    std::vector<Value*> outputPtrs(8, nullptr);
+    for (unsigned i = 0; i < 8; i++) {
+        outputPtrs[i] = b->CreatePointerCast(b->getOutputStreamBlockPtr("basisBits", b->getSize(i)), b->getInt64Ty()->getPointerTo());
+    }
+    uint64_t base_mask = 0x0101010101010101;
+
+    Constant * pext = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pext_64);
+
+    for (unsigned iBlockIndex = 0; iBlockIndex < 4; iBlockIndex++) {
+        std::vector<Value*> tempValues(8, b->getInt64(0));
+        for (size_t iDataIndex = 0; iDataIndex < 8; iDataIndex++) {
+            Value* inputData = b->CreateLoad(b->CreateGEP(inputBasePtr, b->getSize(iDataIndex + iBlockIndex * 8)));
+            for (int iStreamIndex = 0; iStreamIndex < 8; iStreamIndex++) {
+                Value* targetMask = b->getInt64(base_mask << iStreamIndex);
+                Value * const outputValue = b->CreateCall(pext, {inputData, targetMask});
+                tempValues[iStreamIndex] = b->CreateOr(tempValues[iStreamIndex], b->CreateShl(outputValue, b->getInt64(iDataIndex * 8)));
+            }
+        }
+        for (int iStreamIndex = 0; iStreamIndex < 8; iStreamIndex++) {
+            b->CreateStore(tempValues[iStreamIndex], b->CreateGEP(outputPtrs[7 - iStreamIndex], b->getSize(iBlockIndex)));
+        }
+    }
+}
 }

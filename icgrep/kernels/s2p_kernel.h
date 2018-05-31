@@ -36,5 +36,15 @@ protected:
     unsigned mCodeUnitWidth;
 };
 
+
+class S2PByPextKernel final : public BlockOrientedKernel {
+public:
+    S2PByPextKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string prefix = "");
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+};
+
 }
 #endif
