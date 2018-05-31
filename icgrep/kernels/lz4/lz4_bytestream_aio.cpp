@@ -527,55 +527,97 @@ namespace kernel{
 
     void LZ4ByteStreamAioKernel::handleLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                          llvm::Value *literalLength) {
+        unsigned fw = 64;
+        Type* INT_FW_PTR = b->getIntNTy(fw)->getPointerTo();
+
         Value* inputBytePtr = b->getRawInputPointer("byteStream", literalStart);
+        Value* inputPtr = b->CreatePointerCast(inputBytePtr, INT_FW_PTR);
 
         Value* outputPos = b->getScalarField("outputPos");
         Value* outputBufferSize = b->getCapacity("outputStream");
         Value* outputPtr = b->getRawOutputPointer("outputStream", b->CreateURem(outputPos, outputBufferSize));
+        outputPtr = b->CreatePointerCast(outputPtr, INT_FW_PTR);
 
         // We can always assume that we have enough output buffer based on our output buffer allocation strategy (except in extract only case)
-        b->CreateMemCpy(outputPtr, inputBytePtr, literalLength, 1);
 
+        BasicBlock* entryBlock = b->GetInsertBlock();
+        BasicBlock* literalCopyCon = b->CreateBasicBlock("literalCopyCon");
+        BasicBlock* literalCopyBody = b->CreateBasicBlock("literalCopyBody");
+        BasicBlock* literalCopyExit = b->CreateBasicBlock("literalCopyExit");
+
+        b->CreateBr(literalCopyCon);
+
+        // ---- literalCopyCon
+        b->SetInsertPoint(literalCopyCon);
+        PHINode* phiOutputPtr = b->CreatePHI(outputPtr->getType(), 2);
+        phiOutputPtr->addIncoming(outputPtr, entryBlock);
+        PHINode* phiInputPtr = b->CreatePHI(inputPtr->getType(), 2);
+        phiInputPtr->addIncoming(inputPtr, entryBlock);
+        PHINode* phiCopiedLength = b->CreatePHI(literalLength->getType(), 2);
+        phiCopiedLength->addIncoming(b->getSize(0), entryBlock);
+        b->CreateCondBr(b->CreateICmpULT(phiCopiedLength, literalLength), literalCopyBody, literalCopyExit);
+
+        // ---- literalCopyBody
+        b->SetInsertPoint(literalCopyBody);
+        // Always copy fw bits to improve performance
+        // TODO sometime it will crash because of overflow copy in the end of the buffer, need to add 4 bytes of
+        //      extra buffer in order to make sure it does not crash.
+        b->CreateStore(b->CreateLoad(phiInputPtr), phiOutputPtr);
+
+        phiInputPtr->addIncoming(b->CreateGEP(phiInputPtr, b->getSize(1)), b->GetInsertBlock());
+        phiOutputPtr->addIncoming(b->CreateGEP(phiOutputPtr, b->getSize(1)), b->GetInsertBlock());
+        phiCopiedLength->addIncoming(b->CreateAdd(phiCopiedLength, b->getSize(fw / 8)), b->GetInsertBlock());
+        b->CreateBr(literalCopyCon);
+
+        // ---- literalCopyExit
+        b->SetInsertPoint(literalCopyExit);
         b->setScalarField("outputPos", b->CreateAdd(outputPos, literalLength));
     }
 
     void LZ4ByteStreamAioKernel::handleMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                        llvm::Value *matchLength) {
+        unsigned fw = 64;
+        Type* INT_FW_PTR = b->getIntNTy(fw)->getPointerTo();
+
         BasicBlock* entryBlock = b->GetInsertBlock();
 
         Value* outputPos = b->getScalarField("outputPos");
+        Value* outputBufferSize = b->getCapacity("outputStream");
+
+        Value* copyToPtr = b->getRawOutputPointer("outputStream", b->CreateURem(outputPos, outputBufferSize));
+        Value* copyFromPtr = b->getRawOutputPointer("outputStream", b->CreateURem(b->CreateSub(outputPos, matchOffset), outputBufferSize));
+
+        BasicBlock* matchCopyCon = b->CreateBasicBlock("matchCopyCon");
         BasicBlock* matchCopyBody = b->CreateBasicBlock("matchCopyBody");
         BasicBlock* matchCopyExit = b->CreateBasicBlock("matchCopyExit");
 
-        b->CreateBr(matchCopyBody);
+        b->CreateBr(matchCopyCon);
+
+        // ---- matchCopyCon
+        b->SetInsertPoint(matchCopyCon);
+        PHINode* phiFromPtr = b->CreatePHI(b->getInt8PtrTy(), 2);
+        phiFromPtr->addIncoming(copyFromPtr, entryBlock);
+        PHINode* phiToPtr = b->CreatePHI(b->getInt8PtrTy(), 2);
+        phiToPtr->addIncoming(copyToPtr, entryBlock);
+        PHINode* phiCopiedSize = b->CreatePHI(b->getSizeTy(), 2);
+        phiCopiedSize->addIncoming(b->getSize(0), entryBlock);
+
+        b->CreateCondBr(b->CreateICmpULT(phiCopiedSize, matchLength), matchCopyBody, matchCopyExit);
 
         // ---- matchCopyBody
         b->SetInsertPoint(matchCopyBody);
-        PHINode* phiRemainingMatchLength = b->CreatePHI(b->getSizeTy(), 2);
-        phiRemainingMatchLength->addIncoming(matchLength, entryBlock);
-        PHINode* phiCurrentCopyToPos = b->CreatePHI(b->getSizeTy(), 2);
-        phiCurrentCopyToPos->addIncoming(outputPos, entryBlock);
-
-        Value* currentCopyLength = b->CreateUMin(phiRemainingMatchLength, matchOffset);
-//        b->CallPrintInt("currentCopyLength", currentCopyLength);
-        Value* copyFromPos = b->CreateSub(phiCurrentCopyToPos, matchOffset);
-
-        Value* outputBufferSize = b->getCapacity("outputStream");
-        b->CreateMemCpy(
-                b->getRawOutputPointer("outputStream", b->CreateURem(phiCurrentCopyToPos, outputBufferSize)),
-                b->getRawOutputPointer("outputStream", b->CreateURem(copyFromPos, outputBufferSize)),
-                currentCopyLength,
-                1
+        b->CreateStore(
+                b->CreateLoad(b->CreatePointerCast(phiFromPtr, INT_FW_PTR)),
+        b->CreatePointerCast(phiToPtr, INT_FW_PTR)
         );
 
-        Value* newMatchLength = b->CreateSub(phiRemainingMatchLength, currentCopyLength);
-        Value* newOutputPos = b->CreateAdd(phiCurrentCopyToPos, currentCopyLength);
+        Value* copySize = b->CreateUMin(matchOffset, b->getSize(fw / 8));
+        phiFromPtr->addIncoming(b->CreateGEP(phiFromPtr, copySize), b->GetInsertBlock());
+        phiToPtr->addIncoming(b->CreateGEP(phiToPtr, copySize), b->GetInsertBlock());
+        phiCopiedSize->addIncoming(b->CreateAdd(phiCopiedSize, copySize), b->GetInsertBlock());
+        b->CreateBr(matchCopyCon);
 
-        phiRemainingMatchLength->addIncoming(newMatchLength, b->GetInsertBlock());
-        phiCurrentCopyToPos->addIncoming(newOutputPos, b->GetInsertBlock());
-
-        b->CreateCondBr(b->CreateICmpEQ(newMatchLength, b->getSize(0)), matchCopyExit, matchCopyBody);
-
+        // ---- matchCopyExit
         b->SetInsertPoint(matchCopyExit);
         b->setScalarField("outputPos", b->CreateAdd(outputPos, matchLength));
     }
