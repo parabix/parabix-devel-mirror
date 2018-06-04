@@ -20,7 +20,7 @@ namespace kernel{
             // Inputs
                                    {
                                            Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)},
-                                           Binding{b->getStreamSetTy(1, 1), "extender", RateEqualTo("byteStream")},
+//                                           Binding{b->getStreamSetTy(1, 1), "extender", RateEqualTo("byteStream")},
 
                                            // block data
                                            Binding{b->getStreamSetTy(1, 1), "isCompressed", BoundedRate(0, 1), AlwaysConsume()},
@@ -58,7 +58,7 @@ namespace kernel{
         // In MultiblockKernel, availableItemCount + processedItemCount == producedItemCount from previous kernel
         // While in SegmentOrigentedKernel, availableItemCount == producedItemCount from previous kernel
         Value * totalNumber = b->getAvailableItemCount("blockEnd");
-        Value * totalExtender = b->getAvailableItemCount("extender");
+//        Value * totalExtender = b->getAvailableItemCount("extender");
 
         Value * blockEnd = this->generateLoadInt64NumberInput(b, "blockEnd", blockDataIndex);
 
@@ -67,7 +67,8 @@ namespace kernel{
         b->SetInsertPoint(blockEndConBlock);
         Value * blockStart = this->generateLoadInt64NumberInput(b, "blockStart", blockDataIndex);
         BasicBlock * processBlock = b->CreateBasicBlock("processBlock");
-        b->CreateCondBr(b->CreateICmpULE(blockEnd, totalExtender), processBlock, exitBlock);
+//        b->CreateCondBr(b->CreateICmpULE(blockEnd, totalExtender), processBlock, exitBlock);
+        b->CreateBr(processBlock);
 
         b->SetInsertPoint(processBlock);
 
@@ -265,7 +266,7 @@ namespace kernel{
 
     llvm::Value *LZ4ByteStreamAioKernel::processBlockBoundary(const std::unique_ptr<KernelBuilder> &b, llvm::Value *beginTokenPos,
                                                     llvm::Value *lz4BlockEnd) {
-// Constant
+        // Constant
         ConstantInt* SIZE_0 = b->getSize(0);
         ConstantInt* SIZE_1 = b->getSize(1);
         ConstantInt* BYTE_FF = b->getInt8(0xff);
@@ -560,8 +561,6 @@ namespace kernel{
         // ---- literalCopyBody
         b->SetInsertPoint(literalCopyBody);
         // Always copy fw bits to improve performance
-        // TODO sometime it will crash because of overflow copy in the end of the buffer, need to add 4 bytes of
-        //      extra buffer in order to make sure it does not crash.
         b->CreateStore(b->CreateLoad(phiInputPtr), phiOutputPtr);
 
         phiInputPtr->addIncoming(b->CreateGEP(phiInputPtr, b->getSize(1)), b->GetInsertBlock());

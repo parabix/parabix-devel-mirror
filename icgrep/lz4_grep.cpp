@@ -49,6 +49,7 @@ static cl::opt<bool> enableMultiplexing("enable-multiplexing", cl::desc("Enable 
 
 static cl::OptionCategory lz4GrepDebugFlags("LZ4 Grep Debug Flags", "lz4d debug options");
 static cl::opt<bool> aio("aio", cl::desc("Use All-in-One Approach for LZ4 Decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
+static cl::opt<bool> parallelDecompression("parallel-decompression", cl::desc("Use parallel Approach for LZ4 Decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> swizzledDecompression("swizzled-decompression", cl::desc("Use swizzle approach for decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> enableGather("enable-gather", cl::desc("Enable gather intrinsics for bitstream PDEP"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 
@@ -76,7 +77,9 @@ int main(int argc, char *argv[]) {
     re::RE * re_ast = re::RE_Parser::parse(regexString, re::MULTILINE_MODE_FLAG);
     LZ4GrepGenerator g(enableMultiplexing);
     if (aio) {
-        if (enableMultiplexing) {
+        if (parallelDecompression) {
+            g.generateParallelAioPipeline(re_ast);
+        } else if (enableMultiplexing) {
             g.generateMultiplexingSwizzledAioPipeline2(re_ast);
         } else if (swizzledDecompression) {
             g.generateSwizzledAioPipeline(re_ast);

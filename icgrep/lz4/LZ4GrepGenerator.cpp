@@ -612,12 +612,52 @@ void LZ4GrepGenerator::generateSwizzledAioPipeline(re::RE* regex) {
     mPxDriver.finalizeObject();
 }
 
+void LZ4GrepGenerator::generateParallelAioPipeline(re::RE* regex) {
+    auto & iBuilder = mPxDriver.getBuilder();
+    this->generateCountOnlyMainFunc(iBuilder);
+
+    this->generateLoadByteStreamAndBitStream(iBuilder);
+    parabix::StreamSetBuffer * decompressedByteStream = this->generateParallelAIODecompression(iBuilder);
+
+
+    StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks());
+    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, /*aligned = */ true, "a");
+//    Kernel * s2pk = mPxDriver.addKernelInstance<S2PByPextKernel>(iBuilder, "a");
+    mPxDriver.makeKernelCall(s2pk, {decompressedByteStream}, {decompressionBitStream});
+
+
+    StreamSetBuffer * LineBreakStream;
+    StreamSetBuffer * Matches;
+    std::vector<re::RE*> res = {regex};
+    std::tie(LineBreakStream, Matches) = grepPipeline(res, decompressionBitStream);
+
+
+//    Kernel * outK = mPxDriver.addKernelInstance<FileSink>(iBuilder, 8);
+//    outK->setInitialArguments({iBuilder->GetString("/Users/wxy325/developer/LZ4-sample-files/workspace/lz4d-normal/8k_.txt")});
+//    mPxDriver.makeKernelCall(outK, {decompressedStream}, {});
+
+    kernel::Kernel * matchCountK = mPxDriver.addKernelInstance<kernel::PopcountKernel>(iBuilder);
+    mPxDriver.makeKernelCall(matchCountK, {Matches}, {});
+    mPxDriver.generatePipelineIR();
+
+    iBuilder->setKernel(matchCountK);
+    Value * matchedLineCount = iBuilder->getAccumulator("countResult");
+    matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
+
+    mPxDriver.deallocateBuffers();
+
+    iBuilder->CreateRet(matchedLineCount);
+
+    mPxDriver.finalizeObject();
+}
+
 void LZ4GrepGenerator::generateAioPipeline(re::RE *regex) {
     auto & iBuilder = mPxDriver.getBuilder();
     this->generateCountOnlyMainFunc(iBuilder);
 
     // GeneratePipeline
-    this->generateLoadByteStreamAndBitStream(iBuilder);
+//    this->generateLoadByteStreamAndBitStream(iBuilder);
+    this->generateLoadByteStream(iBuilder);
     parabix::StreamSetBuffer * decompressedByteStream = this->generateAIODecompression(iBuilder);
 
 

@@ -37,8 +37,10 @@ protected:
     //// Protected Method
     void generateMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     // Pipeline
+    virtual void generateLoadByteStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual void generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual void generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual parabix::StreamSetBuffer * generateParallelAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual parabix::StreamSetBuffer * generateAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual parabix::StreamSetBuffer * generateSwizzledAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*> generateSwizzleExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
