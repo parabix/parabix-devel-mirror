@@ -97,8 +97,9 @@ int main(int argc, char *argv[]) {
             g.generateCountOnlyGrepPipeline(re_ast, enableGather);
         }
 
-        auto main = g.getMainFunc();
-        main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
+        auto main = g.getCountOnlyGrepMainFunction();
+        uint64_t countResult = main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
+        llvm::outs() << countResult << "\n";
     } else {
         g.generateScanMatchGrepPipeline(re_ast);
         g.invokeScanMatchGrep(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());

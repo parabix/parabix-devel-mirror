@@ -62,6 +62,13 @@ namespace kernel {
         void handleMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffset, llvm::Value* matchLength, llvm::Value* outputPos);
 
         void generateSequentialDecompression(const std::unique_ptr<KernelBuilder> &b, llvm::Value* startBlockDataIndex, llvm::Value* endBlockDataIndex);
+
+
+        llvm::Value* simdFetchByteData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
+        llvm::Value* simdFetchByteDataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
+        llvm::Value* simdFetchByteDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
+
+
     };
 
 }

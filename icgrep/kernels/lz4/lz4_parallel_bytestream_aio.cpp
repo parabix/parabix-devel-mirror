@@ -70,7 +70,7 @@ namespace kernel{
                         UndefValue::get(b->getBitBlockType()),
                         b->CreatePointerCast(b->getRawInputPointer("extender", b->getSize(0)), b->getInt8PtrTy()),
                         b->CreateTrunc(maskBlockIndexVec, VectorType::get(b->getInt32Ty(), 4)),
-                        Constant::getAllOnesValue(b->getBitBlockType()), //TODO test the mask
+                        Constant::getAllOnesValue(b->getBitBlockType()),
                         b->getInt8(8)
                 }
         );
@@ -81,7 +81,7 @@ namespace kernel{
                         UndefValue::get(VectorType::get(b->getInt8Ty(), 4)),
                         b->CreatePointerCast(b->getRawInputPointer("extender", b->getSize(0)), b->getInt8PtrTy()),
                         b->CreateTrunc(maskBlockIndexVec, VectorType::get(b->getInt32Ty(), 4)),
-                        Constant::getAllOnesValue(b->getBitBlockType()), //TODO test the mask
+                        Constant::getAllOnesValue(b->getBitBlockType()),
                         b->getInt8(8)
                 }
         );
@@ -113,7 +113,7 @@ namespace kernel{
     std::pair<Value *, Value *> LZ4ParallelByteStreamAioKernel::simdProcessBlockBoundary(
             const std::unique_ptr<KernelBuilder> &b, Value *beginTokenPosVec, Value *lz4BlockEndVec, Value* initOutputPosVec
     ) {
-        Function *gatherFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256); // TODO find ret <4 * i32> version
+        Function *gatherFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256); // Maybe it will be better to use <4 * i32> version
 
         // Constant
         ConstantInt* SIZE_0 = b->getSize(0);
@@ -138,25 +138,14 @@ namespace kernel{
         Value* notFinishMask = b->CreateNeg(notFinishBitBlock);
 
 
-        Value* bytePtrBase = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
+        Value* byteRawInputPtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
+
         Value* firstTokenPos = b->CreateExtractElement(beginTokenPosVec, (uint64_t)0);
+        Value* bytePtrBase = b->CreateGEP(byteRawInputPtr, firstTokenPos);
 
-        bytePtrBase = b->CreateGEP(bytePtrBase, firstTokenPos);
 
 
-        // TODO use <4 * i32> gather instead of <4 * i64>, since actually we only need <4 * i8>
-        Value* tokenValuesVec =  b->CreateCall(
-                gatherFunc,
-                {
-                        UndefValue::get(b->getBitBlockType()),
-                        bytePtrBase,
-                        b->CreateTrunc(b->CreateSub(beginTokenPosVec, b->simd_fill(SIMD_WIDTH, firstTokenPos)), VectorType::get(b->getInt32Ty(), 4)),
-                        b->CreateAnd(Constant::getAllOnesValue(b->getBitBlockType()), notFinishMask),
-                        b->getInt8(1)
-                }
-        );
-        tokenValuesVec = b->CreateAnd(tokenValuesVec, notFinishMask);
-        tokenValuesVec = b->CreateAnd(tokenValuesVec, BIT_BLOCK_FF);
+        Value* tokenValuesVec = this->simdFetchByteData(b, byteRawInputPtr, beginTokenPosVec, notFinishMask);
 
         Value* shouldExtendLiteralVec = b->CreateICmpEQ(b->CreateAnd(BIT_BLOCK_F0, tokenValuesVec), BIT_BLOCK_F0);
         Value* shouldExtendLiteralBitBlockVec = b->CreateZExt(shouldExtendLiteralVec, b->getBitBlockType());
@@ -189,20 +178,7 @@ namespace kernel{
         shouldExtendLiteralGatherMask = b->CreateAnd(shouldExtendLiteralGatherMask, notFinishMask);
 //        b->CallPrintInt("a", b->getSize(0));
         // TODO maybe we can load i64 once and then consume 8 times
-        // TODO use <4 * i32> gather instead of <4 * i64>, since actually we only need <4 * i8>
-        Value* currentLiteralLengthVec =  b->CreateCall(
-                gatherFunc,
-                {
-                        UndefValue::get(b->getBitBlockType()),
-                        bytePtrBase,
-                        b->CreateTrunc(b->CreateSub(phiCurrentExtendLiteralPosVec, b->simd_fill(SIMD_WIDTH, firstTokenPos)), VectorType::get(b->getInt32Ty(), 4)),
-                        shouldExtendLiteralGatherMask,
-                        b->getInt8(1)
-                }
-        );
-
-        currentLiteralLengthVec = b->CreateAnd(currentLiteralLengthVec, shouldExtendLiteralGatherMask);// TODO remove this line?
-        currentLiteralLengthVec = b->CreateAnd(currentLiteralLengthVec, BIT_BLOCK_FF);
+        Value* currentLiteralLengthVec = this->simdFetchByteData(b, byteRawInputPtr, phiCurrentExtendLiteralPosVec, shouldExtendLiteralGatherMask);
 
         Value* newExtendLiteralLengthVec = b->CreateAdd(phiExtendLiteralLengthVec, currentLiteralLengthVec);
 
@@ -231,7 +207,9 @@ namespace kernel{
         phiExtendLiteralEndPos->addIncoming(beginTokenPosVec, entryBlock);
         phiExtendLiteralEndPos->addIncoming(phiCurrentExtendLiteralPosVec, extendLiteralCond);
 
-        Value* literalLengthVec = b->CreateAdd(literalExtendValueVec, b->CreateLShr(tokenValuesVec, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 4))));
+
+        Value* literalLengthVec = b->simd_add(SIMD_WIDTH, literalExtendValueVec, b->simd_srlv(SIMD_WIDTH, tokenValuesVec, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 4))));
+//        Value* literalLengthVec = b->CreateAdd(literalExtendValueVec, b->CreateLShr(tokenValuesVec, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 4))));
 
         Value* literalStartPosVec = b->CreateAdd(phiExtendLiteralEndPos, BIT_BLOCK_1);
         Value* literalEndPosVec = b->CreateAdd(literalStartPosVec, literalLengthVec);
@@ -277,20 +255,8 @@ namespace kernel{
         Value* shouldExtendMatchGatherMask = b->CreateNeg(phiShouldExtendMatchBitBlockVec);
         shouldExtendMatchGatherMask = b->CreateAnd(shouldExtendMatchGatherMask, notFinishMask);
         // TODO maybe we can load i64 once and then consume 8 times
-        // TODO use <4 * i32> gather instead of <4 * i64>, since actually we only need <4 * i8>
-        Value* currentMatchLengthVec =  b->CreateCall(
-                gatherFunc,
-                {
-                        UndefValue::get(b->getBitBlockType()),
-                        bytePtrBase,
-                        b->CreateTrunc(b->CreateSub(phiCurrentExtendMatchPosVec, b->simd_fill(SIMD_WIDTH, firstTokenPos)), VectorType::get(b->getInt32Ty(), 4)),
-                        shouldExtendMatchGatherMask,
-                        b->getInt8(1)
-                }
-        );
 
-        currentMatchLengthVec = b->CreateAnd(currentMatchLengthVec, shouldExtendMatchGatherMask);// TODO remove this line?
-        currentMatchLengthVec = b->CreateAnd(currentMatchLengthVec, BIT_BLOCK_FF);
+        Value* currentMatchLengthVec = this->simdFetchByteData(b, byteRawInputPtr, phiCurrentExtendMatchPosVec, shouldExtendMatchGatherMask);
 
         Value* newExtendMatchLengthVec = b->CreateAdd(phiExtendMatchLengthVec, currentMatchLengthVec);
 
@@ -342,6 +308,10 @@ namespace kernel{
         );
         matchOffsetVec = b->CreateAnd(matchOffsetVec, notFinishMask);
         matchOffsetVec = b->CreateAnd(matchOffsetVec, BIT_BLOCK_FFFF);
+
+//        Value* matchOffsetVec = this->simdFetchByteData(b, byteRawInputPtr, matchOffsetBeginPosVec, b->CreateAnd(hasMatchPartMask, notFinishMask));
+
+
 
         this->handleSimdMatchCopy(b, matchOffsetVec, matchLength, outputPosAfterLiteralCpy);
 
@@ -468,7 +438,7 @@ namespace kernel{
 
         // ---- notSimdProcessBlock
         b->SetInsertPoint(notSimdProcessBlock);
-        // TODO Use loop to process the remaining block in sequential approach (the number of the remaining block should be less than (b->getBitBlockWidth() / SIMD_WIDTH))
+        // Use loop to process the remaining block in sequential approach (the number of the remaining block should be less than (b->getBitBlockWidth() / SIMD_WIDTH))
         this->generateSequentialDecompression(b, blockDataIndex, totalNumber);
         b->CreateBr(exitBlock);
 
@@ -585,8 +555,7 @@ namespace kernel{
 
     std::pair<llvm::Value *, llvm::Value *> LZ4ParallelByteStreamAioKernel::processBlockBoundary(const std::unique_ptr<KernelBuilder> &b, llvm::Value *beginTokenPos,
                                                               llvm::Value *lz4BlockEnd, llvm::Value* initOutputPos) {
-        // TODO handle initOutputPos;
-// Constant
+        // Constant
         ConstantInt* SIZE_0 = b->getSize(0);
         ConstantInt* SIZE_1 = b->getSize(1);
         ConstantInt* BYTE_FF = b->getInt8(0xff);
@@ -774,13 +743,13 @@ namespace kernel{
 
     void LZ4ParallelByteStreamAioKernel::handleSimdLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* literalStartVec, llvm::Value* literalLengthVec, llvm::Value* outputPosVec) {
         Value* l = b->CreateExtractElement(literalLengthVec, (uint64_t)0);
-        Value* shouldPrint = b->CreateICmpNE(l, b->getSize(0));
-//        b->CallPrintIntCond("literalStart", b->CreateExtractElement(literalStartVec, (uint64_t)0), shouldPrint);
-//        b->CallPrintIntCond("literalLength", l, shouldPrint);
+
+        Value* outputCapacity = b->getCapacity("outputStream");
+        Value* outputPosRemVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->simd_not(b->CreateNeg(outputCapacity))));
         // TODO use memcpy first
 
         BasicBlock* entryBlock = b->GetInsertBlock();
-        Value* outputCapacity = b->getCapacity("outputStream");
+
 
         Value* inputBasePtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
         Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream", b->getSize(0)), b->getInt8PtrTy());
@@ -788,8 +757,7 @@ namespace kernel{
         for (uint64_t i = 0; i < b->getBitBlockWidth() / SIMD_WIDTH; i++) {
             Value* literalStart = b->CreateExtractElement(literalStartVec, i);
             Value* literalLength = b->CreateExtractElement(literalLengthVec, i);
-            Value* outputPos = b->CreateExtractElement(outputPosVec, i);
-            Value* outputPosRem = b->CreateURem(outputPos, outputCapacity);
+            Value* outputPosRem = b->CreateExtractElement(outputPosRemVec, i);;
             b->CreateMemCpy(
                     b->CreateGEP(outputBasePtr, outputPosRem),
                     b->CreateGEP(inputBasePtr, literalStart),
@@ -893,5 +861,64 @@ namespace kernel{
         b->setScalarField("outputPos", b->CreateAdd(outputPos, matchLength));
     }
 
+    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
+        return this->simdFetchByteDataByGather(b, basePtr, offsetVec, mask);
+//        return this->simdFetchByteDataByLoop(b, basePtr, offsetVec, mask);
+    }
+
+    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteDataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
+        Value* BIT_BLOCK_FF = b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0xff));
+        Function *gatherFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256);
+        Function *gatherFunc2 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_d);
+
+        Value* firstOffset = b->CreateExtractElement(offsetVec, (uint64_t)0);
+
+        Type* i32BitBlockTy = VectorType::get(b->getInt32Ty(), 4);
+
+//        Value* tokenValuesVec =  b->CreateCall(
+//                gatherFunc,
+//                {
+//                        UndefValue::get(b->getBitBlockType()),
+//                        b->CreateGEP(basePtr, firstOffset),
+//                        b->CreateTrunc(b->CreateSub(offsetVec, b->simd_fill(SIMD_WIDTH, firstOffset)), VectorType::get(b->getInt32Ty(), 4)),
+//                        mask,
+//                        b->getInt8(1)
+//                }
+//        );
+
+        ////
+        Value* tokenValuesVec =  b->CreateCall(
+                gatherFunc2,
+                {
+                        UndefValue::get(i32BitBlockTy),
+                        b->CreateGEP(basePtr, firstOffset),
+                        b->CreateTrunc(b->CreateSub(offsetVec, b->simd_fill(SIMD_WIDTH, firstOffset)), VectorType::get(b->getInt32Ty(), 4)),
+                        b->CreateTrunc(mask, i32BitBlockTy),
+                        b->getInt8(1)
+                }
+        );
+        tokenValuesVec = b->CreateZExt(tokenValuesVec, b->getBitBlockType());
+        /////
+        
+        tokenValuesVec = b->CreateAnd(tokenValuesVec, mask);
+        tokenValuesVec = b->CreateAnd(tokenValuesVec, BIT_BLOCK_FF);
+        return tokenValuesVec;
+    }
+
+    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* maskVec) {
+        Value* retVec = ConstantVector::getNullValue(b->getBitBlockType());
+
+        for (uint64_t i = 0; i < 4; i++){ //TODO 4 here is a hardcode for AVX2, it may need to be changed to (BitBlockWidth / 64)
+            Value* mask = b->CreateExtractElement(maskVec, i);
+            Value* shouldLoad = b->CreateICmpNE(mask, b->getInt64(0));
+            Value* loadPtr = b->CreateSelect(shouldLoad, b->CreateGEP(basePtr, b->CreateExtractElement(offsetVec, i)), basePtr);
+            Value* loadValue = b->CreateZExt(b->CreateLoad(loadPtr), b->getInt64Ty());
+
+            Value* finalValue = b->CreateSelect(shouldLoad, loadValue, b->getInt64(0));
+            retVec = b->CreateInsertElement(retVec, finalValue, i);
+        }
+
+        return retVec;
+    }
 
 }

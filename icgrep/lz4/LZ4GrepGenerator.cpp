@@ -745,16 +745,23 @@ void LZ4GrepGenerator::generateSwizzledCountOnlyGrepPipeline(re::RE *regex) {
     this->generateLoadByteStreamAndBitStream(iBuilder);
     this->generateExtractAndDepositMarkers(iBuilder);
 
-    auto swizzle = this->generateSwizzleExtractData(iBuilder);
 
-    StreamSetBuffer * depositedSwizzle0 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * depositedSwizzle1 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+    StreamSetBuffer * LineBreakStream;
+    StreamSetBuffer * Matches;
+    std::vector<re::RE*> res = {regex};
+    if (mEnableMultiplexing) {
+        std::tie(LineBreakStream, Matches) = multiplexingGrepPipeline(res);
+    } else {
+        auto swizzle = this->generateSwizzleExtractData(iBuilder);
 
-    Kernel * multiplePdepK = mPxDriver.addKernelInstance<SwizzledMultiplePDEPkernel>(iBuilder, 4, 2);
-    mPxDriver.makeKernelCall(multiplePdepK, {mDepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
+        StreamSetBuffer * depositedSwizzle0 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+        StreamSetBuffer * depositedSwizzle1 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+
+        Kernel * multiplePdepK = mPxDriver.addKernelInstance<SwizzledMultiplePDEPkernel>(iBuilder, 4, 2);
+        mPxDriver.makeKernelCall(multiplePdepK, {mDepositMarker, swizzle.first, swizzle.second}, {depositedSwizzle0, depositedSwizzle1});
 
 
-    // split PDEP into 2 kernel will be a little slower in single thread environment
+        // split PDEP into 2 kernel will be a little slower in single thread environment
 /*
     Kernel * pdep1 = mPxDriver.addKernelInstance<PDEPkernel>(iBuilder, 4);
     mPxDriver.makeKernelCall(pdep1, {mDepositMarker, swizzle.first}, {depositedSwizzle0});
@@ -763,25 +770,20 @@ void LZ4GrepGenerator::generateSwizzledCountOnlyGrepPipeline(re::RE *regex) {
     mPxDriver.makeKernelCall(pdep2, {mDepositMarker, swizzle.second}, {depositedSwizzle1});
 */
 
-    StreamSetBuffer * matchCopiedSwizzle0 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
-    StreamSetBuffer * matchCopiedSwizzle1 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+        StreamSetBuffer * matchCopiedSwizzle0 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
+        StreamSetBuffer * matchCopiedSwizzle1 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(), 1);
 
-    Kernel * swizzledMatchCopyK = mPxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
-    mPxDriver.makeKernelCall(swizzledMatchCopyK, {mMatchOffsetMarker, mM0Marker, mCompressedByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
+        Kernel * swizzledMatchCopyK = mPxDriver.addKernelInstance<LZ4SwizzledMatchCopyKernel>(iBuilder, 4, 2, 4);
+        mPxDriver.makeKernelCall(swizzledMatchCopyK, {mMatchOffsetMarker, mM0Marker, mCompressedByteStream, depositedSwizzle0, depositedSwizzle1}, {matchCopiedSwizzle0, matchCopiedSwizzle1});
 
-    // Produce unswizzled bit streams
-    StreamSetBuffer * matchCopiedbits = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
-    Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
-    mPxDriver.makeKernelCall(unSwizzleK, {matchCopiedSwizzle0, matchCopiedSwizzle1}, {matchCopiedbits});
+        // Produce unswizzled bit streams
+        StreamSetBuffer * matchCopiedbits = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8), this->getInputBufferBlocks());
+        Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
+        mPxDriver.makeKernelCall(unSwizzleK, {matchCopiedSwizzle0, matchCopiedSwizzle1}, {matchCopiedbits});
 
-    StreamSetBuffer * LineBreakStream;
-    StreamSetBuffer * Matches;
-    std::vector<re::RE*> res = {regex};
-//    if (mEnableMultiplexing) {
-//        std::tie(LineBreakStream, Matches) = multiplexingGrepPipeline(res, matchCopiedbits);
-//    } else {
+
         std::tie(LineBreakStream, Matches) = grepPipeline(res, matchCopiedbits);
-//    };
+    };
 
     kernel::Kernel * matchCountK = mPxDriver.addKernelInstance<kernel::PopcountKernel>(iBuilder);
     mPxDriver.makeKernelCall(matchCountK, {Matches}, {});
