@@ -103,8 +103,6 @@ namespace kernel{
     void
     LZ4ByteStreamAioKernel::generateProcessCompressedBlock(const std::unique_ptr<KernelBuilder> &b, llvm::Value *lz4BlockStart,
                                                  llvm::Value *lz4BlockEnd) {
-        BasicBlock* entryBlock = b->GetInsertBlock();
-
         Value* isTerminal = b->CreateICmpEQ(lz4BlockEnd, b->getScalarField("fileSize"));
         b->setTerminationSignal(isTerminal);
 
@@ -396,7 +394,6 @@ namespace kernel{
                                                                             llvm::Value *blockPosBase,
                                                                             llvm::Value *currentTokenLocalPos
     ) {
-        Value* SIZE_1 = b->getSize(1);
         Value* BYTE_F0 = b->getInt8(0xf0);
         Value* shouldExtendLiteral = b->CreateICmpEQ(b->CreateAnd(tokenValue, BYTE_F0), BYTE_F0);
 
@@ -459,7 +456,6 @@ namespace kernel{
                                                                           llvm::Value *tokenValue,
                                                                           llvm::Value *blockPosBase
     ) {
-        Value* SIZE_1 = b->getSize(1);
         Value* BYTE_0F = b->getInt8(0x0f);
         Value* shouldExtendMatch = b->CreateICmpEQ(b->CreateAnd(tokenValue, BYTE_0F), BYTE_0F);
 

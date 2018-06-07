@@ -100,8 +100,6 @@ namespace kernel {
         ConstantInt * const INT64_0 = b->getInt64(0);
         ConstantInt * const INT64_1 = b->getInt64(1);
 
-        Value * BITBLOCK_0 = b->CreateBitCast(ConstantInt::get(b->getIntNTy(b->getBitBlockWidth()), 0), b->getBitBlockType());
-
         // ---- Type
         Type* BITBLOCK_TYPE = b->getBitBlockType();
         Type* BITBLOCK_PTR_TYPE = BITBLOCK_TYPE->getPointerTo();
@@ -153,9 +151,6 @@ namespace kernel {
         Value* dataBlockIndex = b->CreateUDiv(phiCurrentPosition, SIZE_64);
         Value* currentInitM0 = b->CreateLoad(b->CreateGEP(m0MarkerBasePtr, dataBlockIndex));
         vector<Value*> initSourceData = this->loadAllI64BitStreamValues(b, sourceStreamPtr, dataBlockIndex);
-
-        Value* bitBlockIndex = b->CreateUDiv(dataBlockIndex, b->getSize(4));
-        Value* extractIndex = b->CreateURem(dataBlockIndex, b->getSize(4));
 
         BasicBlock* carryBitProcessBlock = b->CreateBasicBlock("CarryBitProcessBlock");
 
@@ -324,7 +319,7 @@ namespace kernel {
         PHINode* phiSourceDataAccessable = b->CreatePHI(b->getSizeTy(), 2);
         phiSourceDataAccessable->addIncoming(phiTargetMatchOffset, doMatchCopyBlock);
         vector<PHINode*> phiPdepSourceData;
-        for (int i = 0; i < mNumberOfStreams; i++) {
+        for (unsigned i = 0; i < mNumberOfStreams; i++) {
             PHINode* v = b->CreatePHI(b->getInt64Ty(), 2);
             v->addIncoming(pdepSourceData[i], doMatchCopyBlock);
             phiPdepSourceData.push_back(v);
@@ -333,7 +328,7 @@ namespace kernel {
 
         // ---- doubleSourceDataBody
         b->SetInsertPoint(doubleSourceDataBody);
-        for (int i = 0; i < mNumberOfStreams; i++) {
+        for (unsigned i = 0; i < mNumberOfStreams; i++) {
             PHINode* v = phiPdepSourceData[i];
             Value* newValue = b->CreateOr(v, b->CreateShl(v, phiSourceDataAccessable));
             v->addIncoming(newValue, doubleSourceDataBody);

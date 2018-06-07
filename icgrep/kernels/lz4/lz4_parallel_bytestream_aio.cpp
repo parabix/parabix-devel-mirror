@@ -53,6 +53,7 @@ namespace kernel{
 
     Value* LZ4ParallelByteStreamAioKernel::generateSimdAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value *beginTokenPosVec,
                                   llvm::Value *blockEndVec) {
+        /*
         // TODO incomplete
 
         // Constant
@@ -105,8 +106,9 @@ namespace kernel{
 
 
 
-
+*/
         return beginTokenPosVec;    //TODO
+
     }
 
 
@@ -116,16 +118,12 @@ namespace kernel{
         Function *gatherFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256); // Maybe it will be better to use <4 * i32> version
 
         // Constant
-        ConstantInt* SIZE_0 = b->getSize(0);
-        ConstantInt* SIZE_1 = b->getSize(1);
-        ConstantInt* BYTE_FF = b->getInt8(0xff);
         Value* BIT_BLOCK_0 = ConstantVector::getNullValue(b->getBitBlockType());
         Value* BIT_BLOCK_1 = b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0x1));
         Value* BIT_BLOCK_F0 = b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0xf0));
         Value* BIT_BLOCK_0F = b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0x0f));
         Value* BIT_BLOCK_FF = b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0xff));
         Value* BIT_BLOCK_FFFF = b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0xffff));
-        Type* i4Ty = b->getIntNTy(4);
         Type* INT_BIT_BLOCK_TY = b->getIntNTy(b->getBitBlockWidth());
         Constant* INT_BIT_BLOCK_TY_0 = b->getIntN(b->getBitBlockWidth(), 0);
 
@@ -687,11 +685,10 @@ namespace kernel{
 
     void LZ4ParallelByteStreamAioKernel::handleSimdMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
         // TODO use memcpy first
-        Value* l = b->CreateExtractElement(matchLengthVec, (uint64_t)0);
-        Value* shouldPrint = b->CreateICmpNE(l, b->getSize(0));
+//        Value* l = b->CreateExtractElement(matchLengthVec, (uint64_t)0);
+//        Value* shouldPrint = b->CreateICmpNE(l, b->getSize(0));
 //        b->CallPrintIntCond("matchOffset", b->CreateExtractElement(matchOffsetVec, (uint64_t)0), shouldPrint);
 //        b->CallPrintIntCond("matchLength", l, shouldPrint);
-        BasicBlock* entryBlock = b->GetInsertBlock();
         Value* outputCapacity = b->getCapacity("outputStream");
         Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream", b->getSize(0)), b->getInt8PtrTy());
 
@@ -742,14 +739,9 @@ namespace kernel{
     }
 
     void LZ4ParallelByteStreamAioKernel::handleSimdLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* literalStartVec, llvm::Value* literalLengthVec, llvm::Value* outputPosVec) {
-        Value* l = b->CreateExtractElement(literalLengthVec, (uint64_t)0);
-
         Value* outputCapacity = b->getCapacity("outputStream");
         Value* outputPosRemVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->simd_not(b->CreateNeg(outputCapacity))));
         // TODO use memcpy first
-
-        BasicBlock* entryBlock = b->GetInsertBlock();
-
 
         Value* inputBasePtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
         Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream", b->getSize(0)), b->getInt8PtrTy());
@@ -868,7 +860,7 @@ namespace kernel{
 
     llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteDataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
         Value* BIT_BLOCK_FF = b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0xff));
-        Function *gatherFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256);
+//        Function *gatherFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256);
         Function *gatherFunc2 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_d);
 
         Value* firstOffset = b->CreateExtractElement(offsetVec, (uint64_t)0);

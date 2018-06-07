@@ -81,7 +81,7 @@ StreamsCombineKernel::StreamsCombineKernel(const std::unique_ptr<kernel::KernelB
 void StreamsCombineKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {
     unsigned outputIndex = 0;
     for (unsigned i = 0; i < mStreamsNumOfSets.size(); i++) {
-        int streamNum = mStreamsNumOfSets[i];
+        unsigned streamNum = mStreamsNumOfSets[i];
         for (unsigned j = 0; j < streamNum; j++) {
             iBuilder->storeOutputStreamBlock(
                     "output",
@@ -112,7 +112,7 @@ StreamsSplitKernel::StreamsSplitKernel(const std::unique_ptr<kernel::KernelBuild
 void StreamsSplitKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {
     unsigned inputIndex = 0;
     for (unsigned i = 0; i < mStreamsNumOfSets.size(); i++) {
-        int streamNum = mStreamsNumOfSets[i];
+        unsigned streamNum = mStreamsNumOfSets[i];
         for (unsigned j = 0; j < streamNum; j++) {
             iBuilder->storeOutputStreamBlock(
                     "outputGroup" + std::to_string(i),

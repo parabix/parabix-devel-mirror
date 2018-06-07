@@ -166,7 +166,7 @@ namespace kernel{
         Value* literalMasks = accelerationRet.first.second;
 //        b->CallPrintInt("phiCursorValue", phiCursorValue);
 //        b->CallPrintInt("literalMasks", literalMasks);
-        Value* matchOffsetMarkers = accelerationRet.second;
+//        Value* matchOffsetMarkers = accelerationRet.second;
 
         // The pending data block index (for compression space) will be the same as the block index of current acceleration block
         b->setScalarField("pendingLiteralMarkerFullBits", b->CreateOr(literalMasks, b->getScalarField("pendingLiteralMarkerFullBits")));
@@ -324,11 +324,11 @@ namespace kernel{
                 )
         );
 
-        Value* extenderPtrBase = b->CreatePointerCast(b->getRawInputPointer("extender", SIZE_0), INT_ACCELERATION_TYPE->getPointerTo());
-        Value* actualPtr = b->CreateGEP(
-                b->CreatePointerCast(b->getRawInputPointer("extender", SIZE_0), INT_ACCELERATION_TYPE->getPointerTo()),
-                b->CreateUDiv(maskedTokenPos, SIZE_ACCELERATION_WIDTH)
-        );
+//        Value* extenderPtrBase = b->CreatePointerCast(b->getRawInputPointer("extender", SIZE_0), INT_ACCELERATION_TYPE->getPointerTo());
+//        Value* actualPtr = b->CreateGEP(
+//                b->CreatePointerCast(b->getRawInputPointer("extender", SIZE_0), INT_ACCELERATION_TYPE->getPointerTo()),
+//                b->CreateUDiv(maskedTokenPos, SIZE_ACCELERATION_WIDTH)
+//        );
         Value* initTokenMarker = b->CreateShl(INT_ACCELERATION_1, tokenPosRem);
         BasicBlock* accelerationProcessBlock = b->CreateBasicBlock("accelerationProcessBlock");
         BasicBlock* accelerationExitBlock = b->CreateBasicBlock("accelerationExitBlock");

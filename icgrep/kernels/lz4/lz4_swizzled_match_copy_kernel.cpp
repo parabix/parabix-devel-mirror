@@ -102,7 +102,7 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
 
     Value* m0MarkerBasePtr = iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("M0Marker", SIZE_0), I64_PTR_TY); // i64*
     vector<Value*> sourceStreamBasePtrs, outputStreamBasePtrs; // <4 * i64>*
-    for (int i = 0; i < mStreamSize; i++) {
+    for (unsigned i = 0; i < mStreamSize; i++) {
         sourceStreamBasePtrs.push_back(iBuilder->CreatePointerCast(iBuilder->getInputStreamBlockPtr("sourceStreamSet" + std::to_string(i), SIZE_0), BITBLOCK_PTR_TYPE));
         outputStreamBasePtrs.push_back(iBuilder->CreatePointerCast(iBuilder->getOutputStreamBlockPtr("outputStreamSet" + std::to_string(i), SIZE_0), BITBLOCK_PTR_TYPE));
     }
@@ -136,7 +136,7 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
     Value* dataBlockIndex = iBuilder->CreateUDiv(phiCurrentPosition, SIZE_64);
     Value* currentInitM0 = iBuilder->CreateLoad(iBuilder->CreateGEP(m0MarkerBasePtr, dataBlockIndex));
     vector<Value*> initSourceData;
-    for (int i = 0; i < mStreamSize; i++) {
+    for (unsigned i = 0; i < mStreamSize; i++) {
         // Because of swizzled form, the sourceStream can be accessed linearly
         initSourceData.push_back(iBuilder->CreateLoad(iBuilder->CreateGEP(sourceStreamBasePtrs[i], dataBlockIndex)));
     }
@@ -170,7 +170,7 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
     Value* carryCopyFromPos = iBuilder->CreateSub(phiCurrentPosition, phiCarryMatchOffset);
     Value* carryCopyFromBlockIndex = iBuilder->CreateUDiv(carryCopyFromPos, SIZE_64);
     Value* carryCopyFromOffset = iBuilder->CreateURem(carryCopyFromPos, SIZE_64);
-    for (int i = 0; i < mStreamSize; i++) {
+    for (unsigned i = 0; i < mStreamSize; i++) {
         Value* v = iBuilder->CreateLoad(iBuilder->CreateGEP(outputStreamBasePtrs[i], carryCopyFromBlockIndex));
         v = iBuilder->CreateLShr(v, iBuilder->simd_fill(mPDEPWidth, carryCopyFromOffset));
         v = iBuilder->CreateAnd(v, iBuilder->simd_fill(mPDEPWidth, INT64_1));
@@ -191,7 +191,7 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
     phiRemainingM0Marker->addIncoming(currentInitM0, carryBitProcessBlock);
 
     vector<PHINode*> outputData;
-    for (int i = 0; i < mStreamSize; i++) {
+    for (unsigned i = 0; i < mStreamSize; i++) {
         PHINode* outputValue = iBuilder->CreatePHI(iBuilder->getBitBlockType(), 3);
         outputValue->addIncoming(initSourceData[i], processLoopBody);
         outputValue->addIncoming(initSourceDataWithCarry[i], carryBitProcessBlock);
@@ -264,7 +264,7 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
 
     vector<Value*> pdepSourceData;
 
-    for (int i = 0; i < mStreamSize; i++) {
+    for (unsigned i = 0; i < mStreamSize; i++) {
         Value* fromPtr = iBuilder->CreateGEP(outputStreamBasePtrs[i], matchCopyFromBlockIndex);
         Value* fromBlockValue = iBuilder->CreateLoad(fromPtr);
         // when dataBlockIndex == matchCopyFromBlockIndex, we need to use current output value as input
@@ -305,7 +305,7 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
     PHINode* phiSourceDataAccessable = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
     phiSourceDataAccessable->addIncoming(phiTargetMatchOffset, doMatchCopyBlock);
     vector<PHINode*> phiPdepSourceData;
-    for (int i = 0; i < mStreamSize; i++) {
+    for (unsigned i = 0; i < mStreamSize; i++) {
         PHINode* v = iBuilder->CreatePHI(iBuilder->getBitBlockType(), 2);
         v->addIncoming(pdepSourceData[i], doMatchCopyBlock);
         phiPdepSourceData.push_back(v);
@@ -314,7 +314,7 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
 
     // ---- doubleSourceDataBody
     iBuilder->SetInsertPoint(doubleSourceDataBody);
-    for (int i = 0; i < mStreamSize; i++) {
+    for (unsigned i = 0; i < mStreamSize; i++) {
         PHINode* v = phiPdepSourceData[i];
         Value* newValue = iBuilder->CreateOr(v, iBuilder->CreateShl(v, iBuilder->simd_fill(mPDEPWidth, phiSourceDataAccessable)));
         v->addIncoming(newValue, doubleSourceDataBody);
@@ -326,7 +326,7 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
     // ---- doubleSourceDataExit
     iBuilder->SetInsertPoint(doubleSourceDataExit);
     // At this point, we can guarantee we have enough data for pdep
-    for (int i = 0; i < mStreamSize; i++) {
+    for (unsigned i = 0; i < mStreamSize; i++) {
         // Do Match Copy by PDEP
         Value* allFromValue = phiPdepSourceData[i];
         Value* newValue = BITBLOCK_0;
@@ -346,7 +346,7 @@ void LZ4SwizzledMatchCopyKernel::generateDoSegmentMethod(const std::unique_ptr<K
 
     // ---- MatchCopyLoopExit
     iBuilder->SetInsertPoint(matchCopyLoopExit);
-    for (int i = 0; i < mStreamSize; i++) {
+    for (unsigned i = 0; i < mStreamSize; i++) {
         iBuilder->CreateStore(outputData[i], iBuilder->CreateGEP(outputStreamBasePtrs[i], dataBlockIndex));
     }
     Value* hasNewCarryBit = iBuilder->CreateAnd(currentInitM0, iBuilder->CreateShl(INT64_1, iBuilder->getInt64(63)));

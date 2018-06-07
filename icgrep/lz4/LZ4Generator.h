@@ -49,8 +49,8 @@ protected:
     void generateCompressionMarker(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
     // BufferSize related Helper Function
-    virtual int getInputBufferBlocks();
-    virtual int getDecompressedBufferBlocks();
+    virtual int getInputBufferBlocks(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual int getDecompressedBufferBlocks(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     int get4MbBufferBlocks();
 
 

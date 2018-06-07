@@ -131,8 +131,6 @@ namespace kernel{
     void
     LZ4SwizzledAioKernel::generateProcessCompressedBlock(const std::unique_ptr<KernelBuilder> &b, llvm::Value *lz4BlockStart,
                                                            llvm::Value *lz4BlockEnd) {
-        BasicBlock* entryBlock = b->GetInsertBlock();
-
         Value* isTerminal = b->CreateICmpEQ(lz4BlockEnd, b->getScalarField("fileSize"));
         b->setTerminationSignal(isTerminal);
 
@@ -189,7 +187,6 @@ namespace kernel{
         Value* inputStreamSize = b->getCapacity("sourceStreamSet0");
 
         Type* INT_ACCELERATION_TYPE = b->getIntNTy(ACCELERATION_WIDTH);
-        Type* BITBLOCK_PTR_TYPE = b->getBitBlockType()->getPointerTo();
 
         Value* INT_ACCELERATION_0 = b->getIntN(ACCELERATION_WIDTH, 0);
         Value* INT_ACCELERATION_1 = b->getIntN(ACCELERATION_WIDTH, 1);
@@ -801,14 +798,12 @@ namespace kernel{
         Value* SIZE_0 = b->getSize(0);
         Value* SIZE_1 = b->getSize(1);
 
-
-        Value* inputStreamSize = b->getCapacity("sourceStreamSet0");
+//        Value* inputStreamSize = b->getCapacity("sourceStreamSet0");
         Value* outputStreamSize = b->getCapacity("outputStreamSet0");
 
         Type* BITBLOCK_PTR_TYPE = b->getBitBlockType()->getPointerTo();
 
 
-        BasicBlock* entryBlock = b->GetInsertBlock();
         Value* outputPos = b->getScalarField("outputPos");
 
         BasicBlock* literalCopyConBlock = b->CreateBasicBlock("literalCopyConBlock");
@@ -816,7 +811,7 @@ namespace kernel{
         BasicBlock* literalCopyExitBlock = b->CreateBasicBlock("literalCopyExitBlock");
 
         vector<Value*> outputStreamBasePtrs; // <4 * i64>*
-        for (int i = 0; i < mStreamSize; i++) {
+        for (unsigned i = 0; i < mStreamSize; i++) {
             outputStreamBasePtrs.push_back(b->CreatePointerCast(b->getRawOutputPointer("outputStreamSet" + std::to_string(i), SIZE_0), BITBLOCK_PTR_TYPE));
         }
 
@@ -831,7 +826,6 @@ namespace kernel{
         b->SetInsertPoint(literalCopyBodyBlock);
 
         Value* literalRem = b->CreateURem(literalStart, SIZE_64);
-        Value* literalBlockIndex = b->CreateUDiv(b->CreateURem(literalStart, inputStreamSize), SIZE_64);
 
         Value* outputPosRem = b->CreateURem(outputPos, SIZE_64);
         Value* remainingOutputPos = b->CreateSub(SIZE_64, outputPosRem);
@@ -855,7 +849,7 @@ namespace kernel{
         Value* clearMask2 = b->simd_fill(64, b->CreateSub(b->CreateShl(SIZE_1, SIZE_0), SIZE_1));
 
 
-        for (int i = 0; i < mStreamSize; i++) {
+        for (unsigned i = 0; i < mStreamSize; i++) {
             Value* inputValue = inputLiteralValues[i];
 
             Value* outputPtr1 = b->CreateGEP(outputStreamBasePtrs[i], outputBlockIndex);
@@ -906,7 +900,7 @@ namespace kernel{
         BasicBlock* literalCopyExitBlock = b->CreateBasicBlock("literalCopyExitBlock");
 
         vector<Value*> sourceStreamBasePtrs, outputStreamBasePtrs; // <4 * i64>*
-        for (int i = 0; i < mStreamSize; i++) {
+        for (unsigned i = 0; i < mStreamSize; i++) {
             sourceStreamBasePtrs.push_back(b->CreatePointerCast(b->getRawInputPointer("sourceStreamSet" + std::to_string(i), SIZE_0), BITBLOCK_PTR_TYPE, "aa" + std::to_string(i)));
             outputStreamBasePtrs.push_back(b->CreatePointerCast(b->getRawOutputPointer("outputStreamSet" + std::to_string(i), SIZE_0), BITBLOCK_PTR_TYPE));
         }
@@ -942,7 +936,7 @@ namespace kernel{
         Value* l2 = b->simd_fill(64, outputPosRem);
         Value* clearMask = b->simd_fill(64, b->CreateSub(b->CreateShl(SIZE_1, outputPosRem), SIZE_1));
 
-        for (int i = 0; i < mStreamSize; i++) {
+        for (unsigned i = 0; i < mStreamSize; i++) {
             Value* inputValue = b->CreateLoad(b->CreateGEP(sourceStreamBasePtrs[i], literalBlockIndex));
             Value* outputValue = b->CreateLoad(b->CreateGEP(outputStreamBasePtrs[i], outputBlockIndex));
 
@@ -972,7 +966,7 @@ namespace kernel{
         Type* BITBLOCK_PTR_TYPE = b->getBitBlockType()->getPointerTo();
 
         vector<Value*> outputStreamBasePtrs; // <4 * i64>*
-        for (int i = 0; i < mStreamSize; i++) {
+        for (unsigned i = 0; i < mStreamSize; i++) {
             outputStreamBasePtrs.push_back(b->CreatePointerCast(b->getRawOutputPointer("outputStreamSet" + std::to_string(i), SIZE_0), BITBLOCK_PTR_TYPE));
         }
 
@@ -1008,7 +1002,7 @@ namespace kernel{
         copySize = b->CreateUMin(copySize, matchOffset);
         copySize = b->CreateUMin(copySize, phiMatchLength);
 
-        for (int i = 0; i < mStreamSize; i++) {
+        for (unsigned i = 0; i < mStreamSize; i++) {
             Value* inputValue = b->CreateLoad(b->CreateGEP(outputStreamBasePtrs[i], outputFromPosBlockIndex));
             Value* outputValue = b->CreateLoad(b->CreateGEP(outputStreamBasePtrs[i], outputToPosBlockIndex));
 
