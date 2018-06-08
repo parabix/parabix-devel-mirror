@@ -33,7 +33,7 @@ StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, uns
 // output & scalars
 , {}, {}, {}, {})
 , mCodeUnitWidth(codeUnitWidth) {
-    // setKernelStride(getpagesize());
+    setStride(getpagesize());
 }
 
 void FileSink::generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & b) {
@@ -97,7 +97,7 @@ FileSink::FileSink(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned co
 // scalars
 {Binding{b->getInt8PtrTy(), "fileName"}}, {}, {Binding{b->getInt8PtrTy(), "tmpFileName"}, Binding{b->getInt32Ty(), "fileDes"}})
 , mCodeUnitWidth(codeUnitWidth) {
-    // setKernelStride(getpagesize());
+    setStride(getpagesize());
 }
 
 }
