@@ -32,6 +32,7 @@ void s2p_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * s0, Value
     p0 = iBuilder->simd_if(1, hi_mask, t0, iBuilder->simd_srli(16, t1, shift));
     p1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, t0, shift), t1);
 }
+//#define LITTLE_ENDIAN_BIT_NUMBERING
 
 void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value * output[]) {
     Value * bit00224466[4];
@@ -52,10 +53,17 @@ void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value
         s2p_step(iBuilder, bit11335577[2*j], bit11335577[2*j+1],
                  iBuilder->simd_himask(4), 2, bit11115555[j], bit33337777[j]);
     }
+#ifndef LITTLE_ENDIAN_BIT_NUMBERING
     s2p_step(iBuilder, bit00004444[0], bit00004444[1], iBuilder->simd_himask(8), 4, output[0], output[4]);
     s2p_step(iBuilder, bit11115555[0], bit11115555[1], iBuilder->simd_himask(8), 4, output[1], output[5]);
     s2p_step(iBuilder, bit22226666[0], bit22226666[1], iBuilder->simd_himask(8), 4, output[2], output[6]);
     s2p_step(iBuilder, bit33337777[0], bit33337777[1], iBuilder->simd_himask(8), 4, output[3], output[7]);
+#else
+    s2p_step(iBuilder, bit00004444[0], bit00004444[1], iBuilder->simd_himask(8), 4, output[7], output[3]);
+    s2p_step(iBuilder, bit11115555[0], bit11115555[1], iBuilder->simd_himask(8), 4, output[6], output[2]);
+    s2p_step(iBuilder, bit22226666[0], bit22226666[1], iBuilder->simd_himask(8), 4, output[5], output[1]);
+    s2p_step(iBuilder, bit33337777[0], bit33337777[1], iBuilder->simd_himask(8), 4, output[4], output[0]);
+#endif    
 }
 
 /* Alternative transposition model, but small field width packs are problematic. */
@@ -158,6 +166,66 @@ S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, bool aligned, std
         mStreamSetInputs[0].addAttribute(Misaligned());
     }
 }
+    
+S2P_21Kernel::S2P_21Kernel(const std::unique_ptr<KernelBuilder> & b)
+: MultiBlockKernel("s2p_21",
+                   {Binding{b->getStreamSetTy(1, 32), "codeUnitStream", FixedRate(), Principal()}},
+                   {Binding{b->getStreamSetTy(21, 1), "basisBits"}}, {}, {}, {}) {
+}
+
+
+void S2P_21Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfBlocks) {
+    BasicBlock * entry = kb->GetInsertBlock();
+    BasicBlock * processBlock = kb->CreateBasicBlock("s2p21_loop");
+    BasicBlock * s2pDone = kb->CreateBasicBlock("s2p21_done");
+    Constant * const ZERO = kb->getSize(0);
+    
+    kb->CreateBr(processBlock);
+    kb->SetInsertPoint(processBlock);
+    PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
+    blockOffsetPhi->addIncoming(ZERO, entry);
+    Value * u32byte0[8];
+    Value * u32byte1[8];
+    Value * u32byte2[8];
+    for (unsigned i = 0; i < 8; i++) {
+        Value * UTF32units[4];
+        for (unsigned j = 0; j < 4; j++) {
+            UTF32units[j] = kb->loadInputStreamPack("codeUnitStream", ZERO, kb->getInt32(4*i + j), blockOffsetPhi);
+        }
+        Value * u32lo16_0 = kb->hsimd_packl(32, UTF32units[0], UTF32units[1]);
+        Value * u32lo16_1 = kb->hsimd_packl(32, UTF32units[2], UTF32units[3]);
+        Value * u32hi16_0 = kb->hsimd_packh(32, UTF32units[0], UTF32units[1]);
+        Value * u32hi16_1 = kb->hsimd_packh(32, UTF32units[2], UTF32units[3]);
+        u32byte0[i] = kb->hsimd_packl(16, u32lo16_0, u32lo16_1);
+        u32byte1[i] = kb->hsimd_packh(16, u32lo16_0, u32lo16_1);
+        u32byte2[i] = kb->hsimd_packl(16, u32hi16_0, u32hi16_1);
+    #ifdef VALIDATE_U32
+        //  Validation should ensure that none of the high 11 bits are
+        //  set for any UTF-32 code unit.   We simply combine the bits
+        //  of code units together with bitwise-or, and then perform a
+        //  single check at the end.
+        u32_check = simd_or(u32_check, simd_or(u32hi16_0, u32hi16_1));
+    #endif
+    }
+    Value * basisbits[24];
+    s2p(kb, u32byte0, basisbits);
+    s2p(kb, u32byte1, &basisbits[8]);
+    s2p(kb, u32byte2, &basisbits[16]);
+    for (unsigned i = 0; i < 21; ++i) {
+#ifndef LITTLE_ENDIAN_BIT_NUMBERING
+        const unsigned idx = (i/3) * 3 + 7 - (i & 7);
+        kb->storeOutputStreamBlock("basisBits", kb->getInt32(idx), blockOffsetPhi, basisbits[i]);
+#else
+        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits[i]);
+#endif
+    }
+    Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
+    blockOffsetPhi->addIncoming(nextBlk, processBlock);
+    Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
+    kb->CreateCondBr(moreToDo, processBlock, s2pDone);
+    kb->SetInsertPoint(s2pDone);
+}
+
 void S2P_PabloKernel::generatePabloMethod() {
     pablo::PabloBlock * const pb = getEntryScope();
     const unsigned steps = std::log2(mCodeUnitWidth);
@@ -176,7 +244,11 @@ void S2P_PabloKernel::generatePabloMethod() {
         streamWidth = streamWidth/2;
     }
     for (unsigned bit = 0; bit < mCodeUnitWidth; bit++) {
+#ifndef LITTLE_ENDIAN_BIT_NUMBERING
         pb->createAssign(pb->createExtract(getOutputStreamVar("basisBits"), pb->getInteger(bit)), streamSet[steps][mCodeUnitWidth-1-bit]);
+#else
+        pb->createAssign(pb->createExtract(getOutputStreamVar("basisBits"), pb->getInteger(bit)), streamSet[steps][bit]);
+#endif
     }
 }
 

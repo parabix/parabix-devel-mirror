@@ -223,10 +223,15 @@ inline PabloAST * Parabix_CC_Compiler::char_or_range_expr(const codepoint_t lo, 
     }
     llvm::report_fatal_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
 }
+//#define LITTLE_ENDIAN_BIT_NUMBERING
 
 inline PabloAST * Parabix_CC_Compiler::getBasisVar(const unsigned i) const {
     assert (i < mEncodingBits);
+#ifndef LITTLE_ENDIAN_BIT_NUMBERING
     const unsigned index = mEncodingBits - i - 1; assert (index < mEncodingBits);
+#else
+    const unsigned index = i;
+#endif
     assert (mBasisBit[index]);
     return mBasisBit[index];
 }

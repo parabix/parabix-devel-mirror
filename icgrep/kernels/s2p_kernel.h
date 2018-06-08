@@ -26,6 +26,15 @@ private:
     bool mAligned;
 };
 
+class S2P_21Kernel final : public MultiBlockKernel {
+public:
+    S2P_21Kernel(const std::unique_ptr<kernel::KernelBuilder> & b);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+};
+
 class S2P_PabloKernel final : public pablo::PabloKernel {
 public:
     S2P_PabloKernel(const std::unique_ptr<KernelBuilder> & b, unsigned codeUnitWidth = 8);
