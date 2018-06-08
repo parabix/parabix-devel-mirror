@@ -131,11 +131,11 @@ StreamSetBuffer * generateBitStreamDeposit(ParabixDriver & pxDriver, StreamSetBu
 
     // Deposit
     StreamSetBuffer * depositedBits = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks, 1);
-    // Kernel * pdepK = pxDriver.addKernelInstance<BitStreamPDEPKernel>(iBuilder, 8);
-    //pxDriver.makeKernelCall(pdepK, {depositMarker, compressedBits}, {depositedBits});
+    Kernel * pdepK = pxDriver.addKernelInstance<BitStreamPDEPKernel>(iBuilder, 8);
+    pxDriver.makeKernelCall(pdepK, {depositMarker, compressedBits}, {depositedBits});
     
-    StreamDepositCompiler depositCompiler(pxDriver, iBuilder->getStreamSetTy(8), bufferBlocks);
-    depositCompiler.makeCall(depositMarker, compressedBits, depositedBits);
+    //StreamDepositCompiler depositCompiler(pxDriver, 8, 0, 8, bufferBlocks);
+    //depositCompiler.makeCall(depositMarker, compressedBits, depositedBits);
 
 
     return depositedBits;

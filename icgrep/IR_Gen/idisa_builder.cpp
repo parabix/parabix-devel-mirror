@@ -235,7 +235,7 @@ Value * IDISA_Builder::mvmd_dsll(unsigned fw, Value * a, Value * b, Value * shif
         Idxs[i] = ConstantInt::get(fwTy, i + field_count);
     }
     Value * shuffle = simd_sub(fw, ConstantVector::get({Idxs, field_count}), simd_fill(fw, shift));
-    Value * rslt = mvmd_shuffle2(fw, fwCast(fw, a), fwCast(fw, b), shuffle);
+    Value * rslt = mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), shuffle);
     return rslt;
 }
 

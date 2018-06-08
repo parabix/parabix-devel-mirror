@@ -52,14 +52,15 @@ private:
 
 class StreamExpandKernel final : public MultiBlockKernel {
 public:
-    StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned sourceStreamCount, unsigned selectedStreamBase, unsigned selectedStreamCount);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) override;
 private:
     const unsigned mFieldWidth;
-    const unsigned mStreamCount;
+    const unsigned mSelectedStreamBase;
+    const unsigned mSelectedStreamCount;
 };
 
 class FieldDepositKernel final : public MultiBlockKernel {
@@ -76,7 +77,7 @@ private:
 
 class PDEPFieldDepositKernel final : public MultiBlockKernel {
 public:
-    PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount, std::string suffix);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -88,13 +89,19 @@ private:
 
 class StreamDepositCompiler {
 public:
-    StreamDepositCompiler(Driver & driver, llvm::Type * streamSetType, unsigned bufferBlocks = 0) :
-    mDriver(driver), ssType(streamSetType), mBufferBlocks(bufferBlocks), mFieldWidth(64) {}
+    StreamDepositCompiler(Driver & driver, unsigned sourceStreamCount, unsigned selectedStreamBase, unsigned selectedStreamCount, unsigned bufferBlocks = 0) :
+        mDriver(driver),
+        mSourceStreamCount(sourceStreamCount),
+        mSelectedStreamBase(selectedStreamBase),
+        mSelectedStreamCount(selectedStreamCount),
+        mBufferBlocks(bufferBlocks), mFieldWidth(64) {}
     void setDepositFieldWidth(unsigned fw) {mFieldWidth = fw;}
     void makeCall(parabix::StreamSetBuffer * mask, parabix::StreamSetBuffer * inputs, parabix::StreamSetBuffer * outputs);
 private:
     Driver & mDriver;
-    llvm::Type * ssType;
+    const unsigned mSourceStreamCount;
+    const unsigned mSelectedStreamBase;
+    const unsigned mSelectedStreamCount;
     unsigned mBufferBlocks;
     unsigned mFieldWidth;
 };

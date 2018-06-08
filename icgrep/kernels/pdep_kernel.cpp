@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 #include "pdep_kernel.h"
@@ -141,16 +141,17 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     b->SetInsertPoint(finishedStrides);
 }
     
-StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
-: MultiBlockKernel("streamExpand" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
+StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, unsigned sourceStreamCount, unsigned selectedStreamBase, unsigned selectedStreamCount)
+: MultiBlockKernel("streamExpand" + std::to_string(fieldWidth) + "_" + std::to_string(sourceStreamCount) + "_" + std::to_string(selectedStreamBase) + "_" + std::to_string(selectedStreamCount),
                    {Binding{kb->getStreamSetTy(), "marker", FixedRate(), Principal()},
-                       Binding{kb->getStreamSetTy(streamCount), "source", PopcountOf("marker")}},
-                   {Binding{kb->getStreamSetTy(streamCount), "output", FixedRate()}},
+                       Binding{kb->getStreamSetTy(sourceStreamCount), "source", PopcountOf("marker")}},
+                   {Binding{kb->getStreamSetTy(selectedStreamCount), "output", FixedRate()}},
                    {}, {}, {})
 , mFieldWidth(fieldWidth)
-, mStreamCount(streamCount) {
-    for (unsigned i = 0; i < streamCount; i++) {
-        addScalar(kb->getBitBlockType(), "pendingSourceBlock_" + std::to_string(i));
+, mSelectedStreamBase(selectedStreamBase)
+, mSelectedStreamCount(selectedStreamCount) {
+    for (unsigned i = 0; i < mSelectedStreamCount; i++) {
+        addScalar(kb->getBitBlockType(), "pendingSourceBlock_" + std::to_string(mSelectedStreamBase + i));
     }
 }
 
@@ -174,10 +175,9 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     
     Value * processedSourceItems = b->getProcessedItemCount("source");
     Value * sourceOffset = b->CreateURem(processedSourceItems, bwConst);
-    
-    std::vector<Value *> pendingData(mStreamCount);
-    for (unsigned i = 0; i < mStreamCount; i++) {
-        pendingData[i] = b->getScalarField("pendingSourceBlock_" + std::to_string(i));
+    std::vector<Value *> pendingData(mSelectedStreamCount);
+    for (unsigned i = 0; i < mSelectedStreamCount; i++) {
+        pendingData[i] = b->getScalarField("pendingSourceBlock_" + std::to_string(mSelectedStreamBase + i));
     }
     
     b->CreateBr(expandLoop);
@@ -185,10 +185,10 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     b->SetInsertPoint(expandLoop);
     PHINode * blockNoPhi = b->CreatePHI(b->getSizeTy(), 2);
     PHINode * pendingItemsPhi = b->CreatePHI(b->getSizeTy(), 2);
-    PHINode * pendingDataPhi[mStreamCount];
+    PHINode * pendingDataPhi[mSelectedStreamCount];
     blockNoPhi->addIncoming(ZERO, entry);
     pendingItemsPhi->addIncoming(sourceOffset, entry);
-    for (unsigned i = 0; i < mStreamCount; i++) {
+    for (unsigned i = 0; i < mSelectedStreamCount; i++) {
         pendingDataPhi[i] = b->CreatePHI(b->getBitBlockType(), 2);
         pendingDataPhi[i]->addIncoming(pendingData[i], entry);
     }
@@ -204,16 +204,15 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     // A = b->simd_srl(fw, b->mvmd_dsll(fw, source, pending, field_offset_lo), bit_offset);
     // B = b->simd_sll(fw, b->mvmd_dsll(fw, source, pending, field_offset_hi), shift_fwd);
     // all_source_bits = simd_or(A, B);
-    Value * pendingOffset = b->CreateURem(pendingBlockEnd, bwConst);
+    Value * pendingOffset = b->CreateURem(pendingItemsPhi, bwConst);
     Value * field_offset_lo =  b->CreateUDiv(pendingOffset, fwConst);
     Value * bit_offset = b->simd_fill(fw, b->CreateURem(pendingOffset, fwConst));
-    
     // Carefully avoid a shift by the full fieldwith (which gives a poison value).
     // field_offset_lo + 1 unless the bit_offset is 0, in which case it is just field_offset_lo.
     Value * field_offset_hi =  b->CreateUDiv(b->CreateAdd(pendingOffset, fw_sub1Const), fwConst);
     // fw - bit_offset, unless bit_offset is 0, in which case, the shift_fwd is 0.
     Value * shift_fwd = b->CreateURem(b->CreateSub(fwSplat, bit_offset), fwSplat);
-    
+
     // Once all source bits are assembled, they need to be distributed to the
     // output fields in accord with the popcounts of the deposit mask fields.
     // The bits for each output field will typically come from (at most) two
@@ -233,14 +232,13 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * source_field_hi = b->CreateUDiv(b->CreateAdd(partialSum, fw_sub1Splat), fwSplat);
     Value * source_shift_lo = b->CreateAnd(partialSum, fw_sub1Splat);  // parallel URem
     Value * source_shift_hi = b->CreateAnd(b->CreateSub(fwSplat, source_shift_lo), fw_sub1Splat);
-    
+
     // Now load and process source streams.
-    for (unsigned i = 0; i < mStreamCount; i++) {
-        Value * source = b->loadInputStreamBlock("source", b->getInt32(i), srcBlockNo);
+    for (unsigned i = 0; i < mSelectedStreamCount; i++) {
+        Value * source = b->loadInputStreamBlock("source", b->getInt32(mSelectedStreamBase + i), srcBlockNo);
         Value * A = b->simd_srlv(fw, b->mvmd_dsll(fw, source, pendingDataPhi[i], field_offset_lo), bit_offset);
         Value * B = b->simd_sllv(fw, b->mvmd_dsll(fw, source, pendingDataPhi[i], field_offset_hi), shift_fwd);
         Value * full_source_block = b->simd_or(A, B);
-        
         Value * C = b->simd_srlv(fw, b->mvmd_shuffle(fw, full_source_block, source_field_lo), source_shift_lo);
         Value * D = b->simd_sllv(fw, b->mvmd_shuffle(fw, full_source_block, source_field_hi), source_shift_hi);
         Value * output = b->bitCast(b->simd_or(C, D));
@@ -261,14 +259,14 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     
     b->SetInsertPoint(expansionDone);
     // Update kernel state.
-    for (unsigned i = 0; i < mStreamCount; i++) {
-        b->setScalarField("pendingSourceBlock_" + std::to_string(i), b->bitCast(pendingDataPhi[i]));
+    for (unsigned i = 0; i < mSelectedStreamCount; i++) {
+        b->setScalarField("pendingSourceBlock_" + std::to_string(mSelectedStreamBase + i), b->bitCast(pendingDataPhi[i]));
     }
 }
 
 FieldDepositKernel::FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
 : MultiBlockKernel("FieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
-                   {Binding{kb->getStreamSetTy(), "depositMask"}, Binding{kb->getStreamSetTy(streamCount), "inputStreamSet"}},
+                   {Binding{kb->getStreamSetTy(1), "depositMask"}, Binding{kb->getStreamSetTy(streamCount), "inputStreamSet"}},
                    {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"}},
                    {}, {}, {})
 , mFieldWidth(fieldWidth)
@@ -297,14 +295,14 @@ void FieldDepositKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     kb->SetInsertPoint(done);
 }
 
-PDEPFieldDepositKernel::PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
-: MultiBlockKernel("PDEPFieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
+PDEPFieldDepositKernel::PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount, std::string suffix)
+: MultiBlockKernel("PDEPFieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount) + suffix,
                    {Binding{kb->getStreamSetTy(), "depositMask"}, Binding{kb->getStreamSetTy(streamCount), "inputStreamSet"}},
                    {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"}},
                    {}, {}, {})
 , mPDEPWidth(fieldWidth)
 , mStreamCount(streamCount) {
-    if ((fieldWidth != 32) && (fieldWidth != 64)) llvm::report_fatal_error("Unsupported PDEP width for PDEPFieldCompressKernel");
+    if ((fieldWidth != 32) && (fieldWidth != 64)) llvm::report_fatal_error("Unsupported PDEP width for PDEPFieldDepositKernel");
 }
 
 void PDEPFieldDepositKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
@@ -326,21 +324,54 @@ void PDEPFieldDepositKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
     blockOffsetPhi->addIncoming(ZERO, entry);
     std::vector<Value *> mask(fieldsPerBlock);
-    Value * extractionMaskPtr = kb->getInputStreamBlockPtr("depositMask", ZERO, blockOffsetPhi);
-    extractionMaskPtr = kb->CreatePointerCast(extractionMaskPtr, fieldPtrTy);
+//  When operating on fields individually, we can use vector load/store with
+//  extract/insert element operations, or we can use individual field load
+//  and stores.   Individual field operations require fewer total operations,
+//  but more memory instructions.   It may be that vector load/extract is better,
+//  while field store is better.   Vector insert then store creates long dependence
+//  chains.
+//
+#define PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
+#ifdef PREFER_FIELD_LOADS_OVER_EXTRACT_ELEMENT
+    Value * depositMaskPtr = kb->getInputStreamBlockPtr("depositMask", ZERO, blockOffsetPhi);
+    depositMaskPtr = kb->CreatePointerCast(depositMaskPtr, fieldPtrTy);
     for (unsigned i = 0; i < fieldsPerBlock; i++) {
-        mask[i] = kb->CreateLoad(kb->CreateGEP(extractionMaskPtr, kb->getInt32(i)));
+        mask[i] = kb->CreateLoad(kb->CreateGEP(depositMaskPtr, kb->getInt32(i)));
     }
+#else
+    Value * depositMask = kb->fwCast(mPDEPWidth, kb->loadInputStreamBlock("depositMask", ZERO, blockOffsetPhi));
+    for (unsigned i = 0; i < fieldsPerBlock; i++) {
+        mask[i] = kb->CreateExtractElement(depositMask, kb->getInt32(i));
+    }
+#endif
     for (unsigned j = 0; j < mStreamCount; ++j) {
+#ifdef PREFER_FIELD_LOADS_OVER_EXTRACT_ELEMENT
         Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
         inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
+#else
+        Value * inputStrm = kb->fwCast(mPDEPWidth, kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi));
+#endif
+#ifdef PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
         Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);
         outputPtr = kb->CreatePointerCast(outputPtr, fieldPtrTy);
+#else
+        Value * outputStrm = kb->fwCast(mPDEPWidth, kb->allZeroes());
+#endif
         for (unsigned i = 0; i < fieldsPerBlock; i++) {
+#ifdef PREFER_FIELD_LOADS_OVER_EXTRACT_ELEMENT
             Value * field = kb->CreateLoad(kb->CreateGEP(inputPtr, kb->getInt32(i)));
+#else
+            Value * field = kb->CreateExtractElement(inputStrm, kb->getInt32(i));
+#endif
             Value * compressed = kb->CreateCall(PDEP_func, {field, mask[i]});
+#ifdef PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
             kb->CreateStore(compressed, kb->CreateGEP(outputPtr, kb->getInt32(i)));
         }
+#else
+            outputStrm = kb->CreateInsertElement(outputStrm, compressed, kb->getInt32(i));
+        }
+        kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, outputStrm);
+#endif
     }
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
     blockOffsetPhi->addIncoming(nextBlk, processBlock);
@@ -353,22 +384,20 @@ void StreamDepositCompiler::makeCall(parabix::StreamSetBuffer * depositMask, par
     if (mBufferBlocks == 0) {
         llvm::report_fatal_error("StreamDepositCompiler needs a non-zero bufferBlocks parameter (for now).");
     }
-    auto & iBuilder = mDriver.getBuilder();
-    unsigned N = IDISA::getNumOfStreams(ssType);
-    if (IDISA::getStreamFieldWidth(ssType) != 1) {
-        llvm::report_fatal_error("StreamDepositCompiler only compresses bit streams (for now)");
-    }
-    parabix::StreamSetBuffer * expandedStreams = mDriver.addBuffer<parabix::StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(N), mBufferBlocks);
-    Kernel * streamK = mDriver.addKernelInstance<StreamExpandKernel>(iBuilder, mFieldWidth, N);
+    auto & b = mDriver.getBuilder();
+    unsigned N = mSelectedStreamCount;
+    parabix::StreamSetBuffer * expandedStreams = mDriver.addBuffer<parabix::StaticBuffer>(b, b->getStreamSetTy(N), mBufferBlocks);
+    Kernel * streamK = mDriver.addKernelInstance<StreamExpandKernel>(b, mFieldWidth, mSourceStreamCount, mSelectedStreamBase, N);
     mDriver.makeKernelCall(streamK, {depositMask, inputs}, {expandedStreams});
 
     Kernel * depositK = nullptr;
     if (AVX2_available()) {
-        depositK = mDriver.addKernelInstance<PDEPFieldDepositKernel>(iBuilder, mFieldWidth, N);
+        depositK = mDriver.addKernelInstance<PDEPFieldDepositKernel>(b, mFieldWidth, N, std::to_string(mSelectedStreamBase));
     } else {
-        depositK = mDriver.addKernelInstance<FieldDepositKernel>(iBuilder, mFieldWidth, N);
+        depositK = mDriver.addKernelInstance<FieldDepositKernel>(b, mFieldWidth, N);
     }
     mDriver.makeKernelCall(depositK, {depositMask, expandedStreams}, {outputs});
 }
 
 }
+
