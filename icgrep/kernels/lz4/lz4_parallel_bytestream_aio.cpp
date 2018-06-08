@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2018/5/31.
-//
 
 #include "lz4_parallel_bytestream_aio.h"
 
@@ -19,12 +16,11 @@ using namespace std;
 
 namespace kernel{
 
-    LZ4ParallelByteStreamAioKernel::LZ4ParallelByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b)
+    LZ4ParallelByteStreamAioKernel::LZ4ParallelByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, size_t outputBlockSize)
             :SegmentOrientedKernel("LZ4ParallelByteStreamAioKernel",
             // Inputs
                                    {
                     Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)},
-                    Binding{b->getStreamSetTy(1, 1), "extender", RateEqualTo("byteStream")},
 
                     // block data
                     Binding{b->getStreamSetTy(1, 1), "isCompressed", BoundedRate(0, 1), AlwaysConsume()},
@@ -46,7 +42,7 @@ namespace kernel{
                                            Binding{b->getInt64Ty(), "tempTimes"},
                                            Binding{b->getIntNTy(SIMD_WIDTH), "outputPos"},
 
-                                   }){
+                                   }), mOutputBlockSize(outputBlockSize) {
         this->setStride(4 * 1024 * 1024 * 4);
         addAttribute(MustExplicitlyTerminate());
     }
@@ -682,13 +678,7 @@ namespace kernel{
         return std::make_pair(nextTokenPos, phiOutputPos);
     }
 
-
-    void LZ4ParallelByteStreamAioKernel::handleSimdMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
-        // TODO use memcpy first
-//        Value* l = b->CreateExtractElement(matchLengthVec, (uint64_t)0);
-//        Value* shouldPrint = b->CreateICmpNE(l, b->getSize(0));
-//        b->CallPrintIntCond("matchOffset", b->CreateExtractElement(matchOffsetVec, (uint64_t)0), shouldPrint);
-//        b->CallPrintIntCond("matchLength", l, shouldPrint);
+    void LZ4ParallelByteStreamAioKernel::generateSimdMatchCopyByMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
         Value* outputCapacity = b->getCapacity("outputStream");
         Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream", b->getSize(0)), b->getInt8PtrTy());
 
@@ -702,7 +692,6 @@ namespace kernel{
             Value* matchOffset = b->CreateExtractElement(matchOffsetVec, i);
             Value* initMatchLength = b->CreateExtractElement(matchLengthVec, i);
             Value* initOutputPos = b->CreateExtractElement(outputPosVec, i);
-//            b->CreateLikelyCondBr(b->CreateICmpNE(matchOffset, b->getSize(0)), matchCopyConBlock, matchCopyExitBlock);
             b->CreateBr(matchCopyConBlock);
 
             // ---- matchCopyConBlock
@@ -711,8 +700,6 @@ namespace kernel{
             phiMatchLength->addIncoming(initMatchLength, beforeConBlock);
             PHINode* phiOutputPos = b->CreatePHI(initOutputPos->getType(), 2);
             phiOutputPos->addIncoming(initOutputPos, beforeConBlock);
-//            b->CallPrintInt("phiMatchLength", phiMatchLength);
-//            b->CallPrintInt("matchOffset", matchOffset);
 
             b->CreateCondBr(b->CreateICmpUGT(phiMatchLength, b->getSize(0)), matchCopyBodyBlock, matchCopyExitBlock);
 
@@ -738,10 +725,80 @@ namespace kernel{
         }
     }
 
+    void LZ4ParallelByteStreamAioKernel::generateSimdSequentialMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
+
+        // Constant
+        Constant * SIZE_8 = b->getSize(8);
+        // Type
+        PointerType* i64PtrTy = b->getInt64Ty()->getPointerTo();
+        PointerType* i8PtrTy = b->getInt8PtrTy();
+
+        Value* outputCapacity = b->getCapacity("outputStream");
+        Value* outputPosRemVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(outputCapacity))));
+        Value* outputPosRemBlockSizeVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(b->getIntN(SIMD_WIDTH, mOutputBlockSize)))));
+        Value* remainingBlockSizeVec = b->simd_sub(SIMD_WIDTH, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, mOutputBlockSize)), outputPosRemBlockSizeVec);
+        Value* copyFromPosRemVec = b->simd_sub(SIMD_WIDTH, outputPosRemVec, matchOffsetVec);
+
+
+        Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream", b->getSize(0)), b->getInt8PtrTy());
+
+
+        for (unsigned i = 0; i < b->getBitBlockWidth() / SIMD_WIDTH; i++) {
+
+            BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
+            BasicBlock* i64MatchCopyBlock = b->CreateBasicBlock("i64LiteralCopyBlock");
+            BasicBlock* i8MatchCopyBlock = b->CreateBasicBlock("i8LiteralCopyBlock");
+
+            // ---- entryBlock
+            Value* matchOffset = b->CreateExtractElement(matchOffsetVec, i);
+            Value* matchLength = b->CreateExtractElement(matchLengthVec, i);
+            Value* outputPosRem = b->CreateExtractElement(outputPosRemVec, i);
+            Value* remainingBlockSize = b->CreateExtractElement(remainingBlockSizeVec, i);
+            Value* outputFromRem = b->CreateExtractElement(copyFromPosRemVec, i);
+
+            Value* inputInitPtr = b->CreateGEP(outputBasePtr, outputFromRem);
+            Value* outputInitPtr = b->CreateGEP(outputBasePtr, outputPosRem);
+
+            b->CreateLikelyCondBr(b->CreateICmpUGE(b->CreateSub(remainingBlockSize, matchLength), SIZE_8), i64MatchCopyBlock, i8MatchCopyBlock);
+
+            //// i64 Match Copy
+            // ---- i64MatchCopyBlock
+            b->SetInsertPoint(i64MatchCopyBlock);
+
+            this->generateOverwritingMemcpy(b, inputInitPtr, outputInitPtr, matchLength, i64PtrTy, b->CreateUMin(matchOffset, SIZE_8));
+            b->CreateBr(exitBlock);
+
+            //// i8 Match Copy
+            // ---- i8MatchCopyBlock
+            b->SetInsertPoint(i8MatchCopyBlock);
+            this->generateOverwritingMemcpy(b, inputInitPtr, outputInitPtr, matchLength, i8PtrTy, 1);
+            b->CreateBr(exitBlock);
+
+            // ---- exitBlock
+            b->SetInsertPoint(exitBlock);
+
+        }
+
+    }
+
+    void LZ4ParallelByteStreamAioKernel::handleSimdMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
+//        this->generateSimdMatchCopyByMemcpy(b, matchOffsetVec, matchLengthVec, outputPosVec);
+        this->generateSimdSequentialMatchCopy(b, matchOffsetVec, matchLengthVec, outputPosVec);
+    }
+
     void LZ4ParallelByteStreamAioKernel::handleSimdLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* literalStartVec, llvm::Value* literalLengthVec, llvm::Value* outputPosVec) {
+        this->generateSimdSequentialLiteralCopy(b, literalStartVec, literalLengthVec, outputPosVec);
+//        this->generateSequentialLiteralCopyWithSimdCalculation(b, literalStartVec, literalLengthVec, outputPosVec);
+//        this->generateLiteralCopyByMemcpy(b, literalStartVec, literalLengthVec, outputPosVec);
+    }
+
+    void LZ4ParallelByteStreamAioKernel::generateSimdLiteralCopyByMemcpy(const std::unique_ptr<KernelBuilder> &b,
+                                                                         llvm::Value *literalStartVec,
+                                                                         llvm::Value *literalLengthVec,
+                                                                         llvm::Value *outputPosVec) {
+        // This function will be slower than other literal copy related function, it is only for performance testing.
         Value* outputCapacity = b->getCapacity("outputStream");
         Value* outputPosRemVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->simd_not(b->CreateNeg(outputCapacity))));
-        // TODO use memcpy first
 
         Value* inputBasePtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
         Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream", b->getSize(0)), b->getInt8PtrTy());
@@ -757,7 +814,222 @@ namespace kernel{
                     1
             );
         }
+    }
 
+    void LZ4ParallelByteStreamAioKernel::generateSimdSequentialLiteralCopy(const std::unique_ptr<KernelBuilder> &b,
+                                                                           llvm::Value *literalStartVec,
+                                                                           llvm::Value *literalLengthVec,
+                                                                           llvm::Value *outputPosVec) {
+        // Constant
+        Constant * SIZE_8 = b->getSize(8);
+        // Type
+        PointerType* i64PtrTy = b->getInt64Ty()->getPointerTo();
+        PointerType* i8PtrTy = b->getInt8PtrTy();
+
+        Value* outputCapacity = b->getCapacity("outputStream");
+        Value* outputPosRemVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(outputCapacity))));
+        Value* outputPosRemBlockSizeVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(b->getIntN(SIMD_WIDTH, mOutputBlockSize)))));
+        Value* remainingBlockSizeVec = b->simd_sub(SIMD_WIDTH, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, mOutputBlockSize)), outputPosRemBlockSizeVec);
+
+        Value* inputBasePtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
+        Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream", b->getSize(0)), b->getInt8PtrTy());
+
+
+        for (unsigned i = 0; i < b->getBitBlockWidth() / SIMD_WIDTH; i++) {
+            BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
+            BasicBlock* i64LiteralCopyBlock = b->CreateBasicBlock("i64LiteralCopyBlock");
+            BasicBlock* i8LiteralCopyBlock = b->CreateBasicBlock("i8LiteralCopyBlock");
+
+            // ---- entryBlock
+            Value* literalStart = b->CreateExtractElement(literalStartVec, i);
+            Value* literalLength = b->CreateExtractElement(literalLengthVec, i);
+            Value* outputPosRem = b->CreateExtractElement(outputPosRemVec, i);
+            Value* remainingBlockSize = b->CreateExtractElement(remainingBlockSizeVec, i);
+
+            Value* inputInitPtr = b->CreateGEP(inputBasePtr, literalStart);
+            Value* outputInitPtr = b->CreateGEP(outputBasePtr, outputPosRem);
+
+            b->CreateLikelyCondBr(b->CreateICmpUGE(b->CreateSub(remainingBlockSize, literalLength), SIZE_8), i64LiteralCopyBlock, i8LiteralCopyBlock);
+
+            //// i64 Literal Copy
+            // ---- i64LiteralCopyBlock
+            b->SetInsertPoint(i64LiteralCopyBlock);
+            this->generateOverwritingMemcpy(b, inputInitPtr, outputInitPtr, literalLength, i64PtrTy, 8);
+            b->CreateBr(exitBlock);
+
+            //// i8 Literal Copy
+            // ---- i8LiteralCopyBlock
+            b->SetInsertPoint(i8LiteralCopyBlock);
+            this->generateOverwritingMemcpy(b, inputInitPtr, outputInitPtr, literalLength, i8PtrTy, 1);
+            b->CreateBr(exitBlock);
+
+            // ---- exitBlock
+            b->SetInsertPoint(exitBlock);
+        }
+    }
+    void LZ4ParallelByteStreamAioKernel::generateOverwritingMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *inputBasePtr,
+                                   llvm::Value *outputBasePtr, llvm::Value *copyBytes, llvm::PointerType *targetPtrTy,
+                                   llvm::Value* stepSize) {
+        unsigned targetPtrBitWidth = targetPtrTy->getElementType()->getIntegerBitWidth();
+
+        Constant * SIZE_0 = b->getSize(0);
+        Constant * SIZE_1 = b->getSize(1);
+        PointerType* i8PtrTy = b->getInt8PtrTy();
+
+        BasicBlock* entryBlock = b->GetInsertBlock();
+        BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
+        BasicBlock* conBlock = b->CreateBasicBlock("conBlock");
+        BasicBlock* bodyBlock = b->CreateBasicBlock("bodyBlock");
+
+        Value* inputInitPtr = b->CreatePointerCast(inputBasePtr, targetPtrTy);
+        Value* outputInitPtr = b->CreatePointerCast(outputBasePtr, targetPtrTy);
+
+        b->CreateBr(conBlock);
+        // ---- conBlock
+        b->SetInsertPoint(conBlock);
+
+        PHINode *phiCopiedSize = b->CreatePHI(b->getSizeTy(), 2);
+        phiCopiedSize->addIncoming(SIZE_0, entryBlock);
+        PHINode *phiInputPtr = b->CreatePHI(targetPtrTy, 2);
+        phiInputPtr->addIncoming(inputInitPtr, entryBlock);
+        PHINode *phiOutputPtr = b->CreatePHI(targetPtrTy, 2);
+        phiOutputPtr->addIncoming(outputInitPtr, entryBlock);
+
+        b->CreateCondBr(b->CreateICmpULT(phiCopiedSize, copyBytes), bodyBlock, exitBlock);
+
+        // ---- bodyBlock
+        b->SetInsertPoint(bodyBlock);
+        b->CreateStore(b->CreateLoad(phiInputPtr), phiOutputPtr);
+
+        phiCopiedSize->addIncoming(b->CreateAdd(phiCopiedSize, stepSize), b->GetInsertBlock());
+
+        Value *newInputPtr = nullptr, *newOutputPtr = nullptr;
+
+        newInputPtr = b->CreatePointerCast(
+                b->CreateGEP(b->CreatePointerCast(phiInputPtr, i8PtrTy), stepSize),
+                targetPtrTy
+        );
+
+        newOutputPtr = b->CreatePointerCast(
+                b->CreateGEP(b->CreatePointerCast(phiOutputPtr, i8PtrTy), stepSize),
+                targetPtrTy
+        );
+
+        phiInputPtr->addIncoming(newInputPtr, b->GetInsertBlock());
+        phiOutputPtr->addIncoming(newOutputPtr, b->GetInsertBlock());
+        b->CreateBr(conBlock);
+
+        // ---- exitBlock
+        b->SetInsertPoint(exitBlock);
+    }
+
+    void LZ4ParallelByteStreamAioKernel::generateOverwritingMemcpy(const std::unique_ptr<KernelBuilder> &b,
+                                                                   llvm::Value *inputBasePtr,
+                                                                   llvm::Value *outputBasePtr,
+                                                                   llvm::Value *copyBytes, llvm::PointerType *targetPtrTy,
+                                                                   size_t stepSize) {
+        unsigned targetPtrBitWidth = targetPtrTy->getElementType()->getIntegerBitWidth();
+
+        Constant * SIZE_0 = b->getSize(0);
+        Constant * SIZE_1 = b->getSize(1);
+        PointerType* i8PtrTy = b->getInt8PtrTy();
+
+        BasicBlock* entryBlock = b->GetInsertBlock();
+        BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
+        BasicBlock* conBlock = b->CreateBasicBlock("conBlock");
+        BasicBlock* bodyBlock = b->CreateBasicBlock("bodyBlock");
+
+        Value* inputInitPtr = b->CreatePointerCast(inputBasePtr, targetPtrTy);
+        Value* outputInitPtr = b->CreatePointerCast(outputBasePtr, targetPtrTy);
+
+        b->CreateBr(conBlock);
+        // ---- conBlock
+        b->SetInsertPoint(conBlock);
+
+        PHINode *phiCopiedSize = b->CreatePHI(b->getSizeTy(), 2);
+        phiCopiedSize->addIncoming(SIZE_0, entryBlock);
+        PHINode *phiInputPtr = b->CreatePHI(targetPtrTy, 2);
+        phiInputPtr->addIncoming(inputInitPtr, entryBlock);
+        PHINode *phiOutputPtr = b->CreatePHI(targetPtrTy, 2);
+        phiOutputPtr->addIncoming(outputInitPtr, entryBlock);
+
+        b->CreateCondBr(b->CreateICmpULT(phiCopiedSize, copyBytes), bodyBlock, exitBlock);
+
+        // ---- bodyBlock
+        b->SetInsertPoint(bodyBlock);
+        b->CreateStore(b->CreateLoad(phiInputPtr), phiOutputPtr);
+
+        phiCopiedSize->addIncoming(b->CreateAdd(phiCopiedSize, b->getSize(stepSize)), b->GetInsertBlock());
+
+        Value *newInputPtr = nullptr, *newOutputPtr = nullptr;
+
+        if (targetPtrBitWidth / 8 == stepSize) {
+            newInputPtr = b->CreateGEP(phiInputPtr, SIZE_1);
+            newOutputPtr = b->CreateGEP(phiOutputPtr, SIZE_1);
+        } else {
+            newInputPtr = b->CreatePointerCast(
+                    b->CreateGEP(b->CreatePointerCast(phiInputPtr, i8PtrTy), b->getSize(stepSize)),
+                    targetPtrTy
+            );
+
+            newOutputPtr = b->CreatePointerCast(
+                    b->CreateGEP(b->CreatePointerCast(phiOutputPtr, i8PtrTy), b->getSize(stepSize)),
+                    targetPtrTy
+            );
+
+        }
+
+        phiInputPtr->addIncoming(newInputPtr, b->GetInsertBlock());
+        phiOutputPtr->addIncoming(newOutputPtr, b->GetInsertBlock());
+        b->CreateBr(conBlock);
+
+        // ---- exitBlock
+        b->SetInsertPoint(exitBlock);
+    }
+
+    void LZ4ParallelByteStreamAioKernel::generateSimdLiteralCopyByScatter(const std::unique_ptr<KernelBuilder> &b,
+                                                                          llvm::Value *literalStartVec,
+                                                                          llvm::Value *literalLengthVec,
+                                                                          llvm::Value *outputPosVec) {
+        // TODO
+    }
+
+    void LZ4ParallelByteStreamAioKernel::generateSimdSequentialLiteralCopyWithSimdCalculation(
+            const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStartVec, llvm::Value *literalLengthVec,
+            llvm::Value *outputPosVec) {
+        // TODO Incomplete
+
+        /*
+        Value* outputCapacity = b->getCapacity("outputStream");
+        Value* outputPosRemVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(outputCapacity))));
+        Value* outputPosRemOutputBlockSize = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(b->getIntN(SIMD_WIDTH, mOutputBlockSize)))));
+
+
+
+        Value* inputBasePtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
+        Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream", b->getSize(0)), b->getInt8PtrTy());
+
+        ////
+        // ---- i64LiteralCopy
+        BasicBlock* i64LiteralCopyCon = b->CreateBasicBlock("literalCopyCon");
+        BasicBlock* i64LiteralCopyBody = b->CreateBasicBlock("literalCopyBody");
+        BasicBlock* i64LiteralCopyExit = b->CreateBasicBlock("literalCopyExit");
+
+        b->CreateBr(i64LiteralCopyCon);
+
+        // ---- i64LiteralCopyCon
+        b->SetInsertPoint(i64LiteralCopyCon);
+
+
+        // ---- literalCopyBody
+        b->SetInsertPoint(i64LiteralCopyBody);
+
+        // ---- literalCopyExit
+        b->SetInsertPoint(i64LiteralCopyExit);
+
+
+        //// ---- i8LiteralCopyCon
+         */
     }
 
     void LZ4ParallelByteStreamAioKernel::handleLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,

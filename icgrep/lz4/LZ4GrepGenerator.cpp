@@ -609,7 +609,7 @@ void LZ4GrepGenerator::generateParallelAioPipeline(re::RE* regex) {
     auto & iBuilder = mPxDriver.getBuilder();
     this->generateCountOnlyMainFunc(iBuilder);
 
-    this->generateLoadByteStreamAndBitStream(iBuilder);
+    this->generateLoadByteStream(iBuilder);
     parabix::StreamSetBuffer * decompressedByteStream = this->generateParallelAIODecompression(iBuilder);
 
 

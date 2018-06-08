@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2018/5/31.
-//
 
 #ifndef ICGREP_LZ4_PARALLEL_BYTESTREAM_AIO_H
 #define ICGREP_LZ4_PARALLEL_BYTESTREAM_AIO_H
@@ -9,6 +6,7 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <llvm/IR/DerivedTypes.h>
 
 namespace llvm {
     class Module;
@@ -25,7 +23,8 @@ namespace kernel {
     class LZ4ParallelByteStreamAioKernel : public SegmentOrientedKernel {
 
     public:
-        LZ4ParallelByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b);
+        // By default, output block size in LZ4 is 4MB
+        LZ4ParallelByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, size_t outputBlockSize = 4 * 1024 * 1024 );
 
     protected:
         void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) override;
@@ -56,7 +55,28 @@ namespace kernel {
 
 
         void handleSimdLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* literalStartVec, llvm::Value* literalLengthVec, llvm::Value* outputPosVec);
+        void generateSimdSequentialLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStartVec,
+                                               llvm::Value *literalLengthVec, llvm::Value *outputPosVec);
+
+        void generateSimdSequentialLiteralCopyWithSimdCalculation(const std::unique_ptr<KernelBuilder> &b,
+                                                                  llvm::Value *literalStartVec,
+                                                                  llvm::Value *literalLengthVec,
+                                                                  llvm::Value *outputPosVec);
+        void generateSimdLiteralCopyByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStartVec,
+                                              llvm::Value *literalLengthVec, llvm::Value *outputPosVec);
+        void generateSimdLiteralCopyByMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStartVec,
+                                             llvm::Value *literalLengthVec, llvm::Value *outputPosVec);
+
+        void generateOverwritingMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *inputBasePtr,
+                                       llvm::Value *outputBasePtr, llvm::Value *copyBytes, llvm::PointerType *targetPtrTy,
+                                       size_t stepSize);
+        void generateOverwritingMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *inputBasePtr,
+                                       llvm::Value *outputBasePtr, llvm::Value *copyBytes, llvm::PointerType *targetPtrTy,
+                                       llvm::Value* stepSize);
+
         void handleSimdMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec);
+        void generateSimdMatchCopyByMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec);
+        void generateSimdSequentialMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec);
 
         void handleLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* literalStart, llvm::Value* literalLength, llvm::Value* outputPos);
         void handleMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffset, llvm::Value* matchLength, llvm::Value* outputPos);
@@ -68,7 +88,7 @@ namespace kernel {
         llvm::Value* simdFetchByteDataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
         llvm::Value* simdFetchByteDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
 
-
+        size_t mOutputBlockSize;
     };
 
 }

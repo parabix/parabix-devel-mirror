@@ -471,10 +471,10 @@ parabix::StreamSetBuffer * LZ4Generator::generateParallelAIODecompression(const 
     StreamSetBuffer * const BlockData_BlockEnd = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(iBuilder), 1);
 
     //// Generate Helper Markers Extenders
-    StreamSetBuffer * const Extenders = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks(iBuilder), 1);
-    mMatchOffsetMarker = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks(iBuilder));
-    Kernel * extenderK = mPxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
-    mPxDriver.makeKernelCall(extenderK, {mCompressedBasisBits}, {Extenders});
+//    StreamSetBuffer * const Extenders = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks(iBuilder), 1);
+//    mMatchOffsetMarker = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks(iBuilder));
+//    Kernel * extenderK = mPxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
+//    mPxDriver.makeKernelCall(extenderK, {mCompressedBasisBits}, {Extenders});
 
     Kernel * blockDecoderK = mPxDriver.addKernelInstance<LZ4BlockDecoderNewKernel>(iBuilder);
     blockDecoderK->setInitialArguments({iBuilder->CreateTrunc(mHasBlockChecksum, iBuilder->getInt1Ty()), mHeaderSize, mFileSize});
@@ -489,7 +489,6 @@ parabix::StreamSetBuffer * LZ4Generator::generateParallelAIODecompression(const 
             lz4AioK,
             {
                     mCompressedByteStream,
-                    Extenders,
 
                     // Block Data
                     BlockData_IsCompressed,
