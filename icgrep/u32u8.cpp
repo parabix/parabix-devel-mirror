@@ -86,6 +86,7 @@ public:
     UTF8fieldDepositMask(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned depositFieldWidth = 64);
 private:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    void generateFinalBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Value * const remainingBytes) override;
     const unsigned mDepositFieldWidth;
 };
 
@@ -94,7 +95,7 @@ UTF8fieldDepositMask::UTF8fieldDepositMask(const std::unique_ptr<kernel::KernelB
             {Binding{b->getStreamSetTy(1, 21), "basis"}},
             {Binding{b->getStreamSetTy(1, 1), "fieldDepositMask", FixedRate(4)}, 
                 Binding{b->getStreamSetTy(1, 1), "codeUnitCounts", FixedRate(4), RoundUpTo(b->getBitBlockWidth())}},
-            {}, {}, {}), mDepositFieldWidth(depositFieldWidth) {
+            {}, {}, {Binding{b->getBitBlockType(), "EOFmask"}}), mDepositFieldWidth(depositFieldWidth) {
 }
 
 
@@ -123,8 +124,10 @@ void UTF8fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBui
     //  extraction mask        1000  1100  1110    1111
     //  interleave u8len3|u8len4, allOnes() for bits 1, 3:  x..., ..x.
     //  interleave prefix4, u8len2|u8len3|u8len4 for bits 0, 2:  .x.., ...x
-    Value * maskA_lo = b->esimd_mergel(1, u8len34, b->allOnes());
-    Value * maskA_hi = b->esimd_mergeh(1, u8len34, b->allOnes());
+    Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
+    
+    Value * maskA_lo = b->esimd_mergel(1, u8len34, fileExtentMask);
+    Value * maskA_hi = b->esimd_mergeh(1, u8len34, fileExtentMask);
     Value * maskB_lo = b->esimd_mergel(1, u8len4, nonASCII);
     Value * maskB_hi = b->esimd_mergeh(1, u8len4, nonASCII);
     Value * extraction_mask[4];
@@ -141,6 +144,13 @@ void UTF8fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBui
         b->storeOutputStreamBlock("codeUnitCounts", b->getSize(0), b->getSize(j), unit_counts);
     }
 }
+void UTF8fieldDepositMask::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * const remainingBytes) {
+    // Standard Pablo convention for final block processing: set a bit marking
+    // the position just past EOF, as well as a mask marking all positions past EOF.
+    b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
+    CreateDoBlockMethodCall(b);
+}
+
 
 //
 // Given a u8-indexed bit stream marking the final code unit position
