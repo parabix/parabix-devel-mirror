@@ -6,10 +6,12 @@
 #include <string>
 #include <llvm/Support/raw_ostream.h>
 #include <kernels/streamset.h>
+#include <IR_Gen/idisa_target.h>
 
 using namespace llvm;
 using namespace kernel;
 using namespace std;
+
 
 #define SIMD_WIDTH (64)
 
@@ -23,7 +25,7 @@ namespace kernel{
                     Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)},
 
                     // block data
-                    Binding{b->getStreamSetTy(1, 1), "isCompressed", BoundedRate(0, 1), AlwaysConsume()},
+                    Binding{b->getStreamSetTy(1, 8), "isCompressed", BoundedRate(0, 1), AlwaysConsume()},
                     Binding{b->getStreamSetTy(1, 64), "blockStart", RateEqualTo("isCompressed"), AlwaysConsume()},
                     Binding{b->getStreamSetTy(1, 64), "blockEnd", RateEqualTo("isCompressed"), AlwaysConsume()}
 
@@ -290,12 +292,13 @@ namespace kernel{
         matchLength = b->CreateAnd(matchLength, hasMatchPartMask);
 
 
+
         Value* matchOffsetVec =  b->CreateCall(
                 gatherFunc,
                 {
                         UndefValue::get(b->getBitBlockType()),
                         bytePtrBase,
-                        b->CreateTrunc(b->CreateSub(matchOffsetBeginPosVec, b->simd_fill(SIMD_WIDTH, firstTokenPos)), VectorType::get(b->getInt32Ty(), 4)),
+                        b->CreateTrunc(b->CreateSub(matchOffsetBeginPosVec, b->simd_fill(SIMD_WIDTH, firstTokenPos)), VectorType::get(b->getInt32Ty(), b->getBitBlockWidth() / SIMD_WIDTH)),
                         hasMatchPartMask,
                         b->getInt8(1)
                 }
@@ -343,14 +346,12 @@ namespace kernel{
 
         Value* outputPos = b->getProducedItemCount("outputStream");
         Value* initOutputPosVec = b->simd_fill(SIMD_WIDTH, outputPos);
-        initOutputPosVec = b->CreateAdd(
-                initOutputPosVec,
-                ConstantVector::get({
-                                            b->getIntN(SIMD_WIDTH, 0),
-                                            b->getIntN(SIMD_WIDTH, 1 * 4 * 1024 * 1024),
-                                            b->getIntN(SIMD_WIDTH, 2 * 4 * 1024 * 1024),
-                                            b->getIntN(SIMD_WIDTH, 3 * 4 * 1024 * 1024)
-                                    }));
+        std::vector<Constant*> initOutputPos;
+        for (unsigned i = 0; i < b->getBitBlockWidth() / SIMD_WIDTH; i++) {
+            initOutputPos.push_back(b->getIntN(SIMD_WIDTH, i * 4 * 1024 * 1024));
+        }
+
+        initOutputPosVec = b->CreateAdd(initOutputPosVec, ConstantVector::get(initOutputPos));
 
         // TODO handle uncompression blocks
 
@@ -1126,8 +1127,11 @@ namespace kernel{
     }
 
     llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
-        return this->simdFetchByteDataByGather(b, basePtr, offsetVec, mask);
-//        return this->simdFetchByteDataByLoop(b, basePtr, offsetVec, mask);
+        if (AVX2_available()) {
+            return this->simdFetchByteDataByGather(b, basePtr, offsetVec, mask);
+        } else {
+            return this->simdFetchByteDataByLoop(b, basePtr, offsetVec, mask);
+        }
     }
 
     llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteDataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
@@ -1137,7 +1141,7 @@ namespace kernel{
 
         Value* firstOffset = b->CreateExtractElement(offsetVec, (uint64_t)0);
 
-        Type* i32BitBlockTy = VectorType::get(b->getInt32Ty(), 4);
+        Type* i32BitBlockTy = VectorType::get(b->getInt32Ty(), b->getBitBlockWidth() / SIMD_WIDTH);
 
 //        Value* tokenValuesVec =  b->CreateCall(
 //                gatherFunc,
@@ -1156,7 +1160,7 @@ namespace kernel{
                 {
                         UndefValue::get(i32BitBlockTy),
                         b->CreateGEP(basePtr, firstOffset),
-                        b->CreateTrunc(b->CreateSub(offsetVec, b->simd_fill(SIMD_WIDTH, firstOffset)), VectorType::get(b->getInt32Ty(), 4)),
+                        b->CreateTrunc(b->CreateSub(offsetVec, b->simd_fill(SIMD_WIDTH, firstOffset)), i32BitBlockTy),
                         b->CreateTrunc(mask, i32BitBlockTy),
                         b->getInt8(1)
                 }
@@ -1172,7 +1176,7 @@ namespace kernel{
     llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* maskVec) {
         Value* retVec = ConstantVector::getNullValue(b->getBitBlockType());
 
-        for (uint64_t i = 0; i < 4; i++){ //TODO 4 here is a hardcode for AVX2, it may need to be changed to (BitBlockWidth / 64)
+        for (uint64_t i = 0; i < b->getBitBlockWidth() / SIMD_WIDTH; i++){
             Value* mask = b->CreateExtractElement(maskVec, i);
             Value* shouldLoad = b->CreateICmpNE(mask, b->getInt64(0));
             Value* loadPtr = b->CreateSelect(shouldLoad, b->CreateGEP(basePtr, b->CreateExtractElement(offsetVec, i)), basePtr);
