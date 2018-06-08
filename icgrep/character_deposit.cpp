@@ -45,6 +45,7 @@ static cl::opt<char> characterToBeDeposit(cl::Positional, cl::desc("<character t
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(characterDepositFlags));
 static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::Required, cl::cat(characterDepositFlags));
 static cl::opt<bool> useSwizzledDeposit("swizzle-deposit", cl::desc("Use swizzle deletion"), cl::init(false), cl::cat(characterDepositFlags));
+static cl::opt<bool> UseStreamDepositCompiler("UseStreamDepositCompiler", cl::desc("Use the StreamDepositCompiler deletion"), cl::init(false), cl::cat(characterDepositFlags));
 
 
 typedef void (*MainFunctionType)(char * byte_data, size_t filesize);
@@ -131,13 +132,13 @@ StreamSetBuffer * generateBitStreamDeposit(ParabixDriver & pxDriver, StreamSetBu
 
     // Deposit
     StreamSetBuffer * depositedBits = pxDriver.addBuffer<DynamicBuffer>(iBuilder, iBuilder->getStreamSetTy(8), bufferBlocks, 1);
-    Kernel * pdepK = pxDriver.addKernelInstance<BitStreamPDEPKernel>(iBuilder, 8);
-    pxDriver.makeKernelCall(pdepK, {depositMarker, compressedBits}, {depositedBits});
-    
-    //StreamDepositCompiler depositCompiler(pxDriver, 8, 0, 8, bufferBlocks);
-    //depositCompiler.makeCall(depositMarker, compressedBits, depositedBits);
-
-
+    if (UseStreamDepositCompiler) {
+        StreamDepositCompiler depositCompiler(pxDriver, 8, 0, 8, bufferBlocks);
+        depositCompiler.makeCall(depositMarker, compressedBits, depositedBits);
+    } else {
+        Kernel * pdepK = pxDriver.addKernelInstance<BitStreamPDEPKernel>(iBuilder, 8);
+        pxDriver.makeKernelCall(pdepK, {depositMarker, compressedBits}, {depositedBits});
+    }
     return depositedBits;
 }
 
