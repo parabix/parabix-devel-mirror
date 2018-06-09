@@ -50,7 +50,7 @@ public:
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
     llvm::Value * mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift) override;
     llvm::Value * mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift) override;
-    llvm::Value * mvmd_shuffle(unsigned fw, llvm::Value * a, llvm::Value * shuffle_table) override;
+    llvm::Value * mvmd_shuffle(unsigned fw, llvm::Value * data_table, llvm::Value * index_vector) override;
     llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) override;
     llvm::Value * simd_pext(unsigned fw, llvm::Value * v, llvm::Value * extract_mask) override;
     llvm::Value * simd_pdep(unsigned fw, llvm::Value * v, llvm::Value * deposit_mask) override;
@@ -78,8 +78,8 @@ public:
     llvm::Value * mvmd_slli(unsigned fw, llvm::Value * a, unsigned shift) override;
     llvm::Value * mvmd_dslli(unsigned fw, llvm::Value * a, llvm::Value * b, unsigned shift) override;
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
-    llvm::Value * mvmd_shuffle(unsigned fw, llvm::Value * a, llvm::Value * shuffle_table) override;
-    llvm::Value * mvmd_shuffle2(unsigned fw, llvm::Value * a, llvm::Value * b, llvm::Value * shuffle_table) override;
+    llvm::Value * mvmd_shuffle(unsigned fw, llvm::Value * data_table, llvm::Value * index_vector) override;
+    llvm::Value * mvmd_shuffle2(unsigned fw, llvm::Value * table0, llvm::Value * table1, llvm::Value * index_vector) override;
     llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) override;
     llvm::Value * mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift) override;
     llvm::Value * mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift) override;

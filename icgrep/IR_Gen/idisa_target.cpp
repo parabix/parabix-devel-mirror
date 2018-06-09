@@ -36,6 +36,14 @@ Features getHostCPUFeatures() {
     return hostCPUFeatures;
 }
 
+bool SSSE3_available() {
+    StringMap<bool> features;
+    if (sys::getHostCPUFeatures(features)) {
+        return features.lookup("ssse3");
+    }
+    return false;
+}
+
 bool AVX2_available() {
     StringMap<bool> features;
     if (sys::getHostCPUFeatures(features)) {
@@ -86,6 +94,7 @@ KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C) {
     } else if (codegen::BlockSize == 64) {
         return new KernelBuilderImpl<IDISA_I64_Builder>(C, codegen::BlockSize, codegen::BlockSize);
     }
+    if (SSSE3_available()) return new KernelBuilderImpl<IDISA_SSSE3_Builder>(C, codegen::BlockSize, codegen::BlockSize);
     return new KernelBuilderImpl<IDISA_SSE2_Builder>(C, codegen::BlockSize, codegen::BlockSize);
 }
 #ifdef CUDA_ENABLED

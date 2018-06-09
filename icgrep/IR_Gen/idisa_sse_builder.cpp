@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -13,6 +13,7 @@ namespace IDISA {
 
 std::string IDISA_SSE_Builder::getBuilderUniqueName() { return mBitBlockWidth != 128 ? "SSE_" + std::to_string(mBitBlockWidth) : "SSE";}
 std::string IDISA_SSE2_Builder::getBuilderUniqueName() { return mBitBlockWidth != 128 ? "SSE2_" + std::to_string(mBitBlockWidth) : "SSE2";}
+std::string IDISA_SSSE3_Builder::getBuilderUniqueName() { return mBitBlockWidth != 128 ? "SSSE3_" + std::to_string(mBitBlockWidth) : "SSSE3";}
 
 Value * IDISA_SSE2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {    
     if ((fw == 16) && (mBitBlockWidth == 128)) {
@@ -20,7 +21,7 @@ Value * IDISA_SSE2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
         return CreateCall(packuswb_func, {simd_srli(16, a, 8), simd_srli(16, b, 8)});
     }
     // Otherwise use default logic.
-    return IDISA_Builder::hsimd_packh(fw, a, b);
+    return IDISA_SSE_Builder::hsimd_packh(fw, a, b);
 }
 
 Value * IDISA_SSE2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
@@ -153,7 +154,7 @@ std::pair<Value *, Value *> IDISA_SSE2_Builder::bitblock_advance(Value * a, Valu
     return std::pair<Value *, Value *>(shiftout, shifted);
 }
     
-Value * IDISA_SSE2_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * shuffle_table) {
+Value * IDISA_SSE2_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * index_vector) {
     if ((mBitBlockWidth == 128) && (fw == 64)) {
         // First create a vector with exchanged values of the 2 fields.
         Constant * idx[2] = {ConstantInt::get(getInt32Ty(), 1), ConstantInt::get(getInt32Ty(), 0)};
@@ -164,11 +165,11 @@ Value * IDISA_SSE2_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * shuffle
         Constant * xchg[2] = {ConstantInt::get(getInt64Ty(), 1), ConstantInt::get(getInt64Ty(), 0)};
         Value * xchg_vec = ConstantVector::get({xchg, 2});
         Constant * oneSplat = ConstantVector::getSplat(2, ConstantInt::get(getInt64Ty(), 1));
-        Value * exchange_mask = simd_eq(fw, simd_and(shuffle_table, oneSplat), xchg_vec);
+        Value * exchange_mask = simd_eq(fw, simd_and(index_vector, oneSplat), xchg_vec);
         Value * rslt = simd_xor(simd_and(changed, exchange_mask), a);
         return rslt;
     }
-    return IDISA_Builder::mvmd_shuffle(fw, a, shuffle_table);
+    return IDISA_SSE_Builder::mvmd_shuffle(fw, a, index_vector);
 }
 
 Value * IDISA_SSE_Builder::mvmd_compress(unsigned fw, Value * a, Value * selector) {
@@ -184,6 +185,82 @@ Value * IDISA_SSE_Builder::mvmd_compress(unsigned fw, Value * a, Value * selecto
         return simd_or(kept, shifted);
     }
     return IDISA_Builder::mvmd_compress(fw, a, selector);
+}
+
+Constant * IDISA_SSSE3_Builder::bit_interleave_byteshuffle_table(unsigned fw) {
+    const unsigned fieldCount = mBitBlockWidth/8;
+    if (fw > 2) llvm::report_fatal_error("bit_interleave_byteshuffle_table requires fw == 1 or fw == 2");
+    // Bit interleave using shuffle.
+    // Make a shuffle table that translates the lower 4 bits of each byte in
+    // order to spread out the bits: xxxxdcba => .d.c.b.a (fw = 1)
+    Constant * bit_interleave[fieldCount];
+    for (unsigned i = 0; i < fieldCount; i++) {
+        if (fw == 1)
+            bit_interleave[i] = getInt8((i & 1) | ((i & 2) << 1) | ((i & 4) << 2) | ((i & 8) << 3));
+        else bit_interleave[i] = getInt8((i & 3) | ((i & 0x0C) << 2));
+    }
+    return ConstantVector::get({bit_interleave, fieldCount});
+}
+
+Value * IDISA_SSSE3_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
+    if ((fw == 1) || (fw == 2)) {
+        Constant * interleave_table = bit_interleave_byteshuffle_table(fw);
+        // Merge the bytes.
+        Value * byte_merge = esimd_mergeh(8, a, b);
+        Value * low_bits = mvmd_shuffle(8, interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8))));
+        Value * high_bits = simd_slli(16, mvmd_shuffle(8, interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))), fw);
+        // For each 16-bit field, interleave the low bits of the two bytes.
+        low_bits = simd_or(simd_and(low_bits, simd_lomask(16)), simd_srli(16, low_bits, 8-fw));
+        // For each 16-bit field, interleave the high bits of the two bytes.
+        high_bits = simd_or(simd_and(high_bits, simd_himask(16)), simd_slli(16, high_bits, 8-fw));
+        return simd_or(low_bits, high_bits);
+    }
+    // Otherwise use default SSE logic.
+    return IDISA_SSE2_Builder::esimd_mergeh(fw, a, b);
+}
+
+Value * IDISA_SSSE3_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
+    if ((fw == 1) || (fw == 2)) {
+        Constant * interleave_table = bit_interleave_byteshuffle_table(fw);
+        // Merge the bytes.
+        Value * byte_merge = esimd_mergel(8, a, b);
+        Value * low_bits = mvmd_shuffle(8, interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8))));
+        Value * high_bits = simd_slli(16, mvmd_shuffle(8, interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))), fw);
+        // For each 16-bit field, interleave the low bits of the two bytes.
+        low_bits = simd_or(simd_and(low_bits, simd_lomask(16)), simd_srli(16, low_bits, 8-fw));
+        // For each 16-bit field, interleave the high bits of the two bytes.
+        high_bits = simd_or(simd_and(high_bits, simd_himask(16)), simd_slli(16, high_bits, 8-fw));
+        return simd_or(low_bits, high_bits);
+    }
+    // Otherwise use default SSE2 logic.
+    return IDISA_SSE2_Builder::esimd_mergel(fw, a, b);
+}
+
+llvm::Value * IDISA_SSSE3_Builder::mvmd_shuffle(unsigned fw, llvm::Value * data_table, llvm::Value * index_vector) {
+    if (mBitBlockWidth == 128 && fw > 8) {
+        // Create a table for shuffling with smaller field widths.
+        const unsigned fieldCount = mBitBlockWidth/fw;
+        Constant * idxMask = ConstantVector::getSplat(fieldCount, ConstantInt::get(getIntNTy(fw), fieldCount-1));
+        Value * idx = simd_and(index_vector, idxMask);
+        unsigned half_fw = fw/2;
+        unsigned field_count = mBitBlockWidth/half_fw;
+        // Build a ConstantVector of alternating 0 and 1 values.
+        Constant * Idxs[field_count];
+        for (unsigned int i = 0; i < field_count; i++) {
+            Idxs[i] = ConstantInt::get(getIntNTy(fw/2), i & 1);
+        }
+        Constant * splat01 = ConstantVector::get({Idxs, field_count});
+        
+        Value * half_fw_indexes = simd_or(idx, mvmd_slli(half_fw, idx, 1));
+        half_fw_indexes = simd_add(fw, simd_add(fw, half_fw_indexes, half_fw_indexes), splat01);
+        Value * rslt = mvmd_shuffle(half_fw, data_table, half_fw_indexes);
+        return rslt;
+    }
+    if (mBitBlockWidth == 128 && fw == 8) {
+        Value * shuf8Func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_ssse3_pshuf_b_128);
+        return CreateCall(shuf8Func, {fwCast(8, data_table), fwCast(8, simd_and(index_vector, simd_lomask(8)))});
+    }
+    return IDISA_SSE2_Builder::mvmd_shuffle(fw, data_table, index_vector);
 }
 
 

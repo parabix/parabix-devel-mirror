@@ -138,6 +138,12 @@ Value * IDISA_Builder::simd_gt(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_Builder::simd_ugt(unsigned fw, Value * a, Value * b) {
     if (fw == 1) return simd_and(a, simd_not(b));
+    if (fw < 8) {
+        Value * half_ugt = simd_ugt(fw/2, a, b);
+        Value * half_eq = simd_eq(fw/2, a, b);
+        Value * ugt_0 = simd_or(simd_srli(fw, half_ugt, fw/2), simd_and(half_ugt, simd_srli(fw, half_eq, fw/2)));
+        return simd_or(ugt_0, simd_slli(32, ugt_0, fw/2));
+    }
     if (fw < 8) report_fatal_error("Unsupported field width: ugt " + std::to_string(fw));
     return CreateSExt(CreateICmpUGT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
 }
@@ -234,8 +240,8 @@ Value * IDISA_Builder::mvmd_dsll(unsigned fw, Value * a, Value * b, Value * shif
     for (unsigned i = 0; i < field_count; i++) {
         Idxs[i] = ConstantInt::get(fwTy, i + field_count);
     }
-    Value * shuffle = simd_sub(fw, ConstantVector::get({Idxs, field_count}), simd_fill(fw, shift));
-    Value * rslt = mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), shuffle);
+    Value * shuffle_indexes = simd_sub(fw, ConstantVector::get({Idxs, field_count}), simd_fill(fw, shift));
+    Value * rslt = mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), shuffle_indexes);
     return rslt;
 }
 
@@ -592,17 +598,17 @@ Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned sh
     return CreateShuffleVector(fwCast(fw, b), fwCast(fw, a), ConstantVector::get({Idxs, field_count}));
 }
 
-Value * IDISA_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * shuffle_table) {
+Value * IDISA_Builder::mvmd_shuffle(unsigned fw, Value * table, Value * index_vector) {
     report_fatal_error("Unsupported field width: mvmd_shuffle " + std::to_string(fw));
 }
     
-Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * a, Value *b, Value * shuffle_table) {
+Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * table0, Value * table1, Value * index_vector) {
     //  Use two shuffles, with selection by the bit value within the shuffle_table.
     const auto field_count = mBitBlockWidth/fw;
     Constant * selectorSplat = ConstantVector::getSplat(field_count, ConstantInt::get(getIntNTy(fw), field_count));
-    Value * selectMask = simd_eq(fw, simd_and(shuffle_table, selectorSplat), selectorSplat);
-    Value * tbl = simd_and(shuffle_table, simd_not(selectorSplat));
-    Value * rslt= simd_or(simd_and(mvmd_shuffle(fw, a, tbl), simd_not(selectMask)), simd_and(mvmd_shuffle(fw, b, tbl), selectMask));
+    Value * selectMask = simd_eq(fw, simd_and(index_vector, selectorSplat), selectorSplat);
+    Value * tbl = simd_and(index_vector, simd_not(selectorSplat));
+    Value * rslt= simd_or(simd_and(mvmd_shuffle(fw, table0, index_vector), simd_not(selectMask)), simd_and(mvmd_shuffle(fw, table1, index_vector), selectMask));
     return rslt;
 }
     

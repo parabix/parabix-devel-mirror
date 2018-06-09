@@ -4,7 +4,6 @@
 /*
  *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
- *  icgrep is a trademark of International Characters.
  */
 
 #include <IR_Gen/idisa_builder.h>
@@ -39,8 +38,28 @@ public:
     llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift) override;
-    llvm::Value * mvmd_shuffle(unsigned fw, llvm::Value * a, llvm::Value * shuffle_table) override;
+    llvm::Value * mvmd_shuffle(unsigned fw, llvm::Value * data_table, llvm::Value * index_vector) override;
     ~IDISA_SSE2_Builder() {}
+};
+
+class IDISA_SSSE3_Builder : public IDISA_SSE2_Builder {
+public:
+    
+    IDISA_SSSE3_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned stride)
+    : IDISA_Builder(C, bitBlockWidth, stride)
+    , IDISA_SSE2_Builder(C, bitBlockWidth, stride)
+    {
+
+    }
+    
+    virtual std::string getBuilderUniqueName() override;
+    llvm::Value * esimd_mergeh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * esimd_mergel(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * mvmd_shuffle(unsigned fw, llvm::Value * data_table, llvm::Value * index_vector) override;
+    ~IDISA_SSSE3_Builder() {}
+
+private:
+    llvm::Constant * bit_interleave_byteshuffle_table(unsigned fw);
 };
 
 }
