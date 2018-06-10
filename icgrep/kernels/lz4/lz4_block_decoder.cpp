@@ -38,7 +38,7 @@ Binding{iBuilder->getInt1Ty(), "hasSkipHeader"},
 Binding{iBuilder->getSizeTy(), "previousOffset"},
 Binding{iBuilder->getInt1Ty(), "reachFinalBlock"},
 
-Binding{iBuilder->getInt1Ty(), "pendingIsCompressed"},
+Binding{iBuilder->getInt8Ty(), "pendingIsCompressed"},
 Binding{iBuilder->getInt64Ty(), "pendingBlockStart"},
 Binding{iBuilder->getInt64Ty(), "pendingBlockEnd"},
 }) {
@@ -93,7 +93,8 @@ void LZ4BlockDecoderNewKernel::generateDoSegmentMethod(const std::unique_ptr<Ker
 
     appendOutput(iBuilder, phiIsCompressed, phiBlockStart, phiBlockEnd);
 
-    phiIsCompressed->addIncoming(iBuilder->getFalse(), storeOutputBlock);
+
+    phiIsCompressed->addIncoming(iBuilder->getInt8(0), storeOutputBlock);
     phiBlockStart->addIncoming(INT64_0, storeOutputBlock);
     phiBlockEnd->addIncoming(INT64_0, storeOutputBlock);
     sOffset->addIncoming(sOffset, storeOutputBlock);

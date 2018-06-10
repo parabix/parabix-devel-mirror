@@ -84,9 +84,12 @@ namespace kernel {
         void generateSequentialDecompression(const std::unique_ptr<KernelBuilder> &b, llvm::Value* startBlockDataIndex, llvm::Value* endBlockDataIndex);
 
 
+        llvm::Value* simdFetchData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
         llvm::Value* simdFetchByteData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
-        llvm::Value* simdFetchByteDataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
-        llvm::Value* simdFetchByteDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
+        llvm::Value* simdFetchDataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value *basePtr,
+                                           llvm::Value *offsetVec, llvm::Value *mask);
+        llvm::Value* simdFetchDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value *basePtr,
+                                         llvm::Value *offsetVec, llvm::Value *mask);
 
         size_t mOutputBlockSize;
     };

@@ -113,8 +113,6 @@ namespace kernel{
     std::pair<Value *, Value *> LZ4ParallelByteStreamAioKernel::simdProcessBlockBoundary(
             const std::unique_ptr<KernelBuilder> &b, Value *beginTokenPosVec, Value *lz4BlockEndVec, Value* initOutputPosVec
     ) {
-        Function *gatherFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256); // Maybe it will be better to use <4 * i32> version
-
         // Constant
         Value* BIT_BLOCK_0 = ConstantVector::getNullValue(b->getBitBlockType());
         Value* BIT_BLOCK_1 = b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0x1));
@@ -292,23 +290,13 @@ namespace kernel{
         matchLength = b->CreateAnd(matchLength, hasMatchPartMask);
 
 
-
-        Value* matchOffsetVec =  b->CreateCall(
-                gatherFunc,
-                {
-                        UndefValue::get(b->getBitBlockType()),
-                        bytePtrBase,
-                        b->CreateTrunc(b->CreateSub(matchOffsetBeginPosVec, b->simd_fill(SIMD_WIDTH, firstTokenPos)), VectorType::get(b->getInt32Ty(), b->getBitBlockWidth() / SIMD_WIDTH)),
-                        hasMatchPartMask,
-                        b->getInt8(1)
-                }
+        Value* matchOffsetVec = this->simdFetchData(
+                b,
+                bytePtrBase,
+                b->CreateSub(matchOffsetBeginPosVec, b->simd_fill(SIMD_WIDTH, firstTokenPos)),
+                hasMatchPartMask
         );
-        matchOffsetVec = b->CreateAnd(matchOffsetVec, notFinishMask);
         matchOffsetVec = b->CreateAnd(matchOffsetVec, BIT_BLOCK_FFFF);
-
-//        Value* matchOffsetVec = this->simdFetchByteData(b, byteRawInputPtr, matchOffsetBeginPosVec, b->CreateAnd(hasMatchPartMask, notFinishMask));
-
-
 
         this->handleSimdMatchCopy(b, matchOffsetVec, matchLength, outputPosAfterLiteralCpy);
 
@@ -367,7 +355,8 @@ namespace kernel{
 
 
         Value* hasRemaining = b->simd_ult(SIMD_WIDTH, phiCursorVec, blockEndVec);
-        hasRemaining = b->CreateICmpNE(b->CreateBitCast(hasRemaining, b->getIntNTy(256)), Constant::getNullValue(b->getIntNTy(256)));
+
+        hasRemaining = b->CreateICmpNE(b->CreateBitCast(hasRemaining, b->getIntNTy(b->getBitBlockWidth())), Constant::getNullValue(b->getIntNTy(b->getBitBlockWidth())));
 
         b->CreateCondBr(hasRemaining, processBody, exitBlock);
 
@@ -1126,18 +1115,34 @@ namespace kernel{
         b->setScalarField("outputPos", b->CreateAdd(outputPos, matchLength));
     }
 
-    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
+    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
+//        return this->simdFetchDataByLoop(b, basePtr, offsetVec, mask);
         if (AVX2_available()) {
-            return this->simdFetchByteDataByGather(b, basePtr, offsetVec, mask);
+            return this->simdFetchDataByGather(b, basePtr, offsetVec, mask);
         } else {
-            return this->simdFetchByteDataByLoop(b, basePtr, offsetVec, mask);
+            return this->simdFetchDataByLoop(b, basePtr, offsetVec, mask);
         }
     }
+    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
+        return b->CreateAnd(
+                this->simdFetchData(b, basePtr, offsetVec, mask),
+                b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0xff))
+        );
+    }
 
-    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteDataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
-        Value* BIT_BLOCK_FF = b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0xff));
-//        Function *gatherFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256);
+    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchDataByGather(const std::unique_ptr<KernelBuilder> &b,
+                                                                       llvm::Value *basePtr, llvm::Value *offsetVec,
+                                                                       llvm::Value *mask) {
+
+//        Function *gatherFnc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256);
         Function *gatherFunc2 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_d);
+        Function *gatherFunc3 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_d_256);
+
+//        gatherFunc2->dump();
+//        gatherFunc3->dump();
+//        Function *gatherFunc4 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx512_gather_qpi_512);
+
+        Function *gatherFunc = AVX512BW_available() ? gatherFunc3 : gatherFunc2;
 
         Value* firstOffset = b->CreateExtractElement(offsetVec, (uint64_t)0);
 
@@ -1156,7 +1161,7 @@ namespace kernel{
 
         ////
         Value* tokenValuesVec =  b->CreateCall(
-                gatherFunc2,
+                gatherFunc,
                 {
                         UndefValue::get(i32BitBlockTy),
                         b->CreateGEP(basePtr, firstOffset),
@@ -1166,22 +1171,21 @@ namespace kernel{
                 }
         );
         tokenValuesVec = b->CreateZExt(tokenValuesVec, b->getBitBlockType());
-        /////
-        
         tokenValuesVec = b->CreateAnd(tokenValuesVec, mask);
-        tokenValuesVec = b->CreateAnd(tokenValuesVec, BIT_BLOCK_FF);
+
         return tokenValuesVec;
     }
 
-    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* maskVec) {
+    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchDataByLoop(const std::unique_ptr<KernelBuilder> &b,
+                                                                     llvm::Value *basePtr, llvm::Value *offsetVec,
+                                                                     llvm::Value *maskVec) {
         Value* retVec = ConstantVector::getNullValue(b->getBitBlockType());
 
         for (uint64_t i = 0; i < b->getBitBlockWidth() / SIMD_WIDTH; i++){
             Value* mask = b->CreateExtractElement(maskVec, i);
             Value* shouldLoad = b->CreateICmpNE(mask, b->getInt64(0));
             Value* loadPtr = b->CreateSelect(shouldLoad, b->CreateGEP(basePtr, b->CreateExtractElement(offsetVec, i)), basePtr);
-            Value* loadValue = b->CreateZExt(b->CreateLoad(loadPtr), b->getInt64Ty());
-
+            Value* loadValue = b->CreateZExt(b->CreateLoad(b->CreatePointerCast(loadPtr, b->getInt64Ty()->getPointerTo())), b->getInt64Ty());
             Value* finalValue = b->CreateSelect(shouldLoad, loadValue, b->getInt64(0));
             retVec = b->CreateInsertElement(retVec, finalValue, i);
         }

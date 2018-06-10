@@ -10,6 +10,7 @@ namespace llvm { class LLVMContext; }
 namespace kernel { class KernelBuilder; }
 
 extern bool AVX2_available();
+extern bool AVX512BW_available();
 
 namespace IDISA {
     
