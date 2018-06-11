@@ -184,10 +184,10 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     // Main Loop
     b->SetInsertPoint(expandLoop);
     PHINode * blockNoPhi = b->CreatePHI(b->getSizeTy(), 2);
-    PHINode * pendingItemsPhi = b->CreatePHI(b->getSizeTy(), 2);
+    PHINode * pendingOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
     PHINode * pendingDataPhi[mSelectedStreamCount];
     blockNoPhi->addIncoming(ZERO, entry);
-    pendingItemsPhi->addIncoming(sourceOffset, entry);
+    pendingOffsetPhi->addIncoming(sourceOffset, entry);
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
         pendingDataPhi[i] = b->CreatePHI(b->getBitBlockType(), 2);
         pendingDataPhi[i]->addIncoming(pendingData[i], entry);
@@ -196,20 +196,21 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     // The source stream may not be positioned at a block boundary.  Partial data
     // has been saved in the kernel state, determine the next full block number
     // for loading source streams.
-    Value * pendingBlockEnd = b->CreateAdd(pendingItemsPhi, bw_sub1Const);
+    Value * pendingBlockEnd = b->CreateAdd(pendingOffsetPhi, bw_sub1Const);
     Value * srcBlockNo = b->CreateUDiv(pendingBlockEnd, bwConst);
     
     // Calculate the field values and offsets we need for assembling a
     // a full block of source bits.  Assembly will use the following operations.
-    // A = b->simd_srl(fw, b->mvmd_dsll(fw, source, pending, field_offset_lo), bit_offset);
-    // B = b->simd_sll(fw, b->mvmd_dsll(fw, source, pending, field_offset_hi), shift_fwd);
+    // A = b->simd_srlv(fw, b->mvmd_dsll(fw, source, pending, field_offset_lo), bit_offset);
+    // B = b->simd_sllv(fw, b->mvmd_dsll(fw, source, pending, field_offset_hi), shift_fwd);
     // all_source_bits = simd_or(A, B);
-    Value * pendingOffset = b->CreateURem(pendingItemsPhi, bwConst);
-    Value * field_offset_lo =  b->CreateUDiv(pendingOffset, fwConst);
+    Value * pendingOffset = b->CreateURem(pendingOffsetPhi, bwConst);
+    Value * pendingItems = b->CreateURem(b->CreateSub(bwConst, pendingOffset), bwConst);
+    Value * field_offset_lo = b->CreateUDiv(b->CreateAdd(pendingItems, fw_sub1Const), fwConst);
     Value * bit_offset = b->simd_fill(fw, b->CreateURem(pendingOffset, fwConst));
     // Carefully avoid a shift by the full fieldwith (which gives a poison value).
     // field_offset_lo + 1 unless the bit_offset is 0, in which case it is just field_offset_lo.
-    Value * field_offset_hi =  b->CreateUDiv(b->CreateAdd(pendingOffset, fw_sub1Const), fwConst);
+    Value * field_offset_hi =  b->CreateUDiv(pendingItems, fwConst);
     // fw - bit_offset, unless bit_offset is 0, in which case, the shift_fwd is 0.
     Value * shift_fwd = b->CreateURem(b->CreateSub(fwSplat, bit_offset), fwSplat);
 
@@ -234,24 +235,25 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * source_shift_hi = b->CreateAnd(b->CreateSub(fwSplat, source_shift_lo), fw_sub1Splat);
 
     // Now load and process source streams.
+    Value * source[mSelectedStreamCount];
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
-        Value * source = b->loadInputStreamBlock("source", b->getInt32(mSelectedStreamBase + i), srcBlockNo);
-        Value * A = b->simd_srlv(fw, b->mvmd_dsll(fw, source, pendingDataPhi[i], field_offset_lo), bit_offset);
-        Value * B = b->simd_sllv(fw, b->mvmd_dsll(fw, source, pendingDataPhi[i], field_offset_hi), shift_fwd);
+        source[i] = b->loadInputStreamBlock("source", b->getInt32(mSelectedStreamBase + i), srcBlockNo);
+        Value * A = b->simd_srlv(fw, b->mvmd_dsll(fw, source[i], pendingDataPhi[i], field_offset_lo), bit_offset);
+        Value * B = b->simd_sllv(fw, b->mvmd_dsll(fw, source[i], pendingDataPhi[i], field_offset_hi), shift_fwd);
         Value * full_source_block = b->simd_or(A, B);
         Value * C = b->simd_srlv(fw, b->mvmd_shuffle(fw, full_source_block, source_field_lo), source_shift_lo);
         Value * D = b->simd_sllv(fw, b->mvmd_shuffle(fw, full_source_block, source_field_hi), source_shift_hi);
         Value * output = b->bitCast(b->simd_or(C, D));
         b->storeOutputStreamBlock("output", b->getInt32(i), blockNoPhi, output);
-        pendingDataPhi[i]->addIncoming(source, expandLoop);
+        pendingDataPhi[i]->addIncoming(source[i], expandLoop);
     }
     //
     // Update loop control Phis for the next iteration.
     //
     Value * nextBlk = b->CreateAdd(blockNoPhi, b->getSize(1));
     blockNoPhi->addIncoming(nextBlk, expandLoop);
-    Value * newPending = b->CreateAdd(pendingItemsPhi, blockPopCount);
-    pendingItemsPhi->addIncoming(newPending, expandLoop);
+    Value * newPending = b->CreateAdd(pendingOffsetPhi, blockPopCount);
+    pendingOffsetPhi->addIncoming(newPending, expandLoop);
     //
     // Now continue the loop if there are more blocks to process.
     Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
