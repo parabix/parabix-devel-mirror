@@ -150,9 +150,6 @@ StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuild
 , mFieldWidth(fieldWidth)
 , mSelectedStreamBase(selectedStreamBase)
 , mSelectedStreamCount(selectedStreamCount) {
-    for (unsigned i = 0; i < mSelectedStreamCount; i++) {
-        addScalar(kb->getBitBlockType(), "pendingSourceBlock_" + std::to_string(mSelectedStreamBase + i));
-    }
 }
 
 void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfBlocks) {
@@ -177,7 +174,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * sourceOffset = b->CreateURem(processedSourceItems, bwConst);
     std::vector<Value *> pendingData(mSelectedStreamCount);
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
-        pendingData[i] = b->getScalarField("pendingSourceBlock_" + std::to_string(mSelectedStreamBase + i));
+        pendingData[i] = b->loadInputStreamBlock("source", b->getInt32(mSelectedStreamBase + i), ZERO);
     }
     
     b->CreateBr(expandLoop);
@@ -260,10 +257,6 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     b->CreateCondBr(moreToDo, expandLoop, expansionDone);
     
     b->SetInsertPoint(expansionDone);
-    // Update kernel state.
-    for (unsigned i = 0; i < mSelectedStreamCount; i++) {
-        b->setScalarField("pendingSourceBlock_" + std::to_string(mSelectedStreamBase + i), b->bitCast(pendingDataPhi[i]));
-    }
 }
 
 FieldDepositKernel::FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
