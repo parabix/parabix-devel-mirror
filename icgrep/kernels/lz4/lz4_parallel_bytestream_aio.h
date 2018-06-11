@@ -58,10 +58,6 @@ namespace kernel {
         void generateSimdSequentialLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStartVec,
                                                llvm::Value *literalLengthVec, llvm::Value *outputPosVec);
 
-        void generateSimdSequentialLiteralCopyWithSimdCalculation(const std::unique_ptr<KernelBuilder> &b,
-                                                                  llvm::Value *literalStartVec,
-                                                                  llvm::Value *literalLengthVec,
-                                                                  llvm::Value *outputPosVec);
         void generateSimdLiteralCopyByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStartVec,
                                               llvm::Value *literalLengthVec, llvm::Value *outputPosVec);
         void generateSimdLiteralCopyByMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStartVec,
@@ -86,10 +82,16 @@ namespace kernel {
 
         llvm::Value* simdFetchData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
         llvm::Value* simdFetchByteData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask);
-        llvm::Value* simdFetchDataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value *basePtr,
-                                           llvm::Value *offsetVec, llvm::Value *mask);
+        llvm::Value* simdFetchI64DataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value *basePtr,
+                                              llvm::Value *offsetVec, llvm::Value *mask);
+        llvm::Value* simdFetchI32DataByGather(const std::unique_ptr<KernelBuilder> &b, llvm::Value *basePtr,
+                                              llvm::Value *offsetVec, llvm::Value *mask);
         llvm::Value* simdFetchDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value *basePtr,
                                          llvm::Value *offsetVec, llvm::Value *mask);
+
+        void simdPutData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask /*i256*/);
+        void simdPutDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask /*i256*/);
+        void simdPutDataByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask /*i256*/);
 
         size_t mOutputBlockSize;
     };

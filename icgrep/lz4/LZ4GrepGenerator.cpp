@@ -627,7 +627,7 @@ void LZ4GrepGenerator::generateParallelAioPipeline(re::RE* regex) {
 
 //    Kernel * outK = mPxDriver.addKernelInstance<FileSink>(iBuilder, 8);
 //    outK->setInitialArguments({iBuilder->GetString("/Users/wxy325/developer/LZ4-sample-files/workspace/lz4d-normal/8k_.txt")});
-//    mPxDriver.makeKernelCall(outK, {decompressedStream}, {});
+//    mPxDriver.makeKernelCall(outK, {decompressedByteStream}, {});
 
     kernel::Kernel * matchCountK = mPxDriver.addKernelInstance<kernel::PopcountKernel>(iBuilder);
     mPxDriver.makeKernelCall(matchCountK, {Matches}, {});

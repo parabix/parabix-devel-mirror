@@ -777,7 +777,8 @@ namespace kernel{
     }
 
     void LZ4ParallelByteStreamAioKernel::handleSimdLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* literalStartVec, llvm::Value* literalLengthVec, llvm::Value* outputPosVec) {
-        this->generateSimdSequentialLiteralCopy(b, literalStartVec, literalLengthVec, outputPosVec);
+        this->generateSimdLiteralCopyByScatter(b, literalStartVec, literalLengthVec, outputPosVec);
+//        this->generateSimdSequentialLiteralCopy(b, literalStartVec, literalLengthVec, outputPosVec);
 //        this->generateSequentialLiteralCopyWithSimdCalculation(b, literalStartVec, literalLengthVec, outputPosVec);
 //        this->generateLiteralCopyByMemcpy(b, literalStartVec, literalLengthVec, outputPosVec);
     }
@@ -857,13 +858,14 @@ namespace kernel{
             b->SetInsertPoint(exitBlock);
         }
     }
+
     void LZ4ParallelByteStreamAioKernel::generateOverwritingMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *inputBasePtr,
                                    llvm::Value *outputBasePtr, llvm::Value *copyBytes, llvm::PointerType *targetPtrTy,
                                    llvm::Value* stepSize) {
-        unsigned targetPtrBitWidth = targetPtrTy->getElementType()->getIntegerBitWidth();
+//        unsigned targetPtrBitWidth = targetPtrTy->getElementType()->getIntegerBitWidth();
 
         Constant * SIZE_0 = b->getSize(0);
-        Constant * SIZE_1 = b->getSize(1);
+//        Constant * SIZE_1 = b->getSize(1);
         PointerType* i8PtrTy = b->getInt8PtrTy();
 
         BasicBlock* entryBlock = b->GetInsertBlock();
@@ -981,46 +983,102 @@ namespace kernel{
                                                                           llvm::Value *literalStartVec,
                                                                           llvm::Value *literalLengthVec,
                                                                           llvm::Value *outputPosVec) {
-        // TODO
-    }
-
-    void LZ4ParallelByteStreamAioKernel::generateSimdSequentialLiteralCopyWithSimdCalculation(
-            const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStartVec, llvm::Value *literalLengthVec,
-            llvm::Value *outputPosVec) {
-        // TODO Incomplete
-
-        /*
-        Value* outputCapacity = b->getCapacity("outputStream");
-        Value* outputPosRemVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(outputCapacity))));
-        Value* outputPosRemOutputBlockSize = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(b->getIntN(SIMD_WIDTH, mOutputBlockSize)))));
+        // ---- EntryBlock
+        BasicBlock* entryBlock = b->GetInsertBlock();
+        BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
+        BasicBlock* i64LiteralCopyBlock = b->CreateBasicBlock("i64LiteralCopyBlock");
+        BasicBlock* i8LiteralCopyBlock = b->CreateBasicBlock("i8LiteralCopyBlock");
 
 
+
+
+
+        llvm::Value* initCopiedLength = ConstantVector::getNullValue(literalLengthVec->getType());
 
         Value* inputBasePtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
         Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream", b->getSize(0)), b->getInt8PtrTy());
 
-        ////
-        // ---- i64LiteralCopy
-        BasicBlock* i64LiteralCopyCon = b->CreateBasicBlock("literalCopyCon");
-        BasicBlock* i64LiteralCopyBody = b->CreateBasicBlock("literalCopyBody");
-        BasicBlock* i64LiteralCopyExit = b->CreateBasicBlock("literalCopyExit");
+        Value* outputCapacity = b->getCapacity("outputStream");
+        Value* outputPosRemVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(outputCapacity))));
+        Value* outputPosRemBlockSizeVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(b->getIntN(SIMD_WIDTH, mOutputBlockSize)))));
+        Value* remainingBlockSizeVec = b->simd_sub(SIMD_WIDTH, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, mOutputBlockSize)), outputPosRemBlockSizeVec);
 
-        b->CreateBr(i64LiteralCopyCon);
+        Value* possibleExceedBuffer = b->simd_uge(SIMD_WIDTH, b->simd_add(SIMD_WIDTH, literalLengthVec, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 8))), remainingBlockSizeVec);
+        // true ffff, false 0000
 
-        // ---- i64LiteralCopyCon
-        b->SetInsertPoint(i64LiteralCopyCon);
+        // TODO handle literalLengthVec == 0
+
+        b->CreateUnlikelyCondBr(
+                b->CreateICmpNE(b->CreateBitCast(possibleExceedBuffer, b->getIntNTy(b->getBitBlockWidth())), b->getIntN(b->getBitBlockWidth(), 0)),
+                i8LiteralCopyBlock,
+                i64LiteralCopyBlock
+        );
+
+        // ---- i8LiteralCopyBlock
+        b->SetInsertPoint(i8LiteralCopyBlock);
+        this->generateSimdSequentialLiteralCopy(b, literalStartVec, literalLengthVec, outputPosVec);
+        b->CreateBr(exitBlock);
+
+        // ---- i64LiteralCopyBlock
+        b->SetInsertPoint(i64LiteralCopyBlock);
+
+        BasicBlock* i64LiteralCopyConBlock = b->CreateBasicBlock("i64LiteralCopyConBlock");
+        BasicBlock* i64LiteralCopyBodyBlock = b->CreateBasicBlock("i64LiteralCopyBodyBlock");
 
 
-        // ---- literalCopyBody
-        b->SetInsertPoint(i64LiteralCopyBody);
+        b->CreateBr(i64LiteralCopyConBlock);
 
-        // ---- literalCopyExit
-        b->SetInsertPoint(i64LiteralCopyExit);
+        // ---- i64LiteralCopyConBlock
+        b->SetInsertPoint(i64LiteralCopyConBlock);
+        PHINode* phiCopiedLength = b->CreatePHI(initCopiedLength->getType(), 2);
+        phiCopiedLength->addIncoming(initCopiedLength, i64LiteralCopyBlock);
+
+        Value* shouldCopiedBitBlock = b->simd_ult(SIMD_WIDTH, phiCopiedLength, literalLengthVec);
+//        b->CallPrintRegister("phiCopiedLength", phiCopiedLength);
+//        b->CallPrintRegister("literalLengthVec", literalLengthVec);
+//        b->CallPrintRegister("shouldCopiedBitBlock", shouldCopiedBitBlock);
+        Value* shouldCopiedI1 = b->CreateICmpNE(
+                b->CreateBitCast(shouldCopiedBitBlock, b->getIntNTy(b->getBitBlockWidth())),
+                b->getIntN(b->getBitBlockWidth(), 0)
+        );
 
 
-        //// ---- i8LiteralCopyCon
-         */
+        b->CreateCondBr(shouldCopiedI1, i64LiteralCopyBodyBlock, exitBlock);
+
+
+        // ---- i64LiteralCopyBodyBlock
+        b->SetInsertPoint(i64LiteralCopyBodyBlock);
+        Value* literalData = this->simdFetchI64DataByGather(b, inputBasePtr, b->simd_add(SIMD_WIDTH, literalStartVec, phiCopiedLength), shouldCopiedBitBlock);
+
+        this->simdPutData(
+                b,
+                outputBasePtr,
+                b->simd_add(SIMD_WIDTH, outputPosRemVec, phiCopiedLength),
+                literalData,
+                shouldCopiedBitBlock
+        );
+//        b->CallPrintRegister("phiCopiedLength", phiCopiedLength);
+        phiCopiedLength->addIncoming(
+                b->simd_add(
+                        SIMD_WIDTH,
+                        phiCopiedLength,
+                        b->simd_and(
+                                b->simd_fill(
+                                        SIMD_WIDTH,
+                                        b->getIntN(SIMD_WIDTH, 8)
+                                ),
+                                shouldCopiedBitBlock
+                        )
+
+                ),
+                b->GetInsertBlock()
+        );
+
+        b->CreateBr(i64LiteralCopyConBlock);
+
+        b->SetInsertPoint(exitBlock);
     }
+
 
     void LZ4ParallelByteStreamAioKernel::handleLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                                    llvm::Value *literalLength, llvm::Value* outputPos) {
@@ -1118,11 +1176,14 @@ namespace kernel{
     llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
 //        return this->simdFetchDataByLoop(b, basePtr, offsetVec, mask);
         if (AVX2_available()) {
-            return this->simdFetchDataByGather(b, basePtr, offsetVec, mask);
+            return this->simdFetchI32DataByGather(b, basePtr, offsetVec, mask);
         } else {
             return this->simdFetchDataByLoop(b, basePtr, offsetVec, mask);
         }
     }
+
+
+
     llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
         return b->CreateAnd(
                 this->simdFetchData(b, basePtr, offsetVec, mask),
@@ -1130,42 +1191,24 @@ namespace kernel{
         );
     }
 
-    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchDataByGather(const std::unique_ptr<KernelBuilder> &b,
-                                                                       llvm::Value *basePtr, llvm::Value *offsetVec,
-                                                                       llvm::Value *mask) {
+    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchI32DataByGather(const std::unique_ptr<KernelBuilder> &b,
+                                                                          llvm::Value *basePtr, llvm::Value *offsetVec,
+                                                                          llvm::Value *mask) {
 
-//        Function *gatherFnc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256);
         Function *gatherFunc2 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_d);
         Function *gatherFunc3 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_d_256);
 
-//        gatherFunc2->dump();
-//        gatherFunc3->dump();
-//        Function *gatherFunc4 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx512_gather_qpi_512);
-
         Function *gatherFunc = AVX512BW_available() ? gatherFunc3 : gatherFunc2;
-
-        Value* firstOffset = b->CreateExtractElement(offsetVec, (uint64_t)0);
 
         Type* i32BitBlockTy = VectorType::get(b->getInt32Ty(), b->getBitBlockWidth() / SIMD_WIDTH);
 
-//        Value* tokenValuesVec =  b->CreateCall(
-//                gatherFunc,
-//                {
-//                        UndefValue::get(b->getBitBlockType()),
-//                        b->CreateGEP(basePtr, firstOffset),
-//                        b->CreateTrunc(b->CreateSub(offsetVec, b->simd_fill(SIMD_WIDTH, firstOffset)), VectorType::get(b->getInt32Ty(), 4)),
-//                        mask,
-//                        b->getInt8(1)
-//                }
-//        );
 
-        ////
         Value* tokenValuesVec =  b->CreateCall(
                 gatherFunc,
                 {
                         UndefValue::get(i32BitBlockTy),
-                        b->CreateGEP(basePtr, firstOffset),
-                        b->CreateTrunc(b->CreateSub(offsetVec, b->simd_fill(SIMD_WIDTH, firstOffset)), i32BitBlockTy),
+                        basePtr,
+                        b->CreateTrunc(offsetVec, i32BitBlockTy),
                         b->CreateTrunc(mask, i32BitBlockTy),
                         b->getInt8(1)
                 }
@@ -1174,6 +1217,42 @@ namespace kernel{
         tokenValuesVec = b->CreateAnd(tokenValuesVec, mask);
 
         return tokenValuesVec;
+    }
+
+    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchI64DataByGather(const std::unique_ptr<KernelBuilder> &b,
+                                                                          llvm::Value *basePtr, llvm::Value *offsetVec,
+                                                                          llvm::Value *mask) {
+        Type* i32BitBlockTy = VectorType::get(b->getInt32Ty(), b->getBitBlockWidth() / SIMD_WIDTH);
+        if (AVX512BW_available()) {
+            // AVX512 gather use i8 mask
+            //declare <8 x double> @llvm.x86.avx512.gather.dpd.512(<8 x double>, i8*, <8 x i32>, i8, i32) #1
+            Function *gatherFunc512 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx512_gather_dpd_512);
+            return b->CreateCall(
+                    gatherFunc512,
+                    {
+                            UndefValue::get(b->getBitBlockType()),
+                            basePtr,
+                            b->CreateTrunc(offsetVec, i32BitBlockTy),
+                            b->CreateTruncOrBitCast(b->hsimd_signmask(SIMD_WIDTH, mask), b->getInt8Ty()),
+                            b->getInt32(1)
+                    });
+            // return result & i512Mask ?
+        } else {
+            // AVX2 gather use i256 mask
+            Function *gatherFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256);
+            Value* tokenValuesVec =  b->CreateCall(
+                    gatherFunc,
+                    {
+                            UndefValue::get(b->getBitBlockType()),
+                            basePtr,
+                            b->CreateTrunc(offsetVec, VectorType::get(b->getInt32Ty(), 4)),
+                            mask,
+                            b->getInt8(1)
+                    }
+            );
+            tokenValuesVec = b->CreateAnd(tokenValuesVec, mask);
+            return tokenValuesVec;
+        }
     }
 
     llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchDataByLoop(const std::unique_ptr<KernelBuilder> &b,
@@ -1191,6 +1270,62 @@ namespace kernel{
         }
 
         return retVec;
+    }
+
+    void LZ4ParallelByteStreamAioKernel::simdPutData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask) {
+        if (AVX512BW_available()) {
+            this->simdPutDataByScatter(b, basePtr, offsetVec, values, mask);
+        } else {
+            this->simdPutDataByLoop(b, basePtr, offsetVec, values, mask);
+        }
+
+
+    }
+
+    void LZ4ParallelByteStreamAioKernel::simdPutDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask) {
+
+        Value* shouldStoreVec = b->CreateICmpNE(mask, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0)));
+
+        for (unsigned i = 0 ; i < b->getBitBlockWidth() / SIMD_WIDTH; i++) {
+            BasicBlock* conBlock = b->CreateBasicBlock("simdPutDataByLoopCon");
+            BasicBlock* bodyBlock = b->CreateBasicBlock("simdPutDataByLoopBody");
+            BasicBlock* exitBlock = b->CreateBasicBlock("simdPutDataByLoopExit");
+
+            b->CreateBr(conBlock);
+
+            // ---- ConBlock
+            b->SetInsertPoint(conBlock);
+            Value* shouldStore = b->CreateExtractElement(shouldStoreVec, i);
+            b->CreateCondBr(shouldStore, bodyBlock, exitBlock);
+
+            // ---- BodyBlock
+            b->SetInsertPoint(bodyBlock);
+            b->CreateStore(
+                    b->CreateExtractElement(values, i),
+                    b->CreatePointerCast(b->CreateGEP(basePtr, b->CreateExtractElement(offsetVec, i)), b->getIntNTy(SIMD_WIDTH)->getPointerTo())
+            );
+
+            b->CreateBr(exitBlock);
+
+            // ---- ExitBlock
+            b->SetInsertPoint(exitBlock);
+
+        }
+    }
+    void LZ4ParallelByteStreamAioKernel::simdPutDataByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask) {
+        Function *scatterFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx512_scatter_dpq_512);
+        //declare void @llvm.x86.avx512.scatter.dpq.512(i8*, i8, <8 x i32>, <8 x i64>, i32)
+
+        Value* i8Mask = b->CreateTruncOrBitCast(b->hsimd_signmask(SIMD_WIDTH, mask), b->getIntNTy(b->getBitBlockWidth() / SIMD_WIDTH));
+
+        b->CreateCall(scatterFunc, {
+                basePtr,
+                i8Mask,
+                b->CreateTrunc(offsetVec, VectorType::get(b->getInt32Ty(), b->getBitBlockWidth() / SIMD_WIDTH)),
+                values,
+                b->getInt32(1)
+        });
+
     }
 
 }
