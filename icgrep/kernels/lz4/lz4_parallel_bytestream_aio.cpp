@@ -1114,7 +1114,7 @@ namespace kernel{
         if (AVX512BW_available()) {
             // AVX512 gather use i8 mask
             //declare <8 x double> @llvm.x86.avx512.gather.dpq.512(<8 x i64>, i8*, <8 x i32>, i8, i32) #1
-            Function *gatherFunc512 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx512_gather_dpd_512);
+            Function *gatherFunc512 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx512_gather_dpq_512);
             return b->CreateCall(
                     gatherFunc512,
                     {
