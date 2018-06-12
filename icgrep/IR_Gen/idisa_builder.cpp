@@ -13,6 +13,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/TypeBuilder.h>
 #include <toolchain/toolchain.h>
+#include <unistd.h>
 
 using namespace llvm;
 
@@ -57,6 +58,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         BasicBlock * entry = BasicBlock::Create(m->getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
+        args.push_back(getInt32(STDERR_FILENO));
         args.push_back(GetString(out.str().c_str()));
         Value * const name = &*(arg++);
         name->setName("name");
@@ -68,9 +70,8 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         for(unsigned i = (mBitBlockWidth / 8); i != 0; --i) {
             args.push_back(builder.CreateZExt(builder.CreateExtractElement(value, builder.getInt32(i - 1)), builder.getInt32Ty()));
         }
-        builder.CreateCall(GetPrintf(), args);
+        builder.CreateCall(GetDprintf(), args);
         builder.CreateRetVoid();
-
         printRegister = function;
     }
     CreateCall(printRegister, {GetString(name.c_str()), CreateBitCast(value, mBitBlockType)});
@@ -607,8 +608,8 @@ Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * table0, Value * table1
     const auto field_count = mBitBlockWidth/fw;
     Constant * selectorSplat = ConstantVector::getSplat(field_count, ConstantInt::get(getIntNTy(fw), field_count));
     Value * selectMask = simd_eq(fw, simd_and(index_vector, selectorSplat), selectorSplat);
-    Value * tbl = simd_and(index_vector, simd_not(selectorSplat));
-    Value * rslt= simd_or(simd_and(mvmd_shuffle(fw, table0, index_vector), simd_not(selectMask)), simd_and(mvmd_shuffle(fw, table1, index_vector), selectMask));
+    Value * idx = simd_and(index_vector, simd_not(selectorSplat));
+    Value * rslt= simd_or(simd_and(mvmd_shuffle(fw, table0, idx), simd_not(selectMask)), simd_and(mvmd_shuffle(fw, table1, idx), selectMask));
     return rslt;
 }
     
