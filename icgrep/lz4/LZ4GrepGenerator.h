@@ -38,7 +38,7 @@ public:
     void generateSwizzledAioPipeline(re::RE* regex);
 
     void generateAioPipeline(re::RE* regex);
-    void generateParallelAioPipeline(re::RE* regex);
+    void generateParallelAioPipeline(re::RE* regex, bool enableGather, bool enableScatter);
 
     ScanMatchGrepMainFunctionType getScanMatchGrepMainFunction();
     CountOnlyGrepMainFunctionType getCountOnlyGrepMainFunction();

@@ -24,7 +24,7 @@ namespace kernel {
 
     public:
         // By default, output block size in LZ4 is 4MB
-        LZ4ParallelByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, size_t outputBlockSize = 4 * 1024 * 1024 );
+        LZ4ParallelByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, bool enableGather = true, bool enableScatter = true, size_t outputBlockSize = 4 * 1024 * 1024 );
 
     protected:
         void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) override;
@@ -60,8 +60,6 @@ namespace kernel {
 
         void generateSimdLiteralCopyByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStartVec,
                                               llvm::Value *literalLengthVec, llvm::Value *outputPosVec);
-        void generateSimdLiteralCopyByMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStartVec,
-                                             llvm::Value *literalLengthVec, llvm::Value *outputPosVec);
 
         void generateOverwritingMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *inputBasePtr,
                                        llvm::Value *outputBasePtr, llvm::Value *copyBytes, llvm::PointerType *targetPtrTy,
@@ -71,7 +69,6 @@ namespace kernel {
                                        llvm::Value* stepSize);
 
         void handleSimdMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec);
-        void generateSimdMatchCopyByMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec);
         void generateSimdSequentialMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec);
 
         void handleLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* literalStart, llvm::Value* literalLength, llvm::Value* outputPos);
@@ -94,6 +91,8 @@ namespace kernel {
         void simdPutDataByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask /*i256*/);
 
         size_t mOutputBlockSize;
+        bool mEnableGather;
+        bool mEnableScatter;
     };
 
 }

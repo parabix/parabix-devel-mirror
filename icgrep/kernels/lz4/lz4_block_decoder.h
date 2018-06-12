@@ -23,7 +23,7 @@ class LZ4BlockDecoderNewKernel : public SegmentOrientedKernel {
 public:
     LZ4BlockDecoderNewKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, std::string&& kernelName = "LZ4BlockDecoderKernel");
 protected:
-    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
 private:
     llvm::Value *generateLoadInput(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *offset);
 

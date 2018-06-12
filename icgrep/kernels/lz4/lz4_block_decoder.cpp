@@ -45,31 +45,31 @@ Binding{iBuilder->getInt64Ty(), "pendingBlockEnd"},
 
 }
 
-void LZ4BlockDecoderNewKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+void LZ4BlockDecoderNewKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
 
-    Constant* INT64_0 = iBuilder->getInt64(0);
+    Constant* INT64_0 = b->getInt64(0);
 
-    BasicBlock * entryBlock = iBuilder->GetInsertBlock();
+    BasicBlock * entryBlock = b->GetInsertBlock();
 
     // Skip Header
-    Value* hasSkipHeader = iBuilder->getScalarField("hasSkipHeader");
-    iBuilder->setScalarField("hasSkipHeader", iBuilder->getTrue());
-    Value* skipLength = iBuilder->CreateSelect(hasSkipHeader, iBuilder->getSize(0), iBuilder->getScalarField("headerSize"));
-    Value* previousOffset = iBuilder->getScalarField("previousOffset");
-    previousOffset = iBuilder->CreateAdd(skipLength, previousOffset);
-    Value* initBlockStart = iBuilder->getScalarField("pendingBlockStart");
-    Value* initBlockEnd = iBuilder->getScalarField("pendingBlockEnd");
-    Value* initIsCompressed = iBuilder->getScalarField("pendingIsCompressed");
-    Value * availableItemCount = iBuilder->getAvailableItemCount("byteStream");
-    BasicBlock * processCon = iBuilder->CreateBasicBlock("process_con");
-    iBuilder->CreateBr(processCon);
+    Value* hasSkipHeader = b->getScalarField("hasSkipHeader");
+    b->setScalarField("hasSkipHeader", b->getTrue());
+    Value* skipLength = b->CreateSelect(hasSkipHeader, b->getSize(0), b->getScalarField("headerSize"));
+    Value* previousOffset = b->getScalarField("previousOffset");
+    previousOffset = b->CreateAdd(skipLength, previousOffset);
+    Value* initBlockStart = b->getScalarField("pendingBlockStart");
+    Value* initBlockEnd = b->getScalarField("pendingBlockEnd");
+    Value* initIsCompressed = b->getScalarField("pendingIsCompressed");
+    Value * availableItemCount = b->getAvailableItemCount("byteStream");
+    BasicBlock * processCon = b->CreateBasicBlock("process_con");
+    b->CreateBr(processCon);
 
-    iBuilder->SetInsertPoint(processCon);
+    b->SetInsertPoint(processCon);
 
-    PHINode* phiIsCompressed = iBuilder->CreatePHI(initIsCompressed->getType(), 3);
-    PHINode* phiBlockStart = iBuilder->CreatePHI(initBlockStart->getType(), 3);
-    PHINode* phiBlockEnd = iBuilder->CreatePHI(initBlockEnd->getType(), 3);
-    PHINode* sOffset = iBuilder->CreatePHI(previousOffset->getType(), 3);
+    PHINode* phiIsCompressed = b->CreatePHI(initIsCompressed->getType(), 3);
+    PHINode* phiBlockStart = b->CreatePHI(initBlockStart->getType(), 3);
+    PHINode* phiBlockEnd = b->CreatePHI(initBlockEnd->getType(), 3);
+    PHINode* sOffset = b->CreatePHI(previousOffset->getType(), 3);
 
     phiIsCompressed->addIncoming(initIsCompressed, entryBlock);
     phiBlockStart->addIncoming(initBlockStart, entryBlock);
@@ -77,87 +77,87 @@ void LZ4BlockDecoderNewKernel::generateDoSegmentMethod(const std::unique_ptr<Ker
     sOffset->addIncoming(previousOffset, entryBlock);
 
     // Store Output
-    BasicBlock* storeOutputBlock = iBuilder->CreateBasicBlock("storeOutputBlock");
-    BasicBlock * block_decoder_con = iBuilder->CreateBasicBlock("block_decoder_con_block");
+    BasicBlock* storeOutputBlock = b->CreateBasicBlock("storeOutputBlock");
+    BasicBlock * block_decoder_con = b->CreateBasicBlock("block_decoder_con_block");
 
-    iBuilder->CreateUnlikelyCondBr(
-            iBuilder->CreateAnd(
-                    iBuilder->CreateICmpULE(phiBlockEnd, availableItemCount),
-                    iBuilder->CreateNot(iBuilder->CreateICmpEQ(phiBlockEnd, INT64_0))
+    b->CreateUnlikelyCondBr(
+            b->CreateAnd(
+                    b->CreateICmpULE(phiBlockEnd, availableItemCount),
+                    b->CreateNot(b->CreateICmpEQ(phiBlockEnd, INT64_0))
             ),
             storeOutputBlock,
             block_decoder_con
     );
 
-    iBuilder->SetInsertPoint(storeOutputBlock);
+    b->SetInsertPoint(storeOutputBlock);
 
-    appendOutput(iBuilder, phiIsCompressed, phiBlockStart, phiBlockEnd);
+    appendOutput(b, phiIsCompressed, phiBlockStart, phiBlockEnd);
 
 
-    phiIsCompressed->addIncoming(iBuilder->getInt8(0), storeOutputBlock);
+    phiIsCompressed->addIncoming(b->getInt8(0), storeOutputBlock);
     phiBlockStart->addIncoming(INT64_0, storeOutputBlock);
     phiBlockEnd->addIncoming(INT64_0, storeOutputBlock);
     sOffset->addIncoming(sOffset, storeOutputBlock);
 
-    iBuilder->CreateBr(processCon);
+    b->CreateBr(processCon);
 
 
     // block decoder entry
-    iBuilder->SetInsertPoint(block_decoder_con);
+    b->SetInsertPoint(block_decoder_con);
 
-    BasicBlock * block_decoder_body = iBuilder->CreateBasicBlock("block_decoder_body_block");
-    BasicBlock * block_decoder_exit = iBuilder->CreateBasicBlock("block_decoder_exit_block");
+    BasicBlock * block_decoder_body = b->CreateBasicBlock("block_decoder_body_block");
+    BasicBlock * block_decoder_exit = b->CreateBasicBlock("block_decoder_exit_block");
 
-    Value * reachFinalBlock = iBuilder->getScalarField("reachFinalBlock");
-    iBuilder->CreateCondBr(
-        iBuilder->CreateAnd(
-            iBuilder->CreateICmpULT(sOffset, availableItemCount),
-            iBuilder->CreateNot(reachFinalBlock)
+    Value * reachFinalBlock = b->getScalarField("reachFinalBlock");
+    b->CreateCondBr(
+        b->CreateAnd(
+            b->CreateICmpULT(sOffset, availableItemCount),
+            b->CreateNot(reachFinalBlock)
         ),
         block_decoder_body,
         block_decoder_exit);
 
     //block_decoder_body
-    iBuilder->SetInsertPoint(block_decoder_body);
-    Value* currentBlockSize = iBuilder->getSize(0);
+    b->SetInsertPoint(block_decoder_body);
+    Value* currentBlockSize = b->getSize(0);
     for (size_t i = 0; i < 4; i++) {
-        Value * offset = iBuilder->CreateAdd(sOffset, iBuilder->getSize(i));
-        Value * rawOffset = iBuilder->CreateZExt(generateLoadInput(iBuilder, offset), iBuilder->getSizeTy());
-        currentBlockSize = iBuilder->CreateOr(currentBlockSize, iBuilder->CreateShl(rawOffset, iBuilder->getSize(8 * i)));
+        Value * offset = b->CreateAdd(sOffset, b->getSize(i));
+        Value * rawOffset = b->CreateZExt(generateLoadInput(b, offset), b->getSizeTy());
+        currentBlockSize = b->CreateOr(currentBlockSize, b->CreateShl(rawOffset, b->getSize(8 * i)));
     }
 
-    Value * realBlockSize = iBuilder->CreateAnd(currentBlockSize, 0x7fffffff);
+    Value * realBlockSize = b->CreateAnd(currentBlockSize, 0x7fffffff);
 
-    Value * isCompressed = iBuilder->CreateNot(currentBlockSize);
-    isCompressed = iBuilder->CreateLShr(isCompressed, 31);
-    isCompressed = iBuilder->CreateTrunc(isCompressed, iBuilder->getInt1Ty());
+    Value * isCompressed = b->CreateNot(currentBlockSize);
+    isCompressed = b->CreateLShr(isCompressed, 31);
+    isCompressed = b->CreateTrunc(isCompressed, b->getInt1Ty());
 
-    Value * isFinalBlock = iBuilder->CreateICmpEQ(realBlockSize, iBuilder->getSize(0));
-    iBuilder->setScalarField("reachFinalBlock", isFinalBlock);
+    Value * isFinalBlock = b->CreateICmpEQ(realBlockSize, b->getSize(0));
+    b->setScalarField("reachFinalBlock", isFinalBlock);
 
-    Value * blockStart = iBuilder->CreateAdd(sOffset, iBuilder->getSize(4));
-    Value * blockEnd = iBuilder->CreateAdd(blockStart, realBlockSize);
+    Value * blockStart = b->CreateAdd(sOffset, b->getSize(4));
+    Value * blockEnd = b->CreateAdd(blockStart, realBlockSize);
 
     Value * newOffset = sOffset;
-    newOffset = iBuilder->CreateAdd(newOffset, iBuilder->getSize(4)); // Block Size
-    newOffset = iBuilder->CreateAdd(newOffset, realBlockSize); // Block Content
-    Value * const blockChecksumOffset = iBuilder->CreateSelect(iBuilder->getScalarField("hasBlockChecksum"), iBuilder->getSize(4), iBuilder->getSize(0));
-    newOffset = iBuilder->CreateAdd(newOffset, blockChecksumOffset);
+    newOffset = b->CreateAdd(newOffset, b->getSize(4)); // Block Size
+    newOffset = b->CreateAdd(newOffset, realBlockSize); // Block Content
+    Value * const blockChecksumOffset = b->CreateSelect(b->getScalarField("hasBlockChecksum"), b->getSize(4), b->getSize(0));
+    newOffset = b->CreateAdd(newOffset, blockChecksumOffset);
 
     sOffset->addIncoming(newOffset, block_decoder_body);
-    phiIsCompressed->addIncoming(isCompressed, block_decoder_body);
+    phiIsCompressed->addIncoming(b->CreateZExt(isCompressed, b->getInt8Ty()), block_decoder_body);
     phiBlockStart->addIncoming(blockStart, block_decoder_body);
     phiBlockEnd->addIncoming(blockEnd, block_decoder_body);
-    iBuilder->CreateBr(processCon);
+    b->CreateBr(processCon);
 
     // block_decoder_exit_block
-    iBuilder->SetInsertPoint(block_decoder_exit);
-    iBuilder->setScalarField("pendingIsCompressed", phiIsCompressed);
-    iBuilder->setScalarField("pendingBlockStart", phiBlockStart);
-    iBuilder->setScalarField("pendingBlockEnd", phiBlockEnd);
-    iBuilder->setScalarField("previousOffset", sOffset);
-    iBuilder->setProcessedItemCount("byteStream", availableItemCount);
-    iBuilder->setTerminationSignal(mIsFinal);
+    b->SetInsertPoint(block_decoder_exit);
+    b->setScalarField("pendingIsCompressed", phiIsCompressed);
+    b->setScalarField("pendingBlockStart", phiBlockStart);
+    b->setScalarField("pendingBlockEnd", phiBlockEnd);
+    b->setScalarField("previousOffset", sOffset);
+    b->setProcessedItemCount("byteStream", availableItemCount);
+    b->setTerminationSignal(mIsFinal);
 }
 
 void LZ4BlockDecoderNewKernel::appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, Value * const isCompressed, Value * const blockStart, Value * const blockEnd) {

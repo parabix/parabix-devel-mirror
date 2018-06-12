@@ -605,12 +605,12 @@ void LZ4GrepGenerator::generateSwizzledAioPipeline(re::RE* regex) {
     mPxDriver.finalizeObject();
 }
 
-void LZ4GrepGenerator::generateParallelAioPipeline(re::RE* regex) {
+void LZ4GrepGenerator::generateParallelAioPipeline(re::RE* regex, bool enableGather, bool enableScatter) {
     auto & iBuilder = mPxDriver.getBuilder();
     this->generateCountOnlyMainFunc(iBuilder);
 
     this->generateLoadByteStream(iBuilder);
-    parabix::StreamSetBuffer * decompressedByteStream = this->generateParallelAIODecompression(iBuilder);
+    parabix::StreamSetBuffer * decompressedByteStream = this->generateParallelAIODecompression(iBuilder, enableGather, enableScatter);
 
 
     StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks(iBuilder));
