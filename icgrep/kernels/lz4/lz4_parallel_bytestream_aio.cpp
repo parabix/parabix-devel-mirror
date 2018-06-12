@@ -43,6 +43,7 @@ namespace kernel{
                                    {
                                            Binding{b->getInt64Ty(), "tempTimes"},
                                            Binding{b->getIntNTy(SIMD_WIDTH), "outputPos"},
+                                           Binding{b->getBitBlockType(), "placeholder"},
 
                                    }), mEnableGather(enableGather), mEnableScatter(enableScatter), mOutputBlockSize(outputBlockSize) {
         this->setStride(4 * 1024 * 1024 * 4);
@@ -631,8 +632,97 @@ namespace kernel{
         return std::make_pair(nextTokenPos, phiOutputPos);
     }
 
-    void LZ4ParallelByteStreamAioKernel::generateSimdSequentialMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
+    void LZ4ParallelByteStreamAioKernel::generateSimdMatchCopyByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
+        // ---- EntryBlock
+        BasicBlock* entryBlock = b->GetInsertBlock();
+        BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
+        BasicBlock* i64MatchCopyBlock = b->CreateBasicBlock("i64MatchCopyBlock");
+        BasicBlock* i8MatchCopyBlock = b->CreateBasicBlock("i8MatchCopyBlock");
 
+        llvm::Value* initCopiedLength = ConstantVector::getNullValue(matchLengthVec->getType());
+
+//        Value* inputBasePtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
+        Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream", b->getSize(0)), b->getInt8PtrTy());
+
+        Value* outputCapacity = b->getCapacity("outputStream");
+        Value* outputPosRemVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(outputCapacity))));
+        Value* outputPosRemBlockSizeVec = b->simd_and(outputPosVec, b->simd_fill(SIMD_WIDTH, b->CreateNot(b->CreateNeg(b->getIntN(SIMD_WIDTH, mOutputBlockSize)))));
+        Value* remainingBlockSizeVec = b->simd_sub(SIMD_WIDTH, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, mOutputBlockSize)), outputPosRemBlockSizeVec);
+
+        Value* possibleExceedBuffer = b->simd_uge(SIMD_WIDTH, b->simd_add(SIMD_WIDTH, matchLengthVec, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 8))), remainingBlockSizeVec);
+        // true ffff, false 0000
+
+        // TODO handle matchLengthVec == 0
+
+        b->CreateUnlikelyCondBr(
+                b->CreateICmpNE(b->CreateBitCast(possibleExceedBuffer, b->getIntNTy(b->getBitBlockWidth())), b->getIntN(b->getBitBlockWidth(), 0)),
+                i8MatchCopyBlock,
+                i64MatchCopyBlock
+        );
+
+        // ---- i8MatchCopyBlock
+        b->SetInsertPoint(i8MatchCopyBlock);
+        this->generateSimdSequentialMatchCopy(b, matchOffsetVec, matchLengthVec, outputPosVec);
+        b->CreateBr(exitBlock);
+
+        // ---- i64MatchCopyBlock
+        b->SetInsertPoint(i64MatchCopyBlock);
+
+        BasicBlock* i64MatchCopyConBlock = b->CreateBasicBlock("i64MatchCopyConBlock");
+        BasicBlock* i64MatchCopyBodyBlock = b->CreateBasicBlock("i64MatchCopyBodyBlock");
+
+        b->CreateBr(i64MatchCopyConBlock);
+
+        // ---- i64MatchCopyConBlock
+        b->SetInsertPoint(i64MatchCopyConBlock);
+        PHINode* phiCopiedLength = b->CreatePHI(initCopiedLength->getType(), 2);
+        phiCopiedLength->addIncoming(initCopiedLength, i64MatchCopyBlock);
+
+        Value* shouldCopiedBitBlock = b->simd_ult(SIMD_WIDTH, phiCopiedLength, matchLengthVec);
+//        b->CallPrintRegister("phiCopiedLength", phiCopiedLength);
+//        b->CallPrintRegister("literalLengthVec", literalLengthVec);
+//        b->CallPrintRegister("shouldCopiedBitBlock", shouldCopiedBitBlock);
+        Value* shouldCopiedI1 = b->CreateICmpNE(
+                b->CreateBitCast(shouldCopiedBitBlock, b->getIntNTy(b->getBitBlockWidth())),
+                b->getIntN(b->getBitBlockWidth(), 0)
+        );
+
+
+        b->CreateCondBr(shouldCopiedI1, i64MatchCopyBodyBlock, exitBlock);
+
+        // ---- i64MatchCopyBodyBlock
+        b->SetInsertPoint(i64MatchCopyBodyBlock);
+        Value* currentOutputPosVec = b->simd_add(SIMD_WIDTH, outputPosRemVec, phiCopiedLength);
+        Value* copyFromPosVec = b->simd_sub(SIMD_WIDTH, currentOutputPosVec, matchOffsetVec);
+
+        Value* literalData = this->simdFetchI64DataByGather(b, outputBasePtr, copyFromPosVec, shouldCopiedBitBlock);
+
+        this->simdPutData(
+                b,
+                outputBasePtr,
+                currentOutputPosVec,
+                literalData,
+                shouldCopiedBitBlock
+        );
+        phiCopiedLength->addIncoming(
+                b->simd_add(
+                        SIMD_WIDTH,
+                        phiCopiedLength,
+                        b->simd_and(
+                                b->simd_umin(SIMD_WIDTH, matchOffsetVec, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 8))),
+                                shouldCopiedBitBlock
+                        )
+
+                ),
+                b->GetInsertBlock()
+        );
+
+        b->CreateBr(i64MatchCopyConBlock);
+        b->SetInsertPoint(exitBlock);
+
+    }
+
+    void LZ4ParallelByteStreamAioKernel::generateSimdSequentialMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
         // Constant
         Constant * SIZE_8 = b->getSize(8);
         // Type
@@ -688,7 +778,11 @@ namespace kernel{
     }
 
     void LZ4ParallelByteStreamAioKernel::handleSimdMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
-        this->generateSimdSequentialMatchCopy(b, matchOffsetVec, matchLengthVec, outputPosVec);
+        if (AVX512BW_available() && mEnableScatter) {
+            this->generateSimdMatchCopyByScatter(b, matchOffsetVec, matchLengthVec, outputPosVec);
+        } else {
+            this->generateSimdSequentialMatchCopy(b, matchOffsetVec, matchLengthVec, outputPosVec);
+        }
     }
 
     void LZ4ParallelByteStreamAioKernel::handleSimdLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* literalStartVec, llvm::Value* literalLengthVec, llvm::Value* outputPosVec) {
@@ -1113,7 +1207,7 @@ namespace kernel{
         Type* i32BitBlockTy = VectorType::get(b->getInt32Ty(), b->getBitBlockWidth() / SIMD_WIDTH);
         if (AVX512BW_available()) {
             // AVX512 gather use i8 mask
-            //declare <8 x double> @llvm.x86.avx512.gather.dpq.512(<8 x i64>, i8*, <8 x i32>, i8, i32) #1
+            //declare <8 x int> @llvm.x86.avx512.gather.dpq.512(<8 x i64>, i8*, <8 x i32>, i8, i32) #1
             Function *gatherFunc512 = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx512_gather_dpq_512);
             return b->CreateCall(
                     gatherFunc512,
@@ -1146,13 +1240,15 @@ namespace kernel{
     llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchDataByLoop(const std::unique_ptr<KernelBuilder> &b,
                                                                      llvm::Value *basePtr, llvm::Value *offsetVec,
                                                                      llvm::Value *maskVec) {
+        Value* placeHolderPtr = b->CreatePointerCast(b->getScalarFieldPtr("placeholder"), basePtr->getType());
+
         Value* retVec = ConstantVector::getNullValue(b->getBitBlockType());
 
         for (uint64_t i = 0; i < b->getBitBlockWidth() / SIMD_WIDTH; i++){
             Value* mask = b->CreateExtractElement(maskVec, i);
             Value* shouldLoad = b->CreateICmpNE(mask, b->getInt64(0));
-//            Value* loadPtr = b->CreateSelect(shouldLoad, b->CreateGEP(basePtr, b->CreateExtractElement(offsetVec, i)), basePtr);
-            Value* loadPtr = b->CreateGEP(basePtr, b->CreateExtractElement(offsetVec, i));
+            Value* loadPtr = b->CreateSelect(shouldLoad, b->CreateGEP(basePtr, b->CreateExtractElement(offsetVec, i)), placeHolderPtr);
+//            Value* loadPtr = b->CreateGEP(basePtr, b->CreateExtractElement(offsetVec, i));
             Value* loadValue = b->CreateZExt(b->CreateLoad(b->CreatePointerCast(loadPtr, b->getInt64Ty()->getPointerTo())), b->getInt64Ty());
             Value* finalValue = b->CreateSelect(shouldLoad, loadValue, b->getInt64(0));
             retVec = b->CreateInsertElement(retVec, finalValue, i);
