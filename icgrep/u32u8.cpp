@@ -23,6 +23,7 @@
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>
 #include <kernels/streamset.h>
+#include <kernels/hex_convert.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -93,19 +94,26 @@ private:
 UTF8fieldDepositMask::UTF8fieldDepositMask(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned depositFieldWidth)
 : BlockOrientedKernel("u8depositMask",
             {Binding{b->getStreamSetTy(1, 21), "basis"}},
-            {Binding{b->getStreamSetTy(1, 1), "fieldDepositMask", FixedRate(4)}, 
+#ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
+            {Binding{b->getStreamSetTy(1, 1), "fieldDepositMask", FixedRate(4)},
+                      Binding{b->getStreamSetTy(1, 1), "extractionMask", FixedRate(4)}},
+#else
+            {Binding{b->getStreamSetTy(1, 1), "fieldDepositMask", FixedRate(4)},
                 Binding{b->getStreamSetTy(1, 1), "codeUnitCounts", FixedRate(4), RoundUpTo(b->getBitBlockWidth())}},
-            {}, {}, {Binding{b->getBitBlockType(), "EOFmask"}}), mDepositFieldWidth(depositFieldWidth) {
+#endif
+                {}, {}, {Binding{b->getBitBlockType(), "EOFmask"}}), mDepositFieldWidth(depositFieldWidth) {
 }
 
 
 void UTF8fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+    Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
     // If any of bits 16 through 20 are 1, a four-byte UTF-8 sequence is required.
     Value * u8len4 = b->loadInputStreamBlock("basis", b->getSize(16), b->getSize(0));
     u8len4 = b->CreateOr(u8len4, b->loadInputStreamBlock("basis", b->getSize(17), b->getSize(0)));
     u8len4 = b->CreateOr(u8len4, b->loadInputStreamBlock("basis", b->getSize(18), b->getSize(0)));
     u8len4 = b->CreateOr(u8len4, b->loadInputStreamBlock("basis", b->getSize(19), b->getSize(0)));
     u8len4 = b->CreateOr(u8len4, b->loadInputStreamBlock("basis", b->getSize(20), b->getSize(0)), "u8len4");
+    u8len4 = b->CreateAnd(u8len4, fileExtentMask);
     Value * u8len34 = u8len4;
     // Otherwise, if any of bits 11 through 15 are 1, a three-byte UTF-8 sequence is required.
     u8len34 = b->CreateOr(u8len34, b->loadInputStreamBlock("basis", b->getSize(11), b->getSize(0)));
@@ -113,18 +121,19 @@ void UTF8fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBui
     u8len34 = b->CreateOr(u8len34, b->loadInputStreamBlock("basis", b->getSize(13), b->getSize(0)));
     u8len34 = b->CreateOr(u8len34, b->loadInputStreamBlock("basis", b->getSize(14), b->getSize(0)));
     u8len34 = b->CreateOr(u8len34, b->loadInputStreamBlock("basis", b->getSize(15), b->getSize(0)));
+    u8len34 = b->CreateAnd(u8len34, fileExtentMask);
     Value * nonASCII = u8len34;
     // Otherwise, if any of bits 7 through 10 are 1, a two-byte UTF-8 sequence is required.
     nonASCII = b->CreateOr(nonASCII, b->loadInputStreamBlock("basis", b->getSize(7), b->getSize(0)));
     nonASCII = b->CreateOr(nonASCII, b->loadInputStreamBlock("basis", b->getSize(8), b->getSize(0)));
     nonASCII = b->CreateOr(nonASCII, b->loadInputStreamBlock("basis", b->getSize(9), b->getSize(0)));
     nonASCII = b->CreateOr(nonASCII, b->loadInputStreamBlock("basis", b->getSize(10), b->getSize(0)), "nonASCII");
+    nonASCII = b->CreateAnd(nonASCII, fileExtentMask);
     //
     //  UTF-8 sequence length:    1     2     3       4
     //  extraction mask        1000  1100  1110    1111
     //  interleave u8len3|u8len4, allOnes() for bits 1, 3:  x..., ..x.
     //  interleave prefix4, u8len2|u8len3|u8len4 for bits 0, 2:  .x.., ...x
-    Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
     
     Value * maskA_lo = b->esimd_mergel(1, u8len34, fileExtentMask);
     Value * maskA_hi = b->esimd_mergeh(1, u8len34, fileExtentMask);
@@ -139,9 +148,13 @@ void UTF8fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBui
     Constant * mask1000 = Constant::getIntegerValue(b->getIntNTy(bw), APInt::getSplat(bw, APInt::getHighBitsSet(4, 1)));
     for (unsigned j = 0; j < 4; ++j) {
         Value * deposit_mask = b->simd_pext(mDepositFieldWidth, mask1000, extraction_mask[j]);
-        Value * unit_counts = b->simd_popcount(mDepositFieldWidth, extraction_mask[j]);
         b->storeOutputStreamBlock("fieldDepositMask", b->getSize(0), b->getSize(j), deposit_mask);
+#ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
+        b->storeOutputStreamBlock("extractionMask", b->getSize(0), b->getSize(j), extraction_mask[j]);
+#else
+        Value * unit_counts = b->simd_popcount(mDepositFieldWidth, extraction_mask[j]);
         b->storeOutputStreamBlock("codeUnitCounts", b->getSize(0), b->getSize(j), unit_counts);
+#endif
     }
 }
 void UTF8fieldDepositMask::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * const remainingBytes) {
@@ -182,11 +195,11 @@ void UTF8_DepositMasks::generatePabloMethod() {
     PabloAST * lookAheadFinal = pb.createLookahead(u8final, 1, "lookaheadFinal");
     // Eliminate lookahead positions that are the final position of the prior unit.
     PabloAST * secondLast = pb.createAnd(lookAheadFinal, nonFinal);
-    PabloAST * u8mask6_11 = pb.createOr(secondLast, ASCII, "u8mask6_11");
+    PabloAST * u8mask6_11 = pb.createInFile(pb.createOr(secondLast, ASCII, "u8mask6_11"));
     PabloAST * prefix2 = pb.createAnd(secondLast, initial);
     PabloAST * lookAhead2 = pb.createLookahead(u8final, 2, "lookahead2");
     PabloAST * thirdLast = pb.createAnd(pb.createAnd(lookAhead2, nonFinal), pb.createNot(secondLast));
-    PabloAST * u8mask12_17 = pb.createOr(thirdLast, pb.createOr(prefix2, ASCII), "u8mask12_17");
+    PabloAST * u8mask12_17 = pb.createInFile(pb.createOr(thirdLast, pb.createOr(prefix2, ASCII), "u8mask12_17"));
     pb.createAssign(pb.createExtract(getOutputStreamVar("u8initial"), pb.getInteger(0)), initial);
     pb.createAssign(pb.createExtract(getOutputStreamVar("u8mask6_11"), pb.getInteger(0)), u8mask6_11);
     pb.createAssign(pb.createExtract(getOutputStreamVar("u8mask12_17"), pb.getInteger(0)), u8mask12_17);
@@ -260,7 +273,9 @@ void u32u8_gen (ParabixDriver & pxDriver) {
     Module * mod = idb->getModule();
 
     const unsigned u32buffersize = codegen::SegmentSize * codegen::ThreadNum;
-	const unsigned u8buffersize = 4 * u32buffersize;
+    const unsigned u8buffersize = 4 * (u32buffersize + 1);
+    const unsigned u8buffersize2 = u8buffersize + 1;
+    const unsigned u8buffersize3 = u8buffersize2 + 4;
 
     Type * const voidTy = idb->getVoidTy();
     
@@ -273,12 +288,12 @@ void u32u8_gen (ParabixDriver & pxDriver) {
     
     idb->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
     
-    // File data from mmap
+    // Source data
     StreamSetBuffer * codeUnitStream = pxDriver.addBuffer<ExternalBuffer>(idb, idb->getStreamSetTy(1, 32));
     
-    Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(idb, 32);
-    mmapK->setInitialArguments({fileDecriptor});
-    pxDriver.makeKernelCall(mmapK, {}, {codeUnitStream});
+    Kernel * sourceK = pxDriver.addKernelInstance<FDSourceKernel>(idb, 32);
+    sourceK->setInitialArguments({idb->getInt8(0), fileDecriptor});
+    pxDriver.makeKernelCall(sourceK, {}, {codeUnitStream});
     
     // Source buffers for transposed UTF-32 basis bits.
     StreamSetBuffer * u32basis = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(21), u32buffersize);
@@ -286,31 +301,41 @@ void u32u8_gen (ParabixDriver & pxDriver) {
     kernel::Kernel * s2p21K = pxDriver.addKernelInstance<S2P_21Kernel>(idb);
     pxDriver.makeKernelCall(s2p21K, {codeUnitStream}, {u32basis});
 
-    StreamSetBuffer * u8unitCounts = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
 
 	// Buffers for calculated deposit masks.
     StreamSetBuffer * u8fieldMask = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
-    StreamSetBuffer * u8final = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
-    StreamSetBuffer * u8initial = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
-    StreamSetBuffer * u8mask12_17 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
-    StreamSetBuffer * u8mask6_11 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
+    StreamSetBuffer * u8final = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize2);
+    StreamSetBuffer * u8initial = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize2);
+    StreamSetBuffer * u8mask12_17 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize2);
+    StreamSetBuffer * u8mask6_11 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize2);
 
     // Intermediate buffers for deposited bits
-    StreamSetBuffer * deposit18_20 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(3), u8buffersize);
-    StreamSetBuffer * deposit12_17 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(6), u8buffersize);
-    StreamSetBuffer * deposit6_11 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(6), u8buffersize);
-    StreamSetBuffer * deposit0_5 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(6), u8buffersize);
+    StreamSetBuffer * deposit18_20 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(3), u8buffersize3);
+    StreamSetBuffer * deposit12_17 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(6), u8buffersize3);
+    StreamSetBuffer * deposit6_11 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(6), u8buffersize3);
+    StreamSetBuffer * deposit0_5 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(6), u8buffersize3);
 
     // Final buffers for computed UTF-8 basis bits and byte stream.
-    StreamSetBuffer * u8basis = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), u8buffersize);
-    StreamSetBuffer * u8bytes = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 8), u8buffersize);
+    StreamSetBuffer * u8basis = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), u8buffersize3);
+    StreamSetBuffer * u8bytes = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 8), u8buffersize3);
 
     // Calculate the u8final deposit mask.
+#ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
+    StreamSetBuffer * extractionMask = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
+    kernel::Kernel * fieldDepositMaskK = pxDriver.addKernelInstance<UTF8fieldDepositMask>(idb);
+    pxDriver.makeKernelCall(fieldDepositMaskK, {u32basis}, {u8fieldMask, extractionMask});
+    kernel::Kernel * streamK = pxDriver.addKernelInstance<StreamCompressKernel>(idb, 64, 1);
+    pxDriver.makeKernelCall(streamK, {u8fieldMask, extractionMask}, {u8final});
+#else
+    StreamSetBuffer * u8unitCounts = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
     kernel::Kernel * fieldDepositMaskK = pxDriver.addKernelInstance<UTF8fieldDepositMask>(idb);
     pxDriver.makeKernelCall(fieldDepositMaskK, {u32basis}, {u8fieldMask, u8unitCounts});
     kernel::Kernel * streamK = pxDriver.addKernelInstance<StreamCompressKernel>(idb, 64, 1);
     pxDriver.makeKernelCall(streamK, {u8fieldMask, u8unitCounts}, {u8final});
-
+#endif
+/*    kernel::Kernel * hexConvert =  pxDriver.addKernelInstance<BinaryToHex>(idb);
+    pxDriver.makeKernelCall(hexConvert, {u8final}, {u8bytes});
+*/
     kernel::Kernel * maskK = pxDriver.addKernelInstance<UTF8_DepositMasks>(idb);
     pxDriver.makeKernelCall(maskK, {u8final}, {u8initial, u8mask12_17, u8mask6_11});
     
