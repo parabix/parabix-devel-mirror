@@ -195,7 +195,6 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     // for loading source streams.
     Value * pendingBlockEnd = b->CreateAdd(pendingOffsetPhi, bw_sub1Const);
     Value * srcBlockNo = b->CreateUDiv(pendingBlockEnd, bwConst);
-    
     // Calculate the field values and offsets we need for assembling a
     // a full block of source bits.  Assembly will use the following operations.
     // A = b->simd_srlv(fw, b->mvmd_dsll(fw, source, pending, field_offset_lo), bit_offset);
@@ -242,7 +241,6 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
         Value * D = b->simd_sllv(fw, b->mvmd_shuffle(fw, full_source_block, source_field_hi), source_shift_hi);
         Value * output = b->bitCast(b->simd_or(C, D));
         b->storeOutputStreamBlock("output", b->getInt32(i), blockNoPhi, output);
-        pendingDataPhi[i]->addIncoming(source[i], expandLoop);
     }
     //
     // Update loop control Phis for the next iteration.
@@ -250,7 +248,12 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * nextBlk = b->CreateAdd(blockNoPhi, b->getSize(1));
     blockNoPhi->addIncoming(nextBlk, expandLoop);
     Value * newPending = b->CreateAdd(pendingOffsetPhi, blockPopCount);
+    Value * isNewBlock = b->CreateICmpNE(srcBlockNo, b->CreateUDiv(b->CreateAdd(newPending, bw_sub1Const), bwConst));
+
     pendingOffsetPhi->addIncoming(newPending, expandLoop);
+    for (unsigned i = 0; i < mSelectedStreamCount; i++) {
+        pendingDataPhi[i]->addIncoming(b->CreateSelect(isNewBlock, source[i], pendingDataPhi[i]), expandLoop);
+    }
     //
     // Now continue the loop if there are more blocks to process.
     Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
