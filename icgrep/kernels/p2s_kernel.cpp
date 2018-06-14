@@ -17,16 +17,24 @@ void p2s_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p0, Value
     s1 = iBuilder->esimd_mergeh(8, t1, t0);
     s0 = iBuilder->esimd_mergel(8, t1, t0);
 }
+#define LITTLE_ENDIAN_BIT_NUMBERING
 
-inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Value * s[]) {
+inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Value * s[], cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian) {
     Value * bit00004444[2];
     Value * bit22226666[2];
     Value * bit11115555[2];
     Value * bit33337777[2];
-    p2s_step(iBuilder, p[0], p[4], iBuilder->simd_himask(8), 4, bit00004444[1], bit00004444[0]);
-    p2s_step(iBuilder, p[1], p[5], iBuilder->simd_himask(8), 4, bit11115555[1], bit11115555[0]);
-    p2s_step(iBuilder, p[2], p[6], iBuilder->simd_himask(8), 4, bit22226666[1], bit22226666[0]);
-    p2s_step(iBuilder, p[3], p[7], iBuilder->simd_himask(8), 4, bit33337777[1], bit33337777[0]);
+    if (basisNumbering == cc::BitNumbering::BigEndian) {
+        p2s_step(iBuilder, p[0], p[4], iBuilder->simd_himask(8), 4, bit00004444[1], bit00004444[0]);
+        p2s_step(iBuilder, p[1], p[5], iBuilder->simd_himask(8), 4, bit11115555[1], bit11115555[0]);
+        p2s_step(iBuilder, p[2], p[6], iBuilder->simd_himask(8), 4, bit22226666[1], bit22226666[0]);
+        p2s_step(iBuilder, p[3], p[7], iBuilder->simd_himask(8), 4, bit33337777[1], bit33337777[0]);
+    }  else {
+        p2s_step(iBuilder, p[7], p[3], iBuilder->simd_himask(8), 4, bit00004444[1], bit00004444[0]);
+        p2s_step(iBuilder, p[6], p[2], iBuilder->simd_himask(8), 4, bit11115555[1], bit11115555[0]);
+        p2s_step(iBuilder, p[5], p[1], iBuilder->simd_himask(8), 4, bit22226666[1], bit22226666[0]);
+        p2s_step(iBuilder, p[4], p[0], iBuilder->simd_himask(8), 4, bit33337777[1], bit33337777[0]);
+    }
     Value * bit00224466[4];
     Value * bit11335577[4];
     for (unsigned j = 0; j<2; j++) {
@@ -44,7 +52,7 @@ void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) 
         p_bitblock[i] = b->loadInputStreamBlock("basisBits", b->getInt32(i));
     }
     Value * s_bytepack[8];
-    p2s(b, p_bitblock, s_bytepack);
+    p2s(b, p_bitblock, s_bytepack, mBasisSetNumbering);
     for (unsigned j = 0; j < 8; ++j) {
         b->storeOutputStreamPack("byteStream", b->getInt32(0), b->getInt32(j), s_bytepack[j]);
     }
@@ -69,7 +77,7 @@ void P2SKernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<
         basisBits[i] = b->loadInputStreamBlock("basisBits", b->getInt32(i));
     }
     Value * bytePack[8];
-    p2s(b, basisBits, bytePack);
+    p2s(b, basisBits, bytePack, mBasisSetNumbering);
 
     Value * const fieldCounts = b->loadInputStreamBlock("fieldCounts", b->getInt32(0));
     Value * unitCounts = partial_sum_popcounts(b, unitsPerRegister, fieldCounts);
@@ -90,16 +98,18 @@ void P2SKernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<
 void P2S16Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        hi_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(j));
+        const unsigned idx = mBasisSetNumbering == cc::BitNumbering::LittleEndian ? j + 8 : j;
+        hi_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(idx));
     }
     Value * hi_bytes[8];
-    p2s(b, hi_input, hi_bytes);
+    p2s(b, hi_input, hi_bytes, mBasisSetNumbering);
     Value * lo_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        lo_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(j + 8));
+        const unsigned idx = mBasisSetNumbering == cc::BitNumbering::LittleEndian ? j : j + 8;
+        lo_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(idx));
     }
     Value * lo_bytes[8];
-    p2s(b, lo_input, lo_bytes);
+    p2s(b, lo_input, lo_bytes, mBasisSetNumbering);
     for (unsigned j = 0; j < 8; ++j) {
         Value * merge0 = b->bitCast(b->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
         Value * merge1 = b->bitCast(b->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
@@ -117,17 +127,19 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        hi_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(j));
+        const unsigned idx = mBasisSetNumbering == cc::BitNumbering::LittleEndian ? j + 8 : j;
+        hi_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(idx));
     }
     Value * hi_bytes[8];
-    p2s(b, hi_input, hi_bytes);
+    p2s(b, hi_input, hi_bytes, mBasisSetNumbering);
 
     Value * lo_input[8];
     for (unsigned j = 0; j < 8; ++j) {
-        lo_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(j + 8));
+        const unsigned idx = mBasisSetNumbering == cc::BitNumbering::LittleEndian ? j : j + 8;
+        lo_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(idx));
     }
     Value * lo_bytes[8];
-    p2s(b, lo_input, lo_bytes);
+    p2s(b, lo_input, lo_bytes, mBasisSetNumbering);
 
     Value * const fieldCounts = b->loadInputStreamBlock("fieldCounts", b->getInt32(0));
     Value * unitCounts = partial_sum_popcounts(b, unitsPerRegister, fieldCounts);
@@ -159,36 +171,39 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     b->setProducedItemCount("i16Stream", i16UnitsFinal);
 }
 
-P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
-: BlockOrientedKernel("p2s",
+P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering numbering)
+    : BlockOrientedKernel("p2s" + cc::numberingSuffix(numbering),
               {Binding{b->getStreamSetTy(8, 1), "basisBits"}},
               {Binding{b->getStreamSetTy(1, 8), "byteStream"}},
-              {}, {}, {}) {
+              {}, {}, {}),
+    mBasisSetNumbering(numbering) {
 }
 
-P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b)
-: BlockOrientedKernel("p2s_compress",
+P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering numbering)
+: BlockOrientedKernel("p2s_compress" + cc::numberingSuffix(numbering),
               {Binding{b->getStreamSetTy(8, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "fieldCounts"}},
               {Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)}},
-              {}, {}, {}) {
+                      {}, {}, {}),
+    mBasisSetNumbering(numbering) {
 }
 
-P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b)
-: BlockOrientedKernel("p2s_16",
+P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering numbering)
+: BlockOrientedKernel("p2s_16" + cc::numberingSuffix(numbering),
               {Binding{b->getStreamSetTy(16, 1), "basisBits"}},
               {Binding{b->getStreamSetTy(1, 16), "i16Stream"}},
-              {}, {}, {}) {
+                      {}, {}, {}),
+    mBasisSetNumbering(numbering) {
 }
 
 
-P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b)
-: BlockOrientedKernel("p2s_16_compress",
+P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering numbering)
+: BlockOrientedKernel("p2s_16_compress" + cc::numberingSuffix(numbering),
               {Binding{b->getStreamSetTy(16, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "fieldCounts"}},
               {Binding{b->getStreamSetTy(1, 16), "i16Stream", BoundedRate(0, 1)}},
               {},
               {},
-              {}) {
-
+              {}),
+    mBasisSetNumbering(numbering) {
 }
     
     

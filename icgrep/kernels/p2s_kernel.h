@@ -5,45 +5,50 @@
 #ifndef P2S_KERNEL_H
 #define P2S_KERNEL_H
 
+#include <cc/alphabet.h>
 #include "kernel.h"  // for KernelBuilder
+
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-   
 class P2SKernel final : public BlockOrientedKernel {
 public:
-    P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
+    P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
+    cc::BitNumbering mBasisSetNumbering;
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 };
 
 class P2SKernelWithCompressedOutput final : public BlockOrientedKernel {
 public:
-    P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b);
+    P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
+    cc::BitNumbering mBasisSetNumbering;
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 };
 
 class P2S16Kernel final : public BlockOrientedKernel {
 public:
-    P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b);
+    P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
+    cc::BitNumbering mBasisSetNumbering;
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 };
     
 class P2S16KernelWithCompressedOutput final : public BlockOrientedKernel {
 public:
-    P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b);
+    P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
+    cc::BitNumbering mBasisSetNumbering;
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
 };
     

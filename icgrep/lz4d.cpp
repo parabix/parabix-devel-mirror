@@ -17,6 +17,7 @@
 #include <boost/iostreams/device/mapped_file.hpp>
 
 #include <lz4FrameDecoder.h>
+#include <cc/alphabet.h>
 #include <cc/cc_compiler.h>
 #include <kernels/cc_kernel.h>
 #include <kernels/streamset.h>
@@ -83,7 +84,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
     pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
 
     // Input stream is not aligned due to the offset.
-    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder, /*aligned = */ false);
+    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::LittleEndian, /*aligned = */ false);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
     
     Kernel * extenderK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);

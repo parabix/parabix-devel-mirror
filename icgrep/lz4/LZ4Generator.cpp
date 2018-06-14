@@ -401,7 +401,7 @@ void LZ4Generator::generateLoadByteStreamAndBitStream(const std::unique_ptr<kern
     kernel::Kernel * sourceK = mPxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);
     sourceK->setInitialArguments({mInputStream, mFileSize});
     mPxDriver.makeKernelCall(sourceK, {}, {mCompressedByteStream});
-    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, /*aligned = */ true);
+    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::BigEndian);
     mPxDriver.makeKernelCall(s2pk, {mCompressedByteStream}, {mCompressedBasisBits});
 }
 

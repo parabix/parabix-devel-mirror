@@ -25,11 +25,11 @@ namespace cc {
     CC_Compiler::CC_Compiler(pablo::PabloBlock * scope)
     : mBuilder(scope) {
     }
-    
 
-Parabix_CC_Compiler::Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet)
+Parabix_CC_Compiler::Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet, cc::BitNumbering basisSetNumbering)
 : CC_Compiler(scope)
 , mEncodingBits(basisBitSet.size())
+, mBasisSetNumbering(basisSetNumbering)
 , mBasisBit(basisBitSet) {
     mEncodingMask = (static_cast<unsigned>(1) << mEncodingBits) - static_cast<unsigned>(1);
 }
@@ -223,17 +223,12 @@ inline PabloAST * Parabix_CC_Compiler::char_or_range_expr(const codepoint_t lo, 
     }
     llvm::report_fatal_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
 }
-//#define LITTLE_ENDIAN_BIT_NUMBERING
 
 inline PabloAST * Parabix_CC_Compiler::getBasisVar(const unsigned i) const {
     assert (i < mEncodingBits);
-#ifndef LITTLE_ENDIAN_BIT_NUMBERING
-    const unsigned index = mEncodingBits - i - 1; assert (index < mEncodingBits);
-#else
-    const unsigned index = i;
-#endif
-    assert (mBasisBit[index]);
-    return mBasisBit[index];
+    if (mBasisSetNumbering == cc::BitNumbering::BigEndian)
+        return mBasisBit[mEncodingBits - i - 1];
+    else return mBasisBit[i];
 }
 
     

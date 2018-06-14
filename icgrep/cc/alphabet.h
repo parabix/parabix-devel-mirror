@@ -12,6 +12,15 @@
 #include <vector>
 
 namespace cc {
+    
+// Set of parallel bit streams may be numbered using either the
+// LittleEndian (right-to-left) or BigEndian (left-to-right) conventions.
+enum class BitNumbering {LittleEndian, BigEndian};
+
+inline std::string numberingSuffix(BitNumbering numbering) {
+    return (numbering == BitNumbering::LittleEndian) ? "-LE" : "-BE";
+}
+
 //
 // An Alphabet is the universe of characters used to form strings in 
 // a given language, together with a mapping of those characters to 

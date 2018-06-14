@@ -5,6 +5,7 @@
  */
 
 #include <IR_Gen/idisa_target.h>                   // for GetIDISA_Builder
+#include <cc/alphabet.h>
 #include <cc/cc_compiler.h>                        // for CC_Compiler
 #include <kernels/deletion.h>                      // for DeletionKernel
 #include <kernels/swizzle.h>                      // for DeletionKernel
@@ -83,7 +84,7 @@ void U8U16Kernel::generatePabloMethod() {
     Var * delmask = main.createVar("delmask", zeroes);
     Var * error_mask = main.createVar("error_mask", zeroes);
 
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), u8_bits);
+    cc::Parabix_CC_Compiler ccc(getEntryScope(), u8_bits, cc::BitNumbering::BigEndian);
 
     // The logic for processing non-ASCII bytes will be embedded within an if-hierarchy.
     PabloAST * nonASCII = ccc.compileCC(re::makeByte(0x80, 0xFF));
@@ -290,7 +291,7 @@ void generatePipeline(ParabixDriver & pxDriver) {
     // Transposed bits from s2p
     StreamSetBuffer * BasisBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), bufferSize);
 
-    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder);
+    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::BigEndian);
     pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
 
 
@@ -328,13 +329,13 @@ void generatePipeline(ParabixDriver & pxDriver) {
         // Produce unswizzled UTF-16 bit streams
         Kernel * unSwizzleK = pxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 16, 1, 4);
         pxDriver.makeKernelCall(unSwizzleK, {u16Swizzle0, u16Swizzle1, u16Swizzle2, u16Swizzle3}, {u16bits});
-        Kernel * p2sk = pxDriver.addKernelInstance<P2S16Kernel>(iBuilder);
+        Kernel * p2sk = pxDriver.addKernelInstance<P2S16Kernel>(iBuilder, cc::BitNumbering::BigEndian);
         pxDriver.makeKernelCall(p2sk, {u16bits}, {u16bytes});
     } else {
         StreamSetBuffer * DeletionCounts = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(), bufferSize);
         Kernel * delK = pxDriver.addKernelInstance<FieldCompressKernel>(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
         pxDriver.makeKernelCall(delK, {u8bits, DelMask}, {u16bits, DeletionCounts});
-        Kernel * p2sk = pxDriver.addKernelInstance<P2S16KernelWithCompressedOutput>(iBuilder);
+        Kernel * p2sk = pxDriver.addKernelInstance<P2S16KernelWithCompressedOutput>(iBuilder, cc::BitNumbering::BigEndian);
         pxDriver.makeKernelCall(p2sk, {u16bits, DeletionCounts}, {u16bytes});
     }
 
