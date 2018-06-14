@@ -757,6 +757,23 @@ Value * IDISA_Builder::simd_not(Value * a) {
     return simd_xor(a, Constant::getAllOnesValue(a->getType()));
 }
 
+
+Constant * IDISA_Builder::bit_interleave_byteshuffle_table(unsigned fw) {
+    const unsigned fieldCount = mBitBlockWidth/8;
+    if (fw > 2) llvm::report_fatal_error("bit_interleave_byteshuffle_table requires fw == 1 or fw == 2");
+    // Bit interleave using shuffle.
+    // Make a shuffle table that translates the lower 4 bits of each byte in
+    // order to spread out the bits: xxxxdcba => .d.c.b.a (fw = 1)
+    Constant * bit_interleave[fieldCount];
+    for (unsigned i = 0; i < fieldCount; i++) {
+        if (fw == 1)
+            bit_interleave[i] = getInt8((i & 1) | ((i & 2) << 1) | ((i & 4) << 2) | ((i & 8) << 3));
+        else bit_interleave[i] = getInt8((i & 3) | ((i & 0x0C) << 2));
+    }
+    return ConstantVector::get({bit_interleave, fieldCount});
+}
+
+
 IDISA_Builder::IDISA_Builder(LLVMContext & C, unsigned vectorWidth, unsigned stride)
 : CBuilder(C)
 , mBitBlockWidth(vectorWidth)

@@ -58,8 +58,6 @@ public:
     llvm::Value * mvmd_shuffle(unsigned fw, llvm::Value * data_table, llvm::Value * index_vector) override;
     ~IDISA_SSSE3_Builder() {}
 
-private:
-    llvm::Constant * bit_interleave_byteshuffle_table(unsigned fw);
 };
 
 }

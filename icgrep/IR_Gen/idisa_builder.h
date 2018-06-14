@@ -200,6 +200,8 @@ public:
     void CallPrintRegister(const std::string & regName, llvm::Value * const value);
 
 protected:
+    llvm::Constant * bit_interleave_byteshuffle_table(unsigned fw);  // support function for merge using shuffles.
+
     const unsigned              mBitBlockWidth;
     const unsigned              mStride;
     llvm::VectorType * const    mBitBlockType;
