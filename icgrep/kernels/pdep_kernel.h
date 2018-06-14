@@ -65,7 +65,7 @@ private:
 
 class FieldDepositKernel final : public MultiBlockKernel {
 public:
-    FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount, std::string suffix);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

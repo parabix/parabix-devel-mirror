@@ -262,8 +262,8 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     b->SetInsertPoint(expansionDone);
 }
 
-FieldDepositKernel::FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
-: MultiBlockKernel("FieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
+FieldDepositKernel::FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount, std::string suffix)
+: MultiBlockKernel("FieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount) + suffix,
                    {Binding{kb->getStreamSetTy(1), "depositMask"}, Binding{kb->getStreamSetTy(streamCount), "inputStreamSet"}},
                    {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"}},
                    {}, {}, {})
@@ -392,7 +392,7 @@ void StreamDepositCompiler::makeCall(parabix::StreamSetBuffer * depositMask, par
     if (AVX2_available()) {
         depositK = mDriver.addKernelInstance<PDEPFieldDepositKernel>(b, mFieldWidth, N, std::to_string(mSelectedStreamBase));
     } else {
-        depositK = mDriver.addKernelInstance<FieldDepositKernel>(b, mFieldWidth, N);
+        depositK = mDriver.addKernelInstance<FieldDepositKernel>(b, mFieldWidth, N, std::to_string(mSelectedStreamBase));
     }
     mDriver.makeKernelCall(depositK, {depositMask, expandedStreams}, {outputs});
 }
