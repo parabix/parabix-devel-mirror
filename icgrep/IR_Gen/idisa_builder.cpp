@@ -702,7 +702,6 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm
     }
 }
 
-
 Value * IDISA_Builder::bitblock_mask_from(Value * pos) {
     Value * p = CreateZExtOrTrunc(pos, getSizeTy());
     const unsigned fw = getSizeTy()->getBitWidth();

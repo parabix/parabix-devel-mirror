@@ -338,7 +338,7 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     Value * const pendingSpaceFilled = b->CreateICmpEQ(pendingFieldIdx, numFieldConst);
     Value * shftBack = b->CreateSub(numFieldConst, pendingFieldIdx);
     for (unsigned i = 0; i < mStreamCount; i++) {
-        Value * outputFwd = b->mvmd_sll(fw, outputFields[i], pendingFieldIdx);
+        Value * outputFwd = b->fwCast(fw, b->mvmd_sll(fw, outputFields[i], pendingFieldIdx));
         outputFwd = b->CreateSelect(pendingSpaceFilled, zeroSplat, outputFwd);
         pendingOutput[i] = b->simd_or(pendingOutput[i], outputFwd);
         outputFields[i] = b->mvmd_srl(fw, outputFields[i], shftBack);

@@ -6,6 +6,7 @@
 
 #include "idisa_sse_builder.h"
 #include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/Module.h>
 
 using namespace llvm;
 
@@ -183,6 +184,26 @@ Value * IDISA_SSE_Builder::mvmd_compress(unsigned fw, Value * a, Value * selecto
         Value * kept = simd_and(simd_eq(64, simd_and(keep_mask, bdcst), keep_mask), a);
         Value * shifted = simd_and(a_srli1, simd_eq(64, shifted_mask, bdcst));
         return simd_or(kept, shifted);
+    }
+    if ((mBitBlockWidth == 128) && (fw == 32)) {
+        Value * bdcst = simd_fill(32, CreateZExtOrTrunc(selector, getInt32Ty()));
+        Constant * fieldBit[4] =
+        {ConstantInt::get(getInt32Ty(), 1), ConstantInt::get(getInt32Ty(), 2),
+            ConstantInt::get(getInt32Ty(), 4), ConstantInt::get(getInt32Ty(), 8)};
+        Constant * fieldMask = ConstantVector::get({fieldBit, 4});
+        Value * a_selected = simd_and(simd_eq(32, fieldMask, simd_and(fieldMask, bdcst)), a);
+        Constant * rotateInwards[4] =
+        {ConstantInt::get(getInt32Ty(), 1), ConstantInt::get(getInt32Ty(), 0),
+            ConstantInt::get(getInt32Ty(), 3), ConstantInt::get(getInt32Ty(), 2)};
+        Constant * rotateVector = ConstantVector::get({rotateInwards, 4});
+        Value * rotated = CreateShuffleVector(fwCast(32, a_selected), UndefValue::get(fwVectorType(fw)), rotateVector);
+        Constant * rotate_bit[2] = {ConstantInt::get(getInt64Ty(), 2), ConstantInt::get(getInt64Ty(), 4)};
+        Constant * rotate_mask = ConstantVector::get({rotate_bit, 2});
+        Value * rotateControl = simd_eq(64, fwCast(64, simd_and(bdcst, rotate_mask)), allZeroes());
+        Value * centralResult = simd_if(1, rotateControl, rotated, a_selected);
+        Value * delete_marks_lo = CreateAnd(CreateNot(selector), ConstantInt::get(selector->getType(), 3));
+        Value * delCount_lo = CreateSub(delete_marks_lo, CreateLShr(delete_marks_lo, 1));
+        return mvmd_srl(32, centralResult, delCount_lo);
     }
     return IDISA_Builder::mvmd_compress(fw, a, selector);
 }
