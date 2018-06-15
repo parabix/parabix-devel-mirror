@@ -89,7 +89,7 @@ Value * IDISA_Builder::simd_fill(unsigned fw, Value * a) {
     if (fw < 8) report_fatal_error("Unsupported field width: simd_fill " + std::to_string(fw));
     const unsigned field_count = mBitBlockWidth/fw;
     Type * singleFieldVecTy = VectorType::get(getIntNTy(fw), 1);
-    Value * aVec = CreateBitCast(a, singleFieldVecTy);
+    Value * aVec = CreateBitCast(CreateZExtOrTrunc(a, getIntNTy(fw)), singleFieldVecTy);
     return CreateShuffleVector(aVec, UndefValue::get(singleFieldVecTy), Constant::getNullValue(VectorType::get(getInt32Ty(), field_count)));
 }
 
