@@ -17,7 +17,6 @@ void p2s_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p0, Value
     s1 = iBuilder->esimd_mergeh(8, t1, t0);
     s0 = iBuilder->esimd_mergel(8, t1, t0);
 }
-#define LITTLE_ENDIAN_BIT_NUMBERING
 
 inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Value * s[], cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian) {
     Value * bit00004444[2];
