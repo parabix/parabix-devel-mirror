@@ -1,0 +1,30 @@
+#!/bin/bash
+#
+# Robert D. Cameron
+#
+# Usage: ./run_abc test_program
+# Example ./run_abc ../icgrep-build/icgrep
+#
+test_dir=`echo "$0" | sed "s/[^\/]*$//"`
+
+test_program=$1
+u8_directory=u8u16/TestFiles
+u32_directory=u32TestFiles
+output_directory=u32u8output
+
+[ -x "$u32_directory" ] && rm -rf $u32_directory
+[ -x "$output_directory.bak" ] && rm -rf $output_directory.bak
+[ -x "$output_directory" ] && mv $output_directory $output_directory.bak
+
+mkdir $u32_directory
+mkdir $output_directory
+
+for f in $u8_directory/*
+do
+    fbase=`echo $f | sed "s#$u8_directory/##"`
+	iconv -f UTF-8 -t UTF-32LE $u8_directory/$fbase > $u32_directory/$fbase
+    fbase=`echo $f | sed "s#$u8_directory/##"`
+    $test_program $u32_directory/$fbase >$output_directory/$fbase
+done
+
+diff -q $u8_directory/$fbase $output_directory/$fbase 

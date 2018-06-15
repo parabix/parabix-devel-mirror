@@ -268,6 +268,11 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
   COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
 
+add_test(
+  NAME u32u8_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/
+  COMMAND ./test_u32u8 "${CMAKE_BINARY_DIR}/u32u8")
+
 #add_test(
 #  NAME lz4d_test
 #  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d
