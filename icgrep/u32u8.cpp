@@ -271,6 +271,8 @@ void UTF8assembly::generatePabloMethod() {
 void u32u8_gen (ParabixDriver & pxDriver) {
     auto & idb = pxDriver.getBuilder();
     Module * mod = idb->getModule();
+    
+    unsigned const FieldWidth = sizeof(size_t) * 8;
 
     const unsigned u32buffersize = codegen::SegmentSize * codegen::ThreadNum;
     const unsigned u8buffersize = 4 * (u32buffersize + 1);
@@ -322,23 +324,25 @@ void u32u8_gen (ParabixDriver & pxDriver) {
     // Calculate the u8final deposit mask.
 #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
     StreamSetBuffer * extractionMask = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
-    kernel::Kernel * fieldDepositMaskK = pxDriver.addKernelInstance<UTF8fieldDepositMask>(idb);
+    kernel::Kernel * fieldDepositMaskK = pxDriver.addKernelInstance<UTF8fieldDepositMask>(idb, FieldWidth);
     pxDriver.makeKernelCall(fieldDepositMaskK, {u32basis}, {u8fieldMask, extractionMask});
-    kernel::Kernel * streamK = pxDriver.addKernelInstance<StreamCompressKernel>(idb, 64, 1);
+    kernel::Kernel * streamK = pxDriver.addKernelInstance<StreamCompressKernel>(idb, FieldWidth, 1);
     pxDriver.makeKernelCall(streamK, {u8fieldMask, extractionMask}, {u8final});
 #else
     StreamSetBuffer * u8unitCounts = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
-    kernel::Kernel * fieldDepositMaskK = pxDriver.addKernelInstance<UTF8fieldDepositMask>(idb);
+    kernel::Kernel * fieldDepositMaskK = pxDriver.addKernelInstance<UTF8fieldDepositMask>(idb, FieldWidth);
     pxDriver.makeKernelCall(fieldDepositMaskK, {u32basis}, {u8fieldMask, u8unitCounts});
-    kernel::Kernel * streamK = pxDriver.addKernelInstance<StreamCompressKernel>(idb, 64, 1);
+    kernel::Kernel * streamK = pxDriver.addKernelInstance<StreamCompressKernel>(idb, FieldWidth, 1);
     pxDriver.makeKernelCall(streamK, {u8fieldMask, u8unitCounts}, {u8final});
 #endif
-/*    kernel::Kernel * hexConvert =  pxDriver.addKernelInstance<BinaryToHex>(idb);
-    pxDriver.makeKernelCall(hexConvert, {u8final}, {u8bytes});
-*/
+//    kernel::Kernel * hexConvert =  pxDriver.addKernelInstance<BinaryToHex>(idb);
+    
     kernel::Kernel * maskK = pxDriver.addKernelInstance<UTF8_DepositMasks>(idb);
     pxDriver.makeKernelCall(maskK, {u8final}, {u8initial, u8mask12_17, u8mask6_11});
-    
+
+//    pxDriver.makeKernelCall(hexConvert, {u8mask6_11}, {u8bytes});
+
+
     StreamDepositCompiler deposit18_20compiler(pxDriver, 21, 18, 3, u32buffersize);
     deposit18_20compiler.makeCall(u8initial, u32basis, deposit18_20);
     
