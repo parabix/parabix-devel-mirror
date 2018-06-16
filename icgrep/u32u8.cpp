@@ -93,7 +93,7 @@ private:
 
 UTF8fieldDepositMask::UTF8fieldDepositMask(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned depositFieldWidth)
 : BlockOrientedKernel("u8depositMask",
-            {Binding{b->getStreamSetTy(1, 21), "basis"}},
+            {Binding{b->getStreamSetTy(21, 1), "basis"}},
 #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
             {Binding{b->getStreamSetTy(1, 1), "fieldDepositMask", FixedRate(4)},
                       Binding{b->getStreamSetTy(1, 1), "extractionMask", FixedRate(4)}},
@@ -298,7 +298,7 @@ void u32u8_gen (ParabixDriver & pxDriver) {
     pxDriver.makeKernelCall(sourceK, {}, {codeUnitStream});
     
     // Source buffers for transposed UTF-32 basis bits.
-    StreamSetBuffer * u32basis = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(21), u32buffersize);
+    StreamSetBuffer * u32basis = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(21), u32buffersize+1);
     
     kernel::Kernel * s2p21K = pxDriver.addKernelInstance<S2P_21Kernel>(idb);
     pxDriver.makeKernelCall(s2p21K, {codeUnitStream}, {u32basis});
