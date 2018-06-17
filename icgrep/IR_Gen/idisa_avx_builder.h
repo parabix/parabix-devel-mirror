@@ -85,6 +85,7 @@ public:
     llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) override;
     llvm::Value * mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift) override;
     llvm::Value * mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift) override;
+    llvm::Value * simd_if(unsigned fw, llvm::Value * cond, llvm::Value * a, llvm::Value * b) override;
 
     ~IDISA_AVX512F_Builder() {
     }
