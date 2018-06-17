@@ -73,6 +73,8 @@ public:
     void getAVX512Features();
     llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * esimd_mergeh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * esimd_mergel(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * esimd_bitspread(unsigned fw, llvm::Value * bitmask) override;
     llvm::Value * simd_popcount(unsigned fw, llvm::Value * a) override;
     llvm::Value * mvmd_slli(unsigned fw, llvm::Value * a, unsigned shift) override;
