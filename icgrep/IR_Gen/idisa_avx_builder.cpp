@@ -764,11 +764,9 @@ Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
         Constant * mask = ConstantInt::getAllOnesValue(getInt64Ty());
         Value * low_bits = CreateCall(shufFn, {interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8))), zeroByteSplat, mask});
         Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4)), zeroByteSplat, mask}), fw);
-        // For each 16-bit field, interleave the low bits of the two bytes.
-        low_bits = simd_or(simd_and(low_bits, simd_lomask(16)), simd_srli(16, low_bits, 8-fw));
-        // For each 16-bit field, interleave the high bits of the two bytes.
-        high_bits = simd_or(simd_and(high_bits, simd_himask(16)), simd_slli(16, high_bits, 8-fw));
-        return simd_or(low_bits, high_bits);
+        Value * lo_move_back = simd_srli(16, low_bits, 8-fw);
+        Value * hi_move_fwd = simd_slli(16, high_bits, 8-fw);
+        return simd_or(simd_if(1, simd_himask(16), high_bits, low_bits), simd_or(lo_move_back, hi_move_fwd));
     }
     // Otherwise use default AVX2 logic.
     return IDISA_AVX2_Builder::esimd_mergeh(fw, a, b);
@@ -788,11 +786,9 @@ Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
         Constant * mask = ConstantInt::getAllOnesValue(getInt64Ty());
         Value * low_bits = CreateCall(shufFn, {interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8))), zeroByteSplat, mask});
         Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4)), zeroByteSplat, mask}), fw);
-        // For each 16-bit field, interleave the low bits of the two bytes.
-        low_bits = simd_or(simd_and(low_bits, simd_lomask(16)), simd_srli(16, low_bits, 8-fw));
-        // For each 16-bit field, interleave the high bits of the two bytes.
-        high_bits = simd_or(simd_and(high_bits, simd_himask(16)), simd_slli(16, high_bits, 8-fw));
-        return simd_or(low_bits, high_bits);
+        Value * lo_move_back = simd_srli(16, low_bits, 8-fw);
+        Value * hi_move_fwd = simd_slli(16, high_bits, 8-fw);
+        return simd_or(simd_if(1, simd_himask(16), high_bits, low_bits), simd_or(lo_move_back, hi_move_fwd));
     }
     // Otherwise use default AVX2 logic.
     return IDISA_AVX2_Builder::esimd_mergel(fw, a, b);
