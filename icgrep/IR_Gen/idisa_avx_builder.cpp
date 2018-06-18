@@ -768,6 +768,37 @@ Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
         Value * hi_move_fwd = simd_slli(16, high_bits, 8-fw);
         return simd_or(simd_if(1, simd_himask(16), high_bits, low_bits), simd_or(lo_move_back, hi_move_fwd));
     }
+    if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
+        const unsigned fieldCount = mBitBlockWidth/fw;
+        Value * permute_func = nullptr;
+        if (fw == 32) permute_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_maskz_vpermt2var_d_512);
+        else permute_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_maskz_vpermt2var_hi_512);
+        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+        Constant * Idxs[fieldCount];
+        for (unsigned i = 0; i < fieldCount / 2; i++) {
+            Idxs[2 * i] = getInt32(i + fieldCount / 2); // selects elements from first reg.
+            Idxs[2 * i + 1] = getInt32(i + fieldCount / 2 + fieldCount); // selects elements from second reg.
+        }
+        Value * args[4] = {ConstantVector::get({Idxs, fieldCount}), fwCast(fw, b), fwCast(fw, a), mask};
+        return bitCast(CreateCall(permute_func, args));
+    }
+    if ((fw == 8) || (hostCPUFeatures.hasAVX512BW && (fw == 8)))   {
+        const unsigned fieldCount = mBitBlockWidth/fw;
+        Constant * Idxs[fieldCount/2];
+        for (unsigned i = 0; i < fieldCount / 2; i++) {
+            Idxs[i] = getInt32(i+fieldCount/2); // selects elements from first reg.
+        }
+        Constant * low_indexes = ConstantVector::get({Idxs, fieldCount/2});
+        Value * a_low = CreateShuffleVector(fwCast(8, a), UndefValue::get(fwVectorType(8)), low_indexes);
+        Value * b_low = CreateShuffleVector(fwCast(8, b), UndefValue::get(fwVectorType(8)), low_indexes);
+        Value * zext_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmovzxb_w_512);
+        Constant * mask = ConstantInt::getAllOnesValue(getInt32Ty());
+        Constant * zeroes = Constant::getNullValue(fwVectorType(16));
+        Value * a_ext = CreateCall(zext_func, {a_low, zeroes, mask});
+        Value * b_ext = CreateCall(zext_func, {b_low, zeroes, mask});
+        Value * rslt = simd_or(a_ext, simd_slli(16, b_ext, 8));
+        return rslt;
+    }
     // Otherwise use default AVX2 logic.
     return IDISA_AVX2_Builder::esimd_mergeh(fw, a, b);
 }
@@ -789,6 +820,37 @@ Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
         Value * lo_move_back = simd_srli(16, low_bits, 8-fw);
         Value * hi_move_fwd = simd_slli(16, high_bits, 8-fw);
         return simd_or(simd_if(1, simd_himask(16), high_bits, low_bits), simd_or(lo_move_back, hi_move_fwd));
+    }
+    if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
+        const unsigned fieldCount = mBitBlockWidth/fw;
+        Value * permute_func = nullptr;
+        if (fw == 32) permute_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_maskz_vpermt2var_d_512);
+        else permute_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_maskz_vpermt2var_hi_512);
+        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+        Constant * Idxs[fieldCount];
+        for (unsigned i = 0; i < fieldCount / 2; i++) {
+            Idxs[2 * i] = getInt32(i); // selects elements from first reg.
+            Idxs[2 * i + 1] = getInt32(i + fieldCount); // selects elements from second reg.
+        }
+        Value * args[4] = {ConstantVector::get({Idxs, fieldCount}), fwCast(fw, b), fwCast(fw, a), mask};
+        return bitCast(CreateCall(permute_func, args));
+    }
+    if ((fw == 8) || (hostCPUFeatures.hasAVX512BW && (fw == 8)))   {
+        const unsigned fieldCount = mBitBlockWidth/fw;
+        Constant * Idxs[fieldCount/2];
+        for (unsigned i = 0; i < fieldCount / 2; i++) {
+            Idxs[i] = getInt32(i); // selects elements from first reg.
+        }
+        Constant * low_indexes = ConstantVector::get({Idxs, fieldCount/2});
+        Value * a_low = CreateShuffleVector(fwCast(8, a), UndefValue::get(fwVectorType(8)), low_indexes);
+        Value * b_low = CreateShuffleVector(fwCast(8, b), UndefValue::get(fwVectorType(8)), low_indexes);
+        Value * zext_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmovzxb_w_512);
+        Constant * mask = ConstantInt::getAllOnesValue(getInt32Ty());
+        Constant * zeroes = Constant::getNullValue(fwVectorType(16));
+        Value * a_ext = CreateCall(zext_func, {a_low, zeroes, mask});
+        Value * b_ext = CreateCall(zext_func, {b_low, zeroes, mask});
+        Value * rslt = simd_or(a_ext, simd_slli(16, b_ext, 8));
+        return rslt;
     }
     // Otherwise use default AVX2 logic.
     return IDISA_AVX2_Builder::esimd_mergel(fw, a, b);
