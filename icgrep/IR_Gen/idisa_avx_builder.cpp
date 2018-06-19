@@ -788,14 +788,11 @@ Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
         for (unsigned i = 0; i < fieldCount / 2; i++) {
             Idxs[i] = getInt32(i+fieldCount/2); // selects elements from first reg.
         }
-        Constant * low_indexes = ConstantVector::get({Idxs, fieldCount/2});
-        Value * a_low = CreateShuffleVector(fwCast(8, a), UndefValue::get(fwVectorType(8)), low_indexes);
-        Value * b_low = CreateShuffleVector(fwCast(8, b), UndefValue::get(fwVectorType(8)), low_indexes);
-        Value * zext_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmovzxb_w_512);
-        Constant * mask = ConstantInt::getAllOnesValue(getInt32Ty());
-        Constant * zeroes = Constant::getNullValue(fwVectorType(16));
-        Value * a_ext = CreateCall(zext_func, {a_low, zeroes, mask});
-        Value * b_ext = CreateCall(zext_func, {b_low, zeroes, mask});
+        Constant * high_indexes = ConstantVector::get({Idxs, fieldCount/2});
+        Value * a_high = CreateShuffleVector(fwCast(8, a), UndefValue::get(fwVectorType(8)), high_indexes);
+        Value * b_high = CreateShuffleVector(fwCast(8, b), UndefValue::get(fwVectorType(8)), high_indexes);
+        Value * a_ext = CreateZExt(a_high, fwVectorType(16));
+        Value * b_ext = CreateZExt(b_high, fwVectorType(16));
         Value * rslt = simd_or(a_ext, simd_slli(16, b_ext, 8));
         return rslt;
     }
@@ -844,11 +841,8 @@ Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
         Constant * low_indexes = ConstantVector::get({Idxs, fieldCount/2});
         Value * a_low = CreateShuffleVector(fwCast(8, a), UndefValue::get(fwVectorType(8)), low_indexes);
         Value * b_low = CreateShuffleVector(fwCast(8, b), UndefValue::get(fwVectorType(8)), low_indexes);
-        Value * zext_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmovzxb_w_512);
-        Constant * mask = ConstantInt::getAllOnesValue(getInt32Ty());
-        Constant * zeroes = Constant::getNullValue(fwVectorType(16));
-        Value * a_ext = CreateCall(zext_func, {a_low, zeroes, mask});
-        Value * b_ext = CreateCall(zext_func, {b_low, zeroes, mask});
+        Value * a_ext = CreateZExt(a_low, fwVectorType(16));
+        Value * b_ext = CreateZExt(b_low, fwVectorType(16));
         Value * rslt = simd_or(a_ext, simd_slli(16, b_ext, 8));
         return rslt;
     }
