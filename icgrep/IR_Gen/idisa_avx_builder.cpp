@@ -753,17 +753,26 @@ llvm::Value * IDISA_AVX512F_Builder::hsimd_signmask(unsigned fw, llvm::Value * a
 Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     if (hostCPUFeatures.hasAVX512BW && ((fw == 1) || (fw == 2))) {
         // Bit interleave using shuffle.
-        Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_mask_pshuf_b_512);
         // Make a shuffle table that translates the lower 4 bits of each byte in
         // order to spread out the bits: xxxxdcba => .d.c.b.a
         // We use two copies of the table for the AVX2 _mm256_shuffle_epi8
         Constant * interleave_table = bit_interleave_byteshuffle_table(fw);
         // Merge the bytes.
         Value * byte_merge = esimd_mergeh(8, a, b);
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)        
+        Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_mask_pshuf_b_512);
+        // Make a shuffle table that translates the lower 4 bits of each byte in
+        // order to spread out the bits: xxxxdcba => .d.c.b.a
+        // We use two copies of the table for the AVX2 _mm256_shuffle_epi8
         Value * zeroByteSplat = fwCast(8, allZeroes());
         Constant * mask = ConstantInt::getAllOnesValue(getInt64Ty());
         Value * low_bits = CreateCall(shufFn, {interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8))), zeroByteSplat, mask});
         Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4)), zeroByteSplat, mask}), fw);
+#else
+        Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_pshuf_b_512);
+        Value * low_bits = CreateCall(shufFn, {interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8)))});
+        Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), fw);
+#endif
         Value * lo_move_back = simd_srli(16, low_bits, 8-fw);
         Value * hi_move_fwd = simd_slli(16, high_bits, 8-fw);
         return simd_or(simd_if(1, simd_himask(16), high_bits, low_bits), simd_or(lo_move_back, hi_move_fwd));
@@ -803,17 +812,27 @@ Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
     if (hostCPUFeatures.hasAVX512BW && ((fw == 1) || (fw == 2))) {
         // Bit interleave using shuffle.
-        Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_mask_pshuf_b_512);
         // Make a shuffle table that translates the lower 4 bits of each byte in
         // order to spread out the bits: xxxxdcba => .d.c.b.a
         // We use two copies of the table for the AVX2 _mm256_shuffle_epi8
         Constant * interleave_table = bit_interleave_byteshuffle_table(fw);
         // Merge the bytes.
         Value * byte_merge = esimd_mergel(8, a, b);
+        
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)        
+        Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_mask_pshuf_b_512);
+        // Make a shuffle table that translates the lower 4 bits of each byte in
+        // order to spread out the bits: xxxxdcba => .d.c.b.a
+        // We use two copies of the table for the AVX2 _mm256_shuffle_epi8
         Value * zeroByteSplat = fwCast(8, allZeroes());
         Constant * mask = ConstantInt::getAllOnesValue(getInt64Ty());
         Value * low_bits = CreateCall(shufFn, {interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8))), zeroByteSplat, mask});
         Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4)), zeroByteSplat, mask}), fw);
+#else
+        Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_pshuf_b_512);
+        Value * low_bits = CreateCall(shufFn, {interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8)))});
+        Value * high_bits = simd_slli(16, CreateCall(shufFn, {interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))}), fw);
+#endif
         Value * lo_move_back = simd_srli(16, low_bits, 8-fw);
         Value * hi_move_fwd = simd_slli(16, high_bits, 8-fw);
         return simd_or(simd_if(1, simd_himask(16), high_bits, low_bits), simd_or(lo_move_back, hi_move_fwd));
