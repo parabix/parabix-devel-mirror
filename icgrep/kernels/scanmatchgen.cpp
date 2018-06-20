@@ -140,7 +140,8 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
             Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
             Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
             Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
-            const auto matchRecNumArg = ++dispatcher->getArgumentList().begin();
+            Function::arg_iterator argi = dispatcher->arg_begin();
+            const auto matchRecNumArg = &*(argi++);
             Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
             b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
             Value * remaining_matches = b->CreateResetLowestBit(phiMatchWord);
