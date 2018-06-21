@@ -13,10 +13,10 @@ namespace IDISA {
 
 class IDISA_AVX_Builder : public IDISA_SSE2_Builder {
 public:
-
-    IDISA_AVX_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
-    : IDISA_Builder(C, vectorWidth, stride)
-    , IDISA_SSE2_Builder(C, vectorWidth, stride)
+    const unsigned NativeBitBlockWidth = 256;
+    IDISA_AVX_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned laneWidth)
+    : IDISA_Builder(C, NativeBitBlockWidth, vectorWidth, laneWidth)
+    , IDISA_SSE2_Builder(C, vectorWidth, laneWidth)
     {
 
     }
@@ -31,10 +31,10 @@ public:
 
 class IDISA_AVX2_Builder : public IDISA_AVX_Builder {
 public:
-
-    IDISA_AVX2_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
-    : IDISA_Builder(C, vectorWidth, stride)
-    , IDISA_AVX_Builder(C, vectorWidth, stride) {
+    const unsigned NativeBitBlockWidth = 256;
+    IDISA_AVX2_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned laneWidth)
+    : IDISA_Builder(C, NativeBitBlockWidth, vectorWidth, laneWidth)
+    , IDISA_AVX_Builder(C, vectorWidth, laneWidth) {
 
     }
 
@@ -62,10 +62,10 @@ public:
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
 class IDISA_AVX512F_Builder : public IDISA_AVX2_Builder {
 public:
-
-    IDISA_AVX512F_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
-    : IDISA_Builder(C, vectorWidth, stride)
-    , IDISA_AVX2_Builder(C, vectorWidth, stride) {
+    const unsigned NativeBitBlockWidth = 512;
+    IDISA_AVX512F_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned laneWidth)
+    : IDISA_Builder(C, NativeBitBlockWidth, vectorWidth, laneWidth)
+    , IDISA_AVX2_Builder(C, vectorWidth, laneWidth) {
         getAVX512Features();
     }
 

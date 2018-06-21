@@ -193,13 +193,20 @@ public:
 
     llvm::Value * CreateCeilUMul2(llvm::Value * const number, const ProcessingRate::RateValue & factor, const llvm::Twine & Name = "");
 
+    unsigned getStride() const {
+        return mStride;
+    }
+
 protected:
 
-    KernelBuilder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
-    : IDISA::IDISA_Builder(C, vectorWidth, stride)
+    KernelBuilder(llvm::LLVMContext & C, unsigned nativeVectorWidth, unsigned vectorWidth, unsigned laneWidth)
+    : IDISA::IDISA_Builder(C, nativeVectorWidth, vectorWidth, laneWidth)
+    , mStride(vectorWidth)
     , mKernel(nullptr) {
 
     }
+    
+    const unsigned mStride;
 
     llvm::Value * getScalarFieldPtr(llvm::Value * instance, llvm::Value * index);
 
@@ -211,15 +218,16 @@ protected:
 
 protected:
     const Kernel * mKernel;
+    
 };
 
 template <class SpecifiedArchitectureBuilder>
 class KernelBuilderImpl final : public KernelBuilder, public SpecifiedArchitectureBuilder {
 public:
-    KernelBuilderImpl(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride)
-    : IDISA::IDISA_Builder(C, vectorWidth, stride)
-    , KernelBuilder(C, vectorWidth, stride)
-    , SpecifiedArchitectureBuilder(C, vectorWidth, stride) {
+    KernelBuilderImpl(llvm::LLVMContext & C, unsigned vectorWidth, unsigned laneWidth)
+    : IDISA::IDISA_Builder(C, SpecifiedArchitectureBuilder::NativeBitBlockWidth, vectorWidth, laneWidth)
+    , KernelBuilder(C, SpecifiedArchitectureBuilder::NativeBitBlockWidth, vectorWidth, laneWidth)
+    , SpecifiedArchitectureBuilder(C, vectorWidth, laneWidth) {
 
     }
 };

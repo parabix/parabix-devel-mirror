@@ -41,7 +41,7 @@ class IDISA_Builder : public CBuilder {
 
 public:
 
-    IDISA_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned stride);
+    IDISA_Builder(llvm::LLVMContext & C, unsigned nativeVectorWidth, unsigned vectorWidth, unsigned laneWidth);
 
     virtual ~IDISA_Builder();
     
@@ -53,10 +53,6 @@ public:
 
     unsigned getBitBlockWidth() const {
         return mBitBlockWidth;
-    }
-
-    unsigned getStride() const {
-        return mStride;
     }
 
     llvm::Constant * allZeroes() const {
@@ -200,10 +196,13 @@ public:
     void CallPrintRegister(const std::string & regName, llvm::Value * const value);
 
 protected:
+    LLVM_ATTRIBUTE_NORETURN void UnsupportedFieldWidthError(const unsigned FieldWidth, std::string op_name);
+    
     llvm::Constant * bit_interleave_byteshuffle_table(unsigned fw);  // support function for merge using shuffles.
 
+    const unsigned              mNativeBitBlockWidth;
     const unsigned              mBitBlockWidth;
-    const unsigned              mStride;
+    const unsigned              mLaneWidth;
     llvm::VectorType * const    mBitBlockType;
     llvm::Constant * const      mZeroInitializer;
     llvm::Constant * const      mOneInitializer;

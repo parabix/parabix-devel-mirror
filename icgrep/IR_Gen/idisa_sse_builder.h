@@ -12,9 +12,9 @@ namespace IDISA {
 
 class IDISA_SSE_Builder : public virtual IDISA_Builder {
 public:
-  
-    IDISA_SSE_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned stride)
-    : IDISA_Builder(C, bitBlockWidth, stride) {
+    const unsigned NativeBitBlockWidth = 128;
+    IDISA_SSE_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned laneWidth)
+    : IDISA_Builder(C, NativeBitBlockWidth, bitBlockWidth, laneWidth) {
 
     }
 
@@ -26,10 +26,10 @@ public:
 
 class IDISA_SSE2_Builder : public IDISA_SSE_Builder {
 public:
-  
-    IDISA_SSE2_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned stride)
-    : IDISA_Builder(C, bitBlockWidth, stride)
-    , IDISA_SSE_Builder(C, bitBlockWidth, stride) {
+    const unsigned NativeBitBlockWidth = 128;  
+    IDISA_SSE2_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned laneWidth)
+    : IDISA_Builder(C, NativeBitBlockWidth, bitBlockWidth, laneWidth)
+    , IDISA_SSE_Builder(C, bitBlockWidth, laneWidth) {
 
     }
 
@@ -44,10 +44,10 @@ public:
 
 class IDISA_SSSE3_Builder : public IDISA_SSE2_Builder {
 public:
-    
-    IDISA_SSSE3_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned stride)
-    : IDISA_Builder(C, bitBlockWidth, stride)
-    , IDISA_SSE2_Builder(C, bitBlockWidth, stride)
+    const unsigned NativeBitBlockWidth = 128;    
+    IDISA_SSSE3_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned laneWidth)
+    : IDISA_Builder(C, NativeBitBlockWidth, bitBlockWidth, laneWidth)
+    , IDISA_SSE2_Builder(C, bitBlockWidth, laneWidth)
     {
 
     }
