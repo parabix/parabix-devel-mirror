@@ -13,7 +13,7 @@ namespace IDISA {
 
 class IDISA_I64_Builder : public virtual IDISA_Builder {
 public:
-    const unsigned NativeBitBlockWidth = I64_width;
+    static const unsigned NativeBitBlockWidth = I64_width;
   
     IDISA_I64_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned laneWidth)
     : IDISA_Builder(C, I64_width, bitBlockWidth, laneWidth) {
