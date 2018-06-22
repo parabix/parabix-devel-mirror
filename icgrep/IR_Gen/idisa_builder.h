@@ -63,6 +63,14 @@ public:
         return mOneInitializer;
     }
     
+    llvm::Constant * getConstantVectorSequence(unsigned fw, unsigned first, unsigned last, unsigned by = 1);
+    
+    llvm::Value * CreateHalfVectorHigh(llvm::Value *);
+    
+    llvm::Value * CreateHalfVectorLow(llvm::Value *);
+
+    llvm::Value * CreateDoubleVector(llvm::Value * lo, llvm::Value * hi);
+    
     llvm::LoadInst * CreateBlockAlignedLoad(llvm::Value * const ptr) {
         return CreateAlignedLoad(ptr, mBitBlockWidth / 8);
     }

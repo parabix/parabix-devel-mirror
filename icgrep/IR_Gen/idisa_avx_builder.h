@@ -10,12 +10,15 @@
 #include <toolchain/toolchain.h>
 
 namespace IDISA {
+    
+    const unsigned AVX_width = 256;
+    const unsigned AVX512_width = 512;
 
 class IDISA_AVX_Builder : public IDISA_SSE2_Builder {
 public:
-    const unsigned NativeBitBlockWidth = 256;
+    const unsigned NativeBitBlockWidth = AVX_width;
     IDISA_AVX_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned laneWidth)
-    : IDISA_Builder(C, NativeBitBlockWidth, vectorWidth, laneWidth)
+    : IDISA_Builder(C, AVX_width, vectorWidth, laneWidth)
     , IDISA_SSE2_Builder(C, vectorWidth, laneWidth)
     {
 
@@ -31,9 +34,9 @@ public:
 
 class IDISA_AVX2_Builder : public IDISA_AVX_Builder {
 public:
-    const unsigned NativeBitBlockWidth = 256;
+    const unsigned NativeBitBlockWidth = AVX_width;
     IDISA_AVX2_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned laneWidth)
-    : IDISA_Builder(C, NativeBitBlockWidth, vectorWidth, laneWidth)
+    : IDISA_Builder(C, AVX_width, vectorWidth, laneWidth)
     , IDISA_AVX_Builder(C, vectorWidth, laneWidth) {
 
     }
@@ -62,9 +65,9 @@ public:
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
 class IDISA_AVX512F_Builder : public IDISA_AVX2_Builder {
 public:
-    const unsigned NativeBitBlockWidth = 512;
+    const unsigned NativeBitBlockWidth = AVX512_width;
     IDISA_AVX512F_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned laneWidth)
-    : IDISA_Builder(C, NativeBitBlockWidth, vectorWidth, laneWidth)
+    : IDISA_Builder(C, AVX512_width, vectorWidth, laneWidth)
     , IDISA_AVX2_Builder(C, vectorWidth, laneWidth) {
         getAVX512Features();
     }

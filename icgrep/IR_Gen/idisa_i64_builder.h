@@ -9,13 +9,14 @@
 #include <IR_Gen/idisa_builder.h>
 
 namespace IDISA {
+    const unsigned I64_width = 64;
 
 class IDISA_I64_Builder : public virtual IDISA_Builder {
 public:
-    const unsigned NativeBitBlockWidth = 64;
+    const unsigned NativeBitBlockWidth = I64_width;
   
     IDISA_I64_Builder(llvm::LLVMContext & C, unsigned bitBlockWidth, unsigned laneWidth)
-    : IDISA_Builder(C, NativeBitBlockWidth, bitBlockWidth, laneWidth) {
+    : IDISA_Builder(C, I64_width, bitBlockWidth, laneWidth) {
 
     } 
 
