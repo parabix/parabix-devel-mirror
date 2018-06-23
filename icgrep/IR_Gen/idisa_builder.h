@@ -2,7 +2,7 @@
 #define IDISA_BUILDER_H
 
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -36,6 +36,7 @@ inline unsigned getStreamFieldWidth (llvm::Type * t) {
     return t->getArrayElementType()->getScalarSizeInBits();
 }
 
+unsigned getVectorBitWidth(llvm::Value * vec);
     
 class IDISA_Builder : public CBuilder {
 
@@ -104,6 +105,9 @@ public:
     llvm::Constant * simd_himask(unsigned fw);
     llvm::Constant * simd_lomask(unsigned fw);
     
+    llvm::Value * simd_select_hi(unsigned fw, llvm::Value * a);
+    llvm::Value * simd_select_lo(unsigned fw, llvm::Value * a);
+
     virtual llvm::Value * simd_fill(unsigned fw, llvm::Value * a);
 
     virtual llvm::Value * simd_add(unsigned fw, llvm::Value * a, llvm::Value * b);

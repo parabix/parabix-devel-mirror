@@ -19,6 +19,10 @@ using namespace llvm;
 
 namespace IDISA {
 
+unsigned getVectorBitWidth(Value * vec) {
+    return cast<VectorType>(vec->getType())->getBitWidth();
+}
+    
 VectorType * IDISA_Builder::fwVectorType(const unsigned fw) {
     return VectorType::get(getIntNTy(fw), mBitBlockWidth / fw);
 }
@@ -89,8 +93,16 @@ Constant * IDISA_Builder::simd_lomask(unsigned fw) {
     return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw/2)));
 }
 
-unsigned getVectorBitWidth(Value * vec) {
-    return cast<VectorType>(vec->getType())->getBitWidth();
+Value * IDISA_Builder::simd_select_hi(unsigned fw, Value * a) {
+    const unsigned vectorWidth = getVectorBitWidth(a);
+    Constant * maskField = Constant::getIntegerValue(getIntNTy(fw), APInt::getHighBitsSet(fw, fw/2));
+    return simd_and(a, ConstantVector::getSplat(vectorWidth/fw, maskField));
+}
+
+Value * IDISA_Builder::simd_select_lo(unsigned fw, Value * a) {
+    const unsigned vectorWidth = getVectorBitWidth(a);
+    Constant * maskField = Constant::getIntegerValue(getIntNTy(fw), APInt::getLowBitsSet(fw, fw/2));
+    return simd_and(a, ConstantVector::getSplat(vectorWidth/fw, maskField));
 }
 
 Constant * IDISA_Builder::getConstantVectorSequence(unsigned fw, unsigned first, unsigned last, unsigned by) {
@@ -105,21 +117,20 @@ Constant * IDISA_Builder::getConstantVectorSequence(unsigned fw, unsigned first,
 }
 
 Value * IDISA_Builder::CreateHalfVectorHigh(Value * vec) {
-    VectorType * const vecTy = cast<VectorType>(vec->getType());
-    const unsigned fieldCount = vecTy->getNumElements();
-    return CreateShuffleVector(vec, UndefValue::get(vecTy), getConstantVectorSequence(32, fieldCount/2, fieldCount-1));
+    Value * v = fwCast(mLaneWidth, vec);
+    const unsigned N = getVectorBitWidth(v)/mLaneWidth;
+    return CreateShuffleVector(v, UndefValue::get(v->getType()), getConstantVectorSequence(32, N/2, N-1));
 }
 
 Value * IDISA_Builder::CreateHalfVectorLow(Value * vec) {
-    VectorType * const vecTy = cast<VectorType>(vec->getType());
-    const unsigned fieldCount = vecTy->getNumElements();
-    return CreateShuffleVector(vec, UndefValue::get(vecTy), getConstantVectorSequence(32, 0, fieldCount/2-1));
+    Value * v = fwCast(mLaneWidth, vec);
+    const unsigned N = getVectorBitWidth(v)/mLaneWidth;
+    return CreateShuffleVector(v, UndefValue::get(v->getType()), getConstantVectorSequence(32, 0, N/2-1));
 }
 
 Value * IDISA_Builder::CreateDoubleVector(Value * lo, Value * hi) {
-    VectorType * const vecTy = cast<VectorType>(lo->getType());
-    const unsigned fieldCount = vecTy->getNumElements();
-    return CreateShuffleVector(lo, hi, getConstantVectorSequence(32, 0, fieldCount*2-1));
+    const unsigned N = getVectorBitWidth(lo)/mLaneWidth;
+    return CreateShuffleVector(fwCast(mLaneWidth, lo), fwCast(mLaneWidth, hi), getConstantVectorSequence(32, 0, 2*N-1));
 }
 
 Value * IDISA_Builder::simd_fill(unsigned fw, Value * a) {

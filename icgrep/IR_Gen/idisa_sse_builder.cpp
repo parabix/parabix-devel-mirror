@@ -115,8 +115,8 @@ std::pair<Value *, Value *> IDISA_SSE2_Builder::bitblock_advance(Value * a, Valu
     }
 #ifndef LEAVE_CARRY_UNNORMALIZED
     if (LLVM_UNLIKELY((shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
-        shifted = simd_or(mvmd_slli(8, a, shift / 8), si);
-        shiftout = mvmd_srli(8, a, (mBitBlockWidth - shift) / 8);
+        shifted = bitCast(simd_or(mvmd_slli(8, a, shift / 8), si));
+        shiftout = bitCast(mvmd_srli(8, a, (mBitBlockWidth - shift) / 8));
         return std::pair<Value *, Value *>(shiftout, shifted);
     }
     Value * shiftback = simd_srli(SHIFT_FIELDWIDTH, a, SHIFT_FIELDWIDTH - (shift % SHIFT_FIELDWIDTH));
