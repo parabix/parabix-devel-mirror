@@ -49,7 +49,7 @@ public:
     virtual std::string getBuilderUniqueName() = 0;  // A name uniquely identifying builder/bitBlockWidth/stride.
     
     llvm::Value * bitCast(llvm::Value * a) {
-        return CreateBitCast(a, mBitBlockType);
+        return fwCast(mLaneWidth, a);
     }
 
     unsigned getBitBlockWidth() const {

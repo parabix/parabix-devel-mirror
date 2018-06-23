@@ -19,8 +19,10 @@ using namespace llvm;
 
 namespace IDISA {
 
-unsigned getVectorBitWidth(Value * vec) {
-    return cast<VectorType>(vec->getType())->getBitWidth();
+unsigned getVectorBitWidth(Value * a) {
+    Type * aTy = a->getType();
+    if (isa<IntegerType>(aTy)) return aTy->getPrimitiveSizeInBits();
+    return cast<VectorType>(aTy)->getBitWidth();
 }
     
 VectorType * IDISA_Builder::fwVectorType(const unsigned fw) {
@@ -28,9 +30,8 @@ VectorType * IDISA_Builder::fwVectorType(const unsigned fw) {
 }
 
 Value * IDISA_Builder::fwCast(const unsigned fw, Value * const a) {
-    VectorType * const ty = fwVectorType(fw);
-    assert (a->getType()->getPrimitiveSizeInBits() == ty->getPrimitiveSizeInBits());
-    return CreateBitCast(a, ty);
+    unsigned vecWidth = getVectorBitWidth(a);
+    return CreateBitCast(a, VectorType::get(getIntNTy(fw), vecWidth / fw));
 }
 
 void IDISA_Builder::UnsupportedFieldWidthError(const unsigned fw, std::string op_name) {
@@ -86,11 +87,11 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
-    return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw/2)));
+    return ConstantVector::getSplat(mBitBlockWidth/fw, Constant::getIntegerValue(getIntNTy(fw), APInt::getHighBitsSet(fw, fw/2)));
 }
 
 Constant * IDISA_Builder::simd_lomask(unsigned fw) {
-    return Constant::getIntegerValue(getIntNTy(mBitBlockWidth), APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw/2)));
+    return ConstantVector::getSplat(mBitBlockWidth/fw, Constant::getIntegerValue(getIntNTy(fw), APInt::getLowBitsSet(fw, fw/2)));
 }
 
 Value * IDISA_Builder::simd_select_hi(unsigned fw, Value * a) {
@@ -275,8 +276,8 @@ Value * IDISA_Builder::mvmd_sll(unsigned fw, Value * value, Value * shift) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Type * const ty = shift->getType();
         Value * const scaled = CreateMul(shift, ConstantInt::get(ty, fw));
-        Value * const inbounds = CreateICmpULE(scaled, ConstantInt::get(ty, vecTy->getBitWidth()));
-        CreateAssert(inbounds, "shift exceeds vector width");
+        Value * const inbounds = CreateICmpULT(scaled, ConstantInt::get(ty, vecTy->getBitWidth()));
+        CreateAssert(inbounds, "poison shift value: >= vector width");
     }
     value = CreateBitCast(value, intTy);
     shift = CreateZExtOrTrunc(CreateMul(shift, ConstantInt::get(shift->getType(), fw)), intTy);
@@ -303,8 +304,8 @@ Value * IDISA_Builder::mvmd_srl(unsigned fw, Value * value, Value * shift) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Type * const ty = shift->getType();
         Value * const scaled = CreateMul(shift, ConstantInt::get(ty, fw));
-        Value * const inbounds = CreateICmpULE(scaled, ConstantInt::get(ty, vecTy->getBitWidth()));
-        CreateAssert(inbounds, "shift exceeds vector width");
+        Value * const inbounds = CreateICmpULT(scaled, ConstantInt::get(ty, vecTy->getBitWidth()));
+        CreateAssert(inbounds, "poison shift value: >= vector width");
     }
     value = CreateBitCast(value, intTy);
     shift = CreateZExtOrTrunc(CreateMul(shift, ConstantInt::get(shift->getType(), fw)), intTy);
@@ -411,7 +412,7 @@ Value * IDISA_Builder::simd_pdep(unsigned fieldwidth, Value * v, Value * deposit
         w = simd_or(simd_srlv(fw, simd_and(w, pext_shift_fwd_field_mask), pext_shift_fwd_amts),
                     simd_sllv(fw, simd_and(w, pext_shift_back_field_mask), pext_shift_back_amts));
     }
-    return CreateAnd(w, deposit_mask);
+    return simd_and(w, deposit_mask);
 }
 
 Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
@@ -475,17 +476,17 @@ Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) 
 }
     
 Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
-    if (getVectorBitWidth(a) > mBitBlockWidth) {
-        Value * a_hi = CreateHalfVectorHigh(a);
-        Value * b_hi = CreateHalfVectorHigh(b);
-        return CreateDoubleVector(esimd_mergel(fw, a_hi, b_hi), esimd_mergeh(fw, a_hi, b_hi));
-    }
     if (fw < 8) {
-        Value * abh = simd_or(simd_and(simd_himask(fw*2), b), simd_srli(32, simd_and(simd_himask(fw*2), a), fw));
-        Value * abl = simd_or(simd_slli(32, simd_and(simd_lomask(fw*2), b), fw), simd_and(simd_lomask(fw*2), a));
+        if (getVectorBitWidth(a) > mNativeBitBlockWidth) {
+            Value * a_hi = CreateHalfVectorHigh(a);
+            Value * b_hi = CreateHalfVectorHigh(b);
+            return CreateDoubleVector(esimd_mergel(fw, a_hi, b_hi), esimd_mergeh(fw, a_hi, b_hi));
+        }
+        Value * abh = simd_or(simd_select_hi(fw*2, b), simd_srli(32, simd_select_hi(fw*2, a), fw));
+        Value * abl = simd_or(simd_slli(32, simd_select_lo(fw*2, b), fw), simd_select_lo(fw*2, a));
         return esimd_mergeh(fw * 2, abl, abh);
     }
-    const auto field_count = mBitBlockWidth / fw;
+    const auto field_count = getVectorBitWidth(a) / fw;
     Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count / 2; i++) {
         Idxs[2 * i] = getInt32(i + field_count / 2); // selects elements from first reg.
@@ -495,18 +496,17 @@ Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
-    if (getVectorBitWidth(a) > mBitBlockWidth) {
-        Value * a_lo = CreateHalfVectorLow(a);
-        Value * b_lo = CreateHalfVectorLow(b);
-        return CreateDoubleVector(esimd_mergel(fw, a_lo, b_lo), esimd_mergeh(fw, a_lo, b_lo));
-    }
     if (fw < 8) {
-        Value * abh = simd_or(simd_and(simd_himask(fw*2), b), simd_srli(32, simd_and(simd_himask(fw*2), a), fw));
-        Value * abl = simd_or(simd_slli(32, simd_and(simd_lomask(fw*2), b), fw), simd_and(simd_lomask(fw*2), a));
+        if (getVectorBitWidth(a) > mNativeBitBlockWidth) {
+            Value * a_lo = CreateHalfVectorLow(a);
+            Value * b_lo = CreateHalfVectorLow(b);
+            return CreateDoubleVector(esimd_mergel(fw, a_lo, b_lo), esimd_mergeh(fw, a_lo, b_lo));
+        }
+        Value * abh = simd_or(simd_select_hi(fw*2, b), simd_srli(32, simd_select_hi(fw*2, a), fw));
+        Value * abl = simd_or(simd_slli(32, simd_select_lo(fw*2, b), fw), simd_select_lo(fw*2, a));
         return esimd_mergel(fw * 2, abl, abh);
     }
-    if (fw < 4) UnsupportedFieldWidthError(fw, "mergel");
-    const auto field_count = mBitBlockWidth / fw;
+    const auto field_count = getVectorBitWidth(a) / fw;
     Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count / 2; i++) {
         Idxs[2 * i] = getInt32(i); // selects elements from first reg.
@@ -816,9 +816,8 @@ Value * IDISA_Builder::simd_not(Value * a) {
     return simd_xor(a, Constant::getAllOnesValue(a->getType()));
 }
 
-
 Constant * IDISA_Builder::bit_interleave_byteshuffle_table(unsigned fw) {
-    const unsigned fieldCount = mBitBlockWidth/8;
+    const unsigned fieldCount = mNativeBitBlockWidth/8;
     if (fw > 2) llvm::report_fatal_error("bit_interleave_byteshuffle_table requires fw == 1 or fw == 2");
     // Bit interleave using shuffle.
     // Make a shuffle table that translates the lower 4 bits of each byte in
@@ -831,7 +830,6 @@ Constant * IDISA_Builder::bit_interleave_byteshuffle_table(unsigned fw) {
     }
     return ConstantVector::get({bit_interleave, fieldCount});
 }
-
 
 IDISA_Builder::IDISA_Builder(LLVMContext & C, unsigned nativeVectorWidth, unsigned vectorWidth, unsigned laneWidth)
 : CBuilder(C)
