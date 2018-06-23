@@ -174,11 +174,11 @@ Value * IDISA_Builder::simd_eq(unsigned fw, Value * a, Value * b) {
     if (fw < 8) {
         Value * eq_bits = simd_not(simd_xor(a, b));
         if (fw == 1) return eq_bits;
-        eq_bits = simd_or(simd_and(simd_srli(32, simd_and(simd_himask(2), eq_bits), 1), eq_bits),
-                          simd_and(simd_slli(32, simd_and(simd_lomask(2), eq_bits), 1), eq_bits));
+        eq_bits = simd_or(simd_and(simd_srli(32, simd_select_hi(2, eq_bits), 1), eq_bits),
+                          simd_and(simd_slli(32, simd_select_lo(2, eq_bits), 1), eq_bits));
         if (fw == 2) return eq_bits;
-        eq_bits = simd_or(simd_and(simd_srli(32, simd_and(simd_himask(4), eq_bits), 2), eq_bits),
-                          simd_and(simd_slli(32, simd_and(simd_lomask(4), eq_bits), 2), eq_bits));
+        eq_bits = simd_or(simd_and(simd_srli(32, simd_select_hi(4, eq_bits), 2), eq_bits),
+                          simd_and(simd_slli(32, simd_select_lo(4, eq_bits), 2), eq_bits));
         return eq_bits;
     }
     return CreateSExt(CreateICmpEQ(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
@@ -214,8 +214,8 @@ Value * IDISA_Builder::simd_ult(unsigned fw, Value * a, Value * b) {
 Value * IDISA_Builder::simd_ule(unsigned fw, Value * a, Value * b) {
     if (fw == 1) return simd_or(simd_not(a), b);
     if (fw < 8) {
-        Value * hi_rslt = simd_and(simd_himask(2*fw), simd_ule(2*fw, simd_and(simd_himask(2*fw), a), b));
-        Value * lo_rslt = simd_and(simd_lomask(2*fw), simd_ule(2*fw, simd_and(simd_lomask(2*fw), a), simd_and(simd_lomask(2*fw), b)));
+        Value * hi_rslt = simd_select_hi(2*fw, simd_ule(2*fw, simd_select_hi(2*fw, a), b));
+        Value * lo_rslt = simd_select_lo(2*fw, simd_ule(2*fw, simd_select_lo(2*fw, a), simd_select_lo(2*fw, b)));
         return simd_or(hi_rslt, lo_rslt);
     }
     return CreateSExt(CreateICmpULE(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
@@ -224,8 +224,8 @@ Value * IDISA_Builder::simd_ule(unsigned fw, Value * a, Value * b) {
 Value * IDISA_Builder::simd_uge(unsigned fw, Value * a, Value * b) {
     if (fw == 1) return simd_or(a, simd_not(b));
     if (fw < 8) {
-        Value * hi_rslt = simd_and(simd_himask(2*fw), simd_uge(2*fw, a, simd_and(simd_himask(2*fw), b)));
-        Value * lo_rslt = simd_and(simd_lomask(2*fw), simd_uge(2*fw, simd_and(simd_lomask(2*fw), a), simd_and(simd_lomask(2*fw), b)));
+        Value * hi_rslt = simd_select_hi(2*fw, simd_uge(2*fw, a, simd_select_hi(2*fw, b)));
+        Value * lo_rslt = simd_select_lo(2*fw, simd_uge(2*fw, simd_select_lo(2*fw, a), simd_select_lo(2*fw, b)));
         return simd_or(hi_rslt, lo_rslt);
     }
     if (fw < 8) UnsupportedFieldWidthError(fw, "ult");
@@ -242,8 +242,8 @@ Value * IDISA_Builder::simd_max(unsigned fw, Value * a, Value * b) {
 Value * IDISA_Builder::simd_umax(unsigned fw, Value * a, Value * b) {
     if (fw == 1) return simd_or(a, b);
     if (fw < 8) {
-        Value * hi_rslt = simd_and(simd_himask(2*fw), simd_umax(2*fw, a, b));
-        Value * lo_rslt = simd_umax(2*fw, simd_and(simd_lomask(2*fw), a), simd_and(simd_lomask(2*fw), b));
+        Value * hi_rslt = simd_select_hi(2*fw, simd_umax(2*fw, a, b));
+        Value * lo_rslt = simd_umax(2*fw, simd_select_lo(2*fw, a), simd_select_lo(2*fw, b));
         return simd_or(hi_rslt, lo_rslt);
     }
     Value * aVec = fwCast(fw, a);
@@ -261,8 +261,8 @@ Value * IDISA_Builder::simd_min(unsigned fw, Value * a, Value * b) {
 Value * IDISA_Builder::simd_umin(unsigned fw, Value * a, Value * b) {
     if (fw == 1) return simd_and(a, b);
     if (fw < 8) {
-        Value * hi_rslt = simd_and(simd_himask(2*fw), simd_umin(2*fw, a, b));
-        Value * lo_rslt = simd_umin(2*fw, simd_and(simd_lomask(2*fw), a), simd_and(simd_lomask(2*fw), b));
+        Value * hi_rslt = simd_select_hi(2*fw, simd_umin(2*fw, a, b));
+        Value * lo_rslt = simd_umin(2*fw, simd_select_lo(2*fw, a), simd_select_lo(2*fw, b));
         return simd_or(hi_rslt, lo_rslt);
     }
     Value * aVec = fwCast(fw, a);
@@ -373,17 +373,14 @@ Value * IDISA_Builder::simd_pext(unsigned fieldwidth, Value * v, Value * extract
     Value * delcounts = CreateNot(extract_mask);  // initially deletion counts per 1-bit field
     Value * w = simd_and(extract_mask, v);
     for (unsigned fw = 2; fw < fieldwidth; fw = fw * 2) {
-        Value * shift_fwd_field_mask = simd_lomask(fw*2);
-        Value * shift_back_field_mask = simd_himask(fw*2);
-        Value * shift_back_count_mask = simd_and(shift_back_field_mask, simd_lomask(fw));
-        Value * shift_fwd_amts = simd_srli(fw, simd_and(shift_fwd_field_mask, delcounts), fw/2);
-        Value * shift_back_amts = simd_and(shift_back_count_mask, delcounts);
-        w = simd_or(simd_sllv(fw, simd_and(w, shift_fwd_field_mask), shift_fwd_amts),
-                    simd_srlv(fw, simd_and(w, shift_back_field_mask), shift_back_amts));
-        delcounts = simd_add(fw, simd_and(simd_lomask(fw), delcounts), simd_srli(fw, delcounts, fw/2));
+        Value * shift_fwd_amts = simd_srli(fw, simd_select_lo(fw*2, delcounts), fw/2);
+        Value * shift_back_amts = simd_select_lo(fw, simd_select_hi(fw*2, delcounts));
+      w = simd_or(simd_sllv(fw, simd_select_lo(fw*2, w), shift_fwd_amts),
+                    simd_srlv(fw, simd_select_hi(fw*2, w), shift_back_amts));
+        delcounts = simd_add(fw, simd_select_lo(fw, delcounts), simd_srli(fw, delcounts, fw/2));
     }
     // Now shift back all fw fields.
-    Value * shift_back_amts = simd_and(simd_lomask(fieldwidth), delcounts);
+    Value * shift_back_amts = simd_select_lo(fieldwidth, delcounts);
     w = simd_srlv(fieldwidth, w, shift_back_amts);
     return w;
 }
@@ -394,23 +391,20 @@ Value * IDISA_Builder::simd_pdep(unsigned fieldwidth, Value * v, Value * deposit
     std::vector<Value *> delcounts;
     delcounts.push_back(simd_not(deposit_mask)); // initially deletion counts per 1-bit field
     for (unsigned fw = 2; fw < fieldwidth; fw = fw * 2) {
-        delcounts.push_back(simd_add(fw, simd_and(simd_lomask(fw), delcounts.back()), simd_srli(fw, delcounts.back(), fw/2)));
+        delcounts.push_back(simd_add(fw, simd_select_lo(fw, delcounts.back()), simd_srli(fw, delcounts.back(), fw/2)));
     }
     //
     // Now reverse the pext process.  First reverse the final shift_back.
-    Value * pext_shift_back_amts = simd_and(simd_lomask(fieldwidth), delcounts.back());
+    Value * pext_shift_back_amts = simd_select_lo(fieldwidth, delcounts.back());
     Value * w = simd_sllv(fieldwidth, v, pext_shift_back_amts);
     //
     // No work through the smaller field widths.
     for (unsigned fw = fieldwidth/2; fw >= 2; fw = fw/2) {
         delcounts.pop_back();
-        Value * pext_shift_fwd_field_mask = simd_lomask(fw*2);
-        Value * pext_shift_back_field_mask = simd_himask(fw*2);
-        Value * pext_shift_back_count_mask = simd_and(pext_shift_back_field_mask, simd_lomask(fw));
-        Value * pext_shift_fwd_amts = simd_srli(fw, simd_and(pext_shift_fwd_field_mask, delcounts.back()), fw/2);
-        Value * pext_shift_back_amts = simd_and(pext_shift_back_count_mask, delcounts.back());
-        w = simd_or(simd_srlv(fw, simd_and(w, pext_shift_fwd_field_mask), pext_shift_fwd_amts),
-                    simd_sllv(fw, simd_and(w, pext_shift_back_field_mask), pext_shift_back_amts));
+        Value * pext_shift_fwd_amts = simd_srli(fw, simd_select_lo(fw * 2, delcounts.back()), fw/2);
+        Value * pext_shift_back_amts = simd_select_lo(fw, simd_select_hi(fw*2, delcounts.back()));
+        w = simd_or(simd_srlv(fw, simd_select_lo(fw * 2, w), pext_shift_fwd_amts),
+                    simd_sllv(fw, simd_select_hi(fw * 2, w), pext_shift_back_amts));
     }
     return simd_and(w, deposit_mask);
 }
@@ -425,10 +419,10 @@ Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
         // case 01:  ab - 0a = 01 - 00 = 01
         // case 10:  ab - 0a = 10 - 01 = 01 (no borrow)
         // case 11:  ab - 0a = 11 - 01 = 10
-        return simd_sub(64, a, simd_srli(64, simd_and(simd_himask(2), a), 1));
+        return simd_sub(64, a, simd_srli(64, simd_select_hi(2, a), 1));
     } else if (fw <= 8) {
         Value * c = simd_popcount(fw/2, a);
-        c = simd_add(64, simd_and(c, simd_lomask(fw)), simd_srli(fw, c, fw/2));
+        c = simd_add(64, simd_select_lo(fw, c), simd_srli(fw, c, fw/2));
         return c;
     } else {
         return CreatePopcount(fwCast(fw, a));
@@ -457,7 +451,7 @@ Value * IDISA_Builder::simd_bitreverse(unsigned fw, Value * a) {
         if (fw > 2) {
             a = simd_bitreverse(fw/2, a);
         }
-        return simd_or(simd_srli(16, simd_and(a, simd_himask(fw)), fw/2), simd_slli(16, simd_and(a, simd_lomask(fw)), fw/2));
+        return simd_or(simd_srli(16, simd_select_hi(fw, a), fw/2), simd_slli(16, simd_select_lo(fw, a), fw/2));
     }
 }
 
@@ -556,8 +550,8 @@ Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
         Value * aLo = simd_srli(fw_wkg, a, fw/2);
         Value * bLo = simd_srli(fw_wkg, b, fw/2);
         return hsimd_packl(fw*2,
-                           bitCast(simd_or(simd_and(simd_himask(fw), aLo), simd_and(simd_lomask(fw), a))),
-                           bitCast(simd_or(simd_and(simd_himask(fw), bLo), simd_and(simd_lomask(fw), b))));
+                           bitCast(simd_or(simd_select_hi(fw, aLo), simd_select_lo(fw, a))),
+                           bitCast(simd_or(simd_select_hi(fw, bLo), simd_select_lo(fw, b))));
     }
     Value * aVec = fwCast(fw/2, a);
     Value * bVec = fwCast(fw/2, b);

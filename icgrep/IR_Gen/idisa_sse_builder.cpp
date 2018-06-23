@@ -216,9 +216,9 @@ Value * IDISA_SSSE3_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
         Value * low_bits = mvmd_shuffle(8, interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8))));
         Value * high_bits = simd_slli(16, mvmd_shuffle(8, interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))), fw);
         // For each 16-bit field, interleave the low bits of the two bytes.
-        low_bits = simd_or(simd_and(low_bits, simd_lomask(16)), simd_srli(16, low_bits, 8-fw));
+        low_bits = simd_or(simd_select_lo(16, low_bits), simd_srli(16, low_bits, 8-fw));
         // For each 16-bit field, interleave the high bits of the two bytes.
-        high_bits = simd_or(simd_and(high_bits, simd_himask(16)), simd_slli(16, high_bits, 8-fw));
+        high_bits = simd_or(simd_select_hi(16, high_bits), simd_slli(16, high_bits, 8-fw));
         return simd_or(low_bits, high_bits);
     }
     // Otherwise use default SSE logic.
@@ -233,9 +233,9 @@ Value * IDISA_SSSE3_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
         Value * low_bits = mvmd_shuffle(8, interleave_table, fwCast(8, simd_and(byte_merge, simd_lomask(8))));
         Value * high_bits = simd_slli(16, mvmd_shuffle(8, interleave_table, fwCast(8, simd_srli(8, byte_merge, 4))), fw);
         // For each 16-bit field, interleave the low bits of the two bytes.
-        low_bits = simd_or(simd_and(low_bits, simd_lomask(16)), simd_srli(16, low_bits, 8-fw));
+        low_bits = simd_or(simd_select_lo(16, low_bits), simd_srli(16, low_bits, 8-fw));
         // For each 16-bit field, interleave the high bits of the two bytes.
-        high_bits = simd_or(simd_and(high_bits, simd_himask(16)), simd_slli(16, high_bits, 8-fw));
+        high_bits = simd_or(simd_select_hi(16, high_bits), simd_slli(16, high_bits, 8-fw));
         return simd_or(low_bits, high_bits);
     }
     // Otherwise use default SSE2 logic.
