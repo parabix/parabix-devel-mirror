@@ -597,7 +597,6 @@ void LZ4GrepGenerator::generateParallelAioPipeline(re::RE* regex, bool enableGat
 
     StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks(iBuilder));
     Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::LittleEndian, /*aligned = */ true, "a");
-//    Kernel * s2pk = mPxDriver.addKernelInstance<S2PByPextKernel>(iBuilder, cc::BitNumbering::LittleEndian, "a");
     mPxDriver.makeKernelCall(s2pk, {decompressedByteStream}, {decompressionBitStream});
 
 
@@ -639,7 +638,6 @@ void LZ4GrepGenerator::generateAioPipeline(re::RE *regex) {
 
     StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks(iBuilder));
     Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::LittleEndian, /*aligned = */ true, "a");
-//    Kernel * s2pk = mPxDriver.addKernelInstance<S2PByPextKernel>(iBuilder, "a");
     mPxDriver.makeKernelCall(s2pk, {decompressedByteStream}, {decompressionBitStream});
 
 
