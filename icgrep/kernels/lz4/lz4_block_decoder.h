@@ -19,9 +19,9 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class LZ4BlockDecoderNewKernel : public SegmentOrientedKernel {
+class LZ4BlockDecoderKernel : public SegmentOrientedKernel {
 public:
-    LZ4BlockDecoderNewKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, std::string&& kernelName = "LZ4BlockDecoderKernel");
+    LZ4BlockDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, std::string&& kernelName = "LZ4BlockDecoderKernel");
 protected:
     void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
 private:

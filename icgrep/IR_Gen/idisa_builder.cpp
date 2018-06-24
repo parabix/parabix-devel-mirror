@@ -429,6 +429,18 @@ Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
     }
 }
 
+Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
+    if (fw == 1) {
+        return simd_not(a);
+    } else {
+        Value* v = simd_sub(fw, a, simd_fill(fw, getIntN(fw, 1)));
+        v = simd_or(v, a);
+        v = simd_xor(v, a);
+        v = simd_popcount(fw, v);
+        return v;
+    }
+}
+
 Value * IDISA_Builder::simd_bitreverse(unsigned fw, Value * a) {
     /*  Pure sequential solution too slow!
      Value * func = Intrinsic::getDeclaration(getModule(), Intrinsic::bitreverse, fwVectorType(fw));

@@ -10,9 +10,9 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-    class LZ4FakeStreamGeneratingKernel final : public MultiBlockKernel {
+    class FakeStreamGeneratingKernel final : public MultiBlockKernel {
     public:
-        LZ4FakeStreamGeneratingKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned numberOfInputStream = 1, const unsigned numberOfOutputStream = 1, std::string name = "LZ4FakeStreamGeneratingKernel");
+        FakeStreamGeneratingKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned numberOfInputStream = 1, const unsigned numberOfOutputStream = 1, std::string name = "LZ4FakeStreamGeneratingKernel");
         bool isCachable() const override { return true; }
         bool hasSignature() const override { return false; }
 

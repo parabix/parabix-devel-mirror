@@ -14,7 +14,7 @@ using namespace std;
 
 namespace kernel{
 
-LZ4BlockDecoderNewKernel::LZ4BlockDecoderNewKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, std::string&& kernelName)
+LZ4BlockDecoderKernel::LZ4BlockDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, std::string&& kernelName)
 : SegmentOrientedKernel(std::string(kernelName),
 // Inputs
 {
@@ -45,7 +45,7 @@ Binding{iBuilder->getInt64Ty(), "pendingBlockEnd"},
 
 }
 
-void LZ4BlockDecoderNewKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
+void LZ4BlockDecoderKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
 
     Constant* INT64_0 = b->getInt64(0);
 
@@ -160,7 +160,7 @@ void LZ4BlockDecoderNewKernel::generateDoSegmentMethod(const std::unique_ptr<Ker
     b->setTerminationSignal(mIsFinal);
 }
 
-void LZ4BlockDecoderNewKernel::appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, Value * const isCompressed, Value * const blockStart, Value * const blockEnd) {
+void LZ4BlockDecoderKernel::appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, Value * const isCompressed, Value * const blockStart, Value * const blockEnd) {
     Value * const offset = iBuilder->getProducedItemCount("isCompressed");
     generateStoreNumberOutput(iBuilder, "isCompressed", offset, iBuilder->CreateZExt(isCompressed, iBuilder->getInt8Ty()));
     generateStoreNumberOutput(iBuilder, "blockStart", offset, blockStart);
@@ -168,11 +168,11 @@ void LZ4BlockDecoderNewKernel::appendOutput(const std::unique_ptr<KernelBuilder>
     iBuilder->setProducedItemCount("isCompressed", iBuilder->CreateAdd(offset, iBuilder->getSize(1)));
 }
 
-Value* LZ4BlockDecoderNewKernel::generateLoadInput(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* offset) {
+Value* LZ4BlockDecoderKernel::generateLoadInput(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* offset) {
     return iBuilder->CreateLoad(iBuilder->getRawInputPointer("byteStream", offset));
 }
 
-void LZ4BlockDecoderNewKernel::generateStoreNumberOutput(const unique_ptr<KernelBuilder> &iBuilder, const string &outputBufferName, Value * offset, Value *value) {
+void LZ4BlockDecoderKernel::generateStoreNumberOutput(const unique_ptr<KernelBuilder> &iBuilder, const string &outputBufferName, Value * offset, Value *value) {
     iBuilder->CreateStore(value, iBuilder->getRawOutputPointer(outputBufferName, offset));
 }
 

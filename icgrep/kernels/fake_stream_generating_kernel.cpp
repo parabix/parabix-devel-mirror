@@ -1,5 +1,5 @@
 
-#include "lz4_fake_stream_generating_kernel.h"
+#include "fake_stream_generating_kernel.h"
 #include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <toolchain/toolchain.h>
@@ -9,7 +9,7 @@ using namespace llvm;
 namespace kernel {
 
 
-    LZ4FakeStreamGeneratingKernel::LZ4FakeStreamGeneratingKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+    FakeStreamGeneratingKernel::FakeStreamGeneratingKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
                                                                  const unsigned int numberOfInputStream,
                                                                  const unsigned int numberOfOutputStream,
                                                                  std::string name)
@@ -22,7 +22,7 @@ namespace kernel {
 
     }
 
-    void LZ4FakeStreamGeneratingKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &b,
+    void FakeStreamGeneratingKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &b,
                                                                 llvm::Value *const numOfStrides) {
     }
 }

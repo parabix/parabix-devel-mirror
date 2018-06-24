@@ -5,7 +5,6 @@
 
 #include <llvm/Support/PrettyStackTrace.h>
 
-#include <cc/alphabet.h>
 #include <cc/cc_compiler.h>
 
 #include <kernels/cc_kernel.h>
@@ -22,7 +21,7 @@
 #include <kernels/lz4/lz4_swizzled_match_copy_kernel.h>
 #include <kernels/lz4/lz4_bitstream_match_copy_kernel.h>
 #include <kernels/lz4/lz4_bitstream_not_kernel.h>
-#include <kernels/lz4/lz4_fake_stream_generating_kernel.h>
+#include <kernels/fake_stream_generating_kernel.h>
 #include <kernels/bitstream_pdep_kernel.h>
 #include <kernels/bitstream_gather_pdep_kernel.h>
 #include <re/re_toolchain.h>
@@ -52,7 +51,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Debug.h>
 #include <kernels/lz4/lz4_block_decoder.h>
-#include <kernels/lz4/lz4_swizzled_aio.h>
+#include <kernels/lz4/aio/lz4_swizzled_aio.h>
 
 
 namespace re { class CC; }
@@ -123,7 +122,7 @@ StreamSetBuffer * LZ4GrepGenerator::convertCompressedBitsStreamWithAioApproach(p
     mPxDriver.makeKernelCall(extenderK, {mCompressedBasisBits}, {Extenders});
 
 
-    Kernel * blockDecoderK = mPxDriver.addKernelInstance<LZ4BlockDecoderNewKernel>(iBuilder);
+    Kernel * blockDecoderK = mPxDriver.addKernelInstance<LZ4BlockDecoderKernel>(iBuilder);
     blockDecoderK->setInitialArguments({iBuilder->CreateTrunc(mHasBlockChecksum, iBuilder->getInt1Ty()), mHeaderSize, mFileSize});
     mPxDriver.makeKernelCall(blockDecoderK, {mCompressedByteStream}, {BlockData_IsCompressed, BlockData_BlockStart, BlockData_BlockEnd});
 
@@ -280,7 +279,7 @@ void LZ4GrepGenerator::generateMultiplexingCompressedBitStream(std::vector<re::R
 
 
     StreamSetBuffer * fakeMatchCopiedBits = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), this->getInputBufferBlocks(idb));
-    Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<LZ4FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, 8);
+    Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, 8);
     mPxDriver.makeKernelCall(fakeStreamGeneratorK, {decompressedCharClasses}, {fakeMatchCopiedBits});
 
     kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[0], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()});
@@ -371,7 +370,7 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerat
      */
 
     StreamSetBuffer * fakeMatchCopiedBits = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), this->getInputBufferBlocks(idb));
-    Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<LZ4FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, 8);
+    Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, 8);
     mPxDriver.makeKernelCall(fakeStreamGeneratorK, {decompressedCharClasses}, {fakeMatchCopiedBits});
 
     kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[0], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()});
@@ -522,25 +521,7 @@ void LZ4GrepGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
     mPxDriver.finalizeObject();
 }
 
-void LZ4GrepGenerator::generateMultiplexingSwizzledAioPipeline(re::RE* regex) {
-    auto & iBuilder = mPxDriver.getBuilder();
-    this->generateMainFunc(iBuilder);
-
-    // GeneratePipeline
-    this->generateLoadByteStreamAndBitStream(iBuilder);
-
-    std::vector<re::RE*> res = {regex};
-    this->generateMultiplexingCompressedBitStream(res);
-
-    mPxDriver.generatePipelineIR();
-    mPxDriver.deallocateBuffers();
-
-    iBuilder->CreateRetVoid();
-
-    mPxDriver.finalizeObject();
-}
-
-void LZ4GrepGenerator::generateMultiplexingSwizzledAioPipeline2(re::RE* regex) {
+void LZ4GrepGenerator::generateMultiplexingSwizzledAioPipeline(re::RE *regex) {
     auto & iBuilder = mPxDriver.getBuilder();
     this->generateCountOnlyMainFunc(iBuilder);
 
@@ -606,17 +587,17 @@ void LZ4GrepGenerator::generateSwizzledAioPipeline(re::RE* regex) {
     mPxDriver.finalizeObject();
 }
 
-void LZ4GrepGenerator::generateParallelAioPipeline(re::RE* regex, bool enableGather, bool enableScatter) {
+void LZ4GrepGenerator::generateParallelAioPipeline(re::RE* regex, bool enableGather, bool enableScatter, int minParallelLevel) {
     auto & iBuilder = mPxDriver.getBuilder();
     this->generateCountOnlyMainFunc(iBuilder);
 
     this->generateLoadByteStream(iBuilder);
-    parabix::StreamSetBuffer * decompressedByteStream = this->generateParallelAIODecompression(iBuilder, enableGather, enableScatter);
+    parabix::StreamSetBuffer * decompressedByteStream = this->generateParallelAIODecompression(iBuilder, enableGather, enableScatter, minParallelLevel);
 
 
     StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks(iBuilder));
-    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::BigEndian, /*aligned = */ true, "a");
-//    Kernel * s2pk = mPxDriver.addKernelInstance<S2PByPextKernel>(iBuilder, cc::BitNumbering::BigEndian, "a");
+    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::LittleEndian, /*aligned = */ true, "a");
+//    Kernel * s2pk = mPxDriver.addKernelInstance<S2PByPextKernel>(iBuilder, cc::BitNumbering::LittleEndian, "a");
     mPxDriver.makeKernelCall(s2pk, {decompressedByteStream}, {decompressionBitStream});
 
 
@@ -650,13 +631,14 @@ void LZ4GrepGenerator::generateAioPipeline(re::RE *regex) {
     this->generateCountOnlyMainFunc(iBuilder);
 
     // GeneratePipeline
-//    this->generateLoadByteStreamAndBitStream(iBuilder);
     this->generateLoadByteStream(iBuilder);
+//    this->generateLoadByteStreamAndBitStream(iBuilder);
+
     parabix::StreamSetBuffer * decompressedByteStream = this->generateAIODecompression(iBuilder);
 
 
     StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks(iBuilder));
-    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::BigEndian, /*aligned = */ true, "a");
+    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::LittleEndian, /*aligned = */ true, "a");
 //    Kernel * s2pk = mPxDriver.addKernelInstance<S2PByPextKernel>(iBuilder, "a");
     mPxDriver.makeKernelCall(s2pk, {decompressedByteStream}, {decompressionBitStream});
 

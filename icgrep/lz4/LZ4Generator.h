@@ -40,7 +40,7 @@ protected:
     virtual void generateLoadByteStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual void generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual void generateExtractAndDepositMarkers(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    virtual parabix::StreamSetBuffer * generateParallelAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, bool enableGather, bool enableScatter);
+    virtual parabix::StreamSetBuffer * generateParallelAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, bool enableGather, bool enableScatter, int minParallelLevel);
     virtual parabix::StreamSetBuffer * generateAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual parabix::StreamSetBuffer * generateSwizzledAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*> generateSwizzleExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
@@ -75,6 +75,8 @@ protected:
 
     // M0CountMarker will not contain anything, it will only be used to pass producedItemCount and manage processedItemCount between different kernel
     parabix::StreamSetBuffer * mM0Marker;
+
+    unsigned mLz4BlockSize;
 };
 
 

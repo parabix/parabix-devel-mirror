@@ -53,6 +53,8 @@ static cl::opt<bool> parallelDecompression("parallel-decompression", cl::desc("U
 static cl::opt<bool> swizzledDecompression("swizzled-decompression", cl::desc("Use swizzle approach for decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> enableGather("enable-gather", cl::desc("Enable gather intrinsics"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> enableScatter("enable-scatter", cl::desc("Enable scatter intrinsics"), cl::init(false), cl::cat(lz4GrepDebugFlags));
+static cl::opt<int> minParallelLevel("min-parallel-level", cl::desc("Mininum parallel level"), cl::init(1), cl::cat(lz4GrepDebugFlags));
+
 
 
 int main(int argc, char *argv[]) {
@@ -79,9 +81,9 @@ int main(int argc, char *argv[]) {
     LZ4GrepGenerator g(enableMultiplexing);
     if (aio) {
         if (parallelDecompression) {
-            g.generateParallelAioPipeline(re_ast, enableGather, enableScatter);
+            g.generateParallelAioPipeline(re_ast, enableGather, enableScatter, minParallelLevel);
         } else if (enableMultiplexing) {
-            g.generateMultiplexingSwizzledAioPipeline2(re_ast);
+            g.generateMultiplexingSwizzledAioPipeline(re_ast);
         } else if (swizzledDecompression) {
             g.generateSwizzledAioPipeline(re_ast);
         } else {

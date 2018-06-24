@@ -32,13 +32,12 @@ public:
 
     void invokeScanMatchGrep(char* fileBuffer, size_t blockStart, size_t blockEnd, bool hasBlockChecksum);
 
-    void generateMultiplexingSwizzledAioPipeline(re::RE* regex);
-    void generateMultiplexingSwizzledAioPipeline2(re::RE* regex);
+    void generateMultiplexingSwizzledAioPipeline(re::RE *regex);
 
     void generateSwizzledAioPipeline(re::RE* regex);
 
     void generateAioPipeline(re::RE* regex);
-    void generateParallelAioPipeline(re::RE* regex, bool enableGather, bool enableScatter);
+    void generateParallelAioPipeline(re::RE* regex, bool enableGather, bool enableScatter, int minParallelLevel);
 
     ScanMatchGrepMainFunctionType getScanMatchGrepMainFunction();
     CountOnlyGrepMainFunctionType getCountOnlyGrepMainFunction();
