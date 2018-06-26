@@ -89,7 +89,6 @@ namespace kernel{
         b->setProcessedItemCount("blockStart", newBlockDataIndex);
         b->setProcessedItemCount("byteStream", blockEnd);
         b->setProducedItemCount("outputStream0", b->getScalarField("outputPos"));
-//        b->CallPrintInt("produced", b->getScalarField("outputPos"));
         b->CreateBr(exitBlock);
 
         b->SetInsertPoint(exitBlock);
@@ -192,9 +191,14 @@ namespace kernel{
         Value* cursorBlockRem = b->CreateURem(remCursorPos, b->getSize(b->getBitBlockWidth()));
         Value* cursorI64BlockIndex = b->CreateUDiv(cursorBlockRem, b->getSize(64));
         Value* cursorI64BlockRem = b->CreateURem(cursorBlockRem, b->getSize(64));
-        Value* literalMask = b->CreateSub(b->CreateShl(b->getInt64(1), literalLength), b->getInt64(1));
+        Value* literalMask = b->CreateSub(
+                b->CreateSelect(b->CreateICmpEQ(literalLength, b->getInt64(0x40)), b->getInt64(0), b->CreateShl(b->getInt64(1), literalLength)),
+                b->getInt64(1)
+        );
 
         std::vector<llvm::Value*> extractValues;
+
+        Value* oldOutputPos = b->getScalarField("outputPos");
 
 
         for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
@@ -279,8 +283,22 @@ namespace kernel{
     }
 
     void LZParabixAioKernel::storePendingOutput(const std::unique_ptr<KernelBuilder> &b) {
+        BasicBlock* storePendingOutputBlock = b->CreateBasicBlock("storePendingOutputBlock");
+        BasicBlock* storePendingOutputExitBlock = b->CreateBasicBlock("storePendingOutputExitBlock");
+
+        Value* oldOutputPos = b->getScalarField("outputPos");
+        b->CreateCondBr(
+                b->CreateICmpNE(b->CreateURem(oldOutputPos, b->getSize(64)), b->getSize(0)),
+                storePendingOutputBlock,
+                storePendingOutputExitBlock
+        );
+
+        b->SetInsertPoint(storePendingOutputBlock);
         this->storePendingOutput_BitStream(b);
 //        this->storePendingOutput_Swizzled(b);
+        b->CreateBr(storePendingOutputExitBlock);
+
+        b->SetInsertPoint(storePendingOutputExitBlock);
     }
 
 
