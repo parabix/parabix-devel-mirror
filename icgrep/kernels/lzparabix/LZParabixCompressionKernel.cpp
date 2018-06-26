@@ -56,9 +56,8 @@ namespace kernel{
         Value* fileSize = b->getScalarField("fileSize");
         inputEndPos = b->CreateUMin(inputEndPos, fileSize);
         Value* outputCursor = b->getProducedItemCount("outputStream");
-//        b->CallPrintInt("inputCursor", inputCursor);
         this->encodeBlock(b, inputCursor, inputEndPos, outputCursor);
-//        b->CallPrintInt("inputCursor:end", inputCursor);
+
         b->setTerminationSignal(b->CreateICmpEQ(inputEndPos, fileSize));
         b->setProcessedItemCount("byteStream", inputEndPos);
     }
@@ -95,8 +94,6 @@ namespace kernel{
         PHINode* phiOutputCursorPos = b->CreatePHI(b->getSizeTy(), 3);
         phiOutputCursorPos->addIncoming(initOutputCursor, entryBlock);
 
-
-
         b->CreateCondBr(
                 b->CreateICmpULT(phiInputCursorPos, inputEndPos),
                 encodeBlockBody,
@@ -118,11 +115,14 @@ namespace kernel{
 
         // ---- updateCacheBlock
         b->SetInsertPoint(updateCacheBlock);
+
         this->updateCache(b, phiPreviousBlockIndex, initBlockIndex);
+
         b->CreateBr(extractMatchInfoBlock);
 
         // ---- encodeProcessBlock
         b->SetInsertPoint(extractMatchInfoBlock);
+
         MatchInfo retMatchInfo = this->extractMatchInfo(b, phiInputCursorPos, initBlockIndex, inputEndPos);
 //        b->CallPrintInt("matchLength", retMatchInfo.matchLength);
         BasicBlock* noAppendOutputBlock = b->CreateBasicBlock("noAppendOutputBlock");
@@ -246,12 +246,15 @@ namespace kernel{
 
         Value* currentGlobalInputBlockIndex = b->CreateUDiv(cursorPos, b->getSize(64));
 
+
+
         for (unsigned i = 0; i < 4; i++) {
             BasicBlock* extractMatchInfoEntryBlock = b->CreateBasicBlock("extractMatchInfoEntryBlock");
             b->CreateBr(extractMatchInfoEntryBlock);
 
             // ---- extractMatchInfoEntryBlock
             b->SetInsertPoint(extractMatchInfoEntryBlock);
+
 
             Value* localMatchBlockIndex = b->CreateAnd(b->CreateLShr(possibleBlockIndexes, b->getInt64(i * 16)), b->getInt64(0xffff));
             Value* globalMatchBlockIndex = b->CreateAdd(localMatchBlockIndex, initBlockGlobalIndex);
@@ -269,6 +272,7 @@ namespace kernel{
 //            b->CallPrintInt("isNoMatch", isNoMatch);
 
             BasicBlock* scanMatchConBlock = b->CreateBasicBlock("scanMatchConBlock");
+            BasicBlock* scanMatchBodyBlock = b->CreateBasicBlock("scanMatchBodyBlock");
             BasicBlock* scanMatchExitBlock = b->CreateBasicBlock("scanMatchExitBlock");
 
 //            b->CreateCondBr(isNoMatch, scanMatchExitBlock, scanMatchConBlock);
@@ -276,6 +280,7 @@ namespace kernel{
 
             // ---- scanMatchConBlock
             b->SetInsertPoint(scanMatchConBlock);
+
             PHINode* phiForwardMatchLength = b->CreatePHI(b->getSizeTy(), 2);
             phiForwardMatchLength->addIncoming(b->getSize(0), extractMatchInfoEntryBlock);
             PHINode* phiMatchPos = b->CreatePHI(b->getSizeTy(), 2);
@@ -283,10 +288,26 @@ namespace kernel{
             PHINode* phiMatchMask = b->CreatePHI(b->getInt64Ty(), 2);
             phiMatchMask->addIncoming(b->getInt64(0), extractMatchInfoEntryBlock);
 
+            b->CreateCondBr(
+                    b->CreateAnd(
+                            b->CreateAnd(
+                                    b->CreateICmpULT(phiMatchPos, b->getInt64(64)),
+                                    b->CreateICmpULT(b->CreateAdd(cursorPos, phiForwardMatchLength), inputEndPos)
+                            ),
+                            b->CreateNot(isNoMatch)
+                    ),
+                    scanMatchBodyBlock,
+                    scanMatchExitBlock
+            );
+
+            // ---- scanMatchBodyBlock
+            b->SetInsertPoint(scanMatchBodyBlock);
+
             Value* isMatch = b->CreateICmpEQ(
                     b->CreateLoad(b->CreateGEP(inputBasePtr, b->CreateAdd(b->CreateMul(globalMatchBlockIndex, b->getInt64(64)), phiMatchPos))),
                     b->CreateLoad(b->CreateGEP(inputBasePtr, b->CreateAdd(cursorPos, phiForwardMatchLength)))
             );
+
 
             phiForwardMatchLength->addIncoming(
                     b->CreateSelect(isMatch, b->CreateAdd(phiForwardMatchLength, b->getSize(1)), phiForwardMatchLength),
@@ -306,17 +327,7 @@ namespace kernel{
                     b->GetInsertBlock()
             );
 
-            b->CreateCondBr(
-                    b->CreateAnd(
-                            b->CreateAnd(
-                                    b->CreateICmpULT(phiMatchPos, b->getInt64(64)),
-                                    b->CreateICmpULT(b->CreateAdd(cursorPos, phiForwardMatchLength), inputEndPos)
-                            ),
-                            b->CreateNot(isNoMatch)
-                    ),
-                    scanMatchConBlock,
-                    scanMatchExitBlock
-            );
+            b->CreateBr(scanMatchConBlock);
 
             // ---- scanMatchExitBlock
             b->SetInsertPoint(scanMatchExitBlock);
