@@ -415,6 +415,7 @@ namespace kernel{
         Value* literalToken = b->CreateOr(b->CreateTrunc(literalLength, b->getInt8Ty()), b->getInt8(1 << 7));
 
         b->CreateStore(literalToken, b->CreateGEP(outputBasePtr, outputPosRem));
+        outputNextPosRem = b->CreateURem(outputNextPosRem, b->getCapacity("outputStream"));
         b->CreateMemCpy(
                 b->CreateGEP(outputBasePtr, outputNextPosRem),
                 b->CreateGEP(inputBasePtr, phiLiteralStart),
