@@ -46,8 +46,8 @@ Value * IDISA_AVX_Builder::hsimd_signmask(unsigned fw, Value * a) {
             return CreateCall(signmask_f32func, pack_as_ps);
         }
     }
-    // Otherwise use default SSE logic.
-    return IDISA_SSE_Builder::hsimd_signmask(fw, a);
+    // Otherwise use default SSE2 logic.
+    return IDISA_SSE2_Builder::hsimd_signmask(fw, a);
 }
 
 std::string IDISA_AVX2_Builder::getBuilderUniqueName() {
@@ -73,7 +73,7 @@ Value * IDISA_AVX2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
         return hsimd_packh(mBitBlockWidth / 2, shufa, shufb);
     }
     // Otherwise use default SSE logic.
-    return IDISA_SSE_Builder::hsimd_packh(fw, a, b);
+    return IDISA_SSE2_Builder::hsimd_packh(fw, a, b);
 }
 
 Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
@@ -95,7 +95,7 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
         return hsimd_packl(mBitBlockWidth / 2, shufa, shufb);
     }
     // Otherwise use default SSE logic.
-    return IDISA_SSE_Builder::hsimd_packl(fw, a, b);
+    return IDISA_SSE2_Builder::hsimd_packl(fw, a, b);
 }
 
 Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
@@ -125,7 +125,7 @@ Value * IDISA_AVX2_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
 #endif
     }
     // Otherwise use default SSE logic.
-    return IDISA_SSE_Builder::esimd_mergeh(fw, a, b);
+    return IDISA_SSE2_Builder::esimd_mergeh(fw, a, b);
 }
 
 Value * IDISA_AVX2_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {

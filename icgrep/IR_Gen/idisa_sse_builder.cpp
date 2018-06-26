@@ -17,7 +17,7 @@ std::string IDISA_SSE2_Builder::getBuilderUniqueName() { return mBitBlockWidth !
 std::string IDISA_SSSE3_Builder::getBuilderUniqueName() { return mBitBlockWidth != 128 ? "SSSE3_" + std::to_string(mBitBlockWidth) : "SSSE3";}
 
 Value * IDISA_SSE2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {    
-    if ((fw == 16) && (mBitBlockWidth == 128)) {
+    if ((fw == 16) && (getVectorBitWidth(a) == SSE_width)) {
         Value * packuswb_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse2_packuswb_128);
         return CreateCall(packuswb_func, {simd_srli(16, a, 8), simd_srli(16, b, 8)});
     }
@@ -26,7 +26,7 @@ Value * IDISA_SSE2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
 }
 
 Value * IDISA_SSE2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
-    if ((fw == 16) && (mBitBlockWidth == 128)) {
+    if ((fw == 16) && (getVectorBitWidth(a) == SSE_width)) {
         Value * packuswb_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse2_packuswb_128);
         Value * mask = simd_lomask(16);
         return CreateCall(packuswb_func, {fwCast(16, simd_and(a, mask)), fwCast(16, simd_and(b, mask))});
@@ -37,7 +37,7 @@ Value * IDISA_SSE2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_SSE2_Builder::hsimd_signmask(unsigned fw, Value * a) {
     // SSE2 special case using Intrinsic::x86_sse2_movmsk_pd (fw=32 only)
-    if (mBitBlockWidth == 128) {
+    if (getVectorBitWidth(a) == SSE_width) {
         if (fw == 64) {
             Value * signmask_f64func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse2_movmsk_pd);
             Type * bitBlock_f64type = VectorType::get(getDoubleTy(), mBitBlockWidth/64);
@@ -49,47 +49,32 @@ Value * IDISA_SSE2_Builder::hsimd_signmask(unsigned fw, Value * a) {
             return CreateCall(pmovmskb_func, fwCast(8, a));
         }
     }
-    const auto fieldCount = mBitBlockWidth / fw;
-    if ((fieldCount > 4) && (fieldCount <= 16)) {
-        Value * pmovmskb_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse2_pmovmskb_128);
-        int fieldBytes = fw / 8;
-        int hiByte = fieldBytes - 1;
-        Constant * Idxs[16];
-        for (unsigned i = 0; i < fieldCount; i++) {
-            Idxs[i] = getInt32(fieldBytes * i + hiByte);
-        }
-        for (unsigned i = fieldCount; i < 16; i++) {
-            Idxs[i] = getInt32(mBitBlockWidth / 8);
-        }
-        Value * packh = CreateShuffleVector(fwCast(8, a), fwCast(8, allZeroes()), ConstantVector::get({Idxs, 16}));
-        return CreateCall(pmovmskb_func, packh);
-    }
     // Otherwise use default SSE logic.
     return IDISA_SSE_Builder::hsimd_signmask(fw, a);
 }
 
 Value * IDISA_SSE_Builder::hsimd_signmask(const unsigned fw, Value * a) {
+    const unsigned SSE_blocks = getVectorBitWidth(a)/SSE_width;
+    if (SSE_blocks > 1) {
+        Value * a_lo = CreateHalfVectorLow(a);
+        Value * a_hi = CreateHalfVectorHigh(a);
+        if ((fw == 8 * SSE_blocks) || (fw >= 32 * SSE_blocks)) {
+            return hsimd_signmask(fw/2, hsimd_packh(fw, a_hi, a_lo));
+        }
+        unsigned maskWidth = getVectorBitWidth(a)/fw;
+        Type * maskTy = getIntNTy(maskWidth);
+        Value * mask_lo = CreateZExtOrTrunc(hsimd_signmask(fw, a_lo), maskTy);
+        Value * mask_hi = CreateZExtOrTrunc(hsimd_signmask(fw, a_hi), maskTy);
+        return CreateOr(CreateShl(mask_hi, maskWidth/2), mask_lo);
+    }
     // SSE special cases using Intrinsic::x86_sse_movmsk_ps (fw=32 only)
     if (fw == 32) {
         Value * signmask_f32func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse_movmsk_ps);
         Type * bitBlock_f32type = VectorType::get(getFloatTy(), mBitBlockWidth/32);
         Value * a_as_ps = CreateBitCast(a, bitBlock_f32type);
-        if (mBitBlockWidth == 128) {
+        if (getVectorBitWidth(a) == SSE_width) {
             return CreateCall(signmask_f32func, a_as_ps);
         }
-    } else if ((fw == 64) && (mBitBlockWidth == 256)) {
-        Type * bitBlock_f32type = VectorType::get(getFloatTy(), mBitBlockWidth/32);
-        Value * a_as_ps = CreateBitCast(a, bitBlock_f32type);
-        Constant * Idxs[4];
-        for (unsigned i = 0; i < 4; i++) {
-            Idxs[i] = getInt32(2 * i + 1);
-        }
-        Value * packh = CreateShuffleVector(a_as_ps, UndefValue::get(bitBlock_f32type), ConstantVector::get({Idxs, 4}));
-        Type * halfBlock_f32type = VectorType::get(getFloatTy(), mBitBlockWidth/64);
-        Value * pack_as_ps = CreateBitCast(packh, halfBlock_f32type);
-        Value * signmask_f32func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse_movmsk_ps);
-        Value * mask = CreateCall(signmask_f32func, pack_as_ps);
-        return mask;
     }
     // Otherwise use default logic.
     return IDISA_Builder::hsimd_signmask(fw, a);
