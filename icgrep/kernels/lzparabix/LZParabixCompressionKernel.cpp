@@ -18,10 +18,6 @@ using namespace kernel;
 using namespace std;
 
 namespace kernel{
-
-
-
-
     LZParabixCompressionKernel::LZParabixCompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b)
     :SegmentOrientedKernel("LZParabixAioKernel",
             // Inputs

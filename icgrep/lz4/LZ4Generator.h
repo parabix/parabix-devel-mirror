@@ -43,6 +43,8 @@ protected:
     virtual parabix::StreamSetBuffer * generateParallelAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, bool enableGather, bool enableScatter, int minParallelLevel);
     virtual parabix::StreamSetBuffer * generateAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual parabix::StreamSetBuffer * generateSwizzledAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual parabix::StreamSetBuffer * generateBitStreamAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+
     virtual std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*> generateSwizzleExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual parabix::StreamSetBuffer* generateBitStreamExtractData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 

@@ -198,9 +198,6 @@ namespace kernel{
 
         std::vector<llvm::Value*> extractValues;
 
-        Value* oldOutputPos = b->getScalarField("outputPos");
-
-
         for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
             Value* bitStreamBasePtr = b->CreatePointerCast(b->getRawInputPointer("inputBitStream" + std::to_string(i), b->getSize(0)), b->getBitBlockType()->getPointerTo());
             Value* targetBlockBasePtr = b->CreatePointerCast(b->CreateGEP(bitStreamBasePtr, b->CreateMul(cursorBlockIndex, b->getSize(mNumsOfBitStreams[i]))), b->getInt64Ty()->getPointerTo());

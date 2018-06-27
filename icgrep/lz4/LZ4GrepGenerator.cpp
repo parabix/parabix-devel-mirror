@@ -550,6 +550,43 @@ void LZ4GrepGenerator::generateMultiplexingSwizzledAioPipeline(re::RE *regex) {
     mPxDriver.finalizeObject();
 }
 
+void LZ4GrepGenerator::generateBitStreamAioPipeline(re::RE* regex) {
+    auto & iBuilder = mPxDriver.getBuilder();
+    this->generateCountOnlyMainFunc(iBuilder);
+
+    // GeneratePipeline
+    this->generateLoadByteStreamAndBitStream(iBuilder);
+    StreamSetBuffer * const decompressionBitStream = this->generateBitStreamAIODecompression(iBuilder);
+
+    StreamSetBuffer * LineBreakStream;
+    StreamSetBuffer * Matches;
+    std::vector<re::RE*> res = {regex};
+    std::tie(LineBreakStream, Matches) = grepPipeline(res, decompressionBitStream);
+
+    /*
+    StreamSetBuffer * const decompressionByteStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks(iBuilder));
+    Kernel * p2sK = mPxDriver.addKernelInstance<P2SKernel>(iBuilder);
+    mPxDriver.makeKernelCall(p2sK, {decompressionBitStream}, {decompressionByteStream});
+
+    Kernel * outK = mPxDriver.addKernelInstance<FileSink>(iBuilder, 8);
+    outK->setInitialArguments({iBuilder->GetString("/Users/wxy325/developer/LZ4-sample-files/workspace/lz4d-normal/8k_.txt")});
+    mPxDriver.makeKernelCall(outK, {decompressionByteStream}, {});
+    */
+    kernel::Kernel * matchCountK = mPxDriver.addKernelInstance<kernel::PopcountKernel>(iBuilder);
+
+    mPxDriver.makeKernelCall(matchCountK, {Matches}, {});
+    mPxDriver.generatePipelineIR();
+
+    iBuilder->setKernel(matchCountK);
+    Value * matchedLineCount = iBuilder->getAccumulator("countResult");
+    matchedLineCount = iBuilder->CreateZExt(matchedLineCount, iBuilder->getInt64Ty());
+    mPxDriver.deallocateBuffers();
+
+    iBuilder->CreateRet(matchedLineCount);
+
+    mPxDriver.finalizeObject();
+}
+
 void LZ4GrepGenerator::generateSwizzledAioPipeline(re::RE* regex) {
     auto & iBuilder = mPxDriver.getBuilder();
     this->generateCountOnlyMainFunc(iBuilder);

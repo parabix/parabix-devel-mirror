@@ -92,6 +92,8 @@ protected:
     virtual void doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                              llvm::Value *matchLength) = 0;
 
+    virtual void storePendingOutput(const std::unique_ptr<KernelBuilder> &b) {};
+
     // Acceleration
     virtual void prepareAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos) {};
     virtual void doAccelerationLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,

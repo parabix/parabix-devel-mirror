@@ -51,6 +51,7 @@ static cl::OptionCategory lz4GrepDebugFlags("LZ4 Grep Debug Flags", "lz4d debug 
 static cl::opt<bool> aio("aio", cl::desc("Use All-in-One Approach for LZ4 Decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> parallelDecompression("parallel-decompression", cl::desc("Use parallel Approach for LZ4 Decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> swizzledDecompression("swizzled-decompression", cl::desc("Use swizzle approach for decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
+static cl::opt<bool> bitStreamDecompression("bitstream-decompression", cl::desc("Use bit stream approach for decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> enableGather("enable-gather", cl::desc("Enable gather intrinsics"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> enableScatter("enable-scatter", cl::desc("Enable scatter intrinsics"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<int> minParallelLevel("min-parallel-level", cl::desc("Mininum parallel level"), cl::init(1), cl::cat(lz4GrepDebugFlags));
@@ -82,10 +83,14 @@ int main(int argc, char *argv[]) {
     if (aio) {
         if (parallelDecompression) {
             g.generateParallelAioPipeline(re_ast, enableGather, enableScatter, minParallelLevel);
-        } else if (enableMultiplexing) {
-            g.generateMultiplexingSwizzledAioPipeline(re_ast);
         } else if (swizzledDecompression) {
-            g.generateSwizzledAioPipeline(re_ast);
+            if (enableMultiplexing) {
+                g.generateMultiplexingSwizzledAioPipeline(re_ast);
+            } else {
+                g.generateSwizzledAioPipeline(re_ast);
+            }
+        } else if (bitStreamDecompression) {
+            g.generateBitStreamAioPipeline(re_ast);
         } else {
             g.generateAioPipeline(re_ast);
         }

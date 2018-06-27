@@ -74,7 +74,8 @@ namespace kernel{
 
         //TODO handle uncompressed block
         this->processCompressedLz4Block(b, blockStart, blockEnd);
-        // TODO store pending value
+        this->storePendingOutput(b);
+
 //        this->storePendingM0(b);
 //        this->storePendingLiteralMask(b);
 //        this->storePendingMatchOffsetMarker(b);

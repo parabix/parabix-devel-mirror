@@ -35,6 +35,7 @@ public:
     void generateMultiplexingSwizzledAioPipeline(re::RE *regex);
 
     void generateSwizzledAioPipeline(re::RE* regex);
+    void generateBitStreamAioPipeline(re::RE* regex);
 
     void generateAioPipeline(re::RE* regex);
     void generateParallelAioPipeline(re::RE* regex, bool enableGather, bool enableScatter, int minParallelLevel);
