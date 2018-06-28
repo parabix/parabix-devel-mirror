@@ -1383,6 +1383,30 @@ CallInst * CBuilder::CreateMemSet(Value * Ptr, Value * Val, Value * Size, unsign
     return IRBuilder<>::CreateMemSet(Ptr, Val, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
 }
 
+CallInst * CBuilder::CreateSRandCall(Value * randomSeed) {
+    Module * const m = getModule();
+    Function * srandFunc = m->getFunction("srand");
+    if (srandFunc == nullptr) {
+        FunctionType * fty = FunctionType::get(getVoidTy(), getInt32Ty(), nullptr);
+        srandFunc = Function::Create(fty, Function::ExternalLinkage, "srand", m);
+        srandFunc->setCallingConv(CallingConv::C);
+    }
+    return CreateCall(srandFunc, randomSeed);
+}
+
+CallInst * CBuilder::CreateRandCall() {
+    Module * const m = getModule();
+    Function * randFunc = m->getFunction("rand");
+    if (randFunc == nullptr) {
+        FunctionType * fty = FunctionType::get(getInt32Ty(), nullptr);
+        randFunc = Function::Create(fty, Function::ExternalLinkage, "rand", m);
+        randFunc->setCallingConv(CallingConv::C);
+    }
+    return CreateCall(randFunc, {});
+}
+
+
+
 CBuilder::CBuilder(LLVMContext & C)
 : IRBuilder<>(C)
 , mCacheLineAlignment(64)

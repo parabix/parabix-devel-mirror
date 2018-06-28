@@ -348,6 +348,9 @@ public:
                            bool isVolatile = false, llvm::MDNode *TBAATag = nullptr,
                            llvm::MDNode *ScopeTag = nullptr,
                            llvm::MDNode *NoAliasTag = nullptr);
+    
+    llvm::CallInst * CreateSRandCall(llvm::Value * randomSeed);
+    llvm::CallInst * CreateRandCall();
 
     void setDriver(Driver * const driver) {
         mDriver = driver;
