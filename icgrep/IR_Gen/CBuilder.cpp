@@ -1387,7 +1387,7 @@ CallInst * CBuilder::CreateSRandCall(Value * randomSeed) {
     Module * const m = getModule();
     Function * srandFunc = m->getFunction("srand");
     if (srandFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getVoidTy(), getInt32Ty(), nullptr);
+        FunctionType * fty = FunctionType::get(getVoidTy(), {getInt32Ty()}, false);
         srandFunc = Function::Create(fty, Function::ExternalLinkage, "srand", m);
         srandFunc->setCallingConv(CallingConv::C);
     }
@@ -1398,7 +1398,7 @@ CallInst * CBuilder::CreateRandCall() {
     Module * const m = getModule();
     Function * randFunc = m->getFunction("rand");
     if (randFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getInt32Ty(), nullptr);
+        FunctionType * fty = FunctionType::get(getInt32Ty(), false);
         randFunc = Function::Create(fty, Function::ExternalLinkage, "rand", m);
         randFunc->setCallingConv(CallingConv::C);
     }
