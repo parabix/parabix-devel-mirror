@@ -101,7 +101,7 @@ void LZParabixGenerator::generateLoadByteStreamAndBitStream(const std::unique_pt
     kernel::Kernel * sourceK = mPxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);
     sourceK->setInitialArguments({mInputStream, mFileSize});
     mPxDriver.makeKernelCall(sourceK, {}, {mCompressedByteStream});
-    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::LittleEndian);
+    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::BigEndian);
     mPxDriver.makeKernelCall(s2pk, {mCompressedByteStream}, {mCompressedBasisBits});
 }
 

@@ -35,6 +35,9 @@ public:
 
 protected:
     //// Protected Method
+    std::vector<parabix::StreamSetBuffer*> convertCompressedBitsStreamWithBitStreamAioApproach(
+            std::vector<parabix::StreamSetBuffer*> compressedBitStreams, std::string prefix);
+
     void generateMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     // Pipeline
     virtual void generateLoadByteStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);

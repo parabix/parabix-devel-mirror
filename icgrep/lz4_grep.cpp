@@ -57,7 +57,6 @@ static cl::opt<bool> enableScatter("enable-scatter", cl::desc("Enable scatter in
 static cl::opt<int> minParallelLevel("min-parallel-level", cl::desc("Mininum parallel level"), cl::init(1), cl::cat(lz4GrepDebugFlags));
 
 
-
 int main(int argc, char *argv[]) {
     // This boilerplate provides convenient stack traces and clean LLVM exit
     // handling. It also initializes the built in support for convenient
@@ -90,7 +89,12 @@ int main(int argc, char *argv[]) {
                 g.generateSwizzledAioPipeline(re_ast);
             }
         } else if (bitStreamDecompression) {
-            g.generateBitStreamAioPipeline(re_ast);
+            if (enableMultiplexing) {
+                g.generateMultiplexingBitStreamAioPipeline(re_ast);
+            } else {
+                g.generateBitStreamAioPipeline(re_ast);
+            }
+
         } else {
             g.generateAioPipeline(re_ast);
         }

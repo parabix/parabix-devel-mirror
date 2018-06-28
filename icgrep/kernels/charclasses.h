@@ -6,6 +6,7 @@
 #define CHARCLASSES_H
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
+#include <cc/alphabet.h>
 
 namespace kernel { class KernelBuilder; }
 namespace IDISA { class IDISA_Builder; }
@@ -21,13 +22,14 @@ protected:
 
 class CharClassesKernel : public CharClassesSignature, public pablo::PabloKernel {
 public:
-    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, bool useDirectCC = false);
+    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, bool useDirectCC = false, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
     bool hasSignature() const override { return true; }
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     bool isCachable() const override { return true; }
 protected:
     void generatePabloMethod() override;
 protected:
+    cc::BitNumbering mBasisSetNumbering;
     std::vector<re::CC *> mCCs;
     
 };

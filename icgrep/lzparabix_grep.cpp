@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
     char *fileBuffer = const_cast<char *>(mappedFile.data());
     re::RE * re_ast = re::RE_Parser::parse(regexString, re::MULTILINE_MODE_FLAG);
 
-    LZParabixGrepGenerator g;
+    LZParabixGrepGenerator g(enableMultiplexing);
 
     g.generateCountOnlyAioPipeline(re_ast);
     auto main = g.getCountOnlyGrepMainFunction();

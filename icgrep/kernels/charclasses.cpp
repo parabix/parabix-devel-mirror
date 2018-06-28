@@ -56,13 +56,13 @@ CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, bool us
 }
 
 
-CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<CC *> && ccs, bool useDirectCC)
+CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<CC *> && ccs, bool useDirectCC, cc::BitNumbering basisNumbering)
 : CharClassesSignature(ccs, useDirectCC)
 , PabloKernel(iBuilder,
               "cc" + sha1sum(mSignature),
               {},
               {Binding{iBuilder->getStreamSetTy(ccs.size(), 1), "charclasses"}})
-, mCCs(std::move(ccs)) {
+, mCCs(std::move(ccs)), mBasisSetNumbering(basisNumbering) {
     if (useDirectCC) {
         mStreamSetInputs.push_back({Binding{iBuilder->getStreamSetTy(1, 8), "byteData"}});
     }
@@ -81,7 +81,7 @@ void CharClassesKernel::generatePabloMethod() {
     if (mUseDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
     }
     unsigned n = mCCs.size();
 

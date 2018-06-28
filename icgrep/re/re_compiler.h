@@ -11,6 +11,8 @@
 #include <boost/container/flat_map.hpp>
 #include <pablo/builder.hpp>
 #include <vector>       // for vector<>::iterator
+#include <cc/alphabet.h>
+
 namespace cc { class CC_Compiler; class Alphabet;}
 namespace pablo { class PabloAST; }
 namespace pablo { class PabloBlock; }
@@ -49,7 +51,7 @@ public:
         MarkerType & operator =(const MarkerType &) = default;
     };
 
-    RE_Compiler(pablo::PabloBlock * scope, cc::CC_Compiler & ccCompiler);
+    RE_Compiler(pablo::PabloBlock * scope, cc::CC_Compiler & ccCompiler, cc::BitNumbering basisSetNumbering = cc::BitNumbering::LittleEndian);
     
     //
     // The CCs (character classes) within a regular expression are generally
@@ -145,7 +147,7 @@ private:
     NameMap *                                       mCompiledName;
     NameMap                                         mBaseMap;
     std::map<std::string, pablo::PabloAST *>        mExternalNameMap;
-
+    cc::BitNumbering mBasisSetNumbering;
 };
 
 }

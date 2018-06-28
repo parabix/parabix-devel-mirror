@@ -6,6 +6,7 @@
 #define LINEBREAK_KERNEL_H
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
+#include <cc/alphabet.h>
 
 namespace kernel { class KernelBuilder; }
 
@@ -14,13 +15,14 @@ namespace kernel {
 
 class LineFeedKernelBuilder final : public pablo::PabloKernel {
 public:
-    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, kernel::Binding && inputStreamSet);
+    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, kernel::Binding && inputStreamSet, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     unsigned mNumOfStreams;
     unsigned mStreamFieldWidth;
+    cc::BitNumbering mBasisSetNumbering;
 };
 
 
