@@ -18,7 +18,7 @@
 #include <kernels/streamset.h>
 #include <kernels/kernel_builder.h>
 #include <toolchain/cpudriver.h>
-
+#include <fstream>
 #include <iostream>
 
 

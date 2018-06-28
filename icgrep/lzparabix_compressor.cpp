@@ -15,6 +15,7 @@
 #include <kernels/kernel_builder.h>
 #include <toolchain/cpudriver.h>
 #include <llvm/Support/raw_ostream.h>
+#include <fstream>
 #include <iostream>
 #include <string>
 
