@@ -175,6 +175,10 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
     const auto UnicodeSets = re::collectCCs(mREs[0], &cc::Unicode, std::set<re::Name *>({re::makeZeroWidth("\\b{g}")}));
     StreamSetBuffer * const MatchResults = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
 
+
+    this->generateBlockData(idb);
+    StreamSetBuffer * const LiteralBitStream = this->extractLiteralBitStream(idb);
+
     mpx = make_unique<cc::MultiplexedAlphabet>("mpx", UnicodeSets);
     mREs[0] = transformCCs(mpx.get(), mREs[0]);
     std::vector<re::CC *> mpx_basis = mpx->getMultiplexedCCs();
@@ -182,13 +186,14 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
     StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), baseBufferSize);
 
     kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis), false, cc::BitNumbering::BigEndian);
-    mGrepDriver->makeKernelCall(ccK, {mCompressedBasisBits}, {CharClasses});
+    mGrepDriver->makeKernelCall(ccK, {LiteralBitStream}, {CharClasses});
 
     StreamSetBuffer * CompressedLineFeedStream = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
     kernel::Kernel * linefeedK = mPxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(8), "basis", FixedRate(), Principal()}, cc::BitNumbering::BigEndian);
-    mPxDriver.makeKernelCall(linefeedK, {mCompressedBasisBits}, {CompressedLineFeedStream});
+    mPxDriver.makeKernelCall(linefeedK, {LiteralBitStream}, {CompressedLineFeedStream});
 
-    auto ret = this->generateAioBitStreamDecompressoin(idb, {CharClasses, CompressedLineFeedStream});
+    auto ret = this->generateBitStreamDecompression(idb, {CharClasses, CompressedLineFeedStream});
+//    auto ret = this->generateAioBitStreamDecompressoin(idb, {CharClasses, CompressedLineFeedStream});
 
     StreamSetBuffer * decompressedCharClasses = ret[0];
     StreamSetBuffer * LineBreakStream = ret[1];
@@ -244,8 +249,13 @@ LZParabixGrepGenerator::grepPipeline(std::vector<re::RE *> &REs) {
 
     std::vector<StreamSetBuffer *> MatchResultsBufs(nREs);
 
-    StreamSetBuffer * CompressedLineBreakStream = this->linefeedStreamFromDecompressedBits(mCompressedBasisBits);
-    auto ret = this->generateAioBitStreamDecompressoin(idb, {mCompressedBasisBits, CompressedLineBreakStream});
+
+    this->generateBlockData(idb);
+    StreamSetBuffer * const LiteralBitStream = this->extractLiteralBitStream(idb);
+    auto compressedLineBreakStream = this->linefeedStreamFromDecompressedBits(LiteralBitStream);
+
+
+    auto ret = this->generateBitStreamDecompression(idb, {LiteralBitStream, compressedLineBreakStream});
     StreamSetBuffer * decompressedBasisBits = ret[0];
     StreamSetBuffer * LineBreakStream = ret[1];
 

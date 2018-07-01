@@ -49,11 +49,12 @@ namespace kernel{
         this->setStride(4 * 1024 * 1024);
         addAttribute(MustExplicitlyTerminate());
 
-        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[0], 1), "inputBitStream0", RateEqualTo("byteStream")});
+        // TODO modify processing for input bitstream
+        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[0], 1), "inputBitStream0", BoundedRate(0, 1), AlwaysConsume()});
         mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[0], 1), "outputStream0", BoundedRate(0, 1)});
 
         for (unsigned i = 1; i < numsOfBitStreams.size(); i++) {
-            mStreamSetInputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[i], 1), "inputBitStream" + std::to_string(i), RateEqualTo("byteStream")});
+            mStreamSetInputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[i], 1), "inputBitStream" + std::to_string(i), RateEqualTo("inputBitStream0"), AlwaysConsume()});
             mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[i], 1), "outputStream" + std::to_string(i), RateEqualTo("outputStream0")});
         }
 
@@ -74,15 +75,29 @@ namespace kernel{
         b->CreateCondBr(b->CreateICmpULT(blockDataIndex, totalNumber), blockEndConBlock, exitBlock);
 
         b->SetInsertPoint(blockEndConBlock);
+
         Value * blockStart = this->generateLoadInt64NumberInput(b, "blockStart", blockDataIndex);
+
+        Value* literalLengthPtr = b->getRawInputPointer("byteStream", blockStart);
+        literalLengthPtr = b->CreatePointerCast(literalLengthPtr, b->getInt32Ty()->getPointerTo());
+        Value* totalLiteralLength = b->CreateZExtOrBitCast(b->CreateLoad(literalLengthPtr), b->getSizeTy());
+        Value* literalStartPos = b->getProcessedItemCount("inputBitStream0");
+
+        Value* literalEndPos = b->CreateAdd(literalStartPos, totalLiteralLength);
+
+        Value* allItemAvailable = b->getInt1(true);
+
+        for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
+            allItemAvailable = b->CreateAnd(allItemAvailable, b->CreateICmpULE(literalEndPos, b->getAvailableItemCount("inputBitStream" + std::to_string(i))));
+        }
+
+
         BasicBlock * processBlock = b->CreateBasicBlock("processBlock");
-//        b->CreateCondBr(b->CreateICmpULE(blockEnd, totalExtender), processBlock, exitBlock);
-        b->CreateBr(processBlock);
+        b->CreateCondBr(allItemAvailable, processBlock, exitBlock);
 
         b->SetInsertPoint(processBlock);
 
         this->generateProcessCompressedBlock(b, blockStart, blockEnd);
-
 
         Value * newBlockDataIndex = b->CreateAdd(blockDataIndex, b->getInt64(1));
         b->setScalarField("blockDataIndex", newBlockDataIndex);
@@ -108,6 +123,17 @@ namespace kernel{
 
     void LZParabixAioKernel::generateProcessCompressedBlock(const std::unique_ptr<KernelBuilder> &b,
                                                             llvm::Value *lz4BlockStart, llvm::Value *lz4BlockEnd) {
+        Value* literalLengthPtr = b->getRawInputPointer("byteStream", lz4BlockStart);
+        literalLengthPtr = b->CreatePointerCast(literalLengthPtr, b->getInt32Ty()->getPointerTo());
+        Value* totalLiteralLength = b->CreateZExtOrBitCast(b->CreateLoad(literalLengthPtr), b->getSizeTy());
+        Value* literalStartPos = b->getProcessedItemCount("inputBitStream0");
+
+
+
+        Value* tokenStartPos = b->CreateAdd(b->CreateAdd(lz4BlockStart, b->getSize(4)), totalLiteralLength);
+
+
+
         Value* isTerminal = b->CreateICmpEQ(lz4BlockEnd, b->getScalarField("fileSize"));
         b->setTerminationSignal(isTerminal);
 
@@ -121,30 +147,39 @@ namespace kernel{
         b->CreateBr(processCon);
         b->SetInsertPoint(processCon);
 
-        PHINode* phiCursorValue = b->CreatePHI(b->getInt64Ty(), 2, "phiCursorValue"); // phiCursorValue should always be the position of next token except for the final sequence
-        phiCursorValue->addIncoming(lz4BlockStart, beforeProcessConBlock);
+        PHINode* phiLiteralCursorValue = b->CreatePHI(b->getInt64Ty(), 2);
+        phiLiteralCursorValue->addIncoming(literalStartPos, beforeProcessConBlock);
 
-        b->CreateCondBr(b->CreateICmpULT(phiCursorValue, lz4BlockEnd), processBody, exitBlock);
+        PHINode* phiTokenCursorValue = b->CreatePHI(b->getInt64Ty(), 2); // phiCursorValue should always be the position of next token except for the final sequence
+        phiTokenCursorValue->addIncoming(tokenStartPos, beforeProcessConBlock);
+
+        b->CreateCondBr(b->CreateICmpULT(phiTokenCursorValue, lz4BlockEnd), processBody, exitBlock);
 
         b->SetInsertPoint(processBody);
 
-        Value* nextTokenGlobalPos = this->processSequence(b, phiCursorValue, lz4BlockEnd);
-        phiCursorValue->addIncoming(nextTokenGlobalPos, b->GetInsertBlock());
+        auto ret = this->processSequence(b, phiLiteralCursorValue, phiTokenCursorValue, lz4BlockEnd);
+
+        Value* nextLiteralGlobalPos = ret.first;
+        Value* nextTokenGlobalPos = ret.second;
+
+        phiLiteralCursorValue->addIncoming(nextLiteralGlobalPos, b->GetInsertBlock());
+        phiTokenCursorValue->addIncoming(nextTokenGlobalPos, b->GetInsertBlock());
         b->CreateBr(processCon);
 
         b->SetInsertPoint(exitBlock);
         this->storePendingOutput(b);
-
+        b->setProcessedItemCount("inputBitStream0", b->CreateAdd(literalStartPos, totalLiteralLength));
     }
 
 
-    llvm::Value *LZParabixAioKernel::processSequence(const std::unique_ptr<KernelBuilder> &b, llvm::Value *cursorPos,
-                                                              llvm::Value *lz4BlockEnd) {
+    std::pair<llvm::Value *, llvm::Value *>
+    LZParabixAioKernel::processSequence(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalCursorPos,
+                                        llvm::Value *tokenCursorPos,
+                                        llvm::Value *lz4BlockEnd) {
 
         BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
-        Value* cursorNextPos = b->CreateAdd(cursorPos, b->getSize(1));
 
-        Value* sequenceBasePtr = b->getRawInputPointer("byteStream", cursorPos);
+        Value* sequenceBasePtr = b->getRawInputPointer("byteStream", tokenCursorPos);
         Value* sequenceToken = b->CreateLoad(sequenceBasePtr);
 
         Value* highestTokenBit = b->CreateAnd(sequenceToken, b->getInt8((uint8_t)1 << 7));
@@ -158,8 +193,9 @@ namespace kernel{
 
         // ---- literalProcessBlock
         b->SetInsertPoint(literalProcessBlock);
-        this->processLiteral(b, cursorNextPos, tokenNumValue);
-        Value* newCursorPosAfterLiteral = b->CreateAdd(cursorNextPos, tokenNumValue);
+        this->processLiteral(b, literalCursorPos, tokenNumValue);
+        Value* newTokenCursorPosAfterLiteral = b->CreateAdd(tokenCursorPos, b->getSize(1));
+        Value* newLiteralCursorPosAfterLiteral = b->CreateAdd(literalCursorPos, tokenNumValue);
 
 
         BasicBlock* literalProcessFinalBlock = b->GetInsertBlock();
@@ -167,32 +203,59 @@ namespace kernel{
 
         // ---- matchProcessBlock
         b->SetInsertPoint(matchProcessBlock);
-
-        Value* matchIndexBytes = this->processMatch(b, cursorNextPos, tokenNumValue, sequenceBasePtr);
-        Value* newCursorPosAfterMatch = b->CreateAdd(cursorNextPos, matchIndexBytes);
+        Value* tokenCursorNextPos = b->CreateAdd(tokenCursorPos, b->getSize(1));
+        Value* matchIndexBytes = this->processMatch(b, tokenCursorNextPos, tokenNumValue, sequenceBasePtr);
+        Value* newTokenCursorPosAfterMatch = b->CreateAdd(tokenCursorNextPos, matchIndexBytes);
 
         BasicBlock* matchProcessFinalBlock = b->GetInsertBlock();
         b->CreateBr(exitBlock);
 
         // ---- exitBlock
         b->SetInsertPoint(exitBlock);
-        PHINode* phiCursorValue = b->CreatePHI(b->getSizeTy(), 2);
-        phiCursorValue->addIncoming(newCursorPosAfterLiteral, literalProcessFinalBlock);
-        phiCursorValue->addIncoming(newCursorPosAfterMatch, matchProcessFinalBlock);
+        PHINode* phiTokenCursorValue = b->CreatePHI(b->getSizeTy(), 2);
+        phiTokenCursorValue->addIncoming(newTokenCursorPosAfterLiteral, literalProcessFinalBlock);
+        phiTokenCursorValue->addIncoming(newTokenCursorPosAfterMatch, matchProcessFinalBlock);
 
+        PHINode* phiLiteralCursorValue = b->CreatePHI(b->getSizeTy(), 2);
+        phiLiteralCursorValue->addIncoming(newLiteralCursorPosAfterLiteral, literalProcessFinalBlock);
+        phiLiteralCursorValue->addIncoming(literalCursorPos, matchProcessFinalBlock);
 
-        return phiCursorValue;
+        return std::make_pair(phiLiteralCursorValue, phiTokenCursorValue);
     }
 
-    llvm::Value *LZParabixAioKernel::processLiteral(const std::unique_ptr<KernelBuilder> &b, llvm::Value* cursorPos, llvm::Value* literalLength) {
+    void LZParabixAioKernel::processLiteral(const std::unique_ptr<KernelBuilder> &b, llvm::Value* cursorPos, llvm::Value* literalLength) {
+        // ---- EntryBlock
+        BasicBlock* entryBlock = b->GetInsertBlock();
         Value* remCursorPos = b->CreateURem(cursorPos, b->getCapacity("inputBitStream0"));
 
-        Value* cursorBlockIndex = b->CreateUDiv(remCursorPos, b->getSize(b->getBitBlockWidth()));
-        Value* cursorBlockRem = b->CreateURem(remCursorPos, b->getSize(b->getBitBlockWidth()));
+        BasicBlock* processLiteralConBlock = b->CreateBasicBlock("processLiteralConBlock");
+        BasicBlock* processLiteralBodyBlock = b->CreateBasicBlock("processLiteralBodyBlock");
+        BasicBlock* processLiteralExitBlock = b->CreateBasicBlock("processLiteralExitBlock");
+
+        b->CreateBr(processLiteralConBlock);
+
+        // ---- processLiteralConBlock
+        b->SetInsertPoint(processLiteralConBlock);
+        PHINode* phiRemCursorPos = b->CreatePHI(b->getSizeTy(), 2);
+        phiRemCursorPos->addIncoming(remCursorPos, entryBlock);
+        PHINode* phiRemainingLiteralLength = b->CreatePHI(b->getSizeTy(), 2);
+        phiRemainingLiteralLength->addIncoming(literalLength, entryBlock);
+
+        b->CreateCondBr(b->CreateICmpUGT(phiRemainingLiteralLength, b->getSize(0)), processLiteralBodyBlock, processLiteralExitBlock);
+
+        // ---- processLiteralBodyBlock
+        b->SetInsertPoint(processLiteralBodyBlock);
+
+        Value* targetLiteralLength = b->CreateSub(b->getSize(64), b->CreateURem(phiRemCursorPos, b->getSize(64)));
+        targetLiteralLength = b->CreateUMin(phiRemainingLiteralLength, targetLiteralLength);
+
+
+        Value* cursorBlockIndex = b->CreateUDiv(phiRemCursorPos, b->getSize(b->getBitBlockWidth()));
+        Value* cursorBlockRem = b->CreateURem(phiRemCursorPos, b->getSize(b->getBitBlockWidth()));
         Value* cursorI64BlockIndex = b->CreateUDiv(cursorBlockRem, b->getSize(64));
         Value* cursorI64BlockRem = b->CreateURem(cursorBlockRem, b->getSize(64));
         Value* literalMask = b->CreateSub(
-                b->CreateSelect(b->CreateICmpEQ(literalLength, b->getInt64(0x40)), b->getInt64(0), b->CreateShl(b->getInt64(1), literalLength)),
+                b->CreateSelect(b->CreateICmpEQ(targetLiteralLength, b->getInt64(0x40)), b->getInt64(0), b->CreateShl(b->getInt64(1), targetLiteralLength)),
                 b->getInt64(1)
         );
 
@@ -210,7 +273,15 @@ namespace kernel{
             }
         }
 
-        this->appendBitStreamOutput(b, extractValues, literalLength);
+        this->appendBitStreamOutput(b, extractValues, targetLiteralLength);
+
+        phiRemCursorPos->addIncoming(b->CreateAdd(phiRemCursorPos, targetLiteralLength), b->GetInsertBlock());
+        phiRemainingLiteralLength->addIncoming(b->CreateSub(phiRemainingLiteralLength, targetLiteralLength), b->GetInsertBlock());
+
+        b->CreateBr(processLiteralConBlock);
+
+        // ---- processLiteralExitBlock
+        b->SetInsertPoint(processLiteralExitBlock);
     }
 
 

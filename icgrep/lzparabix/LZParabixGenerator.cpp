@@ -20,8 +20,9 @@
 #include <kernels/swizzle.h>
 #include <kernels/pdep_kernel.h>
 #include <kernels/swizzled_multiple_pdep_kernel.h>
-#include <kernels/lzparabix/LZParabixBlockDecoder.h>
-#include <kernels/lzparabix/LZParabixAioKernel.h>
+#include <kernels/lzparabix/decoder/LZParabixBlockDecoder.h>
+#include <kernels/lzparabix/decoder/LZParabixAioKernel.h>
+#include <kernels/lzparabix/decoder/LZParabixLiteralDecoderKernel.h>
 
 namespace re { class CC; }
 
@@ -44,10 +45,12 @@ void LZParabixGenerator::generatePipeline(const std::string &outputFile) {
     this->generateMainFunc(iBuilder);
 
     this->generateLoadByteStreamAndBitStream(iBuilder);
-    auto decompressedBitStream = this->generateAioBitStreamDecompressoin(iBuilder, {mCompressedBasisBits})[0];
+
+    auto decompressedBitStream = this->generateFullBitStreamDecompression(iBuilder);
+//    auto decompressedBitStream = this->generateAioBitStreamDecompressoin(iBuilder, {mCompressedBasisBits})[0];
 
     auto decompressedByteStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getInputBufferBlocks(iBuilder));
-    Kernel * p2sK = mPxDriver.addKernelInstance<P2SKernel>(iBuilder);
+    Kernel * p2sK = mPxDriver.addKernelInstance<P2SKernel>(iBuilder, cc::BitNumbering::BigEndian);
     mPxDriver.makeKernelCall(p2sK, {decompressedBitStream}, {decompressedByteStream});
 
     // --------------------------------------------------------
@@ -64,15 +67,58 @@ void LZParabixGenerator::generatePipeline(const std::string &outputFile) {
     mPxDriver.finalizeObject();
 }
 
+
+void LZParabixGenerator::generateBlockData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
+    BlockData_BlockStart = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(iBuilder));
+    BlockData_BlockEnd = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(iBuilder));
+    Kernel * blockDecoderK = mPxDriver.addKernelInstance<LZParabixBlockDecoderKernel>(iBuilder);
+    blockDecoderK->setInitialArguments({mFileSize});
+    mPxDriver.makeKernelCall(blockDecoderK, {mCompressedByteStream}, {BlockData_BlockStart, BlockData_BlockEnd});
+}
+
+parabix::StreamSetBuffer* LZParabixGenerator::extractLiteralBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
+    StreamSetBuffer * const LiteralBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getInputBufferBlocks(iBuilder));
+    Kernel* literalDecoderK = mPxDriver.addKernelInstance<LZParabixLiteralDecoderKernel>(iBuilder);
+    literalDecoderK->setInitialArguments({mFileSize});
+    mPxDriver.makeKernelCall(literalDecoderK, {mCompressedByteStream, BlockData_BlockStart, BlockData_BlockEnd}, {LiteralBitStream});
+    return LiteralBitStream;
+}
+
+std::vector<parabix::StreamSetBuffer*> LZParabixGenerator::generateBitStreamDecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<parabix::StreamSetBuffer*> inputBitStreams) {
+    std::vector<unsigned> numbersOfStreams;
+    std::vector<StreamSetBuffer*> inputStreams = {
+            mCompressedByteStream,
+            BlockData_BlockStart,
+            BlockData_BlockEnd,
+    };;
+    std::vector<StreamSetBuffer*> outputStreams;
+    for (unsigned i = 0; i < inputBitStreams.size(); i++) {
+        unsigned numOfStream = inputBitStreams[i]->getNumOfStreams();
+
+        numbersOfStreams.push_back(numOfStream);
+        inputStreams.push_back(inputBitStreams[i]);
+        outputStreams.push_back(mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(numOfStream, 1), this->getInputBufferBlocks(iBuilder)));
+    }
+
+    Kernel * aioK = mPxDriver.addKernelInstance<LZParabixAioKernel>(iBuilder, numbersOfStreams);
+    aioK->setInitialArguments({mFileSize});
+    mPxDriver.makeKernelCall(aioK, inputStreams, outputStreams);
+    return outputStreams;
+
+}
+
+parabix::StreamSetBuffer* LZParabixGenerator::generateFullBitStreamDecompression(const std::unique_ptr<kernel::KernelBuilder> & b) {
+    this->generateBlockData(b);
+    StreamSetBuffer * const LiteralBitStream = this->extractLiteralBitStream(b);
+    return this->generateBitStreamDecompression(b, {LiteralBitStream})[0];
+}
+
+
 std::vector<parabix::StreamSetBuffer*> LZParabixGenerator::generateAioBitStreamDecompressoin(
         const std::unique_ptr<kernel::KernelBuilder> & iBuilder,
         std::vector<parabix::StreamSetBuffer*> bitStreamSets
 ) {
-    StreamSetBuffer * const BlockData_BlockStart = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(iBuilder), 1);
-    StreamSetBuffer * const BlockData_BlockEnd = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(iBuilder), 1);
-    Kernel * blockDecoderK = mPxDriver.addKernelInstance<LZParabixBlockDecoderKernel>(iBuilder);
-    blockDecoderK->setInitialArguments({mFileSize});
-    mPxDriver.makeKernelCall(blockDecoderK, {mCompressedByteStream}, {BlockData_BlockStart, BlockData_BlockEnd});
+    this->generateBlockData(iBuilder);
 
     std::vector<parabix::StreamSetBuffer*> inputStreamSetParams = {mCompressedByteStream, BlockData_BlockStart, BlockData_BlockEnd};
 
@@ -96,13 +142,13 @@ std::vector<parabix::StreamSetBuffer*> LZParabixGenerator::generateAioBitStreamD
 
 void LZParabixGenerator::generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
     mCompressedByteStream = mPxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    mCompressedBasisBits = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getInputBufferBlocks(iBuilder));
+//    mCompressedBasisBits = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getInputBufferBlocks(iBuilder));
 
     kernel::Kernel * sourceK = mPxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);
     sourceK->setInitialArguments({mInputStream, mFileSize});
     mPxDriver.makeKernelCall(sourceK, {}, {mCompressedByteStream});
-    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::BigEndian);
-    mPxDriver.makeKernelCall(s2pk, {mCompressedByteStream}, {mCompressedBasisBits});
+//    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::BigEndian);
+//    mPxDriver.makeKernelCall(s2pk, {mCompressedByteStream}, {mCompressedBasisBits});
 }
 
 void LZParabixGenerator::generateMainFunc(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {

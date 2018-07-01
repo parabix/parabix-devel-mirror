@@ -16,7 +16,7 @@
 #include <kernels/source_kernel.h>
 #include <kernels/stdout_kernel.h>
 #include <kernels/kernel_builder.h>
-#include <kernels/lzparabix/LZParabixCompressionKernel.h>
+#include <kernels/lzparabix/encoder/LZParabixCompressionKernel.h>
 
 
 namespace re { class CC; }
@@ -42,9 +42,16 @@ void LZParabixCompressorGenerator::generatePipeline(const std::string &outputFil
 
 
     parabix::StreamSetBuffer* outputStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getInputBufferBlocks(iBuilder));
+
+    parabix::StreamSetBuffer* literalByteBuffer = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getInputBufferBlocks(iBuilder));
+    parabix::StreamSetBuffer* tokenByteBuffer = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getInputBufferBlocks(iBuilder));
+
+    parabix::StreamSetBuffer* strToBlockIndex = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), HASHNBCELLS4);
+    parabix::StreamSetBuffer* strToMatchPos = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 32), HASHNBCELLS4);
+
     Kernel * compressionKernel = mPxDriver.addKernelInstance<LZParabixCompressionKernel>(iBuilder);
     compressionKernel->setInitialArguments({mFileSize});
-    mPxDriver.makeKernelCall(compressionKernel, {mCompressedByteStream}, {outputStream});
+    mPxDriver.makeKernelCall(compressionKernel, {mCompressedByteStream, mCompressedBasisBits}, {outputStream, strToBlockIndex, strToMatchPos, literalByteBuffer, tokenByteBuffer});
 
     // --------------------------------------------------------
     // End
@@ -69,8 +76,8 @@ void LZParabixCompressorGenerator::generateLoadByteStreamAndBitStream(
     kernel::Kernel * sourceK = mPxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);
     sourceK->setInitialArguments({mInputStream, mFileSize});
     mPxDriver.makeKernelCall(sourceK, {}, {mCompressedByteStream});
-//    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::LittleEndian);
-//    mPxDriver.makeKernelCall(s2pk, {mCompressedByteStream}, {mCompressedBasisBits});
+    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::BigEndian);
+    mPxDriver.makeKernelCall(s2pk, {mCompressedByteStream}, {mCompressedBasisBits});
 
 }
 

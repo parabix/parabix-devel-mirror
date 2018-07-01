@@ -32,9 +32,9 @@ namespace kernel {
         void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) override;
         llvm::Value *generateLoadInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder,
                                                   std::string inputBufferName, llvm::Value *globalOffset);
-        llvm::Value *processSequence(const std::unique_ptr<KernelBuilder> &b, llvm::Value *beginTokenPos,
+        std::pair<llvm::Value*, llvm::Value*> processSequence(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginLiteralPos, llvm::Value *beginTokenPos,
                                                          llvm::Value *lz4BlockEnd);
-        llvm::Value *processLiteral(const std::unique_ptr<KernelBuilder> &b, llvm::Value* cursorPos, llvm::Value* literalLength);
+        void processLiteral(const std::unique_ptr<KernelBuilder> &b, llvm::Value* cursorPos, llvm::Value* literalLength);
         llvm::Value *processMatch(const std::unique_ptr<KernelBuilder> &b, llvm::Value* cursorPos, llvm::Value* matchOffset, llvm::Value* sequenceBasePtr);
 
 

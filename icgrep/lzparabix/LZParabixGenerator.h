@@ -29,6 +29,8 @@ protected:
     void generateMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     virtual void generateLoadByteStreamAndBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
+
+    parabix::StreamSetBuffer* generateFullBitStreamDecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
     std::vector<parabix::StreamSetBuffer*> generateAioBitStreamDecompressoin(
             const std::unique_ptr<kernel::KernelBuilder> & iBuilder,
             std::vector<parabix::StreamSetBuffer*> bitStreamSets
@@ -56,6 +58,15 @@ protected:
     // StreamSetBuffers
     parabix::StreamSetBuffer * mCompressedByteStream;
     parabix::StreamSetBuffer * mCompressedBasisBits;
+
+    // Block Data
+    void generateBlockData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    parabix::StreamSetBuffer * BlockData_BlockStart;
+    parabix::StreamSetBuffer * BlockData_BlockEnd;
+
+    parabix::StreamSetBuffer* extractLiteralBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+
+    std::vector<parabix::StreamSetBuffer*> generateBitStreamDecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<parabix::StreamSetBuffer*> inputBitStreams);
 };
 
 
