@@ -373,9 +373,9 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerat
         kernel::Kernel* streamSplitKernel = mPxDriver.addKernelInstance<StreamsSplitKernel>(idb, std::vector<unsigned>({1, (unsigned)numOfCharacterClasses}));
         mPxDriver.makeKernelCall(streamSplitKernel, {decompressedCombinedStream}, {LineBreakStream, decompressedCharClasses});
     } else {
-        auto ret = this->convertCompressedBitsStreamWithBitStreamAioApproach({CompressedLineFeedStream, CharClasses}, "combined");
-        LineBreakStream = ret[0];
-        decompressedCharClasses = ret[1];
+        auto ret = this->convertCompressedBitsStreamWithBitStreamAioApproach({CharClasses, CompressedLineFeedStream}, "combined");
+        decompressedCharClasses = ret[0];
+        LineBreakStream = ret[1];
     }
 
     StreamSetBuffer * fakeMatchCopiedBits = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), this->getInputBufferBlocks(idb));
