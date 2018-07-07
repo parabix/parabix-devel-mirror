@@ -14,7 +14,7 @@ namespace re { class RE; class CC; }
 namespace kernel {
 
 struct CharClassesSignature {
-    CharClassesSignature(const std::vector<re::CC *> & ccs, bool useDirectCC);
+    CharClassesSignature(const std::vector<re::CC *> & ccs, bool useDirectCC, cc::BitNumbering basisNumbering);
 protected:
     const bool mUseDirectCC;
     const std::string mSignature;
@@ -29,9 +29,9 @@ public:
 protected:
     void generatePabloMethod() override;
 protected:
-    cc::BitNumbering mBasisSetNumbering;
     std::vector<re::CC *> mCCs;
-    
+    cc::BitNumbering mBasisSetNumbering;
+
 };
 
 }

@@ -51,13 +51,14 @@ inline std::string signature(const std::vector<re::CC *> & ccs) {
     }
 }
 
-CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, bool useDirectCC)
-: mUseDirectCC(useDirectCC), mSignature((useDirectCC ? "d" : "p") + signature(ccs)) {
+CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, bool useDirectCC, cc::BitNumbering bn)
+: mUseDirectCC(useDirectCC),
+  mSignature((useDirectCC ? "d" : "p") + numberingSuffix(bn) + signature(ccs)) {
 }
 
 
 CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<CC *> && ccs, bool useDirectCC, cc::BitNumbering basisNumbering)
-: CharClassesSignature(ccs, useDirectCC)
+: CharClassesSignature(ccs, useDirectCC, basisNumbering)
 , PabloKernel(iBuilder,
               "cc" + sha1sum(mSignature),
               {},
@@ -99,7 +100,11 @@ void CharClassesKernel::generatePabloMethod() {
     } else {
         ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     }
-
+    if (mBasisSetNumbering == cc::BitNumbering::BigEndian) {
+        // The first UnicodeSet in the vector ccs represents the last bit of the
+        // character class basis bit streams.
+        std::reverse(names.begin(), names.end());
+    }
     for (unsigned i = 0; i < names.size(); i++) {
         auto t = nameMap.find(names[i]); 
         if (t != nameMap.end()) {
