@@ -100,8 +100,6 @@ void CharClassesKernel::generatePabloMethod() {
         ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     }
 
-    // The first UnicodeSet in the vector ccs represents the last bit of the character class basis bit streams.
-    std::reverse(names.begin(), names.end());
     for (unsigned i = 0; i < names.size(); i++) {
         auto t = nameMap.find(names[i]); 
         if (t != nameMap.end()) {
