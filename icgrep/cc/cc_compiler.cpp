@@ -26,11 +26,12 @@ namespace cc {
     : mBuilder(scope) {
     }
 
-Parabix_CC_Compiler::Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet, cc::BitNumbering basisSetNumbering)
+Parabix_CC_Compiler::Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet, cc::BitNumbering basisSetNumbering, bool fakeBasisBits)
 : CC_Compiler(scope)
 , mEncodingBits(basisBitSet.size())
 , mBasisSetNumbering(basisSetNumbering)
-, mBasisBit(basisBitSet) {
+, mBasisBit(basisBitSet)
+, mFakeBasisBits(fakeBasisBits) {
     mEncodingMask = (static_cast<unsigned>(1) << mEncodingBits) - static_cast<unsigned>(1);
 }
 
@@ -77,7 +78,7 @@ PabloAST * Parabix_CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder 
                 lo &= (mEncodingMask - 1);
                 hi |= (mEncodingMask ^ (mEncodingMask - 1));
                 PabloAST * expr = make_range(lo, hi, pb);
-                PabloAST * bit0 = getBasisVar(0);
+                PabloAST * bit0 = getBasisVar(0, pb);
                 if ((lo & 1) == 0) {
                     bit0 = pb.createNot(bit0);
                 }
@@ -104,7 +105,7 @@ PabloAST * Parabix_CC_Compiler::bit_pattern_expr(const unsigned pattern, unsigne
             unsigned test_bit = static_cast<unsigned>(1) << i;
             PabloAST * term = pb.createOnes();
             if (selected_bits & test_bit) {
-                term = getBasisVar(i);
+                term = getBasisVar(i, pb);
                 if ((pattern & test_bit) == 0) {
                     term = pb.createNot(term);
                 }
@@ -161,7 +162,7 @@ PabloAST * Parabix_CC_Compiler::make_range(const codepoint_t n1, const codepoint
     PabloAST* lo_test = GE_Range(diff_count - 1, n1 & mask1, pb);
     PabloAST* hi_test = LE_Range(diff_count - 1, n2 & mask1, pb);
 
-    return pb.createAnd(common, pb.createSel(getBasisVar(diff_count - 1), hi_test, lo_test));
+    return pb.createAnd(common, pb.createSel(getBasisVar(diff_count - 1, pb), hi_test, lo_test));
 }
 
 template<typename PabloBlockOrBuilder>
@@ -170,10 +171,10 @@ PabloAST * Parabix_CC_Compiler::GE_Range(const unsigned N, const unsigned n, Pab
         return pb.createOnes(); //Return a true literal.
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 0)) {
-        return pb.createOr(pb.createOr(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n, pb));
+        return pb.createOr(pb.createOr(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb)), GE_Range(N - 2, n, pb));
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 3)) {
-        return pb.createAnd(pb.createAnd(getBasisVar(N - 1), getBasisVar(N - 2)), GE_Range(N - 2, n - (3 << (N - 2)), pb));
+        return pb.createAnd(pb.createAnd(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb)), GE_Range(N - 2, n - (3 << (N - 2)), pb));
     }
     else if (N >= 1)
     {
@@ -187,7 +188,7 @@ PabloAST * Parabix_CC_Compiler::GE_Range(const unsigned N, const unsigned n, Pab
               is set in the target, the target will certaily be >=.  Otherwise,
               the value of GE_range(N-1), lo_range) is required.
             */
-            return pb.createOr(getBasisVar(N - 1), lo_range);
+            return pb.createOr(getBasisVar(N - 1, pb), lo_range);
         }
         else
         {
@@ -195,7 +196,7 @@ PabloAST * Parabix_CC_Compiler::GE_Range(const unsigned N, const unsigned n, Pab
               If the hi_bit of n is set, then the corresponding bit must be set
               in the target for >= and GE_range(N-1, lo_bits) must also be true.
             */
-            return pb.createAnd(getBasisVar(N - 1), lo_range);
+            return pb.createAnd(getBasisVar(N - 1, pb), lo_range);
         }
     }
     throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
@@ -224,11 +225,16 @@ inline PabloAST * Parabix_CC_Compiler::char_or_range_expr(const codepoint_t lo, 
     llvm::report_fatal_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
 }
 
-inline PabloAST * Parabix_CC_Compiler::getBasisVar(const unsigned i) const {
-    assert (i < mEncodingBits);
-    if (mBasisSetNumbering == cc::BitNumbering::BigEndian)
-        return mBasisBit[mEncodingBits - i - 1];
-    else return mBasisBit[i];
+template<typename PabloBlockOrBuilder>
+inline PabloAST * Parabix_CC_Compiler::getBasisVar(const unsigned i, PabloBlockOrBuilder & pb) const {
+    if (mFakeBasisBits) {
+        return pb.createZeroes();
+    } else {
+        assert (i < mEncodingBits);
+        if (mBasisSetNumbering == cc::BitNumbering::BigEndian)
+            return mBasisBit[mEncodingBits - i - 1];
+        else return mBasisBit[i];
+    }
 }
 
     

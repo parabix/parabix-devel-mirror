@@ -204,7 +204,7 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
     Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, 8);
     mPxDriver.makeKernelCall(fakeStreamGeneratorK, {decompressedCharClasses}, {fakeMatchCopiedBits});
 
-    kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[0], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian);
+    kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[0], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian, true);
     mGrepDriver->makeKernelCall(icgrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {MatchResults});
     MatchResultsBufs[0] = MatchResults;
 
@@ -253,15 +253,15 @@ LZParabixGrepGenerator::grepPipeline(std::vector<re::RE *> &REs) {
 
     this->generateBlockData(idb);
     StreamSetBuffer * const LiteralBitStream = this->extractLiteralBitStream(idb);
-    auto compressedLineBreakStream = this->linefeedStreamFromDecompressedBits(LiteralBitStream);
+//    auto compressedLineBreakStream = this->linefeedStreamFromDecompressedBits(LiteralBitStream);
 
 
-    auto ret = this->generateBitStreamDecompression(idb, {LiteralBitStream, compressedLineBreakStream});
+    auto ret = this->generateBitStreamDecompression(idb, {LiteralBitStream/*, compressedLineBreakStream*/});
     StreamSetBuffer * decompressedBasisBits = ret[0];
-    StreamSetBuffer * LineBreakStream = ret[1];
+//    StreamSetBuffer * LineBreakStream = ret[1];
 
 //    StreamSetBuffer * decompressedBasisBits = this->generateAioBitStreamDecompressoin(idb, {mCompressedBasisBits})[0];
-//    StreamSetBuffer * LineBreakStream = this->linefeedStreamFromDecompressedBits(decompressedBasisBits);
+    StreamSetBuffer * LineBreakStream = this->linefeedStreamFromDecompressedBits(decompressedBasisBits);
 
     std::map<std::string, StreamSetBuffer *> propertyStream;
 

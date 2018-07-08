@@ -51,7 +51,7 @@ public:
         MarkerType & operator =(const MarkerType &) = default;
     };
 
-    RE_Compiler(pablo::PabloBlock * scope, cc::CC_Compiler & ccCompiler, cc::BitNumbering basisSetNumbering = cc::BitNumbering::LittleEndian);
+    RE_Compiler(pablo::PabloBlock * scope, cc::CC_Compiler & ccCompiler, cc::BitNumbering basisSetNumbering = cc::BitNumbering::LittleEndian, bool mFakeBasisBits = false);
     
     //
     // The CCs (character classes) within a regular expression are generally
@@ -148,6 +148,7 @@ private:
     NameMap                                         mBaseMap;
     std::map<std::string, pablo::PabloAST *>        mExternalNameMap;
     cc::BitNumbering mBasisSetNumbering;
+    bool mFakeBasisBits;
 };
 
 }
