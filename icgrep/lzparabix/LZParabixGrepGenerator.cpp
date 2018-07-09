@@ -22,6 +22,8 @@
 
 #include <re/collect_ccs.h>
 #include <re/replaceCC.h>
+#include <re/re_seq.h>
+#include <re/re_cc.h>
 
 #include <UCD/resolve_properties.h>
 #include <kernels/charclasses.h>
@@ -172,15 +174,21 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
     std::vector<std::string> externalStreamNames;
     std::set<re::Name *> UnicodeProperties;
 
-    const auto UnicodeSets = re::collectCCs(mREs[0], &cc::Unicode, std::set<re::Name *>({re::makeZeroWidth("\\b{g}")}));
-    StreamSetBuffer * const MatchResults = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize, 1);
+    re::CC* linefeedCC = re::makeCC(0x0A);
 
+    re::Seq* seq = re::makeSeq();
+    seq->push_back(mREs[0]);
+    seq->push_back(std::move(linefeedCC));
+
+    const auto UnicodeSets = re::collectCCs(seq, &cc::Unicode, std::set<re::Name *>({re::makeZeroWidth("\\b{g}")}));
+    StreamSetBuffer * const MatchResults = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize, 1);
 
     this->generateBlockData(idb);
     StreamSetBuffer * const LiteralBitStream = this->extractLiteralBitStream(idb);
 
     mpx = make_unique<cc::MultiplexedAlphabet>("mpx", UnicodeSets);
     mREs[0] = transformCCs(mpx.get(), mREs[0]);
+
     std::vector<re::CC *> mpx_basis = mpx->getMultiplexedCCs();
     auto numOfCharacterClasses = mpx_basis.size();
 //    llvm::outs() << "numOfCharacterClasses:" << numOfCharacterClasses << "\n";
@@ -189,15 +197,15 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
     kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis), false, cc::BitNumbering::BigEndian);
     mGrepDriver->makeKernelCall(ccK, {LiteralBitStream}, {CharClasses});
 
-    StreamSetBuffer * CompressedLineFeedStream = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize, 1);
-    kernel::Kernel * linefeedK = mPxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(8), "basis", FixedRate(), Principal()}, cc::BitNumbering::BigEndian);
-    mPxDriver.makeKernelCall(linefeedK, {LiteralBitStream}, {CompressedLineFeedStream});
+//    StreamSetBuffer * CompressedLineFeedStream = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize, 1);
+//    kernel::Kernel * linefeedK = mPxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(8), "basis", FixedRate(), Principal()}, cc::BitNumbering::BigEndian);
+//    mPxDriver.makeKernelCall(linefeedK, {LiteralBitStream}, {CompressedLineFeedStream});
 
-    auto ret = this->generateBitStreamDecompression(idb, {CharClasses, CompressedLineFeedStream});
-//    auto ret = this->generateAioBitStreamDecompressoin(idb, {CharClasses, CompressedLineFeedStream});
+//    auto ret = this->generateBitStreamDecompression(idb, {CharClasses, CompressedLineFeedStream});
+    auto ret = this->generateBitStreamDecompression(idb, {CharClasses});
 
     StreamSetBuffer * decompressedCharClasses = ret[0];
-    StreamSetBuffer * LineBreakStream = ret[1];
+//    StreamSetBuffer * LineBreakStream = ret[1];
 
 
     StreamSetBuffer * fakeMatchCopiedBits = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), this->getInputBufferBlocks(idb), 1);
@@ -207,6 +215,11 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
     kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[0], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian, true);
     mGrepDriver->makeKernelCall(icgrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {MatchResults});
     MatchResultsBufs[0] = MatchResults;
+
+    StreamSetBuffer * newLineBreak = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), this->getInputBufferBlocks(idb));
+    kernel::Kernel * lineFeedGrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, transformCCs(mpx.get(), linefeedCC), externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian, true);
+    mGrepDriver->makeKernelCall(lineFeedGrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {newLineBreak});
+
 
     StreamSetBuffer * MergedResults = MatchResultsBufs[0];
     if (mREs.size() > 1) {
@@ -219,7 +232,7 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
         StreamSetBuffer * OriginalMatches = Matches;
         kernel::Kernel * matchedLinesK = mGrepDriver->addKernelInstance<kernel::MatchedLinesKernel>(idb);
         Matches = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize);
-        mGrepDriver->makeKernelCall(matchedLinesK, {OriginalMatches, LineBreakStream}, {Matches});
+        mGrepDriver->makeKernelCall(matchedLinesK, {OriginalMatches, newLineBreak}, {Matches});
     }
 
     if (MaxCountFlag > 0) {
@@ -230,7 +243,7 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
         mGrepDriver->makeKernelCall(untilK, {AllMatches}, {Matches});
     }
 
-    return std::pair<StreamSetBuffer *, StreamSetBuffer *>(LineBreakStream, Matches);
+    return std::pair<StreamSetBuffer *, StreamSetBuffer *>(newLineBreak, Matches);
 };
 
 
