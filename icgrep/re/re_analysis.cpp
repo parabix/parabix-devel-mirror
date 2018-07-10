@@ -104,7 +104,30 @@ const CC* matchableCodepoints(const RE * re) {
     return makeCC(); // otherwise = Start, End, Assertion
 }
 
-
+bool isAllCcByteLength(const RE * re) {
+    if (const Alt * alt = dyn_cast<Alt>(re)) {
+        for (const RE * re : *alt) {
+            if (!isAllCcByteLength(re)) {
+                return false;
+            }
+        }
+        return true;
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+        for (const RE * e : *seq) {
+            if (!isAllCcByteLength(e)) return false;
+        }
+        return true;
+    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
+        return isAllCcByteLength(rep->getRE());
+    }  else if (const Name * n = dyn_cast<Name>(re)) {
+        if (n->getType() == Name::Type::ZeroWidth) {
+            return false;
+        }
+        return isAllCcByteLength(n->getDefinition());
+    } else {
+        return isByteLength(re);
+    }
+}
 
 bool isByteLength(const RE * re) {
     if (const Alt * alt = dyn_cast<Alt>(re)) {

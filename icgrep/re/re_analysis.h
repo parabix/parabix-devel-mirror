@@ -16,6 +16,8 @@ bool matchesEmptyString(const RE * re);
 const CC * matchableCodepoints(const RE * re);
 
 bool isByteLength(const RE * re);
+
+bool isAllCcByteLength(const RE * re);
     
 bool isUnicodeUnitLength(const RE * re);
 

@@ -47,6 +47,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Debug.h>
 #include <kernels/fake_stream_generating_kernel.h>
+#include <re/re_alt.h>
 
 namespace re { class CC; }
 
@@ -186,6 +187,8 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
     this->generateBlockData(idb);
     StreamSetBuffer * const LiteralBitStream = this->extractLiteralBitStream(idb);
 
+    bool allCcByteLength = re::isAllCcByteLength(mREs[0]);
+
     mpx = make_unique<cc::MultiplexedAlphabet>("mpx", UnicodeSets);
     mREs[0] = transformCCs(mpx.get(), mREs[0]);
 
@@ -197,29 +200,49 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
     kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis), false, cc::BitNumbering::BigEndian);
     mGrepDriver->makeKernelCall(ccK, {LiteralBitStream}, {CharClasses});
 
-//    StreamSetBuffer * CompressedLineFeedStream = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize, 1);
-//    kernel::Kernel * linefeedK = mPxDriver.addKernelInstance<kernel::LineFeedKernelBuilder>(idb, Binding{idb->getStreamSetTy(8), "basis", FixedRate(), Principal()}, cc::BitNumbering::BigEndian);
-//    mPxDriver.makeKernelCall(linefeedK, {LiteralBitStream}, {CompressedLineFeedStream});
 
-//    auto ret = this->generateBitStreamDecompression(idb, {CharClasses, CompressedLineFeedStream});
-    auto ret = this->generateBitStreamDecompression(idb, {CharClasses});
+    StreamSetBuffer * newLineBreak = nullptr;
+    if (allCcByteLength) {
+        auto ret = this->generateBitStreamDecompression(idb, {CharClasses});
+        StreamSetBuffer * decompressedCharClasses = ret[0];
+        StreamSetBuffer * fakeMatchCopiedBits = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), this->getInputBufferBlocks(idb), 1);
+        Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, 8);
+        mPxDriver.makeKernelCall(fakeStreamGeneratorK, {decompressedCharClasses}, {fakeMatchCopiedBits});
 
-    StreamSetBuffer * decompressedCharClasses = ret[0];
-//    StreamSetBuffer * LineBreakStream = ret[1];
+        newLineBreak = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), this->getInputBufferBlocks(idb));
+        kernel::Kernel * lineFeedGrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, transformCCs(mpx.get(), linefeedCC), externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian, true);
+        mGrepDriver->makeKernelCall(lineFeedGrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {newLineBreak});
 
+        kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[0], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian, true);
+        mGrepDriver->makeKernelCall(icgrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {MatchResults});
+        MatchResultsBufs[0] = MatchResults;
+    } else {
+        re::RE* nonFinalName = re::makeAlt({re::makeByte(0xC2, 0xF4),
+                                            re::makeSeq({re::makeByte(0xE0, 0xF4), re::makeByte(0x80, 0xBF)}),
+                                            re::makeSeq({re::makeByte(0xF0, 0xF4), re::makeByte(0x80, 0xBF), re::makeByte(0x80, 0xBF)})});
+        StreamSetBuffer * compressedU8NoFinalStream = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), this->getInputBufferBlocks(idb));
+        kernel::Kernel * u8NoFinalK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, nonFinalName, externalStreamNames, std::vector<cc::Alphabet *>(), cc::BitNumbering::BigEndian);
+        mGrepDriver->makeKernelCall(u8NoFinalK, {LiteralBitStream}, {compressedU8NoFinalStream});
 
-    StreamSetBuffer * fakeMatchCopiedBits = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), this->getInputBufferBlocks(idb), 1);
-    Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, 8);
-    mPxDriver.makeKernelCall(fakeStreamGeneratorK, {decompressedCharClasses}, {fakeMatchCopiedBits});
+        auto ret = this->generateBitStreamDecompression(idb, {CharClasses, compressedU8NoFinalStream});
 
-    kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[0], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian, true);
-    mGrepDriver->makeKernelCall(icgrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {MatchResults});
-    MatchResultsBufs[0] = MatchResults;
+        StreamSetBuffer * decompressedCharClasses = ret[0];
+        StreamSetBuffer * u8NoFinalStream = ret[1];
 
-    StreamSetBuffer * newLineBreak = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), this->getInputBufferBlocks(idb));
-    kernel::Kernel * lineFeedGrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, transformCCs(mpx.get(), linefeedCC), externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian, true);
-    mGrepDriver->makeKernelCall(lineFeedGrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {newLineBreak});
+        StreamSetBuffer * fakeMatchCopiedBits = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), this->getInputBufferBlocks(idb), 1);
+        Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, 8);
+        mPxDriver.makeKernelCall(fakeStreamGeneratorK, {decompressedCharClasses}, {fakeMatchCopiedBits});
 
+        newLineBreak = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), this->getInputBufferBlocks(idb));
+        kernel::Kernel * lineFeedGrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, transformCCs(mpx.get(), linefeedCC), externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian, true);
+        mGrepDriver->makeKernelCall(lineFeedGrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {newLineBreak});
+
+        externalStreamNames.push_back("UTF8_nonfinal");
+
+        kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[0], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian);
+        mGrepDriver->makeKernelCall(icgrepK, {fakeMatchCopiedBits, u8NoFinalStream, decompressedCharClasses}, {MatchResults});
+        MatchResultsBufs[0] = MatchResults;
+    }
 
     StreamSetBuffer * MergedResults = MatchResultsBufs[0];
     if (mREs.size() > 1) {
