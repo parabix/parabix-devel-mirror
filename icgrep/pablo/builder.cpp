@@ -478,6 +478,7 @@ PabloAST * PabloBuilder::createEquals(PabloAST * expr1, PabloAST * expr2) {
 }
 
 PabloAST * PabloBuilder::createInFile(PabloAST * expr) {
+    if (isa<Zeroes>(expr)) return expr;
     MAKE_UNARY(createInFile, TypeId::InFile, expr);
     return result;
 }

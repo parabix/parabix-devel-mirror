@@ -657,10 +657,13 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
             const PabloAST * lh = op->getLH();
             const PabloAST * rh = op->getRH();
             if ((isa<Var>(lh) || isa<Extract>(lh)) || (isa<Var>(rh) || isa<Extract>(rh))) {
-                const unsigned n = std::min(getIntegerBitWidth(lh->getType()), getIntegerBitWidth(rh->getType()));
-                const unsigned m = b->getBitBlockWidth() / n;
-                IntegerType * const fw = b->getIntNTy(m);
-                VectorType * const vTy = VectorType::get(b->getIntNTy(n), m);
+                if (getIntegerBitWidth(lh->getType()) != getIntegerBitWidth(rh->getType())) {
+                    llvm::report_fatal_error("Integer types must be identical!");
+                }
+                const unsigned intWidth = std::min(getIntegerBitWidth(lh->getType()), getIntegerBitWidth(rh->getType()));
+                const unsigned maskWidth = b->getBitBlockWidth() / intWidth;
+                IntegerType * const maskTy = b->getIntNTy(maskWidth);
+                VectorType * const vTy = VectorType::get(b->getIntNTy(intWidth), maskWidth);
 
                 Value * baseLhv = nullptr;
                 Value * lhvStreamIndex = nullptr;
@@ -688,9 +691,9 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
 
                 if (LLVM_UNLIKELY(typeId == TypeId::Add || typeId == TypeId::Subtract)) {
 
-                    value = b->CreateAlloca(vTy, b->getInt32(n));
+                    value = b->CreateAlloca(vTy, b->getInt32(intWidth));
 
-                    for (unsigned i = 0; i < n; ++i) {
+                    for (unsigned i = 0; i < intWidth; ++i) {
                         llvm::Constant * const index = b->getInt32(i);
                         Value * lhv = nullptr;
                         if (baseLhv) {
@@ -721,9 +724,9 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
 
                 } else {
 
-                    value = UndefValue::get(VectorType::get(fw, n));
+                    value = UndefValue::get(VectorType::get(maskTy, intWidth));
 
-                    for (unsigned i = 0; i < n; ++i) {
+                    for (unsigned i = 0; i < intWidth; ++i) {
                         llvm::Constant * const index = b->getInt32(i);
                         Value * lhv = nullptr;
                         if (baseLhv) {
@@ -742,33 +745,31 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                             rhv = b->CreateBlockAlignedLoad(rhv);
                         }
                         rhv = b->CreateBitCast(rhv, vTy);
-
                         Value * comp = nullptr;
                         switch (typeId) {
                             case TypeId::GreaterThanEquals:
                             case TypeId::LessThan:
-                                comp = b->simd_ult(n, lhv, rhv);
+                                comp = b->simd_ult(intWidth, lhv, rhv);
                                 break;
                             case TypeId::Equals:
                             case TypeId::NotEquals:
-                                comp = b->simd_eq(n, lhv, rhv);
+                                comp = b->simd_eq(intWidth, lhv, rhv);
                                 break;
                             case TypeId::LessThanEquals:
                             case TypeId::GreaterThan:
-                                comp = b->simd_ugt(n, lhv, rhv);
+                                comp = b->simd_ugt(intWidth, lhv, rhv);
                                 break;
                             default: llvm_unreachable("invalid vector operator id");
                         }
-                        Value * const mask = b->CreateZExtOrTrunc(b->hsimd_signmask(n, comp), fw);
-                        value = b->mvmd_insert(m, value, mask, i);
+                        Value * const mask = b->CreateZExtOrTrunc(b->hsimd_signmask(intWidth, comp), maskTy);
+                        value = b->mvmd_insert(maskWidth, value, mask, i);
                     }
-
                     value = b->CreateBitCast(value, b->getBitBlockType());
                     switch (typeId) {
                         case TypeId::GreaterThanEquals:
                         case TypeId::LessThanEquals:
                         case TypeId::NotEquals:
-                            value = b->simd_not(value);
+                            value = b->CreateNot(value);
                         default: break;
                     }
                 }
@@ -782,15 +783,15 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
                     case TypeId::Subtract:
                         value = b->CreateSub(lhv, rhv); break;
                     case TypeId::LessThan:
-                        value = b->CreateICmpSLT(lhv, rhv); break;
+                        value = b->CreateICmpULT(lhv, rhv); break;
                     case TypeId::LessThanEquals:
-                        value = b->CreateICmpSLE(lhv, rhv); break;
+                        value = b->CreateICmpULE(lhv, rhv); break;
                     case TypeId::Equals:
                         value = b->CreateICmpEQ(lhv, rhv); break;
                     case TypeId::GreaterThanEquals:
-                        value = b->CreateICmpSGE(lhv, rhv); break;
+                        value = b->CreateICmpUGE(lhv, rhv); break;
                     case TypeId::GreaterThan:
-                        value = b->CreateICmpSGT(lhv, rhv); break;
+                        value = b->CreateICmpUGT(lhv, rhv); break;
                     case TypeId::NotEquals:
                         value = b->CreateICmpNE(lhv, rhv); break;
                     default: llvm_unreachable("invalid scalar operator id");
