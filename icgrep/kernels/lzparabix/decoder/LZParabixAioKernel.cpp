@@ -275,7 +275,7 @@ namespace kernel{
 
         this->appendBitStreamOutput(b, extractValues, targetLiteralLength);
 
-        phiRemCursorPos->addIncoming(b->CreateAdd(phiRemCursorPos, targetLiteralLength), b->GetInsertBlock());
+        phiRemCursorPos->addIncoming(b->CreateURem(b->CreateAdd(phiRemCursorPos, targetLiteralLength), b->getCapacity("inputBitStream0")), b->GetInsertBlock());
         phiRemainingLiteralLength->addIncoming(b->CreateSub(phiRemainingLiteralLength, targetLiteralLength), b->GetInsertBlock());
 
         b->CreateBr(processLiteralConBlock);
