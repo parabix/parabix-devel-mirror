@@ -40,21 +40,11 @@ namespace kernel {
 
         std::vector<unsigned> mNumsOfBitStreams;
 
-
         // ---- Output
         void initPendingOutputScalar(const std::unique_ptr<KernelBuilder> &b);
         void appendBitStreamOutput(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength);
-        void storePendingOutput(const std::unique_ptr<KernelBuilder> &b);
 
-
-        void initPendingOutputScalar_BitStream(const std::unique_ptr<KernelBuilder> &b);
-        void appendBitStreamOutput_BitStream(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength);
-        void storePendingOutput_BitStream(const std::unique_ptr<KernelBuilder> &b);
-
-
-        void initPendingOutputScalar_Swizzled(const std::unique_ptr<KernelBuilder> &b);
-        void appendBitStreamOutput_Swizzled(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength);
-        void storePendingOutput_Swizzled(const std::unique_ptr<KernelBuilder> &b);
+        void initScalarOutputPtr(const std::unique_ptr<KernelBuilder> &b);
     };
 
 }

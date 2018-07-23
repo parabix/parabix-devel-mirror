@@ -42,8 +42,7 @@ namespace kernel{
             //Internal states:
                                    {
                                            Binding{b->getSizeTy(), "blockDataIndex"},
-                                           Binding{b->getInt64Ty(), "outputPos"},
-
+                                           Binding{b->getInt64Ty(), "outputPos"}
 
                                    }), mNumsOfBitStreams(numsOfBitStreams) {
         this->setStride(4 * 1024 * 1024);
@@ -63,7 +62,21 @@ namespace kernel{
     }
 
 
+    void LZParabixAioKernel::initScalarOutputPtr(const std::unique_ptr<KernelBuilder> &b) {
+//        b->CallPrintInt("------------------", b->getSize(0));
+        for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
+            Value* ptr = b->CreatePointerCast(b->getOutputStreamBlockPtr("outputStream" + std::to_string(i), b->getSize(0)), b->getInt64Ty()->getPointerTo());
+            b->setScalarField("currentOutputPtr_" + std::to_string(i), ptr);
+
+            for (unsigned j = 0; j < mNumsOfBitStreams[i]; j++) {
+                b->CreateStore(b->getInt64(0), b->CreateGEP(ptr, b->getInt32(j * 4)));
+            }
+        }
+    }
+
     void LZParabixAioKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) {
+        this->initScalarOutputPtr(b);
+
         BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
         BasicBlock* blockEndConBlock = b->CreateBasicBlock("blockEndConBlock");
 
@@ -167,10 +180,8 @@ namespace kernel{
         b->CreateBr(processCon);
 
         b->SetInsertPoint(exitBlock);
-        this->storePendingOutput(b);
         b->setProcessedItemCount("inputBitStream0", b->CreateAdd(literalStartPos, totalLiteralLength));
     }
-
 
     std::pair<llvm::Value *, llvm::Value *>
     LZParabixAioKernel::processSequence(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalCursorPos,
@@ -338,48 +349,19 @@ namespace kernel{
         return b->CreateAdd(b->CreateSub(b->getSize(8), b->CreatePopcount(b->CreateOr(oneBitIndex, zeroBitIndex))), b->getSize(2));
     }
 
-
     // ---- Output
     void LZParabixAioKernel::initPendingOutputScalar(const std::unique_ptr<KernelBuilder> &b) {
-        this->initPendingOutputScalar_BitStream(b);
-//        this->initPendingOutputScalar_Swizzled(b);
-    }
-
-    void LZParabixAioKernel::appendBitStreamOutput(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength) {
-        this->appendBitStreamOutput_BitStream(b, extractedValues, valueLength);
-//        this->appendBitStreamOutput_Swizzled(b, extractedValues, valueLength);
-    }
-
-    void LZParabixAioKernel::storePendingOutput(const std::unique_ptr<KernelBuilder> &b) {
-        BasicBlock* storePendingOutputBlock = b->CreateBasicBlock("storePendingOutputBlock");
-        BasicBlock* storePendingOutputExitBlock = b->CreateBasicBlock("storePendingOutputExitBlock");
-
-        Value* oldOutputPos = b->getScalarField("outputPos");
-        b->CreateCondBr(
-                b->CreateICmpNE(b->CreateURem(oldOutputPos, b->getSize(64)), b->getSize(0)),
-                storePendingOutputBlock,
-                storePendingOutputExitBlock
-        );
-
-        b->SetInsertPoint(storePendingOutputBlock);
-        this->storePendingOutput_BitStream(b);
-//        this->storePendingOutput_Swizzled(b);
-        b->CreateBr(storePendingOutputExitBlock);
-
-        b->SetInsertPoint(storePendingOutputExitBlock);
-    }
-
-
-    // ---- Output BitStream
-    void LZParabixAioKernel::initPendingOutputScalar_BitStream(const std::unique_ptr<KernelBuilder> &b) {
         for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
             for (unsigned j = 0; j < mNumsOfBitStreams[i]; j++) {
                 this->addScalar(b->getInt64Ty(), "pendingOutput" + std::to_string(i) + "_" + std::to_string(j));
             }
         }
+        for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
+            this->addScalar(b->getInt64Ty()->getPointerTo(), "currentOutputPtr_" + std::to_string(i));
+        }
     }
 
-    void LZParabixAioKernel::appendBitStreamOutput_BitStream(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength) {
+    void LZParabixAioKernel::appendBitStreamOutput(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength) {
         BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
 
         Value* oldOutputPos = b->getScalarField("outputPos");
@@ -388,159 +370,39 @@ namespace kernel{
         std::vector<llvm::Value*> newOutputVec;
 
         unsigned iStreamIndex = 0;
+
         for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
+            Value* outputPtr = b->getScalarField("currentOutputPtr_" + std::to_string(i));
             for (unsigned j = 0; j < mNumsOfBitStreams[i]; j++) {
-                Value* newValue = b->CreateOr(b->getScalarField("pendingOutput" + std::to_string(i) + "_" + std::to_string(j)), b->CreateShl(extractedValues[iStreamIndex], oldOutputPosRem64));
-                newOutputVec.push_back(newValue);
+                Value* ptr = b->CreateGEP(outputPtr, b->getSize(j * 4));
+                Value* newValue = b->CreateOr(b->CreateLoad(ptr), b->CreateShl(extractedValues[iStreamIndex], oldOutputPosRem64));
+                b->CreateStore(newValue, ptr);
                 ++iStreamIndex;
             }
         }
 
-        BasicBlock* noStoreOutputBlock = b->CreateBasicBlock("noStoreOutputBlock");
         BasicBlock* storeOutputBlock =b->CreateBasicBlock("storeOutputBlock");
-
-        b->CreateCondBr(b->CreateICmpULT(b->CreateAdd(oldOutputPosRem64, valueLength), b->getSize(64)), noStoreOutputBlock, storeOutputBlock);
-
-        // ---- noStoreOutputBlock
-        b->SetInsertPoint(noStoreOutputBlock);
-
-        iStreamIndex = 0;
-        for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
-            for (unsigned j = 0; j < mNumsOfBitStreams[i]; j++) {
-                b->setScalarField("pendingOutput" + std::to_string(i) + "_" + std::to_string(j), newOutputVec[iStreamIndex]);
-                ++iStreamIndex;
-            }
-        }
-
-        b->CreateBr(exitBlock);
+        b->CreateCondBr(b->CreateICmpULT(b->CreateAdd(oldOutputPosRem64, valueLength), b->getSize(64)), exitBlock, storeOutputBlock);
 
         // ---- storeOutputBlock
         b->SetInsertPoint(storeOutputBlock);
 
-        Value* oldOutputPosRem = b->CreateURem(oldOutputPos, b->getCapacity("outputStream0"));
-        Value* oldOutputPosBitBlockIndex = b->CreateUDiv(oldOutputPosRem, b->getSize(b->getBitBlockWidth()));
-        Value* oldOutputPosBitBlockRem = b->CreateURem(oldOutputPosRem, b->getSize(b->getBitBlockWidth()));
-
-        iStreamIndex = 0;
-        for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
-            Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream" + std::to_string(i), b->getSize(0)), b->getBitBlockType()->getPointerTo());
-            Value* outputBitBlockBasePtr = b->CreateGEP(outputBasePtr, b->CreateMul(oldOutputPosBitBlockIndex, b->getSize(mNumsOfBitStreams[i])));
-            outputBitBlockBasePtr = b->CreatePointerCast(outputBitBlockBasePtr, b->getInt64Ty()->getPointerTo());
-
-            Value* oldOutputPosI64Index = b->CreateUDiv(oldOutputPosBitBlockRem, b->getSize(64));
-
-            for (unsigned j = 0; j < mNumsOfBitStreams[i]; j++) {
-                Value* targetPtr = b->CreateGEP(outputBitBlockBasePtr, b->CreateAdd(oldOutputPosI64Index, b->getSize(j * (b->getBitBlockWidth() / 64))));
-                b->CreateStore(newOutputVec[iStreamIndex], targetPtr);
-                ++iStreamIndex;
-            }
-        }
-
         Value* shiftAmount = b->CreateSub(b->getSize(0x40), oldOutputPosRem64);
         Value* fullyShift = b->CreateICmpEQ(shiftAmount, b->getSize(0x40));
 
+        Value* exceedBlock = b->CreateICmpUGE(b->CreateAdd(b->CreateURem(oldOutputPos, b->getSize(b->getBitBlockWidth())), valueLength), b->getSize(b->getBitBlockWidth()));
         iStreamIndex = 0;
         for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
+            Value* oldOutputPtr = b->getScalarField("currentOutputPtr_" + std::to_string(i));
+            Value* distance = b->CreateSelect(exceedBlock, b->getSize(1 + (mNumsOfBitStreams[i] - 1) * b->getBitBlockWidth() / 64), b->getSize(1));
+            Value* newOutputPtr = b->CreateGEP(oldOutputPtr, distance);
+            b->setScalarField("currentOutputPtr_" + std::to_string(i), newOutputPtr);
             for (unsigned j = 0; j < mNumsOfBitStreams[i]; j++) {
-                b->setScalarField("pendingOutput" + std::to_string(i) + "_" + std::to_string(j), b->CreateSelect(fullyShift, b->getInt64(0), b->CreateLShr(extractedValues[iStreamIndex], shiftAmount)));
+                Value* newValue = b->CreateSelect(fullyShift, b->getInt64(0), b->CreateLShr(extractedValues[iStreamIndex], shiftAmount));
+                Value* ptr = b->CreateGEP(newOutputPtr, b->getSize(j * 4));
+                b->CreateStore(newValue, ptr);
                 ++iStreamIndex;
             }
-        }
-
-        b->CreateBr(exitBlock);
-
-        b->SetInsertPoint(exitBlock);
-        b->setScalarField("outputPos", b->CreateAdd(oldOutputPos, valueLength));
-    }
-
-    void LZParabixAioKernel::storePendingOutput_BitStream(const std::unique_ptr<KernelBuilder> &b) {
-        Value* oldOutputPos = b->getScalarField("outputPos");
-        Value* oldOutputPosRem = b->CreateURem(oldOutputPos, b->getCapacity("outputStream0"));
-        Value* oldOutputPosBitBlockIndex = b->CreateUDiv(oldOutputPosRem, b->getSize(b->getBitBlockWidth()));
-        Value* oldOutputPosBitBlockRem = b->CreateURem(oldOutputPosRem, b->getSize(b->getBitBlockWidth()));
-        Value* oldOutputPosI64Index = b->CreateUDiv(oldOutputPosBitBlockRem, b->getSize(64));
-
-        unsigned iStreamIndex = 0;
-        for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
-            Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream" + std::to_string(i), b->getSize(0)), b->getBitBlockType()->getPointerTo());
-            Value* outputBitBlockBasePtr = b->CreateGEP(outputBasePtr, b->CreateMul(oldOutputPosBitBlockIndex, b->getSize(mNumsOfBitStreams[i])));
-            outputBitBlockBasePtr = b->CreatePointerCast(outputBitBlockBasePtr, b->getInt64Ty()->getPointerTo());
-            for (unsigned j = 0; j < mNumsOfBitStreams[i]; j++) {
-                Value* targetPtr = b->CreateGEP(outputBitBlockBasePtr, b->CreateAdd(oldOutputPosI64Index, b->getSize(j * (b->getBitBlockWidth() / 64))));
-                b->CreateStore(b->getScalarField("pendingOutput" + std::to_string(i) + "_" + std::to_string(j)), targetPtr);
-                ++iStreamIndex;
-            }
-        }
-    }
-
-    // ---- Output Swizzled
-    void LZParabixAioKernel::initPendingOutputScalar_Swizzled(const std::unique_ptr<KernelBuilder> &b) {
-        for (unsigned i = 0; i < (mNumsOfBitStreams[0] + 3) / 4; i++) {
-            this->addScalar(b->getBitBlockType(), "pendingOutput" + std::to_string(0) + "_" + std::to_string(i));
-        }
-    }
-    void LZParabixAioKernel::appendBitStreamOutput_Swizzled(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength) {
-
-        std::vector<llvm::Value*> extractedValuesVec;
-        for (unsigned i = 0; i < 2; i++) {
-            Value* vec = ConstantVector::getNullValue(b->getBitBlockType());
-            for (unsigned j = 0; j < 4; j++) {
-                vec = b->CreateInsertElement(vec, extractedValues[i * 4 + j], j);
-            }
-            extractedValuesVec.push_back(vec);
-        }
-
-        BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
-
-        Value* oldOutputPos = b->getScalarField("outputPos");
-        Value* oldOutputPosRem64 = b->CreateURem(oldOutputPos, b->getSize(64));
-
-        std::vector<llvm::Value*> newOutputVec;
-        for (unsigned i = 0; i < 2; i++) {
-            Value* newValue = b->CreateOr(b->getScalarField("pendingOutput" + std::to_string(0) + "_" + std::to_string(i)), b->CreateShl(extractedValuesVec[i], b->simd_fill(64, oldOutputPosRem64)));
-            newOutputVec.push_back(newValue);
-        }
-
-
-        BasicBlock* noStoreOutputBlock = b->CreateBasicBlock("noStoreOutputBlock");
-        BasicBlock* storeOutputBlock =b->CreateBasicBlock("storeOutputBlock");
-
-        b->CreateCondBr(b->CreateICmpULT(b->CreateAdd(oldOutputPosRem64, valueLength), b->getSize(64)), noStoreOutputBlock, storeOutputBlock);
-
-        // ---- noStoreOutputBlock
-        b->SetInsertPoint(noStoreOutputBlock);
-        for (unsigned i = 0; i < 2; i++) {
-            b->setScalarField("pendingOutput" + std::to_string(0) + "_" + std::to_string(i), newOutputVec[i]);
-        }
-        b->CreateBr(exitBlock);
-
-        // ---- storeOutputBlock
-        b->SetInsertPoint(storeOutputBlock);
-
-        Value* oldOutputPosRem = b->CreateURem(oldOutputPos, b->getCapacity("outputStream0"));
-        Value* oldOutputPosBitBlockIndex = b->CreateUDiv(oldOutputPosRem, b->getSize(b->getBitBlockWidth()));
-        Value* oldOutputPosBitBlockRem = b->CreateURem(oldOutputPosRem, b->getSize(b->getBitBlockWidth()));
-
-        Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream0", b->getSize(0)), b->getBitBlockType()->getPointerTo());
-        Value* outputBitBlockBasePtr = b->CreateGEP(outputBasePtr, b->CreateMul(oldOutputPosBitBlockIndex, b->getSize(8)));
-        outputBitBlockBasePtr = b->CreatePointerCast(outputBitBlockBasePtr, b->getInt64Ty()->getPointerTo());
-
-        Value* oldOutputPosI64Index = b->CreateUDiv(oldOutputPosBitBlockRem, b->getSize(64));
-
-        for (unsigned i = 0; i < 2; i++) {
-            for (unsigned j = 0; j < 4; j++) {
-                Value* targetPtr = b->CreateGEP(outputBitBlockBasePtr, b->CreateAdd(oldOutputPosI64Index, b->getSize((i * 4 + j) * 4)));
-                b->CreateStore(b->CreateExtractElement(newOutputVec[i], j), targetPtr);
-            }
-
-        }
-
-        Value* shiftAmount = b->CreateSub(b->getSize(0x40), oldOutputPosRem64);
-        Value* fullyShift = b->CreateICmpEQ(shiftAmount, b->getSize(0x40));
-
-        for (unsigned i = 0; i < 2; i++) {
-
-            b->setScalarField("pendingOutput" + std::to_string(0) + "_" + std::to_string(i), b->CreateSelect(fullyShift, ConstantVector::getNullValue(b->getBitBlockType()), b->CreateLShr(extractedValuesVec[i], b->simd_fill(64, shiftAmount))));
         }
 
         b->CreateBr(exitBlock);
@@ -550,28 +412,4 @@ namespace kernel{
 
     }
 
-    void LZParabixAioKernel::storePendingOutput_Swizzled(const std::unique_ptr<KernelBuilder> &b) {
-        Value* oldOutputPos = b->getScalarField("outputPos");
-        Value* oldOutputPosRem = b->CreateURem(oldOutputPos, b->getCapacity("outputStream0"));
-        Value* oldOutputPosBitBlockIndex = b->CreateUDiv(oldOutputPosRem, b->getSize(b->getBitBlockWidth()));
-        Value* oldOutputPosBitBlockRem = b->CreateURem(oldOutputPosRem, b->getSize(b->getBitBlockWidth()));
-
-        Value* oldOutputPosI64Index = b->CreateUDiv(oldOutputPosBitBlockRem, b->getSize(64));
-
-        Value* outputBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputStream0", b->getSize(0)), b->getBitBlockType()->getPointerTo());
-        Value* outputBitBlockBasePtr = b->CreateGEP(outputBasePtr, b->CreateMul(oldOutputPosBitBlockIndex, b->getSize(8)));
-        outputBitBlockBasePtr = b->CreatePointerCast(outputBitBlockBasePtr, b->getInt64Ty()->getPointerTo());
-
-        vector<Value*> pendingOutputVec;
-        for (unsigned i = 0; i < 2; i++) {
-            pendingOutputVec.push_back(b->getScalarField("pendingOutput" + std::to_string(0) + "_" + std::to_string(i)));
-        }
-
-        for (unsigned i = 0; i < 2; i++) {
-            for (unsigned j = 0; j < 2; j++) {
-                Value* targetPtr = b->CreateGEP(outputBitBlockBasePtr, b->CreateAdd(oldOutputPosI64Index, b->getSize((i * 4 + j) * 4)));
-                b->CreateStore(b->CreateExtractElement(pendingOutputVec[i], j), targetPtr);
-            }
-        }
-    }
 }

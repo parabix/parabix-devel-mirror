@@ -54,7 +54,7 @@ namespace kernel {
         void handleMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchPos, llvm::Value* matchOffset, llvm::Value* matchLength, bool clearBuffer = true);
 
         virtual void doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
-                                   llvm::Value *literalLength);
+                                   llvm::Value *literalLength, llvm::Value* blockStart) override;
         virtual void doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                  llvm::Value *matchLength);
         virtual void setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced);
@@ -62,7 +62,7 @@ namespace kernel {
 
         virtual void prepareAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos) override;
         virtual void doAccelerationLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
-                                                             llvm::Value *literalLength) override;
+                                                             llvm::Value *literalLength, llvm::Value* blockStart) override;
         virtual void doAccelerationMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                                            llvm::Value *matchLength) override;
         virtual void finishAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos, llvm::Value* literalMask) override;

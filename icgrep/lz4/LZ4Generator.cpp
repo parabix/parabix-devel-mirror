@@ -26,6 +26,7 @@
 #include <kernels/lz4/aio/lz4_parallel_bytestream_aio.h>
 #include <kernels/lz4/aio/lz4_swizzled_aio.h>
 #include <kernels/lz4/aio/lz4_bitstream_aio.h>
+#include <kernels/lz4/aio/lz4_i4_bytestream_aio.h>
 #include <kernels/bitstream_pdep_kernel.h>
 #include <kernels/lz4/lz4_bitstream_not_kernel.h>
 
@@ -425,6 +426,38 @@ std::vector<StreamSetBuffer*> LZ4Generator::convertCompressedBitsStreamWithBitSt
     mPxDriver.makeKernelCall(blockDecoderK, {mCompressedByteStream}, {BlockData_IsCompressed, BlockData_BlockStart, BlockData_BlockEnd});
 
 
+
+    if (compressedBitStreams[0]->getNumOfStreams() == 4) {
+        StreamSetBuffer* twistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 4), this->getInputBufferBlocks(iBuilder));
+        kernel::Kernel* twistK = mGrepDriver->addKernelInstance<kernel::P2S4StreamByPDEP>(iBuilder);
+        mGrepDriver->makeKernelCall(twistK, {compressedBitStreams[0]}, {twistedCharClasses});
+
+
+        StreamSetBuffer* uncompressedTwistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 4), this->getInputBufferBlocks(iBuilder));
+        Kernel* lz4I4AioK = mPxDriver.addKernelInstance<LZ4I4ByteStreamAioKernel>(iBuilder);
+        lz4I4AioK->setInitialArguments({mFileSize});
+        mGrepDriver->makeKernelCall(lz4I4AioK, {
+                mCompressedByteStream,
+
+                // Block Data
+                BlockData_IsCompressed,
+                BlockData_BlockStart,
+                BlockData_BlockEnd,
+
+                twistedCharClasses
+        }, {
+                                            uncompressedTwistedCharClasses
+                                    });
+
+        StreamSetBuffer* untwistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(iBuilder));
+        kernel::Kernel* untwistK = mGrepDriver->addKernelInstance<kernel::S2P4StreamByPEXTKernel>(iBuilder);
+        mGrepDriver->makeKernelCall(untwistK, {uncompressedTwistedCharClasses}, {untwistedCharClasses});
+        return {untwistedCharClasses};
+    }
+
+
+
+
     std::vector<StreamSetBuffer *> inputStreams = {
             mCompressedByteStream,
 
@@ -553,38 +586,20 @@ parabix::StreamSetBuffer * LZ4Generator::generateParallelAIODecompression(const 
 }
 
 StreamSetBuffer * LZ4Generator::generateAIODecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
-    //// Decode Block Information
-    StreamSetBuffer * const BlockData_IsCompressed = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getInputBufferBlocks(iBuilder), 1);
-    StreamSetBuffer * const BlockData_BlockStart = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(iBuilder), 1);
-    StreamSetBuffer * const BlockData_BlockEnd = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 64), this->getInputBufferBlocks(iBuilder), 1);
-
-
-    //// Generate Helper Markers Extenders
-//    StreamSetBuffer * const Extenders = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks(iBuilder), 1);
-//    mMatchOffsetMarker = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), this->getInputBufferBlocks(iBuilder));
-//    Kernel * extenderK = mPxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
-//    mPxDriver.makeKernelCall(extenderK, {mCompressedBasisBits}, {Extenders});
-
-
-    Kernel * blockDecoderK = mPxDriver.addKernelInstance<LZ4BlockDecoderKernel>(iBuilder);
-    blockDecoderK->setInitialArguments({iBuilder->CreateTrunc(mHasBlockChecksum, iBuilder->getInt1Ty()), mHeaderSize, mFileSize});
-    mPxDriver.makeKernelCall(blockDecoderK, {mCompressedByteStream}, {BlockData_IsCompressed, BlockData_BlockStart, BlockData_BlockEnd});
-
+    LZ4BlockInfo blockInfo = this->getBlockInfo(iBuilder);
 
     StreamSetBuffer * const decompressionByteStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), this->getDecompressedBufferBlocks(iBuilder), 1);
-
     Kernel* lz4AioK = mPxDriver.addKernelInstance<LZ4ByteStreamAioKernel>(iBuilder);
     lz4AioK->setInitialArguments({mFileSize});
     mPxDriver.makeKernelCall(
             lz4AioK,
             {
                     mCompressedByteStream,
-//                    Extenders,
 
                     // Block Data
-                    BlockData_IsCompressed,
-                    BlockData_BlockStart,
-                    BlockData_BlockEnd
+                    blockInfo.isCompress,
+                    blockInfo.blockStart,
+                    blockInfo.blockEnd
             }, {
                     decompressionByteStream
             });
@@ -693,7 +708,18 @@ int LZ4Generator::getDecompressedBufferBlocks(const std::unique_ptr<kernel::Kern
     return this->get4MbBufferBlocks() * 2 * b->getBitBlockWidth() / 64;
 }
 
+LZ4BlockInfo LZ4Generator::getBlockInfo(const std::unique_ptr<kernel::KernelBuilder> & b) {
+    LZ4BlockInfo blockInfo;
+    blockInfo.isCompress = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, 8), this->getInputBufferBlocks(b), 1);
+    blockInfo.blockStart = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, 64), this->getInputBufferBlocks(b), 1);
+    blockInfo.blockEnd = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, 64), this->getInputBufferBlocks(b), 1);
 
+    Kernel * blockDecoderK = mPxDriver.addKernelInstance<LZ4BlockDecoderKernel>(b);
+    blockDecoderK->setInitialArguments({b->CreateTrunc(mHasBlockChecksum, b->getInt1Ty()), mHeaderSize, mFileSize});
+    mPxDriver.makeKernelCall(blockDecoderK, {mCompressedByteStream}, {blockInfo.isCompress, blockInfo.blockStart, blockInfo.blockEnd});
+
+    return blockInfo;
+}
 
 
 // Kernel Pipeline

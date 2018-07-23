@@ -16,7 +16,7 @@ namespace kernel{
     LZ4BitStreamAioKernel::LZ4BitStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
                                                  std::vector<unsigned> numsOfBitStreams,
                                                  unsigned blockSize)
-    : LZ4SequentialAioBaseKernel(b, "LZ4ByteStreamAioKernel", blockSize),
+    : LZ4SequentialAioBaseKernel(b, "LZ4BitStreamAioKernel", blockSize),
       mNumsOfBitStreams(numsOfBitStreams)
     {
         mStreamSetInputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[0], 1), "inputBitStream0", RateEqualTo("byteStream")});
@@ -39,7 +39,7 @@ namespace kernel{
     }
 
     void LZ4BitStreamAioKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
-                                              llvm::Value *literalLength) {
+                                              llvm::Value *literalLength, llvm::Value* blockStart) {
         // Constant
         ConstantInt* INT_64_0 = b->getInt64(0);
         ConstantInt* INT_64_1 = b->getInt64(1);

@@ -26,7 +26,6 @@ namespace kernel{
                     Binding{b->getStreamSetTy(1, 1), "isCompressed", BoundedRate(0, 1), AlwaysConsume()},
                     Binding{b->getStreamSetTy(1, 64), "blockStart", RateEqualTo("isCompressed"), AlwaysConsume()},
                     Binding{b->getStreamSetTy(1, 64), "blockEnd", RateEqualTo("isCompressed"), AlwaysConsume()}
-
             },
             //Outputs
                                    {
@@ -42,15 +41,33 @@ namespace kernel{
                                            Binding{b->getSizeTy(), "blockDataIndex"},
                                            Binding{b->getInt64Ty(), "outputPos"},
 
+                                           Binding{b->getInt1Ty(), "hasCallInitialization"}
 
-                                   }){
+
+                                   }),
+             mBlockSize(blockSize) {
         this->setStride(blockSize);
         addAttribute(MustExplicitlyTerminate());
     }
 
     // ---- Kernel Methods
     void LZ4SequentialAioBaseKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) {
+        Value* hasCallInitialization = b->getScalarField("hasCallInitialization");
+
+        BasicBlock* initializationBlock = b->CreateBasicBlock("initializationBlock");
+        BasicBlock* entryBlock = b->CreateBasicBlock("entryBlock");
         BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
+
+        b->CreateLikelyCondBr(hasCallInitialization, entryBlock, initializationBlock);
+
+        // ---- initializationBlock
+        b->SetInsertPoint(initializationBlock);
+        b->setScalarField("hasCallInitialization", b->getInt1(true));
+        this->initializationMethod(b);
+        b->CreateBr(entryBlock);
+
+        // ---- entryBlock
+        b->SetInsertPoint(entryBlock);
         BasicBlock* blockEndConBlock = b->CreateBasicBlock("blockEndConBlock");
 
         Value * blockDataIndex = b->getScalarField("blockDataIndex");
@@ -71,9 +88,11 @@ namespace kernel{
         b->CreateBr(processBlock);
 
         b->SetInsertPoint(processBlock);
-
         //TODO handle uncompressed block
+        this->prepareProcessBlock(b, blockStart, blockEnd);
+
         this->processCompressedLz4Block(b, blockStart, blockEnd);
+
         this->storePendingOutput(b);
 
 //        this->storePendingM0(b);
@@ -86,7 +105,21 @@ namespace kernel{
         this->setProducedOutputItemCount(b, b->getScalarField("outputPos"));
         b->CreateBr(exitBlock);
 
+        // ---- exitBlock
         b->SetInsertPoint(exitBlock);
+
+        BasicBlock* beforeTerminationBlock = b->CreateBasicBlock("beforeTerminationBlock");
+        BasicBlock* terminationBlock = b->CreateBasicBlock("terminationBlock");
+
+        b->CreateUnlikelyCondBr(b->getTerminationSignal(), beforeTerminationBlock, terminationBlock);
+
+        // ---- beforeTerminationBlock
+        b->SetInsertPoint(beforeTerminationBlock);
+        this->beforeTermination(b);
+        b->CreateBr(terminationBlock);
+
+        // ---- terminationBlock
+        b->SetInsertPoint(terminationBlock);
     }
 
 
@@ -115,7 +148,7 @@ namespace kernel{
 
         b->SetInsertPoint(processBody);
         /*
-        auto accelerationRet = this->doAcceleration(b, phiCursorValue, lz4BlockEnd);
+        auto accelerationRet = this->doAcceleration(b, phiCursorValue, lz4BlockStart, lz4BlockEnd);
         Value* tokenMarkers = accelerationRet.first.first;
 
         Value* cursorBlockPosBase = b->CreateSub(phiCursorValue, b->CreateURem(phiCursorValue, b->getSize(ACCELERATION_WIDTH)));
@@ -124,7 +157,7 @@ namespace kernel{
 
         nextTokenGlobalPos = this->processLz4Sequence(b, nextTokenGlobalPos, lz4BlockEnd);
         */
-        Value* nextTokenGlobalPos = this->processLz4Sequence(b, phiCursorValue, lz4BlockEnd);
+        Value* nextTokenGlobalPos = this->processLz4Sequence(b, phiCursorValue, lz4BlockStart, lz4BlockEnd);
         phiCursorValue->addIncoming(nextTokenGlobalPos, b->GetInsertBlock());
         b->CreateBr(processCon);
 
@@ -132,8 +165,11 @@ namespace kernel{
     }
 
     std::pair<std::pair<llvm::Value *, llvm::Value *>, llvm::Value *>
-    LZ4SequentialAioBaseKernel::doAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value *beginTokenPos,
-                                     llvm::Value *blockEnd) {
+    LZ4SequentialAioBaseKernel::doAcceleration(
+            const std::unique_ptr<KernelBuilder> &b,
+            llvm::Value *beginTokenPos,
+            llvm::Value *blockStart,
+            llvm::Value *blockEnd) {
         BasicBlock* entryBlock = b->GetInsertBlock();
 
         // Constant
@@ -228,7 +264,7 @@ namespace kernel{
 
         // TODO all of the literal data here will always be in the same 64-bit literal block, it may be better if we provide
         //      this information to the literal copy method, especially when we are working with swizzled form
-        this->doAccelerationLiteralCopy(b, literalStartGlobalPos, literalLength);
+        this->doAccelerationLiteralCopy(b, literalStartGlobalPos, literalLength, blockStart);
         this->doAccelerationMatchCopy(b, matchOffset, matchLength);
 
         phiTokenMarkers->addIncoming(b->CreateOr(phiTokenMarkers, newTokenMarker), b->GetInsertBlock());
@@ -245,9 +281,11 @@ namespace kernel{
         return std::make_pair(std::make_pair(phiTokenMarkers, phiLiteralMasks), phiMatchOffsetMarkers);
     }
 
-    llvm::Value *LZ4SequentialAioBaseKernel::processLz4Sequence(const std::unique_ptr<KernelBuilder> &b,
-                                                      llvm::Value *beginTokenPos,
-                                                      llvm::Value *lz4BlockEnd) {
+    llvm::Value *LZ4SequentialAioBaseKernel::processLz4Sequence(
+            const std::unique_ptr<KernelBuilder> &b,
+            llvm::Value *beginTokenPos,
+            llvm::Value *lz4BlockStart,
+            llvm::Value *lz4BlockEnd) {
         // Constant
         ConstantInt* SIZE_0 = b->getSize(0);
         ConstantInt* SIZE_1 = b->getSize(1);
@@ -306,7 +344,7 @@ namespace kernel{
         BasicBlock* hasMatchPartBlock = b->CreateBasicBlock("hasMatchPartBlock");
 
         // This literal copy will always cross 64 bits literal boundary
-        this->doLiteralCopy(b, literalStartPos, literalLength);
+        this->doLiteralCopy(b, literalStartPos, literalLength, lz4BlockStart);
         BasicBlock* extendLiteralEndFinal = b->GetInsertBlock();
 
         b->CreateLikelyCondBr(b->CreateICmpULT(matchOffsetBeginPos, lz4BlockEnd), hasMatchPartBlock, exitBlock);

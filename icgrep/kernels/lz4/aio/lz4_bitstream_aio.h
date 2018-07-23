@@ -11,7 +11,7 @@ namespace kernel {
         LZ4BitStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::vector<unsigned> numsOfBitStreams = {8}, unsigned blockSize = 4 * 1024 * 1024);
     protected:
         virtual void doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
-                                   llvm::Value *literalLength) override;
+                                   llvm::Value *literalLength, llvm::Value* blockStart) override;
         virtual void doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                  llvm::Value *matchLength) override;
         virtual void setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced) override;

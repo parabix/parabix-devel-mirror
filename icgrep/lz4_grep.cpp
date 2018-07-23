@@ -94,9 +94,12 @@ int main(int argc, char *argv[]) {
             } else {
                 g.generateBitStreamAioPipeline(re_ast);
             }
-
         } else {
-            g.generateAioPipeline(re_ast);
+            if (enableMultiplexing) {
+                g.generateByteStreamMultiplexingAioPipeline(re_ast);
+            } else {
+                g.generateAioPipeline(re_ast);
+            }
         }
 
         auto main = g.getCountOnlyGrepMainFunction();

@@ -56,7 +56,7 @@ namespace kernel{
     }
 
     void LZ4SwizzledAioKernel::doAccelerationLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
-                                           llvm::Value *literalLength) {
+                                           llvm::Value *literalLength, llvm::Value* blockStart) {
 //        this->handleAccelerationLiteralCopy(b, literalStart, literalLength, inputValuesVector);
 
         Type* sizePtrTy = b->getSizeTy()->getPointerTo();
@@ -511,7 +511,7 @@ namespace kernel{
     }
 
     void LZ4SwizzledAioKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
-                                             llvm::Value *literalLength) {
+                                             llvm::Value *literalLength, llvm::Value* blockStart) {
         Value* SIZE_64  = b->getSize(64);
         Value* SIZE_0 = b->getSize(0);
         Value* SIZE_1 = b->getSize(1);

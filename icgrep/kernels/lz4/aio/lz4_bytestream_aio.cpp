@@ -14,26 +14,34 @@ using namespace std;
 
 
 namespace kernel{
+    std::string LZ4ByteStreamAioKernel::getCopyByteStreamName() {
+        return mCopyOtherByteStream ? "targetByteStream" : "byteStream";
+    }
 
-    LZ4ByteStreamAioKernel::LZ4ByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned blockSize)
-            : LZ4SequentialAioBaseKernel(b, "LZ4ByteStreamAioKernel", blockSize) {
+    LZ4ByteStreamAioKernel::LZ4ByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, bool copyOtherByteStream, unsigned blockSize)
+            : LZ4SequentialAioBaseKernel(b, "LZ4ByteStreamAioKernel", blockSize),
+              mCopyOtherByteStream(copyOtherByteStream) {
         mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(1, 8), "outputStream", BoundedRate(0, 1)});
+        this->addScalar(b->getInt8PtrTy(), "temporaryInputPtr");
+        if (copyOtherByteStream) {
+            mStreamSetInputs.push_back(Binding{b->getStreamSetTy(1, 8), "targetByteStream", RateEqualTo("byteStream")});
+        }
     }
 
     void LZ4ByteStreamAioKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
-                                               llvm::Value *literalLength) {
+                                               llvm::Value *literalLength, llvm::Value* blockStart) {
         unsigned fw = 64;
         Type* INT_FW_PTR = b->getIntNTy(fw)->getPointerTo();
 
-        Value* inputBytePtr = b->getRawInputPointer("byteStream", literalStart);
+        Value* inputBytePtr = b->getScalarField("temporaryInputPtr");
+        inputBytePtr = b->CreateGEP(inputBytePtr, b->CreateSub(literalStart, blockStart));
+
         Value* inputPtr = b->CreatePointerCast(inputBytePtr, INT_FW_PTR);
 
         Value* outputPos = b->getScalarField("outputPos");
         Value* outputBufferSize = b->getCapacity("outputStream");
         Value* outputPtr = b->getRawOutputPointer("outputStream", b->CreateURem(outputPos, outputBufferSize));
         outputPtr = b->CreatePointerCast(outputPtr, INT_FW_PTR);
-
-        // We can always assume that we have enough output buffer based on our output buffer allocation strategy (except in extract only case)
 
         BasicBlock* entryBlock = b->GetInsertBlock();
         BasicBlock* literalCopyCon = b->CreateBasicBlock("literalCopyCon");
@@ -117,6 +125,33 @@ namespace kernel{
 
     void LZ4ByteStreamAioKernel::setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced) {
         b->setProducedItemCount("outputStream", produced);
+    }
+
+    void LZ4ByteStreamAioKernel::initializationMethod(const std::unique_ptr<KernelBuilder> &b) {
+        b->setScalarField("temporaryInputPtr", b->CreateMalloc(b->getSize(mBlockSize)));
+    }
+
+    void LZ4ByteStreamAioKernel::prepareProcessBlock(const std::unique_ptr<KernelBuilder> &b, llvm::Value* blockStart, llvm::Value* blockEnd) {
+        Value* rawInputPtr = b->CreatePointerCast(b->getRawInputPointer(this->getCopyByteStreamName(), b->getSize(0)), b->getInt8PtrTy());
+        Value* inputCapacity = b->getCapacity(this->getCopyByteStreamName());
+
+        Value* blockStartRem = b->CreateURem(blockStart, inputCapacity);
+        Value* remSize = b->CreateSub(inputCapacity, blockStartRem);
+
+        Value* blockSize = b->CreateSub(blockEnd, blockStart);
+
+        Value* copySize1 = b->CreateUMin(remSize, blockSize);
+        Value* copySize2 = b->CreateSub(blockSize, copySize1);
+
+        Value* temporayInputPtr = b->getScalarField("temporaryInputPtr");
+
+        b->CreateMemCpy(temporayInputPtr, b->CreateGEP(rawInputPtr, blockStartRem), copySize1, 1);
+        b->CreateMemCpy(b->CreateGEP(temporayInputPtr, copySize1), rawInputPtr, copySize2, 1);
+    }
+
+    void LZ4ByteStreamAioKernel::beforeTermination(const std::unique_ptr<KernelBuilder> &b) {
+        b->CreateFree(b->getScalarField("temporaryInputPtr"));
+//        b->CallPrintInt("beforeTermination", b->getSize(0));
     }
 
 }

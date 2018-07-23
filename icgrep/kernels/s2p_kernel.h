@@ -15,9 +15,16 @@ namespace llvm { class Value; }
 
 namespace kernel {
 
+    class S2P4StreamByPEXTKernel final : public BlockOrientedKernel{
+    public:
+        S2P4StreamByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
+    protected:
+        void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
+    };
+
 class S2PKernel final : public MultiBlockKernel {
 public:
-    S2PKernel(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian, bool aligned = true, std::string prefix = "");
+    S2PKernel(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian, bool aligned = true, std::string prefix = "", unsigned numOfStreams = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -25,6 +32,7 @@ protected:
 private:
     cc::BitNumbering mBasisSetNumbering;
     bool mAligned;
+    unsigned mNumOfStreams;
 };
 
 class S2P_21Kernel final : public MultiBlockKernel {

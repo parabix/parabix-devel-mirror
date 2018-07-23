@@ -18,6 +18,12 @@ namespace re { class CC; }
 
 typedef void (*MainFunctionType)(char * byte_data, size_t headerSize, size_t filesize, bool hasBlockChecksum);
 
+struct LZ4BlockInfo {
+    parabix::StreamSetBuffer* blockStart;
+    parabix::StreamSetBuffer* blockEnd;
+    parabix::StreamSetBuffer* isCompress;
+};
+
 class LZ4Generator {
 
 public:
@@ -82,6 +88,8 @@ protected:
     parabix::StreamSetBuffer * mM0Marker;
 
     unsigned mLz4BlockSize;
+
+    LZ4BlockInfo getBlockInfo(const std::unique_ptr<kernel::KernelBuilder> & b);
 };
 
 
