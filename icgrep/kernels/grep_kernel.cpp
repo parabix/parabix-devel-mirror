@@ -249,7 +249,7 @@ inline std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBui
     return streamSetInputs;
 }
 
-ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<std::string> externals, std::vector<cc::Alphabet *> alphabets, cc::BitNumbering basisSetNumbering, bool fakeBasisBits)
+ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<std::string> externals, std::vector<cc::Alphabet *> alphabets, cc::BitNumbering basisSetNumbering)
 : ICGrepSignature(re)
 , PabloKernel(b, "ic" + sha1sum(mSignature),
 // inputs
@@ -258,8 +258,7 @@ icGrepInputs(b, externals, alphabets),
 {Binding{b->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}})
 , mExternals(externals)
 , mAlphabets(alphabets)
-, mBasisSetNumbering(basisSetNumbering)
-, mFakeBasisBits(fakeBasisBits){
+, mBasisSetNumbering(basisSetNumbering) {
 }
 
 std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -268,8 +267,8 @@ std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuil
 
 void ICGrepKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering, mFakeBasisBits);
-    RE_Compiler re_compiler(getEntryScope(), ccc, mBasisSetNumbering, mFakeBasisBits);
+    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
+    RE_Compiler re_compiler(getEntryScope(), ccc, mBasisSetNumbering);
     for (auto & e : mExternals) {
         re_compiler.addPrecompiled(e, pb.createExtract(getInputStreamVar(e), pb.getInteger(0)));
     }

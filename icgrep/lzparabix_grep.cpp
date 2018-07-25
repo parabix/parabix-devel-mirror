@@ -43,6 +43,7 @@ static cl::opt<std::string> regexString(cl::Positional, cl::desc("<regex>"), cl:
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(lz4GrepFlags));
 static cl::opt<bool> countOnly("count-only", cl::desc("Only count the match result"), cl::init(false), cl::cat(lz4GrepFlags));
 static cl::opt<bool> enableMultiplexing("enable-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false), cl::cat(lz4GrepFlags));
+static cl::opt<bool> swizzledDecompression("swizzled-decompression", cl::desc("Enable Swizzled Decompression."), cl::init(false), cl::cat(lz4GrepFlags));
 
 static cl::OptionCategory lz4GrepDebugFlags("LZ4 Grep Debug Flags", "lz4d debug options");
 
@@ -78,7 +79,7 @@ int main(int argc, char *argv[]) {
 
     LZParabixGrepGenerator g(enableMultiplexing);
 
-    g.generateCountOnlyAioPipeline(re_ast);
+    g.generateCountOnlyAioPipeline(re_ast, swizzledDecompression);
     auto main = g.getCountOnlyGrepMainFunction();
     uint64_t countResult = main(fileBuffer, 0, fileSize, false);
     llvm::outs() << countResult << "\n";

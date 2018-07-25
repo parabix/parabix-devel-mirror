@@ -66,6 +66,8 @@ protected:
 
     parabix::StreamSetBuffer* extractLiteralBitStream(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 
+
+    parabix::StreamSetBuffer* generateSwizzledBitStreamDecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, parabix::StreamSetBuffer* inputBitStreams);
     std::vector<parabix::StreamSetBuffer*> generateBitStreamDecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<parabix::StreamSetBuffer*> inputBitStreams);
 };
 

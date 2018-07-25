@@ -162,6 +162,8 @@ bool isByteLength(const RE * re) {
             const cc::Alphabet * srcA = cast<cc::MultiplexedAlphabet>(a)->getSourceAlphabet();
             if (srcA == &cc::Byte) {
                 return true;
+            } else if (cc->sourceCC) {
+                return isByteLength(cc->sourceCC);
 //            } else if (srcA == &cc::Unicode) {
 //                return cast<cc::MultiplexedAlphabet>(a)->invertCC(cc)->max_codepoint() <= 0x7F;
             } else return (a == &cc::Byte);

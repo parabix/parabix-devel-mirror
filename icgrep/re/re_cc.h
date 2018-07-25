@@ -42,6 +42,7 @@ public:
 
     virtual ~CC() {}
 
+    const CC* sourceCC;
 protected:
     friend CC * makeCC(const cc::Alphabet * alphabet);
     friend CC * makeCC(const codepoint_t codepoint, const cc::Alphabet * alphabet);

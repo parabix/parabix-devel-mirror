@@ -6,6 +6,7 @@
 #include "swizzle.h"
 #include <kernels/kernel_builder.h>
 #include <string>
+#include <vector>
 
 using namespace llvm;
 
@@ -78,4 +79,45 @@ void SwizzleGenerator::generateDoBlockMethod(const std::unique_ptr<kernel::Kerne
 }
 
 
+    SwizzleByGather::SwizzleByGather(const std::unique_ptr<KernelBuilder> &iBuilder)
+    : BlockOrientedKernel("swizzleByGather", {}, {}, {}, {}, {}){
+        for (unsigned i = 0; i < 2; i++) {
+            mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(4, 1), "inputGroup" + std::to_string(i)});
+        }
+        for (unsigned i = 0; i < 1; i++) {
+            mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(8, 1), "outputGroup" + std::to_string(i), FixedRate(1)});
+        }
+    }
+
+    void SwizzleByGather::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &b) {
+        Value* outputStreamPtr = b->getOutputStreamBlockPtr("outputGroup0", b->getSize(0));
+
+        for (unsigned i = 0; i < 2; i++) {
+            std::vector<llvm::Value*> inputStream;
+            Value* inputPtr = b->getInputStreamBlockPtr("inputGroup" + std::to_string(i), b->getSize(0));
+
+            Value* inputBytePtr = b->CreatePointerCast(inputPtr, b->getInt8PtrTy());
+            Function *gatherFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx2_gather_d_q_256);
+            Value *addresses = ConstantVector::get(
+                    {b->getInt32(0), b->getInt32(32), b->getInt32(64), b->getInt32(96)});
+
+            for (unsigned j = 0; j < 4; j++) {
+                Value *gather_result = b->CreateCall(
+                        gatherFunc,
+                        {
+                                UndefValue::get(b->getBitBlockType()),
+                                inputBytePtr,
+                                addresses,
+                                Constant::getAllOnesValue(b->getBitBlockType()),
+                                b->getInt8(1)
+                        }
+                );
+
+                inputBytePtr = b->CreateGEP(inputBytePtr, b->getInt32(8));
+
+                b->CreateStore(gather_result, outputStreamPtr);
+                outputStreamPtr = b->CreateGEP(outputStreamPtr, b->getSize(1));
+            }
+        }
+    }
 }

@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2018/6/18.
-//
 
 #include "LZParabixGenerator.h"
 
@@ -21,7 +18,8 @@
 #include <kernels/pdep_kernel.h>
 #include <kernels/swizzled_multiple_pdep_kernel.h>
 #include <kernels/lzparabix/decoder/LZParabixBlockDecoder.h>
-#include <kernels/lzparabix/decoder/LZParabixAioKernel.h>
+#include <kernels/lzparabix/decoder/LZParabixBitStreamAioKernel.h>
+#include <kernels/lzparabix/decoder/LZParabixSwizzledAioKernel.h>
 #include <kernels/lzparabix/decoder/LZParabixLiteralDecoderKernel.h>
 
 namespace re { class CC; }
@@ -84,6 +82,42 @@ parabix::StreamSetBuffer* LZParabixGenerator::extractLiteralBitStream(const std:
     return LiteralBitStream;
 }
 
+
+
+parabix::StreamSetBuffer* LZParabixGenerator::generateSwizzledBitStreamDecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, parabix::StreamSetBuffer* inputBitStreams) {
+
+    Kernel * swizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 2, 1);
+
+    StreamSetBuffer* inputSwizzled1 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4, 1), this->getInputBufferBlocks(iBuilder));
+    StreamSetBuffer* inputSwizzled2 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4, 1), this->getInputBufferBlocks(iBuilder));
+    mPxDriver.makeKernelCall(swizzleK, {inputBitStreams}, {inputSwizzled1, inputSwizzled2});
+
+
+    StreamSetBuffer* outputSwizzled1 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4, 1), this->getInputBufferBlocks(iBuilder));
+    StreamSetBuffer* outputSwizzled2 = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4, 1), this->getInputBufferBlocks(iBuilder));
+    Kernel * aioK = mPxDriver.addKernelInstance<LZParabixSwizzledAioKernel>(iBuilder);
+    aioK->setInitialArguments({mFileSize});
+    mPxDriver.makeKernelCall(aioK, {
+            mCompressedByteStream,
+            BlockData_BlockStart,
+            BlockData_BlockEnd,
+
+//            inputBitStreams,
+            inputSwizzled1,
+            inputSwizzled2
+    }, {
+            outputSwizzled1,
+            outputSwizzled2
+    });
+
+    StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), this->getDecompressedBufferBlocks(iBuilder));
+
+    Kernel * unSwizzleK2 = mPxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 8, 1, 2);
+//    Kernel * unSwizzleK2 = mPxDriver.addKernelInstance<SwizzleByGather>(iBuilder);
+    mPxDriver.makeKernelCall(unSwizzleK2, {outputSwizzled1, outputSwizzled2}, {decompressionBitStream});
+    return decompressionBitStream;
+}
+
 std::vector<parabix::StreamSetBuffer*> LZParabixGenerator::generateBitStreamDecompression(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<parabix::StreamSetBuffer*> inputBitStreams) {
     std::vector<unsigned> numbersOfStreams;
     std::vector<StreamSetBuffer*> inputStreams = {
@@ -100,7 +134,7 @@ std::vector<parabix::StreamSetBuffer*> LZParabixGenerator::generateBitStreamDeco
         outputStreams.push_back(mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(numOfStream, 1), this->getInputBufferBlocks(iBuilder)));
     }
 
-    Kernel * aioK = mPxDriver.addKernelInstance<LZParabixAioKernel>(iBuilder, numbersOfStreams);
+    Kernel * aioK = mPxDriver.addKernelInstance<LZParabixBitStreamAioKernel>(iBuilder, numbersOfStreams);
     aioK->setInitialArguments({mFileSize});
     mPxDriver.makeKernelCall(aioK, inputStreams, outputStreams);
     return outputStreams;
@@ -132,7 +166,7 @@ std::vector<parabix::StreamSetBuffer*> LZParabixGenerator::generateAioBitStreamD
         outputStreamSets.push_back(mPxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(numOfStreams, 1), this->getInputBufferBlocks(iBuilder)));
     }
 
-    Kernel * aioK = mPxDriver.addKernelInstance<LZParabixAioKernel>(iBuilder, numsOfStreams);
+    Kernel * aioK = mPxDriver.addKernelInstance<LZParabixBitStreamAioKernel>(iBuilder, numsOfStreams);
     aioK->setInitialArguments({mFileSize});
 
     mPxDriver.makeKernelCall(aioK, inputStreamSetParams, outputStreamSets);

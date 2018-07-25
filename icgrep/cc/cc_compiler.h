@@ -40,7 +40,7 @@ protected:
 class Parabix_CC_Compiler : public CC_Compiler {
 public:
     
-    Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet, cc::BitNumbering b = BitNumbering::LittleEndian, bool fakeBasisBits = false);
+    Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet, cc::BitNumbering b = BitNumbering::LittleEndian);
     
     pablo::PabloAST * compileCC(const re::CC *cc) override;
     
@@ -76,7 +76,6 @@ private:
     BitNumbering               mBasisSetNumbering;
     std::vector<pablo::PabloAST *>  mBasisBit;
     unsigned                        mEncodingMask;
-    bool mFakeBasisBits;
 };
 
     inline pablo::PabloAST * Parabix_CC_Compiler::compileCC(const re::CC *cc) {

@@ -65,6 +65,16 @@ private:
     const unsigned mOutputSets;
 };
 
+
+class SwizzleByGather : public BlockOrientedKernel {
+public:
+    SwizzleByGather(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+
+protected:
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+private:
+};
+
 }
     
 #endif

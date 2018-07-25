@@ -61,7 +61,7 @@ protected:
     
 class ICGrepKernel : public ICGrepSignature, public pablo::PabloKernel {
 public:
-    ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast, std::vector<std::string> externals, std::vector<cc::Alphabet *> alphabets = {}, cc::BitNumbering basisSetNumbering = cc::BitNumbering::LittleEndian, bool fakeBasisBits = false);
+    ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re_ast, std::vector<std::string> externals, std::vector<cc::Alphabet *> alphabets = {}, cc::BitNumbering basisSetNumbering = cc::BitNumbering::LittleEndian);
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
     bool isCachable() const override { return true; }
 protected:
@@ -69,7 +69,6 @@ protected:
     std::vector<std::string> mExternals;
     std::vector<cc::Alphabet *> mAlphabets;
     cc::BitNumbering mBasisSetNumbering;
-    bool mFakeBasisBits;
 };
 
 struct ByteGrepSignature {

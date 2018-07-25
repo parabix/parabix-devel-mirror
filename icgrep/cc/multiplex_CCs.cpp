@@ -137,6 +137,7 @@ re::CC * MultiplexedAlphabet::transformCC(const re::CC * sourceCC) const {
     for (auto i : exclusive_IDs) {
         CC_union = re::makeCC(CC_union, re::makeCC(i, this));
     }
+    CC_union->sourceCC = sourceCC;
     return CC_union;
 }
 

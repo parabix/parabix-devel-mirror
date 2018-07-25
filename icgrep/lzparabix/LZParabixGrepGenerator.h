@@ -22,7 +22,7 @@ class LZParabixGrepGenerator: public LZParabixGenerator {
 
 public:
     LZParabixGrepGenerator(bool enableMultiplexing = false);
-    void generateCountOnlyAioPipeline(re::RE* regex);
+    void generateCountOnlyAioPipeline(re::RE* regex, bool swizzledDecompression = false);
     CountOnlyGrepMainFunctionType getCountOnlyGrepMainFunction();
 protected:
     bool mEnableMultiplexing;
@@ -35,7 +35,7 @@ protected:
 
     void initREs(std::vector<re::RE *> & REs);
 
-    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> &REs);
+    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> &REs, bool swizzledDecompression);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrepPipeline(std::vector<re::RE *> &REs);
 
     parabix::StreamSetBuffer * linefeedStreamFromDecompressedBits(parabix::StreamSetBuffer *decompressedBasisBits);
