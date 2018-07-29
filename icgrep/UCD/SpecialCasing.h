@@ -42,7 +42,15 @@ namespace UCD {
 
 
 
-        const unsigned buffer_length = 406;
+        const static std::vector<unsigned> buffer_offsets = {
+        0, 3, 7, 10, 13, 16, 19, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62,
+        66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122,
+        126, 130, 134, 138, 142, 146, 150, 154, 158, 162, 166, 170, 174,
+        178, 182, 186, 190, 194, 198, 202, 206, 210, 214, 218, 222, 226,
+        230, 234, 238, 242, 246, 250, 254, 258, 262, 266, 270, 274, 278,
+        282, 286, 290, 294, 298, 302, 306, 310, 314, 318, 322, 326, 330,
+        334, 338, 342, 346, 350, 354, 358, 362, 366, 370, 374, 378, 382,
+        386, 390, 394, 398, 402, 406};
         const static char string_buffer LLVM_ALIGNAS(32) [512] = u8R"__(ß
 i̇
 ŉ
@@ -166,7 +174,7 @@ i̇
                                                     SLC_ns::property_object, 
                                                     std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
-                                                    buffer_length, 
+                                                    std::move(buffer_offsets), 
                                                     std::move(defined_cps));
     }
     namespace UC_ns {
@@ -196,7 +204,15 @@ i̇
 
 
 
-        const unsigned buffer_length = 571;
+        const static std::vector<unsigned> buffer_offsets = {
+        0, 3, 6, 10, 14, 21, 28, 33, 37, 41, 45, 49, 53, 58, 65, 72, 79, 85,
+        91, 97, 103, 109, 115, 121, 127, 133, 139, 145, 151, 157, 163, 169,
+        175, 181, 187, 193, 199, 205, 211, 217, 223, 229, 235, 241, 247,
+        253, 259, 265, 271, 277, 283, 289, 295, 301, 307, 313, 319, 325,
+        331, 337, 343, 349, 355, 361, 367, 373, 378, 383, 388, 395, 400,
+        406, 411, 416, 421, 428, 433, 440, 447, 452, 459, 466, 473, 478,
+        483, 490, 496, 501, 506, 511, 518, 523, 526, 529, 532, 536, 540,
+        543, 546, 551, 556, 561, 566, 571};
         const static char string_buffer LLVM_ALIGNAS(32) [768] = u8R"__(SS
 İ
 ʼN
@@ -320,7 +336,7 @@ ST
                                                     SUC_ns::property_object, 
                                                     std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
-                                                    buffer_length, 
+                                                    std::move(buffer_offsets), 
                                                     std::move(defined_cps));
     }
     namespace TC_ns {
@@ -350,7 +366,15 @@ ST
 
 
 
-        const unsigned buffer_length = 469;
+        const static std::vector<unsigned> buffer_offsets = {
+        0, 3, 6, 10, 14, 21, 28, 33, 37, 41, 45, 49, 53, 58, 65, 72, 79, 83,
+        87, 91, 95, 99, 103, 107, 111, 115, 119, 123, 127, 131, 135, 139,
+        143, 147, 151, 155, 159, 163, 167, 171, 175, 179, 183, 187, 191,
+        195, 199, 203, 207, 211, 215, 219, 223, 227, 231, 235, 239, 243,
+        247, 251, 255, 259, 263, 267, 271, 277, 281, 286, 291, 298, 302,
+        308, 312, 317, 322, 329, 333, 340, 347, 352, 359, 366, 373, 378,
+        383, 390, 396, 400, 405, 410, 417, 421, 424, 427, 430, 434, 438,
+        441, 444, 449, 454, 459, 464, 469};
         const static char string_buffer LLVM_ALIGNAS(32) [512] = u8R"__(Ss
 İ
 ʼN
@@ -474,7 +498,7 @@ St
                                                     STC_ns::property_object, 
                                                     std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
-                                                    buffer_length, 
+                                                    std::move(buffer_offsets), 
                                                     std::move(defined_cps));
     }
 }

@@ -51,7 +51,8 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
         
         ${reflexive_set_value}
 
-        const unsigned buffer_length = ${buffer_length};
+        const static std::vector<unsigned> buffer_offsets = {
+        ${buffer_offsets}};
         const static char string_buffer LLVM_ALIGNAS(32) [${allocation_length}] = u8R"__(${string_buffer})__";
 
         const static std::vector<codepoint_t> defined_cps{
@@ -60,19 +61,21 @@ def emit_string_property(f, property_code, null_set, reflexive_set, cp_value_map
                                                     std::move(null_codepoint_set), 
                                                     std::move(reflexive_set), 
                                                     static_cast<const char *>(string_buffer), 
-                                                    buffer_length, 
+                                                    std::move(buffer_offsets), 
                                                     std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
     string_buffer = ""
+    buffer_offsets = [0]
     for cp in cps: 
         string_buffer += cp_value_map[cp] + "\n"
-    buffer_length = len(string_buffer.encode("utf-8"))
+        buffer_offsets.append(len(string_buffer.encode("utf-8")))
+    buffer_length = buffer_offsets[-1]
     f.write(s.substitute(prop_enum = property_code,
                          prop_enum_up = property_code.upper(),
                          string_buffer = string_buffer,
-                         buffer_length = buffer_length,
+                         buffer_offsets = cformat.multiline_fill(['%i' % o for o in buffer_offsets], ',', 8),
                          allocation_length = (buffer_length + 255) & -256,
                          null_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(null_set)], ',', 8),
                          null_set_value = null_set.generate("null_codepoint_set", 8),
@@ -89,7 +92,8 @@ def emit_string_override_property(f, property_code, overridden_code, override_se
 
         ${overridden_set_value}
 
-        const unsigned buffer_length = ${buffer_length};
+        const static std::vector<unsigned> buffer_offsets = {
+        ${buffer_offsets}};
         const static char string_buffer LLVM_ALIGNAS(32) [${allocation_length}] = u8R"__(${string_buffer})__";
 
         const static std::vector<codepoint_t> defined_cps{
@@ -98,20 +102,22 @@ def emit_string_override_property(f, property_code, overridden_code, override_se
                                                     ${overridden}_ns::property_object, 
                                                     std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
-                                                    buffer_length, 
+                                                    std::move(buffer_offsets), 
                                                     std::move(defined_cps));
     }
 """)
     cps = sorted(cp_value_map.keys())
     string_buffer = ""
+    buffer_offsets = [0]
     for cp in cps: 
         string_buffer += cp_value_map[cp] + "\n"
-    buffer_length = len(string_buffer.encode("utf-8"))
+        buffer_offsets.append(len(string_buffer.encode("utf-8")))
+    buffer_length = buffer_offsets[-1]
     f.write(s.substitute(prop_enum = property_code,
                          prop_enum_up = property_code.upper(),
                          overridden = overridden_code.upper(),
                          string_buffer = string_buffer,
-                         buffer_length = buffer_length,
+                         buffer_offsets = cformat.multiline_fill(['%i' % o for o in buffer_offsets], ',', 8),
                          allocation_length = (buffer_length + 255) & -256,
                          overridden_set_ranges = cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(override_set)], ',', 8),
                          overridden_set_value = override_set.generate("explicitly_defined_set", 8),
@@ -293,7 +299,7 @@ struct FoldEntry {
     const std::vector<UCD::interval_t> fold_pairs;
 };
 
-UCD::UnicodeSet * caseInsensitize(UCD::UnicodeSet * const cc);
+UCD::UnicodeSet caseInsensitize(const UCD::UnicodeSet & cc);
 
 """
 
@@ -518,7 +524,7 @@ class UCD_generator():
         basename = 'CaseFolding'
         fold_data = parse_CaseFolding_txt(self.property_object_map)
         cm = simple_CaseClosure_map(fold_data)
-        f = cformat.open_header_file_for_write(basename, 'casefold.py')
+        f = cformat.open_header_file_for_write(basename, 'UCD_properties.py')
         cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"', '<vector>'])
         f.write(foldDeclarations)
         f.write(genFoldEntryData(cm))

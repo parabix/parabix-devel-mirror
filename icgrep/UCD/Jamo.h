@@ -46,7 +46,12 @@ namespace UCD {
 
 
 
-        const unsigned buffer_length = 171;
+        const static std::vector<unsigned> buffer_offsets = {
+        0, 2, 5, 7, 9, 12, 14, 16, 18, 21, 23, 26, 28, 31, 33, 35, 37, 39,
+        41, 43, 46, 49, 53, 56, 58, 62, 65, 67, 70, 74, 77, 80, 82, 86, 89,
+        92, 95, 98, 101, 103, 105, 108, 111, 113, 116, 119, 121, 123, 126,
+        129, 132, 135, 138, 141, 144, 146, 148, 151, 153, 156, 159, 161,
+        163, 165, 167, 169, 171};
         const static char string_buffer LLVM_ALIGNAS(32) [256] = u8R"__(G
 GG
 N
@@ -129,7 +134,7 @@ H
                                                     std::move(null_codepoint_set), 
                                                     std::move(reflexive_set), 
                                                     static_cast<const char *>(string_buffer), 
-                                                    buffer_length, 
+                                                    std::move(buffer_offsets), 
                                                     std::move(defined_cps));
     }
 }

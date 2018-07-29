@@ -43,6 +43,7 @@ public:
     virtual const UnicodeSet GetCodepointSet(const std::string & prop_value_string);
     virtual const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern);
     virtual const UnicodeSet GetReflexiveSet();
+    virtual const std::string GetStringValue(UCD::codepoint_t cp);
 
     virtual const std::string & GetPropertyValueGrepString();
     property_t the_property;
@@ -198,12 +199,13 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    StringPropertyObject(UCD::property_t p, const UnicodeSet && nullSet, const UnicodeSet && mapsToSelf, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> && cps)
+    StringPropertyObject(UCD::property_t p, const UnicodeSet && nullSet, const UnicodeSet && mapsToSelf, const char * string_buffer,
+                         const std::vector<unsigned> && offsets, const std::vector<UCD::codepoint_t> && cps)
     : PropertyObject(p, ClassTypeId::StringProperty)
     , mNullCodepointSet(std::move(nullSet))
     , mSelfCodepointSet(std::move(mapsToSelf))
     , mStringBuffer(string_buffer)
-    , mBufSize(bufsize)
+    , mStringOffsets(offsets)
     , mExplicitCps(cps)
     {
 
@@ -211,14 +213,16 @@ public:
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet GetReflexiveSet() override;
+    const std::string GetStringValue(UCD::codepoint_t cp) override;
     
 private:
     const UnicodeSet mNullCodepointSet;  // codepoints for which the property value is the null string.
     const UnicodeSet mSelfCodepointSet;  // codepoints for which the property value is the codepoint itself.
-    const char * mStringBuffer;  // buffer holding all string values for other codepoints, in sorted order. 
-    unsigned mBufSize;
-    const std::vector<UCD::codepoint_t> mExplicitCps;
-
+    // Codepoints other than those in these two sets are explicitly represented.
+    const char * mStringBuffer;  // buffer holding all string values for explicit codepoints, in sorted order.
+    const std::vector<unsigned> mStringOffsets;        // the offsets of each string within the buffer.
+    //unsigned mBufSize;                               // mStringOffsets has one extra element for buffer size.
+    const std::vector<UCD::codepoint_t> mExplicitCps;  // the codepoints having explicit strings
 };
     
 class StringOverridePropertyObject : public PropertyObject {
@@ -229,12 +233,13 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    StringOverridePropertyObject(UCD::property_t p, PropertyObject & baseObj, const UnicodeSet && overriddenSet, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> && cps)
+    StringOverridePropertyObject(UCD::property_t p, PropertyObject & baseObj, const UnicodeSet && overriddenSet, const char * string_buffer,
+                                 const std::vector<unsigned> && offsets, const std::vector<UCD::codepoint_t> && cps)
     : PropertyObject(p, ClassTypeId::StringOverrideProperty)
     , mBaseObject(baseObj)
     , mOverriddenSet(std::move(overriddenSet))
     , mStringBuffer(string_buffer)
-    , mBufSize(bufsize)
+    , mStringOffsets(offsets)
     , mExplicitCps(cps)
     {
         
@@ -242,14 +247,15 @@ public:
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet GetReflexiveSet() override;
-    
+    const std::string GetStringValue(UCD::codepoint_t cp) override;
+
 private:
     PropertyObject & mBaseObject;  // the base object that provides default values for this property unless overridden.
     const UnicodeSet mOverriddenSet;   // codepoints for which the baseObject value is overridden.
     const char * mStringBuffer;  // buffer holding all string values for overridden codepoints, in sorted order. 
-    unsigned mBufSize;
+    const std::vector<unsigned> mStringOffsets;        // the offsets of each string within the buffer.
+    //unsigned mBufSize;                               // mStringOffsets has one extra element for buffer size.
     const std::vector<codepoint_t> mExplicitCps;
-    
 };
     
 class ObsoletePropertyObject : public PropertyObject {

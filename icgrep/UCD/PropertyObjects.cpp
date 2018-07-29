@@ -14,6 +14,7 @@
 #include <util/aligned_allocator.h>
 #include <re/re_analysis.h>
 #include <re/re_cc.h>
+#include <codecvt>
 
 using namespace llvm;
 
@@ -42,7 +43,11 @@ const UnicodeSet PropertyObject::GetCodepointSet(const std::string &) {
 const UnicodeSet PropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
     llvm::report_fatal_error("GetCodepointSetMatchingPattern unsupported");
 }
-    
+
+const std::string PropertyObject::GetStringValue(codepoint_t cp) {
+    llvm::report_fatal_error("GetStringValue unsupported");
+}
+
 const UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
     const int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val < 0) {
@@ -389,14 +394,36 @@ const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * p
     grep::InternalSearchEngine engine;
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
     engine.grepCodeGen(pattern, nullptr, & accum);
-    engine.doGrep(mStringBuffer, mBufSize);
-
+    const unsigned bufSize = mStringOffsets[mExplicitCps.size()];
+    engine.doGrep(mStringBuffer, bufSize);
     matched.insert(accum.getAccumulatedSet());
     return matched;
 }
     
 const UnicodeSet StringPropertyObject::GetReflexiveSet() {
     return mSelfCodepointSet;
+}
+
+const std::string StringPropertyObject::GetStringValue(codepoint_t cp) {
+    if (mNullCodepointSet.contains(cp)) return "";
+    if (mSelfCodepointSet.contains(cp)) {
+        std::u32string s(1, cp);
+        std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
+        return conv.to_bytes(s);
+    }
+    // Otherwise, binary search through the explicit cps to find the index.
+    // string index.
+    unsigned lo = 0;
+    unsigned hi = mExplicitCps.size()-1;
+    while (lo < hi) {
+        unsigned mid = (lo + hi)/2;
+        if (cp <= mExplicitCps[mid]) hi = mid;
+        else lo = mid + 1;
+    }
+    // Now lo == hi is the index of the desired string.
+    unsigned offset = mStringOffsets[lo];
+    unsigned lgth = mStringOffsets[lo+1] - offset - 1;
+    return std::string(&mStringBuffer[offset], lgth);
 }
 
 const UnicodeSet StringOverridePropertyObject::GetCodepointSet(const std::string & value_spec) {
@@ -426,7 +453,8 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re
     grep::InternalSearchEngine engine;
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
     engine.grepCodeGen(pattern, nullptr, & accum);
-    engine.doGrep(mStringBuffer, mBufSize);
+    const unsigned bufSize = mStringOffsets[mExplicitCps.size()];
+    engine.doGrep(mStringBuffer, bufSize);
     base_set.insert(accum.getAccumulatedSet());
     return base_set;
 }
@@ -435,6 +463,22 @@ const UnicodeSet StringOverridePropertyObject::GetReflexiveSet() {
     return mBaseObject.GetReflexiveSet() - mOverriddenSet;
 }
 
+const std::string StringOverridePropertyObject::GetStringValue(codepoint_t cp) {
+    if (!mOverriddenSet.contains(cp)) return mBaseObject.GetStringValue(cp);
+    // Otherwise, binary search through the explicit cps to find the index.
+    // string index.
+    unsigned lo = 0;
+    unsigned hi = mExplicitCps.size()-1;
+    while (lo < hi) {
+        unsigned mid = (lo + hi)/2;
+        if (cp <= mExplicitCps[mid]) hi = mid;
+        else lo = mid + 1;
+    }
+    // Now lo == hi is the index of the desired string.
+    unsigned offset = mStringOffsets[lo];
+    unsigned lgth = mStringOffsets[lo+1] - offset - 1;
+    return std::string(&mStringBuffer[offset], lgth);
+}
 
 const std::string & ObsoletePropertyObject::GetPropertyValueGrepString() {
     llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
