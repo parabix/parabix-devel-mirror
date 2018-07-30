@@ -21,7 +21,6 @@
 #include <kernels/lz4/lz4_swizzled_match_copy_kernel.h>
 #include <kernels/lz4/lz4_bitstream_match_copy_kernel.h>
 #include <kernels/lz4/lz4_bitstream_not_kernel.h>
-#include <kernels/lz4/aio/lz4_i4_bytestream_aio.h>
 #include <kernels/fake_stream_generating_kernel.h>
 #include <kernels/bitstream_pdep_kernel.h>
 #include <kernels/bitstream_gather_pdep_kernel.h>
@@ -400,16 +399,20 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepGenerat
     }
 
     StreamSetBuffer * fakeMatchCopiedBits = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), this->getInputBufferBlocks(idb));
-    Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, 8);
-    mPxDriver.makeKernelCall(fakeStreamGeneratorK, {decompressedCharClasses}, {fakeMatchCopiedBits});
+    StreamSetBuffer * u8NoFinalStream = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), this->getInputBufferBlocks(idb), 1);
+
+    Kernel* fakeStreamGeneratorK = mPxDriver.addKernelInstance<FakeStreamGeneratingKernel>(idb, numOfCharacterClasses, std::vector<unsigned>({8, 1}));
+    mPxDriver.makeKernelCall(fakeStreamGeneratorK, {decompressedCharClasses}, {fakeMatchCopiedBits, u8NoFinalStream});
 
     StreamSetBuffer * LineBreakStream = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), this->getInputBufferBlocks(idb));
     kernel::Kernel * lineFeedGrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, transformCCs(mpx.get(), linefeedCC), externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian);
     mGrepDriver->makeKernelCall(lineFeedGrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {LineBreakStream});
 
 
+    externalStreamNames.push_back("UTF8_nonfinal");
+
     kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[0], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::BigEndian);
-    mGrepDriver->makeKernelCall(icgrepK, {fakeMatchCopiedBits, decompressedCharClasses}, {MatchResults});
+    mGrepDriver->makeKernelCall(icgrepK, {fakeMatchCopiedBits, u8NoFinalStream, decompressedCharClasses}, {MatchResults});
     MatchResultsBufs[0] = MatchResults;
 
     StreamSetBuffer * MergedResults = MatchResultsBufs[0];
@@ -773,8 +776,8 @@ void LZ4GrepGenerator::generateAioPipeline(re::RE *regex) {
     this->generateCountOnlyMainFunc(iBuilder);
 
     // GeneratePipeline
-    this->generateLoadByteStream(iBuilder);
-//    this->generateLoadByteStreamAndBitStream(iBuilder);
+//    this->generateLoadByteStream(iBuilder);
+    this->generateLoadByteStreamAndBitStream(iBuilder);
 
     parabix::StreamSetBuffer * decompressedByteStream = this->generateAIODecompression(iBuilder);
 

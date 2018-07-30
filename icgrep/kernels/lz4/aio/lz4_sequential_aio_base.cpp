@@ -42,8 +42,6 @@ namespace kernel{
                                            Binding{b->getInt64Ty(), "outputPos"},
 
                                            Binding{b->getInt1Ty(), "hasCallInitialization"}
-
-
                                    }),
              mBlockSize(blockSize) {
         this->setStride(blockSize);

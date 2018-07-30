@@ -187,8 +187,6 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
     this->generateBlockData(idb);
     StreamSetBuffer * const LiteralBitStream = this->extractLiteralBitStream(idb);
 
-    bool allCcByteLength = re::isAllCcByteLength(mREs[0]);
-
     mpx = make_unique<cc::MultiplexedAlphabet>("mpx", UnicodeSets);
     mREs[0] = transformCCs(mpx.get(), mREs[0]);
 
@@ -207,6 +205,8 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZParabixGrepG
     StreamSetBuffer * u8NoFinalStream = nullptr;
     StreamSetBuffer * fakeMatchCopiedBits = nullptr;
 
+
+    bool allCcByteLength = re::isAllCcByteLength(mREs[0]);
     if (allCcByteLength) {
         auto ret = this->generateBitStreamDecompression(idb, {CharClasses});
         decompressedCharClasses = ret[0];

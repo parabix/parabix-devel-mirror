@@ -26,9 +26,11 @@
 #include <kernels/lz4/aio/lz4_parallel_bytestream_aio.h>
 #include <kernels/lz4/aio/lz4_swizzled_aio.h>
 #include <kernels/lz4/aio/lz4_bitstream_aio.h>
-#include <kernels/lz4/aio/lz4_i4_bytestream_aio.h>
+#include <kernels/lz4/aio/lz4_twist_aio.h>
 #include <kernels/bitstream_pdep_kernel.h>
 #include <kernels/lz4/lz4_bitstream_not_kernel.h>
+#include <kernels/lz4/aio/twist_kernel.h>
+#include <kernels/lz4/aio/untwist_kernel.h>
 
 namespace re { class CC; }
 
@@ -427,14 +429,17 @@ std::vector<StreamSetBuffer*> LZ4Generator::convertCompressedBitsStreamWithBitSt
 
 
 
-    if (compressedBitStreams[0]->getNumOfStreams() == 4) {
-        StreamSetBuffer* twistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 4), this->getInputBufferBlocks(iBuilder));
-        kernel::Kernel* twistK = mGrepDriver->addKernelInstance<kernel::P2S4StreamByPDEP>(iBuilder);
+    size_t numOfStreams = compressedBitStreams[0]->getNumOfStreams();
+
+    // 1, 2, 4, 8
+
+    if (numOfStreams <= 2) {
+        StreamSetBuffer* twistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 2), this->getInputBufferBlocks(iBuilder));
+        kernel::Kernel* twistK = mGrepDriver->addKernelInstance<kernel::TwistByPDEPKernel>(iBuilder, numOfStreams, 2);
         mGrepDriver->makeKernelCall(twistK, {compressedBitStreams[0]}, {twistedCharClasses});
 
-
-        StreamSetBuffer* uncompressedTwistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 4), this->getInputBufferBlocks(iBuilder));
-        Kernel* lz4I4AioK = mPxDriver.addKernelInstance<LZ4I4ByteStreamAioKernel>(iBuilder);
+        StreamSetBuffer* uncompressedTwistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 2), this->getInputBufferBlocks(iBuilder));
+        Kernel* lz4I4AioK = mPxDriver.addKernelInstance<LZ4TwistAioKernel>(iBuilder, 2);
         lz4I4AioK->setInitialArguments({mFileSize});
         mGrepDriver->makeKernelCall(lz4I4AioK, {
                 mCompressedByteStream,
@@ -449,8 +454,37 @@ std::vector<StreamSetBuffer*> LZ4Generator::convertCompressedBitsStreamWithBitSt
                                             uncompressedTwistedCharClasses
                                     });
 
-        StreamSetBuffer* untwistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), this->getInputBufferBlocks(iBuilder));
-        kernel::Kernel* untwistK = mGrepDriver->addKernelInstance<kernel::S2P4StreamByPEXTKernel>(iBuilder);
+        StreamSetBuffer* untwistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(numOfStreams), this->getInputBufferBlocks(iBuilder));
+        kernel::Kernel* untwistK = mGrepDriver->addKernelInstance<kernel::UntwistByPEXTKernel>(iBuilder, numOfStreams, 2);
+        mGrepDriver->makeKernelCall(untwistK, {uncompressedTwistedCharClasses}, {untwistedCharClasses});
+        return {untwistedCharClasses};
+    }
+
+    if (numOfStreams <= 4) {
+        StreamSetBuffer* twistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 4), this->getInputBufferBlocks(iBuilder));
+        kernel::Kernel* twistK = mGrepDriver->addKernelInstance<kernel::TwistByPDEPKernel>(iBuilder, numOfStreams, 4);
+        mGrepDriver->makeKernelCall(twistK, {compressedBitStreams[0]}, {twistedCharClasses});
+
+
+        StreamSetBuffer* uncompressedTwistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 4), this->getInputBufferBlocks(iBuilder));
+
+        Kernel* lz4I4AioK = mPxDriver.addKernelInstance<LZ4TwistAioKernel>(iBuilder, 4);
+        lz4I4AioK->setInitialArguments({mFileSize});
+        mGrepDriver->makeKernelCall(lz4I4AioK, {
+                mCompressedByteStream,
+
+                // Block Data
+                BlockData_IsCompressed,
+                BlockData_BlockStart,
+                BlockData_BlockEnd,
+
+                twistedCharClasses
+        }, {
+                                            uncompressedTwistedCharClasses
+                                    });
+
+        StreamSetBuffer* untwistedCharClasses = mGrepDriver->addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(numOfStreams), this->getInputBufferBlocks(iBuilder));
+        kernel::Kernel* untwistK = mGrepDriver->addKernelInstance<kernel::UntwistByPEXTKernel>(iBuilder, numOfStreams, 4);
         mGrepDriver->makeKernelCall(untwistK, {uncompressedTwistedCharClasses}, {untwistedCharClasses});
         return {untwistedCharClasses};
     }

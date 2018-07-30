@@ -28,6 +28,8 @@ protected:
     // ---- Constant
     const static unsigned int ACCELERATION_WIDTH = 64;
     const unsigned mBlockSize;
+    const unsigned COPY_FW = 64;
+    const unsigned BYTE_WIDTH = 8;
 
     // ---- Kernel Methods
     void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) override;

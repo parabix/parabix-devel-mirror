@@ -46,58 +46,7 @@ inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Va
 }
 
 
-    P2S4StreamByPDEP::P2S4StreamByPDEP(const std::unique_ptr<kernel::KernelBuilder> & b)
-            : BlockOrientedKernel("P2S4StreamByPDEP",
-                                  {Binding{b->getStreamSetTy(4, 1), "basisBits"}},
-                                  {Binding{b->getStreamSetTy(1, 4), "byteStream"}},
-                                  {}, {}, {})
-    {
-    }
 
-
-    void P2S4StreamByPDEP::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
-        Function * PDEPFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pdep_64);
-        uint64_t pdepBaseMask = 0x1111111111111111;
-
-        Value* inputBlocks[4];
-
-        for (unsigned i = 0; i < 4; i++) {
-            inputBlocks[i] = b->loadInputStreamBlock("basisBits", b->getInt32(i));
-        }
-        Value* outputBasePtr = b->CreatePointerCast(b->getOutputStreamBlockPtr("byteStream", b->getSize(0)), b->getInt64Ty()->getPointerTo());
-
-        for (unsigned i = 0; i < b->getBitBlockWidth() / 64; i++) {
-            Value* currentInput[4];
-            for (unsigned iIndex = 0; iIndex < 4; iIndex++) {
-                currentInput[iIndex] = b->CreateExtractElement(inputBlocks[iIndex], i);
-            }
-
-            for (unsigned j = 0; j < 4; j++) {
-                unsigned outputIndex = i * 4 + j;
-                Value* retI64 = b->getInt64(0);
-                for (unsigned k = 0; k < 4; k++) {
-                    Value* newBits = b->CreateCall(
-                            PDEPFunc,{
-                                    b->CreateLShr(currentInput[k], b->getInt64(j * 16)),
-                                    b->getInt64(pdepBaseMask << k)
-                            }
-                    );
-                    retI64 = b->CreateOr(retI64, newBits);
-                }
-                b->CreateStore(retI64, b->CreateGEP(outputBasePtr, b->getInt32(outputIndex)));
-            }
-        }
-
-//        for (unsigned i = 0; i < 4; i++) {
-//            b->CallPrintRegister("input" + std::to_string(i), inputBlocks[i]);
-//        }
-//
-//        Value* outputBaseBlockPtr = b->CreatePointerCast(b->getOutputStreamBlockPtr("byteStream", b->getSize(0)), b->getBitBlockType()->getPointerTo());
-//        for (unsigned i = 0; i < 4; i++) {
-//            b->CallPrintRegister("output" + std::to_string(i), b->CreateLoad(b->CreateGEP(outputBaseBlockPtr, b->getInt32(i))));
-//        }
-
-    }
 
     		
 void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
@@ -268,6 +217,5 @@ P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::uniq
               {}),
     mBasisSetNumbering(numbering) {
 }
-    
-    
+
 }

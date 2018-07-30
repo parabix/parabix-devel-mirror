@@ -16,7 +16,6 @@ using namespace llvm;
 namespace kernel {
 
 const int PACK_LANES = 2;
-
 void s2p_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
     Value * t0 = nullptr;
     Value * t1 = nullptr;
@@ -30,10 +29,6 @@ void s2p_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * s0, Value
     } else {
         t0 = iBuilder->hsimd_packh(16, s0, s1);
         t1 = iBuilder->hsimd_packl(16, s0, s1);
-    }
-    if (shift == 1) {
-//        iBuilder->CallPrintRegister("t0", t0);
-//        iBuilder->CallPrintRegister("t1", t1);
     }
 
     p0 = iBuilder->simd_if(1, hi_mask, t0, iBuilder->simd_srli(16, t1, shift));
@@ -55,30 +50,17 @@ void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value
 
         s2p_step(iBuilder, bit2200[0], bit2200[1],
                  iBuilder->simd_himask(4), 2, out[2], out[0]);
-        for (unsigned i = 0; i < 4; i++) {
-//            iBuilder->CallPrintRegister("input" + std::to_string(i), input[i]);
-        }
-        for (unsigned i = 0; i < 4; i++) {
-//            iBuilder->CallPrintRegister("out" + std::to_string(i), out[i]);
-        }
     }
 
 
     // Little-endian bit number is used for variables.
     Value * bit66442200[4];
     Value * bit77553311[4];
-//    iBuilder->CallPrintRegister("himask2", iBuilder->simd_himask(2));
-//    iBuilder->CallPrintRegister("himask4", iBuilder->simd_himask(4));
-//    iBuilder->CallPrintRegister("himask8", iBuilder->simd_himask(8));
 
     for (unsigned i = 0; i < 4; i++) {
         Value * s0 = input[2 * i];
         Value * s1 = input[2 * i + 1];
-//        iBuilder->CallPrintRegister("s0_" + std::to_string(2 * i), s0);
-//        iBuilder->CallPrintRegister("s1_" + std::to_string(2 * i + 1), s1);
         s2p_step(iBuilder, s0, s1, iBuilder->simd_himask(2), 1, bit77553311[i], bit66442200[i]);
-//        iBuilder->CallPrintRegister("bit77553311", bit77553311[i]);
-//        iBuilder->CallPrintRegister("bit66442200", bit66442200[i]);
     }
     Value * bit44440000[2];
     Value * bit66662222[2];
@@ -101,13 +83,6 @@ void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value
         s2p_step(iBuilder, bit55551111[0], bit55551111[1], iBuilder->simd_himask(8), 4, output[2], output[6]);
         s2p_step(iBuilder, bit66662222[0], bit66662222[1], iBuilder->simd_himask(8), 4, output[1], output[5]);
         s2p_step(iBuilder, bit77773333[0], bit77773333[1], iBuilder->simd_himask(8), 4, output[0], output[4]);
-    }
-
-    for (unsigned i = 0; i < 8; i++) {
-//        iBuilder->CallPrintRegister("input" + std::to_string(i), input[i]);
-    }
-    for (unsigned i = 0; i < 8; i++) {
-//        iBuilder->CallPrintRegister("output" + std::to_string(i), output[i]);
     }
 }
 
@@ -153,63 +128,6 @@ void s2p_ideal(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[],
     }
 }
 #endif
-
-
-    S2P4StreamByPEXTKernel::S2P4StreamByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
-            :BlockOrientedKernel("s2p4StreamByPEXT",
-                                 {
-                                         Binding{b->getStreamSetTy(1, 4), "byteStream", FixedRate(), Principal()}
-                                 },
-                                 {
-                                         Binding{b->getStreamSetTy(4, 1), "basisBits"}
-                                 }, {}, {}, {}) {
-
-    }
-
-    void S2P4StreamByPEXTKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
-        Function* PEXT_func = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pext_64);
-        uint64_t pextBaseMask = 0x1111111111111111;
-
-        Value* inputBasePtr = b->CreatePointerCast(b->getInputStreamBlockPtr("byteStream", b->getSize(0)), b->getInt64Ty()->getPointerTo());
-
-        Value* outputBlocks[4];
-        for (unsigned i = 0; i < 4; i++) {
-            outputBlocks[i] = ConstantVector::getNullValue(b->getBitBlockType());
-        }
-
-        for (unsigned i = 0; i < b->getBitBlockWidth() / 64; i++) {
-            Value* currentOutput[4];
-            for (unsigned iIndex = 0; iIndex < 4; iIndex++) {
-                currentOutput[iIndex] = b->getInt64(0);
-            }
-
-            for (unsigned j = 0; j < 4; j++) {
-                unsigned inputIndex = i * 4 + j;
-
-                Value* currentInput = b->CreateLoad(b->CreateGEP(inputBasePtr, b->getInt32(inputIndex)));
-                for (unsigned k = 0; k < 4; k++) {
-
-                    Value* newBits = b->CreateCall(
-                            PEXT_func,{
-                                    currentInput,
-                                    b->getInt64(pextBaseMask << k)
-                            }
-                    );
-
-                    currentOutput[k] = b->CreateOr(currentOutput[k], b->CreateShl(newBits, 16 * j));
-                }
-            }
-
-            for (unsigned iIndex = 0; iIndex < 4; iIndex++) {
-                outputBlocks[iIndex] = b->CreateInsertElement(outputBlocks[iIndex], currentOutput[iIndex], i);
-            }
-        }
-
-        for (unsigned i = 0; i < 4; i++) {
-            b->storeOutputStreamBlock("basisBits", b->getInt32(i), outputBlocks[i]);
-//            b->CallPrintRegister("outputBlocks" + std::to_string(i), outputBlocks[i]);
-        }
-    }
 
 void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
@@ -343,5 +261,6 @@ S2P_PabloKernel::S2P_PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & 
   mCodeUnitWidth(codeUnitWidth),
   mBasisSetNumbering(numbering) {
 }
+
 
 }
