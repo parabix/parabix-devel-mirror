@@ -1,5 +1,5 @@
 
-#include "lz4_twist_aio.h"
+#include "lz4_twist_decompression.h"
 
 #include <kernels/kernel_builder.h>
 #include <iostream>
@@ -13,16 +13,16 @@ using namespace std;
 
 
 namespace kernel {
-    size_t LZ4TwistAioKernel::getNormalCopyLength() {
+    size_t LZ4TwistDecompressionKernel::getNormalCopyLength() {
         return (COPY_FW - BYTE_WIDTH) / mTwistWidth;
     }
-    llvm::Value* LZ4TwistAioKernel::getNormalCopyLengthValue(const std::unique_ptr<KernelBuilder> &b) {
+    llvm::Value* LZ4TwistDecompressionKernel::getNormalCopyLengthValue(const std::unique_ptr<KernelBuilder> &b) {
         return b->getSize(this->getNormalCopyLength());
     }
 
 
-    LZ4TwistAioKernel::LZ4TwistAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned twistWidth, unsigned blockSize)
-            : LZ4SequentialAioBaseKernel(b, "LZ4TwistAioKernel", blockSize),
+    LZ4TwistDecompressionKernel::LZ4TwistDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned twistWidth, unsigned blockSize)
+            : LZ4SequentialDecompressionKernel(b, "LZ4TwistDecompressionKernel", blockSize),
               mTwistWidth(twistWidth),
               mItemsPerByte(BYTE_WIDTH / twistWidth)
     {
@@ -34,7 +34,7 @@ namespace kernel {
 
 
 
-    void LZ4TwistAioKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
+    void LZ4TwistDecompressionKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                llvm::Value *literalLength, llvm::Value* blockStart) {
         // Constant and Type
         Constant* SIZE_0 = b->getSize(0);
@@ -128,7 +128,7 @@ namespace kernel {
 
 
 
-    void LZ4TwistAioKernel::doShortMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
+    void LZ4TwistDecompressionKernel::doShortMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                   llvm::Value *matchLength) {
         // Constant and Type
         Constant* SIZE_0 = b->getSize(0);
@@ -202,7 +202,7 @@ namespace kernel {
         b->setScalarField("outputPos", b->CreateAdd(outputPos, matchLength));
     }
 
-    void LZ4TwistAioKernel::doLongMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
+    void LZ4TwistDecompressionKernel::doLongMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                  llvm::Value *matchLength) {
         // Constant and Type
         Constant* SIZE_0 = b->getSize(0);
@@ -291,7 +291,7 @@ namespace kernel {
     }
 
 
-    void LZ4TwistAioKernel::doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
+    void LZ4TwistDecompressionKernel::doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                              llvm::Value *matchLength) {
 
         BasicBlock* shortMatchCopyBlock = b->CreateBasicBlock("shortMatchCopyBlock");
@@ -317,16 +317,16 @@ namespace kernel {
         b->SetInsertPoint(matchCopyFinishBlock);
     }
 
-    void LZ4TwistAioKernel::setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced) {
+    void LZ4TwistDecompressionKernel::setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced) {
         b->setProducedItemCount("outputTwistStream", produced);
     }
 
 
-    void LZ4TwistAioKernel::initializationMethod(const std::unique_ptr<KernelBuilder> &b) {
+    void LZ4TwistDecompressionKernel::initializationMethod(const std::unique_ptr<KernelBuilder> &b) {
         b->setScalarField("temporaryInputPtr", b->CreateMalloc(b->getSize(mBlockSize / mItemsPerByte)));
     }
 
-    void LZ4TwistAioKernel::prepareProcessBlock(const std::unique_ptr<KernelBuilder> &b, llvm::Value* blockStart, llvm::Value* blockEnd) {
+    void LZ4TwistDecompressionKernel::prepareProcessBlock(const std::unique_ptr<KernelBuilder> &b, llvm::Value* blockStart, llvm::Value* blockEnd) {
         Constant* SIZE_0 = b->getSize(0);
         Constant* SIZE_ITEMS_PER_BYTE = b->getSize(mItemsPerByte);
         Type* INT8_PTR_TY = b->getInt8PtrTy();
@@ -353,11 +353,11 @@ namespace kernel {
         b->CreateMemCpy(b->CreateGEP(temporayInputPtr, copyBytes1), rawInputPtr, copyBytes2, 1);
     }
 
-    void LZ4TwistAioKernel::beforeTermination(const std::unique_ptr<KernelBuilder> &b) {
+    void LZ4TwistDecompressionKernel::beforeTermination(const std::unique_ptr<KernelBuilder> &b) {
         b->CreateFree(b->getScalarField("temporaryInputPtr"));
     }
 
-    llvm::Value *LZ4TwistAioKernel::getOutputMask(const std::unique_ptr<KernelBuilder> &b, llvm::Value *outputPos) {
+    llvm::Value *LZ4TwistDecompressionKernel::getOutputMask(const std::unique_ptr<KernelBuilder> &b, llvm::Value *outputPos) {
         Value* remByteItems = b->CreateURem(outputPos, b->getSize(mItemsPerByte));
         Value* INT_FW_1 = b->getIntN(COPY_FW, 1);
         Value* shiftAmount = b->CreateMul(remByteItems, b->getIntN(COPY_FW, mTwistWidth));

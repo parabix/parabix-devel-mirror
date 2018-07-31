@@ -48,7 +48,6 @@ static cl::opt<bool> countOnly("count-only", cl::desc("Only count the match resu
 static cl::opt<bool> enableMultiplexing("enable-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false), cl::cat(lz4GrepFlags));
 
 static cl::OptionCategory lz4GrepDebugFlags("LZ4 Grep Debug Flags", "lz4d debug options");
-static cl::opt<bool> aio("aio", cl::desc("Use All-in-One Approach for LZ4 Decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> parallelDecompression("parallel-decompression", cl::desc("Use parallel Approach for LZ4 Decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> swizzledDecompression("swizzled-decompression", cl::desc("Use swizzle approach for decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> bitStreamDecompression("bitstream-decompression", cl::desc("Use bit stream approach for decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
@@ -79,7 +78,7 @@ int main(int argc, char *argv[]) {
     char *fileBuffer = const_cast<char *>(mappedFile.data());
     re::RE * re_ast = re::RE_Parser::parse(regexString, re::MULTILINE_MODE_FLAG);
     LZ4GrepGenerator g(enableMultiplexing);
-    if (aio) {
+    if (countOnly) {
         if (parallelDecompression) {
             g.generateParallelAioPipeline(re_ast, enableGather, enableScatter, minParallelLevel);
         } else if (swizzledDecompression) {
@@ -100,16 +99,6 @@ int main(int argc, char *argv[]) {
             } else {
                 g.generateAioPipeline(re_ast);
             }
-        }
-
-        auto main = g.getCountOnlyGrepMainFunction();
-        uint64_t countResult = main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
-        llvm::outs() << countResult << "\n";
-    } else if (countOnly) {
-        if (swizzledDecompression) {
-            g.generateSwizzledCountOnlyGrepPipeline(re_ast);
-        } else {
-            g.generateCountOnlyGrepPipeline(re_ast, enableGather);
         }
 
         auto main = g.getCountOnlyGrepMainFunction();

@@ -37,14 +37,6 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::Required, cl::cat(lz4dFlags));
 static cl::opt<bool> overwriteOutput("f", cl::desc("Overwrite existing output file."), cl::init(false), cl::cat(lz4dFlags));
 
-
-static cl::OptionCategory lz4dDebugFlags("LZ4D Debug Flags", "lz4d debug options");
-static cl::opt<bool> newApproach("new-approach", cl::desc("Use new approach for index builder"), cl::init(false), cl::cat(lz4dDebugFlags));
-static cl::opt<bool> extractOnly("extract-only", cl::desc("Only extract literal data to output file"), cl::init(false), cl::cat(lz4dDebugFlags));
-static cl::opt<bool> extractAndDepositOnly("extract-and-deposit-only", cl::desc("Only extract and deposit literal data to output file"), cl::init(false), cl::cat(lz4dDebugFlags));
-static cl::opt<bool> swizzledDecompression("swizzled-decompression", cl::desc("Use swizzle approach for decompression"), cl::init(false), cl::cat(lz4dDebugFlags));
-
-
 int main(int argc, char *argv[]) {
     // This boilerplate provides convenient stack traces and clean LLVM exit
     // handling. It also initializes the built in support for convenient
@@ -52,7 +44,7 @@ int main(int argc, char *argv[]) {
     sys::PrintStackTraceOnErrorSignal(argv[0]);
     llvm::PrettyStackTraceProgram X(argc, argv);
     llvm_shutdown_obj shutdown;
-    codegen::ParseCommandLineOptions(argc, argv, {&lz4dFlags, &lz4dDebugFlags, codegen::codegen_flags()});
+    codegen::ParseCommandLineOptions(argc, argv, {&lz4dFlags, codegen::codegen_flags()});
     std::string fileName = inputFile;
     LZ4FrameDecoder lz4Frame(fileName);
     if (!lz4Frame.isValid()) {
@@ -70,33 +62,12 @@ int main(int argc, char *argv[]) {
     }
 
     boost::iostreams::mapped_file_source mappedFile;
-    // Since mmap offset has to be multiples of pages, we can't use it to skip headers.
-    mappedFile.open(fileName , lz4Frame.getBlocksLength() + lz4Frame.getBlocksStart());
-    //char *fileBuffer = const_cast<char *>(mappedFile.data()) + lz4Frame.getBlocksStart();
+    mappedFile.open(fileName, lz4Frame.getBlocksLength() + lz4Frame.getBlocksStart());
     char *fileBuffer = const_cast<char *>(mappedFile.data());
-    LZ4Generator g;
-    if (extractOnly) {
-        if (newApproach) {
-            g.generateNewExtractOnlyPipeline(outputFile);
-        } else if (swizzledDecompression) {
-            g.generateSwizzledExtractOnlyPipeline(outputFile);
-        } else {
-            g.generateExtractOnlyPipeline(outputFile);
-        }
-    } else if (extractAndDepositOnly) {
-        if (swizzledDecompression) {
-            g.generateSwizzledExtractAndDepositOnlyPipeline(outputFile);
-        } else {
-            g.generateExtractAndDepositOnlyPipeline(outputFile);
-        }
-    } else {
-        if (swizzledDecompression) {
-            g.generateSwizzledPipeline(outputFile);
-        } else {
-            g.generatePipeline(outputFile);
-        }
 
-    }
+    LZ4Generator g;
+    g.generateDecompressionPipeline(outputFile);
+
     auto main = g.getMainFunc();
     main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
     mappedFile.close();

@@ -1,6 +1,3 @@
-//
-// Created by wxy325 on 2018/6/22.
-//
 
 #ifndef ICGREP_LZ4_AIO_BASE_H
 #define ICGREP_LZ4_AIO_BASE_H
@@ -21,9 +18,9 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel{
 
-class LZ4SequentialAioBaseKernel : public SegmentOrientedKernel {
+class LZ4SequentialDecompressionKernel : public SegmentOrientedKernel {
 public:
-    LZ4SequentialAioBaseKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string&& kernelName, unsigned blockSize = 4 * 1024 * 1024);
+    LZ4SequentialDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string&& kernelName, unsigned blockSize = 4 * 1024 * 1024);
 protected:
     // ---- Constant
     const static unsigned int ACCELERATION_WIDTH = 64;

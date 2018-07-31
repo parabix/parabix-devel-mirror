@@ -1,5 +1,5 @@
 
-#include "lz4_bitstream_aio.h"
+#include "lz4_bitstream_decompression.h"
 
 #include <kernels/kernel_builder.h>
 #include <iostream>
@@ -13,10 +13,10 @@ using namespace std;
 
 namespace kernel{
 
-    LZ4BitStreamAioKernel::LZ4BitStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+    LZ4BitStreamDecompressionKernel::LZ4BitStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
                                                  std::vector<unsigned> numsOfBitStreams,
                                                  unsigned blockSize)
-    : LZ4SequentialAioBaseKernel(b, "LZ4BitStreamAioKernel", blockSize),
+    : LZ4SequentialDecompressionKernel(b, "LZ4BitStreamDecompressionKernel", blockSize),
       mNumsOfBitStreams(numsOfBitStreams)
     {
         mStreamSetInputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[0], 1), "inputBitStream0", RateEqualTo("byteStream")});
@@ -30,7 +30,7 @@ namespace kernel{
         this->initPendingOutputScalar(b);
     }
 
-    void LZ4BitStreamAioKernel::initPendingOutputScalar(const std::unique_ptr<kernel::KernelBuilder> &b) {
+    void LZ4BitStreamDecompressionKernel::initPendingOutputScalar(const std::unique_ptr<kernel::KernelBuilder> &b) {
         for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
             for (unsigned j = 0; j < mNumsOfBitStreams[i]; j++) {
                 this->addScalar(b->getInt64Ty(), "pendingOutput" + std::to_string(i) + "_" + std::to_string(j));
@@ -38,7 +38,7 @@ namespace kernel{
         }
     }
 
-    void LZ4BitStreamAioKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
+    void LZ4BitStreamDecompressionKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                               llvm::Value *literalLength, llvm::Value* blockStart) {
         // Constant
         ConstantInt* INT_64_0 = b->getInt64(0);
@@ -100,7 +100,7 @@ namespace kernel{
         b->SetInsertPoint(literalCopyExit);
     }
 
-    void LZ4BitStreamAioKernel::doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
+    void LZ4BitStreamDecompressionKernel::doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                             llvm::Value *matchLength) {
         // Constant
         ConstantInt* INT_64_0 = b->getInt64(0);
@@ -187,11 +187,11 @@ namespace kernel{
     }
 
     void
-    LZ4BitStreamAioKernel::setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value *produced) {
+    LZ4BitStreamDecompressionKernel::setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value *produced) {
         b->setProducedItemCount("outputStream0", produced);
     }
 
-    void LZ4BitStreamAioKernel::appendBitStreamOutput(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength) {
+    void LZ4BitStreamDecompressionKernel::appendBitStreamOutput(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength) {
         BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
 
         Value* oldOutputPos = b->getScalarField("outputPos");
@@ -265,7 +265,7 @@ namespace kernel{
         b->setScalarField("outputPos", b->CreateAdd(oldOutputPos, valueLength));
     }
 
-    void LZ4BitStreamAioKernel::storePendingOutput(const std::unique_ptr<KernelBuilder> &b) {
+    void LZ4BitStreamDecompressionKernel::storePendingOutput(const std::unique_ptr<KernelBuilder> &b) {
         BasicBlock* storePendingOutputBlock = b->CreateBasicBlock("storePendingOutputBlock");
         BasicBlock* storePendingOutputExitBlock = b->CreateBasicBlock("storePendingOutputExitBlock");
 
@@ -284,7 +284,7 @@ namespace kernel{
         b->SetInsertPoint(storePendingOutputExitBlock);
     }
 
-    void LZ4BitStreamAioKernel::storePendingOutput_BitStream(const std::unique_ptr<KernelBuilder> &b) {
+    void LZ4BitStreamDecompressionKernel::storePendingOutput_BitStream(const std::unique_ptr<KernelBuilder> &b) {
 
         Value* oldOutputPos = b->getScalarField("outputPos");
         Value* oldOutputPosRem = b->CreateURem(oldOutputPos, b->getCapacity("outputStream0"));

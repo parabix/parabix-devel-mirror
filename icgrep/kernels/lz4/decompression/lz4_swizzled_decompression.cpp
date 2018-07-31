@@ -1,5 +1,5 @@
 
-#include "lz4_swizzled_aio.h"
+#include "lz4_swizzled_decompression.h"
 
 
 
@@ -18,10 +18,10 @@ using namespace std;
 
 namespace kernel{
 
-    LZ4SwizzledAioKernel::LZ4SwizzledAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned streamCount,
+    LZ4SwizzledDecompressionKernel::LZ4SwizzledDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned streamCount,
                                                unsigned streamSize, unsigned swizzleFactor,
                                                unsigned blockSize):
-    LZ4SequentialAioBaseKernel(b, "LZ4SwizzledAioKernel", blockSize),
+    LZ4SequentialDecompressionKernel(b, "LZ4SwizzledDecompressionKernel", blockSize),
     mStreamCount(streamCount),
     mStreamSize(streamSize),
     mSwizzleFactor(swizzleFactor),
@@ -43,7 +43,7 @@ namespace kernel{
         this->addScalar(ArrayType::get(b->getSizeTy(), 48), "matchLengthArray");
     }
 
-    void LZ4SwizzledAioKernel::prepareAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos) {
+    void LZ4SwizzledDecompressionKernel::prepareAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos) {
         b->setScalarField("accelerationOutputIndex", b->getSize(0));
         /*
         std::vector<Value*> inputValuesVector = std::vector<Value*>();
@@ -55,7 +55,7 @@ namespace kernel{
         */
     }
 
-    void LZ4SwizzledAioKernel::doAccelerationLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
+    void LZ4SwizzledDecompressionKernel::doAccelerationLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                            llvm::Value *literalLength, llvm::Value* blockStart) {
 //        this->handleAccelerationLiteralCopy(b, literalStart, literalLength, inputValuesVector);
 
@@ -70,7 +70,7 @@ namespace kernel{
         b->setScalarField("accelerationOutputIndex", b->CreateAdd(outputIndex, b->getSize(1)));
     }
 
-    void LZ4SwizzledAioKernel::doAccelerationMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
+    void LZ4SwizzledDecompressionKernel::doAccelerationMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                          llvm::Value *matchLength) {
 //        this->handleMatchCopy(b, matchOffset, matchLength);
 
@@ -83,14 +83,14 @@ namespace kernel{
         b->setScalarField("accelerationOutputIndex", b->CreateAdd(outputIndex, b->getSize(1)));
     }
 
-    void LZ4SwizzledAioKernel::finishAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos, llvm::Value* literalMask) {
+    void LZ4SwizzledDecompressionKernel::finishAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos, llvm::Value* literalMask) {
         Value* inputStreamSize = b->getCapacity("sourceStreamSet0");
         Value* SIZE_64 = b->getSize(64);
         Value* literalBlockIndex = b->CreateUDiv(b->CreateURem(beginTokenPos, inputStreamSize), SIZE_64);
 
         Value* outputIndex = b->getScalarField("accelerationOutputIndex");
         Type* sizePtrTy = b->getSizeTy()->getPointerTo();
-        Value* literalStartArray = b->CreatePointerCast(b->getScalarFieldPtr("literalStartArray"), sizePtrTy);
+//        Value* literalStartArray = b->CreatePointerCast(b->getScalarFieldPtr("literalStartArray"), sizePtrTy);
         Value* literalLengthArray = b->CreatePointerCast(b->getScalarFieldPtr("literalLengthArray"), sizePtrTy);
         Value* matchOffsetArray = b->CreatePointerCast(b->getScalarFieldPtr("matchOffsetArray"), sizePtrTy);
         Value* matchLengthArray = b->CreatePointerCast(b->getScalarFieldPtr("matchLengthArray"), sizePtrTy);
@@ -113,7 +113,7 @@ namespace kernel{
         );
     }
 
-    void LZ4SwizzledAioKernel::handleAccelerationMatchCopyOutput(
+    void LZ4SwizzledDecompressionKernel::handleAccelerationMatchCopyOutput(
             const std::unique_ptr<KernelBuilder> &b,
             llvm::Value *literalLengthArray,
             llvm::Value *matchOffsetArray,
@@ -167,7 +167,7 @@ namespace kernel{
 
     }
 
-    void LZ4SwizzledAioKernel::handleAccelerationPdepOutput(
+    void LZ4SwizzledDecompressionKernel::handleAccelerationPdepOutput(
             const std::unique_ptr<KernelBuilder> &b,
             Value *literalBlockIndex,
             Value *literalMasks,
@@ -340,7 +340,7 @@ namespace kernel{
         }
     }
 
-    void LZ4SwizzledAioKernel::handleAccelerationLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
+    void LZ4SwizzledDecompressionKernel::handleAccelerationLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                                  llvm::Value *literalLength, const std::vector<llvm::Value*>& inputLiteralValues) {
         Value* SIZE_64  = b->getSize(64);
         Value* SIZE_0 = b->getSize(0);
@@ -426,7 +426,7 @@ namespace kernel{
         b->setScalarField("outputPos", b->CreateAdd(outputPos, literalLength));
     }
 
-    void LZ4SwizzledAioKernel::handleMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* outputPos, llvm::Value* matchOffset, llvm::Value* matchLength, bool clearBuffer) {
+    void LZ4SwizzledDecompressionKernel::handleMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* outputPos, llvm::Value* matchOffset, llvm::Value* matchLength, bool clearBuffer) {
         Value* SIZE_64  = b->getSize(64);
         Value* SIZE_0 = b->getSize(0);
         Value* SIZE_1 = b->getSize(1);
@@ -499,18 +499,18 @@ namespace kernel{
         b->SetInsertPoint(matchCopyExit);
     }
 
-    void LZ4SwizzledAioKernel::setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced) {
+    void LZ4SwizzledDecompressionKernel::setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced) {
         b->setProducedItemCount("outputStreamSet0", produced);
     }
 
-    void LZ4SwizzledAioKernel::doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
+    void LZ4SwizzledDecompressionKernel::doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                              llvm::Value *matchLength) {
         Value* outputPos = b->getScalarField("outputPos");
         this->handleMatchCopy(b, outputPos, matchOffset, matchLength);
         b->setScalarField("outputPos", b->CreateAdd(outputPos, matchLength));
     }
 
-    void LZ4SwizzledAioKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
+    void LZ4SwizzledDecompressionKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                              llvm::Value *literalLength, llvm::Value* blockStart) {
         Value* SIZE_64  = b->getSize(64);
         Value* SIZE_0 = b->getSize(0);

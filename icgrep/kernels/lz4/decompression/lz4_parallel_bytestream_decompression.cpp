@@ -1,5 +1,5 @@
 
-#include "lz4_parallel_bytestream_aio.h"
+#include "lz4_parallel_bytestream_decompression.h"
 
 #include <kernels/kernel_builder.h>
 #include <iostream>
@@ -18,8 +18,8 @@ using namespace std;
 
 namespace kernel{
 
-    LZ4ParallelByteStreamAioKernel::LZ4ParallelByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned lz4BlockSize, bool enableGather, bool enableScatter, int minParallelLevel)
-            :SegmentOrientedKernel("LZ4ParallelByteStreamAioKernel",
+    LZ4ParallelByteStreamDecompressionKernel::LZ4ParallelByteStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned lz4BlockSize, bool enableGather, bool enableScatter, int minParallelLevel)
+            :SegmentOrientedKernel("LZ4ParallelByteStreamDecompressionKernel",
             // Inputs
                                    {
                     Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)},
@@ -57,7 +57,7 @@ namespace kernel{
     }
 
     // Kernel Methods
-    void LZ4ParallelByteStreamAioKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) {
+    void LZ4ParallelByteStreamDecompressionKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) {
         this->initializeConstantsAndTypes(b);
 
         // Constant
@@ -125,7 +125,7 @@ namespace kernel{
 
 
 
-    Value* LZ4ParallelByteStreamAioKernel::generateSimdAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value *beginTokenPosVec,
+    Value* LZ4ParallelByteStreamDecompressionKernel::generateSimdAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value *beginTokenPosVec,
                                   llvm::Value *blockEndVec) {
 
         /*
@@ -182,7 +182,7 @@ namespace kernel{
 
     }
 
-    void LZ4ParallelByteStreamAioKernel::initializeConstantsAndTypes(const std::unique_ptr<KernelBuilder> &b) {
+    void LZ4ParallelByteStreamDecompressionKernel::initializeConstantsAndTypes(const std::unique_ptr<KernelBuilder> &b) {
         // Constants
         BIT_BLOCK_0 = ConstantVector::getNullValue(b->getBitBlockType());
         BIT_BLOCK_1 = b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0x1));
@@ -204,7 +204,7 @@ namespace kernel{
 
     }
 
-    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamAioKernel::parallelParseLiteralInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value *tokenPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
+    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamDecompressionKernel::parallelParseLiteralInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value *tokenPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
 
         Value* shouldExtendLiteralBitBlockVec = b->simd_eq(SIMD_WIDTH, b->simd_and(BIT_BLOCK_F0, tokenValuesVec), BIT_BLOCK_F0);
         Value* extendLiteralParallelLevel = b->CreatePopcount(b->hsimd_signmask(SIMD_WIDTH, shouldExtendLiteralBitBlockVec));
@@ -236,7 +236,7 @@ namespace kernel{
         return std::make_pair(phiLiteralStartVec, phiLiteralLengthVec);
     };
 
-    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamAioKernel::parseMultipleLiteralInfoByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value *tokenPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
+    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamDecompressionKernel::parseMultipleLiteralInfoByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value *tokenPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
         // ---- EntryBlock
         BasicBlock* entryBlock = b->GetInsertBlock();
         Value* initLiteralLengthVec = b->simd_srlv(SIMD_WIDTH, tokenValuesVec, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 4)));
@@ -282,7 +282,7 @@ namespace kernel{
         return std::make_pair(phiLiteralStartVec, b->simd_and(phiLiteralLengthVec, notFinishMask));
     };
 
-    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamAioKernel::simdParseLiteralInfo(const std::unique_ptr<KernelBuilder> &b, Value *tokenPosVec, Value* tokenValuesVec, Value* notFinishMask) {
+    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamDecompressionKernel::simdParseLiteralInfo(const std::unique_ptr<KernelBuilder> &b, Value *tokenPosVec, Value* tokenValuesVec, Value* notFinishMask) {
         // ---- EntryBlock
         BasicBlock* entryBlock = b->GetInsertBlock();
         Value* byteRawInputPtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
@@ -350,7 +350,7 @@ namespace kernel{
     }
 
     // TODO for now, this method only handle fast step (extension length <= 8)
-    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamAioKernel::simdParseLiteralInfo2(const std::unique_ptr<KernelBuilder> &b, llvm::Value *tokenPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
+    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamDecompressionKernel::simdParseLiteralInfo2(const std::unique_ptr<KernelBuilder> &b, llvm::Value *tokenPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
         // ---- entryBlock
         BasicBlock* entryBlock = b->GetInsertBlock();
         Value* baseLiteralLength = b->simd_srlv(SIMD_WIDTH, tokenValuesVec, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 4)));
@@ -405,7 +405,7 @@ namespace kernel{
         return std::make_pair(phiLiteralStartPos, phiLiteralLength);
     };
 
-    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamAioKernel::parseMultipleMatchInfoByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
+    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamDecompressionKernel::parseMultipleMatchInfoByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
         // ---- EntryBlock
         BasicBlock* entryBlock = b->GetInsertBlock();
         Value* initMatchLengthVec = b->simd_add(SIMD_WIDTH, b->simd_and(tokenValuesVec, BIT_BLOCK_0F), b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 4)));
@@ -449,7 +449,7 @@ namespace kernel{
         return std::make_pair(phiMatchEndPosVec, b->simd_and(phiMatchLengthVec, notFinishMask));
     }
 
-    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamAioKernel::parallelParseMatchInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
+    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamDecompressionKernel::parallelParseMatchInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
 
         Value* shouldExtendMatchBitBlockVec = b->simd_eq(SIMD_WIDTH, b->simd_and(BIT_BLOCK_0F, tokenValuesVec), BIT_BLOCK_0F);
         Value* extendMatchParallelLevel = b->CreatePopcount(b->hsimd_signmask(SIMD_WIDTH, shouldExtendMatchBitBlockVec));
@@ -482,7 +482,7 @@ namespace kernel{
 
     }
 
-    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamAioKernel::simdParseMatchInfo2(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
+    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamDecompressionKernel::simdParseMatchInfo2(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetPosVec, llvm::Value* tokenValuesVec, llvm::Value* notFinishMask) {
         // ---- entryBlock
         BasicBlock* entryBlock = b->GetInsertBlock();
 
@@ -567,7 +567,7 @@ namespace kernel{
 
     }
 
-    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamAioKernel::simdParseMatchInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetPosVec, llvm::Value* tokenValuesVec, llvm::Value* hasMatchPartMask) {
+    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamDecompressionKernel::simdParseMatchInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetPosVec, llvm::Value* tokenValuesVec, llvm::Value* hasMatchPartMask) {
         // ---- entryBlock
         BasicBlock* entryBlock = b->GetInsertBlock();
         Value* byteRawInputPtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
@@ -635,7 +635,7 @@ namespace kernel{
     };
 
 
-    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamAioKernel::simdProcessBlockBoundaryByLoop(const std::unique_ptr<KernelBuilder> &b,
+    std::pair<llvm::Value*, llvm::Value*> LZ4ParallelByteStreamDecompressionKernel::simdProcessBlockBoundaryByLoop(const std::unique_ptr<KernelBuilder> &b,
                                                                          llvm::Value *tokenPosVec, llvm::Value *lz4BlockEnd, llvm::Value* outputPosVec) {
         Value* retNextTokenPos = ConstantVector::getNullValue(b->getBitBlockType());
         Value* retNewOutputPos = ConstantVector::getNullValue(b->getBitBlockType());
@@ -653,11 +653,10 @@ namespace kernel{
         return std::make_pair(retNextTokenPos, retNewOutputPos);
     };
 
-    std::pair<Value *, Value *> LZ4ParallelByteStreamAioKernel::simdProcessBlockBoundary(
+    std::pair<Value *, Value *> LZ4ParallelByteStreamDecompressionKernel::simdProcessBlockBoundary(
             const std::unique_ptr<KernelBuilder> &b, Value *tokenPosVec, Value *lz4BlockEndVec, Value* initOutputPosVec
     ) {
         // ---- EntryBlock
-        BasicBlock* entryBlock = b->GetInsertBlock();
         BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
 
         Value* notFinishMask = b->simd_ult(SIMD_WIDTH, tokenPosVec, lz4BlockEndVec);
@@ -735,7 +734,7 @@ namespace kernel{
         return std::make_pair(nextTokenPos, phiNewOutputPos);
     }
 
-    void LZ4ParallelByteStreamAioKernel::generateSimdDecompression1(const std::unique_ptr<KernelBuilder> &b, Value* blockDataIndex) {
+    void LZ4ParallelByteStreamDecompressionKernel::generateSimdDecompression1(const std::unique_ptr<KernelBuilder> &b, Value* blockDataIndex) {
         BasicBlock* entryBlock = b->GetInsertBlock();
         BasicBlock* exitBlock = b->CreateBasicBlock("simdDecompressionExitBlock");
         BasicBlock* processCon = b->CreateBasicBlock("simdDecompressionProcessConBlock");
@@ -881,7 +880,7 @@ namespace kernel{
 
     }
 
-    void LZ4ParallelByteStreamAioKernel::generateSimdDecompression2(const std::unique_ptr<KernelBuilder> &b, llvm::Value* blockDataIndex) {
+    void LZ4ParallelByteStreamDecompressionKernel::generateSimdDecompression2(const std::unique_ptr<KernelBuilder> &b, llvm::Value* blockDataIndex) {
         BasicBlock* entryBlock = b->GetInsertBlock();
         BasicBlock* exitBlock = b->CreateBasicBlock("simdDecompressionExitBlock");
         BasicBlock* processCon = b->CreateBasicBlock("simdDecompressionProcessConBlock");
@@ -986,7 +985,7 @@ namespace kernel{
     }
 
 
-    void LZ4ParallelByteStreamAioKernel::generateSimdDecompression(const std::unique_ptr<KernelBuilder> &b, Value* blockDataIndex) {
+    void LZ4ParallelByteStreamDecompressionKernel::generateSimdDecompression(const std::unique_ptr<KernelBuilder> &b, Value* blockDataIndex) {
         BasicBlock* entryBlock = b->GetInsertBlock();
         BasicBlock* exitBlock = b->CreateBasicBlock("simdDecompressionExitBlock");
         BasicBlock* processCon = b->CreateBasicBlock("simdDecompressionProcessConBlock");
@@ -1022,10 +1021,6 @@ namespace kernel{
 
         Value* hasRemaining = b->simd_ult(SIMD_WIDTH, phiCursorVec, blockEndVec);
         Value* signMask = b->hsimd_signmask(SIMD_WIDTH, hasRemaining);
-        Value* maskPopcount = b->CreatePopcount(signMask);
-
-
-        hasRemaining = b->CreateICmpNE(b->CreateBitCast(hasRemaining, b->getIntNTy(b->getBitBlockWidth())), Constant::getNullValue(b->getIntNTy(b->getBitBlockWidth())));
 
         Value* notFinishMask = b->simd_ult(SIMD_WIDTH, phiCursorVec, blockEndVec);
         Value* byteRawInputPtr = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
@@ -1111,7 +1106,7 @@ namespace kernel{
 
 
 
-    void LZ4ParallelByteStreamAioKernel::generateSequentialDecompression(const std::unique_ptr<KernelBuilder> &b, llvm::Value* startBlockDataIndex, llvm::Value* endBlockDataIndex) {
+    void LZ4ParallelByteStreamDecompressionKernel::generateSequentialDecompression(const std::unique_ptr<KernelBuilder> &b, llvm::Value* startBlockDataIndex, llvm::Value* endBlockDataIndex) {
 
         // ---- EntryBlock
         BasicBlock* entryBlock = b->GetInsertBlock();
@@ -1155,7 +1150,7 @@ namespace kernel{
     }
 
     llvm::Value *
-    LZ4ParallelByteStreamAioKernel::generateLoadSimdInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputBufferName,
+    LZ4ParallelByteStreamDecompressionKernel::generateLoadSimdInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputBufferName,
                                      llvm::Value *globalOffset) {
         Value * capacity = iBuilder->getCapacity(inputBufferName);
         Value * processed = iBuilder->getProcessedItemCount(inputBufferName);
@@ -1166,7 +1161,7 @@ namespace kernel{
         return iBuilder->CreateLoad(valuePtr);
     }
 
-    llvm::Value *LZ4ParallelByteStreamAioKernel::generateLoadInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder,
+    llvm::Value *LZ4ParallelByteStreamDecompressionKernel::generateLoadInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder,
                                                                       std::string inputBufferName, llvm::Value *globalOffset) {
 
         Value * capacity = iBuilder->getCapacity(inputBufferName);
@@ -1178,7 +1173,7 @@ namespace kernel{
     }
 
     llvm::Value*
-    LZ4ParallelByteStreamAioKernel::generateProcessCompressedBlock(const std::unique_ptr<KernelBuilder> &b, llvm::Value *lz4BlockStart,
+    LZ4ParallelByteStreamDecompressionKernel::generateProcessCompressedBlock(const std::unique_ptr<KernelBuilder> &b, llvm::Value *lz4BlockStart,
                                                            llvm::Value *lz4BlockEnd, llvm::Value* initOutputPos) {
         BasicBlock* entryBlock = b->GetInsertBlock();
 
@@ -1216,7 +1211,7 @@ namespace kernel{
         return phiOutputPos;
     }
 
-    pair<Value*, Value*> LZ4ParallelByteStreamAioKernel::parseLiteralInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value *tokenPos, llvm::Value* tokenValue) {
+    pair<Value*, Value*> LZ4ParallelByteStreamDecompressionKernel::parseLiteralInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value *tokenPos, llvm::Value* tokenValue) {
         BasicBlock* entryBlock = b->GetInsertBlock();
 
         Value* bytePtrBase = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
@@ -1259,7 +1254,7 @@ namespace kernel{
         return std::make_pair(literalStartPos, literalLength);
     }
 
-    std::pair<llvm::Value *, llvm::Value *> LZ4ParallelByteStreamAioKernel::parseMatchInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetPos, llvm::Value* tokenValue) {
+    std::pair<llvm::Value *, llvm::Value *> LZ4ParallelByteStreamDecompressionKernel::parseMatchInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetPos, llvm::Value* tokenValue) {
         Value* bytePtrBase = b->CreatePointerCast(b->getRawInputPointer("byteStream", b->getSize(0)), b->getInt8PtrTy());
 
         Value* shouldExtendMatch = b->CreateICmpEQ(b->CreateAnd(tokenValue, BYTE_0F), BYTE_0F);
@@ -1305,7 +1300,7 @@ namespace kernel{
 
     };
 
-    pair<Value*, Value*> LZ4ParallelByteStreamAioKernel::processBlockBoundary(const std::unique_ptr<KernelBuilder> &b, llvm::Value *beginTokenPos,
+    pair<Value*, Value*> LZ4ParallelByteStreamDecompressionKernel::processBlockBoundary(const std::unique_ptr<KernelBuilder> &b, llvm::Value *beginTokenPos,
                                                               llvm::Value *lz4BlockEnd, llvm::Value* initOutputPos) {
         // ---- EntryBlock
         BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
@@ -1357,9 +1352,8 @@ namespace kernel{
         return std::make_pair(nextTokenPos, phiOutputPos);
     }
 
-    void LZ4ParallelByteStreamAioKernel::generateSimdMatchCopyByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
+    void LZ4ParallelByteStreamDecompressionKernel::generateSimdMatchCopyByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
         // ---- EntryBlock
-        BasicBlock* entryBlock = b->GetInsertBlock();
         BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
         BasicBlock* i64MatchCopyBlock = b->CreateBasicBlock("i64MatchCopyBlock");
         BasicBlock* i8MatchCopyBlock = b->CreateBasicBlock("i8MatchCopyBlock");
@@ -1447,7 +1441,7 @@ namespace kernel{
 
     }
 
-    void LZ4ParallelByteStreamAioKernel::generateSimdSequentialMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
+    void LZ4ParallelByteStreamDecompressionKernel::generateSimdSequentialMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
         // Constant
         Constant * SIZE_8 = b->getSize(8);
         // Type
@@ -1502,7 +1496,7 @@ namespace kernel{
 
     }
 
-    void LZ4ParallelByteStreamAioKernel::handleSimdMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
+    void LZ4ParallelByteStreamDecompressionKernel::handleSimdMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetVec, llvm::Value* matchLengthVec, llvm::Value* outputPosVec) {
         if (AVX512BW_available() && mEnableScatter) {
             this->generateSimdMatchCopyByScatter(b, matchOffsetVec, matchLengthVec, outputPosVec);
         } else {
@@ -1510,7 +1504,7 @@ namespace kernel{
         }
     }
 
-    void LZ4ParallelByteStreamAioKernel::handleSimdLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* literalStartVec, llvm::Value* literalLengthVec, llvm::Value* outputPosVec) {
+    void LZ4ParallelByteStreamDecompressionKernel::handleSimdLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value* literalStartVec, llvm::Value* literalLengthVec, llvm::Value* outputPosVec) {
 //        this->recordParallelLevel(b, b->hsimd_signmask(SIMD_WIDTH, b->simd_gt(SIMD_WIDTH, literalLengthVec, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 32)))));
         if (AVX512BW_available() && mEnableScatter) {
             this->generateSimdLiteralCopyByScatter(b, literalStartVec, literalLengthVec, outputPosVec);
@@ -1519,7 +1513,7 @@ namespace kernel{
         }
     }
 
-    void LZ4ParallelByteStreamAioKernel::generateSimdSequentialLiteralCopy(const std::unique_ptr<KernelBuilder> &b,
+    void LZ4ParallelByteStreamDecompressionKernel::generateSimdSequentialLiteralCopy(const std::unique_ptr<KernelBuilder> &b,
                                                                            llvm::Value *literalStartVec,
                                                                            llvm::Value *literalLengthVec,
                                                                            llvm::Value *outputPosVec) {
@@ -1571,7 +1565,7 @@ namespace kernel{
         }
     }
 
-    void LZ4ParallelByteStreamAioKernel::generateOverwritingMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *inputBasePtr,
+    void LZ4ParallelByteStreamDecompressionKernel::generateOverwritingMemcpy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *inputBasePtr,
                                    llvm::Value *outputBasePtr, llvm::Value *copyBytes, llvm::PointerType *targetPtrTy,
                                    llvm::Value* stepSize) {
 //        unsigned targetPtrBitWidth = targetPtrTy->getElementType()->getIntegerBitWidth();
@@ -1627,7 +1621,7 @@ namespace kernel{
         b->SetInsertPoint(exitBlock);
     }
 
-    void LZ4ParallelByteStreamAioKernel::generateOverwritingMemcpy(const std::unique_ptr<KernelBuilder> &b,
+    void LZ4ParallelByteStreamDecompressionKernel::generateOverwritingMemcpy(const std::unique_ptr<KernelBuilder> &b,
                                                                    llvm::Value *inputBasePtr,
                                                                    llvm::Value *outputBasePtr,
                                                                    llvm::Value *copyBytes, llvm::PointerType *targetPtrTy,
@@ -1691,12 +1685,11 @@ namespace kernel{
         b->SetInsertPoint(exitBlock);
     }
 
-    void LZ4ParallelByteStreamAioKernel::generateSimdLiteralCopyByScatter(const std::unique_ptr<KernelBuilder> &b,
+    void LZ4ParallelByteStreamDecompressionKernel::generateSimdLiteralCopyByScatter(const std::unique_ptr<KernelBuilder> &b,
                                                                           llvm::Value *literalStartVec,
                                                                           llvm::Value *literalLengthVec,
                                                                           llvm::Value *outputPosVec) {
         // ---- EntryBlock
-        BasicBlock* entryBlock = b->GetInsertBlock();
         BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
         BasicBlock* i64LiteralCopyBlock = b->CreateBasicBlock("i64LiteralCopyBlock");
         BasicBlock* i8LiteralCopyBlock = b->CreateBasicBlock("i8LiteralCopyBlock");
@@ -1788,7 +1781,7 @@ namespace kernel{
     }
 
 
-    void LZ4ParallelByteStreamAioKernel::handleLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
+    void LZ4ParallelByteStreamDecompressionKernel::handleLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                                    llvm::Value *literalLength, llvm::Value* outputPos) {
         unsigned fw = 64;
         Type* INT_FW_PTR = b->getIntNTy(fw)->getPointerTo();
@@ -1834,7 +1827,7 @@ namespace kernel{
         b->setScalarField("outputPos", b->CreateAdd(outputPos, literalLength));
     }
 
-    void LZ4ParallelByteStreamAioKernel::handleMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
+    void LZ4ParallelByteStreamDecompressionKernel::handleMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                                  llvm::Value *matchLength, llvm::Value* outputPos) {
         unsigned fw = 64;
         Type* INT_FW_PTR = b->getIntNTy(fw)->getPointerTo();
@@ -1881,7 +1874,7 @@ namespace kernel{
         b->setScalarField("outputPos", b->CreateAdd(outputPos, matchLength));
     }
 
-    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
+    llvm::Value* LZ4ParallelByteStreamDecompressionKernel::simdFetchData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
 //        return this->simdFetchDataByLoop(b, basePtr, offsetVec, mask);
         if (AVX2_available() && mEnableGather) {
             return this->simdFetchI32DataByGather(b, basePtr, offsetVec, mask);
@@ -1892,7 +1885,7 @@ namespace kernel{
 
 
 
-    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchByteData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
+    llvm::Value* LZ4ParallelByteStreamDecompressionKernel::simdFetchByteData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec, llvm::Value* mask) {
         if (AVX2_available() && mEnableGather) {
             return b->simd_and(this->simdFetchI32DataByGather(b, basePtr, offsetVec, mask), b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0xff)));
         } else {
@@ -1900,7 +1893,7 @@ namespace kernel{
         }
     }
 
-    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchI32DataByGather(const std::unique_ptr<KernelBuilder> &b,
+    llvm::Value* LZ4ParallelByteStreamDecompressionKernel::simdFetchI32DataByGather(const std::unique_ptr<KernelBuilder> &b,
                                                                           llvm::Value *basePtr, llvm::Value *offsetVec,
                                                                           llvm::Value *mask) {
 
@@ -1928,7 +1921,7 @@ namespace kernel{
         return tokenValuesVec;
     }
 
-    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchI64DataByGather(const std::unique_ptr<KernelBuilder> &b,
+    llvm::Value* LZ4ParallelByteStreamDecompressionKernel::simdFetchI64DataByGather(const std::unique_ptr<KernelBuilder> &b,
                                                                           llvm::Value *basePtr, llvm::Value *offsetVec,
                                                                           llvm::Value *mask) {
         Type* i32BitBlockTy = VectorType::get(b->getInt32Ty(), b->getBitBlockWidth() / SIMD_WIDTH);
@@ -1964,7 +1957,7 @@ namespace kernel{
         }
     }
 
-    llvm::Value* LZ4ParallelByteStreamAioKernel::simdFetchDataByLoop(const std::unique_ptr<KernelBuilder> &b,
+    llvm::Value* LZ4ParallelByteStreamDecompressionKernel::simdFetchDataByLoop(const std::unique_ptr<KernelBuilder> &b,
                                                                      llvm::Value *basePtr, llvm::Value *offsetVec,
                                                                      llvm::Value *maskVec, unsigned resultBitWidth) {
         Type* INT_TY = b->getIntNTy(resultBitWidth);
@@ -1986,7 +1979,7 @@ namespace kernel{
         return retVec;
     }
 
-    void LZ4ParallelByteStreamAioKernel::simdPutData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask) {
+    void LZ4ParallelByteStreamDecompressionKernel::simdPutData(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask) {
         if (AVX512BW_available()) {
             this->simdPutDataByScatter(b, basePtr, offsetVec, values, mask);
         } else {
@@ -1996,7 +1989,7 @@ namespace kernel{
 
     }
 
-    void LZ4ParallelByteStreamAioKernel::simdPutDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask) {
+    void LZ4ParallelByteStreamDecompressionKernel::simdPutDataByLoop(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask) {
 
         Value* shouldStoreVec = b->CreateICmpNE(mask, b->simd_fill(SIMD_WIDTH, b->getIntN(SIMD_WIDTH, 0)));
 
@@ -2026,7 +2019,7 @@ namespace kernel{
 
         }
     }
-    void LZ4ParallelByteStreamAioKernel::simdPutDataByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask) {
+    void LZ4ParallelByteStreamDecompressionKernel::simdPutDataByScatter(const std::unique_ptr<KernelBuilder> &b, llvm::Value* basePtr, llvm::Value* offsetVec,llvm::Value* values, llvm::Value* mask) {
         Function *scatterFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_avx512_scatter_dpq_512);
         //declare void @llvm.x86.avx512.scatter.dpq.512(i8*, i8, <8 x i32>, <8 x i64>, i32)
 
@@ -2043,19 +2036,19 @@ namespace kernel{
     }
 
 
-    void LZ4ParallelByteStreamAioKernel::initParallelLevelMeasurement(const std::unique_ptr<KernelBuilder> &b) {
+    void LZ4ParallelByteStreamDecompressionKernel::initParallelLevelMeasurement(const std::unique_ptr<KernelBuilder> &b) {
         for (unsigned i = 0; i <= b->getBitBlockWidth() / SIMD_WIDTH; i++) {
             addScalar(b->getSizeTy(), "ParallelLevel" + std::to_string(i));
         }
     }
-    void LZ4ParallelByteStreamAioKernel::recordParallelLevel(const std::unique_ptr<KernelBuilder> &b, llvm::Value* v) {
+    void LZ4ParallelByteStreamDecompressionKernel::recordParallelLevel(const std::unique_ptr<KernelBuilder> &b, llvm::Value* v) {
         for (unsigned i = 0; i <= b->getBitBlockWidth() / SIMD_WIDTH; i++) {
             auto name = "ParallelLevel" + std::to_string(i);
             Value* addValue = b->CreateZExt(b->CreateICmpEQ(v, b->getInt32(i)), b->getSizeTy());
             b->setScalarField(name, b->CreateAdd(b->getScalarField(name), addValue));
         }
     }
-    void LZ4ParallelByteStreamAioKernel::printParallelLevelResult(const std::unique_ptr<KernelBuilder> &b) {
+    void LZ4ParallelByteStreamDecompressionKernel::printParallelLevelResult(const std::unique_ptr<KernelBuilder> &b) {
         for (unsigned i = 0; i <= b->getBitBlockWidth() / SIMD_WIDTH; i++) {
             auto name = "ParallelLevel" + std::to_string(i);
             b->CallPrintInt(name, b->getScalarField(name));

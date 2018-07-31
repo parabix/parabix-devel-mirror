@@ -2,13 +2,13 @@
 #ifndef ICGREP_LZ4_AIO_H
 #define ICGREP_LZ4_AIO_H
 
-#include "kernels/lz4/aio/lz4_sequential_aio_base.h"
+#include "kernels/lz4/decompression/lz4_sequential_decompression_base.h"
 
 namespace kernel {
 
-    class LZ4ByteStreamAioKernel : public LZ4SequentialAioBaseKernel {
+    class LZ4ByteStreamDecompressionKernel : public LZ4SequentialDecompressionKernel {
     public:
-        LZ4ByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, bool copyOtherByteStream = false, unsigned blockSize = 4 * 1024 * 1024);
+        LZ4ByteStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, bool copyOtherByteStream = false, unsigned blockSize = 4 * 1024 * 1024);
 
 
     protected:

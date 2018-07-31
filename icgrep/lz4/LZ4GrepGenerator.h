@@ -19,14 +19,11 @@ class LZ4GrepGenerator : public LZ4Generator{
 public:
 
     LZ4GrepGenerator(bool enableMultiplexing = false);
-    void generateSwizzledCountOnlyGrepPipeline(re::RE *regex);
-    void generateCountOnlyGrepPipeline(re::RE *regex, bool enableGather = true);
 
     void generateScanMatchGrepPipeline(re::RE* regex);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> &REs,
                                                                                    parabix::StreamSetBuffer *decompressedBasisBits);
 
-    void generateMultiplexingCompressedBitStream(std::vector<re::RE *> &REs);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrepPipeline(std::vector<re::RE *> &REs, bool useAio = false, bool useSwizzled = true, bool useByteStream = false);
 
 
@@ -70,17 +67,14 @@ private:
     std::unique_ptr<cc::MultiplexedAlphabet> mpx;
 
     parabix::StreamSetBuffer * linefeedStreamFromDecompressedBits(parabix::StreamSetBuffer *decompressedBasisBits);
-    parabix::StreamSetBuffer * linefeedStreamFromCompressedBits();
 
 
-    parabix::StreamSetBuffer * convertCompressedBitsStreamWithSwizzledApproach(parabix::StreamSetBuffer* compressedBitStream, int numberOfStream, std::string prefix);
+
     parabix::StreamSetBuffer * convertCompressedBitsStreamWithSwizzledAioApproach(
             parabix::StreamSetBuffer *compressedBitStream, int numberOfStream, std::string prefix);
     parabix::StreamSetBuffer * convertCompressedBitsStreamWithByteStreamAioApproach(
             parabix::StreamSetBuffer *compressedBitStream, int numberOfStream, std::string prefix);
 
-
-    parabix::StreamSetBuffer * convertCompressedBitsStream(parabix::StreamSetBuffer* compressedBitStream, int numberOfStream, std::string prefix);
 };
 
 

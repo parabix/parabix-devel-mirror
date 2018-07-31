@@ -1,8 +1,5 @@
-//
-// Created by wxy325 on 2018/6/22.
-//
 
-#include "lz4_sequential_aio_base.h"
+#include "lz4_sequential_decompression_base.h"
 #include <kernels/kernel_builder.h>
 #include <iostream>
 #include <string>
@@ -15,7 +12,7 @@ using namespace kernel;
 using namespace std;
 
 namespace kernel{
-    LZ4SequentialAioBaseKernel::LZ4SequentialAioBaseKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string&& kernelName, unsigned blockSize)
+    LZ4SequentialDecompressionKernel::LZ4SequentialDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string&& kernelName, unsigned blockSize)
             :SegmentOrientedKernel(std::move(kernelName),
             // Inputs
                                    {
@@ -49,7 +46,7 @@ namespace kernel{
     }
 
     // ---- Kernel Methods
-    void LZ4SequentialAioBaseKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) {
+    void LZ4SequentialDecompressionKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) {
         Value* hasCallInitialization = b->getScalarField("hasCallInitialization");
 
         BasicBlock* initializationBlock = b->CreateBasicBlock("initializationBlock");
@@ -123,7 +120,7 @@ namespace kernel{
 
     // ---- LZ4 Format Parsing
     void
-    LZ4SequentialAioBaseKernel::processCompressedLz4Block(const std::unique_ptr<KernelBuilder> &b, llvm::Value *lz4BlockStart,
+    LZ4SequentialDecompressionKernel::processCompressedLz4Block(const std::unique_ptr<KernelBuilder> &b, llvm::Value *lz4BlockStart,
                                                 llvm::Value *lz4BlockEnd) {
         Value* isTerminal = b->CreateICmpEQ(lz4BlockEnd, b->getScalarField("fileSize"));
         b->setTerminationSignal(isTerminal);
@@ -163,7 +160,7 @@ namespace kernel{
     }
 
     std::pair<std::pair<llvm::Value *, llvm::Value *>, llvm::Value *>
-    LZ4SequentialAioBaseKernel::doAcceleration(
+    LZ4SequentialDecompressionKernel::doAcceleration(
             const std::unique_ptr<KernelBuilder> &b,
             llvm::Value *beginTokenPos,
             llvm::Value *blockStart,
@@ -279,7 +276,7 @@ namespace kernel{
         return std::make_pair(std::make_pair(phiTokenMarkers, phiLiteralMasks), phiMatchOffsetMarkers);
     }
 
-    llvm::Value *LZ4SequentialAioBaseKernel::processLz4Sequence(
+    llvm::Value *LZ4SequentialDecompressionKernel::processLz4Sequence(
             const std::unique_ptr<KernelBuilder> &b,
             llvm::Value *beginTokenPos,
             llvm::Value *lz4BlockStart,
@@ -371,7 +368,7 @@ namespace kernel{
         return nextTokenPos;
     }
 
-    std::pair<llvm::Value*, llvm::Value*> LZ4SequentialAioBaseKernel::parseMatchInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetBeginPos, llvm::Value* tokenValue) {
+    std::pair<llvm::Value*, llvm::Value*> LZ4SequentialDecompressionKernel::parseMatchInfo(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetBeginPos, llvm::Value* tokenValue) {
 
         ConstantInt* SIZE_0 = b->getSize(0);
         ConstantInt* SIZE_1 = b->getSize(1);
@@ -426,7 +423,7 @@ namespace kernel{
         return std::make_pair(phiExtendMatchEndPos, matchLength);
     };
 
-    std::pair<llvm::Value*, llvm::Value*> LZ4SequentialAioBaseKernel::parseMatchInfo2(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetBeginPos, llvm::Value* tokenValue) {
+    std::pair<llvm::Value*, llvm::Value*> LZ4SequentialDecompressionKernel::parseMatchInfo2(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetBeginPos, llvm::Value* tokenValue) {
 
         BasicBlock* entryBlock = b->GetInsertBlock();
 
@@ -482,7 +479,7 @@ namespace kernel{
     }
 
 
-    std::pair<llvm::Value *, llvm::Value *> LZ4SequentialAioBaseKernel::noExtensionLiteralLength(const std::unique_ptr<KernelBuilder> &b,
+    std::pair<llvm::Value *, llvm::Value *> LZ4SequentialDecompressionKernel::noExtensionLiteralLength(const std::unique_ptr<KernelBuilder> &b,
                                                                                              llvm::Value *currentTokenMarker,
                                                                                              llvm::Value *currentExtenderValue,
                                                                                              llvm::Value *tokenValue,
@@ -504,7 +501,7 @@ namespace kernel{
     };
 
     std::pair<llvm::Value *, llvm::Value *>
-    LZ4SequentialAioBaseKernel::scanThruLiteralLength(const std::unique_ptr<KernelBuilder> &b, llvm::Value *currentTokenMarker,
+    LZ4SequentialDecompressionKernel::scanThruLiteralLength(const std::unique_ptr<KernelBuilder> &b, llvm::Value *currentTokenMarker,
                                                   llvm::Value *currentExtenderValue, llvm::Value *tokenValue,
                                                   llvm::Value *blockPosBase, llvm::Value *currentTokenLocalPos) {
         Value* SIZE_1 = b->getSize(1);
@@ -545,7 +542,7 @@ namespace kernel{
         return std::make_pair(literalLength, retLiteralMarker);
     }
 
-    inline std::pair<llvm::Value *, llvm::Value *> LZ4SequentialAioBaseKernel::noExtensionMatchLength(const std::unique_ptr<KernelBuilder> &b,
+    inline std::pair<llvm::Value *, llvm::Value *> LZ4SequentialDecompressionKernel::noExtensionMatchLength(const std::unique_ptr<KernelBuilder> &b,
                                                                                                   llvm::Value *matchOffsetEndMarker,
                                                                                                   llvm::Value *currentExtenderValue,
                                                                                                   llvm::Value *tokenValue,
@@ -566,7 +563,7 @@ namespace kernel{
     };
 
     std::pair<llvm::Value *, llvm::Value *>
-    LZ4SequentialAioBaseKernel::scanThruMatchLength(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetEndMarker,
+    LZ4SequentialDecompressionKernel::scanThruMatchLength(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetEndMarker,
                                                 llvm::Value *currentExtenderValue, llvm::Value *tokenValue,
                                                 llvm::Value *blockPosBase) {
         Value* SIZE_1 = b->getSize(1);
@@ -610,7 +607,7 @@ namespace kernel{
     }
 
     // ---- Basic Function
-    llvm::Value *LZ4SequentialAioBaseKernel::generateLoadInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder,
+    llvm::Value *LZ4SequentialDecompressionKernel::generateLoadInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder,
                                                                       std::string inputBufferName, llvm::Value *globalOffset) {
         Value * capacity = iBuilder->getCapacity(inputBufferName);
         Value * processed = iBuilder->getProcessedItemCount(inputBufferName);
@@ -621,7 +618,7 @@ namespace kernel{
     }
 
     llvm::Value *
-    LZ4SequentialAioBaseKernel::scanThru(const std::unique_ptr<KernelBuilder> &b, llvm::Value *from, llvm::Value *thru) {
+    LZ4SequentialDecompressionKernel::scanThru(const std::unique_ptr<KernelBuilder> &b, llvm::Value *from, llvm::Value *thru) {
         return b->CreateAnd(
                 b->CreateAdd(from, thru),
                 b->CreateNot(thru)

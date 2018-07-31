@@ -2,7 +2,7 @@
 #ifndef ICGREP_LZ4_SWIZZLED_AIO_H
 #define ICGREP_LZ4_SWIZZLED_AIO_H
 
-#include "kernels/lz4/aio/lz4_sequential_aio_base.h"
+#include "kernels/lz4/decompression/lz4_sequential_decompression_base.h"
 #include "kernels/kernel.h"
 #include <string>
 #include <map>
@@ -19,10 +19,10 @@ namespace llvm {
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
-    class LZ4SwizzledAioKernel : public LZ4SequentialAioBaseKernel {
+    class LZ4SwizzledDecompressionKernel : public LZ4SequentialDecompressionKernel {
 
     public:
-        LZ4SwizzledAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned streamCount, unsigned streamSize, unsigned swizzleFactor, unsigned blockSize = 4 * 1024 * 1024);
+        LZ4SwizzledDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned streamCount, unsigned streamSize, unsigned swizzleFactor, unsigned blockSize = 4 * 1024 * 1024);
 
     protected:
         unsigned mStreamCount;
@@ -56,8 +56,8 @@ namespace kernel {
         virtual void doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                    llvm::Value *literalLength, llvm::Value* blockStart) override;
         virtual void doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
-                                 llvm::Value *matchLength);
-        virtual void setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced);
+                                 llvm::Value *matchLength) override;
+        virtual void setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced) override;
 
 
         virtual void prepareAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos) override;

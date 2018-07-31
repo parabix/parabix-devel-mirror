@@ -20,11 +20,11 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-    class LZ4ParallelByteStreamAioKernel : public SegmentOrientedKernel {
+    class LZ4ParallelByteStreamDecompressionKernel : public SegmentOrientedKernel {
 
     public:
         // By default, output block size in LZ4 is 4MB
-        LZ4ParallelByteStreamAioKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned lz4BlockSize, bool enableGather = true, bool enableScatter = true, int minParallelLevel = 1);
+        LZ4ParallelByteStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned lz4BlockSize, bool enableGather = true, bool enableScatter = true, int minParallelLevel = 1);
 
     protected:
         void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) override;
@@ -117,11 +117,10 @@ namespace kernel {
 
 
         // ---- Data Member
-        size_t mMininumParallelLevel;
+        unsigned mLz4BlockSize;
         bool mEnableGather;
         bool mEnableScatter;
-        unsigned mLz4BlockSize;
-
+        size_t mMininumParallelLevel;
 
         // ---- Parallel Level Measurement
         void initParallelLevelMeasurement(const std::unique_ptr<KernelBuilder> &b);
