@@ -2,7 +2,8 @@
 #ifndef ICGREP_LZ4GREPGENERATOR_H
 #define ICGREP_LZ4GREPGENERATOR_H
 
-#include "LZ4Generator.h"
+#include "lz4_base_generator.h"
+
 #include <grep_interface.h>
 #include <kernels/streamset.h>
 #include <cc/multiplex_CCs.h>
@@ -15,16 +16,23 @@
 typedef void (*ScanMatchGrepMainFunctionType)(char * byte_data, size_t headerSize, size_t filesize, bool hasBlockChecksum, intptr_t match_accumulator);
 typedef uint64_t (*CountOnlyGrepMainFunctionType)(char * byte_data, size_t headerSize, size_t filesize, bool hasBlockChecksum);
 
-class LZ4GrepGenerator : public LZ4Generator{
+
+class LZ4GrepGenerator : public LZ4BaseGenerator {
 public:
 
     LZ4GrepGenerator(bool enableMultiplexing = false);
 
     void generateScanMatchGrepPipeline(re::RE* regex);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> &REs,
-                                                                                   parabix::StreamSetBuffer *decompressedBasisBits);
+                                                                                   parabix::StreamSetBuffer *uncompressedBasisBits);
 
-    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrepPipeline(std::vector<re::RE *> &REs, bool useAio = false, bool useSwizzled = true, bool useByteStream = false);
+    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrepPipeline(
+            std::vector<re::RE *> &REs,
+            parabix::StreamSetBuffer *compressedByteStream,
+            parabix::StreamSetBuffer *compressedBitStream,
+            bool useSwizzled = true,
+            bool useByteStream = false
+    );
 
 
     void invokeScanMatchGrep(char* fileBuffer, size_t blockStart, size_t blockEnd, bool hasBlockChecksum);
@@ -66,14 +74,21 @@ private:
 
     std::unique_ptr<cc::MultiplexedAlphabet> mpx;
 
-    parabix::StreamSetBuffer * linefeedStreamFromDecompressedBits(parabix::StreamSetBuffer *decompressedBasisBits);
+    parabix::StreamSetBuffer * linefeedStreamFromUncompressedBits(parabix::StreamSetBuffer *uncompressedBasisBits);
 
 
 
     parabix::StreamSetBuffer * convertCompressedBitsStreamWithSwizzledAioApproach(
-            parabix::StreamSetBuffer *compressedBitStream, int numberOfStream, std::string prefix);
-    parabix::StreamSetBuffer * convertCompressedBitsStreamWithByteStreamAioApproach(
-            parabix::StreamSetBuffer *compressedBitStream, int numberOfStream, std::string prefix);
+            parabix::StreamSetBuffer *compressedByteStream,
+            parabix::StreamSetBuffer *compressedBitStream,
+            std::string prefix
+    );
+
+    parabix::StreamSetBuffer *convertCompressedBitsStreamWithByteStreamAioApproach(
+            parabix::StreamSetBuffer *compressedByteStream,
+            parabix::StreamSetBuffer *compressedBitStream,
+            std::string prefix
+    );
 
 };
 

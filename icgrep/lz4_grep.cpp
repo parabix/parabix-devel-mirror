@@ -14,7 +14,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 
-#include <lz4FrameDecoder.h>
+#include <lz4/lz4_frame_decoder.h>
 #include <cc/cc_compiler.h>
 #include <toolchain/toolchain.h>
 #include <kernels/cc_kernel.h>
@@ -24,7 +24,7 @@
 #include <toolchain/cpudriver.h>
 
 #include <iostream>
-#include <lz4/LZ4GrepGenerator.h>
+#include <lz4/lz4_grep_generator.h>
 
 
 #include <re/re_alt.h>

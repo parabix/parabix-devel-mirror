@@ -39,7 +39,7 @@ protected:
 
     // BufferSize related Helper Function
     virtual int getInputBufferBlocks(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    virtual int getDecompressedBufferBlocks(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual int getUncompressedBufferBlocks(const std::unique_ptr<kernel::KernelBuilder> &iBuilder);
     int get4MbBufferBlocks();
 
     //// Data Member

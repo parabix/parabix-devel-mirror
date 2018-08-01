@@ -7,7 +7,7 @@
 #include <iostream>
 #include <fstream>
 
-#include <lz4FrameDecoder.h>
+#include <lz4/lz4_frame_decoder.h>
 
 namespace {
 

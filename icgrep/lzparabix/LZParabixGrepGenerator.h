@@ -38,7 +38,7 @@ protected:
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(std::vector<re::RE *> &REs, bool swizzledDecompression);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrepPipeline(std::vector<re::RE *> &REs);
 
-    parabix::StreamSetBuffer * linefeedStreamFromDecompressedBits(parabix::StreamSetBuffer *decompressedBasisBits);
+    parabix::StreamSetBuffer * linefeedStreamFromUncompressedBits(parabix::StreamSetBuffer *uncompressedBasisBits);
 
     void generateCountOnlyMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
 };

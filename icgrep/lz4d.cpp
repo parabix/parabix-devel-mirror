@@ -16,7 +16,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/device/mapped_file.hpp>
 
-#include <lz4FrameDecoder.h>
+#include <lz4/lz4_frame_decoder.h>
 #include <cc/alphabet.h>
 #include <cc/cc_compiler.h>
 #include <kernels/cc_kernel.h>
