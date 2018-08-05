@@ -247,6 +247,8 @@ public:
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet GetReflexiveSet() override;
+    const PropertyObject & GetBaseObject() {return mBaseObject;}
+    const UnicodeSet & GetOverriddenSet() {return mOverriddenSet;}
     const std::string GetStringValue(UCD::codepoint_t cp) override;
 
 private:

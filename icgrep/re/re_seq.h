@@ -7,7 +7,10 @@
 #ifndef RE_SEQ_H
 #define RE_SEQ_H
 
-#include "re_re.h"
+#include <string>
+#include <re/re_cc.h>
+#include <re/re_re.h>
+#include <UCD/unicode_set.h>
 #include <llvm/Support/Casting.h>
 
 namespace re {
@@ -64,6 +67,15 @@ inline RE * makeSeq(RE::InitializerList list) {
 inline bool isEmptySeq(RE * s) {
     return llvm::isa<Seq>(s) && llvm::cast<Seq>(s)->empty();
 }
+    
+inline RE * u32string2re(std::u32string s) {
+    std::vector<RE *> ccs;
+    for (auto c : s) {
+        ccs.push_back(makeCC(UCD::UnicodeSet(c)));
+    }
+    return makeSeq(ccs.begin(), ccs.end());
+}
+    
 }
 
 #endif // RE_SEQ_H
