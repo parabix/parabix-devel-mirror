@@ -11,6 +11,6 @@
 
 namespace re {
 
-RE * toUTF8(RE * ast);
+RE * toUTF8(RE * ast, bool convertName = false);
 }
 #endif // TO_UTF8_H

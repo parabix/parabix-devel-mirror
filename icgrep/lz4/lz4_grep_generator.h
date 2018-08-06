@@ -84,7 +84,7 @@ private:
             std::string prefix
     );
 
-    parabix::StreamSetBuffer *convertCompressedBitsStreamWithByteStreamAioApproach(
+    parabix::StreamSetBuffer *convertCompressedBitsStreamWithTwistApproach(
             parabix::StreamSetBuffer *compressedByteStream,
             parabix::StreamSetBuffer *compressedBitStream,
             std::string prefix

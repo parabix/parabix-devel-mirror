@@ -34,5 +34,20 @@ protected:
 
 };
 
+
+class ByteClassesKernel: public CharClassesSignature, public pablo::PabloKernel {
+public:
+    ByteClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, bool useDirectCC = false, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
+    bool hasSignature() const override { return true; }
+    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    bool isCachable() const override { return true; }
+protected:
+    void generatePabloMethod() override;
+protected:
+    std::vector<re::CC *> mCCs;
+    cc::BitNumbering mBasisSetNumbering;
+};
+
+
 }
 #endif

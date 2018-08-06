@@ -117,3 +117,59 @@ void CharClassesKernel::generatePabloMethod() {
 }
 
 
+ByteClassesKernel::ByteClassesKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder,
+                                     std::vector<re::CC *> &&ccs, bool useDirectCC, BitNumbering basisNumbering):
+        CharClassesSignature(ccs, useDirectCC, basisNumbering)
+        , PabloKernel(iBuilder,
+                      "ByteClassesKernel_" + sha1sum(mSignature),
+                      {},
+                      {Binding{iBuilder->getStreamSetTy(ccs.size(), 1), "charclasses"}})
+        , mCCs(std::move(ccs)), mBasisSetNumbering(basisNumbering)
+{
+    if (useDirectCC) {
+        mStreamSetInputs.push_back({Binding{iBuilder->getStreamSetTy(1, 8), "byteData"}});
+    }
+    else {
+        mStreamSetInputs.push_back({Binding{iBuilder->getStreamSetTy(8), "basis"}});
+    }
+}
+
+std::string ByteClassesKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {
+    return mSignature;
+}
+
+void ByteClassesKernel::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    std::unique_ptr<CC_Compiler> ccc;
+    if (mUseDirectCC) {
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
+    }
+    unsigned n = mCCs.size();
+
+    NameMap nameMap;
+    std::vector<Name *> names;
+    for (unsigned i = 0; i < n; i++) {
+        Name * name = re::makeName("mpx_basis" + std::to_string(i), mCCs[i]);
+
+        nameMap.emplace(name, ccc->compileCC(mCCs[i]));
+        names.push_back(name);
+
+    }
+
+    if (mBasisSetNumbering == cc::BitNumbering::BigEndian) {
+        // The first UnicodeSet in the vector ccs represents the last bit of the
+        // character class basis bit streams.
+        std::reverse(names.begin(), names.end());
+    }
+    for (unsigned i = 0; i < names.size(); i++) {
+        auto t = nameMap.find(names[i]);
+        if (t != nameMap.end()) {
+            PabloAST * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
+            pb.createAssign(r, pb.createInFile(t->second));
+        } else {
+            llvm::report_fatal_error("Can't compile character classes.");
+        }
+    }
+}

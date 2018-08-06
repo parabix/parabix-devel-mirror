@@ -42,6 +42,8 @@ private:
     const std::vector<re::CC *> mUnicodeSets;
     std::vector<std::vector<unsigned>> mExclusiveSetIDs;
     std::vector<re::CC *> mMultiplexedCCs;
+
+    unsigned long findTargetCCIndex(const re::CC * sourceCC) const;
 };
 }
 

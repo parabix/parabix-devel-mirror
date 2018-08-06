@@ -9,6 +9,7 @@
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
+
     class TwistByPDEPKernel final : public BlockOrientedKernel {
     public:
         TwistByPDEPKernel(const std::unique_ptr <kernel::KernelBuilder> &b, unsigned numberOfInputStream, unsigned twistWidth);
@@ -19,6 +20,20 @@ namespace kernel {
 
         void generateDoBlockMethod(const std::unique_ptr <kernel::KernelBuilder> &b) override;
     };
+
+
+    class TwistMultipleByPDEPKernel final : public BlockOrientedKernel {
+    public:
+        TwistMultipleByPDEPKernel(const std::unique_ptr <kernel::KernelBuilder> &b, unsigned numberOfInputStreamSet, unsigned twistWidth);
+
+    private:
+        const unsigned mNumberOfInputStreamSet;
+        const unsigned mTwistWidth;
+
+        void generateDoBlockMethod(const std::unique_ptr <kernel::KernelBuilder> &b) override;
+    };
+
+
 }
 
 
