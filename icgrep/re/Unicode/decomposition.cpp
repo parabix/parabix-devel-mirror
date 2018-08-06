@@ -28,27 +28,55 @@ using namespace UCD;
 using namespace llvm;
 using namespace re;
 
+// Constants for computation of Hangul decompositions, see Unicode Standard, section 3.12.
+const codepoint_t Hangul_SBase = 0xAC00;
+const codepoint_t Hangul_LBase = 0x1100;
+const codepoint_t Hangul_VBase = 0x1161;
+const codepoint_t Hangul_TBase = 0x11A7;
+const unsigned Hangul_TCount = 28;
+const unsigned Hangul_NCount = 588;
+const unsigned Hangul_SCount = 11172;
+static UnicodeSet HangulPrecomposed = UnicodeSet(Hangul_SBase, Hangul_SBase + Hangul_SCount - 1);
+
+static RE * HangulDecomposition(codepoint_t cp) {
+    auto SIndex = cp - Hangul_SBase;
+    auto LIndex = SIndex / Hangul_NCount;
+    auto VIndex = (SIndex % Hangul_NCount) / Hangul_TCount;
+    auto TIndex = SIndex % Hangul_TCount;
+    auto L = makeCC(Hangul_LBase + LIndex);
+    auto V = makeCC(Hangul_VBase + VIndex);
+    if (TIndex > 0) {
+        return makeSeq({L, V, makeCC(Hangul_TBase + TIndex)});
+    } else {
+        return makeSeq({L, V});
+    }
+}
+
 RE * NFD_CC(CC * cc) {
     std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
     const auto & decompMappingObj = cast<StringPropertyObject>(property_object_table[dm]);
     const auto & decompTypeObj = cast<EnumeratedPropertyObject>(property_object_table[dt]);
     UnicodeSet canonicalMapped = decompTypeObj->GetCodepointSet(DT_ns::Can);
-    UnicodeSet mappingRequired = *cc & canonicalMapped;
+    UnicodeSet mappingRequired = *cc & (canonicalMapped + HangulPrecomposed);
     if (mappingRequired.empty()) return cc;
     std::vector<RE *> alts;
     CC * finalCC = makeCC(*cc - mappingRequired);
     for (const interval_t & i : mappingRequired) {
         for (codepoint_t cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++) {
-            std::u32string dms = conv.from_bytes(decompMappingObj->GetStringValue(cp));
-            RE * dm = u32string2re(dms);
-            if (Seq * s = dyn_cast<Seq>(dm)) {
-                if (s->size() == 1) {
-                    finalCC = makeCC(finalCC, cast<CC>(s->front()));
-                } else {
-                    alts.push_back(s);
-                }
+            if (HangulPrecomposed.contains(cp)) {
+                alts.push_back(HangulDecomposition(cp));
             } else {
-                alts.push_back(dm);
+                std::u32string dms = conv.from_bytes(decompMappingObj->GetStringValue(cp));
+                RE * dm = u32string2re(dms);
+                if (Seq * s = dyn_cast<Seq>(dm)) {
+                    if (s->size() == 1) {
+                        finalCC = makeCC(finalCC, cast<CC>(s->front()));
+                    } else {
+                        alts.push_back(s);
+                    }
+                } else {
+                    alts.push_back(dm);
+                }
             }
         }
     }
@@ -56,26 +84,31 @@ RE * NFD_CC(CC * cc) {
     return makeAlt(alts.begin(), alts.end());
 }
 
+
 RE * NFKD_CC(CC * cc) {
     std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
     const auto & decompMappingObj = cast<StringPropertyObject>(property_object_table[dm]);
-    UnicodeSet reflexiveSet = decompMappingObj->GetReflexiveSet();
+    UnicodeSet reflexiveSet = decompMappingObj->GetReflexiveSet() - HangulPrecomposed;
     UnicodeSet mappingRequired = *cc - reflexiveSet;
     if (mappingRequired.empty()) return cc;
     std::vector<RE *> alts;
     CC * finalCC = makeCC(*cc - mappingRequired);
     for (const interval_t & i : mappingRequired) {
         for (codepoint_t cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++) {
-            std::u32string dms = conv.from_bytes(decompMappingObj->GetStringValue(cp));
-            RE * dm = u32string2re(dms);
-            if (Seq * s = dyn_cast<Seq>(dm)) {
-                if (s->size() == 1) {
-                    finalCC = makeCC(finalCC, cast<CC>(s->front()));
-                } else {
-                    alts.push_back(s);
-                }
+            if (HangulPrecomposed.contains(cp)) {
+                alts.push_back(HangulDecomposition(cp));
             } else {
-                alts.push_back(dm);
+                std::u32string dms = conv.from_bytes(decompMappingObj->GetStringValue(cp));
+                RE * dm = u32string2re(dms);
+                if (Seq * s = dyn_cast<Seq>(dm)) {
+                    if (s->size() == 1) {
+                        finalCC = makeCC(finalCC, cast<CC>(s->front()));
+                    } else {
+                        alts.push_back(s);
+                    }
+                } else {
+                    alts.push_back(dm);
+                }
             }
         }
     }
