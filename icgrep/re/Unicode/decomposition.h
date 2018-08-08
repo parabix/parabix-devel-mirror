@@ -15,8 +15,8 @@ namespace re { class RE; class CC;}
     single codepoint (singleton decomposition) or a codepoint
     string (expanding decomposition).   In general, the result is
     a set of alternatives consisting of sequences for each expanding
-    decomposition as well as a single character class for all the
-    singledton decompositions as well as the codepoints that map to
+    decomposition plus a single character class for all the
+    singleton decompositions as well as the codepoints that map to
     themselves.
 */
 
@@ -34,5 +34,10 @@ re::RE * NFD_RE(re::RE * r);
 re::RE * NFKD_RE(re::RE * r);
 
 re::RE * Casefold_RE(re::RE * r);
+
+/* For every decomposed sequence in RE, add alternatives for all
+   canonically equivalent reorderings according to Unicode rules. */
+re::RE * allOrderings_RE(re::RE * re);
+
 
 #endif
