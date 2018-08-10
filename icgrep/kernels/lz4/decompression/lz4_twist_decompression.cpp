@@ -27,9 +27,11 @@ namespace kernel {
               mItemsPerByte(BYTE_WIDTH / twistWidth)
     {
         mStreamSetInputs.push_back(Binding{b->getStreamSetTy(1, twistWidth), "inputTwistStream", RateEqualTo("byteStream")});
+//        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(1, twistWidth), "refTwistStream"});
         mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(1, twistWidth), "outputTwistStream", BoundedRate(0, 1)});
 
         this->addScalar(b->getInt8PtrTy(), "temporaryInputPtr");
+        this->addScalar(b->getInt8PtrTy(), "temporaryOutputPtr");
     }
 
 
@@ -40,7 +42,6 @@ namespace kernel {
         Constant* SIZE_0 = b->getSize(0);
         Constant* SIZE_ITEMS_PER_BYTE = b->getSize(mItemsPerByte);
         Constant* INT_FW_TWIST_WIDTH = b->getIntN(COPY_FW, mTwistWidth);
-        Type* INT8_PTR_TY = b->getInt8PtrTy();
         Type* INT_FW_TY = b->getIntNTy(COPY_FW);
         Type* INT_FW_PTR_TY = INT_FW_TY->getPointerTo();
 
@@ -54,11 +55,11 @@ namespace kernel {
 
         Value* initInputPtr = b->CreateGEP(temporayInputPtr, initInputOffset);
 
-        Value* outputByteBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputTwistStream", SIZE_0), INT8_PTR_TY);
-        Value* outputPos = b->getScalarField("outputPos");
-        Value* outputCapacity = b->getCapacity("outputTwistStream");
 
-        Value* outputPosRem = b->CreateURem(outputPos, outputCapacity);
+        Value* outputByteBasePtr = b->getScalarField("temporaryOutputPtr");
+        Value* outputPos = b->getScalarField("outputPos");
+
+        Value* outputPosRem = b->CreateSub(outputPos, b->getProducedItemCount("outputTwistStream"));
         Value* outputPosByteRem = b->CreateUDiv(outputPosRem, SIZE_ITEMS_PER_BYTE);
 
         Value* initOutputPtr = b->CreateGEP(outputByteBasePtr, outputPosByteRem);
@@ -68,7 +69,6 @@ namespace kernel {
         Value* literalStartRemByteItem = b->CreateURem(literalStart, SIZE_ITEMS_PER_BYTE);
         Value* outputPosRemByteItem = b->CreateURem(outputPos, SIZE_ITEMS_PER_BYTE);
         Value* outputMask = this->getOutputMask(b, outputPos);
-
 
         // ---- EntryBlock
         BasicBlock* entryBlock = b->GetInsertBlock();
@@ -94,6 +94,7 @@ namespace kernel {
         BasicBlock* literalCopyBody = b->CreateBasicBlock("literalCopyBody");
         BasicBlock* literalCopyExit = b->CreateBasicBlock("literalCopyExit");
 
+
         b->CreateCondBr(b->CreateICmpULT(phiCopiedLength, literalLength), literalCopyBody, literalCopyExit);
 
         // ---- literalCopyBody
@@ -102,7 +103,10 @@ namespace kernel {
         Value* inputFwPtr = b->CreatePointerCast(phiInputPtr, INT_FW_PTR_TY);
         Value* outputFwPtr = b->CreatePointerCast(phiOutputPtr, INT_FW_PTR_TY);
 
+
         Value* inputTargetValue = b->CreateLoad(inputFwPtr);
+
+
         inputTargetValue = b->CreateLShr(inputTargetValue, b->CreateMul(literalStartRemByteItem, INT_FW_TWIST_WIDTH));
         inputTargetValue = b->CreateShl(inputTargetValue, b->CreateMul(outputPosRemByteItem, INT_FW_TWIST_WIDTH));
 
@@ -110,9 +114,10 @@ namespace kernel {
         Value* newCopyLength = this->getNormalCopyLengthValue(b);
 
         Value* outputValue = b->CreateAnd(phiOutputLastByte, outputMask);
-        outputValue = b->CreateOr(outputValue, inputTargetValue);
-        b->CreateStore(outputValue, outputFwPtr);
 
+        outputValue = b->CreateOr(outputValue, inputTargetValue);
+
+        b->CreateStore(outputValue, outputFwPtr);
 
         phiOutputLastByte->addIncoming(b->CreateLShr(outputValue, b->getSize(this->getNormalCopyLength() * mTwistWidth)), b->GetInsertBlock());
         phiCopiedLength->addIncoming(b->CreateAdd(phiCopiedLength, newCopyLength), b->GetInsertBlock());
@@ -123,6 +128,8 @@ namespace kernel {
 
         // ---- literalCopyExit
         b->SetInsertPoint(literalCopyExit);
+
+
         b->setScalarField("outputPos", b->CreateAdd(outputPos, literalLength));
     }
 
@@ -140,12 +147,14 @@ namespace kernel {
 
 
 
-        Value* outputCapacity = b->getCapacity("outputTwistStream");
+//        Value* outputCapacity = b->getCapacity("outputTwistStream");
 
-        Value* outputByteBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputTwistStream", SIZE_0), INT8_PTR_TY);
+//        Value* outputByteBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputTwistStream", SIZE_0), INT8_PTR_TY);
+        Value* outputByteBasePtr = b->getScalarField("temporaryOutputPtr");
 
         Value* outputPos = b->getScalarField("outputPos");
-        Value* outputPosRem = b->CreateURem(outputPos, outputCapacity);
+//        Value* outputPosRem = b->CreateURem(outputPos, outputCapacity);
+        Value* outputPosRem = b->CreateSub(outputPos, b->getProducedItemCount("outputTwistStream"));
 
         // ---- EntryBlock
         BasicBlock* entryBlock = b->GetInsertBlock();
@@ -213,19 +222,23 @@ namespace kernel {
         Type* INT_FW_PTR_TY = INT_FW_TY->getPointerTo();
 
 
-
-        Value* outputByteBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputTwistStream", b->getSize(0)), INT8_PTR_TY);
-        Value* outputCapacity = b->getCapacity("outputTwistStream");
+//        Value* outputByteBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputTwistStream", b->getSize(0)), INT8_PTR_TY);
+//        Value* outputCapacity = b->getCapacity("outputTwistStream");
+        Value* outputByteBasePtr = b->getScalarField("temporaryOutputPtr");
         Value* outputPos = b->getScalarField("outputPos");
-        Value* outputPosRem = b->CreateURem(outputPos, outputCapacity);
+
+
+//        Value* outputPosRem = b->CreateURem(outputPos, outputCapacity);
+        Value* outputPosRem = b->CreateSub(outputPos, b->getProducedItemCount("outputTwistStream"));
 
         Value* outputPosRemByteItem = b->CreateURem(outputPosRem, SIZE_ITEMS_PER_BYTE);
         Value* outputMask = this->getOutputMask(b, outputPosRem);
 
 
         Value* outputBytePos = b->CreateUDiv(outputPosRem, SIZE_ITEMS_PER_BYTE);
-        Value* initCopyToPtr = b->CreateGEP(outputByteBasePtr, outputBytePos);
 
+
+        Value* initCopyToPtr = b->CreateGEP(outputByteBasePtr, outputBytePos);
         Value* initOutputLastByte = b->CreateZExt(b->CreateLoad(initCopyToPtr), INT_FW_TY);
 
         Value* copyFromPosRem = b->CreateSub(outputPosRem, matchOffset);
@@ -318,12 +331,30 @@ namespace kernel {
     }
 
     void LZ4TwistDecompressionKernel::setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced) {
+        Constant* SIZE_ITEMS_PER_BYTE = b->getSize(mItemsPerByte);
+        Constant* SIZE_0 = b->getSize(0);
+        Type* INT8_PTR_TY = b->getInt8PtrTy();
+
+        Value* oldProduced = b->getProducedItemCount("outputTwistStream");
+
+        Value* outputByteBasePtr = b->CreatePointerCast(b->getRawOutputPointer("outputTwistStream", SIZE_0), INT8_PTR_TY);
+        Value* outputCapacity = b->getCapacity("outputTwistStream");
+        Value* outputPosRem = b->CreateURem(oldProduced, outputCapacity);
+
+        Value* outputPosByteRem = b->CreateUDiv(outputPosRem, SIZE_ITEMS_PER_BYTE);
+        Value* actualOutputPtr = b->CreateGEP(outputByteBasePtr, outputPosByteRem);
+        b->CreateMemCpy(actualOutputPtr, b->getScalarField("temporaryOutputPtr"), b->getSize(mBlockSize / mItemsPerByte), 1);
+
+        Value* ptr = b->CreateGEP(b->CreatePointerCast(b->getScalarField("temporaryOutputPtr"), b->getBitBlockType()->getPointerTo()), b->getSize(0x16f));
+
         b->setProducedItemCount("outputTwistStream", produced);
     }
 
 
     void LZ4TwistDecompressionKernel::initializationMethod(const std::unique_ptr<KernelBuilder> &b) {
         b->setScalarField("temporaryInputPtr", b->CreateMalloc(b->getSize(mBlockSize / mItemsPerByte)));
+        b->setScalarField("temporaryOutputPtr", b->CreateMalloc(b->getSize(mBlockSize / mItemsPerByte + COPY_FW / BYTE_WIDTH)));
+
     }
 
     void LZ4TwistDecompressionKernel::prepareProcessBlock(const std::unique_ptr<KernelBuilder> &b, llvm::Value* blockStart, llvm::Value* blockEnd) {
@@ -355,6 +386,7 @@ namespace kernel {
 
     void LZ4TwistDecompressionKernel::beforeTermination(const std::unique_ptr<KernelBuilder> &b) {
         b->CreateFree(b->getScalarField("temporaryInputPtr"));
+        b->CreateFree(b->getScalarField("temporaryOutputPtr"));
     }
 
     llvm::Value *LZ4TwistDecompressionKernel::getOutputMask(const std::unique_ptr<KernelBuilder> &b, llvm::Value *outputPos) {

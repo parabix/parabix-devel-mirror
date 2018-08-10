@@ -24,7 +24,7 @@ struct LZ4BlockInfo {
 class LZ4BaseGenerator {
 public:
     LZ4BaseGenerator();
-
+    virtual ~LZ4BaseGenerator(){};
 protected:
     //// Member Function
     // Input
@@ -47,11 +47,6 @@ protected:
     parabix::StreamSetBuffer * bitStreamDecompression(
             parabix::StreamSetBuffer* compressedByteStream,
             parabix::StreamSetBuffer* compressedBasisBits
-    );
-
-    parabix::StreamSetBuffer *parallelByteStreamDecompression(
-            parabix::StreamSetBuffer *compressedByteStream,
-            bool enableGather, bool enableScatter, int minParallelLevel
     );
 
     std::vector<parabix::StreamSetBuffer*> convertCompressedBitsStreamWithBitStreamAioApproach(

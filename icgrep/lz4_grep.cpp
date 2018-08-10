@@ -24,7 +24,11 @@
 #include <toolchain/cpudriver.h>
 
 #include <iostream>
-#include <lz4/lz4_grep_generator.h>
+#include <lz4/grep/lz4_grep_base_generator.h>
+#include <lz4/grep/lz4_grep_bitstream_generator.h>
+#include <lz4/grep/lz4_grep_bytestream_generator.h>
+#include <lz4/grep/lz4_grep_swizzle_generator.h>
+
 
 
 #include <re/re_alt.h>
@@ -46,14 +50,11 @@ static cl::opt<std::string> regexString(cl::Positional, cl::desc("<regex>"), cl:
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(lz4GrepFlags));
 static cl::opt<bool> countOnly("count-only", cl::desc("Only count the match result"), cl::init(false), cl::cat(lz4GrepFlags));
 static cl::opt<bool> enableMultiplexing("enable-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false), cl::cat(lz4GrepFlags));
+static cl::opt<bool> utf8CC("utf8-CC", cl::desc("Use UTF-8 Character Class."), cl::init(false), cl::cat(lz4GrepFlags));
 
 static cl::OptionCategory lz4GrepDebugFlags("LZ4 Grep Debug Flags", "lz4d debug options");
-static cl::opt<bool> parallelDecompression("parallel-decompression", cl::desc("Use parallel Approach for LZ4 Decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> swizzledDecompression("swizzled-decompression", cl::desc("Use swizzle approach for decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
 static cl::opt<bool> bitStreamDecompression("bitstream-decompression", cl::desc("Use bit stream approach for decompression"), cl::init(false), cl::cat(lz4GrepDebugFlags));
-static cl::opt<bool> enableGather("enable-gather", cl::desc("Enable gather intrinsics"), cl::init(false), cl::cat(lz4GrepDebugFlags));
-static cl::opt<bool> enableScatter("enable-scatter", cl::desc("Enable scatter intrinsics"), cl::init(false), cl::cat(lz4GrepDebugFlags));
-static cl::opt<int> minParallelLevel("min-parallel-level", cl::desc("Mininum parallel level"), cl::init(1), cl::cat(lz4GrepDebugFlags));
 
 
 int main(int argc, char *argv[]) {
@@ -77,40 +78,28 @@ int main(int argc, char *argv[]) {
     //char *fileBuffer = const_cast<char *>(mappedFile.data()) + lz4Frame.getBlocksStart();
     char *fileBuffer = const_cast<char *>(mappedFile.data());
     re::RE * re_ast = re::RE_Parser::parse(regexString, re::MULTILINE_MODE_FLAG);
-    LZ4GrepGenerator g(enableMultiplexing);
-    if (countOnly) {
-        if (parallelDecompression) {
-            g.generateParallelAioPipeline(re_ast, enableGather, enableScatter, minParallelLevel);
-        } else if (swizzledDecompression) {
-            if (enableMultiplexing) {
-                g.generateMultiplexingSwizzledAioPipeline(re_ast);
-            } else {
-                g.generateSwizzledAioPipeline(re_ast);
-            }
-        } else if (bitStreamDecompression) {
-            if (enableMultiplexing) {
-                g.generateMultiplexingBitStreamAioPipeline(re_ast);
-            } else {
-                g.generateBitStreamAioPipeline(re_ast);
-            }
-        } else {
-            if (enableMultiplexing) {
-                g.generateByteStreamMultiplexingAioPipeline(re_ast);
-            } else {
-                g.generateAioPipeline(re_ast);
-            }
-        }
 
-        auto main = g.getCountOnlyGrepMainFunction();
+    LZ4GrepBaseGenerator* g = nullptr;
+    if (swizzledDecompression) {
+        g = new LZ4GrepSwizzleGenerator();
+    } else if (bitStreamDecompression) {
+        g = new LZ4GrepBitStreamGenerator();
+    } else {
+        g = new LZ4GrepByteStreamGenerator();
+    }
+
+    if (countOnly) {
+        g->generateCountOnlyGrepPipeline(re_ast, enableMultiplexing, utf8CC);
+        auto main = g->getCountOnlyGrepMainFunction();
         uint64_t countResult = main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
         llvm::outs() << countResult << "\n";
     } else {
-        g.generateScanMatchGrepPipeline(re_ast);
-        g.invokeScanMatchGrep(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
-
+        g->generateScanMatchGrepPipeline(re_ast);
+        g->invokeScanMatchGrep(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
     }
 
-
     mappedFile.close();
+    delete g;
+
     return 0;
 }
