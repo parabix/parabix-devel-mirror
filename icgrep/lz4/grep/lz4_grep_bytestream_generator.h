@@ -8,6 +8,7 @@ class LZ4GrepByteStreamGenerator: public LZ4GrepBaseGenerator {
 protected:
     virtual parabix::StreamSetBuffer* generateUncompressedBitStreams() override;
     virtual parabix::StreamSetBuffer* decompressBitStream(parabix::StreamSetBuffer* compressedByteStream, parabix::StreamSetBuffer* compressedBitStream) override;
+    virtual std::vector<parabix::StreamSetBuffer*> decompressBitStreams(parabix::StreamSetBuffer* compressedByteStream, std::vector<parabix::StreamSetBuffer*> compressedBitStreams) override;
 
 private:
     parabix::StreamSetBuffer *convertCompressedBitsStreamWithTwistApproach(
@@ -15,6 +16,8 @@ private:
             parabix::StreamSetBuffer *compressedBitStream,
             std::string prefix
     );
+
+
 };
 
 

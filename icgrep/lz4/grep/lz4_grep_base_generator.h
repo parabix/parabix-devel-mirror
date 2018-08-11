@@ -37,6 +37,8 @@ public:
 protected:
     virtual parabix::StreamSetBuffer* generateUncompressedBitStreams() = 0;
     virtual parabix::StreamSetBuffer* decompressBitStream(parabix::StreamSetBuffer* compressedByteStream, parabix::StreamSetBuffer* compressedBitStream) = 0;
+    virtual std::vector<parabix::StreamSetBuffer*> decompressBitStreams(parabix::StreamSetBuffer* compressedByteStream, std::vector<parabix::StreamSetBuffer*> compressedBitStreams);
+
 
 private:
     grep::GrepRecordBreakKind mGrepRecordBreak;
@@ -47,6 +49,7 @@ private:
     re:: RE * mRE;
     std::set<re::Name *> mUnicodeProperties;
     bool mMoveMatchesToEOL;
+    re::RE* u8NonFinalRe;
 
 
     std::vector<std::ostringstream> mResultStrs;
@@ -74,6 +77,14 @@ private:
             bool utf8CC
     );
     std::unique_ptr<cc::MultiplexedAlphabet> mpx;
+
+
+    std::vector<parabix::StreamSetBuffer*> generateFakeStreams(
+            const std::unique_ptr<kernel::KernelBuilder> & iBuilder,
+            parabix::StreamSetBuffer* refStream,
+            std::vector<unsigned> numOfStreams
+    );
+
 };
 
 

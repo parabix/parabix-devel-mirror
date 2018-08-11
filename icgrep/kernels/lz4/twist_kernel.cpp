@@ -41,9 +41,6 @@ namespace kernel {
         }
     }
 
-
-
-
     TwistByPDEPKernel::TwistByPDEPKernel(const std::unique_ptr <kernel::KernelBuilder> &b, unsigned numberOfInputStream, unsigned twistWidth)
             : BlockOrientedKernel("TwistByPDEPKernel",
                                   {Binding{b->getStreamSetTy(numberOfInputStream, 1), "basisBits"}},
@@ -74,32 +71,38 @@ namespace kernel {
 
 
     TwistMultipleByPDEPKernel::TwistMultipleByPDEPKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
-                                                         unsigned numberOfInputStreamSet, unsigned twistWidth)
+                     std::vector<unsigned> numberOfInputStreams, unsigned twistWidth)
             : BlockOrientedKernel("TwistMultipleByPDEPKernel",
                                   {},
                                   {Binding{b->getStreamSetTy(1, twistWidth), "byteStream"}},
                                   {}, {}, {}),
-              mNumberOfInputStreamSet(numberOfInputStreamSet),
+              mNumberOfInputStreams(numberOfInputStreams),
               mTwistWidth(twistWidth)
     {
-        for (unsigned i = 0; i < numberOfInputStreamSet; i++) {
-            mStreamSetInputs.push_back(Binding{b->getStreamSetTy(1), "basisBits_" + std::to_string(i) });
+        assert(twistWidth == 2 || twistWidth == 4);
+        size_t totalNumOfStreams = 0;
+        for (unsigned i = 0; i < numberOfInputStreams.size(); i++) {
+            totalNumOfStreams += numberOfInputStreams[i];
+            mStreamSetInputs.push_back(Binding{b->getStreamSetTy(numberOfInputStreams[i]), "basisBits_" + std::to_string(i) });
         }
+        assert(totalNumOfStreams < twistWidth);
     }
 
     void TwistMultipleByPDEPKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &b) {
         Value *inputBlocks[mTwistWidth];
 
-        for (unsigned i = 0; i < mTwistWidth; i++) {
-            if (i < mNumberOfInputStreamSet) {
-                inputBlocks[i] = b->loadInputStreamBlock("basisBits_" + std::to_string(i), b->getInt32(0));
-                if (i == 0) {
-                    b->CallPrintRegister("basisBits_" + std::to_string(i), inputBlocks[i]);
-                }
-            } else {
-                inputBlocks[i] = ConstantVector::getNullValue(b->getBitBlockType());
+        unsigned iStreamIndex = 0;
+        for (unsigned i = 0; i < mNumberOfInputStreams.size(); i++) {
+            for (unsigned j = 0; j < mNumberOfInputStreams[i]; j++) {
+                inputBlocks[iStreamIndex] = b->loadInputStreamBlock("basisBits_" + std::to_string(i), b->getInt32(j));
+                ++iStreamIndex;
             }
         }
+
+        for (; iStreamIndex < mTwistWidth; iStreamIndex++) {
+            inputBlocks[iStreamIndex] = ConstantVector::getNullValue(b->getBitBlockType());
+        }
+
 
         Value *outputBasePtr = b->CreatePointerCast(b->getOutputStreamBlockPtr("byteStream", b->getSize(0)),
                                                     b->getInt64Ty()->getPointerTo());

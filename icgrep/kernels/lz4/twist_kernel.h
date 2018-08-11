@@ -24,10 +24,10 @@ namespace kernel {
 
     class TwistMultipleByPDEPKernel final : public BlockOrientedKernel {
     public:
-        TwistMultipleByPDEPKernel(const std::unique_ptr <kernel::KernelBuilder> &b, unsigned numberOfInputStreamSet, unsigned twistWidth);
+        TwistMultipleByPDEPKernel(const std::unique_ptr <kernel::KernelBuilder> &b, std::vector<unsigned> numberOfInputStreams, unsigned twistWidth);
 
     private:
-        const unsigned mNumberOfInputStreamSet;
+        std::vector<unsigned> mNumberOfInputStreams;
         const unsigned mTwistWidth;
 
         void generateDoBlockMethod(const std::unique_ptr <kernel::KernelBuilder> &b) override;
