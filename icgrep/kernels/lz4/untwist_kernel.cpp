@@ -111,36 +111,4 @@ namespace kernel {
             }
         }
     }
-
-    StreamCompareKernel::StreamCompareKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
-                                             unsigned int numberOfStream):
-            BlockOrientedKernel("UntwistByPEXTKernel",
-                                {
-                                        Binding{b->getStreamSetTy(numberOfStream, 1), "stream1", FixedRate(), Principal()},
-                                        Binding{b->getStreamSetTy(numberOfStream, 1), "stream2", FixedRate()}
-                                },
-                                {
-//                                        Binding{b->getStreamSetTy(numberOfOutputStream, 1), "basisBits"}
-                                }, {}, {}, {}),mNumberOfStream(numberOfStream)
-    {
-//        this->setStride(4 * 1024 * 1024);
-        this->addScalar(b->getSizeTy(), "pos");
-    }
-
-    void StreamCompareKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &b) {
-        Value* s1 = b->loadInputStreamBlock("stream1", b->getSize(0));
-        Value* s2 = b->loadInputStreamBlock("stream2", b->getSize(0));
-
-        for (unsigned i = 0 ; i < 4; i++) {
-            Value* v1 = b->CreateExtractElement(s1, i);
-            Value* v2 = b->CreateExtractElement(s2, i);
-            Value* shouldPrint = b->CreateICmpNE(v1, v2);
-            b->CallPrintIntCond("---pos", b->getScalarField("pos"), shouldPrint);
-
-//            b->CallPrintIntCond("s1_available", b->getAvailableItemCount("stream1"), shouldPrint);
-            b->CallPrintRegisterCond("s1", s1, shouldPrint);
-            b->CallPrintRegisterCond("s2", s2, shouldPrint);
-        }
-        b->setScalarField("pos", b->CreateAdd(b->getScalarField("pos"), b->getSize(b->getBitBlockWidth())));
-    };
 }

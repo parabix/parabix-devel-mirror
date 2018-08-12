@@ -64,8 +64,6 @@ LZ4GrepBaseGenerator::LZ4GrepBaseGenerator()
     mMoveMatchesToEOL = true;
 }
 
-
-
 void LZ4GrepBaseGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
     auto & iBuilder = mPxDriver.getBuilder();
     this->generateScanMatchMainFunc(iBuilder);
@@ -93,7 +91,6 @@ void LZ4GrepBaseGenerator::generateScanMatchGrepPipeline(re::RE* regex) {
     mPxDriver.finalizeObject();
 }
 
-
 void LZ4GrepBaseGenerator::generateCountOnlyGrepPipeline(re::RE* regex, bool enableMultiplexing, bool utf8CC){
     if (enableMultiplexing) {
         this->generateMultiplexingCountOnlyGrepPipeline(regex, utf8CC);
@@ -101,7 +98,6 @@ void LZ4GrepBaseGenerator::generateCountOnlyGrepPipeline(re::RE* regex, bool ena
         this->generateFullyDecompressionCountOnlyGrepPipeline(regex);
     }
 }
-
 
 void LZ4GrepBaseGenerator::initREs(re::RE * RE) {
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
@@ -132,7 +128,6 @@ void LZ4GrepBaseGenerator::initREs(re::RE * RE) {
 
 }
 
-
 parabix::StreamSetBuffer * LZ4GrepBaseGenerator::linefeedStreamFromUncompressedBits(
         parabix::StreamSetBuffer *uncompressedBasisBits) {
     auto & idb = mPxDriver.getBuilder();
@@ -142,11 +137,6 @@ parabix::StreamSetBuffer * LZ4GrepBaseGenerator::linefeedStreamFromUncompressedB
     mPxDriver.makeKernelCall(linefeedK, {uncompressedBasisBits}, {LineFeedStream});
     return LineFeedStream;
 }
-
-
-
-
-
 
 std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepBaseGenerator::multiplexingGrep(
         re::RE *RE,
@@ -248,10 +238,6 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepBaseGen
         fakeMatchCopiedBits = fakeStreams[0];
         u8NoFinalStream = fakeStreams[1];
     }
-
-
-
-
 
     StreamSetBuffer * const MatchResults = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize, 1);
 
@@ -507,6 +493,9 @@ std::vector<parabix::StreamSetBuffer *>
 LZ4GrepBaseGenerator::generateFakeStreams(const std::unique_ptr<kernel::KernelBuilder> &idb,
                                           parabix::StreamSetBuffer *refStream, std::vector<unsigned> numOfStreams) {
 
+    if (!numOfStreams.size()) {
+        return std::vector<StreamSetBuffer *>();
+    }
     std::vector<StreamSetBuffer *> outputStreams;
     for (unsigned i = 0; i < numOfStreams.size(); i++) {
         outputStreams.push_back(mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(numOfStreams[i]),

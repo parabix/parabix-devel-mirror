@@ -23,6 +23,20 @@ private:
     unsigned mNumOfStreams;
 };
 
+
+class P2SMultipleStreamsKernel final : public BlockOrientedKernel {
+public:
+    P2SMultipleStreamsKernel(
+            const std::unique_ptr<kernel::KernelBuilder> & b,
+            cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian,
+            std::vector<unsigned> numsOfStreams = std::vector<unsigned>{8}
+    );
+private:
+    cc::BitNumbering mBasisSetNumbering;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    std::vector<unsigned> mNumsOfStreams;
+};
+
 class P2SKernelWithCompressedOutput final : public BlockOrientedKernel {
 public:
     P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);

@@ -28,6 +28,18 @@ private:
     unsigned mNumOfStreams;
 };
 
+class S2PMultipleStreamsKernel final : public MultiBlockKernel {
+public:
+    S2PMultipleStreamsKernel(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian, bool aligned = true, std::vector<unsigned> numsOfStreams = std::vector<unsigned>{8});
+protected:
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+private:
+    cc::BitNumbering mBasisSetNumbering;
+    bool mAligned;
+    std::vector<unsigned> mNumsOfStreams;
+};
+
+
 class S2P_21Kernel final : public MultiBlockKernel {
 public:
     S2P_21Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);

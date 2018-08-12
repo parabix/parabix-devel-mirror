@@ -27,15 +27,6 @@ namespace kernel {
         const size_t mTwistWidth;
         void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
     };
-
-
-    class StreamCompareKernel final : public BlockOrientedKernel{
-    public:
-        StreamCompareKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned numberOfStream = 1);
-    protected:
-        const unsigned mNumberOfStream;
-        void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
-    };
 }
 
 

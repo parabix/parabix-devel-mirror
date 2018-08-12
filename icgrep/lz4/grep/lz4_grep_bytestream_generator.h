@@ -11,13 +11,11 @@ protected:
     virtual std::vector<parabix::StreamSetBuffer*> decompressBitStreams(parabix::StreamSetBuffer* compressedByteStream, std::vector<parabix::StreamSetBuffer*> compressedBitStreams) override;
 
 private:
-    parabix::StreamSetBuffer *convertCompressedBitsStreamWithTwistApproach(
-            parabix::StreamSetBuffer *compressedByteStream,
-            parabix::StreamSetBuffer *compressedBitStream,
-            std::string prefix
-    );
-
-
+    unsigned calculateTwistWidth(unsigned numOfStreams);
+    parabix::StreamSetBuffer* twist(const std::unique_ptr<kernel::KernelBuilder> &b,
+                                    std::vector<parabix::StreamSetBuffer*> inputStreams,
+                                    unsigned twistWidth);
+    std::vector<parabix::StreamSetBuffer*> untwist(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, parabix::StreamSetBuffer* inputStream, unsigned twistWidth, std::vector<unsigned> numOfStreams);
 };
 
 
