@@ -131,8 +131,10 @@ RE * Casefold_CC(CC * cc) {
     for (const interval_t & i : foldingRequired) {
         for (codepoint_t cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++) {
             std::u32string dms = conv.from_bytes(caseFoldObj->GetStringValue(cp));
-            RE * dm = u32string2re(dms);
-            if (Seq * s = dyn_cast<Seq>(dm)) {
+            RE * dm = NFD_RE(u32string2re(dms));
+            if (CC * nfd_cc = dyn_cast<CC>(dm)) {
+                finalCC = makeCC(finalCC, nfd_cc);
+            } else if (Seq * s = dyn_cast<Seq>(dm)) {
                 if (s->size() == 1) {
                     finalCC = makeCC(finalCC, cast<CC>(s->front()));
                 } else {
