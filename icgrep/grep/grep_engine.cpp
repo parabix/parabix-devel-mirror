@@ -413,7 +413,10 @@ std::pair<StreamSetBuffer *, StreamSetBuffer *> GrepEngine::grepPipeline(StreamS
                     mGrepDriver->makeKernelCall(ccK, {BasisBits}, {CharClasses});
     //                kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis), true);
     //                mGrepDriver->makeKernelCall(ccK, {ByteStream}, {CharClasses});
-                    kernel::Kernel * icgrepK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[i], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::LittleEndian);
+                    kernel::ICGrepKernel * icgrepK = (kernel::ICGrepKernel*)mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, mREs[i], externalStreamNames, std::vector<cc::Alphabet *>{mpx.get()}, cc::BitNumbering::LittleEndian);
+                    // Multiplexing Grep Kernel is not Cachable, since for now it use string representation of RE AST as cache key,
+                    // whileit is possible that two multiplexed REs with the same name "mpx_1" have different alphabets
+                    icgrepK->setCachable(false);
                     icgrepInputSets.push_back(CharClasses);
                     mGrepDriver->makeKernelCall(icgrepK, icgrepInputSets, {MatchResults});
                     MatchResultsBufs[i] = MatchResults;

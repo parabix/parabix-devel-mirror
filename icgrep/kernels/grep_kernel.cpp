@@ -229,7 +229,7 @@ RequiredStreams_UTF16::RequiredStreams_UTF16(const std::unique_ptr<kernel::Kerne
 ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
 : mRE(re_ast)
 , mSignature(Printer_RE::PrintRE(mRE)) {
-    
+
 }
 
 // Helper to compute stream set inputs to pass into PabloKernel constructor.
@@ -258,7 +258,8 @@ icGrepInputs(b, externals, alphabets),
 {Binding{b->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}})
 , mExternals(externals)
 , mAlphabets(alphabets)
-, mBasisSetNumbering(basisSetNumbering) {
+, mBasisSetNumbering(basisSetNumbering)
+, mIsCachable(true) {
 }
 
 std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
