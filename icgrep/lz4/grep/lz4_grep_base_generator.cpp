@@ -174,6 +174,8 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepBaseGen
         re::Seq* seq = re::makeSeq();
         re::RE* targetRe = mRE;
 
+        bool allCcByteLength = re::isAllCcByteLength(mRE);
+
         linefeedCC = re::makeCC(0x0A);
 
         seq->push_back(targetRe);
@@ -192,25 +194,24 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepBaseGen
         kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis), false, cc::BitNumbering::BigEndian);
         mGrepDriver->makeKernelCall(ccK, {compressedBitStream}, {CharClasses});
 
+        if (allCcByteLength) {
+            // We do not need to decompress U8 NonFinal Stream is all of the character class in target regular expression is byte length
+            uncompressedCharClasses = this->decompressBitStream(compressedByteStream, CharClasses);
+            auto fakeStreams = this->generateFakeStreams(idb, uncompressedCharClasses, std::vector<unsigned>{8, 1});
+            fakeMatchCopiedBits = fakeStreams[0];
+            u8NoFinalStream = fakeStreams[1];
+        } else {
+            StreamSetBuffer* compressedNonFinalStream = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize, 1);
+            kernel::Kernel * nonFinalK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, u8NonFinalRe, externalStreamNames, std::vector<cc::Alphabet *>(), cc::BitNumbering::BigEndian);
+            mGrepDriver->makeKernelCall(nonFinalK, {compressedBitStream}, {compressedNonFinalStream});
 
+            auto decompressedStreams = this->decompressBitStreams(compressedByteStream, {CharClasses, compressedNonFinalStream});
+            uncompressedCharClasses = decompressedStreams[0];
+            u8NoFinalStream = decompressedStreams[1];
 
-        StreamSetBuffer* compressedNonFinalStream = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), baseBufferSize, 1);
-        kernel::Kernel * nonFinalK = mGrepDriver->addKernelInstance<kernel::ICGrepKernel>(idb, u8NonFinalRe, externalStreamNames, std::vector<cc::Alphabet *>(), cc::BitNumbering::BigEndian);
-        mGrepDriver->makeKernelCall(nonFinalK, {compressedBitStream}, {compressedNonFinalStream});
-
-
-
-        auto decompressedStreams = this->decompressBitStreams(compressedByteStream, {CharClasses, compressedNonFinalStream});
-
-//        uncompressedCharClasses = this->decompressBitStream(compressedByteStream, CharClasses);
-        uncompressedCharClasses = decompressedStreams[0];
-        u8NoFinalStream = decompressedStreams[1];
-
-
-
-        auto fakeStreams = this->generateFakeStreams(idb, uncompressedCharClasses, std::vector<unsigned>{8});
-        fakeMatchCopiedBits = fakeStreams[0];
-
+            auto fakeStreams = this->generateFakeStreams(idb, uncompressedCharClasses, std::vector<unsigned>{8});
+            fakeMatchCopiedBits = fakeStreams[0];
+        }
     } else {
         re::Seq* seq = re::makeSeq();
         re::RE* targetRe = mRE;
@@ -228,6 +229,7 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepBaseGen
 
         std::vector<re::CC *> mpx_basis = mpx->getMultiplexedCCs();
         auto numOfCharacterClasses = mpx_basis.size();
+//        llvm::errs() << "numOfCharacterClasses:" << numOfCharacterClasses << "\n";
         StreamSetBuffer * CharClasses = mGrepDriver->addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(numOfCharacterClasses), baseBufferSize, 1);
 
         kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::ByteClassesKernel>(idb, std::move(mpx_basis), false, cc::BitNumbering::BigEndian);

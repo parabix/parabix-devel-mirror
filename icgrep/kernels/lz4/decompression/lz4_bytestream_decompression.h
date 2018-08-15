@@ -25,7 +25,7 @@ namespace kernel {
     private:
         inline std::string getCopyByteStreamName();
         bool mCopyOtherByteStream;
-
+        llvm::Value* oldOutputExceedFwData;
     };
 
 }

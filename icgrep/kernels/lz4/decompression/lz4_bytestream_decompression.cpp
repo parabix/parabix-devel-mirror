@@ -69,23 +69,8 @@ namespace kernel{
         b->SetInsertPoint(literalCopyBody);
 
         Value* remBufferSize = b->CreateSub(LZ4_BLOCK_SIZE, b->CreateAdd(phiCopiedLength, outputPosRemBlockSize));
-        Value* fullCopy = b->CreateICmpULE(SIZE_FW_BYTE, remBufferSize);
 
 
-        BasicBlock* fullCopyBlock = b->CreateBasicBlock("fullCopyBlock");
-        BasicBlock* partCopyBlock = b->CreateBasicBlock("partCopyBlock");
-
-        BasicBlock* literalCopyEnd = b->CreateBasicBlock("literalCopyEnd");
-
-        b->CreateLikelyCondBr(fullCopy, fullCopyBlock, partCopyBlock);
-
-        // ---- fullCopyBlock
-        b->SetInsertPoint(fullCopyBlock);
-        b->CreateStore(b->CreateLoad(phiInputPtr), phiOutputPtr);
-        b->CreateBr(literalCopyEnd);
-        // ---- partCopyBlock
-        b->SetInsertPoint(partCopyBlock);
-        Value* oldOutputValue = b->CreateLoad(phiOutputPtr);
         Value* inputValue = b->CreateLoad(phiInputPtr);
 
         Value* actualCopyLength = b->CreateUMin(SIZE_FW_BYTE, remBufferSize);
@@ -94,23 +79,25 @@ namespace kernel{
                 b->CreateShl(INT_FW_1, b->CreateMul(actualCopyLength, b->getIntN(COPY_FW, 8))),
                 INT_FW_1
         );
+        Value* fullCopy = b->CreateICmpEQ(actualCopyLength, SIZE_FW_BYTE);
         mask = b->CreateSelect(
-                b->CreateICmpEQ(actualCopyLength, SIZE_FW_BYTE),
+                fullCopy,
                 b->CreateNot(b->getIntN(COPY_FW, 0)),
                 mask
         );
 
+        Value* exceedValue = b->CreateSelect(
+                fullCopy,
+                b->getIntN(COPY_FW, 0),
+                b->CreateShl(this->oldOutputExceedFwData, b->CreateMul(actualCopyLength, b->getIntN(COPY_FW, 8)))
+        );
+
         Value* actualOutput = b->CreateOr(
                 b->CreateAnd(inputValue, mask),
-                b->CreateAnd(oldOutputValue, b->CreateNot(mask))
+                exceedValue
         );
 
         b->CreateStore(actualOutput, phiOutputPtr);
-
-        b->CreateBr(literalCopyEnd);
-        // ---- literalCopyEnd
-        b->SetInsertPoint(literalCopyEnd);
-
 
         phiInputPtr->addIncoming(b->CreateGEP(phiInputPtr, b->getSize(1)), b->GetInsertBlock());
         phiOutputPtr->addIncoming(b->CreateGEP(phiOutputPtr, b->getSize(1)), b->GetInsertBlock());
@@ -124,12 +111,10 @@ namespace kernel{
 
     void LZ4ByteStreamDecompressionKernel::doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                              llvm::Value *matchLength) {
-
         Value* LZ4_BLOCK_SIZE = b->getSize(mBlockSize);
         Type* INT_FW_PTR = b->getIntNTy(COPY_FW)->getPointerTo();
         Value* INT_FW_1 = b->getIntN(COPY_FW, 1);
         Value* SIZE_FW_BYTE = b->getSize(COPY_FW / BYTE_WIDTH);
-
 
         BasicBlock* entryBlock = b->GetInsertBlock();
 
@@ -137,7 +122,9 @@ namespace kernel{
         Value* outputBufferSize = b->getCapacity("outputStream");
         Value* outputPosRemBlockSize = b->CreateURem(outputPos, b->getSize(mBlockSize));
 
-        Value* copyToPtr = b->getRawOutputPointer("outputStream", b->CreateURem(outputPos, outputBufferSize));
+        Value* outputPosRem = b->CreateURem(outputPos, outputBufferSize);
+        Value* copyToPtr = b->getRawOutputPointer("outputStream", outputPosRem);
+
         Value* copyFromPtr = b->getRawOutputPointer("outputStream", b->CreateURem(b->CreateSub(outputPos, matchOffset), outputBufferSize));
 
         BasicBlock* matchCopyCon = b->CreateBasicBlock("matchCopyCon");
@@ -161,50 +148,37 @@ namespace kernel{
         b->SetInsertPoint(matchCopyBody);
 
         Value* remBufferSize = b->CreateSub(LZ4_BLOCK_SIZE, b->CreateAdd(phiCopiedSize, outputPosRemBlockSize));
-        Value* fullCopy = b->CreateICmpULE(SIZE_FW_BYTE, remBufferSize);
         Value* copyFromFwPtr = b->CreatePointerCast(phiFromPtr, INT_FW_PTR);
         Value* copyToFwPtr = b->CreatePointerCast(phiToPtr, INT_FW_PTR);
 
-        BasicBlock* fullMatchCopyBlock = b->CreateBasicBlock("fullMatchCopyBlock");
-        BasicBlock* partMatchCopyBlock = b->CreateBasicBlock("partMatchCopyBlock");
-        BasicBlock* matchCopyEndBlock = b->CreateBasicBlock("matchCopyEndBlock");
-
-        b->CreateLikelyCondBr(fullCopy, fullMatchCopyBlock, partMatchCopyBlock);
-
-        // ---- fullMatchCopyBlock
-        b->SetInsertPoint(fullMatchCopyBlock);
-        b->CreateStore(b->CreateLoad(copyFromFwPtr), copyToFwPtr);
-        b->CreateBr(matchCopyEndBlock);
-
-        // ---- partMatchCopyBlock
-        b->SetInsertPoint(partMatchCopyBlock);
-        Value* oldOutputValue = b->CreateLoad(copyToFwPtr);
         Value* actualCopyLength = b->CreateUMin(SIZE_FW_BYTE, remBufferSize);
         Value* mask = b->CreateSub(
                 b->CreateShl(INT_FW_1, b->CreateMul(actualCopyLength, b->getIntN(COPY_FW, 8))),
                 INT_FW_1
         );
+
+        Value* fullCopy = b->CreateICmpEQ(actualCopyLength, SIZE_FW_BYTE);
         mask = b->CreateSelect(
-                b->CreateICmpEQ(actualCopyLength, SIZE_FW_BYTE),
+                fullCopy,
                 b->CreateNot(b->getIntN(COPY_FW, 0)),
                 mask
         );
+        Value* exceedValue = b->CreateSelect(
+                fullCopy,
+                b->getIntN(COPY_FW, 0),
+                b->CreateShl(this->oldOutputExceedFwData, b->CreateMul(actualCopyLength, b->getIntN(COPY_FW, 8)))
+        );
+
 
         Value* actualOutput = b->CreateOr(
                 b->CreateAnd(b->CreateLoad(copyFromFwPtr), mask),
-                b->CreateAnd(oldOutputValue, b->CreateNot(mask))
+                exceedValue
         );
 
         b->CreateStore(
                 actualOutput,
                 copyToFwPtr
         );
-
-        b->CreateBr(matchCopyEndBlock);
-
-        // ---- matchCopyEndBlock
-        b->SetInsertPoint(matchCopyEndBlock);
-
 
         Value* copySize = b->CreateUMin(matchOffset, b->getSize(COPY_FW / 8));
         phiFromPtr->addIncoming(b->CreateGEP(phiFromPtr, copySize), b->GetInsertBlock());
@@ -241,6 +215,17 @@ namespace kernel{
 
         b->CreateMemCpy(temporayInputPtr, b->CreateGEP(rawInputPtr, blockStartRem), copySize1, 1);
         b->CreateMemCpy(b->CreateGEP(temporayInputPtr, copySize1), rawInputPtr, copySize2, 1);
+
+
+        Value* outputPos = b->getScalarField("outputPos");
+        Value* outputBufferSize = b->getCapacity("outputStream");
+        Value* outputPosRem = b->CreateURem(outputPos, outputBufferSize);
+        Value* LZ4_BLOCK_SIZE = b->getSize(mBlockSize);
+        Type* INT_FW_PTR = b->getIntNTy(COPY_FW)->getPointerTo();
+        Value* outputEndPtr = b->CreateGEP(b->getRawOutputPointer("outputStream", b->getSize(0)), b->CreateMul(b->CreateUDiv(b->CreateAdd(outputPosRem, LZ4_BLOCK_SIZE), LZ4_BLOCK_SIZE), LZ4_BLOCK_SIZE));
+        // Only load old output exceed data once for every LZ4 block
+        this->oldOutputExceedFwData = b->CreateLoad(b->CreatePointerCast(outputEndPtr, INT_FW_PTR));
+
     }
 
     void LZ4ByteStreamDecompressionKernel::beforeTermination(const std::unique_ptr<KernelBuilder> &b) {
