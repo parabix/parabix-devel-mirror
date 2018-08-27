@@ -23,7 +23,7 @@ public:
 
     LZ4GrepBaseGenerator();
 
-    void generateScanMatchGrepPipeline(re::RE* regex);
+    void generateScanMatchGrepPipeline(re::RE* regex, bool enableMultiplexing, bool utf8CC);
     void generateCountOnlyGrepPipeline(re::RE* regex, bool enableMultiplexing, bool utf8CC);
 
 
@@ -35,6 +35,10 @@ public:
 
 
 protected:
+    virtual parabix::StreamSetBuffer* generateUncompressedByteStream() {
+        parabix::StreamSetBuffer* bitStreams = this->generateUncompressedBitStreams();
+        return this->p2s(bitStreams);
+    }
     virtual parabix::StreamSetBuffer* generateUncompressedBitStreams() = 0;
     virtual parabix::StreamSetBuffer* decompressBitStream(parabix::StreamSetBuffer* compressedByteStream, parabix::StreamSetBuffer* compressedBitStream) = 0;
     virtual std::vector<parabix::StreamSetBuffer*> decompressBitStreams(parabix::StreamSetBuffer* compressedByteStream, std::vector<parabix::StreamSetBuffer*> compressedBitStreams);
@@ -69,11 +73,15 @@ private:
     parabix::StreamSetBuffer * linefeedStreamFromUncompressedBits(parabix::StreamSetBuffer *uncompressedBasisBits);
 
 
+    void generateFullyDecompressionScanMatchGrepPipeline(re::RE *regex);
+    void generateMultiplexingScanMatchGrepPipeline(re::RE *regex, bool utf8CC);
+
+
     void generateFullyDecompressionCountOnlyGrepPipeline(re::RE *regex);
     void generateMultiplexingCountOnlyGrepPipeline(re::RE *regex, bool utf8CC);
 
 
-    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grep(re::RE *RE,
+    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grep(re::RE *RE, parabix::StreamSetBuffer *byteStream,
                                                                            parabix::StreamSetBuffer *uncompressedBasisBits, bool ccMultiplexing = false);
     std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrep(
             re::RE *RE,

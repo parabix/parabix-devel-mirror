@@ -141,7 +141,7 @@ namespace kernel {
         Constant* SIZE_0 = b->getSize(0);
         Constant* SIZE_ITEMS_PER_BYTE = b->getSize(mItemsPerByte);
         Constant* INT_FW_TWIST_WIDTH = b->getIntN(COPY_FW, mTwistWidth);
-        Type* INT8_PTR_TY = b->getInt8PtrTy();
+//        Type* INT8_PTR_TY = b->getInt8PtrTy();
         Type* INT_FW_TY = b->getIntNTy(COPY_FW);
         Type* INT_FW_PTR_TY = INT_FW_TY->getPointerTo();
 
@@ -217,7 +217,7 @@ namespace kernel {
         Constant* SIZE_0 = b->getSize(0);
         Constant* SIZE_ITEMS_PER_BYTE = b->getSize(mItemsPerByte);
         Constant* INT_FW_TWIST_WIDTH = b->getIntN(COPY_FW, mTwistWidth);
-        Type* INT8_PTR_TY = b->getInt8PtrTy();
+//        Type* INT8_PTR_TY = b->getInt8PtrTy();
         Type* INT_FW_TY = b->getIntNTy(COPY_FW);
         Type* INT_FW_PTR_TY = INT_FW_TY->getPointerTo();
 
@@ -345,7 +345,7 @@ namespace kernel {
         Value* actualOutputPtr = b->CreateGEP(outputByteBasePtr, outputPosByteRem);
         b->CreateMemCpy(actualOutputPtr, b->getScalarField("temporaryOutputPtr"), b->getSize(mBlockSize / mItemsPerByte), 1);
 
-        Value* ptr = b->CreateGEP(b->CreatePointerCast(b->getScalarField("temporaryOutputPtr"), b->getBitBlockType()->getPointerTo()), b->getSize(0x16f));
+//        Value* ptr = b->CreateGEP(b->CreatePointerCast(b->getScalarField("temporaryOutputPtr"), b->getBitBlockType()->getPointerTo()), b->getSize(0x16f));
 
         b->setProducedItemCount("outputTwistStream", produced);
     }

@@ -8,7 +8,7 @@ namespace kernel {
 
     class LZ4ByteStreamDecompressionKernel : public LZ4SequentialDecompressionKernel {
     public:
-        LZ4ByteStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, bool copyOtherByteStream = false, unsigned blockSize = 4 * 1024 * 1024);
+        LZ4ByteStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, bool copyOtherByteStream = false, unsigned blockSize = 4 * 1024 * 1024, bool conditionalDecompression = false);
 
 
     protected:

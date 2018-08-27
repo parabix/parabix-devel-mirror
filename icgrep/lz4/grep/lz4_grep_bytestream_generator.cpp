@@ -13,9 +13,14 @@
 using namespace kernel;
 using namespace parabix;
 
-StreamSetBuffer *LZ4GrepByteStreamGenerator::generateUncompressedBitStreams() {
+
+parabix::StreamSetBuffer* LZ4GrepByteStreamGenerator::generateUncompressedByteStream() {
     StreamSetBuffer* compressedByteStream = this->loadByteStream();
     parabix::StreamSetBuffer * uncompressedByteStream = this->byteStreamDecompression(compressedByteStream);
+    return uncompressedByteStream;
+}
+StreamSetBuffer *LZ4GrepByteStreamGenerator::generateUncompressedBitStreams() {
+    parabix::StreamSetBuffer * uncompressedByteStream = this->generateUncompressedByteStream();
     return this->s2p(uncompressedByteStream);
 }
 

@@ -12,15 +12,15 @@ using namespace kernel;
 using namespace std;
 
 namespace kernel{
-    LZ4SequentialDecompressionKernel::LZ4SequentialDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string&& kernelName, unsigned blockSize)
+    LZ4SequentialDecompressionKernel::LZ4SequentialDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string&& kernelName, unsigned blockSize, bool conditionalDecompression)
             :SegmentOrientedKernel(std::move(kernelName),
             // Inputs
                                    {
-                    Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)},
+                    Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1), AlwaysConsume()},
 //                    Binding{b->getStreamSetTy(1, 1), "extender", RateEqualTo("byteStream")},
 
                     // block data
-                    Binding{b->getStreamSetTy(1, 1), "isCompressed", BoundedRate(0, 1), AlwaysConsume()},
+                    Binding{b->getStreamSetTy(1, 8), "isCompressed", BoundedRate(0, 1), AlwaysConsume()},
                     Binding{b->getStreamSetTy(1, 64), "blockStart", RateEqualTo("isCompressed"), AlwaysConsume()},
                     Binding{b->getStreamSetTy(1, 64), "blockEnd", RateEqualTo("isCompressed"), AlwaysConsume()}
             },
@@ -40,9 +40,17 @@ namespace kernel{
 
                                            Binding{b->getInt1Ty(), "hasCallInitialization"}
                                    }),
-             mBlockSize(blockSize) {
+             mBlockSize(blockSize),
+             mConditionalDecompression(conditionalDecompression)
+    {
+        if (conditionalDecompression) {
+            mStreamSetInputs.push_back(Binding{b->getStreamSetTy(1, 1), "matches", BoundedRate(0, 1)});
+        }
+
+
         this->setStride(blockSize);
         addAttribute(MustExplicitlyTerminate());
+
     }
 
     // ---- Kernel Methods
@@ -83,21 +91,60 @@ namespace kernel{
         b->CreateBr(processBlock);
 
         b->SetInsertPoint(processBlock);
-        //TODO handle uncompressed block
+
+        Value* isTerminal = b->CreateICmpUGE(blockEnd, b->getScalarField("fileSize"));
+        b->setTerminationSignal(isTerminal);
+
+
+        BasicBlock* actualProcessBlock = b->CreateBasicBlock("actualProcessBlock");
+        BasicBlock* skipProcessBlock = b->CreateBasicBlock("actualProcessBlock");
+        BasicBlock* processFinishBlock = b->CreateBasicBlock("processFinishBlock");
+
+        Value* shouldActuallyProcess = nullptr;
+        if(mConditionalDecompression) {
+
+            Value* availableMatch = b->getAvailableItemCount("matches");
+            Value* matchesStart = b->getProcessedItemCount("matches");
+            Value* matchesEnd = b->CreateAdd(matchesStart, b->getSize(mBlockSize));
+            matchesEnd = b->CreateUMin(matchesEnd, availableMatch);
+
+            Value* hasMatch = this->detectMatch(b, matchesStart, matchesEnd);
+            shouldActuallyProcess = hasMatch;
+        } else {
+            shouldActuallyProcess = b->getInt1(true);
+        }
+        b->CreateCondBr(shouldActuallyProcess, actualProcessBlock, skipProcessBlock);
+
+        // ---- actualProcessBlock
+        b->SetInsertPoint(actualProcessBlock);
+
         this->prepareProcessBlock(b, blockStart, blockEnd);
-
         this->processCompressedLz4Block(b, blockStart, blockEnd);
-
         this->storePendingOutput(b);
+        b->CreateBr(processFinishBlock);
 
-//        this->storePendingM0(b);
-//        this->storePendingLiteralMask(b);
-//        this->storePendingMatchOffsetMarker(b);
+        // ---- skipProcessBlock
+        b->SetInsertPoint(skipProcessBlock);
+
+        Value* oldOutputPos = b->getScalarField("outputPos");
+        Value* newOutputPos = b->CreateAdd(oldOutputPos, b->getSize(mBlockSize));
+        newOutputPos = b->CreateUMin(newOutputPos, b->getAvailableItemCount("matches"));
+        b->setScalarField("outputPos", newOutputPos);
+
+        b->CreateBr(processFinishBlock);
+
+        // ---- processFinishBlock
+
+        b->SetInsertPoint(processFinishBlock);
         Value * newBlockDataIndex = b->CreateAdd(blockDataIndex, b->getInt64(1));
         b->setScalarField("blockDataIndex", newBlockDataIndex);
         b->setProcessedItemCount("isCompressed", newBlockDataIndex);
         b->setProcessedItemCount("byteStream", blockEnd);
         this->setProducedOutputItemCount(b, b->getScalarField("outputPos"));
+        if (mConditionalDecompression) {
+            b->setProcessedItemCount("matches", b->getScalarField("outputPos"));
+        }
+
         b->CreateBr(exitBlock);
 
         // ---- exitBlock
@@ -122,8 +169,7 @@ namespace kernel{
     void
     LZ4SequentialDecompressionKernel::processCompressedLz4Block(const std::unique_ptr<KernelBuilder> &b, llvm::Value *lz4BlockStart,
                                                 llvm::Value *lz4BlockEnd) {
-        Value* isTerminal = b->CreateICmpEQ(lz4BlockEnd, b->getScalarField("fileSize"));
-        b->setTerminationSignal(isTerminal);
+
 
         BasicBlock* exitBlock = b->CreateBasicBlock("processCompressedExitBlock");
 
@@ -607,6 +653,17 @@ namespace kernel{
     }
 
     // ---- Basic Function
+    llvm::Value *
+    LZ4SequentialDecompressionKernel::generateLoadInt8NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputBufferName,
+                                llvm::Value *globalOffset) {
+        Value * capacity = iBuilder->getCapacity(inputBufferName);
+        Value * processed = iBuilder->getProcessedItemCount(inputBufferName);
+        processed = iBuilder->CreateAnd(processed, iBuilder->CreateNeg(capacity));
+        Value * offset = iBuilder->CreateSub(globalOffset, processed);
+        Value * valuePtr = iBuilder->getRawInputPointer(inputBufferName, offset);
+        return iBuilder->CreateLoad(valuePtr);
+    }
+
     llvm::Value *LZ4SequentialDecompressionKernel::generateLoadInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder,
                                                                       std::string inputBufferName, llvm::Value *globalOffset) {
         Value * capacity = iBuilder->getCapacity(inputBufferName);
@@ -624,4 +681,56 @@ namespace kernel{
                 b->CreateNot(thru)
         );
     }
+
+
+    llvm::Value* LZ4SequentialDecompressionKernel::detectMatch(const std::unique_ptr<KernelBuilder> & b, llvm::Value* start, llvm::Value* end) {
+        BasicBlock* entryBlock = b->GetInsertBlock();
+
+        Constant* SIZE_63 = b->getSize(63);
+        Constant* SIZE_64 = b->getSize(64);
+
+        Value* bufferCapacity = b->getCapacity("matches");
+        Value* inputBasePtr = b->CreatePointerCast(b->getRawInputPointer("matches", b->getSize(0)), b->getInt64Ty()->getPointerTo());
+
+        Value* startRem = b->CreateURem(start, bufferCapacity);
+        Value* endRem = b->CreateSub(end, b->CreateSub(start, startRem));
+        Value* startI64BlockIndex = b->CreateUDiv(startRem, SIZE_64);
+
+        Value* endI64BlockIndex = b->CreateUDiv(b->CreateAdd(endRem, SIZE_63), SIZE_64);
+
+        Value* startPtr = b->CreateGEP(inputBasePtr, startI64BlockIndex);
+        Value* endPtr = b->CreateGEP(inputBasePtr, endI64BlockIndex);
+
+        BasicBlock* conBlock = b->CreateBasicBlock("conBlock");
+        BasicBlock* bodyBlock = b->CreateBasicBlock("bodyBlock");
+        BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
+
+        b->CreateBr(conBlock);
+
+        b->SetInsertPoint(conBlock);
+
+        PHINode* currentPtr = b->CreatePHI(startPtr->getType(), 2);
+        PHINode* hasMatch = b->CreatePHI(b->getInt1Ty(), 2);
+        currentPtr->addIncoming(startPtr, entryBlock);
+        hasMatch->addIncoming(b->getInt1(false), entryBlock);
+
+        Value* shouldContinue = b->CreateAnd(b->CreateNot(hasMatch), b->CreateICmpNE(currentPtr, endPtr));
+
+//        b->CallPrintInt("shouldContinue", shouldContinue);
+
+        b->CreateCondBr(shouldContinue, bodyBlock, exitBlock);
+
+        b->SetInsertPoint(bodyBlock);
+        Value* currentValue = b->CreateLoad(currentPtr);
+//        b->CallPrintInt("currentValue", currentValue);
+        Value* m = b->CreateICmpNE(currentValue, b->getInt64(0));
+
+        currentPtr->addIncoming(b->CreateGEP(currentPtr, b->getSize(1)), b->GetInsertBlock());
+        hasMatch->addIncoming(b->CreateOr(hasMatch, m), b->GetInsertBlock());
+        b->CreateBr(conBlock);
+
+        b->SetInsertPoint(exitBlock);
+        return hasMatch;
+    }
+
 }

@@ -33,6 +33,7 @@ protected:
 
     // Stream Conversion
     parabix::StreamSetBuffer* s2p(parabix::StreamSetBuffer* byteStream);
+    parabix::StreamSetBuffer* p2s(parabix::StreamSetBuffer* bitStream);
 
 
             // LZ4 Decoder
@@ -72,6 +73,9 @@ protected:
     llvm::Value * mHasBlockChecksum;
 
     unsigned mLz4BlockSize;
+
+    bool mInitBlockInfo;
+    LZ4BlockInfo mBlockInfo;
 };
 
 

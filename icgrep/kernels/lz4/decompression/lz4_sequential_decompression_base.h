@@ -20,7 +20,7 @@ namespace kernel{
 
 class LZ4SequentialDecompressionKernel : public SegmentOrientedKernel {
 public:
-    LZ4SequentialDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string&& kernelName, unsigned blockSize = 4 * 1024 * 1024);
+    LZ4SequentialDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string&& kernelName, unsigned blockSize = 4 * 1024 * 1024, bool conditionalDecompression = false);
 protected:
     // ---- Constant
     const static unsigned int ACCELERATION_WIDTH = 64;
@@ -84,6 +84,9 @@ protected:
 
     // ---- Basic Function
     llvm::Value *
+    generateLoadInt8NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputBufferName,
+                                 llvm::Value *globalOffset);
+    llvm::Value *
     generateLoadInt64NumberInput(const std::unique_ptr<KernelBuilder> &iBuilder, std::string inputBufferName,
                                  llvm::Value *globalOffset);
     llvm::Value *
@@ -113,6 +116,11 @@ protected:
     virtual void finishAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos, llvm::Value* literalMask) {};
 
     virtual void setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced) = 0;
+
+
+    llvm::Value* detectMatch(const std::unique_ptr<KernelBuilder> & b, llvm::Value* start, llvm::Value* end);
+private:
+    bool mConditionalDecompression;
 };
 }
 

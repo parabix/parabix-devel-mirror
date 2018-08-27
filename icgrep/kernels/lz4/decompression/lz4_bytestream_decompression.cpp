@@ -18,8 +18,8 @@ namespace kernel{
         return mCopyOtherByteStream ? "targetByteStream" : "byteStream";
     }
 
-    LZ4ByteStreamDecompressionKernel::LZ4ByteStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, bool copyOtherByteStream, unsigned blockSize)
-            : LZ4SequentialDecompressionKernel(b, "LZ4ByteStreamDecompressionKernel", blockSize),
+    LZ4ByteStreamDecompressionKernel::LZ4ByteStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, bool copyOtherByteStream, unsigned blockSize, bool conditionalDecompression)
+            : LZ4SequentialDecompressionKernel(b, "LZ4ByteStreamDecompressionKernel", blockSize, conditionalDecompression),
               mCopyOtherByteStream(copyOtherByteStream) {
         mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(1, 8), "outputStream", BoundedRate(0, 1)});
         this->addScalar(b->getInt8PtrTy(), "temporaryInputPtr");

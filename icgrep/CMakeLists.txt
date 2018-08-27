@@ -102,8 +102,7 @@ add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_ran
 add_library(RegExpCompiler ${RE_PARSERS_SRC} re/casing.cpp re/to_utf8.cpp re/re_memoizer.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/collect_ccs.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp re/replaceCC.cpp)
 add_library(UCDlib UCD/CaseFolding.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp)
 add_library(GrepEngine  ${GREP_CORE_SRC} grep/grep_engine.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/streams_merge.cpp kernels/until_n.cpp kernels/UCD_property_kernel.cpp kernels/grapheme_kernel.cpp)
-add_library(LZ4_Lib lz4/lz4_frame_decoder.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp lz4/lz4_decompression_generator.cpp kernels/lz4/lz4_block_decoder.cpp kernels/bitstream_pdep_kernel.cpp kernels/bitstream_gather_pdep_kernel.cpp kernels/swizzled_multiple_pdep_kernel.cpp kernels/fake_stream_generating_kernel.cpp kernels/lz4/decompression/lz4_bytestream_decompression.cpp kernels/lz4/decompression/lz4_swizzled_decompression.cpp kernels/lz4/decompression/lz4_sequential_decompression_base.cpp kernels/lz4/decompression/lz4_bitstream_decompression.cpp kernels/lz4/decompression/lz4_twist_decompression.cpp kernels/lz4/twist_kernel.cpp kernels/lz4/untwist_kernel.cpp lz4/lz4_base_generator.cpp)
-add_library(LZParabix_Lib lzparabix/LZParabixGenerator.cpp kernels/lzparabix/decoder/LZParabixBlockDecoder.cpp kernels/lzparabix/decoder/LZParabixAioBaseKernel.cpp lzparabix/LZParabixGrepGenerator.cpp kernels/fake_stream_generating_kernel.cpp kernels/lzparabix/encoder/LZParabixCompressionKernel.cpp kernels/lzparabix/decoder/LZParabixLiteralDecoderKernel.cpp kernels/lzparabix/decoder/LZParabixBitStreamAioKernel.cpp kernels/lzparabix/decoder/LZParabixSwizzledAioKernel.cpp)
+add_library(LZ4_Lib lz4/lz4_frame_decoder.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp lz4/lz4_decompression_generator.cpp kernels/lz4/lz4_block_decoder.cpp kernels/bitstream_pdep_kernel.cpp kernels/bitstream_gather_pdep_kernel.cpp kernels/swizzled_multiple_pdep_kernel.cpp kernels/fake_stream_generating_kernel.cpp kernels/lz4/decompression/lz4_bytestream_decompression.cpp kernels/lz4/decompression/lz4_swizzled_decompression.cpp kernels/lz4/decompression/lz4_sequential_decompression_base.cpp kernels/lz4/decompression/lz4_bitstream_decompression.cpp kernels/lz4/decompression/lz4_twist_decompression.cpp kernels/lz4/twist_kernel.cpp kernels/lz4/untwist_kernel.cpp lz4/lz4_base_generator.cpp kernels/lz4/lz4_match_detector.cpp kernels/lz4/lz4_match_detector.h)
 
 # force the compiler to compile the object cache to ensure that the versioning information is up to date
 add_custom_target(RecompileObjectCache ALL touch ${CMAKE_CURRENT_SOURCE_DIR}/${OBJECT_CACHE_SRC})
@@ -130,9 +129,6 @@ add_executable(character_deletion character_deletion.cpp kernels/cc_kernel.cpp)
 add_executable(character_deposit character_deposit.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp kernels/bitstream_pdep_kernel.cpp)
 add_executable(lz4_decoder lz4_decoder.cpp)
 add_executable(lz4_grep grep_interface.cpp util/file_select.cpp lz4_grep.cpp lz4/grep/lz4_grep_base_generator.cpp lz4/grep/lz4_grep_bytestream_generator.cpp lz4/grep/lz4_grep_bytestream_generator.h lz4/grep/lz4_grep_bitstream_generator.cpp lz4/grep/lz4_grep_bitstream_generator.h lz4/grep/lz4_grep_swizzle_generator.cpp lz4/grep/lz4_grep_swizzle_generator.h)
-add_executable(lzparabix_decoder lzparabix_decoder.cpp)
-add_executable(lzparabix_grep lzparabix_grep.cpp grep_interface.cpp util/file_select.cpp)
-add_executable(lzparabix_compressor lzparabix_compressor.cpp lzparabix/LZParabixCompressorGenerator.cpp)
 add_executable(idisa_test idisa_test.cpp)
 
 
@@ -150,10 +146,7 @@ target_link_libraries (core RegExpCompiler ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARI
 target_link_libraries (character_deletion PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (character_deposit PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4_decoder LZ4_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (lz4_grep LZ4_Lib GrepEngine UCDlib PabloADT RegExpCompiler CodeGen CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (lzparabix_decoder LZParabix_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (lzparabix_grep LZParabix_Lib GrepEngine UCDlib PabloADT RegExpCompiler CodeGen CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (lzparabix_compressor LZParabix_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (lz4_grep LZ4_Lib UCDlib PabloADT RegExpCompiler CodeGen CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (idisa_test CodeGen PabloADT ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 
 

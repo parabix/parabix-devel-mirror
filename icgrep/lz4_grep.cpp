@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
         uint64_t countResult = main(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
         llvm::outs() << countResult << "\n";
     } else {
-        g->generateScanMatchGrepPipeline(re_ast);
+        g->generateScanMatchGrepPipeline(re_ast, enableMultiplexing, utf8CC);
         g->invokeScanMatchGrep(fileBuffer, lz4Frame.getBlocksStart(), lz4Frame.getBlocksStart() + lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
     }
 

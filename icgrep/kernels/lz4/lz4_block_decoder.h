@@ -28,7 +28,6 @@ private:
     llvm::Value *generateLoadInput(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value *offset);
 
     void appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value *isCompressed, llvm::Value *blockStart, llvm::Value *blockEnd);
-
     void generateStoreNumberOutput(const std::unique_ptr<KernelBuilder> &iBuilder, const std::string &outputBufferName, llvm::Value *offset, llvm::Value *value);
 
 };

@@ -5,6 +5,7 @@
 #include <kernels/kernel_builder.h>
 #include <kernels/source_kernel.h>
 #include <kernels/s2p_kernel.h>
+#include <kernels/p2s_kernel.h>
 #include <kernels/swizzle.h>
 #include <kernels/lz4/twist_kernel.h>
 #include <kernels/lz4/untwist_kernel.h>
@@ -18,7 +19,7 @@ using namespace llvm;
 using namespace parabix;
 using namespace kernel;
 
-LZ4BaseGenerator::LZ4BaseGenerator():mPxDriver("lz4"), mLz4BlockSize(4 * 1024 * 1024) {
+LZ4BaseGenerator::LZ4BaseGenerator():mPxDriver("lz4"), mLz4BlockSize(4 * 1024 * 1024), mInitBlockInfo(false) {
 
 }
 
@@ -39,6 +40,14 @@ StreamSetBuffer* LZ4BaseGenerator::s2p(parabix::StreamSetBuffer* byteStream) {
     mPxDriver.makeKernelCall(s2pk, {byteStream}, {basisBits});
     return basisBits;
 }
+parabix::StreamSetBuffer* LZ4BaseGenerator::p2s(parabix::StreamSetBuffer* bitStream) {
+    auto & b = mPxDriver.getBuilder();
+    StreamSetBuffer* byteStream = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, 8),
+                                                                   this->getDefaultBufferBlocks());
+    Kernel * p2sk = mPxDriver.addKernelInstance<P2SKernel>(b, cc::BitNumbering::BigEndian);
+    mPxDriver.makeKernelCall(p2sk, {bitStream}, {byteStream});
+    return byteStream;
+}
 
 std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*>  LZ4BaseGenerator::loadByteStreamAndBitStream() {
     StreamSetBuffer* byteStream = this->loadByteStream();
@@ -46,8 +55,11 @@ std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*>  LZ4BaseGenerato
     return std::make_pair(byteStream, basisBits);
 }
 
-
 LZ4BlockInfo LZ4BaseGenerator::getBlockInfo(StreamSetBuffer* compressedByteStream) {
+    if (mInitBlockInfo) {
+        return mBlockInfo;
+    }
+
     auto & b = mPxDriver.getBuilder();
     LZ4BlockInfo blockInfo;
     blockInfo.isCompress = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, 8), this->getDefaultBufferBlocks(), 1);
@@ -59,6 +71,8 @@ LZ4BlockInfo LZ4BaseGenerator::getBlockInfo(StreamSetBuffer* compressedByteStrea
     blockDecoderK->setInitialArguments({b->CreateTrunc(mHasBlockChecksum, b->getInt1Ty()), mHeaderSize, mFileSize});
     mPxDriver.makeKernelCall(blockDecoderK, {compressedByteStream}, {blockInfo.isCompress, blockInfo.blockStart, blockInfo.blockEnd});
 
+    mInitBlockInfo = true;
+    mBlockInfo = blockInfo;
     return blockInfo;
 }
 
