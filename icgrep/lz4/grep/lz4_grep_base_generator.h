@@ -59,6 +59,7 @@ private:
     std::set<re::Name *> mUnicodeProperties;
     bool mMoveMatchesToEOL;
     re::RE* u8NonFinalRe;
+    re::RE* u8FinalRe;
 
 
     std::vector<std::ostringstream> mResultStrs;
