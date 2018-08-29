@@ -113,19 +113,21 @@ bool isRequireNonFinal(const RE * re, bool checkByteLength) {
     }
 
     if (const Alt * alt = dyn_cast<Alt>(re)) {
-        if (alt->size() == 1) {
-            RE* first = (*alt)[0];
-            return isRequireNonFinal(first, false);
+        for (unsigned i = 0; i < alt->size(); i++) {
+            if (isRequireNonFinal((*alt)[i], false)) {
+                return true;
+            }
         }
+        return false;
     } else if (const Seq * seq = dyn_cast<Seq>(re)) {
         if (seq->size() == 0) {
             return false;
         } else if (seq->size() == 1) {
             return isRequireNonFinal((*seq)[0], false);
         }
-    } else if (const Name * n = dyn_cast<Name>(re)) {
+    } else if (dyn_cast<Name>(re)) {
         return false;
-    } else if (const CC * cc = dyn_cast<CC>(re)) {
+    } else if (dyn_cast<CC>(re)) {
         return false;
     }
     return true;
