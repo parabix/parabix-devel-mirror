@@ -159,13 +159,17 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepBaseGen
         re::Seq* seq = re::makeSeq();
         re::RE* targetRe = mRE;
 
-        bool allCcByteLength = re::isAllCcByteLength(mRE);
+        bool requireNonFinal = re::isRequireNonFinal(mRE);
+        std::vector<re::CC*> OriginalUnicodeSets = re::collectCCs(seq, &cc::Unicode, std::set<re::Name *>({re::makeZeroWidth("\\b{g}")}));;
 
         linefeedCC = re::makeCC(0x0A);
 
         seq->push_back(targetRe);
         seq->push_back(std::move(linefeedCC));
-        seq->push_back(u8FinalRe);
+        if (requireNonFinal) {
+            seq->push_back(u8FinalRe);
+        }
+
 
         std::vector<re::CC*> UnicodeSets = re::collectCCs(seq, &cc::Unicode, std::set<re::Name *>({re::makeZeroWidth("\\b{g}")}));;
 
@@ -183,7 +187,7 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepBaseGen
         kernel::Kernel * ccK = mGrepDriver->addKernelInstance<kernel::CharClassesKernel>(idb, std::move(mpx_basis), false, cc::BitNumbering::BigEndian);
         mGrepDriver->makeKernelCall(ccK, {compressedBitStream}, {CharClasses});
 
-        if (allCcByteLength) {
+        if (!requireNonFinal) {
             // We do not need to decompress U8 NonFinal Stream is all of the character class in target regular expression is byte length
             uncompressedCharClasses = this->decompressBitStream(compressedByteStream, CharClasses);
             auto fakeStreams = this->generateFakeStreams(idb, uncompressedCharClasses, std::vector<unsigned>{8, 1});
@@ -209,7 +213,6 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepBaseGen
             u8NoFinalStream = mPxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), this->getDefaultBufferBlocks(), 1);
             Kernel* notK = mGrepDriver->addKernelInstance<LZ4NotKernel>(idb);
             mGrepDriver->makeKernelCall(notK, {u8FinalStream}, {u8NoFinalStream});
-
         }
     } else {
         re::Seq* seq = re::makeSeq();
@@ -301,7 +304,6 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepBaseGen
 
     for(unsigned i = 0; i < nREs; ++i) {
 
-
         if (ccMultiplexing) {
 
             if (uncompressedBasisBits == nullptr) {
@@ -352,7 +354,7 @@ std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> LZ4GrepBaseGen
                 if (uncompressedBasisBits == nullptr) {
                     uncompressedBasisBits = this->s2p(byteStream);
                 }
-                this->linefeedStreamFromUncompressedBits(uncompressedBasisBits);
+                LineBreakStream = this->linefeedStreamFromUncompressedBits(uncompressedBasisBits);
                 std::vector<std::string> externalStreamNames;
                 std::vector<StreamSetBuffer *> icgrepInputSets = {uncompressedBasisBits};
 

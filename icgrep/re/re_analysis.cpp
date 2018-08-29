@@ -104,6 +104,33 @@ const CC* matchableCodepoints(const RE * re) {
     return makeCC(); // otherwise = Start, End, Assertion
 }
 
+bool isRequireNonFinal(const RE * re, bool checkByteLength) {
+    if (checkByteLength) {
+        bool allCcByteLength = isAllCcByteLength(re);
+        if (allCcByteLength) {
+            return false;
+        }
+    }
+
+    if (const Alt * alt = dyn_cast<Alt>(re)) {
+        if (alt->size() == 1) {
+            RE* first = (*alt)[0];
+            return isRequireNonFinal(first, false);
+        }
+    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
+        if (seq->size() == 0) {
+            return false;
+        } else if (seq->size() == 1) {
+            return isRequireNonFinal((*seq)[0], false);
+        }
+    } else if (const Name * n = dyn_cast<Name>(re)) {
+        return false;
+    } else if (const CC * cc = dyn_cast<CC>(re)) {
+        return false;
+    }
+    return true;
+}
+
 bool isAllCcByteLength(const RE * re) {
     if (const Alt * alt = dyn_cast<Alt>(re)) {
         for (const RE * re : *alt) {
