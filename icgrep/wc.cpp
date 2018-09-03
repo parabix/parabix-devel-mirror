@@ -195,7 +195,7 @@ void wcPipelineGen(ParabixDriver & pxDriver) {
     pxDriver.generatePipelineIR();
     
     iBuilder->setKernel(mmapK);
-    Value * const fileSize = iBuilder->getAccumulator("fileSize");
+    Value * const fileSize = iBuilder->getAccumulator("fileItems");
     iBuilder->setKernel(wck);
     Value * const lineCount = iBuilder->getAccumulator("lineCount");
     Value * const wordCount = iBuilder->getAccumulator("wordCount");

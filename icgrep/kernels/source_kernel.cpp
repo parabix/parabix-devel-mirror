@@ -399,10 +399,9 @@ MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 // input scalars
 , {Binding{b->getInt32Ty(), "fileDescriptor"}}
 // output scalars
-, {}
+, {Binding{b->getSizeTy(), "fileItems"}}
 // internal scalars
-, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}
-,  Binding{b->getSizeTy(), "fileItems"}})
+, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}})
 , mCodeUnitWidth(codeUnitWidth)
 , mFileSizeFunction(nullptr) {
     addAttribute(MustExplicitlyTerminate());
@@ -435,10 +434,10 @@ FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 , {Binding{b->getStreamSetTy(1, codeUnitWidth), "sourceBuffer"}}
 // input scalar
 , {Binding{b->getInt8Ty(), "useMMap"}, Binding{b->getInt32Ty(), "fileDescriptor"}}
-, {}
+// output scalars
+, {Binding{b->getSizeTy(), "fileItems"}}
 // internal scalars
-, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"},
-   Binding{b->getSizeTy(), "fileItems"}})
+, {Binding{b->getIntNTy(codeUnitWidth)->getPointerTo(), "buffer"}})
 , mCodeUnitWidth(codeUnitWidth)
 , mFileSizeFunction(nullptr) {
     addAttribute(MustExplicitlyTerminate());
