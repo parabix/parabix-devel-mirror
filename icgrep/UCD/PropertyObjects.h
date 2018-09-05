@@ -107,6 +107,7 @@ public:
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val) const;
     std::vector<UnicodeSet> & GetEnumerationBasisSets();
+    unsigned GetEnumerationValue(codepoint_t cp);
     const std::string & GetValueEnumName(const int property_enum_val) const {return property_value_enum_names[property_enum_val]; }
     const std::string & GetValueFullName(const int property_enum_val) const {return property_value_full_names[property_enum_val]; }
 

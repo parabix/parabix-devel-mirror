@@ -8,6 +8,7 @@
 #include "PropertyObjects.h"
 #include "PropertyObjectTable.h"
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/raw_ostream.h>
 #include <sstream>
 #include <llvm/Support/ErrorHandling.h>
 #include <grep/grep_engine.h>
@@ -129,13 +130,27 @@ std::vector<UnicodeSet> & EnumeratedPropertyObject::GetEnumerationBasisSets() {
         for (unsigned i = 0; i < basis_count; i++) {
             enumeration_basis_sets.push_back(UnicodeSet());
             for (unsigned e = 0; e < independent_enum_count; e++) {
-                if (((e >> i) & 1UL) == 0) {
+                if (((e >> i) & 1UL) == 1UL) {
                     enumeration_basis_sets[i] = enumeration_basis_sets[i] + *property_value_sets[e];
                 }
             }
         }
     }
     return enumeration_basis_sets;
+}
+
+unsigned EnumeratedPropertyObject::GetEnumerationValue(codepoint_t cp) {
+    unsigned enum_value = 0;
+    if (LLVM_UNLIKELY(enumeration_basis_sets.empty())) {
+        GetEnumerationBasisSets();
+    }
+    unsigned basis_count = enumeration_basis_sets.size();
+    for (unsigned i = 0; i < basis_count; i++) {
+        if (enumeration_basis_sets[i].contains(cp)) {
+            enum_value += 1 << i;
+        }
+    }
+    return enum_value;
 }
 
 const std::string & EnumeratedPropertyObject::GetPropertyValueGrepString() {
