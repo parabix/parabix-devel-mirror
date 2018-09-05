@@ -12,9 +12,7 @@ failure_count = 0
 # For bitstream approach, there are still some bugs in some special small file
 # (For now, it will have bug in 29k.txt.lz4)
 test_options = [
-    # ('extract_only', '-extract-only', {'extract_only' : True}),
-    # ('extract_and_deposit', '-extract-and-deposit-only', {'extract_and_deposit_only': True}),
-    ('normal', '-swizzled-decompression', {}),
+    ('normal', '', {}),
 ]
 
 

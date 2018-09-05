@@ -355,8 +355,8 @@ add_custom_target (base64_test
 #)
 
 #add_custom_target(lz4d_ext_dep_test
-#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d_ext_dep_test
-#  COMMAND python main.py ${CMAKE_BINARY_DIR}/lz4d_ext_dep_test
+#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4_decoder_test
+#  COMMAND python main.py ${CMAKE_BINARY_DIR}/lz4_decoder
 #)
 
 add_custom_target (abc_gen
