@@ -306,8 +306,8 @@ add_test(
 
 #add_test(
 #  NAME lz4d_ext_dep_test
-#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4d_ext_dep
-#  COMMAND python main.py ${CMAKE_BINARY_DIR}/lz4d_ext_dep
+#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4_decoder
+#  COMMAND python main.py ${CMAKE_BINARY_DIR}/lz4_decoder
 #)
 
 SET_PROPERTY(TEST greptest PROPERTY TIMEOUT 400)
@@ -355,7 +355,7 @@ add_custom_target (base64_test
 #)
 
 #add_custom_target(lz4d_ext_dep_test
-#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4_decoder_test
+#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4_decoder
 #  COMMAND python main.py ${CMAKE_BINARY_DIR}/lz4_decoder
 #)
 
