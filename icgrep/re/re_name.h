@@ -182,4 +182,23 @@ inline Name * makeZeroWidth(const std::string & name, RE * zerowidth = NULL) {
 }
 }
 
+template <typename To, typename FromTy> bool defined(FromTy * e) {
+    if (llvm::isa<To>(e)) return true;
+    if (llvm::isa<re::Name>(e)) {
+        re::RE * def = llvm::cast<re::Name>(e)->getDefinition();
+        return def && defined<To, FromTy>(def);
+    }
+    return false;
+}
+
+template <typename To, typename FromTy> To * defCast(FromTy * e) {
+    if (llvm::isa<To>(e)) return llvm::cast<To>(e);
+    if (llvm::isa<re::Name>(e)) {
+        re::RE * def = llvm::cast<re::Name>(e)->getDefinition();
+        if (def) return defCast<To, FromTy>(def);
+    }
+    return nullptr;
+}
+
+
 #endif // RE_NAME_H
