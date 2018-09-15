@@ -62,49 +62,13 @@ static RE * rangeToUTF8(codepoint_t lo, codepoint_t hi) {
     }
 }
 
-RE * toUTF8(RE * r, bool convertName) {
-    if (const Name*  n = dyn_cast<Name>(r)) {
-        if (convertName) {
-            return toUTF8(n->getDefinition(), convertName);
-        } else {
-            return r;
-        }
+RE * UTF8_Transformer::transformCC(CC * cc) {
+    if (cc->getAlphabet() != &cc::Unicode) return cc;
+    std::vector<RE *> alt;
+    for (const interval_t & i : *cc) {
+        alt.push_back(rangeToUTF8(lo_codepoint(i), hi_codepoint(i)));
     }
-    else if (isa<Name>(r) || isa<Start>(r) || isa<End>(r)) {
-        return r;
-    } else if (const CC * cc = dyn_cast<CC>(r)) {
-        if (cc->getAlphabet() != &cc::Unicode) return r;
-        std::vector<RE *> alt;
-        for (const interval_t & i : *cc) {
-            alt.push_back(rangeToUTF8(lo_codepoint(i), hi_codepoint(i)));
-        }
-        return makeAlt(alt.begin(), alt.end());
-    } else if (Alt * alt = dyn_cast<Alt>(r)) {
-        std::vector<RE *> list;
-        list.reserve(alt->size());
-        for (RE * a : *alt) {
-            list.push_back(toUTF8(a, convertName));
-        }
-        return makeAlt(list.begin(), list.end());
-    } else if (Seq * seq = dyn_cast<Seq>(r)) {
-        std::vector<RE *> list;
-        list.reserve(seq->size());
-        for (RE * s : *seq) {
-            list.push_back(toUTF8(s, convertName));
-        }
-        return makeSeq(list.begin(), list.end());
-    } else if (Assertion * a = dyn_cast<Assertion>(r)) {
-        return makeAssertion(toUTF8(a->getAsserted(), convertName), a->getKind(), a->getSense());
-    } else if (Rep * rep = dyn_cast<Rep>(r)) {
-        RE * expr = toUTF8(rep->getRE(), convertName);
-        return makeRep(expr, rep->getLB(), rep->getUB());
-    } else if (Diff * diff = dyn_cast<Diff>(r)) {
-        return makeDiff(toUTF8(diff->getLH(), convertName), toUTF8(diff->getRH(), convertName));
-    } else if (Intersect * e = dyn_cast<Intersect>(r)) {
-        return makeIntersect(toUTF8(e->getLH(), convertName), toUTF8(e->getRH(), convertName));
-    }
-    llvm_unreachable("unexpected RE type given to toUTF8");
-    return nullptr;
+    return makeAlt(alt.begin(), alt.end());
 }
 
 }

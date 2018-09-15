@@ -100,7 +100,7 @@ RE * regular_expression_passes(RE * r) {
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
         errs() << "RemoveNullableSuffix:\n" << Printer_RE::PrintRE(r) << '\n';
     }
-    r = RE_Star_Normal::star_normal(r);
+    r = RE_Star_Normal().transform(r);
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowSimplifiedREs)) {
         //Print to the terminal the AST that was transformed to the star normal form.
         errs() << "Star_Normal_Form:\n" << Printer_RE::PrintRE(r) << '\n';

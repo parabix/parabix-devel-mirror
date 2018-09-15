@@ -141,5 +141,26 @@ RE * transformCCs(cc::MultiplexedAlphabet * mpx, RE * re) {
     return re;
 };
 
+    RE * CC_multiplexer::transformCC(CC * cc) {
+        if (cc->getAlphabet() == mMultiplexedAlphabet->getSourceAlphabet()) {
+            return mMultiplexedAlphabet->transformCC(cc);
+        }
+        return cc;
+    }
+    
+    RE * CC_multiplexer::transformName(Name * name) {
+        if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+            RE * xfrm = transform(name->getDefinition());
+            if (name->getType() == Name::Type::ZeroWidth)
+                return makeZeroWidth(name->getName(), xfrm);
+            else if (name->getType() == Name::Type::Capture)
+                return makeCapture(name->getName(), xfrm);
+            else
+                return makeName(name->getName(), xfrm);
+        } else {
+            UndefinedNameError(name);
+        }
+    }
+    
 
 }

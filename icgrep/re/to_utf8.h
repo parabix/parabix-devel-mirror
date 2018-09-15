@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -8,9 +8,18 @@
 #define TO_UTF8_H
 
 #include <re/re_re.h>
+#include <re/re_utility.h>
 
 namespace re {
+class CC;
 
-RE * toUTF8(RE * ast, bool convertName = false);
+class UTF8_Transformer : public RE_Transformer {
+public:
+    UTF8_Transformer(NameTransformationMode m = NameTransformationMode::None) : RE_Transformer(m) {}
+    RE * transformCC(CC * cc) override;
+};
+
+inline RE * toUTF8(RE * r, bool convertName = false) {
+    return UTF8_Transformer(convertName ? NameTransformationMode::TransformDefinition : NameTransformationMode::None ).transform(r);}
 }
 #endif // TO_UTF8_H

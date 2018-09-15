@@ -9,6 +9,7 @@
 #include <re/re_assertion.h>
 #include <re/re_analysis.h>
 #include <re/re_nullable.h>
+#include <re/re_utility.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 

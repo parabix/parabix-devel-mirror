@@ -14,6 +14,7 @@
 #include <re/re_start.h>
 #include <re/re_end.h>
 #include <re/re_any.h>
+#include <re/re_utility.h>
 #include <re/re_memoizer.hpp>
 #include <UCD/resolve_properties.h>
 #include <cc/alphabet.h>

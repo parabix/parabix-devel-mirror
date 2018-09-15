@@ -17,7 +17,7 @@ using namespace llvm;
 
 namespace re {
 
-RE * RE_Star_Normal::star_rule(RE * re) {
+RE * star_rule(RE * re) {
     if (Seq * seq = dyn_cast<Seq>(re)) {
         if (RE_Nullable::isNullable(re)) {
             std::vector<RE *> list;
@@ -37,40 +37,14 @@ RE * RE_Star_Normal::star_rule(RE * re) {
     return re;
 }
 
-RE * RE_Star_Normal::star_normal(RE * re) {
-    if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE *> list;
-        list.reserve(alt->size());
-        for (RE * re : *alt) {
-            list.push_back(star_normal(re));
-        }
-        re = makeAlt(list.begin(), list.end());
-    } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        std::vector<RE *> list;
-        list.reserve(seq->size());
-        for (RE * re : *seq) {
-            list.push_back(star_normal(re));
-        }
-        re = makeSeq(list.begin(), list.end());
-    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-        re = makeAssertion(star_normal(a->getAsserted()), a->getKind(), a->getSense());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        RE * expr = star_normal(rep->getRE());
-        if (rep->getLB() == 0 && rep->getUB() == Rep::UNBOUNDED_REP) {
-            re = makeRep(star_rule(expr), 0, rep->getUB());
-        } else {
-            re = makeRep(expr, rep->getLB(), rep->getUB());
-        }
-    } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        re = makeDiff(star_normal(diff->getLH()), star_normal(diff->getRH()));
-    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
-        re = makeIntersect(star_normal(e->getLH()), star_normal(e->getRH()));
-    } else if (Name * name = dyn_cast<Name>(re)) {
-        if (name->getDefinition()) {
-            name->setDefinition(star_normal(name->getDefinition()));
-        }
+RE * RE_Star_Normal::transformRep(Rep * rep) {
+    RE * e0 = rep->getRE();
+    RE * e = transform(e0);
+    if (rep->getLB() == 0 && rep->getUB() == Rep::UNBOUNDED_REP) {
+        e = star_rule(e);
     }
-    return re;
+    if (e == e0) return rep;
+    return makeRep(e, rep->getLB(), rep->getUB());
 }
 
 }

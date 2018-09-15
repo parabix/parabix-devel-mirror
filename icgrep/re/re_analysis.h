@@ -42,7 +42,6 @@ bool hasEndAnchor(const RE * r);
     
 bool DefiniteLengthBackReferencesOnly(const RE * re);
     
-void UndefinedNameError (const Name * n);
 }
 
 #endif // RE_ANALYSIS_H
