@@ -6,8 +6,7 @@ namespace re {
     class RE;
     class Name;
 
-    RE * resolveUnicodeProperties(RE * re);
-    RE * resolveNames(RE * re);
+    RE * resolveUnicodeNames(RE * re);
     RE * resolveAnchors(RE * r, RE * breakRE);
 
 }

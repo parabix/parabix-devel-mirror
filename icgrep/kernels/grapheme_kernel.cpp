@@ -40,7 +40,7 @@ void GraphemeClusterBreakKernel::generatePabloMethod() {
     for (auto & name : externals) {
         nameMap.emplace(name, nullptr);
     }
-    GCB = resolveUnicodeProperties(GCB);
+    GCB = resolveUnicodeNames(GCB);
     ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     re_compiler.addPrecompiled("UTF8_nonfinal", pb.createExtract(getInputStreamVar("nonFinal"), pb.getInteger(0)));
     PabloAST * const gcb = re_compiler.compile(GCB);

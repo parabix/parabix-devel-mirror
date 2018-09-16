@@ -27,204 +27,79 @@ using namespace llvm;
 
 namespace re {
   
-struct NameResolver {
-    RE * resolveUnicodeProperties(RE * re) {
-        if (Name * name = dyn_cast<Name>(re)) {
-            auto f = mMemoizer.find(name);
-            if (f == mMemoizer.end()) {
-                if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
-                    name->setDefinition(resolveUnicodeProperties(name->getDefinition()));
-                } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty || name->getType() == Name::Type::ZeroWidth)) {
-                    if (UCD::resolvePropertyDefinition(name)) {
-                        name->setDefinition(resolveUnicodeProperties(name->getDefinition()));
-                    } else {
-                        name->setDefinition(makeCC(UCD::resolveUnicodeSet(name), &cc::Unicode));
-                    }
-                } else {
-                    UndefinedNameError(name);
-                }
-                re = mMemoizer.memoize(name);
-            } else {
-                return *f;
-            }
-        } else if (Vector * vec = dyn_cast<Vector>(re)) {
-            for (RE *& re : *vec) {
-                re = resolveUnicodeProperties(re);
-            }
-        } else if (Rep * rep = dyn_cast<Rep>(re)) {
-            rep->setRE(resolveUnicodeProperties(rep->getRE()));
-        } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-            a->setAsserted(resolveUnicodeProperties(a->getAsserted()));
-        } else if (Range * rg = dyn_cast<Range>(re)) {
-            return makeRange(resolveUnicodeProperties(rg->getLo()),
-                             resolveUnicodeProperties(rg->getHi()));
-        } else if (Diff * diff = dyn_cast<Diff>(re)) {
-            diff->setLH(resolveUnicodeProperties(diff->getLH()));
-            diff->setRH(resolveUnicodeProperties(diff->getRH()));
-        } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
-            ix->setLH(resolveUnicodeProperties(ix->getLH()));
-            ix->setRH(resolveUnicodeProperties(ix->getRH()));
-        } else if (Group * g = dyn_cast<Group>(re)) {
-            g->setRE(resolveUnicodeProperties(g->getRE()));
-        }
-        return re;
-    }
-    
-    RE * resolve(RE * re) {
-        if (Name * name = dyn_cast<Name>(re)) {
-            auto f = mMemoizer.find(name);
-            if (f == mMemoizer.end()) {
-                if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
-                    name->setDefinition(resolve(name->getDefinition()));
-                } else {
-                    UndefinedNameError(name);
-                }
-                re = mMemoizer.memoize(name);
-            } else {
-                return *f;
-            }
-        } else if (Vector * vec = dyn_cast<Vector>(re)) {
-            for (RE *& re : *vec) {
-                re = resolve(re);
-            }
-        } else if (Rep * rep = dyn_cast<Rep>(re)) {
-            rep->setRE(resolve(rep->getRE()));
-        } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-            a->setAsserted(resolve(a->getAsserted()));
-        } else if (Range * rg = dyn_cast<Range>(re)) {
-            return makeRange(resolve(rg->getLo()), resolve(rg->getHi()));
-        } else if (Diff * diff = dyn_cast<Diff>(re)) {
-            diff->setLH(resolve(diff->getLH()));
-            diff->setRH(resolve(diff->getRH()));
-        } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
-            ix->setLH(resolve(ix->getLH()));
-            ix->setRH(resolve(ix->getRH()));
-        } else if (Group * g = dyn_cast<Group>(re)) {
-            g->setRE(resolve(g->getRE()));
-        }
-        return re;
-    }
-    
+class UnicodeNameResolver : public RE_Transformer {
+public:
+    UnicodeNameResolver() : RE_Transformer() {}
+    RE * transformName(Name * name) override;
 private:
-    Memoizer                mMemoizer;
+    Memoizer mMemoizer;
 };
     
-    RE * resolveUnicodeProperties(RE * re) {
-        NameResolver nameResolver;
-        return nameResolver.resolveUnicodeProperties(re);
-    }
-    
-    RE * resolveNames(RE * re) {
-        NameResolver nameResolver;
-        return nameResolver.resolve(re);
-    }
-    
-    
-    
-bool hasAnchor(const RE * re) {
-    if (const Alt * alt = dyn_cast<Alt>(re)) {
-        for (const RE * re : *alt) {
-            if (hasAnchor(re)) {
-                return true;
+RE * UnicodeNameResolver::transformName(Name * name) {
+    auto f = mMemoizer.find(name);
+    if (f == mMemoizer.end()) {
+        if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+            name->setDefinition(transform(name->getDefinition()));
+        } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty || name->getType() == Name::Type::ZeroWidth)) {
+            if (UCD::resolvePropertyDefinition(name)) {
+                name->setDefinition(transform(name->getDefinition()));
+            } else {
+                name->setDefinition(makeCC(UCD::resolveUnicodeSet(name), &cc::Unicode));
             }
+        } else {
+            UndefinedNameError(name);
         }
-        return false;
-    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
-        for (const RE * re : *seq) {
-            if (hasAnchor(re)) {
-                return true;
-            }
-        }
-        return false;
-    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
-        return hasAnchor(rep->getRE());
-    } else if (isa<Start>(re)) {
-        return true;
-    } else if (isa<End>(re)) {
-        return true;
-    } else if (const Assertion * a = dyn_cast<Assertion>(re)) {
-        return hasAnchor(a->getAsserted());
-    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
-        return hasAnchor(diff->getLH()) || hasAnchor(diff->getRH());
-    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
-        return hasAnchor(e->getLH()) || hasAnchor(e->getRH());
-    } else if (isa<Any>(re)) {
-        return false;
-    } else if (isa<CC>(re)) {
-        return false;
-    } else if (const Group * g = dyn_cast<Group>(re)) {
-        return hasAnchor(g->getRE());
-    } else if (const Name * n = dyn_cast<Name>(re)) {
-        return hasAnchor(n->getDefinition());
+        return mMemoizer.memoize(name);
+    } else {
+        return *f;
     }
-    return false; // otherwise
 }
 
-struct AnchorResolution {
+RE * resolveUnicodeNames(RE * re) {
+    return UnicodeNameResolver().transform(re);
+}
+
+ 
+class AnchorResolution : public RE_Transformer {
+public:
+    AnchorResolution(RE * anchorRE);
+    RE * transformStart(Start * s) override;
+    RE * transformEnd(End * s) override;
+
+private:
     RE * mAnchorRE;
     bool mIsNegated;
-    RE * resolve(RE * r);
 };
-    
-RE * AnchorResolution::resolve(RE * r) {
-    if (hasAnchor(r)) {
-        if (const Alt * alt = dyn_cast<Alt>(r)) {
-            std::vector<RE *> list;
-            list.reserve(alt->size());
-            for (RE * item : *alt) {
-                item = resolve(item);
-                list.push_back(item);
-            }
-            return makeAlt(list.begin(), list.end());
-        } else if (const Seq * seq = dyn_cast<Seq>(r)) {
-            std::vector<RE *> list;
-            list.reserve(seq->size());
-            for (RE * item : *seq) {
-                item = resolve(item);
-                list.push_back(item);
-            }
-            return makeSeq(list.begin(), list.end());
-        } else if (Assertion * a = dyn_cast<Assertion>(r)) {
-            return makeAssertion(resolve(a->getAsserted()), a->getKind(), a->getSense());
-        } else if (Rep * rep = dyn_cast<Rep>(r)) {
-            return makeRep(resolve(rep->getRE()), rep->getLB(), rep->getUB());
-        } else if (Diff * diff = dyn_cast<Diff>(r)) {
-            return makeDiff(resolve(diff->getLH()), resolve(diff->getRH()));
-        } else if (Intersect * e = dyn_cast<Intersect>(r)) {
-            return makeIntersect(resolve(e->getLH()), resolve(e->getRH()));
-        } else if (isa<Start>(r)) {
-            if (mIsNegated) {
-                return makeNegativeLookBehindAssertion(mAnchorRE);
-            } else {
-                return makeAlt({makeSOT(), makeLookBehindAssertion(mAnchorRE)});
-            }
-        } else if (isa<End>(r)) {
-            if (mIsNegated) {
-                return makeNegativeLookAheadAssertion(mAnchorRE);
-            } else {
-                return makeAlt({makeEOT(), makeLookAheadAssertion(mAnchorRE)});
-            }
-        }
-    }
-    return r;
-}
-
-RE * resolveAnchors(RE * r, RE * breakRE) {
-    AnchorResolution a;
+ 
+AnchorResolution::AnchorResolution(RE * breakRE)
+: RE_Transformer() {
     if (const CC * cc = dyn_cast<CC>(breakRE)) {
-        a.mIsNegated = true;
+        mIsNegated = true;
         if (cc->getAlphabet() == &cc::Unicode) {
-            a.mAnchorRE = makeDiff(makeCC(0, 0x10FFFF), breakRE);
+            mAnchorRE = makeDiff(makeCC(0, 0x10FFFF), breakRE);
         } else if (cc->getAlphabet() == &cc::Byte) {
-            a.mAnchorRE = makeDiff(makeByte(0, 0xFF), breakRE);
+            mAnchorRE = makeDiff(makeByte(0, 0xFF), breakRE);
         } else {
             llvm::report_fatal_error("resolveAnchors: unexpected alphabet " + cc->getAlphabet()->getName());
         }
     } else {
-        a.mIsNegated = false;
-        a.mAnchorRE = breakRE;
+        mIsNegated = false;
+        mAnchorRE = breakRE;
     }
-    return a.resolve(r);
+}
+
+RE * AnchorResolution::transformStart(Start * s) {
+    if (mIsNegated) return makeNegativeLookBehindAssertion(mAnchorRE);
+    return makeAlt({makeSOT(), makeLookBehindAssertion(mAnchorRE)});
+}
+
+RE * AnchorResolution::transformEnd(End * e) {
+    if (mIsNegated) return makeNegativeLookAheadAssertion(mAnchorRE);
+    return makeAlt({makeEOT(), makeLookAheadAssertion(mAnchorRE)});
+}
+
+RE * resolveAnchors(RE * r, RE * breakRE) {
+    return AnchorResolution(breakRE).transform(r);
 }
                                                         
 }

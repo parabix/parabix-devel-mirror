@@ -70,9 +70,9 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     if (PrintOptions.isSet(ShowAllREs)) {
         errs() << "resolveGraphemeMode:\n" << Printer_RE::PrintRE(r) << '\n';
     }
-    r = re::resolveUnicodeProperties(r);
+    r = re::resolveUnicodeNames(r);
     if (PrintOptions.isSet(ShowAllREs)) {
-        errs() << "resolveUnicodeProperties:\n" << Printer_RE::PrintRE(r) << '\n';
+        errs() << "resolveUnicodeNames:\n" << Printer_RE::PrintRE(r) << '\n';
     }
     r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
     if (PrintOptions.isSet(ShowAllREs)) {
@@ -104,10 +104,6 @@ RE * regular_expression_passes(RE * r) {
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowSimplifiedREs)) {
         //Print to the terminal the AST that was transformed to the star normal form.
         errs() << "Star_Normal_Form:\n" << Printer_RE::PrintRE(r) << '\n';
-    }
-    r = re::resolveNames(r);
-    if (PrintOptions.isSet(ShowAllREs)) {
-        errs() << "Resolve Names:\n" << Printer_RE::PrintRE(r) << '\n';
     }
     if (codegen::OptLevel > 1) {
         r = RE_Minimizer::minimize(r);

@@ -66,7 +66,7 @@ bool resolvePropertyDefinition(Name * const property) {
             return true;
         } else if (value == "\\b{g}") {
             RE * gcb = generateGraphemeClusterBoundaryRule();
-            property->setDefinition(resolveUnicodeProperties(gcb));
+            property->setDefinition(resolveUnicodeNames(gcb));
             return true;
         } else if (value == "^s") {  // "start anchor (^) in single-line mode"
             property->setDefinition(makeNegativeLookBehindAssertion(makeCC(0, 0x10FFFF)));
@@ -108,7 +108,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             if ((value.length() > 0) && (value[0] == '/')) {
                 // resolve a regular expression
                 re::RE * propValueRe = RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE, false);
-                propValueRe = re::resolveNames(propValueRe);  // Recursive name resolution may be required.
+                propValueRe = re::resolveUnicodeNames(propValueRe);  // Recursive name resolution may be required.
                 return propObj->GetCodepointSetMatchingPattern(propValueRe);
             }
             if ((value.length() > 0) && (value[0] == '@')) {
