@@ -36,23 +36,6 @@ void s2p_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * s0, Value
 }
 
 void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value * output[], cc::BitNumbering basisNumbering) {
-    {
-        //input[0 - 3]
-        Value* bit3311[2];
-        Value* bit2200[2];
-        for (unsigned i = 0; i < 2; i++) {
-            s2p_step(iBuilder, input[2 * i], input[2 * i + 1], iBuilder->simd_himask(2), 1, bit3311[i], bit2200[i]);
-        }
-
-        Value* out[4];
-        s2p_step(iBuilder, bit3311[0], bit3311[1],
-                 iBuilder->simd_himask(4), 2, out[3], out[1]);
-
-        s2p_step(iBuilder, bit2200[0], bit2200[1],
-                 iBuilder->simd_himask(4), 2, out[2], out[0]);
-    }
-
-
     // Little-endian bit number is used for variables.
     Value * bit66442200[4];
     Value * bit77553311[4];
