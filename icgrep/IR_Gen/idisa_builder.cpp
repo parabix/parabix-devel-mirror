@@ -181,12 +181,16 @@ Value * IDISA_Builder::simd_eq(unsigned fw, Value * a, Value * b) {
                           simd_and(simd_slli(32, simd_select_lo(4, eq_bits), 2), eq_bits));
         return eq_bits;
     }
-    return CreateSExt(CreateICmpEQ(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    Value * a1 = fwCast(fw, a);
+    Value * b1 = fwCast(fw, b);
+    return CreateSExt(CreateICmpEQ(a1, b1), a1->getType());
 }
 
 Value * IDISA_Builder::simd_gt(unsigned fw, Value * a, Value * b) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "gt");
-    return CreateSExt(CreateICmpSGT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    Value * a1 = fwCast(fw, a);
+    Value * b1 = fwCast(fw, b);
+    return CreateSExt(CreateICmpSGT(a1, b1), a1->getType());
 }
 
 Value * IDISA_Builder::simd_ugt(unsigned fw, Value * a, Value * b) {
@@ -198,17 +202,23 @@ Value * IDISA_Builder::simd_ugt(unsigned fw, Value * a, Value * b) {
         return simd_or(ugt_0, simd_slli(32, ugt_0, fw/2));
     }
     if (fw < 8) UnsupportedFieldWidthError(fw, "ugt");
-    return CreateSExt(CreateICmpUGT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    Value * a1 = fwCast(fw, a);
+    Value * b1 = fwCast(fw, b);
+    return CreateSExt(CreateICmpUGT(a1, b1), a1->getType());
 }
 
 Value * IDISA_Builder::simd_lt(unsigned fw, Value * a, Value * b) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "lt");
-    return CreateSExt(CreateICmpSLT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    Value * a1 = fwCast(fw, a);
+    Value * b1 = fwCast(fw, b);
+    return CreateSExt(CreateICmpSLT(a1, b1), a1->getType());
 }
 
 Value * IDISA_Builder::simd_ult(unsigned fw, Value * a, Value * b) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "ult");
-    return CreateSExt(CreateICmpULT(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    Value * a1 = fwCast(fw, a);
+    Value * b1 = fwCast(fw, b);
+    return CreateSExt(CreateICmpULT(a1, b1), a1->getType());
 }
 
 Value * IDISA_Builder::simd_ule(unsigned fw, Value * a, Value * b) {
@@ -218,7 +228,9 @@ Value * IDISA_Builder::simd_ule(unsigned fw, Value * a, Value * b) {
         Value * lo_rslt = simd_select_lo(2*fw, simd_ule(2*fw, simd_select_lo(2*fw, a), simd_select_lo(2*fw, b)));
         return simd_or(hi_rslt, lo_rslt);
     }
-    return CreateSExt(CreateICmpULE(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    Value * a1 = fwCast(fw, a);
+    Value * b1 = fwCast(fw, b);
+    return CreateSExt(CreateICmpULE(a1, b1), a1->getType());
 }
 
 Value * IDISA_Builder::simd_uge(unsigned fw, Value * a, Value * b) {
@@ -229,7 +241,9 @@ Value * IDISA_Builder::simd_uge(unsigned fw, Value * a, Value * b) {
         return simd_or(hi_rslt, lo_rslt);
     }
     if (fw < 8) UnsupportedFieldWidthError(fw, "ult");
-    return CreateSExt(CreateICmpUGE(fwCast(fw, a), fwCast(fw, b)), fwVectorType(fw));
+    Value * a1 = fwCast(fw, a);
+    Value * b1 = fwCast(fw, b);
+    return CreateSExt(CreateICmpUGE(a1, b1), a1->getType());
 }
 
 Value * IDISA_Builder::simd_max(unsigned fw, Value * a, Value * b) {
@@ -450,14 +464,15 @@ Value * IDISA_Builder::simd_bitreverse(unsigned fw, Value * a) {
         // Reverse the bits of each byte and then use a byte shuffle to complete the job.
         Value * bitrev8 = fwCast(8, simd_bitreverse(8, a));
         const auto bytes_per_field = fw/8;
-        const auto byte_count = mBitBlockWidth / 8;
+        const unsigned vectorWidth = getVectorBitWidth(a);
+        const auto byte_count = vectorWidth / 8;
         Constant * Idxs[byte_count];
         for (unsigned i = 0; i < byte_count; i += bytes_per_field) {
             for (unsigned j = 0; j < bytes_per_field; j++) {
                 Idxs[i + j] = getInt32(i + bytes_per_field - j - 1);
             }
         }
-        return CreateShuffleVector(bitrev8, UndefValue::get(fwVectorType(8)), ConstantVector::get({Idxs, byte_count}));
+        return CreateShuffleVector(bitrev8, UndefValue::get(bitrev8->getType()), ConstantVector::get({Idxs, byte_count}));
     }
     else {
         if (fw > 2) {
@@ -615,7 +630,8 @@ Value * IDISA_Builder::hsimd_packl_in_lanes(unsigned lanes, unsigned fw, Value *
 
 Value * IDISA_Builder::hsimd_signmask(unsigned fw, Value * a) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "hsimd_signmask");
-    Value * mask = CreateICmpSLT(fwCast(fw, a), ConstantAggregateZero::get(fwVectorType(fw)));
+    Value * a1 = fwCast(fw, a);
+    Value * mask = CreateICmpSLT(a1, ConstantAggregateZero::get(a1->getType()));
     mask = CreateBitCast(mask, getIntNTy(mBitBlockWidth/fw));
     if (mBitBlockWidth/fw < 32) return CreateZExt(mask, getInt32Ty());
     else return mask;
@@ -645,19 +661,21 @@ Value * IDISA_Builder::mvmd_insert(unsigned fw, Value * a, Value * elt, unsigned
 
 Value * IDISA_Builder::mvmd_slli(unsigned fw, Value * a, unsigned shift) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "mvmd_slli");
-    Value * shifted = mvmd_dslli(fw, a, Constant::getNullValue(fwVectorType(fw)), shift);
+    Value * a1 = fwCast(fw, a);
+    Value * shifted = mvmd_dslli(fw, a1, Constant::getNullValue(a1->getType()), shift);
     return shifted;
 }
 
 Value * IDISA_Builder::mvmd_srli(unsigned fw, Value * a, unsigned shift) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "mvmd_srli");
-    const auto field_count = mBitBlockWidth / fw;
-    return mvmd_dslli(fw, Constant::getNullValue(fwVectorType(fw)), a, field_count - shift);
+    const auto field_count = getVectorBitWidth(a) / fw;
+    Value * a1 = fwCast(fw, a);
+    return mvmd_dslli(fw, Constant::getNullValue(a1->getType()), a1, field_count - shift);
 }
 
 Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned shift) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "mvmd_dslli");
-    const auto field_count = mBitBlockWidth/fw;
+    const auto field_count = getVectorBitWidth(a) / fw;
     Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count; i++) {
         Idxs[i] = getInt32(i + field_count - shift);
@@ -685,7 +703,7 @@ llvm::Value * IDISA_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::V
 }
 
 Value * IDISA_Builder::bitblock_any(Value * a) {
-    Type * iBitBlock = getIntNTy(mBitBlockWidth);
+    Type * iBitBlock = getIntNTy(getVectorBitWidth(a));
     return CreateICmpNE(CreateBitCast(a, iBitBlock),  ConstantInt::getNullValue(iBitBlock));
 }
 
