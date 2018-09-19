@@ -16,60 +16,61 @@
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa
 #include <llvm/Support/ErrorHandling.h>
-
+#include <re/re_utility.h>
 
 using namespace llvm;
 
 namespace re {
-RE * resolveCaseInsensitiveMode(RE * re, const bool inCaseInsensitiveMode) {
-    if (isa<CC>(re)) {
-        if (inCaseInsensitiveMode) {
-            return makeCC(caseInsensitize(*cast<CC>(re)));
-        }
+
+class ResolveCaseInsensitiveMode final : public RE_Transformer {
+public:
+    RE * transformCC(CC * cc) override;
+    RE * transformName(Name * name) override;
+    RE * transformGroup(Group * g) override;
+
+    ResolveCaseInsensitiveMode(const bool globallyCaseInsensitive) : inCaseInsensitiveMode(globallyCaseInsensitive) { }
+
+private:
+    bool inCaseInsensitiveMode;
+};
+
+RE * ResolveCaseInsensitiveMode::transformCC(CC * cc) {
+    if (inCaseInsensitiveMode) {
+        return makeCC(caseInsensitize(*cc));
+    }
+    return cc;
+}
+
+RE * ResolveCaseInsensitiveMode::transformName(Name * name) {
+    if (!inCaseInsensitiveMode || (name->getDefinition() == nullptr)) {
+        return name;
+    }
+    Name * n = nullptr;
+    if (name->hasNamespace()) {
+        n = makeName(name->getNamespace(), name->getName() + "/i", name->getType());
+    } else {
+        n = makeName(name->getName() + "/i", name->getType());
+    }
+    n->setDefinition(transform(name->getDefinition()));
+    return n;
+}
+
+RE * ResolveCaseInsensitiveMode::transformGroup(Group * g) {
+    if (g->getMode() == Group::Mode::CaseInsensitiveMode) {
+        const auto wasInCaseInsensitiveMode = inCaseInsensitiveMode;
+        inCaseInsensitiveMode = g->getSense() == Group::Sense::On;
+        RE * const re = transform(g->getRE());
+        inCaseInsensitiveMode = wasInCaseInsensitiveMode;
         return re;
-    } else if (Name * name = dyn_cast<Name>(re)) {
-        if (!inCaseInsensitiveMode || (name->getDefinition() == nullptr)) return re;
-        RE * r = resolveCaseInsensitiveMode(name->getDefinition(), true);
-        Name * n = nullptr;
-        if (name->hasNamespace()) {
-            n = makeName(name->getNamespace(), name->getName() + "/i", name->getType());
-        } else {
-            n = makeName(name->getName() + "/i", name->getType());
-        }
-        n->setDefinition(r);
-        return n;
-    } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        std::vector<RE*> list;
-        for (auto i = seq->begin(); i != seq->end(); ++i) {
-            list.push_back(resolveCaseInsensitiveMode(*i, inCaseInsensitiveMode));
-        }
-        return makeSeq(list.begin(), list.end());
-    } else if (Group * g = dyn_cast<Group>(re)) {
-        if (g->getMode() == Group::Mode::CaseInsensitiveMode) {
-            return resolveCaseInsensitiveMode(g->getRE(), g->getSense() == Group::Sense::On);
-        }
-        else {
-            return makeGroup(g->getMode(), resolveCaseInsensitiveMode(g->getRE(), inCaseInsensitiveMode), g->getSense());
-        }
-    } else if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE*> list;
-        for (auto i = alt->begin(); i != alt->end(); ++i) {
-            list.push_back(resolveCaseInsensitiveMode(*i, inCaseInsensitiveMode));
-        }
-        return makeAlt(list.begin(), list.end());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        return makeRep(resolveCaseInsensitiveMode(rep->getRE(), inCaseInsensitiveMode), rep->getLB(), rep->getUB());
-    } else if (const Diff * diff = dyn_cast<const Diff>(re)) {
-        return makeDiff(resolveCaseInsensitiveMode(diff->getLH(), inCaseInsensitiveMode),
-                        resolveCaseInsensitiveMode(diff->getRH(), inCaseInsensitiveMode));
-    } else if (const Intersect * e = dyn_cast<const Intersect>(re)) {
-        return makeIntersect(resolveCaseInsensitiveMode(e->getLH(), inCaseInsensitiveMode),
-                             resolveCaseInsensitiveMode(e->getRH(), inCaseInsensitiveMode));
-    } else if (const Assertion * a = dyn_cast<Assertion>(re)) {
-        return makeAssertion(resolveCaseInsensitiveMode(a->getAsserted(), inCaseInsensitiveMode), a->getKind(), a->getSense());
-    } else if (isa<Start>(re) || isa<End>(re)) {
-        return re;
-    } else llvm_unreachable("Unknown RE type");
+    } else {
+        return RE_Transformer::transformGroup(g);
+    }
+}
+
+
+RE * resolveCaseInsensitiveMode(RE * re, const bool globallyCaseInsensitive) {
+    ResolveCaseInsensitiveMode R(globallyCaseInsensitive);
+    return R.transform(re);
 }
 
 }

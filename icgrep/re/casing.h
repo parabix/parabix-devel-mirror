@@ -5,7 +5,7 @@ namespace re {
 
 class RE;
 
-RE * resolveCaseInsensitiveMode(RE * re, const bool inCaseInsensitiveMode);
+RE * resolveCaseInsensitiveMode(RE * re, const bool globallyCaseInsensitive);
 
 }
 
