@@ -23,7 +23,7 @@ void s2p_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * s0, Value
         Value * x0 = iBuilder->esimd_mergel(128, s0, s1);
         Value * x1 = iBuilder->esimd_mergeh(128, s0, s1);
 
-        t0 = iBuilder->hsimd_packh_in_lanes(PACK_LANES, 16, x0, x1); // TODO 4个bit streams时这里的16改为8?
+        t0 = iBuilder->hsimd_packh_in_lanes(PACK_LANES, 16, x0, x1);
         t1 = iBuilder->hsimd_packl_in_lanes(PACK_LANES, 16, x0, x1);
 
     } else {
