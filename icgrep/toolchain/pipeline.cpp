@@ -319,6 +319,9 @@ void generateSegmentParallelPipeline(const std::unique_ptr<KernelBuilder> & b, c
             Value * stringPtr = b->CreatePointerCast(b->GetString(formatString), b->getInt8PtrTy());
             b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fItems, fCycles, b->CreateFDiv(fCycles, fItems), percentage});
         }
+        const auto formatString = "Total CPU Cycles: %7.2e\n ";
+        Value * stringPtr = b->CreatePointerCast(b->GetString(formatString), b->getInt8PtrTy());
+        b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fTotalCycle});
     }
     
 }
@@ -400,6 +403,10 @@ void generatePipelineLoop(const std::unique_ptr<KernelBuilder> & b, const std::v
             Value * stringPtr = b->CreatePointerCast(b->GetString(formatString), b->getInt8PtrTy());
             b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fItems, fCycles, b->CreateFDiv(fCycles, fItems), percentage});
         }
+
+        const auto formatString = "Total CPU Cycles: %7.2e\n ";
+        Value * stringPtr = b->CreatePointerCast(b->GetString(formatString), b->getInt8PtrTy());
+        b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fTotalCycle});
     }
 
 }

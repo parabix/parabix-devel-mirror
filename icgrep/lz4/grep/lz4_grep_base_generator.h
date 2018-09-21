@@ -48,6 +48,7 @@ protected:
             parabix::StreamSetBuffer* refStream,
             std::vector<unsigned> numOfStreams
     );
+    unsigned calculateTwistWidth(unsigned numOfStreams);
 
 private:
     grep::GrepRecordBreakKind mGrepRecordBreak;

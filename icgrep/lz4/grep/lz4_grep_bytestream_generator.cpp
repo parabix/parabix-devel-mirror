@@ -30,18 +30,6 @@ LZ4GrepByteStreamGenerator::decompressBitStream(parabix::StreamSetBuffer *compre
     return this->decompressBitStreams(compressedByteStream, {compressedBitStream})[0];
 }
 
-unsigned LZ4GrepByteStreamGenerator::calculateTwistWidth(unsigned numOfStreams) {
-    if (numOfStreams <= 2) {
-        return numOfStreams;
-    } else if (numOfStreams <= 4) {
-        return 4;
-    } else if (numOfStreams <= 8) {
-        return 8;
-    } else {
-        llvm::report_fatal_error("Twist: Unsupported numOfStreams " + std::to_string(numOfStreams));;
-    }
-}
-
 std::vector<parabix::StreamSetBuffer *>
 LZ4GrepByteStreamGenerator::decompressBitStreams(parabix::StreamSetBuffer *compressedByteStream,
                                                  std::vector<parabix::StreamSetBuffer *> compressedBitStreams) {

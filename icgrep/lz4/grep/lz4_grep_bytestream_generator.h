@@ -12,7 +12,7 @@ protected:
     virtual std::vector<parabix::StreamSetBuffer*> decompressBitStreams(parabix::StreamSetBuffer* compressedByteStream, std::vector<parabix::StreamSetBuffer*> compressedBitStreams) override;
 
 private:
-    unsigned calculateTwistWidth(unsigned numOfStreams);
+
     parabix::StreamSetBuffer* twist(const std::unique_ptr<kernel::KernelBuilder> &b,
                                     std::vector<parabix::StreamSetBuffer*> inputStreams,
                                     unsigned twistWidth);
