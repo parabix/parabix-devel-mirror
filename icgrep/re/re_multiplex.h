@@ -11,21 +11,8 @@ namespace re {
     class Name;
     class CC;
 
-    RE * multiplex(RE * const re,
-                   const std::vector<const CC *> & UnicodeSets,
-                   const std::vector<std::vector<unsigned>> & exclusiveSetIDs);
-
     RE * transformCCs(cc::MultiplexedAlphabet * mpx, RE * r);
 
     
-    class CC_multiplexer : public RE_Transformer {
-    public:
-        CC_multiplexer(cc::MultiplexedAlphabet * mpx) : RE_Transformer(), mMultiplexedAlphabet(mpx) {}
-        RE * transformCC(CC *) override;
-        RE * transformName(Name *) override;
-    private:
-        cc::MultiplexedAlphabet * mMultiplexedAlphabet;
-    };
-
 }
 #endif
