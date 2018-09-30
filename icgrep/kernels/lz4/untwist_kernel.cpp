@@ -59,7 +59,7 @@ namespace kernel {
              mTwistWidth(twistWidth)
     {
         assert(twistWidth == 2 || twistWidth == 4);
-        assert(numberOfInputStream <= twistWidth);
+        assert(numberOfOutputStream <= twistWidth);
 
     }
 

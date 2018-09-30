@@ -35,7 +35,7 @@ public:
     inline ClassTypeId getClassTypeId() const {
         return mClassTypeId;
     }
-
+    virtual ~Alphabet() {}
 protected:
     Alphabet(std::string name, ClassTypeId k) : mAlphabetName(name), mClassTypeId(k) {}
 private:

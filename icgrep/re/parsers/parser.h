@@ -248,6 +248,8 @@ protected:
     LLVM_ATTRIBUTE_NORETURN void ParseFailure(const std::string & errmsg) {
         mCursor.ParseFailure(errmsg);
     }
+public:
+    virtual ~RE_Parser() {}
 
 protected:
     bool                        fByteMode;
