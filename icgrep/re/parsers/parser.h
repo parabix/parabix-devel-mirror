@@ -24,7 +24,8 @@ enum ModeFlagType : unsigned {
     DOTALL_MODE_FLAG = 4,         // not currently implemented
     IGNORE_SPACE_MODE_FLAG = 8,
     UNIX_LINES_MODE_FLAG = 16,
-    GRAPHEME_CLUSTER_MODE = 32
+    GRAPHEME_CLUSTER_MODE = 32,
+    COMPATIBLE_EQUIVALENCE_MODE = 64
 };
 
 using ModeFlagSet = unsigned;

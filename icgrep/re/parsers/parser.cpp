@@ -151,6 +151,7 @@ RE * RE_Parser::parse_mode_group(bool & closing_paren_parsed) {
         switch (*mCursor) {
             case 'i': modeBit = CASE_INSENSITIVE_MODE_FLAG; break;
             case 'g': modeBit = GRAPHEME_CLUSTER_MODE; break;
+            case 'K': modeBit = COMPATIBLE_EQUIVALENCE_MODE; break;
             case 'm': modeBit = MULTILINE_MODE_FLAG; break;
                 //case 's': modeBit = DOTALL_MODE_FLAG; break;
             case 'x': modeBit = IGNORE_SPACE_MODE_FLAG; break;
@@ -176,6 +177,10 @@ RE * RE_Parser::parse_mode_group(bool & closing_paren_parsed) {
             group_expr = makeGroup(Group::Mode::GraphemeMode, group_expr,
                                    (fModeFlagSet & GRAPHEME_CLUSTER_MODE) == 0 ? Group::Sense::Off : Group::Sense::On);
         }
+        if ((changed & COMPATIBLE_EQUIVALENCE_MODE) != 0) {
+            group_expr = makeGroup(Group::Mode::CompatibilityMode, group_expr,
+                                   (fModeFlagSet & COMPATIBLE_EQUIVALENCE_MODE) == 0 ? Group::Sense::Off : Group::Sense::On);
+        }
         fModeFlagSet = savedModeFlagSet;
         closing_paren_parsed = false;
         return group_expr;
@@ -192,6 +197,10 @@ RE * RE_Parser::parse_mode_group(bool & closing_paren_parsed) {
             if ((changed & GRAPHEME_CLUSTER_MODE) != 0) {
                 group_expr = makeGroup(Group::Mode::GraphemeMode, group_expr,
                                        (fModeFlagSet & GRAPHEME_CLUSTER_MODE) == 0 ? Group::Sense::Off : Group::Sense::On);
+            }
+            if ((changed & COMPATIBLE_EQUIVALENCE_MODE) != 0) {
+                group_expr = makeGroup(Group::Mode::CompatibilityMode, group_expr,
+                                       (fModeFlagSet & COMPATIBLE_EQUIVALENCE_MODE) == 0 ? Group::Sense::Off : Group::Sense::On);
             }
             return group_expr;
         }
@@ -223,7 +232,7 @@ RE * RE_Parser::parse_group() {
             group_expr = makeAtomicGroup(parse_alt());
         } else if (accept('|')) { // negative look ahead
             group_expr = makeBranchResetGroup(parse_alt());
-        } else if (atany("-dimsxg")) { // mode switches
+        } else if (atany("-dimsxgK")) { // mode switches
             bool closing_paren_parsed;
             group_expr = parse_mode_group(closing_paren_parsed);
             if (closing_paren_parsed) {

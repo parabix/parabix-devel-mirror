@@ -15,7 +15,7 @@ public:
     static inline bool classof(const RE * re) {return re->getClassTypeId() == ClassTypeId::Group;}
     static inline bool classof(const void *) {return false;}
     
-    enum class Mode {CaseInsensitiveMode, GraphemeMode};
+    enum class Mode {CaseInsensitiveMode, GraphemeMode, CompatibilityMode};
     enum class Sense {On, Off};
     Mode getMode() const {return mMode;}
     Sense getSense() const {return mSense;}

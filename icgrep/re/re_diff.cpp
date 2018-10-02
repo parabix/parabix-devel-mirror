@@ -14,12 +14,6 @@ using namespace llvm;
 namespace re {
 
 RE * makeDiff(RE * lh, RE * rh) {
-    if (defined<CC>(lh) && defined<CC>(rh)) {
-        CC * lh_cc = defCast<CC>(lh);
-        CC * rh_cc = defCast<CC>(rh);
-        if (lh_cc->getAlphabet() == rh_cc->getAlphabet())
-            return subtractCC(lh_cc, rh_cc);
-    }
     return new Diff(lh, rh);
 }
     

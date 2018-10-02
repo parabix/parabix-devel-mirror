@@ -134,6 +134,9 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         else if (g->getMode() == Group::Mode::CaseInsensitiveMode) {
             retVal.append((g->getSense() == Group::Sense::On) ? "+i:" : "-i:");
         }
+        else if (g->getMode() == Group::Mode::CompatibilityMode) {
+            retVal.append((g->getSense() == Group::Sense::On) ? "+K:" : "-K:");
+        }
         retVal.append(PrintRE(g->getRE()));
         retVal.append(")");
     } else if (isa<const Start>(re)) {

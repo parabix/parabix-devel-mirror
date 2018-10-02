@@ -4,7 +4,7 @@
 namespace re {
     
 class RE;
-    class Name;
+class Name;
     
 bool hasGraphemeClusterBoundary(const RE * re);
     
