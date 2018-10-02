@@ -16,7 +16,7 @@
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa
 #include <llvm/Support/ErrorHandling.h>
-#include <re/re_utility.h>
+#include <re/re_toolchain.h>
 
 using namespace llvm;
 
@@ -28,7 +28,8 @@ public:
     RE * transformName(Name * name) override;
     RE * transformGroup(Group * g) override;
 
-    ResolveCaseInsensitiveMode(const bool globallyCaseInsensitive) : inCaseInsensitiveMode(globallyCaseInsensitive) { }
+    ResolveCaseInsensitiveMode(const bool globallyCaseInsensitive) :
+       RE_Transformer("CaseInsensitize"), inCaseInsensitiveMode(globallyCaseInsensitive) { }
 
 private:
     bool inCaseInsensitiveMode;
@@ -70,7 +71,7 @@ RE * ResolveCaseInsensitiveMode::transformGroup(Group * g) {
 
 RE * resolveCaseInsensitiveMode(RE * re, const bool globallyCaseInsensitive) {
     ResolveCaseInsensitiveMode R(globallyCaseInsensitive);
-    return R.transform(re);
+    return R.transformRE(re);
 }
 
 }

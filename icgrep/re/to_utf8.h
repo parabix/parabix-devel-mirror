@@ -8,18 +8,18 @@
 #define TO_UTF8_H
 
 #include <re/re_re.h>
-#include <re/re_utility.h>
+#include <re/re_toolchain.h>
 
 namespace re {
 class CC;
 
 class UTF8_Transformer : public RE_Transformer {
 public:
-    UTF8_Transformer(NameTransformationMode m = NameTransformationMode::None) : RE_Transformer(m) {}
+    UTF8_Transformer(NameTransformationMode m = NameTransformationMode::None) : RE_Transformer("ToUTF8", m) {}
     RE * transformCC(CC * cc) override;
 };
 
 inline RE * toUTF8(RE * r, bool convertName = false) {
-    return UTF8_Transformer(convertName ? NameTransformationMode::TransformDefinition : NameTransformationMode::None ).transform(r);}
+    return UTF8_Transformer(convertName ? NameTransformationMode::TransformDefinition : NameTransformationMode::None ).transformRE(r);}
 }
 #endif // TO_UTF8_H

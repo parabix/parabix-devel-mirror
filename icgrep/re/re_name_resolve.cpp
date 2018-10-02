@@ -14,7 +14,7 @@
 #include <re/re_start.h>
 #include <re/re_end.h>
 #include <re/re_any.h>
-#include <re/re_utility.h>
+#include <re/re_toolchain.h>
 #include <re/re_memoizer.hpp>
 #include <UCD/resolve_properties.h>
 #include <cc/alphabet.h>
@@ -29,7 +29,7 @@ namespace re {
   
 class UnicodeNameResolver : public RE_Transformer {
 public:
-    UnicodeNameResolver() : RE_Transformer() {}
+    UnicodeNameResolver() : RE_Transformer("UnicodeNames") {}
     RE * transformName(Name * name) override;
 private:
     Memoizer mMemoizer;
@@ -56,7 +56,7 @@ RE * UnicodeNameResolver::transformName(Name * name) {
 }
 
 RE * resolveUnicodeNames(RE * re) {
-    return UnicodeNameResolver().transform(re);
+    return UnicodeNameResolver().transformRE(re);
 }
 
  
@@ -99,7 +99,7 @@ RE * AnchorResolution::transformEnd(End * e) {
 }
 
 RE * resolveAnchors(RE * r, RE * breakRE) {
-    return AnchorResolution(breakRE).transform(r);
+    return AnchorResolution(breakRE).transformRE(r);
 }
                                                         
 }

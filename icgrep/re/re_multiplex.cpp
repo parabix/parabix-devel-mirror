@@ -11,6 +11,7 @@
 #include <re/re_analysis.h>
 #include <re/re_memoizer.hpp>
 #include <re/printer_re.h>
+#include <re/re_toolchain.h>
 #include <UCD/ucd_compiler.hpp>
 #include <UCD/resolve_properties.h>
 #include <boost/container/flat_set.hpp>
@@ -29,7 +30,8 @@ namespace re {
 
 class CC_multiplexer : public RE_Transformer {
 public:
-    CC_multiplexer(cc::MultiplexedAlphabet * mpx) : RE_Transformer(), mMultiplexedAlphabet(mpx) {}
+    CC_multiplexer(cc::MultiplexedAlphabet * mpx) :
+        RE_Transformer("Multiplex_" + mpx->getName()), mMultiplexedAlphabet(mpx) {}
     RE * transformCC(CC *) override;
     RE * transformName(Name *) override;
 private:
@@ -57,7 +59,7 @@ RE * CC_multiplexer::transformName(Name * name) {
 }
 
 RE * transformCCs(cc::MultiplexedAlphabet * mpx, RE * re) {
-    return CC_multiplexer(mpx).transform(re);
+    return CC_multiplexer(mpx).transformRE(re);
 } 
 
 }

@@ -46,15 +46,6 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         retVal = "CC \"";
         retVal += re_cc->canonicalName();
         retVal += "\" ";
-
-        for (const auto & i : *re_cc) {
-            retVal += "[";
-            retVal += std::to_string(lo_codepoint(i));
-            if (hi_codepoint(i) != lo_codepoint(i))
-                retVal += "-" + std::to_string(hi_codepoint(i));
-            retVal += "]";
-        }
-        retVal += "/" + re_cc->getAlphabet()->getName();
     } else if (const Name* re_name = dyn_cast<const Name>(re)) {
         retVal = "Name \"";
         if (re_name->hasNamespace()) {

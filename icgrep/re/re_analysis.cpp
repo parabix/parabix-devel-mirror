@@ -500,7 +500,7 @@ struct ByteTestComplexity {
 void ByteTestComplexity::gatherTests(RE * re) {
     if (const CC * cc = dyn_cast<CC>(re)) {
         if (cc->getAlphabet() == &cc::Unicode) {
-            gatherTests(UTF8_Transformer().transform(re));
+            gatherTests(UTF8_Transformer().transformRE(re));
         } else {
             for (const auto range : *cc) {
                 const auto lo = re::lo_codepoint(range);

@@ -1,7 +1,7 @@
 #ifndef RE_STAR_NORMAL_H
 #define RE_STAR_NORMAL_H
 
-#include <re/re_utility.h>
+#include <re/re_toolchain.h>
 
 namespace re {
 
@@ -19,8 +19,8 @@ class RE; class Rep;
 // Usage:  RE_Star_Normal().transform(regexp);
 
 class RE_Star_Normal : public RE_Transformer {
-    
 public:
+    RE_Star_Normal() : RE_Transformer("StarNormal") {}
     RE * transformRep(Rep * rep) override;
 };
 

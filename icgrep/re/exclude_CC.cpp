@@ -18,7 +18,7 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
-#include <re/re_utility.h>
+#include <re/re_toolchain.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
 
@@ -28,7 +28,7 @@ namespace re {
  
 class CC_Remover : public RE_Transformer {
 public:
-    CC_Remover(CC * toExclude) : RE_Transformer(), mExcludedCC(toExclude) {}
+    CC_Remover(CC * toExclude) : RE_Transformer("Exclude"), mExcludedCC(toExclude) {}
     RE * transformCC (CC * cc) override;
     RE * transformName (Name * name) override;
 private:
@@ -61,7 +61,7 @@ RE * CC_Remover::transformName(Name * n) {
 }
     
 RE * exclude_CC(RE * re, CC * cc) {
-    return CC_Remover(cc).transform(re);
+    return CC_Remover(cc).transformRE(re);
 }
 }
 

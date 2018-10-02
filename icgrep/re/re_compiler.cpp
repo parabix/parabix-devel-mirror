@@ -128,7 +128,7 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
         }
         return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, pb.createInFile(mCCCompiler.compileCC(cc, pb))));
     } else if (a == &cc::Unicode) {
-        MarkerType m = compile(UTF8_Transformer().transform(cc), pb);
+        MarkerType m = compile(UTF8_Transformer().transformRE(cc), pb);
         if (isByteLength(cc)) {
             if (marker.pos == FinalMatchUnit) {
                 nextPos = pb.createAdvance(nextPos, 1);
