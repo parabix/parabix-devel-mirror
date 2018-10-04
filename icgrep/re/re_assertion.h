@@ -54,7 +54,7 @@ inline Assertion::Sense Assertion::negateSense(Assertion::Sense s) {
 }
 
 inline RE * makeAssertion(RE * asserted, Assertion::Kind k, Assertion::Sense s) {
-    if (RE_Nullable::isNullable(asserted)) {
+    if (isNullable(asserted)) {
         if (k == Assertion::Kind::Boundary) {
             if (s == Assertion::Sense::Positive) return makeAlt();
             else return makeSeq();

@@ -19,7 +19,7 @@ namespace re {
 
 RE * star_rule(RE * re) {
     if (Seq * seq = dyn_cast<Seq>(re)) {
-        if (RE_Nullable::isNullable(re)) {
+        if (isNullable(re)) {
             std::vector<RE *> list;
             list.reserve(seq->size());
             for (RE * r : *seq) {

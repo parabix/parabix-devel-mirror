@@ -20,14 +20,8 @@ public:
     RE * getLo() const {
         return mLo;
     }
-    void setLo(RE * lh) {
-        mLo = lh;
-    }
     RE * getHi() const {
         return mHi;
-    }
-    void setHi(RE * rh) {
-        mHi = rh;
     }
 protected:
     friend RE * makeRange(RE*, RE*);

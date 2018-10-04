@@ -98,14 +98,8 @@ RE * excludeUnicodeLineBreak(RE * r) {
 RE * regular_expression_passes(RE * r) {
 
     //Optimization passes to simplify the AST.
-    r = RE_Nullable::removeNullablePrefix(r);
-    if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
-        errs() << "RemoveNullablePrefix:\n" << Printer_RE::PrintRE(r) << '\n';
-    }
-    r = RE_Nullable::removeNullableSuffix(r);
-    if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowStrippedREs)) {
-        errs() << "RemoveNullableSuffix:\n" << Printer_RE::PrintRE(r) << '\n';
-    }
+    r = removeNullablePrefix(r);
+    r = removeNullableSuffix(r);
     r = RE_Star_Normal().transformRE(r);
     if (codegen::OptLevel > 1) {
         r = RE_Minimizer::minimize(r);

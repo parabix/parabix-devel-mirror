@@ -5,19 +5,9 @@ namespace re { class RE; }
 namespace re { class Vector; }
 
 namespace re {
-
-class RE_Nullable {
-public:
-    static RE * excludeNullable(RE * re);
-    static RE * removeNullablePrefix(RE * re);
-    static RE * removeNullableSuffix(RE * re);
-    static bool isNullable(const RE * re);
-    static bool hasNullablePrefix(const RE * re);
-    static bool hasNullableSuffix(const RE * re);
-private:
-    static bool isNullable(const Vector * vec);
-};
-
+    bool isNullable(const RE * re);
+    RE * removeNullablePrefix(RE * re);
+    RE * removeNullableSuffix(RE * re);
 }
 
 #endif // RE_NULLABLE_H

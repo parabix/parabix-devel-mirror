@@ -16,14 +16,8 @@ public:
     RE * getLH() const {
         return mLh;
     }
-    void setLH(RE * lh) {
-        mLh = lh;
-    }
     RE * getRH() const {
         return mRh;
-    }
-    void setRH(RE * rh) {
-        mRh = rh;
     }
 protected:
     friend RE * makeIntersect(RE*, RE*);

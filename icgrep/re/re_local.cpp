@@ -42,7 +42,7 @@ const CC * first(const RE * re) {
         const CC * cc = nullptr;
         for (auto & si : *seq) {
             cc = combine(cc, first(si));
-            if (!RE_Nullable::isNullable(si)) {
+            if (!isNullable(si)) {
                 break;
             }
         }
@@ -84,7 +84,7 @@ const CC * final(const RE * re) {
         const CC * cc = nullptr;
         for (auto & si : boost::adaptors::reverse(*seq)) {
             cc = combine(cc, final(si));
-            if (!RE_Nullable::isNullable(si)) {
+            if (!isNullable(si)) {
                 break;
             }
         }

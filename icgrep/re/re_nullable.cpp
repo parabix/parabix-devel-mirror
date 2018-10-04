@@ -8,6 +8,7 @@
 #include <re/re_rep.h>             // for Rep, makeRep
 #include <re/re_seq.h>             // for Seq, makeSeq
 #include <re/re_group.h>             // for Seq, makeSeq
+#include <re/re_toolchain.h>
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa
 
@@ -23,132 +24,7 @@ using namespace llvm;
 
 namespace re {
 
-    
-RE * RE_Nullable::excludeNullable(RE * re) {
-    if (!isNullable(re)) return re;
-    if (Seq * seq = dyn_cast<Seq>(re)) {
-        // All items in the seq must be nullable.  We must allow
-        // all possibilities that all but one continue to match empty.
-        std::vector<RE*> alts;
-        for (auto i = 0; i < seq->size(); i++) {
-            std::vector<RE*> list;
-            for (auto j = 0; j < seq->size(); j++) {
-                if (i == j) {
-                    list.push_back(excludeNullable(&seq[j]));
-                } else {
-                    list.push_back(&seq[j]);
-                }
-            }
-            alts.push_back(makeSeq(list.begin(), list.end()));
-        }
-        return makeAlt(alts.begin(), alts.end());
-    } else if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE*> list;
-        for (auto i = alt->begin(); i != alt->end(); ++i) {
-            list.push_back(excludeNullable(*i));
-        }
-        return makeAlt(list.begin(), list.end());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        auto lb = rep->getLB();
-        auto ub = rep->getUB();
-        auto e = rep->getRE();
-        if (!isNullable(e)) {
-            assert (lb == 0);  // because isNullable(re) is true
-            return makeRep(e, 1, ub);
-        }
-        auto e1 = excludeNullable(e);
-        if (ub == 1) {
-            return e1;
-        } else {
-            return makeSeq({e1, makeRep(e, lb == 0 ? 0 : lb - 1, ub == Rep::UNBOUNDED_REP ? ub : ub - 1)});
-        }
-    } else if (Group * g = dyn_cast<Group>(re)) {
-        return makeGroup(g->getMode(), excludeNullable(g->getRE()), g->getSense());
-    } else if (Name * name = dyn_cast<Name>(re)) {
-        return excludeNullable(name->getDefinition());
-    }
-    return re;
-}
-
-    
-RE * RE_Nullable::removeNullablePrefix(RE * re) {
-    if (!hasNullablePrefix(re)) return re;
-    if (Seq * seq = dyn_cast<Seq>(re)) {
-        std::vector<RE*> list;
-        for (auto i = seq->begin(); i != seq->end(); ++i) {
-            if (!isNullable(*i)) {
-                list.push_back(removeNullablePrefix(*i));
-                std::copy(++i, seq->end(), std::back_inserter(list));
-                break;
-            }
-        }
-        return makeSeq(list.begin(), list.end());
-    } else if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE*> list;
-        for (auto i = alt->begin(); i != alt->end(); ++i) {
-            list.push_back(removeNullablePrefix(*i));
-        }
-        return makeAlt(list.begin(), list.end());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        auto lb = rep->getLB();
-        auto e = rep->getRE();
-        if ((lb == 0) || isNullable(e)) {
-            return makeSeq();
-        }
-        else if (hasNullablePrefix(e)) {
-            return makeSeq({removeNullablePrefix(e), makeRep(e, lb - 1, lb - 1)});
-        }
-        else {
-            return makeRep(e, lb, lb);
-        }
-    } else if (Name * name = dyn_cast<Name>(re)) {
-        auto def = name->getDefinition();
-        if (hasNullablePrefix(def)) {
-            return removeNullablePrefix(def);
-        }
-    }
-    return re;
-}
-
-RE * RE_Nullable::removeNullableSuffix(RE * re) {
-    if (Seq * seq = dyn_cast<Seq>(re)) {
-        std::vector<RE*> list;
-        for (auto i = seq->rbegin(); i != seq->rend(); ++i) {
-            if (!isNullable(*i)) {
-                std::copy(seq->begin(), (i + 1).base(), std::back_inserter(list));
-                list.push_back(removeNullableSuffix(*i));
-                break;
-            }
-        }
-        return makeSeq(list.begin(), list.end());
-    } else if (Alt* alt = dyn_cast<Alt>(re)) {
-        std::vector<RE*> list;
-        for (auto i = alt->begin(); i != alt->end(); ++i) {
-            list.push_back(removeNullableSuffix(*i));
-        }
-        return makeAlt(list.begin(), list.end());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        auto lb = rep->getLB();
-        auto e = rep->getRE();
-        if ((lb == 0) || isNullable(e)) {
-            return makeSeq();
-        }
-        else if (hasNullableSuffix(e)) {
-            return makeSeq({makeRep(e, lb - 1, lb - 1), removeNullableSuffix(e)});
-        }
-        else {
-            return makeRep(e, lb, lb);
-        }
-    } else if (Name * name = dyn_cast<Name>(re)) {
-        auto def = name->getDefinition();
-        if (hasNullableSuffix(def)) {
-            return removeNullableSuffix(def);
-        }
-    }
-    return re;
-}
-
-bool RE_Nullable::isNullable(const RE * re) {
+bool isNullable(const RE * re) {
     if (const Seq * re_seq = dyn_cast<const Seq>(re)) {
         for (const RE * re : *re_seq) {
             if (!isNullable(re)) {
@@ -175,42 +51,107 @@ bool RE_Nullable::isNullable(const RE * re) {
     return false;
 }
 
-bool RE_Nullable::hasNullablePrefix(const RE * re) {
-    if (const Seq * seq = dyn_cast<const Seq>(re)) {
-        if (seq->empty()) return false;
-        return isNullable(seq->front()) || hasNullablePrefix(seq->front());
-    } else if (const Alt * alt = dyn_cast<const Alt>(re)) {
-        for (const RE * a : *alt) {
-            if (hasNullablePrefix(a)) {
-                return true;
-            }
-        }
-        return false;
-    } else if (const Rep * rep = dyn_cast<const Rep>(re)) {
-        return (rep->getLB() != rep->getUB()) || hasNullablePrefix(rep->getRE());
-    } else if (const Group * g = dyn_cast<const Group>(re)) {
-        return hasNullablePrefix(g->getRE());
+
+class NullablePrefixRemover: public RE_Transformer {
+protected:
+    RE * transformSeq(Seq * seq) override;
+    RE * transformRep(Rep * rep) override;
+    RE * transformAssertion(Assertion * a) override;
+public:
+    NullablePrefixRemover() : RE_Transformer("NullablePrefixRemoval") {}
+};
+
+RE * NullablePrefixRemover::transformSeq(Seq * seq) {
+    std::vector<RE*> list;
+    // if the sequence is empty, return it unmodified.
+    if (isNullable(seq)) return seq;
+    // Process the first element.
+    auto i = seq->begin();
+    auto e = transform(*i);
+    while (isNullable(e)) {
+        // Skip empty elements.
+        i++;
+        e = transform(*i);
     }
-    return false;
+    // Special case: nothing skipped and first element unchanged.
+    if ((i == seq->begin()) && (e == *i)) return seq;
+    list.push_back(e);
+    i++;
+    while (i != seq->end()) {
+        list.push_back(*i);
+        i++;
+    }
+    return makeSeq(list.begin(), list.end());
 }
 
-bool RE_Nullable::hasNullableSuffix(const RE * re) {
-    if (const Seq * seq = dyn_cast<const Seq>(re)) {
-        if (seq->empty()) return false;
-        return isNullable(seq->back()) || hasNullableSuffix(seq->back());
-    } else if (const Alt * alt = dyn_cast<const Alt>(re)) {
-        for (const RE * a : *alt) {
-            if (hasNullableSuffix(a)) {
-                return true;
-            }
-        }
-        return false;
-    } else if (const Rep * rep = dyn_cast<const Rep>(re)) {
-        return (rep->getLB() != rep->getUB()) || hasNullableSuffix(rep->getRE());
-    } else if (const Group * g = dyn_cast<const Group>(re)) {
-        return hasNullableSuffix(g->getRE());
+RE * NullablePrefixRemover::transformRep(Rep * rep) {
+    auto lb = rep->getLB();
+    auto r = rep->getRE();
+    if ((lb == 0) || isNullable(r)) {
+        return makeSeq();
     }
-    return false;
+    auto s = transform(r);
+    if ((s == r) && (lb == rep->getUB())) return rep; // special case.  No transformation required.
+    if (lb == 1) return s;
+    if (lb == 2) return makeSeq({s, r});
+    return makeSeq({s, makeRep(r, lb - 1, lb - 1)});
 }
+
+RE * NullablePrefixRemover::transformAssertion(Assertion * a) {
+    return a;
+}
+
+RE * removeNullablePrefix(RE * r) {
+    return NullablePrefixRemover().transformRE(r);
+}
+
+class NullableSuffixRemover: public RE_Transformer {
+protected:
+    RE * transformSeq(Seq * seq) override;
+    RE * transformRep(Rep * rep) override;
+    RE * transformAssertion(Assertion * a) override;
+public:
+    NullableSuffixRemover() : RE_Transformer("NullableSuffixRemoval") {}
+};
+
+RE * NullableSuffixRemover::transformSeq(Seq * seq) {
+    std::vector<RE*> list;
+    // if the sequence is empty, return it unmodified.
+    if (isNullable(seq)) return seq;
+    // Process the last element.
+    auto ri = seq->rbegin();
+    auto r = transform(*ri);
+    while (isNullable(r)) {
+        // Skip empty elements.
+        ri++;
+        r = transform(*ri);
+    }
+    // Special case: nothing skipped and first element unchanged.
+    if ((ri == seq->rbegin()) && (r == *ri)) return seq;
+    std::copy(seq->begin(), (ri + 1).base(), std::back_inserter(list));
+    list.push_back(r);
+    return makeSeq(list.begin(), list.end());
+}
+
+RE * NullableSuffixRemover::transformRep(Rep * rep) {
+    auto lb = rep->getLB();
+    auto r = rep->getRE();
+    if ((lb == 0) || isNullable(r)) {
+        return makeSeq();
+    }
+    auto s = transform(r);
+    if ((s == r) && (lb == rep->getUB())) return rep; // special case.  No transformation required.
+    if (lb == 1) return s;
+    if (lb == 2) return makeSeq({r, s});
+    return makeSeq({makeRep(r, lb - 1, lb - 1), s});
+}
+
+RE * NullableSuffixRemover::transformAssertion(Assertion * a) {
+    return a;
+}
+RE * removeNullableSuffix(RE * r) {
+    return NullableSuffixRemover().transformRE(r);
+}
+    
 
 }

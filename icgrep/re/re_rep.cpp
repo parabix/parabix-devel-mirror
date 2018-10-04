@@ -32,7 +32,7 @@ RE * makeRep(RE * re, int lb, const int ub) {
     if (LLVM_UNLIKELY(ub != Rep::UNBOUNDED_REP && ub < lb)) {
         report_fatal_error("lower bound cannot exceed upper bound");
     }
-    if (RE_Nullable::isNullable(re)) {
+    if (isNullable(re)) {
         if (ub == 1) {
             return re;
         }
