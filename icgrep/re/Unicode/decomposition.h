@@ -7,37 +7,51 @@
 #ifndef DECOMPOSITION_H
 #define DECOMPOSITION_H
 
-namespace re { class RE; class CC;}
+#include <string>
+#include <locale>
+#include <codecvt>
+#include <re/re_toolchain.h>
+#include <UCD/unicode_set.h>
 
-/*  NFD, NFKD and casefold decompositions of a character class.
-    Each codepoint in a class is mapped to its decomposition
-    under the appropriate mapping, which may be itself, another
-    single codepoint (singleton decomposition) or a codepoint
-    string (expanding decomposition).   In general, the result is
-    a set of alternatives consisting of sequences for each expanding
-    decomposition plus a single character class for all the
-    singleton decompositions as well as the codepoints that map to
-    themselves.
-*/
+namespace re { class RE; class CC; class Seq;}
+namespace UCD { class EnumeratedPropertyObject; class StringPropertyObject; class StringOverridePropertyObject;}
 
-re::RE * NFD_CC(re::CC * cc);
-    
-re::RE * NFKD_CC(re::CC * cc);
+namespace UCD {
+    enum DecompositionOptions : int {NFD = 0, CaseFold = 1, NFKD = 2};
 
-re::RE * Casefold_CC(re::CC * cc);
-
-/*  Systematic NFD, NFKD and casefold decomposition of all character
-    classes in a regular expression.  */
-
-re::RE * NFD_RE(re::RE * r);
-
-re::RE * NFKD_RE(re::RE * r);
-
-re::RE * Casefold_RE(re::RE * r);
-
-/* For every decomposed sequence in RE, add alternatives for all
-   canonically equivalent reorderings according to Unicode rules. */
-re::RE * allOrderings_RE(re::RE * re);
-
-
+    class NFD_Transformer : public re::RE_Transformer {
+    public:
+        /* Transforme an RE so that all string pieces and character classes
+         are converted to NFD form (or NFKD form if the UCD::Compatible option
+         is used.  The options may also including case folding.  Example:
+         UCD:NFD_Transformer(UCD::CaseFold | UCD::NFKD).transformRE(r);
+        */
+        NFD_Transformer(DecompositionOptions opt = NFD);
+        /* Helpers to convert and append an individual codepoint or a u32string
+           to an existing NFD_string.   The process performs any necessary
+           reordering of marks of the existing string and the appended data
+           to ensure that the result is overall in NFD form.
+           These may be used independently of RE transformation, for example:
+           UCD::NFD_Transformer(UCD::CaseFold).NFD_append1(s, cp);
+        */
+        void NFD_append1(std::u32string & NFD_string, codepoint_t cp);
+        void NFD_append(std::u32string & NFD_string, std::u32string & to_convert);
+    protected:
+        re::RE * transformCC(re::CC * cc) override;
+        re::RE * transformSeq(re::Seq * seq) override;
+        re::RE * transformGroup(re::Group * g) override;
+        bool reordering_needed(std::u32string & prefix, codepoint_t suffix_cp);
+    private:
+        DecompositionOptions mOptions;
+        EnumeratedPropertyObject * decompTypeObj;
+        StringPropertyObject * decompMappingObj;
+        EnumeratedPropertyObject * cccObj;
+        StringOverridePropertyObject * caseFoldObj;
+        const UnicodeSet & canonicalMapped;
+        const UnicodeSet & cc0Set;
+        const UnicodeSet selfNFKD;
+        const UnicodeSet selfCaseFold;
+        std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
+    };
+}
 #endif

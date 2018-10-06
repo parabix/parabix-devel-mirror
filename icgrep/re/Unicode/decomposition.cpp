@@ -24,238 +24,24 @@
 #include <UCD/PropertyValueAliases.h>
 #include <llvm/Support/Casting.h>
 
-using namespace UCD;
 using namespace llvm;
 using namespace re;
 
+namespace UCD {
+    
 // Constants for computation of Hangul decompositions, see Unicode Standard, section 3.12.
 const codepoint_t Hangul_SBase = 0xAC00;
 const codepoint_t Hangul_LBase = 0x1100;
+//const codepoint_t Hangul_LMax = 0x1112;
 const codepoint_t Hangul_VBase = 0x1161;
+//const codepoint_t Hangul_VMax = 0x1175;
 const codepoint_t Hangul_TBase = 0x11A7;
+//const codepoint_t Hangul_TMax = 0x11C2;
 const unsigned Hangul_TCount = 28;
 const unsigned Hangul_NCount = 588;
 const unsigned Hangul_SCount = 11172;
-static UnicodeSet HangulPrecomposed = UnicodeSet(Hangul_SBase, Hangul_SBase + Hangul_SCount - 1);
 
-static RE * HangulDecomposition(codepoint_t cp) {
-    auto SIndex = cp - Hangul_SBase;
-    auto LIndex = SIndex / Hangul_NCount;
-    auto VIndex = (SIndex % Hangul_NCount) / Hangul_TCount;
-    auto TIndex = SIndex % Hangul_TCount;
-    auto L = makeCC(Hangul_LBase + LIndex);
-    auto V = makeCC(Hangul_VBase + VIndex);
-    if (TIndex > 0) {
-        return makeSeq({L, V, makeCC(Hangul_TBase + TIndex)});
-    } else {
-        return makeSeq({L, V});
-    }
-}
-
-RE * NFD_CC(CC * cc) {
-    std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
-    const auto & decompMappingObj = cast<StringPropertyObject>(property_object_table[dm]);
-    const auto & decompTypeObj = cast<EnumeratedPropertyObject>(property_object_table[dt]);
-    UnicodeSet canonicalMapped = decompTypeObj->GetCodepointSet(DT_ns::Can);
-    UnicodeSet mappingRequired = *cc & (canonicalMapped + HangulPrecomposed);
-    if (mappingRequired.empty()) return cc;
-    std::vector<RE *> alts;
-    CC * finalCC = makeCC(*cc - mappingRequired);
-    for (const interval_t & i : mappingRequired) {
-        for (codepoint_t cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++) {
-            if (HangulPrecomposed.contains(cp)) {
-                alts.push_back(HangulDecomposition(cp));
-            } else {
-                std::u32string dms = conv.from_bytes(decompMappingObj->GetStringValue(cp));
-                RE * dm = NFD_RE(u32string2re(dms));
-                if (CC * nfd_cc = dyn_cast<CC>(dm)) {
-                    finalCC = makeCC(finalCC, nfd_cc);
-                } else if (Seq * s = dyn_cast<Seq>(dm)) {
-                    if (s->size() == 1) {
-                        finalCC = makeCC(finalCC, cast<CC>(s->front()));
-                    } else {
-                        alts.push_back(s);
-                    }
-                } else {
-                    alts.push_back(dm);
-                }
-            }
-        }
-    }
-    if (!finalCC->empty()) alts.push_back(finalCC);
-    return makeAlt(alts.begin(), alts.end());
-}
-
-
-RE * NFKD_CC(CC * cc) {
-    std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
-    const auto & decompMappingObj = cast<StringPropertyObject>(property_object_table[dm]);
-    UnicodeSet reflexiveSet = decompMappingObj->GetReflexiveSet() - HangulPrecomposed;
-    UnicodeSet mappingRequired = *cc - reflexiveSet;
-    if (mappingRequired.empty()) return cc;
-    std::vector<RE *> alts;
-    CC * finalCC = makeCC(*cc - mappingRequired);
-    for (const interval_t & i : mappingRequired) {
-        for (codepoint_t cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++) {
-            if (HangulPrecomposed.contains(cp)) {
-                alts.push_back(HangulDecomposition(cp));
-            } else {
-                std::u32string dms = conv.from_bytes(decompMappingObj->GetStringValue(cp));
-                RE * dm = NFKD_RE(u32string2re(dms));
-                if (CC * nfkd_cc = dyn_cast<CC>(dm)) {
-                    finalCC = makeCC(finalCC, nfkd_cc);
-                } else if (Seq * s = dyn_cast<Seq>(dm)) {
-                    if (s->size() == 1) {
-                        finalCC = makeCC(finalCC, cast<CC>(s->front()));
-                    } else {
-                        alts.push_back(s);
-                    }
-                } else {
-                    alts.push_back(dm);
-                }
-            }
-        }
-    }
-    if (!finalCC->empty()) alts.push_back(finalCC);
-    return makeAlt(alts.begin(), alts.end());
-}
-
-RE * Casefold_CC(CC * cc) {
-    std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
-    const auto & caseFoldObj = cast<StringOverridePropertyObject>(property_object_table[cf]);
-    UnicodeSet reflexiveSet = caseFoldObj->GetReflexiveSet();
-    UnicodeSet foldingRequired = *cc - reflexiveSet;
-    if (foldingRequired.empty()) return cc;
-    std::vector<RE *> alts;
-    CC * finalCC = makeCC(*cc - foldingRequired);
-    for (const interval_t & i : foldingRequired) {
-        for (codepoint_t cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++) {
-            std::u32string dms = conv.from_bytes(caseFoldObj->GetStringValue(cp));
-            RE * dm = NFD_RE(u32string2re(dms));
-            if (CC * nfd_cc = dyn_cast<CC>(dm)) {
-                finalCC = makeCC(finalCC, nfd_cc);
-            } else if (Seq * s = dyn_cast<Seq>(dm)) {
-                if (s->size() == 1) {
-                    finalCC = makeCC(finalCC, cast<CC>(s->front()));
-                } else {
-                    alts.push_back(s);
-                }
-            } else {
-                alts.push_back(dm);
-            }
-        }
-    }
-    if (!finalCC->empty()) alts.push_back(finalCC);
-    return makeAlt(alts.begin(), alts.end());
-}
-
-RE * NFD_RE(RE * re) {
-    if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE *> list;
-        list.reserve(alt->size());
-        for (RE * re : *alt) {
-            list.push_back(NFD_RE(re));
-        }
-        return makeAlt(list.begin(), list.end());
-    } else if (CC * cc = dyn_cast<CC>(re)) {
-        return NFD_CC(cc);
-    } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        std::vector<RE *> list;
-        list.reserve(seq->size());
-        for (RE * re : *seq) {
-            list.push_back(NFD_RE(re));
-        }
-        return makeSeq(list.begin(), list.end());
-    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-        return makeAssertion(NFD_RE(a->getAsserted()), a->getKind(), a->getSense());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        RE * expr = NFD_RE(rep->getRE());
-        return makeRep(expr, rep->getLB(), rep->getUB());
-    } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        return makeDiff(NFD_RE(diff->getLH()), NFD_RE(diff->getRH()));
-    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
-        return makeIntersect(NFD_RE(e->getLH()), NFD_RE(e->getRH()));
-    } else if (Range * rg = dyn_cast<Range>(re)) {
-        return makeRange(NFD_RE(rg->getLo()), NFD_RE(rg->getHi()));
-    } else if (Group * g = dyn_cast<Group>(re)) {
-        return makeGroup(g->getMode(), NFD_RE(g->getRE()), g->getSense());
-    }
-    return re;
-}
-    
-RE * NFKD_RE(RE * re) {
-    if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE *> list;
-        list.reserve(alt->size());
-        for (RE * re : *alt) {
-            list.push_back(NFKD_RE(re));
-        }
-        return makeAlt(list.begin(), list.end());
-    } else if (CC * cc = dyn_cast<CC>(re)) {
-        return NFKD_CC(cc);
-    } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        std::vector<RE *> list;
-        list.reserve(seq->size());
-        for (RE * re : *seq) {
-            list.push_back(NFKD_RE(re));
-        }
-        return makeSeq(list.begin(), list.end());
-    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-        return makeAssertion(NFKD_RE(a->getAsserted()), a->getKind(), a->getSense());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        RE * expr = NFKD_RE(rep->getRE());
-        return makeRep(expr, rep->getLB(), rep->getUB());
-    } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        return makeDiff(NFKD_RE(diff->getLH()), NFKD_RE(diff->getRH()));
-    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
-        return makeIntersect(NFKD_RE(e->getLH()), NFKD_RE(e->getRH()));
-    } else if (Range * rg = dyn_cast<Range>(re)) {
-        return makeRange(NFKD_RE(rg->getLo()), NFKD_RE(rg->getHi()));
-    } else if (Group * g = dyn_cast<Group>(re)) {
-        return makeGroup(g->getMode(), NFKD_RE(g->getRE()), g->getSense());
-    }
-    return re;
-}
-
-RE * Casefold_RE(RE * re) {
-    if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE *> list;
-        list.reserve(alt->size());
-        for (RE * re : *alt) {
-            list.push_back(Casefold_RE(re));
-        }
-        return makeAlt(list.begin(), list.end());
-    } else if (CC * cc = dyn_cast<CC>(re)) {
-        return Casefold_CC(cc);
-    } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        std::vector<RE *> list;
-        list.reserve(seq->size());
-        for (RE * re : *seq) {
-            list.push_back(Casefold_RE(re));
-        }
-        return makeSeq(list.begin(), list.end());
-    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-        return makeAssertion(Casefold_RE(a->getAsserted()), a->getKind(), a->getSense());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        RE * expr = Casefold_RE(rep->getRE());
-        return makeRep(expr, rep->getLB(), rep->getUB());
-    } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        return makeDiff(Casefold_RE(diff->getLH()), Casefold_RE(diff->getRH()));
-    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
-        return makeIntersect(Casefold_RE(e->getLH()), Casefold_RE(e->getRH()));
-    } else if (Range * rg = dyn_cast<Range>(re)) {
-        return makeRange(Casefold_RE(rg->getLo()), Casefold_RE(rg->getHi()));
-    } else if (Group * g = dyn_cast<Group>(re)) {
-        return makeGroup(g->getMode(), Casefold_RE(g->getRE()), g->getSense());
-    }
-    return re;
-}
-
-/* Reordering of Grapheme Clusters */
-
-/* Extract the next grapheme cluster at a given position within a sequence. */
-
-std::u32string getCluster(Seq * s, unsigned position) {
+static inline std::u32string getStringPiece(Seq * s, unsigned position) {
     unsigned pos = position;
     unsigned size = s->size();
     std::u32string rslt;
@@ -264,94 +50,152 @@ std::u32string getCluster(Seq * s, unsigned position) {
         if (cc->empty()) return rslt;
         codepoint_t lo = lo_codepoint(cc->front());
         codepoint_t hi = hi_codepoint(cc->back());
-        if (lo != hi) // not a singleton CC; end of the cluster.
+        if (lo != hi) // not a singleton CC; end of the string piece.
             return rslt;
-        if (pos > position) {
-            // After the first codepoint of a cluster, all remaining codepoints
-            // must have ccc > 0.   Terminate the cluster when any starter
-            // (codepoint with ccc==0) is found.
-            const auto & cccObj = cast<EnumeratedPropertyObject>(property_object_table[ccc]);
-            const UnicodeSet & ccc0 = cccObj->GetCodepointSet(CCC_ns::NR);
-            if (ccc0.contains(lo)) return rslt;
-        }
         rslt.push_back(lo);
         pos++;
     }
     return rslt;
 }
+    
+NFD_Transformer::NFD_Transformer(DecompositionOptions opt) :
+    RE_Transformer("toNFD"),
+    mOptions(opt),
+    decompTypeObj(cast<EnumeratedPropertyObject>(property_object_table[dt])),
+    decompMappingObj(cast<StringPropertyObject>(property_object_table[dm])),
+    cccObj(cast<EnumeratedPropertyObject>(property_object_table[ccc])),
+    caseFoldObj(cast<StringOverridePropertyObject>(property_object_table[cf])),
+    canonicalMapped(decompTypeObj->GetCodepointSet(DT_ns::Can)),
+    cc0Set(cccObj->GetCodepointSet(CCC_ns::NR)),
+    selfNFKD(decompMappingObj->GetReflexiveSet()),
+    selfCaseFold(caseFoldObj->GetReflexiveSet())
+{}
 
-/*  Helper function to insert a given mark at all possible positions within
-    a set of prefixes, subject to constraints on Unicode canonically-equivalent
-    ordering. */
-std::vector<std::u32string> allReorderedInsertions(std::vector<std::u32string> prefixes, codepoint_t mark) {
-    const auto & cccObj = cast<EnumeratedPropertyObject>(property_object_table[ccc]);
-    const UnicodeSet & cccSet = cccObj->GetCodepointSet(cccObj->GetEnumerationValue(mark));
-    const UnicodeSet & cc0Set = cccObj->GetCodepointSet(CCC_ns::NR); // ccc = 0, NotReorderable.
-    const UnicodeSet insertBeforeBlocked = cccSet + cc0Set;
-    std::vector<std::u32string> reorderings;
-    for (auto & prefix : prefixes) {
-        reorderings.push_back(prefix + (char32_t) mark);
-        int insert_pos = prefix.size() - 1;
-        while ((insert_pos >= 0) && (!insertBeforeBlocked.contains(prefix[insert_pos]))) {
-            reorderings.push_back(prefix.substr(0, insert_pos) + (char32_t) mark + prefix.substr(insert_pos));
-            insert_pos--;
-        }
-    }
-    return reorderings;
+static UnicodeSet HangulPrecomposed = UnicodeSet(Hangul_SBase, Hangul_SBase + Hangul_SCount - 1);
+
+bool hasOption(enum DecompositionOptions optionSet, enum DecompositionOptions testOption) {
+    return (testOption & optionSet) != 0;
+}
+    
+bool NFD_Transformer::reordering_needed(std::u32string & prefix, codepoint_t suffix_cp) {
+    if (prefix.empty()) return false;
+    if (cc0Set.contains(suffix_cp)) return false;
+    auto cc1 = cccObj->GetEnumerationValue(prefix.back());
+    auto cc2 = cccObj->GetEnumerationValue(suffix_cp);
+    return cc1 > cc2;
 }
 
-RE * allClusterOrderings(std::u32string cluster) {
-    std::vector<std::u32string> orderings = {cluster.substr(0,1)};
-    for (unsigned i = 1; i < cluster.size(); i++) {
-        orderings = allReorderedInsertions(orderings, cluster[i]);
+void NFD_Transformer::NFD_append1(std::u32string & NFD_string, codepoint_t cp) {
+    if (HangulPrecomposed.contains(cp)) {
+        // Apply NFD normalization; no NFKD or casefolding required
+        auto SIndex = cp - Hangul_SBase;
+        auto LIndex = SIndex / Hangul_NCount;
+        auto VIndex = (SIndex % Hangul_NCount) / Hangul_TCount;
+        auto TIndex = SIndex % Hangul_TCount;
+        NFD_string.push_back(Hangul_LBase + LIndex);
+        NFD_string.push_back(Hangul_VBase + VIndex);
+        if (TIndex > 0) {
+            NFD_string.push_back(Hangul_TBase + TIndex);
+        }
+    } else if (canonicalMapped.contains(cp)) {
+        std::string u8decomposed = decompMappingObj->GetStringValue(cp);
+        std::u32string dms = conv.from_bytes(u8decomposed);
+        // Recursive normalization may be necessary.
+        NFD_append(NFD_string, dms);
+        // After canonical mappings are handled, canonical ordering may be required.
+        // This should be done before casefolding.
+    } else if (reordering_needed(NFD_string, cp)) {
+        // Reorder the last two characters - recursion will handle
+        // rare multiposition reordering.
+        std::u32string reordered({cp, NFD_string.back()});
+        NFD_string.pop_back();
+        NFD_append(NFD_string, reordered);
+    } else if (hasOption(mOptions, UCD::CaseFold) && !selfCaseFold.contains(cp)) {
+        std::u32string dms = conv.from_bytes(caseFoldObj->GetStringValue(cp));
+        NFD_append(NFD_string, dms);
+    } else if (hasOption(mOptions, UCD::NFKD) && (!selfNFKD.contains(cp))) {
+        std::u32string dms = conv.from_bytes(decompMappingObj->GetStringValue(cp));
+        NFD_append(NFD_string, dms);
+    } else {
+        NFD_string.push_back(cp);
     }
+}
+
+void NFD_Transformer::NFD_append(std::u32string & NFD_string, std::u32string & to_convert) {
+    for (unsigned i = 0; i < to_convert.size(); i++) {
+        NFD_append1(NFD_string, to_convert[i]);
+    }
+}
+
+RE * NFD_Transformer::transformGroup(Group * g) {
+    re::Group::Mode mode = g->getMode();
+    re::Group::Sense sense = g->getSense();
+    auto r = g->getRE();
+    UCD::DecompositionOptions saveOptions = mOptions;
+    if (mode == re::Group::Mode::CaseInsensitiveMode) {
+        if (sense == re::Group::Sense::On) {
+            mOptions = static_cast<UCD::DecompositionOptions>(mOptions | UCD::CaseFold);
+        } else {
+            mOptions = static_cast<UCD::DecompositionOptions>(mOptions & ~UCD::CaseFold);
+        }
+    } else if (mode == re::Group::Mode::CompatibilityMode) {
+        if (sense == re::Group::Sense::On) {
+            mOptions = static_cast<UCD::DecompositionOptions>(mOptions | UCD::NFKD);
+        } else {
+            mOptions = static_cast<UCD::DecompositionOptions>(mOptions & ~UCD::NFKD);
+        }
+    }
+    RE * t = transform(r);
+    mOptions = saveOptions;
+    if (t == r) return g;
+    return makeGroup(mode, t, sense);
+    
+}
+
+RE * NFD_Transformer::transformCC(CC * cc) {
+    UnicodeSet mappingRequired = *cc & (canonicalMapped + HangulPrecomposed);
+    if (hasOption(mOptions, UCD::CaseFold)) {
+        mappingRequired = mappingRequired + (*cc - selfCaseFold);
+    }
+    if (hasOption(mOptions, UCD::NFKD)) {
+        mappingRequired = mappingRequired + (*cc - selfNFKD);
+    }
+    if (mappingRequired.empty()) return cc;
     std::vector<RE *> alts;
-    for (auto a : orderings) {
-        alts.push_back(u32string2re(a));
+    CC * finalCC = makeCC(*cc - mappingRequired);
+    for (const interval_t & i : mappingRequired) {
+        for (codepoint_t cp = lo_codepoint(i); cp <= hi_codepoint(i); cp++) {
+            std::u32string decomp;
+            NFD_append1(decomp, cp);
+            if (decomp.size() == 1) {
+                finalCC = makeCC(finalCC, makeCC(decomp[0]));
+            } else {
+                alts.push_back(u32string2re(decomp));
+            }
+        }
     }
+    if (!finalCC->empty()) alts.push_back(finalCC);
     return makeAlt(alts.begin(), alts.end());
 }
 
-RE * allOrderings_RE(RE * re) {
-    if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE *> list;
-        list.reserve(alt->size());
-        for (RE * a : *alt) {
-            list.push_back(allOrderings_RE(a));
+RE * NFD_Transformer::transformSeq(Seq * seq) {
+    // find and process all string pieces
+    unsigned size = seq->size();
+    if (size == 0) return seq;
+    std::vector<RE *> list;
+    unsigned i = 0;
+    while (i < size) {
+        std::u32string stringPiece = getStringPiece(seq, i);
+        if (stringPiece.size() > 0) {
+            std::u32string s;
+            NFD_append(s, stringPiece);
+            list.push_back(u32string2re(s));
+            i += stringPiece.size();
+        } else {
+            list.push_back(transform((*seq)[i]));
+            i++;
         }
-        return makeAlt(list.begin(), list.end());
-    } else if (CC * cc = dyn_cast<CC>(re)) {
-        return cc;
-    } else if (Seq * seq = dyn_cast<Seq>(re)) {
-        // find and process all string pieces
-        std::vector<RE *> list;
-        unsigned size = seq->size();
-        unsigned i = 0;
-        while (i < size) {
-            std::u32string cluster = getCluster(seq, i);
-            if (cluster.size() > 0) {
-                list.push_back(allClusterOrderings(cluster));
-                i += cluster.size();
-            } else {
-                list.push_back(allOrderings_RE((*seq)[i]));
-                i++;
-            }
-        }
-        return makeSeq(list.begin(), list.end());
-    } else if (Assertion * a = dyn_cast<Assertion>(re)) {
-        return makeAssertion(allOrderings_RE(a->getAsserted()), a->getKind(), a->getSense());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        RE * expr = allOrderings_RE(rep->getRE());
-        return makeRep(expr, rep->getLB(), rep->getUB());
-    } else if (Diff * diff = dyn_cast<Diff>(re)) {
-        return makeDiff(allOrderings_RE(diff->getLH()), allOrderings_RE(diff->getRH()));
-    } else if (Intersect * e = dyn_cast<Intersect>(re)) {
-        return makeIntersect(allOrderings_RE(e->getLH()), allOrderings_RE(e->getRH()));
-    } else if (Range * rg = dyn_cast<Range>(re)) {
-        return makeRange(allOrderings_RE(rg->getLo()), allOrderings_RE(rg->getHi()));
-    } else if (Group * g = dyn_cast<Group>(re)) {
-        return makeGroup(g->getMode(), allOrderings_RE(g->getRE()), g->getSense());
     }
-    return re;
+    return makeSeq(list.begin(), list.end());
 }
-
+} // end namespace UCD
