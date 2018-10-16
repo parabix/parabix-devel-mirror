@@ -4,23 +4,12 @@
 #include <pablo/codegenstate.h>
 #include <pablo/expression_map.hpp>
 #include <pablo/pe_var.h>
+#include <util/not_null.h>
 
 namespace pablo {
 
 class PabloBuilder {
 public:
-
-    template<typename T>
-    struct not_null {
-        not_null(T const value) : _value(value) { assert(_value); }
-        not_null(std::nullptr_t) = delete;
-        not_null(unsigned) = delete;
-        operator T() const { return _value; }
-        T operator-> () const { return _value; }
-        T get() const { return _value; }
-    private:
-        T const  _value;
-    };
 
     using iterator = PabloBlock::iterator;
 

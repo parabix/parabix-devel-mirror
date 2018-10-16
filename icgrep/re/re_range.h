@@ -23,6 +23,7 @@ public:
     RE * getHi() const {
         return mHi;
     }
+
 protected:
     friend RE * makeRange(RE*, RE*);
     Range(RE * lh, RE * rh)
@@ -34,8 +35,8 @@ protected:
     }
     virtual ~Range() {}
 private:
-    RE * mLo;
-    RE * mHi;
+    RE * const mLo;
+    RE * const mHi;
 };
 
 RE * makeRange(RE * lh, RE * rh);

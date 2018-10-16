@@ -17,30 +17,36 @@
 #include <pablo/pe_var.h>
 #include <pablo/ps_assign.h>
 #include <boost/preprocessor/variadic/elem.hpp>
+#include <type_traits>
 
 using namespace llvm;
 
 namespace pablo {
 
+using TypeId = PabloAST::ClassTypeId;
+
 #define GET(I, ...) \
     reinterpret_cast<decltype(BOOST_PP_VARIADIC_ELEM(I, __VA_ARGS__))>(arg##I)
 
-#define MAKE_UNARY(NAME, TYPE, ARGS...) \
+#define MAKE_UNARY(TYPE, ARGS...) \
+[&](){ /* immediately invoked lambda */ \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0) { \
-        return mPb->NAME(GET(0, ARGS)); \
+        return mPb->create##TYPE(GET(0, ARGS)); \
     } \
     inline __##NAME(PabloBlock * const pb) : mPb(pb) {} \
 private: \
     PabloBlock * const mPb; \
 }; \
 __##NAME functor(mPb); \
-PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
+return cast<TYPE>(mExprTable.findUnaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+}()
 
-#define MAKE_NAMED_UNARY(NAME, TYPE, PREFIX, ARGS...) \
+#define MAKE_NAMED_UNARY(TYPE, PREFIX, ARGS...) \
+[&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0) { \
-        return mPb->NAME(GET(0, ARGS), mPrefix); \
+        return mPb->create##TYPE(GET(0, ARGS), mPrefix); \
     } \
     inline __##NAME(PabloBlock * const pb, const llvm::StringRef & prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
@@ -48,24 +54,28 @@ private: \
     const llvm::StringRef & mPrefix; \
 }; \
 __##NAME functor(mPb, prefix); \
-PabloAST * result = mExprTable.findUnaryOrCall(std::move(functor), TYPE, ARGS)
+return cast<TYPE>(mExprTable.findUnaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+}()
 
-#define MAKE_BINARY(NAME, TYPE, ARGS...) \
+#define MAKE_BINARY(TYPE, ARGS...) \
+[&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1) { \
-        return mPb->NAME(GET(0, ARGS), GET(1, ARGS)); \
+        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS)); \
     } \
     inline __##NAME(PabloBlock * const pb) : mPb(pb) {} \
 private: \
     PabloBlock * const mPb; \
 }; \
 __##NAME functor(mPb); \
-PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
+return cast<TYPE>(mExprTable.findBinaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+}()
 
-#define MAKE_NAMED_BINARY(NAME, TYPE, PREFIX, ARGS...) \
+#define MAKE_NAMED_BINARY(TYPE, PREFIX, ARGS...) \
+[&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1) { \
-        return mPb->NAME(GET(0, ARGS), GET(1, ARGS), mPrefix); \
+        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), mPrefix); \
     } \
     inline __##NAME(PabloBlock * const pb, const llvm::StringRef & prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
@@ -73,24 +83,28 @@ private: \
     const llvm::StringRef & mPrefix; \
 }; \
 __##NAME functor(mPb, PREFIX); \
-PabloAST * result = mExprTable.findBinaryOrCall(std::move(functor), TYPE, ARGS)
+return cast<TYPE>(mExprTable.findBinaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+}()
 
-#define MAKE_TERNARY(NAME, TYPE, ARGS...) \
+#define MAKE_TERNARY(TYPE, ARGS...) \
+[&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1, void * const arg2) { \
-        return mPb->NAME(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS)); \
+        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS)); \
     } \
     inline __##NAME(PabloBlock * const pb) : mPb(pb) {} \
 private: \
     PabloBlock * const mPb; \
 }; \
 __##NAME functor(mPb); \
-PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
+return cast<TYPE>(mExprTable.findTernaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+}()
 
-#define MAKE_NAMED_TERNARY(NAME, TYPE, PREFIX, ARGS...) \
+#define MAKE_NAMED_TERNARY(TYPE, PREFIX, ARGS...) \
+[&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1, void * const arg2) { \
-        return mPb->NAME(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS), mPrefix); \
+        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS), mPrefix); \
     } \
     inline __##NAME(PabloBlock * const pb, const llvm::StringRef & prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
@@ -98,24 +112,21 @@ private: \
     const llvm::StringRef & mPrefix; \
 }; \
 __##NAME functor(mPb, PREFIX); \
-PabloAST * result = mExprTable.findTernaryOrCall(std::move(functor), TYPE, ARGS)
-
-using TypeId = PabloAST::ClassTypeId;
+return cast<TYPE>(mExprTable.findTernaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+}()
 
 PabloAST * PabloBuilder::createAdvance(PabloAST * expr, not_null<Integer *> shiftAmount) {
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount.get())->value() == 0) {
         return expr;
     }
-    MAKE_BINARY(createAdvance, TypeId::Advance, expr, shiftAmount.get());
-    return result;
+    return MAKE_BINARY(Advance, expr, shiftAmount.get());
 }
 
 PabloAST * PabloBuilder::createAdvance(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount.get())->value() == 0) {
         return expr;
     }
-    MAKE_NAMED_BINARY(createAdvance, TypeId::Advance, prefix, expr, shiftAmount.get());
-    return result;
+    return MAKE_NAMED_BINARY(Advance, prefix, expr, shiftAmount.get());
 }
 
 PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, not_null<Integer *> shiftAmount) {
@@ -128,8 +139,7 @@ PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexS
     else if (cast<Integer>(shiftAmount.get())->value() == 1) {
         return createAdvanceThenScanTo(createAnd(expr, indexStream), indexStream);
     }
-    MAKE_TERNARY(createIndexedAdvance, TypeId::IndexedAdvance, expr, indexStream, shiftAmount.get());
-    return result;
+    return MAKE_TERNARY(IndexedAdvance, expr, indexStream, shiftAmount.get());
 }
 
 PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, not_null<Integer *> shiftAmount, const llvm::StringRef & prefix) {
@@ -142,29 +152,25 @@ PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexS
     else if (cast<Integer>(shiftAmount.get())->value() == 1) {
         return createAdvanceThenScanTo(expr, indexStream, prefix);
     }
-    MAKE_NAMED_TERNARY(createIndexedAdvance, TypeId::IndexedAdvance, prefix, expr, indexStream, shiftAmount.get());
-    return result;
+    return MAKE_NAMED_TERNARY(IndexedAdvance, prefix, expr, indexStream, shiftAmount.get());
 }
     
 Extract * PabloBuilder::createExtract(Var * array, not_null<Integer *> index) {
-    MAKE_BINARY(createExtract, TypeId::Extract, array, index.get());
-    return cast<Extract>(result);
+    return MAKE_BINARY(Extract, array, index.get());
 }
 
 PabloAST * PabloBuilder::createLookahead(PabloAST * expr, not_null<Integer *> shiftAmount) {
     if (LLVM_UNLIKELY(isa<Zeroes>(expr) || cast<Integer>(shiftAmount.get())->value() == 0)) {
         return expr;
     }
-    MAKE_BINARY(createLookahead, TypeId::Lookahead, expr, shiftAmount.get());
-    return result;
+    return MAKE_BINARY(Lookahead, expr, shiftAmount.get());
 }
 
 PabloAST * PabloBuilder::createLookahead(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef & prefix) {
     if (LLVM_UNLIKELY(isa<Zeroes>(expr) || cast<Integer>(shiftAmount.get())->value() == 0)) {
         return expr;
     }
-    MAKE_NAMED_BINARY(createLookahead, TypeId::Lookahead, prefix, expr, shiftAmount.get());
-    return result;
+    return MAKE_NAMED_BINARY(Lookahead, prefix, expr, shiftAmount.get());
 }
 
 PabloAST * PabloBuilder::createNot(PabloAST * expr) {
@@ -177,8 +183,7 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr) {
     else if (Not * not1 = dyn_cast<Not>(expr)) {
         return not1->getOperand(0);
     }
-    MAKE_UNARY(createNot, TypeId::Not, expr);
-    return result;
+    return MAKE_UNARY(Not, expr);
 }
 
 PabloAST * PabloBuilder::createNot(PabloAST * expr, const llvm::StringRef & prefix) {
@@ -191,39 +196,32 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr, const llvm::StringRef & pref
     else if (Not * not1 = dyn_cast<Not>(expr)) {
         return not1->getOperand(0);
     }
-    MAKE_NAMED_UNARY(createNot, TypeId::Not, prefix, expr);
-    return result;
+    return MAKE_NAMED_UNARY(Not, prefix, expr);
 }
 
 PabloAST * PabloBuilder::createCount(PabloAST * expr) {
-    MAKE_UNARY(createCount, TypeId::Count, expr);
-    return result;
+    return MAKE_UNARY(Count, expr);
 }
 
 PabloAST * PabloBuilder::createCount(PabloAST * expr, const llvm::StringRef & prefix) {
-    MAKE_NAMED_UNARY(createCount, TypeId::Count, prefix, expr);
-    return result;
+    return MAKE_NAMED_UNARY(Count, prefix, expr);
 }
 
 PabloAST * PabloBuilder::createRepeat(not_null<Integer *> fieldWidth, PabloAST * value) {
-    MAKE_BINARY(createRepeat, TypeId::Repeat, fieldWidth.get(), value);
-    return result;
+    return MAKE_BINARY(Repeat, fieldWidth.get(), value);
 }
 
 PabloAST * PabloBuilder::createRepeat(not_null<Integer *> fieldWidth, PabloAST * value, const llvm::StringRef & prefix) {
-    MAKE_NAMED_BINARY(createRepeat, TypeId::Repeat, prefix, fieldWidth.get(), value);
-    return result;
+    return MAKE_NAMED_BINARY(Repeat, prefix, fieldWidth.get(), value);
 }
 
     
 PabloAST * PabloBuilder::createPackL(not_null<Integer *> fieldWidth, PabloAST * value) {
-    MAKE_BINARY(createPackL, TypeId::PackL, fieldWidth.get(), value);
-    return result;
+    return MAKE_BINARY(PackL, fieldWidth.get(), value);
 }
 
 PabloAST * PabloBuilder::createPackH(not_null<Integer *> fieldWidth, PabloAST * value) {
-    MAKE_BINARY(createPackH, TypeId::PackH, fieldWidth.get(), value);
-    return result;
+    return MAKE_BINARY(PackH, fieldWidth.get(), value);
 }
 
 
@@ -254,8 +252,7 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2) {
     if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
-    MAKE_BINARY(createAnd, TypeId::And, expr1, expr2);
-    return result;
+    return MAKE_BINARY(And, expr1, expr2);
 }
 
 PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
@@ -285,8 +282,7 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const llv
     if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
-    MAKE_NAMED_BINARY(createAnd, TypeId::And, prefix, expr1, expr2);
-    return result;
+    return MAKE_NAMED_BINARY(And, prefix, expr1, expr2);
 }
 
 PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
@@ -332,8 +328,7 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
     if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
-    MAKE_BINARY(createOr, TypeId::Or, expr1, expr2);
-    return result;
+    return MAKE_BINARY(Or, expr1, expr2);
 }
 
 PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
@@ -379,8 +374,7 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const llvm
     if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
-    MAKE_NAMED_BINARY(createOr, TypeId::Or, prefix, expr1, expr2);
-    return result;
+    return MAKE_NAMED_BINARY(Or, prefix, expr1, expr2);
 }
 
 PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
@@ -402,8 +396,7 @@ PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
     if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
-    MAKE_BINARY(createXor, TypeId::Xor, expr1, expr2);
-    return result;
+    return MAKE_BINARY(Xor, expr1, expr2);
 }
 
 PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
@@ -425,8 +418,7 @@ PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const llv
     if (expr1 > expr2) {
         std::swap(expr1, expr2);
     }
-    MAKE_NAMED_BINARY(createXor, TypeId::Xor, prefix, expr1, expr2);
-    return result;
+    return MAKE_NAMED_BINARY(Xor, prefix, expr1, expr2);
 }
 
 PabloAST * PabloBuilder::createAdd(PabloAST * expr1, PabloAST * expr2) {
@@ -441,8 +433,7 @@ PabloAST * PabloBuilder::createAdd(PabloAST * expr1, PabloAST * expr2) {
             return expr1;
         }
     }
-    MAKE_BINARY(createAdd, TypeId::Add, expr1, expr2);
-    return result;
+    return MAKE_BINARY(Add, expr1, expr2);
 }
 
 PabloAST * PabloBuilder::createSubtract(PabloAST * expr1, PabloAST * expr2) {
@@ -457,125 +448,108 @@ PabloAST * PabloBuilder::createSubtract(PabloAST * expr1, PabloAST * expr2) {
             return expr1;
         }
     }
-    MAKE_BINARY(createSubtract, TypeId::Subtract, expr1, expr2);
-    return result;
+    return MAKE_BINARY(Subtract, expr1, expr2);
 }
 
 PabloAST * PabloBuilder::createLessThan(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Integer>(expr1) && isa<Integer>(expr2)) {
         return getInteger(cast<Integer>(expr1)->value() < cast<Integer>(expr2)->value() ? 1 : 0);
     }
-    MAKE_BINARY(createLessThan, TypeId::LessThan, expr1, expr2);
-    return result;
+    return MAKE_BINARY(LessThan, expr1, expr2);
 }
 
 PabloAST * PabloBuilder::createEquals(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Integer>(expr1) && isa<Integer>(expr2)) {
         return getInteger(cast<Integer>(expr1)->value() == cast<Integer>(expr2)->value() ? 1 : 0);
     }
-    MAKE_BINARY(createEquals, TypeId::Equals, expr1, expr2);
-    return result;
+    return MAKE_BINARY(Equals, expr1, expr2);
 }
 
 PabloAST * PabloBuilder::createInFile(PabloAST * expr) {
     if (isa<Zeroes>(expr)) return expr;
-    MAKE_UNARY(createInFile, TypeId::InFile, expr);
-    return result;
+    return MAKE_UNARY(InFile, expr);
 }
 
 PabloAST * PabloBuilder::createInFile(PabloAST * expr, const llvm::StringRef & prefix) {
-    MAKE_NAMED_UNARY(createInFile, TypeId::InFile, prefix, expr);
-    return result;
+    return MAKE_NAMED_UNARY(InFile, prefix, expr);
 }
 
 PabloAST * PabloBuilder::createAtEOF(PabloAST * expr) {
-    MAKE_UNARY(createAtEOF, TypeId::AtEOF, expr);
-    return result;
+    return MAKE_UNARY(AtEOF, expr);
 }
 
 PabloAST * PabloBuilder::createAtEOF(PabloAST * expr, const llvm::StringRef & prefix) {
-    MAKE_NAMED_UNARY(createAtEOF, TypeId::AtEOF, prefix, expr);
-    return result;
+    return MAKE_NAMED_UNARY(AtEOF, prefix, expr);
 }
 
 PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass) {
     if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
         return marker;
     }
-    MAKE_BINARY(createMatchStar, TypeId::MatchStar, marker, charclass);
-    return result;
+    return MAKE_BINARY(MatchStar, marker, charclass);
 }
 
 PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
         return marker;
     }
-    MAKE_NAMED_BINARY(createMatchStar, TypeId::MatchStar, prefix, marker, charclass);
-    return result;
+    return MAKE_NAMED_BINARY(MatchStar, prefix, marker, charclass);
 }
 
 PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru) {
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
         return from;
     }
-    MAKE_BINARY(createScanThru, TypeId::ScanThru, from, thru);
-    return result;
+    return MAKE_BINARY(ScanThru, from, thru);
 }
 
 PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
         return from;
     }
-    MAKE_NAMED_BINARY(createScanThru, TypeId::ScanThru, prefix, from, thru);
-    return result;
+    return MAKE_NAMED_BINARY(ScanThru, prefix, from, thru);
 }
 
 PabloAST * PabloBuilder::createScanTo(PabloAST * from, PabloAST * to) {
     if (isa<Zeroes>(from)) {
         return from;
     }
-    MAKE_BINARY(createScanTo, TypeId::ScanTo, from, to);
-    return result;
+    return MAKE_BINARY(ScanTo, from, to);
 }
 
 PabloAST * PabloBuilder::createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(from)) {
         return from;
     }
-    MAKE_NAMED_BINARY(createScanTo, TypeId::ScanTo, prefix, from, to);
-    return result;
+    return MAKE_NAMED_BINARY(ScanTo, prefix, from, to);
 }
 
 PabloAST * PabloBuilder::createAdvanceThenScanThru(PabloAST * from, PabloAST * thru) {
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
         return from;
     }
-    MAKE_BINARY(createAdvanceThenScanThru, TypeId::AdvanceThenScanThru, from, thru);
-    return result;
+    return MAKE_BINARY(AdvanceThenScanThru, from, thru);
 }
 
 PabloAST * PabloBuilder::createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
         return from;
     }
-    MAKE_NAMED_BINARY(createAdvanceThenScanThru, TypeId::AdvanceThenScanThru, prefix, from, thru);
-    return result;
+    return MAKE_NAMED_BINARY(AdvanceThenScanThru, prefix, from, thru);
 }
 
 PabloAST * PabloBuilder::createAdvanceThenScanTo(PabloAST * from, PabloAST * to) {
     if (isa<Zeroes>(from)) {
         return from;
     }
-    MAKE_BINARY(createAdvanceThenScanTo, TypeId::ScanTo, from, to);
-    return result;
+    return MAKE_BINARY(AdvanceThenScanTo, from, to);
 }
 
 PabloAST * PabloBuilder::createAdvanceThenScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(from)) {
         return from;
     }
-    MAKE_NAMED_BINARY(createAdvanceThenScanTo, TypeId::ScanTo, prefix, from, to);
-    return result;
+    return MAKE_NAMED_BINARY(AdvanceThenScanTo, prefix, from, to);
 }
 
 PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr) {
@@ -598,8 +572,7 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
     } else if (isa<Not>(falseExpr) && equals(trueExpr, cast<Not>(falseExpr)->getOperand(0))){
         return createXor(condition, trueExpr);
     }
-    MAKE_TERNARY(createSel, TypeId::Sel, condition, trueExpr, falseExpr);
-    return result;
+    return MAKE_TERNARY(Sel, condition, trueExpr, falseExpr);
 }
 
 PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef & prefix) {
@@ -622,8 +595,7 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
     } else if (isa<Not>(falseExpr) && equals(trueExpr, cast<Not>(falseExpr)->getOperand(0))){
         return createXor(condition, trueExpr);
     }
-    MAKE_NAMED_TERNARY(createSel, TypeId::Sel, prefix, condition, trueExpr, falseExpr);
-    return result;
+    return MAKE_NAMED_TERNARY(Sel, prefix, condition, trueExpr, falseExpr);
 }
 
 }

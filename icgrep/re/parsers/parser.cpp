@@ -254,7 +254,7 @@ RE * RE_Parser::parse_capture_body() {
     RE * captured = parse_alt();
     mCaptureGroupCount++;
     std::string captureName = "\\" + std::to_string(mCaptureGroupCount);
-    Name * const capture  = mMemoizer.memoize(makeCapture(captureName, captured));
+    Name * const capture  = makeCapture(captureName, captured);
     auto key = std::make_pair("", captureName);
     mNameMap.insert(std::make_pair(std::move(key), capture));
     return capture;
@@ -776,8 +776,7 @@ codepoint_t RE_Parser::parse_hex_codepoint(int mindigits, int maxdigits) {
 }
 
 CC * RE_Parser::createCC(const codepoint_t cp) {
-    CC * cc = mMemoizer.memoize(makeCC(cp));
-    return cc;
+    return makeCC(cp);
 }
 
 RE * RE_Parser::makeComplement(RE * s) {
@@ -816,19 +815,19 @@ RE * RE_Parser::makeWordEnd() {
 }
 
 Name * RE_Parser::makeDigitSet() {
-    return mMemoizer.memoize(createName("nd"));
+    return createName("nd");
 }
 
 Name * RE_Parser::makeAlphaNumeric() {
-    return mMemoizer.memoize(createName("alnum"));
+    return createName("alnum");
 }
 
 Name * RE_Parser::makeWhitespaceSet() {
-    return mMemoizer.memoize(createName("whitespace"));
+    return createName("whitespace");
 }
 
 Name * RE_Parser::makeWordSet() {
-    return mMemoizer.memoize(createName("word"));
+    return createName("word");
 }
 
 Name * RE_Parser::createName(std::string value) {
@@ -837,7 +836,7 @@ Name * RE_Parser::createName(std::string value) {
     if (f != mNameMap.end()) {
         return f->second;
     }
-    Name * const property = mMemoizer.memoize(makeName(value, Name::Type::UnicodeProperty));
+    Name * const property = makeName(value, Name::Type::UnicodeProperty);
     mNameMap.insert(std::make_pair(std::move(key), property));
     return property;
     }
@@ -848,7 +847,7 @@ Name * RE_Parser::createName(std::string prop, std::string value) {
     if (f != mNameMap.end()) {
         return f->second;
     }
-    Name * const property = mMemoizer.memoize(makeName(prop, value, Name::Type::UnicodeProperty));
+    Name * const property = makeName(prop, value, Name::Type::UnicodeProperty);
     mNameMap.insert(std::make_pair(std::move(key), property));
     return property;
 }

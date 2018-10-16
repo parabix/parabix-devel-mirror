@@ -14,7 +14,6 @@
 #include <kernels/lz4/decompression/lz4_twist_decompression.h>
 #include <kernels/lz4/decompression/lz4_bitstream_decompression.h>
 
-
 using namespace llvm;
 using namespace parabix;
 using namespace kernel;

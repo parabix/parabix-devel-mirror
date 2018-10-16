@@ -15,17 +15,20 @@
 
 namespace re {
 
-class Any : public RE {
+class Any {
 public:
     static inline bool classof(const RE * re) {
-        return (re->getClassTypeId() == ClassTypeId::CC) && llvm::cast<CC>(re)->full();
+        if (llvm::isa<Name>(re)) {
+            re = llvm::cast<Name>(re)->getDefinition();
+            if (re == nullptr) return false;
+        }
+        return llvm::isa<CC>(re) && llvm::cast<CC>(re)->full();
     }
     static inline bool classof(const void *) {
         return false;
     }
-protected:
-    Any() : RE(ClassTypeId::Any) {}
-    virtual ~Any() {}
+private:
+    Any() {}
 };
 
 inline RE * makeAny() {

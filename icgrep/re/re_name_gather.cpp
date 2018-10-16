@@ -10,7 +10,6 @@
 #include <re/re_assertion.h>
 #include <re/re_group.h>
 #include <re/re_analysis.h>
-#include <re/re_memoizer.hpp>
 #include <cc/alphabet.h>
 #include <UCD/ucd_compiler.hpp>
 #include <UCD/resolve_properties.h>

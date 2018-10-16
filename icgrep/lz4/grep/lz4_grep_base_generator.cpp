@@ -22,6 +22,7 @@
 #include <re/exclude_CC.h>
 #include <re/to_utf8.h>
 #include <re/re_analysis.h>
+#include <re/re_name.h>
 #include <re/re_name_resolve.h>
 #include <re/re_name_gather.h>
 #include <re/re_multiplex.h>

@@ -16,14 +16,8 @@ public:
     RE * getLH() const {
         return mLh;
     }
-    void setLH(RE * lh) {
-        mLh = lh;
-    }
     RE * getRH() const {
         return mRh;
-    }
-    void setRH(RE * rh) {
-        mRh = rh;
     }
 protected:
     friend RE * makeDiff(RE*, RE*);
@@ -36,8 +30,8 @@ protected:
     }
     virtual ~Diff() {}
 private:
-    RE * mLh;
-    RE * mRh;
+    RE * const mLh;
+    RE * const mRh;
 };
 
 RE * makeDiff(RE * lh, RE * rh);

@@ -17,7 +17,7 @@ using namespace llvm;
 
 namespace re {
 
-RE * star_rule(RE * re) {
+inline RE * star_rule(RE * re) {
     if (Seq * seq = dyn_cast<Seq>(re)) {
         if (isNullable(re)) {
             std::vector<RE *> list;

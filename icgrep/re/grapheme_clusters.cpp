@@ -15,10 +15,12 @@
 #include <re/re_range.h>
 #include <re/printer_re.h>
 #include <re/re_name_resolve.h>
+
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
+
 
 /*
  Unicode Technical Standard #18 defines grapheme cluster mode, signified by the (?g) switch.
@@ -34,7 +36,7 @@ using namespace llvm;
 
 namespace re {
 bool hasGraphemeClusterBoundary(const RE * re) {
-    if (isa<CC>(re)) {
+    if (isa<CC>(re) || isa<Range>(re)) {
         return false;
     } else if (const Name * n = dyn_cast<Name>(re)) {
         if (n->getType() == Name::Type::ZeroWidth) {
@@ -68,7 +70,7 @@ bool hasGraphemeClusterBoundary(const RE * re) {
     }
     else llvm_unreachable("Unknown RE type");
 }
-    
+
 RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
     if (isa<Name>(re)) {
         if (inGraphemeMode && (cast<Name>(re)->getName() == ".")) {

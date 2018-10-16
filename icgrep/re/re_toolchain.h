@@ -6,8 +6,12 @@
 
 #ifndef RE_TOOLCHAIN_H
 #define RE_TOOLCHAIN_H
+
+#include <map>
+#include <set>
 #include <string>
 #include <llvm/Support/Compiler.h>
+
 namespace llvm { namespace cl { class OptionCategory; } }
 namespace pablo { class PabloKernel; class PabloAST; }
 namespace re { class RE; class CC;}
@@ -39,12 +43,15 @@ void UndefinedNameError (const Name * n);
 enum class NameTransformationMode {None, TransformDefinition};
 
 class RE_Transformer {
+    struct MemoizerComparator {
+        bool operator() (const RE * lh, const RE * rh) const;
+    };
 public:
-    RE_Transformer(std::string transformationName = "",
-                   NameTransformationMode m = NameTransformationMode::None) :
-    mTransformationName(transformationName), mNameTransform(m) {}
     RE * transformRE(RE * r);
 protected:
+    RE_Transformer(std::string transformationName, NameTransformationMode m = NameTransformationMode::None)
+    : mTransformationName(std::move(transformationName)), mNameTransform(m) {}
+
     RE * transform(RE * r);
     virtual RE * transformName(Name * n);
     virtual RE * transformStart(Start * s);
@@ -58,9 +65,38 @@ protected:
     virtual RE * transformRange(Range * rg);
     virtual RE * transformGroup(Group * g);
     virtual RE * transformAssertion(Assertion * a);
-    
-    std::string mTransformationName;
-    NameTransformationMode mNameTransform;
+private:
+    const std::string mTransformationName;
+    const NameTransformationMode mNameTransform;
+    std::map<RE *, RE *, MemoizerComparator> mMap;
+};
+
+enum class InspectionMode {TraverseNonUnique, IgnoreNonUnique};
+
+class RE_Inspector {
+    struct MemoizerComparator {
+        bool operator() (const RE * lh, const RE * rh) const;
+    };
+public:
+    void inspectRE(RE * r);
+protected:
+    RE_Inspector(const InspectionMode ignoreNonUnique = InspectionMode::IgnoreNonUnique) : mIgnoreNonUnique(ignoreNonUnique) {}
+    void inspect(RE * r);
+    virtual void inspectName(Name * n);
+    virtual void inspectStart(Start * s);
+    virtual void inspectEnd(End * e);
+    virtual void inspectCC(CC * cc);
+    virtual void inspectSeq(Seq * s);
+    virtual void inspectAlt(Alt * a);
+    virtual void inspectRep(Rep * rep);
+    virtual void inspectIntersect(Intersect * e);
+    virtual void inspectDiff(Diff * d);
+    virtual void inspectRange(Range * rg);
+    virtual void inspectGroup(Group * g);
+    virtual void inspectAssertion(Assertion * a);
+private:
+    const InspectionMode mIgnoreNonUnique;
+    std::set<RE *, MemoizerComparator> mMap;
 };
 
 RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive = false);

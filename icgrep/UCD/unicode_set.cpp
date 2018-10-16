@@ -182,10 +182,10 @@ codepoint_t UnicodeSet::at(const size_type k) const {
         } else if (typeOf(r) == Full) {
             const auto m = lengthOf(r) * QUAD_BITS;
             if (LLVM_UNLIKELY(remaining < m)) {
-                return (base * QUAD_BITS) + remaining;
+                return base + remaining;
             }
             base += m;
-            remaining -= m * QUAD_BITS;
+            remaining -= m;
         } else { // if (typeOf(r) == Mixed) {
             for (auto l = lengthOf(r); l; --l, ++qi) {
                 auto q = *qi; assert (q);
@@ -196,13 +196,13 @@ codepoint_t UnicodeSet::at(const size_type k) const {
                         assert (q);
                         const bitquad_t k = scan_forward_zeroes<bitquad_t>(q);
                         if (remaining == 0) {
-                            return (base * QUAD_BITS) + k;
+                            return base + k;
                         }
                         q ^= static_cast<bitquad_t>(1) << k;
                         --remaining;
                     }
                 }
-                ++base;
+                base += QUAD_BITS;
                 remaining -= c;
             }
         }

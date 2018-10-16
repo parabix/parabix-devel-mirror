@@ -45,9 +45,8 @@ protected:
     friend Name * makeReference(const std::string & name, RE * captureName);
     friend Name * makeZeroWidth(const std::string & name, RE * zerowidth);
     friend Name * makeName(CC * const cc);
-    friend Name * makeName(const std::string &, Type);
-    friend Name * makeName(const std::string &, const std::string &, Type);
-    friend Name * makeName(const std::string & nm, const Name::Type type, RE * defn); 
+    friend Name * makeName(const std::string &, Type, RE *);
+    friend Name * makeName(const std::string &, const std::string &, Type, RE *);
     Name(const char * nameSpace, const length_t namespaceLength, const char * name, const length_t nameLength, Type type, RE * defn)
     : RE(ClassTypeId::Name)
     , mNamespaceLength(namespaceLength)
@@ -142,16 +141,12 @@ inline bool Name::operator > (const CC & other) const {
     return RE::ClassTypeId::CC < RE::ClassTypeId::Name;
 }
 
-inline Name * makeName(const std::string & name, const Name::Type type) {
-    return new Name(nullptr, 0, name.c_str(), name.length(), type, nullptr);
+inline Name * makeName(const std::string & name, const Name::Type type, RE * defn = nullptr) {
+    return new Name(nullptr, 0, name.c_str(), name.length(), type, defn);
 }
 
-inline Name * makeName(const std::string & property, const std::string & value, const Name::Type type) {
-    return new Name(property.c_str(), property.length(), value.c_str(), value.length(), type, nullptr);
-}
-    
-inline Name * makeName(const std::string & nm, const Name::Type type, RE * defn) {
-    return new Name(nullptr, 0, nm.c_str(), nm.length(), type, defn);
+inline Name * makeName(const std::string & property, const std::string & value, const Name::Type type, RE * defn = nullptr) {
+    return new Name(property.c_str(), property.length(), value.c_str(), value.length(), type, defn);
 }
 
 inline Name * makeName(const std::string & name, RE * cc) {

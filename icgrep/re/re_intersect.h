@@ -30,8 +30,8 @@ protected:
     }
     virtual ~Intersect() {}
 private:
-    RE * mLh;
-    RE * mRh;
+    RE * const mLh;
+    RE * const mRh;
 };
 
 RE * makeIntersect(RE * lh, RE * rh);

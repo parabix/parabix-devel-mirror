@@ -8,6 +8,7 @@
 #include <re/re_cc.h>
 #include <re/re_name.h>
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
 
 using namespace llvm;
@@ -16,11 +17,22 @@ namespace re {
 
 RE * makeRange(RE * lo, RE * hi) {
     if (isa<CC>(lo) && isa<CC>(hi)) {
-        if (!((dyn_cast<CC>(lo)->count() == 1) && (dyn_cast<CC>(hi)->count() == 1)))
-            llvm::report_fatal_error("invalid range operand");
-        auto lo_val = dyn_cast<CC>(lo)->front().first;
-        auto hi_val = dyn_cast<CC>(hi)->front().first;
-        return makeCC(lo_val, hi_val, dyn_cast<CC>(hi)->getAlphabet());
+        CC * const cc_lo = cast<CC>(lo);
+        CC * const cc_hi = cast<CC>(hi);
+        if (LLVM_LIKELY((cc_lo->count() == 1) && (cc_hi->count() == 1))) {
+            const auto lo_val = cc_lo->at(0);
+            const auto hi_val = cc_hi->at(0);
+            if (LLVM_LIKELY(lo_val <= hi_val)) {
+                return makeCC(lo_val, hi_val, dyn_cast<CC>(hi)->getAlphabet());
+            }
+        }
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        cc_lo->print(out);
+        out << " to ";
+        cc_hi->print(out);
+        out << " are invalid range operands";
+        report_fatal_error(out.str());
     }
     else if (isa<Name>(lo) && (cast<Name>(lo)->getDefinition() != nullptr)) {
         return makeRange(cast<Name>(lo)->getDefinition(), hi);

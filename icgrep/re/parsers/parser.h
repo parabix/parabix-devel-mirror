@@ -8,7 +8,7 @@
 #define RE_PARSER_H
 
 #include <map>
-#include <re/re_memoizer.hpp>
+#include <set>
 #include <re/re_cc.h>
 
 namespace re { class Name; }
@@ -261,7 +261,6 @@ protected:
     unsigned                    mCaptureGroupCount;
     RE_Syntax                   mReSyntax;
     NameMap                     mNameMap;
-    Memoizer                    mMemoizer;
 };
 
 }

@@ -15,7 +15,6 @@
 #include <re/re_end.h>
 #include <re/re_any.h>
 #include <re/re_toolchain.h>
-#include <re/re_memoizer.hpp>
 #include <UCD/resolve_properties.h>
 #include <cc/alphabet.h>
 #include <boost/container/flat_set.hpp>
@@ -27,32 +26,43 @@ using namespace llvm;
 
 namespace re {
   
-class UnicodeNameResolver : public RE_Transformer {
+class UnicodeNameResolver final : public RE_Transformer {
 public:
     UnicodeNameResolver() : RE_Transformer("UnicodeNames") {}
     RE * transformName(Name * name) override;
-private:
-    Memoizer mMemoizer;
+    RE * transformRange(Range * rg) override;
 };
     
 RE * UnicodeNameResolver::transformName(Name * name) {
-    auto f = mMemoizer.find(name);
-    if (f == mMemoizer.end()) {
-        if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+    if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+        name->setDefinition(transform(name->getDefinition()));
+    } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty || name->getType() == Name::Type::ZeroWidth)) {
+        if (UCD::resolvePropertyDefinition(name)) {
             name->setDefinition(transform(name->getDefinition()));
-        } else if (LLVM_LIKELY(name->getType() == Name::Type::UnicodeProperty || name->getType() == Name::Type::ZeroWidth)) {
-            if (UCD::resolvePropertyDefinition(name)) {
-                name->setDefinition(transform(name->getDefinition()));
-            } else {
-                name->setDefinition(makeCC(UCD::resolveUnicodeSet(name), &cc::Unicode));
-            }
         } else {
-            UndefinedNameError(name);
-        }
-        return mMemoizer.memoize(name);
+            name->setDefinition(makeCC(UCD::resolveUnicodeSet(name), &cc::Unicode));
+        }        
     } else {
-        return *f;
+        UndefinedNameError(name);
     }
+    return name;
+}
+
+RE * getDefinitionOf(RE * const re) {
+    if (Name * const name = dyn_cast<Name>(re)) {
+        RE * const def = name->getDefinition();
+        if (LLVM_UNLIKELY(def == nullptr)) {
+            llvm::report_fatal_error(name->getFullName() + " could not be resolved.");
+        }
+        return def;
+    }
+    return re;
+}
+
+RE * UnicodeNameResolver::transformRange(Range * rg) {
+    RE * const x = getDefinitionOf(transform(rg->getLo()));
+    RE * const y = getDefinitionOf(transform(rg->getHi()));
+    return makeRange(x, y);
 }
 
 RE * resolveUnicodeNames(RE * re) {
@@ -72,7 +82,7 @@ private:
 };
  
 AnchorResolution::AnchorResolution(RE * breakRE)
-: RE_Transformer() {
+: RE_Transformer("Anchor Resolution") {
     if (const CC * cc = dyn_cast<CC>(breakRE)) {
         mIsNegated = true;
         if (cc->getAlphabet() == &cc::Unicode) {

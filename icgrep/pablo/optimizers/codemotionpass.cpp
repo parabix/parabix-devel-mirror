@@ -27,7 +27,7 @@ struct SetQueue : public std::vector<T> {
             std::vector<T>::insert(i, item);
         }
     }
-    inline bool contains(T const item) const {
+    inline bool count(T const item) const {
         const auto i = std::lower_bound(std::vector<T>::begin(), std::vector<T>::end(), item);
         return (i != std::vector<T>::end() && *i == item);
     }
@@ -147,7 +147,7 @@ struct CodeMotionPassContainer {
             Statement * temp = stmt;
             for (;;) {
                 temp = temp->getNextNode();
-                if (temp == nullptr || mUsers.contains(temp)) {
+                if (temp == nullptr || mUsers.count(temp)) {
                     if (branch) {
                         // we can move the statement past a branch within its current scope
                         stmt->insertAfter(branch);
@@ -177,53 +177,74 @@ struct CodeMotionPassContainer {
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief hoistLoopInvariants
      ** ------------------------------------------------------------------------------------------------------------- */
-    void hoistLoopInvariants(Branch * const loop) {
-        assert (mLoopVariants.empty());
-        for (Var * variant : loop->getEscaped()) {
-            mLoopVariants.insert(variant);
-            mLoopInvariants.insert(variant);
+    void hoistLoopInvariants(While * const loop) {
+
+        assert ("Loop variants were not cleared correctly." && mVariants.empty());
+
+        // Assume every escaped Var is tainted but not necessarily a variant. Then iterate
+        // through the loop body and mark any statement that uses a tainted expression as
+        // tainted itself. If a Var is assigned a tainted value, mark the Var as a variant.
+
+        for (const Var * var : loop->getEscaped()) {
+            mTainted.insert(var);
         }
-        mLoopInvariants.erase(loop->getCondition());
+
+        for (const Statement * stmt : *loop->getBody()) {
+            if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+                // Trust that any escaped values of an inner branch is a variant.
+                for (const Var * var : cast<Branch>(stmt)->getEscaped()) {
+                    mVariants.insert(var);
+                }
+            } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
+                const Assign * const a = cast<Assign>(stmt);
+                if (LLVM_LIKELY(mTainted.count(a->getValue()))) {
+                    mVariants.insert(a->getVariable());
+               }
+            } else {
+                for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                    const PabloAST * const op = stmt->getOperand(i);
+                    if (mTainted.count(op)) {
+                        mTainted.insert(stmt);
+                        break;
+                    }
+                }
+            }
+        }
+
+        assert ("A loop without any variants is an infinite loop" && !mVariants.empty());
+
+        mVariants.reserve(mTainted.size());
+        mTainted.clear();
+
+        // Iterate over the loop again but this time move any invariants out of the loop.
+        // An invariant is any statement whose operands are all non-variants.
 
         Statement * outerNode = loop->getPrevNode();
         Statement * stmt = loop->getBody()->front();
         while (stmt) {
             if (isa<Branch>(stmt)) {
-                for (Var * var : cast<Branch>(stmt)->getEscaped()) {
-                    mLoopVariants.insert(var);
-                    mLoopInvariants.erase(var);
-                }
                 stmt = stmt->getNextNode();
             } else {
                 bool invariant = true;
-                if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
-                    if (mLoopVariants.count(cast<Assign>(stmt)->getValue()) != 0) {
+                for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                    const PabloAST * const op = stmt->getOperand(i);
+                    if (mVariants.count(op)) {
                         invariant = false;
-                    }
-                } else {
-                    for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
-                        const PabloAST * const op = stmt->getOperand(i);
-                        if (mLoopVariants.count(op) != 0) {
-                            if (isa<Var>(op)) {
-                                mLoopInvariants.erase(op);
-                            }
-                            invariant = false;
-                        }
+                        break;
                     }
                 }
-
                 Statement * const next = stmt->getNextNode();
-                if (LLVM_UNLIKELY(invariant)) {                    
+                if (LLVM_UNLIKELY(invariant)) {
                     stmt->insertAfter(outerNode);
-                    outerNode = stmt;                    
+                    outerNode = stmt;
                 } else {
-                    mLoopVariants.insert(stmt);
+                    mVariants.insert(stmt);
                 }
                 stmt = next;
             }
         }
-        mLoopVariants.clear();
-        assert (mLoopInvariants.empty());
+
+        mVariants.clear();
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -248,11 +269,8 @@ struct CodeMotionPassContainer {
             branches.pop_back();
             doCodeMovement(br->getBody());
             if (isa<While>(br)) {
-                // TODO: if we analyzed the probability of this loop being executed once, twice, or many times, we could
-                // determine whether hoisting will helpful or harmful to the expected run time.
-                hoistLoopInvariants(br);
+                hoistLoopInvariants(cast<While>(br));
             }
-
         }
 
     }
@@ -260,8 +278,8 @@ struct CodeMotionPassContainer {
 private:
     ScopeSet        mScopes;
     UserSet         mUsers;
-    LoopVariants    mLoopVariants;
-    LoopVariants    mLoopInvariants;
+    LoopVariants    mVariants;
+    LoopVariants    mTainted;
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *
