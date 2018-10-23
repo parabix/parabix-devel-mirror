@@ -872,5 +872,6 @@ Unterminated</datafile>
 <grepcase regexp="7{4}" datafile="." flags="-include=7* -l -r" grepcount="7777"/>
 <grepcase regexp="7{4}" datafile="." flags="-include=7* -L -r" grepcount="7890"/>
 
+<grepcase regexp="[AI].*(?i:[AI])" datafile="simple1" grepcount="1"/>
 </greptest>
 

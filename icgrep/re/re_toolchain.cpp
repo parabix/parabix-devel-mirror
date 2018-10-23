@@ -265,12 +265,6 @@ RE * RE_Transformer::transformRE(RE * re) {
 }
 
 RE * RE_Transformer::transform(RE * const from) {
-    assert (from);
-    const auto f = mMap.find(from);
-    if (f != mMap.end()) {
-        return f->second;
-    }
-
     using T = RE::ClassTypeId;
     RE * to = from;
     #define TRANSFORM(Type) \
@@ -302,8 +296,6 @@ RE * RE_Transformer::transform(RE * const from) {
             to = f->second;
         }
     }
-
-    mMap.emplace(from, to);
 
     return to;
 }
