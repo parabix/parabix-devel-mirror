@@ -42,8 +42,8 @@ public:
     PropertyObject(property_t p, ClassTypeId k) : the_property(p), the_kind(k) {}
     virtual const UnicodeSet GetCodepointSet(const std::string & prop_value_string);
     virtual const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern);
-    virtual const UnicodeSet GetReflexiveSet();
-    virtual const std::string GetStringValue(UCD::codepoint_t cp);
+    virtual const UnicodeSet GetReflexiveSet() const;
+    virtual const std::string GetStringValue(UCD::codepoint_t cp) const;
 
     virtual const std::string & GetPropertyValueGrepString();
     property_t the_property;
@@ -213,8 +213,8 @@ public:
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
-    const UnicodeSet GetReflexiveSet() override;
-    const std::string GetStringValue(UCD::codepoint_t cp) override;
+    const UnicodeSet GetReflexiveSet() const override;
+    const std::string GetStringValue(UCD::codepoint_t cp) const override;
     
 private:
     const UnicodeSet mNullCodepointSet;  // codepoints for which the property value is the null string.
@@ -247,10 +247,10 @@ public:
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
-    const UnicodeSet GetReflexiveSet() override;
+    const UnicodeSet GetReflexiveSet() const override;
     const PropertyObject & GetBaseObject() {return mBaseObject;}
-    const UnicodeSet & GetOverriddenSet() {return mOverriddenSet;}
-    const std::string GetStringValue(UCD::codepoint_t cp) override;
+    const UnicodeSet & GetOverriddenSet() const {return mOverriddenSet;}
+    const std::string GetStringValue(UCD::codepoint_t cp) const override;
 
 private:
     PropertyObject & mBaseObject;  // the base object that provides default values for this property unless overridden.

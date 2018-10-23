@@ -45,7 +45,7 @@ const UnicodeSet PropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern
     llvm::report_fatal_error("GetCodepointSetMatchingPattern unsupported");
 }
 
-const std::string PropertyObject::GetStringValue(codepoint_t cp) {
+const std::string PropertyObject::GetStringValue(codepoint_t cp) const {
     llvm::report_fatal_error("GetStringValue unsupported");
 }
 
@@ -57,7 +57,7 @@ const UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & v
     return GetCodepointSet(property_enum_val);
 }
     
-const UnicodeSet PropertyObject::GetReflexiveSet() {
+const UnicodeSet PropertyObject::GetReflexiveSet() const {
     return UnicodeSet();
 }
 
@@ -415,11 +415,11 @@ const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * p
     return matched;
 }
     
-const UnicodeSet StringPropertyObject::GetReflexiveSet() {
+const UnicodeSet StringPropertyObject::GetReflexiveSet() const {
     return mSelfCodepointSet;
 }
 
-const std::string StringPropertyObject::GetStringValue(codepoint_t cp) {
+const std::string StringPropertyObject::GetStringValue(codepoint_t cp) const {
     if (mNullCodepointSet.contains(cp)) return "";
     if (mSelfCodepointSet.contains(cp)) {
         std::u32string s(1, cp);
@@ -474,11 +474,11 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re
     return base_set;
 }
 
-const UnicodeSet StringOverridePropertyObject::GetReflexiveSet() {
+const UnicodeSet StringOverridePropertyObject::GetReflexiveSet() const {
     return mBaseObject.GetReflexiveSet() - mOverriddenSet;
 }
 
-const std::string StringOverridePropertyObject::GetStringValue(codepoint_t cp) {
+const std::string StringOverridePropertyObject::GetStringValue(codepoint_t cp) const {
     if (!mOverriddenSet.contains(cp)) return mBaseObject.GetStringValue(cp);
     // Otherwise, binary search through the explicit cps to find the index.
     // string index.
