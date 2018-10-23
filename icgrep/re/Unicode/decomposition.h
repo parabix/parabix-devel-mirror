@@ -24,7 +24,7 @@ namespace UCD {
         /* Transforme an RE so that all string pieces and character classes
          are converted to NFD form (or NFKD form if the UCD::Compatible option
          is used.  The options may also including case folding.  Example:
-         UCD:NFD_Transformer(UCD::CaseFold | UCD::NFKD).transformRE(r);
+         UCD::NFD_Transformer(UCD::CaseFold | UCD::NFKD).transformRE(r);
         */
         NFD_Transformer(DecompositionOptions opt = NFD);
         /* Helpers to convert and append an individual codepoint or a u32string
