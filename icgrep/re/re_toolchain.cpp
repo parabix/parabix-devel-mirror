@@ -50,10 +50,8 @@ const cl::OptionCategory * LLVM_READONLY re_toolchain_flags() {
 }
 
 static cl::bits<RE_PrintFlags> 
-    PrintOptions(cl::values(clEnumVal(ShowREs, "Print parsed or generated regular expressions"),
-                            clEnumVal(ShowAllREs, "Print all regular expression passes"),
-                            clEnumVal(ShowStrippedREs, "Print REs with nullable prefixes/suffixes removed"),
-                            clEnumVal(ShowSimplifiedREs, "Print final simplified REs")
+    PrintOptions(cl::values(clEnumVal(ShowREs, "Show parsed regular expressions and transformations that change them"),
+                            clEnumVal(ShowAllREs, "Print all regular expression passes")
                             CL_ENUM_VAL_SENTINEL), cl::cat(RegexOptions));
 
 static cl::bits<RE_AlgorithmFlags>
@@ -79,9 +77,6 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
         errs() << "Parser:\n" << Printer_RE::PrintRE(r) << '\n';
     }
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
-    if (PrintOptions.isSet(ShowAllREs)) {
-        errs() << "resolveGraphemeMode:\n" << Printer_RE::PrintRE(r) << '\n';
-    }
     r = re::resolveUnicodeNames(r);
     r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
     return r;
@@ -258,7 +253,7 @@ inline bool RE_Transformer::MemoizerComparator::operator()(const RE * const lh, 
 RE * RE_Transformer::transformRE(RE * re) {
     RE * initialRE = re;
     RE * finalRE = transform(re);
-    if (PrintOptions.isSet(ShowAllREs) && (initialRE != finalRE) && (mTransformationName != "")) {
+    if ((mTransformationName != "") && (PrintOptions.isSet(ShowAllREs) || (PrintOptions.isSet(ShowREs) && (initialRE != finalRE))))  {
         errs() << mTransformationName << ":\n" << Printer_RE::PrintRE(finalRE) << '\n';
     }
     return finalRE;

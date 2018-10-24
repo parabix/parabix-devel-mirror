@@ -15,6 +15,7 @@
 #include <re/re_range.h>
 #include <re/printer_re.h>
 #include <re/re_name_resolve.h>
+#include <re/re_toolchain.h>
 
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa
@@ -71,62 +72,76 @@ bool hasGraphemeClusterBoundary(const RE * re) {
     else llvm_unreachable("Unknown RE type");
 }
 
-RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
-    if (isa<Name>(re)) {
-        if (inGraphemeMode && (cast<Name>(re)->getName() == ".")) {
+class GraphemeModeTransformer : public RE_Transformer {
+public:
+    GraphemeModeTransformer(bool inGraphemeMode = true) : RE_Transformer("ResolveGraphemeMode"), mGraphemeMode(inGraphemeMode) {}
+    
+    RE * transformName(Name * n) override {
+        if (mGraphemeMode && (n->getName() == ".")) {
             RE * GCB = makeZeroWidth("\\b{g}");
             RE * nonGCB = makeDiff(makeSeq({}), GCB);
             return makeSeq({makeAny(), makeRep(makeSeq({nonGCB, makeAny()}), 0, Rep::UNBOUNDED_REP), GCB});
         }
-        else return re;
+        return n;
     }
-    else if (isa<CC>(re) || isa<Range>(re)) {
-        if (inGraphemeMode) return makeSeq({re, makeZeroWidth("\\b{g}")});
-        else return re;
+    
+    RE * transformCC(CC * cc) override {
+        if (mGraphemeMode) return makeSeq({cc, makeZeroWidth("\\b{g}")});
+        return cc;
     }
-    else if (Seq * seq = dyn_cast<Seq>(re)) {
+    
+    RE * transformRange(Range * rg) override {
+        if (mGraphemeMode) return makeSeq({rg, makeZeroWidth("\\b{g}")});
+        return rg;
+    }
+    
+    RE * transformGroup(Group * g) override {
+        if (g->getMode() == Group::Mode::GraphemeMode) {
+            RE * r = g->getRE();
+            bool modeSave = mGraphemeMode;
+            mGraphemeMode = g->getSense() == Group::Sense::On;
+            RE * t = transform(r);
+            mGraphemeMode = modeSave;
+            return t;
+        } else {
+            return RE_Transformer::transformGroup(g);
+        }
+    }
+    
+    RE * transformSeq(Seq * seq) override {
         std::vector<RE*> list;
         bool afterSingleChar = false;
+        bool changed = false;
         for (auto i = seq->begin(); i != seq->end(); ++i) {
-            bool atSingleChar = isa<CC>(re) && (cast<CC>(re)->count() == 1);
-            if (afterSingleChar && inGraphemeMode && !atSingleChar)
+            bool atSingleChar = isa<CC>(*i) && (cast<CC>(*i)->count() == 1);
+            if (afterSingleChar && mGraphemeMode && !atSingleChar) {
                 list.push_back(makeZeroWidth("\\b{g}"));
-            if (isa<CC>(re)) list.push_back(*i);
-            else {
-                list.push_back(resolveGraphemeMode(*i, inGraphemeMode));
+                changed = true;
+            }
+            if (isa<CC>(*i)) {
+                list.push_back(*i);
+            } else {
+                RE * t = transform(*i);
+                if (*i != t) changed = true;
+                list.push_back(t);
             }
             afterSingleChar = atSingleChar;
         }
-        if (afterSingleChar && inGraphemeMode) list.push_back(makeZeroWidth("\\b{g}"));
+        if (afterSingleChar && mGraphemeMode) {
+            list.push_back(makeZeroWidth("\\b{g}"));
+            changed = true;
+        }
+        if (!changed) return seq;
         return makeSeq(list.begin(), list.end());
-    } else if (Group * g = dyn_cast<Group>(re)) {
-        if (g->getMode() == Group::Mode::GraphemeMode) {
-            return resolveGraphemeMode(g->getRE(), g->getSense() == Group::Sense::On);
-        }
-        else {
-            return makeGroup(g->getMode(), resolveGraphemeMode(g->getRE(), inGraphemeMode), g->getSense());
-        }
-    } else if (Alt * alt = dyn_cast<Alt>(re)) {
-        std::vector<RE*> list;
-        for (auto i = alt->begin(); i != alt->end(); ++i) {
-            list.push_back(resolveGraphemeMode(*i, inGraphemeMode));
-        }
-        return makeAlt(list.begin(), list.end());
-    } else if (Rep * rep = dyn_cast<Rep>(re)) {
-        return makeRep(resolveGraphemeMode(rep->getRE(), inGraphemeMode), rep->getLB(), rep->getUB());
-    } else if (const Diff * diff = dyn_cast<const Diff>(re)) {
-        return makeDiff(resolveGraphemeMode(diff->getLH(), inGraphemeMode),
-                        resolveGraphemeMode(diff->getRH(), inGraphemeMode));
-    } else if (const Intersect * e = dyn_cast<const Intersect>(re)) {
-        return makeIntersect(resolveGraphemeMode(e->getLH(), inGraphemeMode),
-                             resolveGraphemeMode(e->getRH(), inGraphemeMode));
-    } else if (const Assertion * a = dyn_cast<Assertion>(re)) {
-        return makeAssertion(resolveGraphemeMode(a->getAsserted(), inGraphemeMode), a->getKind(), a->getSense());
-    } else if (isa<Start>(re) || isa<End>(re)) {
-        return re;
-    } else llvm_unreachable("Unknown RE type");
-}
+    }
 
+private:
+    bool mGraphemeMode;
+};
+
+RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
+    return GraphemeModeTransformer(inGraphemeMode).transformRE(re);
+}
 
 #define Behind(x) makeLookBehindAssertion(x)
 #define Ahead(x) makeLookAheadAssertion(x)
