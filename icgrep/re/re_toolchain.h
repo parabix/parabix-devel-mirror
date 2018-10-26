@@ -31,6 +31,7 @@ enum RE_AlgorithmFlags {
     DisableUnicodeLineBreak, UsePregeneratedUnicode
 };
     
+bool LLVM_READONLY PrintOptionIsSet(RE_PrintFlags flag);
 bool LLVM_READONLY AlgorithmOptionIsSet(RE_AlgorithmFlags flag);
     
 extern int IfInsertionGap;

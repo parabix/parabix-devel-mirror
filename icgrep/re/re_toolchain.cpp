@@ -33,7 +33,9 @@
 #include <re/casing.h>
 #include <re/exclude_CC.h>
 #include <re/re_name_resolve.h>
+
 #include <re/grapheme_clusters.h>
+#include <re/validation.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <toolchain/toolchain.h>
@@ -62,6 +64,10 @@ static cl::bits<RE_AlgorithmFlags>
                               clEnumVal(DisableUnicodeLineBreak, "disable Unicode line breaks - use LF only")
                               CL_ENUM_VAL_SENTINEL), cl::cat(RegexOptions));
 
+bool LLVM_READONLY PrintOptionIsSet(RE_PrintFlags flag) {
+    return PrintOptions.isSet(flag);
+}
+
 bool LLVM_READONLY AlgorithmOptionIsSet(RE_AlgorithmFlags flag) {
     return AlgorithmOptions.isSet(flag);
 }
@@ -78,6 +84,7 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     }
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
     r = re::resolveUnicodeNames(r);
+    validateNamesDefined(r);
     r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
     return r;
 }

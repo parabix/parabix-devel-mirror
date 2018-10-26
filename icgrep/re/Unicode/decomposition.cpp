@@ -48,6 +48,7 @@ static inline std::u32string getStringPiece(Seq * s, unsigned position) {
     while ((pos < size) && isa<CC>((*s)[pos])) {
         CC * cc = cast<CC>((*s)[pos]);
         if (cc->empty()) return rslt;
+        if (cc->getAlphabet() != &cc::Unicode) return rslt;
         codepoint_t lo = lo_codepoint(cc->front());
         codepoint_t hi = hi_codepoint(cc->back());
         if (lo != hi) // not a singleton CC; end of the string piece.
@@ -153,6 +154,7 @@ RE * NFD_Transformer::transformGroup(Group * g) {
 }
 
 RE * NFD_Transformer::transformCC(CC * cc) {
+    if (cc->getAlphabet() != &cc::Unicode) return cc;
     UnicodeSet mappingRequired = *cc & (canonicalMapped + HangulPrecomposed);
     if (hasOption(mOptions, UCD::CaseFold)) {
         mappingRequired = mappingRequired + (*cc - selfCaseFold);
