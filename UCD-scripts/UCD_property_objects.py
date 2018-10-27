@@ -213,7 +213,7 @@ class StringPropertyObject(PropertyObject):
                 stringValue = s
             for cp in range(cp_lo, cp_hi+1):
                 if len(stringValue) == 1 and ord(stringValue[0]) == cp:
-                    print("Found reflexive entry for %s: %s" % (self.property_code, stringValue))
+                    #print("Found reflexive entry for %s: %s" % (self.property_code, stringValue))
                     self.reflexive_set = uset_union(self.reflexive_set, singleton_uset(ord(stringValue[0])))
                 else:
                     self.cp_value_map[cp] = stringValue

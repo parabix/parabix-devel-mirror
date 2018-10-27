@@ -361,7 +361,6 @@ def parse_UnicodeData_txt(property_object_map):
         rangeMatch = NameRange_regexp.match(name)
         if rangeMatch:
             rangeName = rangeMatch.group(1)
-            print(rangeName, rangeMatch.group(2))
             if rangeMatch.group(2) == 'First': name_range_starts[rangeName] = cp
             if rangeMatch.group(2) == 'Last': 
                 if not rangeName in name_range_starts: raise Exception("UnicodeData range end encountered without prior range start: %s" % t)

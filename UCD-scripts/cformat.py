@@ -1,9 +1,10 @@
-import UCD_config
+import UCD_config, sys, time
+from datetime import date
 
 header_template = r"""#ifndef %s
 #define %s
 /*
- *  Copyright (c) 2017 International Characters, Inc.
+ *  Copyright (c) %s International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -14,7 +15,7 @@ header_template = r"""#ifndef %s
 
 cpp_template = r"""
 /*
- *  Copyright (c) 2016 International Characters, Inc.
+ *  Copyright (c) %s International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -24,16 +25,30 @@ cpp_template = r"""
 #include "%s.h"
 """
 
+def open_header_file_for_write(filename):
+   generator_name = sys.argv[0]
 
-
-def open_header_file_for_write(filename, generator_name='UCD_properties.py'):
    f = open(UCD_config.UCD_output_dir + '/' + filename + '.h', 'w')
    hname = filename.upper() + '_H'
-   f.write(header_template % (hname, hname, generator_name))
+   f.write(header_template % (hname, hname, date.today().year, generator_name))
    return f
+
+def open_cpp_file_for_write(filename):
+   generator_name = sys.argv[0]
+
+   f = open(UCD_config.UCD_output_dir + '/' + filename + '.cpp', 'w')
+   hname = filename.upper() + '_H'
+   f.write(cpp_template % (date.today().year, generator_name, filename))
+   return f
+
+
+
 
 def close_header_file(f):
    f.write("\n#endif\n")
+   f.close()
+
+def close_cpp_file(f):
    f.close()
 
 def write_imports(f, import_list):
