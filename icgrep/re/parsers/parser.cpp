@@ -188,7 +188,7 @@ RE * RE_Parser::parse_mode_group(bool & closing_paren_parsed) {
         require(')');
         closing_paren_parsed = true;
         auto changed = fModeFlagSet ^ savedModeFlagSet;
-        if ((changed & (CASE_INSENSITIVE_MODE_FLAG|GRAPHEME_CLUSTER_MODE)) != 0) {
+        if ((changed & (CASE_INSENSITIVE_MODE_FLAG|GRAPHEME_CLUSTER_MODE|COMPATIBLE_EQUIVALENCE_MODE)) != 0) {
             RE * group_expr = parse_seq();
             if ((changed & CASE_INSENSITIVE_MODE_FLAG) != 0) {
                 group_expr = makeGroup(Group::Mode::CaseInsensitiveMode, group_expr,
