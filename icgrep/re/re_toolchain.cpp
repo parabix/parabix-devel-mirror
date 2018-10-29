@@ -36,6 +36,8 @@
 
 #include <re/grapheme_clusters.h>
 #include <re/validation.h>
+#include <re/Unicode/decomposition.h>
+#include <re/Unicode/equivalence.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <toolchain/toolchain.h>
@@ -64,6 +66,9 @@ static cl::bits<RE_AlgorithmFlags>
                               clEnumVal(DisableUnicodeLineBreak, "disable Unicode line breaks - use LF only")
                               CL_ENUM_VAL_SENTINEL), cl::cat(RegexOptions));
 
+    
+static cl::opt<bool> UnicodeLevel2("U2", cl::desc("Enable Unicode Level matching under canonical and compatible (?K) equivalence."), cl::cat(RegexOptions));
+
 bool LLVM_READONLY PrintOptionIsSet(RE_PrintFlags flag) {
     return PrintOptions.isSet(flag);
 }
@@ -85,7 +90,13 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
     r = re::resolveUnicodeNames(r);
     validateNamesDefined(r);
-    r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
+    if (UnicodeLevel2 && validateAlphabet(&cc::Unicode, r)) {
+        r = UCD::NFD_Transformer().transformRE(r);
+        r = UCD::addClusterMatches(r);
+        r = UCD::addEquivalentCodepoints(r);
+    } else {
+        r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
+    }
     return r;
 }
 
@@ -97,10 +108,10 @@ RE * excludeUnicodeLineBreak(RE * r) {
     return r;
 }
 
-RE * regular_expression_passes(RE * r) {
+RE * regular_expression_passes(RE * re) {
 
     //Optimization passes to simplify the AST.
-    r = removeNullablePrefix(r);
+    RE * r = removeNullablePrefix(re);
     r = removeNullableSuffix(r);
     r = RE_Star_Normal().transformRE(r);
     if (codegen::OptLevel > 1) {

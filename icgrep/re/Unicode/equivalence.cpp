@@ -140,16 +140,26 @@ RE * ClusterMatchTransformer::transformSeq(Seq * seq) {
     if (size == 0) return seq;
     std::vector<RE *> list;
     unsigned i = 0;
+    bool changed = false;
     while (i < size) {
         std::u32string stringPiece = getStringPiece(seq, i);
         if (stringPiece.size() > 0) {
+            RE * e = addEquivalents(stringPiece);
+            if (Seq * t = dyn_cast<Seq>(e)) {
+                unsigned tsize = t->size();
+                if ((tsize != size) || (getStringPiece(t,0) != stringPiece)) changed = true;
+            } else changed = true;
             list.push_back(addEquivalents(stringPiece));
             i += stringPiece.size();
         } else {
-            list.push_back(transform((*seq)[i]));
+            RE * r = (*seq)[i];
+            RE * t = transform(r);
+            if (t != r) changed = true;
+            list.push_back(t);
             i++;
         }
     }
+    if (!changed) return seq;
     return makeSeq(list.begin(), list.end());
 }
     
@@ -448,7 +458,7 @@ CC * add_equivalent_codepoints(CC * cc, EquivalenceOptions options) {
             addedCC = addedCC + equivalentCodepoints(cp, options);
         }
     }
-    if (addedCC.empty()) return cc;
+    if ((addedCC - *cc).empty()) return cc;
     return makeCC(*cc + addedCC);
 }
         

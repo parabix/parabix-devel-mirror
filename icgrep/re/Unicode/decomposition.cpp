@@ -186,18 +186,24 @@ RE * NFD_Transformer::transformSeq(Seq * seq) {
     if (size == 0) return seq;
     std::vector<RE *> list;
     unsigned i = 0;
+    bool unchanged = true;
     while (i < size) {
         std::u32string stringPiece = getStringPiece(seq, i);
         if (stringPiece.size() > 0) {
             std::u32string s;
             NFD_append(s, stringPiece);
+            if (s != stringPiece) unchanged = false;
             list.push_back(u32string2re(s));
             i += stringPiece.size();
         } else {
-            list.push_back(transform((*seq)[i]));
+            RE * r = (*seq)[i];
+            RE * t = transform(r);
+            if (t != r) unchanged = false;
+            list.push_back(t);
             i++;
         }
     }
+    if (unchanged) return seq;
     return makeSeq(list.begin(), list.end());
 }
 } // end namespace UCD
