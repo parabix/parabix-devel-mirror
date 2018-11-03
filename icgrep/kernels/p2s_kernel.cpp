@@ -43,10 +43,6 @@ inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Va
         p2s_step(iBuilder, bit00224466[j], bit11335577[j], iBuilder->simd_himask(2), 1, s[2*j+1], s[2*j]);
     }
 }
-
-
-
-
     		
 void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
     const auto numOfStreams = getStreamBinding("basisBits").getNumElements();

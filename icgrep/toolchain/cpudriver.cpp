@@ -104,8 +104,6 @@ CPUDriver::CPUDriver(std::string && moduleName)
     if (mTarget == nullptr) {
         throw std::runtime_error("Could not selectTarget");
     }
-    preparePassManager();
-
     #ifdef ORCJIT
     mCompileLayer = make_unique<CompileLayerT>(mObjectLayer, orc::SimpleCompiler(*mTarget));
     #else
@@ -226,6 +224,8 @@ void CPUDriver::preparePassManager() {
 }
 
 void CPUDriver::generateUncachedKernels() {
+    if (mUncachedKernel.empty()) return;
+    preparePassManager();
     for (auto & kernel : mUncachedKernel) {
         kernel->prepareKernel(iBuilder);
     }

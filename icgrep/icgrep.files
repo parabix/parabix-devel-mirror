@@ -116,7 +116,6 @@ re/re_multiplex.h
 re/re_multiplex.cpp
 re/re_minimizer.h
 re/re_minimizer.cpp
-re/re_memoizer.cpp
 re/re_local.h
 re/re_local.cpp
 re/re_intersect.h

@@ -132,8 +132,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RateValue upper{std::numeric_limits<unsigned>::max()};
 
             BufferNode & kn = G[i];
-
-            const Kernel * const kernel = kn.kernel; assert(kernel);
+            assert(kn.kernel);
 
             for (const auto ce : make_iterator_range(in_edges(i, G))) {
                 // current consuming edge of this buffer
@@ -264,7 +263,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
 
     for (unsigned i = 0; i < numOfKernels; ++i) {
         const Kernel * const kernel = mPipeline[i]; assert(kernel);
-        out << "v" << i << " [label=\"" << i << ": " <<  mPipeline[i]->getName()  << "\" shape=box];\n";
+        out << "v" << i << " [label=\"" << i << ": " <<  kernel->getName()  << "\" shape=box];\n";
     }
 
     out << "v" << numOfKernels << " [label=\"" << numOfKernels << ": pipeline\" shape=box];\n";

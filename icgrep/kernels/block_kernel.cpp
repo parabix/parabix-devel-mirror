@@ -352,8 +352,7 @@ void BlockOrientedKernel::CreateDoBlockMethodCall(const std::unique_ptr<KernelBu
  ** ------------------------------------------------------------------------------------------------------------- */
 
 using PopCountRateGraph = adjacency_list<hash_setS, vecS, directedS>;
-using Key = std::reference_wrapper<const std::string>;
-using PopCountRateMap = boost::container::flat_map<Key, PopCountRateGraph::vertex_descriptor, std::less<std::string>>;
+using PopCountRateMap = llvm::StringMap<PopCountRateGraph::vertex_descriptor>;
 
 #define POP_COUNT 0
 #define NEGATED_POP_COUNT 1
@@ -372,9 +371,8 @@ inline PopCountRateGraph makePopCountRateGraph(const Bindings & inputStreamSets,
     const auto n = inputStreamSets.size();
     PopCountRateGraph G(n);
     PopCountRateMap M;
-    M.reserve(n);
     for (unsigned i = 0; i < n; ++i) {
-        M.emplace(inputStreamSets[i].getName(), i);
+        M.insert(std::make_pair(inputStreamSets[i].getName(), i));
         checkPopCount(inputStreamSets[i], G, M);
     }
     const auto m = outputStreamSets.size();

@@ -145,8 +145,8 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addScalarToMap
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addScalarToMap(const std::string & name, const ScalarType scalarType, const unsigned index) {
-    const auto r = mScalarMap.emplace(name, ScalarField{scalarType, index});
+void Kernel::addScalarToMap(const llvm::StringRef name, const ScalarType scalarType, const unsigned index) {
+    const auto r = mScalarMap.insert(std::make_pair(name, ScalarField{scalarType, index}));
     if (LLVM_UNLIKELY(!r.second)) {
         const ScalarField & sf = r.first->second;
         if (LLVM_UNLIKELY(sf.type != scalarType || sf.index != index)) {
@@ -158,8 +158,8 @@ void Kernel::addScalarToMap(const std::string & name, const ScalarType scalarTyp
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addScalarToMap
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addStreamToMap(const std::string & name, const Port port, const unsigned index) {
-    const auto r = mStreamSetMap.emplace(name, std::make_pair(port, index));
+void Kernel::addStreamToMap(const llvm::StringRef name, const Port port, const unsigned index) {
+    const auto r = mStreamSetMap.insert(std::make_pair(name, std::make_pair(port, index)));
     if (LLVM_UNLIKELY(!r.second)) {
         const StreamPort & sf = r.first->second;
         if (LLVM_UNLIKELY(sf.first != port || sf.second != index)) {
@@ -612,7 +612,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalScalar
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addInternalScalar(llvm::Type * type, const std::string & name) {
+void Kernel::addInternalScalar(llvm::Type * type, const llvm::StringRef name) {
     const auto index = mInternalScalars.size();
     mInternalScalars.emplace_back(type, name);
     addScalarToMap(name, ScalarType::Internal, index);
@@ -621,7 +621,7 @@ void Kernel::addInternalScalar(llvm::Type * type, const std::string & name) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getScalarIndex
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned Kernel::getScalarIndex(const std::string & fieldName) const {
+unsigned Kernel::getScalarIndex(const llvm::StringRef fieldName) const {
     const auto & field = getScalarField(fieldName);
     assert (mKernelStateType);
     unsigned index = field.index;
@@ -674,11 +674,11 @@ std::string Kernel::makeSignature(const std::unique_ptr<KernelBuilder> & b) {
  *
  * Create a fixed length string hash of the given str
  ** ------------------------------------------------------------------------------------------------------------- */
-std::string Kernel::getStringHash(const std::string & str) {
+std::string Kernel::getStringHash(const llvm::StringRef str) {
 
     uint32_t digest[5]; // 160 bits in total
     boost::uuids::detail::sha1 sha1;
-    sha1.process_bytes(str.c_str(), str.size());
+    sha1.process_bytes(str.data(), str.size());
     sha1.get_digest(digest);
 
     std::string buffer;
@@ -755,7 +755,7 @@ Value * Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getScalarField
  ** ------------------------------------------------------------------------------------------------------------- */
-const Kernel::ScalarField & Kernel::getScalarField(const std::string & name) const {
+const Kernel::ScalarField & Kernel::getScalarField(const llvm::StringRef name) const {
     assert (!mScalarMap.empty());
     const auto f = mScalarMap.find(name);
     if (LLVM_UNLIKELY(f == mScalarMap.end())) {
@@ -767,7 +767,7 @@ const Kernel::ScalarField & Kernel::getScalarField(const std::string & name) con
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputScalarBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-Binding & Kernel::getInputScalarBinding(const std::string & name) {
+Binding & Kernel::getInputScalarBinding(const llvm::StringRef name) {
     const ScalarField & field = getScalarField(name);
     if (LLVM_UNLIKELY(field.type != ScalarType::Input)) {
         report_fatal_error(getName() + "." + name + "is not an input scalar");
@@ -778,7 +778,7 @@ Binding & Kernel::getInputScalarBinding(const std::string & name) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputScalarBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-Binding & Kernel::getOutputScalarBinding(const std::string & name) {
+Binding & Kernel::getOutputScalarBinding(const llvm::StringRef name) {
     const ScalarField & field = getScalarField(name);
     if (LLVM_UNLIKELY(field.type != ScalarType::Output)) {
         report_fatal_error(getName() + "." + name + "is not an output scalar");
@@ -789,7 +789,7 @@ Binding & Kernel::getOutputScalarBinding(const std::string & name) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getStreamPort
  ** ------------------------------------------------------------------------------------------------------------- */
-Kernel::StreamSetPort Kernel::getStreamPort(const std::string & name) const {
+Kernel::StreamSetPort Kernel::getStreamPort(const llvm::StringRef name) const {
     const auto f = mStreamSetMap.find(name);
     if (LLVM_UNLIKELY(f == mStreamSetMap.end())) {
         assert (!mStreamSetMap.empty());
@@ -801,7 +801,7 @@ Kernel::StreamSetPort Kernel::getStreamPort(const std::string & name) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-const Binding & Kernel::getStreamBinding(const std::string & name) const {
+const Binding & Kernel::getStreamBinding(const llvm::StringRef name) const {
     Port port; unsigned index;
     std::tie(port, index) = getStreamPort(name);
     return (port == Port::Input) ? getInputStreamSetBinding(index) : getOutputStreamSetBinding(index);
