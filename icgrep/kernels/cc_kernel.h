@@ -14,7 +14,7 @@ namespace kernel {
 
 class DirectCharacterClassKernelBuilder final : public pablo::PabloKernel {
 public:    
-    DirectCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses);
+    DirectCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * byteStream, StreamSet * ccStream);
 protected:
     void generatePabloMethod() override;
 private:
@@ -23,7 +23,7 @@ private:
 
 class ParabixCharacterClassKernelBuilder final : public pablo::PabloKernel {
 public:
-    ParabixCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, const std::vector<re::CC *> & charClasses, unsigned codeUnitWidth);
+    ParabixCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, const std::vector<re::CC *> & charClasses, StreamSet * basisStream, StreamSet * outputStream);
 protected:
     void generatePabloMethod() override;
 private:

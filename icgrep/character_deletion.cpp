@@ -36,7 +36,6 @@
 namespace re { class CC; }
 
 using namespace llvm;
-using namespace parabix;
 using namespace kernel;
 
 static cl::OptionCategory characterDeletionFlags("Command Flags", "deletion options");
@@ -53,7 +52,7 @@ typedef void (*MainFunctionType)(char * byte_data, size_t filesize);
  * It will delete the character from the input file and then print the output to stdout
  * */
 
-StreamSetBuffer * loadBasisBits(ParabixDriver & pxDriver, Value* inputStream, Value* fileSize, int inputBufferBlocks) {
+StreamSetBuffer * loadBasisBits(CPUDriver & pxDriver, Value* inputStream, Value* fileSize, int inputBufferBlocks) {
     auto & iBuilder = pxDriver.getBuilder();
 
     StreamSetBuffer * ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
@@ -69,7 +68,7 @@ StreamSetBuffer * loadBasisBits(ParabixDriver & pxDriver, Value* inputStream, Va
     return BasisBits;
 }
 
-StreamSetBuffer * generateSwizzledDeletion(ParabixDriver & pxDriver, StreamSetBuffer * BasisBits, int inputBufferBlocks) {
+StreamSetBuffer * generateSwizzledDeletion(CPUDriver & pxDriver, StreamSetBuffer * BasisBits, int inputBufferBlocks) {
     auto & iBuilder = pxDriver.getBuilder();
 
     StreamSetBuffer * const CharacterMarkerBuffer = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), inputBufferBlocks);
@@ -91,7 +90,7 @@ StreamSetBuffer * generateSwizzledDeletion(ParabixDriver & pxDriver, StreamSetBu
 }
 
 // TODO: It seems that there are still some bugs in DeleteByPEXTkernel
-StreamSetBuffer * generateDeletion(ParabixDriver & pxDriver, StreamSetBuffer * BasisBits, int inputBufferBlocks) {
+StreamSetBuffer * generateDeletion(CPUDriver & pxDriver, StreamSetBuffer * BasisBits, int inputBufferBlocks) {
     auto & iBuilder = pxDriver.getBuilder();
 
     StreamSetBuffer * const CharacterMarkerBuffer = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), inputBufferBlocks);
@@ -111,12 +110,14 @@ StreamSetBuffer * generateDeletion(ParabixDriver & pxDriver, StreamSetBuffer * B
     return compressedBits;
 }
 
-StreamSetBuffer * generateDeletionByCompression(ParabixDriver & pxDriver, StreamSetBuffer * BasisBits, int inputBufferBlocks) {
+StreamSetBuffer * generateDeletionByCompression(CPUDriver & pxDriver, StreamSetBuffer * BasisBits, int inputBufferBlocks) {
     auto & iBuilder = pxDriver.getBuilder();
 
     StreamSetBuffer * const CharacterMarkerBuffer = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), inputBufferBlocks);
     Kernel * ccK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "deletionMarker", std::vector<re::CC *>{re::subtractCC(re::makeByte(0, 255), re::makeCC(characterToBeDeleted))}, 8);
     pxDriver.makeKernelCall(ccK, {BasisBits}, {CharacterMarkerBuffer});
+
+    #warning TODO: replace StreamFilterCompiler with the deposit method
 
     StreamSetBuffer * compressedBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8), inputBufferBlocks);
     StreamFilterCompiler filterCompiler(pxDriver, iBuilder->getStreamSetTy(8), inputBufferBlocks);
@@ -150,7 +151,7 @@ int main(int argc, char *argv[]) {
 
     const int inputBufferBlocks = codegen::BufferSegments * codegen::ThreadNum * 16;
 
-    ParabixDriver pxDriver("character_deletion");
+    CPUDriver pxDriver("character_deletion");
     auto & iBuilder = pxDriver.getBuilder();
     Module * M = iBuilder->getModule();
     Type * const sizeTy = iBuilder->getSizeTy();
@@ -188,11 +189,7 @@ int main(int argc, char *argv[]) {
 
     Kernel * outK = pxDriver.addKernelInstance<StdOutKernel>(iBuilder, 8);
     pxDriver.makeKernelCall(outK, {deletedByteStream}, {});
-
     pxDriver.generatePipelineIR();
-
-    pxDriver.deallocateBuffers();
-
     iBuilder->CreateRetVoid();
 
     pxDriver.finalizeObject();

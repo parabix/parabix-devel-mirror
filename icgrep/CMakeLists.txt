@@ -61,15 +61,18 @@ SET(OBJECT_CACHE_SRC toolchain/object_cache.cpp)
 
 SET(GREP_CORE_SRC kernels/linebreak_kernel.cpp kernels/grep_kernel.cpp kernels/scanmatchgen.cpp )
 
-SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/pipeline.cpp)
+SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/object_cache_manager.cpp)
 
 SET(DRIVER_SRC toolchain/driver.cpp toolchain/cpudriver.cpp)
 if(ENABLE_CUDA_COMPILE)
 SET(DRIVER_SRC ${DRIVER_SRC} toolchain/NVPTXDriver.cpp)
 endif()
 
-SET(KERNEL_SRC kernels/attributes.cpp kernels/processing_rate.cpp kernels/interface.cpp kernels/kernel.cpp kernels/multiblock_kernel.cpp kernels/block_kernel.cpp kernels/streamset.cpp kernels/kernel_builder.cpp)
+SET(KERNEL_SRC kernels/attributes.cpp kernels/binding.cpp kernels/relationship.cpp kernels/processing_rate.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/kernel.cpp kernels/streamset.cpp kernels/multiblock_kernel.cpp kernels/block_kernel.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/pipeline/pipeline_kernel.cpp kernels/pipeline/pipeline_builder.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/hex_convert.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/kernel_builder.cpp)
 
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp)
 SET(IDISA_SRC ${IDISA_SRC} IR_Gen/idisa_target.cpp)
@@ -102,6 +105,7 @@ add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_ran
 add_library(RegExpCompiler ${RE_PARSERS_SRC} re/casing.cpp re/to_utf8.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/collect_ccs.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp re/replaceCC.cpp re/validation.cpp re/Unicode/decomposition.cpp re/Unicode/equivalence.cpp)
 add_library(UCDlib UCD/Equivalence.cpp UCD/CaseFolding.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp)
 add_library(GrepEngine  ${GREP_CORE_SRC} grep/grep_engine.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/streams_merge.cpp kernels/until_n.cpp kernels/UCD_property_kernel.cpp kernels/grapheme_kernel.cpp)
+add_library(FileSelect util/file_select.cpp)
 add_library(LZ4_Lib lz4/lz4_frame_decoder.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp lz4/lz4_decompression_generator.cpp kernels/lz4/lz4_block_decoder.cpp kernels/bitstream_pdep_kernel.cpp kernels/bitstream_gather_pdep_kernel.cpp kernels/swizzled_multiple_pdep_kernel.cpp kernels/fake_stream_generating_kernel.cpp kernels/lz4/decompression/lz4_bytestream_decompression.cpp kernels/lz4/decompression/lz4_swizzled_decompression.cpp kernels/lz4/decompression/lz4_sequential_decompression_base.cpp kernels/lz4/decompression/lz4_bitstream_decompression.cpp kernels/lz4/decompression/lz4_twist_decompression.cpp kernels/lz4/twist_kernel.cpp kernels/lz4/untwist_kernel.cpp lz4/lz4_base_generator.cpp kernels/lz4/lz4_match_detector.cpp kernels/lz4/lz4_match_detector.h kernels/lz4/lz4_not_kernel.cpp kernels/lz4/lz4_not_kernel.h)
 
 # force the compiler to compile the object cache to ensure that the versioning information is up to date
@@ -113,40 +117,41 @@ target_link_libraries (CodeGen ${REQ_LLVM_LIBRARIES})
 target_link_libraries (PabloADT CodeGen)
 target_link_libraries (CCADT PabloADT)
 target_link_libraries (RegExpADT PabloADT CCADT)
-target_link_libraries (UCDlib GrepEngine RegExpCompiler RegExpADT PabloADT CCADT)
+target_link_libraries (UCDlib RegExpADT PabloADT CCADT) # GrepEngine RegExpCompiler
 target_link_libraries (RegExpCompiler UCDlib CCADT RegExpADT)
 target_link_libraries (GrepEngine RegExpCompiler CodeGen)
+target_link_libraries (FileSelect GrepEngine)
 
-add_executable(icgrep icgrep.cpp util/file_select.cpp grep_interface.cpp)
+add_executable(icgrep icgrep.cpp grep_interface.cpp)
 add_executable(u8u16 u8u16.cpp)
 add_executable(u32u8 u32u8.cpp kernels/pdep_kernel.cpp)
 add_executable(base64 base64.cpp kernels/radix64.cpp)
-add_executable(wc wc.cpp util/file_select.cpp)
+add_executable(wc wc.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp kernels/streams_merge.cpp kernels/cc_kernel.cpp)
-add_executable(lz4d lz4d.cpp lz4/lz4_frame_decoder.cpp kernels/cc_kernel.cpp kernels/lz4/lz4_index_decoder.cpp kernels/lz4/lz4_bytestream_decoder.cpp)
+# add_executable(lz4d lz4d.cpp lz4/lz4_frame_decoder.cpp kernels/cc_kernel.cpp kernels/lz4/lz4_index_decoder.cpp kernels/lz4/lz4_bytestream_decoder.cpp)
 add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/propGen.cpp combine/icgrep-test/icgrep-test.cpp grep_interface.cpp grep/grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
-add_executable(character_deletion character_deletion.cpp kernels/cc_kernel.cpp)
-add_executable(character_deposit character_deposit.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp kernels/bitstream_pdep_kernel.cpp)
+# add_executable(character_deletion character_deletion.cpp kernels/cc_kernel.cpp)
+# add_executable(character_deposit character_deposit.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp kernels/bitstream_pdep_kernel.cpp)
 add_executable(lz4_decoder lz4_decoder.cpp)
-add_executable(lz4_grep grep_interface.cpp util/file_select.cpp lz4_grep.cpp lz4/grep/lz4_grep_base_generator.cpp lz4/grep/lz4_grep_bytestream_generator.cpp lz4/grep/lz4_grep_bytestream_generator.h lz4/grep/lz4_grep_bitstream_generator.cpp lz4/grep/lz4_grep_bitstream_generator.h lz4/grep/lz4_grep_swizzle_generator.cpp lz4/grep/lz4_grep_swizzle_generator.h)
+add_executable(lz4_grep grep_interface.cpp lz4_grep.cpp lz4/grep/lz4_grep_base_generator.cpp lz4/grep/lz4_grep_bytestream_generator.cpp lz4/grep/lz4_grep_bytestream_generator.h lz4/grep/lz4_grep_bitstream_generator.cpp lz4/grep/lz4_grep_bitstream_generator.h lz4/grep/lz4_grep_swizzle_generator.cpp lz4/grep/lz4_grep_swizzle_generator.h)
 add_executable(idisa_test idisa_test.cpp)
 
 
 #Exclude CoRE from default build.
 set_target_properties(core PROPERTIES EXCLUDE_FROM_ALL 1)
 
-target_link_libraries (icgrep GrepEngine UCDlib PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (icgrep GrepEngine UCDlib PabloADT RegExpCompiler CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u8u16 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u32u8 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (base64 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (wc GrepEngine UCDlib PabloADT RegExpCompiler  CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (editd PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (lz4d PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+# target_link_libraries (lz4d PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (core RegExpCompiler ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
-target_link_libraries (character_deletion PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (character_deposit PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+# target_link_libraries (character_deletion PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+# target_link_libraries (character_deposit PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4_decoder LZ4_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (lz4_grep LZ4_Lib UCDlib PabloADT RegExpCompiler CodeGen CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (lz4_grep LZ4_Lib UCDlib PabloADT RegExpCompiler CodeGen CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (idisa_test CodeGen PabloADT ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 
 
@@ -237,7 +242,11 @@ ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
 
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+# no pie disables the generation of position-independent executables, which is a default security feature of newer compiles
+# that prevents addr2line from being able to resolve which line corresponds to the code at run time. This in turn prevents
+# CreateAssert from being able to provide the compilation call stack for each JIT'ed assertion error.
+
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -no-pie")
 
 UNSET(HAS_ADDRESS_SANITIZER)
 IF (USE_ADDRESS_SANITIZER)
@@ -265,7 +274,7 @@ add_test(
 add_test(
   NAME u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
-  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
+  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -enable-segment-pipeline-parallel")
 
 add_test(
   NAME u32u8_test
@@ -326,7 +335,7 @@ add_custom_target (proptest
 
 add_custom_target (u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
-  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -segment-size=16 -enable-segment-pipeline-parallel")
+  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -enable-segment-pipeline-parallel")
 
 add_custom_target (u32u8_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA

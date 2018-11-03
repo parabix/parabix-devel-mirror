@@ -3,76 +3,88 @@
 
 #include <IR_Gen/FunctionTypeBuilder.h>
 #include <llvm/ExecutionEngine/GenericValue.h>
-#include <kernels/streamset.h>
 #include <kernels/kernel.h>
+#include <kernels/streamset.h>
+#include <kernels/relationship.h>
+#include <toolchain/object_cache_manager.h>
+#include <util/slab_allocator.h>
 #include <string>
 #include <vector>
 #include <memory>
 
 namespace llvm { class Function; }
 namespace kernel { class KernelBuilder; }
+namespace kernel { class PipelineBuilder; }
+class CBuilder;
 
-class Driver {
+class ObjectCacheManager;
+
+class BaseDriver {
     friend class CBuilder;
+    friend class kernel::PipelineBuilder;
+    using Kernel = kernel::Kernel;
+    using Relationship = kernel::Relationship;
+    using Bindings = kernel::Bindings;
+    using OwnedKernels = std::vector<std::unique_ptr<Kernel>>;
+
 public:
-    Driver(std::string && moduleName);
+
+    std::unique_ptr<kernel::PipelineBuilder> makePipelineWithIO(Bindings stream_inputs = {}, Bindings stream_outputs = {}, Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
+
+    std::unique_ptr<kernel::PipelineBuilder> makePipeline(Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
 
     const std::unique_ptr<kernel::KernelBuilder> & getBuilder() {
         return iBuilder;
     }
 
-    template<typename BufferType, typename... Args>
-    parabix::StreamSetBuffer * addBuffer(Args &&... args) {
-        BufferType * const b = new BufferType(std::forward<Args>(args) ...);
-        mOwnedBuffers.emplace_back(b);
-        mOwnedBuffers.back()->allocateBuffer(iBuilder);
-        return b;
-    }
+    kernel::StreamSet * CreateStreamSet(const unsigned NumElements = 1, const unsigned FieldWidth = 1);
 
-    template<typename KernelType, typename... Args>
-    kernel::Kernel * addKernelInstance(Args &&... args) {
-        KernelType * const k = new KernelType(std::forward<Args>(args) ...);
-        mOwnedKernels.emplace_back(k);
-        return k;
-    }
+    kernel::Scalar * CreateScalar(llvm::Type * scalarType);
 
-    virtual void makeKernelCall(kernel::Kernel * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) = 0;
+    kernel::Scalar * CreateConstant(llvm::Constant * value);
 
-    virtual void generatePipelineIR() = 0;
+    void addKernel(Kernel * const kernel);
 
     template <typename ExternalFunctionType>
-    llvm::Function * LinkFunction(kernel::Kernel & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const;
+    llvm::Function * LinkFunction(not_null<Kernel *> kb, llvm::StringRef name, ExternalFunctionType & functionPtr) const;
 
     virtual bool hasExternalFunction(const llvm::StringRef functionName) const = 0;
 
-    void deallocateBuffers();
-    
-    virtual void finalizeObject() = 0;
-    
-    virtual void * getMain() = 0; // "main" exists until the driver is deleted
-    
-    virtual void performIncrementalCacheCleanupStep() = 0;
+    virtual void generateUncachedKernels() = 0;
 
-    virtual ~Driver() = 0;
+    virtual void * finalizeObject(llvm::Function * mainMethod) = 0;
+    
+    virtual ~BaseDriver();
+
+    llvm::LLVMContext & getContext() const {
+        return *mContext.get();
+    }
+
+    llvm::Module * getMainModule() const {
+        return mMainModule;
+    }
 
 protected:
+
+    BaseDriver(std::string && moduleName);
 
     virtual llvm::Function * addLinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const = 0;
 
 protected:
+
     std::unique_ptr<llvm::LLVMContext>                      mContext;
     llvm::Module * const                                    mMainModule;
     std::unique_ptr<kernel::KernelBuilder>                  iBuilder;
-    std::vector<std::unique_ptr<kernel::Kernel>>            mOwnedKernels;
-    std::vector<std::unique_ptr<parabix::StreamSetBuffer>>  mOwnedBuffers;
-    std::vector<kernel::Kernel *>                           mPipeline;
+    OwnedKernels                                            mUncachedKernel;
+    OwnedKernels                                            mCachedKernel;
+    SlabAllocator<>                                         mAllocator;
 };
 
 template <typename ExternalFunctionType>
-llvm::Function * Driver::LinkFunction(kernel::Kernel & kb, llvm::StringRef name, ExternalFunctionType * functionPtr) const {
-    llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(*mContext.get());
+llvm::Function * BaseDriver::LinkFunction(not_null<Kernel *> kb, llvm::StringRef name, ExternalFunctionType & functionPtr) const {
+    llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(getContext());
     assert ("FunctionTypeBuilder did not resolve a function type." && type);
-    return addLinkFunction(kb.getModule(), name, type, reinterpret_cast<void *>(functionPtr));
+    return addLinkFunction(kb->getModule(), name, type, reinterpret_cast<void *>(functionPtr));
 }
 
 #endif // DRIVER_H

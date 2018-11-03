@@ -32,45 +32,37 @@ typedef llvm::orc::IRCompileLayer<ObjectLayerT, llvm::orc::SimpleCompiler> Compi
 
 #endif
 
-class ParabixObjectCache;
+class ObjectCacheManager;
 
-class ParabixDriver final : public Driver {
-    friend class CBuilder;
+class CPUDriver final : public BaseDriver {
 public:
-    ParabixDriver(std::string && moduleName);
 
-    ~ParabixDriver();
+    CPUDriver(std::string && moduleName);
 
-    void generatePipelineIR() override;
+    ~CPUDriver();
 
-    void makeKernelCall(kernel::Kernel * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) override;
+    void generateUncachedKernels() override;
 
-    void finalizeObject() override;
+    void * finalizeObject(llvm::Function * mainMethod) override;
 
     bool hasExternalFunction(const llvm::StringRef functionName) const override;
 
-    void * getMain() override; // "main" exists until the driver is deleted
-    
-    void performIncrementalCacheCleanupStep() override;
-
 private:
+
     std::string getMangledName(std::string s);
     
     void preparePassManager();
 
     llvm::Function * addLinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const override;
 
+private:
     llvm::TargetMachine *                                   mTarget;
-
-#ifdef ORCJIT
-    ObjectLayerT mObjectLayer;
-    std::unique_ptr<CompileLayerT> mCompileLayer;
-
-#else
+    #ifdef ORCJIT
+    ObjectLayerT                                            mObjectLayer;
+    std::unique_ptr<CompileLayerT>                          mCompileLayer;
+    #else
     llvm::ExecutionEngine *                                 mEngine;
-#endif
-    ParabixObjectCache *                                    mCache;
-    std::vector<kernel::Kernel *>                           mUncachedKernel;
+    #endif
     std::unique_ptr<llvm::raw_fd_ostream>                   mUnoptimizedIROutputStream;
     std::unique_ptr<llvm::raw_fd_ostream>                   mIROutputStream;
     std::unique_ptr<llvm::raw_fd_ostream>                   mASMOutputStream;

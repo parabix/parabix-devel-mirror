@@ -9,6 +9,7 @@
 #include <re/re_assertion.h>
 #include <re/re_group.h>
 #include <re/re_analysis.h>
+#include <re/re_utility.h>
 #include <re/printer_re.h>
 #include <re/re_toolchain.h>
 #include <UCD/ucd_compiler.hpp>

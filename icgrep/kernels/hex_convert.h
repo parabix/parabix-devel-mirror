@@ -6,10 +6,6 @@
 #define HEX_CONVERT_H
 
 #include <kernels/kernel.h>
-#include <kernels/kernel_builder.h>
-#include <kernels/interface.h>
-#include <kernels/streamset.h>
-#include <llvm/IR/Value.h>
 
 namespace kernel {
 //
@@ -19,7 +15,7 @@ namespace kernel {
 
 class HexToBinary final : public kernel::BlockOrientedKernel {
 public:
-    HexToBinary(const std::unique_ptr<kernel::KernelBuilder> & b);
+    HexToBinary(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * hexStream, StreamSet * binStream);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -33,12 +29,13 @@ protected:
 
 class BinaryToHex final : public kernel::BlockOrientedKernel {
 public:
-    BinaryToHex(const std::unique_ptr<kernel::KernelBuilder> & b);
+    BinaryToHex(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * binStream, StreamSet * hexStream);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
     void generateFinalBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Value * const remainingBits) override;
 };
+
 }
 #endif

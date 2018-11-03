@@ -5,7 +5,7 @@
 #include "lz4/lz4_base_generator.h"
 
 #include <grep_interface.h>
-#include <kernels/streamset.h>
+#include <kernels/relationship.h>
 #include <cc/multiplex_CCs.h>
 #include <string>
 #include <vector>
@@ -21,7 +21,7 @@ typedef uint64_t (*CountOnlyGrepMainFunctionType)(char * byte_data, size_t heade
 class LZ4GrepBaseGenerator : public LZ4BaseGenerator {
 public:
 
-    LZ4GrepBaseGenerator();
+    enum FunctionType { CountOnly, Match };
 
     void generateScanMatchGrepPipeline(re::RE* regex, bool enableMultiplexing, bool utf8CC);
     void generateCountOnlyGrepPipeline(re::RE* regex, bool enableMultiplexing, bool utf8CC);
@@ -32,27 +32,30 @@ public:
     ScanMatchGrepMainFunctionType getScanMatchGrepMainFunction();
     CountOnlyGrepMainFunctionType getCountOnlyGrepMainFunction();
 
-
-
 protected:
-    virtual parabix::StreamSetBuffer* generateUncompressedByteStream() {
-        parabix::StreamSetBuffer* bitStreams = this->generateUncompressedBitStreams();
-        return this->p2s(bitStreams);
-    }
-    virtual parabix::StreamSetBuffer* generateUncompressedBitStreams() = 0;
-    virtual parabix::StreamSetBuffer* decompressBitStream(parabix::StreamSetBuffer* compressedByteStream, parabix::StreamSetBuffer* compressedBitStream) = 0;
-    virtual std::vector<parabix::StreamSetBuffer*> decompressBitStreams(parabix::StreamSetBuffer* compressedByteStream, std::vector<parabix::StreamSetBuffer*> compressedBitStreams);
 
-    std::vector<parabix::StreamSetBuffer*> generateFakeStreams(
-            const std::unique_ptr<kernel::KernelBuilder> & iBuilder,
-            parabix::StreamSetBuffer* refStream,
-            std::vector<unsigned> numOfStreams
-    );
+    LZ4GrepBaseGenerator(const FunctionType type);
+
+    virtual kernel::StreamSet* generateUncompressedByteStream() {
+        kernel::StreamSet* bitStreams = generateUncompressedBitStreams();
+        return p2s(bitStreams);
+    }
+
+    virtual kernel::StreamSet* generateUncompressedBitStreams() = 0;
+    virtual kernel::StreamSet* decompressBitStream(kernel::StreamSet* compressedByteStream, kernel::StreamSet* compressedBitStream) = 0;
+    virtual kernel::StreamSets decompressBitStreams(kernel::StreamSet* compressedByteStream, kernel::StreamSets compressedBitStreams);
+
+    kernel::StreamSets generateFakeStreams(kernel::StreamSet * refStream, std::vector<unsigned> numOfStreams);
+
     unsigned calculateTwistWidth(unsigned numOfStreams);
 
 private:
+
+    std::unique_ptr<kernel::PipelineBuilder> makeInternalPipeline(const FunctionType type);
+
     grep::GrepRecordBreakKind mGrepRecordBreak;
-    void initREs(re::RE * REs);
+
+    void initREs(re::RE * re);
 
 
     re::CC * mBreakCC;
@@ -61,18 +64,12 @@ private:
     bool mMoveMatchesToEOL;
     re::RE* u8NonFinalRe;
     re::RE* u8FinalRe;
-
+    kernel::Scalar * match_accumulator;
+    void * mMainMethod;
 
     std::vector<std::ostringstream> mResultStrs;
 
-    void generateCountOnlyMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    void generateScanMatchMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-
-
-    llvm::Value * match_accumulator;
-
-
-    parabix::StreamSetBuffer * linefeedStreamFromUncompressedBits(parabix::StreamSetBuffer *uncompressedBasisBits);
+    kernel::StreamSet * linefeedStreamFromUncompressedBits(kernel::StreamSet *uncompressedBasisBits);
 
 
     void generateFullyDecompressionScanMatchGrepPipeline(re::RE *regex);
@@ -83,15 +80,11 @@ private:
     void generateMultiplexingCountOnlyGrepPipeline(re::RE *regex, bool utf8CC);
 
 
-    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grep(re::RE *RE, parabix::StreamSetBuffer *byteStream,
-                                                                           parabix::StreamSetBuffer *uncompressedBasisBits, bool ccMultiplexing = false);
-    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> multiplexingGrep(
-            re::RE *RE,
-            parabix::StreamSetBuffer *compressedByteStream,
-            parabix::StreamSetBuffer *compressedBitStream,
-            bool utf8CC
-    );
-    std::unique_ptr<cc::MultiplexedAlphabet> mpx;
+    std::pair<kernel::StreamSet *, kernel::StreamSet *> grep(
+            re::RE * re, kernel::StreamSet *byteStream, kernel::StreamSet *uncompressedBasisBits, bool ccMultiplexing = false);
+
+    std::pair<kernel::StreamSet *, kernel::StreamSet *> multiplexingGrep(
+            re::RE * re, kernel::StreamSet *compressedByteStream, kernel::StreamSet *compressedBitStream, bool utf8CC);
 
 };
 

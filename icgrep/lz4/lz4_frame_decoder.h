@@ -60,7 +60,7 @@ private:
     size_t getMinFileSize() {
         return 4 +         // Magic number
                3 +         // Frame descriptor (3-11 bytes)
-               this->endMarkSize();          // End mark
+               endMarkSize();          // End mark
     }
 };
 

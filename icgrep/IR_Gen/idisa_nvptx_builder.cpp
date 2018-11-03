@@ -27,7 +27,7 @@ Value * IDISA_NVPTX20_Builder::bitblock_any(Value * val) {
     return CreateICmpNE(anyNonZero,  ConstantInt::getNullValue(int32ty));
 }
 
-Value * IDISA_NVPTX20_Builder::bitblock_mask_from(Value * pos){
+Value * IDISA_NVPTX20_Builder::bitblock_mask_from(Value * pos, const bool safe){
     Type * const int64ty = getInt64Ty();
     Value * id = CreateCall(tidFunc);
     Value * id64 = CreateZExt(id, int64ty);
@@ -39,7 +39,7 @@ Value * IDISA_NVPTX20_Builder::bitblock_mask_from(Value * pos){
     return CreateBitCast(CreateOr(CreateAnd(finalBlockMask, finalBlockSelect), unusedBlockMask), mBitBlockType);
 }
 
-Value * IDISA_NVPTX20_Builder::bitblock_set_bit(Value * pos){
+Value * IDISA_NVPTX20_Builder::bitblock_set_bit(Value * pos, const bool safe){
     Type * const int64ty = getInt64Ty();
     Value * id = CreateCall(tidFunc);
     Value * id64 = CreateZExt(id, int64ty);

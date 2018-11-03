@@ -16,14 +16,14 @@ using namespace kernel;
 #define DEBUG_RT_PRINT 0
 #endif
 
-#define printRTDebugMsg(MSG) \
-    if (DEBUG_RT_PRINT) b->CallPrintMsgToStderr(MSG)
+#define printRTDebugMsg(MSG)
+//    if (DEBUG_RT_PRINT) b->CallPrintMsgToStderr(MSG)
 
-#define printRTDebugInt(NAME, X) \
-    if (DEBUG_RT_PRINT) b->CallPrintIntToStderr(NAME, X)
+#define printRTDebugInt(NAME, X)
+//    if (DEBUG_RT_PRINT) b->CallPrintIntToStderr(NAME, X)
 
-#define printGlobalPos() \
-    printRTDebugInt("GlobalPos", b->CreateAdd(blockStartPos, b->CreateLoad(sOffset)))
+#define printGlobalPos()
+//    printRTDebugInt("GlobalPos", b->CreateAdd(blockStartPos, b->CreateLoad(sOffset)))
 
 namespace {
 
@@ -139,19 +139,8 @@ void LZ4IndexDecoderKernel::loadCurrentExtender(const std::unique_ptr<KernelBuil
 void LZ4IndexDecoderKernel::generateProduceOutput(const std::unique_ptr<KernelBuilder> &b) {
     Value * producedItem = b->getProducedItemCount("literalIndexes");
 
-//#ifndef NDEBUG
-//    b->CallPrintInt("ProducedItem", producedItem);
-//    // LiteralStart is adjusted to be relative to the block start, so that
-//    // the output can be compared against that of the reference implementation.
-//    Value * literalStart = b->CreateSub(b->getScalarField("LiteralStart"), b->getScalarField("LZ4BlockStart"));
-//    b->CallPrintInt("LiteralStart", literalStart);
-//    b->CallPrintInt("LiteralLength", b->getScalarField("LiteralLength"));
-//    b->CallPrintInt("MatchOffset", b->getScalarField("MatchOffset"));
-//    b->CallPrintInt("MatchLength", b->getScalarField("MatchLength"));
-//#endif
-    printRTDebugMsg("--------------");
-
-    Value * outputOffset = b->CreateAnd(b->CreateTrunc(producedItem, b->getInt32Ty()), b->getInt32(b->getBitBlockWidth() - 1));  // producedItem % blockWidth (as blockWidth is always a power of 2)
+    // producedItem % blockWidth (as blockWidth is always a power of 2)
+    Value * outputOffset = b->CreateAnd(b->CreateTrunc(producedItem, b->getInt32Ty()), b->getInt32(b->getBitBlockWidth() - 1));
     Value * baseLiteralStartPtr = b->getOutputStreamBlockPtr("literalIndexes", b->getInt32(0));
 
     Value * literalStartPtr = getOutputPtr(b, baseLiteralStartPtr, outputOffset);
@@ -681,16 +670,24 @@ void LZ4IndexDecoderKernel::generateAtBlockChecksum(const std::unique_ptr<Kernel
     // No checksum, offset not advanced.  Falls through to the next block (block_size).
 }
 
-LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
+LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                             // arguments
+                                             Scalar * hasBlockChecksum,
+                                             // inputs
+                                             StreamSet * byteStream,
+                                             StreamSet * extenders,
+                                             // outputs
+                                             StreamSet * literalIndexes,
+                                             StreamSet * matchIndexes)
 : BlockOrientedKernel("lz4IndexDecoder",
 // Inputs
-{Binding{b->getStreamSetTy(1, 8), "byteStream", FixedRate(), Misaligned()},
- Binding{b->getStreamSetTy(1, 1), "extenders"}},
+{Binding{"byteStream", byteStream, FixedRate(), Misaligned()},
+ Binding{"extenders", extenders}},
 // Outputs: literal start, literal length, match offset, match length
-{Binding{b->getStreamSetTy(2, 32), "literalIndexes", UnknownRate()},
- Binding{b->getStreamSetTy(2, 32), "matchIndexes", RateEqualTo("literalIndexes")}},
+{Binding{"literalIndexes", literalIndexes, UnknownRate()},
+ Binding{"matchIndexes", matchIndexes, RateEqualTo("literalIndexes")}},
 // Arguments
-{Binding{b->getInt1Ty(), "hasBlockChecksum"}},
+{Binding{"hasBlockChecksum", hasBlockChecksum}},
 {},
 // Internal states:
 {Binding{b->getInt32Ty(), "BlockNo"},

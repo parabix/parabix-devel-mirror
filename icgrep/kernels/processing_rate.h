@@ -5,6 +5,8 @@
 #include <assert.h>
 #include <boost/rational.hpp>
 
+namespace llvm { class raw_ostream; }
+
 namespace kernel {
 
 // Processing rate attributes are required for all stream set bindings. They describe
@@ -19,15 +21,14 @@ namespace kernel {
 // NOTE: fixed and bounded rates should be the smallest number of input items for the
 // smallest number of output items that can be logically produced by a kernel.
 
-
-
+class Kernel;
 
 struct ProcessingRate  {
 
     friend struct Binding;
 
     enum class KindId {
-        Fixed, Bounded, Unknown, Relative, PopCount, NegatedPopCount
+        Fixed, Bounded, PopCount, NegatedPopCount, Unknown, Relative, Greedy
     };
 
     using RateValue = boost::rational<unsigned>;
@@ -43,6 +44,7 @@ struct ProcessingRate  {
     }
 
     RateValue getUpperBound() const {
+        assert (!isGreedy());
         return mUpperBound;
     }
 
@@ -57,6 +59,10 @@ struct ProcessingRate  {
 
     bool isBounded() const {
         return mKind == KindId::Bounded;
+    }
+
+    bool isGreedy() const {
+        return mKind == KindId::Greedy;
     }
 
     bool isRelative() const {
@@ -91,25 +97,42 @@ struct ProcessingRate  {
         return !(*this == other);
     }
 
-    friend ProcessingRate FixedRate(const unsigned);
+    bool operator < (const ProcessingRate & other) const {
+        if (mKind < other.mKind) {
+            return true;
+        } else if (mLowerBound < other.mLowerBound) {
+            return true;
+        } else if (mUpperBound < other.mUpperBound) {
+            return true;
+        } else {
+            return mReference < other.mReference;
+        }
+    }
+
+    friend ProcessingRate FixedRate(const unsigned);    
     friend ProcessingRate BoundedRate(const unsigned, const unsigned);
     friend ProcessingRate UnknownRate(const unsigned);
     friend ProcessingRate RateEqualTo(std::string);
     friend ProcessingRate PopcountOf(std::string);
     friend ProcessingRate PopcountOfNot(std::string);
+    friend ProcessingRate Greedy();
 
     ProcessingRate(ProcessingRate &&) = default;
     ProcessingRate(const ProcessingRate &) = default;
     ProcessingRate & operator = (const ProcessingRate & other) = default;
 
 protected:    
+
     ProcessingRate(const KindId k, const RateValue lb, const RateValue ub, const std::string && ref = "")
     : mKind(k)
     , mLowerBound(lb)
     , mUpperBound(ub)
     , mReference(ref) {
-        assert (isFixed() ? mUpperBound == mLowerBound : (isBounded() ? mUpperBound > mLowerBound :  mUpperBound >= mLowerBound));
+
     }
+
+    void print(const Kernel * const kernel, llvm::raw_ostream & out) const noexcept;
+
 private:
     const KindId mKind;
     const RateValue mLowerBound;
@@ -118,23 +141,19 @@ private:
 };
 
 inline ProcessingRate FixedRate(const unsigned rate = 1) {
+    assert (rate > 0);
     return ProcessingRate(ProcessingRate::KindId::Fixed, rate, rate);
 }
 
 inline ProcessingRate BoundedRate(const unsigned lower, const unsigned upper) {
-    using RateValue = boost::rational<unsigned>;
     if (lower == upper) {
         return FixedRate(lower);
     } else {
-        return ProcessingRate(ProcessingRate::KindId::Bounded, RateValue(lower), RateValue(upper));
+        assert (upper > lower);
+        return ProcessingRate(ProcessingRate::KindId::Bounded, ProcessingRate::RateValue(lower), ProcessingRate::RateValue(upper));
     }
 }
 
-/**
- * @brief UnknownRate
- *
- * The produced item count per stride should never be dependent on an unknown rate input stream.
- */
 inline ProcessingRate UnknownRate(const unsigned lower = 0) {
     return ProcessingRate(ProcessingRate::KindId::Unknown, lower, 0);
 }
@@ -151,9 +170,16 @@ inline ProcessingRate PopcountOfNot(std::string ref) {
     return ProcessingRate(ProcessingRate::KindId::NegatedPopCount, 0, 1, std::move(ref));
 }
 
+inline ProcessingRate Greedy() {
+    return ProcessingRate(ProcessingRate::KindId::Greedy, 0, 0);
+}
+
+
 ProcessingRate::RateValue lcm(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y);
 
 ProcessingRate::RateValue gcd(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y);
+
+unsigned floor(const ProcessingRate::RateValue & r);
 
 unsigned ceiling(const ProcessingRate::RateValue & r);
 

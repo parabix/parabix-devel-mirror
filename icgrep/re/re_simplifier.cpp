@@ -8,6 +8,7 @@
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
 #include <re/re_toolchain.h>
+#include <re/re_toolchain.h>
 #include <boost/container/flat_set.hpp>
 
 using namespace llvm;

@@ -11,51 +11,45 @@
 #include <IR_Gen/idisa_target.h>
 
 #include <toolchain/toolchain.h>
-
 #include <toolchain/cpudriver.h>
 #include <string>
 
+namespace kernel { class StreamSet; }
+namespace kernel { class Scalar; }
+
 struct LZ4BlockInfo {
-    parabix::StreamSetBuffer* blockStart;
-    parabix::StreamSetBuffer* blockEnd;
-    parabix::StreamSetBuffer* isCompress;
+    kernel::StreamSet * blockStart;
+    kernel::StreamSet * blockEnd;
+    kernel::StreamSet * isCompress;
+
+    LZ4BlockInfo() : blockStart(nullptr), blockEnd(nullptr), isCompress(nullptr) { }
 };
 
 class LZ4BaseGenerator {
 public:
     LZ4BaseGenerator();
-    virtual ~LZ4BaseGenerator(){};
+    virtual ~LZ4BaseGenerator();
 protected:
     //// Member Function
     // Input
-    parabix::StreamSetBuffer* loadByteStream();
-    std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*> loadByteStreamAndBitStream();
+    kernel::StreamSet * loadByteStream();
+    std::pair<kernel::StreamSet*, kernel::StreamSet*> loadByteStreamAndBitStream();
 
     // Stream Conversion
-    parabix::StreamSetBuffer* s2p(parabix::StreamSetBuffer* byteStream);
-    parabix::StreamSetBuffer* p2s(parabix::StreamSetBuffer* bitStream);
+    kernel::StreamSet* s2p(kernel::StreamSet* byteStream);
+    kernel::StreamSet* p2s(kernel::StreamSet* bitStream);
 
 
             // LZ4 Decoder
-    LZ4BlockInfo getBlockInfo(parabix::StreamSetBuffer* compressedByteStream);
-    parabix::StreamSetBuffer * byteStreamDecompression(
-            parabix::StreamSetBuffer* compressedByteStream
-    );
-    parabix::StreamSetBuffer * swizzledDecompression(
-            parabix::StreamSetBuffer* compressedByteStream,
-            parabix::StreamSetBuffer* compressedBasisBits
-    );
-    parabix::StreamSetBuffer * bitStreamDecompression(
-            parabix::StreamSetBuffer* compressedByteStream,
-            parabix::StreamSetBuffer* compressedBasisBits
-    );
+    LZ4BlockInfo getBlockInfo(kernel::StreamSet* compressedByteStream);
 
-    std::vector<parabix::StreamSetBuffer*> convertCompressedBitsStreamWithBitStreamAioApproach(
-            parabix::StreamSetBuffer* compressedByteStream,
-            std::vector<parabix::StreamSetBuffer*> compressedBitStreams
-    );
+    kernel::StreamSet * byteStreamDecompression(kernel::StreamSet* compressedByteStream);
 
+    kernel::StreamSet * swizzledDecompression(kernel::StreamSet* compressedByteStream, kernel::StreamSet* compressedBasisBits);
 
+    kernel::StreamSet * bitStreamDecompression(kernel::StreamSet* compressedByteStream, kernel::StreamSet* compressedBasisBits);
+
+    kernel::StreamSets convertCompressedBitsStreamWithBitStreamAioApproach(kernel::StreamSet* compressedByteStream, kernel::StreamSets compressedBitStreams);
 
     // BufferSize related Helper Function
     unsigned getDefaultBufferBlocks();
@@ -64,17 +58,17 @@ protected:
 
     //// Data Member
     // Driver
-    ParabixDriver mPxDriver;
+    CPUDriver mPxDriver;
+    std::unique_ptr<kernel::PipelineBuilder> mPipeline;
 
     // Runtime Arguments
-    llvm::Value * mInputStream;
-    llvm::Value * mHeaderSize;
-    llvm::Value * mFileSize;
-    llvm::Value * mHasBlockChecksum;
+    kernel::Scalar * mInputStream;
+    kernel::Scalar * mHeaderSize;
+    kernel::Scalar * mFileSize;
+    kernel::Scalar * mHasBlockChecksum;
 
-    unsigned mLz4BlockSize;
+    const unsigned mLz4BlockSize;
 
-    bool mInitBlockInfo;
     LZ4BlockInfo mBlockInfo;
 };
 

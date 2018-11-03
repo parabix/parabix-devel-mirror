@@ -10,6 +10,8 @@ class Kernel;
 
 class KernelBuilder : public virtual IDISA::IDISA_Builder {
     friend class Kernel;
+    friend class MultiBlockKernel;
+    friend class PipelineGenerator;
 public:
 
     // Get the value of a scalar field for the current instance.
@@ -35,20 +37,24 @@ public:
 
     void releaseLogicalSegmentNo(llvm::Value * const nextSegNo);
 
+    llvm::Value * getAvailableItemCount(const std::string & name);
+
+    llvm::Value * getAccessibleItemCount(const std::string & name);
+
+    llvm::Value * getProcessedItemCount(const std::string & name) {
+        return getNamedItemCount(name, PROCESSED_ITEM_COUNT_SUFFIX);
+    }
+
+    void setProcessedItemCount(const std::string & name, llvm::Value * value) {
+        setNamedItemCount(name, PROCESSED_ITEM_COUNT_SUFFIX, value);
+    }
+
     llvm::Value * getProducedItemCount(const std::string & name) {
         return getNamedItemCount(name, PRODUCED_ITEM_COUNT_SUFFIX);
     }
 
     void setProducedItemCount(const std::string & name, llvm::Value * value) {
         setNamedItemCount(name, PRODUCED_ITEM_COUNT_SUFFIX, value);
-    }
-
-    llvm::Value * getProcessedItemCount(const std::string & name) {        
-        return getNamedItemCount(name, PROCESSED_ITEM_COUNT_SUFFIX);
-    }
-
-    void setProcessedItemCount(const std::string & name, llvm::Value * value) {
-        setNamedItemCount(name, PROCESSED_ITEM_COUNT_SUFFIX, value);
     }
 
     llvm::Value * getConsumedItemCount(const std::string & name) {
@@ -92,6 +98,8 @@ public:
 
     llvm::Value * getInputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);
 
+    llvm::Value * getInputStreamLogicalBasePtr(const Binding & input);
+
     llvm::Value * loadInputStreamBlock(const std::string & name, llvm::Value * streamIndex) {
         return loadInputStreamBlock(name, streamIndex, nullptr);
     }
@@ -117,6 +125,8 @@ public:
     }
 
     llvm::Value * getOutputStreamBlockPtr(const std::string & name, llvm::Value * streamIndex, llvm::Value * blockOffset);
+
+    llvm::Value * getOutputStreamLogicalBasePtr(const Binding & output);
 
     llvm::StoreInst * storeOutputStreamBlock(const std::string & name, llvm::Value * streamIndex, llvm::Value * toStore) {
         return storeOutputStreamBlock(name, streamIndex, nullptr, toStore);
@@ -144,33 +154,13 @@ public:
 
     llvm::Value * getBaseAddress(const std::string & name);
 
-    void CreatePrepareOverflow(const std::string & name);
-
-    void CreateNonLinearCopyFromOverflow(const Binding & output, llvm::Value * itemsToCopy, llvm::Value * overflowOffset);
-
-    void CreateCopyFromOverflow(const Binding & output, llvm::Value * itemsToCopy);
-
-    void CreateCopyToOverflow(const std::string & name);
-
     void setBaseAddress(const std::string & name, llvm::Value * addr);
     
     llvm::Value * getCapacity(const std::string & name);
-    
-    void setCapacity(const std::string & name, llvm::Value * c);
-    
-    llvm::Value * getAvailableItemCount(const std::string & name);
 
-    llvm::Value * getLinearlyAccessibleItems(const std::string & name, llvm::Value * fromPos, llvm::Value * avail, bool reverse = false);
-
-    llvm::Value * getLinearlyWritableItems(const std::string & name, llvm::Value * fromPos, bool reverse = false);
-
-    llvm::BasicBlock * CreateConsumerWait();
-
-    llvm::Value * getStreamHandle(const std::string & name);
+    void setCapacity(const std::string & name, llvm::Value * capacity);
 
     llvm::CallInst * createDoSegmentCall(const std::vector<llvm::Value *> & args);
-
-    llvm::Value * getAccumulator(const std::string & accumName);
 
     llvm::Value * getConsumerLock(const std::string & name);
 
@@ -193,6 +183,8 @@ public:
 
     llvm::Value * CreateCeilUMul2(llvm::Value * const number, const ProcessingRate::RateValue & factor, const llvm::Twine & Name = "");
 
+    llvm::Type * resolveStreamSetType(llvm::Type * streamSetType);
+
     unsigned getStride() const {
         return mStride;
     }
@@ -208,7 +200,7 @@ protected:
     
     const unsigned mStride;
 
-    llvm::Value * getScalarFieldPtr(llvm::Value * instance, llvm::Value * index);
+    llvm::Value * getScalarFieldPtr(llvm::Value * handle, llvm::Value * index);
 
     llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & fieldName);
 

@@ -15,12 +15,19 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 
+// ccNameStr, std::vector<re::CC *>{cc}, ByteStream, ccStream
+
 DirectCharacterClassKernelBuilder::DirectCharacterClassKernelBuilder(
-        const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses)
+        const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * byteStream, StreamSet * ccStream)
 : PabloKernel(b, ccSetName +"_direct",
-              {Binding{b->getStreamSetTy(1, 8), "byteStream"}},
-              {Binding{b->getStreamSetTy(charClasses.size(), 1), "ccStream"}})
-, mCharClasses(charClasses) {
+// input
+{Binding{"byteStream", byteStream}},
+// output
+{Binding{"ccStream", ccStream}})
+, mCharClasses(std::move(charClasses)) {
+    if (LLVM_UNLIKELY(ccStream->getNumElements() != mCharClasses.size())) {
+        report_fatal_error("cc streamset must have " + std::to_string(mCharClasses.size()) + " streams");
+    }
 }
 
 void DirectCharacterClassKernelBuilder::generatePabloMethod() {
@@ -33,16 +40,17 @@ void DirectCharacterClassKernelBuilder::generatePabloMethod() {
 }
 
 
-ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (
-        const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, const std::vector<CC *> & charClasses, unsigned codeUnitWidth)
+ParabixCharacterClassKernelBuilder::ParabixCharacterClassKernelBuilder (const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, const std::vector<CC *> & charClasses, StreamSet * basisStream, StreamSet * outputStream)
 : PabloKernel(b, ccSetName +"_kernel",
 // stream inputs
-{Binding{b->getStreamSetTy(codeUnitWidth), "basis"}}
+{Binding{"basis", basisStream}}
 // stream outputs
-, {Binding(b->getStreamSetTy((unsigned int)charClasses.size()), "outputStream")}
+, {Binding("outputStream", outputStream)}
 )
 , mCharClasses(charClasses) {
-
+    if (LLVM_UNLIKELY(outputStream->getNumElements() != mCharClasses.size())) {
+        report_fatal_error("output streamset must have " + std::to_string(mCharClasses.size()) + " streams");
+    }
 }
 
 void ParabixCharacterClassKernelBuilder::generatePabloMethod() {

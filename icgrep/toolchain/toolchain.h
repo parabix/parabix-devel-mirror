@@ -36,6 +36,7 @@ enum DebugFlags {
     TraceCounts,
     TraceDynamicBuffers,
     EnableAsserts,
+    EnableMProtect,
     EnableCycleCounter,
     DisableIndirectBranch,
     DebugFlagSentinel
@@ -57,7 +58,7 @@ extern unsigned CacheDaysLimit;  // set from command line
 extern llvm::CodeGenOpt::Level OptLevel;  // set from command line
 const unsigned LaneWidth = 64;
 extern unsigned BlockSize;  // set from command line
-extern unsigned SegmentSize;  // set from command line
+extern unsigned SegmentSize; // set from command line
 extern unsigned BufferSegments;
 extern unsigned ThreadNum;
 extern bool EnableObjectCache;
@@ -68,8 +69,8 @@ extern llvm::TargetOptions target_Options;
 
 void ParseCommandLineOptions(int argc, const char *const *argv, std::initializer_list<const llvm::cl::OptionCategory *> hiding = {});
 
-}
-
 void AddParabixVersionPrinter();
+
+}
 
 #endif

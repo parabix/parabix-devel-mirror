@@ -15,7 +15,9 @@
 #include <llvm/Support/CommandLine.h>
 #include <boost/filesystem.hpp>
 
-namespace re {class RE;}
+class BaseDriver;
+namespace re { class RE; }
+
 
 namespace argv {
 

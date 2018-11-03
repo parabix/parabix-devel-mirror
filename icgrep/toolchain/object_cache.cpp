@@ -91,14 +91,17 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
         assert (kernel->getModule() == nullptr);
         const auto moduleId = kernel->getCacheName(idb);
 
-        // Have we already seen this module before?
-        const auto f = mCachedObject.find(moduleId);
-        if (LLVM_UNLIKELY(f != mCachedObject.end())) {
-            Module * const m = f->second.first; assert (m);
-            kernel->setModule(m);
-            kernel->prepareCachedKernel(idb);
-            return true;
-        }
+        // TODO: To enable the quick lookup of previously cached objects, I need to reclaim ownership
+        // of the modules from the JIT engine before it destroys them.
+
+//        // Have we already seen this module before?
+//        const auto f = mCachedObject.find(moduleId);
+//        if (LLVM_UNLIKELY(f != mCachedObject.end())) {
+//            Module * const m = f->second.first; assert (m);
+//            kernel->setModule(m);
+//            kernel->prepareCachedKernel(idb);
+//            return true;
+//        }
 
         // No, check for an existing cache file.
         Path fileName(mCachePath);
@@ -162,6 +165,7 @@ invalid:
 // exists, write it out.
 void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef Obj) {
     if (LLVM_LIKELY(M->getNamedMetadata(CACHEABLE))) {
+
         const auto moduleId = M->getModuleIdentifier();
         Path objectName(mCachePath);
         sys::path::append(objectName, CACHE_PREFIX);
@@ -199,25 +203,34 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
 }
 
 void ParabixObjectCache::performIncrementalCacheCleanupStep() {
-    mCleanupMutex.lock();
-    if (LLVM_UNLIKELY(mCleanupIterator == fs::directory_iterator())) {
-        mCleanupMutex.unlock();
-    } else {
-        const auto e = mCleanupIterator->path();
-        mCleanupIterator++;
-        mCleanupMutex.unlock();
+    if (LLVM_LIKELY(mCleanupMutex.try_lock())) {
+        try {
 
-        // Simple clean-up policy: files that haven't been touched by the
-        // driver in MaxCacheEntryHours are deleted.
-        // TODO: possibly incrementally manage by size and/or total file count.
-        // TODO: possibly determine total filecount and set items per clean up step based on
-        // filecount
-        if (fs::is_regular_file(e)) {
-            const auto age = std::time(nullptr) - fs::last_write_time(e);
-            if (age > (CACHE_ENTRY_MAX_HOURS * SECONDS_PER_HOUR)) {
-                fs::remove(e);
+            // Simple clean-up policy: files that haven't been touched by the
+            // driver in MaxCacheEntryHours are deleted.
+
+            // TODO: possibly incrementally manage by size and/or total file count.
+            // TODO: possibly determine total filecount and set items per clean up step based on
+            // filecount
+
+            const auto now = std::time(nullptr);
+            while (LLVM_LIKELY(mCleanupIterator != fs::directory_iterator())) {
+                const auto i = mCleanupIterator;
+                ++mCleanupIterator;
+                const auto & e = i->path();
+                if (LLVM_LIKELY(fs::is_regular_file(e))) {
+                    const auto expiry = fs::last_write_time(e) + (CACHE_ENTRY_MAX_HOURS * SECONDS_PER_HOUR);
+                    if (now > expiry) {
+                        fs::remove(e);
+                        break;
+                    }
+                }
             }
+        } catch (...) {
+            fs::path p(mCachePath.str());
+            mCleanupIterator = fs::directory_iterator(p);
         }
+        mCleanupMutex.unlock();
     }
 }
 
@@ -255,5 +268,3 @@ ParabixObjectCache::ParabixObjectCache()
 : ParabixObjectCache(getDefaultPath()) {
 
 }
-
-

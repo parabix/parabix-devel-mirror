@@ -15,11 +15,17 @@ namespace kernel {
 
 class LZ4ByteStreamDecoderKernel final : public MultiBlockKernel {
 public:
-    LZ4ByteStreamDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, size_t bufferSize);
+    LZ4ByteStreamDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> &,
+                               // inputs
+                               StreamSet * literalIndexes,
+                               StreamSet * matchIndexes,
+                               StreamSet * inputStream,
+                               // output
+                               StreamSet * outputStream);
 protected:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * numOfStrides) override;
 private:
-    size_t mBufferSize;
+    const size_t mBufferSize;
 };
 
 }

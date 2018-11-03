@@ -13,6 +13,10 @@
 
 using namespace llvm;
 
+inline size_t ceil_udiv(const size_t n, const size_t m) {
+    return (n + m - 1) / m;
+}
+
 namespace kernel {
 
 inline std::vector<Value *> parallel_prefix_deletion_masks(const std::unique_ptr<KernelBuilder> & kb, const unsigned fw, Value * del_mask) {
@@ -112,20 +116,38 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
     kb->SetInsertPoint(done);
 }
 
-FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
-: MultiBlockKernel("fieldCompress" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
-                      {Binding{kb->getStreamSetTy(streamCount), "inputStreamSet"},
-                          Binding{kb->getStreamSetTy(), "extractionMask"}},
 #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
-                   {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"}},
-#else
-                   {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"},
-                       Binding{kb->getStreamSetTy(), "unitCounts", FixedRate(), RoundUpTo(kb->getBitBlockWidth())}},
-#endif
-                      {}, {}, {})
-, mCompressFieldWidth(fieldWidth)
-, mStreamCount(streamCount) {
+FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
+                                         , StreamSet * inputStreamSet, StreamSet * extractionMask
+                                         , StreamSet * outputStreamSet)
+: MultiBlockKernel("fieldCompress" + std::to_string(b->getBitBlockWidth() / inputStreamSet->getNumElements()) + "_" + std::to_string(inputStreamSet->getNumElements()),
+// inputs
+{Binding{"inputStreamSet", inputStreamSet},
+Binding{"extractionMask", extractionMask}},
+// outputs
+{Binding{"outputStreamSet", outputStreamSet}},
+{}, {}, {})
+, mCompressFieldWidth(b->getBitBlockWidth() / inputStreamSet->getNumElements())
+, mStreamCount(inputStreamSet->getNumElements()) {
+
 }
+#else
+FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
+                                         , StreamSet * inputStreamSet, StreamSet * extractionMask
+                                         , StreamSet * outputStreamSet, StreamSet * unitCounts)
+: MultiBlockKernel("fieldCompress" + std::to_string(b->getBitBlockWidth() / inputStreamSet->getNumElements()) + "_" + std::to_string(inputStreamSet->getNumElements()),
+// inputs
+{Binding{"inputStreamSet", inputStreamSet},
+Binding{"extractionMask", extractionMask}},
+// outputs
+{Binding{"outputStreamSet", outputStreamSet},
+Binding{"unitCounts", unitCounts, FixedRate(), RoundUpTo(b->getBitBlockWidth())}},
+{}, {}, {})
+, mCompressFieldWidth(b->getBitBlockWidth() / inputStreamSet->getNumElements())
+, mStreamCount(inputStreamSet->getNumElements()) {
+
+}
+#endif
 
 void PEXTFieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
     Type * fieldTy = kb->getIntNTy(mPEXTWidth);
@@ -196,21 +218,29 @@ PEXTFieldCompressKernel::PEXTFieldCompressKernel(const std::unique_ptr<kernel::K
     if ((fieldWidth != 32) && (fieldWidth != 64)) llvm::report_fatal_error("Unsupported PEXT width for PEXTFieldCompressKernel");
 }
     
-StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
-: MultiBlockKernel("streamCompress" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
-                   {Binding{kb->getStreamSetTy(streamCount), "sourceStreamSet"},
+StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & kb
+                                           , StreamSet * source
+                                           #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
+                                           , StreamSet * extractionMask
+                                           #else
+                                           , StreamSet * unitCounts
+                                           #endif
+                                           , StreamSet * compresedOutput
+                                           , const unsigned FieldWidth)
+: MultiBlockKernel("streamCompress" + std::to_string(FieldWidth) + "_" + std::to_string(source->getNumElements()),
+{Binding{"sourceStreamSet", source},
 #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
-                       Binding{kb->getStreamSetTy(), "extractionMask"}},
+Binding{"extractionMask", extractionMask}},
 #else
-                   Binding{kb->getStreamSetTy(), "unitCounts"}},
+Binding{"unitCounts", unitCounts}},
 #endif
-                   {Binding{kb->getStreamSetTy(streamCount), "compressedOutput", BoundedRate(0, 1)}},
-                   {}, {}, {})
-, mCompressedFieldWidth(fieldWidth)
-, mStreamCount(streamCount) {
-    addScalar(kb->getSizeTy(), "pendingItemCount");
-    for (unsigned i = 0; i < streamCount; i++) {
-        addScalar(kb->getBitBlockType(), "pendingOutputBlock_" + std::to_string(i));
+{Binding{"compressedOutput", compresedOutput, BoundedRate(0, 1)}},
+{}, {}, {})
+, mCompressedFieldWidth(FieldWidth)
+, mStreamCount(source->getNumElements()) {
+    addInternalScalar(kb->getSizeTy(), "pendingItemCount");
+    for (unsigned i = 0; i < mStreamCount; i++) {
+        addInternalScalar(kb->getBitBlockType(), "pendingOutputBlock_" + std::to_string(i));
     }
 
 }
@@ -232,7 +262,7 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     BasicBlock * finalWrite = b->CreateBasicBlock("finalWrite");
     BasicBlock * updateProducedCount = b->CreateBasicBlock("updateProducedCount");
     Constant * const ZERO = b->getSize(0);
-    
+
     Value * pendingItemCount = b->getScalarField("pendingItemCount");
     std::vector<Value *> pendingData(mStreamCount);
     for (unsigned i = 0; i < mStreamCount; i++) {
@@ -338,9 +368,12 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     Value * const pendingSpaceFilled = b->CreateICmpEQ(pendingFieldIdx, numFieldConst);
     Value * shftBack = b->CreateSub(numFieldConst, pendingFieldIdx);
     for (unsigned i = 0; i < mStreamCount; i++) {
-        Value * outputFwd = b->fwCast(fw, b->mvmd_sll(fw, outputFields[i], pendingFieldIdx));
-        outputFwd = b->CreateSelect(pendingSpaceFilled, zeroSplat, outputFwd);
-        pendingOutput[i] = b->simd_or(pendingOutput[i], outputFwd);
+        Value * shiftedField = b->mvmd_sll(fw, outputFields[i], pendingFieldIdx);
+
+        Value * outputFwd = b->fwCast(fw, shiftedField);
+        shiftedField = b->CreateSelect(pendingSpaceFilled, zeroSplat, outputFwd);
+
+        pendingOutput[i] = b->simd_or(pendingOutput[i], shiftedField);
         outputFields[i] = b->mvmd_srl(fw, outputFields[i], shftBack);
     }
     //
@@ -395,70 +428,52 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     b->setProducedItemCount("compressedOutput", produced);
 }
 
-SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned streamCount, unsigned PEXT_width)
-: BlockOrientedKernel("PEXTdel" + std::to_string(PEXT_width) + "_" + std::to_string(streamCount),
-                  {Binding{b->getStreamSetTy(), "delMaskSet"}, Binding{b->getStreamSetTy(streamCount), "inputStreamSet"}},
-                  {}, {}, {}, {})
-, mStreamCount(streamCount)
-, mSwizzleFactor(b->getBitBlockWidth() / PEXT_width)
-// add mSwizzleFactor - 1 to mStreamCount before dividing by mSwizzleFactor
-// to prevent rounding errors.
-, mSwizzleSetCount((mStreamCount + mSwizzleFactor - 1)/mSwizzleFactor)
-, mPEXTWidth(PEXT_width)
-{
-    assert((mPEXTWidth > 0) && ((mPEXTWidth & (mPEXTWidth - 1)) == 0)
-        && "mDelCountFieldWidth must be a power of 2");
+Bindings makeSwizzledDeleteByPEXTOutputBindings(const std::vector<StreamSet *> & outputStreamSets, const unsigned PEXTWidth) {
+    const auto n = outputStreamSets.size();
+    Bindings outputs;
+    outputs.reserve(n);
+    outputs.emplace_back("outputSwizzle0", outputStreamSets[0], PopcountOf("selectors"), BlockSize(PEXTWidth)); // PopcountOfNot("delMaskSet")
+    for (unsigned i = 1; i < n; ++i) {
+        outputs.emplace_back("outputSwizzle" + std::to_string(i), outputStreamSets[i], RateEqualTo("outputSwizzle0"), BlockSize(PEXTWidth));
+    }
+    return outputs;
+}
+
+SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                                       StreamSet * selectors, StreamSet * inputStreamSet,
+                                                       const std::vector<StreamSet *> & outputStreamSets,
+                                                       const unsigned PEXTWidth)
+
+: MultiBlockKernel("PEXTdel" + std::to_string(PEXTWidth) + "_" + std::to_string(inputStreamSet->getNumElements()),
+{Binding{"selectors", selectors}, Binding{"inputStreamSet", inputStreamSet}},
+std::move(makeSwizzledDeleteByPEXTOutputBindings(outputStreamSets, PEXTWidth)),
+{}, {}, {})
+, mStreamCount(inputStreamSet->getNumElements())
+, mSwizzleFactor(b->getBitBlockWidth() / PEXTWidth)
+, mSwizzleSetCount(ceil_udiv(mStreamCount, mSwizzleFactor))
+, mPEXTWidth(PEXTWidth) {
+
+    assert((mPEXTWidth > 0) && ((mPEXTWidth & (mPEXTWidth - 1)) == 0) && "mDelCountFieldWidth must be a power of 2");
     assert(mSwizzleFactor > 1 && "mDelCountFieldWidth must be less than the block width");
     assert((mPEXTWidth == 64 || mPEXTWidth == 32) && "PEXT width must be 32 or 64");
+    assert (mSwizzleSetCount);
+    assert (outputStreamSets.size() == mSwizzleSetCount);
+    assert (outputStreamSets[0]->getNumElements() == mSwizzleFactor);
 
-    // why, if we have 1 input stream, are there n output swizzle streams rather 1 of n?
-    Type * const outputTy = b->getStreamSetTy(mSwizzleFactor, 1);
-
-    mStreamSetOutputs.push_back(Binding{outputTy, "outputSwizzle0", BoundedRate(0, 1), BlockSize(PEXT_width)}); // PopcountOfNot("delMaskSet")
-    addScalar(b->getBitBlockType(), "pendingSwizzleData0");
-    for (unsigned i = 1; i < mSwizzleSetCount; i++) {
-        mStreamSetOutputs.push_back(Binding{outputTy, "outputSwizzle" + std::to_string(i), RateEqualTo("outputSwizzle0"), BlockSize(PEXT_width)});
-        addScalar(b->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
+    addInternalScalar(b->getBitBlockType(), "pendingSwizzleData0");
+    for (unsigned i = 1; i < outputStreamSets.size(); ++i) {
+        assert (outputStreamSets[i]->getNumElements() == mSwizzleFactor);
+        addInternalScalar(b->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
     }
-    addScalar(b->getSizeTy(), "pendingOffset");
 }
 
-void SwizzledDeleteByPEXTkernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void SwizzledDeleteByPEXTkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfBlocks) {
     // We use delMask to apply the same PEXT delete operation to each stream in the input stream set
-    Value * const delMask = b->loadInputStreamBlock("delMaskSet", b->getInt32(0));
-    generateProcessingLoop(b, delMask, false);
-}
 
-void SwizzledDeleteByPEXTkernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * remainingBytes) {
-    IntegerType * const vecTy = b->getIntNTy(b->getBitBlockWidth());
-    Value * const remaining = b->CreateZExt(remainingBytes, vecTy);
-    Value * const EOFMask = b->bitCast(b->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
-    Value * const delMask = b->CreateOr(EOFMask, b->loadInputStreamBlock("delMaskSet", b->getInt32(0)));
-    generateProcessingLoop(b, delMask, true);
-}
+    BasicBlock * const entry = b->GetInsertBlock();
+    BasicBlock * const beginLoop = b->CreateBasicBlock("beginLoop");
 
-/*
-What this function does in pseudo code:
-for (mSwizzleFactor)
-    create a swizzle set containing mSwizzleFactor blocks
-    apply PEXT to each block in the swizzle set
-    store the swizzleSet in PEXTedSwizzleSets vector
-
-for (each swizzle row i)
-    for (each swizzle set j)
-        processes row i in swizzle set j
-        store output in pendingData[j]
-*/
-
-void SwizzledDeleteByPEXTkernel::generateProcessingLoop(const std::unique_ptr<KernelBuilder> & b, Value * const delMask, const bool flush) {
-
-    // selectors marks the positions we want to keep
-    Value * const selectors = b->CreateNot(delMask);
-
-    const auto swizzleSets = makeSwizzleSets(b, selectors);
-
-    // Compress the PEXTedSwizzleSets
-    // Output is written and committed to the output buffer one swizzle at a time.
+    ConstantInt * const ZERO = b->getSize(0);
     ConstantInt * const BLOCK_WIDTH_MASK = b->getSize(b->getBitBlockWidth() - 1);
     ConstantInt * const PEXT_WIDTH = b->getSize(mPEXTWidth);
     ConstantInt * const LOG_2_PEXT_WIDTH = b->getSize(std::log2(mPEXTWidth));
@@ -466,29 +481,52 @@ void SwizzledDeleteByPEXTkernel::generateProcessingLoop(const std::unique_ptr<Ke
     ConstantInt * const PEXT_WIDTH_MASK = b->getSize(mPEXTWidth - 1);
 
     // All output groups have the same count.
-    Value * outputProduced = b->getProducedItemCount("outputSwizzle0");
-    outputProduced = b->CreateAdd(outputProduced, b->getScalarField("pendingOffset"));
-    Value * const producedOffset = b->CreateAnd(outputProduced, BLOCK_WIDTH_MASK);
-    Value * outputIndex = b->CreateLShr(producedOffset, LOG_2_PEXT_WIDTH);
+    Value * const baseOutputProduced = b->getProducedItemCount("outputSwizzle0");
+    Value * const baseProducedOffset = b->CreateAnd(baseOutputProduced, BLOCK_WIDTH_MASK);
 
     // There is a separate vector of pending data for each swizzle group.
-    std::vector<Value *> pendingData;
+    std::vector<Value *> pendingData(mSwizzleSetCount);
     for (unsigned i = 0; i < mSwizzleSetCount; i++) {
-        pendingData.push_back(b->getScalarField("pendingSwizzleData" + std::to_string(i)));
+        pendingData[i] = b->getScalarField("pendingSwizzleData" + std::to_string(i));
+    }
+    b->CreateBr(beginLoop);
+
+    b->SetInsertPoint(beginLoop);
+    PHINode * const strideIndex = b->CreatePHI(numOfBlocks->getType(), 2);
+    strideIndex->addIncoming(ZERO, entry);
+    PHINode * const producedOffsetPhi = b->CreatePHI(numOfBlocks->getType(), 2);
+    producedOffsetPhi->addIncoming(baseProducedOffset, entry);
+    std::vector<PHINode *> pendingDataPhi(mSwizzleSetCount);
+    for (unsigned i = 0; i < mSwizzleSetCount; i++) {
+        pendingDataPhi[i] = b->CreatePHI(pendingData[i]->getType(), 2);
+        pendingDataPhi[i]->addIncoming(pendingData[i], entry);
+        pendingData[i] = pendingDataPhi[i];
     }
 
+    Value * const selectors = b->loadInputStreamBlock("selectors", strideIndex);
+
+    const auto swizzleSets = makeSwizzleSets(b, selectors, strideIndex);
+
     Value * const newItemCounts = b->simd_popcount(mPEXTWidth, selectors);
+
+    // Compress the PEXTedSwizzleSets
+    // Output is written and committed to the output buffer one swizzle at a time.
+    Value * producedOffset = producedOffsetPhi;
 
     // For each row i
     for (unsigned i = 0; i < mSwizzleFactor; i++) {
 
         // Generate code for each of the mSwizzleFactor fields making up a block.
         // We load the count for the field and process all swizzle groups accordingly.
-        Value * const pendingOffset = b->CreateAnd(outputProduced, PEXT_WIDTH_MASK);
+        Value * const pendingOffset = b->CreateAnd(producedOffset, PEXT_WIDTH_MASK);
         Value * const newItemCount = b->CreateExtractElement(newItemCounts, i);
         Value * const pendingSpace = b->CreateSub(PEXT_WIDTH, pendingOffset);
         Value * const pendingSpaceFilled = b->CreateICmpUGE(newItemCount, pendingSpace);
 
+        Value * const shiftVector = b->simd_fill(mPEXTWidth, pendingOffset);
+        Value * const spaceVector = b->simd_fill(mPEXTWidth, pendingSpace);
+
+        Value * const outputIndex = b->CreateLShr(producedOffset, LOG_2_PEXT_WIDTH);
         Value * const swizzleIndex = b->CreateAnd(outputIndex, mSwizzleFactor - 1);
         Value * const blockOffset = b->CreateLShr(outputIndex, LOG_2_SWIZZLE_FACTOR);
 
@@ -497,42 +535,34 @@ void SwizzledDeleteByPEXTkernel::generateProcessingLoop(const std::unique_ptr<Ke
         for (unsigned j = 0; j < mSwizzleSetCount; j++) {
             Value * const newItems = swizzleSets[j][i];
             // Combine as many of the new items as possible into the pending group.
-            Value * const shiftVector = b->simd_fill(mPEXTWidth, pendingOffset);
             Value * const shiftedItems = b->CreateShl(newItems, shiftVector);
             Value * const combinedGroup = b->CreateOr(pendingData[j], shiftedItems);
             // To avoid an unpredictable branch, always store the combined group, whether full or not.
-            Value * const outputPtr = b->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(j), swizzleIndex, blockOffset);
-            b->CreateBlockAlignedStore(combinedGroup, outputPtr);
+            b->storeOutputStreamBlock("outputSwizzle" + std::to_string(j), swizzleIndex, blockOffset, combinedGroup);
             // Any items in excess of the space available in the current pending group overflow for the next group.
-            Value * overFlowGroup = b->CreateLShr(newItems, b->simd_fill(mPEXTWidth, pendingSpace));
+            Value * overFlowGroup = b->CreateLShr(newItems, spaceVector);
             // If we filled the space, then the overflow group becomes the new pending group and the index is updated.
             pendingData[j] = b->CreateSelect(pendingSpaceFilled, overFlowGroup, combinedGroup);
         }
-
-        Value * const swizzleIncrement = b->CreateZExt(pendingSpaceFilled, b->getSizeTy());
-        outputIndex = b->CreateAdd(outputIndex, swizzleIncrement);
-
-        outputProduced = b->CreateAdd(outputProduced, newItemCount);
+        producedOffset = b->CreateAdd(producedOffset, newItemCount);
     }
 
-    if (flush) { // incase we selected the overflow group on the final iteration
-        Value * const swizzleIndex = b->CreateAnd(outputIndex, mSwizzleFactor - 1);
-        Value * const blockOffset = b->CreateLShr(outputIndex, LOG_2_SWIZZLE_FACTOR);
-        for (unsigned i = 0; i < mSwizzleSetCount; i++) {
-            Value * const outputPtr = b->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), swizzleIndex, blockOffset);
-            b->CreateBlockAlignedStore(pendingData[i], outputPtr);
-        }
-    } else {
-        for (unsigned i = 0; i < mSwizzleSetCount; i++) {
-            b->setScalarField("pendingSwizzleData" + std::to_string(i), pendingData[i]);
-        }
-        Value * const pendingOffset = b->CreateAnd(outputProduced, PEXT_WIDTH_MASK);
-        b->setScalarField("pendingOffset", pendingOffset);
-        // unless this is our final stride, don't report partially written fields.
-        outputProduced = b->CreateAnd(outputProduced, b->CreateNot(PEXT_WIDTH_MASK));
+    BasicBlock * const finishedLoop = b->CreateBasicBlock("finishedLoop");
+    Value * const nextStrideIndex = b->CreateAdd(strideIndex, b->getSize(1));
+    BasicBlock * const loopEndBlock = b->GetInsertBlock();
+    strideIndex->addIncoming(nextStrideIndex, loopEndBlock);
+    for (unsigned i = 0; i < mSwizzleSetCount; i++) {
+        pendingDataPhi[i]->addIncoming(pendingData[i], loopEndBlock);
     }
+    producedOffsetPhi->addIncoming(producedOffset, loopEndBlock);
+    Value * const doneLoop = b->CreateICmpEQ(nextStrideIndex, numOfBlocks);
 
-    b->setProducedItemCount("outputSwizzle0", outputProduced);
+    b->CreateUnlikelyCondBr(doneLoop, finishedLoop, beginLoop);
+
+    b->SetInsertPoint(finishedLoop);
+    for (unsigned i = 0; i < mSwizzleSetCount; i++) {
+        b->setScalarField("pendingSwizzleData" + std::to_string(i), pendingData[i]);
+    }
 }
 
 /*
@@ -580,7 +610,7 @@ Returns:
     output (vector of Value*): Swizzled, PEXTed version of strms. See example above.
 */
 
-std::vector<std::vector<llvm::Value *>> SwizzledDeleteByPEXTkernel::makeSwizzleSets(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const selectors) {
+SwizzledDeleteByPEXTkernel::SwizzleSets SwizzledDeleteByPEXTkernel::makeSwizzleSets(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const selectors, Value * const strideIndex) {
 
     Constant * pext = nullptr;
     if (mPEXTWidth == 64) {
@@ -597,7 +627,7 @@ std::vector<std::vector<llvm::Value *>> SwizzledDeleteByPEXTkernel::makeSwizzleS
 
     }
 
-    std::vector<std::vector<Value *>> swizzleSets;
+    SwizzleSets swizzleSets;
     swizzleSets.reserve(mSwizzleSetCount);
 
     VectorType * const vecTy = b->fwVectorType(mPEXTWidth);
@@ -611,7 +641,7 @@ std::vector<std::vector<llvm::Value *>> SwizzledDeleteByPEXTkernel::makeSwizzleS
         for (unsigned j = 0; j < mSwizzleFactor; ++j) {
             const unsigned k = (i * mSwizzleFactor) + j;
             if (k < mStreamCount) {
-                input[j] = b->CreateBitCast(b->loadInputStreamBlock("inputStreamSet", b->getInt32(k)), vecTy);
+                input[j] = b->CreateBitCast(b->loadInputStreamBlock("inputStreamSet", b->getInt32(k), strideIndex), vecTy);
             } else {
                 input[j] = Constant::getNullValue(vecTy);
             }
@@ -632,12 +662,12 @@ std::vector<std::vector<llvm::Value *>> SwizzledDeleteByPEXTkernel::makeSwizzleS
                 output[k] = b->CreateInsertElement(output[k], selected, j);
             }
         }
-
         swizzleSets.emplace_back(output);
     }
 
     return swizzleSets;
 }
+
 
 // Apply deletion to a set of stream_count input streams and produce a set of swizzled output streams.
 // Kernel inputs: stream_count data streams plus one del_mask stream
@@ -693,8 +723,8 @@ DeleteByPEXTkernel::DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuild
 , mStreamCount(streamCount)
 , mSwizzleFactor(b->getBitBlockWidth() / PEXT_width)
 , mPEXTWidth(PEXT_width) {
-    mStreamSetOutputs.emplace_back(b->getStreamSetTy(mStreamCount), "outputStreamSet", PopcountOfNot("delMaskSet"));
-    mStreamSetOutputs.emplace_back(b->getStreamSetTy(), "deletionCounts");
+    mOutputStreamSets.emplace_back(b->getStreamSetTy(mStreamCount), "outputStreamSet", PopcountOfNot("delMaskSet"));
+    mOutputStreamSets.emplace_back(b->getStreamSetTy(), "deletionCounts");
 }
 
     
@@ -718,20 +748,20 @@ SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(const std::un
 : BlockOrientedKernel("swizzled_compress" + std::to_string(fieldWidth) + "_" + std::to_string(bitStreamCount),
                      {Binding{kb->getStreamSetTy(), "countsPerStride"}}, {}, {}, {}, {})
 , mBitStreamCount(bitStreamCount)
-    , mFieldWidth(fieldWidth)
-    , mSwizzleFactor(kb->getBitBlockWidth() / fieldWidth)
-    , mSwizzleSetCount((mBitStreamCount + mSwizzleFactor - 1)/mSwizzleFactor) {
-        assert((fieldWidth > 0) && ((fieldWidth & (fieldWidth - 1)) == 0) && "fieldWidth must be a power of 2");
-        assert(mSwizzleFactor > 1 && "fieldWidth must be less than the block width");
-        mStreamSetInputs.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle0"});
-        mStreamSetOutputs.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle0", BoundedRate(0, 1)});
-        addScalar(kb->getBitBlockType(), "pendingSwizzleData0");
-        for (unsigned i = 1; i < mSwizzleSetCount; i++) {
-            mStreamSetInputs.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle" + std::to_string(i)});
-            mStreamSetOutputs.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle" + std::to_string(i), RateEqualTo("outputSwizzle0")});
-            addScalar(kb->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
-        }
-        addScalar(kb->getSizeTy(), "pendingOffset");
+, mFieldWidth(fieldWidth)
+, mSwizzleFactor(kb->getBitBlockWidth() / fieldWidth)
+, mSwizzleSetCount((mBitStreamCount + mSwizzleFactor - 1)/mSwizzleFactor) {
+    assert((fieldWidth > 0) && ((fieldWidth & (fieldWidth - 1)) == 0) && "fieldWidth must be a power of 2");
+    assert(mSwizzleFactor > 1 && "fieldWidth must be less than the block width");
+    mInputStreamSets.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle0"});
+    mOutputStreamSets.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle0", BoundedRate(0, 1)});
+    addInternalScalar(kb->getBitBlockType(), "pendingSwizzleData0");
+    for (unsigned i = 1; i < mSwizzleSetCount; i++) {
+        mInputStreamSets.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle" + std::to_string(i)});
+        mOutputStreamSets.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle" + std::to_string(i), RateEqualTo("outputSwizzle0")});
+        addInternalScalar(kb->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
+    }
+    addInternalScalar(kb->getSizeTy(), "pendingOffset");
 }
     
 void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) {
@@ -765,12 +795,14 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
         Value * pendingSpace = kb->CreateSub(kb->getSize(mFieldWidth), pendingOffset);
         Value * pendingSpaceFilled = kb->CreateICmpUGE(newItemCount, pendingSpace);
         
+        Value * const fieldWidths = kb->simd_fill(mFieldWidth, pendingOffset);
+
         // Data from the ith swizzle pack of each group is processed
         // according to the same newItemCount, pendingSpace, ...
         for (unsigned j = 0; j < mSwizzleSetCount; j++) {
             Value * newItems = kb->loadInputStreamBlock("inputSwizzle" + std::to_string(j), kb->getInt32(i));
             // Combine as many of the new items as possible into the pending group.
-            Value * combinedGroup = kb->CreateOr(pendingData[j], kb->CreateShl(newItems, kb->simd_fill(mFieldWidth, pendingOffset)));
+            Value * combinedGroup = kb->CreateOr(pendingData[j], kb->CreateShl(newItems, fieldWidths));
             // To avoid an unpredictable branch, always store the combined group, whether full or not.               
             kb->CreateBlockAlignedStore(combinedGroup, kb->CreateGEP(outputStreamPtr[j], outputIndex));
             // Any items in excess of the space available in the current pending group overflow for the next group.
@@ -782,12 +814,12 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
         pendingOffset = kb->CreateAnd(kb->CreateAdd(newItemCount, pendingOffset), kb->getSize(mFieldWidth-1));
     }
     kb->setScalarField("pendingOffset", pendingOffset);
-    Value * newlyProduced = kb->CreateSub(kb->CreateShl(outputIndex, outputIndexShift), producedOffset);
-    Value * produced = kb->CreateAdd(outputProduced, newlyProduced);
+//    Value * newlyProduced = kb->CreateSub(kb->CreateShl(outputIndex, outputIndexShift), producedOffset);
+//    Value * produced = kb->CreateAdd(outputProduced, newlyProduced);
     for (unsigned j = 0; j < mSwizzleSetCount; j++) {
         kb->setScalarField("pendingSwizzleData" + std::to_string(j), pendingData[j]);
     }
-    kb->setProducedItemCount("outputSwizzle0", produced);
+//    kb->setProducedItemCount("outputSwizzle0", produced);
 }
 
 void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & kb, Value * /* remainingBytes */) {
@@ -798,7 +830,7 @@ void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(const std::uniqu
     Value * outputProduced = kb->getProducedItemCount("outputSwizzle0"); // All output groups have the same count.
     Value * producedOffset = kb->CreateAnd(outputProduced, blockOffsetMask);
     Value * outputIndex = kb->CreateLShr(producedOffset, outputIndexShift);
-    Value * pendingOffset = kb->getScalarField("pendingOffset");
+//    Value * pendingOffset = kb->getScalarField("pendingOffset");
 
     // Write the pending data.
     for (unsigned i = 0; i < mSwizzleSetCount; i++) {
@@ -806,39 +838,7 @@ void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(const std::uniqu
         Value * outputStreamPtr = kb->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), kb->getInt32(0));
         kb->CreateBlockAlignedStore(pendingData, kb->CreateGEP(outputStreamPtr, outputIndex));
     }
-    kb->setProducedItemCount("outputSwizzle0", kb->CreateAdd(pendingOffset, outputProduced));
+//    kb->setProducedItemCount("outputSwizzle0", kb->CreateAdd(pendingOffset, outputProduced));
 }
-    
-void StreamFilterCompiler::makeCall(parabix::StreamSetBuffer * mask, parabix::StreamSetBuffer * inputs, parabix::StreamSetBuffer * outputs) {
-    if (mBufferBlocks == 0) {
-        llvm::report_fatal_error("StreamFilterCompiler needs a non-zero bufferBlocks parameter (for now).");
-    }
-    auto & iBuilder = mDriver.getBuilder();
-    unsigned N = IDISA::getNumOfStreams(ssType);
-    if (IDISA::getStreamFieldWidth(ssType) != 1) {
-        llvm::report_fatal_error("StreamFilterCompiler only compresses bit streams (for now)");
-    }
-    Kernel * compressK = nullptr;
-    if (AVX2_available()) {
-        compressK = mDriver.addKernelInstance<PEXTFieldCompressKernel>(iBuilder, mIntraFieldCompressionWidth, N);
-    } else {
-        compressK = mDriver.addKernelInstance<FieldCompressKernel>(iBuilder, mIntraFieldCompressionWidth, N);
-    }
-    parabix::StreamSetBuffer * compressedFields = mDriver.addBuffer<parabix::StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(N), mBufferBlocks);
-#ifndef STREAM_COMPRESS_USING_EXTRACTION_MASK
-    parabix::StreamSetBuffer * unitCounts = mDriver.addBuffer<parabix::StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(), mBufferBlocks);
-    
-    mDriver.makeKernelCall(compressK, {inputs, mask}, {compressedFields, unitCounts});
-    
-    Kernel * streamK = mDriver.addKernelInstance<StreamCompressKernel>(iBuilder, mIntraFieldCompressionWidth, N);
-    mDriver.makeKernelCall(streamK, {compressedFields, unitCounts}, {outputs});
-#else
-    mDriver.makeKernelCall(compressK, {inputs, mask}, {compressedFields});
-    
-    Kernel * streamK = mDriver.addKernelInstance<StreamCompressKernel>(iBuilder, mIntraFieldCompressionWidth, N);
-    mDriver.makeKernelCall(streamK, {compressedFields, mask}, {outputs});
-#endif
-}
-
 
 }

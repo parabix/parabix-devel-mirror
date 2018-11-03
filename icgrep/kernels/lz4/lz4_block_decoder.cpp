@@ -14,33 +14,39 @@ using namespace std;
 
 namespace kernel{
 
-LZ4BlockDecoderKernel::LZ4BlockDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, std::string&& kernelName)
-: SegmentOrientedKernel(std::string(kernelName),
+LZ4BlockDecoderKernel::LZ4BlockDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+                                             // arguments
+                                             Scalar * hasBlockChecksum, Scalar * headerSize, Scalar * fileSize,
+                                             // inputs
+                                             StreamSet * byteStream,
+                                             // outputs
+                                             StreamSet * isCompressed, StreamSet * blockStart, StreamSet * blockEnd)
+: SegmentOrientedKernel("LZ4BlockdDecoder",
 // Inputs
 {
-    Binding{iBuilder->getStreamSetTy(1, 8), "byteStream"},
+    Binding{"byteStream", byteStream},
 },
 //Outputs
 {
-    Binding{iBuilder->getStreamSetTy(1, 8), "isCompressed", BoundedRate(0, 1)},
-    Binding{iBuilder->getStreamSetTy(1, 64), "blockStart", RateEqualTo("isCompressed")},
-    Binding{iBuilder->getStreamSetTy(1, 64), "blockEnd", RateEqualTo("isCompressed")}},
+    Binding{"isCompressed", isCompressed, BoundedRate(0, 1)},
+    Binding{"blockStart", blockStart, RateEqualTo("isCompressed")},
+    Binding{"blockEnd", blockEnd, RateEqualTo("isCompressed")}},
 //Arguments
 {
-    Binding{iBuilder->getInt1Ty(), "hasBlockChecksum"},
-    Binding{iBuilder->getSizeTy(), "headerSize"},
-    Binding{iBuilder->getSizeTy(), "fileSize"}
+    Binding{"hasBlockChecksum", hasBlockChecksum},
+    Binding{"headerSize", headerSize},
+    Binding{"fileSize", fileSize}
 },
 {},
 //Internal states:
 {
-Binding{iBuilder->getInt1Ty(), "hasSkipHeader"},
-Binding{iBuilder->getSizeTy(), "previousOffset"},
-Binding{iBuilder->getInt1Ty(), "reachFinalBlock"},
+Binding{b->getInt1Ty(), "hasSkipHeader"},
+Binding{b->getSizeTy(), "previousOffset"},
+Binding{b->getInt1Ty(), "reachFinalBlock"},
 
-Binding{iBuilder->getInt8Ty(), "pendingIsCompressed"},
-Binding{iBuilder->getInt64Ty(), "pendingBlockStart"},
-Binding{iBuilder->getInt64Ty(), "pendingBlockEnd"},
+Binding{b->getInt8Ty(), "pendingIsCompressed"},
+Binding{b->getInt64Ty(), "pendingBlockStart"},
+Binding{b->getInt64Ty(), "pendingBlockEnd"},
 }) {
 
 }

@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
+#include <toolchain/cpudriver.h>
 
 using namespace llvm;
 
@@ -119,53 +120,55 @@ int main(int argc, char *argv[]) {
     std::vector<fs::path> allFiles = argv::getFullFileList(inputFiles);
     if (inputFiles.empty()) {
         argv::UseStdIn = true;
-    }
-    else if ((allFiles.size() > 1) && !argv::NoFilenameFlag) {
+    } else if ((allFiles.size() > 1) && !argv::NoFilenameFlag) {
         argv::WithFilenameFlag = true;
     }
 
-    std::unique_ptr<grep::GrepEngine> grepEngine;
-    
+    CPUDriver driver("icgrep");
+
+    std::unique_ptr<grep::GrepEngine> grep;
+
     switch (argv::Mode) {
         case argv::NormalMode:
-            grepEngine = make_unique<grep::EmitMatchesEngine>();
-            if (argv::MaxCountFlag) grepEngine->setMaxCount(argv::MaxCountFlag);
-            if (argv::WithFilenameFlag) grepEngine->showFileNames();
-            if (argv::LineNumberFlag) grepEngine->showLineNumbers();
-            if (argv::InitialTabFlag) grepEngine->setInitialTab();
+            grep = make_unique<grep::EmitMatchesEngine>(driver);
+            if (argv::MaxCountFlag) grep->setMaxCount(argv::MaxCountFlag);
+            if (argv::WithFilenameFlag) grep->showFileNames();
+            if (argv::LineNumberFlag) grep->showLineNumbers();
+            if (argv::InitialTabFlag) grep->setInitialTab();
            break;
         case argv::CountOnly:
-            grepEngine = make_unique<grep::CountOnlyEngine>();
-            if (argv::WithFilenameFlag) grepEngine->showFileNames();
-            if (argv::MaxCountFlag) grepEngine->setMaxCount(argv::MaxCountFlag);
+            grep = make_unique<grep::CountOnlyEngine>(driver);
+            if (argv::WithFilenameFlag) grep->showFileNames();
+            if (argv::MaxCountFlag) grep->setMaxCount(argv::MaxCountFlag);
            break;
         case argv::FilesWithMatch:
         case argv::FilesWithoutMatch:
-            grepEngine = make_unique<grep::MatchOnlyEngine>(argv::Mode == argv::FilesWithMatch, argv::NullFlag);
+            grep = make_unique<grep::MatchOnlyEngine>(driver, argv::Mode == argv::FilesWithMatch, argv::NullFlag);
             break;
         case argv::QuietMode:
-            grepEngine = make_unique<grep::QuietModeEngine>();
+            grep = make_unique<grep::QuietModeEngine>(driver);
             break;
         default: llvm_unreachable("Invalid grep mode!");
     }
-    if (argv::IgnoreCaseFlag) grepEngine->setCaseInsensitive();
-    if (argv::InvertMatchFlag) grepEngine->setInvertMatches();
+    if (argv::IgnoreCaseFlag) grep->setCaseInsensitive();
+    if (argv::InvertMatchFlag) grep->setInvertMatches();
     if (argv::UnicodeLinesFlag) {
-        grepEngine->setRecordBreak(grep::GrepRecordBreakKind::Unicode);
+        grep->setRecordBreak(grep::GrepRecordBreakKind::Unicode);
     } else if (argv::NullDataFlag) {
-        grepEngine->setRecordBreak(grep::GrepRecordBreakKind::Null);
+        grep->setRecordBreak(grep::GrepRecordBreakKind::Null);
     } else {
-        grepEngine->setRecordBreak(grep::GrepRecordBreakKind::LF);
+        grep->setRecordBreak(grep::GrepRecordBreakKind::LF);
     }
-    grepEngine->setStdinLabel(argv::LabelFlag);
-    if (argv::UseStdIn) grepEngine->setGrepStdIn();
-    if (argv::NoMessagesFlag) grepEngine->suppressFileMessages();
-    if (argv::MmapFlag) grepEngine->setPreferMMap();
-    grepEngine->setBinaryFilesOption(argv::BinaryFilesFlag);
-    grepEngine->initREs(REs);
-    grepEngine->grepCodeGen();
-    grepEngine->initFileResult(allFiles);
-    bool matchFound = grepEngine->searchAllFiles();
-    
+
+    grep->setStdinLabel(argv::LabelFlag);
+    if (argv::UseStdIn) grep->setGrepStdIn();
+    if (argv::NoMessagesFlag) grep->suppressFileMessages();
+    if (argv::MmapFlag) grep->setPreferMMap();
+    grep->setBinaryFilesOption(argv::BinaryFilesFlag);
+    grep->initREs(REs);
+    grep->grepCodeGen();
+    grep->initFileResult(allFiles);
+    const bool matchFound = grep->searchAllFiles();
+
     return matchFound ? argv::MatchFoundExitCode : argv::MatchNotFoundExitCode;
 }

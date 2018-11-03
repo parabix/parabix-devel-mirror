@@ -21,7 +21,13 @@ namespace kernel {
 
 class LZ4BlockDecoderKernel : public SegmentOrientedKernel {
 public:
-    LZ4BlockDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, std::string&& kernelName = "LZ4BlockDecoderKernel");
+    LZ4BlockDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+                          // arguments
+                          Scalar * hasBlockChecksum, Scalar * headerSize, Scalar * fileSize,
+                          // inputs
+                          StreamSet * byteStream,
+                          // outputs
+                          StreamSet * isCompressed, StreamSet * blockStart, StreamSet * blockEnd);
 protected:
     void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
 private:

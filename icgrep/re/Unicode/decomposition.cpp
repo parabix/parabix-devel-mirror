@@ -4,11 +4,11 @@
  *  icgrep is a trademark of International Characters.
  */
 
+#include "decomposition.h"
 #include <string>
 #include <vector>
 #include <locale>
 #include <codecvt>
-#include <re/Unicode/decomposition.h>
 #include <re/re_cc.h>
 #include <re/re_seq.h>
 #include <re/re_alt.h>
@@ -17,12 +17,14 @@
 #include <re/re_diff.h>
 #include <re/re_intersect.h>
 #include <re/re_assertion.h>
+#include <re/re_toolchain.h>
 #include <UCD/unicode_set.h>
 #include <UCD/PropertyAliases.h>
 #include <UCD/PropertyObjects.h>
 #include <UCD/PropertyObjectTable.h>
 #include <UCD/PropertyValueAliases.h>
 #include <llvm/Support/Casting.h>
+
 
 using namespace llvm;
 using namespace re;
@@ -58,21 +60,57 @@ static inline std::u32string getStringPiece(Seq * s, unsigned position) {
     }
     return rslt;
 }
+
+class NFD_Transformer final : public re::RE_Transformer {
+public:
+    /* Transforme an RE so that all string pieces and character classes
+     are converted to NFD form (or NFKD form if the Compatible option
+     is used.  The options may also including case folding.  Example:
+     NFD_Transformer(CaseFold | NFKD).transformRE(r);
+    */
+    NFD_Transformer(DecompositionOptions opt);
+    /* Helpers to convert and append an individual codepoint or a u32string
+       to an existing NFD_string.   The process performs any necessary
+       reordering of marks of the existing string and the appended data
+       to ensure that the result is overall in NFD form.
+       These may be used independently of RE transformation, for example:
+       NFD_Transformer(CaseFold).NFD_append1(s, cp);
+    */
+    void NFD_append1(std::u32string & NFD_string, codepoint_t cp);
+    void NFD_append(std::u32string & NFD_string, std::u32string & to_convert);
+protected:
+    re::RE * transformCC(re::CC * cc) override;
+    re::RE * transformSeq(re::Seq * seq) override;
+    re::RE * transformGroup(re::Group * g) override;
+    bool reordering_needed(std::u32string & prefix, codepoint_t suffix_cp);
+private:
+    DecompositionOptions mOptions;
+    EnumeratedPropertyObject * decompTypeObj;
+    StringPropertyObject * decompMappingObj;
+    EnumeratedPropertyObject * cccObj;
+    StringOverridePropertyObject * caseFoldObj;
+    const UnicodeSet & canonicalMapped;
+    const UnicodeSet & cc0Set;
+    const UnicodeSet selfNFKD;
+    const UnicodeSet selfCaseFold;
+    const UnicodeSet HangulPrecomposed;
+    std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
+};
     
 NFD_Transformer::NFD_Transformer(DecompositionOptions opt) :
-    RE_Transformer("toNFD"),
-    mOptions(opt),
-    decompTypeObj(cast<EnumeratedPropertyObject>(property_object_table[dt])),
-    decompMappingObj(cast<StringPropertyObject>(property_object_table[dm])),
-    cccObj(cast<EnumeratedPropertyObject>(property_object_table[ccc])),
-    caseFoldObj(cast<StringOverridePropertyObject>(property_object_table[cf])),
-    canonicalMapped(decompTypeObj->GetCodepointSet(DT_ns::Can)),
-    cc0Set(cccObj->GetCodepointSet(CCC_ns::NR)),
-    selfNFKD(decompMappingObj->GetReflexiveSet()),
-    selfCaseFold(caseFoldObj->GetReflexiveSet())
-{}
+RE_Transformer("toNFD"),
+mOptions(opt),
+decompTypeObj(cast<EnumeratedPropertyObject>(property_object_table[dt])),
+decompMappingObj(cast<StringPropertyObject>(property_object_table[dm])),
+cccObj(cast<EnumeratedPropertyObject>(property_object_table[ccc])),
+caseFoldObj(cast<StringOverridePropertyObject>(property_object_table[cf])),
+canonicalMapped(decompTypeObj->GetCodepointSet(DT_ns::Can)),
+cc0Set(cccObj->GetCodepointSet(CCC_ns::NR)),
+selfNFKD(std::move(decompMappingObj->GetReflexiveSet())),
+selfCaseFold(std::move(caseFoldObj->GetReflexiveSet())),
+HangulPrecomposed(Hangul_SBase, Hangul_SBase + Hangul_SCount - 1) {
 
-static UnicodeSet HangulPrecomposed = UnicodeSet(Hangul_SBase, Hangul_SBase + Hangul_SCount - 1);
+}
 
 bool hasOption(enum DecompositionOptions optionSet, enum DecompositionOptions testOption) {
     return (testOption & optionSet) != 0;
@@ -111,10 +149,10 @@ void NFD_Transformer::NFD_append1(std::u32string & NFD_string, codepoint_t cp) {
         std::u32string reordered({cp, NFD_string.back()});
         NFD_string.pop_back();
         NFD_append(NFD_string, reordered);
-    } else if (hasOption(mOptions, UCD::CaseFold) && !selfCaseFold.contains(cp)) {
+    } else if (hasOption(mOptions, CaseFold) && !selfCaseFold.contains(cp)) {
         std::u32string dms = conv.from_bytes(caseFoldObj->GetStringValue(cp));
         NFD_append(NFD_string, dms);
-    } else if (hasOption(mOptions, UCD::NFKD) && (!selfNFKD.contains(cp))) {
+    } else if (hasOption(mOptions, NFKD) && (!selfNFKD.contains(cp))) {
         std::u32string dms = conv.from_bytes(decompMappingObj->GetStringValue(cp));
         NFD_append(NFD_string, dms);
     } else {
@@ -132,18 +170,18 @@ RE * NFD_Transformer::transformGroup(Group * g) {
     re::Group::Mode mode = g->getMode();
     re::Group::Sense sense = g->getSense();
     auto r = g->getRE();
-    UCD::DecompositionOptions saveOptions = mOptions;
+    DecompositionOptions saveOptions = mOptions;
     if (mode == re::Group::Mode::CaseInsensitiveMode) {
         if (sense == re::Group::Sense::On) {
-            mOptions = static_cast<UCD::DecompositionOptions>(mOptions | UCD::CaseFold);
+            mOptions = static_cast<DecompositionOptions>(mOptions | CaseFold);
         } else {
-            mOptions = static_cast<UCD::DecompositionOptions>(mOptions & ~UCD::CaseFold);
+            mOptions = static_cast<DecompositionOptions>(mOptions & ~CaseFold);
         }
     } else if (mode == re::Group::Mode::CompatibilityMode) {
         if (sense == re::Group::Sense::On) {
-            mOptions = static_cast<UCD::DecompositionOptions>(mOptions | UCD::NFKD);
+            mOptions = static_cast<DecompositionOptions>(mOptions | NFKD);
         } else {
-            mOptions = static_cast<UCD::DecompositionOptions>(mOptions & ~UCD::NFKD);
+            mOptions = static_cast<DecompositionOptions>(mOptions & ~NFKD);
         }
     }
     RE * t = transform(r);
@@ -156,10 +194,10 @@ RE * NFD_Transformer::transformGroup(Group * g) {
 RE * NFD_Transformer::transformCC(CC * cc) {
     if (cc->getAlphabet() != &cc::Unicode) return cc;
     UnicodeSet mappingRequired = *cc & (canonicalMapped + HangulPrecomposed);
-    if (hasOption(mOptions, UCD::CaseFold)) {
+    if (hasOption(mOptions, CaseFold)) {
         mappingRequired = mappingRequired + (*cc - selfCaseFold);
     }
-    if (hasOption(mOptions, UCD::NFKD)) {
+    if (hasOption(mOptions, NFKD)) {
         mappingRequired = mappingRequired + (*cc - selfNFKD);
     }
     if (mappingRequired.empty()) return cc;
@@ -206,4 +244,9 @@ RE * NFD_Transformer::transformSeq(Seq * seq) {
     if (unchanged) return seq;
     return makeSeq(list.begin(), list.end());
 }
+
+RE * transform(RE * re, const DecompositionOptions opt) {
+    return NFD_Transformer(opt).transformRE(re);
+}
+
 } // end namespace UCD

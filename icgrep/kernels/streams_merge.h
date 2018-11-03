@@ -13,17 +13,10 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel {
 
 class StreamsMerge : public BlockOrientedKernel {
-public:
-    
-    StreamsMerge(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamsPerSet=1, unsigned inputSets = 1);
-    
-protected:
-    
+public:    
+    StreamsMerge(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const std::vector<StreamSet *> & inputs, StreamSet * output);
+protected:   
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-    
-private:
-    const unsigned mStreamsPerSet;
-    const unsigned mInputSets;
 };
 
 class StreamsCombineKernel : public BlockOrientedKernel {
@@ -46,16 +39,9 @@ private:
 
 class StreamsIntersect : public BlockOrientedKernel {
 public:
-    
-    StreamsIntersect(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamsPerSet=1, unsigned inputSets = 1);
-    
+    StreamsIntersect(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const std::vector<StreamSet *> & inputs, StreamSet * output);
 protected:
-    
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-    
-private:
-    const unsigned mStreamsPerSet;
-    const unsigned mInputSets;
 };
 
 }

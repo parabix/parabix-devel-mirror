@@ -61,6 +61,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     Value * const scanwordPos = b->CreateShl(blockNo, floor_log2(b->getBitBlockWidth()));
     Value * const consumed = b->getProcessedItemCount("InputStream");
     Value * const consumedLines = b->getScalarField("LineNum");
+    Value * const avail = b->getAvailableItemCount("InputStream");
     b->CreateBr(scanWordIteration);
 
     b->SetInsertPoint(scanWordIteration);
@@ -135,12 +136,13 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
             Value * matchRecordEnd = b->CreateAdd(phiScanwordPos, b->CreateCountForwardZeroes(phiMatchWord, true));
             // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
             // to access past EOF.
-            Value * const bufLimit = b->CreateSub(b->CreateAdd(scanwordPos, b->getAvailableItemCount("InputStream")), ONE);
+            Value * const bufLimit = b->CreateSub(b->CreateAdd(scanwordPos, avail), ONE);
             matchRecordEnd = b->CreateUMin(matchRecordEnd, bufLimit);
             Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
             Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
             Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
-            Function::arg_iterator argi = dispatcher->arg_begin();
+
+            auto argi = dispatcher->arg_begin();
             const auto matchRecNumArg = &*(argi++);
             Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
             b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
@@ -197,7 +199,6 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     b->CreateCondBr(mIsFinal, callFinalizeScan, scanReturn);
 
     b->SetInsertPoint(callFinalizeScan);
-    Value * avail = b->getAvailableItemCount("InputStream");
     b->setProcessedItemCount("InputStream", b->CreateAdd(avail, scanwordPos));
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
     Value * const buffer_base = b->getRawInputPointer("InputStream", ZERO);
@@ -208,22 +209,22 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     b->SetInsertPoint(scanReturn);
 }
 
-ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
+ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject)
 : MultiBlockKernel("scanMatch",
 // inputs
-{Binding{b->getStreamSetTy(1, 1), "matchResult", FixedRate(), Principal()}
-,Binding{b->getStreamSetTy(1, 1), "lineBreak"}
-,Binding{b->getStreamSetTy(1, 8), "InputStream", FixedRate(), { Deferred(), RequiresLinearAccess() }}},
+{Binding{"matchResult", Matches, FixedRate(), Principal()}
+,Binding{"lineBreak", LineBreakStream}
+,Binding{"InputStream", ByteStream, FixedRate(), Deferred()}},
 // outputs
 {},
 // input scalars
-{Binding{b->getIntAddrTy(), "accumulator_address"}},
+{Binding{"accumulator_address", callbackObject}},
 // output scalars
 {},
 // kernel state
 {Binding{b->getSizeTy(), "BlockNo"}
 ,Binding{b->getSizeTy(), "LineNum"}}) {
-
+    addAttribute(SideEffecting());
 }
 
 }

@@ -11,7 +11,6 @@
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
 #include <toolchain/toolchain.h>
-#include <toolchain/pipeline.h>
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/CodeGen/MIRParser/MIRParser.h>
 #include <llvm/IR/LegacyPassManager.h>
@@ -27,10 +26,10 @@
 
 using namespace llvm;
 
-using StreamSetBuffer = parabix::StreamSetBuffer;
+using StreamSetBuffer = kernel::StreamSetBuffer;
 
 NVPTXDriver::NVPTXDriver(std::string && moduleName)
-: Driver(std::move(moduleName)) {
+: BaseDriver(std::move(moduleName)) {
 
     InitializeAllTargets();
     InitializeAllTargetMCs();
@@ -54,32 +53,6 @@ NVPTXDriver::NVPTXDriver(std::string && moduleName)
     iBuilder.reset(IDISA::GetIDISA_GPU_Builder(*mContext));
     iBuilder->setModule(mMainModule);
     iBuilder->CreateBaseFunctions();
-}
-
-void NVPTXDriver::makeKernelCall(kernel::Kernel * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) {
-    assert ("addKernelCall or makeKernelCall was already run on this kernel." && (kb->getModule() == nullptr));
-    mPipeline.emplace_back(kb);
-    kb->bindPorts(inputs, outputs);
-    kb->setModule(mMainModule);
-}
-
-void NVPTXDriver::generatePipelineIR() {
-    // note: instantiation of all kernels must occur prior to initialization
-    for (const auto & k : mPipeline) {
-        k->addKernelDeclarations(iBuilder);
-    }
-    for (const auto & k : mPipeline) {
-        k->createInstance(iBuilder);
-    }
-    for (const auto & k : mPipeline) {
-        k->initializeInstance(iBuilder);
-    }
-    
-    generatePipelineLoop(iBuilder, mPipeline);
-    
-    for (const auto & k : mPipeline) {
-        k->finalizeInstance(iBuilder);
-    }
 }
 
 Function * NVPTXDriver::addLinkFunction(Module *, llvm::StringRef, FunctionType *, void *) const {
@@ -157,7 +130,7 @@ static int llvm2ptx(Module * M, std::string PTXFilename) {
     return 0;
 }
 
-void NVPTXDriver::finalizeObject() {
+void * NVPTXDriver::finalizeObject(Function * mainMethod) {
 
     legacy::PassManager PM;
     PM.add(createPromoteMemoryToRegisterPass()); //Force the use of mem2reg to promote stack variables.
@@ -189,11 +162,10 @@ void NVPTXDriver::finalizeObject() {
     const auto PTXFilename = mMainModule->getModuleIdentifier() + ".ptx";
 
     llvm2ptx(mMainModule, PTXFilename);
-}
 
-void * NVPTXDriver::getMain() {
-    report_fatal_error("NVPTX must be executed by calling RunPTX");
+    return nullptr;
 }
 
 NVPTXDriver::~NVPTXDriver() {
+
 }

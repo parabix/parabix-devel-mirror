@@ -2,6 +2,7 @@
 #ifndef ICGREP_LZ4_AIO_BASE_H
 #define ICGREP_LZ4_AIO_BASE_H
 
+#include <lz4/lz4_base_generator.h>
 #include "kernels/kernel.h"
 #include <string>
 #include <map>
@@ -19,9 +20,19 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel{
 
 class LZ4SequentialDecompressionKernel : public SegmentOrientedKernel {
-public:
-    LZ4SequentialDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string&& kernelName, unsigned blockSize = 4 * 1024 * 1024, bool conditionalDecompression = false);
+public:    
+
+    LZ4SequentialDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::string&& kernelName,
+                                     // argument
+                                     Scalar * fileSize,
+                                     // inputs
+                                     StreamSet * byteStream,
+                                     const LZ4BlockInfo & blockInfo,
+                                     // constants
+                                     unsigned blockSize = 4 * 1024 * 1024, bool conditionalDecompression = false);
 protected:
+
+
     // ---- Constant
     const static unsigned int ACCELERATION_WIDTH = 64;
     const unsigned mBlockSize;
@@ -53,11 +64,11 @@ protected:
     std::pair<llvm::Value*, llvm::Value*> parseMatchInfo2(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetBeginPos, llvm::Value* tokenValue);
 
     std::pair<llvm::Value *, llvm::Value *> noExtensionLiteralLength(const std::unique_ptr<KernelBuilder> &b,
-                                                                            llvm::Value *currentTokenMarker,
-                                                                            llvm::Value *currentExtenderValue,
-                                                                            llvm::Value *tokenValue,
-                                                                            llvm::Value *blockPosBase,
-                                                                            llvm::Value *currentTokenLocalPos
+                                                                        llvm::Value *currentTokenMarker,
+                                                                        llvm::Value *currentExtenderValue,
+                                                                        llvm::Value *tokenValue,
+                                                                        llvm::Value *blockPosBase,
+                                                                        llvm::Value *currentTokenLocalPos
     );
 
     std::pair<llvm::Value *, llvm::Value *> scanThruLiteralLength(const std::unique_ptr<KernelBuilder> &b,
@@ -94,9 +105,9 @@ protected:
 
     // ---- Methods To Be Override
 
-    virtual void initializationMethod(const std::unique_ptr<KernelBuilder> &b){};
-    virtual void prepareProcessBlock(const std::unique_ptr<KernelBuilder> &b, llvm::Value* blockStart, llvm::Value* blockEnd){};
-    virtual void beforeTermination(const std::unique_ptr<KernelBuilder> &b){};
+    virtual void initializationMethod(const std::unique_ptr<KernelBuilder> &b) {}
+    virtual void prepareProcessBlock(const std::unique_ptr<KernelBuilder> &b, llvm::Value* blockStart, llvm::Value* blockEnd) {}
+    virtual void beforeTermination(const std::unique_ptr<KernelBuilder> &b) {}
 
 
     virtual void doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
@@ -105,15 +116,17 @@ protected:
     virtual void doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                              llvm::Value *matchLength) = 0;
 
-    virtual void storePendingOutput(const std::unique_ptr<KernelBuilder> &b) {};
+    virtual void storePendingOutput(const std::unique_ptr<KernelBuilder> &b) {}
 
     // Acceleration
-    virtual void prepareAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos) {};
+    virtual void prepareAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos) {}
     virtual void doAccelerationLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
-                                           llvm::Value *literalLength, llvm::Value* blockStart) {this->doLiteralCopy(b, literalStart, literalLength, blockStart);}
+                                           llvm::Value *literalLength, llvm::Value* blockStart) {doLiteralCopy(b, literalStart, literalLength, blockStart);}
+
     virtual void doAccelerationMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
-                                         llvm::Value *matchLength) {this->doMatchCopy(b, matchOffset, matchLength);}
-    virtual void finishAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos, llvm::Value* literalMask) {};
+                                         llvm::Value *matchLength) {doMatchCopy(b, matchOffset, matchLength);}
+
+    virtual void finishAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos, llvm::Value* literalMask) {}
 
     virtual void setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value* produced) = 0;
 

@@ -13,183 +13,109 @@
 #include <kernels/lz4/decompression/lz4_swizzled_decompression.h>
 #include <kernels/lz4/decompression/lz4_twist_decompression.h>
 #include <kernels/lz4/decompression/lz4_bitstream_decompression.h>
+#include <kernels/pipeline_builder.h>
 
 using namespace llvm;
-using namespace parabix;
 using namespace kernel;
 
-LZ4BaseGenerator::LZ4BaseGenerator():mPxDriver("lz4"), mLz4BlockSize(4 * 1024 * 1024), mInitBlockInfo(false) {
+LZ4BaseGenerator::LZ4BaseGenerator()
+: mPxDriver("lz4")
+, mLz4BlockSize(4 * 1024 * 1024) {
 
 }
 
-StreamSetBuffer* LZ4BaseGenerator::loadByteStream() {
-    auto & b = mPxDriver.getBuilder();
-    StreamSetBuffer* byteStream = mPxDriver.addBuffer<ExternalBuffer>(b, b->getStreamSetTy(1, 8));
-    kernel::Kernel * sourceK = mPxDriver.addKernelInstance<MemorySourceKernel>(b);
-    sourceK->setInitialArguments({mInputStream, mFileSize});
-    mPxDriver.makeKernelCall(sourceK, {}, {byteStream});
+StreamSet* LZ4BaseGenerator::loadByteStream() {
+    StreamSet * const byteStream = mPipeline->CreateStreamSet(1, 8);
+    mPipeline->CreateKernelCall<MemorySourceKernel>(mInputStream, mFileSize, byteStream);
     return byteStream;
 }
 
-StreamSetBuffer* LZ4BaseGenerator::s2p(parabix::StreamSetBuffer* byteStream) {
-    auto & b = mPxDriver.getBuilder();
-    StreamSetBuffer* basisBits = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(8, 1),
-                                                             this->getDefaultBufferBlocks());
-    Kernel * s2pk = mPxDriver.addKernelInstance<S2PKernel>(b, cc::BitNumbering::BigEndian);
-    mPxDriver.makeKernelCall(s2pk, {byteStream}, {basisBits});
+StreamSet* LZ4BaseGenerator::s2p(StreamSet* byteStream) {
+    StreamSet * const basisBits = mPipeline->CreateStreamSet(8, 1);
+    mPipeline->CreateKernelCall<S2PKernel>(byteStream, basisBits, cc::BitNumbering::BigEndian);
     return basisBits;
 }
-parabix::StreamSetBuffer* LZ4BaseGenerator::p2s(parabix::StreamSetBuffer* bitStream) {
-    auto & b = mPxDriver.getBuilder();
-    StreamSetBuffer* byteStream = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, 8),
-                                                                   this->getDefaultBufferBlocks());
-    Kernel * p2sk = mPxDriver.addKernelInstance<P2SKernel>(b, cc::BitNumbering::BigEndian);
-    mPxDriver.makeKernelCall(p2sk, {bitStream}, {byteStream});
+
+StreamSet* LZ4BaseGenerator::p2s(StreamSet* bitStream) {
+    StreamSet * const byteStream = mPipeline->CreateStreamSet(1, 8);
+    mPipeline->CreateKernelCall<P2SKernel>(bitStream, byteStream, cc::BitNumbering::BigEndian);
     return byteStream;
 }
 
-std::pair<parabix::StreamSetBuffer*, parabix::StreamSetBuffer*>  LZ4BaseGenerator::loadByteStreamAndBitStream() {
-    StreamSetBuffer* byteStream = this->loadByteStream();
-    StreamSetBuffer*  basisBits = s2p(byteStream);
+std::pair<StreamSet*, StreamSet*>  LZ4BaseGenerator::loadByteStreamAndBitStream() {
+    StreamSet * const byteStream = loadByteStream();
+    StreamSet * const basisBits = s2p(byteStream);
     return std::make_pair(byteStream, basisBits);
 }
 
-LZ4BlockInfo LZ4BaseGenerator::getBlockInfo(StreamSetBuffer* compressedByteStream) {
-    if (mInitBlockInfo) {
+LZ4BlockInfo LZ4BaseGenerator::getBlockInfo(StreamSet* compressedByteStream) {
+    if (mBlockInfo.isCompress) {
         return mBlockInfo;
     }
 
-    auto & b = mPxDriver.getBuilder();
-    LZ4BlockInfo blockInfo;
-    blockInfo.isCompress = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, 8), this->getDefaultBufferBlocks(), 1);
-    blockInfo.blockStart = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, 64),
-                                                             this->getDefaultBufferBlocks(), 1);
-    blockInfo.blockEnd = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, 64), this->getDefaultBufferBlocks(), 1);
+    mBlockInfo.isCompress =  mPipeline->CreateStreamSet(1, 8);
+    mBlockInfo.blockStart = mPipeline->CreateStreamSet(1, 64);
+    mBlockInfo.blockEnd = mPipeline->CreateStreamSet(1, 64);
 
-    Kernel * blockDecoderK = mPxDriver.addKernelInstance<LZ4BlockDecoderKernel>(b);
-    blockDecoderK->setInitialArguments({b->CreateTrunc(mHasBlockChecksum, b->getInt1Ty()), mHeaderSize, mFileSize});
-    mPxDriver.makeKernelCall(blockDecoderK, {compressedByteStream}, {blockInfo.isCompress, blockInfo.blockStart, blockInfo.blockEnd});
+    mPipeline->CreateKernelCall<LZ4BlockDecoderKernel>(
+                // arguments
+                mHasBlockChecksum, mHeaderSize, mFileSize,
+                // inputs
+                compressedByteStream,
+                // outputs
+                mBlockInfo.isCompress,
+                mBlockInfo.blockStart,
+                mBlockInfo.blockEnd);
 
-    mInitBlockInfo = true;
-    mBlockInfo = blockInfo;
-    return blockInfo;
+    return mBlockInfo;
 }
 
-StreamSetBuffer * LZ4BaseGenerator::byteStreamDecompression(StreamSetBuffer* compressedByteStream) {
-    auto & b = mPxDriver.getBuilder();
-    LZ4BlockInfo blockInfo = this->getBlockInfo(compressedByteStream);
-
-    StreamSetBuffer *const decompressionByteStream =
-            mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, 8),
-                                              this->getDefaultBufferBlocks(), 1);
-    Kernel* lz4AioK = mPxDriver.addKernelInstance<LZ4ByteStreamDecompressionKernel>(b);
-    lz4AioK->setInitialArguments({mFileSize});
-    mPxDriver.makeKernelCall(
-            lz4AioK,
-            {
-                    compressedByteStream,
-
-                    // Block Data
-                    blockInfo.isCompress,
-                    blockInfo.blockStart,
-                    blockInfo.blockEnd
-            }, {
-                    decompressionByteStream
-            });
-
+StreamSet * LZ4BaseGenerator::byteStreamDecompression(StreamSet* compressedByteStream) {
+    LZ4BlockInfo blockInfo = getBlockInfo(compressedByteStream);
+    StreamSet * const decompressionByteStream = mPipeline->CreateStreamSet(1, 8);
+    mPipeline->CreateKernelCall<LZ4ByteStreamDecompressionKernel>(mFileSize, compressedByteStream, blockInfo, nullptr, decompressionByteStream );
     return decompressionByteStream;
 }
 
-StreamSetBuffer * LZ4BaseGenerator::swizzledDecompression(
-        StreamSetBuffer* compressedByteStream,
-        StreamSetBuffer* compressedBasisBits
-) {
-    auto & b = mPxDriver.getBuilder();
-    LZ4BlockInfo blockInfo = this->getBlockInfo(compressedByteStream);
+StreamSet * LZ4BaseGenerator::swizzledDecompression(StreamSet* compressedByteStream, StreamSet* compressedBasisBits) {
+    LZ4BlockInfo blockInfo = getBlockInfo(compressedByteStream);
 
     // Produce unswizzled bit streams
-    StreamSetBuffer * u16Swizzle0 = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(4),
-                                                                      this->getDefaultBufferBlocks(), 1);
-    StreamSetBuffer * u16Swizzle1 = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(4),
-                                                                      this->getDefaultBufferBlocks(), 1);
-    Kernel * unSwizzleK = mPxDriver.addKernelInstance<SwizzleGenerator>(b, 8, 2, 1, 64, "source");
-    mPxDriver.makeKernelCall(unSwizzleK, {compressedBasisBits}, {u16Swizzle0, u16Swizzle1});
+    StreamSet * const u16Swizzle0 = mPipeline->CreateStreamSet(4);
+    StreamSet * const u16Swizzle1 = mPipeline->CreateStreamSet(4);
+    mPipeline->CreateKernelCall<SwizzleGenerator>(StreamSets{compressedBasisBits}, StreamSets{u16Swizzle0, u16Swizzle1});
 
+    StreamSet * const uncompressedSwizzled0 = mPipeline->CreateStreamSet(4);
+    StreamSet * const uncompressedSwizzled1 = mPipeline->CreateStreamSet(4);
 
+    mPipeline->CreateKernelCall<LZ4SwizzledDecompressionKernel>(
+        mFileSize,
+        // inputs
+        compressedByteStream, blockInfo,
+        StreamSets{ u16Swizzle0, u16Swizzle1 },
+        // outputs
+        StreamSets{ uncompressedSwizzled0, uncompressedSwizzled1 } );
 
-    StreamSetBuffer * uncompressedSwizzled0 = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(4),
-                                                                                this->getDefaultBufferBlocks(), 1);
-    StreamSetBuffer * uncompressedSwizzled1 = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(4),
-                                                                                this->getDefaultBufferBlocks(), 1);
+    StreamSet * const decompressionBitStream = mPipeline->CreateStreamSet(8);
 
-
-    Kernel* lz4AioK = mPxDriver.addKernelInstance<LZ4SwizzledDecompressionKernel>(b, 4, 2, 4);
-    lz4AioK->setInitialArguments({mFileSize});
-    mPxDriver.makeKernelCall(
-            lz4AioK,
-            {
-                    compressedByteStream,
-
-                    blockInfo.isCompress,
-                    blockInfo.blockStart,
-                    blockInfo.blockEnd,
-
-                    u16Swizzle0,
-                    u16Swizzle1
-            }, {
-                    uncompressedSwizzled0,
-                    uncompressedSwizzled1
-            });
-
-
-    StreamSetBuffer * const decompressionBitStream = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(8, 1),
-                                                                                       this->getDefaultBufferBlocks(), 1);
-
-    Kernel * unSwizzleK2 = mPxDriver.addKernelInstance<SwizzleGenerator>(b, 8, 1, 2);
-    mPxDriver.makeKernelCall(unSwizzleK2, {uncompressedSwizzled0, uncompressedSwizzled1}, {decompressionBitStream});
+    mPipeline->CreateKernelCall<SwizzleGenerator>(StreamSets{uncompressedSwizzled0, uncompressedSwizzled1}, StreamSets{decompressionBitStream});
 
     return decompressionBitStream;
 }
 
-StreamSetBuffer * LZ4BaseGenerator::bitStreamDecompression(
-        parabix::StreamSetBuffer* compressedByteStream,
-        parabix::StreamSetBuffer* compressedBasisBits
-) {
-    return this->convertCompressedBitsStreamWithBitStreamAioApproach(compressedByteStream, {compressedBasisBits})[0];
+StreamSet * LZ4BaseGenerator::bitStreamDecompression(StreamSet* compressedByteStream, StreamSet * compressedBasisBits) {
+    return convertCompressedBitsStreamWithBitStreamAioApproach(compressedByteStream, {compressedBasisBits})[0];
 }
 
-std::vector<StreamSetBuffer*> LZ4BaseGenerator::convertCompressedBitsStreamWithBitStreamAioApproach(
-        parabix::StreamSetBuffer* compressedByteStream,
-        std::vector<StreamSetBuffer*> compressedBitStreams
-) {
-    auto & b = mPxDriver.getBuilder();
-
-    LZ4BlockInfo blockInfo = this->getBlockInfo(compressedByteStream);
-
-    std::vector<StreamSetBuffer *> inputStreams = {
-            compressedByteStream,
-
-            blockInfo.isCompress,
-            blockInfo.blockStart,
-            blockInfo.blockEnd,
-    };
-
-    std::vector<StreamSetBuffer *> outputStream;
-    std::vector<unsigned> numbersOfStreams;
-
-    for (unsigned i = 0; i < compressedBitStreams.size(); i++) {
-        unsigned numOfStreams = compressedBitStreams[i]->getNumOfStreams();
-        numbersOfStreams.push_back(numOfStreams);
-        inputStreams.push_back(compressedBitStreams[i]);
-        outputStream.push_back(mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(numOfStreams, 1),
-                                                                 this->getDefaultBufferBlocks(), 1));
+StreamSets LZ4BaseGenerator::convertCompressedBitsStreamWithBitStreamAioApproach(StreamSet * compressedByteStream, StreamSets compressedBitStreams) {
+    LZ4BlockInfo blockInfo = getBlockInfo(compressedByteStream);
+    StreamSets outputStreams;
+    outputStreams.reserve(compressedBitStreams.size());
+    for (const auto & bitStream : compressedBitStreams) {
+        outputStreams.push_back(mPipeline->CreateStreamSet(bitStream->getNumElements(), bitStream->getFieldWidth()));
     }
-
-    Kernel* lz4AioK = mPxDriver.addKernelInstance<LZ4BitStreamDecompressionKernel>(b, numbersOfStreams);
-    lz4AioK->setInitialArguments({mFileSize});
-    mPxDriver.makeKernelCall(lz4AioK, inputStreams, outputStream);
-
-    return outputStream;
+    mPipeline->CreateKernelCall<LZ4BitStreamDecompressionKernel>(mFileSize, compressedByteStream, blockInfo, compressedBitStreams, outputStreams);
+    return outputStreams;
 }
 
 unsigned LZ4BaseGenerator::getBlockSizeBufferBlocks() {
@@ -197,5 +123,9 @@ unsigned LZ4BaseGenerator::getBlockSizeBufferBlocks() {
 }
 
 unsigned LZ4BaseGenerator::getDefaultBufferBlocks() {
-    return this->getBlockSizeBufferBlocks() * 2; // buffer 2 LZ4 Block By Default
+    return getBlockSizeBufferBlocks() * 2; // buffer 2 LZ4 Block By Default
+}
+
+LZ4BaseGenerator::~LZ4BaseGenerator() {
+
 }

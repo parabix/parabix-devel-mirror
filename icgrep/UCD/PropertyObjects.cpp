@@ -11,11 +11,13 @@
 #include <llvm/Support/raw_ostream.h>
 #include <sstream>
 #include <llvm/Support/ErrorHandling.h>
+#include <toolchain/cpudriver.h>
 #include <grep/grep_engine.h>
 #include <util/aligned_allocator.h>
 #include <re/re_analysis.h>
 #include <re/re_cc.h>
 #include <codecvt>
+
 
 using namespace llvm;
 
@@ -95,18 +97,17 @@ const UnicodeSet EnumeratedPropertyObject::GetCodepointSetMatchingPattern(re::RE
     std::memset(aligned + n, 0, m);
     
     PropertyValueAccumulator accum(accumulatedValues);
-    
-    grep::InternalSearchEngine engine;
+    CPUDriver driver("driver");
+    grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    engine.grepCodeGen(pattern, nullptr, & accum);
-    engine.doGrep(aligned, n);
+    engine.grepCodeGen(pattern, nullptr);
+    engine.doGrep(aligned, n, accum);
     //grepBuffer(pattern, aligned, n, & accum);
     alloc.deallocate(aligned, 0);
     
     UnicodeSet a;
-    for (const auto & v : accumulatedValues) {
-        
-        int e = GetPropertyValueEnumCode(v);
+    for (const auto & v : accumulatedValues) {       
+        const auto e = GetPropertyValueEnumCode(v);
         a.insert(GetCodepointSet(e));
     }
     return a;
@@ -238,10 +239,11 @@ const UnicodeSet ExtensionPropertyObject::GetCodepointSetMatchingPattern(re::RE 
     std::memset(aligned + n, 0, m);
     
     PropertyValueAccumulator accum(accumulatedValues);
-    grep::InternalSearchEngine engine;
+    CPUDriver driver("driver");
+    grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    engine.grepCodeGen(pattern, nullptr, & accum);
-    engine.doGrep(aligned, n);
+    engine.grepCodeGen(pattern, nullptr);
+    engine.doGrep(aligned, n, accum);
     alloc.deallocate(aligned, 0);
     
     UnicodeSet a;
@@ -363,10 +365,11 @@ const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & valu
 
 const UnicodeSet NumericPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
     SetByLineNumberAccumulator accum(mExplicitCps, mNaNCodepointSet);
-    grep::InternalSearchEngine engine;
+    CPUDriver driver("driver");
+    grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    engine.grepCodeGen(pattern, nullptr, & accum);
-    engine.doGrep(mStringBuffer, mBufSize);
+    engine.grepCodeGen(pattern, nullptr);
+    engine.doGrep(mStringBuffer, mBufSize, accum);
     //grepBuffer(pattern, mStringBuffer, mBufSize, &accum);
     return accum.getAccumulatedSet();
 }
@@ -406,11 +409,12 @@ const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * p
         matched.insert(mNullCodepointSet);
     }
     SetByLineNumberAccumulator accum(mExplicitCps, mNullCodepointSet);
-    grep::InternalSearchEngine engine;
+    CPUDriver driver("driver");
+    grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    engine.grepCodeGen(pattern, nullptr, & accum);
+    engine.grepCodeGen(pattern, nullptr);
     const unsigned bufSize = mStringOffsets[mExplicitCps.size()];
-    engine.doGrep(mStringBuffer, bufSize);
+    engine.doGrep(mStringBuffer, bufSize, accum);
     matched.insert(accum.getAccumulatedSet());
     return matched;
 }
@@ -465,11 +469,12 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSet(const std::string
 const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
     UnicodeSet base_set = mBaseObject.GetCodepointSetMatchingPattern(pattern) - mOverriddenSet;
     SetByLineNumberAccumulator accum(mExplicitCps, UnicodeSet());
-    grep::InternalSearchEngine engine;
+    CPUDriver driver("driver");
+    grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    engine.grepCodeGen(pattern, nullptr, & accum);
+    engine.grepCodeGen(pattern, nullptr);
     const unsigned bufSize = mStringOffsets[mExplicitCps.size()];
-    engine.doGrep(mStringBuffer, bufSize);
+    engine.doGrep(mStringBuffer, bufSize, accum);
     base_set.insert(accum.getAccumulatedSet());
     return base_set;
 }

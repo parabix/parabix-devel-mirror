@@ -7,6 +7,7 @@
 #include <IR_Gen/idisa_target.h>                   // for GetIDISA_Builder
 #include <cc/alphabet.h>
 #include <cc/cc_compiler.h>                        // for CC_Compiler
+#include <kernels/pipeline_builder.h>
 #include <kernels/deletion.h>                      // for DeletionKernel
 #include <kernels/swizzle.h>                      // for DeletionKernel
 #include <kernels/source_kernel.h>
@@ -39,8 +40,8 @@
 
 using namespace pablo;
 using namespace kernel;
-using namespace parabix;
 using namespace llvm;
+using namespace codegen;
 
 static cl::OptionCategory u8u16Options("u8u16 Options", "Transcoding control options.");
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(u8u16Options));
@@ -49,18 +50,25 @@ static cl::opt<bool> enableAVXdel("enable-AVX-deletion", cl::desc("Enable AVX2 d
 static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
 static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
 
+inline bool useAVX2() {
+    return enableAVXdel && AVX2_available() && codegen::BlockSize == 256;
+}
+
 class U8U16Kernel final: public pablo::PabloKernel {
 public:
-    U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b);
+    U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * BasisBits, StreamSet * u8bits, StreamSet * DelMask);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
     void generatePabloMethod() override;
 };
 
-U8U16Kernel::U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b)
+U8U16Kernel::U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * BasisBits, StreamSet * u8bits, StreamSet * selectors)
 : PabloKernel(b, "u8u16",
-{Binding{b->getStreamSetTy(8, 1), "u8bit"}},
-{Binding{b->getStreamSetTy(16, 1), "u16bit"}, Binding{b->getStreamSetTy(1, 1), "delMask"}}) {
+// input
+{Binding{"u8bit", BasisBits}},
+// outputs
+{Binding{"u16bit", u8bits},
+ Binding{"selectors", selectors}}) {
 
 }
 
@@ -247,118 +255,63 @@ void U8U16Kernel::generatePabloMethod() {
     main.createAssign(u16_lo[7], main.createOr(main.createAnd(last_byte, u8_bits[7]), s43_lo7));
 
     Var * output = getOutputStreamVar("u16bit");
-    Var * delmask_out = getOutputStreamVar("delMask");
     for (unsigned i = 0; i < 8; i++) {
         main.createAssign(main.createExtract(output, i), u16_hi[i]);
     }
     for (unsigned i = 0; i < 8; i++) {
         main.createAssign(main.createExtract(output, i + 8), u16_lo[i]);
     }
-    main.createAssign(main.createExtract(delmask_out, main.getInteger(0)), main.createInFile(main.createNot(delmask)));
+    PabloAST * selectors = main.createInFile(main.createNot(delmask));
+    main.createAssign(main.createExtract(getOutputStreamVar("selectors"), main.getInteger(0)), selectors);
 }
 
-void generatePipeline(ParabixDriver & pxDriver) {
+typedef void (*u8u16FunctionType)(uint32_t fd, const char *);
 
-    auto & iBuilder = pxDriver.getBuilder();
-    Module * mod = iBuilder->getModule();
+u8u16FunctionType generatePipeline(CPUDriver & pxDriver) {
 
-    const unsigned bufferSize = codegen::SegmentSize * codegen::ThreadNum;
-
-    assert (iBuilder);
-
-    Type * const voidTy = iBuilder->getVoidTy();
-    Type * const bitBlockType = iBuilder->getBitBlockType();
-    Type * const outputType = ArrayType::get(ArrayType::get(bitBlockType, 16), 1)->getPointerTo();
-
-    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, iBuilder->getInt32Ty(), outputType, nullptr));
-    main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
-
-    Value * const fileDecriptor = &*(args++);
-    fileDecriptor->setName("fileDecriptor");
-    Value * const outputStream = &*(args++);
-    outputStream->setName("outputStream");
-
-    iBuilder->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
-
+    auto & b = pxDriver.getBuilder();
+    auto P = pxDriver.makePipeline({Binding{b->getInt32Ty(), "inputFileDecriptor"}, Binding{b->getInt8PtrTy(), "outputFileName"}}, {});
+    Scalar * fileDescriptor = P->getInputScalar("inputFileDecriptor");
     // File data from mmap
-    StreamSetBuffer * ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
-
-    Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
-    mmapK->setInitialArguments({fileDecriptor});
-    pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
+    StreamSet * const ByteStream = P->CreateStreamSet(1, 8);
+    P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, ByteStream);
 
     // Transposed bits from s2p
-    StreamSetBuffer * BasisBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), bufferSize);
-
-    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::BigEndian);
-    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
-
+    StreamSet * BasisBits = P->CreateStreamSet(8);
+    P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits, cc::BitNumbering::BigEndian);
 
     // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
-    StreamSetBuffer * u8bits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(16), bufferSize);
-    StreamSetBuffer * DelMask = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(), bufferSize);
+    StreamSet * u8bits = P->CreateStreamSet(16);
+    StreamSet * selectors = P->CreateStreamSet();
+    P->CreateKernelCall<U8U16Kernel>(BasisBits, u8bits, selectors);
 
-    Kernel * u8u16k = pxDriver.addKernelInstance<U8U16Kernel>(iBuilder);
-    pxDriver.makeKernelCall(u8u16k, {BasisBits}, {u8bits, DelMask});
-
-    StreamSetBuffer * u16bits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(16), bufferSize);
-
-    const auto avx2 = enableAVXdel && AVX2_available() && codegen::BlockSize==256;
-
-    // Different choices for the output buffer depending on chosen option.
-    StreamSetBuffer * u16bytes = nullptr;
-    if (mMapBuffering || memAlignBuffering) {
-        u16bytes = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), outputStream);
-    } else if (avx2) {
-        u16bytes = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), bufferSize);
-    } else {
-        u16bytes = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 16), bufferSize, 1);
-    }
-
-    if (avx2) {
+    StreamSet * u16bits = P->CreateStreamSet(16);
+    StreamSet * u16bytes = P->CreateStreamSet(1, 16);
+    if (useAVX2()) {
         // Allocate space for fully compressed swizzled UTF-16 bit streams
-        StreamSetBuffer * u16Swizzle0 = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
-        StreamSetBuffer * u16Swizzle1 = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
-        StreamSetBuffer * u16Swizzle2 = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
-        StreamSetBuffer * u16Swizzle3 = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(4), bufferSize, 1);
+        std::vector<StreamSet *> u16Swizzles(4);
+        u16Swizzles[0] = P->CreateStreamSet(4);
+        u16Swizzles[1] = P->CreateStreamSet(4);
+        u16Swizzles[2] = P->CreateStreamSet(4);
+        u16Swizzles[3] = P->CreateStreamSet(4);
+
         // Apply a deletion algorithm to discard all but the final position of the UTF-8
         // sequences (bit streams) for each UTF-16 code unit. Also compresses and swizzles the result.
-        Kernel * delK = pxDriver.addKernelInstance<SwizzledDeleteByPEXTkernel>(iBuilder, 16);
-        pxDriver.makeKernelCall(delK, {DelMask, u8bits}, {u16Swizzle0, u16Swizzle1, u16Swizzle2, u16Swizzle3});
+        P->CreateKernelCall<SwizzledDeleteByPEXTkernel>(selectors, u8bits, u16Swizzles);
         // Produce unswizzled UTF-16 bit streams
-        Kernel * unSwizzleK = pxDriver.addKernelInstance<SwizzleGenerator>(iBuilder, 16, 1, 4);
-        pxDriver.makeKernelCall(unSwizzleK, {u16Swizzle0, u16Swizzle1, u16Swizzle2, u16Swizzle3}, {u16bits});
-        Kernel * p2sk = pxDriver.addKernelInstance<P2S16Kernel>(iBuilder, cc::BitNumbering::BigEndian);
-        pxDriver.makeKernelCall(p2sk, {u16bits}, {u16bytes});
+        P->CreateKernelCall<SwizzleGenerator>(u16Swizzles, std::vector<StreamSet *>{u16bits});
+        P->CreateKernelCall<P2S16Kernel>(u16bits, u16bytes, cc::BitNumbering::BigEndian);
     } else {
-        StreamSetBuffer * DeletionCounts = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(), bufferSize);
-        Kernel * delK = pxDriver.addKernelInstance<FieldCompressKernel>(iBuilder, iBuilder->getBitBlockWidth()/16, 16);
-        pxDriver.makeKernelCall(delK, {u8bits, DelMask}, {u16bits, DeletionCounts});
-        Kernel * p2sk = pxDriver.addKernelInstance<P2S16KernelWithCompressedOutput>(iBuilder, cc::BitNumbering::BigEndian);
-        pxDriver.makeKernelCall(p2sk, {u16bits, DeletionCounts}, {u16bytes});
+        StreamSet * DeletionCounts = P->CreateStreamSet();
+        P->CreateKernelCall<FieldCompressKernel>(u8bits, selectors, u16bits, DeletionCounts);
+        P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, DeletionCounts, u16bytes, cc::BitNumbering::BigEndian);
     }
 
-    Kernel * outK = nullptr;
-    if (outputFile.empty()) {
-        outK = pxDriver.addKernelInstance<StdOutKernel>(iBuilder, 16);
-    } else {
-        outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 16);
-        Value * fName = iBuilder->CreatePointerCast(iBuilder->GetString(outputFile.c_str()), iBuilder->getInt8PtrTy());
-        outK->setInitialArguments({fName});
-    }
-    pxDriver.makeKernelCall(outK, {u16bytes}, {});
+    Scalar * outputFileName = P->getInputScalar("outputFileName");
+    P->CreateKernelCall<FileSink>(outputFileName, u16bytes);
 
-    pxDriver.generatePipelineIR();
-
-    pxDriver.deallocateBuffers();
-
-    iBuilder->CreateRetVoid();
-
-    pxDriver.finalizeObject();
+    return reinterpret_cast<u8u16FunctionType>(P->compile());
 }
-
-typedef void (*u8u16FunctionType)(uint32_t fd, char * output_data);
 
 size_t file_size(const int fd) {
     struct stat st;
@@ -368,38 +321,17 @@ size_t file_size(const int fd) {
     return st.st_size;
 }
 
-void u8u16(u8u16FunctionType fn_ptr, const std::string & fileName) {
-    const int fd = open(fileName.c_str(), O_RDONLY);
-    if (LLVM_UNLIKELY(fd == -1)) {
-        std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
-    } else {
-        const auto fileSize = file_size(fd);
-        if (mMapBuffering) {
-            boost::interprocess::mapped_region outputBuffer(boost::interprocess::anonymous_shared_memory(2 * fileSize));
-            outputBuffer.advise(boost::interprocess::mapped_region::advice_willneed);
-            outputBuffer.advise(boost::interprocess::mapped_region::advice_sequential);
-            fn_ptr(fd, static_cast<char*>(outputBuffer.get_address()));
-        } else if (memAlignBuffering) {
-            char * outputBuffer;
-            const auto r = posix_memalign(reinterpret_cast<void **>(&outputBuffer), 32, 2 * fileSize);
-            if (LLVM_UNLIKELY(r != 0)) {
-                throw std::runtime_error("posix_memalign failed with return code " + std::to_string(r));
-            }
-            fn_ptr(fd, outputBuffer);
-            free(reinterpret_cast<void *>(outputBuffer));
-        } else { /* No external output buffer */
-            fn_ptr(fd, nullptr);
-        }
-        close(fd);
-    }
-}
-
 int main(int argc, char *argv[]) {
     codegen::ParseCommandLineOptions(argc, argv, {&u8u16Options, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
-    ParabixDriver pxDriver("u8u16");
-    generatePipeline(pxDriver);
-    auto u8u16Function = reinterpret_cast<u8u16FunctionType>(pxDriver.getMain());
-    u8u16(u8u16Function, inputFile);
+    CPUDriver pxDriver("u8u16");
+    auto u8u16Function = generatePipeline(pxDriver);
+    const int fd = open(inputFile.c_str(), O_RDONLY);
+    if (LLVM_UNLIKELY(fd == -1)) {
+        std::cerr << "Error: cannot open " << inputFile << " for processing. Skipped.\n";
+    } else {
+        u8u16Function(fd, outputFile.c_str());
+        close(fd);
+    }
     return 0;
 }
 

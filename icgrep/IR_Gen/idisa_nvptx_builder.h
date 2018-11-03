@@ -37,8 +37,8 @@ public:
     llvm::Value * bitblock_any(llvm::Value * a) override;
     std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin) override;
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift) override;
-    llvm::Value * bitblock_mask_from(llvm::Value * pos) override;
-    llvm::Value * bitblock_set_bit(llvm::Value * pos) override;
+    llvm::Value * bitblock_mask_from(llvm::Value * pos, const bool safe) override;
+    llvm::Value * bitblock_set_bit(llvm::Value * pos, const bool safe) override;
 
     llvm::Value * getEOFMask(llvm::Value * remainingBytes);
 

@@ -1,8 +1,52 @@
 #include "attributes.h"
 
 #include <llvm/Support/raw_ostream.h>
+#include <boost/preprocessor/stringize.hpp>
 
 namespace kernel {
+
+void Attribute::print(llvm::raw_ostream & out) const noexcept {
+    #define NAME(DEF) \
+        case KindId::DEF : out << BOOST_PP_STRINGIZE(DEF); break
+    #define NAME_AMOUNT(DEF) \
+        case KindId::DEF : out << BOOST_PP_STRINGIZE(DEF) << mAmount; break
+    switch (getKind()) {
+        NAME_AMOUNT(LookAhead);
+        NAME_AMOUNT(LookBehind);
+        NAME(Principal);
+        NAME(Deferred);
+        NAME(ZeroExtend);
+        NAME(IndependentRegionBegin); NAME(IndependentRegionEnd);
+        NAME(ConditionalRegionBegin); NAME(ConditionalRegionEnd);
+        NAME(RequiresPopCountArray); NAME(RequiresNegatedPopCountArray);
+        NAME_AMOUNT(Add);
+        NAME_AMOUNT(RoundUpTo);
+        NAME(ManagedBuffer);
+        NAME(Misaligned);
+        NAME_AMOUNT(BlockSize);
+        NAME(ReverseRegionBegin); NAME(ReverseRegionEnd);
+        NAME_AMOUNT(SliceOffset);
+        NAME(Expandable);
+        NAME(CanTerminateEarly);
+        NAME(MustExplicitlyTerminate);
+        NAME(SideEffecting);
+        NAME(Family);
+    }
+    #undef NAME
+    #undef NAME_AMOUNT
+}
+
+void AttributeSet::print(llvm::raw_ostream & out) const noexcept {
+    if (hasAttributes()) {
+        char joiner = '{';
+        for (const Attribute & a : getAttributes()) {
+            out << joiner;
+            a.print(out);
+            joiner = ',';
+        }
+        out << '}';
+    }
+}
 
 Attribute & AttributeSet::addAttribute(Attribute attribute) {
     for (auto i = begin(), i_end = end(); i != i_end; ++i) {

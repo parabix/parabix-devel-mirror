@@ -13,26 +13,37 @@ using namespace std;
 
 
 namespace kernel {
+
+LZ4TwistDecompressionKernel::LZ4TwistDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+                                                         // arguments
+                                                         Scalar * fileSize,
+                                                         // input
+                                                         StreamSet * inputStream,
+                                                         const LZ4BlockInfo & blockInfo,
+                                                         StreamSet * twistStream,
+                                                         // output
+                                                         StreamSet * outputStream)
+: LZ4SequentialDecompressionKernel(b, "LZ4TwistDecompressionKernel", fileSize, inputStream, blockInfo, 4 * 1024 * 1024),
+mTwistWidth(twistStream->getFieldWidth()),
+mItemsPerByte(BYTE_WIDTH / mTwistWidth) {
+
+    mInputStreamSets.push_back(Binding{"inputTwistStream", twistStream, RateEqualTo("byteStream")});
+    mOutputStreamSets.push_back(Binding{"outputTwistStream", outputStream, BoundedRate(0, 1)});
+
+    addInternalScalar(b->getInt8PtrTy(), "temporaryInputPtr");
+    addInternalScalar(b->getInt8PtrTy(), "temporaryOutputPtr");
+}
+
+
+
     size_t LZ4TwistDecompressionKernel::getNormalCopyLength() {
         return (COPY_FW - BYTE_WIDTH) / mTwistWidth;
     }
     llvm::Value* LZ4TwistDecompressionKernel::getNormalCopyLengthValue(const std::unique_ptr<KernelBuilder> &b) {
-        return b->getSize(this->getNormalCopyLength());
+        return b->getSize(getNormalCopyLength());
     }
 
 
-    LZ4TwistDecompressionKernel::LZ4TwistDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned twistWidth, unsigned blockSize)
-            : LZ4SequentialDecompressionKernel(b, "LZ4TwistDecompressionKernel", blockSize),
-              mTwistWidth(twistWidth),
-              mItemsPerByte(BYTE_WIDTH / twistWidth)
-    {
-        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(1, twistWidth), "inputTwistStream", RateEqualTo("byteStream")});
-//        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(1, twistWidth), "refTwistStream"});
-        mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(1, twistWidth), "outputTwistStream", BoundedRate(0, 1)});
-
-        this->addScalar(b->getInt8PtrTy(), "temporaryInputPtr");
-        this->addScalar(b->getInt8PtrTy(), "temporaryOutputPtr");
-    }
 
 
 
@@ -68,7 +79,7 @@ namespace kernel {
 
         Value* literalStartRemByteItem = b->CreateURem(literalStart, SIZE_ITEMS_PER_BYTE);
         Value* outputPosRemByteItem = b->CreateURem(outputPos, SIZE_ITEMS_PER_BYTE);
-        Value* outputMask = this->getOutputMask(b, outputPos);
+        Value* outputMask = getOutputMask(b, outputPos);
 
         // ---- EntryBlock
         BasicBlock* entryBlock = b->GetInsertBlock();
@@ -111,7 +122,7 @@ namespace kernel {
         inputTargetValue = b->CreateShl(inputTargetValue, b->CreateMul(outputPosRemByteItem, INT_FW_TWIST_WIDTH));
 
 
-        Value* newCopyLength = this->getNormalCopyLengthValue(b);
+        Value* newCopyLength = getNormalCopyLengthValue(b);
 
         Value* outputValue = b->CreateAnd(phiOutputLastByte, outputMask);
 
@@ -119,7 +130,7 @@ namespace kernel {
 
         b->CreateStore(outputValue, outputFwPtr);
 
-        phiOutputLastByte->addIncoming(b->CreateLShr(outputValue, b->getSize(this->getNormalCopyLength() * mTwistWidth)), b->GetInsertBlock());
+        phiOutputLastByte->addIncoming(b->CreateLShr(outputValue, b->getSize(getNormalCopyLength() * mTwistWidth)), b->GetInsertBlock());
         phiCopiedLength->addIncoming(b->CreateAdd(phiCopiedLength, newCopyLength), b->GetInsertBlock());
         phiInputPtr->addIncoming(b->CreateGEP(phiInputPtr, b->CreateUDiv(newCopyLength, SIZE_ITEMS_PER_BYTE)), b->GetInsertBlock());
         phiOutputPtr->addIncoming(b->CreateGEP(phiOutputPtr, b->CreateUDiv(newCopyLength, SIZE_ITEMS_PER_BYTE)), b->GetInsertBlock());
@@ -193,7 +204,7 @@ namespace kernel {
         inputTargetValue = b->CreateLShr(inputTargetValue, b->CreateMul(copyStartRemByteItem, INT_FW_TWIST_WIDTH));
 
         Value* outputValue = b->CreateLoad(outputTargetPtr);
-        Value* outputMask = this->getOutputMask(b, outputStartRemByteItem);
+        Value* outputMask = getOutputMask(b, outputStartRemByteItem);
         outputValue = b->CreateAnd(outputValue, outputMask);
 
         inputTargetValue = b->CreateShl(inputTargetValue, b->CreateMul(outputStartRemByteItem, INT_FW_TWIST_WIDTH));
@@ -232,7 +243,7 @@ namespace kernel {
         Value* outputPosRem = b->CreateSub(outputPos, b->getProducedItemCount("outputTwistStream"));
 
         Value* outputPosRemByteItem = b->CreateURem(outputPosRem, SIZE_ITEMS_PER_BYTE);
-        Value* outputMask = this->getOutputMask(b, outputPosRem);
+        Value* outputMask = getOutputMask(b, outputPosRem);
 
 
         Value* outputBytePos = b->CreateUDiv(outputPosRem, SIZE_ITEMS_PER_BYTE);
@@ -248,7 +259,7 @@ namespace kernel {
         Value* initCopyFromPtr = b->CreateGEP(outputByteBasePtr, copyFromBytePos);
 
 
-        Value* copyLength = this->getNormalCopyLengthValue(b);
+        Value* copyLength = getNormalCopyLengthValue(b);
         Value* copyLengthByte = b->CreateUDiv(copyLength, SIZE_ITEMS_PER_BYTE);
 
         // ---- EntryBlock
@@ -293,7 +304,7 @@ namespace kernel {
         phiCopiedLength->addIncoming(b->CreateAdd(phiCopiedLength, copyLength), b->GetInsertBlock());
         phiCopyFromPtr->addIncoming(b->CreateGEP(phiCopyFromPtr, copyLengthByte), b->GetInsertBlock());
         phiCopyToPtr->addIncoming(b->CreateGEP(phiCopyToPtr, copyLengthByte), b->GetInsertBlock());
-        phiOutputLastByte->addIncoming(b->CreateLShr(outputValue, b->getSize(this->getNormalCopyLength() * mTwistWidth)), b->GetInsertBlock());
+        phiOutputLastByte->addIncoming(b->CreateLShr(outputValue, b->getSize(getNormalCopyLength() * mTwistWidth)), b->GetInsertBlock());
 
         b->CreateBr(literalCopyCon);
 
@@ -312,19 +323,19 @@ namespace kernel {
         BasicBlock* matchCopyFinishBlock = b->CreateBasicBlock("matchCopyFinishBlock");
 
         b->CreateUnlikelyCondBr(
-                b->CreateICmpULT(matchOffset, this->getNormalCopyLengthValue(b)),
+                b->CreateICmpULT(matchOffset, getNormalCopyLengthValue(b)),
                 shortMatchCopyBlock,
                 longMatchCopyBlock
         );
 
         // ---- shortMatchCopyBlock
         b->SetInsertPoint(shortMatchCopyBlock);
-        this->doShortMatchCopy(b, matchOffset, matchLength);
+        doShortMatchCopy(b, matchOffset, matchLength);
         b->CreateBr(matchCopyFinishBlock);
 
         // ---- longMatchCopyBlock
         b->SetInsertPoint(longMatchCopyBlock);
-        this->doLongMatchCopy(b, matchOffset, matchLength);
+        doLongMatchCopy(b, matchOffset, matchLength);
         b->CreateBr(matchCopyFinishBlock);
 
         b->SetInsertPoint(matchCopyFinishBlock);

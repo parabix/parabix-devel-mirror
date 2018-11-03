@@ -9,6 +9,7 @@
 #include <UCD/UCD_Config.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
+#include <boost/interprocess/mapped_region.hpp>
 
 using namespace llvm;
 
@@ -19,9 +20,11 @@ using namespace llvm;
 #endif
 
 namespace codegen {
-
-const unsigned DEFAULT_SEGMENT_SIZE = 64;
     
+inline unsigned getPageSize() {
+    return boost::interprocess::mapped_region::get_page_size();
+}
+
 static cl::OptionCategory CodeGenOptions("Code Generation Options", "These options control code generation.");
 
 static cl::bits<DebugFlags>
@@ -30,6 +33,8 @@ DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(TraceCounts, "Show kernel processed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Show dynamic buffer allocations and deallocations."),
                         clEnumVal(EnableAsserts, "Enable built-in Parabix framework asserts in generated IR."),
+                        clEnumVal(EnableMProtect, "Use mprotect to cause a write fault when erroneously overwriting kernel state / stream space.\n"
+                                                  "NOTE: this requires memory to be page-aligned, which may still hide errors."),
                         clEnumVal(EnableCycleCounter, "Count and report CPU cycles per kernel."),
                         clEnumVal(DisableIndirectBranch, "Disable use of indirect branches in kernel code.")
                         CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
@@ -67,8 +72,9 @@ static cl::opt<unsigned, true> BlockSizeOption("BlockSize", cl::location(BlockSi
                                           cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
 
 
-static cl::opt<unsigned, true> SegmentSizeOption("segment-size", cl::location(SegmentSize), cl::init(DEFAULT_SEGMENT_SIZE),
-                                            cl::desc("Segment Size"), cl::value_desc("positive integer"));
+static cl::opt<unsigned, true> SegmentSizeOption("segment-size", cl::location(SegmentSize),
+                                               cl::init(getPageSize()),
+                                               cl::desc("Expected amount of input data to process per segment"), cl::value_desc("positive integer"), cl::cat(CodeGenOptions));
 
 static cl::opt<unsigned, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::init(1),
                                                cl::desc("Buffer Segments"), cl::value_desc("positive integer"));
@@ -78,7 +84,7 @@ static cl::opt<unsigned, true> ThreadNumOption("thread-num", cl::location(Thread
                                           cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
 
 
-static cl::opt<bool, true> segmentPipelineParallelOption("enable-segment-pipeline-parallel", cl::location(SegmentPipelineParallel),
+static cl::opt<bool, true> segmentPipelineParallelOption("enable-segment-pipeline-parallel", cl::location(SegmentPipelineParallel), cl::init(false),
                                                          cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
 
 static cl::opt<bool, true> NVPTXOption("NVPTX", cl::location(NVPTX), cl::init(false),
@@ -160,7 +166,6 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
 #endif
 }
 
-}
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(6, 0, 0)
 void printParabixVersion () {
     outs() << "Unicode version " << UCD::UnicodeVersion << "\n";
@@ -175,4 +180,6 @@ void printParabixVersion (raw_ostream & outs) {
 
 void AddParabixVersionPrinter() {
     cl::AddExtraVersionPrinter(&printParabixVersion);
+}
+
 }

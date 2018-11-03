@@ -1,26 +1,81 @@
 #include "driver.h"
 #include <kernels/kernel_builder.h>
-#include <kernels/streamset.h>
-#include <kernels/kernel.h>
+#include <kernels/pipeline_builder.h>
 #include <llvm/IR/Module.h>
+#include <toolchain/toolchain.h>
+#include <toolchain/object_cache.h>
+#include <llvm/Support/raw_ostream.h>
 
-using namespace llvm;
-using namespace parabix;
+using namespace kernel;
 
-using Kernel = kernel::Kernel;
-using KernelBuilder = kernel::KernelBuilder;
+using RelationshipAllocator = Relationship::Allocator;
 
-Driver::Driver(std::string && moduleName)
-: mContext(new llvm::LLVMContext())
-, mMainModule(new Module(moduleName, *mContext))
-, iBuilder(nullptr) {
-
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePipelineWithIO
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::unique_ptr<PipelineBuilder> BaseDriver::makePipelineWithIO(Bindings stream_inputs, Bindings stream_outputs, Bindings scalar_inputs, Bindings scalar_outputs) {
+    return llvm::make_unique<PipelineBuilder>(*this, std::move(stream_inputs), std::move(stream_outputs), std::move(scalar_inputs), std::move(scalar_outputs));
 }
 
-void Driver::deallocateBuffers() {
-    for (const auto & b : mOwnedBuffers) {
-        b->releaseBuffer(iBuilder);
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePipeline
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::unique_ptr<kernel::PipelineBuilder> BaseDriver::makePipeline(Bindings scalar_inputs, Bindings scalar_outputs) {
+    return llvm::make_unique<PipelineBuilder>(*this, Bindings{}, Bindings{}, std::move(scalar_inputs), std::move(scalar_outputs));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateStreamSet
+ ** ------------------------------------------------------------------------------------------------------------- */
+StreamSet * BaseDriver::CreateStreamSet(const unsigned NumElements, const unsigned FieldWidth) {
+    RelationshipAllocator A(mAllocator);
+    return new (A) StreamSet(getContext(), NumElements, FieldWidth);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateConstant
+ ** ------------------------------------------------------------------------------------------------------------- */
+Scalar * BaseDriver::CreateScalar(llvm::Type * scalarType) {
+    RelationshipAllocator A(mAllocator);
+    return new (A) Scalar(scalarType);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief CreateConstant
+ ** ------------------------------------------------------------------------------------------------------------- */
+Scalar * BaseDriver::CreateConstant(llvm::Constant * const value) {
+    RelationshipAllocator A(mAllocator);
+    return new (A) ScalarConstant(value);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeCache
+ ** ------------------------------------------------------------------------------------------------------------- */
+void BaseDriver::addKernel(Kernel * const kernel) {
+    if (ObjectCacheManager::checkForCachedKernel(iBuilder, kernel)) {
+        assert (kernel->getModule());
+        mCachedKernel.emplace_back(kernel);
+    } else {
+        if (kernel->getModule() == nullptr) {
+            kernel->makeModule(iBuilder);
+        }
+        mUncachedKernel.emplace_back(kernel);
     }
 }
 
-Driver::~Driver() {}
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructor
+ ** ------------------------------------------------------------------------------------------------------------- */
+BaseDriver::BaseDriver(std::string && moduleName)
+: mContext(new llvm::LLVMContext())
+, mMainModule(new llvm::Module(moduleName, *mContext))
+, iBuilder(nullptr) {
+    ObjectCacheManager::initializeCacheSystems();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief deconstructor
+ ** ------------------------------------------------------------------------------------------------------------- */
+BaseDriver::~BaseDriver() {
+
+}

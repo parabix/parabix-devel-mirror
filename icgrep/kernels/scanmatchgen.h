@@ -15,7 +15,7 @@ namespace kernel {
 
 class ScanMatchKernel : public MultiBlockKernel {
 public:
-	ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
+    ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:

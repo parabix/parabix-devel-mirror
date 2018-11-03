@@ -12,6 +12,7 @@
 #ifndef NDEBUG
 #include <llvm/IR/Function.h>
 #endif
+#include <unistd.h>
 
 namespace kernels { class KernelBuilder; }
 namespace llvm { class Function; }
@@ -21,10 +22,9 @@ namespace llvm { class PointerType; }
 namespace llvm { class Type; }
 namespace llvm { class Value; }
 
-class Driver;
+class BaseDriver;
 
 class CBuilder : public llvm::IRBuilder<> {
-    using Predicate = llvm::CmpInst::Predicate;
 public:
 
     CBuilder(llvm::LLVMContext & C);
@@ -64,35 +64,35 @@ public:
     llvm::Value * CreateRoundUp(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
             
     // Get minimum of two unsigned numbers
-    llvm::Value * CreateUMin(llvm::Value * const a, llvm::Value * const b) {
-        if (a == nullptr) return b;
-        if (b == nullptr) return a;
+    llvm::Value * CreateUMin(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "") {
+        if (LLVM_UNLIKELY(a == nullptr || a == b)) return b;
+        if (LLVM_UNLIKELY(b == nullptr)) return a;
         assert (a->getType() == b->getType());
-        return CreateSelect(CreateICmpULT(a, b), a, b);
+        return CreateSelect(CreateICmpULT(a, b), a, b, Name);
     }
 
     // Get minimum of two signed numbers
-    llvm::Value * CreateSMin(llvm::Value * const a, llvm::Value * const b) {
-        if (a == nullptr) return b;
-        if (b == nullptr) return a;
+    llvm::Value * CreateSMin(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "") {
+        if (LLVM_UNLIKELY(a == nullptr || a == b)) return b;
+        if (LLVM_UNLIKELY(b == nullptr)) return a;
         assert (a->getType() == b->getType());
-        return CreateSelect(CreateICmpSLT(a, b), a, b);
+        return CreateSelect(CreateICmpSLT(a, b), a, b, Name);
     }
 
     // Get maximum of two unsigned numbers
-    llvm::Value * CreateUMax(llvm::Value * const a, llvm::Value * const b) {
-        if (a == nullptr) return b;
-        if (b == nullptr) return a;
+    llvm::Value * CreateUMax(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "") {
+        if (LLVM_UNLIKELY(a == nullptr || a == b)) return b;
+        if (LLVM_UNLIKELY(b == nullptr)) return a;
         assert (a->getType() == b->getType());
-        return CreateSelect(CreateICmpUGT(a, b), a, b);
+        return CreateSelect(CreateICmpUGT(a, b), a, b, Name);
     }
 
     // Get maximum of two signed numbers
-    llvm::Value * CreateSMax(llvm::Value * const a, llvm::Value * const b) {
-        if (a == nullptr) return b;
-        if (b == nullptr) return a;
+    llvm::Value * CreateSMax(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "") {
+        if (LLVM_UNLIKELY(a == nullptr || a == b)) return b;
+        if (LLVM_UNLIKELY(b == nullptr)) return a;
         assert (a->getType() == b->getType());
-        return CreateSelect(CreateICmpSGT(a, b), a, b);
+        return CreateSelect(CreateICmpSGT(a, b), a, b, Name);
     }
 
     llvm::Value * CreateMalloc(llvm::Value * const size);
@@ -102,7 +102,9 @@ public:
     llvm::Value * CreateCacheAlignedMalloc(llvm::Value * const size) {
         return CreateAlignedMalloc(size, getCacheAlignment());
     }
-    
+
+    llvm::Value * CreateCacheAlignedMalloc(llvm::Type * const type, llvm::Value * const ArraySize = nullptr, const unsigned addressSpace = 0);
+
     void CreateFree(llvm::Value * const ptr);
 
     llvm::Value * CreateRealloc(llvm::Value * const ptr, llvm::Value * const size);
@@ -112,11 +114,13 @@ public:
     }
 
     llvm::Value * CreateMemChr(llvm::Value * ptr, llvm::Value * byteVal, llvm::Value * num);
+
+    llvm::CallInst * CreateMemCmp(llvm::Value * ptr1, llvm::Value * ptr2, llvm::Value * num);
     
     llvm::AllocaInst * CreateAlignedAlloca(llvm::Type * const Ty, const unsigned alignment, llvm::Value * const ArraySize = nullptr) {
-        llvm::AllocaInst * instr = CreateAlloca(Ty, ArraySize);
-        instr->setAlignment(alignment);
-        return instr;
+        llvm::AllocaInst * const alloc = CreateAlloca(Ty, ArraySize);
+        alloc->setAlignment(alignment);
+        return alloc;
     }
 
     llvm::AllocaInst * CreateCacheAlignedAlloca(llvm::Type * const Ty, llvm::Value * const ArraySize = nullptr) {
@@ -193,7 +197,11 @@ public:
         , EXEC = 4
     };
 
-    llvm::Value * CreateMProtect(llvm::Value * addr, llvm::Value * size, int protect);
+    llvm::Value * CreateMProtect(llvm::Value * addr, const Protect protect) {
+        return CreateMProtect(addr, llvm::ConstantExpr::getSizeOf(addr->getType()->getPointerElementType()), protect);
+    }
+
+    llvm::Value * CreateMProtect(llvm::Value * addr, llvm::Value * size, const Protect protect);
 
     //  Posix thread (pthread.h) functions.
     //
@@ -210,22 +218,24 @@ public:
     //  Create a call to:  int pthread_join(pthread_t thread, void **value_ptr);
     llvm::Value * CreatePThreadJoinCall(llvm::Value * thread, llvm::Value * value_ptr);
 
-    void CallPrintIntCond(const std::string & name, llvm::Value * const value, llvm::Value * const cond);
+    enum class STD_FD {
+        STD_IN = STDIN_FILENO
+        , STD_OUT = STDOUT_FILENO
+        , STD_ERR = STDERR_FILENO
+    };
 
-    void CallPrintInt(const std::string & name, llvm::Value * const value);
-    
-    void CallPrintIntToStderr(const std::string & name, llvm::Value * const value);
-    
+    void CallPrintIntCond(const std::string & name, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd = STD_FD::STD_ERR);
+
+    void CallPrintInt(const std::string & name, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
+       
     llvm::Value * GetString(llvm::StringRef Str);
-
-    void CallPrintMsgToStderr(const std::string & message);
 
     inline llvm::IntegerType * getSizeTy() const {
         assert (mSizeType);
         return mSizeType;
     }
     
-    inline llvm::ConstantInt * getSize(const size_t value) {
+    inline llvm::ConstantInt * LLVM_READNONE getSize(const size_t value) {
         return llvm::ConstantInt::get(getSizeTy(), value);
     }
     
@@ -238,22 +248,18 @@ public:
     inline unsigned getCacheAlignment() const {
         return mCacheLineAlignment;
     }
+
+    static LLVM_READNONE unsigned getPageSize();
     
     virtual llvm::LoadInst* CreateAtomicLoadAcquire(llvm::Value * ptr);
 
     virtual llvm::StoreInst *  CreateAtomicStoreRelease(llvm::Value * val, llvm::Value * ptr);
 
     void CreateAssert(llvm::Value * assertion, const llvm::Twine & failureMessage) {
-        if (LLVM_UNLIKELY(assertion->getType()->isVectorTy())) {
-            assertion = CreateBitCast(assertion, getIntNTy(assertion->getType()->getPrimitiveSizeInBits()));
-        }
         return __CreateAssert(CreateIsNotNull(assertion), failureMessage);
     }
 
     void CreateAssertZero(llvm::Value * assertion, const llvm::Twine & failureMessage) {
-        if (LLVM_UNLIKELY(assertion->getType()->isVectorTy())) {
-            assertion = CreateBitCast(assertion, getIntNTy(assertion->getType()->getPrimitiveSizeInBits()));
-        }
         return __CreateAssert(CreateIsNull(assertion), failureMessage);
     }
 
@@ -291,7 +297,9 @@ public:
     llvm::Value * CreateReadCycleCounter();
 
     template <typename ExternalFunctionType>
-    llvm::Function * LinkFunction(llvm::StringRef name, ExternalFunctionType * functionPtr) const;
+    llvm::Function * LinkFunction(llvm::StringRef name, ExternalFunctionType & functionPtr) const;
+
+    llvm::Function * LinkFunction(llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
 
     virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, const char * Name);
 
@@ -349,10 +357,22 @@ public:
                            llvm::MDNode *ScopeTag = nullptr,
                            llvm::MDNode *NoAliasTag = nullptr);
     
+    llvm::Value * CreateExtractElement(llvm::Value *Vec, llvm::Value *Idx, const llvm::Twine &Name = "");
+
+    llvm::Value * CreateExtractElement(llvm::Value *Vec, uint64_t Idx, const llvm::Twine &Name = "") {
+        return CreateExtractElement(Vec, getInt64(Idx), Name);
+    }
+
+    llvm::Value * CreateInsertElement(llvm::Value *Vec, llvm::Value *NewElt, llvm::Value *Idx, const llvm::Twine &Name = "");
+
+    llvm::Value * CreateInsertElement(llvm::Value *Vec, llvm::Value *NewElt, uint64_t Idx, const llvm::Twine &Name = "") {
+        return CreateInsertElement(Vec, NewElt, getInt64(Idx), Name);
+    }
+
     llvm::CallInst * CreateSRandCall(llvm::Value * randomSeed);
     llvm::CallInst * CreateRandCall();
 
-    void setDriver(Driver * const driver) {
+    void setDriver(BaseDriver * const driver) {
         mDriver = driver;
     }
 
@@ -366,24 +386,24 @@ protected:
 
     void __CreateAssert(llvm::Value * assertion, const llvm::Twine & failureMessage);
 
-    llvm::Function * LinkFunction(llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
-
 protected:
 
     llvm::Module *                  mModule;
     unsigned                        mCacheLineAlignment;
     llvm::IntegerType * const       mSizeType;
     llvm::StructType *              mFILEtype;
-    Driver *                        mDriver;    
+    BaseDriver *                        mDriver;
     llvm::LLVMContext               mContext;
     const std::string               mTriple;
 };
 
 template <typename ExternalFunctionType>
-llvm::Function *CBuilder::LinkFunction(llvm::StringRef name, ExternalFunctionType * functionPtr) const {
+llvm::Function * CBuilder::LinkFunction(llvm::StringRef name, ExternalFunctionType & functionPtr) const {
     llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(getContext());
     assert ("FunctionTypeBuilder did not resolve a function type." && type);
-    return LinkFunction(name, type, reinterpret_cast<void *>(functionPtr));
+    return LinkFunction(name, type, reinterpret_cast<void *>(&functionPtr));
 }
+
+llvm::ModulePass * createRemoveRedundantAssertionsPass();
 
 #endif

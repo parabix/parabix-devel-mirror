@@ -288,7 +288,7 @@ PrintStreamSet::PrintStreamSet(const std::unique_ptr<kernel::KernelBuilder> & bu
 , mNameWidth(0) {
     auto width = minWidth;
     for (const std::string & name : mNames) {
-        mStreamSetInputs.emplace_back(builder->getStreamSetTy(0), name);
+        mInputStreamSets.emplace_back(builder->getStreamSetTy(0), name);
         width = std::max<unsigned>(name.length() + 5, width);
     }
     mNameWidth = width;

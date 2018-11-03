@@ -20,7 +20,7 @@ namespace kernel {
  
 class expand3_4Kernel final : public MultiBlockKernel {
 public:   
-    expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * input, StreamSet * expandedOutput);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
@@ -29,7 +29,7 @@ private:
 
 class radix64Kernel final : public BlockOrientedKernel {
 public:
-    radix64Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    radix64Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * input, StreamSet * output);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
@@ -40,7 +40,7 @@ private:
 
 class base64Kernel final : public BlockOrientedKernel {
 public:
-    base64Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    base64Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * input, StreamSet * output);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:

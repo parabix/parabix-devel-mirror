@@ -13,33 +13,44 @@ using namespace std;
 
 namespace kernel{
 
-    LZ4BitStreamDecompressionKernel::LZ4BitStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
-                                                 std::vector<unsigned> numsOfBitStreams,
-                                                 unsigned blockSize)
-    : LZ4SequentialDecompressionKernel(b, "LZ4BitStreamDecompressionKernel", blockSize),
-      mNumsOfBitStreams(numsOfBitStreams)
-    {
-        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[0], 1), "inputBitStream0", RateEqualTo("byteStream")});
-        mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[0], 1), "outputStream0", BoundedRate(0, 1)});
-
-        for (unsigned i = 1; i < numsOfBitStreams.size(); i++) {
-            mStreamSetInputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[i], 1), "inputBitStream" + std::to_string(i), RateEqualTo("byteStream")});
-            mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(numsOfBitStreams[i], 1), "outputStream" + std::to_string(i), RateEqualTo("outputStream0")});
+    std::vector<unsigned> makeNumOfBitstreams(const StreamSets & streams) {
+        std::vector<unsigned> numOfBitstreams;
+        numOfBitstreams.reserve(streams.size());
+        for (const auto & stream : streams) {
+            numOfBitstreams.push_back(stream->getNumElements());
         }
+        return numOfBitstreams;
+    }
 
-        this->initPendingOutputScalar(b);
+    LZ4BitStreamDecompressionKernel::LZ4BitStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+                                                                     Scalar * fileSize,
+                                                                     StreamSet * inputStream,
+                                                                     const LZ4BlockInfo & blockInfo,
+                                                                     StreamSets inputStreams,
+                                                                     StreamSets outputStreams)
+    : LZ4SequentialDecompressionKernel(b, "LZ4BitStreamDecompression", fileSize, inputStream, blockInfo),
+      mNumsOfBitStreams(makeNumOfBitstreams(inputStreams)) {
+        mInputStreamSets.push_back(Binding{"inputBitStream0", inputStreams[0], RateEqualTo("byteStream")});
+        for (unsigned i = 1; i < inputStreams.size(); i++) {
+            mInputStreamSets.push_back(Binding{"inputBitStream" + std::to_string(i), inputStreams[i], RateEqualTo("byteStream")});
+        }
+        mOutputStreamSets.push_back(Binding{"outputStream0", outputStreams[0], BoundedRate(0, 1)});
+        for (unsigned i = 1; i < outputStreams.size(); i++) {
+            mOutputStreamSets.push_back(Binding{"outputStream" + std::to_string(i), outputStreams[i], RateEqualTo("outputStream0")});
+        }
+        initPendingOutputScalar(b);
     }
 
     void LZ4BitStreamDecompressionKernel::initPendingOutputScalar(const std::unique_ptr<kernel::KernelBuilder> &b) {
         for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
             for (unsigned j = 0; j < mNumsOfBitStreams[i]; j++) {
-                this->addScalar(b->getInt64Ty(), "pendingOutput" + std::to_string(i) + "_" + std::to_string(j));
+                addInternalScalar(b->getInt64Ty(), "pendingOutput" + std::to_string(i) + "_" + std::to_string(j));
             }
         }
     }
 
-    void LZ4BitStreamDecompressionKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
-                                              llvm::Value *literalLength, llvm::Value* blockStart) {
+    void LZ4BitStreamDecompressionKernel::doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, Value *literalStart,
+                                              Value *literalLength, Value* blockStart) {
         // Constant
         ConstantInt* INT_64_0 = b->getInt64(0);
         ConstantInt* INT_64_1 = b->getInt64(1);
@@ -78,7 +89,7 @@ namespace kernel{
                 INT_64_1
         );
 
-        std::vector<llvm::Value*> extractValues;
+        std::vector<Value*> extractValues;
 
         for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
             Value* bitStreamBasePtr = b->CreatePointerCast(b->getRawInputPointer("inputBitStream" + std::to_string(i), b->getSize(0)), b->getBitBlockType()->getPointerTo());
@@ -91,7 +102,7 @@ namespace kernel{
                 extractValues.push_back(extractV);
             }
         }
-        this->appendBitStreamOutput(b, extractValues, copyLength);
+        appendBitStreamOutput(b, extractValues, copyLength);
 
         phiLiteralPos->addIncoming(b->CreateAdd(phiLiteralPos, copyLength), b->GetInsertBlock());
         b->CreateBr(literalCopyCon);
@@ -100,8 +111,8 @@ namespace kernel{
         b->SetInsertPoint(literalCopyExit);
     }
 
-    void LZ4BitStreamDecompressionKernel::doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
-                                            llvm::Value *matchLength) {
+    void LZ4BitStreamDecompressionKernel::doMatchCopy(const std::unique_ptr<KernelBuilder> &b, Value *matchOffset,
+                                            Value *matchLength) {
         // Constant
         ConstantInt* INT_64_0 = b->getInt64(0);
         ConstantInt* INT_64_1 = b->getInt64(1);
@@ -152,7 +163,7 @@ namespace kernel{
         );
 //        b->CallPrintInt("sameBlock", sameBlock);
 
-        std::vector<llvm::Value*> extractValues;
+        std::vector<Value*> extractValues;
 //        b->CallPrintInt("matchPosI64BlockRem", matchPosI64BlockRem);
         unsigned iStreamIndex = 0;
         for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
@@ -177,7 +188,7 @@ namespace kernel{
 
         }
 
-        this->appendBitStreamOutput(b, extractValues, copyLength);
+        appendBitStreamOutput(b, extractValues, copyLength);
 
         phiMatchPos->addIncoming(b->CreateAdd(phiMatchPos, copyLength), b->GetInsertBlock());
         b->CreateBr(matchCopyCon);
@@ -186,18 +197,17 @@ namespace kernel{
         b->SetInsertPoint(matchCopyExit);
     }
 
-    void
-    LZ4BitStreamDecompressionKernel::setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, llvm::Value *produced) {
+    void LZ4BitStreamDecompressionKernel::setProducedOutputItemCount(const std::unique_ptr<KernelBuilder> &b, Value *produced) {
         b->setProducedItemCount("outputStream0", produced);
     }
 
-    void LZ4BitStreamDecompressionKernel::appendBitStreamOutput(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength) {
+    void LZ4BitStreamDecompressionKernel::appendBitStreamOutput(const std::unique_ptr<KernelBuilder> &b, std::vector<Value*>& extractedValues, Value* valueLength) {
         BasicBlock* exitBlock = b->CreateBasicBlock("exitBlock");
 
         Value* oldOutputPos = b->getScalarField("outputPos");
         Value* oldOutputPosRem64 = b->CreateURem(oldOutputPos, b->getSize(64));
 
-        std::vector<llvm::Value*> newOutputVec;
+        std::vector<Value*> newOutputVec;
 
         unsigned iStreamIndex = 0;
         for (unsigned i = 0; i < mNumsOfBitStreams.size(); i++) {
@@ -277,8 +287,8 @@ namespace kernel{
         );
 
         b->SetInsertPoint(storePendingOutputBlock);
-        this->storePendingOutput_BitStream(b);
-//        this->storePendingOutput_Swizzled(b);
+        storePendingOutput_BitStream(b);
+//        storePendingOutput_Swizzled(b);
         b->CreateBr(storePendingOutputExitBlock);
 
         b->SetInsertPoint(storePendingOutputExitBlock);

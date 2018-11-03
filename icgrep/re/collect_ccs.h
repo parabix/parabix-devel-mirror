@@ -11,7 +11,7 @@ class RE;
 class CC;
 class Name;
 
-std::vector<CC *> collectCCs(RE * const re, const cc::Alphabet * a, std::set<Name *> external = {});
+std::vector<CC *> collectCCs(RE * const re, const cc::Alphabet & a, std::set<Name *> external = {});
 
 }
 #endif

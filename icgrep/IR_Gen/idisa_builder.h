@@ -154,8 +154,8 @@ public:
     virtual llvm::Value * mvmd_extract(unsigned fw, llvm::Value * a, unsigned fieldIndex);
     virtual llvm::Value * mvmd_insert(unsigned fw, llvm::Value * blk, llvm::Value * elt, unsigned fieldIndex);
 
-    virtual llvm::Value * mvmd_sll(unsigned fw, llvm::Value * value, llvm::Value * shift);
-    virtual llvm::Value * mvmd_srl(unsigned fw, llvm::Value * value, llvm::Value * shift);
+    virtual llvm::Value * mvmd_sll(unsigned fw, llvm::Value * value, llvm::Value * shift, const bool safe = false);
+    virtual llvm::Value * mvmd_srl(unsigned fw, llvm::Value * value, llvm::Value * shift, const bool safe = false);
     virtual llvm::Value * mvmd_slli(unsigned fw, llvm::Value * a, unsigned shift);
     virtual llvm::Value * mvmd_srli(unsigned fw, llvm::Value * a, unsigned shift);
     virtual llvm::Value * mvmd_dslli(unsigned fw, llvm::Value * a, llvm::Value * b, unsigned shift);
@@ -171,8 +171,9 @@ public:
     // full shift producing {shiftout, shifted}
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift);
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_indexed_advance(llvm::Value * a, llvm::Value * index_strm, llvm::Value * shiftin, unsigned shift);
-    virtual llvm::Value * bitblock_mask_from(llvm::Value * pos);
-    virtual llvm::Value * bitblock_set_bit(llvm::Value * pos);
+    virtual llvm::Value * bitblock_mask_from(llvm::Value * const position, const bool safe = false);
+    virtual llvm::Value * bitblock_mask_to(llvm::Value * const position, const bool safe = false);
+    virtual llvm::Value * bitblock_set_bit(llvm::Value * const position, const bool safe = false);
 
     // returns a scalar with the popcount of this block
     llvm::Value * bitblock_popcount(llvm::Value * const to_count);
@@ -205,8 +206,8 @@ public:
         return getStreamSetTy(getContext(), NumElements, FieldWidth);
     }
 
-    void CallPrintRegisterCond(const std::string & regName, llvm::Value * const value, llvm::Value * const cond);
-    void CallPrintRegister(const std::string & regName, llvm::Value * const value);
+    void CallPrintRegisterCond(const std::string & regName, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd = STD_FD::STD_ERR);
+    void CallPrintRegister(const std::string & regName, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
 
 protected:
     LLVM_ATTRIBUTE_NORETURN void UnsupportedFieldWidthError(const unsigned FieldWidth, std::string op_name);

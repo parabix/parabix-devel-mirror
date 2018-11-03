@@ -20,6 +20,7 @@
 #include <re/re_toolchain.h>
 #include <re/printer_re.h>
 #include <grep/grep_engine.h>
+#include <toolchain/cpudriver.h>
 #include <fstream>
 #include <string>
 
@@ -290,15 +291,15 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
         std::vector<fs::path> selectedDirectories;
         
         FileSelectAccumulator directoryAccum(selectedDirectories);
-        grep::InternalSearchEngine directorySelectEngine;
+        CPUDriver driver("driver");
+        grep::InternalSearchEngine directorySelectEngine(driver);
         directorySelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
-        directorySelectEngine.grepCodeGen
-            (getDirectoryIncludePattern(), getDirectoryExcludePattern(), & directoryAccum);
+        directorySelectEngine.grepCodeGen(getDirectoryIncludePattern(), getDirectoryExcludePattern());
         
         // The initial grep search determines which of the command line directories to process.
         // Each of these candidates is a full path return from command line argument processing.
         directoryAccum.setFullPathEntries(dirCandidates.getCandidateCount());
-        directorySelectEngine.doGrep(dirCandidates.getBufferBase(), dirCandidates.getBufferSize());
+        directorySelectEngine.doGrep(dirCandidates.getBufferBase(), dirCandidates.getBufferSize(), directoryAccum);
 
         while (!selectedDirectories.empty()) {
             // We now iterate through the full list of directories, gathering
@@ -355,7 +356,7 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
             selectedDirectories.clear();
             //
             //  Now do the search to produce the next level of selected subdirectories
-            directorySelectEngine.doGrep(subdirCandidates.getBufferBase(), subdirCandidates.getBufferSize());
+            directorySelectEngine.doGrep(subdirCandidates.getBufferBase(), subdirCandidates.getBufferSize(), directoryAccum);
             // Thre search result has been written to directoryList, continue while we
             // have new subdirectories.
         } while (!selectedDirectories.empty());
@@ -363,11 +364,11 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
     //  All directories have been processed and all the fileCandidates in the SearchBuffer.
     //  Now determine which of the candidates should included or excluded from the search.
     //  The results will be accumulated in collectedPaths.
-    grep::InternalSearchEngine fileSelectEngine;
+    CPUDriver driver("driver");
+    grep::InternalSearchEngine fileSelectEngine(driver);
     fileSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
-    fileSelectEngine.grepCodeGen
-       (getFileIncludePattern(), getFileExcludePattern(), & fileAccum);
-    fileSelectEngine.doGrep(fileCandidates.getBufferBase(), fileCandidates.getBufferSize());
+    fileSelectEngine.grepCodeGen(getFileIncludePattern(), getFileExcludePattern());
+    fileSelectEngine.doGrep(fileCandidates.getBufferBase(), fileCandidates.getBufferSize(), fileAccum);
     return collectedPaths;
 }
 

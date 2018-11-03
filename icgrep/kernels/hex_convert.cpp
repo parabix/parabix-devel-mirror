@@ -11,10 +11,10 @@
 using namespace kernel;
 using namespace llvm;
 
-HexToBinary::HexToBinary(const std::unique_ptr<kernel::KernelBuilder> & b)
+HexToBinary::HexToBinary(const std::unique_ptr<kernel::KernelBuilder> & /* b */, StreamSet * hexStream, StreamSet * binStream)
 : BlockOrientedKernel("HexToBinary",
-                   {Binding{b->getStreamSetTy(1, 8), "hexdata", FixedRate()}},
-                   {Binding{b->getStreamSetTy(1, 1), "binary_data", FixedRate(4)}},
+                   {Binding{"hexdata", hexStream, FixedRate()}},
+                   {Binding{"binary_data", binStream, FixedRate(4)}},
 {}, {}, {}) {}
 
 void HexToBinary::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
@@ -46,10 +46,10 @@ void HexToBinary::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
     }
 }
 
-BinaryToHex::BinaryToHex(const std::unique_ptr<kernel::KernelBuilder> & b)
+BinaryToHex::BinaryToHex(const std::unique_ptr<kernel::KernelBuilder> & /* b */, StreamSet * binStream, StreamSet * hexStream)
 : BlockOrientedKernel("BinaryToHex",
-                   {Binding{b->getStreamSetTy(1, 1), "binary_data", FixedRate(4)}},
-                   {Binding{b->getStreamSetTy(1, 8), "hexdata", FixedRate(), RoundUpTo(1)}},
+                   {Binding{"binary_data", binStream, FixedRate(4)}},
+                   {Binding{"hexdata", hexStream, FixedRate(), RoundUpTo(1)}},
                    {}, {}, {}) {}
 
 

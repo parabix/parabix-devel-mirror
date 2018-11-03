@@ -4,7 +4,6 @@
  */
 
 #include "grep_kernel.h"
-#include <boost/uuid/sha1.hpp>
 #include <re/printer_re.h>
 #include <re/re_cc.h>
 #include <re/re_name.h>
@@ -36,18 +35,6 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 
-inline static std::string sha1sum(const std::string & str) {
-    char buffer[41];    // 40 hex-digits and the terminating null
-    uint32_t digest[5]; // 160 bits in total
-    boost::uuids::detail::sha1 sha1;
-    sha1.process_bytes(str.c_str(), str.size());
-    sha1.get_digest(digest);
-    snprintf(buffer, sizeof(buffer), "%.8x%.8x%.8x%.8x%.8x",
-             digest[0], digest[1], digest[2], digest[3], digest[4]);
-    return std::string(buffer);
-}
-
-
 UnicodeLineBreakKernel::UnicodeLineBreakKernel(const std::unique_ptr<kernel::KernelBuilder> & kb)
 : PabloKernel(kb,
               "UTF8_LB",
@@ -56,9 +43,9 @@ UnicodeLineBreakKernel::UnicodeLineBreakKernel(const std::unique_ptr<kernel::Ker
 }
 
 void UnicodeLineBreakKernel::generatePabloMethod() {
-        PabloBuilder pb(getEntryScope());
-        cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
-        UCD::UCDCompiler ucdCompiler(ccc);
+    PabloBuilder pb(getEntryScope());
+    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
+    UCD::UCDCompiler ucdCompiler(ccc);
     
     Name * breakChars = re::makeName("breakChars", makeCC(makeCC(makeCC(0x0A, 0x0D), makeCC(0x85)), makeCC(0x2028,0x2029)));
     UCD::UCDCompiler::NameMap nameMap;
@@ -179,14 +166,14 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("UnicodeLB"), pb.getInteger(0)), LineBreak);//pb.createOr(LineBreak, unterminatedLineAtEOF, "EOL"));
 }
 
-RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb)
+RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * LineFeedStream, StreamSet * RequiredStreams, StreamSet * UnicodeLB)
 : PabloKernel(kb, "RequiredStreams_UTF8",
 // input
-{Binding{kb->getStreamSetTy(8), "basis"},
- Binding{kb->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
+{Binding{"basis", BasisBits},
+ Binding{"lf", LineFeedStream, FixedRate(), LookAhead(1)}},
 // output
-{Binding{kb->getStreamSetTy(1), "nonFinal", FixedRate()},
- Binding{kb->getStreamSetTy(1), "UnicodeLB", FixedRate()}}) {
+{Binding{"nonFinal", RequiredStreams, FixedRate()},
+ Binding{"UnicodeLB", UnicodeLB, FixedRate()}}) {
 
 }
 
@@ -233,33 +220,36 @@ ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
 }
 
 // Helper to compute stream set inputs to pass into PabloKernel constructor.
-inline std::vector<Binding> icGrepInputs(const std::unique_ptr<kernel::KernelBuilder> & b,
-                                         const std::vector<std::string> & externals,
-                                         const std::vector<cc::Alphabet *> & alphabets) {
-    std::vector<Binding> streamSetInputs = {
-        Binding{b->getStreamSetTy(8), "basis"},
-    };
-    for (auto & e : externals) {
-        streamSetInputs.push_back(Binding{b->getStreamSetTy(1, 1), e});
+Bindings ICGrepKernel::makeInputBindings(StreamSet * const basis, const Externals & externals, const Alphabets & alphabets) {
+    Bindings inputs;
+    inputs.emplace_back("basis", basis);
+    for (const auto & e : externals) {
+        inputs.emplace_back(e.first, e.second);
     }
-    for (const auto & alphabet : alphabets) {
-        unsigned basis_size = cast<cc::MultiplexedAlphabet>(alphabet)->getMultiplexedCCs().size();
-        streamSetInputs.push_back(Binding{b->getStreamSetTy(basis_size, 1), alphabet->getName() + "_basis"});
+    for (const auto & a : alphabets) {
+        inputs.emplace_back(a.first->getName() + "_basis", a.second);
     }
-    return streamSetInputs;
+    return inputs;
 }
 
-ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<std::string> externals, std::vector<cc::Alphabet *> alphabets, cc::BitNumbering basisSetNumbering)
+ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                           RE * const re,
+                           StreamSet * const BasisBits,
+                           StreamSet * const matches,
+                           const Externals externals,
+                           const Alphabets alphabets,
+                           const cc::BitNumbering basisSetNumbering,
+                           const bool cachable)
 : ICGrepSignature(re)
-, PabloKernel(b, "ic" + sha1sum(mSignature),
+, PabloKernel(b, "ic" + getStringHash(mSignature),
 // inputs
-icGrepInputs(b, externals, alphabets),
+std::move(makeInputBindings(BasisBits, externals, alphabets)),
 // output
-{Binding{b->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}})
-, mExternals(externals)
-, mAlphabets(alphabets)
+{Binding{"matches", matches, FixedRate(), Add1()}})
+, mExternals(std::move(externals))
+, mAlphabets(std::move(alphabets))
 , mBasisSetNumbering(basisSetNumbering)
-, mIsCachable(true) {
+, mIsCachable(cachable) {
 }
 
 std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -270,12 +260,13 @@ void ICGrepKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
     RE_Compiler re_compiler(getEntryScope(), ccc, mBasisSetNumbering);
-    for (auto & e : mExternals) {
-        re_compiler.addPrecompiled(e, pb.createExtract(getInputStreamVar(e), pb.getInteger(0)));
+    for (const auto & e : mExternals) {
+        re_compiler.addPrecompiled(e.first, pb.createExtract(getInputStreamVar(e.first), pb.getInteger(0)));
     }
-    for (auto a : mAlphabets) {
-        auto mpx_basis = getInputStreamSet(a->getName() + "_basis");
-        re_compiler.addAlphabet(a, mpx_basis);
+    for (const auto & a : mAlphabets) {
+        auto & alpha = a.first;
+        auto mpx_basis = getInputStreamSet(alpha->getName() + "_basis");
+        re_compiler.addAlphabet(alpha, mpx_basis);
     }
     PabloAST * const matches = re_compiler.compile(mRE);
     Var * const output = getOutputStreamVar("matches");
@@ -288,34 +279,31 @@ ByteGrepSignature::ByteGrepSignature(RE * re)
 , mSignature(Printer_RE::PrintRE(re) ) {
 }
 
-ByteGrepKernel::ByteGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<std::string> externals)
+ByteGrepKernel::ByteGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<Binding> inputSets, StreamSet * matches)
 : ByteGrepSignature(re)
-, PabloKernel(b, "byteGrep" + sha1sum(mSignature),
-              // inputs
-{Binding{b->getStreamSetTy(1, 8), "byteData"}},
-              // output
-{Binding{b->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}})
-, mExternals(externals) {
-    for (auto & e : externals) {
-        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(1, 1), e});
-    }
+, PabloKernel(b, "byteGrep" + getStringHash(mSignature),
+// inputs
+std::move(inputSets),
+// output
+{Binding{"matches", matches, FixedRate(), Add1()}}) {
+
 }
 
 std::string ByteGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
     return mSignature;
 }
 
-
 void ByteGrepKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     PabloAST * u8bytes = pb.createExtract(getInput(0), pb.getInteger(0));
     cc::Direct_CC_Compiler dcc(getEntryScope(), u8bytes);
     RE_Compiler re_byte_compiler(getEntryScope(), dcc);
-    for (auto & e : mExternals) {
-        re_byte_compiler.addPrecompiled(e, pb.createExtract(getInputStreamVar(e), pb.getInteger(0)));
+    const auto numOfInputs = getNumOfInputs();
+    for (unsigned i = 1; i < numOfInputs; ++i) {
+        const Binding & input = getInputStreamSetBinding(i);
+        re_byte_compiler.addPrecompiled(input.getName(), pb.createExtract(getInputStreamVar(input.getName()), pb.getInteger(0)));
     }
-    PabloAST * const matches = re_byte_compiler.compile(mRE);
-    
+    PabloAST * const matches = re_byte_compiler.compile(mRE);    
     Var * const output = getOutputStreamVar("matches");
     pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
 }
@@ -324,7 +312,7 @@ void ByteGrepKernel::generatePabloMethod() {
 inline std::vector<Binding> byteBitGrepInputs(const std::unique_ptr<kernel::KernelBuilder> & b,
                                               const std::vector<std::string> & externals) {
     std::vector<Binding> streamSetInputs = {
-        Binding{b->getStreamSetTy(1, 8), "bytedata"},
+        Binding{b->getStreamSetTy(1, 8), "byteData"},
     };
     for (auto & e : externals) {
         streamSetInputs.push_back(Binding{b->getStreamSetTy(1, 1), e});
@@ -338,14 +326,14 @@ ByteBitGrepSignature::ByteBitGrepSignature(RE * prefix, RE * suffix)
 , mSignature(Printer_RE::PrintRE(mPrefixRE) + Printer_RE::PrintRE(mSuffixRE) ) {
 }
 
-ByteBitGrepKernel::ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const prefixRE, RE * const suffixRE, std::vector<std::string> externals)
+ByteBitGrepKernel::ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const prefixRE, RE * const suffixRE, std::vector<Binding> inputSets, StreamSet * matches)
 : ByteBitGrepSignature(prefixRE, suffixRE)
-, PabloKernel(b, "bBc" + sha1sum(mSignature),
-              // inputs
-              byteBitGrepInputs(b, externals),
-              // output
-{Binding{b->getStreamSetTy(1, 1), "matches", FixedRate(), Add1()}})
-, mExternals(externals) {
+, PabloKernel(b, "bBc" + getStringHash(mSignature),
+// inputs
+std::move(inputSets),
+// output
+{Binding{"matches", matches, FixedRate(), Add1()}}) {
+
 }
 
 std::string ByteBitGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -358,9 +346,13 @@ void ByteBitGrepKernel::generatePabloMethod() {
     PabloAST * u8bytes = pb.createExtract(getInput(0), pb.getInteger(0));
     cc::Direct_CC_Compiler dcc(getEntryScope(), u8bytes);
     RE_Compiler re_byte_compiler(getEntryScope(), dcc);
-    for (auto & e : mExternals) {
-        re_byte_compiler.addPrecompiled(e, pb.createExtract(getInputStreamVar(e), pb.getInteger(0)));
+
+    const auto numOfInputs = getNumOfInputs();
+    for (unsigned i = 1; i < numOfInputs; ++i) {
+        const Binding & input = getInputStreamSetBinding(i);
+        re_byte_compiler.addPrecompiled(input.getName(), pb.createExtract(getInputStreamVar(input.getName()), pb.getInteger(0)));
     }
+
     PabloAST * const prefixMatches = re_byte_compiler.compile(mPrefixRE);
     Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
     PabloBlock * scope1 = getEntryScope()->createScope();
@@ -404,13 +396,13 @@ void MatchedLinesKernel::generatePabloMethod() {
     pb.createAssign(pb.createExtract(matchedLines, pb.getInteger(0)), pb.createAnd(match_follow, pb.createOr(lineBreaks, unterminatedLineAtEOF)));
 }
 
-MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
+MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
 : PabloKernel(iBuilder, "MatchedLines",
 // inputs
-{Binding{iBuilder->getStreamSetTy(1), "matchResults"}
-,Binding{iBuilder->getStreamSetTy(1), "lineBreaks"}},
+{Binding{"matchResults", OriginalMatches}
+,Binding{"lineBreaks", LineBreakStream}},
 // output
-{Binding{iBuilder->getStreamSetTy(1), "matchedLines", FixedRate(), Add1()}}) {
+{Binding{"matchedLines", Matches, FixedRate(), Add1()}}) {
 
 }
 
@@ -422,12 +414,13 @@ void InvertMatchesKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuil
     iBuilder->storeOutputStreamBlock("nonMatches", iBuilder->getInt32(0), inverted);
 }
 
-InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder)
+InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
 : BlockOrientedKernel("Invert",
 // Inputs
-{Binding{builder->getStreamSetTy(1, 1), "matchedLines"}, Binding{builder->getStreamSetTy(1, 1), "lineBreaks"}},
+{Binding{"matchedLines", OriginalMatches},
+ Binding{"lineBreaks", LineBreakStream}},
 // Outputs
-{Binding{builder->getStreamSetTy(1, 1), "nonMatches"}},
+{Binding{"nonMatches", Matches}},
 // Input/Output Scalars and internal state
 {}, {}, {}) {
 
@@ -435,19 +428,19 @@ InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBui
 
 
 void PopcountKernel::generatePabloMethod() {
-    auto pb = this->getEntryScope();
+    auto pb = getEntryScope();
     const auto toCount = pb->createExtract(getInputStreamVar("toCount"), pb->getInteger(0));
     pablo::Var * countResult = getOutputScalarVar("countResult");
     
     pb->createAssign(countResult, pb->createCount(pb->createInFile(toCount)));
 }
 
-PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
+PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet * const toCount, Scalar * countResult)
 : PabloKernel(iBuilder, "Popcount",
-{Binding{iBuilder->getStreamSetTy(1), "toCount"}},
+{Binding{"toCount", toCount}},
 {},
 {},
-{Binding{iBuilder->getSizeTy(), "countResult"}}) {
+{Binding{"countResult", countResult}}) {
 
 }
 
@@ -468,13 +461,13 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     BasicBlock * const segmentDone = b->CreateBasicBlock("segmentDone");
 
     Value * const numOfBlocks = b->CreateMul(numOfStrides, BLOCKS_PER_STRIDE);
-    Value * availItems = b->getAvailableItemCount("bytedata");
+    Value * availItems = b->getAvailableItemCount("byteData");
     //
     // Fast loop to prove that there are no null bytes in a multiblock region.
     // We repeatedly combine byte packs using a SIMD unsigned min operation
     // (implemented as a Select/ICmpULT combination).
     //
-    Value * byteStreamBasePtr = b->getInputStreamBlockPtr("bytedata", b->getSize(0), b->getSize(0));
+    Value * byteStreamBasePtr = b->getInputStreamBlockPtr("byteData", b->getSize(0), b->getSize(0));
     Value * outputStreamBasePtr = b->getOutputStreamBlockPtr("untilNull", b->getSize(0), b->getSize(0));
 
     //
@@ -549,14 +542,14 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     b->setProducedItemCount("untilNull", producedCount);
 }
 
-AbortOnNull::AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> & b)
+AbortOnNull::AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * const InputStream, StreamSet * const OutputStream, Scalar * callbackObject)
 : MultiBlockKernel("AbortOnNull",
-                   // inputs
-{Binding{b->getStreamSetTy(1, 8), "bytedata"}},
-                   // outputs
-{Binding{b->getStreamSetTy(1, 8), "untilNull", FixedRate(), Deferred()}},
-                   // input scalars
-{Binding{b->getIntAddrTy(), "handler_address"}},
+// inputs
+{Binding{"byteData", InputStream, FixedRate(), Principal()}},
+// outputs
+{Binding{ "untilNull", OutputStream, FixedRate(), Deferred()}},
+// input scalars
+{Binding{"handler_address", callbackObject}},
 {}, {}) {
     addAttribute(CanTerminateEarly());
 }

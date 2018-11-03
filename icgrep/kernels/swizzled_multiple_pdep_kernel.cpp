@@ -22,8 +22,8 @@ Binding{b->getStreamSetTy(swizzleFactor), "source0", PopcountOf("marker"), Block
 {}, {}, {})
 , mSwizzleFactor(swizzleFactor), mNumberOfStreamSet(numberOfStreamSet) {
     for (unsigned i = 1; i < numberOfStreamSet; i++) {
-        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(swizzleFactor), "source" + std::to_string(i), RateEqualTo("source0"), BlockSize(b->getBitBlockWidth() / swizzleFactor) });
-        mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(swizzleFactor), "output" + std::to_string(i), RateEqualTo("output0"), BlockSize(b->getBitBlockWidth() / swizzleFactor)});
+        mInputStreamSets.push_back(Binding{b->getStreamSetTy(swizzleFactor), "source" + std::to_string(i), RateEqualTo("source0"), BlockSize(b->getBitBlockWidth() / swizzleFactor) });
+        mOutputStreamSets.push_back(Binding{b->getStreamSetTy(swizzleFactor), "output" + std::to_string(i), RateEqualTo("output0"), BlockSize(b->getBitBlockWidth() / swizzleFactor)});
     }
 }
 
@@ -34,15 +34,6 @@ void SwizzledMultiplePDEPkernel::generateMultiBlockLogic(const std::unique_ptr<K
     const auto pdepWidth = b->getBitBlockWidth() / mSwizzleFactor;
     ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
     ConstantInt * const PDEP_WIDTH = b->getSize(pdepWidth);
-
-    Function * pdep = nullptr;
-    if (pdepWidth == 64) {
-        pdep = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_64);
-    } else if (pdepWidth == 32) {
-        pdep = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_32);
-    } else {
-        report_fatal_error(getName() + ": PDEP width must be 32 or 64");
-    }
 
     Constant * const ZERO = b->getSize(0);
     Value * const sourceItemCount = b->getProcessedItemCount("source0");

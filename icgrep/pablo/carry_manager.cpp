@@ -103,16 +103,16 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
 
     Type * const carryStateTy = analyse(b, mCurrentScope);
 
-    kernel->addScalar(carryStateTy, "carries");
+    kernel->addInternalScalar(carryStateTy, "carries");
 
     if (mHasLoop) {
-        kernel->addScalar(b->getInt32Ty(), "selector");
+        kernel->addInternalScalar(b->getInt32Ty(), "selector");
     }
     if (mHasLongAdvance) {
-        kernel->addScalar(b->getSizeTy(), "CarryBlockIndex");
+        kernel->addInternalScalar(b->getSizeTy(), "CarryBlockIndex");
     }
     for (unsigned i = 0; i < mIndexedLongAdvanceTotal; i++) {
-        kernel->addScalar(b->getSizeTy(), "IndexedAdvancePosition" + std::to_string(i));
+        kernel->addInternalScalar(b->getSizeTy(), "IndexedAdvancePosition" + std::to_string(i));
     }
 }
 

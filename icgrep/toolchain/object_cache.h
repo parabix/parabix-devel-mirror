@@ -26,11 +26,11 @@ namespace kernel { class KernelBuilder; }
 // The ParabixObjectCache is a two-level cache compatible with the requirements
 // of the LLVM ExecutionEngine as well as the Parabix Kernel builder infrastructure.
 //
-// The ParabixObjectCache allows the ParabixDriver to look up cached modules based on a
+// The ParabixObjectCache allows the CPUEngineInstance to look up cached modules based on a
 // module stub that contains only the necessary Module ID and signature (loadCachedObjectFile).
 // If found, the module object file is immediately loaded into the cachedObjectMap,
 // and later made available to the ExecutionEngine as needed.  Otherwise, false is
-// return to signal that a cached File is not found.  The ParabixDriver can then
+// return to signal that a cached File is not found.  The CPUEngineInstance can then
 // apply the necessary kernel builder to build the full module IR before passing
 // it to the ExecutionEngine.
 //

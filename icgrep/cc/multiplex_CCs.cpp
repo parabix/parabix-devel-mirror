@@ -30,20 +30,22 @@ namespace cc {
 // status changes at the breakpoint.
 //
 
-std::map<UCD::codepoint_t, boost::dynamic_bitset<>> computeBreakpoints(const std::vector<re::CC *> & CCs) {
-    std::map<UCD::codepoint_t, boost::dynamic_bitset<>> breakpoints;
+using bitset = boost::dynamic_bitset<>;
+
+std::map<UCD::codepoint_t, bitset> computeBreakpoints(const std::vector<re::CC *> & CCs) {
+    std::map<UCD::codepoint_t, bitset> breakpoints;
     for (unsigned i = 0; i < CCs.size(); i++) {
         for (const auto range : *CCs[i]) {
             const auto lo = re::lo_codepoint(range);
             const auto hi = re::hi_codepoint(range);
             auto f = breakpoints.find(lo);
             if (f == breakpoints.end()) {
-                breakpoints.emplace(lo, boost::dynamic_bitset<>(CCs.size()));
+                breakpoints.emplace(lo, bitset(CCs.size()));
             }
             breakpoints[lo].set(i);
             f = breakpoints.find(hi + 1);
             if (f == breakpoints.end()) {
-                breakpoints.emplace(hi+1, boost::dynamic_bitset<>(CCs.size()));
+                breakpoints.emplace(hi+1, bitset(CCs.size()));
             }
             breakpoints[hi+1].set(i);
         }
@@ -64,14 +66,14 @@ void doMultiplexCCs(const std::vector<re::CC *> & CCs,
     //
     // Set up a map from the set of source CCs for each exclusive set to the exclusive set index.
 
-    std::map<boost::dynamic_bitset<>, unsigned> CC_set_to_exclusive_set_map;
+    std::map<bitset, unsigned> CC_set_to_exclusive_set_map;
 
     // Entry 0 is for the characters not in any of the CCs.
-    CC_set_to_exclusive_set_map.emplace(boost::dynamic_bitset<>(CCs.size()), 0);
+    CC_set_to_exclusive_set_map.emplace(bitset(CCs.size()), 0);
 
     unsigned current_exclusive_set_idx = 0;
     unsigned multiplexed_bit_count = 0;
-    boost::dynamic_bitset<> current_set(CCs.size());
+    bitset current_set(CCs.size());
     
     unsigned range_lo = 0;
     unsigned next_set_index = 1;
@@ -112,15 +114,18 @@ void doMultiplexCCs(const std::vector<re::CC *> & CCs,
 
 
 
-MultiplexedAlphabet::MultiplexedAlphabet(std::string alphabetName, const std::vector<re::CC *> CCs) 
-    : Alphabet(alphabetName, ClassTypeId::MultiplexedAlphabet), mUnicodeSets(CCs) {
-        if (CCs.size() > 0) {
-            mSourceAlphabet = CCs[0]->getAlphabet();
-            for (unsigned i = 1; i < CCs.size(); i++) {
-                if (CCs[i]->getAlphabet() != mSourceAlphabet) llvm::report_fatal_error("Mismatched source alphabets for Multiplexed Alphabet");
+MultiplexedAlphabet::MultiplexedAlphabet(const std::string alphabetName, const std::vector<re::CC *> CCs)
+: Alphabet(std::move(alphabetName), ClassTypeId::MultiplexedAlphabet)
+, mUnicodeSets(std::move(CCs)) {
+    if (!mUnicodeSets.empty()) {
+        mSourceAlphabet = mUnicodeSets[0]->getAlphabet();
+        for (unsigned i = 1; i < CCs.size(); i++) {
+            if (CCs[i]->getAlphabet() != mSourceAlphabet) {
+                llvm::report_fatal_error("Mismatched source alphabets for Multiplexed Alphabet");
             }
         }
-        cc::doMultiplexCCs(CCs, mExclusiveSetIDs, mMultiplexedCCs);
+    }
+    doMultiplexCCs(CCs, mExclusiveSetIDs, mMultiplexedCCs);
 }
 
 unsigned long MultiplexedAlphabet::findTargetCCIndex(const re::CC * sourceCC) const {
@@ -144,7 +149,7 @@ re::CC * MultiplexedAlphabet::transformCC(const re::CC * sourceCC) const {
         llvm::report_fatal_error("Mismatched source alphabets for transformCC");
     }
 
-    const auto index = this->findTargetCCIndex(sourceCC);
+    const auto index = findTargetCCIndex(sourceCC);
     const auto exclusive_IDs = mExclusiveSetIDs[index];
     re::CC * CC_union = re::makeCC(this);
     for (auto i : exclusive_IDs) {

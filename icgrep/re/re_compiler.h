@@ -68,6 +68,10 @@ public:
     // a basis for the coded alphabet values.
 
     void addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST* > basis_set);
+
+    void addAlphabet(const std::shared_ptr<cc::Alphabet> & a, std::vector<pablo::PabloAST* > basis_set) {
+        addAlphabet(a.get(), basis_set);
+    }
     
     void addPrecompiled(std::string precompiledName, pablo::PabloAST * precompiledStream);
 

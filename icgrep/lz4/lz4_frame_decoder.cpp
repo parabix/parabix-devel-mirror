@@ -21,11 +21,11 @@ LZ4FrameDecoder::LZ4FrameDecoder() {
 }
 
 LZ4FrameDecoder::LZ4FrameDecoder(const std::string & filename) {
-    this->init(filename);
+    init(filename);
 }
 
 void LZ4FrameDecoder::init(const std::string &filename) {
-    const size_t minFilesize = this->getMinFileSize();
+    const size_t minFilesize = getMinFileSize();
 
     std::ifstream f(filename, std::ios::binary | std::ios::ate);
     if (f.fail()) {
@@ -50,7 +50,7 @@ void LZ4FrameDecoder::init(const std::string &filename) {
     }
 
     mBlocksStart = 4 + mFDLength;       // MagicNb & FD
-    long long blocksEnd = mFilesize - this->endMarkSize() - (mHasContentChecksum ? this->contentChecksumSize() : 0);      // EndMark & checksum
+    long long blocksEnd = mFilesize - endMarkSize() - (mHasContentChecksum ? contentChecksumSize() : 0);      // EndMark & checksum
     if (blocksEnd > 0 && mBlocksStart <= static_cast<size_t>(blocksEnd)) {
         mBlocksLength = blocksEnd - mBlocksStart;
         mValid = true;
@@ -58,7 +58,7 @@ void LZ4FrameDecoder::init(const std::string &filename) {
 }
 
 bool LZ4FrameDecoder::decodeFrameDescriptor(std::ifstream & f) {
-    const size_t minFilesize = this->getMinFileSize();
+    const size_t minFilesize = getMinFileSize();
 
     char flag, blockDescriptor, headerChecksum;
     f.get(flag);
@@ -73,7 +73,7 @@ bool LZ4FrameDecoder::decodeFrameDescriptor(std::ifstream & f) {
     }
 
     if (mFilesize < minFilesize +
-            (mHasContentChecksum ? this->contentChecksumSize() : 0) +
+            (mHasContentChecksum ? contentChecksumSize() : 0) +
             (hasContentSize ? 8 : 0)
        ) {
         return false;

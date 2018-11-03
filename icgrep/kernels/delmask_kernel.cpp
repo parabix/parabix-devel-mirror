@@ -95,9 +95,9 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     it.createAssign(delmask, it.createInFile(it.createOr(it.createOr(del3, del4), ccc.compileCC(re::makeCC(0xC0, 0xFF), it))));
     it.createAssign(neg_delmask, it.createInFile(it.createNot(delmask)));
     
-    Var * delmask_out = this->getOutputStreamVar("delMask");
-    Var * neg_delmask_out = this->getOutputStreamVar("neg_delMask");
-    Var * error_mask_out = this->getOutputStreamVar("errMask");
+    Var * delmask_out = getOutputStreamVar("delMask");
+    Var * neg_delmask_out = getOutputStreamVar("neg_delMask");
+    Var * error_mask_out = getOutputStreamVar("errMask");
     
     main.createAssign(main.createExtract(delmask_out, main.getInteger(0)), delmask);
     main.createAssign(main.createExtract(neg_delmask_out, main.getInteger(0)), neg_delmask);

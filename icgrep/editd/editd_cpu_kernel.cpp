@@ -94,19 +94,23 @@ void editdCPUKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilde
     CreateDoBlockMethodCall(idb);
 }
 
-editdCPUKernel::editdCPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen, unsigned groupSize) :
-BlockOrientedKernel("editd_cpu",
-             {Binding{b->getStreamSetTy(4), "CCStream"}},
-             {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
-             {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},
-             Binding{PointerType::get(ArrayType::get(b->getBitBlockType(), pattLen * (dist + 1) * 4 * groupSize), 0), "strideCarry"}},
-             {},
-             {Binding{b->getBitBlockType(), "EOFmask"}}),
-mEditDistance(dist),
-mPatternLen(pattLen),
-mGroupSize(groupSize){
-}
+editdCPUKernel::editdCPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                               const unsigned patternLen, const unsigned groupSize,
+                               Scalar * const pattStream,
+                               StreamSet * const CCStream, StreamSet * const ResultStream)
+: BlockOrientedKernel("editd_cpu" + std::to_string(patternLen) + "x" + std::to_string(groupSize),
+// input stream
+{Binding{"CCStream", CCStream}},
+// output stream
+{Binding{"ResultStream", ResultStream}},
+// input scalar
+{Binding{"pattStream", pattStream}},
+// output scalar
+{},
+// internal scalars
+{Binding{b->getBitBlockType(), "EOFmask"},
+ Binding{ArrayType::get(b->getBitBlockType(), (patternLen * groupSize * 4 * ResultStream->getNumElements())), "strideCarry"}}) {
 
 }
 
-
+}

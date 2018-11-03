@@ -28,13 +28,13 @@
 #include <kernels/lz4/lz4_bytestream_decoder.h>
 
 #include <kernels/kernel_builder.h>
+#include <kernels/pipeline_builder.h>
 #include <toolchain/cpudriver.h>
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
 namespace re { class CC; }
 
 using namespace llvm;
-using namespace parabix;
 using namespace kernel;
 
 static cl::OptionCategory lz4dFlags("Command Flags", "lz4d options");
@@ -42,72 +42,46 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::Required, cl::cat(lz4dFlags));
 static cl::opt<bool> overwriteOutput("f", cl::desc("Overwrite existing output file."), cl::init(false), cl::cat(lz4dFlags));
 
-typedef void (*MainFunctionType)(char * byte_data, size_t filesize, bool hasBlockChecksum);
+typedef void (*MainFunctionType)(char * byte_data, size_t filesize, bool hasBlockChecksum, const char * outputFileName);
 
-void generatePipeline(ParabixDriver & pxDriver) {
-    auto & iBuilder = pxDriver.getBuilder();
-    Module * M = iBuilder->getModule();
+MainFunctionType generatePipeline(CPUDriver & pxDriver) {
+    auto & b = pxDriver.getBuilder();
 
-    Type * const sizeTy = iBuilder->getSizeTy();
-    Type * const boolTy = iBuilder->getIntNTy(sizeof(bool) * 8);
-    Type * const voidTy = iBuilder->getVoidTy();
-    Type * const inputType = iBuilder->getInt8PtrTy();
+    Type * const sizeTy = b->getSizeTy();
+    Type * const boolTy = b->getIntNTy(sizeof(bool) * 8);
+    Type * const int8PtrTy = b->getInt8PtrTy();
     
-    Function * const main = cast<Function>(M->getOrInsertFunction("Main", voidTy, inputType, sizeTy, boolTy, nullptr));
-    main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
-    Value * const inputStream = &*(args++);
-    inputStream->setName("input");
-    Value * const fileSize = &*(args++);
-    fileSize->setName("fileSize");
-    Value * const hasBlockChecksum = &*(args++);
-    hasBlockChecksum->setName("hasBlockChecksum");
 
-    const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned bufferSegments = codegen::BufferSegments * codegen::ThreadNum;
-    // Output buffer should be at least one whole LZ4 block (4MB) large in case of uncompressed blocks.
-    // And the size (in bytes) also needs to be a power of two.
-    const unsigned decompressBufBlocks = (4 * 1024 * 1024) / codegen::BlockSize;
+    auto P = pxDriver.makePipeline({Binding{int8PtrTy, "input"}, Binding{sizeTy, "fileSize"}, Binding{boolTy, "hasBlockChecksum"}, Binding{int8PtrTy, "outputFileName"}});
 
-    iBuilder->SetInsertPoint(BasicBlock::Create(M->getContext(), "entry", main, 0));
+    StreamSet * const ByteStream = P->CreateStreamSet(1, 8);
+    StreamSet * const BasisBits = P->CreateStreamSet(8, 1);
+    StreamSet * const Extenders = P->CreateStreamSet(1, 1);
+    StreamSet * const LiteralIndexes = P->CreateStreamSet(2, 32);
+    StreamSet * const MatchIndexes = P->CreateStreamSet(2, 32);
+    StreamSet * const DecompressedByteStream = P->CreateStreamSet(1, 8);
 
-    StreamSetBuffer * const ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
-    StreamSetBuffer * const BasisBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
-    StreamSetBuffer * const Extenders = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
-    StreamSetBuffer * const LiteralIndexes = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments);
-    StreamSetBuffer * const MatchIndexes = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(2, 32), segmentSize * bufferSegments);
-    StreamSetBuffer * const DecompressedByteStream = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8), decompressBufBlocks);
 
-    
-    kernel::Kernel * sourceK = pxDriver.addKernelInstance<MemorySourceKernel>(iBuilder);
-    sourceK->setInitialArguments({inputStream, fileSize});
-    pxDriver.makeKernelCall(sourceK, {}, {ByteStream});
+    Scalar * const inputStream = P->getInputScalar("input");
+    Scalar * const fileSize = P->getInputScalar("fileSize");
+
+    P->CreateKernelCall<MemorySourceKernel>(inputStream, fileSize, ByteStream);
 
     // Input stream is not aligned due to the offset.
-    Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder, cc::BitNumbering::LittleEndian, /*aligned = */ false);
-    pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
-    
-    Kernel * extenderK = pxDriver.addKernelInstance<ParabixCharacterClassKernelBuilder>(iBuilder, "extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, 8);
-    pxDriver.makeKernelCall(extenderK, {BasisBits}, {Extenders});
+    P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits, cc::BitNumbering::LittleEndian, /*aligned = */ false);
 
-    Kernel * lz4iK = pxDriver.addKernelInstance<LZ4IndexDecoderKernel>(iBuilder);
-    lz4iK->setInitialArguments({iBuilder->CreateTrunc(hasBlockChecksum, iBuilder->getInt1Ty())});
-    pxDriver.makeKernelCall(lz4iK, {ByteStream, Extenders}, {LiteralIndexes, MatchIndexes});
+    P->CreateKernelCall<ParabixCharacterClassKernelBuilder>("extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, BasisBits, Extenders);
 
-    Kernel * lz4bK = pxDriver.addKernelInstance<LZ4ByteStreamDecoderKernel>(iBuilder, decompressBufBlocks * codegen::BlockSize);
-    pxDriver.makeKernelCall(lz4bK, {LiteralIndexes, MatchIndexes, ByteStream}, {DecompressedByteStream});
+    Scalar * const hasBlockChecksum = P->getInputScalar("hasBlockChecksum");
 
-    Kernel * outK = pxDriver.addKernelInstance<FileSink>(iBuilder, 8);
-    outK->setInitialArguments({iBuilder->GetString(outputFile)});
-    pxDriver.makeKernelCall(outK, {DecompressedByteStream}, {});
- 
-    pxDriver.generatePipelineIR();
+    P->CreateKernelCall<LZ4IndexDecoderKernel>(hasBlockChecksum, ByteStream, Extenders, LiteralIndexes, MatchIndexes);
 
-    pxDriver.deallocateBuffers();
+    P->CreateKernelCall<LZ4ByteStreamDecoderKernel>(LiteralIndexes, MatchIndexes, ByteStream, DecompressedByteStream);
 
-    iBuilder->CreateRetVoid();
- 
-    pxDriver.finalizeObject();
+    Scalar * outputFileName = P->getInputScalar("outputFileName");
+    P->CreateKernelCall<FileSink>(outputFileName, DecompressedByteStream);
+
+    return reinterpret_cast<MainFunctionType>(P->compile());
 }
 
 int main(int argc, char *argv[]) {
@@ -138,11 +112,10 @@ int main(int argc, char *argv[]) {
     // Since mmap offset has to be multiples of pages, we can't use it to skip headers.
     mappedFile.open(fileName, lz4Frame.getBlocksLength() + lz4Frame.getBlocksStart());
     char *fileBuffer = const_cast<char *>(mappedFile.data()) + lz4Frame.getBlocksStart();
-    ParabixDriver pxDriver("lz4d");
-    generatePipeline(pxDriver);
-    auto main = reinterpret_cast<MainFunctionType>(pxDriver.getMain());
+    CPUDriver pxDriver("lz4d");
+    auto main = generatePipeline(pxDriver);
 
-    main(fileBuffer, lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum());
+    main(fileBuffer, lz4Frame.getBlocksLength(), lz4Frame.hasBlockChecksum(), outputFile.c_str());
 
     mappedFile.close();
     return 0;

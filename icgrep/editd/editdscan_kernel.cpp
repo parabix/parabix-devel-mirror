@@ -12,40 +12,40 @@ using namespace llvm;
 
 namespace kernel {
 
-void editdScanKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & idb) {
-    auto savePoint = idb->saveIP();
-    Function * scanWordFunction = generateScanWordRoutine(idb);
-    idb->restoreIP(savePoint);
+void editdScanKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) {
+    auto savePoint = b->saveIP();
+    Function * scanWordFunction = generateScanWordRoutine(b);
+    b->restoreIP(savePoint);
 
-    const unsigned fieldCount = idb->getBitBlockWidth() / mScanwordBitWidth;
-    Type * T = idb->getIntNTy(mScanwordBitWidth);
+    const unsigned fieldCount = b->getBitBlockWidth() / mScanwordBitWidth;
+    Type * T = b->getIntNTy(mScanwordBitWidth);
     VectorType * scanwordVectorType =  VectorType::get(T, fieldCount);
-    Value * blockNo = idb->getScalarField("BlockNo");
-    Value * scanwordPos = idb->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), idb->getBitBlockWidth()));
+    Value * blockNo = b->getScalarField("BlockNo");
+    Value * scanwordPos = b->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), b->getBitBlockWidth()));
     
     std::vector<Value * > matchWordVectors;
-    for(unsigned d = 0; d <= mEditDistance; d++) {
-        Value * matches = idb->loadInputStreamBlock("matchResults", idb->getInt32(d));
-        matchWordVectors.push_back(idb->CreateBitCast(matches, scanwordVectorType));
+    for(unsigned d = 0; d < mNumElements; d++) {
+        Value * matches = b->loadInputStreamBlock("matchResults", b->getInt32(d));
+        matchWordVectors.push_back(b->CreateBitCast(matches, scanwordVectorType));
     }
     
     for(unsigned i = 0; i < fieldCount; ++i) {
-        for(unsigned d = 0; d <= mEditDistance; d++) {
-            Value * matchWord = idb->CreateExtractElement(matchWordVectors[d], ConstantInt::get(T, i));
-            idb->CreateCall(scanWordFunction, {matchWord, idb->getInt32(d), scanwordPos});
+        for(unsigned d = 0; d < mNumElements; d++) {
+            Value * matchWord = b->CreateExtractElement(matchWordVectors[d], ConstantInt::get(T, i));
+            b->CreateCall(scanWordFunction, {matchWord, b->getInt32(d), scanwordPos});
         }
-        scanwordPos = idb->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
+        scanwordPos = b->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
     }
 
-    idb->setScalarField("BlockNo", idb->CreateAdd(blockNo, idb->getSize(1)));
+    b->setScalarField("BlockNo", b->CreateAdd(blockNo, b->getSize(1)));
 }
 
-Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBuilder> &iBuilder) const {
+Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBuilder> &b) const {
 
-    IntegerType * T = iBuilder->getIntNTy(mScanwordBitWidth);
-    Module * const m = iBuilder->getModule();
+    IntegerType * T = b->getIntNTy(mScanwordBitWidth);
+    Module * const m = b->getModule();
 
-    Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", iBuilder->getVoidTy(), T, iBuilder->getInt32Ty(), T, nullptr));
+    Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", b->getVoidTy(), T, b->getInt32Ty(), T, nullptr));
     scanFunc->setCallingConv(CallingConv::C);
     Function::arg_iterator args = scanFunc->arg_begin();
 
@@ -56,42 +56,42 @@ Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<Kernel
     Value * basePos = &*(args++);
     basePos->setName("basePos");
 
-    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_pos", iBuilder->getVoidTy(), T, iBuilder->getInt32Ty(), nullptr);
-    BasicBlock * entryBlock = BasicBlock::Create(iBuilder->getContext(), "entry", scanFunc, 0);
-    BasicBlock * matchesCondBlock = BasicBlock::Create(iBuilder->getContext(), "matchesCond", scanFunc, 0);
-    BasicBlock * matchesLoopBlock = BasicBlock::Create(iBuilder->getContext(), "matchesLoop", scanFunc, 0);
-    BasicBlock * matchesDoneBlock = BasicBlock::Create(iBuilder->getContext(), "matchesDone", scanFunc, 0);
+    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_pos", b->getVoidTy(), T, b->getInt32Ty(), nullptr);
+    BasicBlock * entryBlock = BasicBlock::Create(b->getContext(), "entry", scanFunc, 0);
+    BasicBlock * matchesCondBlock = BasicBlock::Create(b->getContext(), "matchesCond", scanFunc, 0);
+    BasicBlock * matchesLoopBlock = BasicBlock::Create(b->getContext(), "matchesLoop", scanFunc, 0);
+    BasicBlock * matchesDoneBlock = BasicBlock::Create(b->getContext(), "matchesDone", scanFunc, 0);
 
-    iBuilder->SetInsertPoint(entryBlock);
-    iBuilder->CreateBr(matchesCondBlock);
+    b->SetInsertPoint(entryBlock);
+    b->CreateBr(matchesCondBlock);
 
-    iBuilder->SetInsertPoint(matchesCondBlock);
-    PHINode * matches_phi = iBuilder->CreatePHI(T, 2, "matches");
+    b->SetInsertPoint(matchesCondBlock);
+    PHINode * matches_phi = b->CreatePHI(T, 2, "matches");
     matches_phi->addIncoming(matchWord, entryBlock);
-    Value * have_matches_cond = iBuilder->CreateICmpUGT(matches_phi, ConstantInt::get(T, 0));
-    iBuilder->CreateCondBr(have_matches_cond, matchesLoopBlock, matchesDoneBlock);
+    Value * have_matches_cond = b->CreateICmpUGT(matches_phi, ConstantInt::get(T, 0));
+    b->CreateCondBr(have_matches_cond, matchesLoopBlock, matchesDoneBlock);
 
-    iBuilder->SetInsertPoint(matchesLoopBlock);
-    Value * match_pos = iBuilder->CreateAdd(iBuilder->CreateCountForwardZeroes(matches_phi), basePos);
-    Value * matches_new = iBuilder->CreateAnd(matches_phi, iBuilder->CreateSub(matches_phi, ConstantInt::get(T, 1)));
+    b->SetInsertPoint(matchesLoopBlock);
+    Value * match_pos = b->CreateAdd(b->CreateCountForwardZeroes(matches_phi), basePos);
+    Value * matches_new = b->CreateAnd(matches_phi, b->CreateSub(matches_phi, ConstantInt::get(T, 1)));
     matches_phi->addIncoming(matches_new, matchesLoopBlock);
-    iBuilder->CreateCall(matchProcessor, std::vector<Value *>({match_pos, dist}));
-    iBuilder->CreateBr(matchesCondBlock);
+    b->CreateCall(matchProcessor, std::vector<Value *>({match_pos, dist}));
+    b->CreateBr(matchesCondBlock);
 
-    iBuilder->SetInsertPoint(matchesDoneBlock);
-    iBuilder -> CreateRetVoid();
+    b->SetInsertPoint(matchesDoneBlock);
+    b -> CreateRetVoid();
 
     return scanFunc;
 
 }
 
-editdScanKernel::editdScanKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned dist) :
-BlockOrientedKernel("scanMatch",
-              {Binding{iBuilder->getStreamSetTy(dist + 1), "matchResults"}},
-              {}, {}, {}, {Binding{iBuilder->getSizeTy(), "BlockNo"}}),
-mEditDistance(dist),
-mScanwordBitWidth(iBuilder->getSizeTy()->getBitWidth()) {
-
+editdScanKernel::editdScanKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * matchResults) :
+BlockOrientedKernel("editdScanMatch" + std::to_string(matchResults->getNumElements()),
+              {Binding{"matchResults", matchResults}},
+              {}, {}, {}, {Binding{b->getSizeTy(), "BlockNo"}}),
+mNumElements(matchResults->getNumElements()),
+mScanwordBitWidth(b->getSizeTy()->getBitWidth()) {
+    addAttribute(SideEffecting());
 }
 
 }

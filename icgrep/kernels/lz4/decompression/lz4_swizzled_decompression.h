@@ -19,17 +19,17 @@ namespace llvm {
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
-    class LZ4SwizzledDecompressionKernel : public LZ4SequentialDecompressionKernel {
+    class LZ4SwizzledDecompressionKernel final : public LZ4SequentialDecompressionKernel {
 
     public:
-        LZ4SwizzledDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned streamCount, unsigned streamSize, unsigned swizzleFactor, unsigned blockSize = 4 * 1024 * 1024);
+        LZ4SwizzledDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+                                       Scalar * fileSize,
+                                       StreamSet * inputStream,
+                                       const LZ4BlockInfo & blockInfo,
+                                       const std::vector<StreamSet * > & swizzledInput,
+                                       const std::vector<StreamSet * > & swizzledOutput);
 
     protected:
-        unsigned mStreamCount;
-        unsigned mStreamSize;
-        unsigned mSwizzleFactor;
-        unsigned mPDEPWidth;
-
 
         void handleAccelerationLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                                                  llvm::Value *literalLength, const std::vector<llvm::Value*>& inputLiteralValues);
@@ -66,10 +66,15 @@ namespace kernel {
         virtual void doAccelerationMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                                            llvm::Value *matchLength) override;
         virtual void finishAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos, llvm::Value* literalMask) override;
+
     private:
 
+        const unsigned mStreamCount;
+        const unsigned mStreamSize;
+        const unsigned mPDEPWidth;
+
     };
-};
+}
 
 
 #endif //ICGREP_LZ4_SWIZZLED_AIO_H

@@ -23,13 +23,13 @@ using namespace re;
 using namespace llvm;
 using namespace IDISA;
 
-LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, Binding && inputStreamSet, cc::BitNumbering basisNumbering)
-: PabloKernel(b, "lf" + std::to_string(getNumOfStreams(inputStreamSet.getType())) + "x" + std::to_string(getStreamFieldWidth(inputStreamSet.getType())),
+LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * BasisBits, StreamSet * LineFeedStream, cc::BitNumbering basisNumbering)
+: PabloKernel(b, "lf" + std::to_string(BasisBits->getNumElements()) + "x" + std::to_string(BasisBits->getFieldWidth()),
 // input
-{inputStreamSet},
-{Binding{b->getStreamSetTy(1), "lf"}}),
-    mNumOfStreams(getNumOfStreams(inputStreamSet.getType())),
-    mStreamFieldWidth(getStreamFieldWidth(inputStreamSet.getType())),
+{Binding{"basis", BasisBits}},
+{Binding{"lf", LineFeedStream}}),
+    mNumOfStreams(BasisBits->getNumElements()),
+    mStreamFieldWidth(BasisBits->getFieldWidth()),
     mBasisSetNumbering(basisNumbering)
 {
 }

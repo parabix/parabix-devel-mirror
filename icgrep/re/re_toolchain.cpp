@@ -91,7 +91,7 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     r = re::resolveUnicodeNames(r);
     validateNamesDefined(r);
     if (UnicodeLevel2 && validateAlphabet(&cc::Unicode, r)) {
-        r = UCD::NFD_Transformer().transformRE(r);
+        r = UCD::transform(r);
         r = UCD::addClusterMatches(r);
         r = UCD::addEquivalentCodepoints(r);
     } else {
@@ -271,13 +271,13 @@ inline bool RE_Transformer::MemoizerComparator::operator()(const RE * const lh, 
 RE * RE_Transformer::transformRE(RE * re) {
     RE * initialRE = re;
     RE * finalRE = transform(re);
-    if ((mTransformationName != "") && (PrintOptions.isSet(ShowAllREs) || (PrintOptions.isSet(ShowREs) && (initialRE != finalRE))))  {
+    if ((!mTransformationName.empty()) && (PrintOptions.isSet(ShowAllREs) || (PrintOptions.isSet(ShowREs) && (initialRE != finalRE))))  {
         errs() << mTransformationName << ":\n" << Printer_RE::PrintRE(finalRE) << '\n';
     }
     return finalRE;
 }
 
-RE * RE_Transformer::transform(RE * const from) {
+RE * RE_Transformer::transform(RE * const from) { assert (from);
     using T = RE::ClassTypeId;
     RE * to = from;
     #define TRANSFORM(Type) \

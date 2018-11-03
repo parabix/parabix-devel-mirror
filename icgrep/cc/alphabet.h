@@ -37,13 +37,13 @@ public:
     }
     virtual ~Alphabet() {}
 protected:
-    Alphabet(std::string name, ClassTypeId k) : mAlphabetName(name), mClassTypeId(k) {}
+    Alphabet(const std::string && name, ClassTypeId k) : mAlphabetName(std::move(name)), mClassTypeId(k) {}
 private:
     const std::string mAlphabetName;
     const ClassTypeId mClassTypeId;
 };
 
-class UnicodeMappableAlphabet : public Alphabet {
+class UnicodeMappableAlphabet final : public Alphabet {
 public:
     //  Alphabets may be formed by some subset of Unicode characters, together
     //  with a mapping to and from Unicode.  The mapping is defined in terms of unicodeCommon:
@@ -52,7 +52,7 @@ public:
     //  codepoint, together with a vector defining the Unicode codepoints for consecutive
     //  character codes (if any) above unicodeCommon - 1.
     
-    UnicodeMappableAlphabet(std::string alphabetName,
+    UnicodeMappableAlphabet(const std::string alphabetName,
                             unsigned unicodeCommon,
                             std::vector <UCD::codepoint_t> aboveCommon);
     
@@ -69,14 +69,13 @@ public:
     const unsigned getSize() const override {return mUnicodeCommon + mAboveCommon.size();}
 
 protected:
-    UCD::codepoint_t mCharSet;
-    UCD::codepoint_t mUnicodeCommon;
-    std::vector <UCD::codepoint_t> mAboveCommon;
+    const UCD::codepoint_t mUnicodeCommon;
+    const std::vector<UCD::codepoint_t> mAboveCommon;
 };
 
-class CodeUnitAlphabet : public Alphabet {
+class CodeUnitAlphabet final : public Alphabet {
 public:
-    CodeUnitAlphabet(std::string alphabetName, uint8_t codeUnitBits);
+    CodeUnitAlphabet(const std::string alphabetName, uint8_t codeUnitBits);
     static inline bool classof(const Alphabet * a) {
         return a->getClassTypeId() == ClassTypeId::CodeUnitAlphabet;
     }
@@ -85,7 +84,7 @@ public:
     const unsigned getSize() const override {return 1<<mCodeUnitBits;}
 
 private:
-    uint8_t mCodeUnitBits;
+    const uint8_t mCodeUnitBits;
 };
 
 //  Some important alphabets are predefined.

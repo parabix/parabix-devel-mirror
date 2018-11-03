@@ -52,7 +52,10 @@ private:
 
 class StreamExpandKernel final : public MultiBlockKernel {
 public:
-    StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned sourceStreamCount, unsigned selectedStreamBase, unsigned selectedStreamCount);
+    StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b
+                       , StreamSet * source, const unsigned base, StreamSet * mask
+                       , StreamSet * expanded
+                       , const unsigned FieldWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -65,7 +68,7 @@ private:
 
 class FieldDepositKernel final : public MultiBlockKernel {
 public:
-    FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount, std::string suffix);
+    FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * mask, StreamSet * input, StreamSet * output, const unsigned fieldWidth = 64);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -77,7 +80,7 @@ private:
 
 class PDEPFieldDepositKernel final : public MultiBlockKernel {
 public:
-    PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount, std::string suffix);
+    PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * mask, StreamSet * expanded, StreamSet * outputs, const unsigned fieldWidth = 64);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -85,25 +88,6 @@ protected:
 private:
     const unsigned mPDEPWidth;
     const unsigned mStreamCount;
-};
-
-class StreamDepositCompiler {
-public:
-    StreamDepositCompiler(Driver & driver, unsigned sourceStreamCount, unsigned selectedStreamBase, unsigned selectedStreamCount, unsigned bufferBlocks = 0) :
-        mDriver(driver),
-        mSourceStreamCount(sourceStreamCount),
-        mSelectedStreamBase(selectedStreamBase),
-        mSelectedStreamCount(selectedStreamCount),
-        mBufferBlocks(bufferBlocks), mFieldWidth(64) {}
-    void setDepositFieldWidth(unsigned fw) {mFieldWidth = fw;}
-    void makeCall(parabix::StreamSetBuffer * mask, parabix::StreamSetBuffer * inputs, parabix::StreamSetBuffer * outputs);
-private:
-    Driver & mDriver;
-    const unsigned mSourceStreamCount;
-    const unsigned mSelectedStreamBase;
-    const unsigned mSelectedStreamCount;
-    unsigned mBufferBlocks;
-    unsigned mFieldWidth;
 };
 
 }

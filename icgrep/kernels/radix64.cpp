@@ -272,26 +272,27 @@ void base64Kernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder>
     b->SetInsertPoint(fbExit);
 }
 
-expand3_4Kernel::expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
+expand3_4Kernel::expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet *input, StreamSet *expandedOutput)
 : MultiBlockKernel("expand3_4",
-            {Binding{iBuilder->getStreamSetTy(1, 8), "sourceStream", FixedRate(3)}},
-            {Binding{iBuilder->getStreamSetTy(1, 8), "expand34Stream", FixedRate(4)}},
-            {}, {}, {}) {
+{Binding{"sourceStream", input, FixedRate(3)}},
+{Binding{"expand34Stream", expandedOutput, FixedRate(4)}},
+{}, {}, {}) {
 
 }
 
-radix64Kernel::radix64Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
+radix64Kernel::radix64Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * input, StreamSet * output)
 : BlockOrientedKernel("radix64",
-            {Binding{iBuilder->getStreamSetTy(1, 8), "expandedStream"}},
-            {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
+            {Binding{"expandedStream", input}},
+            {Binding{"radix64stream", output}},
             {}, {}, {}) {
 }
 
-base64Kernel::base64Kernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
+base64Kernel::base64Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * input, StreamSet * output)
 : BlockOrientedKernel("base64",
-            {Binding{iBuilder->getStreamSetTy(1, 8), "radix64stream"}},
-            {Binding{iBuilder->getStreamSetTy(1, 8), "base64stream", FixedRate(1), RoundUpTo(4)}},
-            {}, {}, {}) {
+{Binding{"radix64stream", input}},
+{Binding{"base64stream", output, FixedRate(1), RoundUpTo(4)}},
+{}, {}, {}) {
+
 }
 
 }

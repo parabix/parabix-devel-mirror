@@ -2,13 +2,18 @@
 #ifndef ICGREP_LZ4_BITSTREAM_AIO_H
 #define ICGREP_LZ4_BITSTREAM_AIO_H
 
-#include "kernels/lz4/decompression/lz4_sequential_decompression_base.h"
+#include <kernels/lz4/decompression/lz4_sequential_decompression_base.h>
 #include <vector>
 
 namespace kernel {
     class LZ4BitStreamDecompressionKernel : public LZ4SequentialDecompressionKernel {
     public:
-        LZ4BitStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, std::vector<unsigned> numsOfBitStreams = {8}, unsigned blockSize = 4 * 1024 * 1024);
+        LZ4BitStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+                                        Scalar * fileSize,
+                                        StreamSet * inputStream,
+                                        const LZ4BlockInfo & blockInfo,
+                                        StreamSets inputStreams,
+                                        StreamSets outputStreams);
     protected:
         virtual void doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                    llvm::Value *literalLength, llvm::Value* blockStart) override;
@@ -18,6 +23,7 @@ namespace kernel {
         virtual void storePendingOutput(const std::unique_ptr<KernelBuilder> &b) override;
 
     private:
+
         std::vector<unsigned> mNumsOfBitStreams;
         void initPendingOutputScalar(const std::unique_ptr<kernel::KernelBuilder> &b);
         void appendBitStreamOutput(const std::unique_ptr<KernelBuilder> &b, std::vector<llvm::Value*>& extractedValues, llvm::Value* valueLength);

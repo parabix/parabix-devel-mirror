@@ -19,22 +19,22 @@
 namespace re { class CC; }
 
 
-typedef void (*MainFunctionType)(char * byte_data, size_t headerSize, size_t filesize, bool hasBlockChecksum);
+typedef void (*MainFunctionType)(char * byte_data, size_t headerSize, size_t filesize, bool hasBlockChecksum, const char * outputFileName);
 
 
 
-class LZ4DecompressionGenerator: public LZ4BaseGenerator {
+class LZ4DecompressionGenerator final : public LZ4BaseGenerator {
 
 public:
     LZ4DecompressionGenerator();
 
-    int decompress(std::string&& inputFileName, std::string&& outputFileName, bool overwriteOutput);
+    int decompress(std::string && inputFileName, std::string&& outputFileName, bool overwriteOutput);
 
-    MainFunctionType getMainFunc();
+private:
 
-    void generateDecompressionPipeline(const std::string &outputFile);
-protected:
-    void generateMainFunc(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    std::unique_ptr<kernel::PipelineBuilder> makeInternalPipeline();
+
+    MainFunctionType generateDecompressionPipeline();
 
 };
 

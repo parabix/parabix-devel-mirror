@@ -20,7 +20,6 @@
 #include <llvm/Support/raw_ostream.h>
 
 using namespace kernel;
-using namespace parabix;
 using namespace IDISA;
 using namespace llvm;
 
@@ -34,12 +33,13 @@ Var * PabloKernel::getInputStreamVar(const std::string & name) {
 }
 
 std::vector<PabloAST *> PabloKernel::getInputStreamSet(const std::string & name) {
-    Port port; unsigned index;
+    unsigned index; Port port;
     std::tie(port, index) = getStreamPort(name);
     assert (port == Port::Input);
-    auto numStreams = mStreamSetInputBuffers[index]->getNumOfStreams();
-    std::vector<PabloAST *> inputSet(numStreams);
-    for (unsigned i = 0; i < numStreams; i++) {
+    const Binding & input = getInputStreamSetBinding(index);
+    const auto numOfStreams = IDISA::getNumOfStreams(input.getType());
+    std::vector<PabloAST *> inputSet(numOfStreams);
+    for (unsigned i = 0; i < numOfStreams; i++) {
         inputSet[i] = mEntryScope->createExtract(mInputs[index], mEntryScope->getInteger(i));
     }
     return inputSet;
@@ -102,19 +102,19 @@ void PabloKernel::addInternalKernelProperties(const std::unique_ptr<kernel::Kern
     mSymbolTable = new SymbolGenerator(b->getContext(), mAllocator);
     mEntryScope = new (mAllocator) PabloBlock(this, mAllocator);
     mContext = &b->getContext();
-    for (const Binding & ss : mStreamSetInputs) {
+    for (const Binding & ss : mInputStreamSets) {
         Var * param = new (mAllocator) Var(makeName(ss.getName()), ss.getType(), mAllocator, Var::KernelInputParameter);
         param->addUser(this);
         mInputs.push_back(param);
         mVariables.push_back(param);
     }
-    for (const Binding & ss : mStreamSetOutputs) {
+    for (const Binding & ss : mOutputStreamSets) {
         Var * result = new (mAllocator) Var(makeName(ss.getName()), ss.getType(), mAllocator, Var::KernelOutputParameter);
         result->addUser(this);
         mOutputs.push_back(result);
         mVariables.push_back(result);
     }
-    for (const Binding & ss : mScalarOutputs) {
+    for (const Binding & ss : mOutputScalars) {
         Var * result = new (mAllocator) Var(makeName(ss.getName()), ss.getType(), mAllocator, Var::KernelOutputParameter);
         result->addUser(this);
         mOutputs.push_back(result);
@@ -238,7 +238,7 @@ llvm::IntegerType * PabloKernel::getInt1Ty() const {
     return IntegerType::getInt1Ty(getModule()->getContext());
 }
 
-static inline std::string && annotateKernelNameWithDebugFlags(std::string && name) {
+static inline std::string && annotateKernelNameWithPabloDebugFlags(std::string && name) {
     if (DebugOptionIsSet(DumpTrace)) {
         name += "_DumpTrace";
     }
@@ -254,7 +254,7 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
                          std::vector<Binding> stream_outputs,
                          std::vector<Binding> scalar_parameters,
                          std::vector<Binding> scalar_outputs)
-: BlockOrientedKernel(annotateKernelNameWithDebugFlags(std::move(kernelName)),
+: BlockOrientedKernel(annotateKernelNameWithPabloDebugFlags(std::move(kernelName)),
                       std::move(stream_inputs), std::move(stream_outputs), 
                       std::move(scalar_parameters), std::move(scalar_outputs),
                       {Binding{b->getBitBlockType(), "EOFbit"}, Binding{b->getBitBlockType(), "EOFmask"}})

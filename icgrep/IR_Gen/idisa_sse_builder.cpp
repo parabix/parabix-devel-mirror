@@ -188,7 +188,7 @@ Value * IDISA_SSE_Builder::mvmd_compress(unsigned fw, Value * a, Value * selecto
         Value * centralResult = simd_if(1, rotateControl, rotated, a_selected);
         Value * delete_marks_lo = CreateAnd(CreateNot(selector), ConstantInt::get(selector->getType(), 3));
         Value * delCount_lo = CreateSub(delete_marks_lo, CreateLShr(delete_marks_lo, 1));
-        return mvmd_srl(32, centralResult, delCount_lo);
+        return mvmd_srl(32, centralResult, delCount_lo, true);
     }
     return IDISA_Builder::mvmd_compress(fw, a, selector);
 }

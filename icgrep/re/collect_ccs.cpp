@@ -49,9 +49,9 @@ private:
 };
 
 
-std::vector<CC *> collectCCs(RE * const re, const cc::Alphabet * a, std::set<Name *> external) {
+std::vector<CC *> collectCCs(RE * const re, const cc::Alphabet & a, std::set<Name *> external) {
     std::vector<CC *> ccs;
-    SetCollector collector(a, external, ccs);
+    SetCollector collector(&a, external, ccs);
     collector.inspectRE(re);
     return ccs;
 }

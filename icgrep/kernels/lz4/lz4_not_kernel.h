@@ -13,7 +13,7 @@ namespace kernel {
 
     class LZ4NotKernel: public pablo::PabloKernel {
     public:
-        LZ4NotKernel(const std::unique_ptr<kernel::KernelBuilder> & kb);
+        LZ4NotKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * inputStream, StreamSet * invertedOutputStream);
     protected:
         void generatePabloMethod() override;
     };

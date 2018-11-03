@@ -146,82 +146,96 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
     kb->SetInsertPoint(s2pDone);
 }
 
-S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b, cc::BitNumbering numbering, bool aligned, std::string prefix, unsigned numOfStreams)
-    : MultiBlockKernel(aligned ? prefix + "s2p" + cc::numberingSuffix(numbering): prefix + "s2p_unaligned" + cc::numberingSuffix(numbering),
-    {Binding{b->getStreamSetTy(1, 8), "byteStream", FixedRate(), Principal()}},
-    {Binding{b->getStreamSetTy(numOfStreams, 1), "basisBits"}}, {}, {}, {}),
-  mBasisSetNumbering(numbering),
-  mAligned(aligned),
-  mNumOfStreams(numOfStreams)
-{
+S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> &, StreamSet * const codeUnitStream, StreamSet * const BasisBits, const cc::BitNumbering numbering, const bool aligned)
+: MultiBlockKernel("s2p" + std::to_string(BasisBits->getNumElements()) + (aligned ? "a" : "u") + cc::numberingSuffix(numbering),
+{Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}},
+{Binding{"basisBits", BasisBits}}, {}, {}, {}),
+mBasisSetNumbering(numbering),
+mAligned(aligned),
+mNumOfStreams(BasisBits->getNumElements()) {
+    assert (codeUnitStream->getFieldWidth() == BasisBits->getNumElements());
     if (!aligned) {
-        mStreamSetInputs[0].addAttribute(Misaligned());
+        mInputStreamSets[0].addAttribute(Misaligned());
     }
 }
 
-S2PMultipleStreamsKernel::S2PMultipleStreamsKernel(
-        const std::unique_ptr<kernel::KernelBuilder> & b,
-        cc::BitNumbering basisNumbering,
-        bool aligned,
-        std::vector<unsigned> numsOfStreams)
-: MultiBlockKernel(aligned ? "s2pMultipleStreams" + cc::numberingSuffix(basisNumbering): "s2p_unaligned" + cc::numberingSuffix(basisNumbering),
-                   {Binding{b->getStreamSetTy(1, 8), "byteStream", FixedRate(), Principal()}},
-                   {}, {}, {}, {}),
-  mBasisSetNumbering(basisNumbering),
-  mAligned(aligned),
-  mNumsOfStreams(numsOfStreams)
-{
-    for (unsigned i = 0; i < numsOfStreams.size(); i++) {
-        mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(numsOfStreams[i], 1), "basisBits_" + std::to_string(i)});
+inline std::string makeMultiS2PName(const StreamSets & outputStreams, const cc::BitNumbering basisNumbering, const bool aligned) {
+    std::string buffer;
+    raw_string_ostream out(buffer);
+    out << "s2p";
+    for (unsigned i = 0; i < outputStreams.size(); ++i) {
+        if (i) out << ".";
+        out << outputStreams[i]->getNumElements();
+    }
+    out << (aligned ? "a" : "u");
+    out << cc::numberingSuffix(basisNumbering);
+    out.flush();
+    return buffer;
+}
+
+S2PMultipleStreamsKernel::S2PMultipleStreamsKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+        StreamSet * codeUnitStream,
+        const StreamSets & outputStreams,
+        const cc::BitNumbering basisNumbering,
+        const bool aligned)
+: MultiBlockKernel(makeMultiS2PName(outputStreams, basisNumbering, aligned),
+// input
+{Binding{"byteStream", codeUnitStream}},
+{}, {}, {}, {}),
+mBasisSetNumbering(basisNumbering),
+mAligned(aligned) {
+    for (unsigned i = 0; i < outputStreams.size(); i++) {
+        mOutputStreamSets.emplace_back("basisBits_" + std::to_string(i), outputStreams[i]);
     }
 }
 
-void S2PMultipleStreamsKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &kb,
-                                                       llvm::Value *const numOfBlocks) {
-    BasicBlock * entry = kb->GetInsertBlock();
-    BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
-    BasicBlock * s2pDone = kb->CreateBasicBlock("s2pDone");
-    Constant * const ZERO = kb->getSize(0);
+void S2PMultipleStreamsKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &b, Value *const numOfBlocks) {
+    BasicBlock * entry = b->GetInsertBlock();
+    BasicBlock * processBlock = b->CreateBasicBlock("processBlock");
+    BasicBlock * s2pDone = b->CreateBasicBlock("s2pDone");
+    Constant * const ZERO = b->getSize(0);
 
-    kb->CreateBr(processBlock);
+    b->CreateBr(processBlock);
 
-    kb->SetInsertPoint(processBlock);
-    PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
+    b->SetInsertPoint(processBlock);
+    PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
     blockOffsetPhi->addIncoming(ZERO, entry);
 
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
         if (mAligned) {
-            bytepack[i] = kb->loadInputStreamPack("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
+            bytepack[i] = b->loadInputStreamPack("byteStream", ZERO, b->getInt32(i), blockOffsetPhi);
         } else {
-            Value * ptr = kb->getInputStreamPackPtr("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
+            Value * ptr = b->getInputStreamPackPtr("byteStream", ZERO, b->getInt32(i), blockOffsetPhi);
             // CreateLoad defaults to aligned here, so we need to force the alignment to 1 byte.
-            bytepack[i] = kb->CreateAlignedLoad(ptr, 1);
+            bytepack[i] = b->CreateAlignedLoad(ptr, 1);
         }
     }
     Value * basisbits[8];
-    s2p(kb, bytepack, basisbits, mBasisSetNumbering);
-    unsigned iStreamIndex = 0;
-    for (unsigned i = 0; i < mNumsOfStreams.size(); i++) {
-        for (unsigned j = 0; j < mNumsOfStreams[i]; j++) {
-            kb->storeOutputStreamBlock("basisBits_" + std::to_string(i), kb->getInt32(j), blockOffsetPhi, basisbits[iStreamIndex]);
-            iStreamIndex++;
+    s2p(b, bytepack, basisbits, mBasisSetNumbering);
+
+    unsigned k = 0;
+    for (unsigned i = 0; i < getNumOfStreamOutputs(); ++i) {
+        const auto m = getOutputStreamSet(i)->getNumElements();
+        for (unsigned j = 0; j < m; j++) {
+            b->storeOutputStreamBlock("basisBits_" + std::to_string(i), b->getInt32(j), blockOffsetPhi, basisbits[k++]);
         }
     }
 
-    Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
+    Value * nextBlk = b->CreateAdd(blockOffsetPhi, b->getSize(1));
     blockOffsetPhi->addIncoming(nextBlk, processBlock);
-    Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
-    kb->CreateCondBr(moreToDo, processBlock, s2pDone);
-    kb->SetInsertPoint(s2pDone);
+    Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
+    b->CreateCondBr(moreToDo, processBlock, s2pDone);
+    b->SetInsertPoint(s2pDone);
 }
 
 
-S2P_21Kernel::S2P_21Kernel(const std::unique_ptr<KernelBuilder> & b, cc::BitNumbering numbering)
+S2P_21Kernel::S2P_21Kernel(const std::unique_ptr<KernelBuilder> &, StreamSet * const codeUnitStream, StreamSet * const BasisBits, cc::BitNumbering numbering)
 : MultiBlockKernel("s2p_21" + cc::numberingSuffix(numbering),
-                   {Binding{b->getStreamSetTy(1, 32), "codeUnitStream", FixedRate(), Principal()}},
-                   {Binding{b->getStreamSetTy(21, 1), "basisBits"}}, {}, {}, {}),
-    mBasisSetNumbering(numbering) {
+{Binding{"codeUnitStream", codeUnitStream, FixedRate(), Principal()}},
+{Binding{"basisBits", BasisBits}}, {}, {}, {})
+, mBasisSetNumbering(numbering) {
+
 }
 
 void S2P_21Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfBlocks) {
@@ -231,16 +245,18 @@ void S2P_21Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     Constant * const ZERO = kb->getSize(0);
     
     kb->CreateBr(processBlock);
+
     kb->SetInsertPoint(processBlock);
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
     blockOffsetPhi->addIncoming(ZERO, entry);
+
     Value * u32byte0[8];
     Value * u32byte1[8];
     Value * u32byte2[8];
     for (unsigned i = 0; i < 8; i++) {
         Value * UTF32units[4];
         for (unsigned j = 0; j < 4; j++) {
-            UTF32units[j] = kb->loadInputStreamPack("codeUnitStream", ZERO, kb->getInt32(4*i + j), blockOffsetPhi);
+            UTF32units[j] = kb->loadInputStreamPack("codeUnitStream", ZERO, kb->getInt32(4 * i + j), blockOffsetPhi);
         }
         Value * u32lo16_0 = kb->hsimd_packl(32, UTF32units[0], UTF32units[1]);
         Value * u32lo16_1 = kb->hsimd_packl(32, UTF32units[2], UTF32units[3]);
@@ -295,12 +311,15 @@ void S2P_PabloKernel::generatePabloMethod() {
     }
 }
 
-S2P_PabloKernel::S2P_PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned codeUnitWidth, cc::BitNumbering numbering)
-: PabloKernel(b, "s2p_pablo" + std::to_string(codeUnitWidth) + cc::numberingSuffix(numbering),
-    {Binding{b->getStreamSetTy(1, codeUnitWidth), "codeUnitStream"}},
-    {Binding{b->getStreamSetTy(codeUnitWidth, 1), "basisBits"}}),
-  mCodeUnitWidth(codeUnitWidth),
-  mBasisSetNumbering(numbering) {
+S2P_PabloKernel::S2P_PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const codeUnitStream, StreamSet * const BasisBits, cc::BitNumbering numbering)
+: PabloKernel(b, "s2p_pablo" + std::to_string(codeUnitStream->getFieldWidth()) + cc::numberingSuffix(numbering),
+// input
+{Binding{"codeUnitStream", codeUnitStream}},
+// output
+{Binding{"basisBits", BasisBits}}),
+mBasisSetNumbering(numbering),
+mCodeUnitWidth(codeUnitStream->getFieldWidth()) {
+    assert (codeUnitStream->getFieldWidth() == BasisBits->getNumElements());
 }
 
 

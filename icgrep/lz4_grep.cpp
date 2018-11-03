@@ -38,11 +38,11 @@
 #include <re/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <llvm/Support/raw_ostream.h>
+#include <memory>
 
 namespace re { class CC; }
 
 using namespace llvm;
-using namespace parabix;
 using namespace kernel;
 
 static cl::OptionCategory lz4GrepFlags("Command Flags", "lz4d options");
@@ -79,13 +79,15 @@ int main(int argc, char *argv[]) {
     char *fileBuffer = const_cast<char *>(mappedFile.data());
     re::RE * re_ast = re::RE_Parser::parse(regexString, re::MULTILINE_MODE_FLAG);
 
-    LZ4GrepBaseGenerator* g = nullptr;
+    const auto mode = (countOnly ? LZ4GrepBaseGenerator::CountOnly : LZ4GrepBaseGenerator::Match);
+
+    std::unique_ptr<LZ4GrepBaseGenerator> g;
     if (swizzledDecompression) {
-        g = new LZ4GrepSwizzleGenerator();
+        g.reset(new LZ4GrepSwizzleGenerator(mode));
     } else if (bitStreamDecompression) {
-        g = new LZ4GrepBitStreamGenerator();
+        g.reset(new LZ4GrepBitStreamGenerator(mode));
     } else {
-        g = new LZ4GrepByteStreamGenerator();
+        g.reset(new LZ4GrepByteStreamGenerator(mode));
     }
 
     if (countOnly) {
@@ -99,7 +101,6 @@ int main(int argc, char *argv[]) {
     }
 
     mappedFile.close();
-    delete g;
 
     return 0;
 }

@@ -8,7 +8,15 @@
 namespace kernel{
     class LZ4TwistDecompressionKernel : public LZ4SequentialDecompressionKernel {
     public:
-        LZ4TwistDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned twistWidth, unsigned blockSize = 4 * 1024 * 1024);
+        LZ4TwistDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+                                    // arguments
+                                    Scalar * fileSize,
+                                    // input
+                                    StreamSet * inputStream,
+                                    const LZ4BlockInfo & blockInfo,
+                                    StreamSet * twistStream,
+                                    // output
+                                    StreamSet * outputStream);
 
     protected:
         virtual void doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,

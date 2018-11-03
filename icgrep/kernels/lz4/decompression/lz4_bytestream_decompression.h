@@ -8,8 +8,16 @@ namespace kernel {
 
     class LZ4ByteStreamDecompressionKernel : public LZ4SequentialDecompressionKernel {
     public:
-        LZ4ByteStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, bool copyOtherByteStream = false, unsigned blockSize = 4 * 1024 * 1024, bool conditionalDecompression = false);
 
+        LZ4ByteStreamDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+                                         // arguments
+                                         Scalar * fileSize,
+                                         // input
+                                         StreamSet * inputStream,
+                                         const LZ4BlockInfo & blockInfo,
+                                         StreamSet * targetStream,
+                                         // output
+                                         StreamSet * outputStream);
 
     protected:
         virtual void doLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
@@ -24,8 +32,8 @@ namespace kernel {
 
     private:
         inline std::string getCopyByteStreamName();
-        bool mCopyOtherByteStream;
-        llvm::Value* oldOutputExceedFwData;
+        const bool mCopyOtherByteStream;
+        llvm::Value * oldOutputExceedFwData;
     };
 
 }

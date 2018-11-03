@@ -12,7 +12,7 @@ namespace kernel {
 
     class UntwistByPEXTKernel final : public BlockOrientedKernel{
     public:
-        UntwistByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned numberOfOutputStream, unsigned twistWidth);
+        UntwistByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * inputStream, StreamSet * outputStream);
     protected:
         const size_t mNumberOfOutputStream;
         const size_t mTwistWidth;
@@ -21,9 +21,8 @@ namespace kernel {
 
     class UntwistMultipleByPEXTKernel final : public BlockOrientedKernel{
     public:
-        UntwistMultipleByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::vector<unsigned> numberOfOutputStreams, unsigned twistWidth);
+        UntwistMultipleByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * inputStream, const StreamSets & outputStreams);
     protected:
-        const std::vector<unsigned> mNumberOfOutputStreams;
         const size_t mTwistWidth;
         void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
     };

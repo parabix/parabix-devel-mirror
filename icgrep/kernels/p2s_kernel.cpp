@@ -7,7 +7,6 @@
 namespace llvm { class Value; }
 
 using namespace llvm;
-using namespace parabix;
 
 namespace kernel{
 	
@@ -50,9 +49,11 @@ inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Va
 
     		
 void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+    const auto numOfStreams = getStreamBinding("basisBits").getNumElements();
     Value * p_bitblock[8];
+    // todo: generalize this to the nearest pow 2?
     for (unsigned i = 0; i < 8; i++) {
-        if (i < mNumOfStreams) {
+        if (i < numOfStreams) {
             p_bitblock[i] = b->loadInputStreamBlock("basisBits", b->getInt32(i));
         } else {
             p_bitblock[i] = ConstantVector::getNullValue(b->getBitBlockType());
@@ -68,24 +69,23 @@ void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) 
 
 
 void P2SMultipleStreamsKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &b) {
-    Value * p_bitblock[8];
-
-    unsigned iStreamIndex = 0;
-    for (unsigned i = 0; i < mNumsOfStreams.size(); i++) {
-        for (unsigned j = 0; j < mNumsOfStreams[i]; j++) {
-            p_bitblock[iStreamIndex] = b->loadInputStreamBlock("basisBits_" + std::to_string(i), b->getInt32(j));
-            iStreamIndex++;
+    Value * input[8];
+    unsigned k = 0;
+    for (unsigned i = 0; i < getNumOfStreamInputs(); ++i) {
+        const auto m = getInputStreamSet(i)->getNumElements();
+        for (unsigned j = 0; j < m; j++) {
+            input[k++] = b->loadInputStreamBlock("basisBits_" + std::to_string(i), b->getInt32(j));
         }
     }
-    while (iStreamIndex < 8) {
-        p_bitblock[iStreamIndex] = ConstantVector::getNullValue(b->getBitBlockType());
-        iStreamIndex++;
+    assert (k <= 8);
+    while (k < 8) {
+        input[k++] = ConstantVector::getNullValue(b->getBitBlockType());
     }
 
-    Value * s_bytepack[8];
-    p2s(b, p_bitblock, s_bytepack, mBasisSetNumbering);
+    Value * output[8];
+    p2s(b, input, output, mBasisSetNumbering);
     for (unsigned j = 0; j < 8; ++j) {
-        b->storeOutputStreamPack("byteStream", b->getInt32(0), b->getInt32(j), s_bytepack[j]);
+        b->storeOutputStreamPack("byteStream", b->getInt32(0), b->getInt32(j), output[j]);
     }
 }
 
@@ -206,55 +206,57 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
 
 
 
-P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering numbering, std::string prefix, unsigned numOfStreams)
-    : BlockOrientedKernel(prefix + "p2s" + cc::numberingSuffix(numbering),
-              {Binding{b->getStreamSetTy(numOfStreams, 1), "basisBits"}},
-              {Binding{b->getStreamSetTy(1, 8), "byteStream"}},
-              {}, {}, {}),
-    mBasisSetNumbering(numbering),
-      mNumOfStreams(numOfStreams) {
+P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * basisBits, StreamSet * byteStream, cc::BitNumbering numbering)
+: BlockOrientedKernel("p2s" + cc::numberingSuffix(numbering),
+{Binding{"basisBits", basisBits}},
+{Binding{"byteStream", byteStream}},
+{}, {}, {}),
+mBasisSetNumbering(numbering) {
+
 }
 
 P2SMultipleStreamsKernel::P2SMultipleStreamsKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
-                                                   cc::BitNumbering basisNumbering,
-                                                   std::vector<unsigned> numsOfStreams)
-        : BlockOrientedKernel("p2sMultipleStreams" + cc::numberingSuffix(basisNumbering),
-                              {/*Binding{b->getStreamSetTy(numOfStreams, 1), "basisBits"}*/},
-                              {Binding{b->getStreamSetTy(1, 8), "byteStream"}},
-                              {}, {}, {}),
-          mBasisSetNumbering(basisNumbering),
-          mNumsOfStreams(numsOfStreams) {
-
-    for (unsigned i = 0; i < numsOfStreams.size(); i++) {
-        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(numsOfStreams[i], 1), "basisBits_" + std::to_string(i)});
+                                                   const StreamSets & inputStreams,
+                                                   StreamSet * const outputStream,
+                                                   cc::BitNumbering basisNumbering)
+: BlockOrientedKernel("p2sMultipleStreams" + cc::numberingSuffix(basisNumbering),
+{},
+{Binding{"byteStream", outputStream}},
+{}, {}, {}),
+mBasisSetNumbering(basisNumbering) {
+    for (unsigned i = 0; i < inputStreams.size(); i++) {
+        mInputStreamSets.emplace_back("basisBits_" + std::to_string(i), inputStreams[i]);
     }
 }
 
 P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering numbering)
 : BlockOrientedKernel("p2s_compress" + cc::numberingSuffix(numbering),
-              {Binding{b->getStreamSetTy(8, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "fieldCounts"}},
-              {Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)}},
-                      {}, {}, {}),
-    mBasisSetNumbering(numbering) {
+{Binding{b->getStreamSetTy(8, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "fieldCounts"}},
+{Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)}},
+{}, {}, {}),
+mBasisSetNumbering(numbering) {
+
 }
 
-P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering numbering)
+P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet *u16bits, StreamSet *u16bytes, cc::BitNumbering numbering)
 : BlockOrientedKernel("p2s_16" + cc::numberingSuffix(numbering),
-              {Binding{b->getStreamSetTy(16, 1), "basisBits"}},
-              {Binding{b->getStreamSetTy(1, 16), "i16Stream"}},
-                      {}, {}, {}),
-    mBasisSetNumbering(numbering) {
+{Binding{"basisBits", u16bits}},
+{Binding{"i16Stream", u16bytes}},
+{}, {}, {}),
+mBasisSetNumbering(numbering) {
+
 }
 
-
-P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering numbering)
+P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> &,
+                                                                 StreamSet * basisBits, StreamSet * fieldCounts, StreamSet * i16Stream,
+                                                                 cc::BitNumbering numbering)
 : BlockOrientedKernel("p2s_16_compress" + cc::numberingSuffix(numbering),
-              {Binding{b->getStreamSetTy(16, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "fieldCounts"}},
-              {Binding{b->getStreamSetTy(1, 16), "i16Stream", BoundedRate(0, 1)}},
-              {},
-              {},
-              {}),
-    mBasisSetNumbering(numbering) {
+{Binding{"basisBits", basisBits},
+Binding{"fieldCounts", fieldCounts}},
+{Binding{"i16Stream", i16Stream, BoundedRate(0, 1)}},
+{}, {}, {}),
+mBasisSetNumbering(numbering) {
+
 }
 
 

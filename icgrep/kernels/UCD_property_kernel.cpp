@@ -17,13 +17,13 @@ using namespace kernel;
 using namespace pablo;
 
 
-UnicodePropertyKernelBuilder::UnicodePropertyKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::Name * property_value_name)
+UnicodePropertyKernelBuilder::UnicodePropertyKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::Name * property_value_name, StreamSet *BasisBits, StreamSet * property)
 : PabloKernel(iBuilder,
-              "UCD:" + property_value_name->getFullName(),
-              {Binding{iBuilder->getStreamSetTy(8), "basis"}},
-              {Binding{iBuilder->getStreamSetTy(1, 1), "property_stream", FixedRate()}}),
-  mName(property_value_name)
-{
+"UCD:" + property_value_name->getFullName(),
+{Binding{"basis", BasisBits}},
+{Binding{"property_stream", property}}),
+  mName(property_value_name) {
+
 }
 
 void UnicodePropertyKernelBuilder::generatePabloMethod() {

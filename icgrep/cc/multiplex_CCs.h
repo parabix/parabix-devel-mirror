@@ -5,16 +5,16 @@
 #ifndef MULTIPLEX_CCS_H
 #define MULTIPLEX_CCS_H
 
-#include <vector>
 #include <cc/alphabet.h>
 
 namespace re { class CC; }
 
 namespace cc {
 
-class MultiplexedAlphabet : public Alphabet {
+class MultiplexedAlphabet final : public Alphabet {
 public:
-    MultiplexedAlphabet(std::string alphabetName, const std::vector<re::CC *> CCs);
+    MultiplexedAlphabet(const std::string alphabetName, const std::vector<re::CC *> CCs);
+
     static inline bool classof(const Alphabet * a) {
         return a->getClassTypeId() == ClassTypeId::MultiplexedAlphabet;
     }
@@ -45,6 +45,7 @@ private:
 
     unsigned long findTargetCCIndex(const re::CC * sourceCC) const;
 };
+
 }
 
 

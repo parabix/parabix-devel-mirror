@@ -10,8 +10,6 @@
 
 #include <re/re_cc.h>
 #include <pablo/builder.hpp>
-#include <kernels/interface.h>
-#include <string>
 #include <cc/alphabet.h>
 
 namespace cc {

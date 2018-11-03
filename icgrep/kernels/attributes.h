@@ -5,6 +5,8 @@
 #include <llvm/Support/Compiler.h>
 #include <assert.h>
 
+namespace llvm { class raw_ostream; }
+
 namespace kernel {
 
 struct Attribute {
@@ -13,7 +15,7 @@ struct Attribute {
 
         /** INPUT STREAM ATTRIBUTES **/
 
-        LookAhead, /// NOT DONE
+        LookAhead,
 
         // A LookAhead(n) attribute on an input stream set S declares that the kernel
         // looks ahead n positions in the input stream.  That is, processing of item
@@ -67,10 +69,14 @@ struct Attribute {
 
         ZeroExtend, /// NOT DONE
 
-        // If the available item count of an input stream it less than some other input
-        // stream(s), it will be zero-extended to the length of the larger stream. If
-        // this option is not set and the kernel does not have a MustExplicitlyTerminate
+        // If the available item count of an input stream is less than some other input
+        // stream(s), the stream will be zero-extended to the length of the larger stream.
+        // If this option is not set and the kernel does not have a MustExplicitlyTerminate
         // attribute, it will end once any input has been exhausted.
+
+        // NOTE: zero-extended streams are not considered by the pipeline when ascertaining
+        // whether it is entering the final segment. At least one input stream must not be
+        // zero-extended and a stream cannot have both Principal and ZeroExtend attributes.
 
         IndependentRegionBegin, IndependentRegionEnd, /// NOT DONE
 
@@ -99,10 +105,10 @@ struct Attribute {
         // out" the input streams. Otherwise a MultiBlock will use temporary buffers for all
         // uses of the streams and zero out any non-regions from the data.
 
-        AlwaysConsume,
+        RequiresPopCountArray, RequiresNegatedPopCountArray,
 
-        // Always consume the input (i.e., use the lowerbound to determine whether to there
-        // is enough data to execute a stride rather than the upper bound.)
+        // Marks whether a particular input stream requires a popcount or negated popcount
+        // array for its own internal processing.
 
         /** OUTPUT STREAM ATTRIBUTES **/
 
@@ -115,6 +121,16 @@ struct Attribute {
 
         // A RoundUpTo(k) attribute indicates the final item count of this stream will
         // be rounded up to the nearest multiple of k
+
+        ManagedBuffer,
+
+        // Generally, kernels do not require knowledge about how many items are consumed
+        // from their produced streams or who is consuming them and instead rely on the
+        // pipeline to manage their output buffers for them. The major exception are source
+        // kernels since they produce data "autonomously" and may manage their memory
+        // internally. Thus this attribute instructs both the kernel compiler and pipeline
+        // that a particular output stream needs both the consumed item count and a pointer
+        // to each of its consumers logical segment number for its internal logic.
 
         /** INPUT/OUTPUT STREAM ATTRIBUTES **/
 
@@ -209,66 +225,17 @@ struct Attribute {
 //        That seems to have disappeared in the current system.
 
 
-        RequiresLinearAccess, PermitsNonLinearAccess,
+        SliceOffset, /// NOT DONE
 
-        // Indicates whether all unprocessed / consumed space is safely accessible by the
-        // MultiBlockKernel code. By default, input streams and any output stream in which
-        // we know a priori exactly how much data will be written into the overflow buffer
-        // are opt-out and all others are opt-in. The reason is that writing non-linear
-        // output at a non-Fixed rate be costly to manage. E.g.,
-
-        //                             BUFFER          v   OVERFLOW
-        //                |?????############...........###|#####???|
-        //                                 n           p  k    m
-
-        // Suppose from a given offset p, we write n items but only have space for k items
-        // in the stream set buffer. Assuming we wrote more than one stride, we know that
-        // there are (m - k) items in the overflow but may not know what our value of m is
-        // unless we can derive the relationship between m and n a priori. The problem is
-        // that the kernel will write the second stride's output at the (m - k)-th position
-        // of the 0-th block and but final reported count will be n. We can safely mitigate
-        // this in many ways:
-
-        // (1) when we detect that we could write into the overflow region of the buffer,
-        // we can zero out the memory of both the overflow *and* the 0-th block of the
-        // buffer then combine both by OR-ing the streams and writing them to the 0-th
-        // block. The advantage is we require no extra memory but the disadvantage is that
-        // the kernel is now relies on the pipeline to ensure that whenever we may write
-        // into the overflow that the 0-th block is fully consumed.
-
-        // (2) the overflow region is equal to the size of the buffer (i.e., employ double
-        // buffering.) The advantage of this is the kernel makes no assumptions about the
-        // pipeline itself. The disadvantage is we could have to copy a lot of data if k
-        // is very small and the amount we will copy is variable.
-
-        // (3) use stack allocated temporary buffers. This method has similar advantages /
-        // disadvantages to 2 but trades heap space allocations for stack based ones.
-
-        // (4) force people writing kernels to record the number of items written each
-        // stride. The advantage of this is it would be as cheap as (1) but requires the
-        // kernel writer maintain the current stride index and that the kernel logic has
-        // a natural breakpoint in the algorithm in which to record the number.
+        // Given a SliceOffset of k, the k-th stream set be the base (zeroth) stream set
+        // for the kernel. Internally, this stores a scalar in the kernel state and loads
+        // it once at the start of each segment.
 
         Expandable, /// NOT DONE
 
         // Indicates that the number of stream sets in this buffer can increase.
 
         /** KERNEL ATTRIBUTES **/
-
-        SelectMinimumInputLength, /// NOT DONE
-
-        // If a kernel has multiple input streams and their final item count differs,
-        // a MultiBlock kernel will select the *minimum* input item count as it's
-        // principle item length and truncate the streams to fit
-
-        // NOTE: this is the default if a kernel does not have SelectMaximumInputLength
-        // set and no PrincipalInputStream was declared.
-
-        SelectMaximumInputLength, /// NOT DONE
-
-        // If a kernel has multiple input streams and their final item count differs,
-        // a MultiBlock kernel will select the *maximum* input item count as it's
-        // principle item length and zero-extend the streams accordingly.
 
         CanTerminateEarly,
 
@@ -281,9 +248,17 @@ struct Attribute {
         // and will be called even when there is no new input data when the prior kernels
         // in the pipeline have also terminated.
 
-        MustProcessAll,
+        SideEffecting,
 
-        //Workaround, the kernel will finish only when all of the inputs are consumed
+        // Mark this kernel as side-effecting, which will prevent the pipeline compiler
+        // from wrongly removing it from the pipeline. All sink kernels that produce a
+        // result through StdOut/StdErr should be marked as SideEffecting.
+
+        Family,
+
+        // Marks that this kernel is belongs to a named family and whether an input scalar
+        // should be surpressed from the generated "main" function because it will be bound
+        // within it to the appropriate handle/function pointers.
 
     };
 
@@ -330,8 +305,8 @@ protected:
     friend Attribute Add1();
     friend Attribute BlockSize(const unsigned k);
     friend Attribute Principal();
-    friend Attribute AlwaysConsume();
     friend Attribute RoundUpTo(const unsigned);
+    friend Attribute ManagedBuffer();
     friend Attribute LookAhead(const unsigned);
     friend Attribute LookBehind(const unsigned);
     friend Attribute Deferred();
@@ -340,8 +315,12 @@ protected:
     friend Attribute ConditionalRegionEnd();
     friend Attribute CanTerminateEarly();
     friend Attribute MustExplicitlyTerminate();
-    friend Attribute RequiresLinearAccess();
-    friend Attribute PermitsNonLinearAccess();
+    friend Attribute RequiresPopCountArray();
+    friend Attribute RequiresNegatedPopCountArray();
+    friend Attribute SideEffecting();
+    friend Attribute Family();
+
+    void print(llvm::raw_ostream & out) const noexcept;
 
     Attribute(const KindId kind, const unsigned k) : mKind(kind), mAmount(k) { }
 
@@ -367,25 +346,31 @@ struct AttributeSet : public std::vector<Attribute> {
         }
     }
 
-    Attribute & findAttribute(const AttributeId id) const {
+    Attribute & findAttribute(const AttributeId id) const LLVM_READNONE {
         return *__findAttribute(id);
     }
 
     Attribute & addAttribute(Attribute attribute);
 
-    bool LLVM_READNONE hasAttributes() const {
+    bool hasAttributes() const LLVM_READNONE {
         return !empty();
     }
 
-    bool LLVM_READNONE hasAttribute(const AttributeId id) const {
+    bool hasAttribute(const AttributeId id) const LLVM_READNONE {
         return __findAttribute(id) != nullptr;
     }
 
     AttributeSet() = default;
 
+    AttributeSet(const AttributeSet &) = default;
+
     AttributeSet(Attribute && attr) { emplace_back(std::move(attr)); }
 
     AttributeSet(std::initializer_list<Attribute> attrs) : std::vector<Attribute>(attrs) { }
+
+protected:
+
+    void print(llvm::raw_ostream & out) const noexcept;
 
 private:
 
@@ -401,8 +386,8 @@ inline Attribute RoundUpTo(const unsigned k) {
     return Attribute(Attribute::KindId::RoundUpTo, k);
 }
 
-inline Attribute AlwaysConsume() {
-    return Attribute(Attribute::KindId::AlwaysConsume, 0);
+inline Attribute ManagedBuffer() {
+    return Attribute(Attribute::KindId::ManagedBuffer, 0);
 }
 
 inline Attribute Principal() {
@@ -430,14 +415,6 @@ inline Attribute Swizzled() {
     return BlockSize(64);
 }
 
-inline Attribute RequiresLinearAccess() {
-    return Attribute(Attribute::KindId::RequiresLinearAccess, 0);
-}
-
-inline Attribute PermitsNonLinearAccess() {
-    return Attribute(Attribute::KindId::PermitsNonLinearAccess, 0);
-}
-
 inline Attribute Misaligned() {
     return Attribute(Attribute::KindId::Misaligned, 0);
 }
@@ -456,6 +433,22 @@ inline Attribute CanTerminateEarly() {
 
 inline Attribute MustExplicitlyTerminate() {
     return Attribute(Attribute::KindId::MustExplicitlyTerminate, 0);
+}
+
+inline Attribute SideEffecting() {
+    return Attribute(Attribute::KindId::SideEffecting, 0);
+}
+
+inline Attribute Family() {
+    return Attribute(Attribute::KindId::Family, 0);
+}
+
+inline Attribute RequiresPopCountArray() {
+    return Attribute(Attribute::KindId::RequiresPopCountArray, 0);
+}
+
+inline Attribute RequiresNegatedPopCountArray() {
+    return Attribute(Attribute::KindId::RequiresNegatedPopCountArray, 0);
 }
 
 }

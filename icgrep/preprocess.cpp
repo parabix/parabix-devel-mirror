@@ -24,7 +24,6 @@
 
 using namespace llvm;
 using namespace kernel;
-using namespace parabix;
 
 namespace re {class RE;}
 
@@ -37,7 +36,7 @@ void wrapped_report_pos(size_t match_pos, int dist) {
 
 }
 
-void preprocessPipeline(ParabixDriver & pxDriver){
+void preprocessPipeline(CPUEngineInstance & pxDriver){
     auto & iBuilder = pxDriver.getBuilder();
     Module * m = iBuilder->getModule();
     Type * const size_ty = iBuilder->getSizeTy();
@@ -78,7 +77,7 @@ void preprocessPipeline(ParabixDriver & pxDriver){
 typedef void (*preprocessFunctionType)(char * byte_data, size_t filesize);
 
 std::vector<size_t> preprocess(char * fileBuffer, size_t fileSize) {
-    ParabixDriver pxDriver("preprocess");
+    CPUEngineInstance pxDriver("preprocess");
     preprocessPipeline(pxDriver);
     auto main = reinterpret_cast<preprocessFunctionType>(pxDriver.getMain());
     main(fileBuffer, fileSize);

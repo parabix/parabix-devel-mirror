@@ -8,107 +8,74 @@
 #include <kernels/p2s_kernel.h>
 #include <kernels/lz4/decompression/lz4_bytestream_decompression.h>
 #include <kernels/kernel_builder.h>
-
+#include <kernels/pipeline_builder.h>
 
 using namespace kernel;
-using namespace parabix;
 
-
-parabix::StreamSetBuffer* LZ4GrepByteStreamGenerator::generateUncompressedByteStream() {
-    StreamSetBuffer* compressedByteStream = this->loadByteStream();
-    parabix::StreamSetBuffer * uncompressedByteStream = this->byteStreamDecompression(compressedByteStream);
+StreamSet *LZ4GrepByteStreamGenerator::generateUncompressedByteStream() {
+    StreamSet* compressedByteStream = loadByteStream();
+    StreamSet * uncompressedByteStream = byteStreamDecompression(compressedByteStream);
     return uncompressedByteStream;
 }
-StreamSetBuffer *LZ4GrepByteStreamGenerator::generateUncompressedBitStreams() {
-    parabix::StreamSetBuffer * uncompressedByteStream = this->generateUncompressedByteStream();
-    return this->s2p(uncompressedByteStream);
+StreamSet *LZ4GrepByteStreamGenerator::generateUncompressedBitStreams() {
+    StreamSet * uncompressedByteStream = generateUncompressedByteStream();
+    return s2p(uncompressedByteStream);
 }
 
-parabix::StreamSetBuffer *
-LZ4GrepByteStreamGenerator::decompressBitStream(parabix::StreamSetBuffer *compressedByteStream,
-                                                parabix::StreamSetBuffer *compressedBitStream) {
-    return this->decompressBitStreams(compressedByteStream, {compressedBitStream})[0];
+StreamSet * LZ4GrepByteStreamGenerator::decompressBitStream(StreamSet *compressedByteStream, StreamSet *compressedBitStream) {
+    return decompressBitStreams(compressedByteStream, {compressedBitStream})[0];
 }
 
-std::vector<parabix::StreamSetBuffer *>
-LZ4GrepByteStreamGenerator::decompressBitStreams(parabix::StreamSetBuffer *compressedByteStream,
-                                                 std::vector<parabix::StreamSetBuffer *> compressedBitStreams) {
-    auto & b = mPxDriver.getBuilder();
+StreamSets LZ4GrepByteStreamGenerator::decompressBitStreams(StreamSet * compressedByteStream, StreamSets compressedBitStreams) {
 
     std::vector<unsigned> numOfStreams(compressedBitStreams.size());
-    std::transform(compressedBitStreams.begin(), compressedBitStreams.end(), numOfStreams.begin(), [](StreamSetBuffer* b){return b->getNumOfStreams();});
-    unsigned totalStreamNum = std::accumulate(numOfStreams.begin(), numOfStreams.end(), 0u);
+    std::transform(compressedBitStreams.begin(), compressedBitStreams.end(), numOfStreams.begin(),
+                   [](StreamSet* b){
+                        return b->getNumElements();
+                   });
 
-    unsigned twistWidth = this->calculateTwistWidth(totalStreamNum);
-    StreamSetBuffer* twistedStream = this->twist(b, compressedBitStreams, twistWidth);
+    const auto totalStreamNum = std::accumulate(numOfStreams.begin(), numOfStreams.end(), 0u);
 
-    LZ4BlockInfo blockInfo = this->getBlockInfo(compressedByteStream);
-    StreamSetBuffer* uncompressedTwistedStream = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, twistWidth), this->getDefaultBufferBlocks(), 1);
-    std::vector<StreamSetBuffer*> inputStreams = {
-            compressedByteStream,
+    const auto twistWidth = calculateTwistWidth(totalStreamNum);
+    StreamSet * twistedStream = twist(compressedBitStreams, twistWidth);
 
-            blockInfo.isCompress,
-            blockInfo.blockStart,
-            blockInfo.blockEnd,
+    LZ4BlockInfo blockInfo = getBlockInfo(compressedByteStream);
 
-            twistedStream
-    };
-    std::vector<StreamSetBuffer*> outputStreams = {
-            uncompressedTwistedStream
-    };
+    StreamSet * const uncompressedTwistedStream = mPipeline->CreateStreamSet(1, twistWidth);
 
-    if (twistWidth <= 4) {
-        Kernel* lz4I4AioK = mPxDriver.addKernelInstance<LZ4TwistDecompressionKernel>(b, twistWidth);
-        lz4I4AioK->setInitialArguments({mFileSize});
-        mPxDriver.makeKernelCall(lz4I4AioK, inputStreams, outputStreams);
-
+    if (twistWidth <= 4) {    
+        mPipeline->CreateKernelCall<LZ4TwistDecompressionKernel>(mFileSize, compressedByteStream, blockInfo, twistedStream, uncompressedTwistedStream);
     } else {
-        Kernel* lz4AioK = mPxDriver.addKernelInstance<LZ4ByteStreamDecompressionKernel>(b, true);
-        lz4AioK->setInitialArguments({mFileSize});
-        mPxDriver.makeKernelCall(lz4AioK, inputStreams, outputStreams);
+        mPipeline->CreateKernelCall<LZ4ByteStreamDecompressionKernel>(mFileSize, compressedByteStream, blockInfo, twistedStream, uncompressedTwistedStream);
     }
-    return this->untwist(b, uncompressedTwistedStream, twistWidth, numOfStreams);
+
+    return untwist(uncompressedTwistedStream, twistWidth, numOfStreams);
 }
 
-parabix::StreamSetBuffer* LZ4GrepByteStreamGenerator::twist(const std::unique_ptr<kernel::KernelBuilder> &b,
-                                                            std::vector<StreamSetBuffer*> inputStreams,
-                                                            unsigned twistWidth
-) {
-    std::vector<unsigned> numsOfStreams(inputStreams.size());
-    std::transform(inputStreams.begin(), inputStreams.end(), numsOfStreams.begin(), [](StreamSetBuffer* b){return b->getNumOfStreams();});
-    unsigned totalNumOfStreams = std::accumulate(numsOfStreams.begin(), numsOfStreams.end(), 0u);
-    assert(totalNumOfStreams <= twistWidth);
+StreamSet * LZ4GrepByteStreamGenerator::twist(const StreamSets & inputStreams, const unsigned twistWidth) {
 
     if (twistWidth == 1) {
         for (unsigned i = 0; i < inputStreams.size(); i++) {
-            if (inputStreams[i]->getNumOfStreams() == 1) {
+            if (inputStreams[i]->getNumElements() == 1) {
                 return inputStreams[i];
             }
         }
-    } else if (twistWidth == 2 || twistWidth == 4) {
-        StreamSetBuffer* twistedCharClasses = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, twistWidth),
-                                                                                this->getDefaultBufferBlocks(), 1);
-        kernel::Kernel* twistK = mPxDriver.addKernelInstance<kernel::TwistMultipleByPDEPKernel>(b, numsOfStreams, twistWidth);
-        mPxDriver.makeKernelCall(twistK, inputStreams, {twistedCharClasses});
-        return twistedCharClasses;
-    } else if (twistWidth == 8) {
-        StreamSetBuffer * const mtxByteStream = mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(1, twistWidth),
-                                                                                  this->getDefaultBufferBlocks());
-        Kernel * p2sK = mPxDriver.addKernelInstance<P2SMultipleStreamsKernel>(b, cc::BitNumbering::BigEndian, numsOfStreams);
-        mPxDriver.makeKernelCall(p2sK, inputStreams, {mtxByteStream});
-        return mtxByteStream;
-    } else {
-        llvm::report_fatal_error("Twist: Unsupported twistWidth " + std::to_string(twistWidth));;
+        llvm_unreachable("did not find input stream");
     }
+
+    StreamSet * const twistedOutput = mPipeline->CreateStreamSet(1, twistWidth);
+    if (twistWidth == 2 || twistWidth == 4) {
+        mPipeline->CreateKernelCall<TwistMultipleByPDEPKernel>(inputStreams, twistedOutput);
+    } else if (twistWidth == 8) {
+        mPipeline->CreateKernelCall<P2SMultipleStreamsKernel>(inputStreams, twistedOutput, cc::BitNumbering::BigEndian);
+    } else {
+        llvm::report_fatal_error("Twist: Unsupported twistWidth " + std::to_string(twistWidth));
+    }
+    return twistedOutput;
 }
 
-std::vector<StreamSetBuffer*> LZ4GrepByteStreamGenerator::untwist(const std::unique_ptr<kernel::KernelBuilder> &b,
-                                                              parabix::StreamSetBuffer *inputStream,
-                                                              unsigned twistWidth,
-                                                              std::vector<unsigned> numOfStreams
-) {
-    unsigned totalNumOfStreams = std::accumulate(numOfStreams.begin(), numOfStreams.end(), 0u);
-    assert(totalNumOfStreams <= twistWidth);
+StreamSets LZ4GrepByteStreamGenerator::untwist(StreamSet * inputStream, const unsigned twistWidth, const std::vector<unsigned> & numOfStreams) {
+    StreamSets retBuffers;
     if (twistWidth == 1) {
         std::vector<unsigned> fakeStreamNums;
         for (unsigned i = 0; i < numOfStreams.size(); i++) {
@@ -116,38 +83,28 @@ std::vector<StreamSetBuffer*> LZ4GrepByteStreamGenerator::untwist(const std::uni
                 fakeStreamNums.push_back(0);
             }
         }
-        auto fakeStreams = this->generateFakeStreams(b, inputStream, fakeStreamNums);
-
-        std::vector<StreamSetBuffer*> retBuffers;
+        auto fakeStreams = generateFakeStreams(inputStream, fakeStreamNums);
         unsigned j = 0;
         for (unsigned i = 0; i < numOfStreams.size(); i++) {
             if (numOfStreams[i] == 0) {
-                retBuffers.push_back(fakeStreams[j]);
-                j++;
+                retBuffers.push_back(fakeStreams[j++]);
             } else {
                 retBuffers.push_back(inputStream);
             }
         }
-        return retBuffers;
-    } else{
-        std::vector<StreamSetBuffer*> retBuffers;
+    } else{        
         for (unsigned i = 0; i < numOfStreams.size(); i++) {
-            retBuffers.push_back(mPxDriver.addBuffer<StaticBuffer>(b, b->getStreamSetTy(numOfStreams[i]), this->getDefaultBufferBlocks(), 1));
+            retBuffers.push_back(mPipeline->CreateStreamSet(numOfStreams[i]));
         }
-
-
         if (twistWidth == 2 || twistWidth == 4) {
-            kernel::Kernel* untwistK = mPxDriver.addKernelInstance<kernel::UntwistMultipleByPEXTKernel>(b, numOfStreams, twistWidth);
-            mPxDriver.makeKernelCall(untwistK, {inputStream}, retBuffers);
-            return retBuffers;
+            mPipeline->CreateKernelCall<UntwistMultipleByPEXTKernel>(inputStream, retBuffers);
         } else if (twistWidth == 8) {
-            Kernel * s2pk = mPxDriver.addKernelInstance<S2PMultipleStreamsKernel>(b, cc::BitNumbering::BigEndian, true, numOfStreams);
-            mPxDriver.makeKernelCall(s2pk, {inputStream}, retBuffers);
-            return retBuffers;
+            mPipeline->CreateKernelCall<S2PMultipleStreamsKernel>(inputStream, retBuffers, cc::BitNumbering::BigEndian, true);
         } else {
             llvm::report_fatal_error("Twist: Unsupported twistWidth " + std::to_string(twistWidth));;
         }
     }
+    return retBuffers;
 }
 
 

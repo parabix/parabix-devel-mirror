@@ -18,46 +18,41 @@ using namespace std;
 
 namespace kernel{
 
-    LZ4SwizzledDecompressionKernel::LZ4SwizzledDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned streamCount,
-                                               unsigned streamSize, unsigned swizzleFactor,
-                                               unsigned blockSize):
-    LZ4SequentialDecompressionKernel(b, "LZ4SwizzledDecompressionKernel", blockSize),
-    mStreamCount(streamCount),
-    mStreamSize(streamSize),
-    mSwizzleFactor(swizzleFactor),
-    mPDEPWidth(b->getBitBlockWidth() / mSwizzleFactor)
+    LZ4SwizzledDecompressionKernel::LZ4SwizzledDecompressionKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+                                                                   Scalar * fileSize,
+                                                                   StreamSet * inputStream,
+                                                                   const LZ4BlockInfo & blockInfo,
+                                                                   const std::vector<StreamSet * > & swizzledInput,
+                                                                   const std::vector<StreamSet * > & swizzledOutput):
+    LZ4SequentialDecompressionKernel(b, "LZ4SwizzledDecompressionKernel", fileSize, inputStream, blockInfo),
+    mStreamCount(swizzledInput[0]->getNumElements()),
+    mStreamSize(swizzledInput.size()),
+    mPDEPWidth(b->getBitBlockWidth() / 4)
     {
 //        assert((mPDEPWidth == 64 || mPDEPWidth == 32) && "PDEP width must be 32 or 64");
-        mStreamSetInputs.push_back(Binding{b->getStreamSetTy(streamCount), "sourceStreamSet0", RateEqualTo("byteStream"), {Swizzled(), AlwaysConsume()}});
-        mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(streamCount), "outputStreamSet0", BoundedRate(0, 1)});
+        mInputStreamSets.push_back(Binding{"sourceStreamSet0", swizzledInput[0], RateEqualTo("byteStream"), {Swizzled()}}); // , AlwaysConsume()
+        mOutputStreamSets.push_back(Binding{"outputStreamSet0", swizzledOutput[0], BoundedRate(0, 1)});
 
-        for (unsigned i = 1; i < streamSize; i++) {
-            mStreamSetInputs.push_back(Binding{b->getStreamSetTy(streamCount), "sourceStreamSet" + std::to_string(i), RateEqualTo("sourceStreamSet0"), {Swizzled(), AlwaysConsume()}});
-            mStreamSetOutputs.push_back(Binding{b->getStreamSetTy(streamCount), "outputStreamSet" + std::to_string(i), RateEqualTo("outputStreamSet0")});
+        for (unsigned i = 1; i < mStreamSize; i++) {
+            mInputStreamSets.push_back(Binding{"sourceStreamSet" + std::to_string(i), swizzledInput[i], RateEqualTo("sourceStreamSet0"), {Swizzled()}}); // , AlwaysConsume()
+            mOutputStreamSets.push_back(Binding{"outputStreamSet" + std::to_string(i), swizzledOutput[i], RateEqualTo("outputStreamSet0")});
         }
 
-        this->addScalar(b->getSizeTy(), "accelerationOutputIndex");
-        this->addScalar(ArrayType::get(b->getSizeTy(), 48), "literalStartArray");
-        this->addScalar(ArrayType::get(b->getSizeTy(), 48), "literalLengthArray");
-        this->addScalar(ArrayType::get(b->getSizeTy(), 48), "matchOffsetArray");
-        this->addScalar(ArrayType::get(b->getSizeTy(), 48), "matchLengthArray");
+        addInternalScalar(b->getSizeTy(), "accelerationOutputIndex");
+        ArrayType * const arrayTy = ArrayType::get(b->getSizeTy(), 48);
+        addInternalScalar(arrayTy, "literalStartArray");
+        addInternalScalar(arrayTy, "literalLengthArray");
+        addInternalScalar(arrayTy, "matchOffsetArray");
+        addInternalScalar(arrayTy, "matchLengthArray");
     }
 
     void LZ4SwizzledDecompressionKernel::prepareAcceleration(const std::unique_ptr<KernelBuilder> &b, llvm::Value* beginTokenPos) {
         b->setScalarField("accelerationOutputIndex", b->getSize(0));
-        /*
-        std::vector<Value*> inputValuesVector = std::vector<Value*>();
-        for (unsigned i = 0; i < mStreamSize; i++) {
-            Value* sourceBasePtr = b->CreatePointerCast(b->getRawInputPointer("sourceStreamSet" + std::to_string(i), SIZE_0), BITBLOCK_PTR_TYPE);
-            Value* inputValue = b->CreateLoad(b->CreateGEP(sourceBasePtr, literalBlockIndex));
-            inputValuesVector.push_back(inputValue);
-        }
-        */
     }
 
     void LZ4SwizzledDecompressionKernel::doAccelerationLiteralCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *literalStart,
                                            llvm::Value *literalLength, llvm::Value* blockStart) {
-//        this->handleAccelerationLiteralCopy(b, literalStart, literalLength, inputValuesVector);
+//        handleAccelerationLiteralCopy(b, literalStart, literalLength, inputValuesVector);
 
         Type* sizePtrTy = b->getSizeTy()->getPointerTo();
         Value* outputIndex = b->getScalarField("accelerationOutputIndex");
@@ -72,7 +67,7 @@ namespace kernel{
 
     void LZ4SwizzledDecompressionKernel::doAccelerationMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                                          llvm::Value *matchLength) {
-//        this->handleMatchCopy(b, matchOffset, matchLength);
+//        handleMatchCopy(b, matchOffset, matchLength);
 
         Type* sizePtrTy = b->getSizeTy()->getPointerTo();
         Value* outputIndex = b->getScalarField("accelerationOutputIndex");
@@ -94,7 +89,7 @@ namespace kernel{
         Value* literalLengthArray = b->CreatePointerCast(b->getScalarFieldPtr("literalLengthArray"), sizePtrTy);
         Value* matchOffsetArray = b->CreatePointerCast(b->getScalarFieldPtr("matchOffsetArray"), sizePtrTy);
         Value* matchLengthArray = b->CreatePointerCast(b->getScalarFieldPtr("matchLengthArray"), sizePtrTy);
-        this->handleAccelerationPdepOutput(
+        handleAccelerationPdepOutput(
                 b,
                 literalBlockIndex,
                 literalMask,
@@ -104,7 +99,7 @@ namespace kernel{
                 outputIndex
         );
 
-        this->handleAccelerationMatchCopyOutput(
+        handleAccelerationMatchCopyOutput(
                 b,
                 literalLengthArray,
                 matchOffsetArray,
@@ -154,7 +149,7 @@ namespace kernel{
         Value* currentMatchOffset = b->CreateLoad(b->CreateGEP(matchOffsetArray, phiMatchCopyDataIndex));
         Value* currentMatchLength = b->CreateLoad(b->CreateGEP(matchLengthArray, phiMatchCopyDataIndex));
         Value* matchPos = b->CreateAdd(phiMatchCopyOutputPos, currentLiteralLength);
-        this->handleMatchCopy(b, matchPos, currentMatchOffset, currentMatchLength, false);
+        handleMatchCopy(b, matchPos, currentMatchOffset, currentMatchLength, false);
 
         phiMatchCopyDataIndex->addIncoming(b->CreateAdd(phiMatchCopyDataIndex, SIZE_1), b->GetInsertBlock());
         phiMatchCopyOutputPos->addIncoming(b->CreateAdd(matchPos, currentMatchLength), b->GetInsertBlock());
@@ -506,7 +501,7 @@ namespace kernel{
     void LZ4SwizzledDecompressionKernel::doMatchCopy(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffset,
                              llvm::Value *matchLength) {
         Value* outputPos = b->getScalarField("outputPos");
-        this->handleMatchCopy(b, outputPos, matchOffset, matchLength);
+        handleMatchCopy(b, outputPos, matchOffset, matchLength);
         b->setScalarField("outputPos", b->CreateAdd(outputPos, matchLength));
     }
 

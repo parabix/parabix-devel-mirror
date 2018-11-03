@@ -5,64 +5,96 @@
 
 #include "streams_merge.h"
 #include <kernels/kernel_builder.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
 namespace kernel {
 
-StreamsMerge::StreamsMerge(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamsPerSet, unsigned inputSets)
-    : BlockOrientedKernel("streamsMerge" + std::to_string(streamsPerSet) + "_" + std::to_string(inputSets) , {}, {}, {}, {}, {})
-, mStreamsPerSet(streamsPerSet)
-, mInputSets(inputSets) {
-    for (unsigned i = 0; i < mInputSets; i++) {
-        mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(streamsPerSet, 1), "inputGroup" + std::to_string(i)});
+std::string makeKernelName(const std::string & prefix, const std::vector<StreamSet *> & inputs, StreamSet * const output) {
+    std::string tmp;
+    raw_string_ostream out(tmp);
+    out << prefix << inputs.size();
+    char joiner = 'x';
+    unsigned maxNumOfInputStreams = 0;
+    for (unsigned i = 0; i < inputs.size(); ++i) {
+        if (LLVM_UNLIKELY(inputs[i]->getFieldWidth() != 1)) {
+            report_fatal_error("input streams must be of field width 1");
+        }
+        maxNumOfInputStreams = std::max(maxNumOfInputStreams, inputs[i]->getNumElements());
+        out << joiner << inputs[i]->getNumElements();
+        joiner = '_';
     }
-    mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamsPerSet, 1), "output"});
+    if (LLVM_UNLIKELY(output->getNumElements() < maxNumOfInputStreams)) {
+        report_fatal_error("output streamset requires " + std::to_string(maxNumOfInputStreams) + " streams");
+    }
+    out << ':' << output->getNumElements();
+    out.flush();
+    return tmp;
+}
+
+StreamsMerge::StreamsMerge(const std::unique_ptr<kernel::KernelBuilder> &, const std::vector<StreamSet *> & inputs, StreamSet * output)
+: BlockOrientedKernel(makeKernelName("streamsMerge", inputs, output), {}, {}, {}, {}, {}) {
+    for (unsigned i = 0; i < inputs.size(); i++) {
+        mInputStreamSets.push_back(Binding{"input" + std::to_string(i), inputs[i]});
+    }
+    mOutputStreamSets.push_back(Binding{"output", output});
 }
 
 void StreamsMerge::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
 
-    std::vector<Value *> resultStreams;
-
-    for (unsigned j = 0; j < mStreamsPerSet; j++) {
-        resultStreams.push_back(iBuilder->loadInputStreamBlock("inputGroup" + std::to_string(0), iBuilder->getInt32(j)));
-    }
-
-    for (unsigned i = 1; i < mInputSets; i++) {
-        for (unsigned j = 0; j < mStreamsPerSet; j++) {
-            resultStreams[j] = iBuilder->CreateOr(resultStreams[j], iBuilder->loadInputStreamBlock("inputGroup" + std::to_string(i), iBuilder->getInt32(j)));
+    const auto n = getOutputStreamSet(0)->getNumElements();
+    std::vector<Value *> resultStreams(n, nullptr);
+    for (unsigned i = 0; i < getNumOfStreamInputs(); ++i) {
+        const auto m = getInputStreamSet(i)->getNumElements(); assert (m <= n);
+        for (unsigned j = 0; j < m; ++j) {
+            Value * const inputValue = iBuilder->loadInputStreamBlock("input" + std::to_string(i), iBuilder->getInt32(j));
+            if (resultStreams[j]) {
+                resultStreams[j] = iBuilder->CreateOr(resultStreams[j], inputValue);
+            } else {
+                resultStreams[j] = inputValue;
+            }
         }
     }
-    for (unsigned j = 0; j < mStreamsPerSet; j++) {
-        iBuilder->storeOutputStreamBlock("output", iBuilder->getInt32(j), resultStreams[j]);
+
+    for (unsigned j = 0; j < n; j++) {
+        Value * output = resultStreams[j];
+        if (LLVM_UNLIKELY(output == nullptr)) {
+            output = iBuilder->allZeroes();
+        }
+        iBuilder->storeOutputStreamBlock("output", iBuilder->getInt32(j), output);
     }
 }
 
-StreamsIntersect::StreamsIntersect(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamsPerSet, unsigned inputSets)
-: BlockOrientedKernel("streamsIntersect" + std::to_string(streamsPerSet) + "_" + std::to_string(inputSets) , {}, {}, {}, {}, {})
-, mStreamsPerSet(streamsPerSet)
-, mInputSets(inputSets) {
-    for (unsigned i = 0; i < mInputSets; i++) {
-        mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(streamsPerSet, 1), "inputGroup" + std::to_string(i)});
+StreamsIntersect::StreamsIntersect(const std::unique_ptr<kernel::KernelBuilder> &, const std::vector<StreamSet *> & inputs, StreamSet * output)
+: BlockOrientedKernel(makeKernelName("streamsIntersect", inputs, output), {}, {}, {}, {}, {}) {
+    for (unsigned i = 0; i < inputs.size(); i++) {
+        mInputStreamSets.push_back(Binding{"input" + std::to_string(i), inputs[i]});
     }
-    mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamsPerSet, 1), "output"});
+    mOutputStreamSets.push_back(Binding{"output", output});
 }
 
 void StreamsIntersect::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
-    
-    std::vector<Value *> resultStreams;
-    
-    for (unsigned j = 0; j < mStreamsPerSet; j++) {
-        resultStreams.push_back(iBuilder->loadInputStreamBlock("inputGroup" + std::to_string(0), iBuilder->getInt32(j)));
-    }
-    
-    for (unsigned i = 1; i < mInputSets; i++) {
-        for (unsigned j = 0; j < mStreamsPerSet; j++) {
-            resultStreams[j] = iBuilder->CreateAnd(resultStreams[j], iBuilder->loadInputStreamBlock("inputGroup" + std::to_string(i), iBuilder->getInt32(j)));
+    const auto n = getOutputStreamSet(0)->getNumElements();
+    std::vector<Value *> resultStreams(n, nullptr);
+    for (unsigned i = 0; i < getNumOfStreamInputs(); ++i) {
+        const auto m = getInputStreamSet(i)->getNumElements(); assert (m <= n);
+        for (unsigned j = 0; j < m; ++j) {
+            Value * const inputValue = iBuilder->loadInputStreamBlock("input" + std::to_string(i), iBuilder->getInt32(j));
+            if (resultStreams[j]) {
+                resultStreams[j] = iBuilder->CreateAnd(resultStreams[j], inputValue);
+            } else {
+                resultStreams[j] = inputValue;
+            }
         }
     }
-    for (unsigned j = 0; j < mStreamsPerSet; j++) {
-        iBuilder->storeOutputStreamBlock("output", iBuilder->getInt32(j), resultStreams[j]);
+
+    for (unsigned j = 0; j < n; j++) {
+        Value * output = resultStreams[j];
+        if (LLVM_UNLIKELY(output == nullptr)) {
+            output = iBuilder->allZeroes();
+        }
+        iBuilder->storeOutputStreamBlock("output", iBuilder->getInt32(j), output);
     }
 }
 
@@ -73,9 +105,9 @@ StreamsCombineKernel::StreamsCombineKernel(const std::unique_ptr<kernel::KernelB
     int total = 0;
     for (unsigned i = 0; i < streamsNumOfSets.size(); i++) {
         total += streamsNumOfSets[i];
-        mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(streamsNumOfSets[i], 1), "inputGroup" + std::to_string(i)});
+        mInputStreamSets.push_back(Binding{iBuilder->getStreamSetTy(streamsNumOfSets[i], 1), "inputGroup" + std::to_string(i)});
     }
-    mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(total, 1), "output"});
+    mOutputStreamSets.push_back(Binding{iBuilder->getStreamSetTy(total, 1), "output"});
 }
 
 void StreamsCombineKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {
@@ -104,9 +136,9 @@ StreamsSplitKernel::StreamsSplitKernel(const std::unique_ptr<kernel::KernelBuild
     int total = 0;
     for (unsigned i = 0; i < streamsNumOfSets.size(); i++) {
         total += streamsNumOfSets[i];
-        mStreamSetOutputs.push_back(Binding{iBuilder->getStreamSetTy(streamsNumOfSets[i], 1), "outputGroup" + std::to_string(i)});
+        mOutputStreamSets.push_back(Binding{iBuilder->getStreamSetTy(streamsNumOfSets[i], 1), "outputGroup" + std::to_string(i)});
     }
-    mStreamSetInputs.push_back(Binding{iBuilder->getStreamSetTy(total, 1), "input"});
+    mInputStreamSets.push_back(Binding{iBuilder->getStreamSetTy(total, 1), "input"});
 }
 
 void StreamsSplitKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {

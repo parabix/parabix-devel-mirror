@@ -21,11 +21,15 @@ using namespace kernel;
 using namespace pablo;
 
 
-GraphemeClusterBreakKernel::GraphemeClusterBreakKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
+GraphemeClusterBreakKernel::GraphemeClusterBreakKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet *BasisBits, StreamSet * RequiredStreams, StreamSet * GCB_stream)
 : PabloKernel(iBuilder,
-              "gcb",
-              {Binding{iBuilder->getStreamSetTy(8), "basis"}, Binding{iBuilder->getStreamSetTy(1), "nonFinal"}},
-              {Binding{iBuilder->getStreamSetTy(1, 1), "\\b{g}", FixedRate(), Add1()}}) {
+"gcb",
+// inputs
+{Binding{"basis", BasisBits},
+ Binding{"nonFinal", RequiredStreams}},
+// output
+{Binding{"\\b{g}", GCB_stream, FixedRate(), Add1()}}) {
+
 }
 
 void GraphemeClusterBreakKernel::generatePabloMethod() {

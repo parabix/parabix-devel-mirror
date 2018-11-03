@@ -50,7 +50,7 @@ public:
     ClassTypeId the_kind;
 };
 
-class BinaryPropertyObject : public PropertyObject {
+class BinaryPropertyObject final : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::BinaryProperty;
@@ -76,7 +76,7 @@ private:
     std::string mPropertyValueGrepString;
 };
 
-class EnumeratedPropertyObject : public PropertyObject {
+class EnumeratedPropertyObject final : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::EnumeratedProperty;
@@ -130,7 +130,7 @@ private:
     std::vector<UnicodeSet> enumeration_basis_sets;
 };
 
-class ExtensionPropertyObject : public PropertyObject {
+class ExtensionPropertyObject final : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::ExtensionProperty;
@@ -164,7 +164,7 @@ private:
     const std::vector<const UnicodeSet *> property_value_sets;
 };
 
-class NumericPropertyObject : public PropertyObject {
+class NumericPropertyObject final : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::NumericProperty;
@@ -192,7 +192,7 @@ private:
     const std::vector<UCD::codepoint_t> mExplicitCps;
 };
 
-class StringPropertyObject : public PropertyObject {
+class StringPropertyObject final : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::StringProperty;
@@ -226,7 +226,7 @@ private:
     const std::vector<UCD::codepoint_t> mExplicitCps;  // the codepoints having explicit strings
 };
     
-class StringOverridePropertyObject : public PropertyObject {
+class StringOverridePropertyObject final : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::StringOverrideProperty;
@@ -261,7 +261,7 @@ private:
     const std::vector<codepoint_t> mExplicitCps;
 };
     
-class ObsoletePropertyObject : public PropertyObject {
+class ObsoletePropertyObject final : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::ObsoleteProperty;
@@ -278,7 +278,7 @@ public:
 
 };
 
-class UnsupportedPropertyObject : public PropertyObject {
+class UnsupportedPropertyObject final : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
         return p->getClassTypeId() == ClassTypeId::UnsupportedProperty;

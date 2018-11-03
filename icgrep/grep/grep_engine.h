@@ -1,4 +1,4 @@
-
+﻿
 /*
  *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
@@ -7,7 +7,7 @@
 #ifndef GREP_ENGINE_H
 #define GREP_ENGINE_H
 #include <grep_interface.h>
-#include <kernels/streamset.h>
+//#include <kernels/streamset.h>
 #include <cc/multiplex_CCs.h>
 #include <string>
 #include <vector>
@@ -19,12 +19,16 @@
 namespace re { class CC; }
 namespace re { class RE; }
 namespace llvm { namespace cl { class OptionCategory; } }
-class Driver;
+namespace kernel { class PipelineBuilder; }
+namespace kernel { class StreamSet; }
+class BaseDriver;
 
 
 namespace grep {
     
 enum class GrepRecordBreakKind {Null, LF, Unicode};
+
+class InternalSearchEngine;
 
 enum GrepSignal : unsigned {BinaryFile};
 
@@ -52,11 +56,12 @@ extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
 
 class GrepEngine {
     enum class FileStatus {Pending, GrepComplete, PrintComplete};
+    friend class InternalSearchEngine;
 public:
 
     enum class EngineKind {QuietMode, MatchOnly, CountOnly, EmitMatches};
 
-    GrepEngine();
+    GrepEngine(BaseDriver & driver);
 
     virtual ~GrepEngine() = 0;
     
@@ -83,7 +88,8 @@ public:
     virtual void showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm);
 
 protected:
-    std::pair<parabix::StreamSetBuffer *, parabix::StreamSetBuffer *> grepPipeline(parabix::StreamSetBuffer * ByteStream, llvm::Value * callback_object_addr);
+    std::pair<kernel::StreamSet *, kernel::StreamSet *> grepPipeline(const std::unique_ptr<kernel::PipelineBuilder> & P,
+                                                                     kernel::StreamSet * ByteStream);
 
     virtual uint64_t doGrep(const std::string & fileName, std::ostringstream & strm);
     int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
@@ -104,7 +110,8 @@ protected:
     bool mInvertMatches;
     int mMaxCount;
     bool mGrepStdIn;
-    std::unique_ptr<Driver> mGrepDriver;
+    BaseDriver & mGrepDriver;
+    void * mMainMethod;
 
     std::atomic<unsigned> mNextFileToGrep;
     std::atomic<unsigned> mNextFileToPrint;
@@ -117,7 +124,6 @@ protected:
     std::vector<re:: RE *> mREs;
     std::set<re::Name *> mUnicodeProperties;
     re::CC * mBreakCC;
-    std::unique_ptr<cc::MultiplexedAlphabet> mpx;
     std::string mFileSuffix;
     bool mMoveMatchesToEOL;
     pthread_t mEngineThread;
@@ -131,7 +137,8 @@ protected:
 class EmitMatch : public MatchAccumulator {
     friend class EmitMatchesEngine;
 public:
-    EmitMatch(std::string linePrefix, bool showLineNumbers, bool initialTab, std::ostringstream & strm) : mLinePrefix(linePrefix),
+    EmitMatch(std::string linePrefix, bool showLineNumbers, bool initialTab, std::ostringstream & strm)
+        : mLinePrefix(linePrefix),
         mShowLineNumbers(showLineNumbers),
         mInitialTab(initialTab),
         mLineCount(0),
@@ -148,54 +155,57 @@ protected:
     std::ostringstream & mResultStr;
 };
 
-class EmitMatchesEngine : public GrepEngine {
+class EmitMatchesEngine final : public GrepEngine {
 public:
-    EmitMatchesEngine();
+    EmitMatchesEngine(BaseDriver & driver);
     void grepCodeGen() override;
 private:
     uint64_t doGrep(const std::string & fileName, std::ostringstream & strm) override;
 };
 
-class CountOnlyEngine : public GrepEngine {
+class CountOnlyEngine final : public GrepEngine {
 public:
-    CountOnlyEngine();
+    CountOnlyEngine(BaseDriver & driver);
 private:
     void showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) override;
 };
 
-class MatchOnlyEngine : public GrepEngine {
+class MatchOnlyEngine final : public GrepEngine {
 public:
-    MatchOnlyEngine(bool showFilesWithoutMatch, bool useNullSeparators);
+    MatchOnlyEngine(BaseDriver & driver, bool showFilesWithoutMatch, bool useNullSeparators);
 private:
     void showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) override;
     unsigned mRequiredCount;
 };
 
-class QuietModeEngine : public GrepEngine {
+class QuietModeEngine final : public GrepEngine {
 public:
-    QuietModeEngine();
+    QuietModeEngine(BaseDriver & driver);
 };
 
     
     
 class InternalSearchEngine {
 public:
-    InternalSearchEngine();
+    InternalSearchEngine(BaseDriver & driver);
+
+    InternalSearchEngine(const std::unique_ptr<grep::GrepEngine> & engine);
+
     ~InternalSearchEngine();
     
     void setRecordBreak(GrepRecordBreakKind b) {mGrepRecordBreak = b;}
     void setCaseInsensitive()  {mCaseInsensitive = true;}
     
-    void grepCodeGen(re::RE * matchingRE, re::RE * invertedRE, MatchAccumulator * accum);
+    void grepCodeGen(re::RE * matchingRE, re::RE * invertedRE);
     
-    void doGrep(const char * search_buffer, size_t bufferLength);
+    void doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum);
     
 private:
     GrepRecordBreakKind mGrepRecordBreak;
     bool mCaseInsensitive;
     bool mSaveSegmentPipelineParallel;
-
-    std::unique_ptr<Driver> mGrepDriver;
+    BaseDriver & mGrepDriver;
+    void * mMainMethod;
 };
     
     

@@ -11,22 +11,22 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class StdOutKernel final : public MultiBlockKernel {
+class StdOutKernel final : public SegmentOrientedKernel {
 public:
-    StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth);
+    StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet * codeUnitBuffer);
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
 private:
     const unsigned mCodeUnitWidth;
     
 };
 
-class FileSink final : public MultiBlockKernel {
+class FileSink final : public SegmentOrientedKernel {
 public:  
-    FileSink(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned codeUnitWidth);
+    FileSink(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Scalar * outputFileName, StreamSet * codeUnitBuffer);
 protected:
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
     void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) override;
 private:
     const unsigned mCodeUnitWidth;

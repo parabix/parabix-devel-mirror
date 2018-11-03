@@ -7,24 +7,27 @@
 #ifndef NVPTXDRIVER_H
 #define NVPTXDRIVER_H
 
-#include "driver.h"
+#include <toolchain/driver.h>
+#include <toolchain/object_cache_manager.h>
 
-class NVPTXDriver final : public Driver {
+class NVPTXDriver final : public BaseDriver {
     friend class CBuilder;
 public:
     NVPTXDriver(std::string && moduleName);
 
     ~NVPTXDriver();
 
-    void generatePipelineIR() override;
-    
-    void makeKernelCall(kernel::Kernel * kb, const std::vector<parabix::StreamSetBuffer *> & inputs, const std::vector<parabix::StreamSetBuffer *> & outputs) override;
+    void addKernel(Kernel * const kernel) override { }
 
-    void finalizeObject() override;
+    void generateUncachedKernels() { }
+
+    void * finalizeObject(llvm::Function * mainMethod) override;
 
     bool hasExternalFunction(const llvm::StringRef /* functionName */) const override { return false; }
 
-    void * getMain() override; // "main" exists until the driver is deleted
+protected:
+
+    NVPTXDriver(std::string && moduleName);
 
 private:
 

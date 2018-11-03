@@ -13,19 +13,6 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-class StreamFilterCompiler {
-public:
-    StreamFilterCompiler(Driver & driver, llvm::Type * streamSetType, unsigned bufferBlocks = 0) :
-    mDriver(driver), ssType(streamSetType), mBufferBlocks(bufferBlocks), mIntraFieldCompressionWidth(64) {}
-    void setIntraFieldCompressionWidth(unsigned fw) {mIntraFieldCompressionWidth = fw;}
-    void makeCall(parabix::StreamSetBuffer * mask, parabix::StreamSetBuffer * inputs, parabix::StreamSetBuffer * outputs);
-private:
-    Driver & mDriver;
-    llvm::Type * ssType;
-    unsigned mBufferBlocks;
-    unsigned mIntraFieldCompressionWidth;
-};
-
 //
 // Parallel Prefix Deletion Kernel
 // see Parallel Prefix Compress in Henry S. Warren, Hacker's Delight, Chapter 7
@@ -51,7 +38,11 @@ private:
 
 class FieldCompressKernel final : public MultiBlockKernel {
 public:
-    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
+    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * inputStreamSet, StreamSet * extractionMask, StreamSet * outputStreamSet);
+    #else
+    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * inputStreamSet, StreamSet * extractionMask, StreamSet * outputStreamSet, StreamSet * unitCounts);
+    #endif
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -78,7 +69,16 @@ private:
 //  compressed streams.
 class StreamCompressKernel final : public MultiBlockKernel {
 public:
-    StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
+                         , StreamSet * source
+                         #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
+                         , StreamSet * extractionMask
+                         #else
+                         , StreamSet * unitCounts
+                         #endif
+                         , StreamSet * compresedOutput
+                         , const unsigned FieldWidth = sizeof(size_t) * 8);
+
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -92,17 +92,19 @@ private:
 Input: a set of bitstreams
 Output: swizzles containing the input bitstreams with the specified bits deleted
 */
-class SwizzledDeleteByPEXTkernel final : public BlockOrientedKernel {
+class SwizzledDeleteByPEXTkernel final : public MultiBlockKernel {
 public:
-    SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned streamCount, unsigned PEXT_width = 64);
+    using SwizzleSets = std::vector<std::vector<llvm::Value *>>;
+    SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b
+                               , StreamSet * selectors, StreamSet * inputStreamSet
+                               , const std::vector<StreamSet *> & outputs
+                               , unsigned PEXTWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
-    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * remainingBytes) override;
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfBlocks) override;
 private:
-    void generateProcessingLoop(const std::unique_ptr<KernelBuilder> & b, llvm::Value * delMask, const bool flush);
-    std::vector<std::vector<llvm::Value *>> makeSwizzleSets(const std::unique_ptr<KernelBuilder> & b, llvm::Value * delMask);
+    SwizzleSets makeSwizzleSets(const std::unique_ptr<KernelBuilder> & b, llvm::Value * selectors, llvm::Value * const strideIndex);
 private:
     const unsigned mStreamCount;
     const unsigned mSwizzleFactor;

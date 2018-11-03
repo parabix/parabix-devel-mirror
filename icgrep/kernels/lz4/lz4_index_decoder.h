@@ -23,7 +23,15 @@ namespace kernel {
 
 class LZ4IndexDecoderKernel final : public BlockOrientedKernel {
 public:
-    LZ4IndexDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    LZ4IndexDecoderKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                          // arguments
+                          Scalar * hasBlockChecksum,
+                          // inputs
+                          StreamSet * byteStream,
+                          StreamSet * extenders,
+                          // outputs
+                          StreamSet * literalIndexes,
+                          StreamSet * matchIndexes);
 protected:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder)override;
 private:

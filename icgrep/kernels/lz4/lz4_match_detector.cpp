@@ -32,7 +32,7 @@ namespace kernel {
                                     }),
               mLz4BlockSize(blockSize)
     {
-        this->setStride(blockSize);
+        setStride(blockSize);
     }
 
     void LZ4MatchDetectorKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &b) {
@@ -58,8 +58,8 @@ namespace kernel {
         Value* startPos = processed;
         Value* endPos = b->CreateAdd(processed, blockSize);
         endPos = b->CreateUMin(endPos, total);
-        Value* hasMatch = this->detectMatch(b, startPos, endPos);
-        this->appendOutput(b, hasMatch);
+        Value* hasMatch = detectMatch(b, startPos, endPos);
+        appendOutput(b, hasMatch);
         b->setProcessedItemCount("matches", endPos);
         b->CreateBr(exitBlock);
 

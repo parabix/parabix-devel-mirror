@@ -22,9 +22,9 @@ protected:
 
 class CharClassesKernel : public CharClassesSignature, public pablo::PabloKernel {
 public:
-    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, bool useDirectCC = false, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
+    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
     bool hasSignature() const override { return true; }
-    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) override;
     bool isCachable() const override { return true; }
 protected:
     void generatePabloMethod() override;
@@ -37,9 +37,9 @@ protected:
 
 class ByteClassesKernel: public CharClassesSignature, public pablo::PabloKernel {
 public:
-    ByteClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, bool useDirectCC = false, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
+    ByteClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, StreamSet * inputStream, StreamSet * CharClasses, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
     bool hasSignature() const override { return true; }
-    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) override;
     bool isCachable() const override { return true; }
 protected:
     void generatePabloMethod() override;

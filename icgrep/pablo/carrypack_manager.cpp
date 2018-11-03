@@ -128,13 +128,13 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
 
     kernel->setCarryDataTy(analyse(iBuilder, mCurrentScope));
 
-    kernel->addScalar(kernel->getCarryDataTy(), "carries");
+    kernel->addInternalScalar(kernel->getCarryDataTy(), "carries");
 
     if (mHasLoop) {
-        kernel->addScalar(iBuilder->getInt32Ty(), "selector");
+        kernel->addInternalScalar(iBuilder->getInt32Ty(), "selector");
     }
     if (mHasLongAdvance) {
-        kernel->addScalar(iBuilder->getSizeTy(), "CarryBlockIndex");
+        kernel->addInternalScalar(iBuilder->getSizeTy(), "CarryBlockIndex");
     }
 }
 
@@ -677,7 +677,8 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
                 Value * const prior = iBuilder->CreateBitCast(iBuilder->CreateBlockAlignedLoad(ptr), streamTy);
                 Value * const stream = iBuilder->CreateBitCast(iBuilder->CreateOr(iBuilder->CreateShl(prior, 1), carry), iBuilder->getBitBlockType());
                 if (LLVM_LIKELY(i == summarySize)) {
-                    Value * const maskedStream = iBuilder->CreateAnd(stream, iBuilder->bitblock_mask_from(iBuilder->getInt32(summarySize % iBuilder->getBitBlockWidth())));
+                    Value * const summeryOffset = iBuilder->getInt32(summarySize % iBuilder->getBitBlockWidth());
+                    Value * const maskedStream = iBuilder->CreateAnd(stream, iBuilder->bitblock_mask_from(summeryOffset, true));
                     addToCarryOutSummary(iBuilder, maskedStream);
                     iBuilder->CreateBlockAlignedStore(maskedStream, ptr);
                     break;

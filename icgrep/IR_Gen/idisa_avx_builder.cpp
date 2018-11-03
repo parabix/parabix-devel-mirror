@@ -325,11 +325,11 @@ Value * IDISA_AVX2_Builder::hsimd_signmask(unsigned fw, Value * a) {
     return IDISA_AVX_Builder::hsimd_signmask(fw, a);
 }
 
-llvm::Value * IDISA_AVX2_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift) {
+llvm::Value * IDISA_AVX2_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift, const bool safe) {
     // Intrinsic::x86_avx2_permd) allows an efficient implementation for field width 32.
     // Translate larger field widths to 32 bits.
     if (fw > 32) {
-        return fwCast(fw, mvmd_srl(32, a, CreateMul(shift, ConstantInt::get(shift->getType(), fw/32))));
+        return fwCast(fw, mvmd_srl(32, a, CreateMul(shift, ConstantInt::get(shift->getType(), fw/32)), safe));
     }
     if ((mBitBlockWidth == 256) && (fw == 32)) {
         Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
@@ -350,14 +350,14 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm::V
         Value * shifted = CreateCall(permuteFunc, {a0, permuteVec});
         return simd_if(1, simd_eq(fw, shiftSplat, allZeroes()), a, shifted);
     }
-    return IDISA_Builder::mvmd_srl(fw, a, shift);
+    return IDISA_Builder::mvmd_srl(fw, a, shift, safe);
 }
 
-llvm::Value * IDISA_AVX2_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift) {
+llvm::Value * IDISA_AVX2_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift, const bool safe) {
     // Intrinsic::x86_avx2_permd) allows an efficient implementation for field width 32.
     // Translate larger field widths to 32 bits.
     if (fw > 32) {
-        return fwCast(fw, mvmd_sll(32, a, CreateMul(shift, ConstantInt::get(shift->getType(), fw/32))));
+        return fwCast(fw, mvmd_sll(32, a, CreateMul(shift, ConstantInt::get(shift->getType(), fw/32)), safe));
     }
     if ((mBitBlockWidth == 256) && (fw == 32)) {
         Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
@@ -378,7 +378,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::V
         Value * shifted = CreateCall(permuteFunc, {a0, permuteVec});
         return simd_if(1, simd_eq(fw, shiftSplat, allZeroes()), a, shifted);
     }
-    return IDISA_Builder::mvmd_sll(fw, a, shift);
+    return IDISA_Builder::mvmd_sll(fw, a, shift, safe);
 }
 
     
@@ -534,7 +534,7 @@ llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * 
     return IDISA_Builder::esimd_bitspread(fw, bitmask);
 }
 
-llvm::Value * IDISA_AVX512F_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift) {
+llvm::Value * IDISA_AVX512F_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift, const bool safe) {
     const unsigned fieldCount = mBitBlockWidth/fw;
     Type * fieldTy = getIntNTy(fw);
     Constant * indexes[fieldCount];
@@ -553,10 +553,10 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm
             return shifted;
         }
     }
-    return IDISA_Builder::mvmd_srl(fw, a, shift);
+    return IDISA_Builder::mvmd_srl(fw, a, shift, safe);
 }
  
-llvm::Value * IDISA_AVX512F_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift) {
+llvm::Value * IDISA_AVX512F_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift, const bool safe) {
     const unsigned fieldCount = mBitBlockWidth/fw;
     Type * fieldTy = getIntNTy(fw);
     Constant * indexes[fieldCount];

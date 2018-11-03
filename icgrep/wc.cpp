@@ -4,32 +4,35 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <iostream>
-#include <iomanip>
-#include <vector>
-#include <string>
-#include <toolchain/toolchain.h>
+#include <IR_Gen/idisa_target.h>
+#include <boost/filesystem.hpp>
+#include <cc/cc_compiler.h>
+#include <kernels/kernel_builder.h>
+#include <kernels/pipeline_builder.h>
+#include <kernels/s2p_kernel.h>
+#include <kernels/source_kernel.h>
+#include <kernels/streamset.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
-#include <cc/cc_compiler.h>
-#include <pablo/pablo_kernel.h>
-#include <kernels/kernel_builder.h>
-#include <IR_Gen/idisa_target.h>
-#include <kernels/streamset.h>
-#include <kernels/source_kernel.h>
-#include <kernels/s2p_kernel.h>
 #include <pablo/pablo_compiler.h>
+#include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
 #include <toolchain/cpudriver.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <toolchain/toolchain.h>
 #include <util/file_select.h>
-#include <boost/filesystem.hpp>
+#include <fcntl.h>
+#include <iomanip>
+#include <iostream>
+#include <string>
+#include <sys/stat.h>
+#include <vector>
+
 namespace fs = boost::filesystem;
 
 using namespace llvm;
+using namespace codegen;
 
 static cl::OptionCategory wcFlags("Command Flags", "wc options");
 
@@ -71,7 +74,6 @@ uint64_t TotalBytes = 0;
 
 using namespace pablo;
 using namespace kernel;
-using namespace parabix;
 
 //  The callback routine that records counts in progress.
 //
@@ -90,16 +92,16 @@ extern "C" {
 
 class WordCountKernel final: public pablo::PabloKernel {
 public:
-    WordCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Binding && inputStreamSet);
+    WordCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const countable);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-WordCountKernel::WordCountKernel (const std::unique_ptr<kernel::KernelBuilder> & b, Binding && inputStreamSet)
+WordCountKernel::WordCountKernel (const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const countable)
 : PabloKernel(b, "wc_" + wc_modes,
-    {inputStreamSet},
+    {Binding{"countable", countable}},
     {},
     {},
     {Binding{b->getSizeTy(), "lineCount"}, Binding{b->getSizeTy(), "wordCount"}, Binding{b->getSizeTy(), "charCount"}}) {
@@ -110,7 +112,7 @@ void WordCountKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<cc::CC_Compiler> ccc;
     if (CountWords || CountChars) {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("u8bit"));
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("countable"));
     } else {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     }
@@ -142,75 +144,43 @@ void WordCountKernel::generatePabloMethod() {
     }
 }
 
-typedef void (*WordCountFunctionType)(uint32_t fd, size_t fileIdx);
+typedef void (*WordCountFunctionType)(uint32_t fd, uint32_t fileIdx);
 
-void wcPipelineGen(ParabixDriver & pxDriver) {
+WordCountFunctionType wcPipelineGen(CPUDriver & pxDriver) {
 
     auto & iBuilder = pxDriver.getBuilder();
-    Module * m = iBuilder->getModule();
-    const unsigned segmentSize = codegen::SegmentSize;
-    const unsigned bufferSegments = codegen::ThreadNum+1;
 
-   
     Type * const int32Ty = iBuilder->getInt32Ty();
-    Type * const sizeTy = iBuilder->getSizeTy();
-    Type * const voidTy = iBuilder->getVoidTy();
 
-    FunctionType * const recordCountsType = FunctionType::get(voidTy, {sizeTy, sizeTy, sizeTy, sizeTy, sizeTy}, false);
-    Constant * const recordCounts = m->getOrInsertFunction("record_counts", recordCountsType);
+    auto P = pxDriver.makePipeline({Binding{int32Ty, "fd"}, Binding{int32Ty, "fileIdx"}});
 
-    FunctionType * const mainType = FunctionType::get(voidTy, {int32Ty, sizeTy}, false);
-    Function * const main = cast<Function>(m->getOrInsertFunction("Main", mainType));
-    main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();    
-    Value * const fileDecriptor = &*(args++);
-    fileDecriptor->setName("fileDecriptor");
-    Value * const fileIdx = &*(args++);
-    fileIdx->setName("fileIdx");
+    Scalar * const fileDescriptor = P->getInputScalar("fd");
+    Scalar * const fileIdx = P->getInputScalar("fileIdx");
 
-    iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
+    StreamSet * const ByteStream = P->CreateStreamSet(1, 8);
 
-    StreamSetBuffer * const ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
+    Kernel * mmapK = P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, ByteStream);
 
-
-    Kernel * mmapK = pxDriver.addKernelInstance<MMapSourceKernel>(iBuilder);
-    mmapK->setInitialArguments({fileDecriptor});
-    pxDriver.makeKernelCall(mmapK, {}, {ByteStream});
-    
-    Kernel * wck  = nullptr;
+    auto CountableStream = ByteStream;
     if (CountWords || CountChars) {
-        StreamSetBuffer * const BasisBits = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(8, 1), segmentSize * bufferSegments);
-        Kernel * s2pk = pxDriver.addKernelInstance<S2PKernel>(iBuilder);
-        pxDriver.makeKernelCall(s2pk, {ByteStream}, {BasisBits});
-        
-        wck = pxDriver.addKernelInstance<WordCountKernel>(iBuilder, Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"});
-        pxDriver.makeKernelCall(wck, {BasisBits}, {});
-
-
-    } else {
-        wck = pxDriver.addKernelInstance<WordCountKernel>(iBuilder, Binding{iBuilder->getStreamSetTy(1, 8), "u8byte"});
-        pxDriver.makeKernelCall(wck, {ByteStream}, {});
+        auto BasisBits = P->CreateStreamSet(8, 1);
+        P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+        CountableStream = BasisBits;
     }
 
-    pxDriver.generatePipelineIR();
-    
-    iBuilder->setKernel(mmapK);
-    Value * const fileSize = iBuilder->getAccumulator("fileItems");
-    iBuilder->setKernel(wck);
-    Value * const lineCount = iBuilder->getAccumulator("lineCount");
-    Value * const wordCount = iBuilder->getAccumulator("wordCount");
-    Value * const charCount = iBuilder->getAccumulator("charCount");
+    Kernel * const wck = P->CreateKernelCall<WordCountKernel>(CountableStream);
 
-    iBuilder->CreateCall(recordCounts, {lineCount, wordCount, charCount, fileSize, fileIdx});
-    pxDriver.deallocateBuffers();
-    iBuilder->CreateRetVoid();
+    Scalar * const lineCount = wck->getOutputScalar("lineCount");
+    Scalar * const wordCount = wck->getOutputScalar("wordCount");
+    Scalar * const charCount = wck->getOutputScalar("charCount");
+    Scalar * const fileSize = mmapK->getOutputScalar("fileItems");
 
-    pxDriver.finalizeObject();
+    P->CreateCall("record_counts", record_counts, {lineCount, wordCount, charCount, fileSize, fileIdx});
+
+    return reinterpret_cast<WordCountFunctionType>(P->compile());
 }
 
-
-
-void wc(WordCountFunctionType fn_ptr, const int64_t fileIdx) {
+void wc(WordCountFunctionType fn_ptr, const uint32_t fileIdx) {
     std::string fileName = allFiles[fileIdx].string();
     struct stat sb;
     const int fd = open(fileName.c_str(), O_RDONLY);
@@ -240,8 +210,9 @@ int main(int argc, char *argv[]) {
     if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
         argv::DirectoriesFlag = argv::Recurse;
     }
+
     allFiles = argv::getFullFileList(inputFiles);
-    
+
     const auto fileCount = allFiles.size();
     if (wcOptions.size() == 0) {
         CountLines = true;
@@ -266,9 +237,9 @@ int main(int argc, char *argv[]) {
     if (CountChars) wc_modes += "m";
     if (CountBytes) wc_modes += "c";
 
-    ParabixDriver pxDriver("wc");
-    wcPipelineGen(pxDriver);
-    auto wordCountFunctionPtr = reinterpret_cast<WordCountFunctionType>(pxDriver.getMain());
+    CPUDriver pxDriver("wc");
+    auto wordCountFunctionPtr = wcPipelineGen(pxDriver);
+
     lineCount.resize(fileCount);
     wordCount.resize(fileCount);
     charCount.resize(fileCount);

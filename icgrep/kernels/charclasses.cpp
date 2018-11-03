@@ -9,7 +9,6 @@
 #include <UCD/ucd_compiler.hpp>
 #include <cc/cc_compiler.h>
 #include <re/re_name.h>
-#include <boost/uuid/sha1.hpp>
 #include <pablo/builder.hpp>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
@@ -22,17 +21,6 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 using namespace UCD;
-
-inline static std::string sha1sum(const std::string & str) {
-    char buffer[41];    // 40 hex-digits and the terminating null
-    uint32_t digest[5]; // 160 bits in total
-    boost::uuids::detail::sha1 sha1;
-    sha1.process_bytes(str.c_str(), str.size());
-    sha1.get_digest(digest);
-    snprintf(buffer, sizeof(buffer), "%.8x%.8x%.8x%.8x%.8x",
-             digest[0], digest[1], digest[2], digest[3], digest[4]);
-    return std::string(buffer);
-}
 
 inline std::string signature(const std::vector<re::CC *> & ccs) {
     if (LLVM_UNLIKELY(ccs.empty())) {
@@ -57,19 +45,12 @@ CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, bool us
 }
 
 
-CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<CC *> && ccs, bool useDirectCC, cc::BitNumbering basisNumbering)
-: CharClassesSignature(ccs, useDirectCC, basisNumbering)
-, PabloKernel(iBuilder,
-              "cc" + sha1sum(mSignature),
-              {},
-              {Binding{iBuilder->getStreamSetTy(ccs.size(), 1), "charclasses"}})
-, mCCs(std::move(ccs)), mBasisSetNumbering(basisNumbering) {
-    if (useDirectCC) {
-        mStreamSetInputs.push_back({Binding{iBuilder->getStreamSetTy(1, 8), "byteData"}});
-    }
-    else {
-        mStreamSetInputs.push_back({Binding{iBuilder->getStreamSetTy(8), "basis"}});
-    }
+CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses, cc::BitNumbering basisNumbering)
+: CharClassesSignature(ccs, BasisBits->getNumElements() == 1, basisNumbering)
+, PabloKernel(iBuilder, "cc" + getStringHash(mSignature), {Binding{"basis", BasisBits}}, {Binding{"charclasses", CharClasses}})
+, mCCs(std::move(ccs))
+, mBasisSetNumbering(basisNumbering) {
+
 }
 
 std::string CharClassesKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -118,23 +99,18 @@ void CharClassesKernel::generatePabloMethod() {
 
 
 ByteClassesKernel::ByteClassesKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder,
-                                     std::vector<re::CC *> &&ccs, bool useDirectCC, BitNumbering basisNumbering):
-        CharClassesSignature(ccs, useDirectCC, basisNumbering)
-        , PabloKernel(iBuilder,
-                      "ByteClassesKernel_" + sha1sum(mSignature),
-                      {},
-                      {Binding{iBuilder->getStreamSetTy(ccs.size(), 1), "charclasses"}})
-        , mCCs(std::move(ccs)), mBasisSetNumbering(basisNumbering)
-{
-    if (useDirectCC) {
-        mStreamSetInputs.push_back({Binding{iBuilder->getStreamSetTy(1, 8), "byteData"}});
-    }
-    else {
-        mStreamSetInputs.push_back({Binding{iBuilder->getStreamSetTy(8), "basis"}});
-    }
+                                     std::vector<re::CC *> && ccs,
+                                     StreamSet * inputStream,
+                                     StreamSet * CharClasses,
+                                     BitNumbering basisNumbering):
+CharClassesSignature(ccs, inputStream->getNumElements() == 1, basisNumbering)
+, PabloKernel(iBuilder, "ByteClassesKernel_" + getStringHash(mSignature), {Binding{"basis", inputStream}}, {Binding{"charclasses", CharClasses}})
+, mCCs(std::move(ccs))
+, mBasisSetNumbering(basisNumbering) {
+
 }
 
-std::string ByteClassesKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {
+std::string ByteClassesKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
     return mSignature;
 }
 

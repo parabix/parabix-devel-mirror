@@ -38,36 +38,35 @@ void IDISA_Builder::UnsupportedFieldWidthError(const unsigned fw, std::string op
     llvm::report_fatal_error(op_name + ": Unsupported field width: " +  std::to_string(fw));
 }
 
-void IDISA_Builder::CallPrintRegisterCond(const std::string & regName, llvm::Value * const value, llvm::Value * const cond) {
-    BasicBlock* callBlock = this->CreateBasicBlock("callBlock");
-    BasicBlock* exitBlock = this->CreateBasicBlock("exitBlock");
-    this->CreateCondBr(cond, callBlock, exitBlock);
-
-    this->SetInsertPoint(callBlock);
-    this->CallPrintRegister(regName, value);
-
-    this->CreateBr(exitBlock);
-    this->SetInsertPoint(exitBlock);
+void IDISA_Builder::CallPrintRegisterCond(const std::string & regName, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd) {
+    BasicBlock * const insertBefore = GetInsertBlock()->getNextNode();
+    BasicBlock* const callBlock = CreateBasicBlock("callBlock", insertBefore);
+    BasicBlock* const exitBlock = CreateBasicBlock("exitBlock", insertBefore);
+    CreateCondBr(cond, callBlock, exitBlock);
+    CallPrintRegister(regName, value, fd);
+    CreateBr(exitBlock);
+    SetInsertPoint(exitBlock);
 }
 
-void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const value) {
+void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const value, const STD_FD fd) {
     Module * const m = getModule();
-    Constant * printRegister = m->getFunction("PrintRegister");
+    Constant * printRegister = m->getFunction("print_register");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
-        FunctionType *FT = FunctionType::get(getVoidTy(), { PointerType::get(getInt8Ty(), 0), getBitBlockType() }, false);
-        Function * function = Function::Create(FT, Function::InternalLinkage, "PrintRegister", m);
+        FunctionType *FT = FunctionType::get(getVoidTy(), { getInt32Ty(), getInt8PtrTy(0), getBitBlockType() }, false);
+        Function * function = Function::Create(FT, Function::InternalLinkage, "print_register", m);
         auto arg = function->arg_begin();
         std::string tmp;
         raw_string_ostream out(tmp);
         out << "%-40s =";
-        for(unsigned i = 0; i < (mBitBlockWidth / 8); ++i) {
+        for(unsigned i = 0; i < (getBitBlockWidth() / 8); ++i) {
             out << " %02x";
         }
         out << '\n';
         BasicBlock * entry = BasicBlock::Create(m->getContext(), "entry", function);
         IRBuilder<> builder(entry);
         std::vector<Value *> args;
-        args.push_back(getInt32(STDERR_FILENO));
+        Value * const fdInt = &*(arg++);
+        args.push_back(fdInt);
         args.push_back(GetString(out.str().c_str()));
         Value * const name = &*(arg++);
         name->setName("name");
@@ -76,14 +75,14 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         value->setName("value");
         Type * const byteVectorType = VectorType::get(getInt8Ty(), (mBitBlockWidth / 8));
         value = builder.CreateBitCast(value, byteVectorType);
-        for(unsigned i = (mBitBlockWidth / 8); i != 0; --i) {
+        for(unsigned i = (getBitBlockWidth() / 8); i != 0; --i) {
             args.push_back(builder.CreateZExt(builder.CreateExtractElement(value, builder.getInt32(i - 1)), builder.getInt32Ty()));
         }
         builder.CreateCall(GetDprintf(), args);
         builder.CreateRetVoid();
         printRegister = function;
     }
-    CreateCall(printRegister, {GetString(name.c_str()), CreateBitCast(value, mBitBlockType)});
+    CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name.c_str()), CreateBitCast(value, getBitBlockType())});
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
@@ -284,18 +283,31 @@ Value * IDISA_Builder::simd_umin(unsigned fw, Value * a, Value * b) {
     return CreateSelect(CreateICmpULT(aVec, bVec), aVec, bVec);
 }
 
-Value * IDISA_Builder::mvmd_sll(unsigned fw, Value * value, Value * shift) {
-    VectorType * const vecTy = cast<VectorType>(value->getType());
+Value * IDISA_Builder::mvmd_sll(unsigned fw, Value * value, Value * shift, const bool safe) {
+    VectorType * const vecTy = fwVectorType(fw);
     IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        Type * const ty = shift->getType();
-        Value * const scaled = CreateMul(shift, ConstantInt::get(ty, fw));
-        Value * const inbounds = CreateICmpULT(scaled, ConstantInt::get(ty, vecTy->getBitWidth()));
-        CreateAssert(inbounds, "poison shift value: >= vector width");
-    }
+    Constant * const FIELD_WIDTH = ConstantInt::get(shift->getType(), fw);
+    Constant * const BLOCK_WIDTH = ConstantInt::get(shift->getType(), vecTy->getBitWidth());
+    shift = CreateMul(shift, FIELD_WIDTH);
+//    if (LLVM_UNLIKELY(safe && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+//        Value * const inbounds = CreateICmpULT(shift, BLOCK_WIDTH);
+//        CreateAssert(inbounds, "poison shift value: >= vector width");
+//    }
+    Value * result = nullptr;
     value = CreateBitCast(value, intTy);
-    shift = CreateZExtOrTrunc(CreateMul(shift, ConstantInt::get(shift->getType(), fw)), intTy);
-    return CreateBitCast(CreateShl(value, shift), vecTy);
+//    if (safe) {
+        shift = CreateZExtOrTrunc(shift, intTy);
+        result = CreateShl(value, shift);
+//    } else {
+//        // TODO: check the ASM generated by this to see what the select generates
+//        Value * const moddedShift = CreateURem(shift, BLOCK_WIDTH);
+//        Value * const inbounds = CreateICmpEQ(moddedShift, shift);
+//        shift = CreateZExtOrTrunc(moddedShift, intTy);
+//        Constant * const ZEROES = Constant::getNullValue(intTy);
+//        result = CreateShl(value, shift);
+//        result = CreateSelect(inbounds, result, ZEROES);
+//    }
+    return CreateBitCast(result, vecTy);
 }
 
 Value * IDISA_Builder::mvmd_dsll(unsigned fw, Value * a, Value * b, Value * shift) {
@@ -312,18 +324,31 @@ Value * IDISA_Builder::mvmd_dsll(unsigned fw, Value * a, Value * b, Value * shif
     return rslt;
 }
 
-Value * IDISA_Builder::mvmd_srl(unsigned fw, Value * value, Value * shift) {
-    VectorType * const vecTy = cast<VectorType>(value->getType());
+Value * IDISA_Builder::mvmd_srl(unsigned fw, Value * value, Value * shift, const bool safe) {
+    VectorType * const vecTy = fwVectorType(fw);
     IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        Type * const ty = shift->getType();
-        Value * const scaled = CreateMul(shift, ConstantInt::get(ty, fw));
-        Value * const inbounds = CreateICmpULT(scaled, ConstantInt::get(ty, vecTy->getBitWidth()));
-        CreateAssert(inbounds, "poison shift value: >= vector width");
-    }
+    Constant * const FIELD_WIDTH = ConstantInt::get(shift->getType(), fw);
+    Constant * const BLOCK_WIDTH = ConstantInt::get(shift->getType(), vecTy->getBitWidth());
+    shift = CreateMul(shift, FIELD_WIDTH);
+//    if (LLVM_UNLIKELY(safe && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+//        Value * const inbounds = CreateICmpULT(shift, BLOCK_WIDTH);
+//        CreateAssert(inbounds, "poison shift value: >= vector width");
+//    }
+    Value * result = nullptr;
     value = CreateBitCast(value, intTy);
-    shift = CreateZExtOrTrunc(CreateMul(shift, ConstantInt::get(shift->getType(), fw)), intTy);
-    return CreateBitCast(CreateLShr(value, shift), vecTy);
+//    if (safe) {
+        shift = CreateZExtOrTrunc(shift, intTy);
+        result = CreateLShr(value, shift);
+//    } else {
+//        // TODO: check the ASM generated by this to see what the select generates
+//        Value * const moddedShift = CreateURem(shift, BLOCK_WIDTH);
+//        Value * const inbounds = CreateICmpEQ(moddedShift, shift);
+//        shift = CreateZExtOrTrunc(moddedShift, intTy);
+//        Constant * const ZEROES = Constant::getNullValue(intTy);
+//        result = CreateLShr(value, shift);
+//        result = CreateSelect(inbounds, result, ZEROES);
+//    }
+    return CreateBitCast(result, vecTy);
 }
 
 Value * IDISA_Builder::simd_slli(unsigned fw, Value * a, unsigned shift) {
@@ -786,31 +811,76 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm
     }
 }
 
-Value * IDISA_Builder::bitblock_mask_from(Value * pos) {
-    Value * p = CreateZExtOrTrunc(pos, getSizeTy());
-    const unsigned fw = getSizeTy()->getBitWidth();
-    const auto field_count = mBitBlockWidth / fw;
-    Constant * fwVal = ConstantInt::get(getSizeTy(), fw);
-    Constant * poaBase[field_count];
-    for (unsigned i = 0; i < field_count; i++) {
-        poaBase[i] = ConstantInt::get(getSizeTy(), fw * i);
+Value * IDISA_Builder::bitblock_mask_from(Value * const position, const bool safe) {
+    Value * const originalPos = CreateZExtOrTrunc(position, getSizeTy());
+    if (LLVM_UNLIKELY(safe && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Constant * const BLOCK_WIDTH = getSize(mBitBlockWidth);
+        CreateAssert(CreateICmpULT(originalPos, BLOCK_WIDTH), "position exceeds block width");
     }
-    Value * posBaseVec = ConstantVector::get({poaBase, field_count});
-    Value * mask1 = CreateSExt(CreateICmpUGT(posBaseVec, simd_fill(fw, pos)), fwVectorType(fw));
-    Value * bitField = CreateShl(ConstantInt::getAllOnesValue(getSizeTy()), CreateURem(p, fwVal));
-    Value * inBitBlock = CreateICmpULT(p, getSize(mBitBlockWidth));
-    Value * fieldNo = CreateUDiv(p, fwVal);
-    Value * const final_mask = CreateSelect(inBitBlock, CreateInsertElement(mask1, bitField, fieldNo), mask1);
-    return bitCast(final_mask);
+    Value * const pos = safe ? position : CreateAnd(originalPos, getSize(mBitBlockWidth - 1));
+    const unsigned fieldWidth = getSizeTy()->getBitWidth();
+    const auto fieldCount = mBitBlockWidth / fieldWidth;
+    Constant * posBase[fieldCount];
+    for (unsigned i = 0; i < fieldCount; i++) {
+        posBase[i] = ConstantInt::get(getSizeTy(), fieldWidth * i);
+    }
+    Value * const posBaseVec = ConstantVector::get({posBase, fieldCount});
+    Value * const positionVec = simd_fill(fieldWidth, pos);
+    Value * const fullFieldWidthMasks = CreateSExt(CreateICmpUGT(posBaseVec, positionVec), fwVectorType(fieldWidth));
+    Constant * const FIELD_ONES = ConstantInt::getAllOnesValue(getSizeTy());
+    Value * const bitField = CreateShl(FIELD_ONES, CreateAnd(pos, getSize(fieldWidth - 1)));
+    Value * const fieldNo = CreateLShr(pos, getSize(std::log2(fieldWidth)));   
+    Value * result = CreateInsertElement(fullFieldWidthMasks, bitField, fieldNo);
+    if (!safe) { // if the originalPos doesn't match the moddedPos then the originalPos must exceed the block width.
+        Constant * const VECTOR_ZEROES = Constant::getNullValue(fwVectorType(fieldWidth));
+        result = CreateSelect(CreateICmpEQ(originalPos, pos), result, VECTOR_ZEROES);
+    }
+    return bitCast(result);
 }
 
-Value * IDISA_Builder::bitblock_set_bit(Value * pos) {
-    Value * p = CreateZExtOrTrunc(pos, getSizeTy());
-    const unsigned fw = getSizeTy()->getBitWidth();
-    Constant * fwVal = ConstantInt::get(getSizeTy(), fw);
-    Value * bitField = CreateShl(ConstantInt::get(getSizeTy(), 1), CreateURem(p, fwVal));
-    Value * fieldNo = CreateUDiv(p, fwVal);
-    return bitCast(CreateInsertElement(Constant::getNullValue(fwVectorType(fw)), bitField, fieldNo));
+Value * IDISA_Builder::bitblock_mask_to(Value * const position, const bool safe) {
+    Value * const originalPos = CreateZExtOrTrunc(position, getSizeTy());
+    if (LLVM_UNLIKELY(safe && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Constant * const BLOCK_WIDTH = getSize(mBitBlockWidth);
+        CreateAssert(CreateICmpULT(originalPos, BLOCK_WIDTH), "position exceeds block width");
+    }
+    Value * const pos = safe ? position : CreateAnd(originalPos, getSize(mBitBlockWidth - 1));
+    const unsigned fieldWidth = getSizeTy()->getBitWidth();
+    const auto fieldCount = mBitBlockWidth / fieldWidth;
+    Constant * posBase[fieldCount];
+    for (unsigned i = 0; i < fieldCount; i++) {
+        posBase[i] = ConstantInt::get(getSizeTy(), fieldWidth * i);
+    }
+    Value * const posBaseVec = ConstantVector::get({posBase, fieldCount});
+    Value * const positionVec = simd_fill(fieldWidth, pos);
+    Value * const fullFieldWidthMasks = CreateSExt(CreateICmpULT(posBaseVec, positionVec), fwVectorType(fieldWidth));
+    Constant * const FIELD_ONES = ConstantInt::getAllOnesValue(getSizeTy());
+    Value * const bitField = CreateLShr(FIELD_ONES, CreateAnd(getSize(fieldWidth - 1), CreateNot(pos)));
+    Value * const fieldNo = CreateLShr(pos, getSize(std::log2(fieldWidth)));
+    Value * result = CreateInsertElement(fullFieldWidthMasks, bitField, fieldNo);
+    if (!safe) { // if the originalPos doesn't match the moddedPos then the originalPos must exceed the block width.
+        Constant * const VECTOR_ONES = Constant::getAllOnesValue(fwVectorType(fieldWidth));
+        result = CreateSelect(CreateICmpEQ(originalPos, pos), result, VECTOR_ONES);
+    }
+    return bitCast(result);
+}
+
+Value * IDISA_Builder::bitblock_set_bit(Value * const position, const bool safe) {
+    Value * const originalPos = CreateZExtOrTrunc(position, getSizeTy());
+    if (LLVM_UNLIKELY(safe && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Constant * const BLOCK_WIDTH = getSize(mBitBlockWidth);
+        CreateAssert(CreateICmpULT(originalPos, BLOCK_WIDTH), "position exceeds block width");
+    }
+    const unsigned fieldWidth = getSizeTy()->getBitWidth();
+    Value * const bitField = CreateShl(getSize(1), CreateAnd(originalPos, getSize(fieldWidth - 1)));
+    Value * const pos = safe ? position : CreateAnd(originalPos, getSize(mBitBlockWidth - 1));
+    Value * const fieldNo = CreateLShr(pos, getSize(std::log2(fieldWidth)));
+    Constant * const VECTOR_ZEROES = Constant::getNullValue(fwVectorType(fieldWidth));
+    Value * result = CreateInsertElement(VECTOR_ZEROES, bitField, fieldNo);
+    if (!safe) { // If the originalPos doesn't match the moddedPos then the originalPos must exceed the block width.
+        result = CreateSelect(CreateICmpEQ(originalPos, pos), result, VECTOR_ZEROES);
+    }
+    return bitCast(result);
 }
 
 Value * IDISA_Builder::bitblock_popcount(Value * const to_count) {

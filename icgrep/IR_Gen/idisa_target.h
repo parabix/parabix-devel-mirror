@@ -6,11 +6,13 @@
 #ifndef IDISA_TARGET_H
 #define IDISA_TARGET_H
 
+#include <llvm/Support/Compiler.h>
+
 namespace llvm { class LLVMContext; }
 namespace kernel { class KernelBuilder; }
 
-extern bool AVX2_available();
-extern bool AVX512BW_available();
+extern LLVM_READNONE bool AVX2_available();
+extern LLVM_READNONE bool AVX512BW_available();
 
 namespace IDISA {
     

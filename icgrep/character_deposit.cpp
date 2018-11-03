@@ -37,7 +37,6 @@
 namespace re { class CC; }
 
 using namespace llvm;
-using namespace parabix;
 using namespace kernel;
 
 static cl::OptionCategory characterDepositFlags("Command Flags", "deletion options");
@@ -63,7 +62,7 @@ typedef void (*MainFunctionType)(char * byte_data, size_t filesize);
  * and store the result to output file
  * */
 
-StreamSetBuffer * loadBasisBits(ParabixDriver & pxDriver, Value* inputStream, Value* fileSize, int bufferBlocks) {
+StreamSetBuffer * loadBasisBits(CPUDriver & pxDriver, Value* inputStream, Value* fileSize, int bufferBlocks) {
     auto & iBuilder = pxDriver.getBuilder();
 
     StreamSetBuffer * ByteStream = pxDriver.addBuffer<ExternalBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 8));
@@ -78,7 +77,7 @@ StreamSetBuffer * loadBasisBits(ParabixDriver & pxDriver, Value* inputStream, Va
     return BasisBits;
 }
 
-StreamSetBuffer * generateSwizzledDeposit(ParabixDriver & pxDriver, StreamSetBuffer * BasisBits, int bufferBlocks) {
+StreamSetBuffer * generateSwizzledDeposit(CPUDriver & pxDriver, StreamSetBuffer * BasisBits, int bufferBlocks) {
     auto & iBuilder = pxDriver.getBuilder();
 
     StreamSetBuffer * const CharacterMarkerBuffer = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), bufferBlocks);
@@ -108,7 +107,7 @@ StreamSetBuffer * generateSwizzledDeposit(ParabixDriver & pxDriver, StreamSetBuf
     return resultbits;
 }
 
-StreamSetBuffer * generateBitStreamDeposit(ParabixDriver & pxDriver, StreamSetBuffer * BasisBits, int bufferBlocks) {
+StreamSetBuffer * generateBitStreamDeposit(CPUDriver & pxDriver, StreamSetBuffer * BasisBits, int bufferBlocks) {
     auto & iBuilder = pxDriver.getBuilder();
 
     StreamSetBuffer * const deletionMarker = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), bufferBlocks);
@@ -167,7 +166,7 @@ int main(int argc, char *argv[]) {
 
     const auto bufferBlocks = codegen::ThreadNum * codegen::SegmentSize;
 
-    ParabixDriver pxDriver("character_deletion");
+    CPUDriver pxDriver("character_deletion");
     auto & iBuilder = pxDriver.getBuilder();
     Module * M = iBuilder->getModule();
     Type * const sizeTy = iBuilder->getSizeTy();
@@ -203,9 +202,6 @@ int main(int argc, char *argv[]) {
     pxDriver.makeKernelCall(outK, {ResultBytes}, {});
 
     pxDriver.generatePipelineIR();
-
-    pxDriver.deallocateBuffers();
-
     iBuilder->CreateRetVoid();
 
     pxDriver.finalizeObject();

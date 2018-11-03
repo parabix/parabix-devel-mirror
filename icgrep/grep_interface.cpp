@@ -193,23 +193,22 @@ static cl::alias ColorAlias("colour", cl::desc("Alias for -color"), cl::aliasopt
 // and signal error the InternalFailure exit code.
 // 
 static void icgrep_error_handler(void *UserData, const std::string &Message, bool GenCrashDiag) {
-#ifndef NDEBUG
-        throw std::runtime_error(Message);
-#else
-        // Modified from LLVM's internal report_fatal_error logic.
-        SmallVector<char, 64> Buffer;
-        raw_svector_ostream OS(Buffer);
-        OS << "icgrep ERROR: " << Message << "\n";
-        StringRef MessageStr = OS.str();
-        ssize_t written = ::write(2, MessageStr.data(), MessageStr.size());
-        (void)written; // If something went wrong, we deliberately just give up.
-        // Run the interrupt handlers to make sure any special cleanups get done, in
-        // particular that we remove files registered with RemoveFileOnSignal.
-        llvm::sys::RunInterruptHandlers();
-        exit(InternalFailureCode);
-#endif
+    // Modified from LLVM's internal report_fatal_error logic.
+    #ifndef NDEBUG
+    throw std::runtime_error(Message);
+    #else
+    SmallVector<char, 64> Buffer;
+    raw_svector_ostream OS(Buffer);
+    OS << "icgrep ERROR: " << Message << "\n";
+    const auto MessageStr = OS.str();
+    ssize_t written = ::write(2, MessageStr.data(), MessageStr.size());
+    (void)written; // If something went wrong, we deliberately just give up.
+    // Run the interrupt handlers to make sure any special cleanups get done, in
+    // particular that we remove files registered with RemoveFileOnSignal.
+    llvm::sys::RunInterruptHandlers();
+    exit(InternalFailureCode);
+    #endif
 }
-    
 
 void InitializeCommandLineInterface(int argc, char *argv[]) {
     llvm::install_fatal_error_handler(&icgrep_error_handler);

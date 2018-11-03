@@ -61,7 +61,7 @@ void PabloCompiler::initializeKernelData(const std::unique_ptr<kernel::KernelBui
     mCarryManager->initializeCarryData(b, mKernel);
     if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {
         const auto count = (mBranchCount * 2) + 1;
-        mKernel->addScalar(ArrayType::get(mKernel->getSizeTy(), count), "profile");
+        mKernel->addInternalScalar(ArrayType::get(mKernel->getSizeTy(), count), "profile");
         mBasicBlock.reserve(count);
     }
 }
@@ -97,7 +97,7 @@ void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & 
             if (LLVM_LIKELY(isa<Var>(input))) {
                 for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
                     if (input == mKernel->getInput(i)) {
-                        const auto & binding = mKernel->getStreamInput(i);
+                        const auto & binding = mKernel->getInputStreamSetBinding(i);
                         if (LLVM_UNLIKELY(!binding.hasLookahead() || binding.getLookahead() < la->getAmount())) {
                             std::string tmp;
                             raw_string_ostream out(tmp);
@@ -117,7 +117,7 @@ void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & 
             ++mBranchCount;
             examineBlock(b, cast<Branch>(stmt)->getBody());
         } else if (LLVM_UNLIKELY(isa<Count>(stmt))) {
-            mAccumulator.insert(std::make_pair(stmt, b->getInt32(mKernel->addUnnamedScalar(stmt->getType()))));
+            mKernel->addInternalScalar(stmt->getType(), stmt->getName().str());
         }
     }    
 }
@@ -497,12 +497,8 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
         } else if (const Count * c = dyn_cast<Count>(stmt)) {
             Value * EOFbit = b->getScalarField("EOFbit");
             Value * EOFmask = b->getScalarField("EOFmask");
-            Value * const to_count = b->simd_and(b->simd_or(b->simd_not(EOFmask), EOFbit), compileExpression(b, c->getExpr()));            
-            const auto f = mAccumulator.find(c);
-            if (LLVM_UNLIKELY(f == mAccumulator.end())) {
-                report_fatal_error("Unknown accumulator: " + c->getName().str());
-            }
-            Value * const ptr = b->getScalarFieldPtr(f->second);
+            Value * const to_count = b->simd_and(b->simd_or(b->simd_not(EOFmask), EOFbit), compileExpression(b, c->getExpr()));
+            Value * const ptr = b->getScalarFieldPtr(stmt->getName().str());
             const auto alignment = getPointerElementAlignment(ptr);
             Value * const countSoFar = b->CreateAlignedLoad(ptr, alignment, c->getName() + "_accumulator");
             const auto fieldWidth = b->getSizeTy()->getBitWidth();
@@ -521,12 +517,13 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             const auto bit_shift = (l->getAmount() % b->getBitBlockWidth());
             const auto block_shift = (l->getAmount() / b->getBitBlockWidth());
             Value * ptr = b->getInputStreamBlockPtr(cast<Var>(stream)->getName(), index, b->getSize(block_shift));
+            // Value * base = b->CreatePointerCast(b->getBaseAddress(cast<Var>(stream)->getName()), ptr->getType());
             Value * lookAhead = b->CreateBlockAlignedLoad(ptr);
-            if (bit_shift == 0) {  // Simple case with no intra-block shifting.
+            if (LLVM_UNLIKELY(bit_shift == 0)) {  // Simple case with no intra-block shifting.
                 value = lookAhead;
             } else { // Need to form shift result from two adjacent blocks.
-                Value * ptr = b->getInputStreamBlockPtr(cast<Var>(stream)->getName(), index, b->getSize(block_shift + 1));
-                Value * lookAhead1 = b->CreateBlockAlignedLoad(ptr);
+                Value * ptr1 = b->getInputStreamBlockPtr(cast<Var>(stream)->getName(), index, b->getSize(block_shift + 1));
+                Value * lookAhead1 = b->CreateBlockAlignedLoad(ptr1);
                 if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
                     value = b->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));
                 } else {

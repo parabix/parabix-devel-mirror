@@ -10,12 +10,14 @@
 
 namespace cc {
     
-UnicodeMappableAlphabet::UnicodeMappableAlphabet(std::string alphabetName,
+UnicodeMappableAlphabet::UnicodeMappableAlphabet(const std::string alphabetName,
                                                  unsigned unicodeCommon,
-                                                 std::vector <UCD::codepoint_t> aboveCommon) :
-    Alphabet(alphabetName, ClassTypeId::UnicodeMappableAlphabet),
-    mUnicodeCommon(unicodeCommon),
-    mAboveCommon(aboveCommon) {}
+                                                 std::vector <UCD::codepoint_t> aboveCommon)
+: Alphabet(std::move(alphabetName), ClassTypeId::UnicodeMappableAlphabet),
+mUnicodeCommon(unicodeCommon),
+mAboveCommon(std::move(aboveCommon)) {
+
+}
 
 UCD::codepoint_t UnicodeMappableAlphabet::toUnicode(const unsigned n) const {
     UCD::codepoint_t cp = n;
@@ -33,8 +35,11 @@ unsigned UnicodeMappableAlphabet::fromUnicode(const UCD::codepoint_t codepoint) 
     llvm::report_fatal_error("fromUnicode: codepoint not found in alphabet.");
 }
 
-CodeUnitAlphabet::CodeUnitAlphabet(std::string alphabetName, uint8_t bits) :
-    Alphabet(alphabetName, ClassTypeId::CodeUnitAlphabet), mCodeUnitBits(bits) {}
+CodeUnitAlphabet::CodeUnitAlphabet(const std::string alphabetName, uint8_t bits) :
+Alphabet(std::move(alphabetName), ClassTypeId::CodeUnitAlphabet)
+, mCodeUnitBits(bits) {
+
+}
 
 const UnicodeMappableAlphabet Unicode("Unicode", UCD::UNICODE_MAX, {});
 

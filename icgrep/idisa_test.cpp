@@ -13,7 +13,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <kernels/kernel_builder.h>
 #include <IR_Gen/idisa_target.h>
-#include <kernels/interface.h>
 #include <kernels/streamset.h>
 #include <kernels/source_kernel.h>
 #include <kernels/hex_convert.h>
@@ -21,12 +20,14 @@
 #include <kernels/stdout_kernel.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>
+#include <kernels/pipeline_builder.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
 
 using namespace llvm;
+using namespace kernel;
 
 static cl::OptionCategory testFlags("Command Flags", "test options");
 
@@ -41,26 +42,26 @@ static cl::opt<bool> QuietMode("q", cl::desc("Suppress output, set the return co
 static cl::opt<int> ShiftLimit("ShiftLimit", cl::desc("Upper limit for the shift operand (2nd operand) of sllv, srlv, srav."), cl::init(0));
 static cl::opt<int> Immediate("i", cl::desc("Immediate value for mvmd_dslli"), cl::init(1));
 
-class ShiftLimitKernel : public kernel::BlockOrientedKernel {
+class ShiftLimitKernel : public BlockOrientedKernel {
 public:
-    ShiftLimitKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned limit);
+    ShiftLimitKernel(const std::unique_ptr<KernelBuilder> & b, unsigned fw, unsigned limit, StreamSet * input, StreamSet * output);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & kb) override;
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) override;
 private:
     const unsigned mTestFw;
     const unsigned mShiftLimit;
 };
 
-ShiftLimitKernel::ShiftLimitKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned limit)
-: kernel::BlockOrientedKernel("shiftLimit" + std::to_string(fw) + "_" + std::to_string(limit),
-                              {kernel::Binding{b->getStreamSetTy(1, fw), "shiftOperand"}},
-                              {kernel::Binding{b->getStreamSetTy(1, fw), "limitedShift"}},
+ShiftLimitKernel::ShiftLimitKernel(const std::unique_ptr<KernelBuilder> & b, unsigned fw, unsigned limit, StreamSet * input, StreamSet * output)
+: BlockOrientedKernel("shiftLimit" + std::to_string(fw) + "_" + std::to_string(limit),
+                              {Binding{"shiftOperand", input}},
+                              {Binding{"limitedShift", output}},
                               {}, {}, {}),
 mTestFw(fw), mShiftLimit(limit) {}
 
-void ShiftLimitKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & kb) {
+void ShiftLimitKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) {
     Type * fwTy = kb->getIntNTy(mTestFw);
     Constant * const ZeroConst = kb->getSize(0);
     Value * shiftOperand = kb->loadInputStreamBlock("shiftOperand", ZeroConst);
@@ -69,27 +70,29 @@ void ShiftLimitKernel::generateDoBlockMethod(const std::unique_ptr<kernel::Kerne
     kb->storeOutputStreamBlock("limitedShift", ZeroConst, limited);
 }
 
-class IdisaBinaryOpTestKernel : public kernel::MultiBlockKernel {
+class IdisaBinaryOpTestKernel : public MultiBlockKernel {
 public:
-    IdisaBinaryOpTestKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm=0);
+    IdisaBinaryOpTestKernel(const std::unique_ptr<KernelBuilder> &, std::string idisa_op, unsigned fw, unsigned imm,
+                            StreamSet * Operand1, StreamSet * Operand2, StreamSet * result);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
 private:
     const std::string mIdisaOperation;
     const unsigned mTestFw;
     const unsigned mImmediateShift;
 };
 
-IdisaBinaryOpTestKernel::IdisaBinaryOpTestKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm)
-: kernel::MultiBlockKernel(idisa_op + std::to_string(fw) + "_test",
-     {kernel::Binding{b->getStreamSetTy(1, 1), "operand1"}, kernel::Binding{b->getStreamSetTy(1, 1), "operand2"}},
-     {kernel::Binding{b->getStreamSetTy(1, 1), "result"}},
+IdisaBinaryOpTestKernel::IdisaBinaryOpTestKernel(const std::unique_ptr<KernelBuilder> & /* b */, std::string idisa_op, unsigned fw, unsigned imm,
+                                                 StreamSet * Operand1, StreamSet * Operand2, StreamSet * result)
+: MultiBlockKernel(idisa_op + std::to_string(fw) + "_test",
+     {Binding{"operand1", Operand1}, Binding{"operand2", Operand2}},
+     {Binding{"result", result}},
      {}, {}, {}),
-mIdisaOperation(idisa_op), mTestFw(fw), mImmediateShift(imm) {}
+mIdisaOperation(std::move(idisa_op)), mTestFw(fw), mImmediateShift(imm) {}
 
-void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
+void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
     BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
     BasicBlock * done = kb->CreateBasicBlock("done");
@@ -162,29 +165,33 @@ void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<kern
     kb->SetInsertPoint(done);
 }
 
-class IdisaBinaryOpCheckKernel : public kernel::BlockOrientedKernel {
+class IdisaBinaryOpCheckKernel : public BlockOrientedKernel {
 public:
-    IdisaBinaryOpCheckKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm=0);
+    IdisaBinaryOpCheckKernel(const std::unique_ptr<KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm,
+                             StreamSet * Operand1, StreamSet * Operand2, StreamSet * result,
+                             StreamSet * expected, Scalar * failures);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & kb) override;
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) override;
 private:
     const std::string mIdisaOperation;
     const unsigned mTestFw;
     const unsigned mImmediateShift;
 };
 
-IdisaBinaryOpCheckKernel::IdisaBinaryOpCheckKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm)
-: kernel::BlockOrientedKernel(idisa_op + std::to_string(fw) + "_check" + std::to_string(QuietMode),
-                           {kernel::Binding{b->getStreamSetTy(1, 1), "operand1"},
-                            kernel::Binding{b->getStreamSetTy(1, 1), "operand2"},
-                            kernel::Binding{b->getStreamSetTy(1, 1), "test_result"}},
-                           {kernel::Binding{b->getStreamSetTy(1, 1), "expected_result"}},
-                           {}, {kernel::Binding{b->getSizeTy(), "totalFailures"}}, {}),
+IdisaBinaryOpCheckKernel::IdisaBinaryOpCheckKernel(const std::unique_ptr<KernelBuilder> & /* b */, std::string idisa_op, unsigned fw, unsigned imm,
+                                                   StreamSet * Operand1, StreamSet * Operand2, StreamSet * result,
+                                                   StreamSet * expected, Scalar * failures)
+: BlockOrientedKernel(idisa_op + std::to_string(fw) + "_check" + std::to_string(QuietMode),
+                           {Binding{"operand1", Operand1},
+                            Binding{"operand2", Operand2},
+                            Binding{"test_result", result}},
+                           {Binding{"expected_result", expected}},
+                           {}, {Binding{"totalFailures", failures}}, {}),
 mIdisaOperation(idisa_op), mTestFw(fw), mImmediateShift(imm) {}
 
-void IdisaBinaryOpCheckKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & kb) {
+void IdisaBinaryOpCheckKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) {
     Type * fwTy = kb->getIntNTy(mTestFw);
     BasicBlock * reportFailure = kb->CreateBasicBlock("reportFailure");
     BasicBlock * continueTest = kb->CreateBasicBlock("continueTest");
@@ -345,92 +352,75 @@ int32_t openFile(const std::string & fileName, llvm::raw_ostream & msgstrm) {
 
 typedef size_t (*IDISAtestFunctionType)(int32_t fd1, int32_t fd2);
 
-using namespace parabix;
+StreamSet * readHexToBinary(std::unique_ptr<PipelineBuilder> & P, const std::string & fd) {
+    StreamSet * const hexStream = P->CreateStreamSet(1, 8);
+    Scalar * const fileDecriptor = P->getInputScalar(fd);
+    P->CreateKernelCall<MMapSourceKernel>(fileDecriptor, hexStream);
+    StreamSet * const bitStream = P->CreateStreamSet(1, 1);
+    P->CreateKernelCall<HexToBinary>(hexStream, bitStream);
+    return bitStream;
+}
 
-void pipelineGen(ParabixDriver & pxDriver) {
-
-    auto & idb = pxDriver.getBuilder();
-    Module * m = idb->getModule();
-    Value * useMMap = idb->CreateZExt(idb->getTrue(), idb->getInt8Ty());
-    const auto bufferSize = codegen::SegmentSize * codegen::BufferSegments;
-    
-    Type * const int32Ty = idb->getInt32Ty();
-    Type * const sizeTy = idb->getSizeTy();
-
-    FunctionType * const mainType = FunctionType::get(sizeTy, {int32Ty, int32Ty}, false);
-    Function * const main = cast<Function>(m->getOrInsertFunction("Main", mainType));
-    main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();    
-    Value * const fileDecriptor1 = &*(args++);
-    fileDecriptor1->setName("operand1FileDecriptor");
-    Value * const fileDecriptor2 = &*(args++);
-    fileDecriptor2->setName("operand2FileDecriptor");
-
-    idb->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", main,0));
-
-    StreamSetBuffer * Operand1HexStream = pxDriver.addBuffer<ExternalBuffer>(idb, idb->getStreamSetTy(1, 8));
-    kernel::Kernel * sourceK1 = pxDriver.addKernelInstance<kernel::FDSourceKernel>(idb);
-    sourceK1->setInitialArguments({useMMap, fileDecriptor1});
-    pxDriver.makeKernelCall(sourceK1, {}, {Operand1HexStream});
-    
-    StreamSetBuffer * Operand1BitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
-    kernel::Kernel * hexbinK = pxDriver.addKernelInstance<kernel::HexToBinary>(idb);
-    pxDriver.makeKernelCall(hexbinK, {Operand1HexStream}, {Operand1BitStream});
-    
-    StreamSetBuffer * Operand2HexStream = pxDriver.addBuffer<ExternalBuffer>(idb, idb->getStreamSetTy(1, 8));
-    kernel::Kernel * sourceK2 = pxDriver.addKernelInstance<kernel::FDSourceKernel>(idb);
-    sourceK2->setInitialArguments({useMMap, fileDecriptor2});
-    pxDriver.makeKernelCall(sourceK2, {}, {Operand2HexStream});
-    
-    StreamSetBuffer * Operand2BitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
-    kernel::Kernel * hexbinK2 = pxDriver.addKernelInstance<kernel::HexToBinary>(idb);
-    pxDriver.makeKernelCall(hexbinK2, {Operand2HexStream}, {Operand2BitStream});
-    
+inline StreamSet * applyShiftLimit(std::unique_ptr<PipelineBuilder> & P, StreamSet * const input) {
     if (ShiftLimit > 0) {
-        StreamSetBuffer * PreLimitBitStream = Operand2BitStream;
-        Operand2BitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
-        kernel::Kernel * limitK = pxDriver.addKernelInstance<ShiftLimitKernel>(idb, TestFieldWidth, ShiftLimit);
-        pxDriver.makeKernelCall(limitK, {PreLimitBitStream}, {Operand2BitStream});
+        StreamSet * output = P->CreateStreamSet(1, 1);
+        P->CreateKernelCall<ShiftLimitKernel>(TestFieldWidth, ShiftLimit, input, output);
+        return output;
+    }
+    return input;
+}
+
+IDISAtestFunctionType pipelineGen(CPUDriver & pxDriver) {
+
+    auto & b = pxDriver.getBuilder();
+
+    Type * const sizeTy = b->getSizeTy();
+    Type * const int32Ty = b->getInt32Ty();
+
+    Bindings inputs;
+    inputs.emplace_back(int32Ty, "operand1FileDecriptor");
+    inputs.emplace_back(int32Ty, "operand2FileDecriptor");
+    if (!TestOutputFile.empty()) {
+        inputs.emplace_back(b->getInt8PtrTy(), "outputFileName");
     }
 
-    StreamSetBuffer * ResultBitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
-    kernel::Kernel * testK = pxDriver.addKernelInstance<IdisaBinaryOpTestKernel>(idb, TestOperation, TestFieldWidth, Immediate);
-    pxDriver.makeKernelCall(testK, {Operand1BitStream, Operand2BitStream}, {ResultBitStream});
-    
-    StreamSetBuffer * ExpectedResultBitStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 1), bufferSize);
-    kernel::Kernel * checkK = pxDriver.addKernelInstance<IdisaBinaryOpCheckKernel>(idb, TestOperation, TestFieldWidth, Immediate);
-    pxDriver.makeKernelCall(checkK, {Operand1BitStream, Operand2BitStream, ResultBitStream}, {ExpectedResultBitStream});
-    
+    auto P = pxDriver.makePipeline(std::move(inputs), {Binding{sizeTy, "totalFailures"}});
+
+
+    StreamSet * const Operand1BitStream = readHexToBinary(P, "operand1FileDecriptor");
+    StreamSet * const Operand2BitStream = applyShiftLimit(P, readHexToBinary(P, "operand2FileDecriptor"));
+
+    StreamSet * const ResultBitStream = P->CreateStreamSet(1, 1);
+
+    P->CreateKernelCall<IdisaBinaryOpTestKernel>(TestOperation, TestFieldWidth, Immediate
+                                                 , Operand1BitStream, Operand2BitStream
+                                                 , ResultBitStream);
+
+    StreamSet * ExpectedResultBitStream = P->CreateStreamSet(1, 1);
+
+    P->CreateKernelCall<IdisaBinaryOpCheckKernel>(TestOperation, TestFieldWidth, Immediate
+                                                 , Operand1BitStream, Operand2BitStream, ResultBitStream
+                                                 , ExpectedResultBitStream, P->getOutputScalar("totalFailures"));
+
     if (!TestOutputFile.empty()) {
-        StreamSetBuffer * ResultHexStream = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 8), bufferSize);
-        kernel::Kernel * binhexK = pxDriver.addKernelInstance<kernel::BinaryToHex>(idb);
-        pxDriver.makeKernelCall(binhexK, {ResultBitStream}, {ResultHexStream});
-        kernel::Kernel * outK = pxDriver.addKernelInstance<kernel::FileSink>(idb, 8);
-        Value * fName = idb->CreatePointerCast(idb->GetString(TestOutputFile.c_str()), idb->getInt8PtrTy());
-        outK->setInitialArguments({fName});
-        pxDriver.makeKernelCall(outK, {ResultHexStream}, {});
-   }
-    
-    pxDriver.generatePipelineIR();
-    idb->setKernel(checkK);
-    Value * totalFailures = idb->getAccumulator("totalFailures");
-    
-    pxDriver.deallocateBuffers();
-    idb->CreateRet(totalFailures);
-    pxDriver.finalizeObject();
+        StreamSet * ResultHexStream = P->CreateStreamSet(1, 8);
+        P->CreateKernelCall<BinaryToHex>(ResultBitStream, ResultHexStream);
+        Scalar * outputFileName = P->getInputScalar("outputFileName");
+        P->CreateKernelCall<FileSink>(outputFileName, ResultHexStream);
+    }
+
+    return reinterpret_cast<IDISAtestFunctionType>(P->compile());
 }
 
 int main(int argc, char *argv[]) {
     cl::ParseCommandLineOptions(argc, argv);
     //codegen::SegmentSize = 1;
-    ParabixDriver pxDriver("idisa_test");
-    pipelineGen(pxDriver);
+    CPUDriver pxDriver("idisa_test");
+    auto idisaTestFunction = pipelineGen(pxDriver);
     
-    int32_t fd1 = openFile(Operand1TestFile, llvm::outs());
-    int32_t fd2 = openFile(Operand2TestFile, llvm::outs());
-    
-    auto idisaTestFunction = reinterpret_cast<IDISAtestFunctionType>(pxDriver.getMain());
-    size_t failure_count = idisaTestFunction(fd1, fd2);
+    const int32_t fd1 = openFile(Operand1TestFile, llvm::outs());
+    const int32_t fd2 = openFile(Operand2TestFile, llvm::outs());
+    const size_t failure_count = idisaTestFunction(fd1, fd2);
     if (!QuietMode) {
         if (failure_count == 0) {
             llvm::outs() << "Test success: " << TestOperation << "<" << TestFieldWidth << ">\n";

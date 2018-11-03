@@ -4,19 +4,17 @@
 
 #include "lz4_grep_base_generator.h"
 
-class LZ4GrepByteStreamGenerator: public LZ4GrepBaseGenerator {
+class LZ4GrepByteStreamGenerator final : public LZ4GrepBaseGenerator {
+public:
+    LZ4GrepByteStreamGenerator(const FunctionType type) : LZ4GrepBaseGenerator(type) { }
 protected:
-    virtual parabix::StreamSetBuffer* generateUncompressedByteStream() override;
-    virtual parabix::StreamSetBuffer* generateUncompressedBitStreams() override;
-    virtual parabix::StreamSetBuffer* decompressBitStream(parabix::StreamSetBuffer* compressedByteStream, parabix::StreamSetBuffer* compressedBitStream) override;
-    virtual std::vector<parabix::StreamSetBuffer*> decompressBitStreams(parabix::StreamSetBuffer* compressedByteStream, std::vector<parabix::StreamSetBuffer*> compressedBitStreams) override;
-
+    kernel::StreamSet * generateUncompressedByteStream() override;
+    kernel::StreamSet * generateUncompressedBitStreams() override;
+    kernel::StreamSet * decompressBitStream(kernel::StreamSet* compressedByteStream, kernel::StreamSet* compressedBitStream) override;
+    kernel::StreamSets decompressBitStreams(kernel::StreamSet* compressedByteStream, kernel::StreamSets compressedBitStreams) override;
 private:
-
-    parabix::StreamSetBuffer* twist(const std::unique_ptr<kernel::KernelBuilder> &b,
-                                    std::vector<parabix::StreamSetBuffer*> inputStreams,
-                                    unsigned twistWidth);
-    std::vector<parabix::StreamSetBuffer*> untwist(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, parabix::StreamSetBuffer* inputStream, unsigned twistWidth, std::vector<unsigned> numOfStreams);
+    kernel::StreamSet* twist(const kernel::StreamSets &inputStreams, const unsigned twistWidth);
+    kernel::StreamSets untwist(kernel::StreamSet * inputStream, const unsigned twistWidth, const std::vector<unsigned> & numOfStreams);
 };
 
 

@@ -170,9 +170,9 @@ void U8U32KernelBuilder::generatePabloMethod() {
     
     it.createAssign(delmask, it.createOr(it.createOr(del3, del4), ccc.compileCC(re::makeByte(0xC0, 0xFF), it)));
     
-    Var * output = this->getOutputStreamVar("u32bit");
-    Var * delmask_out = this->getOutputStreamVar("delMask");
-    Var * error_mask_out = this->getOutputStreamVar("errMask");
+    Var * output = getOutputStreamVar("u32bit");
+    Var * delmask_out = getOutputStreamVar("delMask");
+    Var * error_mask_out = getOutputStreamVar("errMask");
     
 
     for (unsigned i = 0; i < 8; i++) {

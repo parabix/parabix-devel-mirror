@@ -10,28 +10,27 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-    class TwistByPDEPKernel final : public BlockOrientedKernel {
-    public:
-        TwistByPDEPKernel(const std::unique_ptr <kernel::KernelBuilder> &b, unsigned numberOfInputStream, unsigned twistWidth);
+class TwistByPDEPKernel final : public BlockOrientedKernel {
+public:
+    TwistByPDEPKernel(const std::unique_ptr <kernel::KernelBuilder> &b, unsigned numberOfInputStream, unsigned twistWidth);
 
-    private:
-        const unsigned mNumberOfInputStream;
-        const unsigned mTwistWidth;
+private:
+    const unsigned mNumberOfInputStream;
+    const unsigned mTwistWidth;
 
-        void generateDoBlockMethod(const std::unique_ptr <kernel::KernelBuilder> &b) override;
-    };
+    void generateDoBlockMethod(const std::unique_ptr <kernel::KernelBuilder> &b) override;
+};
 
 
-    class TwistMultipleByPDEPKernel final : public BlockOrientedKernel {
-    public:
-        TwistMultipleByPDEPKernel(const std::unique_ptr <kernel::KernelBuilder> &b, std::vector<unsigned> numberOfInputStreams, unsigned twistWidth);
+class TwistMultipleByPDEPKernel final : public BlockOrientedKernel {
+public:
+    TwistMultipleByPDEPKernel(const std::unique_ptr <kernel::KernelBuilder> &b, const StreamSets & inputStreams, StreamSet * outputStream);
 
-    private:
-        std::vector<unsigned> mNumberOfInputStreams;
-        const unsigned mTwistWidth;
+private:
+    const unsigned mTwistWidth;
 
-        void generateDoBlockMethod(const std::unique_ptr <kernel::KernelBuilder> &b) override;
-    };
+    void generateDoBlockMethod(const std::unique_ptr <kernel::KernelBuilder> &b) override;
+};
 
 
 }

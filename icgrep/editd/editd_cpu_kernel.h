@@ -16,7 +16,10 @@ namespace kernel {
 class editdCPUKernel : public BlockOrientedKernel {
 public:
 
-    editdCPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen, unsigned groupSize);
+    editdCPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                   const unsigned patternLen, const unsigned groupSize,
+                   Scalar * const pattStream,
+                   StreamSet * const CCStream, StreamSet * const ResultStream);
     
 
 private:

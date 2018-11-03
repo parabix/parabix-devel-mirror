@@ -33,11 +33,12 @@
 #include <llvm/Support/raw_ostream.h>
 #include <pablo/builder.hpp>
 #include <fcntl.h>
+#include <kernels/pipeline_builder.h>
 
 using namespace pablo;
 using namespace kernel;
-using namespace parabix;
 using namespace llvm;
+using namespace codegen;
 
 static cl::OptionCategory u32u8Options("u32u8 Options", "Transcoding control options.");
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(u32u8Options));
@@ -54,7 +55,7 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 // each group of one to four positions for a single character, a deposit mask
 // must have exactly one 1 bit set.  Different deposit masks are used for
 // depositing bits, depending on the destination byte position within the
-// ultimate 4 byte sequence.
+// ultimate 4 byte sequencE->
 //
 // The following deposit masks (shown in little-endian representation) are
 // used for depositing bits.
@@ -84,24 +85,25 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 
 class UTF8fieldDepositMask final : public BlockOrientedKernel {
 public:
-    UTF8fieldDepositMask(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned depositFieldWidth = 64);
+    UTF8fieldDepositMask(const std::unique_ptr<KernelBuilder> & b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth = 64);
 private:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
-    void generateFinalBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Value * const remainingBytes) override;
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
+    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const remainingBytes) override;
     const unsigned mDepositFieldWidth;
 };
 
-UTF8fieldDepositMask::UTF8fieldDepositMask(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned depositFieldWidth)
+UTF8fieldDepositMask::UTF8fieldDepositMask(const std::unique_ptr<KernelBuilder> & b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth)
 : BlockOrientedKernel("u8depositMask",
-            {Binding{b->getStreamSetTy(21, 1), "basis"}},
+{Binding{"basis", u32basis}},
+{Binding{"fieldDepositMask", u8fieldMask, FixedRate(4)},
 #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
-            {Binding{b->getStreamSetTy(1, 1), "fieldDepositMask", FixedRate(4)},
-                      Binding{b->getStreamSetTy(1, 1), "extractionMask", FixedRate(4)}},
+Binding{"extractionMask", u8unitCounts, FixedRate(4)}},
 #else
-            {Binding{b->getStreamSetTy(1, 1), "fieldDepositMask", FixedRate(4)},
-                Binding{b->getStreamSetTy(1, 1), "codeUnitCounts", FixedRate(4), RoundUpTo(b->getBitBlockWidth())}},
+Binding{"codeUnitCounts", u8unitCounts, FixedRate(4), RoundUpTo(b->getBitBlockWidth())}},
 #endif
-                {}, {}, {Binding{b->getBitBlockType(), "EOFmask"}}), mDepositFieldWidth(depositFieldWidth) {
+{}, {}, {Binding{b->getBitBlockType(), "EOFmask"}})
+, mDepositFieldWidth(depositFieldWidth) {
+
 }
 
 
@@ -172,19 +174,19 @@ void UTF8fieldDepositMask::generateFinalBlockMethod(const std::unique_ptr<Kernel
 //
 class UTF8_DepositMasks : public pablo::PabloKernel {
 public:
-    UTF8_DepositMasks(const std::unique_ptr<kernel::KernelBuilder> & kb);
+    UTF8_DepositMasks(const std::unique_ptr<KernelBuilder> & kb, StreamSet * u8final, StreamSet * u8initial, StreamSet * u8mask12_17, StreamSet * u8mask6_11);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-UTF8_DepositMasks::UTF8_DepositMasks (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
+UTF8_DepositMasks::UTF8_DepositMasks (const std::unique_ptr<KernelBuilder> & iBuilder, StreamSet * u8final, StreamSet * u8initial, StreamSet * u8mask12_17, StreamSet * u8mask6_11)
 : PabloKernel(iBuilder, "UTF8_DepositMasks",
-              {Binding{iBuilder->getStreamSetTy(1), "u8final", FixedRate(1), LookAhead(2)}},
-              {Binding{iBuilder->getStreamSetTy(1), "u8initial"},
-               Binding{iBuilder->getStreamSetTy(1), "u8mask12_17"},
-               Binding{iBuilder->getStreamSetTy(1), "u8mask6_11"}}) {}
+              {Binding{"u8final", u8final, FixedRate(1), LookAhead(2)}},
+              {Binding{"u8initial", u8initial},
+               Binding{"u8mask12_17", u8mask12_17},
+               Binding{"u8mask6_11", u8mask6_11}}) {}
 
 void UTF8_DepositMasks::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
@@ -211,24 +213,32 @@ void UTF8_DepositMasks::generatePabloMethod() {
 //
 class UTF8assembly : public pablo::PabloKernel {
 public:
-    UTF8assembly(const std::unique_ptr<kernel::KernelBuilder> & kb);
+    UTF8assembly(const std::unique_ptr<KernelBuilder> & kb,
+                 StreamSet * deposit18_20, StreamSet * deposit12_17, StreamSet * deposit6_11, StreamSet * deposit0_5,
+                 StreamSet * u8initial, StreamSet * u8final, StreamSet * u8mask6_11, StreamSet * u8mask12_17,
+                 StreamSet * u8basis);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-UTF8assembly::UTF8assembly (const std::unique_ptr<kernel::KernelBuilder> & b)
+UTF8assembly::UTF8assembly (const std::unique_ptr<KernelBuilder> & b,
+                            StreamSet * deposit18_20, StreamSet * deposit12_17, StreamSet * deposit6_11, StreamSet * deposit0_5,
+                            StreamSet * u8initial, StreamSet * u8final, StreamSet * u8mask6_11, StreamSet * u8mask12_17,
+                            StreamSet * u8basis)
 : PabloKernel(b, "UTF8assembly",
-              {Binding{b->getStreamSetTy(3), "dep18_20"},
-                Binding{b->getStreamSetTy(6), "dep12_17"},
-                Binding{b->getStreamSetTy(6), "dep6_11"},
-                Binding{b->getStreamSetTy(6), "dep0_5"},
-                Binding{b->getStreamSetTy(1), "u8initial"},
-                Binding{b->getStreamSetTy(1), "u8final"},
-                Binding{b->getStreamSetTy(1), "u8mask6_11"},
-                Binding{b->getStreamSetTy(1), "u8mask12_17"}},
-              {Binding{b->getStreamSetTy(8), "u8basis"}}) {}
+{Binding{"dep18_20", deposit18_20},
+ Binding{"dep12_17", deposit12_17},
+ Binding{"dep6_11", deposit6_11},
+ Binding{"dep0_5", deposit0_5},
+ Binding{"u8initial", u8initial},
+ Binding{"u8final", u8final},
+ Binding{"u8mask6_11", u8mask6_11},
+ Binding{"u8mask12_17", u8mask12_17}},
+{Binding{"u8basis", u8basis}}) {
+
+}
 
 void UTF8assembly::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
@@ -268,120 +278,84 @@ void UTF8assembly::generatePabloMethod() {
     }
 }
 
-void u32u8_gen (ParabixDriver & pxDriver) {
-    auto & idb = pxDriver.getBuilder();
-    Module * mod = idb->getModule();
-    
-    unsigned const FieldWidth = sizeof(size_t) * 8;
-
-    const unsigned u32buffersize = codegen::SegmentSize * codegen::ThreadNum;
-    const unsigned u8buffersize = 4 * (u32buffersize + 1);
-    const unsigned u8buffersize2 = u8buffersize + 1;
-    const unsigned u8buffersize3 = u8buffersize2 + 4;
-
-    Type * const voidTy = idb->getVoidTy();
-    
-    Function * const main = cast<Function>(mod->getOrInsertFunction("Main", voidTy, idb->getInt32Ty(), nullptr));
-    main->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = main->arg_begin();
-    
-    Value * const fileDecriptor = &*(args++);
-    fileDecriptor->setName("fileDecriptor");
-    
-    idb->SetInsertPoint(BasicBlock::Create(mod->getContext(), "entry", main,0));
-    
-    // Source data
-    StreamSetBuffer * codeUnitStream = pxDriver.addBuffer<ExternalBuffer>(idb, idb->getStreamSetTy(1, 32));
-    
-    Kernel * sourceK = pxDriver.addKernelInstance<FDSourceKernel>(idb, 32);
-    sourceK->setInitialArguments({idb->getInt8(0), fileDecriptor});
-    pxDriver.makeKernelCall(sourceK, {}, {codeUnitStream});
-    
-    // Source buffers for transposed UTF-32 basis bits.
-    StreamSetBuffer * u32basis = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(21), u32buffersize+1);
-    
-    kernel::Kernel * s2p21K = pxDriver.addKernelInstance<S2P_21Kernel>(idb);
-    pxDriver.makeKernelCall(s2p21K, {codeUnitStream}, {u32basis});
-
-
-	// Buffers for calculated deposit masks.
-    StreamSetBuffer * u8fieldMask = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
-    StreamSetBuffer * u8final = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize2);
-    StreamSetBuffer * u8initial = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize2);
-    StreamSetBuffer * u8mask12_17 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize2);
-    StreamSetBuffer * u8mask6_11 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize2);
-
-    // Intermediate buffers for deposited bits
-    StreamSetBuffer * deposit18_20 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(3), u8buffersize3);
-    StreamSetBuffer * deposit12_17 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(6), u8buffersize3);
-    StreamSetBuffer * deposit6_11 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(6), u8buffersize3);
-    StreamSetBuffer * deposit0_5 = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(6), u8buffersize3);
-
-    // Final buffers for computed UTF-8 basis bits and byte stream.
-    StreamSetBuffer * u8basis = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(8), u8buffersize3);
-    StreamSetBuffer * u8bytes = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1, 8), u8buffersize3);
-
-    // Calculate the u8final deposit mask.
-#ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
-    StreamSetBuffer * extractionMask = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
-    kernel::Kernel * fieldDepositMaskK = pxDriver.addKernelInstance<UTF8fieldDepositMask>(idb, FieldWidth);
-    pxDriver.makeKernelCall(fieldDepositMaskK, {u32basis}, {u8fieldMask, extractionMask});
-    kernel::Kernel * streamK = pxDriver.addKernelInstance<StreamCompressKernel>(idb, FieldWidth, 1);
-    pxDriver.makeKernelCall(streamK, {u8fieldMask, extractionMask}, {u8final});
-#else
-    StreamSetBuffer * u8unitCounts = pxDriver.addBuffer<StaticBuffer>(idb, idb->getStreamSetTy(1), u8buffersize);
-    kernel::Kernel * fieldDepositMaskK = pxDriver.addKernelInstance<UTF8fieldDepositMask>(idb, FieldWidth);
-    pxDriver.makeKernelCall(fieldDepositMaskK, {u32basis}, {u8fieldMask, u8unitCounts});
-    kernel::Kernel * streamK = pxDriver.addKernelInstance<StreamCompressKernel>(idb, FieldWidth, 1);
-    pxDriver.makeKernelCall(streamK, {u8fieldMask, u8unitCounts}, {u8final});
-#endif
-//    kernel::Kernel * hexConvert =  pxDriver.addKernelInstance<BinaryToHex>(idb);
-    
-    kernel::Kernel * maskK = pxDriver.addKernelInstance<UTF8_DepositMasks>(idb);
-    pxDriver.makeKernelCall(maskK, {u8final}, {u8initial, u8mask12_17, u8mask6_11});
-
-//    pxDriver.makeKernelCall(hexConvert, {u8mask6_11}, {u8bytes});
-
-
-    StreamDepositCompiler deposit18_20compiler(pxDriver, 21, 18, 3, u32buffersize);
-    deposit18_20compiler.makeCall(u8initial, u32basis, deposit18_20);
-    
-    StreamDepositCompiler deposit12_17compiler(pxDriver, 21, 12, 6, u32buffersize);
-    deposit12_17compiler.makeCall(u8mask12_17, u32basis, deposit12_17);
-    
-    StreamDepositCompiler deposit6_11compiler(pxDriver, 21, 6, 6, u32buffersize);
-    deposit6_11compiler.makeCall(u8mask6_11, u32basis, deposit6_11);
-    
-    StreamDepositCompiler deposit0_5compiler(pxDriver, 21, 0, 6, u32buffersize);
-    deposit0_5compiler.makeCall(u8final, u32basis, deposit0_5);
-    
-    kernel::Kernel * u8assemblyK = pxDriver.addKernelInstance<UTF8assembly>(idb);
-    pxDriver.makeKernelCall(u8assemblyK, {deposit18_20, deposit12_17, deposit6_11, deposit0_5,
-                                          u8initial, u8final, u8mask6_11, u8mask12_17},
-                                         {u8basis});
-
-    kernel::Kernel * p2sK = pxDriver.addKernelInstance<P2SKernel>(idb);
-    pxDriver.makeKernelCall(p2sK, {u8basis}, {u8bytes});
-
-    kernel::Kernel * outK = pxDriver.addKernelInstance<StdOutKernel>(idb, 8);
-    pxDriver.makeKernelCall(outK, {u8bytes}, {});
-
-    pxDriver.generatePipelineIR();
-
-    pxDriver.deallocateBuffers();
-
-    idb->CreateRetVoid();
-
-    pxDriver.finalizeObject();
+void deposit(const std::unique_ptr<PipelineBuilder> & P, const unsigned base, const unsigned count, StreamSet * mask, StreamSet * inputs, StreamSet * outputs) {
+    StreamSet * const expanded = P->CreateStreamSet(count);
+    P->CreateKernelCall<StreamExpandKernel>(inputs, base, mask, expanded);
+    if (AVX2_available()) {
+        P->CreateKernelCall<PDEPFieldDepositKernel>(mask, expanded, outputs);
+    } else {
+        P->CreateKernelCall<FieldDepositKernel>(mask, expanded, outputs);
+    }
 }
 
 typedef void (*u32u8FunctionType)(uint32_t fd);
 
+u32u8FunctionType u32u8_gen (CPUDriver & pxDriver) {
+
+    auto & iBuilder = pxDriver.getBuilder();
+    Type * const int32Ty = iBuilder->getInt32Ty();
+    auto P = pxDriver.makePipeline({Binding{int32Ty, "fd"}});
+
+    Scalar * const fileDescriptor = P->getInputScalar("fd");
+
+    // Source data
+    StreamSet * const codeUnitStream = P->CreateStreamSet(1, 32);
+    P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, codeUnitStream);
+
+    // Source buffers for transposed UTF-32 basis bits.
+    StreamSet * const u32basis = P->CreateStreamSet(21);
+    P->CreateKernelCall<S2P_21Kernel>(codeUnitStream, u32basis);
+
+    // Buffers for calculated deposit masks.
+    StreamSet * const u8fieldMask = P->CreateStreamSet();
+    StreamSet * const u8final = P->CreateStreamSet();
+    StreamSet * const u8initial = P->CreateStreamSet();
+    StreamSet * const u8mask12_17 = P->CreateStreamSet();
+    StreamSet * const u8mask6_11 = P->CreateStreamSet();
+
+    // Intermediate buffers for deposited bits
+    StreamSet * const deposit18_20 = P->CreateStreamSet(3);
+    StreamSet * const deposit12_17 = P->CreateStreamSet(6);
+    StreamSet * const deposit6_11 = P->CreateStreamSet(6);
+    StreamSet * const deposit0_5 = P->CreateStreamSet(6);
+
+    // Final buffers for computed UTF-8 basis bits and byte stream.
+    StreamSet * const u8basis = P->CreateStreamSet(8);
+    StreamSet * const u8bytes = P->CreateStreamSet(1, 8);
+
+    // Calculate the u8final deposit mask.
+    #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
+    StreamSet * const extractionMask = P->CreateStreamSet();
+    P->CreateKernelCall<UTF8fieldDepositMask>(u32basis, u8fieldMask, extractionMask);
+    P->CreateKernelCall<StreamCompressKernel>(u8fieldMask, extractionMask, u8final);
+    #else
+    StreamSet * const u8unitCounts = P->CreateStreamSet();
+    P->CreateKernelCall<UTF8fieldDepositMask>(u32basis, u8fieldMask, u8unitCounts);
+    P->CreateKernelCall<StreamCompressKernel>(u8fieldMask, u8unitCounts, u8final);
+    #endif
+
+    P->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
+
+    deposit(P, 18, 3, u8initial, u32basis, deposit18_20);
+    deposit(P, 12, 6, u8mask12_17, u32basis, deposit12_17);
+    deposit(P, 6, 6, u8mask6_11, u32basis, deposit6_11);
+    deposit(P, 0, 6, u8final, u32basis, deposit0_5);
+
+    P->CreateKernelCall<UTF8assembly>(deposit18_20, deposit12_17, deposit6_11, deposit0_5,
+                                     u8initial, u8final, u8mask6_11, u8mask12_17,
+                                     u8basis);
+
+    P->CreateKernelCall<P2SKernel>(u8basis, u8bytes);
+
+    P->CreateKernelCall<StdOutKernel>(u8bytes);
+
+    return reinterpret_cast<u32u8FunctionType>(P->compile());
+}
+
 int main(int argc, char *argv[]) {
     codegen::ParseCommandLineOptions(argc, argv, {&u32u8Options, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
-    ParabixDriver pxDriver("u32u8");
-    u32u8_gen(pxDriver);
-    auto u32u8Function = reinterpret_cast<u32u8FunctionType>(pxDriver.getMain());
+    CPUDriver pxDriver("u32u8");
+    auto u32u8Function = u32u8_gen(pxDriver);
     const int fd = open(inputFile.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
         errs() << "Error: cannot open " << inputFile << " for processing. Skipped.\n";

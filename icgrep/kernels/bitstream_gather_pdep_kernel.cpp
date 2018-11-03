@@ -120,7 +120,7 @@ namespace kernel {
                 Value *addresses = ConstantVector::get(
                         {b->getInt32(0), b->getInt32(32), b->getInt32(64), b->getInt32(96)});
 
-                Value *nullAddress = this->fill_address(b, 32, 4, b->CreateMul(b->CreateTrunc(swizzleIndex, b->getInt32Ty()),
+                Value *nullAddress = fill_address(b, 32, 4, b->CreateMul(b->CreateTrunc(swizzleIndex, b->getInt32Ty()),
                                                                         b->getInt32(8)));
 
                 addresses = b->CreateAdd(addresses, nullAddress);
