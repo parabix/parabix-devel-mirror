@@ -91,7 +91,7 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     r = re::resolveUnicodeNames(r);
     validateNamesDefined(r);
     if (UnicodeLevel2 && validateAlphabet(&cc::Unicode, r)) {
-        r = UCD::transform(r);
+        r = UCD::toNFD(r);
         r = UCD::addClusterMatches(r);
         r = UCD::addEquivalentCodepoints(r);
     } else {

@@ -157,11 +157,11 @@ public:
 
     void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * addr) const override;
 
-    virtual bool hasOverflow() const {
+    virtual bool hasOverflow() const override {
         return false;
     }
 
-    virtual size_t getOverflowCapacity(const std::unique_ptr<kernel::KernelBuilder> & b) const;
+    virtual size_t getOverflowCapacity(const std::unique_ptr<kernel::KernelBuilder> & b) const override;
 
     llvm::Value * getOverflowAddress(IDISA::IDISA_Builder * const b) const override;
 

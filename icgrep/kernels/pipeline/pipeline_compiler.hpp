@@ -127,7 +127,8 @@ struct PopCountData {
 
 using PopCountDataMap = flat_map<std::pair<const StreamSetBuffer *, bool>, PopCountData>;
 
-struct PipelineCompiler {
+class PipelineCompiler {
+public:
 
     using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 

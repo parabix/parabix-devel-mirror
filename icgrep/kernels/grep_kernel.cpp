@@ -243,7 +243,7 @@ ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 : ICGrepSignature(re)
 , PabloKernel(b, "ic" + getStringHash(mSignature),
 // inputs
-std::move(makeInputBindings(BasisBits, externals, alphabets)),
+makeInputBindings(BasisBits, externals, alphabets),
 // output
 {Binding{"matches", matches, FixedRate(), Add1()}})
 , mExternals(std::move(externals))

@@ -130,8 +130,6 @@ add_executable(wc wc.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp kernels/streams_merge.cpp kernels/cc_kernel.cpp)
 # add_executable(lz4d lz4d.cpp lz4/lz4_frame_decoder.cpp kernels/cc_kernel.cpp kernels/lz4/lz4_index_decoder.cpp kernels/lz4/lz4_bytestream_decoder.cpp)
 add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/propGen.cpp combine/icgrep-test/icgrep-test.cpp grep_interface.cpp grep/grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp kernels/cc_kernel.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
-# add_executable(character_deletion character_deletion.cpp kernels/cc_kernel.cpp)
-# add_executable(character_deposit character_deposit.cpp kernels/cc_kernel.cpp kernels/pdep_kernel.cpp kernels/bitstream_pdep_kernel.cpp)
 add_executable(lz4_decoder lz4_decoder.cpp)
 add_executable(lz4_grep grep_interface.cpp lz4_grep.cpp lz4/grep/lz4_grep_base_generator.cpp lz4/grep/lz4_grep_bytestream_generator.cpp lz4/grep/lz4_grep_bytestream_generator.h lz4/grep/lz4_grep_bitstream_generator.cpp lz4/grep/lz4_grep_bitstream_generator.h lz4/grep/lz4_grep_swizzle_generator.cpp lz4/grep/lz4_grep_swizzle_generator.h)
 add_executable(idisa_test idisa_test.cpp)
@@ -148,8 +146,6 @@ target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen FileSelec
 target_link_libraries (editd PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 # target_link_libraries (lz4d PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (core RegExpCompiler ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
-# target_link_libraries (character_deletion PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-# target_link_libraries (character_deposit PabloADT RegExpCompiler CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4_decoder LZ4_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4_grep LZ4_Lib UCDlib PabloADT RegExpCompiler CodeGen CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (idisa_test CodeGen PabloADT ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
@@ -302,18 +298,6 @@ add_test(
   COMMAND ${CMAKE_BINARY_DIR}/idisa_test simd_pdep 64 randhex65536a randhex65536b)
 
 #add_test(
-#  NAME character_deletion_test
-#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deletion
-#  COMMAND python character_deletion_test.py ${CMAKE_BINARY_DIR}/character_deletion
-#)
-
-#add_test(
-#  NAME character_deposit_test
-#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deposit
-#  COMMAND python character_deposit_test.py ${CMAKE_BINARY_DIR}/character_deposit
-#)
-
-#add_test(
 #  NAME lz4d_ext_dep_test
 #  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4_decoder
 #  COMMAND python main.py ${CMAKE_BINARY_DIR}/lz4_decoder
@@ -352,16 +336,6 @@ add_custom_target (editd_test
 add_custom_target (base64_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
   COMMAND python base64test.py "${CMAKE_BINARY_DIR}/base64")
-
-#add_custom_target(character_deletion_test
-#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deletion
-#  COMMAND python character_deletion_test.py ${CMAKE_BINARY_DIR}/character_deletion
-#)
-
-#add_custom_target(character_deposit_test
-#  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/character_deposit
-#  COMMAND python character_deposit_test.py ${CMAKE_BINARY_DIR}/character_deposit
-#)
 
 #add_custom_target(lz4d_ext_dep_test
 #  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/lz4_decoder

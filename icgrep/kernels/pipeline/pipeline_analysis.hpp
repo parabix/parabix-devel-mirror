@@ -110,7 +110,7 @@ PortDependencyGraph PipelineCompiler::makePortDependencyGraph() const {
         if (rate.hasReference()) {
             Port port; unsigned j;
             std::tie(port, j) = mKernel->getStreamPort(rate.getReference());
-            add_edge((i + n), (j + (port == Port::Output) ? n : 0), rate.getKind(), G);
+            add_edge((i + n), j + ((port == Port::Output) ? n : 0), rate.getKind(), G);
         }
     }
     return G;

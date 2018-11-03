@@ -78,8 +78,8 @@ SwizzleGenerator::SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> 
                                    const std::vector<StreamSet *> & outputs,
                                    const unsigned fieldWidth)
 : BlockOrientedKernel(makeSwizzleName(inputs, outputs, fieldWidth),
-std::move(makeSwizzledInputs(inputs)),
-std::move(makeSwizzledOutputs(outputs, fieldWidth)),
+makeSwizzledInputs(inputs),
+makeSwizzledOutputs(outputs, fieldWidth),
 {}, {}, {})
 , mBitStreamCount(getBitStreamCount(inputs))
 , mFieldWidth(fieldWidth) {

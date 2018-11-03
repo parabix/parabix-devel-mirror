@@ -1039,7 +1039,7 @@ Kernel::Kernel(std::string && kernelName,
 , mStride(0)
 , mIsFinal(nullptr)
 , mNumOfStrides(nullptr)
-, mKernelName(std::move(annotateKernelNameWithDebugFlags(std::move(kernelName)))) {
+, mKernelName(annotateKernelNameWithDebugFlags(std::move(kernelName))) {
 
 }
 

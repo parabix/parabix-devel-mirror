@@ -48,6 +48,7 @@ public:
     virtual const std::string & GetPropertyValueGrepString();
     property_t the_property;
     ClassTypeId the_kind;
+    virtual ~PropertyObject() {}
 };
 
 class BinaryPropertyObject final : public PropertyObject {

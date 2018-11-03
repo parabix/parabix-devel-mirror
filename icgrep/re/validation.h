@@ -35,6 +35,7 @@ class RE_Validator {
 public:
     bool validateRE(RE * r);
     RE_Validator(std::string name = "") : mValidatorName(name) {}
+    virtual ~RE_Validator() {}
 protected:
     bool validate(RE * r);
     virtual bool validateName(Name * n);

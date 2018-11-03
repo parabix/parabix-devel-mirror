@@ -83,6 +83,7 @@ public:
     void inspectRE(RE * r);
 protected:
     RE_Inspector(const InspectionMode ignoreNonUnique = InspectionMode::IgnoreNonUnique) : mIgnoreNonUnique(ignoreNonUnique) {}
+    virtual ~RE_Inspector() {}
     void inspect(RE * r);
     virtual void inspectName(Name * n);
     virtual void inspectStart(Start * s);

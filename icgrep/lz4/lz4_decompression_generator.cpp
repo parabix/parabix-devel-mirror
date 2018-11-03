@@ -16,7 +16,7 @@ using namespace kernel;
 
 LZ4DecompressionGenerator::LZ4DecompressionGenerator()
 : LZ4BaseGenerator() {
-    mPipeline = std::move(makeInternalPipeline());
+    mPipeline = makeInternalPipeline();
 }
 
 inline std::unique_ptr<kernel::PipelineBuilder> LZ4DecompressionGenerator::makeInternalPipeline() {

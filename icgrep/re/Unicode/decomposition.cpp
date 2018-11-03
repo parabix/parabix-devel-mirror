@@ -106,8 +106,8 @@ cccObj(cast<EnumeratedPropertyObject>(property_object_table[ccc])),
 caseFoldObj(cast<StringOverridePropertyObject>(property_object_table[cf])),
 canonicalMapped(decompTypeObj->GetCodepointSet(DT_ns::Can)),
 cc0Set(cccObj->GetCodepointSet(CCC_ns::NR)),
-selfNFKD(std::move(decompMappingObj->GetReflexiveSet())),
-selfCaseFold(std::move(caseFoldObj->GetReflexiveSet())),
+selfNFKD(decompMappingObj->GetReflexiveSet()),
+selfCaseFold(caseFoldObj->GetReflexiveSet()),
 HangulPrecomposed(Hangul_SBase, Hangul_SBase + Hangul_SCount - 1) {
 
 }
@@ -245,7 +245,7 @@ RE * NFD_Transformer::transformSeq(Seq * seq) {
     return makeSeq(list.begin(), list.end());
 }
 
-RE * transform(RE * re, const DecompositionOptions opt) {
+RE * toNFD(RE * re, const DecompositionOptions opt) {
     return NFD_Transformer(opt).transformRE(re);
 }
 

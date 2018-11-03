@@ -446,7 +446,7 @@ SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(const std::unique_ptr<ker
 
 : MultiBlockKernel("PEXTdel" + std::to_string(PEXTWidth) + "_" + std::to_string(inputStreamSet->getNumElements()),
 {Binding{"selectors", selectors}, Binding{"inputStreamSet", inputStreamSet}},
-std::move(makeSwizzledDeleteByPEXTOutputBindings(outputStreamSets, PEXTWidth)),
+makeSwizzledDeleteByPEXTOutputBindings(outputStreamSets, PEXTWidth),
 {}, {}, {})
 , mStreamCount(inputStreamSet->getNumElements())
 , mSwizzleFactor(b->getBitBlockWidth() / PEXTWidth)
