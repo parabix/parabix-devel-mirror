@@ -115,9 +115,9 @@ RE * regular_expression_passes(RE * re) {
     r = removeNullableSuffix(r);
     r = RE_Star_Normal().transformRE(r);
     if (codegen::OptLevel > 1) {
-        r = RE_Minimizer::minimize(r);
+        r = minimizeRE(r);
     } else {
-        r = RE_Simplifier::simplify(r);
+        r = simplifyRE(r);
     }
     if (!DefiniteLengthBackReferencesOnly(r)) {
         llvm::report_fatal_error("Future back reference support: references must be within a fixed distance from a fixed-length capture.");

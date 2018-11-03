@@ -53,6 +53,7 @@ protected:
     RE_Transformer(std::string transformationName, NameTransformationMode m = NameTransformationMode::None)
     : mTransformationName(std::move(transformationName)), mNameTransform(m) {}
 
+    virtual ~RE_Transformer() {}
     RE * transform(RE * r);
     virtual RE * transformName(Name * n);
     virtual RE * transformStart(Start * s);

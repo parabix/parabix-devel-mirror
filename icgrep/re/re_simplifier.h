@@ -7,10 +7,7 @@ namespace re {
 
 class RE;
 
-class RE_Simplifier {
-public:
-    static RE * simplify(RE * re);
-};
+RE * simplifyRE(RE * re);
 
 }
 

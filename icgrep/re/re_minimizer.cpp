@@ -19,7 +19,7 @@ using Set = flat_set<RE *>;
 using Map = flat_map<RE *, RE *>;
 using List = std::vector<RE *>;
 
-struct PassContainer final : public RE_Transformer {
+struct RE_Minimizer : public RE_Transformer {
 
     RE * transformAlt(Alt * alt) override {
         Set set;
@@ -101,7 +101,7 @@ struct PassContainer final : public RE_Transformer {
         return nm;
     }
 
-    PassContainer() : RE_Transformer("minimizer", NameTransformationMode::TransformDefinition) { }
+    RE_Minimizer() : RE_Transformer("minimizer", NameTransformationMode::TransformDefinition) { }
 
 protected:
 
@@ -306,9 +306,8 @@ protected:
 };
 
 
-RE * RE_Minimizer::minimize(RE * re) {
-    PassContainer pc;
-    return pc.transformRE(re);
+RE * minimizeRE(RE * re) {
+    return RE_Minimizer().transformRE(re);
 }
 
 }

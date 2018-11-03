@@ -4,11 +4,8 @@
 namespace re {
 
 class RE;
-
-class RE_Minimizer {
-public:
-    static RE * minimize(RE * re);
-};
+    
+RE * minimizeRE(RE * re);
 
 }
 

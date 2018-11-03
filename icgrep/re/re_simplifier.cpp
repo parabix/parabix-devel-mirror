@@ -18,7 +18,7 @@ namespace re {
 using Set = boost::container::flat_set<RE *>;
 using List = std::vector<RE *>;
 
-struct PassContainer final : public RE_Transformer {
+struct RE_Simplifier final : public RE_Transformer {
 
     RE * transformAlt(Alt * alt) override {
         Set set;
@@ -54,13 +54,12 @@ struct PassContainer final : public RE_Transformer {
         return nm;
     }
 
-    PassContainer() : RE_Transformer("Simplifier", NameTransformationMode::TransformDefinition) { }
+    RE_Simplifier() : RE_Transformer("Simplifier", NameTransformationMode::TransformDefinition) { }
 
 };
 
-RE * RE_Simplifier::simplify(RE * re) {
-    PassContainer pc;
-    return pc.transformRE(re);
+RE * simplifyRE(RE * re) {
+    return RE_Simplifier().transformRE(re);
 }
 
 }
