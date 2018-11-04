@@ -79,7 +79,7 @@ LZ4GrepBaseGenerator::LZ4GrepBaseGenerator(const FunctionType type)
 , mMainMethod(nullptr) {
     mGrepRecordBreak = grep::GrepRecordBreakKind::LF;
     mMoveMatchesToEOL = true;
-    mPipeline = std::move(makeInternalPipeline(type));
+    mPipeline = makeInternalPipeline(type);
 }
 
 inline std::unique_ptr<kernel::PipelineBuilder> LZ4GrepBaseGenerator::makeInternalPipeline(const FunctionType type) {
