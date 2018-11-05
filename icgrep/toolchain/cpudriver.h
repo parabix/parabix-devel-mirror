@@ -51,7 +51,7 @@ private:
 
     std::string getMangledName(std::string s);
     
-    void preparePassManager();
+    llvm::legacy::PassManager preparePassManager();
 
     llvm::Function * addLinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const override;
 
@@ -66,7 +66,6 @@ private:
     std::unique_ptr<llvm::raw_fd_ostream>                   mUnoptimizedIROutputStream;
     std::unique_ptr<llvm::raw_fd_ostream>                   mIROutputStream;
     std::unique_ptr<llvm::raw_fd_ostream>                   mASMOutputStream;
-    llvm::legacy::PassManager                               mPassManager;
 };
 
 #endif // CPUDRIVER_H

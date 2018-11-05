@@ -224,9 +224,9 @@ public:
         , STD_ERR = STDERR_FILENO
     };
 
-    void CallPrintIntCond(const std::string & name, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd = STD_FD::STD_ERR);
+    void CallPrintIntCond(llvm::StringRef name, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd = STD_FD::STD_ERR);
 
-    void CallPrintInt(const std::string & name, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
+    void CallPrintInt(llvm::StringRef name, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
        
     llvm::Value * GetString(llvm::StringRef Str);
 

@@ -82,16 +82,18 @@ inline void PipelineCompiler::allocateLocalPopCountArray(BuilderRef b, const Pro
     PopCountData & pc = findOrAddPopCountData(b, index, negated);
     if (pc.partialSumArray == nullptr) {
         IntegerType * const sizeTy = b->getSizeTy();
-        Constant * sizeOfSizeTy = ConstantExpr::getSizeOf(sizeTy);
-        // TODO: this initial value should be more intelligently chosen
-        Constant * maxNumOfStrides = ConstantInt::get(sizeOfSizeTy->getType(), codegen::SegmentSize / mKernel->getStride());
-        pc.strideCapacity = b->CreateAlloca(maxNumOfStrides->getType());
+        Constant * maxNumOfStrides = b->getSize(ceiling(mBufferGraph[mKernelIndex].upper));
+        pc.strideCapacity = b->CreateAlloca(sizeTy);
         b->CreateStore(maxNumOfStrides, pc.strideCapacity);
+
+        Constant * const sizeOfSizeTy = ConstantExpr::getTrunc(ConstantExpr::getSizeOf(sizeTy), sizeTy, true);
         Constant * const arraySize = ConstantExpr::getMul(maxNumOfStrides, sizeOfSizeTy);
         PointerType * const sizePtrTy = sizeTy->getPointerTo();
-        pc.partialSumArray = b->CreateAlloca(sizePtrTy);
         Value * const ptr = b->CreatePointerCast(b->CreateCacheAlignedMalloc(arraySize), sizePtrTy);
+
+        pc.partialSumArray = b->CreateAlloca(sizePtrTy);
         b->CreateStore(ptr, pc.partialSumArray);
+
         const Binding & input = mKernel->getInputStreamSetBinding(index);
         if (input.hasAttribute(negated ? AttrId::RequiresNegatedPopCountArray : AttrId::RequiresPopCountArray)) {
             pc.individualCountArray = b->CreateAlloca(sizePtrTy);
@@ -181,10 +183,10 @@ PopCountData & PipelineCompiler::makePopCountArray(BuilderRef b, const unsigned 
     // hold the correct number strides as it doesn't consider how the source data is transformed/generated
     // by preceeding kernels.
     b->SetInsertPoint(popCountExpand);
-    IntegerType * const sizeTy = b->getSizeTy();
-    Constant * sizeOfSizeTy = ConstantExpr::getSizeOf(sizeTy);
     Value * const newStrideCapacity = b->CreateRoundUp(mNumOfLinearStrides, strideCapacity);
     b->CreateStore(newStrideCapacity, pc.strideCapacity);
+    IntegerType * const sizeTy = b->getSizeTy();
+    Constant * const sizeOfSizeTy = ConstantExpr::getTrunc(ConstantExpr::getSizeOf(sizeTy), sizeTy, true);
     Value * const newStrideSize = b->CreateMul(newStrideCapacity, sizeOfSizeTy);
     PointerType * const sizePtrTy = sizeTy->getPointerTo();
     Value * const newPartialSumArray = b->CreatePointerCast(b->CreateRealloc(initialPartialSumArray, newStrideSize), sizePtrTy);

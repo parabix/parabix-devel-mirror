@@ -150,8 +150,7 @@ Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * 
     Value * const processed = getProcessedItemCount(name);
     Value * blockIndex = CreateLShr(processed, std::log2(getBitBlockWidth()));
     if (blockOffset) {
-        assert (blockOffset->getType() == blockIndex->getType());
-        blockIndex = CreateAdd(blockIndex, blockOffset);
+        blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
     return buf->getStreamBlockPtr(this, streamIndex, blockIndex);
 }
@@ -161,8 +160,7 @@ Value * KernelBuilder::getInputStreamPackPtr(const std::string & name, Value * c
     Value * const processed = getProcessedItemCount(name);
     Value * blockIndex = CreateLShr(processed, std::log2(getBitBlockWidth()));
     if (blockOffset) {
-        assert (blockOffset->getType() == blockIndex->getType());
-        blockIndex = CreateAdd(blockIndex, blockOffset);
+        blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
     return buf->getStreamPackPtr(this, streamIndex, blockIndex, packIndex);
 }
@@ -185,8 +183,7 @@ Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value *
     Value * const produced = getProducedItemCount(name);
     Value * blockIndex = CreateLShr(produced, std::log2(getBitBlockWidth()));
     if (blockOffset) {
-        assert (blockOffset->getType() == blockIndex->getType());
-        blockIndex = CreateAdd(blockIndex, blockOffset);
+        blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
     return buf->getStreamBlockPtr(this, streamIndex, blockIndex);
 }
@@ -196,8 +193,7 @@ Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * 
     Value * const produced = getProducedItemCount(name);
     Value * blockIndex = CreateLShr(produced, std::log2(getBitBlockWidth()));
     if (blockOffset) {
-        assert (blockOffset->getType() == blockIndex->getType());
-        blockIndex = CreateAdd(blockIndex, blockOffset);
+        blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
     return buf->getStreamPackPtr(this, streamIndex, blockIndex, packIndex);
 }

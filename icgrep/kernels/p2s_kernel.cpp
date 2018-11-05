@@ -45,7 +45,7 @@ inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Va
 }
     		
 void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
-    const auto numOfStreams = getStreamBinding("basisBits").getNumElements();
+    const auto numOfStreams = getInputStreamSet("basisBits")->getNumElements();
     Value * p_bitblock[8];
     // todo: generalize this to the nearest pow 2?
     for (unsigned i = 0; i < 8; i++) {

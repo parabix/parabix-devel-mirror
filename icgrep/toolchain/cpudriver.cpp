@@ -71,7 +71,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
 
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
-    InitializeNativeTargetAsmParser();
+//    InitializeNativeTargetAsmParser();
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
     
 
@@ -161,7 +161,10 @@ std::string CPUDriver::getMangledName(std::string s) {
     #endif
 }
 
-void CPUDriver::preparePassManager() {
+inline legacy::PassManager CPUDriver::preparePassManager() {
+
+    legacy::PassManager PM;
+
     PassRegistry * Registry = PassRegistry::getPassRegistry();
     initializeCore(*Registry);
     initializeCodeGen(*Registry);
@@ -169,63 +172,61 @@ void CPUDriver::preparePassManager() {
     
     if (LLVM_UNLIKELY(codegen::ShowUnoptimizedIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
-            if (codegen::ShowUnoptimizedIROption != "") {
+            if (!codegen::ShowUnoptimizedIROption.empty()) {
                 std::error_code error;
                 mUnoptimizedIROutputStream = make_unique<raw_fd_ostream>(codegen::ShowUnoptimizedIROption, error, sys::fs::OpenFlags::F_None);
             } else {
                 mUnoptimizedIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
             }
         }
-        mPassManager.add(createPrintModulePass(*mUnoptimizedIROutputStream));
+        PM.add(createPrintModulePass(*mUnoptimizedIROutputStream));
     }
     if (IN_DEBUG_MODE || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
-        mPassManager.add(createVerifierPass());
+        PM.add(createVerifierPass());
     }
-
-    mPassManager.add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
-    mPassManager.add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
-    mPassManager.add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
-    mPassManager.add(createEarlyCSEPass());                   // Simple common subexpression elimination pass
-    mPassManager.add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.
-    mPassManager.add(createReassociatePass());                // Canonicalizes commutative expressions
-    mPassManager.add(createGVNPass());                        // Global value numbering redundant expression elimination pass
-    mPassManager.add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
+    PM.add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
+    PM.add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
+    PM.add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
+    PM.add(createEarlyCSEPass());                   // Simple common subexpression elimination pass
+    PM.add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.
+    PM.add(createReassociatePass());                // Canonicalizes commutative expressions
+    PM.add(createGVNPass());                        // Global value numbering redundant expression elimination pass
+    PM.add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        mPassManager.add(createRemoveRedundantAssertionsPass());
-        mPassManager.add(createDeadCodeEliminationPass());
-        mPassManager.add(createCFGSimplificationPass());
+        PM.add(createRemoveRedundantAssertionsPass());
+        PM.add(createDeadCodeEliminationPass());
+        PM.add(createCFGSimplificationPass());
     }
-
     if (LLVM_UNLIKELY(codegen::ShowIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
-            if (codegen::ShowIROption != "") {
+            if (!codegen::ShowIROption.empty()) {
                 std::error_code error;
                 mIROutputStream = make_unique<raw_fd_ostream>(codegen::ShowIROption, error, sys::fs::OpenFlags::F_None);
             } else {
                 mIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
             }
         }
-        mPassManager.add(createPrintModulePass(*mIROutputStream));
+        PM.add(createPrintModulePass(*mIROutputStream));
     }
-    
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
-        if (codegen::ShowASMOption != "") {
+        if (!codegen::ShowASMOption.empty()) {
             std::error_code error;
             mASMOutputStream = make_unique<raw_fd_ostream>(codegen::ShowASMOption, error, sys::fs::OpenFlags::F_None);
         } else {
             mASMOutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
         }
-        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(mPassManager, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
             report_fatal_error("LLVM error: could not add emit assembly pass");
         }
     }
-#endif
+    #endif
+    return PM;
 }
 
 void CPUDriver::generateUncachedKernels() {
     if (mUncachedKernel.empty()) return;
-    preparePassManager();
+    auto PM = preparePassManager();
     for (auto & kernel : mUncachedKernel) {
         kernel->prepareKernel(iBuilder);
     }
@@ -234,7 +235,7 @@ void CPUDriver::generateUncachedKernels() {
         kernel->generateKernel(iBuilder);
         Module * const module = kernel->getModule(); assert (module);
         module->setTargetTriple(mMainModule->getTargetTriple());
-        mPassManager.run(*module);
+        PM.run(*module);
         mCachedKernel.emplace_back(kernel.release());
     }
     mUncachedKernel.clear();
@@ -269,7 +270,6 @@ void * CPUDriver::finalizeObject(llvm::Function * mainMethod) {
     #endif
 
     iBuilder->setModule(mMainModule);
-    mPassManager.run(*mMainModule);
     #ifdef ORCJIT
     std::vector<std::unique_ptr<Module>> moduleSet;
     moduleSet.reserve(mCachedKernel.size());

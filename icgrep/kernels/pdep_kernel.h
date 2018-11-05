@@ -68,7 +68,7 @@ private:
 
 class FieldDepositKernel final : public MultiBlockKernel {
 public:
-    FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * mask, StreamSet * input, StreamSet * output, const unsigned fieldWidth = 64);
+    FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * mask, StreamSet * input, StreamSet * output, const unsigned fieldWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -80,7 +80,7 @@ private:
 
 class PDEPFieldDepositKernel final : public MultiBlockKernel {
 public:
-    PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * mask, StreamSet * expanded, StreamSet * outputs, const unsigned fieldWidth = 64);
+    PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * mask, StreamSet * expanded, StreamSet * outputs, const unsigned fieldWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

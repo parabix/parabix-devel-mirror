@@ -33,14 +33,14 @@ using namespace llvm;
 namespace pablo {
 
 #ifndef NDEBUG
-inline void checkSameType(const Type * const A, const Type * const B) {
+inline void __checkSameType(const Type * const A, const Type * const B) {
     assert ("DIFFERING CONTEXTS" && (&(A->getContext()) == &(B->getContext())));
     assert ("DIFFERING TYPES" && (A == B));
 }
-inline void checkSameType(const PabloAST * const A, const PabloAST * const B) {
-    checkSameType(A->getType(), B->getType());
+inline void __checkSameType(const PabloAST * const A, const PabloAST * const B) {
+    __checkSameType(A->getType(), B->getType());
 }
-#define CHECK_SAME_TYPE(A, B) checkSameType(A, B)
+#define CHECK_SAME_TYPE(A, B) __checkSameType(A, B)
 #else
 #define CHECK_SAME_TYPE(A, B)
 #endif
@@ -154,7 +154,6 @@ Equals * PabloBlock::createEquals(PabloAST * expr1, PabloAST * expr2) {
 }
 
 Assign * PabloBlock::createAssign(PabloAST * const var, PabloAST * const value) {
-    CHECK_SAME_TYPE(var, value);
     Var * test = nullptr;
     if (isa<Extract>(var)) {
         test = cast<Extract>(var)->getArray();

@@ -484,8 +484,9 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             expr = cast<Assign>(stmt)->getVariable();
             value = compileExpression(b, cast<Assign>(stmt)->getValue());
             if (isa<Extract>(expr) || (isa<Var>(expr) && cast<Var>(expr)->isKernelParameter())) {
-                Value * const ptr = compileExpression(b, expr, false);
-                b->CreateAlignedStore(value, ptr, getAlignment(value));
+                Value * const ptr = compileExpression(b, expr, false);                
+                Type * const elemTy = ptr->getType()->getPointerElementType();
+                b->CreateAlignedStore(b->CreateZExt(value, elemTy), ptr, getAlignment(elemTy));
                 value = ptr;
             }
         } else if (const InFile * e = dyn_cast<InFile>(stmt)) {

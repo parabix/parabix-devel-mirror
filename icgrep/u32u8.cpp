@@ -85,7 +85,7 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 
 class UTF8fieldDepositMask final : public BlockOrientedKernel {
 public:
-    UTF8fieldDepositMask(const std::unique_ptr<KernelBuilder> & b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth = 64);
+    UTF8fieldDepositMask(const std::unique_ptr<KernelBuilder> & b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth = sizeof(size_t) * 8);
 private:
     void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
     void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const remainingBytes) override;
@@ -342,8 +342,8 @@ u32u8FunctionType u32u8_gen (CPUDriver & pxDriver) {
     deposit(P, 0, 6, u8final, u32basis, deposit0_5);
 
     P->CreateKernelCall<UTF8assembly>(deposit18_20, deposit12_17, deposit6_11, deposit0_5,
-                                     u8initial, u8final, u8mask6_11, u8mask12_17,
-                                     u8basis);
+                                      u8initial, u8final, u8mask6_11, u8mask12_17,
+                                      u8basis);
 
     P->CreateKernelCall<P2SKernel>(u8basis, u8bytes);
 

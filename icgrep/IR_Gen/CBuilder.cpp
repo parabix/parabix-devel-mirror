@@ -290,7 +290,7 @@ Function * CBuilder::GetDprintf() {
     return dprintf;
 }
 
-void CBuilder::CallPrintIntCond(const std::string & name, Value * const value, Value * const cond, const STD_FD fd) {
+void CBuilder::CallPrintIntCond(StringRef name, Value * const value, Value * const cond, const STD_FD fd) {
     BasicBlock * const insertBefore = GetInsertBlock()->getNextNode();
     BasicBlock* const callBlock = CreateBasicBlock("callBlock", insertBefore);
     BasicBlock* const exitBlock = CreateBasicBlock("exitBlock", insertBefore);
@@ -301,38 +301,39 @@ void CBuilder::CallPrintIntCond(const std::string & name, Value * const value, V
     SetInsertPoint(exitBlock);
 }
 
-void CBuilder::CallPrintInt(const std::string & name, Value * const value, const STD_FD fd) {
+void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd) {
     Module * const m = getModule();
     Constant * printRegister = m->getFunction("print_int");
+    IntegerType * const int64Ty = getInt64Ty();
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
-        FunctionType *FT = FunctionType::get(getVoidTy(), { getInt32Ty(), PointerType::get(getInt8Ty(), 0), getSizeTy() }, false);
+        FunctionType *FT = FunctionType::get(getVoidTy(), { getInt32Ty(), getInt8PtrTy(), int64Ty }, false);
         Function * function = Function::Create(FT, Function::InternalLinkage, "print_int", m);
         auto arg = function->arg_begin();
-        const char * out = "%-40s = %" PRIx64 "\n";
         BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
         IRBuilder<> builder(entry);
-        std::vector<Value *> args;
         Value * const fdInt = &*(arg++);
-        args.push_back(fdInt);
-        args.push_back(GetString(out));
+        fdInt->setName("fd");
         Value * const name = &*(arg++);
         name->setName("name");
-        args.push_back(name);
         Value * value = &*arg;
-        value->setName("value");
-        args.push_back(value);
+        value->setName("value");        
+        std::vector<Value *> args(4);
+        args[0] = fdInt;
+        args[1] = GetString("%-40s = %" PRIx64 "\n");
+        args[2] = name;
+        args[3] = value;
         builder.CreateCall(GetDprintf(), args);
         builder.CreateRetVoid();
         printRegister = function;
     }
     Value * num = nullptr;
     if (value->getType()->isPointerTy()) {
-        num = CreatePtrToInt(value, getSizeTy());
+        num = CreatePtrToInt(value, int64Ty);
     } else {
-        num = CreateZExtOrBitCast(value, getSizeTy());
+        num = CreateZExt(value, int64Ty);
     }
     assert (num->getType()->isIntegerTy());
-    CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name.c_str()), num});
+    CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), num});
 }
 
 Value * CBuilder::CreateMalloc(Value * size) {
@@ -1425,14 +1426,14 @@ CBuilder::CBuilder(LLVMContext & C)
 
 }
 
-struct RemoveRedundantAssertionsPass : public llvm::ModulePass {
+struct RemoveRedundantAssertionsPass : public ModulePass {
     static char ID;
     RemoveRedundantAssertionsPass() : ModulePass(ID) { }
 
-    virtual bool runOnModule(llvm::Module &M) override;
+    virtual bool runOnModule(Module &M) override;
 };
 
-llvm::ModulePass * createRemoveRedundantAssertionsPass() {
+ModulePass * createRemoveRedundantAssertionsPass() {
     return new RemoveRedundantAssertionsPass();
 }
 

@@ -35,10 +35,10 @@ Value * IDISA_Builder::fwCast(const unsigned fw, Value * const a) {
 }
 
 void IDISA_Builder::UnsupportedFieldWidthError(const unsigned fw, std::string op_name) {
-    llvm::report_fatal_error(op_name + ": Unsupported field width: " +  std::to_string(fw));
+    report_fatal_error(op_name + ": Unsupported field width: " +  std::to_string(fw));
 }
 
-void IDISA_Builder::CallPrintRegisterCond(const std::string & regName, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd) {
+void IDISA_Builder::CallPrintRegisterCond(StringRef regName, Value * const value, Value * const cond, const STD_FD fd) {
     BasicBlock * const insertBefore = GetInsertBlock()->getNextNode();
     BasicBlock* const callBlock = CreateBasicBlock("callBlock", insertBefore);
     BasicBlock* const exitBlock = CreateBasicBlock("exitBlock", insertBefore);
@@ -48,7 +48,7 @@ void IDISA_Builder::CallPrintRegisterCond(const std::string & regName, llvm::Val
     SetInsertPoint(exitBlock);
 }
 
-void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const value, const STD_FD fd) {
+void IDISA_Builder::CallPrintRegister(StringRef name, Value * const value, const STD_FD fd) {
     Module * const m = getModule();
     Constant * printRegister = m->getFunction("print_register");
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
@@ -64,17 +64,18 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         out << '\n';
         BasicBlock * entry = BasicBlock::Create(m->getContext(), "entry", function);
         IRBuilder<> builder(entry);
-        std::vector<Value *> args;
         Value * const fdInt = &*(arg++);
-        args.push_back(fdInt);
-        args.push_back(GetString(out.str().c_str()));
         Value * const name = &*(arg++);
         name->setName("name");
-        args.push_back(name);
         Value * value = &*arg;
         value->setName("value");
         Type * const byteVectorType = VectorType::get(getInt8Ty(), (mBitBlockWidth / 8));
         value = builder.CreateBitCast(value, byteVectorType);
+
+        std::vector<Value *> args;
+        args.push_back(fdInt);
+        args.push_back(GetString(out.str()));
+        args.push_back(name);
         for(unsigned i = (getBitBlockWidth() / 8); i != 0; --i) {
             args.push_back(builder.CreateZExt(builder.CreateExtractElement(value, builder.getInt32(i - 1)), builder.getInt32Ty()));
         }
@@ -82,7 +83,7 @@ void IDISA_Builder::CallPrintRegister(const std::string & name, Value * const va
         builder.CreateRetVoid();
         printRegister = function;
     }
-    CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name.c_str()), CreateBitCast(value, getBitBlockType())});
+    CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), CreateBitCast(value, getBitBlockType())});
 }
 
 Constant * IDISA_Builder::simd_himask(unsigned fw) {
@@ -287,7 +288,7 @@ Value * IDISA_Builder::mvmd_sll(unsigned fw, Value * value, Value * shift, const
     VectorType * const vecTy = fwVectorType(fw);
     IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
     Constant * const FIELD_WIDTH = ConstantInt::get(shift->getType(), fw);
-    Constant * const BLOCK_WIDTH = ConstantInt::get(shift->getType(), vecTy->getBitWidth());
+//    Constant * const BLOCK_WIDTH = ConstantInt::get(shift->getType(), vecTy->getBitWidth());
     shift = CreateMul(shift, FIELD_WIDTH);
 //    if (LLVM_UNLIKELY(safe && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
 //        Value * const inbounds = CreateICmpULT(shift, BLOCK_WIDTH);
@@ -328,7 +329,7 @@ Value * IDISA_Builder::mvmd_srl(unsigned fw, Value * value, Value * shift, const
     VectorType * const vecTy = fwVectorType(fw);
     IntegerType * const intTy = getIntNTy(vecTy->getBitWidth());
     Constant * const FIELD_WIDTH = ConstantInt::get(shift->getType(), fw);
-    Constant * const BLOCK_WIDTH = ConstantInt::get(shift->getType(), vecTy->getBitWidth());
+//    Constant * const BLOCK_WIDTH = ConstantInt::get(shift->getType(), vecTy->getBitWidth());
     shift = CreateMul(shift, FIELD_WIDTH);
 //    if (LLVM_UNLIKELY(safe && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
 //        Value * const inbounds = CreateICmpULT(shift, BLOCK_WIDTH);
@@ -723,7 +724,7 @@ Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * table0, Value * table1
 }
     
 
-llvm::Value * IDISA_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
+Value * IDISA_Builder::mvmd_compress(unsigned fw, Value * a, Value * select_mask) {
     UnsupportedFieldWidthError(fw, "mvmd_compress");
 }
 
@@ -912,7 +913,7 @@ Value * IDISA_Builder::simd_not(Value * a) {
 
 Constant * IDISA_Builder::bit_interleave_byteshuffle_table(unsigned fw) {
     const unsigned fieldCount = mNativeBitBlockWidth/8;
-    if (fw > 2) llvm::report_fatal_error("bit_interleave_byteshuffle_table requires fw == 1 or fw == 2");
+    if (fw > 2) report_fatal_error("bit_interleave_byteshuffle_table requires fw == 1 or fw == 2");
     // Bit interleave using shuffle.
     // Make a shuffle table that translates the lower 4 bits of each byte in
     // order to spread out the bits: xxxxdcba => .d.c.b.a (fw = 1)

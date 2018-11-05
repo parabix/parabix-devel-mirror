@@ -206,8 +206,8 @@ public:
         return getStreamSetTy(getContext(), NumElements, FieldWidth);
     }
 
-    void CallPrintRegisterCond(const std::string & regName, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd = STD_FD::STD_ERR);
-    void CallPrintRegister(const std::string & regName, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
+    void CallPrintRegisterCond(llvm::StringRef regName, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd = STD_FD::STD_ERR);
+    void CallPrintRegister(llvm::StringRef regName, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
 
 protected:
     LLVM_ATTRIBUTE_NORETURN void UnsupportedFieldWidthError(const unsigned FieldWidth, std::string op_name);

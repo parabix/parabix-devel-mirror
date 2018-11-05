@@ -258,15 +258,23 @@ void verifyProgramStructure(const PabloBlock * block, unsigned & nestingDepth) {
             }
 
             PabloAST * const value = cast<Assign>(stmt)->getValue();
-            if (LLVM_UNLIKELY(variable->getType() != value->getType())) {
+
+            Type * const A = value->getType();
+            Type * const B = variable->getType();
+
+            bool invalid = false;
+            if (A->isIntegerTy() && B->isIntegerTy()) {
+                invalid = A->getPrimitiveSizeInBits() > B->getPrimitiveSizeInBits();
+            } else {
+                invalid = !A->canLosslesslyBitCastTo(B);
+            }
+
+            if (LLVM_UNLIKELY(invalid)) {
                 std::string tmp;
                 raw_string_ostream out(tmp);
                 out << "invalid assignment: ";
                 PabloPrinter::print(stmt, out);
-                out << "  --- type of ";
-                PabloPrinter::print(variable, out);
-                out << " differs from ";
-                PabloPrinter::print(value, out);
+                out << "  --- value cannot fit wthin variable";
                 throw std::runtime_error(out.str());
             }
 
