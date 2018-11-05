@@ -10,7 +10,7 @@ bool hasGraphemeClusterBoundary(const RE * re);
     
 RE * resolveGraphemeMode(RE * re, bool inGraphemeMode);
 
-RE * generateGraphemeClusterBoundaryRule();
+RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters = true);
 
 }
 
