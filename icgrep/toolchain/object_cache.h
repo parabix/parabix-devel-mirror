@@ -49,9 +49,12 @@ public:
     void performIncrementalCacheCleanupStep();
 private:
     std::mutex mCleanupMutex;
+    unsigned mCacheRetrievals;
+    unsigned mNewlyCached;
     boost::filesystem::directory_iterator mCleanupIterator;
     ModuleCache mCachedObject;
     const Path mCachePath;
+    
 };
 
 #endif

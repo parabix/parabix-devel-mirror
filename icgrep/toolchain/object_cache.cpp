@@ -140,6 +140,7 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
                     fs::last_write_time(fileName.c_str(), access_time);
                     sys::path::replace_extension(fileName, ".kernel");
                     fs::last_write_time(fileName.c_str(), access_time);
+                    mNewlyCached++;
                     return true;
                 }
             }
@@ -199,6 +200,7 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
         raw_fd_ostream kernelFile(objectName.str(), EC, sys::fs::F_None);
         WriteBitcodeToFile(H.get(), kernelFile);
         kernelFile.close();
+        mCacheRetrievals++;
     }
 }
 
@@ -208,12 +210,14 @@ void ParabixObjectCache::performIncrementalCacheCleanupStep() {
 
             // Simple clean-up policy: files that haven't been touched by the
             // driver in MaxCacheEntryHours are deleted.
-
-            // TODO: possibly incrementally manage by size and/or total file count.
-            // TODO: possibly determine total filecount and set items per clean up step based on
-            // filecount
+            // Each cleanup step removes at monst mNewlyCached + 1 files
+            // and examines at most mNewlyCached + mCacheRetrievals files.
 
             const auto now = std::time(nullptr);
+            unsigned removed = 0;
+            unsigned examined = 0;
+            unsigned removalLimit = mNewlyCached + 1;
+            unsigned examineLimit = mNewlyCached + mCacheRetrievals;
             while (LLVM_LIKELY(mCleanupIterator != fs::directory_iterator())) {
                 const auto i = mCleanupIterator;
                 ++mCleanupIterator;
@@ -222,8 +226,16 @@ void ParabixObjectCache::performIncrementalCacheCleanupStep() {
                     const auto expiry = fs::last_write_time(e) + (CACHE_ENTRY_MAX_HOURS * SECONDS_PER_HOUR);
                     if (now > expiry) {
                         fs::remove(e);
-                        break;
+                        removed++;
+                        if (removed >= removalLimit) break;
                     }
+                    examined++;
+                    if (examined > examineLimit) break;
+                }
+                unsigned skip = rand() % 23;
+                while ((mCleanupIterator != fs::directory_iterator()) && (skip > 0)) {
+                    ++mCleanupIterator;
+                    skip--;
                 }
             }
         } catch (...) {
@@ -244,7 +256,9 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * modul
 }
 
 ParabixObjectCache::ParabixObjectCache(const StringRef dir)
-: mCachePath(dir) {
+: mCacheRetrievals(0)
+, mNewlyCached(0)
+, mCachePath(dir) {
     fs::path p(mCachePath.str());
     if (LLVM_LIKELY(!mCachePath.empty())) {
         sys::fs::create_directories(mCachePath);
