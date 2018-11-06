@@ -1,7 +1,7 @@
 #ifndef PROPERTYOBJECTTABLE_H
 #define PROPERTYOBJECTTABLE_H
 /*
- *  Copyright (c) 2017 International Characters, Inc.
+ *  Copyright (c) 2018 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -43,10 +43,11 @@
 #include "UnicodeData.h"
 #include "VerticalOrientation.h"
 #include "WordBreakProperty.h"
+#include "emoji-data.h"
 
 namespace UCD {
 
-  const std::array<PropertyObject *, 120> property_object_table = {{
+  const std::array<PropertyObject *, 127> property_object_table = {{
     new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
@@ -76,6 +77,7 @@ namespace UCD {
     new UnsupportedPropertyObject(cjkIRG_USource, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkIRG_VSource, PropertyObject::ClassTypeId::StringProperty),
     new UnsupportedPropertyObject(cjkRSUnicode, PropertyObject::ClassTypeId::StringProperty),
+    new UnsupportedPropertyObject(EqUIdeo, PropertyObject::ClassTypeId::StringProperty),
     &ISC_ns::property_object,
     &JSN_ns::property_object,
     &NA_ns::property_object,
@@ -166,7 +168,13 @@ namespace UCD {
     &XO_NFC_ns::property_object,
     &XO_NFD_ns::property_object,
     &XO_NFKC_ns::property_object,
-    &XO_NFKD_ns::property_object  }};
+    &XO_NFKD_ns::property_object,
+    &EMOJI_ns::property_object,
+    &EMOJIPRESENTATION_ns::property_object,
+    &EMOJIMODIFIER_ns::property_object,
+    &EMOJIMODIFIERBASE_ns::property_object,
+    &EMOJICOMPONENT_ns::property_object,
+    &EXTENDEDPICTOGRAPHIC_ns::property_object  }};
 }
 
 #endif

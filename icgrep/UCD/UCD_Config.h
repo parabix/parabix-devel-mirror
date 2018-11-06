@@ -1,7 +1,7 @@
 #ifndef UCD_CONFIG_H
 #define UCD_CONFIG_H
 /*
- *  Copyright (c) 2017 International Characters, Inc.
+ *  Copyright (c) 2018 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -10,7 +10,7 @@
 
 #include <utility>
 namespace UCD {
-	const auto UnicodeVersion = "10.0.0";
+	const auto UnicodeVersion = "11.0.0";
 	using codepoint_t = unsigned;
 	enum : codepoint_t { UNICODE_MAX = 0x10FFFF };
 	using interval_t = std::pair<codepoint_t, codepoint_t>;

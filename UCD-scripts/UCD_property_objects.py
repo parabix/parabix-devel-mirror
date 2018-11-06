@@ -123,7 +123,7 @@ class BinaryPropertyObject(PropertyObject):
         self.empty_regexp = re.compile("\s+")
         self.property_value_full_name_map = {"N" : "No", "Y" : "Yes"}
         self.name_list_order = ['N', 'Y']
-        self.property_value_lookup_map = {"n" : "N", "N" : "N", "no" : "N", "f" : "N", "false" : "N",
+        self.property_value_lookup_map = {"n" : "N", "N" : "N", "no" : "N", "f" : "N", "false" : "N", 
         "y" : "Y", "Y" : "Y", "yes" : "Y", "t" : "Y", "true" : "Y"}
         self.default_value = "N"
         self.value_map = {"N" : empty_uset(), "Y" : empty_uset()}
@@ -136,7 +136,13 @@ class BinaryPropertyObject(PropertyObject):
         else: 
             self.value_map['Y'] = uset_difference(self.value_map['Y'], range_uset(cp_lo, cp_hi))
 
-
+    def setDefaultValue(self, default):
+        dflt = canonicalize(default)
+        if not dflt in self.property_value_lookup_map: 
+            raise Exception("Erroneous default value %s for property %s" % (default, self.full_name))
+        dflt = self.property_value_lookup_map[dflt]
+        if dflt != "N": 
+            raise Exception("Binary properties must have default value No")
 
 class NumericPropertyObject(PropertyObject):
     def __init__(self):

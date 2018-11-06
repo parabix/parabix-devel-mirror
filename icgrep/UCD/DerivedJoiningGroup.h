@@ -1,7 +1,7 @@
 #ifndef DERIVEDJOININGGROUP_H
 #define DERIVEDJOININGGROUP_H
 /*
- *  Copyright (c) 2017 International Characters, Inc.
+ *  Copyright (c) 2018 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -15,27 +15,29 @@
 
 namespace UCD {
   namespace JG_ns {
-    const unsigned independent_prop_values = 100;
+    const unsigned independent_prop_values = 102;
     /** Code Point Ranges for No_Joining_Group
     [0000, 061f], [0621, 0621], [0640, 0640], [064b, 066d], [0670, 0670],
     [0674, 0674], [06d4, 06d4], [06d6, 06ed], [06f0, 06f9], [06fd, 06fe],
     [0700, 070f], [0711, 0711], [0730, 074c], [0780, 085f], [086b, 089f],
     [08ad, 08ad], [08b5, 08b5], [08be, 10abf], [10ac6, 10ac6],
     [10ac8, 10ac8], [10acb, 10acc], [10ae2, 10ae3], [10ae5, 10aea],
-    [10af0, 10ffff]**/
+    [10af0, 10d01], [10d03, 10d08], [10d0a, 10d18], [10d1a, 10d1b],
+    [10d1d, 10d1d], [10d1f, 10d1f], [10d21, 10d22], [10d24, 10ffff]**/
 
 
     namespace {
     const static UnicodeSet::run_t __no_joining_group_Set_runs[] = {
     {Full, 49}, {Mixed, 3}, {Empty, 2}, {Mixed, 5}, {Empty, 1}, {Full, 7},
-    {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 2064}, {Mixed, 2},
-    {Full, 32680}};
+    {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Full, 2064}, {Mixed, 2}, {Full, 16},
+    {Mixed, 2}, {Full, 32662}};
     const static UnicodeSet::bitquad_t  __no_joining_group_Set_quads[] = {
     0x00000002, 0xfffff801, 0x00113fff, 0xffd00000, 0x63ff3fff, 0x0002ffff,
-    0xffff0000, 0x00001fff, 0xfffff800, 0xc0202000, 0x00001940, 0xffff07ec};
+    0xffff0000, 0x00001fff, 0xfffff800, 0xc0202000, 0x00001940, 0xffff07ec,
+    0xadfffdfb, 0xfffffff6};
     }
 
-    const static UnicodeSet no_joining_group_Set{const_cast<UnicodeSet::run_t *>(__no_joining_group_Set_runs), 12, 0, const_cast<UnicodeSet::bitquad_t *>(__no_joining_group_Set_quads), 12, 0};
+    const static UnicodeSet no_joining_group_Set{const_cast<UnicodeSet::run_t *>(__no_joining_group_Set_runs), 14, 0, const_cast<UnicodeSet::bitquad_t *>(__no_joining_group_Set_quads), 14, 0};
 
     /** Code Point Ranges for Ain
     [0639, 063a], [06a0, 06a0], [06fc, 06fc], [075d, 075f], [08b3, 08b3]**/
@@ -1351,6 +1353,32 @@ namespace UCD {
 
     const static UnicodeSet malayalam_ssa_Set{const_cast<UnicodeSet::run_t *>(__malayalam_ssa_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__malayalam_ssa_Set_quads), 1, 0};
 
+    /** Code Point Ranges for Hanifi_Rohingya_Pa
+    [10d02, 10d02], [10d09, 10d09], [10d1c, 10d1c]**/
+
+
+    namespace {
+    const static UnicodeSet::run_t __hanifi_rohingya_pa_Set_runs[] = {
+    {Empty, 2152}, {Mixed, 1}, {Empty, 32663}};
+    const static UnicodeSet::bitquad_t  __hanifi_rohingya_pa_Set_quads[] = {
+    0x10000204};
+    }
+
+    const static UnicodeSet hanifi_rohingya_pa_Set{const_cast<UnicodeSet::run_t *>(__hanifi_rohingya_pa_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__hanifi_rohingya_pa_Set_quads), 1, 0};
+
+    /** Code Point Ranges for Hanifi_Rohingya_Kinna_Ya
+    [10d19, 10d19], [10d1e, 10d1e], [10d20, 10d20], [10d23, 10d23]**/
+
+
+    namespace {
+    const static UnicodeSet::run_t __hanifi_rohingya_kinna_ya_Set_runs[] = {
+    {Empty, 2152}, {Mixed, 2}, {Empty, 32662}};
+    const static UnicodeSet::bitquad_t  __hanifi_rohingya_kinna_ya_Set_quads[] = {
+    0x42000000, 0x00000009};
+    }
+
+    const static UnicodeSet hanifi_rohingya_kinna_ya_Set{const_cast<UnicodeSet::run_t *>(__hanifi_rohingya_kinna_ya_Set_runs), 3, 0, const_cast<UnicodeSet::bitquad_t *>(__hanifi_rohingya_kinna_ya_Set_quads), 2, 0};
+
     static EnumeratedPropertyObject property_object
         {jg,
         JG_ns::independent_prop_values,
@@ -1384,7 +1412,8 @@ namespace UCD {
         &malayalam_nga_Set, &malayalam_ja_Set, &malayalam_nya_Set,
         &malayalam_tta_Set, &malayalam_nna_Set, &malayalam_nnna_Set,
         &malayalam_bha_Set, &malayalam_ra_Set, &malayalam_lla_Set,
-        &malayalam_llla_Set, &malayalam_ssa_Set
+        &malayalam_llla_Set, &malayalam_ssa_Set, &hanifi_rohingya_pa_Set,
+        &hanifi_rohingya_kinna_ya_Set
         }};
     }
 }

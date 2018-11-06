@@ -524,7 +524,7 @@ class UCD_generator():
         basename = 'CaseFolding'
         fold_data = parse_CaseFolding_txt(self.property_object_map)
         cm = simple_CaseClosure_map(fold_data)
-        f = cformat.open_header_file_for_write(basename, 'UCD_properties.py')
+        f = cformat.open_header_file_for_write(basename)
         cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"', '<vector>'])
         f.write(foldDeclarations)
         f.write(genFoldEntryData(cm))
@@ -638,6 +638,9 @@ def UCD_main():
     ucd.generate_property_value_file('Jamo', 'JSN')
     #
     # 
+        # Binary properties from PropList.txt
+    ucd.generate_multisection_properties_file('emoji/emoji-data')
+    
     #
     ucd.generate_PropertyValueAliases_h()
 

@@ -1,4 +1,4 @@
-import UCD_config, sys, time
+import UCD_config, sys, time, re
 from datetime import date
 
 header_template = r"""#ifndef %s
@@ -26,12 +26,12 @@ cpp_template = r"""
 """
 
 def open_header_file_for_write(filename):
-   generator_name = sys.argv[0]
-
-   f = open(UCD_config.UCD_output_dir + '/' + filename + '.h', 'w')
-   hname = filename.upper() + '_H'
-   f.write(header_template % (hname, hname, date.today().year, generator_name))
-   return f
+    generator_name = sys.argv[0]
+    f = open(UCD_config.UCD_output_dir + '/' + filename + '.h', 'w')
+    substitute_name_char_re = re.compile('[-\s]')
+    hname = substitute_name_char_re.sub('_', filename.upper()) + '_H'
+    f.write(header_template % (hname, hname, date.today().year, generator_name))
+    return f
 
 def open_cpp_file_for_write(filename):
    generator_name = sys.argv[0]

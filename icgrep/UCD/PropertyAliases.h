@@ -1,7 +1,7 @@
 #ifndef PROPERTYALIASES_H
 #define PROPERTYALIASES_H
 /*
- *  Copyright (c) 2017 International Characters, Inc.
+ *  Copyright (c) 2018 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -18,16 +18,18 @@ namespace UCD {
         cjkCompatibilityVariant, dm, FC_NFKC, lc, NFKC_CF, scf, slc, stc,
         suc, tc, uc, bmg, bpb, cjkIICore, cjkIRG_GSource, cjkIRG_HSource,
         cjkIRG_JSource, cjkIRG_KPSource, cjkIRG_KSource, cjkIRG_MSource,
-        cjkIRG_TSource, cjkIRG_USource, cjkIRG_VSource, cjkRSUnicode, isc,
-        JSN, na, na1, Name_Alias, scx, age, blk, sc, bc, bpt, ccc, dt, ea,
-        gc, GCB, hst, InPC, InSC, jg, jt, lb, NFC_QC, NFD_QC, NFKC_QC,
-        NFKD_QC, nt, SB, vo, WB, AHex, Alpha, Bidi_C, Bidi_M, Cased, CE, CI,
-        Comp_Ex, CWCF, CWCM, CWKCF, CWL, CWT, CWU, Dash, Dep, DI, Dia, Ext,
-        Gr_Base, Gr_Ext, Gr_Link, Hex, Hyphen, IDC, Ideo, IDS, IDSB, IDST,
-        Join_C, LOE, Lower, Math, NChar, OAlpha, ODI, OGr_Ext, OIDC, OIDS,
-        OLower, OMath, OUpper, Pat_Syn, Pat_WS, PCM, QMark, Radical, RI, SD,
-        STerm, Term, UIdeo, Upper, VS, WSpace, XIDC, XIDS, XO_NFC, XO_NFD,
-        XO_NFKC, XO_NFKD};
+        cjkIRG_TSource, cjkIRG_USource, cjkIRG_VSource, cjkRSUnicode,
+        EqUIdeo, isc, JSN, na, na1, Name_Alias, scx, age, blk, sc, bc, bpt,
+        ccc, dt, ea, gc, GCB, hst, InPC, InSC, jg, jt, lb, NFC_QC, NFD_QC,
+        NFKC_QC, NFKD_QC, nt, SB, vo, WB, AHex, Alpha, Bidi_C, Bidi_M,
+        Cased, CE, CI, Comp_Ex, CWCF, CWCM, CWKCF, CWL, CWT, CWU, Dash, Dep,
+        DI, Dia, Ext, Gr_Base, Gr_Ext, Gr_Link, Hex, Hyphen, IDC, Ideo, IDS,
+        IDSB, IDST, Join_C, LOE, Lower, Math, NChar, OAlpha, ODI, OGr_Ext,
+        OIDC, OIDS, OLower, OMath, OUpper, Pat_Syn, Pat_WS, PCM, QMark,
+        Radical, RI, SD, STerm, Term, UIdeo, Upper, VS, WSpace, XIDC, XIDS,
+        XO_NFC, XO_NFD, XO_NFKC, XO_NFKD, emoji, emojipresentation,
+        emojimodifier, emojimodifierbase, emojicomponent,
+        extendedpictographic};
     const static std::vector<std::string> property_enum_name = {
         "cjkAccountingNumeric", "cjkOtherNumeric", "cjkPrimaryNumeric",
         "nv", "cf", "cjkCompatibilityVariant", "dm", "FC_NFKC", "lc",
@@ -35,9 +37,9 @@ namespace UCD {
         "cjkIICore", "cjkIRG_GSource", "cjkIRG_HSource", "cjkIRG_JSource",
         "cjkIRG_KPSource", "cjkIRG_KSource", "cjkIRG_MSource",
         "cjkIRG_TSource", "cjkIRG_USource", "cjkIRG_VSource",
-        "cjkRSUnicode", "isc", "JSN", "na", "na1", "Name_Alias", "scx",
-        "age", "blk", "sc", "bc", "bpt", "ccc", "dt", "ea", "gc", "GCB",
-        "hst", "InPC", "InSC", "jg", "jt", "lb", "NFC_QC", "NFD_QC",
+        "cjkRSUnicode", "EqUIdeo", "isc", "JSN", "na", "na1", "Name_Alias",
+        "scx", "age", "blk", "sc", "bc", "bpt", "ccc", "dt", "ea", "gc",
+        "GCB", "hst", "InPC", "InSC", "jg", "jt", "lb", "NFC_QC", "NFD_QC",
         "NFKC_QC", "NFKD_QC", "nt", "SB", "vo", "WB", "AHex", "Alpha",
         "Bidi_C", "Bidi_M", "Cased", "CE", "CI", "Comp_Ex", "CWCF", "CWCM",
         "CWKCF", "CWL", "CWT", "CWU", "Dash", "Dep", "DI", "Dia", "Ext",
@@ -46,7 +48,9 @@ namespace UCD {
         "OAlpha", "ODI", "OGr_Ext", "OIDC", "OIDS", "OLower", "OMath",
         "OUpper", "Pat_Syn", "Pat_WS", "PCM", "QMark", "Radical", "RI",
         "SD", "STerm", "Term", "UIdeo", "Upper", "VS", "WSpace", "XIDC",
-        "XIDS", "XO_NFC", "XO_NFD", "XO_NFKC", "XO_NFKD"};
+        "XIDS", "XO_NFC", "XO_NFD", "XO_NFKC", "XO_NFKD", "emoji",
+        "emojipresentation", "emojimodifier", "emojimodifierbase",
+        "emojicomponent", "extendedpictographic"};
     const static std::vector<std::string> property_full_name = {
         "kAccountingNumeric", "kOtherNumeric", "kPrimaryNumeric",
         "Numeric_Value", "Case_Folding", "kCompatibilityVariant",
@@ -57,9 +61,9 @@ namespace UCD {
         "Bidi_Paired_Bracket", "kIICore", "kIRG_GSource", "kIRG_HSource",
         "kIRG_JSource", "kIRG_KPSource", "kIRG_KSource", "kIRG_MSource",
         "kIRG_TSource", "kIRG_USource", "kIRG_VSource", "kRSUnicode",
-        "ISO_Comment", "Jamo_Short_Name", "Name", "Unicode_1_Name",
-        "Name_Alias", "Script_Extensions", "Age", "Block", "Script",
-        "Bidi_Class", "Bidi_Paired_Bracket_Type",
+        "Equivalent_Unified_Ideograph", "ISO_Comment", "Jamo_Short_Name",
+        "Name", "Unicode_1_Name", "Name_Alias", "Script_Extensions", "Age",
+        "Block", "Script", "Bidi_Class", "Bidi_Paired_Bracket_Type",
         "Canonical_Combining_Class", "Decomposition_Type",
         "East_Asian_Width", "General_Category", "Grapheme_Cluster_Break",
         "Hangul_Syllable_Type", "Indic_Positional_Category",
@@ -87,7 +91,8 @@ namespace UCD {
         "Sentence_Terminal", "Terminal_Punctuation", "Unified_Ideograph",
         "Uppercase", "Variation_Selector", "White_Space", "XID_Continue",
         "XID_Start", "Expands_On_NFC", "Expands_On_NFD", "Expands_On_NFKC",
-        "Expands_On_NFKD"};
+        "Expands_On_NFKD", "Emoji", "Emoji_Presentation", "Emoji_Modifier",
+        "Emoji_Modifier_Base", "Emoji_Component", "Extended_Pictographic"};
     static std::unordered_map<std::string, int> alias_map {{
         {"age", age}, {"ahex", AHex}, {"alpha", Alpha},
         {"alphabetic", Alpha}, {"asciihexdigit", AHex}, {"bc", bc},
@@ -122,9 +127,15 @@ namespace UCD {
         {"decompositiontype", dt}, {"defaultignorablecodepoint", DI},
         {"dep", Dep}, {"deprecated", Dep}, {"di", DI}, {"dia", Dia},
         {"diacritic", Dia}, {"dm", dm}, {"dt", dt}, {"ea", ea},
-        {"eastasianwidth", ea}, {"expandsonnfc", XO_NFC},
+        {"eastasianwidth", ea}, {"emoji", emoji},
+        {"emojicomponent", emojicomponent},
+        {"emojimodifier", emojimodifier},
+        {"emojimodifierbase", emojimodifierbase},
+        {"emojipresentation", emojipresentation}, {"equideo", EqUIdeo},
+        {"equivalentunifiedideograph", EqUIdeo}, {"expandsonnfc", XO_NFC},
         {"expandsonnfd", XO_NFD}, {"expandsonnfkc", XO_NFKC},
-        {"expandsonnfkd", XO_NFKD}, {"ext", Ext}, {"extender", Ext},
+        {"expandsonnfkd", XO_NFKD}, {"ext", Ext},
+        {"extendedpictographic", extendedpictographic}, {"extender", Ext},
         {"fcnfkc", FC_NFKC}, {"fcnfkcclosure", FC_NFKC},
         {"fullcompositionexclusion", Comp_Ex}, {"gc", gc}, {"gcb", GCB},
         {"generalcategory", gc}, {"graphemebase", Gr_Base},

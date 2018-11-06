@@ -1,7 +1,7 @@
 #ifndef VERTICALORIENTATION_H
 #define VERTICALORIENTATION_H
 /*
- *  Copyright (c) 2017 International Characters, Inc.
+ *  Copyright (c) 2018 International Characters, Inc.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters, Inc.
  *
@@ -33,8 +33,8 @@ namespace UCD {
     [ff0d, ff0d], [ff1c, ff1e], [ff61, ffdf], [ffe8, ffef], [fff9, fffb],
     [fffe, 1097f], [109a0, 1157f], [11600, 119ff], [11ab0, 12fff],
     [13430, 143ff], [14680, 16fdf], [18b00, 1afff], [1b130, 1b16f],
-    [1b300, 1cfff], [1d200, 1d2ff], [1d380, 1d7ff], [1dab0, 1efff],
-    [1f800, 1f8ff], [1fa00, 1ffff], [2fffe, 2ffff], [3fffe, effff],
+    [1b300, 1cfff], [1d200, 1d2df], [1d380, 1d7ff], [1dab0, 1efff],
+    [1f800, 1f8ff], [1fa70, 1ffff], [2fffe, 2ffff], [3fffe, effff],
     [ffffe, fffff], [10fffe, 10ffff]**/
 
 
@@ -53,10 +53,10 @@ namespace UCD {
     {Empty, 5}, {Mixed, 1}, {Full, 170}, {Empty, 33}, {Mixed, 1},
     {Full, 126}, {Empty, 20}, {Full, 331}, {Empty, 217}, {Full, 296},
     {Empty, 9}, {Mixed, 1}, {Full, 1}, {Mixed, 1}, {Empty, 12}, {Full, 232},
-    {Empty, 16}, {Full, 8}, {Empty, 4}, {Full, 36}, {Empty, 21}, {Mixed, 1},
-    {Full, 170}, {Empty, 64}, {Full, 8}, {Empty, 8}, {Full, 48},
-    {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}, {Full, 22528},
-    {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}};
+    {Empty, 16}, {Full, 7}, {Empty, 5}, {Full, 36}, {Empty, 21}, {Mixed, 1},
+    {Full, 170}, {Empty, 64}, {Full, 8}, {Empty, 11}, {Mixed, 1},
+    {Full, 44}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1},
+    {Full, 22528}, {Empty, 2047}, {Mixed, 1}, {Empty, 2047}, {Mixed, 1}};
     const static UnicodeSet::bitquad_t  __r_Set_quads[] = {
     0x8ffdbd7f, 0xff7fffff, 0xff7fffff, 0xfffff3ff, 0x00000001, 0x0000ffff,
     0xffbfffff, 0xe7fcfffc, 0xfffdfc7b, 0xffffffdf, 0x1fffffff, 0xffffffe2,
@@ -66,10 +66,10 @@ namespace UCD {
     0xffff0000, 0xfc00ffff, 0x00ffffff, 0x00040000, 0x0000f000, 0xffff0000,
     0x0000ffff, 0x0000ffff, 0x0100fe00, 0xffff0078, 0x70002001, 0xfffffffe,
     0xce00ff00, 0xffff0000, 0xffff0000, 0xffff0000, 0x0000ffff, 0xffff0000,
-    0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000};
+    0xffff0000, 0xc0000000, 0xc0000000, 0xc0000000, 0xc0000000};
     }
 
-    const static UnicodeSet r_Set{const_cast<UnicodeSet::run_t *>(__r_Set_runs), 94, 0, const_cast<UnicodeSet::bitquad_t *>(__r_Set_quads), 52, 0};
+    const static UnicodeSet r_Set{const_cast<UnicodeSet::run_t *>(__r_Set_runs), 95, 0, const_cast<UnicodeSet::bitquad_t *>(__r_Set_quads), 53, 0};
 
     /** Code Point Ranges for U
     [00a7, 00a7], [00a9, 00a9], [00ae, 00ae], [00b1, 00b1], [00bc, 00be],
@@ -96,8 +96,8 @@ namespace UCD {
     [ffe4, ffe7], [fff0, fff8], [fffc, fffd], [10980, 1099f],
     [11580, 115ff], [11a00, 11aaf], [13000, 1342f], [14400, 1467f],
     [16fe0, 18aff], [1b000, 1b12f], [1b170, 1b2ff], [1d000, 1d1ff],
-    [1d300, 1d37f], [1d800, 1daaf], [1f000, 1f1ff], [1f202, 1f7ff],
-    [1f900, 1f9ff], [20000, 2fffd], [30000, 3fffd], [f0000, ffffd],
+    [1d2e0, 1d37f], [1d800, 1daaf], [1f000, 1f1ff], [1f202, 1f7ff],
+    [1f900, 1fa6f], [20000, 2fffd], [30000, 3fffd], [f0000, ffffd],
     [100000, 10fffd]**/
 
 
@@ -117,11 +117,11 @@ namespace UCD {
     {Full, 4}, {Empty, 32}, {Full, 5}, {Mixed, 1}, {Empty, 170}, {Full, 33},
     {Mixed, 1}, {Empty, 126}, {Full, 20}, {Empty, 331}, {Full, 217},
     {Empty, 296}, {Full, 9}, {Mixed, 1}, {Empty, 1}, {Mixed, 1}, {Full, 12},
-    {Empty, 232}, {Full, 16}, {Empty, 8}, {Full, 4}, {Empty, 36},
+    {Empty, 232}, {Full, 16}, {Empty, 7}, {Full, 5}, {Empty, 36},
     {Full, 21}, {Mixed, 1}, {Empty, 170}, {Full, 16}, {Mixed, 1},
-    {Full, 47}, {Empty, 8}, {Full, 8}, {Empty, 48}, {Full, 2047},
-    {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Empty, 22528}, {Full, 2047},
-    {Mixed, 1}, {Full, 2047}, {Mixed, 1}};
+    {Full, 47}, {Empty, 8}, {Full, 11}, {Mixed, 1}, {Empty, 44},
+    {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1}, {Empty, 22528},
+    {Full, 2047}, {Mixed, 1}, {Full, 2047}, {Mixed, 1}};
     const static UnicodeSet::bitquad_t  __u_Set_quads[] = {
     0x70024280, 0x00800000, 0x00800000, 0x00000c00, 0xfffffffe, 0xffff0000,
     0x00400000, 0x18030003, 0x00020384, 0x00000020, 0xe0000000, 0x0000001d,
@@ -133,10 +133,11 @@ namespace UCD {
     0xef9fbf57, 0xffffff7f, 0x0000ffff, 0xff000000, 0x07ffffff, 0x0000ffff,
     0xffff0000, 0xffff0000, 0x80f801ff, 0x0000ff87, 0x03ff8cfc, 0x57ffffff,
     0x07ffffff, 0x31ff00f7, 0x0000ffff, 0x0000ffff, 0x0000ffff, 0xffff0000,
-    0x0000ffff, 0xfffffffc, 0x3fffffff, 0x3fffffff, 0x3fffffff, 0x3fffffff};
+    0x0000ffff, 0xfffffffc, 0x0000ffff, 0x3fffffff, 0x3fffffff, 0x3fffffff,
+    0x3fffffff};
     }
 
-    const static UnicodeSet u_Set{const_cast<UnicodeSet::run_t *>(__u_Set_runs), 103, 0, const_cast<UnicodeSet::bitquad_t *>(__u_Set_quads), 66, 0};
+    const static UnicodeSet u_Set{const_cast<UnicodeSet::run_t *>(__u_Set_runs), 104, 0, const_cast<UnicodeSet::bitquad_t *>(__u_Set_quads), 67, 0};
 
     /** Code Point Ranges for Tr
     [2329, 232a], [3008, 3011], [3014, 301f], [3030, 3030], [30a0, 30a0],
