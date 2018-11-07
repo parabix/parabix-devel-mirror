@@ -254,8 +254,9 @@ Value * CBuilder::CreateUnlinkCall(Value * path) {
 Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
     Module * const m = getModule();
     Function * mkstempFn = m->getFunction("mkstemp");
-    if (mkstempFn == nullptr) {
-        mkstempFn = cast<Function>(m->getOrInsertFunction("mkstemp", getInt32Ty(), getInt8PtrTy(), nullptr));
+    if (mkstempFn == nullptr) {       
+        FunctionType * const fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, false);
+        mkstempFn = Function::Create(fty, Function::ExternalLinkage, "mkstemp", m);
     }
     return CreateCall(mkstempFn, ftemplate);
 }
@@ -264,7 +265,8 @@ Value * CBuilder::CreateStrlenCall(Value * str) {
     Module * const m = getModule();
     Function * strlenFn = m->getFunction("strlen");
     if (strlenFn == nullptr) {
-        strlenFn = cast<Function>(m->getOrInsertFunction("strlen", getSizeTy(), getInt8PtrTy(), nullptr));
+        FunctionType * const fty = FunctionType::get(getSizeTy(), {getInt8PtrTy()}, false);
+        strlenFn = Function::Create(fty, Function::ExternalLinkage, "strlen", m);
     }
     return CreateCall(strlenFn, str);
 }
@@ -273,7 +275,7 @@ Function * CBuilder::GetPrintf() {
     Module * const m = getModule();
     Function * printf = m->getFunction("printf");
     if (printf == nullptr) {
-        FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, true);
+        FunctionType * const fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, true);
         printf = Function::Create(fty, Function::ExternalLinkage, "printf", m);
         printf->addAttribute(1, Attribute::NoAlias);
     }

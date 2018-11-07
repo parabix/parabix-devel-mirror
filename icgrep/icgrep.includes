@@ -1,5 +1,6 @@
 .
 ../libllvm/include
+../../icgrep-devel/libllvm/include
 kernels/pipeline
 util
 kernels

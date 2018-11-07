@@ -1,3 +1,6 @@
+icgrep.pro
+kernels/directorysearch.cpp
+kernels/directorysearch.h
 wc.cpp
 CMakeLists.txt
 base64.cpp

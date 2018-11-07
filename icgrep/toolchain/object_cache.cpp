@@ -205,7 +205,7 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
 }
 
 void ParabixObjectCache::performIncrementalCacheCleanupStep() {
-    if (LLVM_LIKELY(mCleanupMutex.try_lock())) {
+    //if (LLVM_LIKELY(mCleanupMutex.try_lock())) {
         try {
 
             // Simple clean-up policy: files that haven't been touched by the
@@ -242,8 +242,8 @@ void ParabixObjectCache::performIncrementalCacheCleanupStep() {
             fs::path p(mCachePath.str());
             mCleanupIterator = fs::directory_iterator(p);
         }
-        mCleanupMutex.unlock();
-    }
+//        mCleanupMutex.unlock();
+//    }
 }
 
 std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * module) {

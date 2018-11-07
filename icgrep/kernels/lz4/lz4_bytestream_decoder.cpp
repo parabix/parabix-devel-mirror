@@ -101,8 +101,8 @@ void LZ4ByteStreamDecoderKernel::generateMultiBlockLogic(const std::unique_ptr<K
 
     b->SetInsertPoint(cpyLoopBody);
 //#ifndef NDEBUG
-//    iBuilder->CallPrintIntToStderr("srcOffset", phiSrcOffset);
-//    iBuilder->CallPrintIntToStderr("dstOffset", phiDstOffset);
+//    iBuilder->CallPrintInt("srcOffset", phiSrcOffset);
+//    iBuilder->CallPrintInt("dstOffset", phiDstOffset);
 //#endif
     BasicBlock * reachingBufferEnd_then = b->CreateBasicBlock("matchcopy_reaching_buf_end_then");
     BasicBlock * reachingBufferEnd_else = b->CreateBasicBlock("matchcopy_reaching_buf_end_else");

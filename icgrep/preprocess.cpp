@@ -69,7 +69,7 @@ void preprocessPipeline(CPUEngineInstance & pxDriver){
     pxDriver.generatePipelineIR();
     iBuilder->CreateRetVoid();
 
-    pxDriver.LinkFunction(*scanMatchK, "wrapped_report_pos", &wrapped_report_pos);
+    pxDriver.LinkFunction(*scanMatchK, "wrapped_report_pos", wrapped_report_pos);
     pxDriver.finalizeObject();
 
 }
