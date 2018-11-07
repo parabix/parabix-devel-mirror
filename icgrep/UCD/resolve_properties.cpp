@@ -23,6 +23,7 @@
 #include "UCD/PropertyObjectTable.h"
 #include "UCD/PropertyValueAliases.h"
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace UCD;
 using namespace re;
@@ -98,6 +99,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
     if (name->getType() == Name::Type::UnicodeProperty) {
         std::string prop = name->getNamespace();
         std::string value = name->getName();
+        llvm::errs() << "resolveUnicodeSet(" << prop << ":" << value << ")\n";
         if (prop.length() > 0) {
             prop = canonicalize_value_name(prop);
             auto propit = alias_map.find(prop);
@@ -136,18 +138,20 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
         }
         else {
             // No namespace (property) name.   Try as a general category.
+            std::string canon = canonicalize_value_name(value);
             const auto & gcobj = cast<EnumeratedPropertyObject>(property_object_table[gc]);
-            int valcode = gcobj->GetPropertyValueEnumCode(value);
+            int valcode = gcobj->GetPropertyValueEnumCode(canon);
             if (valcode >= 0) {
                 return gcobj->GetCodepointSet(valcode);
             }
             const auto & scObj = cast<EnumeratedPropertyObject>(property_object_table[sc]);
-            valcode = scObj->GetPropertyValueEnumCode(value);
+            valcode = scObj->GetPropertyValueEnumCode(canon);
             if (valcode >= 0) {
                 return scObj->GetCodepointSet(valcode);
             }
             // Try as a binary property.
-            auto propit = alias_map.find(value);
+            
+            auto propit = alias_map.find(canon);
             if (propit != alias_map.end()) {
                 auto theprop = propit->second;
                 if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(property_object_table[theprop])) {
@@ -160,29 +164,29 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             // Try special cases of Unicode TR #18
             // Now compatibility properties of UTR #18 Annex C
                     
-            else if (value == ".") return UnicodeSet(0, 0x10FFFF);
-            else if (value == "alnum") {
+            else if (canon == ".") return UnicodeSet(0, 0x10FFFF);
+            else if (canon == "alnum") {
                 Name * digit = makeName("nd", Name::Type::UnicodeProperty);
                 Name * alpha = makeName("alphabetic", Name::Type::UnicodeProperty);
                 return resolveUnicodeSet(digit) + resolveUnicodeSet(alpha);
-            } else if (value == "xdigit") {
+            } else if (canon == "xdigit") {
                 Name * digit = makeName("nd", Name::Type::UnicodeProperty);
                 Name * hexdigit = makeName("hexdigit", Name::Type::UnicodeProperty);
                 return resolveUnicodeSet(digit) + resolveUnicodeSet(hexdigit);
-            } else if (value == "blank") {
+            } else if (canon == "blank") {
                 Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
                 return resolveUnicodeSet(space_sep) + UnicodeSet(0x09) /* tab */;
-            } else if (value == "print") {
+            } else if (canon == "print") {
                 Name * graph = makeName("graph", Name::Type::UnicodeProperty);
                 Name * space_sep = makeName("space_separator", Name::Type::UnicodeProperty);
                 return resolveUnicodeSet(graph) + resolveUnicodeSet(space_sep);
-            } else if (value == "word") {
+            } else if (canon == "word") {
                 Name * alnum = makeName("alnum", Name::Type::UnicodeProperty);
                 Name * mark = makeName("mark", Name::Type::UnicodeProperty);
                 Name * conn = makeName("connectorpunctuation", Name::Type::UnicodeProperty);
                 Name * join = makeName("joincontrol", Name::Type::UnicodeProperty);
                 return resolveUnicodeSet(alnum) + resolveUnicodeSet(mark) + resolveUnicodeSet(conn) + resolveUnicodeSet(join);
-            } else if (value == "graph") {
+            } else if (canon == "graph") {
                 Name * space = makeName("space", Name::Type::UnicodeProperty);
                 Name * ctrl = makeName("control", Name::Type::UnicodeProperty);
                 Name * surr = makeName("surrogate", Name::Type::UnicodeProperty);

@@ -5,6 +5,7 @@
 #include <pablo/expression_map.hpp>
 #include <pablo/pe_var.h>
 #include <util/not_null.h>
+#include <sstream>
 
 namespace pablo {
 

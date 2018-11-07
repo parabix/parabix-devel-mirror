@@ -200,9 +200,9 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
         GCX_9 = makeAlt({GCX_9, GCX_9a, GCX_9b});
     }
 
-    // RE * ExtendedPictographic = makeName("Extended_Pictographic", Name::Type::UnicodeProperty));
-    // RE * EmojiSeq = makeSeq({ExtendedPictographic, makeRep(GCB_EX, 0, Rep::UNBOUNDED_REP), GCB_ZWJ});
-    // RE * GCX_11 = makeSeq({Behind(EmojiSeq), Ahead(ExtendedPictographic)});
+    RE * ExtendedPictographic = makeName("Extended_Pictographic", Name::Type::UnicodeProperty);
+    RE * EmojiSeq = makeSeq({ExtendedPictographic, makeRep(GCB_EX, 0, Rep::UNBOUNDED_REP), GCB_ZWJ});
+    RE * GCX_11 = makeSeq({Behind(EmojiSeq), Ahead(ExtendedPictographic)});
     
     RE * GCB_RI = makeName("gcb", "ri", Name::Type::UnicodeProperty);
     // Note: notBehind(RI) == sot | [^RI]
@@ -210,7 +210,7 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
     RE * GCX_12_13 = makeSeq({Behind(odd_RI_seq), Ahead(GCB_RI)});
     
     //Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
-    RE * GCX = makeAlt({GCX_1, GCX_6, GCX_7, GCX_8, GCX_9, GCX_12_13});
+    RE * GCX = makeAlt({GCX_1, GCX_6, GCX_7, GCX_8, GCX_9, GCX_11, GCX_12_13});
     
     RE * gcb = makeDiff(makeSeq(), GCX);
     return gcb;
