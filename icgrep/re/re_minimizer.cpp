@@ -287,8 +287,8 @@ protected:
     }
 
 
-    template <typename T>
-    static bool unchanged(const Vector * A, const T & B) {
+    template <typename T1, typename T2>
+    static bool unchanged(const T1 * A, const T2 & B) {
         if (A->size() != B.size()) {
             return false;
         }

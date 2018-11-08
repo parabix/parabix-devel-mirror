@@ -8,6 +8,8 @@
 #define ALT_H
 
 #include "re_re.h"
+#include <util/slab_allocator.h>
+#include <vector>
 #include <re/re_cc.h>
 #include <re/re_seq.h>
 #include <re/re_rep.h>
@@ -16,7 +18,7 @@
 
 namespace re {
 
-class Alt : public Vector {
+class Alt : public RE, public std::vector<RE*, ProxyAllocator<RE *>> {
 public:
     static inline bool classof(const RE * re) {
         return re->getClassTypeId() == ClassTypeId::Alt;
@@ -27,14 +29,9 @@ public:
 protected:
     friend Alt * makeAlt();
     template<typename iterator> friend RE * makeAlt(iterator, iterator);
-    Alt()
-    : Vector(ClassTypeId::Alt) {
-
-    }
+    Alt() : RE(ClassTypeId::Alt), std::vector<RE*, ProxyAllocator<RE *>>(mAllocator) {}
     Alt(iterator begin, iterator end)
-    : Vector(ClassTypeId::Alt, begin, end) {
-
-    }
+    : RE(ClassTypeId::Alt), std::vector<RE*, ProxyAllocator<RE *>>(begin, end, mAllocator) { }
 };
 
 /**

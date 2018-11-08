@@ -8,6 +8,8 @@
 #define RE_SEQ_H
 
 #include <string>
+#include <util/slab_allocator.h>
+#include <vector>
 #include <re/re_cc.h>
 #include <re/re_re.h>
 #include <UCD/unicode_set.h>
@@ -15,7 +17,7 @@
 
 namespace re {
 
-class Seq : public Vector {
+class Seq : public RE, public std::vector<RE*, ProxyAllocator<RE *>> {
 public:
     static inline bool classof(const RE * re) {
         return re->getClassTypeId() == ClassTypeId::Seq;
@@ -27,14 +29,9 @@ public:
 protected:
     friend Seq * makeSeq();
     template<typename iterator> friend RE * makeSeq(const iterator, const iterator);
-    Seq()
-    : Vector(ClassTypeId::Seq) {
-
-    }
+    Seq() : RE(ClassTypeId::Seq), std::vector<RE*, ProxyAllocator<RE *>>(mAllocator) {}
     Seq(iterator begin, iterator end)
-    : Vector(ClassTypeId::Seq, begin, end) {
-
-    }
+    : RE(ClassTypeId::Seq), std::vector<RE*, ProxyAllocator<RE *>>(begin, end, mAllocator) { }
 };
 
 inline Seq * makeSeq() {

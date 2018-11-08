@@ -127,9 +127,7 @@ RE * regular_expression_passes(RE * re) {
 
 static bool compare(const RE * const lh, const RE * const rh);
 
-static bool lessThan(const Vector * const lh, const Vector * const rh) {
-    assert (lh->getClassTypeId() == rh->getClassTypeId());
-    assert (lh->getClassTypeId() == RE::ClassTypeId::Alt || lh->getClassTypeId() == RE::ClassTypeId::Seq);
+static bool lessThan(const Seq * const lh, const Seq * const rh) {
     if (LLVM_LIKELY(lh->size() != rh->size())) {
         return lh->size() < rh->size();
     }
@@ -144,6 +142,21 @@ static bool lessThan(const Vector * const lh, const Vector * const rh) {
     return false;
 }
 
+static bool lessThan(const Alt * const lh, const Alt * const rh) {
+    if (LLVM_LIKELY(lh->size() != rh->size())) {
+        return lh->size() < rh->size();
+    }
+    for (auto i = lh->begin(), j = rh->begin(); i != lh->end(); ++i, ++j) {
+        assert (*i && *j);
+        if (compare(*i, *j)) {
+            return true;
+        } else if (compare(*j, *i)) {
+            return false;
+        }
+    }
+    return false;
+}
+    
 inline bool lessThan(const Name * const lh, const Name * const rh) {
     if (lh->getType() != rh->getType()) {
         return lh->getType() < rh->getType();
@@ -238,8 +251,9 @@ inline bool compare(const RE * const lh, const RE * const rh) {
     }
     switch (typeL) {
         case Type::Alt:
+            return lessThan(cast<Alt>(lh), cast<Alt>(rh));
         case Type::Seq:
-            return lessThan(cast<Vector>(lh), cast<Vector>(rh));
+            return lessThan(cast<Seq>(lh), cast<Seq>(rh));
         case Type::End: case Type::Start:
             return false;
         case Type::Assertion:
