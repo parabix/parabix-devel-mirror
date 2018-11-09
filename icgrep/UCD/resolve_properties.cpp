@@ -99,7 +99,6 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
     if (name->getType() == Name::Type::UnicodeProperty) {
         std::string prop = name->getNamespace();
         std::string value = name->getName();
-        llvm::errs() << "resolveUnicodeSet(" << prop << ":" << value << ")\n";
         if (prop.length() > 0) {
             prop = canonicalize_value_name(prop);
             auto propit = alias_map.find(prop);
