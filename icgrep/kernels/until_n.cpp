@@ -34,7 +34,6 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
    EOF position, then this is treated as if the Nth bit does not exist in the
    input stream.
 */
-
     IntegerType * const sizeTy = b->getSizeTy();
     const unsigned packSize = sizeTy->getBitWidth();
     Constant * const ZERO = b->getSize(0);
@@ -72,10 +71,8 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     PHINode * const localIndex = b->CreatePHI(sizeTy, 2);
     localIndex->addIncoming(ZERO, strideLoop);
     Value * const blockIndex = b->CreateAdd(baseBlockIndex, localIndex);
-    Value * inputPtr = b->getInputStreamBlockPtr("bits", ZERO, blockIndex);
-    Value * inputValue = b->CreateBlockAlignedLoad(inputPtr);
-    Value * outputPtr = b->getOutputStreamBlockPtr("uptoN", ZERO, blockIndex);
-    b->CreateBlockAlignedStore(inputValue, outputPtr);
+    Value * inputValue = b->loadInputStreamBlock("bits", ZERO, blockIndex);
+    b->storeOutputStreamBlock("uptoN", ZERO, blockIndex, inputValue);
     Value * const inputPackValue = b->CreateNot(b->simd_eq(packSize, inputValue, ZEROES));
     Value * iteratorMask = b->CreateZExtOrTrunc(b->hsimd_signmask(packSize, inputPackValue), sizeTy);
     iteratorMask = b->CreateShl(iteratorMask, b->CreateMul(localIndex, PACKS_PER_BLOCK));
@@ -153,7 +150,16 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     Value * const mask = b->bitblock_mask_to(blockOffset, true);
     Value * const maskedInputValue = b->CreateAnd(inputValue2, mask);
     b->storeOutputStreamBlock("uptoN", ZERO, blockIndex2, maskedInputValue);
-    Value * const positionOfNthItem = b->CreateAdd(b->CreateMul(blockIndex2, b->getSize(b->getBitBlockWidth())), b->CreateAdd(blockOffset, ONE));
+    Value * const priorProducedItemCount = b->getProducedItemCount("uptoN");
+    const auto log2BlockWidth = std::log2<unsigned>(b->getBitBlockWidth());
+    Value * positionOfNthItem = b->CreateShl(blockIndex2, log2BlockWidth);
+    positionOfNthItem = b->CreateAdd(positionOfNthItem, b->CreateAdd(blockOffset, ONE));
+    positionOfNthItem = b->CreateAdd(positionOfNthItem, priorProducedItemCount);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Value * const availableBits = b->getAvailableItemCount("bits");
+        Value * const positionLessThanAvail = b->CreateICmpULT(positionOfNthItem, availableBits);
+        b->CreateAssert(positionLessThanAvail, "position of n-th item exceeds available items!");
+    }
     b->setTerminationSignal();
     BasicBlock * const segmentDone = b->CreateBasicBlock("segmentDone");
     b->CreateBr(segmentDone);
@@ -168,9 +174,7 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     PHINode * const produced = b->CreatePHI(sizeTy, 2);
     produced->addIncoming(positionOfNthItem, foundNthBit);
     produced->addIncoming(availableBits, nextStride);
-    Value * producedCount = b->getProducedItemCount("uptoN");
-    producedCount = b->CreateAdd(producedCount, produced);
-    b->setProducedItemCount("uptoN", producedCount);
+    b->setProducedItemCount("uptoN", produced);
 
 }
 
@@ -179,7 +183,7 @@ UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> &, Scala
 // inputs
 {Binding{"bits", AllMatches}},
 // outputs
-{Binding{"uptoN", Matches, FixedRate(), Deferred()}},
+{Binding{"uptoN", Matches, BoundedRate(0, 1)}},
 // input scalar
 {Binding{"N", maxCount}}, {},
 // internal state
