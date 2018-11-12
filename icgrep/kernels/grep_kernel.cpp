@@ -370,11 +370,8 @@ void ByteBitGrepKernel::generatePabloMethod() {
     
     std::vector<PabloAST *> basis(8);
     for (unsigned i = 0; i < 4; i++) {
-        // The subtraction 7-bit is because of the confusion between
-        // little-endian and big-endian bit numbering of bytes.
-        // We should fix this, switching to little-endian numbering throughout.
-        basis[7-2*i] = scope1->createPackL(scope1->getInteger(2), bitpairs[i]);
-        basis[7-(2*i + 1)] = scope1->createPackH(scope1->getInteger(2), bitpairs[i]);
+        basis[2*i] = scope1->createPackL(scope1->getInteger(2), bitpairs[i]);
+        basis[2*i + 1] = scope1->createPackH(scope1->getInteger(2), bitpairs[i]);
     }
     
     cc::Parabix_CC_Compiler ccc(scope1, basis);
