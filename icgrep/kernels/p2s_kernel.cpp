@@ -168,10 +168,9 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     }
     Value * lo_bytes[8];
     p2s(b, lo_input, lo_bytes, mBasisSetNumbering);
-
-    Value * const fieldCounts = b->loadInputStreamBlock("fieldCounts", b->getInt32(0));
+    Value * const extractionMask = b->loadInputStreamBlock("extractionMask", b->getInt32(0));
+    Value * const fieldCounts = b->simd_popcount(unitsPerRegister, extractionMask);
     Value * unitCounts = partial_sum_popcounts(b, unitsPerRegister, fieldCounts);
-    
     Value * outputPtr = b->getOutputStreamBlockPtr("i16Stream", b->getInt32(0));
     outputPtr = b->CreatePointerCast(outputPtr, int16PtrTy);
     Value * const i16UnitsGenerated = b->getProducedItemCount("i16Stream"); // units generated to buffer
@@ -227,7 +226,7 @@ mBasisSetNumbering(basisNumbering) {
 
 P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering numbering)
 : BlockOrientedKernel("p2s_compress" + cc::numberingSuffix(numbering),
-{Binding{b->getStreamSetTy(8, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "fieldCounts"}},
+{Binding{b->getStreamSetTy(8, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "extractionMask"}},
 {Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)}},
 {}, {}, {}),
 mBasisSetNumbering(numbering) {
@@ -244,11 +243,11 @@ mBasisSetNumbering(numbering) {
 }
 
 P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> &,
-                                                                 StreamSet * basisBits, StreamSet * fieldCounts, StreamSet * i16Stream,
+                                                                 StreamSet * basisBits, StreamSet * extractionMask, StreamSet * i16Stream,
                                                                  cc::BitNumbering numbering)
 : BlockOrientedKernel("p2s_16_compress" + cc::numberingSuffix(numbering),
 {Binding{"basisBits", basisBits},
-Binding{"fieldCounts", fieldCounts}},
+Binding{"extractionMask", extractionMask}},
 {Binding{"i16Stream", i16Stream, BoundedRate(0, 1)}},
 {}, {}, {}),
 mBasisSetNumbering(numbering) {

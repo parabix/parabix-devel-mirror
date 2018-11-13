@@ -105,10 +105,6 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
         Value * output = apply_parallel_prefix_deletion(kb, mCompressFieldWidth, delMask, move_masks, input);
         kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, output);
     }
-#ifndef STREAM_COMPRESS_USING_EXTRACTION_MASK
-    Value * unitCount = kb->simd_popcount(mCompressFieldWidth, extractionMask);
-    kb->storeOutputStreamBlock("unitCounts", kb->getInt32(0), blockOffsetPhi, kb->bitCast(unitCount));
-#endif
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
     blockOffsetPhi->addIncoming(nextBlk, processBlock);
     Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
@@ -116,44 +112,25 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
     kb->SetInsertPoint(done);
 }
 
-#ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
-FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
+FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw
                                          , StreamSet * inputStreamSet, StreamSet * extractionMask
                                          , StreamSet * outputStreamSet)
-: MultiBlockKernel("fieldCompress" + std::to_string(b->getBitBlockWidth() / inputStreamSet->getNumElements()) + "_" + std::to_string(inputStreamSet->getNumElements()),
+: MultiBlockKernel("fieldCompress" + std::to_string(fw) + "_" + std::to_string(inputStreamSet->getNumElements()),
 // inputs
 {Binding{"inputStreamSet", inputStreamSet},
 Binding{"extractionMask", extractionMask}},
 // outputs
 {Binding{"outputStreamSet", outputStreamSet}},
 {}, {}, {})
-, mCompressFieldWidth(b->getBitBlockWidth() / inputStreamSet->getNumElements())
+, mCompressFieldWidth(fw)
 , mStreamCount(inputStreamSet->getNumElements()) {
 
 }
-#else
-FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
-                                         , StreamSet * inputStreamSet, StreamSet * extractionMask
-                                         , StreamSet * outputStreamSet, StreamSet * unitCounts)
-: MultiBlockKernel("fieldCompress" + std::to_string(b->getBitBlockWidth() / inputStreamSet->getNumElements()) + "_" + std::to_string(inputStreamSet->getNumElements()),
-// inputs
-{Binding{"inputStreamSet", inputStreamSet},
-Binding{"extractionMask", extractionMask}},
-// outputs
-{Binding{"outputStreamSet", outputStreamSet},
-Binding{"unitCounts", unitCounts, FixedRate(), RoundUpTo(b->getBitBlockWidth())}},
-{}, {}, {})
-, mCompressFieldWidth(b->getBitBlockWidth() / inputStreamSet->getNumElements())
-, mStreamCount(inputStreamSet->getNumElements()) {
-
-}
-#endif
 
 void PEXTFieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
     Type * fieldTy = kb->getIntNTy(mPEXTWidth);
     Type * fieldPtrTy = PointerType::get(fieldTy, 0);
     Constant * PEXT_func = nullptr;
-    Constant * popc_func = Intrinsic::getDeclaration(getModule(), Intrinsic::ctpop, fieldTy);
     if (mPEXTWidth == 64) {
         PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_64);
     } else if (mPEXTWidth == 32) {
@@ -171,19 +148,9 @@ void PEXTFieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<Kern
     std::vector<Value *> mask(fieldsPerBlock);
     Value * extractionMaskPtr = kb->getInputStreamBlockPtr("extractionMask", ZERO, blockOffsetPhi);
     extractionMaskPtr = kb->CreatePointerCast(extractionMaskPtr, fieldPtrTy);
-#ifndef STREAM_COMPRESS_USING_EXTRACTION_MASK
-    Value * unitCountPtr = kb->getOutputStreamBlockPtr("unitCounts", ZERO, blockOffsetPhi);
-    unitCountPtr = kb->CreatePointerCast(unitCountPtr, fieldPtrTy);
-    for (unsigned i = 0; i < fieldsPerBlock; i++) {
-        mask[i] = kb->CreateLoad(kb->CreateGEP(extractionMaskPtr, kb->getInt32(i)));
-        Value * popc = kb->CreateCall(popc_func, mask[i]);
-        kb->CreateStore(popc, kb->CreateGEP(unitCountPtr, kb->getInt32(i)));
-    }
-#else
     for (unsigned i = 0; i < fieldsPerBlock; i++) {
         mask[i] = kb->CreateLoad(kb->CreateGEP(extractionMaskPtr, kb->getInt32(i)));
     }
-#endif
     for (unsigned j = 0; j < mStreamCount; ++j) {
         Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
         inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
@@ -206,12 +173,7 @@ PEXTFieldCompressKernel::PEXTFieldCompressKernel(const std::unique_ptr<kernel::K
 : MultiBlockKernel("PEXTfieldCompress" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
                    {Binding{kb->getStreamSetTy(streamCount), "inputStreamSet"},
                        Binding{kb->getStreamSetTy(), "extractionMask"}},
-#ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
                    {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"}},
-#else
-                   {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"},
-                       Binding{kb->getStreamSetTy(), "unitCounts", FixedRate(), RoundUpTo(kb->getBitBlockWidth())}},
-#endif
                    {}, {}, {})
 , mPEXTWidth(fieldWidth)
 , mStreamCount(streamCount) {
@@ -220,21 +182,13 @@ PEXTFieldCompressKernel::PEXTFieldCompressKernel(const std::unique_ptr<kernel::K
     
 StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
                                            , StreamSet * source
-                                           #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
                                            , StreamSet * extractionMask
-                                           #else
-                                           , StreamSet * unitCounts
-                                           #endif
-                                           , StreamSet * compresedOutput
+                                           , StreamSet * compressedOutput
                                            , const unsigned FieldWidth)
 : MultiBlockKernel("streamCompress" + std::to_string(FieldWidth) + "_" + std::to_string(source->getNumElements()),
 {Binding{"sourceStreamSet", source},
-#ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
 Binding{"extractionMask", extractionMask}},
-#else
-Binding{"unitCounts", unitCounts}},
-#endif
-{Binding{"compressedOutput", compresedOutput, BoundedRate(0, 1)}},
+{Binding{"compressedOutput", compressedOutput, BoundedRate(0, 1)}},
 {}, {}, {})
 , mCompressedFieldWidth(FieldWidth)
 , mStreamCount(source->getNumElements()) {
@@ -285,11 +239,7 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
         pendingDataPhi[i] = b->CreatePHI(b->getBitBlockType(), 2);
         pendingDataPhi[i]->addIncoming(pendingData[i], entry);
     }
-    #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
-    Value * fieldPopCounts = b->simd_popcount(fw, b->loadInputStreamBlock("extractionMask", ZERO, blockOffsetPhi));
-    #else
-    Value * fieldPopCounts = b->loadInputStreamBlock("unitCounts", ZERO, blockOffsetPhi);
-    #endif
+    Value * fieldPopCounts = b->simd_popcount(mCompressedFieldWidth, b->loadInputStreamBlock("extractionMask", ZERO, blockOffsetPhi));
     // For each field determine the (partial) sum popcount of all fields up to and
     // including the current field.
     Value * partialSum = fieldPopCounts;
@@ -316,7 +266,6 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     // field numbers for all subsequent fields, (the fields that receive overflow bits).
     Value * pendingSum = b->simd_add(mCompressedFieldWidth, partialSum, splatPending);
     Value * fieldNo = b->simd_srli(mCompressedFieldWidth, pendingSum, std::log2(mCompressedFieldWidth));
-  //
     // Now process the input data block of each stream in the input stream set.
     //
     // First load all the stream set blocks and the pending data.

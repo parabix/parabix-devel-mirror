@@ -35,14 +35,11 @@ private:
     const unsigned mDeletionFieldWidth;
     const unsigned mStreamCount;
 };
-
+    
+// Compress within fields of size fw.
 class FieldCompressKernel final : public MultiBlockKernel {
 public:
-    #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
-    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * inputStreamSet, StreamSet * extractionMask, StreamSet * outputStreamSet);
-    #else
-    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * inputStreamSet, StreamSet * extractionMask, StreamSet * outputStreamSet, StreamSet * unitCounts);
-    #endif
+    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, StreamSet * inputStreamSet, StreamSet * extractionMask, StreamSet * outputStreamSet);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -71,12 +68,8 @@ class StreamCompressKernel final : public MultiBlockKernel {
 public:
     StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
                          , StreamSet * source
-                         #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
                          , StreamSet * extractionMask
-                         #else
-                         , StreamSet * unitCounts
-                         #endif
-                         , StreamSet * compresedOutput
+                         , StreamSet * compressedOutput
                          , const unsigned FieldWidth = sizeof(size_t) * 8);
 
     bool isCachable() const override { return true; }

@@ -302,9 +302,8 @@ u8u16FunctionType generatePipeline(CPUDriver & pxDriver) {
         P->CreateKernelCall<SwizzleGenerator>(u16Swizzles, std::vector<StreamSet *>{u16bits});
         P->CreateKernelCall<P2S16Kernel>(u16bits, u16bytes, cc::BitNumbering::BigEndian);
     } else {
-        StreamSet * DeletionCounts = P->CreateStreamSet();
-        P->CreateKernelCall<FieldCompressKernel>(u8bits, selectors, u16bits, DeletionCounts);
-        P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, DeletionCounts, u16bytes, cc::BitNumbering::BigEndian);
+        P->CreateKernelCall<FieldCompressKernel>(b->getBitBlockWidth()/16, u8bits, selectors, u16bits);
+        P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes, cc::BitNumbering::BigEndian);
     }
 
     Scalar * outputFileName = P->getInputScalar("outputFileName");

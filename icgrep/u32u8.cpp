@@ -96,11 +96,7 @@ UTF8fieldDepositMask::UTF8fieldDepositMask(const std::unique_ptr<KernelBuilder> 
 : BlockOrientedKernel("u8depositMask",
 {Binding{"basis", u32basis}},
 {Binding{"fieldDepositMask", u8fieldMask, FixedRate(4)},
-#ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
 Binding{"extractionMask", u8unitCounts, FixedRate(4)}},
-#else
-Binding{"codeUnitCounts", u8unitCounts, FixedRate(4), RoundUpTo(b->getBitBlockWidth())}},
-#endif
 {}, {}, {Binding{b->getBitBlockType(), "EOFmask"}})
 , mDepositFieldWidth(depositFieldWidth) {
 
@@ -151,12 +147,7 @@ void UTF8fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBui
     for (unsigned j = 0; j < 4; ++j) {
         Value * deposit_mask = b->simd_pext(mDepositFieldWidth, mask1000, extraction_mask[j]);
         b->storeOutputStreamBlock("fieldDepositMask", b->getSize(0), b->getSize(j), deposit_mask);
-#ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
         b->storeOutputStreamBlock("extractionMask", b->getSize(0), b->getSize(j), extraction_mask[j]);
-#else
-        Value * unit_counts = b->simd_popcount(mDepositFieldWidth, extraction_mask[j]);
-        b->storeOutputStreamBlock("codeUnitCounts", b->getSize(0), b->getSize(j), unit_counts);
-#endif
     }
 }
 void UTF8fieldDepositMask::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * const remainingBytes) {
@@ -324,15 +315,9 @@ u32u8FunctionType u32u8_gen (CPUDriver & pxDriver) {
     StreamSet * const u8bytes = P->CreateStreamSet(1, 8);
 
     // Calculate the u8final deposit mask.
-    #ifdef STREAM_COMPRESS_USING_EXTRACTION_MASK
     StreamSet * const extractionMask = P->CreateStreamSet();
     P->CreateKernelCall<UTF8fieldDepositMask>(u32basis, u8fieldMask, extractionMask);
     P->CreateKernelCall<StreamCompressKernel>(u8fieldMask, extractionMask, u8final);
-    #else
-    StreamSet * const u8unitCounts = P->CreateStreamSet();
-    P->CreateKernelCall<UTF8fieldDepositMask>(u32basis, u8fieldMask, u8unitCounts);
-    P->CreateKernelCall<StreamCompressKernel>(u8fieldMask, u8unitCounts, u8final);
-    #endif
 
     P->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
 

@@ -7,7 +7,6 @@
 
 #include <cc/alphabet.h>
 #include "kernel.h"  // for KernelBuilder
-
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
