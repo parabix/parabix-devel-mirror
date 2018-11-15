@@ -188,7 +188,7 @@ StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelB
 : MultiBlockKernel("streamCompress" + std::to_string(FieldWidth) + "_" + std::to_string(source->getNumElements()),
 {Binding{"sourceStreamSet", source},
 Binding{"extractionMask", extractionMask}},
-{Binding{"compressedOutput", compressedOutput, BoundedRate(0, 1)}},
+{Binding{"compressedOutput", compressedOutput, PopcountOf("extractionMask")}},
 {}, {}, {})
 , mCompressedFieldWidth(FieldWidth)
 , mStreamCount(source->getNumElements()) {
@@ -377,12 +377,12 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     b->CreateBr(updateProducedCount);
 
     b->SetInsertPoint(updateProducedCount);
-    Value * produced = b->getProducedItemCount("compressedOutput");
-    Value * const blockOffset = b->CreateMul(nextOutputBlk, b->getSize(b->getBitBlockWidth()));
-    produced = b->CreateAdd(produced, blockOffset);
-    newPending = b->CreateZExtOrTrunc(newPending, sizeTy);
-    produced = b->CreateSelect(mIsFinal, b->CreateAdd(produced, newPending), produced);
-    b->setProducedItemCount("compressedOutput", produced);
+    //Value * produced = b->getProducedItemCount("compressedOutput");
+    //Value * const blockOffset = b->CreateMul(nextOutputBlk, b->getSize(b->getBitBlockWidth()));
+    //produced = b->CreateAdd(produced, blockOffset);
+    //newPending = b->CreateZExtOrTrunc(newPending, sizeTy);
+    //produced = b->CreateSelect(mIsFinal, b->CreateAdd(produced, newPending), produced);
+    //b->setProducedItemCount("compressedOutput", produced);
 }
 
 Bindings makeSwizzledDeleteByPEXTOutputBindings(const std::vector<StreamSet *> & outputStreamSets, const unsigned PEXTWidth) {
