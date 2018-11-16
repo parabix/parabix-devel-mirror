@@ -473,8 +473,8 @@ MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Mar
             PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask);
             // MatchStar deposits any cursors on the post position. However those cursors may may land on the initial "byte" of a
             // "multi-byte" character. Combine the masked range with any nonFinals.
-            PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, u8NonFinal(pb)), "bounded");
-            return makeMarker(FinalPostPositionUnit, bounded);
+            PabloAST * bounded = pb.createMatchStar(cursor, masked, "bounded");
+            return makeMarker(InitialPostPositionUnit, bounded);
         }
         else if (isUnicodeUnitLength(repeated)) {
             // For a regexp which represent a single Unicode codepoint, we can use the u8Final(pb) stream
@@ -525,9 +525,8 @@ MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType mark
     if (isByteLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar))) {
         PabloAST * mask = markerVar(compile(repeated, pb));
         // The post position character may land on the initial byte of a multi-byte character. Combine them with the masked range.
-        mask = pb.createOr(mask, u8NonFinal(pb));
         PabloAST * unbounded = pb.createMatchStar(base, mask, "unbounded");
-        return makeMarker(FinalPostPositionUnit, unbounded);
+        return makeMarker(InitialPostPositionUnit, unbounded);
     } else if (isUnicodeUnitLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar) && !AlgorithmOptionIsSet(DisableUnicodeMatchStar))) {
         PabloAST * mask = markerVar(compile(repeated, pb));
         mask = pb.createOr(mask, u8NonFinal(pb));
