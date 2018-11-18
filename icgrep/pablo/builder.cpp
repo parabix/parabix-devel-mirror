@@ -466,11 +466,16 @@ PabloAST * PabloBuilder::createEquals(PabloAST * expr1, PabloAST * expr2) {
 }
 
 PabloAST * PabloBuilder::createInFile(PabloAST * expr) {
-    if (isa<Zeroes>(expr)) return expr;
+    if (LLVM_UNLIKELY(isa<InFile>(expr) || isa<Zeroes>(expr))) {
+        return expr;
+    }
     return MAKE_UNARY(InFile, expr);
 }
 
 PabloAST * PabloBuilder::createInFile(PabloAST * expr, const llvm::StringRef & prefix) {
+    if (LLVM_UNLIKELY(isa<InFile>(expr) || isa<Zeroes>(expr))) {
+        return expr;
+    }
     return MAKE_NAMED_UNARY(InFile, prefix, expr);
 }
 
