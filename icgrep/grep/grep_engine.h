@@ -35,6 +35,7 @@ enum GrepSignal : unsigned {BinaryFile};
 class GrepCallBackObject {
 public:
     GrepCallBackObject() : mBinaryFile(false) {}
+    virtual ~GrepCallBackObject() {}
     virtual void handle_signal(unsigned signal);
     bool binaryFileSignalled() {return mBinaryFile;}
 private:
@@ -44,6 +45,7 @@ private:
 class MatchAccumulator : public GrepCallBackObject {
 public:
     MatchAccumulator() {}
+    virtual ~MatchAccumulator() {}
     virtual void accumulate_match(const size_t lineNum, char * line_start, char * line_end) = 0;
     virtual void finalize_match(char * buffer_end) {}  // default: no op
 };

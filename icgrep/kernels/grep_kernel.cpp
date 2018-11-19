@@ -428,7 +428,7 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     BasicBlock * const segmentDone = b->CreateBasicBlock("segmentDone");
 
     Value * const numOfBlocks = b->CreateMul(numOfStrides, BLOCKS_PER_STRIDE);
-    Value * availItems = b->getAvailableItemCount("byteData");
+    Value * itemsToDo = b->getAccessibleItemCount("byteData");
     //
     // Fast loop to prove that there are no null bytes in a multiblock region.
     // We repeatedly combine byte packs using a SIMD unsigned min operation
@@ -480,13 +480,13 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     
     
     b->SetInsertPoint(finalStride);
-    b->CreateMemCpy(b->CreatePointerCast(outputStreamBasePtr, voidPtrTy), b->CreatePointerCast(byteStreamBasePtr, voidPtrTy), availItems, 1);
+    b->CreateMemCpy(b->CreatePointerCast(outputStreamBasePtr, voidPtrTy), b->CreatePointerCast(byteStreamBasePtr, voidPtrTy), itemsToDo, 1);
     b->CreateBr(nullByteDetection);
     
     b->SetInsertPoint(nullByteDetection);
     //  Find the exact location using memchr, which should be fast enough.
     //
-    Value * ptrToNull = b->CreateMemChr(b->CreatePointerCast(byteStreamBasePtr, voidPtrTy), b->getInt32(0), availItems);
+    Value * ptrToNull = b->CreateMemChr(b->CreatePointerCast(byteStreamBasePtr, voidPtrTy), b->getInt32(0), itemsToDo);
     Value * ptrAddr = b->CreatePtrToInt(ptrToNull, intPtrTy);
     b->CreateCondBr(b->CreateICmpEQ(ptrAddr, ConstantInt::getNullValue(intPtrTy)), segmentDone, nullByteFound);
     
@@ -502,8 +502,8 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     b->SetInsertPoint(segmentDone);
     PHINode * const produced = b->CreatePHI(b->getSizeTy(), 3);
     produced->addIncoming(nullPosn, nullByteFound);
-    produced->addIncoming(availItems, stridesDone);
-    produced->addIncoming(availItems, nullByteDetection);
+    produced->addIncoming(itemsToDo, stridesDone);
+    produced->addIncoming(itemsToDo, nullByteDetection);
     Value * producedCount = b->getProducedItemCount("untilNull");
     producedCount = b->CreateAdd(producedCount, produced);
     b->setProducedItemCount("untilNull", producedCount);
