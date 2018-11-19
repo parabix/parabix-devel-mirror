@@ -83,24 +83,6 @@ protected:
     const cc::BitNumbering mBasisSetNumbering;
     const bool mIsCachable;
 };
-
-struct ByteGrepSignature {
-    ByteGrepSignature(re::RE * re);
-protected:
-    re::RE * const  mRE;
-    std::string     mSignature;
-};
-
-
-class ByteGrepKernel : public ByteGrepSignature, public pablo::PabloKernel {
-public:
-    ByteGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const re, std::vector<Binding> inputSets, StreamSet * matches);
-    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) override;
-    bool isCachable() const override { return true; }
-    bool hasFamilyName() const override { return true; }
-protected:
-    void generatePabloMethod() override;
-};
     
 struct ByteBitGrepSignature {
     ByteBitGrepSignature(re::RE * prefix, re::RE * suffix);
@@ -112,11 +94,15 @@ protected:
 
     
 class ByteBitGrepKernel : public ByteBitGrepSignature, public pablo::PabloKernel {
+    using Externals = std::vector<std::pair<std::string, StreamSet *>>;
 public:
-    ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const prefix, re::RE * const suffix, std::vector<Binding> inputSets, StreamSet * matches);
+    ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const prefix, re::RE * const suffix, StreamSet * const Source, StreamSet * const MatchResults,
+                      const Externals externals = {});
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) override;
     bool isCachable() const override { return true; }
     bool hasFamilyName() const override { return true; }
+private:
+    static Bindings makeInputBindings(StreamSet * const source, const Externals & externals);
 protected:
     void generatePabloMethod() override;
 };

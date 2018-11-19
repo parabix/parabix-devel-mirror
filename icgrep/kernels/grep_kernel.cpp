@@ -218,7 +218,6 @@ ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
 , mSignature(Printer_RE::PrintRE(mRE)) {
 
 }
-
 // Helper to compute stream set inputs to pass into PabloKernel constructor.
 Bindings ICGrepKernel::makeInputBindings(StreamSet * const basis, const Externals & externals, const Alphabets & alphabets) {
     Bindings inputs;
@@ -258,8 +257,15 @@ std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuil
 
 void ICGrepKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
-    RE_Compiler re_compiler(getEntryScope(), ccc, mBasisSetNumbering);
+    std::unique_ptr<cc::CC_Compiler> ccc;
+    bool useDirectCC = getInput(0)->getType()->getArrayNumElements() == 1;
+    if (useDirectCC) {
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
+    }
+    //cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
+    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), mBasisSetNumbering);
     for (const auto & e : mExternals) {
         re_compiler.addPrecompiled(e.first, pb.createExtract(getInputStreamVar(e.first), pb.getInteger(0)));
     }
@@ -273,52 +279,16 @@ void ICGrepKernel::generatePabloMethod() {
     pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
 }
 
-
-ByteGrepSignature::ByteGrepSignature(RE * re)
-: mRE(re)
-, mSignature(Printer_RE::PrintRE(re) ) {
-}
-
-ByteGrepKernel::ByteGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const re, std::vector<Binding> inputSets, StreamSet * matches)
-: ByteGrepSignature(re)
-, PabloKernel(b, "byteGrep" + getStringHash(mSignature),
-// inputs
-std::move(inputSets),
-// output
-{Binding{"matches", matches, FixedRate(), Add1()}}) {
-
-}
-
-std::string ByteGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
-    return mSignature;
-}
-
-void ByteGrepKernel::generatePabloMethod() {
-    PabloBuilder pb(getEntryScope());
-    PabloAST * u8bytes = pb.createExtract(getInput(0), pb.getInteger(0));
-    cc::Direct_CC_Compiler dcc(getEntryScope(), u8bytes);
-    RE_Compiler re_byte_compiler(getEntryScope(), dcc);
-    const auto numOfInputs = getNumOfInputs();
-    for (unsigned i = 1; i < numOfInputs; ++i) {
-        const Binding & input = getInputStreamSetBinding(i);
-        re_byte_compiler.addPrecompiled(input.getName(), pb.createExtract(getInputStreamVar(input.getName()), pb.getInteger(0)));
-    }
-    PabloAST * const matches = re_byte_compiler.compile(mRE);    
-    Var * const output = getOutputStreamVar("matches");
-    pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
-}
-
 // Helper to compute stream set inputs to pass into PabloKernel constructor.
-inline std::vector<Binding> byteBitGrepInputs(const std::unique_ptr<kernel::KernelBuilder> & b,
-                                              const std::vector<std::string> & externals) {
-    std::vector<Binding> streamSetInputs = {
-        Binding{b->getStreamSetTy(1, 8), "byteData"},
-    };
-    for (auto & e : externals) {
-        streamSetInputs.push_back(Binding{b->getStreamSetTy(1, 1), e});
+Bindings ByteBitGrepKernel::makeInputBindings(StreamSet * const basis, const Externals & externals) {
+    Bindings inputs;
+    inputs.emplace_back("basis", basis);
+    for (const auto & e : externals) {
+        inputs.emplace_back(e.first, e.second);
     }
-    return streamSetInputs;
+    return inputs;
 }
+
 
 ByteBitGrepSignature::ByteBitGrepSignature(RE * prefix, RE * suffix)
 : mPrefixRE(prefix)
@@ -326,14 +296,14 @@ ByteBitGrepSignature::ByteBitGrepSignature(RE * prefix, RE * suffix)
 , mSignature(Printer_RE::PrintRE(mPrefixRE) + Printer_RE::PrintRE(mSuffixRE) ) {
 }
 
-ByteBitGrepKernel::ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const prefixRE, RE * const suffixRE, std::vector<Binding> inputSets, StreamSet * matches)
+ByteBitGrepKernel::ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const prefixRE, RE * const suffixRE, StreamSet * const Source, StreamSet * const matches, const Externals externals)
 : ByteBitGrepSignature(prefixRE, suffixRE)
 , PabloKernel(b, "bBc" + getStringHash(mSignature),
 // inputs
-std::move(inputSets),
+makeInputBindings(Source, externals),
 // output
 {Binding{"matches", matches, FixedRate(), Add1()}}) {
-
+    
 }
 
 std::string ByteBitGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {

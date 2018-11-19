@@ -76,7 +76,7 @@ const auto ENCODING_BITS = 8;
 namespace grep {
 
 using Alphabets = ICGrepKernel::Alphabets;
-
+    
 extern "C" void signal_dispatcher(intptr_t callback_object_addr, unsigned signal) {
     reinterpret_cast<GrepCallBackObject *>(callback_object_addr)->handle_signal(signal);
 }
@@ -158,12 +158,12 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mNextFileToPrint(0),
     grepMatchFound(false),
     mGrepRecordBreak(GrepRecordBreakKind::LF),
+    mRequiredComponents(static_cast<Component>(0)),
     mMoveMatchesToEOL(true),
     mEngineThread(pthread_self()) {}
 
 QuietModeEngine::QuietModeEngine(BaseDriver &driver) : GrepEngine(driver) {
     mEngineKind = EngineKind::QuietMode;
-    mMoveMatchesToEOL = false;
     mMaxCount = 1;
 }
 
@@ -171,7 +171,6 @@ MatchOnlyEngine::MatchOnlyEngine(BaseDriver & driver, bool showFilesWithMatch, b
     GrepEngine(driver), mRequiredCount(showFilesWithMatch) {
     mEngineKind = EngineKind::MatchOnly;
     mFileSuffix = useNullSeparators ? std::string("\0", 1) : "\n";
-    mMoveMatchesToEOL = false;
     mMaxCount = 1;
     mShowFileNames = true;
 }
@@ -188,6 +187,14 @@ EmitMatchesEngine::EmitMatchesEngine(BaseDriver &driver)
 }
 
     
+bool GrepEngine::hasComponent(Component compon_set, Component c) {
+    return (static_cast<component_t>(compon_set) & static_cast<component_t>(c)) != 0;
+}
+
+void GrepEngine::GrepEngine::setComponent(Component & compon_set, Component c) {
+    compon_set = static_cast<Component>(static_cast<component_t>(compon_set) | static_cast<component_t>(c));
+}
+
 void GrepEngine::setRecordBreak(GrepRecordBreakKind b) {
     mGrepRecordBreak = b;
 }
@@ -224,8 +231,11 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         re::gatherUnicodeProperties(mREs[i], mUnicodeProperties);
         mREs[i] = regular_expression_passes(mREs[i]);
     }
-    if (allAnchored && (mGrepRecordBreak != GrepRecordBreakKind::Unicode)) mMoveMatchesToEOL = false;
-
+    if ((mEngineKind == EngineKind::EmitMatches) || (mEngineKind == EngineKind::CountOnly)) {
+        if (!allAnchored || (mGrepRecordBreak == GrepRecordBreakKind::Unicode)) {
+            setComponent(mRequiredComponents, Component::MoveMatchesToEOL);
+        }
+    }
 }
 
 // Code Generation
@@ -257,6 +267,9 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         hasGCB[i] = hasGraphemeClusterBoundary(mREs[i]);
         anyGCB |= hasGCB[i];
     }
+    if (anyGCB) {
+        setComponent(mRequiredComponents, Component::GraphemeClusterBoundary);
+    }
 
 
     StreamSet * LineBreakStream = P->CreateStreamSet();
@@ -272,31 +285,31 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     }
 
     bool requiresComplexTest = true;
+    
+
 
     if (isSimple) {
         const auto isWithinByteTestLimit = byteTestsWithinLimit(mREs[0], ByteCClimit);
         const auto hasTriCC = hasTriCCwithinLimit(mREs[0], ByteCClimit, prefixRE, suffixRE);
+        ICGrepKernel::Externals externals;
         if (isWithinByteTestLimit || hasTriCC) {
-            std::vector<Binding> inputSets;
-            inputSets.emplace_back("byteData", ByteStream);
             if (MultithreadedSimpleRE && hasTriCC) {
                 auto CCs = re::collectCCs(prefixRE, cc::Byte);
-                inputSets.reserve(CCs.size());
                 for (auto cc : CCs) {
                     auto ccName = makeName(cc);
                     mREs[0] = re::replaceCC(mREs[0], cc, ccName);
                     auto ccNameStr = ccName->getFullName();
                     StreamSet * const ccStream = P->CreateStreamSet(1, 1);
                     P->CreateKernelCall<DirectCharacterClassKernelBuilder>(ccNameStr, std::vector<re::CC *>{cc}, ByteStream, ccStream);
-                    inputSets.emplace_back(ccNameStr, ccStream);
+                    externals.emplace_back(ccNameStr, ccStream);
                 }
             }
             StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
             MatchResultsBufs[0] = MatchResults;
             if (isWithinByteTestLimit) {
-                P->CreateKernelCall<ByteGrepKernel>(mREs[0], inputSets, MatchResults);
+                P->CreateKernelCall<ICGrepKernel>(mREs[0], ByteStream, MatchResults, externals);
             } else {
-                P->CreateKernelCall<ByteBitGrepKernel>(prefixRE, suffixRE, inputSets, MatchResults);
+                P->CreateKernelCall<ByteBitGrepKernel>(prefixRE, suffixRE, ByteStream, MatchResults, externals);
             }
             P->CreateKernelCall<DirectCharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, ByteStream, LineBreakStream);
             requiresComplexTest = false;
@@ -339,7 +352,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         }
 
         StreamSet * GCB_stream = nullptr;
-        if (anyGCB) {
+        if (hasComponent(mRequiredComponents, Component::GraphemeClusterBoundary)) {
             GCB_stream = P->CreateStreamSet();
             P->CreateKernelCall<GraphemeClusterBreakKernel>(BasisBits, RequiredStreams, GCB_stream);
         }
@@ -401,7 +414,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         P->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
         Matches = MergedMatches;
     }
-    if (mMoveMatchesToEOL) {
+    if (hasComponent(mRequiredComponents, Component::MoveMatchesToEOL)) {
         StreamSet * const MovedMatches = P->CreateStreamSet();
         P->CreateKernelCall<MatchedLinesKernel>(Matches, LineBreakStream, MovedMatches);
         Matches = MovedMatches;

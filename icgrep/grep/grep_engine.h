@@ -1,4 +1,4 @@
-﻿
+
 /*
  *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
@@ -88,6 +88,17 @@ public:
     virtual void showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm);
 
 protected:
+    // Functional components that may be required for grep searches,
+    // depending on search pattern, mode flags, external parameters and
+    // implementation strategy.
+    typedef uint32_t component_t;
+    enum class Component : component_t {
+        MoveMatchesToEOL = 0x01,
+        GraphemeClusterBoundary = 0x02
+    };
+    bool hasComponent(Component compon_set, Component c);
+    void setComponent(Component & compon_set, Component c);
+
     std::pair<kernel::StreamSet *, kernel::StreamSet *> grepPipeline(const std::unique_ptr<kernel::PipelineBuilder> & P,
                                                                      kernel::StreamSet * ByteStream);
 
@@ -125,6 +136,7 @@ protected:
     std::set<re::Name *> mUnicodeProperties;
     re::CC * mBreakCC;
     std::string mFileSuffix;
+    Component mRequiredComponents;
     bool mMoveMatchesToEOL;
     pthread_t mEngineThread;
 };
