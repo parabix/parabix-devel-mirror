@@ -604,6 +604,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, std::ostringstr
     close(fileDescriptor);
     if (accum.binaryFileSignalled()) {
         accum.mResultStr.clear();
+        accum.mResultStr << "Binary file " << fileName << " skipped.\n";
     }
     if (accum.mLineCount > 0) grepMatchFound = true;
     return accum.mLineCount;
