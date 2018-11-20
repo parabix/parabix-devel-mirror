@@ -238,11 +238,16 @@ ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
 
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+
 # no pie disables the generation of position-independent executables, which is a default security feature of newer compiles
 # that prevents addr2line from being able to resolve which line corresponds to the code at run time. This in turn prevents
 # CreateAssert from being able to provide the compilation call stack for each JIT'ed assertion error.
 
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -no-pie")
+CHECK_CXX_COMPILER_FLAG("-no-pie" COMPILER_SUPPORTS_NO_PIE)
+IF (COMPILER_SUPPORTS_NO_PIE)
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -no-pie")
+ENDIF()
 
 UNSET(HAS_ADDRESS_SANITIZER)
 IF (USE_ADDRESS_SANITIZER)
