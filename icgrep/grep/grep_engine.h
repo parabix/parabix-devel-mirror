@@ -7,7 +7,7 @@
 #ifndef GREP_ENGINE_H
 #define GREP_ENGINE_H
 #include <grep_interface.h>
-//#include <kernels/streamset.h>
+#include <kernels/callback.h>
 #include <cc/multiplex_CCs.h>
 #include <string>
 #include <vector>
@@ -32,9 +32,9 @@ class InternalSearchEngine;
 
 enum GrepSignal : unsigned {BinaryFile};
 
-class GrepCallBackObject {
+class GrepCallBackObject : public kernel::SignallingObject {
 public:
-    GrepCallBackObject() : mBinaryFile(false) {}
+    GrepCallBackObject() : SignallingObject(), mBinaryFile(false) {}
     virtual ~GrepCallBackObject() {}
     virtual void handle_signal(unsigned signal);
     bool binaryFileSignalled() {return mBinaryFile;}
@@ -50,8 +50,6 @@ public:
     virtual void finalize_match(char * buffer_end) {}  // default: no op
 };
 
-extern "C" void signal_dispatcher(intptr_t callback_object_addr, unsigned signal);
-    
 extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end);
 
 extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);

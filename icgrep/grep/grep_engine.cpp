@@ -8,6 +8,7 @@
 #include <llvm/IR/Module.h>
 #include <boost/filesystem.hpp>
 #include <UCD/resolve_properties.h>
+#include <kernels/callback.h>
 #include <kernels/charclasses.h>
 #include <kernels/cc_kernel.h>
 #include <kernels/grep_kernel.h>
@@ -76,10 +77,6 @@ const auto ENCODING_BITS = 8;
 namespace grep {
 
 using Alphabets = ICGrepKernel::Alphabets;
-    
-extern "C" void signal_dispatcher(intptr_t callback_object_addr, unsigned signal) {
-    reinterpret_cast<GrepCallBackObject *>(callback_object_addr)->handle_signal(signal);
-}
     
 void GrepCallBackObject::handle_signal(unsigned s) {
     if (static_cast<GrepSignal>(s) == GrepSignal::BinaryFile) {
@@ -254,7 +251,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     } else if (mBinaryFilesMode == argv::WithoutMatch) {
         ByteStream = P->CreateStreamSet(1, 8);
         Kernel * binaryCheckK = P->CreateKernelCall<AbortOnNull>(SourceStream, ByteStream, callbackObject);
-        mGrepDriver.LinkFunction(binaryCheckK, "signal_dispatcher", signal_dispatcher);
+        mGrepDriver.LinkFunction(binaryCheckK, "signal_dispatcher", kernel::signal_dispatcher);
     } else {
         llvm::report_fatal_error("Binary mode not supported.");
     }

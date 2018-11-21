@@ -69,7 +69,7 @@ SET(DRIVER_SRC ${DRIVER_SRC} toolchain/NVPTXDriver.cpp)
 endif()
 
 SET(KERNEL_SRC kernels/attributes.cpp kernels/binding.cpp kernels/relationship.cpp kernels/processing_rate.cpp)
-SET(KERNEL_SRC ${KERNEL_SRC} kernels/kernel.cpp kernels/streamset.cpp kernels/multiblock_kernel.cpp kernels/block_kernel.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/kernel.cpp kernels/streamset.cpp kernels/multiblock_kernel.cpp kernels/block_kernel.cpp kernels/callback.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/pipeline/pipeline_kernel.cpp kernels/pipeline/pipeline_builder.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/s2p_kernel.cpp kernels/deletion.cpp kernels/swizzle.cpp kernels/p2s_kernel.cpp kernels/stdout_kernel.cpp kernels/hex_convert.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/kernel_builder.cpp)
