@@ -87,6 +87,7 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowREs)) {
         errs() << "Parser:\n" << Printer_RE::PrintRE(r) << '\n';
     }
+    r = removeUnneededCaptures(r);
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
     r = re::resolveUnicodeNames(r);
     validateNamesDefined(r);

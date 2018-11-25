@@ -62,4 +62,42 @@ RE * simplifyRE(RE * re) {
     return RE_Simplifier().transformRE(re);
 }
 
+using ReferenceSet = boost::container::flat_set<std::string>;
+
+struct ReferenceCollector  final : public RE_Inspector {
+    ReferenceCollector(ReferenceSet & references)
+    : RE_Inspector(InspectionMode::IgnoreNonUnique), mReferences(references) {}
+    
+    void inspectName(Name * n) final {
+        if (n->getType() == Name::Type::Reference) {
+            mReferences.insert(n->getName());
+        }
+    }
+    
+private:
+    ReferenceSet & mReferences;
+};
+
+struct UnneededCaptureRemoval final : public RE_Transformer {
+    UnneededCaptureRemoval(ReferenceSet & references)
+    : RE_Transformer("UnneededCaptureRemoval"), mReferences(references) {}
+    
+    RE * transformName(Name * n) final {
+        if (n->getType() == Name::Type::Capture) {
+            if (mReferences.count(n->getName()) == 0) {
+                return n->getDefinition();
+            }
+        }
+        return n;
+    }
+    
+private:
+    ReferenceSet & mReferences;
+};
+
+RE * removeUnneededCaptures(RE * r) {
+    ReferenceSet refs;
+    ReferenceCollector(refs).inspectRE(r);
+    return UnneededCaptureRemoval(refs).transformRE(r);
+}
 }

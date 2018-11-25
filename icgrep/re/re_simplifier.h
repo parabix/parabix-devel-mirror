@@ -9,6 +9,8 @@ class RE;
 
 RE * simplifyRE(RE * re);
 
+RE * removeUnneededCaptures(RE * r);
+
 }
 
 #endif // RE_SIMPLIFIER_H
