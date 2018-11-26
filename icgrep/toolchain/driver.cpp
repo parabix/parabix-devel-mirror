@@ -52,7 +52,7 @@ Scalar * BaseDriver::CreateConstant(llvm::Constant * const value) {
  * @brief makeCache
  ** ------------------------------------------------------------------------------------------------------------- */
 void BaseDriver::addKernel(Kernel * const kernel) {
-    if (ObjectCacheManager::checkForCachedKernel(iBuilder, kernel)) {
+    if (ParabixObjectCache::checkForCachedKernel(iBuilder, kernel)) {
         assert (kernel->getModule());
         mCachedKernel.emplace_back(kernel);
     } else {
@@ -70,7 +70,7 @@ BaseDriver::BaseDriver(std::string && moduleName)
 : mContext(new llvm::LLVMContext())
 , mMainModule(new llvm::Module(moduleName, *mContext))
 , iBuilder(nullptr) {
-    ObjectCacheManager::initializeCacheSystems();
+    ParabixObjectCache::initializeCacheSystems();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

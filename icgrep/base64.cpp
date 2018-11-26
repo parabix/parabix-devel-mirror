@@ -26,6 +26,7 @@
 #include <mutex>
 #include <kernels/pipeline_builder.h>
 
+
 using namespace llvm;
 using namespace codegen;
 
@@ -74,7 +75,7 @@ void base64(base64FunctionType fn_ptr, const std::string & fileName) {
         return;
     }
     fn_ptr(fd);
-    close(fd);    
+    close(fd);
 }
 
 int main(int argc, char *argv[]) {

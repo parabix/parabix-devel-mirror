@@ -11,10 +11,7 @@
 #include <llvm/ExecutionEngine/ObjectCache.h>
 #include <llvm/ADT/StringRef.h>
 #include <boost/container/flat_map.hpp>
-#include <boost/filesystem.hpp>
-#include <vector>
 #include <string>
-//#include <mutex>
 
 namespace llvm { class Module; }
 namespace llvm { class MemoryBuffer; }
@@ -35,26 +32,41 @@ namespace kernel { class KernelBuilder; }
 // it to the ExecutionEngine.
 //
 
-class ParabixObjectCache final : public llvm::ObjectCache {    
+class ParabixObjectCache final : public llvm::ObjectCache {
     template <typename K, typename V>
     using Map = boost::container::flat_map<K, V>;
-    using ModuleCache = Map<std::string, std::pair<llvm::Module *, std::unique_ptr<llvm::MemoryBuffer>>>;    
+    using ModuleCache = Map<std::string, std::pair<llvm::Module *, std::unique_ptr<llvm::MemoryBuffer>>>;
+    using Instance = std::unique_ptr<ParabixObjectCache>;
 public:
     using Path = llvm::SmallString<128>;
-    ParabixObjectCache(const llvm::StringRef dir);
-    ParabixObjectCache();
+
+    static bool checkForCachedKernel(const std::unique_ptr<kernel::KernelBuilder> & b, kernel::Kernel * const kernel) noexcept;
+
+    static void initializeCacheSystems() noexcept;
+
+    static ParabixObjectCache * getInstance() {
+        return mInstance.get();
+    }
+
     bool loadCachedObjectFile(const std::unique_ptr<kernel::KernelBuilder> & idb, kernel::Kernel * const kernel);
+
     void notifyObjectCompiled(const llvm::Module * M, llvm::MemoryBufferRef Obj) override;
+
     std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module * M) override;
-    void performIncrementalCacheCleanupStep();
+
+protected:
+
+    ParabixObjectCache();
+    void loadCacheSettings() noexcept;
+    void saveCacheSettings() noexcept;
+
 private:
-//    std::mutex mCleanupMutex;
-    unsigned mCacheRetrievals;
-    unsigned mNewlyCached;
-    boost::filesystem::directory_iterator mCleanupIterator;
-    ModuleCache mCachedObject;
-    const Path mCachePath;
-    
+    void initiateCacheCleanUp() noexcept;
+    bool requiresCacheCleanUp() noexcept;
+private:
+    static Instance     mInstance;
+    ModuleCache         mCachedObject;
+    Path                mCachePath;
 };
 
 #endif

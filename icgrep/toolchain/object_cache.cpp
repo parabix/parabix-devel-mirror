@@ -1,5 +1,5 @@
-#include "toolchain.h"
-#include "object_cache.h"
+﻿#include "object_cache.h"
+#include "object_cache_util.hpp"
 #include <kernels/kernel.h>
 #include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
@@ -9,12 +9,7 @@
 #include <llvm/Support/Path.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/IR/Module.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <boost/filesystem.hpp>
-#include <boost/range/iterator_range.hpp>
-#include <boost/container/flat_set.hpp>
+#include <toolchain/toolchain.h>
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
 #include <llvm/Bitcode/ReaderWriter.h>
 #else
@@ -22,18 +17,15 @@
 #include <llvm/Bitcode/BitcodeWriter.h>
 #endif
 #include <llvm/IR/Verifier.h>
-#include <ctime>
+#include <boost/lexical_cast.hpp>
 
 using namespace llvm;
-namespace fs = boost::filesystem;
+using namespace boost;
 
-#ifdef NDEBUG
-#define CACHE_ENTRY_MAX_HOURS (24 * codegen::CacheDaysLimit)
-#else
-#define CACHE_ENTRY_MAX_HOURS (1)
-#endif
+using Path = ParabixObjectCache::Path;
 
-#define SECONDS_PER_HOUR (3600)
+std::unique_ptr<ParabixObjectCache> ParabixObjectCache::mInstance;
+
 //===----------------------------------------------------------------------===//
 // Object cache (based on tools/lli/lli.cpp, LLVM 3.6.1)
 //
@@ -76,6 +68,9 @@ const static auto CACHEABLE = "cacheable";
 
 const static auto SIGNATURE = "signature";
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getSignature
+ ** ------------------------------------------------------------------------------------------------------------- */
 const MDString * getSignature(const llvm::Module * const M) {
     NamedMDNode * const sig = M->getNamedMetadata(SIGNATURE);
     if (sig) {
@@ -86,6 +81,9 @@ const MDString * getSignature(const llvm::Module * const M) {
     return nullptr;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief loadCachedObjectFile
+ ** ------------------------------------------------------------------------------------------------------------- */
 bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::KernelBuilder> & idb, kernel::Kernel * const kernel) {
     if (LLVM_LIKELY(kernel->isCachable())) {
         assert (kernel->getModule() == nullptr);
@@ -107,9 +105,9 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
         Path fileName(mCachePath);
         sys::path::append(fileName, CACHE_PREFIX);
         fileName.append(moduleId);
-        fileName.append(".kernel");
+        fileName.append("." KERNEL_FILE_EXTENSION);
 
-        auto kernelBuffer = MemoryBuffer::getFile(fileName.c_str(), -1, false);
+        auto kernelBuffer = MemoryBuffer::getFile(fileName, -1, false);
         if (kernelBuffer) {
             #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
             auto loadedFile = getLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
@@ -126,7 +124,7 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
                         goto invalid;
                     }
                 }
-                sys::path::replace_extension(fileName, ".o");
+                sys::path::replace_extension(fileName, "." OBJECT_FILE_EXTENSION);
                 auto objectBuffer = MemoryBuffer::getFile(fileName.c_str(), -1, false);
                 if (LLVM_LIKELY(objectBuffer)) {
                     Module * const m = M.release();
@@ -136,11 +134,10 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
                     kernel->prepareCachedKernel(idb);
                     mCachedObject.emplace(moduleId, std::make_pair(m, std::move(objectBuffer.get())));
                     // update the modified time of the .kernel, .o and .sig files
-                    time_t access_time = time(0);
+                    const auto access_time = currentTime();
                     fs::last_write_time(fileName.c_str(), access_time);
-                    sys::path::replace_extension(fileName, ".kernel");
+                    sys::path::replace_extension(fileName, "." KERNEL_FILE_EXTENSION);
                     fs::last_write_time(fileName.c_str(), access_time);
-                    mNewlyCached++;
                     return true;
                 }
             }
@@ -162,8 +159,11 @@ invalid:
     return false;
 }
 
-// A new module has been compiled. If it is cacheable and no conflicting module
-// exists, write it out.
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief notifyObjectCompiled
+ *
+ * A new module has been compiled. If it is cacheable and no conflicting module exists, write it out.
+ ** ------------------------------------------------------------------------------------------------------------- */
 void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef Obj) {
     if (LLVM_LIKELY(M->getNamedMetadata(CACHEABLE))) {
 
@@ -171,7 +171,7 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
         Path objectName(mCachePath);
         sys::path::append(objectName, CACHE_PREFIX);
         objectName.append(moduleId);
-        objectName.append(".o");
+        objectName.append("." OBJECT_FILE_EXTENSION);
 
         // Write the object code
         std::error_code EC;
@@ -196,56 +196,16 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
             md->addOperand(MDNode::get(H->getContext(), {sigCopy}));
         }
 
-        sys::path::replace_extension(objectName, ".kernel");
+        sys::path::replace_extension(objectName, "." KERNEL_FILE_EXTENSION);
         raw_fd_ostream kernelFile(objectName.str(), EC, sys::fs::F_None);
         WriteBitcodeToFile(H.get(), kernelFile);
         kernelFile.close();
-        mCacheRetrievals++;
     }
 }
 
-void ParabixObjectCache::performIncrementalCacheCleanupStep() {
-    //if (LLVM_LIKELY(mCleanupMutex.try_lock())) {
-        try {
-
-            // Simple clean-up policy: files that haven't been touched by the
-            // driver in MaxCacheEntryHours are deleted.
-            // Each cleanup step removes at monst mNewlyCached + 1 files
-            // and examines at most mNewlyCached + mCacheRetrievals files.
-
-            const auto now = std::time(nullptr);
-            unsigned removed = 0;
-            unsigned examined = 0;
-            unsigned removalLimit = mNewlyCached + 1;
-            unsigned examineLimit = mNewlyCached + mCacheRetrievals;
-            while (LLVM_LIKELY(mCleanupIterator != fs::directory_iterator())) {
-                const auto i = mCleanupIterator;
-                ++mCleanupIterator;
-                const auto & e = i->path();
-                if (LLVM_LIKELY(fs::is_regular_file(e))) {
-                    const auto expiry = fs::last_write_time(e) + (CACHE_ENTRY_MAX_HOURS * SECONDS_PER_HOUR);
-                    if (now > expiry) {
-                        fs::remove(e);
-                        removed++;
-                        if (removed >= removalLimit) break;
-                    }
-                    examined++;
-                    if (examined > examineLimit) break;
-                }
-                unsigned skip = rand() % 23;
-                while ((mCleanupIterator != fs::directory_iterator()) && (skip > 0)) {
-                    ++mCleanupIterator;
-                    skip--;
-                }
-            }
-        } catch (...) {
-            fs::path p(mCachePath.str());
-            mCleanupIterator = fs::directory_iterator(p);
-        }
-//        mCleanupMutex.unlock();
-//    }
-}
-
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getObject
+ ** ------------------------------------------------------------------------------------------------------------- */
 std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * module) {
     const auto f = mCachedObject.find(module->getModuleIdentifier());
     if (f == mCachedObject.end()) {
@@ -255,30 +215,141 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * modul
     return MemoryBuffer::getMemBufferCopy(f->second.second.get()->getBuffer());
 }
 
-ParabixObjectCache::ParabixObjectCache(const StringRef dir)
-: mCacheRetrievals(0)
-, mNewlyCached(0)
-, mCachePath(dir) {
-    fs::path p(mCachePath.str());
-    if (LLVM_LIKELY(!mCachePath.empty())) {
-        sys::fs::create_directories(mCachePath);
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief checkForCachedKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool ParabixObjectCache::checkForCachedKernel(const std::unique_ptr<kernel::KernelBuilder> & b, kernel::Kernel * const kernel) noexcept {
+    return mInstance.get() && mInstance->loadCachedObjectFile(b, kernel);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief requiresCacheCleanUp
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool ParabixObjectCache::requiresCacheCleanUp() noexcept {
+    return FileLock(fs::path{mCachePath.str()}).locked();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initiateCacheCleanUp
+ ** ------------------------------------------------------------------------------------------------------------- */
+void ParabixObjectCache::initiateCacheCleanUp() noexcept {
+    if (LLVM_UNLIKELY(requiresCacheCleanUp())) {
+        // syslog?
+        if (fork() == 0) {
+            char * const cachePath = const_cast<char *>(mCachePath.c_str());
+            char * args[3] = {const_cast<char *>(CACHE_JANITOR_FILE_NAME), cachePath, nullptr};
+            fs::path path(codegen::ProgramName);
+            path.remove_filename().append(CACHE_JANITOR_FILE_NAME);
+            if (execvp(const_cast<char *>(path.c_str()), args) < 0) {
+                // syslog?
+            }
+        }
     }
-    mCleanupIterator = fs::directory_iterator(p);
 }
 
-inline ParabixObjectCache::Path getDefaultPath() {
-    // $HOME/.cache/parabix/
-    ParabixObjectCache::Path cachePath;
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(3, 7, 0)
-    sys::path::user_cache_directory(cachePath, "parabix");
-#else
-    sys::path::home_directory(cachePath);
-    sys::path::append(cachePath, ".cache", "parabix");
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getDefaultCachePath
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void getDefaultCachePath(Path & configPath) {
+    // default: $HOME/.cache/parabix/
+    sys::path::home_directory(configPath);
+    sys::path::append(configPath, ".cache", "parabix");
+}
+
+#if 0
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getConfigPath
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Path getConfigPath() {
+    // $HOME/.config/parabix/cache.cfg
+    Path configPath;
+    sys::path::home_directory(configPath);
+    sys::path::append(configPath, ".config", "parabix");
+    sys::fs::create_directories(configPath);
+    sys::path::append(configPath, "cache.cfg");
+    return configPath;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief loadCacheSettings
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline size_t parseInt(const StringRef & str, const StringRef & label) {
+    try {
+        return lexical_cast<size_t>(str.data(), str.size());
+    } catch(const bad_lexical_cast &) {
+        errs() << "configuration for " << label << " must be an integer";
+        exit(-1);
+    }
+}
+
 #endif
-    return cachePath;
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief loadCacheSettings
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void ParabixObjectCache::loadCacheSettings() noexcept {
+    getDefaultCachePath(mCachePath);
+    #if 0
+
+    const auto configPath = getConfigPath();
+    auto configFile = MemoryBuffer::getFile(configPath);
+
+    // default: $HOME/.cache/parabix/
+    sys::path::home_directory(mCachePath);
+    sys::path::append(mCachePath, ".cache", "parabix");
+    // default: 1 week
+    mCacheExpirationDelay = CACHE_ENTRY_EXPIRY_PERIOD;
+
+    if (LLVM_UNLIKELY(!!configFile)) {
+        const StringRef config = (*configFile)->getBuffer();
+        #define ASCII_WHITESPACE " \f\n\r\t\v"
+        #define ASCII_WHITESPACE_OR_EQUALS (ASCII_WHITESPACE "+")
+        size_t nameStart = 0;
+        for (;;) {
+
+            const auto nameEnd = config.find_first_of(ASCII_WHITESPACE_OR_EQUALS, nameStart);
+            if (nameEnd == StringRef::npos) break;
+            const auto afterEquals = config.find_first_of('=', nameEnd) + 1;
+            if (LLVM_UNLIKELY(afterEquals == StringRef::npos)) break;
+            const auto valueStart = config.find_first_not_of(ASCII_WHITESPACE, afterEquals);
+            if (LLVM_UNLIKELY(valueStart == StringRef::npos)) break;
+            const auto valueEnd = config.find_first_of(ASCII_WHITESPACE, valueStart);
+            if (LLVM_UNLIKELY(valueEnd == StringRef::npos)) break;
+            const auto name = config.slice(nameStart, nameEnd);
+            const auto value = config.slice(valueStart, valueEnd);
+
+            if (name.equals_lower("cachepath")) {
+                mCachePath.assign(value);
+            } else if (name.equals_lower("cachedayslimit")) {
+                mCacheExpirationDelay = parseInt(value, "cachedayslimit");
+            }
+            // get the next name start
+            nameStart = config.find_first_not_of(ASCII_WHITESPACE, valueEnd + 1);
+        }
+    }
+    #endif
+    sys::fs::create_directories(mCachePath);
 }
 
-ParabixObjectCache::ParabixObjectCache()
-: ParabixObjectCache(getDefaultPath()) {
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief saveCachePath
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void ParabixObjectCache::saveCacheSettings() noexcept {
 
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initializeCacheSystems
+ ** ------------------------------------------------------------------------------------------------------------- */
+void ParabixObjectCache::initializeCacheSystems() noexcept {
+    if (LLVM_LIKELY(mInstance.get() == nullptr && codegen::EnableObjectCache)) {
+        mInstance.reset(new ParabixObjectCache());
+    }
+}
+
+ParabixObjectCache::ParabixObjectCache() {
+    loadCacheSettings();
+    initiateCacheCleanUp();
 }

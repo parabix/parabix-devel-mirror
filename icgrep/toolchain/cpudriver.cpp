@@ -73,7 +73,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
     InitializeNativeTargetAsmPrinter();
 //    InitializeNativeTargetAsmParser();
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
-    
+
 
     #ifdef ORCJIT
     EngineBuilder builder;
@@ -100,7 +100,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
     }
 
     mTarget = builder.selectTarget();
-    
+
     if (mTarget == nullptr) {
         throw std::runtime_error("Could not selectTarget");
     }
@@ -112,7 +112,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
     #endif
-    auto cache = ObjectCacheManager::getObjectCache();
+    auto cache = ParabixObjectCache::getInstance();
     if (cache) {
         #ifdef ORCJIT
         #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
@@ -151,7 +151,7 @@ Function * CPUDriver::addLinkFunction(Module * mod, llvm::StringRef name, Functi
 
 std::string CPUDriver::getMangledName(std::string s) {
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
-    DataLayout DL(mTarget->createDataLayout());    
+    DataLayout DL(mTarget->createDataLayout());
     std::string MangledName;
     raw_string_ostream MangledNameStream(MangledName);
     Mangler::getNameWithPrefix(MangledNameStream, s, DL);
@@ -169,7 +169,7 @@ inline legacy::PassManager CPUDriver::preparePassManager() {
     initializeCore(*Registry);
     initializeCodeGen(*Registry);
     initializeLowerIntrinsicsPass(*Registry);
-    
+
     if (LLVM_UNLIKELY(codegen::ShowUnoptimizedIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (!codegen::ShowUnoptimizedIROption.empty()) {

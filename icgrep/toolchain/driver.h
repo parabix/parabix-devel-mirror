@@ -6,7 +6,6 @@
 #include <kernels/kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/relationship.h>
-#include <toolchain/object_cache_manager.h>
 #include <util/slab_allocator.h>
 #include <string>
 #include <vector>
@@ -16,8 +15,6 @@ namespace llvm { class Function; }
 namespace kernel { class KernelBuilder; }
 namespace kernel { class PipelineBuilder; }
 class CBuilder;
-
-class ObjectCacheManager;
 
 class BaseDriver {
     friend class CBuilder;
@@ -53,7 +50,7 @@ public:
     virtual void generateUncachedKernels() = 0;
 
     virtual void * finalizeObject(llvm::Function * mainMethod) = 0;
-    
+
     virtual ~BaseDriver();
 
     llvm::LLVMContext & getContext() const {

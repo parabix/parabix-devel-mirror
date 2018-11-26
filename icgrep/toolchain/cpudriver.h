@@ -32,8 +32,6 @@ typedef llvm::orc::IRCompileLayer<ObjectLayerT, llvm::orc::SimpleCompiler> Compi
 
 #endif
 
-class ObjectCacheManager;
-
 class CPUDriver final : public BaseDriver {
 public:
 
@@ -50,7 +48,7 @@ public:
 private:
 
     std::string getMangledName(std::string s);
-    
+
     llvm::legacy::PassManager preparePassManager();
 
     llvm::Function * addLinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const override;

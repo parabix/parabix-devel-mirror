@@ -28,10 +28,8 @@
 #include <llvm/Support/Format.h>
 #include <sstream>
 
-
 using namespace llvm;
 using namespace boost;
-using boost::container::flat_set;
 
 namespace kernel {
 
@@ -402,7 +400,7 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
 
     // Calculate and/or load the accessible and writable item counts. If they are unneeded,
     // LLVM ought to recognize them as dead code and remove them.
-    generateKernelMethod(b); // must be overridden by the Kernel subtype   
+    generateKernelMethod(b); // must be overridden by the Kernel subtype
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mHandle, CBuilder::Protect::READ);
     }
@@ -600,7 +598,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
             assert (scalar.getType());
             fields.push_back(scalar.getType());
         }
-        mKernelStateType = StructType::create(b->getContext(), fields, getName());        
+        mKernelStateType = StructType::create(b->getContext(), fields, getName());
     }
 
 
@@ -643,7 +641,7 @@ unsigned Kernel::getScalarIndex(const llvm::StringRef fieldName) const {
 void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & b) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
         report_fatal_error(getName() + ": cannot prepare kernel after kernel state finalized");
-    } 
+    }
     addBaseKernelProperties(b);
     mKernelStateType = getModule()->getTypeByName(getName());
     if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {

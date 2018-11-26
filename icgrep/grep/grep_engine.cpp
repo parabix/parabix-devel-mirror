@@ -77,7 +77,7 @@ const auto ENCODING_BITS = 8;
 namespace grep {
 
 using Alphabets = ICGrepKernel::Alphabets;
-    
+
 void GrepCallBackObject::handle_signal(unsigned s) {
     if (static_cast<GrepSignal>(s) == GrepSignal::BinaryFile) {
         mBinaryFile = true;
@@ -93,7 +93,7 @@ extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineN
 extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
     reinterpret_cast<MatchAccumulator *>(accum_addr)->finalize_match(buffer_end);
 }
-    
+
 
 inline static size_t ceil_log2(const size_t v) {
     assert ("log2(0) is undefined!" && v != 0);
@@ -183,7 +183,7 @@ EmitMatchesEngine::EmitMatchesEngine(BaseDriver &driver)
     mFileSuffix = mInitialTab ? "\t:" : ":";
 }
 
-    
+
 bool GrepEngine::hasComponent(Component compon_set, Component c) {
     return (static_cast<component_t>(compon_set) & static_cast<component_t>(c)) != 0;
 }
@@ -195,7 +195,7 @@ void GrepEngine::GrepEngine::setComponent(Component & compon_set, Component c) {
 void GrepEngine::setRecordBreak(GrepRecordBreakKind b) {
     mGrepRecordBreak = b;
 }
-    
+
 void GrepEngine::initFileResult(std::vector<boost::filesystem::path> & paths) {
     const unsigned n = paths.size();
     mResultStrs.resize(n);
@@ -217,7 +217,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
     }
-    
+
     mREs = REs;
     bool allAnchored = true;
     for(unsigned i = 0; i < mREs.size(); ++i) {
@@ -282,7 +282,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     }
 
     bool requiresComplexTest = true;
-    
+
 
 
     if (isSimple) {
@@ -578,12 +578,12 @@ std::string GrepEngine::linePrefix(std::string fileName) {
 // Default: do not show anything
 void GrepEngine::showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) {
 }
-    
+
 void CountOnlyEngine::showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) {
     if (mShowFileNames) strm << linePrefix(fileName);
     strm << grepResult << "\n";
 }
-    
+
 void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileName, std::ostringstream & strm) {
     if (grepResult == mRequiredCount) {
        strm << linePrefix(fileName);
@@ -703,17 +703,13 @@ void * GrepEngine::DoGrepThreadMethod() {
             }
             mFileStatus[printIdx] = FileStatus::PrintComplete;
             printIdx = mNextFileToPrint++;
-        } else {
-            ObjectCacheManager::performIncrementalCacheCleanupStep();
         }
-        sched_yield();
     }
 
     if (pthread_self() != mEngineThread) {
         pthread_exit(nullptr);
     } else {
         // Always perform one final cache cleanup step.
-        ObjectCacheManager::performIncrementalCacheCleanupStep();
         if (mGrepStdIn) {
             std::ostringstream s;
             const auto grepResult = doGrep("-", s);
@@ -724,19 +720,19 @@ void * GrepEngine::DoGrepThreadMethod() {
     return nullptr;
 }
 
-    
-    
+
+
 InternalSearchEngine::InternalSearchEngine(BaseDriver &driver) :
     mGrepRecordBreak(GrepRecordBreakKind::LF),
     mCaseInsensitive(false),
     mGrepDriver(driver),
     mMainMethod(nullptr) {}
-    
+
 void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE) {
     auto & idb = mGrepDriver.getBuilder();
     mSaveSegmentPipelineParallel = codegen::SegmentPipelineParallel;
     codegen::SegmentPipelineParallel = false;
-    
+
     re::CC * breakCC = nullptr;
     if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
         breakCC = re::makeByte(0x0);
@@ -773,9 +769,9 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE)
     StreamSet * RecordBreakStream = E->CreateStreamSet();
     const auto RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
 
-    
+
     StreamSet * BasisBits = nullptr;
-    
+
     if (matchAllLines && excludeNothing) {
         E->CreateKernelCall<DirectCharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, ByteStream, RecordBreakStream);
     } else {
@@ -783,7 +779,7 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE)
         E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
         E->CreateKernelCall<ParabixCharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
     }
-    
+
     StreamSet * MatchingRecords = nullptr;
     if (matchAllLines) {
         MatchingRecords = RecordBreakStream;

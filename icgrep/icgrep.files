@@ -1,6 +1,10 @@
 icgrep.pro
 kernels/directorysearch.cpp
 kernels/directorysearch.h
+toolchain/object_cache.cpp
+toolchain/object_cache.h
+toolchain/object_cache_daemon.cpp
+toolchain/object_cache_util.hpp
 wc.cpp
 CMakeLists.txt
 base64.cpp
@@ -76,8 +80,6 @@ UCD/unicode_set.cpp
 UCD/unicode_set.h
 toolchain/toolchain.h
 toolchain/toolchain.cpp
-toolchain/object_cache_manager.h
-toolchain/object_cache_manager.cpp
 toolchain/object_cache.h
 toolchain/object_cache.cpp
 toolchain/NVPTXDriver.cpp

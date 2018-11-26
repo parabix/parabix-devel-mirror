@@ -59,9 +59,11 @@ link_directories(${Boost_LIBRARY_DIR})
 
 SET(OBJECT_CACHE_SRC toolchain/object_cache.cpp)
 
+SET(OBJECT_CACHE_DAEMON_SRC toolchain/object_cache_daemon.cpp)
+
 SET(GREP_CORE_SRC kernels/linebreak_kernel.cpp kernels/grep_kernel.cpp kernels/scanmatchgen.cpp )
 
-SET(TOOLCHAIN_SRC toolchain/toolchain.cpp toolchain/object_cache_manager.cpp)
+SET(TOOLCHAIN_SRC toolchain/toolchain.cpp)
 
 SET(DRIVER_SRC toolchain/driver.cpp toolchain/cpudriver.cpp)
 if(ENABLE_CUDA_COMPILE)
@@ -133,7 +135,7 @@ add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp 
 add_executable(lz4_decoder lz4_decoder.cpp)
 add_executable(lz4_grep grep_interface.cpp lz4_grep.cpp lz4/grep/lz4_grep_base_generator.cpp lz4/grep/lz4_grep_bytestream_generator.cpp lz4/grep/lz4_grep_bytestream_generator.h lz4/grep/lz4_grep_bitstream_generator.cpp lz4/grep/lz4_grep_bitstream_generator.h lz4/grep/lz4_grep_swizzle_generator.cpp lz4/grep/lz4_grep_swizzle_generator.h)
 add_executable(idisa_test idisa_test.cpp)
-
+add_executable(cachejanitord ${OBJECT_CACHE_DAEMON_SRC})
 
 #Exclude CoRE from default build.
 set_target_properties(core PROPERTIES EXCLUDE_FROM_ALL 1)
@@ -149,6 +151,7 @@ target_link_libraries (core RegExpCompiler ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARI
 target_link_libraries (lz4_decoder LZ4_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4_grep LZ4_Lib UCDlib PabloADT RegExpCompiler CodeGen CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (idisa_test CodeGen PabloADT ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (cachejanitord ${Boost_LIBRARIES})
 
 
 IF(ENABLE_MULTIPLEXING)
@@ -187,7 +190,7 @@ endif()
 IF (MSVC) # using Visual Studio C++
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
 ELSE() # using Clang, GCC, Intel C++, etc
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")  
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
 ENDIF()
 
 #Disable Dual ABI support
@@ -350,7 +353,7 @@ add_custom_target (base64_test
 add_custom_target (abc_gen
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
   COMMAND python abc_testgen.py)
-  
+
 add_custom_target (abc_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
   COMMAND ./run_abc "${CMAKE_BINARY_DIR}/icgrep")
@@ -371,5 +374,4 @@ add_custom_target (viewer
 add_custom_target (text_viewer
   COMMAND python2 viewer.py -t
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance)
-
 
