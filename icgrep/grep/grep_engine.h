@@ -93,6 +93,7 @@ protected:
     // implementation strategy.
     typedef uint32_t component_t;
     enum class Component : component_t {
+        NoComponents = 0,
         MoveMatchesToEOL = 0x01,
         GraphemeClusterBoundary = 0x02
     };

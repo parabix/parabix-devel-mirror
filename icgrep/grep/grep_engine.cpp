@@ -25,9 +25,13 @@
 #include <pablo/pablo_kernel.h>
 #include <cc/alphabet.h>
 #include <re/re_cc.h>
+#include <re/re_diff.h>
+#include <re/re_seq.h>
+#include <re/re_rep.h>
 #include <re/re_alt.h>
 #include <re/re_end.h>
 #include <re/re_name.h>
+#include <re/re_assertion.h>
 #include <re/casing.h>
 #include <re/exclude_CC.h>
 #include <re/to_utf8.h>
@@ -93,7 +97,6 @@ extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineN
 extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
     reinterpret_cast<MatchAccumulator *>(accum_addr)->finalize_match(buffer_end);
 }
-
 
 inline static size_t ceil_log2(const size_t v) {
     assert ("log2(0) is undefined!" && v != 0);
@@ -182,7 +185,6 @@ EmitMatchesEngine::EmitMatchesEngine(BaseDriver &driver)
     mEngineKind = EngineKind::EmitMatches;
     mFileSuffix = mInitialTab ? "\t:" : ":";
 }
-
 
 bool GrepEngine::hasComponent(Component compon_set, Component c) {
     return (static_cast<component_t>(compon_set) & static_cast<component_t>(c)) != 0;
@@ -274,6 +276,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
 
     re::RE * prefixRE;
     re::RE * suffixRE;
+
     // For simple regular expressions with a small number of characters, we
     // can bypass transposition and use the Direct CC compiler.
     const auto isSimple = (numOfREs == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) && (!anyGCB);
@@ -282,10 +285,15 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     }
 
     bool requiresComplexTest = true;
-
+    Component internalComponents = Component::NoComponents;
 
 
     if (isSimple) {
+        if (hasComponent(mRequiredComponents, Component::MoveMatchesToEOL)) {
+            re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), mBreakCC);
+            mREs[0] = re::makeSeq({mREs[0], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
+            setComponent(internalComponents, Component::MoveMatchesToEOL);
+        }
         const auto isWithinByteTestLimit = byteTestsWithinLimit(mREs[0], ByteCClimit);
         const auto hasTriCC = hasTriCCwithinLimit(mREs[0], ByteCClimit, prefixRE, suffixRE);
         ICGrepKernel::Externals externals;
@@ -411,7 +419,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         P->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
         Matches = MergedMatches;
     }
-    if (hasComponent(mRequiredComponents, Component::MoveMatchesToEOL)) {
+    if (hasComponent(mRequiredComponents, Component::MoveMatchesToEOL) && !hasComponent(internalComponents, Component::MoveMatchesToEOL)) {
         StreamSet * const MovedMatches = P->CreateStreamSet();
         P->CreateKernelCall<MatchedLinesKernel>(Matches, LineBreakStream, MovedMatches);
         Matches = MovedMatches;
@@ -704,12 +712,12 @@ void * GrepEngine::DoGrepThreadMethod() {
             mFileStatus[printIdx] = FileStatus::PrintComplete;
             printIdx = mNextFileToPrint++;
         }
+        //sched_yield();
     }
 
     if (pthread_self() != mEngineThread) {
         pthread_exit(nullptr);
     } else {
-        // Always perform one final cache cleanup step.
         if (mGrepStdIn) {
             std::ostringstream s;
             const auto grepResult = doGrep("-", s);
@@ -719,8 +727,6 @@ void * GrepEngine::DoGrepThreadMethod() {
     }
     return nullptr;
 }
-
-
 
 InternalSearchEngine::InternalSearchEngine(BaseDriver &driver) :
     mGrepRecordBreak(GrepRecordBreakKind::LF),
@@ -768,7 +774,6 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE)
 
     StreamSet * RecordBreakStream = E->CreateStreamSet();
     const auto RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
-
 
     StreamSet * BasisBits = nullptr;
 
