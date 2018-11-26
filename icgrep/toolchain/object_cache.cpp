@@ -105,7 +105,7 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
         Path fileName(mCachePath);
         sys::path::append(fileName, CACHE_PREFIX);
         fileName.append(moduleId);
-        fileName.append("." KERNEL_FILE_EXTENSION);
+        fileName.append(KERNEL_FILE_EXTENSION);
 
         auto kernelBuffer = MemoryBuffer::getFile(fileName, -1, false);
         if (kernelBuffer) {
@@ -124,7 +124,7 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
                         goto invalid;
                     }
                 }
-                sys::path::replace_extension(fileName, "." OBJECT_FILE_EXTENSION);
+                sys::path::replace_extension(fileName, OBJECT_FILE_EXTENSION);
                 auto objectBuffer = MemoryBuffer::getFile(fileName.c_str(), -1, false);
                 if (LLVM_LIKELY(objectBuffer)) {
                     Module * const m = M.release();
@@ -133,10 +133,10 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
                     kernel->setModule(m);
                     kernel->prepareCachedKernel(idb);
                     mCachedObject.emplace(moduleId, std::make_pair(m, std::move(objectBuffer.get())));
-                    // update the modified time of the .kernel, .o and .sig files
+                    // update the modified time of the .kernel, .o and .kernel files
                     const auto access_time = currentTime();
                     fs::last_write_time(fileName.c_str(), access_time);
-                    sys::path::replace_extension(fileName, "." KERNEL_FILE_EXTENSION);
+                    sys::path::replace_extension(fileName, KERNEL_FILE_EXTENSION);
                     fs::last_write_time(fileName.c_str(), access_time);
                     return true;
                 }
@@ -171,7 +171,7 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
         Path objectName(mCachePath);
         sys::path::append(objectName, CACHE_PREFIX);
         objectName.append(moduleId);
-        objectName.append("." OBJECT_FILE_EXTENSION);
+        objectName.append(OBJECT_FILE_EXTENSION);
 
         // Write the object code
         std::error_code EC;
@@ -196,7 +196,7 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
             md->addOperand(MDNode::get(H->getContext(), {sigCopy}));
         }
 
-        sys::path::replace_extension(objectName, "." KERNEL_FILE_EXTENSION);
+        sys::path::replace_extension(objectName, KERNEL_FILE_EXTENSION);
         raw_fd_ostream kernelFile(objectName.str(), EC, sys::fs::F_None);
         WriteBitcodeToFile(H.get(), kernelFile);
         kernelFile.close();
