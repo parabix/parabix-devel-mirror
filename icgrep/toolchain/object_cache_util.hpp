@@ -21,7 +21,11 @@
 #define SECONDS_PER_HOUR (60 * 60)
 #define CACHE_ENTRY_EXPIRY_PERIOD (CACHE_ENTRY_MAX_HOURS * SECONDS_PER_HOUR)
 
+#ifdef BOOST_ATTRIBUTE_UNUSED
 #define UNUSED BOOST_ATTRIBUTE_UNUSED
+#else
+#define UNUSED
+#endif
 
 using namespace boost;
 using namespace std::chrono;
