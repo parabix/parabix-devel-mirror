@@ -238,9 +238,11 @@ void ParabixObjectCache::initiateCacheCleanUp() noexcept {
         if (fork() == 0) {
             char * const cachePath = const_cast<char *>(mCachePath.c_str());
             char * args[3] = {const_cast<char *>(CACHE_JANITOR_FILE_NAME), cachePath, nullptr};
-            fs::path path(codegen::ProgramName);
-            path.remove_filename().append(CACHE_JANITOR_FILE_NAME);
-            if (execvp(const_cast<char *>(path.c_str()), args) < 0) {
+            Path janitorFileName(codegen::ProgramName);
+            sys::path::remove_filename(janitorFileName);
+            sys::path::append(janitorFileName, CACHE_JANITOR_FILE_NAME);
+            char * const janitorPath = const_cast<char *>(janitorFileName.c_str());
+            if (execvp(janitorPath, args) < 0) {
                 // syslog?
             }
         }
