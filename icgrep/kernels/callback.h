@@ -36,6 +36,8 @@ namespace kernel {
         driver->LinkFunction(theKernel, "signal_dispatcher", &signal_dispatcher);
  
 */
+    
+enum {NULL_SIGNAL = 0};
  
 class SignallingObject {
 public:

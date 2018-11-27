@@ -22,16 +22,18 @@ public:
               StreamSet * const codeUnitStream,
               StreamSet * const BasisBits,
               const cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian,
-              const bool aligned = true);
+              bool abortOnNull = false, Scalar * signalNullObject = nullptr);
 
 
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
+    Bindings makeOutputBindings(StreamSet * const BasisBits, bool abortOnNull);
+    Bindings makeInputScalarBindings(bool abortOnNull, Scalar * signalNullObject);
     void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
 private:
     const cc::BitNumbering mBasisSetNumbering;
-    const bool mAligned;
+    bool mAbortOnNull;
     unsigned mNumOfStreams;
 };
 

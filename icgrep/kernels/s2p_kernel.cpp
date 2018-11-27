@@ -4,11 +4,12 @@
  */
 
 #include "s2p_kernel.h"
+#include <kernels/callback.h>
 #include <kernels/kernel_builder.h>
 #include <pablo/pabloAST.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_pack.h>
-
+#include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
@@ -113,50 +114,111 @@ void s2p_ideal(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[],
 #endif
 
 void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfBlocks) {
+    Module * m = kb->getModule();
+    DataLayout DL(m);
+    IntegerType * const intPtrTy = DL.getIntPtrType(kb->getContext());
+    PointerType * const voidPtrTy = kb->getVoidPtrTy();
     BasicBlock * entry = kb->GetInsertBlock();
-    BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
-    BasicBlock * s2pDone = kb->CreateBasicBlock("s2pDone");
+    BasicBlock * s2pLoop = kb->CreateBasicBlock("s2pLoop");
+    BasicBlock * s2pFinalize = kb->CreateBasicBlock("s2pFinalize");
     Constant * const ZERO = kb->getSize(0);
-
-    kb->CreateBr(processBlock);
+    // Declarations for AbortOnNull mode:
+    PHINode * nullCheckPhi = nullptr;
+    Value * nonNullSoFar = nullptr;
     
-    kb->SetInsertPoint(processBlock);
+    kb->CreateBr(s2pLoop);
+    
+    kb->SetInsertPoint(s2pLoop);
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
     blockOffsetPhi->addIncoming(ZERO, entry);
-
+    if (mAbortOnNull) {
+        nullCheckPhi = kb->CreatePHI(kb->getBitBlockType(), 2);
+        nullCheckPhi->addIncoming(kb->allOnes(), entry);
+    }
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        if (mAligned) {
-            bytepack[i] = kb->loadInputStreamPack("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
-        } else {
-            Value * ptr = kb->getInputStreamPackPtr("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
-            // CreateLoad defaults to aligned here, so we need to force the alignment to 1 byte.
-            bytepack[i] = kb->CreateAlignedLoad(ptr, 1);
-        }
+        bytepack[i] = kb->loadInputStreamPack("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
     }
     Value * basisbits[8];
     s2p(kb, bytepack, basisbits, mBasisSetNumbering);
     for (unsigned i = 0; i < mNumOfStreams; ++i) {
         kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits[i]);
     }
+    if (mAbortOnNull) {
+        Value * nonNull = kb->simd_or(kb->simd_or(kb->simd_or(basisbits[0], basisbits[1]),
+                                                  kb->simd_or(basisbits[2], basisbits[3])),
+                                      kb->simd_or(kb->simd_or(basisbits[4], basisbits[5]),
+                                                  kb->simd_or(basisbits[6], basisbits[7])));
+        nonNullSoFar = kb->simd_and(nonNull, nullCheckPhi);
+        nullCheckPhi->addIncoming(nonNullSoFar, s2pLoop);
+    }
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
-    blockOffsetPhi->addIncoming(nextBlk, processBlock);
+    blockOffsetPhi->addIncoming(nextBlk, s2pLoop);
     Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
-    kb->CreateCondBr(moreToDo, processBlock, s2pDone);
-    kb->SetInsertPoint(s2pDone);
+    
+    kb->CreateCondBr(moreToDo, s2pLoop, s2pFinalize);
+    
+    kb->SetInsertPoint(s2pFinalize);
+    //  s2p is complete, except for null byte check.
+    if (mAbortOnNull) {
+        BasicBlock * nullByteDetected = kb->CreateBasicBlock("nullByteDetected");
+        BasicBlock * nullInFileDetected = kb->CreateBasicBlock("nullInFileDetected");
+        BasicBlock * s2pExit = kb->CreateBasicBlock("s2pExit");
+        Value * itemsToDo = kb->getAccessibleItemCount("byteStream");
+        Value * anyNull = kb->bitblock_any(kb->simd_not(nonNullSoFar));
+        kb->CreateCondBr(anyNull, nullByteDetected, s2pExit);
+        
+        kb->SetInsertPoint(nullByteDetected);
+        // A null byte has been detected, determine its position and whether it is past EOF.
+        Value * byteStreamBasePtr = kb->getInputStreamBlockPtr("byteStream", ZERO, ZERO);
+        Value * ptrToNull = kb->CreateMemChr(kb->CreatePointerCast(byteStreamBasePtr, voidPtrTy), kb->getInt32(0), itemsToDo);
+        Value * nullInFile = kb->CreateICmpNE(ptrToNull, ZERO);
+        kb->CreateCondBr(nullInFile, nullInFileDetected, s2pExit);
+        kb->SetInsertPoint(nullInFileDetected);
+        // A null byte has been located within the file; set the termination code and call the signal handler.
+        Value * nullPosn = kb->CreateSub(kb->CreatePtrToInt(ptrToNull, intPtrTy), kb->CreatePtrToInt(byteStreamBasePtr, intPtrTy));
+        kb->setTerminationSignal();
+        Function * const dispatcher = m->getFunction("signal_dispatcher"); assert (dispatcher);
+        Value * handler = kb->getScalarField("handler_address");
+        kb->CreateCall(dispatcher, {handler, ConstantInt::get(kb->getInt32Ty(), NULL_SIGNAL)});
+        kb->CreateBr(s2pExit);
+        kb->SetInsertPoint(s2pExit);
+        PHINode * const produced = kb->CreatePHI(kb->getSizeTy(), 3);
+        produced->addIncoming(itemsToDo, nullByteDetected);
+        produced->addIncoming(nullPosn, nullInFileDetected);
+        produced->addIncoming(itemsToDo, s2pFinalize);
+        Value * producedCount = kb->getProducedItemCount("basisBits");
+        producedCount = kb->CreateAdd(producedCount, produced);
+        kb->setProducedItemCount("basisBits", producedCount);
+    }
 }
 
-S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> &, StreamSet * const codeUnitStream, StreamSet * const BasisBits, const cc::BitNumbering numbering, const bool aligned)
-: MultiBlockKernel("s2p" + std::to_string(BasisBits->getNumElements()) + (aligned ? "a" : "u") + cc::numberingSuffix(numbering),
+Bindings S2PKernel::makeOutputBindings(StreamSet * const BasisBits, bool abortOnNull) {
+    if (abortOnNull) {
+        return {Binding("basisBits", BasisBits, FixedRate(), Deferred())};
+    } else {
+        return {Binding("basisBits", BasisBits)};
+    }
+}
+
+Bindings S2PKernel::makeInputScalarBindings(bool abortOnNull, Scalar * signalNullObject) {
+    if (abortOnNull) {
+        return {Binding{"handler_address", signalNullObject}};
+    } else {
+        return {};
+    }
+}
+
+S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> &, StreamSet * const codeUnitStream, StreamSet * const BasisBits, const cc::BitNumbering numbering,
+                     bool abortOnNull, Scalar * signalNullObject)
+    : MultiBlockKernel((abortOnNull ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements()) + cc::numberingSuffix(numbering),
 {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}},
-{Binding{"basisBits", BasisBits}}, {}, {}, {}),
+makeOutputBindings(BasisBits, abortOnNull), makeInputScalarBindings(abortOnNull, signalNullObject), {}, {}),
 mBasisSetNumbering(numbering),
-mAligned(aligned),
+mAbortOnNull(abortOnNull),
 mNumOfStreams(BasisBits->getNumElements()) {
     assert (codeUnitStream->getFieldWidth() == BasisBits->getNumElements());
-    if (!aligned) {
-        mInputStreamSets[0].addAttribute(Misaligned());
-    }
+    addAttribute(CanTerminateEarly());
 }
 
 inline std::string makeMultiS2PName(const StreamSets & outputStreams, const cc::BitNumbering basisNumbering, const bool aligned) {
