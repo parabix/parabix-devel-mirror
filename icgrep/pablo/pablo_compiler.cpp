@@ -25,6 +25,7 @@
 #include <pablo/pe_pack.h>
 #include <pablo/pe_var.h>
 #include <pablo/ps_assign.h>
+#include <pablo/ps_terminate.h>
 #ifdef USE_CARRYPACK_MANAGER
 #include <pablo/carrypack_manager.h>
 #else
@@ -480,6 +481,24 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             Value * const to = b->simd_xor(compileExpression(b, sthru->getScanTo()), b->getScalarField("EOFmask"));
             Value * const sum = mCarryManager->addCarryInCarryOut(b, sthru, from, b->simd_or(from, b->simd_not(to)));
             value = b->simd_and(sum, to);
+        } else if (const TerminateAt * s = dyn_cast<TerminateAt>(stmt)) {
+            Value * signal_strm = compileExpression(b, s->getExpr());
+            llvm::errs() << "Here\n";
+            b->CallPrintRegister("signal_strm", signal_strm);
+            BasicBlock * signalCallBack = b->CreateBasicBlock("signalCallBack");
+            BasicBlock * postSignal = b->CreateBasicBlock("postSignal");
+            b->CreateCondBr(b->bitblock_any(signal_strm), signalCallBack, postSignal);
+            b->SetInsertPoint(signalCallBack);
+            // Perhaps check for handler address and skip call back if none???
+            Value * handler = b->getScalarField("handler_address");
+            Function * const dispatcher = b->getModule()->getFunction("signal_dispatcher"); assert (dispatcher);
+            b->CreateCall(dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), s->getSignalCode())});
+            //Value * rel_position = b->createCountForwardZeroes(signal_strm);
+            //Value * position = b->CreateAdd(b->getProcessedItemCount(), rel_position);
+            b->setTerminationSignal();
+            b->CreateBr(postSignal);
+            b->SetInsertPoint(postSignal);
+            value = signal_strm;
         } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
             expr = cast<Assign>(stmt)->getVariable();
             value = compileExpression(b, cast<Assign>(stmt)->getValue());

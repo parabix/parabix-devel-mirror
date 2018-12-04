@@ -24,6 +24,7 @@
 #include <pablo/pe_var.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/ps_assign.h>
+#include <pablo/ps_terminate.h>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/DerivedTypes.h>  // for get getSequentialElementType
 #include <llvm/Support/raw_os_ostream.h>
@@ -169,6 +170,10 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             out << " = pablo.AtEOF(";
             print(e->getExpr(), out);
             out << ")";
+        } else if (const TerminateAt * s = dyn_cast<TerminateAt>(stmt)) {
+            out << " = pablo.TerminateAt(";
+            print(s->getExpr(), out);
+            out << ", " << std::to_string(s->getSignalCode()) << ")";
         } else {
             out << "???";
         }

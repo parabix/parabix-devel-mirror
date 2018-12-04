@@ -174,6 +174,7 @@ const String & Statement::getName() const {
             MAKE_PREFIX(MatchStar, "matchstar");
             MAKE_PREFIX(InFile, "inFile");
             MAKE_PREFIX(AtEOF, "atEOF");
+            MAKE_PREFIX(TerminateAt, "terminateAt");
             // Statistics operations
             MAKE_PREFIX(Count, "count");
             // Misc. operations

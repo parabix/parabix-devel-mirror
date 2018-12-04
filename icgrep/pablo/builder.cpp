@@ -16,6 +16,7 @@
 #include <pablo/pe_ones.h>
 #include <pablo/pe_var.h>
 #include <pablo/ps_assign.h>
+#include <pablo/ps_terminate.h>
 #include <boost/preprocessor/variadic/elem.hpp>
 #include <type_traits>
 
@@ -487,13 +488,23 @@ PabloAST * PabloBuilder::createAtEOF(PabloAST * expr, const llvm::StringRef & pr
     return MAKE_NAMED_UNARY(AtEOF, prefix, expr);
 }
 
+PabloAST * PabloBuilder::createTerminateAt(PabloAST * strm, not_null<Integer *> code) {
+    if (isa<Zeroes>(strm)) return strm;
+    return MAKE_BINARY(TerminateAt, strm, code.get());
+}
+
+PabloAST * PabloBuilder::createTerminateAt(PabloAST * strm, not_null<Integer *> code, const llvm::StringRef & prefix) {
+    if (isa<Zeroes>(strm)) return strm;
+    return MAKE_NAMED_BINARY(TerminateAt, prefix, strm, code.get());
+}
+
 PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass) {
     if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
         return marker;
     }
     return MAKE_BINARY(MatchStar, marker, charclass);
 }
-
+    
 PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass, const llvm::StringRef & prefix) {
     if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
         return marker;

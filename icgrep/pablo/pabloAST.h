@@ -85,6 +85,7 @@ public:
         , MatchStar
         , InFile
         , AtEOF
+        , TerminateAt
         // Statistics operations
         , Count
         // Variable assignments

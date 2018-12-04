@@ -23,6 +23,7 @@
 #include <pablo/pe_var.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/ps_assign.h>
+#include <pablo/ps_terminate.h>
 #include <pablo/pablo_kernel.h>
 #include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Module.h>
@@ -76,6 +77,11 @@ InFile * PabloBlock::createInFile(PabloAST * expr, const String * const name) {
 AtEOF * PabloBlock::createAtEOF(PabloAST * expr, const String * const name) {
     assert (expr);
     return insertAtInsertionPoint(new (mAllocator) AtEOF(expr, name, mAllocator));
+}
+
+TerminateAt * PabloBlock::createTerminateAt(PabloAST * strm, Integer *  code, const String * const name) {
+    assert (strm); assert(code);
+    return insertAtInsertionPoint(new (mAllocator) TerminateAt(strm, code, name, mAllocator));
 }
 
 /// BINARY CREATE FUNCTIONS

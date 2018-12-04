@@ -42,6 +42,7 @@ namespace pablo { class Sel; }
 namespace pablo { class Repeat; }
 namespace pablo { class String; }
 namespace pablo { class Subtract; }
+namespace pablo { class TerminateAt; }
 namespace pablo { class Var; }
 namespace pablo { class Xor; }
 namespace pablo { class Zeroes; }
@@ -139,9 +140,19 @@ public:
     AtEOF * createAtEOF(PabloAST * expr, const llvm::StringRef & prefix) {
         return createAtEOF(expr, makeName(prefix));
     }
-
+    
     AtEOF * createAtEOF(PabloAST * expr, const String * const name = nullptr);
 
+    TerminateAt * createTerminateAt(PabloAST * strm, Integer * code) {
+        return createTerminateAt(strm, code, nullptr);
+    }
+    
+    TerminateAt * createTerminateAt(PabloAST * strm, Integer * code, const llvm::StringRef & prefix) {
+        return createTerminateAt(strm, code, makeName(prefix));
+    }
+    
+    TerminateAt * createTerminateAt(PabloAST * strm, Integer * code, const String * const name);
+    
     Extract * createExtract(Var * array, Integer * index);
 
     Assign * createAssign(PabloAST * const var, PabloAST * const value);

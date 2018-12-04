@@ -206,6 +206,18 @@ public:
     
     PabloAST * createAtEOF(PabloAST * expr, const llvm::StringRef & prefix);
     
+    PabloAST * createTerminateAt(PabloAST * strm, not_null<Integer *> code);
+    
+    PabloAST * createTerminateAt(PabloAST * strm, not_null<Integer *> code, const llvm::StringRef & prefix);
+    
+    PabloAST * createTerminateAt(PabloAST * strm, int64_t code) {
+        return createTerminateAt(strm, mPb->getInteger(code));
+    }
+    
+    PabloAST * createTerminateAt(PabloAST * strm, int64_t code, const llvm::StringRef & prefix) {
+        return createTerminateAt(strm, mPb->getInteger(code), prefix);
+    }
+    
     PabloAST * createAdd(PabloAST * expr1, PabloAST * expr2);
 
     PabloAST * createSubtract(PabloAST * expr1, PabloAST * expr2);
