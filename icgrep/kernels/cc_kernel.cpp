@@ -18,15 +18,27 @@ using namespace llvm;
 // ccNameStr, std::vector<re::CC *>{cc}, ByteStream, ccStream
 
 DirectCharacterClassKernelBuilder::DirectCharacterClassKernelBuilder(
-        const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * byteStream, StreamSet * ccStream)
-: PabloKernel(b, ccSetName +"_direct",
+        const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * byteStream, StreamSet * ccStream, Scalar * signalNullObject)
+: PabloKernel(b, ccSetName + (signalNullObject ? "_direct_abort_on_null" : "_direct"),
 // input
 {Binding{"byteStream", byteStream}},
 // output
-{Binding{"ccStream", ccStream}})
-, mCharClasses(std::move(charClasses)) {
+{Binding{"ccStream", ccStream}},
+makeInputScalarBindings(signalNullObject),
+{}), mCharClasses(std::move(charClasses)), mAbortOnNull(signalNullObject != nullptr) {
     if (LLVM_UNLIKELY(ccStream->getNumElements() != mCharClasses.size())) {
         report_fatal_error("cc streamset must have " + std::to_string(mCharClasses.size()) + " streams");
+    }
+    if (mAbortOnNull) {
+        addAttribute(CanTerminateEarly());
+    }
+}
+
+Bindings DirectCharacterClassKernelBuilder::makeInputScalarBindings(Scalar * signalNullObject) {
+    if (signalNullObject) {
+        return {Binding{"handler_address", signalNullObject}};
+    } else {
+        return {};
     }
 }
 
@@ -34,8 +46,17 @@ void DirectCharacterClassKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Direct_CC_Compiler ccc(getEntryScope(), getInputStreamSet("byteStream")[0]);
     Var * outputVar = getOutputStreamVar("ccStream");
+    PabloAST * nonNull = nullptr;
+    if (mAbortOnNull) {
+        PabloAST * nullCC = pb.createTerminateAt(ccc.compileCC(makeCC(0, &cc::Byte)), pb.getInteger(0));
+        nonNull = pb.createNot(nullCC);
+    }
     for (unsigned i = 0; i < mCharClasses.size(); ++i) {
-        pb.createAssign(pb.createExtract(outputVar, i), ccc.compileCC(mCharClasses[i]));
+        PabloAST * cc = ccc.compileCC(mCharClasses[i]);
+        if (mAbortOnNull) {
+            cc = pb.createAnd(nonNull, cc);
+        }
+        pb.createAssign(pb.createExtract(outputVar, i), cc);
     }
 }
 

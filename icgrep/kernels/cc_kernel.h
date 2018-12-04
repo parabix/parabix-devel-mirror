@@ -6,6 +6,7 @@
 #define CC_KERNEL_H
 
 #include <pablo/pablo_kernel.h>
+#include <kernels/callback.h>
 
 namespace IDISA { class IDISA_Builder; }
 namespace re { class CC; }
@@ -14,11 +15,13 @@ namespace kernel {
 
 class DirectCharacterClassKernelBuilder final : public pablo::PabloKernel {
 public:    
-    DirectCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * byteStream, StreamSet * ccStream);
+    DirectCharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * byteStream, StreamSet * ccStream, Scalar * signalNullObject = nullptr);
 protected:
     void generatePabloMethod() override;
+    Bindings makeInputScalarBindings(Scalar * signalNullObject);
 private:
     const std::vector<re::CC *> mCharClasses;
+    bool mAbortOnNull;
 };
 
 class ParabixCharacterClassKernelBuilder final : public pablo::PabloKernel {

@@ -483,8 +483,6 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             value = b->simd_and(sum, to);
         } else if (const TerminateAt * s = dyn_cast<TerminateAt>(stmt)) {
             Value * signal_strm = compileExpression(b, s->getExpr());
-            llvm::errs() << "Here\n";
-            b->CallPrintRegister("signal_strm", signal_strm);
             BasicBlock * signalCallBack = b->CreateBasicBlock("signalCallBack");
             BasicBlock * postSignal = b->CreateBasicBlock("postSignal");
             b->CreateCondBr(b->bitblock_any(signal_strm), signalCallBack, postSignal);

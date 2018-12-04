@@ -316,6 +316,8 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             } else {
                 P->CreateKernelCall<ByteBitGrepKernel>(prefixRE, suffixRE, ByteStream, MatchResults, externals);
             }
+            Kernel * LB_nullK = P->CreateKernelCall<DirectCharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, ByteStream, LineBreakStream, callbackObject);
+            mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
             P->CreateKernelCall<DirectCharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, ByteStream, LineBreakStream);
             requiresComplexTest = false;
         }
@@ -327,7 +329,8 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         } else {
-            P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+            Kernel * s2pK = P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits, cc::BitNumbering::LittleEndian, callbackObject);
+            mGrepDriver.LinkFunction(s2pK, "signal_dispatcher", kernel::signal_dispatcher);
         }
 
         StreamSet * const RequiredStreams = P->CreateStreamSet();

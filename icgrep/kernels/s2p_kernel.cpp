@@ -195,14 +195,14 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
 
 Bindings S2PKernel::makeOutputBindings(StreamSet * const BasisBits, bool abortOnNull) {
     if (abortOnNull) {
-        return {Binding("basisBits", BasisBits, FixedRate(), Deferred())};
+        return {Binding("basisBits", BasisBits)};
     } else {
         return {Binding("basisBits", BasisBits)};
     }
 }
 
-Bindings S2PKernel::makeInputScalarBindings(bool abortOnNull, Scalar * signalNullObject) {
-    if (abortOnNull) {
+Bindings S2PKernel::makeInputScalarBindings(Scalar * signalNullObject) {
+    if (signalNullObject) {
         return {Binding{"handler_address", signalNullObject}};
     } else {
         return {};
@@ -210,12 +210,12 @@ Bindings S2PKernel::makeInputScalarBindings(bool abortOnNull, Scalar * signalNul
 }
 
 S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> &, StreamSet * const codeUnitStream, StreamSet * const BasisBits, const cc::BitNumbering numbering,
-                     bool abortOnNull, Scalar * signalNullObject)
-    : MultiBlockKernel((abortOnNull ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements()) + cc::numberingSuffix(numbering),
+                     Scalar * signalNullObject)
+    : MultiBlockKernel((signalNullObject ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements()) + cc::numberingSuffix(numbering),
 {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}},
-makeOutputBindings(BasisBits, abortOnNull), makeInputScalarBindings(abortOnNull, signalNullObject), {}, {}),
+makeOutputBindings(BasisBits, signalNullObject), makeInputScalarBindings(signalNullObject), {}, {}),
 mBasisSetNumbering(numbering),
-mAbortOnNull(abortOnNull),
+mAbortOnNull(signalNullObject != nullptr),
 mNumOfStreams(BasisBits->getNumElements()) {
     assert (codeUnitStream->getFieldWidth() == BasisBits->getNumElements());
     addAttribute(CanTerminateEarly());
