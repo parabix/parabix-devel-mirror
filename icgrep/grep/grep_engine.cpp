@@ -318,7 +318,6 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             }
             Kernel * LB_nullK = P->CreateKernelCall<DirectCharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, ByteStream, LineBreakStream, callbackObject);
             mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
-            P->CreateKernelCall<DirectCharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, ByteStream, LineBreakStream);
             requiresComplexTest = false;
         }
     }
