@@ -51,37 +51,54 @@ protected:
 };
 
 
-struct ICGrepSignature {
-    ICGrepSignature(re::RE * re_ast);
+class GrepKernelOptions {
+    friend class ICGrepKernel;
+public:
+    using Externals = std::vector<std::pair<std::string, StreamSet *>>;
+    using Alphabets = std::vector<std::pair<std::shared_ptr<cc::Alphabet>, StreamSet *>>;
+    GrepKernelOptions() :
+        mBasisSetNumbering(cc::BitNumbering::LittleEndian),
+        mIndexingAlphabet(&cc::Byte),
+        mPrefixRE(nullptr) {}
+    void setNumbering(cc::BitNumbering numbering);
+    void setIndexingAlphabet(cc::Alphabet * a);
+    void setSource(StreamSet * s);
+    void setResults(StreamSet * r);
+    void addExternal(std::string name, StreamSet * strm);
+    void addAlphabet(std::shared_ptr<cc::Alphabet> a, StreamSet * basis);
+    void setRE(re::RE * re);
+    void setPrefixRE(re::RE * re);
+
 protected:
-    re::RE * const  mRE;
+    Bindings streamSetInputBindings();
+    Bindings streamSetOutputBindings();
+    Bindings scalarInputBindings();
+    Bindings scalarOutputBindings();
+    std::string getSignature();
+
+private:
+    cc::BitNumbering mBasisSetNumbering;
+    const cc::Alphabet * mIndexingAlphabet;
+    StreamSet * mSource;
+    StreamSet * mResults;
+    Externals mExternals;
+    Alphabets mAlphabets;
+    re::RE * mRE;
+    re::RE * mPrefixRE;
     std::string     mSignature;
 };
 
-    
-class ICGrepKernel : public ICGrepSignature, public pablo::PabloKernel {
+
+class ICGrepKernel : public pablo::PabloKernel {
 public:
-
-    using Externals = std::vector<std::pair<std::string, StreamSet *>>;
-    using Alphabets = std::vector<std::pair<std::shared_ptr<cc::Alphabet>, StreamSet *>>;
-
     ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder,
-                 re::RE * const re_ast, StreamSet * const BasisBits, StreamSet * const MatchResults,
-                 const Externals externals = {}, const Alphabets alphabets = {},
-                 const cc::BitNumbering basisSetNumbering = cc::BitNumbering::LittleEndian,
-                 const bool cachable = true);
+                 std::unique_ptr<GrepKernelOptions> options);
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) override;
-    bool isCachable() const override { return mIsCachable; }
+    bool isCachable() const override { return true; }
     bool hasFamilyName() const override { return true; }
 protected:
     void generatePabloMethod() override;
-private:
-    static Bindings makeInputBindings(StreamSet * const basis, const Externals & externals, const Alphabets & alphabets);
-protected:
-    const Externals mExternals;
-    const Alphabets mAlphabets;
-    const cc::BitNumbering mBasisSetNumbering;
-    const bool mIsCachable;
+    std::unique_ptr<GrepKernelOptions> mOptions;
 };
     
 struct ByteBitGrepSignature {

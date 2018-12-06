@@ -80,8 +80,6 @@ const auto ENCODING_BITS = 8;
 
 namespace grep {
 
-using Alphabets = ICGrepKernel::Alphabets;
-
 void GrepCallBackObject::handle_signal(unsigned s) {
     if (static_cast<GrepSignal>(s) == GrepSignal::BinaryFile) {
         mBinaryFile = true;
@@ -287,6 +285,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     bool requiresComplexTest = true;
     Component internalComponents = Component::NoComponents;
 
+    
 
     if (isSimple) {
         if (hasComponent(mRequiredComponents, Component::MoveMatchesToEOL)) {
@@ -294,9 +293,9 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             mREs[0] = re::makeSeq({mREs[0], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
             setComponent(internalComponents, Component::MoveMatchesToEOL);
         }
+        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
         const auto isWithinByteTestLimit = byteTestsWithinLimit(mREs[0], ByteCClimit);
         const auto hasTriCC = hasTriCCwithinLimit(mREs[0], ByteCClimit, prefixRE, suffixRE);
-        ICGrepKernel::Externals externals;
         if (isWithinByteTestLimit || hasTriCC) {
             if (MultithreadedSimpleRE && hasTriCC) {
                 auto CCs = re::collectCCs(prefixRE, cc::Byte);
@@ -306,15 +305,23 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                     auto ccNameStr = ccName->getFullName();
                     StreamSet * const ccStream = P->CreateStreamSet(1, 1);
                     P->CreateKernelCall<DirectCharacterClassKernelBuilder>(ccNameStr, std::vector<re::CC *>{cc}, ByteStream, ccStream);
-                    externals.emplace_back(ccNameStr, ccStream);
+                    options->addExternal(ccNameStr, ccStream);
                 }
             }
             StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
             MatchResultsBufs[0] = MatchResults;
             if (isWithinByteTestLimit) {
-                P->CreateKernelCall<ICGrepKernel>(mREs[0], ByteStream, MatchResults, externals);
+                options->setRE(mREs[0]);
+                options->setSource(ByteStream);
+                options->setResults(MatchResults);
+                P->CreateKernelCall<ICGrepKernel>(std::move(options));
             } else {
-                P->CreateKernelCall<ByteBitGrepKernel>(prefixRE, suffixRE, ByteStream, MatchResults, externals);
+                //P->CreateKernelCall<ByteBitGrepKernel>(prefixRE, suffixRE, ByteStream, MatchResults, externals);
+                options->setPrefixRE(prefixRE);
+                options->setRE(suffixRE);
+                options->setSource(ByteStream);
+                options->setResults(MatchResults);
+                P->CreateKernelCall<ICGrepKernel>(std::move(options));
             }
             Kernel * LB_nullK = P->CreateKernelCall<DirectCharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, ByteStream, LineBreakStream, callbackObject);
             mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
@@ -328,6 +335,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         } else {
+            //P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
             Kernel * s2pK = P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits, cc::BitNumbering::LittleEndian, callbackObject);
             mGrepDriver.LinkFunction(s2pK, "signal_dispatcher", kernel::signal_dispatcher);
         }
@@ -365,10 +373,10 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         }
 
         for(unsigned i = 0; i < numOfREs; ++i) {
-            ICGrepKernel::Externals externals;
+            std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
             if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
-                externals.emplace_back("UTF8_LB", LineBreakStream);
-                externals.emplace_back("UTF8_nonfinal", RequiredStreams);
+                options->addExternal("UTF8_LB", LineBreakStream);
+                options->addExternal("UTF8_nonfinal", RequiredStreams);
             }
             std::set<re::Name *> UnicodeProperties;
             if (PropertyKernels) {
@@ -379,11 +387,11 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                     if (LLVM_UNLIKELY(f == propertyStream.end())) {
                         report_fatal_error(name + " not found");
                     }
-                    externals.emplace_back(name, f->second);
+                    options->addExternal(name, f->second);
                 }
             }
             if (hasGCB[i]) { assert (GCB_stream);
-                externals.emplace_back("\\b{g}", GCB_stream);
+                options->addExternal("\\b{g}", GCB_stream);
             }
 
             StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
@@ -392,7 +400,9 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             if (CC_Multiplexing) {
                 const auto UnicodeSets = re::collectCCs(mREs[i], cc::Unicode, std::set<re::Name *>{re::makeZeroWidth("\\b{g}")});
                 if (UnicodeSets.size() <= 1) {
-                    P->CreateKernelCall<ICGrepKernel>(mREs[i], BasisBits, MatchResults, externals);
+                    options->setRE(mREs[i]);
+                    options->setSource(BasisBits);
+                    options->setResults(MatchResults);
                 } else {
                     auto mpx = std::make_shared<MultiplexedAlphabet>("mpx", UnicodeSets);
                     mREs[i] = transformCCs(mpx, mREs[i]);
@@ -403,13 +413,17 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                     #warning TODO: multiplexed CCs ought to generate unique names. Make the name also dependent on alphabet.
                     // Multiplexing Grep Kernel is not Cachable, since for now it use string representation of RE AST as cache key,
                     // whileit is possible that two multiplexed REs with the same name "mpx_1" have different alphabets
-
-                    Alphabets alphabets;
-                    alphabets.emplace_back(mpx, CharClasses);
-                    P->CreateKernelCall<ICGrepKernel>(mREs[i], BasisBits, MatchResults, externals, alphabets, cc::BitNumbering::LittleEndian, false);
+                    options->setRE(mREs[i]);
+                    options->setSource(BasisBits);
+                    options->setResults(MatchResults);
+                    options->addAlphabet(mpx, CharClasses);
+                    P->CreateKernelCall<ICGrepKernel>(std::move(options));
                 }
             } else {
-                P->CreateKernelCall<ICGrepKernel>(mREs[i], BasisBits, MatchResults, externals);
+                options->setRE(mREs[i]);
+                options->setSource(BasisBits);
+                options->setResults(MatchResults);
+                P->CreateKernelCall<ICGrepKernel>(std::move(options));
             }
         }
 
@@ -567,6 +581,7 @@ uint64_t GrepEngine::doGrep(const std::string & fileName, std::ostringstream & s
 
     close(fileDescriptor);
     if (handler.binaryFileSignalled()) {
+        llvm::errs() << "Binary file " << fileName << "\n";
         return 0;
     }
     else {
@@ -611,7 +626,9 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, std::ostringstr
     close(fileDescriptor);
     if (accum.binaryFileSignalled()) {
         accum.mResultStr.clear();
-        accum.mResultStr << "Binary file " << fileName << " skipped.\n";
+        if (!mSuppressFileMessages) {
+            accum.mResultStr << "Binary file " << fileName << " skipped.\n";
+        }
     }
     if (accum.mLineCount > 0) grepMatchFound = true;
     return accum.mLineCount;
@@ -792,13 +809,21 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE)
         MatchingRecords = RecordBreakStream;
     } else {
         StreamSet * MatchResults = E->CreateStreamSet();
-        E->CreateKernelCall<ICGrepKernel>(matchingRE, BasisBits, MatchResults);
+        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
+        options->setRE(matchingRE);
+        options->setSource(BasisBits);
+        options->setResults(MatchResults);
+        E->CreateKernelCall<ICGrepKernel>(std::move(options));
         MatchingRecords = E->CreateStreamSet();
         E->CreateKernelCall<MatchedLinesKernel>(MatchResults, RecordBreakStream, MatchingRecords);
     }
     if (!excludeNothing) {
         StreamSet * ExcludedResults = E->CreateStreamSet();
-        E->CreateKernelCall<ICGrepKernel>(excludedRE, BasisBits, ExcludedResults);
+        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
+        options->setRE(excludedRE);
+        options->setSource(BasisBits);
+        options->setResults(ExcludedResults);
+        E->CreateKernelCall<ICGrepKernel>(std::move(options));
         StreamSet * ExcludedRecords = E->CreateStreamSet();
         E->CreateKernelCall<MatchedLinesKernel>(ExcludedResults, RecordBreakStream, ExcludedRecords);
 

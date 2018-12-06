@@ -4,6 +4,7 @@
  */
 
 #include "grep_kernel.h"
+#include <cc/alphabet.h>
 #include <re/printer_re.h>
 #include <re/re_cc.h>
 #include <re/re_name.h>
@@ -213,46 +214,71 @@ RequiredStreams_UTF16::RequiredStreams_UTF16(const std::unique_ptr<kernel::Kerne
 
 }
 
-ICGrepSignature::ICGrepSignature(re::RE * const re_ast)
-: mRE(re_ast)
-, mSignature(Printer_RE::PrintRE(mRE)) {
-
+void GrepKernelOptions::setNumbering(cc::BitNumbering numbering) {mBasisSetNumbering = numbering;}
+void GrepKernelOptions::setIndexingAlphabet(cc::Alphabet * a) {mIndexingAlphabet = a;}
+void GrepKernelOptions::setRE(RE * e) {mRE = e;}
+void GrepKernelOptions::setPrefixRE(RE * e) {mPrefixRE = e;}
+void GrepKernelOptions::setSource(StreamSet * s) {mSource = s;}
+void GrepKernelOptions::setResults(StreamSet * r) {mResults = r;}
+void GrepKernelOptions::addExternal(std::string name, StreamSet * strm) {
+    mExternals.emplace_back(name, strm);
 }
-// Helper to compute stream set inputs to pass into PabloKernel constructor.
-Bindings ICGrepKernel::makeInputBindings(StreamSet * const basis, const Externals & externals, const Alphabets & alphabets) {
+void GrepKernelOptions::addAlphabet(std::shared_ptr<cc::Alphabet> a, StreamSet * basis) {
+    mAlphabets.emplace_back(a, basis);
+}
+
+Bindings GrepKernelOptions::streamSetInputBindings() {
     Bindings inputs;
-    inputs.emplace_back("basis", basis);
-    for (const auto & e : externals) {
+    inputs.emplace_back("basis", mSource);
+    for (const auto & e : mExternals) {
         inputs.emplace_back(e.first, e.second);
     }
-    for (const auto & a : alphabets) {
+    for (const auto & a : mAlphabets) {
         inputs.emplace_back(a.first->getName() + "_basis", a.second);
     }
     return inputs;
 }
 
-ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
-                           RE * const re,
-                           StreamSet * const BasisBits,
-                           StreamSet * const matches,
-                           const Externals externals,
-                           const Alphabets alphabets,
-                           const cc::BitNumbering basisSetNumbering,
-                           const bool cachable)
-: ICGrepSignature(re)
-, PabloKernel(b, "ic" + getStringHash(mSignature),
-// inputs
-makeInputBindings(BasisBits, externals, alphabets),
-// output
-{Binding{"matches", matches, FixedRate(), Add1()}})
-, mExternals(std::move(externals))
-, mAlphabets(std::move(alphabets))
-, mBasisSetNumbering(basisSetNumbering)
-, mIsCachable(cachable) {
+Bindings GrepKernelOptions::streamSetOutputBindings() {
+    return {Binding{"matches", mResults, FixedRate(), Add1()}};
+}
+
+Bindings GrepKernelOptions::scalarInputBindings() {
+    return {};
+}
+
+Bindings GrepKernelOptions::scalarOutputBindings() {
+    return {};
+}
+
+std::string GrepKernelOptions::getSignature() {
+    if (mSignature == "") {
+        mSignature = std::to_string(mSource->getNumElements()) + "x" + std::to_string(mSource->getFieldWidth());
+        mSignature += "/" + mIndexingAlphabet->getName();
+        for (auto e: mExternals) {
+            mSignature += "_" + e.first;
+        }
+        for (auto a: mAlphabets) {
+            mSignature += "_" + a.first->getName();
+        }
+        if (mPrefixRE) {
+            mSignature += ":" + Printer_RE::PrintRE(mPrefixRE);
+        }
+        mSignature += ":" + Printer_RE::PrintRE(mRE);
+    }
+    return mSignature;
+}
+
+ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::unique_ptr<GrepKernelOptions> options)
+: PabloKernel(b, "ic" + getStringHash(options->getSignature()),
+    options->streamSetInputBindings(),
+    options->streamSetOutputBindings(),
+    options->scalarInputBindings(),
+              options->scalarOutputBindings()), mOptions(std::move(options)) {
 }
 
 std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
-    return mSignature;
+    return mOptions->getSignature();
 }
 
 void ICGrepKernel::generatePabloMethod() {
@@ -262,21 +288,51 @@ void ICGrepKernel::generatePabloMethod() {
     if (useDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
     }
-    //cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
-    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), mBasisSetNumbering);
-    for (const auto & e : mExternals) {
+    //cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
+    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), mOptions->mBasisSetNumbering);
+    for (const auto & e : mOptions->mExternals) {
         re_compiler.addPrecompiled(e.first, pb.createExtract(getInputStreamVar(e.first), pb.getInteger(0)));
     }
-    for (const auto & a : mAlphabets) {
+    for (const auto & a : mOptions->mAlphabets) {
         auto & alpha = a.first;
         auto mpx_basis = getInputStreamSet(alpha->getName() + "_basis");
         re_compiler.addAlphabet(alpha, mpx_basis);
     }
-    PabloAST * const matches = re_compiler.compile(mRE);
-    Var * const output = getOutputStreamVar("matches");
-    pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
+    if (mOptions->mPrefixRE) {
+        PabloAST * const prefixMatches = re_compiler.compile(mOptions->mPrefixRE);
+        Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
+        PabloBlock * scope1 = getEntryScope()->createScope();
+        pb.createIf(prefixMatches, scope1);
+        
+        PabloAST * u8bytes = pb.createExtract(getInput(0), pb.getInteger(0));
+        PabloAST * nybbles[2];
+        nybbles[0] = scope1->createPackL(scope1->getInteger(8), u8bytes);
+        nybbles[1] = scope1->createPackH(scope1->getInteger(8), u8bytes);
+        
+        PabloAST * bitpairs[4];
+        for (unsigned i = 0; i < 2; i++) {
+            bitpairs[2*i] = scope1->createPackL(scope1->getInteger(4), nybbles[i]);
+            bitpairs[2*i + 1] = scope1->createPackH(scope1->getInteger(4), nybbles[i]);
+        }
+        
+        std::vector<PabloAST *> basis(8);
+        for (unsigned i = 0; i < 4; i++) {
+            basis[2*i] = scope1->createPackL(scope1->getInteger(2), bitpairs[i]);
+            basis[2*i + 1] = scope1->createPackH(scope1->getInteger(2), bitpairs[i]);
+        }
+        
+        cc::Parabix_CC_Compiler ccc(scope1, basis);
+        RE_Compiler re_compiler(scope1, ccc);
+        scope1->createAssign(final_matches, re_compiler.compile(mOptions->mRE, prefixMatches));
+        Var * const output = getOutputStreamVar("matches");
+        pb.createAssign(pb.createExtract(output, pb.getInteger(0)), final_matches);
+    } else {
+        PabloAST * const matches = re_compiler.compile(mOptions->mRE);
+        Var * const output = getOutputStreamVar("matches");
+        pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
+    }
 }
 
 // Helper to compute stream set inputs to pass into PabloKernel constructor.
