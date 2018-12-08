@@ -93,6 +93,10 @@ static cl::opt<bool, true> NVPTXOption("NVPTX", cl::location(NVPTX), cl::init(fa
 static cl::opt<unsigned, true> GroupNumOption("group-num", cl::location(GroupNum), cl::init(256),
                                          cl::desc("NUmber of groups declared on GPU"), cl::value_desc("positive integer"), cl::cat(CodeGenOptions));
 
+std::string TraceOption = "";
+static cl::opt<std::string, true> TraceValueOption("trace", cl::location(TraceOption),
+                                            cl::desc("Instrument programs to trace values beginning prefix"), cl::value_desc("prefix"), cl::cat(CodeGenOptions));
+
 CodeGenOpt::Level OptLevel;
 
 bool SegmentPipelineParallel;

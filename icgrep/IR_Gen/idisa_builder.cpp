@@ -895,20 +895,20 @@ Value * IDISA_Builder::bitblock_popcount(Value * const to_count) {
     return mvmd_extract(fieldWidth, fieldCounts, 0);
 }
 
-Value * IDISA_Builder::simd_and(Value * a, Value * b) {
-    return a->getType() == b->getType() ? CreateAnd(a, b) : CreateAnd(bitCast(a), bitCast(b));
+Value * IDISA_Builder::simd_and(Value * a, Value * b, StringRef s) {
+    return a->getType() == b->getType() ? CreateAnd(a, b, s) : CreateAnd(bitCast(a), bitCast(b), s);
 }
 
-Value * IDISA_Builder::simd_or(Value * a, Value * b) {
-    return a->getType() == b->getType() ? CreateOr(a, b) : CreateOr(bitCast(a), bitCast(b));
+Value * IDISA_Builder::simd_or(Value * a, Value * b, StringRef s) {
+    return a->getType() == b->getType() ? CreateOr(a, b, s) : CreateOr(bitCast(a), bitCast(b), s);
 }
     
-Value * IDISA_Builder::simd_xor(Value * a, Value * b) {
-    return a->getType() == b->getType() ? CreateXor(a, b) : CreateXor(bitCast(a), bitCast(b));
+Value * IDISA_Builder::simd_xor(Value * a, Value * b, StringRef s) {
+    return a->getType() == b->getType() ? CreateXor(a, b, s) : CreateXor(bitCast(a), bitCast(b), s);
 }
 
-Value * IDISA_Builder::simd_not(Value * a) {
-    return simd_xor(a, Constant::getAllOnesValue(a->getType()));
+Value * IDISA_Builder::simd_not(Value * a, StringRef s) {
+    return simd_xor(a, Constant::getAllOnesValue(a->getType()), s);
 }
 
 Constant * IDISA_Builder::bit_interleave_byteshuffle_table(unsigned fw) {

@@ -10,6 +10,7 @@
 #include <llvm/IR/IRPrintingPasses.h>
 #include <llvm/InitializePasses.h>                 // for initializeCodeGencd .
 #include <llvm/PassRegistry.h>                     // for PassRegistry
+#include <llvm/Support/raw_ostream.h>              // for errs()
 #include <llvm/Support/CodeGen.h>                  // for Level, Level::None
 #include <llvm/Support/Compiler.h>                 // for LLVM_UNLIKELY
 #include <llvm/Support/TargetSelect.h>
@@ -197,6 +198,9 @@ inline legacy::PassManager CPUDriver::preparePassManager() {
         PM.add(createDeadCodeEliminationPass());
         PM.add(createCFGSimplificationPass());
     }
+    if (LLVM_UNLIKELY(!codegen::TraceOption.empty())) {
+        PM.add(createTracePass(iBuilder.get(), codegen::TraceOption));
+    }
     if (LLVM_UNLIKELY(codegen::ShowIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (!codegen::ShowIROption.empty()) {
@@ -221,6 +225,7 @@ inline legacy::PassManager CPUDriver::preparePassManager() {
         }
     }
     #endif
+
     return PM;
 }
 
@@ -313,3 +318,56 @@ CPUDriver::~CPUDriver() {
     #endif
     delete mTarget;
 }
+
+
+class TracePass : public ModulePass {
+public:
+    static char ID;
+    TracePass(kernel::KernelBuilder * kb, StringRef to_trace) : ModulePass(ID), iBuilder(kb), mToTrace(to_trace) { }
+    
+    virtual bool runOnModule(Module &M) override;
+private:
+    kernel::KernelBuilder * iBuilder;
+    StringRef mToTrace;
+};
+
+char TracePass::ID = 0;
+
+bool TracePass::runOnModule(Module & M) {
+    Module * saveModule = iBuilder->getModule();
+    iBuilder->setModule(&M);
+    bool modified = false;
+    for (auto & F : M) {
+        for (auto & B : F) {
+            for (BasicBlock::iterator i = B.begin(); i != B.end(); ) {
+                auto i0 = i;
+                ++i;
+                if (!isa<Value>(*i0)) continue;
+                StringRef theName = (*i0).getName();
+                if (theName.startswith(mToTrace)) {
+                    //errs() << theName << "\n";
+                    Type * t = (*i0).getType();
+                    //t->dump();
+                    if (t == iBuilder->getBitBlockType()) {
+                        iBuilder->SetInsertPoint(&B, i);
+                        iBuilder->CallPrintRegister(theName, &*i0);
+                        modified = true;
+                    }
+                    else if (t == iBuilder->getInt64Ty()) {
+                        iBuilder->SetInsertPoint(&B, i);
+                        iBuilder->CallPrintInt(theName, &*i0);
+                        modified = true;
+                    }
+                }
+            }
+        }
+    }
+    //if (modified) M.dump();
+    iBuilder->setModule(saveModule);
+    return modified;
+}
+
+ModulePass * CPUDriver::createTracePass(kernel::KernelBuilder * kb, StringRef to_trace) {
+    return new TracePass(iBuilder.get(), to_trace);
+}
+                    

@@ -12,6 +12,7 @@ namespace llvm { class Constant; }
 namespace llvm { class LoadInst; }
 namespace llvm { class Module; }
 namespace llvm { class Value; }
+namespace llvm { class StringRef; }
 
 namespace IDISA {
 
@@ -180,10 +181,10 @@ public:
 
     virtual void CreateBaseFunctions() {}
     
-    llvm::Value * simd_and(llvm::Value * a, llvm::Value * b);
-    llvm::Value * simd_or(llvm::Value * a, llvm::Value * b);
-    llvm::Value * simd_xor(llvm::Value * a, llvm::Value * b);
-    llvm::Value * simd_not(llvm::Value * a);
+    llvm::Value * simd_and(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
+    llvm::Value * simd_or(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
+    llvm::Value * simd_xor(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
+    llvm::Value * simd_not(llvm::Value * a, llvm::StringRef s = llvm::StringRef());
     llvm::Value * fwCast(unsigned fw, llvm::Value * a);
     
     inline llvm::VectorType * getBitBlockType() const {

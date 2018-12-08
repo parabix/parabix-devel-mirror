@@ -427,22 +427,22 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
         if (isa<And>(stmt)) {
             Value * const op0 = compileExpression(b, stmt->getOperand(0));
             Value * const op1 = compileExpression(b, stmt->getOperand(1));
-            value = b->simd_and(op0, op1);
+            value = b->simd_and(op0, op1, stmt->getName());
         } else if (isa<Or>(stmt)) {
             Value * const op0 = compileExpression(b, stmt->getOperand(0));
             Value * const op1 = compileExpression(b, stmt->getOperand(1));
-            value = b->simd_or(op0, op1);
+            value = b->simd_or(op0, op1, stmt->getName());
         } else if (isa<Xor>(stmt)) {
             Value * const op0 = compileExpression(b, stmt->getOperand(0));
             Value * const op1 = compileExpression(b, stmt->getOperand(1));
-            value = b->simd_xor(op0, op1);
+            value = b->simd_xor(op0, op1, stmt->getName());
         } else if (const Sel * sel = dyn_cast<Sel>(stmt)) {
             Value* ifMask = compileExpression(b, sel->getCondition());
             Value* ifTrue = b->simd_and(ifMask, compileExpression(b, sel->getTrueExpr()));
             Value* ifFalse = b->simd_and(b->simd_not(ifMask), compileExpression(b, sel->getFalseExpr()));
             value = b->simd_or(ifTrue, ifFalse);
         } else if (isa<Not>(stmt)) {
-            value = b->simd_not(compileExpression(b, stmt->getOperand(0)));
+            value = b->simd_not(compileExpression(b, stmt->getOperand(0)), stmt->getName());
         } else if (isa<Advance>(stmt)) {
             const Advance * const adv = cast<Advance>(stmt);
             // If our expr is an Extract op on a mutable Var then we need to pass the index value to the carry
@@ -460,27 +460,27 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             Value * const cc = compileExpression(b, mstar->getCharClass());
             Value * const marker_and_cc = b->simd_and(marker, cc);
             Value * const sum = mCarryManager->addCarryInCarryOut(b, mstar, marker_and_cc, cc);
-            value = b->simd_or(b->simd_xor(sum, cc), marker);
+            value = b->simd_or(b->simd_xor(sum, cc), marker, mstar->getName());
         } else if (const ScanThru * sthru = dyn_cast<ScanThru>(stmt)) {
             Value * const from = compileExpression(b, sthru->getScanFrom());
             Value * const thru = compileExpression(b, sthru->getScanThru());
             Value * const sum = mCarryManager->addCarryInCarryOut(b, sthru, from, thru);
-            value = b->simd_and(sum, b->simd_not(thru));
+            value = b->simd_and(sum, b->simd_not(thru), sthru->getName());
         } else if (const ScanTo * sthru = dyn_cast<ScanTo>(stmt)) {
             Value * const marker_expr = compileExpression(b, sthru->getScanFrom());
             Value * const to = b->simd_xor(compileExpression(b, sthru->getScanTo()), b->getScalarField("EOFmask"));
             Value * const sum = mCarryManager->addCarryInCarryOut(b, sthru, marker_expr, b->simd_not(to));
-            value = b->simd_and(sum, to);
+            value = b->simd_and(sum, to, sthru->getName());
         } else if (const AdvanceThenScanThru * sthru = dyn_cast<AdvanceThenScanThru>(stmt)) {
             Value * const from = compileExpression(b, sthru->getScanFrom());
             Value * const thru = compileExpression(b, sthru->getScanThru());
             Value * const sum = mCarryManager->addCarryInCarryOut(b, sthru, from, b->simd_or(from, thru));
-            value = b->simd_and(sum, b->simd_not(thru));
+            value = b->simd_and(sum, b->simd_not(thru), sthru->getName());
         } else if (const AdvanceThenScanTo * sthru = dyn_cast<AdvanceThenScanTo>(stmt)) {
             Value * const from = compileExpression(b, sthru->getScanFrom());
             Value * const to = b->simd_xor(compileExpression(b, sthru->getScanTo()), b->getScalarField("EOFmask"));
             Value * const sum = mCarryManager->addCarryInCarryOut(b, sthru, from, b->simd_or(from, b->simd_not(to)));
-            value = b->simd_and(sum, to);
+            value = b->simd_and(sum, to, sthru->getName());
         } else if (const TerminateAt * s = dyn_cast<TerminateAt>(stmt)) {
             Value * signal_strm = compileExpression(b, s->getExpr());
             BasicBlock * signalCallBack = b->CreateBasicBlock("signalCallBack");

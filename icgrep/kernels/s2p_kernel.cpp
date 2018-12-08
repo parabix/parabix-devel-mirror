@@ -172,7 +172,7 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
         // A null byte has been detected, determine its position and whether it is past EOF.
         Value * byteStreamBasePtr = kb->getInputStreamBlockPtr("byteStream", ZERO, ZERO);
         Value * ptrToNull = kb->CreateMemChr(kb->CreatePointerCast(byteStreamBasePtr, voidPtrTy), kb->getInt32(0), itemsToDo);
-        Value * nullInFile = kb->CreateICmpNE(ptrToNull, ZERO);
+        Value * nullInFile = kb->CreateICmpNE(ptrToNull, ConstantPointerNull::get(cast<PointerType>(ptrToNull->getType())));
         kb->CreateCondBr(nullInFile, nullInFileDetected, s2pExit);
         kb->SetInsertPoint(nullInFileDetected);
         // A null byte has been located within the file; set the termination code and call the signal handler.

@@ -5,6 +5,8 @@
 namespace llvm { class ExecutionEngine; }
 namespace llvm { class TargetMachine; }
 namespace llvm { class raw_fd_ostream; }
+namespace llvm { class ModulePass; }
+namespace kernel { class KernelBuilder; }
 
 #include <llvm/IR/LegacyPassManager.h>
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
@@ -44,6 +46,9 @@ public:
     void * finalizeObject(llvm::Function * mainMethod) override;
 
     bool hasExternalFunction(const llvm::StringRef functionName) const override;
+    
+    llvm::ModulePass * createTracePass(kernel::KernelBuilder * kb, llvm::StringRef to_trace);
+
 
 private:
 

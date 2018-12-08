@@ -50,6 +50,7 @@ extern bool SegmentPipelineParallel;
 const std::string OmittedOption = ".";
 extern std::string ShowUnoptimizedIROption;
 extern std::string ShowIROption;
+extern std::string TraceOption;
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
 extern std::string ShowASMOption;
 #endif
