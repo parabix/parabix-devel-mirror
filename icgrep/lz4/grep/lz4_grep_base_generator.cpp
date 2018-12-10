@@ -7,7 +7,7 @@
 
 #include <cc/cc_compiler.h>
 
-#include <kernels/cc_kernel.h>
+#include <cc/cc_kernel.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/p2s_kernel.h>
 #include <kernels/source_kernel.h>

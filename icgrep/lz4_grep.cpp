@@ -17,7 +17,7 @@
 #include <lz4/lz4_frame_decoder.h>
 #include <cc/cc_compiler.h>
 #include <toolchain/toolchain.h>
-#include <kernels/cc_kernel.h>
+#include <cc/cc_kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/kernel_builder.h>

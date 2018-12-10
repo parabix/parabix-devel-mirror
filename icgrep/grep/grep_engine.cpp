@@ -10,7 +10,7 @@
 #include <UCD/resolve_properties.h>
 #include <kernels/callback.h>
 #include <kernels/charclasses.h>
-#include <kernels/cc_kernel.h>
+#include <cc/cc_kernel.h>
 #include <kernels/grep_kernel.h>
 #include <kernels/UCD_property_kernel.h>
 #include <kernels/grapheme_kernel.h>
@@ -304,7 +304,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                     mREs[0] = re::replaceCC(mREs[0], cc, ccName);
                     auto ccNameStr = ccName->getFullName();
                     StreamSet * const ccStream = P->CreateStreamSet(1, 1);
-                    P->CreateKernelCall<DirectCharacterClassKernelBuilder>(ccNameStr, std::vector<re::CC *>{cc}, ByteStream, ccStream);
+                    P->CreateKernelCall<CharacterClassKernelBuilder>(ccNameStr, std::vector<re::CC *>{cc}, ByteStream, ccStream);
                     options->addExternal(ccNameStr, ccStream);
                 }
             }
@@ -323,7 +323,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                 options->setResults(MatchResults);
                 P->CreateKernelCall<ICGrepKernel>(std::move(options));
             }
-            Kernel * LB_nullK = P->CreateKernelCall<DirectCharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, ByteStream, LineBreakStream, callbackObject);
+            Kernel * LB_nullK = P->CreateKernelCall<CharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, ByteStream, LineBreakStream, callbackObject);
             mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
             requiresComplexTest = false;
         }
@@ -351,7 +351,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             LineBreakStream = LineFeedStream;
         } else if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
             LineBreakStream = P->CreateStreamSet();
-            P->CreateKernelCall<DirectCharacterClassKernelBuilder>( "Null", std::vector<re::CC *>{mBreakCC}, BasisBits, LineBreakStream);
+            P->CreateKernelCall<CharacterClassKernelBuilder>( "Null", std::vector<re::CC *>{mBreakCC}, BasisBits, LineBreakStream);
         } else {
             LineBreakStream = UnicodeLB;
         }
@@ -797,11 +797,11 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE)
     StreamSet * BasisBits = nullptr;
 
     if (matchAllLines && excludeNothing) {
-        E->CreateKernelCall<DirectCharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, ByteStream, RecordBreakStream);
+        E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, ByteStream, RecordBreakStream);
     } else {
         BasisBits = E->CreateStreamSet(8);
         E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-        E->CreateKernelCall<ParabixCharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
+        E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
     }
 
     StreamSet * MatchingRecords = nullptr;
