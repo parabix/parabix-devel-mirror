@@ -58,6 +58,9 @@ public:
         mAllocator.Reset();
     }
 
+    inline void PrintStats() {
+        mAllocator.PrintStats();
+    }
     inline SlabAllocator() noexcept {}
     inline SlabAllocator(const SlabAllocator &) noexcept = delete;
     template <class U> inline SlabAllocator (const SlabAllocator<U> &) noexcept { }

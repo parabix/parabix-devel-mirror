@@ -36,6 +36,9 @@ public:
     inline static void Reset() {
         mAllocator.Reset();
     }
+    inline static void PrintStats() {
+        mAllocator.PrintStats();
+    }
     typedef std::initializer_list<RE *> InitializerList;
 
 protected:
