@@ -103,8 +103,8 @@ add_library(PabloADT ${PABLO_SRC})
 # CCADT is the core library for representing and compiling character classes
 add_library(CCADT re/re_re.cpp re/re_cc.cpp cc/cc_compiler.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp UCD/unicode_set.cpp cc/cc_kernel.cpp)
 # RegExpADT is the core library for representing, parsing and printing regular expressions
-add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_range.cpp re/re_assertion.cpp re/printer_re.cpp re/re_utility.cpp)
-add_library(RegExpCompiler ${RE_PARSERS_SRC} re/casing.cpp re/to_utf8.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/collect_ccs.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp re/replaceCC.cpp re/validation.cpp re/Unicode/decomposition.cpp re/Unicode/equivalence.cpp)
+add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_range.cpp re/re_assertion.cpp re/re_empty_set.cpp re/printer_re.cpp re/re_utility.cpp)
+add_library(RegExpCompiler ${RE_PARSERS_SRC} re/casing.cpp re/to_utf8.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/collect_ccs.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp re/replaceCC.cpp re/validation.cpp re/Unicode/decomposition.cpp re/Unicode/equivalence.cpp re/re_contextual_simplification.cpp)
 add_library(UCDlib UCD/Equivalence.cpp UCD/CaseFolding.cpp utf8_encoder.cpp utf16_encoder.cpp UCD/ucd_compiler.cpp UCD/PropertyObjects.cpp UCD/resolve_properties.cpp)
 add_library(GrepEngine  ${GREP_CORE_SRC} grep/grep_engine.cpp kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/streams_merge.cpp kernels/until_n.cpp kernels/UCD_property_kernel.cpp kernels/grapheme_kernel.cpp)
 add_library(FileSelect util/file_select.cpp)
