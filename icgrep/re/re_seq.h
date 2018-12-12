@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -12,6 +12,7 @@
 #include <vector>
 #include <re/re_cc.h>
 #include <re/re_re.h>
+#include <re/re_empty_set.h>
 #include <UCD/unicode_set.h>
 #include <llvm/Support/Casting.h>
 
@@ -25,7 +26,6 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~Seq() {}
 protected:
     friend Seq * makeSeq();
     template<typename iterator> friend RE * makeSeq(const iterator, const iterator);
@@ -43,7 +43,9 @@ inline RE * makeSeq(const iterator begin, const iterator end) {
     Seq * seq = makeSeq();
     for (auto i = begin; i != end; ++i) {
         RE * const item = *i;
-        if (LLVM_UNLIKELY(llvm::isa<Seq>(item))) {
+        if (LLVM_UNLIKELY(isEmptySet(item))) {
+            return makeEmptySet();
+        } else if (LLVM_UNLIKELY(llvm::isa<Seq>(item))) {
             for (RE * const innerItem : *llvm::cast<Seq>(item)) {
                 seq->push_back(innerItem);
             }
@@ -57,7 +59,7 @@ inline RE * makeSeq(const iterator begin, const iterator end) {
     return seq;
 }
 
-inline RE * makeSeq(RE::InitializerList list) {
+inline RE * makeSeq(std::initializer_list<RE *> list) {
     return makeSeq(list.begin(), list.end());
 }
 

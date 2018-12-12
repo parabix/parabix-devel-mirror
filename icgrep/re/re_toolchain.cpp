@@ -35,6 +35,7 @@
 #include <re/re_name_resolve.h>
 
 #include <re/grapheme_clusters.h>
+#include <re/re_contextual_simplification.h>
 #include <re/validation.h>
 #include <re/Unicode/decomposition.h>
 #include <re/Unicode/equivalence.h>
@@ -120,6 +121,7 @@ RE * regular_expression_passes(RE * re) {
     } else {
         r = simplifyRE(r);
     }
+    r = RE_ContextSimplifier().transformRE(r);
     if (!DefiniteLengthBackReferencesOnly(r)) {
         llvm::report_fatal_error("Future back reference support: references must be within a fixed distance from a fixed-length capture.");
     }

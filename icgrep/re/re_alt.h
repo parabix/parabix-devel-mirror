@@ -118,14 +118,10 @@ RE * makeAlt(iterator begin, iterator end) {
     return newAlt->size() == 1 ? newAlt->front() : newAlt;
 }
 
-inline RE * makeAlt(RE::InitializerList list) {
+inline RE * makeAlt(std::initializer_list<RE *> list) {
     return makeAlt(list.begin(), list.end());
 }
 
-// An Alt with no members represent the empty set.
-inline bool isEmptySet(RE * r) {
-    return llvm::isa<Alt>(r) && llvm::cast<Alt>(r)->empty();
-}
 }
 
 #endif // ALT_H

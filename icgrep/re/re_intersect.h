@@ -19,8 +19,8 @@ public:
     RE * getRH() const {
         return mRh;
     }
-protected:
     friend RE * makeIntersect(RE*, RE*);
+protected:
     Intersect(RE * lh, RE * rh)
     : RE(ClassTypeId::Intersect)
     , mLh(lh)
