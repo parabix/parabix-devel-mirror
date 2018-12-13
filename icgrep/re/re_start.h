@@ -13,21 +13,13 @@ namespace re {
 
 class Start : public RE {
 public:
-    static inline bool classof(const RE * re) {
-        return re->getClassTypeId() == ClassTypeId::Start;
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
-protected:
-    friend Start * makeStart();
+    static Start * Create() {return new Start();}
+    RE_SUBTYPE(Start)
+private:
     Start() : RE(ClassTypeId::Start) {}
-    virtual ~Start() {}
 };
 
-inline Start * makeStart() {
-    return new Start();
-}
+inline Start * makeStart() {return Start::Create();}
 
 }
 

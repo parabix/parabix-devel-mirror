@@ -12,6 +12,11 @@
 
 namespace re {
 
+// REs are defined in a class hierarchy supporting llvm::isa, llvm::dyn_cast.
+#define RE_SUBTYPE(kind) \
+static inline bool classof(const RE * re) {return re->getClassTypeId() == ClassTypeId::kind;}\
+static inline bool classof(const void *) {return false;}
+
 class RE {
 public:
     using Allocator = SlabAllocator<RE *>;

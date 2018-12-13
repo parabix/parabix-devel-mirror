@@ -13,61 +13,18 @@ namespace re {
 
 class Rep : public RE {
 public:
-    static inline bool classof(const RE * re) {
-        return re->getClassTypeId() == ClassTypeId::Rep;
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
     enum { UNBOUNDED_REP = -1 };
-    RE * getRE() const;
-    void setRE(RE * re = nullptr);
-    int getLB() const;
-    void setLB(const int lb);
-    int getUB() const;
-    void setUB(const int ub);
-    virtual ~Rep() {}
-protected:
-    friend RE * makeRep(RE *, const int, const int);
-    Rep(RE * re, const int lb, const int ub);
+    RE * getRE() const {return mRE;}
+    int getLB() const {return mLB;}
+    int getUB() const {return mUB;}
+    static Rep * Create(RE * r, const int lb, const int ub) {return new Rep(r, lb, ub);}
+    RE_SUBTYPE(Rep)
 private:
+    Rep(RE * repeated, const int lb, const int ub) : RE(ClassTypeId::Rep), mRE(repeated), mLB(lb), mUB(ub) {}
     RE* mRE;
     int mLB;
     int mUB;
 };
-
-inline Rep::Rep(RE * re, const int lb, const int ub)
-: RE(ClassTypeId::Rep)
-, mRE(re)
-, mLB(lb)
-, mUB(ub)
-{
-
-}
-
-inline RE * Rep::getRE() const {
-    return mRE;
-}
-
-inline void Rep::setRE(RE * re) {
-    mRE = re;
-}
-
-inline int Rep::getLB() const {
-    return mLB;
-}
-
-inline void Rep::setLB(const int lb) {
-    mLB = lb;
-}
-
-inline int Rep::getUB() const {
-    return mUB;
-}
-
-inline void Rep::setUB(const int ub) {
-    mUB = ub;
-}
 
 RE * makeRep(RE * re, const int lower_bound, const int upper_bound);
     

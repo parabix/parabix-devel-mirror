@@ -42,7 +42,7 @@ RE * makeRep(RE * re, int lb, const int ub) {
         int l = rep->getLB();
         int u = rep->getUB();
         if (lb == ub) {
-            return new Rep(rep->getRE(), l * lb, ubCombine(u, ub));
+            return Rep::Create(rep->getRE(), l * lb, ubCombine(u, ub));
         }
         else if (u == Rep::UNBOUNDED_REP) {
             if (l == 0) {
@@ -50,23 +50,23 @@ RE * makeRep(RE * re, int lb, const int ub) {
                 return rep;
             } else if (l == 1) {
                 /*  R{1,}{lb, ub} = R{lb,} */
-                return new Rep(rep->getRE(), lb, Rep::UNBOUNDED_REP);
+                return Rep::Create(rep->getRE(), lb, Rep::UNBOUNDED_REP);
             } else if (lb == 0) {
                 /*  R{l,}{0, ub} = R{l,}? */
-                return new Rep(rep, 0, 1);
+                return Rep::Create(rep, 0, 1);
             } else {
                 /* R{l,}{lb, ub} = R{l * lb,} */
-                return new Rep(rep->getRE(), l * lb, Rep::UNBOUNDED_REP);
+                return Rep::Create(rep->getRE(), l * lb, Rep::UNBOUNDED_REP);
             }
         }
         else if (u > l) {
             // Calculate the smallest number of repetitions n such that n * u + 1 >= (n + 1) * l
             int n = (u - 2)/(u-l);
             if (lb >= n) {
-                return new Rep(rep->getRE(), l * lb, ubCombine(u, ub));
+                return Rep::Create(rep->getRE(), l * lb, ubCombine(u, ub));
             }
             if ((ub == Rep::UNBOUNDED_REP) || (ub >= n)) {
-                RE * r1 = new Rep(rep->getRE(), n * l, ubCombine(u, ub));
+                RE * r1 = Rep::Create(rep->getRE(), n * l, ubCombine(u, ub));
                 RE * r2 = makeRep(rep, lb, n - 1);  // makeRep recursive simplifies.
                 return makeAlt({r1, r2});
             }
@@ -89,7 +89,7 @@ RE * makeRep(RE * re, int lb, const int ub) {
             return re;
         }
     }
-    return new Rep(re, lb, ub);
+    return Rep::Create(re, lb, ub);
 }
 
 RE * unrollFirst(Rep * rep) {

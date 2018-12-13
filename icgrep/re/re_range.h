@@ -11,30 +11,12 @@ namespace re {
 
 class Range : public RE {
 public:
-    static inline bool classof(const RE * re) {
-        return re->getClassTypeId() == ClassTypeId::Range;
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
-    RE * getLo() const {
-        return mLo;
-    }
-    RE * getHi() const {
-        return mHi;
-    }
-
-protected:
-    friend RE * makeRange(RE*, RE*);
-    Range(RE * lh, RE * rh)
-    : RE(ClassTypeId::Range)
-    , mLo(lh)
-    , mHi(rh)
-    {
-
-    }
-    virtual ~Range() {}
+    RE * getLo() const {return mLo;}
+    RE * getHi() const {return mHi;}
+    static Range * Create(RE * lh, RE * rh) {return new Range(lh, rh);}
+    RE_SUBTYPE(Range)
 private:
+    Range(RE * lh, RE * rh) : RE(ClassTypeId::Range), mLo(lh), mHi(rh) {}
     RE * const mLo;
     RE * const mHi;
 };

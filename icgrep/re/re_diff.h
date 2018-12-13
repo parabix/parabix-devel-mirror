@@ -7,29 +7,12 @@ namespace re {
 
 class Diff : public RE {
 public:
-    static inline bool classof(const RE * re) {
-        return re->getClassTypeId() == ClassTypeId::Diff;
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
-    RE * getLH() const {
-        return mLh;
-    }
-    RE * getRH() const {
-        return mRh;
-    }
-protected:
-    friend RE * makeDiff(RE*, RE*);
-    Diff(RE * lh, RE * rh)
-    : RE(ClassTypeId::Diff)
-    , mLh(lh)
-    , mRh(rh)
-    {
-
-    }
-    virtual ~Diff() {}
+    RE * getLH() const {return mLh;}
+    RE * getRH() const {return mRh;}
+    static Diff * Create(RE * lh, RE * rh) {return new Diff(lh, rh);}
+    RE_SUBTYPE(Diff)
 private:
+    Diff(RE * lh, RE * rh): RE(ClassTypeId::Diff), mLh(lh), mRh(rh) {}
     RE * const mLh;
     RE * const mRh;
 };

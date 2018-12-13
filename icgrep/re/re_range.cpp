@@ -43,7 +43,7 @@ RE * makeRange(RE * lo, RE * hi) {
     else if (lo == hi) { // TODO: general check for equality, not just instance equality
         return lo;
     }
-    return new Range(lo, hi);
+    return Range::Create(lo, hi);
 }
     
 }

@@ -20,7 +20,7 @@ RE * makeIntersect(RE * lh, RE * rh) {
         if (lh_cc->getAlphabet() == rh_cc->getAlphabet())
             return intersectCC(lh_cc, rh_cc);
     }
-    return new Intersect(lh, rh);
+    return Intersect::Create(lh, rh);
 }
 
 }

@@ -16,29 +16,21 @@ namespace re {
 
 class Assertion : public RE {
 public:
-    static inline bool classof(const RE * re) {
-        return re->getClassTypeId() == ClassTypeId::Assertion;
-    }
-    static inline bool classof(const void *) {
-        return false;
-    }
     enum class Kind {Lookbehind, Lookahead, Boundary};
     enum class Sense {Positive, Negative};
-
+    
     RE * getAsserted() const {return mAsserted;}
     Assertion::Kind getKind() const {return mKind;}
     Assertion::Sense getSense() const {return mSense;}
-    void setAsserted(RE * r) {mAsserted = r;}
-
+    
     static Assertion::Kind reverseKind(Assertion::Kind k);
     static Assertion::Sense negateSense(Assertion::Sense s);
-
-protected:
-    friend RE * makeAssertion(RE * asserted, Kind k, Sense s);
-    Assertion(RE * r, Kind k, Sense s) : RE(ClassTypeId::Assertion), mAsserted(r), mKind(k), mSense(s) {}
-    virtual ~Assertion() {}
-
+    static Assertion * Create(RE * asserted, Kind k, Sense s) {
+        return new Assertion(asserted, k, s);
+    }
+    RE_SUBTYPE(Assertion)
 private:
+    Assertion(RE * r, Kind k, Sense s) : RE(ClassTypeId::Assertion), mAsserted(r), mKind(k), mSense(s) {}
     RE * mAsserted;
     Kind mKind;
     Sense mSense;
@@ -62,7 +54,7 @@ inline RE * makeAssertion(RE * asserted, Assertion::Kind k, Assertion::Sense s) 
         if (s == Assertion::Sense::Positive) return makeSeq();
         else return makeAlt();
     }
-    return new Assertion(asserted, k, s);
+    return Assertion::Create(asserted, k, s);
 }
 
 inline RE * makeLookAheadAssertion(RE * r) {

@@ -18,15 +18,14 @@ namespace re {
 #include <re/re_empty_set.h>
     
 RE * makeDiff(RE * lh, RE * rh) {
-    
     if (LLVM_UNLIKELY(isEmptySeq(lh) && isEmptySeq(rh))) {
         return makeEmptySet();
     } else if (LLVM_UNLIKELY(isEmptySet(rh))) {
         return lh;
     } else if (LLVM_UNLIKELY(isEmptySet(lh))) {
-        return makeEmptySet();
+        return lh;
     } else {
-        return new Diff(lh, rh);
+        return Diff::Create(lh, rh);
     }
 }
 
