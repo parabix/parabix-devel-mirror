@@ -24,14 +24,12 @@ void StdOutKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> 
         bytesToDo = b->CreateUDiv(bytesToDo, b->getSize(8 / mCodeUnitWidth));
     }
     b->CreateWriteCall(b->getInt32(STDOUT_FILENO), codeUnitBuffer, bytesToDo);
-    Value * const avail = b->getAvailableItemCount("codeUnitBuffer");
-    b->setProcessedItemCount("codeUnitBuffer", avail);
 }
 
 StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * codeUnitBuffer)
 : SegmentOrientedKernel("stdout" + std::to_string(codeUnitBuffer->getFieldWidth()),
 // input
-{Binding{"codeUnitBuffer", codeUnitBuffer, FixedRate()}}
+{Binding{"codeUnitBuffer", codeUnitBuffer}}
 // output & scalars
 , {}, {}, {}, {})
 , mCodeUnitWidth(codeUnitBuffer->getFieldWidth()) {
@@ -105,8 +103,6 @@ void FileSink::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b)
     }
     Value * const fileDescriptor = b->getScalarField("fileDescriptor");
     b->CreateWriteCall(fileDescriptor, codeUnitBuffer, bytesToDo);
-    Value * const avail = b->getAvailableItemCount("codeUnitBuffer");
-    b->setProcessedItemCount("codeUnitBuffer", avail);
 }
 
 void FileSink::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
@@ -129,7 +125,7 @@ void FileSink::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) 
 FileSink::FileSink(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * outputFileName, StreamSet * codeUnitBuffer)
 : SegmentOrientedKernel("filesink" + std::to_string(codeUnitBuffer->getFieldWidth()),
 // input
-{Binding{"codeUnitBuffer", codeUnitBuffer, FixedRate()}},
+{Binding{"codeUnitBuffer", codeUnitBuffer}},
 // output
 {},
 // input scalars

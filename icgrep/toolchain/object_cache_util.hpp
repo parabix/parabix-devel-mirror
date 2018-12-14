@@ -54,7 +54,7 @@ struct FileLock {
         lseek(mFd, 0, SEEK_SET);
         const auto pid = std::to_string(getpid());
         UNUSED auto written = write(mFd, pid.c_str(), pid.length());
-        assert (written == pid.length());
+        assert (written == static_cast<decltype(written)>(pid.length()));
     }
 
     ~FileLock() noexcept {

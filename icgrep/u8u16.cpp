@@ -75,7 +75,7 @@ U8U16Kernel::U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, Strea
 void U8U16Kernel::generatePabloMethod() {
     PabloBuilder main(getEntryScope());
     Zeroes * zeroes = main.createZeroes();
-    
+
     //  input: 8 basis bit streams
     std::vector<PabloAST *> u8_bits = getInputStreamSet("u8bit");
 
@@ -88,7 +88,7 @@ void U8U16Kernel::generatePabloMethod() {
     for (int i = 0; i < 8; ++i) {
         u16_lo[i] = main.createVar("u16_lo" + std::to_string(i), zeroes);
     }
-    
+
     Var * delmask = main.createVar("delmask", zeroes);
     Var * error_mask = main.createVar("error_mask", zeroes);
 
@@ -334,5 +334,5 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-                       
+
 

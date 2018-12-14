@@ -28,7 +28,7 @@ class CBuilder : public llvm::IRBuilder<> {
 public:
 
     CBuilder(llvm::LLVMContext & C);
-    
+
     virtual ~CBuilder() {}
 
     llvm::Module * getModule() const {
@@ -47,7 +47,7 @@ public:
         mModule = module;
         ClearInsertionPoint();
     }
-    
+
     // UDiv and URem with optimization for division by power-of-2 constants
     llvm::Value * CreateUDiv(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
     llvm::Value * CreateURem(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
@@ -59,10 +59,10 @@ public:
     llvm::Value * CreateUDivCeil(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "") {
         return CreateCeilUDiv(number, divisor, Name);
     }
-    
+
     // Round up to a multiple of divisor.
     llvm::Value * CreateRoundUp(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
-            
+
     // Get minimum of two unsigned numbers
     llvm::Value * CreateUMin(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "") {
         if (LLVM_UNLIKELY(a == nullptr || a == b)) return b;
@@ -107,7 +107,9 @@ public:
 
     void CreateFree(llvm::Value * const ptr);
 
-    llvm::Value * CreateRealloc(llvm::Value * const ptr, llvm::Value * const size);
+    llvm::Value * CreateRealloc(llvm::Type * const type, llvm::Value * const base, llvm::Value * const ArraySize);
+
+    llvm::Value * CreateRealloc(llvm::Value * const base, llvm::Value * const size);
 
     llvm::CallInst * CreateMemZero(llvm::Value * const ptr, llvm::Value * const size, const unsigned alignment = 1) {
         return CreateMemSet(ptr, getInt8(0), size, alignment);
@@ -116,7 +118,7 @@ public:
     llvm::Value * CreateMemChr(llvm::Value * ptr, llvm::Value * byteVal, llvm::Value * num);
 
     llvm::CallInst * CreateMemCmp(llvm::Value * ptr1, llvm::Value * ptr2, llvm::Value * num);
-    
+
     llvm::AllocaInst * CreateAlignedAlloca(llvm::Type * const Ty, const unsigned alignment, llvm::Value * const ArraySize = nullptr) {
         llvm::AllocaInst * const alloc = CreateAlloca(Ty, ArraySize);
         alloc->setAlignment(alignment);
@@ -139,10 +141,10 @@ public:
     llvm::Value * CreateFCloseCall(llvm::Value * stream);
     //  Create a call to:  int remove(const char *path);
     llvm::Value * CreateRemoveCall(llvm::Value * path);
-    
+
     //  Create a call to:  int rename(const char *old, const char *new);
     llvm::Value * CreateRenameCall(llvm::Value * oldName, llvm::Value * newName);
-    
+
     llvm::Function * GetPrintf();
 
     llvm::Function * GetDprintf();
@@ -166,10 +168,10 @@ public:
     //
     //  Create a call to:  int mkstemp (char *template);
     llvm::Value * CreateMkstempCall(llvm::Value * ftemplate);
-    
+
     //  Create a call to:  size_t strlen(const char *str);
     llvm::Value * CreateStrlenCall(llvm::Value * str);
-    
+
     llvm::Value * CreateAnonymousMMap(llvm::Value * size);
 
     llvm::Value * CreateFileSourceMMap(llvm::Value * fd, llvm::Value * size);
@@ -211,10 +213,10 @@ public:
 
     //  Create a call to:  int pthread_yield(void);
     llvm::Value * CreatePThreadYield();
-    
+
     //  Create a call to:  void pthread_exit(void *value_ptr);
     llvm::Value * CreatePThreadExitCall(llvm::Value * value_ptr);
-    
+
     //  Create a call to:  int pthread_join(pthread_t thread, void **value_ptr);
     llvm::Value * CreatePThreadJoinCall(llvm::Value * thread, llvm::Value * value_ptr);
 
@@ -227,30 +229,30 @@ public:
     void CallPrintIntCond(llvm::StringRef name, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd = STD_FD::STD_ERR);
 
     void CallPrintInt(llvm::StringRef name, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
-       
+
     llvm::Value * GetString(llvm::StringRef Str);
 
     inline llvm::IntegerType * getSizeTy() const {
         assert (mSizeType);
         return mSizeType;
     }
-    
+
     inline llvm::ConstantInt * LLVM_READNONE getSize(const size_t value) {
         return llvm::ConstantInt::get(getSizeTy(), value);
     }
-    
+
     llvm::IntegerType * LLVM_READNONE getIntAddrTy() const;
-    
+
     llvm::PointerType * LLVM_READNONE getVoidPtrTy(const unsigned AddressSpace = 0) const;
-    
+
     llvm::PointerType * LLVM_READNONE getFILEptrTy();
-    
+
     inline unsigned getCacheAlignment() const {
         return mCacheLineAlignment;
     }
 
     static LLVM_READNONE unsigned getPageSize();
-    
+
     virtual llvm::LoadInst* CreateAtomicLoadAcquire(llvm::Value * ptr);
 
     virtual llvm::StoreInst *  CreateAtomicStoreRelease(llvm::Value * val, llvm::Value * ptr);
@@ -280,20 +282,20 @@ public:
     // TODO: AVX512 offers these as vector instructions
     llvm::Value * CreateCountForwardZeroes(llvm::Value * value, const bool guaranteedNonZero = false);
     llvm::Value * CreateCountReverseZeroes(llvm::Value * value, const bool guaranteedNonZero = false);
-    
-    // Useful bit manipulation operations  
-    llvm::Value * CreateResetLowestBit(llvm::Value * bits);   
-    
+
+    // Useful bit manipulation operations
+    llvm::Value * CreateResetLowestBit(llvm::Value * bits);
+
     llvm::Value * CreateIsolateLowestBit(llvm::Value * bits);
-    
+
     llvm::Value * CreateMaskToLowestBitInclusive(llvm::Value * bits);
-    
+
     llvm::Value * CreateMaskToLowestBitExclusive(llvm::Value * bits);
-    
+
     llvm::Value * CreateExtractBitField(llvm::Value * bits, llvm::Value * start, llvm::Value * length);
-    
+
     llvm::Value * CreateCeilLog2(llvm::Value * value);
-    
+
     llvm::Value * CreateReadCycleCounter();
 
     template <typename ExternalFunctionType>
@@ -356,7 +358,7 @@ public:
                            bool isVolatile = false, llvm::MDNode *TBAATag = nullptr,
                            llvm::MDNode *ScopeTag = nullptr,
                            llvm::MDNode *NoAliasTag = nullptr);
-    
+
     llvm::Value * CreateExtractElement(llvm::Value *Vec, llvm::Value *Idx, const llvm::Twine &Name = "");
 
     llvm::Value * CreateExtractElement(llvm::Value *Vec, uint64_t Idx, const llvm::Twine &Name = "") {
@@ -384,6 +386,8 @@ protected:
 
     bool hasAddressSanitizer() const;
 
+    virtual std::string getKernelName() const = 0;
+
     void __CreateAssert(llvm::Value * assertion, const llvm::Twine & failureMessage);
 
 protected:
@@ -392,7 +396,7 @@ protected:
     unsigned                        mCacheLineAlignment;
     llvm::IntegerType * const       mSizeType;
     llvm::StructType *              mFILEtype;
-    BaseDriver *                        mDriver;
+    BaseDriver *                    mDriver;
     llvm::LLVMContext               mContext;
     const std::string               mTriple;
 };

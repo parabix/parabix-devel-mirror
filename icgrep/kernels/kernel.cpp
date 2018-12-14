@@ -757,6 +757,7 @@ const Kernel::ScalarField & Kernel::getScalarField(const llvm::StringRef name) c
     assert (!mScalarMap.empty());
     const auto f = mScalarMap.find(name);
     if (LLVM_UNLIKELY(f == mScalarMap.end())) {
+        assert (false && "could not find scalar!");
         report_fatal_error(getName() + " does not contain scalar: " + name);
     }
     return f->second;
@@ -836,8 +837,8 @@ bool Kernel::isCountable(const Binding & binding) const {
     const ProcessingRate & rate = binding.getRate();
     if (rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount()) {
         return true;
-//    } else if (rate.isRelative()) {
-//        return isCountable(getStreamBinding(rate.getReference()));
+    } else if (rate.isRelative()) {
+        return isCountable(getStreamBinding(rate.getReference()));
     } else {
         return false;
     }

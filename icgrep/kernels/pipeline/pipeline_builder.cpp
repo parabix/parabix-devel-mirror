@@ -9,6 +9,7 @@
 #include <llvm/IR/Constants.h>
 #include <queue>
 
+
 #warning if two kernels have an identical signature and take the same inputs, they ought to produce the same outputs unless they are nondeterministic.
 
 #warning the pipeline ordering should be canonicalized to ensure that when multiple kernels could be scheduled the same one will always be chosen.
@@ -44,6 +45,7 @@ void * PipelineBuilder::compile() {
     return mDriver.finalizeObject(main);
 }
 
+using Kernels = PipelineBuilder::Kernels;
 
 enum class VertexType { Kernel, StreamSet, Scalar };
 
@@ -75,16 +77,25 @@ inline typename graph_traits<Graph>::edge_descriptor out_edge(const typename gra
     return *out_edges(u, G).first;
 }
 
-void enumerateProducerBindings(const VertexType type, const Vertex producerVertex, const Bindings & bindings, Graph & G, Map & M) {
+void enumerateProducerBindings(const VertexType type, const Vertex producerVertex, const Bindings & bindings, Graph & G, Map & M, const Kernels & K) {
     const auto n = bindings.size();
     for (unsigned i = 0; i < n; ++i) {
         const Relationship * const rel = getRelationship(bindings[i]);
         if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
-        assert (M.count(rel) == 0);
+        const auto f = M.find(rel);
+        if (LLVM_UNLIKELY(f != M.end())) {
+            std::string tmp;
+            raw_string_ostream out(tmp);
+            const auto existingProducer = target(out_edge(f->second, G), G);
+            out << "Both " << K[existingProducer]->getName() <<
+                   " and " << K[producerVertex]->getName() <<
+                   " produce the same stream.";
+            throw std::runtime_error(out.str());
+        }
         const auto bufferVertex = add_vertex(G);
+        M.emplace(rel, bufferVertex);
         G[bufferVertex].type = type;
         add_edge(bufferVertex, producerVertex, i, G); // buffer -> producer ordering
-        M.emplace(rel, bufferVertex);
     }
 }
 
@@ -182,11 +193,11 @@ PipelineKernel * PipelineBuilder::makePipelineKernel() {
     Graph G(pipelineVertex + 1);
     Map M;
 
-    enumerateProducerBindings(VertexType::Scalar, pipelineVertex, mInputScalars, G, M);
-    enumerateProducerBindings(VertexType::StreamSet, pipelineVertex, mInputStreamSets, G, M);
+    enumerateProducerBindings(VertexType::Scalar, pipelineVertex, mInputScalars, G, M, mKernels);
+    enumerateProducerBindings(VertexType::StreamSet, pipelineVertex, mInputStreamSets, G, M, mKernels);
     for (unsigned i = 0; i < numOfKernels; ++i) {
-        enumerateProducerBindings(VertexType::Scalar, i, mKernels[i]->getOutputScalarBindings(), G, M);
-        enumerateProducerBindings(VertexType::StreamSet, i, mKernels[i]->getOutputStreamSetBindings(), G, M);
+        enumerateProducerBindings(VertexType::Scalar, i, mKernels[i]->getOutputScalarBindings(), G, M, mKernels);
+        enumerateProducerBindings(VertexType::StreamSet, i, mKernels[i]->getOutputStreamSetBindings(), G, M, mKernels);
     }
     for (unsigned i = 0; i < numOfKernels; ++i) {
         enumerateConsumerBindings(VertexType::Scalar, i, mKernels[i]->getInputScalarBindings(), G, M);
@@ -260,7 +271,7 @@ PipelineKernel * PipelineBuilder::makePipelineKernel() {
     out.flush();
 
     Kernels pipeline;
-    pipeline.reserve(ordering.size());    
+    pipeline.reserve(ordering.size());
 
     const std::unique_ptr<kernel::KernelBuilder> & b = mDriver.getBuilder();
     Type * const addrPtrTy = b->getVoidPtrTy(); // is voidptrty sufficient?

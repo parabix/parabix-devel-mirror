@@ -2,23 +2,20 @@
 #define ENUM_FLAGS_HPP
 
 #include <type_traits>
-
 namespace {
-
 template<typename EnumType>
 struct __EnumFlagSet {
     static const bool enable = false;
 };
-
 }
 
 #define ENABLE_ENUM_FLAGS(EnumType) \
-    namespace { \
-    template<> \
-    struct __EnumFlagSet<EnumType> { \
-        static const bool enable = true; \
-    }; \
-    }
+inline namespace { \
+template<> \
+struct __EnumFlagSet<EnumType> { \
+    static const bool enable = true; \
+}; \
+}
 
 template<typename EnumType>
 constexpr typename std::enable_if<__EnumFlagSet<EnumType>::enable, EnumType>::type

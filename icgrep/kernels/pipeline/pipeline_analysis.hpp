@@ -1,10 +1,35 @@
 #include "pipeline_compiler.hpp"
+#include "lexographic_ordering.hpp"
 #include <boost/graph/topological_sort.hpp>
 #include <util/extended_boost_graph_containers.h>
 
 namespace kernel {
 
 #warning TODO: support call bindings that produce output that are inputs of other call bindings or become scalar outputs of the pipeline
+
+#if 0
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief printBufferGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <typename Graph>
+void printGraph(const Graph & G, raw_ostream & out) {
+
+    out << "digraph G {\n";
+    for (auto v : make_iterator_range(vertices(G))) {
+        out << "v" << v << " [label=\"" << v << "\"];\n";
+    }
+    for (auto e : make_iterator_range(edges(G))) {
+        const auto s = source(e, G);
+        const auto t = target(e, G);
+        out << "v" << s << " -> v" << t << ";\n";
+    }
+
+    out << "}\n\n";
+    out.flush();
+}
+
+#endif
 
 namespace {
 
@@ -45,7 +70,7 @@ namespace {
         }
     }
 
-}
+} // end of anonymous namespace
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeScalarDependencyGraph
@@ -79,41 +104,85 @@ ScalarDependencyGraph PipelineCompiler::makeScalarDependencyGraph() const {
     return G;
 }
 
+namespace {
 
+    template <typename Graph, typename Vertex = typename graph_traits<Graph>::vertex_descriptor>
+    bool add_edge_if_no_induced_cycle(const Vertex s, const Vertex t, Graph & G) {
+        // If G is a DAG and there is a t-s path, adding s-t will induce a cycle.
+        const auto d = in_degree(s, G);
+        if (d != 0) {
+            flat_set<Vertex> V;
+            V.reserve(num_vertices(G) - 1);
+            std::queue<Vertex> Q;
+            Q.push(t);
+            // do a BFS to find one a path to s
+            for (;;) {
+                const auto u = Q.front();
+                Q.pop();
+                for (auto e : make_iterator_range(out_edges(u, G))) {
+                    const auto v = target(e, G);
+                    if (V.contains(v)) continue;
+                    if (LLVM_UNLIKELY(v == s)) return false;
+                    Q.push(v);
+                    V.insert(v);
+                }
+                if (Q.empty()) {
+                    break;
+                }
+            }
+        }
+        add_edge(s, t, G);
+        return true;
+    }
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePortDependencyGraph
+ *
+ * Returns a lexographically sorted list of ports s.t. the inputs will be ordered as close as possible (baring
+ * any constraints) to the kernel's original I/O ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-PortDependencyGraph PipelineCompiler::makePortDependencyGraph() const {
+std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
 
-    const auto n = mKernel->getNumOfStreamInputs();
-    const auto m = mKernel->getNumOfStreamOutputs();
-    const auto l = n + m;
+    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfPorts = numOfInputs + numOfOutputs;
 
-    PortDependencyGraph G(l);
+    using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
+
+    Graph G(numOfPorts);
 
     // enumerate the input relations
-    for (unsigned i = 0; i < n; ++i) {
+    for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = mKernel->getInputStreamSetBinding(i);
         const ProcessingRate & rate = input.getRate();
         if (rate.hasReference()) {
             Port port; unsigned j;
             std::tie(port, j) = mKernel->getStreamPort(rate.getReference());
             assert ("input stream cannot refer to an output stream" && port == Port::Input);
-            add_edge(i, j, rate.getKind(), G);
+            add_edge(j, i, G);
         }
     }
     // and then enumerate the output relations
-    for (unsigned i = 0; i < m; ++i) {
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = mKernel->getOutputStreamSetBinding(i);
         const ProcessingRate & rate = output.getRate();
         if (rate.hasReference()) {
             Port port; unsigned j;
             std::tie(port, j) = mKernel->getStreamPort(rate.getReference());
-            add_edge((i + n), j + ((port == Port::Output) ? n : 0), rate.getKind(), G);
+            add_edge(j + ((port == Port::Output) ? numOfInputs : 0), (i + numOfInputs), G);
         }
     }
-    return G;
+
+    // check any dynamic buffer last
+
+
+
+    // TODO: add additional constraints on input ports to indicate the ones
+    // likely to have fewest number of strides?
+
+
+    return lexicalOrdering(std::move(G), mKernel->getName() + " has cyclic port dependencies.");
 }
 
 
@@ -145,40 +214,109 @@ namespace {
         }
     }
 
-    void printTerminationGraph(const TerminationGraph & G, const std::vector<Kernel *> & pipeline, const unsigned index) {
+} // end of anonymous namespace
 
-        auto & out = errs();
+namespace {
 
-        const auto numOfKernels = pipeline.size();
-
-        out << "digraph G" << index << " {\n";
-        for (auto u : make_iterator_range(vertices(G))) {
-            out << "v" << u << " [label=\"" << u << ": ";
-            if (u < numOfKernels) {
-                out << pipeline[u]->getName();
-            } else if (u == numOfKernels) {
-                out << "Pipeline";
-            } else {
-                out << "B" << (u - numOfKernels);
-            }
-            out << "\"];\n";
-        }
-
-        for (auto e : make_iterator_range(edges(G))) {
-            const auto s = source(e, G);
-            const auto t = target(e, G);
-            out << "v" << s << " -> v" << t;
-           // out << " label=\"" << G[e] << "\"";
-            out << ";\n";
-        }
-
-        out << "}\n\n";
-        out.flush();
-
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief minimumConsumed
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline LLVM_READNONE RateValue minimumConsumed(const Kernel * const kernel, const Binding & binding) {
+    if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::Deferred))) {
+        return RateValue{0};
     }
-
+    return lowerBound(kernel, binding);
+}
 
 }
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeConsumerGraph
+ *
+ * Copy the buffer graph but amalgamate any multi-edges into a single one
+ ** ------------------------------------------------------------------------------------------------------------- */
+ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
+
+    const auto lastBuffer = num_vertices(mBufferGraph);
+    ConsumerGraph G(lastBuffer);
+    const auto numOfKernels = mPipeline.size();
+    const auto firstBuffer = numOfKernels + 1;
+
+    #warning TODO: ConsumerGraph assumes the dataflow is transitively bounded by the same initial source
+
+    #warning REVISIT: ConsumerGraph is not optimal for handling relative rate inputs
+
+    std::vector<std::pair<unsigned, unsigned>> consumers; // kernel, portIndex
+
+    for (auto bufferVertex = firstBuffer; bufferVertex < lastBuffer; ++bufferVertex) {
+
+        const BufferNode & bn = mBufferGraph[bufferVertex];
+
+        if (LLVM_UNLIKELY(bn.Type == BufferType::External)) {
+            continue;
+        }
+
+        // copy the producing edge
+        const auto pe = in_edge(bufferVertex, mBufferGraph);
+        add_edge(source(pe, mBufferGraph), bufferVertex, mBufferGraph[pe].Port, G);
+
+        // collect the consumers of the i-th buffer
+        consumers.clear();
+        for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
+            consumers.emplace_back(target(e, mBufferGraph), mBufferGraph[e].Port);
+        }
+
+        // If the minimum input rate of the j-th consumer is greater than or equal to the maximum input
+        // rate of the k-th consumer, we do not need to test the j-th consumer. This also ensures that
+        // for each *FIXED* rate stream, keep only the minimum such rate. However, we may need to insert
+        // a "fake" edge to mark the last consumer otherwise we'll set it too soon.
+
+        if (LLVM_LIKELY(consumers.size() > 1)) {
+            std::sort(consumers.begin(), consumers.end());
+
+            const auto finalConsumer = consumers.back().first;
+
+            for (auto j = consumers.begin() + 1; j != consumers.end(); ) {
+
+                const Kernel * const kernel_j = mPipeline[j->first];
+                const Binding & input_j = kernel_j->getInputStreamSetBinding(j->second);
+                const auto lb_j = minimumConsumed(kernel_j, input_j);
+
+                for (auto k = consumers.begin(); k != j; ++k) {
+                    const Kernel * const kernel_k = mPipeline[k->first];
+                    const Binding & input_k = kernel_k->getInputStreamSetBinding(k->second);
+                    const auto ub_k = upperBound(kernel_k, input_k);
+                    if (LLVM_UNLIKELY(lb_j >= ub_k)) {
+                        j = consumers.erase(j);
+                        goto next;
+                    }
+                }
+
+                for (auto k = j + 1; k != consumers.end(); ++k) {
+                    const Kernel * const kernel_k = mPipeline[k->first];
+                    const Binding & input_k = kernel_k->getInputStreamSetBinding(k->second);
+                    const auto ub_k = upperBound(kernel_k, input_k);
+                    if (LLVM_UNLIKELY(lb_j >= ub_k)) {
+                        j = consumers.erase(j);
+                        goto next;
+                    }
+                }
+
+                ++j;
+next:           continue;
+            }
+            if (LLVM_UNLIKELY(consumers.back().first != finalConsumer)) {
+                consumers.emplace_back(finalConsumer, FAKE_CONSUMER);
+            }
+        }
+
+        for (const auto & consumer : consumers) {
+            add_edge(bufferVertex, consumer.first, consumer.second, G);
+        }
+    }
+
+    return G;
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeTerminationGraph
@@ -263,5 +401,100 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
 
     return G;
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePopCountGraph
+ *
+ * Kernel -> Port -> Buffer ordering. Edge between a Kernel and a port indicates the port # of the source
+ * items stream. Edges between a port and buffer state the ref port #. The kernel and buffer vertices are
+ * aligned with the BufferGraph. Any buffer vertex with an in-degree > 0 is the reference of a pop count
+ * rate stream.
+ ** ------------------------------------------------------------------------------------------------------------- */
+PopCountGraph PipelineCompiler::makePopCountGraph() const {
+    const auto numOfKernels = mPipeline.size();
+
+    using PopCountVertex = PopCountGraph::vertex_descriptor;
+    using PortMapping = flat_map<unsigned, PopCountVertex>;
+
+    PopCountGraph G(num_vertices(mBufferGraph));
+    PortMapping M;
+
+    auto addPopCountDependency = [&](
+        const Kernel * const kernel,
+        const PopCountVertex kernelVertex,
+        const unsigned portIndex,
+        const Binding & binding) {
+
+        const ProcessingRate & rate = binding.getRate();
+        if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
+            // determine which port this I/O port refers to
+            Port portType; unsigned refPort;
+            std::tie(portType, refPort) = kernel->getStreamPort(rate.getReference());
+
+            // verify the reference stream is an input port
+            if (LLVM_UNLIKELY(portType != Port::Input)) {
+                std::string tmp;
+                raw_string_ostream msg(tmp);
+                msg << kernel->getName();
+                msg << ": pop count rate for ";
+                msg << binding.getName();
+                msg << " cannot refer to an output stream";
+                report_fatal_error(msg.str());
+            }
+
+            const auto type = rate.isPopCount() ? CountingType::Positive : CountingType::Negative;
+
+            // check if we've already created a vertex for the ref port ...
+            const auto f = M.find(refPort);
+            if (LLVM_UNLIKELY(f != M.end())) {
+                const auto refPortVertex = f->second;
+                add_edge(kernelVertex, refPortVertex, PopCountEdge{type, portIndex}, G);
+                // update the ref -> buffer edge with the counting type
+                for (const auto e : make_iterator_range(out_edges(refPortVertex, G))) {
+                    G[e].Type |= type;
+                }
+            } else { // ... otherwise map a new vertex to it.
+
+                // verify the reference stream is a Fixed rate stream
+                const Binding & refBinding = kernel->getInputStreamSetBinding(refPort);
+                if (LLVM_UNLIKELY(refBinding.isDeferred() || !refBinding.getRate().isFixed())) {
+                    std::string tmp;
+                    raw_string_ostream msg(tmp);
+                    msg << kernel->getName();
+                    msg << ": pop count reference ";
+                    msg << refBinding.getName();
+                    msg << " must be a non-deferred Fixed rate stream";
+                    report_fatal_error(msg.str());
+                }
+
+                const auto refPortVertex = add_vertex(G);
+                M.emplace(refPort, refPortVertex);
+                add_edge(kernelVertex, refPortVertex, PopCountEdge{type, portIndex}, G);
+
+                // determine which buffer this port refers to by inspecting the buffer graph
+                const auto bufferVertex = getInputBufferVertex(kernelVertex, refPort);
+                add_edge(refPortVertex, bufferVertex, PopCountEdge{type, refPort}, G);
+            }
+        }
+    };
+
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        const Kernel * const kernel = mPipeline[i];
+        const auto numOfInputs = kernel->getNumOfStreamInputs();
+        const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+        for (unsigned j = 0; j < numOfInputs; ++j) {
+            const auto & input = kernel->getInputStreamSetBinding(j);
+            addPopCountDependency(kernel, i, j, input);
+        }
+        for (unsigned j = 0; j < numOfOutputs; ++j) {
+            const auto & output = kernel->getOutputStreamSetBinding(j);
+            addPopCountDependency(kernel, i, j + numOfInputs, output);
+        }
+        M.clear();
+    }
+
+    return G;
+}
+
 
 } // end of namespace

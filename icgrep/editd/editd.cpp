@@ -165,18 +165,6 @@ typedef void (*preprocessFunctionType)(char * output_data, size_t output_size, c
 static char * chStream;
 static size_t size;
 
-//class PreprocessPipeline : public PipelineKernel {
-//public:
-//    PreprocessPipeline(EngineInstance & driver, StreamSet * CCResults)
-//     : PipelineKernel(driver,
-//    {},
-//    {Binding{"CCResults", CCResults}},
-//    {Binding{driver.getBuilder()->getInt32Ty(), "fileDescriptor"}},
-//    {}) {
-
-//    }
-//};
-
 class PreprocessKernel final: public pablo::PabloKernel {
 public:
     PreprocessKernel(const std::unique_ptr<KernelBuilder> & b, StreamSet * BasisBits, StreamSet * CCResults);

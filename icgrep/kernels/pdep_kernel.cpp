@@ -140,8 +140,8 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
 
     b->SetInsertPoint(finishedStrides);
 }
-    
-StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> &
+
+StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b
                                        , StreamSet * source, const unsigned base, StreamSet * mask
                                        , StreamSet * expanded
                                        , const unsigned FieldWidth)
@@ -150,7 +150,7 @@ StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuild
 + "_" + std::to_string(base) + "_" + std::to_string(expanded->getNumElements()),
 
 {Binding{"marker", mask, FixedRate(), Principal()},
-Binding{"source", source, PopcountOf("marker")}},
+Binding{"source", source, PopcountOf("marker")}}, // BlockSize(b->getBitBlockWidth())
 {Binding{"output", expanded, FixedRate()}},
 {}, {}, {})
 , mFieldWidth(FieldWidth)
@@ -163,23 +163,24 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Type * fieldWidthTy = b->getIntNTy(mFieldWidth);
     Type * sizeTy = b->getSizeTy();
     const unsigned numFields = b->getBitBlockWidth() / mFieldWidth;
-    
+
     Constant * const ZERO = b->getSize(0);
     Constant * bwConst = ConstantInt::get(sizeTy, b->getBitBlockWidth());
     Constant * fwConst = ConstantInt::get(sizeTy, mFieldWidth);
     Constant * fwSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fieldWidthTy, mFieldWidth));
     Constant * fw_sub1Splat = ConstantVector::getSplat(numFields, ConstantInt::get(fieldWidthTy, mFieldWidth - 1));
-    
+
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * expandLoop = b->CreateBasicBlock("expandLoop");
     BasicBlock * expansionDone = b->CreateBasicBlock("expansionDone");
     Value * processedSourceItems = b->getProcessedItemCount("source");
     Value * initialSourceOffset = b->CreateURem(processedSourceItems, bwConst);
+
     Value * pendingData[mSelectedStreamCount];
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
         pendingData[i] = b->loadInputStreamBlock("source", b->getInt32(mSelectedStreamBase + i), ZERO);
     }
-    
+
     b->CreateBr(expandLoop);
     // Main Loop
     b->SetInsertPoint(expandLoop);
@@ -215,7 +216,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     // output fields in accord with the popcounts of the deposit mask fields.
     // The bits for each output field will typically come from (at most) two
     // source fields, with offsets.  Calculate the field numbers and offsets.
-    
+
     Value * fieldPopCounts = b->simd_popcount(mFieldWidth, deposit_mask);
     // For each field determine the (partial) sum popcount of all fields prior to
     // the current field.
@@ -236,6 +237,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     // for loading source streams.
     Value * const newPendingOffset = b->CreateAdd(pendingOffsetPhi, blockPopCount);
     Value * const srcBlockNo = b->CreateUDiv(newPendingOffset, bwConst);
+
     // Now load and process source streams.
     Value * sourceData[mSelectedStreamCount];
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
@@ -261,7 +263,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     // Now continue the loop if there are more blocks to process.
     Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
     b->CreateCondBr(moreToDo, expandLoop, expansionDone);
-    
+
     b->SetInsertPoint(expansionDone);
 }
 
@@ -277,7 +279,7 @@ FieldDepositKernel::FieldDepositKernel(const std::unique_ptr<kernel::KernelBuild
 , mStreamCount(input->getNumElements()) {
 
 }
-    
+
 void FieldDepositKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
     BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");

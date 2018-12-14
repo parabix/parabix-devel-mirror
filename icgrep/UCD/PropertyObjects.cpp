@@ -275,11 +275,10 @@ const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum
     if (property_enum_val == Binary_ns::Y) {
         return mY;
     }
-    if (mNoUninitialized) {
-        mN = ~mY;
-        mNoUninitialized = false;
+    if (mN.get() == nullptr) {
+        mN = llvm::make_unique<UnicodeSet>(std::move(~mY));
     }
-    return mN;
+    return *mN;
 }
 
 const UnicodeSet BinaryPropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {

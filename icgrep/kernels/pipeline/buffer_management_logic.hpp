@@ -27,7 +27,10 @@ inline RateValue div_by_non_zero(const RateValue & num, const RateValue & denom)
 }
 
 inline RateValue getOverflowSize(const Kernel * kernel, const Binding & binding, const BufferRateData & rate) {
-    return std::min(rate.maximum - rate.minimum, upperBound(kernel, binding));
+    if (binding.hasAttribute(AttrId::BlockSize)) {
+        return 0;
+    }
+    return std::min(rate.Maximum - rate.Minimum, upperBound(kernel, binding));
 }
 
 inline RateValue getInputOverflowSize(const Kernel * kernel, const Binding & binding, const BufferRateData & rate) {
@@ -45,11 +48,19 @@ inline RateValue getOutputOverflowSize(const Kernel * kernel, const Binding & bi
 } // end of anonymous namespace
 
 inline const Binding & PipelineCompiler::getOutputBinding(const Kernel * const producer, const unsigned index) const {
-    return producer == mPipelineKernel ? mPipelineKernel->getInputStreamSetBinding(index) : producer->getOutputStreamSetBinding(index);
+    if (producer == mPipelineKernel) {
+        return mPipelineKernel->getInputStreamSetBinding(index);
+    } else {
+        return producer->getOutputStreamSetBinding(index);
+    }
 }
 
 inline const Binding & PipelineCompiler::getInputBinding(const Kernel * const consumer, const unsigned index) const {
-    return consumer == mPipelineKernel ? mPipelineKernel->getOutputStreamSetBinding(index) : consumer->getInputStreamSetBinding(index);
+    if (consumer == mPipelineKernel) {
+        return mPipelineKernel->getOutputStreamSetBinding(index);
+    } else {
+        return consumer->getInputStreamSetBinding(index);
+    }
 }
 
 inline BufferRateData PipelineCompiler::getBufferRateData(const unsigned index, const unsigned port, bool input) {
@@ -92,6 +103,8 @@ void PipelineCompiler::enumerateBufferConsumerBindings(const unsigned consumer, 
  * @brief makePipelineBufferGraph
  *
  * Return a cyclic bi-partite graph indicating the I/O relationships between the kernels and their buffers.
+ *
+ * Ordering: producer -> buffer -> consumer
  ** ------------------------------------------------------------------------------------------------------------- */
 BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
@@ -102,12 +115,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
     // make an edge from the pipeline input to a buffer vertex
     enumerateBufferProducerBindings(pipelineVertex, mPipelineKernel->getInputStreamSetBindings(), G, M);
-    G[pipelineVertex].kernel = mPipelineKernel;
+    G[pipelineVertex].Kernel = mPipelineKernel;
     // make an edge from each producing kernel to a buffer vertex
     for (unsigned i = 0; i < numOfKernels; ++i) {
         const auto & producer = mPipeline[i];
         enumerateBufferProducerBindings(i, producer->getOutputStreamSetBindings(), G, M);
-        G[i].kernel = producer;
+        G[i].Kernel = producer;
     }
     // make an edge from each buffer to its consuming kernel(s)
     for (unsigned i = 0; i < numOfKernels; ++i) {
@@ -132,7 +145,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RateValue upper{std::numeric_limits<unsigned>::max()};
 
             BufferNode & kn = G[i];
-            assert(kn.kernel);
+            assert(kn.Kernel);
 
             for (const auto ce : make_iterator_range(in_edges(i, G))) {
                 // current consuming edge of this buffer
@@ -142,49 +155,51 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 const auto pe = in_edge(buffer, G);
                 const BufferRateData & pd = G[pe];
 
-                const auto min = div_by_non_zero(pd.minimum, cd.maximum);
+                const auto min = div_by_non_zero(pd.Minimum, cd.Maximum);
                 lower = std::min(lower, min);
 
-                const auto max = div_by_non_zero(pd.maximum, cd.minimum);
+                const auto max = div_by_non_zero(pd.Maximum, cd.Minimum);
                 upper = std::min(upper, max);
             }
 
-            kn.lower = lower;
-            kn.upper = upper;
+            kn.Lower = lower;
+            kn.Upper = upper;
 
             for (const auto e : make_iterator_range(out_edges(i, G))) {
                 BufferRateData & rd = G[e];
-                rd.minimum = lower * rd.minimum;
-                rd.maximum = upper * rd.maximum;
+                rd.Minimum = lower * rd.Minimum;
+                rd.Maximum = upper * rd.Maximum;
             }
 
         }
     }
 
-//    printBufferGraph(G, errs());
-
     // fill in any known pipeline I/O buffers
     for (const auto e : make_iterator_range(out_edges(pipelineVertex, G))) {
         const auto bufferVertex = target(e, G);
-        assert (G[bufferVertex].buffer == nullptr);
-        StreamSetBuffer * const buffer = mPipelineKernel->getInputStreamSetBuffer(G[e].port);
-        mIsPipelineIO.insert(buffer);
-        G[bufferVertex].buffer = buffer;
+        BufferNode & bn = G[bufferVertex];
+        assert (bn.Buffer == nullptr);
+        const auto inputPort = G[e].Port;
+        bn.Buffer = mPipelineKernel->getInputStreamSetBuffer(inputPort);
+        bn.Type = BufferType::External;
     }
 
     for (const auto e : make_iterator_range(in_edges(pipelineVertex, G))) {
         const auto bufferVertex = source(e, G);
-        assert (G[bufferVertex].buffer == nullptr);
-        StreamSetBuffer * const buffer = mPipelineKernel->getOutputStreamSetBuffer(G[e].port);
-        mIsPipelineIO.insert(buffer);
-        G[bufferVertex].buffer = buffer;
+        BufferNode & bn = G[bufferVertex];
+        assert (bn.Buffer == nullptr);
+        const auto outputPort = G[e].Port;
+        bn.Buffer = mPipelineKernel->getOutputStreamSetBuffer(outputPort);
+        bn.Type = BufferType::External;
     }
 
     // then construct the rest
     for (unsigned i = firstBuffer; i != lastBuffer; ++i) {
 
         // Is this a pipeline I/O buffer?
-        if (LLVM_UNLIKELY(G[i].buffer != nullptr)) {
+        BufferNode & bn = G[i];
+
+        if (LLVM_UNLIKELY(bn.Buffer != nullptr)) {
             continue;
         }
 
@@ -193,58 +208,72 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
 
         const BufferNode & producerNode = G[producerVertex];
-        const auto & producer = producerNode.kernel;
+        const auto & producer = producerNode.Kernel;
         const BufferRateData & producerRate = G[pe];
-        const Binding & output = getOutputBinding(producer, producerRate.port);
+        const Binding & output = getOutputBinding(producer, producerRate.Port);
 
         StreamSetBuffer * buffer = nullptr;
 
-        const auto isUnknown = producerRate.maximum.numerator() == 0;
+        const auto isUnknown = producerRate.Maximum.numerator() == 0;
         const auto isManaged = output.hasAttribute(AttrId::ManagedBuffer);
+
+        BufferType bufferType = BufferType::Internal;
+
         if (LLVM_UNLIKELY(isUnknown || isManaged)) {
             buffer = new ExternalBuffer(b, output.getType());
+            bufferType = BufferType::Managed;
         } else {
 
-            RateValue requiredSpace{producerRate.maximum};
+            RateValue requiredSpace{producerRate.Maximum};
             RateValue overflowSpace{getInputOverflowSize(producer, output, producerRate)};
             RateValue facsimileSpace{0};
-            bool dynamic = (producerRate.minimum < producerRate.maximum);
+
+            bool dynamic = false;
 
             for (const auto ce : make_iterator_range(out_edges(i, G))) {
                 const BufferRateData & consumerRate = G[ce];
-                requiredSpace = lcm(requiredSpace, consumerRate.maximum);
+                requiredSpace = lcm(requiredSpace, consumerRate.Maximum);
                 const auto c = target(ce, G);
                 const BufferNode & consumerNode = G[c];
-                const Kernel * const consumer = consumerNode.kernel; assert (consumer);
-                const Binding & input = getInputBinding(consumer, consumerRate.port);
+                const Kernel * const consumer = consumerNode.Kernel; assert (consumer);
+                const Binding & input = getInputBinding(consumer, consumerRate.Port);
                 facsimileSpace = std::max(facsimileSpace, getOutputOverflowSize(consumer, input, consumerRate));
                 // Could the consumption rate be less than the production rate?
-                if ((consumerNode.lower * consumerRate.minimum) < producerRate.maximum) {
+                if ((consumerNode.Lower * consumerRate.Minimum) < producerRate.Maximum) {
                     dynamic = true;
                 }
             }
 
-            const auto bufferSize = lcm(requiredSpace, b->getBitBlockWidth()) * mPipelineKernel->getNumOfThreads();
-            assert (bufferSize.denominator() == 1);
-            const auto overflowSize = lcm(std::max(overflowSpace, facsimileSpace), b->getBitBlockWidth());
-            assert (overflowSize.denominator() == 1);
+            // calculate overflow (copyback) and fascimile (copyforward) space
+            overflowSpace = lcm(overflowSpace, b->getBitBlockWidth());
+            assert (overflowSpace.denominator() == 1);
+            facsimileSpace = lcm(facsimileSpace, b->getBitBlockWidth());
+            assert (facsimileSpace.denominator() == 1);
+            bn.Overflow = overflowSpace.numerator();
+            bn.Fasimile = facsimileSpace.numerator();
+            const auto overflowSize = std::max(bn.Overflow, bn.Fasimile);
+
+            // compute the buffer size
+            const auto bufferSpace = lcm(requiredSpace, b->getBitBlockWidth());
+            assert (bufferSpace.denominator() == 1);
+            const auto bufferSize = bufferSpace.numerator() * mPipelineKernel->getNumOfThreads();
+
 
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             if (dynamic) {
-                buffer = new DynamicBuffer(b, output.getType(), bufferSize.numerator(), overflowSize.numerator());
+                buffer = new DynamicBuffer(b, output.getType(), bufferSize, overflowSize);
             } else {
-                buffer = new StaticBuffer(b, output.getType(), bufferSize.numerator(), overflowSize.numerator());
-            }
-            if (LLVM_UNLIKELY(overflowSize > 0)) {
-                mOverflowRequirements.emplace(buffer, OverflowRequirement{ceiling(overflowSpace), ceiling(facsimileSpace)});
+                buffer = new StaticBuffer(b, output.getType(), bufferSize, overflowSize);
             }
         }
 
-        G[i].buffer = buffer;
+        bn.Buffer = buffer;
+        bn.Type = bufferType;
+
         mOwnedBuffers.emplace_back(buffer);
     }
 
-    // printBufferGraph(G, errs());
+//    printBufferGraph(G, errs());
 
     return G;
 }
@@ -270,14 +299,18 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
 
     for (unsigned i = firstBuffer; i != lastBuffer; ++i) {
         out << "v" << i << " [label=\"";
-        if (G[i].buffer == nullptr) {
+        const BufferNode & bn = G[i];
+        if (bn.Buffer == nullptr) {
             out << '?';
-        } else if (isa<ExternalBuffer>(G[i].buffer)) {
+        } else if (isa<ExternalBuffer>(bn.Buffer)) {
             out << 'E';
-        } else if (isa<DynamicBuffer>(G[i].buffer)) {
+        } else if (isa<DynamicBuffer>(bn.Buffer)) {
             out << 'D';
-        } else if (isa<StaticBuffer>(G[i].buffer)) {
+        } else if (isa<StaticBuffer>(bn.Buffer)) {
             out << 'S';
+        }
+        if (bn.Overflow || bn.Fasimile) {
+            out << " (O:" << bn.Overflow << ",F:" << bn.Fasimile << ')';
         }
         out << "\"];\n";
     }
@@ -292,23 +325,23 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         const BufferRateData & pd = G[e];
 
         out << " [label=\"";
-        if (pd.minimum.denominator() > 1 || pd.maximum.denominator() > 1) {
-            out << pd.minimum.numerator() << "/" << pd.minimum.denominator()
+        if (pd.Minimum.denominator() > 1 || pd.Maximum.denominator() > 1) {
+            out << pd.Minimum.numerator() << "/" << pd.Minimum.denominator()
                 << " - "
-                << pd.maximum.numerator() << "/" << pd.maximum.denominator();
+                << pd.Maximum.numerator() << "/" << pd.Maximum.denominator();
         } else {
-            out << pd.minimum.numerator() << " - " << pd.maximum.numerator();
+            out << pd.Minimum.numerator() << " - " << pd.Maximum.numerator();
         }
         out << '\n';
 
         if (s <= numOfKernels) {
             // producer edge
-            const Kernel * const k = G[s].kernel;
-            out << k->getName() << "." << getOutputBinding(k, pd.port).getName();
+            const Kernel * const k = G[s].Kernel;
+            out << k->getName() << "." << getOutputBinding(k, pd.Port).getName();
         } else {
             assert (t <= numOfKernels);
-            const Kernel * const k = G[t].kernel;
-            out << k->getName() << "." << getInputBinding(k, pd.port).getName();
+            const Kernel * const k = G[t].Kernel;
+            out << k->getName() << "." << getInputBinding(k, pd.Port).getName();
         }
 
         out << "\"];\n";
@@ -321,27 +354,23 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addHandlesToPipelineKernel
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addHandlesToPipelineKernel(BuilderRef b) {
-    const auto numOfKernels = mPipeline.size();
-    b->setKernel(mPipelineKernel);
+inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index) {
     IntegerType * const sizeTy = b->getSizeTy();
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        const auto & kernel = mPipeline[i];
-        if (!kernel->hasFamilyName()) {
-            PointerType * kernelPtrTy = kernel->getKernelType()->getPointerTo(0);
-            mPipelineKernel->addInternalScalar(kernelPtrTy, makeKernelName(i));
+    const Kernel * const kernel = mPipeline[index];
+    if (!kernel->hasFamilyName()) {
+        PointerType * kernelPtrTy = kernel->getKernelType()->getPointerTo(0);
+        mPipelineKernel->addInternalScalar(kernelPtrTy, makeKernelName(index));
+    }
+    for (const auto e : make_iterator_range(out_edges(index, mBufferGraph))) {
+        const auto bufferVertex = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[bufferVertex];
+        if (LLVM_UNLIKELY(bn.Type == BufferType::Managed)) {
+            continue;
         }
-        for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            const auto bufferVertex = target(e, mBufferGraph);
-            const StreamSetBuffer * const buffer = mBufferGraph[bufferVertex].buffer;
-            if (LLVM_UNLIKELY(isa<ExternalBuffer>(buffer))) {
-                continue;
-            }
-            const Binding & output = kernel->getOutputStreamSetBinding(mBufferGraph[e].port);
-            const auto bufferName = makeBufferName(i, output);
-            mPipelineKernel->addInternalScalar(buffer->getHandleType(b), bufferName);
-            mPipelineKernel->addInternalScalar(sizeTy, bufferName + CONSUMED_ITEM_COUNT_SUFFIX);
-        }
+        const Binding & output = kernel->getOutputStreamSetBinding(mBufferGraph[e].Port);
+        const auto bufferName = makeBufferName(index, output);
+        mPipelineKernel->addInternalScalar(bn.Buffer->getHandleType(b), bufferName);
+        mPipelineKernel->addInternalScalar(sizeTy, bufferName + CONSUMED_ITEM_COUNT_SUFFIX);
     }
 }
 
@@ -358,18 +387,18 @@ void PipelineCompiler::constructBuffers(BuilderRef b) {
     b->setKernel(mPipelineKernel);
 
     for (unsigned i = firstBuffer; i < lastBuffer; ++i) {
-        StreamSetBuffer * const buffer = mBufferGraph[i].buffer;
-        if (LLVM_UNLIKELY(isa<ExternalBuffer>(buffer))) {
-            continue;
+        const BufferNode & bn = mBufferGraph[i];
+        if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
+            const auto pe = in_edge(i, mBufferGraph);
+            const auto p = source(pe, mBufferGraph);
+            const auto & producer = mPipeline[p];
+            const Binding & output = producer->getOutputStreamSetBinding(mBufferGraph[pe].Port);
+            const auto name = makeBufferName(p, output);
+            Value * const handle = b->getScalarFieldPtr(name);
+            StreamSetBuffer * const buffer = bn.Buffer;
+            buffer->setHandle(b, handle);
+            buffer->allocateBuffer(b);
         }
-        const auto pe = in_edge(i, mBufferGraph);
-        const auto p = source(pe, mBufferGraph);
-        const auto & producer = mPipeline[p];
-        const Binding & output = producer->getOutputStreamSetBinding(mBufferGraph[pe].port);
-        const auto name = makeBufferName(p, output);
-        Value * const handle = b->getScalarFieldPtr(name);
-        buffer->setHandle(b, handle);
-        buffer->allocateBuffer(b);
     }
 }
 
@@ -380,114 +409,110 @@ void PipelineCompiler::constructBuffers(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::loadBufferHandles(BuilderRef b) {
     assert (mPipeline[mKernelIndex] == mKernel);
-    assert (b->getKernel() == mKernel);
     for (const auto pe : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
         const auto bufferVertex = target(pe, mBufferGraph);
-        StreamSetBuffer * const buffer = mBufferGraph[bufferVertex].buffer;
-        const Binding & output = mKernel->getOutputStreamSetBinding(mBufferGraph[pe].port);
-        if (LLVM_UNLIKELY(isa<ExternalBuffer>(buffer))) {
-            // if the handle was already set, it must be a pipeline I/O stream
-            if (LLVM_LIKELY(buffer->getHandle() == nullptr)) {
-                buffer->setHandle(b, b->getScalarFieldPtr(output.getName() + BUFFER_HANDLE_SUFFIX));
-            }
-        } else {
+        const auto outputPort = mBufferGraph[pe].Port;
+        const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
+        const BufferNode & bn = mBufferGraph[bufferVertex];
+        StreamSetBuffer * const buffer = bn.Buffer;
+        if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
             b->setKernel(mPipelineKernel);
             buffer->setHandle(b, b->getScalarFieldPtr(makeBufferName(mKernelIndex, output)));
+        } else if (bn.Type == BufferType::Managed) {
             b->setKernel(mKernel);
+            buffer->setHandle(b, b->getScalarFieldPtr(output.getName() + BUFFER_HANDLE_SUFFIX));
         }
+        assert (buffer->getHandle());
     }
+    b->setKernel(mKernel);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief releaseBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::releaseBuffers(BuilderRef b) {
-    for (const auto & buffer : mOwnedBuffers) {
-        buffer->releaseBuffer(b);
+    const auto firstBuffer = mPipeline.size() + 1;
+    const auto lastBuffer = num_vertices(mBufferGraph);
+    for (auto bufferVertex = firstBuffer; bufferVertex != lastBuffer; ++bufferVertex) {
+        const BufferNode & bn = mBufferGraph[bufferVertex];
+        if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
+            bn.Buffer->releaseBuffer(b);
+        }
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief readCurrentProducedItemCounts
+ * @brief readInitialProducedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::readCurrentProducedItemCounts(BuilderRef b) {
+inline void PipelineCompiler::readInitialProducedItemCounts(BuilderRef b) {
+    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        Value * const produced = b->getNonDeferredProducedItemCount(output);
+        mInitiallyProducedItemCount[i] = produced;
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief readFinalProducedItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::readFinalProducedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(mBufferGraph[e].port);
-        Value * const produced = b->getProducedItemCount(output.getName());
-        const auto bufferIndex = target(e, mBufferGraph);
-        const StreamSetBuffer * const buffer = mBufferGraph[bufferIndex].buffer;
-        assert (mTotalItemCount.count(buffer) == 0);
-        mTotalItemCount.emplace(buffer, produced);
-        initializeConsumedItemCount(b, bufferIndex, produced);
+        const Binding & output = mKernel->getOutputStreamSetBinding(mBufferGraph[e].Port);
+        Value * const produced = b->getNonDeferredProducedItemCount(output);
+        // TODO: we only need to consider the blocksize attribute if it's possible this
+        // stream could be read before being fully written. This might occur if one of
+        // it's consumers is a PopCount rate that does not have a matching BlockSize
+        // attribute.
+        Value * fullyProduced = truncateBlockSize(b, output, produced, mTerminatedFlag);
+        const auto bufferVertex = target(e, mBufferGraph);
+        BufferNode & bn = mBufferGraph[bufferVertex];
+        assert (bn.TotalItems == nullptr);
+        bn.TotalItems = fullyProduced;
+        initializeConsumedItemCount(b, bufferVertex, fullyProduced);
+        initializePopCountReferenceItemCount(b, bufferVertex, fullyProduced);
+        #ifdef PRINT_DEBUG_MESSAGES
+        const auto prefix = makeBufferName(mKernelIndex, output);
+        b->CallPrintInt(prefix + "_produced'", produced);
+        #endif
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief requiresCopyBack
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool PipelineCompiler::requiresCopyBack(const StreamSetBuffer * const buffer) const {
-    const auto f = mOverflowRequirements.find(buffer);
-    if (f == mOverflowRequirements.end()) return false;
-    const OverflowRequirement & r = f->second;
-    return r.copyBack != 0;
+inline bool PipelineCompiler::requiresCopyBack(const unsigned bufferVertex) const {
+    return getCopyBack(bufferVertex) != 0;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getCopyBack
  ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getCopyBack(const StreamSetBuffer * const buffer) const {
-    const auto f = mOverflowRequirements.find(buffer);
-    if (LLVM_LIKELY(f == mOverflowRequirements.end())) {
-        return 0;
-    }
-    const OverflowRequirement & r = f->second;
-    return r.copyBack;
+inline unsigned PipelineCompiler::getCopyBack(const unsigned bufferVertex) const {
+    return mBufferGraph[bufferVertex].Overflow;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief requiresFacsimile
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool PipelineCompiler::requiresFacsimile(const StreamSetBuffer * const buffer) const {
-    const auto f = mOverflowRequirements.find(buffer);
-    if (f == mOverflowRequirements.end()) return false;
-    const OverflowRequirement & r = f->second;
-    return r.facsimile != 0;
+inline bool PipelineCompiler::requiresFacsimile(const unsigned bufferVertex) const {
+    return getFacsimile(bufferVertex) != 0;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getFacsimile
  ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getFacsimile(const StreamSetBuffer * const buffer) const {
-    const auto f = mOverflowRequirements.find(buffer);
-    if (LLVM_LIKELY(f == mOverflowRequirements.end())) {
-        return 0;
-    }
-    const OverflowRequirement & r = f->second;
-    return r.facsimile;
+inline unsigned PipelineCompiler::getFacsimile(const unsigned bufferVertex) const {
+    return mBufferGraph[bufferVertex].Fasimile;
 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isPipelineIO
+ * @brief getOutputBufferType
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool PipelineCompiler::isPipelineIO(const StreamSetBuffer * const buffer) const {
-    return mIsPipelineIO.count(buffer) != 0;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief storeCopyBackProducedItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::storeCopyBackProducedItemCounts(BuilderRef b) {
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
-    mCopyBackProducedOutputItems.resize(numOfOutputs);
-    std::fill(mCopyBackProducedOutputItems.begin(), mCopyBackProducedOutputItems.end(), nullptr);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetBuffer * const buffer = getOutputBuffer(i);
-        if (requiresCopyBack(buffer)) {
-            const Binding & output = mKernel->getOutputStreamSetBinding(i);
-            mCopyBackProducedOutputItems[i] = b->getNonDeferredProducedItemCount(output);
-        }
-    }
+BufferType PipelineCompiler::getOutputBufferType(const unsigned outputPort) const {
+    const auto bufferVertex = getOutputBufferVertex(outputPort);
+    return mBufferGraph[bufferVertex].Type;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -496,15 +521,14 @@ inline void PipelineCompiler::storeCopyBackProducedItemCounts(BuilderRef b) {
 inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        if (mCopyBackProducedOutputItems[i]) {
+        if (requiresCopyBack(getOutputBufferVertex(i))) {
             const Binding & output = mKernel->getOutputStreamSetBinding(i);
-            const auto prefix = mKernel->getName() + "_" + output.getName();
+            const auto prefix = makeBufferName(mKernelIndex, output);
             BasicBlock * const copyBack = b->CreateBasicBlock(prefix + "_copyBack", mKernelExit);
             BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "_copyBackExit", mKernelExit);
             const StreamSetBuffer * const buffer = getOutputBuffer(i);
             Value * const capacity = buffer->getCapacity(b.get());
-
-            Value * const priorOffset = b->CreateURem(mCopyBackProducedOutputItems[i], capacity);
+            Value * const priorOffset = b->CreateURem(mAlreadyProducedItemCount[i], capacity);
             Value * const produced = b->getNonDeferredProducedItemCount(output);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const nonCapacityAlignedWrite = b->CreateIsNotNull(producedOffset);
@@ -513,39 +537,10 @@ inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
             b->CreateUnlikelyCondBr(needsCopyBack, copyBack, copyExit);
 
             b->SetInsertPoint(copyBack);
-            Value * blocksToCopy = producedOffset;
-            const auto itemWidth = getItemWidth(buffer->getBaseType());
-            const auto blockWidth = b->getBitBlockWidth();
-            if (LLVM_LIKELY(itemWidth < blockWidth)) {
-                blocksToCopy = b->CreateCeilUDiv(blocksToCopy, b->getSize(blockWidth / itemWidth));
-            } else if (LLVM_UNLIKELY(blockWidth > itemWidth)) {
-                blocksToCopy = b->CreateMul(blocksToCopy, b->getSize(itemWidth / blockWidth));
-            }
-            blocksToCopy = b->CreateMul(blocksToCopy, buffer->getStreamSetCount(b.get()));
-            const auto bytesPerBlock = blockWidth / 8;
-            Value * const bytesToCopy = b->CreateMul(blocksToCopy, b->getSize(bytesPerBlock));
-            Value * const source = buffer->getOverflowAddress(b.get());
-            Value * const target = buffer->getBaseAddress(b.get());
-            b->CreateMemCpy(target, source, bytesToCopy, bytesPerBlock);
+            writeOverflowCopy(b, buffer, OverflowCopy::Backwards, producedOffset);
             b->CreateBr(copyExit);
 
             b->SetInsertPoint(copyExit);
-        }
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief storeCopyForwardProducedItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::storeCopyForwardProducedItemCounts(BuilderRef b) {
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
-    mCopyForwardProducedOutputItems.resize(numOfOutputs);
-    std::fill(mCopyForwardProducedOutputItems.begin(), mCopyForwardProducedOutputItems.end(), nullptr);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetBuffer * const buffer = getOutputBuffer(i);
-        if (requiresFacsimile(buffer)) {
-            const Binding & output = mKernel->getOutputStreamSetBinding(i);
-            mCopyForwardProducedOutputItems[i] = b->getNonDeferredProducedItemCount(output);
         }
     }
 }
@@ -558,16 +553,16 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
     // any data. To do so would incur extra writes and pollute the cache with potentially unnecessary data.
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        if (mCopyForwardProducedOutputItems[i]) {
+        if (requiresFacsimile(getOutputBufferVertex(i))) {
 
             const Binding & output = mKernel->getOutputStreamSetBinding(i);
-            const auto prefix = mKernel->getName() + "_" + output.getName();
+            const auto prefix = makeBufferName(mKernelIndex, output);
             BasicBlock * const copyForward = b->CreateBasicBlock(prefix + "_copyForward", mKernelExit);
             BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "_copyForwardExit", mKernelExit);
             const StreamSetBuffer * const buffer = getOutputBuffer(i);
 
             Value * const capacity = buffer->getCapacity(b.get());
-            Value * const initial = mCopyForwardProducedOutputItems[i];
+            Value * const initial = mInitiallyProducedItemCount[i];
             Value * const produced = b->getNonDeferredProducedItemCount(output);
 
             // If we wrote anything and it was not our first write to the buffer ...
@@ -577,7 +572,7 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
                 overwroteData = b->CreateAnd(overwroteData, producedOutput);
             }
             // And we started writing within the first block ...
-            const auto requiredOverflowSize = getFacsimile(buffer);
+            const auto requiredOverflowSize = getFacsimile(getOutputBufferVertex(i));
             assert (requiredOverflowSize <= buffer->getOverflowCapacity(b));
             Constant * const overflowSize = b->getSize(requiredOverflowSize);
             Value * const initialOffset = b->CreateURem(initial, capacity);
@@ -599,21 +594,7 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
             // TODO: look into non-cache-polluting writes? How big does the buffer need to be before it helps?
 
             b->SetInsertPoint(copyForward);
-            Value * blocksToCopy = overflowSize;
-            const auto itemWidth = getItemWidth(buffer->getBaseType());
-            const auto blockWidth = b->getBitBlockWidth();
-            if (LLVM_LIKELY(itemWidth < blockWidth)) {
-                blocksToCopy = b->CreateCeilUDiv(blocksToCopy, b->getSize(blockWidth / itemWidth));
-            } else if (LLVM_UNLIKELY(blockWidth > itemWidth)) {
-                blocksToCopy = b->CreateMul(blocksToCopy, b->getSize(itemWidth / blockWidth));
-            }
-            blocksToCopy = b->CreateMul(blocksToCopy, buffer->getStreamSetCount(b.get()));
-
-            const auto bytesPerBlock = blockWidth / 8;
-            Value * const bytesToCopy = b->CreateMul(blocksToCopy, b->getSize(bytesPerBlock));
-            Value * const source = buffer->getBaseAddress(b.get());
-            Value * const target = buffer->getOverflowAddress(b.get());
-            b->CreateMemCpy(target, source, bytesToCopy, bytesPerBlock);
+            writeOverflowCopy(b, buffer, OverflowCopy::Forwards, overflowSize);
             b->CreateBr(copyExit);
 
             b->SetInsertPoint(copyExit);
@@ -622,23 +603,45 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief writeOverflowCopy
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::writeOverflowCopy(BuilderRef b, const StreamSetBuffer * const buffer, const OverflowCopy direction, Value * const itemsToCopy) const {
+    Value * const count = buffer->getStreamSetCount(b.get());
+    Value * blocksToCopy = b->CreateMul(itemsToCopy, count);
+    const auto itemWidth = getItemWidth(buffer->getBaseType());
+    const auto blockWidth = b->getBitBlockWidth();
+    if (LLVM_LIKELY(itemWidth < blockWidth)) {
+        blocksToCopy = b->CreateCeilUDiv(blocksToCopy, b->getSize(blockWidth / itemWidth));
+    } else if (LLVM_UNLIKELY(blockWidth > itemWidth)) {
+        blocksToCopy = b->CreateMul(blocksToCopy, b->getSize(itemWidth / blockWidth));
+    }
+    const auto bytesPerBlock = blockWidth / 8;
+    Value * const bytesToCopy = b->CreateMul(blocksToCopy, b->getSize(bytesPerBlock));
+    Value * const base = buffer->getBaseAddress(b.get());
+    Value * const overflow = buffer->getOverflowAddress(b.get());
+    Value * const source = (direction == OverflowCopy::Forwards) ? base : overflow;
+    Value * const target = (direction == OverflowCopy::Forwards) ? overflow : base;
+    b->CreateMemCpy(target, source, bytesToCopy, bytesPerBlock);
+    return bytesToCopy;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getLogicalInputBaseAddress
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::getLogicalInputBaseAddress(BuilderRef b, const unsigned index) const {
-    const Binding & input = mKernel->getInputStreamSetBinding(index);
-    const StreamSetBuffer * const buffer = getInputBuffer(index);
-    Value * const processed = b->getNonDeferredProcessedItemCount(input);
-    assert (mAccessibleInputItems[index]);
+inline Value * PipelineCompiler::getLogicalInputBaseAddress(BuilderRef b, const unsigned inputPort) {
+    const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
+    const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
+    Value * const processed = getAlreadyProcessedItemCount(b, inputPort);
     return calculateLogicalBaseAddress(b, input, buffer, processed);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getLogicalOutputBaseAddress
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::getLogicalOutputBaseAddress(BuilderRef b, const unsigned index) const {
-    const Binding & output = mKernel->getOutputStreamSetBinding(index);
-    const StreamSetBuffer * const buffer = getOutputBuffer(index);
-    Value * const produced = b->getNonDeferredProducedItemCount(output);
+inline Value * PipelineCompiler::getLogicalOutputBaseAddress(BuilderRef b, const unsigned outputPort) {
+    const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
+    const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
+    Value * const produced = getAlreadyProducedItemCount(b, outputPort);
     return calculateLogicalBaseAddress(b, output, buffer, produced);
 }
 
@@ -647,7 +650,7 @@ inline Value * PipelineCompiler::getLogicalOutputBaseAddress(BuilderRef b, const
  *
  * Returns the address of the "zeroth" item of the (logically-unbounded) stream set.
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::calculateLogicalBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemCount) const {
+inline Value * PipelineCompiler::calculateLogicalBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemCount) {
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(floor_log2(b->getBitBlockWidth()));
     Constant * const ZERO = b->getSize(0);
     Value * const blockIndex = b->CreateLShr(itemCount, LOG_2_BLOCK_WIDTH);
@@ -661,7 +664,8 @@ inline Value * PipelineCompiler::calculateLogicalBaseAddress(BuilderRef b, const
         tmp.setBaseAddress(b.get(), address);
         Value * const A0 = buffer->getStreamBlockPtr(b.get(), ZERO, blockIndex);
         Value * const B0 = tmp.getStreamBlockPtr(b.get(), ZERO, blockIndex);
-        b->CreateAssert(b->CreateICmpEQ(A0, B0), prefix + ": logical base address is incorrect");
+        Value * const B1 = b->CreatePointerCast(B0, A0->getType());
+        b->CreateAssert(b->CreateICmpEQ(A0, B1), prefix + ": logical base address is incorrect");
     }
     return address;
 }

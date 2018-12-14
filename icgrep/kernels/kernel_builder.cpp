@@ -336,7 +336,7 @@ Value * KernelBuilder::CreateCeilUMul2(Value * const number, const ProcessingRat
  ** ------------------------------------------------------------------------------------------------------------- */
 Type * KernelBuilder::resolveStreamSetType(Type * const streamSetType) {
     // TODO: Should this function be here? in StreamSetBuffer? or in Binding?
-    unsigned numElements = 1;    
+    unsigned numElements = 1;
     Type * type = streamSetType;
     if (LLVM_LIKELY(type->isArrayTy())) {
         numElements = type->getArrayNumElements();
@@ -360,5 +360,11 @@ Type * KernelBuilder::resolveStreamSetType(Type * const streamSetType) {
     report_fatal_error(out.str());
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getKernelName
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::string KernelBuilder::getKernelName() const {
+    return mKernel->getName();
+}
 
 }

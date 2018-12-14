@@ -9,9 +9,13 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <toolchain/toolchain.h>
+#include <boost/interprocess/mapped_region.hpp>
 
 using namespace llvm;
 
+inline unsigned getPageSize() {
+    return boost::interprocess::mapped_region::get_page_size();
+}
 
 extern "C" uint64_t file_size(const uint32_t fd) {
     struct stat st;
@@ -35,7 +39,7 @@ void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod,
     BasicBlock * const nonEmptyFile = b->CreateBasicBlock("NonEmptyFile");
     BasicBlock * const exit = b->CreateBasicBlock("Exit");
     IntegerType * const sizeTy = b->getSizeTy();
-    ConstantInt * const PAGE_SIZE = b->getSize(stride);
+    ConstantInt * const STRIDE_SIZE = b->getSize(stride);
     Constant * const PAGE_ITEMS = b->getSize(stride /(codeUnitWidth/8));
     Value * const fd = b->getScalarField("fileDescriptor");
 
@@ -59,7 +63,7 @@ void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod,
     b->CreateBr(exit);
 
     b->SetInsertPoint(emptyFile);
-    Value * const emptyFilePtr = b->CreatePointerCast(b->CreateAnonymousMMap(PAGE_SIZE), codeUnitPtrTy);
+    Value * const emptyFilePtr = b->CreatePointerCast(b->CreateAnonymousMMap(STRIDE_SIZE), codeUnitPtrTy);
     b->setScalarField("buffer", emptyFilePtr);
     b->setBaseAddress("sourceBuffer", emptyFilePtr);
     b->setScalarField("fileItems", PAGE_ITEMS);
@@ -77,7 +81,10 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     BasicBlock * const setTermination = b->CreateBasicBlock("setTermination");
     BasicBlock * const exit = b->CreateBasicBlock("mmapSourceExit");
 
-    Constant * const PAGE_SIZE = b->getSize(stride);
+    Constant * const PAGE_SIZE = b->getSize(getPageSize());
+
+    Constant * const STRIDE_SIZE = b->getSize(stride);
+
     Constant * const PAGE_ITEMS = b->getSize((8 * stride) / codeUnitWidth);
     Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
     Constant * const CODE_UNIT_BYTES = b->getSize(codeUnitWidth / 8);
@@ -96,7 +103,7 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->SetInsertPoint(dropPages);
     // instruct the OS that it can safely drop any fully consumed pages
     b->CreateMAdvise(readableBuffer, unnecessaryBytes, CBuilder::ADVICE_DONTNEED);
-    b->setScalarField("buffer", b->CreateGEP(readableBuffer, unnecessaryBytes));
+    //b->setScalarField("buffer", b->CreateGEP(readableBuffer, unnecessaryBytes));
     b->CreateBr(checkRemaining);
 
     // determine whether or not we've exhausted the file buffer
@@ -121,7 +128,7 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     Value * unconsumedBytes = b->CreateSub(readEndInt, readStartInt);
     unconsumedBytes = b->CreateTrunc(unconsumedBytes, b->getSizeTy());
 
-    Value * const bufferSize = b->CreateRoundUp(b->CreateAdd(unconsumedBytes, PADDING_SIZE), PAGE_SIZE);
+    Value * const bufferSize = b->CreateRoundUp(b->CreateAdd(unconsumedBytes, PADDING_SIZE), STRIDE_SIZE);
     Value * const buffer = b->CreateAlignedMalloc(bufferSize, b->getCacheAlignment());
 
     b->CreateMemCpy(buffer, readStart, unconsumedBytes, 1);
@@ -133,7 +140,7 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     Value * const offsettedBuffer = b->CreateGEP(buffer, diff);
     PointerType * const codeUnitPtrTy = b->getIntNTy(codeUnitWidth)->getPointerTo();
     // set the original base address as the buffer address.
-    b->setScalarField("buffer", b->CreatePointerCast(base, codeUnitPtrTy));
+    //b->setScalarField("buffer", b->CreatePointerCast(base, codeUnitPtrTy));
     b->setScalarField("ancillaryBuffer", b->CreatePointerCast(buffer, codeUnitPtrTy));
     b->setBaseAddress("sourceBuffer", b->CreatePointerCast(offsettedBuffer, codeUnitPtrTy));
     b->setTerminationSignal();

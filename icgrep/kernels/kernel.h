@@ -30,6 +30,7 @@ namespace llvm { class StructType; }
 namespace llvm { class LoadInst; }
 namespace llvm { class Type; }
 namespace llvm { class Value; }
+
 class BaseDriver;
 
 const static std::string LOGICAL_SEGMENT_NO_SCALAR = "segmentNo";
@@ -43,17 +44,17 @@ const static std::string CONSUMER_SUFFIX = "_consumerLocks";
 const static std::string CYCLECOUNT_SCALAR = "CPUcycles";
 
 namespace kernel {
-    
+
 class KernelBuilder;
 class StreamSetBuffer;
 class StreamSet;
 
 class Kernel : public AttributeSet {
-    friend class KernelBuilder;        
+    friend class KernelBuilder;
     friend class PipelineBuilder;
     friend class PipelineCompiler;
     friend class PipelineKernel;
-
+    friend class BaseDriver;
 public:
 
     enum class ScalarType { Input, Output, Internal };
@@ -242,6 +243,10 @@ public:
 
     LLVM_READNONE Binding & getInputScalarBinding(const llvm::StringRef name);
 
+    LLVM_READNONE const Binding & getInputScalarBinding(const llvm::StringRef name) const {
+        return const_cast<Kernel *>(this)->getInputScalarBinding(name);
+    }
+
     LLVM_READNONE Scalar * getInputScalar(const unsigned i) {
         return llvm::cast<Scalar>(getInputScalarBinding(i).getRelationship());
     }
@@ -270,6 +275,10 @@ public:
     }
 
     LLVM_READNONE Binding & getOutputScalarBinding(const llvm::StringRef name);
+
+    LLVM_READNONE const Binding & getOutputScalarBinding(const llvm::StringRef name) const {
+        return const_cast<Kernel *>(this)->getOutputScalarBinding(name);
+    }
 
     LLVM_READNONE Scalar * getOutputScalar(const llvm::StringRef name) {
         return llvm::cast<Scalar>(getOutputScalarBinding(name).getRelationship());
@@ -329,7 +338,7 @@ public:
     virtual llvm::Value * finalizeInstance(const std::unique_ptr<KernelBuilder> & b);
 
     void generateKernel(const std::unique_ptr<KernelBuilder> & b);
-    
+
     void prepareKernel(const std::unique_ptr<KernelBuilder> & b);
 
     void prepareCachedKernel(const std::unique_ptr<KernelBuilder> & b);
@@ -351,6 +360,10 @@ public:
     LLVM_READNONE bool requiresOverflow(const Binding & binding) const;
 
     LLVM_READNONE bool isUnknownRate(const Binding & binding) const;
+
+    /* Fill in any generated names / attributes for the kernel if their initialization is dependent on
+     * settings / bindings added after construction. */
+    virtual void finalizeKernel() { }
 
     void initializeBindings(BaseDriver & driver);
 
@@ -482,7 +495,7 @@ protected:
     StreamSetMap                    mStreamSetMap;
 
     const std::string               mKernelName;
-    
+
 
     OwnedStreamSetBuffers           mStreamSetInputBuffers;
     OwnedStreamSetBuffers           mStreamSetOutputBuffers;
@@ -524,10 +537,6 @@ protected:
 private:
 
     void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
-
-    void recordInitialItemCountsOfCountableStreams(const std::unique_ptr<KernelBuilder> & b);
-
-    void incrementItemCountsOfCountableRateStreams(const std::unique_ptr<KernelBuilder> & b);
 
 };
 
@@ -580,4 +589,4 @@ private:
 
 }
 
-#endif 
+#endif

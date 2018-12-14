@@ -60,9 +60,9 @@ public:
         std::swap(mEntryScope, entryBlock);
         return entryBlock;
     }
-    
+
     Var * getInputStreamVar(const std::string & name);
-    
+
     std::vector<PabloAST *> getInputStreamSet(const std::string & name);
 
     Var * getInput(const unsigned index) {
@@ -78,9 +78,9 @@ public:
     unsigned getNumOfInputs() const {
         return mInputs.size();
     }
-    
+
     Var * getOutputStreamVar(const std::string & name);
-    
+
     Var * getOutputScalarVar(const std::string & name);
 
     Var * getOutput(const unsigned index) {
@@ -111,7 +111,7 @@ public:
     Ones * getAllOnesValue(llvm::Type * const type);
 
     inline SymbolGenerator * getSymbolTable() const {
-        return mSymbolTable;
+        return mSymbolTable.get();
     }
 
     void * operator new (std::size_t size) noexcept {
@@ -184,20 +184,20 @@ private:
 
 private:
 
-    Allocator                       mAllocator;
-    PabloCompiler *                 mPabloCompiler;
-    SymbolGenerator *               mSymbolTable;
-    PabloBlock *                    mEntryScope;
-    llvm::IntegerType *             mSizeTy;
-    llvm::VectorType *              mStreamTy;
-    llvm::StructType *              mCarryDataTy;
-    llvm::LLVMContext *             mContext;
+    Allocator                        mAllocator;
+    std::unique_ptr<PabloCompiler>   mPabloCompiler;
+    std::unique_ptr<SymbolGenerator> mSymbolTable;
+    PabloBlock *                     mEntryScope;
+    llvm::IntegerType *              mSizeTy;
+    llvm::VectorType *               mStreamTy;
+    llvm::StructType *               mCarryDataTy;
+    llvm::LLVMContext *              mContext;
 
-    std::vector<Var *>              mInputs;
-    std::vector<Var *>              mOutputs;
-    std::vector<PabloAST *>         mConstants;
-    std::vector<Var *>              mVariables;
-    std::vector<Var *>              mScalarOutputVars;
+    std::vector<Var *>               mInputs;
+    std::vector<Var *>               mOutputs;
+    std::vector<PabloAST *>          mConstants;
+    std::vector<Var *>               mVariables;
+    std::vector<Var *>               mScalarOutputVars;
 };
 
 }

@@ -106,8 +106,8 @@ cccObj(cast<EnumeratedPropertyObject>(property_object_table[ccc])),
 caseFoldObj(cast<StringOverridePropertyObject>(property_object_table[cf])),
 canonicalMapped(decompTypeObj->GetCodepointSet(DT_ns::Can)),
 cc0Set(cccObj->GetCodepointSet(CCC_ns::NR)),
-selfNFKD(decompMappingObj->GetReflexiveSet()),
-selfCaseFold(caseFoldObj->GetReflexiveSet()),
+selfNFKD(std::move(decompMappingObj->GetReflexiveSet())),
+selfCaseFold(std::move(caseFoldObj->GetReflexiveSet())),
 HangulPrecomposed(Hangul_SBase, Hangul_SBase + Hangul_SCount - 1) {
 
 }

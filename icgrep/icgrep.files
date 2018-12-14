@@ -1,15 +1,5 @@
-icgrep.pro
-kernels/directorysearch.cpp
-kernels/directorysearch.h
-toolchain/object_cache.cpp
-toolchain/object_cache.h
-toolchain/object_cache_daemon.cpp
-toolchain/object_cache_util.hpp
 wc.cpp
-CMakeLists.txt
 base64.cpp
-character_deletion.cpp
-character_deposit.cpp
 grep_interface.cpp
 grep_interface.h
 icgrep.cpp
@@ -50,6 +40,8 @@ UCD/DerivedJoiningType.h
 UCD/DerivedNormalizationProps.h
 UCD/DerivedNumericType.h
 UCD/EastAsianWidth.h
+UCD/Equivalence.cpp
+UCD/Equivalence.h
 UCD/GraphemeBreakProperty.h
 UCD/HangulSyllableType.h
 UCD/IndicPositionalCategory.h
@@ -57,6 +49,7 @@ UCD/IndicSyllabicCategory.h
 UCD/Jamo.h
 UCD/LineBreak.h
 UCD/NameAliases.h
+UCD/PrecomposedMappings.h
 UCD/PropList.h
 UCD/PropertyAliases.h
 UCD/PropertyObjectTable.h
@@ -72,6 +65,7 @@ UCD/UTF.h
 UCD/UnicodeData.h
 UCD/VerticalOrientation.h
 UCD/WordBreakProperty.h
+UCD/emoji-data.h
 UCD/resolve_properties.cpp
 UCD/resolve_properties.h
 UCD/ucd_compiler.cpp
@@ -80,6 +74,8 @@ UCD/unicode_set.cpp
 UCD/unicode_set.h
 toolchain/toolchain.h
 toolchain/toolchain.cpp
+toolchain/object_cache_util.hpp
+toolchain/object_cache_daemon.cpp
 toolchain/object_cache.h
 toolchain/object_cache.cpp
 toolchain/NVPTXDriver.cpp
@@ -88,6 +84,8 @@ toolchain/driver.h
 toolchain/driver.cpp
 toolchain/cpudriver.h
 toolchain/cpudriver.cpp
+re/validation.h
+re/validation.cpp
 re/to_utf8.h
 re/to_utf8.cpp
 re/replaceCC.h
@@ -127,8 +125,12 @@ re/re_intersect.h
 re/re_intersect.cpp
 re/re_group.h
 re/re_end.h
+re/re_empty_set.h
+re/re_empty_set.cpp
 re/re_diff.h
 re/re_diff.cpp
+re/re_contextual_simplification.h
+re/re_contextual_simplification.cpp
 re/re_compiler.h
 re/re_compiler.cpp
 re/re_cc.h
@@ -143,6 +145,8 @@ re/printer_re.h
 re/printer_re.cpp
 re/Unicode/decomposition.cpp
 re/Unicode/decomposition.h
+re/Unicode/equivalence.cpp
+re/Unicode/equivalence.h
 re/casing.cpp
 re/casing.h
 re/collect_ccs.cpp
@@ -168,6 +172,7 @@ re/parsers/BRE_parser.h
 re/parsers/BRE_parser.cpp
 pablo/symbol_generator.h
 pablo/symbol_generator.cpp
+pablo/ps_terminate.h
 pablo/ps_assign.h
 pablo/printer_pablos.h
 pablo/printer_pablos.cpp
@@ -280,8 +285,9 @@ kernels/bitstream_gather_pdep_kernel.h
 kernels/bitstream_pdep_kernel.cpp
 kernels/bitstream_pdep_kernel.h
 kernels/block_kernel.cpp
+kernels/callback.cpp
+kernels/callback.h
 kernels/cc_kernel.cpp
-kernels/cc_kernel.h
 kernels/cc_scan_kernel.cpp
 kernels/cc_scan_kernel.h
 kernels/charclasses.cpp
@@ -290,6 +296,8 @@ kernels/deletion.cpp
 kernels/deletion.h
 kernels/delmask_kernel.cpp
 kernels/delmask_kernel.h
+kernels/directorysearch.cpp
+kernels/directorysearch.h
 kernels/evenodd.cpp
 kernels/evenodd.h
 kernels/fake_stream_generating_kernel.cpp
@@ -317,6 +325,7 @@ kernels/pipeline/pipeline_kernel.cpp
 kernels/pipeline/pipeline_compiler.hpp
 kernels/pipeline/pipeline_builder.cpp
 kernels/pipeline/pipeline_analysis.hpp
+kernels/pipeline/lexographic_ordering.hpp
 kernels/pipeline/kernel_logic.hpp
 kernels/pipeline/cycle_counter_logic.hpp
 kernels/pipeline/core_logic.hpp
@@ -390,6 +399,8 @@ combine/icgrep-test/icgrep-test.h
 combine/icgrep-test/icgrep-test.cpp
 cc/multiplex_CCs.h
 cc/multiplex_CCs.cpp
+cc/cc_kernel.h
+cc/cc_kernel.cpp
 cc/cc_compiler.h
 cc/cc_compiler.cpp
 cc/alphabet.h

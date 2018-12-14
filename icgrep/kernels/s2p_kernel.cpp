@@ -125,9 +125,9 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
     // Declarations for AbortOnNull mode:
     PHINode * nullCheckPhi = nullptr;
     Value * nonNullSoFar = nullptr;
-    
+
     kb->CreateBr(s2pLoop);
-    
+
     kb->SetInsertPoint(s2pLoop);
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
     blockOffsetPhi->addIncoming(ZERO, entry);
@@ -155,9 +155,9 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
     blockOffsetPhi->addIncoming(nextBlk, s2pLoop);
     Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
-    
+
     kb->CreateCondBr(moreToDo, s2pLoop, s2pFinalize);
-    
+
     kb->SetInsertPoint(s2pFinalize);
     //  s2p is complete, except for null byte check.
     if (mAbortOnNull) {
@@ -167,7 +167,7 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
         Value * itemsToDo = kb->getAccessibleItemCount("byteStream");
         Value * anyNull = kb->bitblock_any(kb->simd_not(nonNullSoFar));
         kb->CreateCondBr(anyNull, nullByteDetected, s2pExit);
-        
+
         kb->SetInsertPoint(nullByteDetected);
         // A null byte has been detected, determine its position and whether it is past EOF.
         Value * byteStreamBasePtr = kb->getInputStreamBlockPtr("byteStream", ZERO, ZERO);
@@ -305,7 +305,7 @@ void S2P_21Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     BasicBlock * processBlock = kb->CreateBasicBlock("s2p21_loop");
     BasicBlock * s2pDone = kb->CreateBasicBlock("s2p21_done");
     Constant * const ZERO = kb->getSize(0);
-    
+
     kb->CreateBr(processBlock);
 
     kb->SetInsertPoint(processBlock);

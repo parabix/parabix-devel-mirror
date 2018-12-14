@@ -148,7 +148,10 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
     }
 #endif
     cl::ParseCommandLineOptions(argc, argv);
-    if (DebugOptions.getBits() || (ShowIROption != OmittedOption) || (ShowUnoptimizedIROption != OmittedOption) || (ShowASMOption != OmittedOption)
+    if (DebugOptions.getBits() || (ShowIROption != OmittedOption) || (ShowUnoptimizedIROption != OmittedOption)
+        #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
+        || (ShowASMOption != OmittedOption)
+        #endif
         || (pablo::ShowPabloOption != OmittedOption) || (pablo::ShowOptimizedPabloOption != OmittedOption)) {
         EnableObjectCache = false;
     }

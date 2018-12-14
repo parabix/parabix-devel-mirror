@@ -35,47 +35,8 @@ using RateValue = ProcessingRate::RateValue;
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
-
     Value * const numOfStrides = b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides);
-
     generateMultiBlockLogic(b, numOfStrides);
-
-    BasicBlock * const exit = b->CreateBasicBlock();
-    if (LLVM_UNLIKELY(hasAttribute(AttrId::CanTerminateEarly) || hasAttribute(AttrId::MustExplicitlyTerminate))) {
-        Value * const terminated = b->getTerminationSignal();
-        BasicBlock * const regularExit = b->CreateBasicBlock("regularExit", exit);
-        b->CreateUnlikelyCondBr(terminated, exit, regularExit);
-
-        b->SetInsertPoint(regularExit);
-    }
-    incrementItemCountsOfCountableRateStreams(b);
-    b->CreateBr(exit);
-
-    b->SetInsertPoint(exit);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief incrementItemCountsOfCountableRateStreams
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void MultiBlockKernel::incrementItemCountsOfCountableRateStreams(const std::unique_ptr<KernelBuilder> & b) {
-
-    const auto numOfInputs = getNumOfStreamInputs();
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        const Binding & input = getInputStreamSetBinding(i);
-        if (isCountable(input)) {
-            Value * avail = getAvailableInputItems(i);
-            b->setNonDeferredProcessedItemCount(input, avail);
-        }
-    }
-
-    const auto numOfOutputs = getNumOfStreamOutputs();
-    for (unsigned i = 0; i < numOfOutputs; i++) {
-        const Binding & output = getOutputStreamSetBinding(i);
-        if (isCountable(output)) {
-            Value * avail = b->getCapacity(output.getName());
-            b->setNonDeferredProducedItemCount(output, avail);
-        }
-    }
 }
 
 // MULTI-BLOCK KERNEL CONSTRUCTOR

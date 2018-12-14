@@ -99,7 +99,7 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
 void PabloKernel::addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mSizeTy = b->getSizeTy();
     mStreamTy = b->getStreamTy();
-    mSymbolTable = new SymbolGenerator(b->getContext(), mAllocator);
+    mSymbolTable.reset(new SymbolGenerator(b->getContext(), mAllocator));
     mEntryScope = new (mAllocator) PabloBlock(this, mAllocator);
     mContext = &b->getContext();
     for (const Binding & ss : mInputStreamSets) {
@@ -122,12 +122,12 @@ void PabloKernel::addInternalKernelProperties(const std::unique_ptr<kernel::Kern
         mScalarOutputVars.push_back(result);
         result->setScalar();
     }
-    generatePabloMethod();    
+    generatePabloMethod();
     pablo_function_passes(this);
-    mPabloCompiler = new PabloCompiler(this);
+    mPabloCompiler.reset(new PabloCompiler(this));
     mPabloCompiler->initializeKernelData(b);
     mSizeTy = nullptr;
-    mStreamTy = nullptr;   
+    mStreamTy = nullptr;
 }
 
 void PabloKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
@@ -255,12 +255,12 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
                          std::vector<Binding> scalar_parameters,
                          std::vector<Binding> scalar_outputs)
 : BlockOrientedKernel(annotateKernelNameWithPabloDebugFlags(std::move(kernelName)),
-                      std::move(stream_inputs), std::move(stream_outputs), 
+                      std::move(stream_inputs), std::move(stream_outputs),
                       std::move(scalar_parameters), std::move(scalar_outputs),
                       {Binding{b->getBitBlockType(), "EOFbit"}, Binding{b->getBitBlockType(), "EOFmask"}})
 , PabloAST(PabloAST::ClassTypeId::Kernel, nullptr, mAllocator)
-, mPabloCompiler(nullptr)
-, mSymbolTable(nullptr)
+, mPabloCompiler()
+, mSymbolTable()
 , mEntryScope(nullptr)
 , mSizeTy(nullptr)
 , mStreamTy(nullptr)
@@ -268,9 +268,6 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
 
 }
 
-PabloKernel::~PabloKernel() {
-    delete mPabloCompiler;
-    delete mSymbolTable; 
-}
+PabloKernel::~PabloKernel() { }
 
 }

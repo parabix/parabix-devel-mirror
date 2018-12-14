@@ -155,7 +155,7 @@ public:
     llvm::Value * getBaseAddress(const std::string & name);
 
     void setBaseAddress(const std::string & name, llvm::Value * addr);
-    
+
     llvm::Value * getCapacity(const std::string & name);
 
     void setCapacity(const std::string & name, llvm::Value * capacity);
@@ -197,7 +197,7 @@ protected:
     , mKernel(nullptr) {
 
     }
-    
+
     const unsigned mStride;
 
     llvm::Value * getScalarFieldPtr(llvm::Value * handle, llvm::Value * index);
@@ -208,9 +208,11 @@ protected:
 
     void setNamedItemCount(const std::string & name, const std::string & suffix, llvm::Value * const value);
 
+    std::string getKernelName() const final;
+
 protected:
     const Kernel * mKernel;
-    
+
 };
 
 template <class SpecifiedArchitectureBuilder>

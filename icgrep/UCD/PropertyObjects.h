@@ -46,8 +46,8 @@ public:
     virtual const std::string GetStringValue(UCD::codepoint_t cp) const;
 
     virtual const std::string & GetPropertyValueGrepString();
-    property_t the_property;
-    ClassTypeId the_kind;
+    const property_t the_property;
+    const ClassTypeId the_kind;
     virtual ~PropertyObject() {}
 };
 
@@ -59,21 +59,20 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    
+
     BinaryPropertyObject(UCD::property_t p, const UnicodeSet && set)
     : PropertyObject(p, ClassTypeId::BinaryProperty)
-    , mNoUninitialized(true)
-    , mY(std::move(set)) {
-        
+    , mY(std::move(set))
+    , mN() {
+
     }
     const UnicodeSet GetCodepointSet(const std::string & prop_value_string) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet & GetCodepointSet(const int property_enum_val);
     const std::string & GetPropertyValueGrepString() override;
 private:
-    bool mNoUninitialized;
     const UnicodeSet mY;
-    UnicodeSet mN;
+    std::unique_ptr<UnicodeSet> mN;
     std::string mPropertyValueGrepString;
 };
 
@@ -173,7 +172,7 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    
+
     NumericPropertyObject(UCD::property_t p, const UnicodeSet && NaN_Set, const char * string_buffer, unsigned bufsize, const std::vector<UCD::codepoint_t> && cps)
     : PropertyObject(p, ClassTypeId::NumericProperty)
     , mNaNCodepointSet(std::move(NaN_Set))
@@ -181,14 +180,14 @@ public:
     , mBufSize(bufsize)
     , mExplicitCps(std::move(cps))
     {
-        
+
     }
     const UnicodeSet GetCodepointSet(const std::string & numeric_spec) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
 
 private:
     const UnicodeSet mNaNCodepointSet;  // codepoints for which the property value is NaN (not a number).
-    const char * mStringBuffer;  // buffer holding all string values for other codepoints, in sorted order. 
+    const char * mStringBuffer;  // buffer holding all string values for other codepoints, in sorted order.
     unsigned mBufSize;
     const std::vector<UCD::codepoint_t> mExplicitCps;
 };
@@ -216,7 +215,7 @@ public:
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet GetReflexiveSet() const override;
     const std::string GetStringValue(UCD::codepoint_t cp) const override;
-    
+
 private:
     const UnicodeSet mNullCodepointSet;  // codepoints for which the property value is the null string.
     const UnicodeSet mSelfCodepointSet;  // codepoints for which the property value is the codepoint itself.
@@ -226,7 +225,7 @@ private:
     //unsigned mBufSize;                               // mStringOffsets has one extra element for buffer size.
     const std::vector<UCD::codepoint_t> mExplicitCps;  // the codepoints having explicit strings
 };
-    
+
 class StringOverridePropertyObject final : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
@@ -244,7 +243,7 @@ public:
     , mStringOffsets(offsets)
     , mExplicitCps(cps)
     {
-        
+
     }
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
@@ -256,12 +255,12 @@ public:
 private:
     PropertyObject & mBaseObject;  // the base object that provides default values for this property unless overridden.
     const UnicodeSet mOverriddenSet;   // codepoints for which the baseObject value is overridden.
-    const char * mStringBuffer;  // buffer holding all string values for overridden codepoints, in sorted order. 
+    const char * mStringBuffer;  // buffer holding all string values for overridden codepoints, in sorted order.
     const std::vector<unsigned> mStringOffsets;        // the offsets of each string within the buffer.
     //unsigned mBufSize;                               // mStringOffsets has one extra element for buffer size.
     const std::vector<codepoint_t> mExplicitCps;
 };
-    
+
 class ObsoletePropertyObject final : public PropertyObject {
 public:
     static inline bool classof(const PropertyObject * p) {
@@ -270,10 +269,10 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    
+
     ObsoletePropertyObject(property_t p)
     : PropertyObject(p, ClassTypeId::ObsoleteProperty) {}
-    
+
     const std::string & GetPropertyValueGrepString() override;
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
 
@@ -287,7 +286,7 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    
+
     UnsupportedPropertyObject(property_t p, ClassTypeId)
     : PropertyObject(p, ClassTypeId::UnsupportedProperty) {}
 };

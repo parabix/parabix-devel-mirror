@@ -179,7 +179,7 @@ PEXTFieldCompressKernel::PEXTFieldCompressKernel(const std::unique_ptr<kernel::K
 , mStreamCount(streamCount) {
     if ((fieldWidth != 32) && (fieldWidth != 64)) llvm::report_fatal_error("Unsupported PEXT width for PEXTFieldCompressKernel");
 }
-    
+
 StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
                                            , StreamSet * source
                                            , StreamSet * extractionMask
@@ -188,18 +188,15 @@ StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelB
 : MultiBlockKernel("streamCompress" + std::to_string(FieldWidth) + "_" + std::to_string(source->getNumElements()),
 {Binding{"sourceStreamSet", source},
 Binding{"extractionMask", extractionMask}},
-{Binding{"compressedOutput", compressedOutput, PopcountOf("extractionMask")}},
+{Binding{"compressedOutput", compressedOutput, PopcountOf("extractionMask"), BlockSize(1)}},
 {}, {}, {})
 , mCompressedFieldWidth(FieldWidth)
 , mStreamCount(source->getNumElements()) {
-    Type * const fwTy = b->getIntNTy(mCompressedFieldWidth);
-    addInternalScalar(fwTy, "pendingItemCount");
     for (unsigned i = 0; i < mStreamCount; i++) {
         addInternalScalar(b->getBitBlockType(), "pendingOutputBlock_" + std::to_string(i));
     }
-
 }
-    
+
 void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfBlocks) {
     IntegerType * const fwTy = b->getIntNTy(mCompressedFieldWidth);
     IntegerType * const sizeTy = b->getSizeTy();
@@ -217,14 +214,16 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     BasicBlock * updateProducedCount = b->CreateBasicBlock("updateProducedCount");
     Constant * const ZERO = ConstantInt::get(sizeTy, 0);
     Constant * const ONE = ConstantInt::get(sizeTy, 1);
+    Constant * const BlockWidth = b->getSize(b->getBitBlockWidth());
 
+    Value * produced = b->getProducedItemCount("compressedOutput");
+    Value * const pendingItemCount = b->CreateURem(produced, BlockWidth);
 
-    Value * pendingItemCount = b->getScalarField("pendingItemCount");
     std::vector<Value *> pendingData(mStreamCount);
     for (unsigned i = 0; i < mStreamCount; i++) {
         pendingData[i] = b->getScalarField("pendingOutputBlock_" + std::to_string(i));
     }
-    
+
     b->CreateBr(segmentLoop);
     // Main Loop
     b->SetInsertPoint(segmentLoop);
@@ -360,10 +359,9 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     // Now continue the loop if there are more blocks to process.
     Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
     b->CreateCondBr(moreToDo, segmentLoop, segmentDone);
-    
+
     b->SetInsertPoint(segmentDone);
     // Save kernel state.
-    b->setScalarField("pendingItemCount", newPending);
     for (unsigned i = 0; i < mStreamCount; i++) {
         b->setScalarField("pendingOutputBlock_" + std::to_string(i), b->bitCast(pendingOutput[i]));
     }
@@ -377,12 +375,7 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     b->CreateBr(updateProducedCount);
 
     b->SetInsertPoint(updateProducedCount);
-    //Value * produced = b->getProducedItemCount("compressedOutput");
-    //Value * const blockOffset = b->CreateMul(nextOutputBlk, b->getSize(b->getBitBlockWidth()));
-    //produced = b->CreateAdd(produced, blockOffset);
-    //newPending = b->CreateZExtOrTrunc(newPending, sizeTy);
-    //produced = b->CreateSelect(mIsFinal, b->CreateAdd(produced, newPending), produced);
-    //b->setProducedItemCount("compressedOutput", produced);
+
 }
 
 Bindings makeSwizzledDeleteByPEXTOutputBindings(const std::vector<StreamSet *> & outputStreamSets, const unsigned PEXTWidth) {
@@ -684,7 +677,7 @@ DeleteByPEXTkernel::DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuild
     mOutputStreamSets.emplace_back(b->getStreamSetTy(), "deletionCounts");
 }
 
-    
+
 //
 // This kernel performs final stream compression for a set of N bitstreams, given
 // (a) a set of bitstreams partially compressed within K-bit fields and stored
@@ -720,17 +713,17 @@ SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(const std::un
     }
     addInternalScalar(kb->getSizeTy(), "pendingOffset");
 }
-    
+
 void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) {
-        
+
     Value * countsPerStridePtr = kb->getInputStreamBlockPtr("countsPerStride", kb->getInt32(0));
     Value * countStreamPtr = kb->CreatePointerCast(countsPerStridePtr, kb->getIntNTy(mFieldWidth)->getPointerTo());
-    
+
     // Output is written and committed to the output buffer one swizzle at a time.
     //
     Constant * blockOffsetMask = kb->getSize(kb->getBitBlockWidth() - 1);
     Constant * outputIndexShift = kb->getSize(std::log2(mFieldWidth));
-    
+
     Value * outputProduced = kb->getProducedItemCount("outputSwizzle0"); // All output groups have the same count.
     Value * producedOffset = kb->CreateAnd(outputProduced, blockOffsetMask);
     Value * outputIndex = kb->CreateLShr(producedOffset, outputIndexShift);
@@ -744,14 +737,14 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
         pendingData.push_back(kb->getScalarField("pendingSwizzleData" + std::to_string(i)));
         outputStreamPtr.push_back(kb->getOutputStreamBlockPtr("outputSwizzle" + std::to_string(i), kb->getInt32(0)));
     }
-    
+
     // Generate code for each of the mSwizzleFactor fields making up a block.
     // We load the count for the field and process all swizzle groups accordingly.
     for (unsigned i = 0; i < mSwizzleFactor; i++) {
         Value * newItemCount = kb->CreateLoad(kb->CreateGEP(countStreamPtr, kb->getInt32(i)));
         Value * pendingSpace = kb->CreateSub(kb->getSize(mFieldWidth), pendingOffset);
         Value * pendingSpaceFilled = kb->CreateICmpUGE(newItemCount, pendingSpace);
-        
+
         Value * const fieldWidths = kb->simd_fill(mFieldWidth, pendingOffset);
 
         // Data from the ith swizzle pack of each group is processed
@@ -760,7 +753,7 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
             Value * newItems = kb->loadInputStreamBlock("inputSwizzle" + std::to_string(j), kb->getInt32(i));
             // Combine as many of the new items as possible into the pending group.
             Value * combinedGroup = kb->CreateOr(pendingData[j], kb->CreateShl(newItems, fieldWidths));
-            // To avoid an unpredictable branch, always store the combined group, whether full or not.               
+            // To avoid an unpredictable branch, always store the combined group, whether full or not.
             kb->CreateBlockAlignedStore(combinedGroup, kb->CreateGEP(outputStreamPtr[j], outputIndex));
             // Any items in excess of the space available in the current pending group overflow for the next group.
             Value * overFlowGroup = kb->CreateLShr(newItems, kb->simd_fill(mFieldWidth, pendingSpace));
@@ -783,7 +776,7 @@ void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(const std::uniqu
     CreateDoBlockMethodCall(kb);
     Constant * blockOffsetMask = kb->getSize(kb->getBitBlockWidth() - 1);
     Constant * outputIndexShift = kb->getSize(std::log2(mFieldWidth));
-    
+
     Value * outputProduced = kb->getProducedItemCount("outputSwizzle0"); // All output groups have the same count.
     Value * producedOffset = kb->CreateAnd(outputProduced, blockOffsetMask);
     Value * outputIndex = kb->CreateLShr(producedOffset, outputIndexShift);

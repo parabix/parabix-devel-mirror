@@ -254,7 +254,7 @@ Value * CBuilder::CreateUnlinkCall(Value * path) {
 Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
     Module * const m = getModule();
     Function * mkstempFn = m->getFunction("mkstemp");
-    if (mkstempFn == nullptr) {       
+    if (mkstempFn == nullptr) {
         FunctionType * const fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, false);
         mkstempFn = Function::Create(fty, Function::ExternalLinkage, "mkstemp", m);
     }
@@ -318,7 +318,7 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
         Value * const name = &*(arg++);
         name->setName("name");
         Value * value = &*arg;
-        value->setName("value");        
+        value->setName("value");
         std::vector<Value *> args(4);
         args[0] = fdInt;
         args[1] = GetString("%-40s = %" PRIx64 "\n");
@@ -340,7 +340,7 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
 
 Value * CBuilder::CreateMalloc(Value * size) {
     Module * const m = getModule();
-    IntegerType * const sizeTy = getSizeTy();    
+    IntegerType * const sizeTy = getSizeTy();
     Function * f = m->getFunction("malloc");
     if (f == nullptr) {
         PointerType * const voidPtrTy = getVoidPtrTy();
@@ -418,7 +418,17 @@ inline bool CBuilder::hasPosixMemalign() const {
     return mDriver && mDriver->hasExternalFunction("posix_memalign");
 }
 
-Value * CBuilder::CreateRealloc(Value * const ptr, Value * const size) {
+Value * CBuilder::CreateRealloc(llvm::Type * const type, llvm::Value * const base, llvm::Value * const ArraySize) {
+    Value * size = ConstantExpr::getSizeOf(type);
+    if (ArraySize) {
+        size = CreateMul(size, CreateZExtOrTrunc(ArraySize, size->getType()));
+    }
+    return CreatePointerCast(CreateRealloc(base, size), type->getPointerTo());
+}
+
+Value * CBuilder::CreateRealloc(Value * const base, Value * const size) {
+    assert ("Ptr is not a pointer type" && base->getType()->isPointerTy());
+    assert ("Size is not an integer" && size->getType()->isIntegerTy());
     Module * const m = getModule();
     IntegerType * const sizeTy = getSizeTy();
     PointerType * const voidPtrTy = getVoidPtrTy();
@@ -428,12 +438,12 @@ Value * CBuilder::CreateRealloc(Value * const ptr, Value * const size) {
         f = Function::Create(fty, Function::ExternalLinkage, "realloc", m);
         f->setCallingConv(CallingConv::C);
         f->setReturnDoesNotAlias();
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
+        #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
         f->setDoesNotAlias(1);
-#endif
+        #endif
     }
-    CallInst * const ci = CreateCall(f, {CreatePointerCast(ptr, voidPtrTy), CreateZExtOrTrunc(size, sizeTy)});
-    return CreatePointerCast(ci, ptr->getType());
+    CallInst * const ci = CreateCall(f, {CreatePointerCast(base, voidPtrTy), CreateZExtOrTrunc(size, sizeTy)});
+    return CreatePointerCast(ci, base->getType());
 }
 
 void CBuilder::CreateFree(Value * const ptr) {
@@ -469,7 +479,7 @@ Value * CBuilder::CreateFileSourceMMap(Value * fd, Value * size) {
     size = CreateZExtOrTrunc(size, sizeTy);
     ConstantInt * const prot =  ConstantInt::get(intTy, PROT_READ);
     ConstantInt * const flags =  ConstantInt::get(intTy, MAP_PRIVATE);
-    Constant * const offset = ConstantInt::get(sizeTy, 0);       
+    Constant * const offset = ConstantInt::get(sizeTy, 0);
     return CreateMMap(ConstantPointerNull::getNullValue(voidPtrTy), size, prot, flags, fd, offset);
 }
 
@@ -664,7 +674,7 @@ LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
     LoadInst * inst = CreateAlignedLoad(ptr, alignment);
     inst->setOrdering(AtomicOrdering::Acquire);
     return inst;
-    
+
 }
 
 StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
@@ -810,7 +820,7 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
 
-void __report_failure(const char * msg, const uintptr_t * trace, const uint32_t n) {
+void __report_failure(const char * name, const char * msg, const uintptr_t * trace, const uint32_t n) {
     // TODO: look into boost stacktrace, available from version 1.65
     raw_fd_ostream out(STDERR_FILENO, false);
     if (trace) {
@@ -842,8 +852,12 @@ void __report_failure(const char * msg, const uintptr_t * trace, const uint32_t 
         out.resetColor();
         out << trace_string.str();
     }
+    if (name) {
+        out.changeColor(raw_fd_ostream::RED, true);
+        out << name << ": ";
+    }
     out.changeColor(raw_fd_ostream::WHITE, true);
-    out << msg << "\n";    
+    out << msg << "\n";
     if (trace == nullptr) {
         out.changeColor(raw_fd_ostream::WHITE, true);
         out << "No debug symbols loaded.\n";
@@ -906,12 +920,12 @@ _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned ski
     pthread_t self = pthread_self();
     uintptr_t stacktop = (uintptr_t)(pthread_get_stackaddr_np(self));
     uintptr_t stackbot = stacktop - (uintptr_t)(pthread_get_stacksize_np(self));
-    
+
     *nb = 0;
-    
+
     /* make sure return address is never out of bounds */
     stacktop -= (FP_LINK_OFFSET + 1) * sizeof(void *);
-    
+
     /*
      * The original implementation called the first_frame_address() function,
      * which returned the stack frame pointer.  The problem was that in ppc,
@@ -966,7 +980,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine & failureMess
         if (LLVM_UNLIKELY(function == nullptr)) {
             auto ip = saveIP();
             IntegerType * const int1Ty = getInt1Ty();
-            FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
+            FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
             function = Function::Create(fty, Function::PrivateLinkage, "assert", m);
             function->setDoesNotThrow();
             #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
@@ -978,6 +992,8 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine & failureMess
             auto arg = function->arg_begin();
             arg->setName("assertion");
             Value * assertion = &*arg++;
+            arg->setName("name");
+            Value * name = &*arg++;
             arg->setName("msg");
             Value * msg = &*arg++;
             arg->setName("trace");
@@ -987,7 +1003,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine & failureMess
             SetInsertPoint(entry);
             IRBuilder<>::CreateCondBr(assertion, success, failure);
             IRBuilder<>::SetInsertPoint(failure);
-            IRBuilder<>::CreateCall(LinkFunction("__report_failure", __report_failure), { msg, trace, depth });
+            IRBuilder<>::CreateCall(LinkFunction("__report_failure", __report_failure), { name, msg, trace, depth });
             CreateExit(-1);
             IRBuilder<>::CreateBr(success); // necessary to satisfy the LLVM verifier. this is never executed.
             SetInsertPoint(success);
@@ -1073,8 +1089,10 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine & failureMess
         Value * trace = ConstantPointerNull::get(stackPtrTy);
         Value * depth = getInt32(0);
         #endif
+        Value * const name = GetString(getKernelName());
         SmallVector<char, 1024> tmp;
-        IRBuilder<>::CreateCall(function, {assertion, GetString(failureMessage.toStringRef(tmp)), trace, depth});
+        Value * const msg = GetString(failureMessage.toStringRef(tmp));
+        IRBuilder<>::CreateCall(function, {assertion, name, msg, trace, depth});
     } else { // if assertions are not enabled, make it a compiler assumption.
 
         // INVESTIGATE: while interesting, this does not seem to produce faster code and only provides a trivial
@@ -1123,7 +1141,7 @@ Value * CBuilder::CreateCountForwardZeroes(Value * value, const bool guaranteedN
     if (LLVM_UNLIKELY(guaranteedNonZero && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(value, "CreateCountForwardZeroes: value cannot be zero!");
     }
-    Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());   
+    Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());
     return CreateCall(cttzFunc, {value, getInt1(guaranteedNonZero)});
 }
 
@@ -1207,12 +1225,13 @@ LoadInst * CBuilder::CreateLoad(Type * Ty, Value *Ptr, const Twine & Name) {
 LoadInst * CBuilder::CreateLoad(Value * Ptr, bool isVolatile, const Twine & Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CHECK_ADDRESS(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
-    }    
+    }
     return IRBuilder<>::CreateLoad(Ptr, isVolatile, Name);
 }
 
 StoreInst * CBuilder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
-    assert (Val->getType() == Ptr->getType()->getPointerElementType());
+    assert ("Ptr is not a pointer type for Val" &&
+            Ptr->getType()->isPointerTy() && Val->getType() == Ptr->getType()->getPointerElementType());
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CHECK_ADDRESS(Ptr, ConstantExpr::getSizeOf(Val->getType()), "CreateStore");
     }

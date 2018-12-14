@@ -109,7 +109,7 @@ struct ProcessingRate  {
         }
     }
 
-    friend ProcessingRate FixedRate(const unsigned);    
+    friend ProcessingRate FixedRate(const unsigned);
     friend ProcessingRate BoundedRate(const unsigned, const unsigned);
     friend ProcessingRate UnknownRate(const unsigned);
     friend ProcessingRate RateEqualTo(std::string);
@@ -121,7 +121,7 @@ struct ProcessingRate  {
     ProcessingRate(const ProcessingRate &) = default;
     ProcessingRate & operator = (const ProcessingRate & other) = default;
 
-protected:    
+protected:
 
     ProcessingRate(const KindId k, const RateValue lb, const RateValue ub, const std::string && ref = "")
     : mKind(k)

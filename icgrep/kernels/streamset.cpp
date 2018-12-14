@@ -11,6 +11,7 @@
 #include <toolchain/toolchain.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/Format.h>
+#include <array>
 
 namespace llvm { class Constant; }
 namespace llvm { class Function; }
@@ -272,7 +273,7 @@ Value * StaticBuffer::getLinearlyAccessibleItems(const std::unique_ptr<KernelBui
     Value * capacityWithOverflow = capacity;
     assert (overflowSize <= getOverflowCapacity(b));
     if (overflowSize) {
-        capacityWithOverflow = b->CreateAdd(capacity, b->getSize(overflowSize));
+        capacityWithOverflow = b->CreateAdd(capacity, b->getSize(overflowSize - 1));
     }
     Value * const linearSpace = b->CreateSub(capacityWithOverflow, fromOffset);
     return b->CreateUMin(availableItems, linearSpace);
@@ -397,7 +398,7 @@ Value * DynamicBuffer::getLinearlyAccessibleItems(const std::unique_ptr<KernelBu
     Value * capacityWithOverflow = capacity;
     assert (overflowSize <= getOverflowCapacity(b));
     if (overflowSize) {
-        capacityWithOverflow = b->CreateAdd(capacity, b->getSize(overflowSize));
+        capacityWithOverflow = b->CreateAdd(capacity, b->getSize(overflowSize - 1));
     }
     Value * const linearSpace = b->CreateSub(capacityWithOverflow, fromOffset);
     return b->CreateUMin(availableItems, linearSpace);
@@ -428,17 +429,22 @@ Value * DynamicBuffer::getCapacity(IDISA_Builder * const b) const {
 
 void DynamicBuffer::setCapacity(IDISA_Builder * const b, Value * required) const {
 
-    const auto LOG_2_BIT_BLOCK_WIDTH = std::log2(b->getBitBlockWidth());
-    Value * const handle = getHandle(b);
-    Value * const capacityField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(Capacity)});
-    Value * const capacity = b->CreateShl(b->CreateLoad(capacityField), LOG_2_BIT_BLOCK_WIDTH);
+    std::vector<Value *> indices(2);
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(Capacity);
 
-    Value * const newCapacity = b->CreateRoundUp(required, capacity);
+    Constant * const LOG_2_BIT_BLOCK_WIDTH = b->getSize(std::log2(b->getBitBlockWidth()));
+    Value * const handle = getHandle(b);
+    Value * const capacityField = b->CreateGEP(handle, indices);
+    Value * const capacity = b->CreateShl(b->CreateLoad(capacityField), LOG_2_BIT_BLOCK_WIDTH);
+    Value * const newCapacity = b->CreateRoundUp(required, b->CreateShl(capacity, 1));
     Value * const newBufferSize = b->CreateRoundUp(getAllocationSize(b, newCapacity, mOverflow), b->getSize(b->getCacheAlignment()));
     Value * const newBaseAddress = b->CreateCacheAlignedMalloc(newBufferSize);
-    Value * const baseAddressField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(BaseAddress)});
+    indices[1] = b->getInt32(BaseAddress);
+    Value * const baseAddressField = b->CreateGEP(handle, indices);
     Value * const currentBaseAddress = b->CreateLoad(baseAddressField);
-    Value * const priorBaseAddressField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(PriorBaseAddress)});
+    indices[1] = b->getInt32(PriorBaseAddress);
+    Value * const priorBaseAddressField = b->CreateGEP(handle, indices);
     Value * const priorBaseAddress = b->CreateLoad(priorBaseAddressField);
 
     // Copy the data twice to handle the potential of a dynamic circular buffer. E.g., suppose p is the processed
@@ -456,7 +462,6 @@ void DynamicBuffer::setCapacity(IDISA_Builder * const b, Value * required) const
 
     Value * const bufferSize = getAllocationSize(b, capacity, 0);
     b->CreateMemCpy(newBaseAddress, currentBaseAddress, bufferSize, b->getCacheAlignment());
-
     Value * const expandedBaseAddress = b->CreateGEP(newBaseAddress, bufferSize);
     b->CreateMemCpy(expandedBaseAddress, currentBaseAddress, bufferSize, b->getCacheAlignment());
 

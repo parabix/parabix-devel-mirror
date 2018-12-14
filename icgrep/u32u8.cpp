@@ -50,7 +50,7 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 // having one bit position per codepoint), deposit masks are needed
 // to identify the positions at which bits for each character are
 // to be deposited.   A UTF-8 deposit mask will have one to four bit
-// positions per character depending on the character being encoded, that is, 
+// positions per character depending on the character being encoded, that is,
 // depending on the number of bytes needed to encode the character.   Within
 // each group of one to four positions for a single character, a deposit mask
 // must have exactly one 1 bit set.  Different deposit masks are used for
@@ -68,10 +68,10 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 //  Bits 18-20                      1    01   001    0001    u8initial
 //
 //  To compute UTF-8 deposit masks, we begin by constructing an extraction
-//  mask having 4 bit positions per character, but with the number of 
-//  1 bits to be kept dependent on the sequence length.  When this extraction 
+//  mask having 4 bit positions per character, but with the number of
+//  1 bits to be kept dependent on the sequence length.  When this extraction
 //  mask is applied to the repeating constant 4-bit mask 1000, u8final above
-//  is produced.  
+//  is produced.
 //
 //  UTF-8 sequence length:             1     2     3       4
 //  extraction mask                 1000  1100  1110    1111
@@ -132,7 +132,7 @@ void UTF8fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBui
     //  extraction mask        1000  1100  1110    1111
     //  interleave u8len3|u8len4, allOnes() for bits 1, 3:  x..., ..x.
     //  interleave prefix4, u8len2|u8len3|u8len4 for bits 0, 2:  .x.., ...x
-    
+
     Value * maskA_lo = b->esimd_mergel(1, u8len34, fileExtentMask);
     Value * maskA_hi = b->esimd_mergeh(1, u8len34, fileExtentMask);
     Value * maskB_lo = b->esimd_mergel(1, u8len4, nonASCII);
@@ -244,7 +244,7 @@ void UTF8assembly::generatePabloMethod() {
     PabloAST * ASCII = pb.createAnd(u8initial, u8final);
     PabloAST * nonASCII = pb.createNot(ASCII, "nonASCII");
     PabloAST * u8basis[8];
-    // 
+    //
     // Deposit bit 6 is either used for bit 6 of an ASCII code unit, or
     // bit 0 for nonASCII units.   Extract the ASCII case separately.
     PabloAST * ASCIIbit6 = pb.createAnd(dep6_11[0], ASCII);
@@ -254,7 +254,7 @@ void UTF8assembly::generatePabloMethod() {
         u8basis[i] = pb.createOr(u8basis[i], dep12_17[i], "basis" + std::to_string(i));
         if (i < 3) u8basis[i] = pb.createOr(u8basis[i], dep18_20[i]);
     }
-    // The high bit of UTF-8 prefix and suffix bytes (any nonASCII byte) is always 1. 
+    // The high bit of UTF-8 prefix and suffix bytes (any nonASCII byte) is always 1.
     u8basis[7] = nonASCII;
     // The second highest bit of UTF-8 units is 1 for any prefix, or ASCII byte with
     // a 1 in bit 6 of the Unicode representation.
