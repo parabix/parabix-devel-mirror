@@ -174,22 +174,21 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
         Value * ptrToNull = kb->CreateMemChr(kb->CreatePointerCast(byteStreamBasePtr, voidPtrTy), kb->getInt32(0), itemsToDo);
         Value * nullInFile = kb->CreateICmpNE(ptrToNull, ConstantPointerNull::get(cast<PointerType>(ptrToNull->getType())));
         kb->CreateCondBr(nullInFile, nullInFileDetected, s2pExit);
+
         kb->SetInsertPoint(nullInFileDetected);
         // A null byte has been located within the file; set the termination code and call the signal handler.
-        Value * nullPosn = kb->CreateSub(kb->CreatePtrToInt(ptrToNull, intPtrTy), kb->CreatePtrToInt(byteStreamBasePtr, intPtrTy));
+        Value * firstNull = kb->CreatePtrToInt(ptrToNull, intPtrTy);
+        Value * startOfStride = kb->CreatePtrToInt(byteStreamBasePtr, intPtrTy);
+        Value * itemsBeforeNull = kb->CreateZExtOrTrunc(kb->CreateSub(firstNull, startOfStride), itemsToDo->getType());
+        Value * producedCount = kb->CreateAdd(kb->getProducedItemCount("basisBits"), itemsBeforeNull);
+        kb->setProducedItemCount("basisBits", producedCount);
         kb->setTerminationSignal();
         Function * const dispatcher = m->getFunction("signal_dispatcher"); assert (dispatcher);
         Value * handler = kb->getScalarField("handler_address");
         kb->CreateCall(dispatcher, {handler, ConstantInt::get(kb->getInt32Ty(), NULL_SIGNAL)});
         kb->CreateBr(s2pExit);
+
         kb->SetInsertPoint(s2pExit);
-        PHINode * const produced = kb->CreatePHI(kb->getSizeTy(), 3);
-        produced->addIncoming(itemsToDo, nullByteDetected);
-        produced->addIncoming(nullPosn, nullInFileDetected);
-        produced->addIncoming(itemsToDo, s2pFinalize);
-        Value * producedCount = kb->getProducedItemCount("basisBits");
-        producedCount = kb->CreateAdd(producedCount, produced);
-        kb->setProducedItemCount("basisBits", producedCount);
     }
 }
 
@@ -209,16 +208,20 @@ Bindings S2PKernel::makeInputScalarBindings(Scalar * signalNullObject) {
     }
 }
 
-S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> &, StreamSet * const codeUnitStream, StreamSet * const BasisBits, const cc::BitNumbering numbering,
+S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> &,
+                     StreamSet * const codeUnitStream,
+                     StreamSet * const BasisBits,
+                     const cc::BitNumbering numbering,
                      Scalar * signalNullObject)
-    : MultiBlockKernel((signalNullObject ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements()) + cc::numberingSuffix(numbering),
-{Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}},
-makeOutputBindings(BasisBits, signalNullObject), makeInputScalarBindings(signalNullObject), {}, {}),
-mBasisSetNumbering(numbering),
-mAbortOnNull(signalNullObject != nullptr),
-mNumOfStreams(BasisBits->getNumElements()) {
+: MultiBlockKernel((signalNullObject ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements()) + cc::numberingSuffix(numbering)
+, {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}}
+, makeOutputBindings(BasisBits, signalNullObject)
+, makeInputScalarBindings(signalNullObject), {}, {})
+, mBasisSetNumbering(numbering)
+, mAbortOnNull(signalNullObject != nullptr)
+, mNumOfStreams(BasisBits->getNumElements()) {
     assert (codeUnitStream->getFieldWidth() == BasisBits->getNumElements());
-    addAttribute(CanTerminateEarly());
+    if (mAbortOnNull) addAttribute(CanTerminateEarly());
 }
 
 inline std::string makeMultiS2PName(const StreamSets & outputStreams, const cc::BitNumbering basisNumbering, const bool aligned) {
@@ -386,3 +389,4 @@ mCodeUnitWidth(codeUnitStream->getFieldWidth()) {
 
 
 }
+
