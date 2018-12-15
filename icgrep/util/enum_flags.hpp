@@ -10,7 +10,7 @@ struct __EnumFlagSet {
 }
 
 #define ENABLE_ENUM_FLAGS(EnumType) \
-inline namespace { \
+namespace { \
 template<> \
 struct __EnumFlagSet<EnumType> { \
     static const bool enable = true; \
