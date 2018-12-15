@@ -95,29 +95,29 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
     // -------------------------------------------------------------------------------------------------------------------------
     b->restoreIP(resumePoint);
     mPipelineKernel->setHandle(b, handle);
-    const unsigned threads = numOfThreads - 1;
-    Type * const pthreadsTy = ArrayType::get(sizeTy, threads);
-    AllocaInst * const pthreads = b->CreateAlloca(pthreadsTy);
-    Value * threadIdPtr[threads];
-    for (unsigned i = 0; i < threads; ++i) {
-        threadIdPtr[i] = b->CreateGEP(pthreads, {ZERO, b->getInt32(i)});
-    }
 
     // use the process thread to handle the initial segment function after spawning
     // (n - 1) threads to handle the subsequent offsets
-    std::vector<Value *> localState(numOfThreads);
+    const unsigned threads = numOfThreads - 1;
+    Type * const pthreadsTy = ArrayType::get(sizeTy, threads);
+    AllocaInst * const pthreads = b->CreateAlloca(pthreadsTy);
+    std::vector<Value *> threadIdPtr(threads);
+    std::vector<Value *> localState(threads);
     for (unsigned i = 0; i < threads; ++i) {
         AllocaInst * const threadState = b->CreateAlloca(threadStructType);
         b->CreateStore(handle, b->CreateGEP(threadState, {ZERO, ZERO}));
         b->CreateStore(b->getSize(i + 1), b->CreateGEP(threadState, {ZERO, ONE}));
         localState[i] = allocateThreadLocalSpace(b, localStateTy);
         b->CreateStore(localState[i], b->CreateGEP(threadState, {ZERO, TWO}));
+        threadIdPtr[i] = b->CreateGEP(pthreads, {ZERO, b->getInt32(i)});
         b->CreatePThreadCreateCall(threadIdPtr[i], nullVoidPtrVal, threadFunc, threadState);
     }
 
     AllocaInst * const threadState = b->CreateAlloca(threadStructType);
     b->CreateStore(handle, b->CreateGEP(threadState, {ZERO, ZERO}));
     b->CreateStore(b->getSize(0), b->CreateGEP(threadState, {ZERO, ONE}));
+    Value * const processLocalState = allocateThreadLocalSpace(b, localStateTy);
+    b->CreateStore(processLocalState, b->CreateGEP(threadState, {ZERO, TWO}));
     b->CreateCall(threadFunc, b->CreatePointerCast(threadState, voidPtrTy));
 
     AllocaInst * const status = b->CreateAlloca(voidPtrTy);
@@ -126,6 +126,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
         b->CreatePThreadJoinCall(threadId, status);
         deallocateThreadLocalSpace(b, localState[i]);
     }
+    deallocateThreadLocalSpace(b, processLocalState);
 
 }
 
