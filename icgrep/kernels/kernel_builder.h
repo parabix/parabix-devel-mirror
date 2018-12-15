@@ -24,19 +24,6 @@ public:
     // Set the value of a scalar field for the current instance.
     void setScalarField(const std::string & fieldName, llvm::Value * value);
 
-    // Synchronization actions for executing a kernel for a particular logical segment.
-    //
-    // Before the segment is processed, acquireLogicalSegmentNo must be used to load
-    // the segment number of the kernel state to ensure that the previous segment is
-    // complete (by checking that the acquired segment number is equal to the desired segment
-    // number).
-    // After all segment processing actions for the kernel are complete, and any necessary
-    // data has been extracted from the kernel for further pipeline processing, the
-    // segment number must be incremented and stored using releaseLogicalSegmentNo.
-    llvm::LoadInst * acquireLogicalSegmentNo();
-
-    void releaseLogicalSegmentNo(llvm::Value * const nextSegNo);
-
     llvm::Value * getAvailableItemCount(const std::string & name);
 
     llvm::Value * getAccessibleItemCount(const std::string & name);

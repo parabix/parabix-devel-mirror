@@ -350,6 +350,9 @@ Value * CBuilder::CreateMalloc(Value * size) {
         f->setReturnDoesNotAlias();
     }
     size = CreateZExtOrTrunc(size, sizeTy);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        CreateAssert(size, "CreateMalloc: 0-byte malloc is implementation defined");
+    }
     CallInst * const ptr = CreateCall(f, size);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(ptr, "CreateMalloc: returned null pointer");
@@ -376,6 +379,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     ConstantInt * const align = ConstantInt::get(sizeTy, alignment);
     size = CreateZExtOrTrunc(size, sizeTy);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        CreateAssert(size, "CreateAlignedMalloc: 0-byte malloc is implementation defined");
         CreateAssertZero(CreateURem(size, align), "CreateAlignedMalloc: size must be an integral multiple of alignment.");
     }
     Value * ptr = nullptr;

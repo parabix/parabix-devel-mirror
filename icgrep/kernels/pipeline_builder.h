@@ -60,7 +60,8 @@ public:
 
     PipelineBuilder(BaseDriver & driver,
                     Bindings && stream_inputs, Bindings && stream_outputs,
-                    Bindings && scalar_inputs, Bindings && scalar_outputs);
+                    Bindings && scalar_inputs, Bindings && scalar_outputs,
+                    const unsigned numOfThreads = 1);
 
 protected:
 

@@ -359,9 +359,10 @@ void PipelineBuilder::setOutputScalar(const std::string & name, Scalar * value) 
 
 PipelineBuilder::PipelineBuilder(BaseDriver & driver,
                                  Bindings && stream_inputs, Bindings && stream_outputs,
-                                 Bindings && scalar_inputs, Bindings && scalar_outputs)
+                                 Bindings && scalar_inputs, Bindings && scalar_outputs,
+                                 const unsigned numOfThreads)
 : mDriver(driver)
-, mNumOfThreads(1)
+, mNumOfThreads(numOfThreads)
 , mInputStreamSets(stream_inputs)
 , mOutputStreamSets(stream_outputs)
 , mInputScalars(scalar_inputs)

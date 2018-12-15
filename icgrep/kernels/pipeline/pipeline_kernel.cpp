@@ -27,7 +27,7 @@ void PipelineKernel::addInternalKernelProperties(const std::unique_ptr<kernel::K
         mKernels[0]->addInternalKernelProperties(b);
     } else { // add handles for each of unique streams
         mCompiler = llvm::make_unique<PipelineCompiler>(b, this);
-        mCompiler->addInternalKernelProperties(b);
+        mCompiler->addPipelineKernelProperties(b);
     }
 }
 
@@ -90,7 +90,7 @@ void PipelineKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> &
             mCompiler->generateSingleThreadKernelMethod(b);
         } else {
             mCompiler->generateMultiThreadKernelMethod(b, mNumOfThreads);
-        }        
+        }
     }
 }
 

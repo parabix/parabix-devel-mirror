@@ -5,21 +5,58 @@ const static std::string TERMINATION_SIGNAL = "terminationSignal";
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addInternalKernelProperties
+ * @brief addPipelineKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b) {
+inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     initializePopCounts();
     const auto numOfKernels = mPipeline.size();
     b->setKernel(mPipelineKernel);
-    IntegerType * const boolTy = b->getInt1Ty();
     for (unsigned i = 0; i < numOfKernels; ++i) {
-        // TODO: prove two termination signals can be fused into a single counter?
-        const auto prefix = makeKernelName(i);
-        mPipelineKernel->addInternalScalar(boolTy, prefix + TERMINATION_SIGNAL);
+        addInternalKernelProperties(b, i);
         addBufferHandlesToPipelineKernel(b, i);
         addPopCountScalarsToPipelineKernel(b, i);
     }
     b->setKernel(mPipelineKernel);
+}
+
+//const static std::string PROCESSED_ITEM_COUNT_SUFFIX = "_processedItemCount";
+//const static std::string PRODUCED_ITEM_COUNT_SUFFIX = "_producedItemCount";
+// const static std::string NON_DEFERRED_ITEM_COUNT_SUFFIX = "_nonDeferredItemCount";
+// const static std::string LOGICAL_SEGMENT_NO_SCALAR = "segmentNo";
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addInternalKernelProperties
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex) {
+//    Kernel * const kernel = mPipeline[kernelIndex];
+    IntegerType * const sizeTy = b->getSizeTy();
+
+    const auto name = makeKernelName(kernelIndex);
+    // TODO: prove two termination signals can be fused into a single counter?
+    mPipelineKernel->addInternalScalar(b->getInt1Ty(), name + TERMINATION_SIGNAL);
+    // TODO: non deferred item count for fixed rates could be calculated from seg no.
+    mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_NO_SCALAR);
+
+//    const auto numOfInputs = kernel->getNumOfStreamInputs();
+//    for (unsigned i = 0; i < numOfInputs; i++) {
+//        const Binding & input = kernel->getInputStreamSetBinding(i);
+//        const auto prefix = makeBufferName(kernelIndex, input);
+//        mPipelineKernel->addInternalScalar(sizeTy, prefix + PROCESSED_ITEM_COUNT_SUFFIX);
+//        if (input.isDeferred()) {
+//            mPipelineKernel->addInternalScalar(sizeTy, prefix + NON_DEFERRED_ITEM_COUNT_SUFFIX);
+//        }
+//    }
+
+//    const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+//    for (unsigned i = 0; i < numOfOutputs; i++) {
+//        const Binding & output = kernel->getOutputStreamSetBinding(i);
+//        const auto prefix = makeBufferName(kernelIndex, output);
+//        mPipelineKernel->addInternalScalar(sizeTy, prefix + PRODUCED_ITEM_COUNT_SUFFIX);
+//        if (output.isDeferred()) {
+//            mPipelineKernel->addInternalScalar(sizeTy, prefix + NON_DEFERRED_ITEM_COUNT_SUFFIX);
+//        }
+//    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -298,39 +335,58 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     // to have access to them here and then PHI them out within the kernel loop
 
     readFinalProducedItemCounts(b);
-    releaseCurrentSegment(b);
     updateOptionalCycleCounter(b);
 
     assert (mKernel == mPipeline[mKernelIndex] && b->getKernel() == mKernel);
 }
 
+// Synchronization actions for executing a kernel for a particular logical segment.
+
+// Before the segment is processed, CreateAtomicLoadAcquire must be used to load
+// the segment number of the kernel state to ensure that the previous segment is
+// complete (by checking that the acquired segment number is equal to the desired segment
+// number).
+
+// After all segment processing actions for the kernel are complete, and any necessary
+// data has been extracted from the kernel for further pipeline processing, the
+// segment number must be incremented and stored using CreateAtomicStoreRelease.
+
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief wait
+ * @brief synchronize
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::synchronize(BuilderRef b) {
 
-    const auto kernelName = makeKernelName(mKernelIndex);
-
-    BasicBlock * const kernelWait = b->CreateBasicBlock(kernelName + "Wait", mPipelineEnd);
+    const auto prefix = makeKernelName(mKernelIndex);
+    b->setKernel(mPipelineKernel);
+    BasicBlock * const kernelWait = b->CreateBasicBlock(prefix + "Wait", mPipelineEnd);
     b->CreateBr(kernelWait);
 
     b->SetInsertPoint(kernelWait);
-    const Kernel * waitingOn = mKernel;
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::SerializeThreads))) {
-        waitingOn = mPipeline.back();
-    }
-    b->setKernel(waitingOn);
-    Value * const processedSegmentCount = b->acquireLogicalSegmentNo();
+    const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
+    const unsigned waitingOnIdx = serialize ? mPipeline.size() - 1 : mKernelIndex;
+    const auto waitingOn = makeKernelName(waitingOnIdx);
+    Value * const waitingOnPtr = b->getScalarFieldPtr(waitingOn + LOGICAL_SEGMENT_NO_SCALAR);
+    Value * const processedSegmentCount = b->CreateAtomicLoadAcquire(waitingOnPtr);
     assert (processedSegmentCount->getType() == mSegNo->getType());
     Value * const ready = b->CreateICmpEQ(mSegNo, processedSegmentCount);
 
-    BasicBlock * const kernelCheck = b->CreateBasicBlock(kernelName + "Check", mPipelineEnd);
+    BasicBlock * const kernelCheck = b->CreateBasicBlock(prefix + "Check", mPipelineEnd);
     b->CreateCondBr(ready, kernelCheck, kernelWait);
 
     b->SetInsertPoint(kernelCheck);
     b->setKernel(mKernel);
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief releaseCurrentSegment
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::releaseCurrentSegment(BuilderRef b) {
+    b->setKernel(mPipelineKernel);
+    Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
+    const auto prefix = makeKernelName(mKernelIndex);
+    Value * const waitingOnPtr = b->getScalarFieldPtr(prefix + LOGICAL_SEGMENT_NO_SCALAR);
+    b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief next
@@ -522,20 +578,6 @@ inline void PipelineCompiler::setTerminated(BuilderRef b, Value * const value) {
     b->CallPrintInt("*** " + prefix + "_terminated ***", value);
     #endif
     b->setKernel(mKernel);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief releaseCurrentSegment
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::releaseCurrentSegment(BuilderRef b) {
-    Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mKernel->getHandle(), CBuilder::Protect::WRITE);
-    }
-    b->releaseLogicalSegmentNo(nextSegNo);
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mKernel->getHandle(), CBuilder::Protect::READ);
-    }
 }
 
 }

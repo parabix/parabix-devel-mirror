@@ -9,7 +9,8 @@ namespace kernel {
  * @brief compileSingleThread
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
-    Value * const localState = allocateThreadLocalSpace(b);
+    StructType * const localStateType = getLocalStateType(b);
+    Value * const localState = allocateThreadLocalSpace(b, localStateType);
     setThreadLocalSpace(b, localState);
     start(b, b->getSize(0));
     for (unsigned i = 0; i < mPipeline.size(); ++i) {
@@ -19,6 +20,8 @@ void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
     end(b, 1);
     deallocateThreadLocalSpace(b, localState);
 }
+
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief compileMultiThread
@@ -33,6 +36,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
 
     assert (numOfThreads > 1);
 
+
     Module * const m = b->getModule();
     IntegerType * const sizeTy = b->getSizeTy();
     PointerType * const voidPtrTy = b->getVoidPtrTy();
@@ -41,17 +45,20 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
     ConstantInt * const ONE = b->getInt32(1);
     ConstantInt * const TWO = b->getInt32(2);
 
-    // store where we'll resume compiling the DoSegment method
-    const auto resumePoint = b->saveIP();
     Value * const handle = mPipelineKernel->getHandle(); assert (handle);
-    StructType * const threadStructType = StructType::get(m->getContext(), {handle->getType(), sizeTy, voidPtrTy});
-    FunctionType * const threadFuncType = FunctionType::get(voidPtrTy, {voidPtrTy}, false);
+    StructType * const localStateTy = getLocalStateType(b);
+    PointerType * const localStatePtrTy = localStateTy->getPointerTo();
+    StructType * const threadStructType = StructType::get(m->getContext(), {handle->getType(), sizeTy, localStatePtrTy});
+    FunctionType * const threadFuncType = FunctionType::get(b->getVoidTy(), {voidPtrTy}, false);
 
     const auto threadName = mPipelineKernel->getName() + "_DoSegmentThread";
     Function * const threadFunc = Function::Create(threadFuncType, Function::InternalLinkage, threadName, b->getModule());
     threadFunc->setCallingConv(CallingConv::C);
     auto args = threadFunc->arg_begin();
     args->setName("kernelStateObject");
+
+    // store where we'll resume compiling the DoSegment method
+    const auto resumePoint = b->saveIP();
 
     // -------------------------------------------------------------------------------------------------------------------------
     // MAKE PIPELINE THREAD
@@ -67,6 +74,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
         setActiveKernel(b, i);
         synchronize(b);
         executeKernel(b);
+        releaseCurrentSegment(b);
     }
     mKernel = nullptr;
     mKernelIndex = 0;
@@ -80,10 +88,10 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
     b->CreatePThreadExitCall(nullVoidPtrVal);
     b->CreateBr(exitFunction);
     b->SetInsertPoint(exitFunction);
-    b->CreateRet(nullVoidPtrVal);
+    b->CreateRetVoid();
 
     // -------------------------------------------------------------------------------------------------------------------------
-    // MAKE PIPELINE DRIVER
+    // MAKE PIPELINE DRIVER CONTINUED
     // -------------------------------------------------------------------------------------------------------------------------
     b->restoreIP(resumePoint);
     mPipelineKernel->setHandle(b, handle);
@@ -94,14 +102,15 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
     for (unsigned i = 0; i < threads; ++i) {
         threadIdPtr[i] = b->CreateGEP(pthreads, {ZERO, b->getInt32(i)});
     }
+
     // use the process thread to handle the initial segment function after spawning
     // (n - 1) threads to handle the subsequent offsets
-    Value * localState[threads];
+    std::vector<Value *> localState(numOfThreads);
     for (unsigned i = 0; i < threads; ++i) {
         AllocaInst * const threadState = b->CreateAlloca(threadStructType);
         b->CreateStore(handle, b->CreateGEP(threadState, {ZERO, ZERO}));
         b->CreateStore(b->getSize(i + 1), b->CreateGEP(threadState, {ZERO, ONE}));
-        localState[i] = allocateThreadLocalSpace(b);
+        localState[i] = allocateThreadLocalSpace(b, localStateTy);
         b->CreateStore(localState[i], b->CreateGEP(threadState, {ZERO, TWO}));
         b->CreatePThreadCreateCall(threadIdPtr[i], nullVoidPtrVal, threadFunc, threadState);
     }
@@ -118,23 +127,25 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
         deallocateThreadLocalSpace(b, localState[i]);
     }
 
-
 }
 
 enum : int {
     POP_COUNT_STRUCT_INDEX = 0
 };
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getLocalStateType
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline StructType * PipelineCompiler::getLocalStateType(BuilderRef b) {
+    StructType * const popCountTy = getPopCountThreadLocalStateType(b);
+    return StructType::get(popCountTy, nullptr);
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief allocateThreadLocalSpace
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::allocateThreadLocalSpace(BuilderRef b) {
-    // malloc the local state object
-    StructType * const popCountTy = getPopCountThreadLocalStateType(b);
-    StructType * const localStateTy = StructType::get(popCountTy, nullptr);
-    Value * const localState = b->CreateCacheAlignedAlloca(localStateTy);
-    // and any pop count refs
+inline Value * PipelineCompiler::allocateThreadLocalSpace(BuilderRef b, StructType * localStateType) {
+    Value * const localState = b->CreateCacheAlignedAlloca(localStateType);
     Constant * const ZERO = b->getInt32(0);
     Constant * const POP_COUNT_STRUCT = b->getInt32(POP_COUNT_STRUCT_INDEX);
     allocatePopCountArrays(b, b->CreateGEP(localState, {ZERO, POP_COUNT_STRUCT}));

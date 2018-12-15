@@ -54,14 +54,6 @@ void KernelBuilder::setScalarField(const std::string & fieldName, Value * const 
     CreateStore(value, ptr);
 }
 
-LoadInst * KernelBuilder::acquireLogicalSegmentNo() {
-    return CreateAtomicLoadAcquire(getScalarFieldPtr(LOGICAL_SEGMENT_NO_SCALAR));
-}
-
-void KernelBuilder::releaseLogicalSegmentNo(Value * const nextSegNo) {
-    CreateAtomicStoreRelease(nextSegNo, getScalarFieldPtr(LOGICAL_SEGMENT_NO_SCALAR));
-}
-
 Value * KernelBuilder::getCycleCountPtr() {
     return getScalarFieldPtr(CYCLECOUNT_SCALAR);
 }

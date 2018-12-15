@@ -165,7 +165,7 @@ public:
 
     PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel);
 
-    void addInternalKernelProperties(BuilderRef b);
+    void addPipelineKernelProperties(BuilderRef b);
     void generateInitializeMethod(BuilderRef b);
     void generateSingleThreadKernelMethod(BuilderRef b);
     void generateMultiThreadKernelMethod(BuilderRef b, const unsigned numOfThreads);
@@ -176,13 +176,16 @@ protected:
 
 // main pipeline functions
 
+    void addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex);
+
     void start(BuilderRef b, Value * const initialSegNo);
     void setActiveKernel(BuilderRef b, const unsigned index);
     void synchronize(BuilderRef b);
     void executeKernel(BuilderRef b);
     void end(BuilderRef b, const unsigned step);
 
-    Value * allocateThreadLocalSpace(BuilderRef b);
+    StructType * getLocalStateType(BuilderRef b);
+    Value * allocateThreadLocalSpace(BuilderRef b, StructType * localStateType);
     void setThreadLocalSpace(BuilderRef b, Value * const localState);
     void deallocateThreadLocalSpace(BuilderRef b, Value * const localState);
 
