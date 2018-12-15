@@ -81,7 +81,7 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     BasicBlock * const setTermination = b->CreateBasicBlock("setTermination");
     BasicBlock * const exit = b->CreateBasicBlock("mmapSourceExit");
 
-    Constant * const PAGE_SIZE = b->getSize(getPageSize());
+    Constant * const MMAP_PAGE_SIZE = b->getSize(getPageSize());
 
     Constant * const STRIDE_SIZE = b->getSize(stride);
 
@@ -92,7 +92,7 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
 
     Value * const consumedItems = b->getConsumedItemCount("sourceBuffer");
     Value * const consumedBytes = b->CreateMul(consumedItems, CODE_UNIT_BYTES);
-    Value * const consumedPageOffset = b->CreateAnd(consumedBytes, ConstantExpr::getNeg(PAGE_SIZE));
+    Value * const consumedPageOffset = b->CreateAnd(consumedBytes, ConstantExpr::getNeg(MMAP_PAGE_SIZE));
     Value * const consumedBuffer = b->getRawOutputPointer("sourceBuffer", consumedPageOffset);
     Value * const readableBuffer = b->getScalarField("buffer");
     Value * const unnecessaryBytes = b->CreatePtrDiff(consumedBuffer, readableBuffer);
