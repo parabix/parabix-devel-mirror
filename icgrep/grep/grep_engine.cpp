@@ -52,7 +52,6 @@
 #include <cc/multiplex_CCs.h>
 #include <llvm/Support/raw_ostream.h>
 #include <util/file_select.h>
-#include <util/aligned_allocator.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -62,6 +61,7 @@
 #include <llvm/Support/Casting.h>
 #include <kernels/pipeline_builder.h>
 #include <sched.h>
+#include <atomic>
 
 using namespace llvm;
 using namespace cc;
@@ -100,40 +100,6 @@ inline static size_t ceil_log2(const size_t v) {
     assert ("log2(0) is undefined!" && v != 0);
     assert ("sizeof(size_t) == sizeof(long)" && sizeof(size_t) == sizeof(long));
     return (sizeof(size_t) * CHAR_BIT) - __builtin_clzl(v - 1UL);
-}
-
-void SearchableBuffer::addSearchCandidate(const char * C_string_ptr) {
-    size_t length = strlen(C_string_ptr)+1;
-    if (mSpace_used + length >= mAllocated_capacity) {
-        size_t new_capacity = size_t{1} << (ceil_log2(mSpace_used + length + 1));
-        AlignedAllocator<char, BUFFER_ALIGNMENT> alloc;
-        char * new_buffer = mAllocator.allocate(new_capacity, 0);
-        memcpy(new_buffer, mBuffer_base, mSpace_used);
-        memset(&new_buffer[mSpace_used], 0, new_capacity-mSpace_used);
-        if (mBuffer_base != mInitial_buffer) {
-            alloc.deallocate(mBuffer_base, 0);
-        }
-        mBuffer_base = new_buffer;
-        mAllocated_capacity = new_capacity;
-    }
-    memcpy((void * ) &mBuffer_base[mSpace_used], C_string_ptr, length);
-    mSpace_used += length;
-    assert("Search candidate not null terminated" && (mBuffer_base[mSpace_used] == '\0'));
-    mEntries++;
-}
-
-SearchableBuffer::SearchableBuffer() :
-    mAllocated_capacity(INITIAL_CAPACITY),
-    mSpace_used(0),
-    mEntries(0),
-    mBuffer_base(mInitial_buffer) {
-    memset(mBuffer_base, 0, INITIAL_CAPACITY);
-}
-
-SearchableBuffer::~SearchableBuffer() {
-    if (mBuffer_base != mInitial_buffer) {
-        mAllocator.deallocate(mBuffer_base, 0);
-    }
 }
 
 // Grep Engine construction and initialization.
@@ -196,7 +162,7 @@ void GrepEngine::setRecordBreak(GrepRecordBreakKind b) {
     mGrepRecordBreak = b;
 }
 
-void GrepEngine::initFileResult(std::vector<boost::filesystem::path> & paths) {
+void GrepEngine::initFileResult(const std::vector<boost::filesystem::path> & paths) {
     const unsigned n = paths.size();
     mResultStrs.resize(n);
     mFileStatus.resize(n, FileStatus::Pending);
@@ -285,7 +251,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     bool requiresComplexTest = true;
     Component internalComponents = Component::NoComponents;
 
-    
+
 
     if (isSimple) {
         if (hasComponent(mRequiredComponents, Component::MoveMatchesToEOL)) {
@@ -721,28 +687,31 @@ void * GrepEngine::DoGrepThreadMethod() {
     }
 
     unsigned printIdx = mNextFileToPrint++;
-    while (printIdx < inputPaths.size()) {
-        const bool readyToPrint = ((printIdx == 0) || (mFileStatus[printIdx - 1] == FileStatus::PrintComplete)) && (mFileStatus[printIdx] == FileStatus::GrepComplete);
-        if (readyToPrint) {
-            const auto output = mResultStrs[printIdx].str();
-            if (!output.empty()) {
-                llvm::outs() << output;
-            }
-            mFileStatus[printIdx] = FileStatus::PrintComplete;
-            printIdx = mNextFileToPrint++;
-        }
-        //sched_yield();
-    }
+    if (printIdx == 0) {
 
-    if (pthread_self() != mEngineThread) {
-        pthread_exit(nullptr);
-    } else {
+        while (printIdx < inputPaths.size()) {
+            const bool readyToPrint = (mFileStatus[printIdx] == FileStatus::GrepComplete);
+            if (readyToPrint) {
+                const auto output = mResultStrs[printIdx].str();
+                if (!output.empty()) {
+                    llvm::outs() << output;
+                }
+                mFileStatus[printIdx] = FileStatus::PrintComplete;
+                printIdx = mNextFileToPrint++;
+            } else {
+                sched_yield();
+            }
+        }
+
         if (mGrepStdIn) {
             std::ostringstream s;
             const auto grepResult = doGrep("-", s);
             llvm::outs() << s.str();
             if (grepResult) grepMatchFound = true;
         }
+    }
+    if (pthread_self() != mEngineThread) {
+        pthread_exit(nullptr);
     }
     return nullptr;
 }

@@ -1,3 +1,5 @@
+CMakeLists.txt
+grep/searchable_buffer.h
 wc.cpp
 base64.cpp
 grep_interface.cpp

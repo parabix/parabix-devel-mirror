@@ -13,7 +13,6 @@
 #include <vector>
 #include <sstream>
 #include <atomic>
-#include <util/aligned_allocator.h>
 #include <boost/filesystem.hpp>
 
 namespace re { class CC; }
@@ -25,7 +24,7 @@ class BaseDriver;
 
 
 namespace grep {
-    
+
 enum class GrepRecordBreakKind {Null, LF, Unicode};
 
 class InternalSearchEngine;
@@ -41,7 +40,7 @@ public:
 private:
     bool mBinaryFile;
 };
-    
+
 class MatchAccumulator : public GrepCallBackObject {
 public:
     MatchAccumulator() {}
@@ -64,9 +63,9 @@ public:
     GrepEngine(BaseDriver & driver);
 
     virtual ~GrepEngine() = 0;
-    
+
     void setPreferMMap() {mPreferMMap = true;}
-    
+
     void showFileNames() {mShowFileNames = true;}
     void setStdinLabel(std::string lbl) {mStdinLabel = lbl;}
     void showLineNumbers() {mShowLineNumbers = true;}
@@ -80,7 +79,7 @@ public:
     void suppressFileMessages() {mSuppressFileMessages = true;}
     void setBinaryFilesOption(argv::BinaryFilesMode mode) {mBinaryFilesMode = mode;}
     void setRecordBreak(GrepRecordBreakKind b);
-    void initFileResult(std::vector<boost::filesystem::path> & filenames);
+    void initFileResult(const std::vector<boost::filesystem::path> & filenames);
     void initREs(std::vector<re::RE *> & REs);
     virtual void grepCodeGen();
     bool searchAllFiles();
@@ -132,7 +131,7 @@ protected:
     std::vector<FileStatus> mFileStatus;
     bool grepMatchFound;
     GrepRecordBreakKind mGrepRecordBreak;
-    
+
     std::vector<re:: RE *> mREs;
     std::set<re::Name *> mUnicodeProperties;
     re::CC * mBreakCC;
@@ -196,8 +195,8 @@ public:
     QuietModeEngine(BaseDriver & driver);
 };
 
-    
-    
+
+
 class InternalSearchEngine {
 public:
     InternalSearchEngine(BaseDriver & driver);
@@ -205,42 +204,20 @@ public:
     InternalSearchEngine(const std::unique_ptr<grep::GrepEngine> & engine);
 
     ~InternalSearchEngine();
-    
+
     void setRecordBreak(GrepRecordBreakKind b) {mGrepRecordBreak = b;}
     void setCaseInsensitive()  {mCaseInsensitive = true;}
-    
+
     void grepCodeGen(re::RE * matchingRE, re::RE * invertedRE);
-    
+
     void doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum);
-    
+
 private:
     GrepRecordBreakKind mGrepRecordBreak;
     bool mCaseInsensitive;
     bool mSaveSegmentPipelineParallel;
     BaseDriver & mGrepDriver;
     void * mMainMethod;
-};
-    
-    
-#define MAX_SIMD_WIDTH_SUPPORTED 512
-#define INITIAL_CAPACITY (MAX_SIMD_WIDTH_SUPPORTED * 4)
-    
-class SearchableBuffer  {
-public:
-    SearchableBuffer();
-    void addSearchCandidate(const char * string_ptr);
-    size_t getCandidateCount() {return mEntries;}
-    char * getBufferBase() {return mBuffer_base;}
-    size_t getBufferSize() {return mSpace_used;}
-    ~SearchableBuffer();
-private:
-    static const unsigned BUFFER_ALIGNMENT = MAX_SIMD_WIDTH_SUPPORTED/8;
-    AlignedAllocator<char, BUFFER_ALIGNMENT> mAllocator;
-    size_t mAllocated_capacity;
-    size_t mSpace_used;
-    size_t mEntries;
-    char * mBuffer_base;
-    alignas(BUFFER_ALIGNMENT) char mInitial_buffer[INITIAL_CAPACITY];
 };
 
 }

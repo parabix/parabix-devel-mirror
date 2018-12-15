@@ -43,7 +43,7 @@ static cl::opt<int> REsPerGroup("re-num", cl::desc("Number of regular expression
 static re::ModeFlagSet globalFlags = re::MULTILINE_MODE_FLAG;
 
 std::vector<re::RE *> readExpressions() {
-  
+
     if (argv::FileFlag != "") {
         std::ifstream regexFile(argv::FileFlag.c_str());
         std::string r;
@@ -54,10 +54,10 @@ std::vector<re::RE *> readExpressions() {
             regexFile.close();
         }
     }
-    
+
     // if there are no regexes specified through -e or -f, the first positional argument
     // must be a regex, not an input file.
-    
+
     if (argv::RegexpVector.size() == 0) {
         argv::RegexpVector.push_back(inputFiles[0]);
         inputFiles.erase(inputFiles.begin());
@@ -72,7 +72,7 @@ std::vector<re::RE *> readExpressions() {
         REs.push_back(re_ast);
     }
 
-    
+
     // If there are multiple REs, combine them into groups.
     // A separate kernel will be created for each group.
     if (REs.size() > 1) {
@@ -114,10 +114,10 @@ namespace fs = boost::filesystem;
 int main(int argc, char *argv[]) {
 
     argv::InitializeCommandLineInterface(argc, argv);
-    
+
     auto REs = readExpressions();
 
-    std::vector<fs::path> allFiles = argv::getFullFileList(inputFiles);
+    const auto allFiles = argv::getFullFileList(inputFiles);
     if (inputFiles.empty()) {
         argv::UseStdIn = true;
     } else if ((allFiles.size() > 1) && !argv::NoFilenameFlag) {
@@ -125,9 +125,7 @@ int main(int argc, char *argv[]) {
     }
 
     CPUDriver driver("icgrep");
-
     std::unique_ptr<grep::GrepEngine> grep;
-
     switch (argv::Mode) {
         case argv::NormalMode:
             grep = make_unique<grep::EmitMatchesEngine>(driver);
@@ -167,7 +165,7 @@ int main(int argc, char *argv[]) {
     grep->setBinaryFilesOption(argv::BinaryFilesFlag);
     grep->initREs(REs);
     grep->grepCodeGen();
-    grep->initFileResult(allFiles);
+    grep->initFileResult(allFiles); // unnecessary copy!
     const bool matchFound = grep->searchAllFiles();
 
     return matchFound ? argv::MatchFoundExitCode : argv::MatchNotFoundExitCode;

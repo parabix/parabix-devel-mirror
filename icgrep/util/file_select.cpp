@@ -20,14 +20,16 @@
 #include <re/re_toolchain.h>
 #include <re/printer_re.h>
 #include <grep/grep_engine.h>
+#include <grep/searchable_buffer.h>
 #include <toolchain/cpudriver.h>
 #include <fstream>
 #include <string>
+#include <re/printer_re.h>
 
 using namespace llvm;
 
 namespace argv {
-    
+
 static cl::OptionCategory Input_Options("File Selection Options", "These options control the input sources.");
 
 bool NoMessagesFlag;
@@ -124,7 +126,7 @@ re::RE * getFileExcludePattern() {
     if (patterns.empty()) return re::makeAlt();  // matches nothing, so excludes nothing.
     return anchorToFullFileName(re::makeAlt(patterns.begin(), patterns.end()));
 }
-    
+
 re::RE * getFileIncludePattern() {
     if (IncludeFlag != "") {
         re::RE * includeSpec = re::RE_Parser::parse(IncludeFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
@@ -170,7 +172,7 @@ protected:
     std::vector<fs::path> mDirectoryList;
     std::vector<unsigned> mCumulativeEntryCount;
 };
-    
+
 void FileSelectAccumulator::reset() {
     mCollectedPaths.clear();
     mFullPathEntries = 0;
@@ -197,28 +199,25 @@ void FileSelectAccumulator::accumulate_match(const size_t fileIdx, char * name_s
     }
 }
 
-
-
-    
 std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
     // The vector to accumulate the full list of collected files to be searched.
     std::vector<fs::path> collectedPaths;
-    
+
     // In this pass through command line arguments and the file hierarchy,
     // we are just gathering file and subdirectory entries, so we silently
     // ignore errors.  We use the boost::filesystem operations that set
     // error codes rather than raise exceptions.
-    boost::system::error_code errc;
-    
+
     // In non-recursive greps with no include/exclude processing, we simply assemble the
     // paths.
-    if ((DirectoriesFlag != Recurse) && (ExcludeFlag == "") && (IncludeFlag == "") && (ExcludeFromFlag == "")) {
+    if ((DirectoriesFlag != Recurse) && (ExcludeFlag.empty()) && (IncludeFlag.empty()) && (ExcludeFromFlag.empty())) {
         for (const std::string & f : inputFiles) {
             if (f == "-") {  // stdin, will always be searched.
                 argv::UseStdIn = true;
                 continue;
             }
             fs::path p(f);
+            boost::system::error_code errc;
             fs::file_status s = fs::status(p, errc);
             if (errc) {
                 // If there was an error, we leave the file in the fileCandidates
@@ -239,11 +238,11 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
         }
         return collectedPaths;
     }
-    
+
     // Otherwise we need to filter paths according to some include/exclude rules.
-    
+
     FileSelectAccumulator fileAccum(collectedPaths);
-    
+
     // At each level we gather candidate file and directory names and then
     // filter the names based on -include, -exclude, -include-dir, -excclude-dir,
     // and -exclude-from settings.
@@ -258,48 +257,50 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
             continue;
         }
         fs::path p(f);
+        boost::system::error_code errc;
         fs::file_status s = fs::status(p, errc);
         if (errc) {
             // If there was an error, we leave the file in the fileCandidates
             // list for later error processing.
-            if (!NoMessagesFlag) fileCandidates.addSearchCandidate(p.c_str());
+            if (!NoMessagesFlag) fileCandidates.append(p.string());
         } else if (fs::is_directory(s)) {
             if (DirectoriesFlag == Recurse) {
-                dirCandidates.addSearchCandidate(p.c_str());
+                dirCandidates.append(p.string());
             } else if (DirectoriesFlag == Read) {
-                fileCandidates.addSearchCandidate(p.c_str());
+                fileCandidates.append(p.string());
             }
         } else if (fs::is_regular_file(s)) {
-            fileCandidates.addSearchCandidate(p.c_str());
+            fileCandidates.append(p.string());
         } else {
             // Devices and unknown file types
             if (DevicesFlag == Read) {
-                fileCandidates.addSearchCandidate(p.c_str());
+                fileCandidates.append(p.string());
             }
         }
     }
-    
+
     auto commandLineDirCandidates = dirCandidates.getCandidateCount();
     auto commandLineFileCandidates = fileCandidates.getCandidateCount();
     fileAccum.setFullPathEntries(commandLineFileCandidates);
     if (commandLineDirCandidates > 0) {
         // Recursive processing of directories has been requested and we have
         // candidate directories from the command line.
-    
+
         // selectedDirectories will accumulate hold the results of directory
         // include/exclude filtering at each level of processing.
         std::vector<fs::path> selectedDirectories;
-        
         FileSelectAccumulator directoryAccum(selectedDirectories);
+
         CPUDriver driver("driver");
         grep::InternalSearchEngine directorySelectEngine(driver);
         directorySelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
         directorySelectEngine.grepCodeGen(getDirectoryIncludePattern(), getDirectoryExcludePattern());
-        
+
         // The initial grep search determines which of the command line directories to process.
         // Each of these candidates is a full path return from command line argument processing.
         directoryAccum.setFullPathEntries(dirCandidates.getCandidateCount());
-        directorySelectEngine.doGrep(dirCandidates.getBufferBase(), dirCandidates.getBufferSize(), directoryAccum);
+        directorySelectEngine.doGrep(dirCandidates.data(), dirCandidates.size(), directoryAccum);
+        grep::SearchableBuffer subdirCandidates;
 
         while (!selectedDirectories.empty()) {
             // We now iterate through the full list of directories, gathering
@@ -307,68 +308,74 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
             // (a) File entries are added into the global list of fileCandidates.
             // (b) Directory entries are added into a new list of candidates at each level.
 
-            grep::SearchableBuffer subdirCandidates;
-            std::vector<fs::path> currentDirectories = selectedDirectories;
+            std::vector<fs::path> currentDirectories;
+            assert (currentDirectories.empty());
+            currentDirectories.swap(selectedDirectories);
+            assert (selectedDirectories.empty());
+            assert (!currentDirectories.empty());
+
+            subdirCandidates.reset();
             directoryAccum.reset();
+
             // Iterate through all directories, collecting subdirectory and file candidates.
-            for (auto & dirpath : currentDirectories) {
+            for (const auto & dirpath : currentDirectories) {
                 boost::system::error_code errc;
-                fs::directory_iterator di_end;
                 fs::directory_iterator di(dirpath, errc);
                 if (errc) {
                     // If we cannot enter the directory, keep it in the list of files,
                     // for possible error reporting.
-                    if (!NoMessagesFlag) fileCandidates.addSearchCandidate(dirpath.filename().c_str());
+                    if (!NoMessagesFlag) {
+                        fileCandidates.append(dirpath.filename().string());
+                    }
                     continue;
                 }
+
+                const auto di_end = fs::directory_iterator();
                 while (di != di_end) {
-                    auto & e = di->path();
-                    fs::file_status s = fs::status(e, errc);
+                    const auto & e = di->path();
+                    boost::system::error_code errc;
+                    const auto s = fs::status(e, errc);
                     if (errc) {
                         // If there was an error, we leave the file in the fileCandidates
                         // list for later error processing.
-                        if (!NoMessagesFlag) fileCandidates.addSearchCandidate(e.filename().c_str());
+                        if (!NoMessagesFlag) {
+                            fileCandidates.append(e.filename().string());
+                        }
                     } else if (fs::is_directory(s)) {
                         if (fs::is_symlink(s) && !DereferenceRecursiveFlag) {
                             di.increment(errc);
                             continue;
                         }
-                        subdirCandidates.addSearchCandidate(e.filename().c_str());
-                    } else if (fs::is_regular_file(s)) {
-                        fileCandidates.addSearchCandidate(e.filename().c_str());
-                    } else {
-                        // Devices and unknown file types
-                        if (DevicesFlag == Read) {
-                            fileCandidates.addSearchCandidate(e.filename().c_str());
-                        }
+                        subdirCandidates.append(e.filename().string());
+                    } else if (fs::is_regular_file(s) || DevicesFlag == Read) {
+                        fileCandidates.append(e.filename().string());
                     }
-                    di.increment(errc);
-                    if (errc) break;
+                    boost::system::error_code errc2;
+                    di.increment(errc2);
+                    if (errc2) break;
                 }
                 // For each directory, update counts for candidates generated at this level.
                 //
                 directoryAccum.addDirectory(dirpath, subdirCandidates.getCandidateCount());
                 fileAccum.addDirectory(dirpath, fileCandidates.getCandidateCount());
             }
-            // Directory traversal at this level is complete.  Clear the directoryList,
-            // so that it will accumulate only the selected entries from the gathered
-            // buffer of subdirCandidates.
-            selectedDirectories.clear();
-            //
-            //  Now do the search to produce the next level of selected subdirectories
-            directorySelectEngine.doGrep(subdirCandidates.getBufferBase(), subdirCandidates.getBufferSize(), directoryAccum);
+
+
+            // Now do the search to produce the next level of selected subdirectories
+            directorySelectEngine.doGrep(subdirCandidates.data(), subdirCandidates.size(), directoryAccum);
             // Thre search result has been written to directoryList, continue while we
             // have new subdirectories.
-        } while (!selectedDirectories.empty());
+        }
     }
     //  All directories have been processed and all the fileCandidates in the SearchBuffer.
     //  Now determine which of the candidates should included or excluded from the search.
     //  The results will be accumulated in collectedPaths.
+
     CPUDriver driver("driver");
     grep::InternalSearchEngine fileSelectEngine(driver);
     fileSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
     fileSelectEngine.grepCodeGen(getFileIncludePattern(), getFileExcludePattern());
-    fileSelectEngine.doGrep(fileCandidates.getBufferBase(), fileCandidates.getBufferSize(), fileAccum);
+    fileSelectEngine.doGrep(fileCandidates.data(), fileCandidates.size(), fileAccum);
     return collectedPaths;
 }
 
