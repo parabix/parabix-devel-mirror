@@ -21,7 +21,6 @@ public:
     : IDISA_Builder(C, AVX_width, vectorWidth, laneWidth)
     , IDISA_SSE2_Builder(C, vectorWidth, laneWidth)
     {
-
     }
 
     virtual std::string getBuilderUniqueName() override;
@@ -29,7 +28,6 @@ public:
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
 
     ~IDISA_AVX_Builder() {}
-
 };
 
 class IDISA_AVX2_Builder : public IDISA_AVX_Builder {
@@ -38,7 +36,8 @@ public:
     IDISA_AVX2_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned laneWidth)
     : IDISA_Builder(C, AVX_width, vectorWidth, laneWidth)
     , IDISA_AVX_Builder(C, vectorWidth, laneWidth) {
-
+        llvm::StringMap<bool> features;
+        hasBMI2 = llvm::sys::getHostCPUFeatures(features) && features.lookup("bmi2");
     }
 
     virtual std::string getBuilderUniqueName() override;
@@ -60,6 +59,8 @@ public:
     
 
     ~IDISA_AVX2_Builder() {}
+protected:
+    bool hasBMI2;
 };
 
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
