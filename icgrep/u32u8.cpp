@@ -272,7 +272,7 @@ void UTF8assembly::generatePabloMethod() {
 void deposit(const std::unique_ptr<PipelineBuilder> & P, const unsigned base, const unsigned count, StreamSet * mask, StreamSet * inputs, StreamSet * outputs) {
     StreamSet * const expanded = P->CreateStreamSet(count);
     P->CreateKernelCall<StreamExpandKernel>(inputs, base, mask, expanded);
-    if (AVX2_available()) {
+    if (AVX2_available() && BMI2_available()) {
         P->CreateKernelCall<PDEPFieldDepositKernel>(mask, expanded, outputs);
     } else {
         P->CreateKernelCall<FieldDepositKernel>(mask, expanded, outputs);

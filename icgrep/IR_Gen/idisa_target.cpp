@@ -44,6 +44,14 @@ bool SSSE3_available() {
     return false;
 }
 
+bool BMI2_available() {
+    StringMap<bool> features;
+    if (sys::getHostCPUFeatures(features)) {
+        return features.lookup("bmi2");
+    }
+    return false;
+}
+
 bool AVX2_available() {
     StringMap<bool> features;
     if (sys::getHostCPUFeatures(features)) {
