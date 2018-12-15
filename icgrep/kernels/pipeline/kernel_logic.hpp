@@ -508,7 +508,11 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     b->CallPrintInt("* " + prefix + "_executing", mNumOfLinearStrides);
     #endif
 
-    b->CreateCall(getDoSegmentFunction(b), arguments);
+
+    mTerminationExplicitly = b->CreateCall(getDoSegmentFunction(b), arguments);
+    if (LLVM_LIKELY(mTerminationExplicitly->getType()->isVoidTy())) {
+        mTerminationExplicitly = b->getFalse();
+    }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mPipelineKernel->getHandle(), CBuilder::Protect::WRITE);
@@ -658,7 +662,7 @@ void PipelineCompiler::itemCountSanityCheck(BuilderRef b, const Binding & bindin
     if (lb > 0 && !binding.hasAttribute(AttrId::Deferred)) {
         Constant * const strideSize = b->getSize(ceiling(lb * mKernel->getStride()));
         Value * hasEnough = b->CreateICmpULE(itemCount, strideSize);
-        hasEnough = b->CreateOr(hasEnough, terminatedExplicitly(b));
+        hasEnough = b->CreateOr(hasEnough, mTerminationExplicitly);
         b->CreateAssert(hasEnough, prefix + " " + label + " fewer items than expected");
     }
     Value * const withinBounds = b->CreateICmpULE(itemCount, expected);

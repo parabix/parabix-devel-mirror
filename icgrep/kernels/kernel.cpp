@@ -102,10 +102,8 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
     }
 
     IntegerType * const sizeTy = b->getSizeTy();
-    PointerType * const sizePtrPtrTy = sizeTy->getPointerTo()->getPointerTo();
 
     addInternalScalar(sizeTy, LOGICAL_SEGMENT_NO_SCALAR);
-    addInternalScalar(sizeTy, TERMINATION_SIGNAL);
 
     // TODO: if we had a way of easily calculating the number of processed/produced items of the
     // final stride of a non-deferred fixed rate stream, we could avoid storing the item counts.
@@ -118,7 +116,6 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
     }
 
     // If an output is a managed buffer, we need to store both the buffer and a set of consumers.
-    Type * const consumerSetTy = StructType::get(b->getContext(), {sizeTy, sizePtrPtrTy})->getPointerTo();
     for (unsigned i = 0; i < numOfOutputStreams; ++i) {
         const Binding & output = mOutputStreamSets[i];
         addInternalScalar(sizeTy, output.getName() + PRODUCED_ITEM_COUNT_SUFFIX);
@@ -128,7 +125,6 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
         if (LLVM_UNLIKELY(isLocalBuffer(output))) {
             Type * const handleTy = mStreamSetOutputBuffers[i]->getHandleType(b);
             addInternalScalar(handleTy, output.getName() + BUFFER_HANDLE_SUFFIX);
-            addInternalScalar(consumerSetTy, output.getName() + CONSUMER_SUFFIX);
             addInternalScalar(sizeTy, output.getName() + CONSUMED_ITEM_COUNT_SUFFIX);
         }
     }
@@ -190,7 +186,7 @@ void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) 
         params.push_back(binding.getType());
     }
 
-    FunctionType * const initType = FunctionType::get(b->getVoidTy(), params, false);
+    FunctionType * const initType = FunctionType::get(b->getInt1Ty(), params, false);
     Function * const initFunc = Function::Create(initType, GlobalValue::ExternalLinkage, getName() + INIT_SUFFIX, b->getModule());
     initFunc->setCallingConv(CallingConv::C);
     initFunc->setDoesNotThrow();
@@ -230,11 +226,16 @@ void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> &
             mStreamSetOutputBuffers[i]->setHandle(b, handle);
         }
     }
+    // any kernel can set termination on initialization
+    mTerminationSignalPtr = b->CreateAlloca(b->getInt1Ty(), nullptr, "terminationSignal");
+    b->CreateStore(b->getFalse(), mTerminationSignalPtr);
     generateInitializeMethod(b);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mHandle, CBuilder::Protect::READ);
     }
-    b->CreateRetVoid();
+    b->CreateRet(b->CreateLoad(mTerminationSignalPtr));
+    mTerminationSignalPtr = nullptr;
+
     b->setKernel(storedKernel);
     mHandle = storedHandle;
     mCurrentMethod = nullptr;
@@ -247,7 +248,6 @@ void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
 
     IntegerType * const sizeTy = b->getSizeTy();
     PointerType * const sizePtrTy = sizeTy->getPointerTo();
-    Type * const voidTy = b->getVoidTy();
 
     std::vector<Type *> params;
     params.reserve(2 + mInputStreamSets.size() + mOutputStreamSets.size());
@@ -278,7 +278,8 @@ void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
         }
     }
 
-    FunctionType * const doSegmentType = FunctionType::get(voidTy, params, false);
+    Type * const retTy = canSetTerminateSignal() ? b->getInt1Ty() : b->getVoidTy();
+    FunctionType * const doSegmentType = FunctionType::get(retTy, params, false);
     Function * const doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, b->getModule());
     doSegment->setCallingConv(CallingConv::C);
     doSegment->setDoesNotThrow();
@@ -398,13 +399,26 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
         b->CreateAssert(b->CreateNot(terminated), getName() + " was called after termination");
     }
 
+    // initialize the termination signal if this kernel can set it
+    if (canSetTerminateSignal()) {
+        mTerminationSignalPtr = b->CreateAlloca(b->getInt1Ty(), nullptr, "terminationSignal");
+        b->CreateStore(b->getFalse(), mTerminationSignalPtr);
+    }
+
     // Calculate and/or load the accessible and writable item counts. If they are unneeded,
     // LLVM ought to recognize them as dead code and remove them.
     generateKernelMethod(b); // must be overridden by the Kernel subtype
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mHandle, CBuilder::Protect::READ);
     }
-    b->CreateRetVoid();
+
+    // return the termination signal (if one exists)
+    if (canSetTerminateSignal()) {
+        b->CreateRet(b->CreateLoad(mTerminationSignalPtr));
+        mTerminationSignalPtr = nullptr;
+    } else {
+        b->CreateRetVoid();
+    }
 
     // Clean up all of the constructed buffers.
     b->setKernel(storedKernel);
@@ -757,7 +771,7 @@ const Kernel::ScalarField & Kernel::getScalarField(const llvm::StringRef name) c
     assert (!mScalarMap.empty());
     const auto f = mScalarMap.find(name);
     if (LLVM_UNLIKELY(f == mScalarMap.end())) {
-        assert (false && "could not find scalar!");
+        assert (!"could not find scalar!");
         report_fatal_error(getName() + " does not contain scalar: " + name);
     }
     return f->second;
@@ -791,7 +805,7 @@ Binding & Kernel::getOutputScalarBinding(const llvm::StringRef name) {
 Kernel::StreamSetPort Kernel::getStreamPort(const llvm::StringRef name) const {
     const auto f = mStreamSetMap.find(name);
     if (LLVM_UNLIKELY(f == mStreamSetMap.end())) {
-        assert (!mStreamSetMap.empty());
+        assert (!"could not find stream set!");
         report_fatal_error(getName() + " does not contain stream set " + name);
     }
     return f->second;
@@ -1036,6 +1050,7 @@ Kernel::Kernel(std::string && kernelName,
 , mInternalScalars( std::move(internal_scalars))
 , mCurrentMethod(nullptr)
 , mStride(0)
+, mTerminationSignalPtr(nullptr)
 , mIsFinal(nullptr)
 , mNumOfStrides(nullptr)
 , mKernelName(annotateKernelNameWithDebugFlags(std::move(kernelName))) {

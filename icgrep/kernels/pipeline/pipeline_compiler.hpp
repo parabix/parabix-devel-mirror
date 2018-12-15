@@ -239,9 +239,9 @@ protected:
     Constant * getLookahead(BuilderRef b, const unsigned inputPort) const;
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount, Value * all) const;
     Value * getTotalItemCount(BuilderRef b, const unsigned inputPort) const;
-    Value * terminatedExplicitly(BuilderRef b) const;
     Value * hasProducerTerminated(BuilderRef b, const unsigned inputPort) const;
-    void setTerminated(BuilderRef b);
+    Value * getInitialTerminationSignal(BuilderRef b) const;
+    void setTerminated(BuilderRef b, Value * const terminated);
     void resetMemoizedFields();
 
 // pop-count functions
@@ -396,6 +396,7 @@ protected:
 
     // kernel state
     Value *                                     mNumOfLinearStrides = nullptr;
+    Value *                                     mTerminationExplicitly = nullptr;
 
     std::vector<unsigned>                       mPortOrdering;
 

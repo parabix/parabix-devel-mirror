@@ -123,26 +123,28 @@ Value * KernelBuilder::getAccessibleItemCount(const std::string & name) {
  * @brief getTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::getTerminationSignal() {
-    return CreateICmpNE(getScalarField(TERMINATION_SIGNAL), getSize(0));
+    Value * const ptr = mKernel->getTerminationSignalPtr();
+    if (ptr) {
+        return CreateLoad(ptr);
+    } else {
+        return getFalse();
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
 void KernelBuilder::setTerminationSignal(Value * const value) {
+    assert (value);
     assert (value->getType() == getInt1Ty());
     if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
         CallPrintInt(mKernel->getName() + ": setTerminationSignal", value);
     }
-    setScalarField(TERMINATION_SIGNAL, CreateZExt(value, getSizeTy()));
-}
-
-Value * KernelBuilder::getConsumerLock(const std::string & name) {
-    return getScalarField(name + CONSUMER_SUFFIX);
-}
-
-void KernelBuilder::setConsumerLock(const std::string & name, Value * const value) {
-    setScalarField(name + CONSUMER_SUFFIX, value);
+    Value * const ptr = mKernel->getTerminationSignalPtr();
+    if (LLVM_UNLIKELY(ptr == nullptr)) {
+        llvm::report_fatal_error(mKernel->getName() + " does not have CanTerminateEarly or MustExplicitlyTerminate set.");
+    }
+    CreateStore(value, ptr);
 }
 
 Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * const streamIndex, Value * const blockOffset) {

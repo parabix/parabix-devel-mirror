@@ -4,7 +4,6 @@ wc.cpp
 base64.cpp
 grep_interface.cpp
 grep_interface.h
-icgrep.cpp
 idisa_test.cpp
 lz4_decoder.cpp
 lz4_grep.cpp

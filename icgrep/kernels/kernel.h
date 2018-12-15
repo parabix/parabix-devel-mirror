@@ -38,9 +38,7 @@ const static std::string PROCESSED_ITEM_COUNT_SUFFIX = "_processedItemCount";
 const static std::string PRODUCED_ITEM_COUNT_SUFFIX = "_producedItemCount";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = "_consumedItemCount";
 const static std::string NON_DEFERRED_ITEM_COUNT_SUFFIX = "_nonDeferredItemCount";
-const static std::string TERMINATION_SIGNAL = "terminationSignal";
 const static std::string BUFFER_HANDLE_SUFFIX = "_buffer";
-const static std::string CONSUMER_SUFFIX = "_consumerLocks";
 const static std::string CYCLECOUNT_SCALAR = "CPUcycles";
 
 namespace kernel {
@@ -433,6 +431,18 @@ protected:
 
     llvm::Value * getPopCountRateItemCount(const std::unique_ptr<KernelBuilder> & b, const ProcessingRate & rate, llvm::Value * const strideIndex);
 
+    LLVM_READNONE bool canSetTerminateSignal() const {
+        return hasAttribute(Attribute::KindId::CanTerminateEarly) || hasAttribute(Attribute::KindId::MustExplicitlyTerminate);
+    }
+
+    llvm::Value * getTerminationSignalPtr() const {
+        return mTerminationSignalPtr;
+    }
+
+    llvm::Value * isFinal() const {
+        return mIsFinal;
+    }
+
     // Constructor
     Kernel(std::string && kernelName,
            Bindings && stream_inputs, Bindings && stream_outputs,
@@ -482,6 +492,7 @@ protected:
     llvm::Function *                mCurrentMethod;
     unsigned                        mStride;
 
+    llvm::Value *                   mTerminationSignalPtr;
     llvm::Value *                   mIsFinal;
     llvm::Value *                   mNumOfStrides;
 

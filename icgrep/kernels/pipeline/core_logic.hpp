@@ -1,5 +1,7 @@
 #include "pipeline_compiler.hpp"
 
+const static std::string TERMINATION_SIGNAL = "terminationSignal";
+
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -9,10 +11,15 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b) {
     initializePopCounts();
     const auto numOfKernels = mPipeline.size();
     b->setKernel(mPipelineKernel);
+    IntegerType * const boolTy = b->getInt1Ty();
     for (unsigned i = 0; i < numOfKernels; ++i) {
+        // TODO: prove two termination signals can be fused into a single counter?
+        const auto prefix = makeKernelName(i);
+        mPipelineKernel->addInternalScalar(boolTy, prefix + TERMINATION_SIGNAL);
         addBufferHandlesToPipelineKernel(b, i);
         addPopCountScalarsToPipelineKernel(b, i);
     }
+    b->setKernel(mPipelineKernel);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -49,7 +56,10 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
             args[j] = b->getScalarField(input.getName());
         }
         b->setKernel(mKernel);
-        b->CreateCall(getInitializationFunction(b), args);
+        Value * const terminatedOnInit = b->CreateCall(getInitializationFunction(b), args);
+        if (mKernel->canSetTerminateSignal()) {
+            setTerminated(b, terminatedOnInit);
+        }
     }
 }
 
@@ -105,15 +115,15 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
     /// KERNEL ENTRY
     /// -------------------------------------------------------------------------------------
-    Value * const term = b->getTerminationSignal();
+    Value * const initiallyTerminated = getInitialTerminationSignal(b);
     #ifdef PRINT_DEBUG_MESSAGES
     if (1) {
     Constant * const MAX_INT = ConstantInt::getAllOnesValue(mSegNo->getType());
-    Value * const round = b->CreateSelect(term, MAX_INT, mSegNo);
+    Value * const round = b->CreateSelect(initiallyTerminated, MAX_INT, mSegNo);
     b->CallPrintInt("--- " + kernelName + "_start ---", round);
     }
     #endif
-    b->CreateUnlikelyCondBr(term, mKernelExit, checkProducers);
+    b->CreateUnlikelyCondBr(initiallyTerminated, mKernelExit, checkProducers);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL CHECK PRODUCERS
@@ -217,7 +227,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     // If the kernel itself terminates, it must set the final processed/produced item counts.
     // Otherwise, the pipeline will update any countable rates, even upon termination.
-    b->CreateUnlikelyCondBr(terminatedExplicitly(b), terminated, incrementItemCounts);
+    b->CreateUnlikelyCondBr(mTerminationExplicitly, terminated, incrementItemCounts);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL INCREMENT ITEM COUNTS
@@ -253,7 +263,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     b->SetInsertPoint(terminated);
     zeroFillPartiallyWrittenOutputStreams(b);
-    setTerminated(b);
+    setTerminated(b, b->getTrue());
     BasicBlock * const kernelTerminatedEnd = b->GetInsertBlock();
     mTerminatedPhi->addIncoming(b->getTrue(), kernelTerminatedEnd);
     if (mHasProgressedPhi) {
@@ -326,7 +336,7 @@ void PipelineCompiler::synchronize(BuilderRef b) {
  * @brief next
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::end(BuilderRef b, const unsigned step) {
-
+    b->setKernel(mPipelineKernel);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         ConstantInt * const ZERO = b->getSize(0);
         ConstantInt * const ONE = b->getSize(1);
@@ -350,8 +360,7 @@ void PipelineCompiler::end(BuilderRef b, const unsigned step) {
     for (const auto e : make_iterator_range(in_edges(pipelineOutputVertex, mBufferGraph))) {
         // TODO: not a very elegant way here; revise
         const auto bufferVertex = source(e, mBufferGraph);
-        mKernelIndex = parent(bufferVertex, mBufferGraph);
-        mKernel = mPipeline[mKernelIndex];
+        setActiveKernel(b, parent(bufferVertex, mBufferGraph));
         resetMemoizedFields();
         const auto outputPort = mBufferGraph[e].Port;
         Value * const writable = getWritableOutputItems(b, outputPort);
@@ -363,6 +372,7 @@ void PipelineCompiler::end(BuilderRef b, const unsigned step) {
         Value * const strideLength = getMaximumStrideLength(b, Port::Output, outputPort);
         notEnoughSpace = b->CreateOr(b->CreateICmpULT(writable, strideLength), notEnoughSpace);
     }
+    b->setKernel(mPipelineKernel);
     Value * const done = b->CreateOr(allTerminated, notEnoughSpace);
     #ifdef PRINT_DEBUG_MESSAGES
     Constant * const ONES = Constant::getAllOnesValue(mSegNo->getType());
@@ -490,48 +500,28 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
     createPopCountReferenceCounts(b);
 }
 
-#warning TODO: move termination variables into pipeline if the kernel cannot signal termination itself.
-
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief terminatedExplicitly
+ * @brief getInitialTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::terminatedExplicitly(BuilderRef b) const {
-    if (LLVM_UNLIKELY(mKernel->hasAttribute(AttrId::MustExplicitlyTerminate) || mKernel->hasAttribute(AttrId::CanTerminateEarly))) {
-        return b->getTerminationSignal();
-    } else {
-        return b->getFalse();
-    }
+inline Value * PipelineCompiler::getInitialTerminationSignal(BuilderRef b) const {
+    b->setKernel(mPipelineKernel);
+    const auto prefix = makeKernelName(mKernelIndex);
+    Value * const terminated = b->getScalarField(prefix + TERMINATION_SIGNAL);
+    b->setKernel(mKernel);
+    return terminated;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::setTerminated(BuilderRef b) {
-    if (LLVM_UNLIKELY(mKernel->hasAttribute(AttrId::MustExplicitlyTerminate))) {
-        return;
-    }
+inline void PipelineCompiler::setTerminated(BuilderRef b, Value * const value) {
     const auto prefix = makeKernelName(mKernelIndex);
-    BasicBlock * const terminationIsSet = b->CreateBasicBlock(prefix + "_terminationIsSet", mKernelLoopExit);
-    if (mKernel->hasAttribute(AttrId::CanTerminateEarly)) {
-        BasicBlock * const setTermination = b->CreateBasicBlock(prefix + "_setTermination", terminationIsSet);
-        Value * const terminated = b->getTerminationSignal();
-        b->CreateCondBr(terminated, terminationIsSet, setTermination);
-
-        b->SetInsertPoint(setTermination);
-    }
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mKernel->getHandle(), CBuilder::Protect::WRITE);
-    }
-    b->setTerminationSignal();
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mKernel->getHandle(), CBuilder::Protect::READ);
-    }
+    b->setKernel(mPipelineKernel);
+    b->setScalarField(prefix + TERMINATION_SIGNAL, value);
     #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt("*** " + prefix + "_terminated ***", b->getTrue());
+    b->CallPrintInt("*** " + prefix + "_terminated ***", value);
     #endif
-    b->CreateBr(terminationIsSet);
-
-    b->SetInsertPoint(terminationIsSet);
+    b->setKernel(mKernel);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

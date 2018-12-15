@@ -162,10 +162,6 @@ public:
 
     llvm::CallInst * createDoSegmentCall(const std::vector<llvm::Value *> & args);
 
-    llvm::Value * getConsumerLock(const std::string & name);
-
-    void setConsumerLock(const std::string & name, llvm::Value * value);
-
     const Kernel * getKernel() const {
         return mKernel;
     }

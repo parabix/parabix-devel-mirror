@@ -351,7 +351,9 @@ Value * CBuilder::CreateMalloc(Value * size) {
     }
     size = CreateZExtOrTrunc(size, sizeTy);
     CallInst * const ptr = CreateCall(f, size);
-    CreateAssert(ptr, "CreateMalloc: returned null pointer");
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        CreateAssert(ptr, "CreateMalloc: returned null pointer");
+    }
     CreateMemZero(ptr, size, 1);
     return ptr;
 }
