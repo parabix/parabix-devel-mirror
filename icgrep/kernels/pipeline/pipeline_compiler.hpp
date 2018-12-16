@@ -174,9 +174,11 @@ public:
 
 protected:
 
-// main pipeline functions
+// internal pipeline state construction functions
 
     void addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex);
+
+// main pipeline functions
 
     void start(BuilderRef b, Value * const initialSegNo);
     void setActiveKernel(BuilderRef b, const unsigned index);
@@ -184,10 +186,17 @@ protected:
     void executeKernel(BuilderRef b);
     void end(BuilderRef b, const unsigned step);
 
-    StructType * getLocalStateType(BuilderRef b);
-    Value * allocateThreadLocalSpace(BuilderRef b, StructType * localStateType);
-    void setThreadLocalSpace(BuilderRef b, Value * const localState);
-    void deallocateThreadLocalSpace(BuilderRef b, Value * const localState);
+// internal pipeline functions
+
+    LLVM_READNONE StructType * getThreadStateType(BuilderRef b);
+    AllocaInst * allocateThreadState(BuilderRef b, const unsigned segOffset);
+    Value * setThreadState(BuilderRef b, Value * threadState);
+    void deallocateThreadState(BuilderRef b, Value * const threadState);
+
+    LLVM_READNONE StructType * getLocalStateType(BuilderRef b);
+    Value * allocateThreadLocalState(BuilderRef b, StructType * localStateType);
+    void setThreadLocalState(BuilderRef b, Value * const localState);
+    void deallocateThreadLocalState(BuilderRef b, Value * const localState);
 
 // inter-kernel functions
 
@@ -407,9 +416,9 @@ protected:
     std::vector<Value *>                        mInputStrideLength;
     std::vector<Value *>                        mAccessibleInputItems;
     std::vector<PHINode *>                      mLinearInputItemsPhi;
-    std::vector<Value *>                        mFullyProcessedItemCount;
+    std::vector<Value *>                        mFullyProcessedItemCount; // exiting the kernel
 
-    std::vector<Value *>                        mInitiallyProducedItemCount; // entering the kernel
+    std::vector<Value *>                        mInitiallyProducedItemCount; // entering the *kernel*
     std::vector<Value *>                        mAlreadyProducedItemCount; // entering the stride
     std::vector<Value *>                        mOutputStrideLength;
     std::vector<Value *>                        mWritableOutputItems;
