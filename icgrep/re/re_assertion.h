@@ -88,6 +88,8 @@ RE * makeSOT();
 RE * makeEOT();
     
 RE * expandBoundaryAssertion(RE * r);
+    
+RE * lookaheadPromotion(RE * r);
 }
 
 #endif // RE_ASSERTION_H

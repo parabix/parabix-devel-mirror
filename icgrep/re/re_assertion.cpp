@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017 International Characters.
+ *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
@@ -9,6 +9,7 @@
 #include "re_seq.h"
 #include "re_alt.h"
 #include "re_nullable.h"
+#include <re/re_toolchain.h>
 
 using namespace llvm;
 
@@ -38,5 +39,32 @@ RE * expandBoundaryAssertion (RE * re) {
         }
     }
     return re;
+}
+    
+    
+struct FinalLookaheadPromotion : public RE_Transformer {
+    FinalLookaheadPromotion() : RE_Transformer("FinalLookaheadPromotion") {}
+    RE * transformSeq(Seq * s) override {
+        if (s->empty()) return s;
+        RE * t = transform(s->back());
+        if (s == t) return s;
+        std::vector<RE *> elems;
+        for (unsigned i = 0; i < s->size() - 1; i++) {
+            elems.push_back((*s)[i]);
+        }
+        elems.push_back(t);
+        return makeSeq(elems.begin(), elems.end());
+    }
+    RE * transformRep(Rep * r) override { return r;}
+    RE * transformAssertion(Assertion * a) override {
+        if ((a->getKind() == Assertion::Kind::Lookahead) && (a->getSense() == Assertion::Sense::Positive)) {
+            return transform(a->getAsserted());
+        }
+        return a;
+    }
+};
+    
+RE * lookaheadPromotion(RE * r) {
+    return FinalLookaheadPromotion().transformRE(r);
 }
 }
