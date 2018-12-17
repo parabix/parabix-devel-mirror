@@ -200,7 +200,6 @@ inline legacy::PassManager CPUDriver::preparePassManager() {
     }
     if (LLVM_UNLIKELY(!codegen::TraceOption.empty())) {
         PM.add(createTracePass(iBuilder.get(), codegen::TraceOption));
-        PM.add(createVerifierPass());
     }
     if (LLVM_UNLIKELY(codegen::ShowIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
