@@ -162,7 +162,9 @@ public:
     //  Create a call to:  int unlink(const char *path);
     llvm::Value * CreateUnlinkCall(llvm::Value * path);
 
-    llvm::Value * CreateFileSize(llvm::Value * fileDescriptor);
+    // llvm::Value * CreateFileSize(llvm::Value * fileDescriptor);
+
+    llvm::Value * CreateFSync(llvm::Value * fileDescriptor);
 
     //  Create calls to stdlib.h functions.
     //

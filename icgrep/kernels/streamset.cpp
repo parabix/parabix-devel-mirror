@@ -192,8 +192,14 @@ void StaticBuffer::allocateBuffer(const std::unique_ptr<kernel::KernelBuilder> &
     b->CreateStore(buffer, mHandle);
 }
 
+LLVM_READNONE inline ConstantPointerNull * nullPointerFor(Value * ptr) {
+    return ConstantPointerNull::get(cast<PointerType>(ptr->getType()));
+}
+
 void StaticBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> & b) const {
-    b->CreateFree(getBaseAddress(b.get()));
+    Value * buffer = b->CreateLoad(mHandle);
+    b->CreateFree(buffer);
+    b->CreateStore(nullPointerFor(buffer), mHandle);
 }
 
 inline bool isCapacityGuaranteed(const Value * const index, const size_t capacity) {
@@ -327,9 +333,13 @@ void DynamicBuffer::releaseBuffer(const std::unique_ptr<kernel::KernelBuilder> &
     /* Free the dynamically allocated buffer(s). */
     Value * const handle = getHandle(b.get());
     Value * priorAddressField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(PriorBaseAddress)});
-    b->CreateFree(b->CreateLoad(priorAddressField));
+    Value * priorAddress = b->CreateLoad(priorAddressField);
+    b->CreateFree(priorAddress);
+    b->CreateStore(nullPointerFor(priorAddress), priorAddressField);
     Value * baseAddressField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(BaseAddress)});
-    b->CreateFree(b->CreateLoad(baseAddressField));
+    Value * baseAddress = b->CreateLoad(baseAddressField);
+    b->CreateFree(baseAddress);
+    b->CreateStore(nullPointerFor(baseAddress), baseAddressField);
 }
 
 void DynamicBuffer::setBaseAddress(IDISA_Builder * const /* b */, Value * /* addr */) const {

@@ -33,7 +33,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
 
     const auto name = makeKernelName(kernelIndex);
     // TODO: prove two termination signals can be fused into a single counter?
-    mPipelineKernel->addInternalScalar(b->getInt1Ty(), name + TERMINATION_SIGNAL);
+    mPipelineKernel->addInternalScalar(sizeTy, name + TERMINATION_SIGNAL);
     // TODO: non deferred item count for fixed rates could be calculated from seg no.
     mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_NO_SCALAR);
 
@@ -564,7 +564,7 @@ inline Value * PipelineCompiler::getInitialTerminationSignal(BuilderRef b) const
     const auto prefix = makeKernelName(mKernelIndex);
     Value * const terminated = b->getScalarField(prefix + TERMINATION_SIGNAL);
     b->setKernel(mKernel);
-    return terminated;
+    return b->CreateICmpNE(terminated, b->getSize(0));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -573,7 +573,7 @@ inline Value * PipelineCompiler::getInitialTerminationSignal(BuilderRef b) const
 inline void PipelineCompiler::setTerminated(BuilderRef b, Value * const value) {
     const auto prefix = makeKernelName(mKernelIndex);
     b->setKernel(mPipelineKernel);
-    b->setScalarField(prefix + TERMINATION_SIGNAL, value);
+    b->setScalarField(prefix + TERMINATION_SIGNAL, b->CreateZExtOrTrunc(value, b->getSizeTy()));
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt("*** " + prefix + "_terminated ***", value);
     #endif

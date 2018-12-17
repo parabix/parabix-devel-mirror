@@ -251,6 +251,19 @@ Value * CBuilder::CreateUnlinkCall(Value * path) {
     return CreateCall(unlinkFunc, path);
 }
 
+Value * CBuilder::CreateFSync(Value * fileDescriptor) {
+    Module * const m = getModule();
+    Function * fSync = m->getFunction("fsync");
+    if (fSync == nullptr) {
+        IntegerType * int32Ty = getInt32Ty();
+        FunctionType * fty = FunctionType::get(int32Ty, {int32Ty}, true);
+        fSync = Function::Create(fty, Function::ExternalLinkage, "fsync", m);
+    }
+    return CreateCall(fSync, fileDescriptor);
+}
+
+
+
 Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
     Module * const m = getModule();
     Function * mkstempFn = m->getFunction("mkstemp");

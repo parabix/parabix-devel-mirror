@@ -16,13 +16,14 @@ public:
     StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet * codeUnitBuffer);
 private:
     void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
+    void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) override;
 private:
     const unsigned mCodeUnitWidth;
-    
+
 };
 
 class FileSink final : public SegmentOrientedKernel {
-public:  
+public:
     FileSink(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Scalar * outputFileName, StreamSet * codeUnitBuffer);
 protected:
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
@@ -30,7 +31,7 @@ protected:
     void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) override;
 private:
     const unsigned mCodeUnitWidth;
-    
+
 };
 }
 

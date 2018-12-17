@@ -245,20 +245,20 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             }
 
             // calculate overflow (copyback) and fascimile (copyforward) space
-            overflowSpace = lcm(overflowSpace, b->getBitBlockWidth());
+            const auto blockWidth = b->getBitBlockWidth();
+            overflowSpace = lcm(overflowSpace, blockWidth);
             assert (overflowSpace.denominator() == 1);
-            facsimileSpace = lcm(facsimileSpace, b->getBitBlockWidth());
+            facsimileSpace = lcm(facsimileSpace, blockWidth);
             assert (facsimileSpace.denominator() == 1);
             bn.Overflow = overflowSpace.numerator();
             bn.Fasimile = facsimileSpace.numerator();
             const auto overflowSize = std::max(bn.Overflow, bn.Fasimile);
 
             // compute the buffer size
-            const auto bufferSpace = lcm(requiredSpace, b->getBitBlockWidth());
+            const auto bufferMod = overflowSize ? overflowSize : blockWidth;
+            const auto bufferSpace = lcm(requiredSpace, bufferMod);
             assert (bufferSpace.denominator() == 1);
             const auto bufferSize = bufferSpace.numerator() * mPipelineKernel->getNumOfThreads();
-
-
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             if (dynamic) {
                 buffer = new DynamicBuffer(b, output.getType(), bufferSize, overflowSize);
@@ -273,7 +273,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         mOwnedBuffers.emplace_back(buffer);
     }
 
-//    printBufferGraph(G, errs());
+  //  printBufferGraph(G, errs());
 
     return G;
 }

@@ -4,27 +4,17 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <iostream>
-#include <llvm/IR/Function.h>
-#include <llvm/IR/Module.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/IR/Verifier.h>
-#include <llvm/Support/CommandLine.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>
-#include <IR_Gen/idisa_target.h>
 #include <kernels/source_kernel.h>
-#include <kernels/streamset.h>
 #include <kernels/radix64.h>
 #include <kernels/stdout_kernel.h>
 #include <kernels/kernel_builder.h>
-#include <boost/interprocess/mapped_region.hpp>
-#include <boost/interprocess/anonymous_shared_memory.hpp>
-#include <boost/math/common_factor_rt.hpp>
+#include <kernels/pipeline_builder.h>
+#include <llvm/Support/CommandLine.h>
+#include <iostream>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <mutex>
-#include <kernels/pipeline_builder.h>
 
 
 using namespace llvm;

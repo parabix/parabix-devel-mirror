@@ -9,8 +9,8 @@ namespace kernel {
  * @brief generateSingleThreadKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
-    StructType * const localStateType = getLocalStateType(b);
-    Value * const localState = allocateThreadLocalState(b, localStateType);
+    Value * const localState = b->CreateCacheAlignedAlloca(getLocalStateType(b));
+    allocateThreadLocalState(b, localState);
     setThreadLocalState(b, localState);
     start(b, b->getSize(0));
     for (unsigned i = 0; i < mPipeline.size(); ++i) {
@@ -67,14 +67,14 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
     // execute the process thread
     Value * const processState = allocateThreadState(b, 0);
     b->CreateCall(threadFunc, b->CreatePointerCast(processState, voidPtrTy));
-    deallocateThreadLocalState(b, processState);
+    deallocateThreadState(b, processState);
 
     // wait for all other threads to complete
     AllocaInst * const status = b->CreateAlloca(voidPtrTy);
     for (unsigned i = 0; i < threads; ++i) {
         Value * threadId = b->CreateLoad(threadIdPtr[i]);
         b->CreatePThreadJoinCall(threadId, status);
-        deallocateThreadLocalState(b, threadState[i]);
+        deallocateThreadState(b, threadState[i]);
     }
 
     // store where we'll resume compiling the DoSegment method
@@ -117,12 +117,10 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
  * @brief getThreadStateType
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StructType * PipelineCompiler::getThreadStateType(BuilderRef b) {
-
-    StructType * const localStateTy = getLocalStateType(b);
     std::vector<Type *> threadStructFields;
     threadStructFields.push_back(mPipelineKernel->getHandle()->getType());
     threadStructFields.push_back(b->getSizeTy());
-    threadStructFields.push_back(localStateTy->getPointerTo());
+    threadStructFields.push_back(getLocalStateType(b));
     const auto numOfInputs = mPipelineKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {
         auto buffer = mPipelineKernel->getInputStreamSetBuffer(i);
@@ -136,8 +134,11 @@ inline StructType * PipelineCompiler::getThreadStateType(BuilderRef b) {
         threadStructFields.push_back(handle->getType());
     }
     return StructType::get(b->getContext(), threadStructFields);
-
 }
+
+enum : int {
+    POP_COUNT_STRUCT_INDEX = 0
+};
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructThreadState
@@ -153,9 +154,8 @@ inline AllocaInst * PipelineCompiler::allocateThreadState(BuilderRef b, const un
     AllocaInst * const threadState = b->CreateAlloca(threadStructType);
     b->CreateStore(mPipelineKernel->getHandle(), b->CreateGEP(threadState, {ZERO, HANDLE}));
     b->CreateStore(b->getSize(segOffset), b->CreateGEP(threadState, {ZERO, SEG_OFFSET}));
-    StructType * const localStateTy = getLocalStateType(b);
-    Value * const localState = allocateThreadLocalState(b, localStateTy);
-    b->CreateStore(localState, b->CreateGEP(threadState, {ZERO, LOCAL_STATE}));
+    allocateThreadLocalState(b, b->CreateGEP(threadState, {ZERO, LOCAL_STATE}));
+
     const auto numOfInputs = mPipelineKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {
         auto buffer = mPipelineKernel->getInputStreamSetBuffer(i);
@@ -186,7 +186,7 @@ inline Value * PipelineCompiler::setThreadState(BuilderRef b, Value * threadStat
 
     mPipelineKernel->setHandle(b, handle);
     Value * const segmentOffset = b->CreateLoad(b->CreateGEP(threadState, {ZERO, SEG_OFFSET}));
-    setThreadLocalState(b, b->CreateLoad(b->CreateGEP(threadState, {ZERO, LOCAL_STATE})));
+    setThreadLocalState(b, b->CreateGEP(threadState, {ZERO, LOCAL_STATE}));
     const auto numOfInputs = mPipelineKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {
         Value * streamHandle = b->CreateLoad(b->CreateGEP(threadState, {ZERO, b->getInt32(i + 3)}));
@@ -212,11 +212,6 @@ inline void PipelineCompiler::deallocateThreadState(BuilderRef b, Value * const 
     deallocateThreadLocalState(b, b->CreateGEP(threadState, {ZERO, LOCAL_STATE}));
 }
 
-
-enum : int {
-    POP_COUNT_STRUCT_INDEX = 0
-};
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getLocalStateType
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -228,12 +223,10 @@ inline StructType * PipelineCompiler::getLocalStateType(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief allocateThreadLocalState
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::allocateThreadLocalState(BuilderRef b, StructType * localStateType) {
-    Value * const localState = b->CreateCacheAlignedAlloca(localStateType);
+inline void PipelineCompiler::allocateThreadLocalState(BuilderRef b, Value * const localState) {
     Constant * const ZERO = b->getInt32(0);
     Constant * const POP_COUNT_STRUCT = b->getInt32(POP_COUNT_STRUCT_INDEX);
     allocatePopCountArrays(b, b->CreateGEP(localState, {ZERO, POP_COUNT_STRUCT}));
-    return localState;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -242,7 +235,9 @@ inline Value * PipelineCompiler::allocateThreadLocalState(BuilderRef b, StructTy
 inline void PipelineCompiler::setThreadLocalState(BuilderRef b, Value * const localState) {
     Constant * const ZERO = b->getInt32(0);
     Constant * const POP_COUNT_STRUCT = b->getInt32(POP_COUNT_STRUCT_INDEX);
+    assert (localState->getType()->getPointerElementType() == getLocalStateType(b));
     mPopCountState = b->CreateGEP(localState, {ZERO, POP_COUNT_STRUCT});
+    assert (mPopCountState->getType()->getPointerElementType() == getPopCountThreadLocalStateType(b));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -251,6 +246,7 @@ inline void PipelineCompiler::setThreadLocalState(BuilderRef b, Value * const lo
 inline void PipelineCompiler::deallocateThreadLocalState(BuilderRef b, Value * const localState) {
     Constant * const ZERO = b->getInt32(0);
     Constant * const POP_COUNT_STRUCT = b->getInt32(POP_COUNT_STRUCT_INDEX);
+    assert (localState->getType()->getPointerElementType() == getLocalStateType(b));
     deallocatePopCountArrays(b, b->CreateGEP(localState, {ZERO, POP_COUNT_STRUCT}));
 }
 

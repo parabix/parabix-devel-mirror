@@ -194,7 +194,7 @@ protected:
     void deallocateThreadState(BuilderRef b, Value * const threadState);
 
     LLVM_READNONE StructType * getLocalStateType(BuilderRef b);
-    Value * allocateThreadLocalState(BuilderRef b, StructType * localStateType);
+    void allocateThreadLocalState(BuilderRef b, Value * const localState);
     void setThreadLocalState(BuilderRef b, Value * const localState);
     void deallocateThreadLocalState(BuilderRef b, Value * const localState);
 
@@ -283,7 +283,7 @@ protected:
     LLVM_READNONE unsigned getPopCountReferencePort(const Kernel * kernel, const ProcessingRate & rate) const;
     LLVM_READNONE unsigned getPopCountReferenceBuffer(const Kernel * kernel, const ProcessingRate & rate) const;
 
-    StructType * getPopCountThreadLocalStateType(BuilderRef b);
+    LLVM_READNONE StructType * getPopCountThreadLocalStateType(BuilderRef b);
     void allocatePopCountArrays(BuilderRef b, Value * base);
     void deallocatePopCountArrays(BuilderRef b, Value * base);
 

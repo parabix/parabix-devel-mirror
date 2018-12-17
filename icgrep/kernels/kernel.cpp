@@ -482,12 +482,10 @@ void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b
             mStreamSetOutputBuffers[i]->setHandle(b, handle);
         }
     }
-
     generateFinalizeMethod(b); // may be overridden by the Kernel subtype
     const auto outputs = getFinalOutputScalars(b);
     b->CreateFree(mHandle);
     mHandle = nullptr;
-
     if (outputs.empty()) {
         b->CreateRetVoid();
     } else {
@@ -717,8 +715,6 @@ Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & b) {
     } else {
         handle = b->CreateAlignedMalloc(size, b->getCacheAlignment());
     }
-//    mHandle = b->CreatePointerCast(handle, mKernelStateType->getPointerTo());
-//    return mHandle;
     return b->CreatePointerCast(handle, mKernelStateType->getPointerTo());
 }
 

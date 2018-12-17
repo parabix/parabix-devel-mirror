@@ -697,7 +697,7 @@ void * GrepEngine::DoGrepThreadMethod() {
                     llvm::outs() << output;
                 }
                 mFileStatus[printIdx] = FileStatus::PrintComplete;
-                printIdx = mNextFileToPrint++;
+                printIdx++;
             } else {
                 sched_yield();
             }

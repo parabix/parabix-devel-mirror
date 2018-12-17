@@ -127,10 +127,8 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     Value * const readStartInt = b->CreatePtrToInt(readStart, intPtrTy);
     Value * unconsumedBytes = b->CreateSub(readEndInt, readStartInt);
     unconsumedBytes = b->CreateTrunc(unconsumedBytes, b->getSizeTy());
-
     Value * const bufferSize = b->CreateRoundUp(b->CreateAdd(unconsumedBytes, PADDING_SIZE), STRIDE_SIZE);
     Value * const buffer = b->CreateAlignedMalloc(bufferSize, b->getCacheAlignment());
-
     b->CreateMemCpy(buffer, readStart, unconsumedBytes, 1);
     b->CreateMemZero(b->CreateGEP(buffer, unconsumedBytes), b->CreateSub(bufferSize, unconsumedBytes), 1);
     // get the difference between our base and from position then compute an offsetted temporary buffer address
@@ -139,11 +137,11 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     Value * const diff = b->CreateSub(baseInt, readStartInt);
     Value * const offsettedBuffer = b->CreateGEP(buffer, diff);
     PointerType * const codeUnitPtrTy = b->getIntNTy(codeUnitWidth)->getPointerTo();
-    // set the original base address as the buffer address.
-    //b->setScalarField("buffer", b->CreatePointerCast(base, codeUnitPtrTy));
     b->setScalarField("ancillaryBuffer", b->CreatePointerCast(buffer, codeUnitPtrTy));
     b->setBaseAddress("sourceBuffer", b->CreatePointerCast(offsettedBuffer, codeUnitPtrTy));
     b->setTerminationSignal();
+
+
     BasicBlock * const terminationExit = b->GetInsertBlock();
     b->CreateBr(exit);
 
@@ -418,7 +416,7 @@ void MemorySourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBui
     PHINode * const newProducedItems = b->CreatePHI(b->getSizeTy(), 2);
     newProducedItems->addIncoming(nextProducedItems, entry);
     newProducedItems->addIncoming(fileItems, terminationExit);
-    b->setProducedItemCount("sourceBuffer", newProducedItems);    
+    b->setProducedItemCount("sourceBuffer", newProducedItems);
 }
 
 void MemorySourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
