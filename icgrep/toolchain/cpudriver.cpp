@@ -200,6 +200,7 @@ inline legacy::PassManager CPUDriver::preparePassManager() {
     }
     if (LLVM_UNLIKELY(!codegen::TraceOption.empty())) {
         PM.add(createTracePass(iBuilder.get(), codegen::TraceOption));
+        PM.add(createVerifierPass());
     }
     if (LLVM_UNLIKELY(codegen::ShowIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
@@ -325,6 +326,23 @@ public:
     static char ID;
     TracePass(kernel::KernelBuilder * kb, StringRef to_trace) : ModulePass(ID), iBuilder(kb), mToTrace(to_trace) { }
     
+    bool addTraceStmt(BasicBlock * BB, BasicBlock::iterator to_trace, BasicBlock::iterator insert_pt) {
+        bool modified = false;
+        Type * t = (*to_trace).getType();
+        //t->dump();
+        if (t == iBuilder->getBitBlockType()) {
+            iBuilder->SetInsertPoint(BB, insert_pt);
+            iBuilder->CallPrintRegister((*to_trace).getName(), &*to_trace);
+            modified = true;
+        }
+        else if (t == iBuilder->getInt64Ty()) {
+            iBuilder->SetInsertPoint(BB, insert_pt);
+            iBuilder->CallPrintInt((*to_trace).getName(), &*to_trace);
+            modified = true;
+        }
+        return modified;
+    }
+    
     virtual bool runOnModule(Module &M) override;
 private:
     kernel::KernelBuilder * iBuilder;
@@ -339,25 +357,22 @@ bool TracePass::runOnModule(Module & M) {
     bool modified = false;
     for (auto & F : M) {
         for (auto & B : F) {
-            for (BasicBlock::iterator i = B.begin(); i != B.end(); ) {
+            std::vector<BasicBlock::iterator> tracedPhis;
+            BasicBlock::iterator i = B.begin();
+            while (isa<PHINode>(*i)) {
+                if ((*i).getName().startswith(mToTrace)) {
+                    tracedPhis.push_back(i);
+                }
+                ++i;
+            }
+            for (auto t : tracedPhis) {
+                modified = addTraceStmt(&B, t, i) || modified;
+            }
+            while (i != B.end()) {
                 auto i0 = i;
                 ++i;
-                if (!isa<Value>(*i0)) continue;
-                StringRef theName = (*i0).getName();
-                if (theName.startswith(mToTrace)) {
-                    //errs() << theName << "\n";
-                    Type * t = (*i0).getType();
-                    //t->dump();
-                    if (t == iBuilder->getBitBlockType()) {
-                        iBuilder->SetInsertPoint(&B, i);
-                        iBuilder->CallPrintRegister(theName, &*i0);
-                        modified = true;
-                    }
-                    else if (t == iBuilder->getInt64Ty()) {
-                        iBuilder->SetInsertPoint(&B, i);
-                        iBuilder->CallPrintInt(theName, &*i0);
-                        modified = true;
-                    }
+                if ((*i0).getName().startswith(mToTrace)) {
+                    modified = addTraceStmt(&B, i0, i) || modified;
                 }
             }
         }
