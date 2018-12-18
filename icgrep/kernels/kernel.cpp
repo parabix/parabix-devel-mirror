@@ -103,7 +103,7 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
 
     IntegerType * const sizeTy = b->getSizeTy();
 
-    addInternalScalar(sizeTy, LOGICAL_SEGMENT_NO_SCALAR);
+//    addInternalScalar(sizeTy, LOGICAL_SEGMENT_NO_SCALAR);
 
     // TODO: if we had a way of easily calculating the number of processed/produced items of the
     // final stride of a non-deferred fixed rate stream, we could avoid storing the item counts.

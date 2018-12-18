@@ -356,24 +356,23 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::synchronize(BuilderRef b) {
 
-    const auto prefix = makeKernelName(mKernelIndex);
     b->setKernel(mPipelineKernel);
+    const auto prefix = makeKernelName(mKernelIndex);
+    const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
+    const unsigned waitingOnIdx = serialize ? (mPipeline.size() - 1) : mKernelIndex;
+    const auto waitingOn = makeKernelName(waitingOnIdx);
+    Value * const waitingOnPtr = b->getScalarFieldPtr(waitingOn + LOGICAL_SEGMENT_NO_SCALAR);
     BasicBlock * const kernelWait = b->CreateBasicBlock(prefix + "Wait", mPipelineEnd);
     b->CreateBr(kernelWait);
 
     b->SetInsertPoint(kernelWait);
-    const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
-    const unsigned waitingOnIdx = serialize ? mPipeline.size() - 1 : mKernelIndex;
-    const auto waitingOn = makeKernelName(waitingOnIdx);
-    Value * const waitingOnPtr = b->getScalarFieldPtr(waitingOn + LOGICAL_SEGMENT_NO_SCALAR);
     Value * const processedSegmentCount = b->CreateAtomicLoadAcquire(waitingOnPtr);
     assert (processedSegmentCount->getType() == mSegNo->getType());
     Value * const ready = b->CreateICmpEQ(mSegNo, processedSegmentCount);
+    BasicBlock * const kernelStart = b->CreateBasicBlock(prefix + "Start", mPipelineEnd);
+    b->CreateCondBr(ready, kernelStart, kernelWait);
 
-    BasicBlock * const kernelCheck = b->CreateBasicBlock(prefix + "Check", mPipelineEnd);
-    b->CreateCondBr(ready, kernelCheck, kernelWait);
-
-    b->SetInsertPoint(kernelCheck);
+    b->SetInsertPoint(kernelStart);
     b->setKernel(mKernel);
 }
 

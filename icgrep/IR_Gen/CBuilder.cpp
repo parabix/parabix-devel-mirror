@@ -690,7 +690,7 @@ PointerType * LLVM_READNONE CBuilder::getVoidPtrTy(const unsigned AddressSpace) 
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
     const auto alignment = ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
-    LoadInst * inst = CreateAlignedLoad(ptr, alignment);
+    LoadInst * inst = CreateAlignedLoad(ptr, alignment, true);
     inst->setOrdering(AtomicOrdering::Acquire);
     return inst;
 
@@ -698,7 +698,7 @@ LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
 
 StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     const auto alignment = ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
-    StoreInst * inst = CreateAlignedStore(val, ptr, alignment);
+    StoreInst * inst = CreateAlignedStore(val, ptr, alignment, true);
     inst->setOrdering(AtomicOrdering::Release);
     return inst;
 }
