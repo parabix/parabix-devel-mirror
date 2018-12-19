@@ -146,6 +146,7 @@ RE * resolveGraphemeMode(RE * re, bool inGraphemeMode) {
 #define Behind(x) makeLookBehindAssertion(x)
 #define notBehind(x) makeNegativeLookBehindAssertion(x)
 #define Ahead(x) makeLookAheadAssertion(x)
+#define notAhead(x) makeNegativeLookAheadAssertion(x)
 
 RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
     // 3.1.1 Grapheme Cluster Boundary Rules
@@ -166,16 +167,18 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
     RE * GCB_CR = makeName("gcb", "cr", Name::Type::UnicodeProperty);
     RE * GCB_LF = makeName("gcb", "lf", Name::Type::UnicodeProperty);
     RE * GCB_Control = makeName("gcb", "control", Name::Type::UnicodeProperty);
-    // Any single character that is not a control, CR or LF.
-    RE * nonControl = makeDiff(makeAny(), makeAlt({GCB_CR, GCB_LF, GCB_Control}));
-
-    // Now the various rules excluding grapheme cluster breaks.
+    RE * GCB_Control_CR_LF = makeAlt({GCB_Control, GCB_CR, GCB_LF});
     
-    // There is no break for empty text.  (Inference from rules GB1, GB2).
-    RE * GCX_1 = makeSeq({makeSOT(), makeEOT()});
+    // Break at the start and end of text.
+    RE * GCB_1 = makeSOT();
+    RE * GCB_2 = makeEOT();
+    // Do not break between a CR and LF.
+    RE * GCB_3 = makeSeq({Behind(GCB_CR), Ahead(GCB_LF)});
+    // Otherwise, break before and after controls.
+    RE * GCB_4 = Behind(GCB_Control_CR_LF);
+    RE * GCB_5 = Ahead(GCB_Control_CR_LF);
+    RE * GCB_1_5 = makeAlt({GCB_1, GCB_2, makeDiff(makeAlt({GCB_4, GCB_5}), GCB_3)});
     
-    // Do not break between a CR and LF.  (Rule GB 3)
-    // RE * GCX_3 = makeSeq({Behind(GCB_CR), Ahead(GCB_LF)});
     
     // Do not break Hangul syllable sequences.
     RE * GCB_L = makeName("gcb", "l", Name::Type::UnicodeProperty);
@@ -190,13 +193,13 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
     // Do not break before extendiers or zero-width joiners.
     RE * GCB_EX = makeName("gcb", "ex", Name::Type::UnicodeProperty);
     RE * GCB_ZWJ = makeName("gcb", "zwj", Name::Type::UnicodeProperty);
-    RE * GCX_9 = makeSeq({Behind(nonControl), Ahead(makeAlt({GCB_EX, GCB_ZWJ}))});
+    RE * GCX_9 = makeSeq({notBehind(GCB_Control_CR_LF), Ahead(makeAlt({GCB_EX, GCB_ZWJ}))});
 
     if (extendedGraphemeClusters) {
         RE * GCB_SpacingMark = makeName("gcb", "sm", Name::Type::UnicodeProperty);
         RE * GCB_Prepend = makeName("gcb", "pp", Name::Type::UnicodeProperty);
-        RE * GCX_9a = makeSeq({Behind(nonControl), Ahead(GCB_SpacingMark)});
-        RE * GCX_9b = makeSeq({Behind(GCB_Prepend), Ahead(nonControl)});
+        RE * GCX_9a = makeSeq({notBehind(GCB_Control_CR_LF), Ahead(GCB_SpacingMark)});
+        RE * GCX_9b = makeSeq({Behind(GCB_Prepend), notAhead(GCB_Control_CR_LF)});
         GCX_9 = makeAlt({GCX_9, GCX_9a, GCX_9b});
     }
 
@@ -210,9 +213,13 @@ RE * generateGraphemeClusterBoundaryRule(bool extendedGraphemeClusters) {
     RE * GCX_12_13 = makeSeq({Behind(odd_RI_seq), Ahead(GCB_RI)});
     
     //Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
-    RE * GCX = makeAlt({GCX_1, GCX_6, GCX_7, GCX_8, GCX_9, GCX_11, GCX_12_13});
+    RE * GCX = makeAlt({GCX_6, GCX_7, GCX_8, GCX_9, GCX_11, GCX_12_13});
     
-    RE * gcb = makeDiff(makeSeq(), GCX);
+    // Otherwise, break everywhere.
+    RE * GCB_999 = makeSeq({Behind(makeAny()), Ahead(makeAny())});
+    
+    //Name * gcb = makeName("gcb", Name::Type::UnicodeProperty);
+    RE * gcb = makeAlt({GCB_1_5, makeDiff(GCB_999, GCX)});
     return gcb;
 }
 
