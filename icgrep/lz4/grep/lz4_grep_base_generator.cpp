@@ -72,7 +72,7 @@ inline RE * makeNonFinal() {
 LZ4GrepBaseGenerator::LZ4GrepBaseGenerator(const FunctionType type)
 : LZ4BaseGenerator()
 , u8NonFinalRe(makeNonFinal())
-, u8FinalRe(makeCC(0x0, 0x1FFFFF))
+, u8FinalRe(makeCC(0x0, 0x10FFFF))
 , mMainMethod(nullptr) {
     mGrepRecordBreak = grep::GrepRecordBreakKind::LF;
     mMoveMatchesToEOL = true;
