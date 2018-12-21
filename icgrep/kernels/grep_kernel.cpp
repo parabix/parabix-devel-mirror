@@ -47,7 +47,6 @@ void UnicodeLineBreakKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
     UCD::UCDCompiler ucdCompiler(ccc);
-    
     Name * breakChars = re::makeName("breakChars", makeCC(makeCC(makeCC(0x0A, 0x0D), makeCC(0x85)), makeCC(0x2028,0x2029)));
     UCD::UCDCompiler::NameMap nameMap;
     nameMap.emplace(breakChars, nullptr);
@@ -57,7 +56,7 @@ void UnicodeLineBreakKernel::generatePabloMethod() {
     PabloAST * breakStream = f-> second;
     PabloAST * const LF = pb.createExtract(getInput(1), pb.getInteger(0), "LF");
     PabloAST * const CR = ccc.compileCC(makeByte(0x0D));
-    Var * const CR_before_LF = pb.createVar("CR_before_LFCR_before_LF", pb.createZeroes());
+    Var * const CR_before_LF = pb.createVar("CR_before_LF", pb.createZeroes());
     auto crb = pb.createScope();
     pb.createIf(CR, crb);
     PabloAST * const lookaheadLF = crb.createLookahead(LF, 1, "lookaheadLF");
@@ -69,11 +68,17 @@ void UnicodeLineBreakKernel::generatePabloMethod() {
 
 void RequiredStreams_UTF8::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
-    
+    std::unique_ptr<cc::CC_Compiler> ccc;
+    bool useDirectCC = getInput(0)->getType()->getArrayNumElements() == 1;
+    if (useDirectCC) {
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("source"));
+    }
+
     PabloAST * const LF = pb.createExtract(getInput(1), pb.getInteger(0), "LF");
-    PabloAST * const CR = ccc.compileCC(makeByte(0x0D));
-    PabloAST * const LF_VT_FF_CR = ccc.compileCC("LF,VT,FF,CR", makeByte(0x0A, 0x0D), pb);
+    PabloAST * const CR = ccc->compileCC(makeByte(0x0D));
+    PabloAST * const LF_VT_FF_CR = ccc->compileCC("LF,VT,FF,CR", makeByte(0x0A, 0x0D), pb);
     Var * const LineBreak = pb.createVar("LineBreak", LF_VT_FF_CR);
     
     // Remove the CR of any CR+LF
@@ -88,7 +93,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
 
     
     Zeroes * const ZEROES = pb.createZeroes();
-    PabloAST * const u8pfx = ccc.compileCC(makeByte(0xC0, 0xFF));
+    PabloAST * const u8pfx = ccc->compileCC(makeByte(0xC0, 0xFF));
 
 
     Var * const nonFinal = pb.createVar("nonFinal", u8pfx);
@@ -97,10 +102,10 @@ void RequiredStreams_UTF8::generatePabloMethod() {
 
     auto it = pb.createScope();
     pb.createIf(u8pfx, it);
-    PabloAST * const u8pfx2 = ccc.compileCC(makeByte(0xC2, 0xDF), it);
-    PabloAST * const u8pfx3 = ccc.compileCC(makeByte(0xE0, 0xEF), it);
-    PabloAST * const u8pfx4 = ccc.compileCC(makeByte(0xF0, 0xF4), it);
-    PabloAST * const u8suffix = ccc.compileCC("u8suffix", makeByte(0x80, 0xBF), it);
+    PabloAST * const u8pfx2 = ccc->compileCC(makeByte(0xC2, 0xDF), it);
+    PabloAST * const u8pfx3 = ccc->compileCC(makeByte(0xE0, 0xEF), it);
+    PabloAST * const u8pfx4 = ccc->compileCC(makeByte(0xF0, 0xF4), it);
+    PabloAST * const u8suffix = ccc->compileCC("u8suffix", makeByte(0x80, 0xBF), it);
     
     //
     // Two-byte sequences
@@ -108,7 +113,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     auto it2 = it.createScope();
     it.createIf(u8pfx2, it2);
     it2.createAssign(anyscope, it2.createAdvance(u8pfx2, 1));
-    PabloAST * NEL = it2.createAnd(it2.createAdvance(ccc.compileCC(makeByte(0xC2), it2), 1), ccc.compileCC(makeByte(0x85), it2), "NEL");
+    PabloAST * NEL = it2.createAnd(it2.createAdvance(ccc->compileCC(makeByte(0xC2), it2), 1), ccc->compileCC(makeByte(0x85), it2), "NEL");
     it2.createAssign(LineBreak, it2.createOr(LineBreak, NEL));
 
 
@@ -122,12 +127,12 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
     PabloAST * const u8scope3X = it3.createOr(u8scope32, u8scope33);
     it3.createAssign(anyscope, it3.createOr(anyscope, u8scope3X));
-    PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeByte(0xE0), it3), 1), ccc.compileCC(makeByte(0x80, 0x9F), it3));
-    PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(makeByte(0xED), it3), 1), ccc.compileCC(makeByte(0xA0, 0xBF), it3));
+    PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE0), it3), 1), ccc->compileCC(makeByte(0x80, 0x9F), it3));
+    PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xED), it3), 1), ccc->compileCC(makeByte(0xA0, 0xBF), it3));
     PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
     it3.createAssign(EF_invalid, EX_invalid);
-    PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc.compileCC(makeByte(0xE2), it3), 1), ccc.compileCC(makeByte(0x80), it3));
-    PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc.compileCC(makeByte(0xA8,0xA9), it3), "LS_PS");
+    PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE2), it3), 1), ccc->compileCC(makeByte(0x80), it3));
+    PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc->compileCC(makeByte(0xA8,0xA9), it3), "LS_PS");
     it3.createAssign(LineBreak, it3.createOr(LineBreak, LS_PS));
 
     //
@@ -141,8 +146,8 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     it4.createAssign(nonFinal, it4.createOr(nonFinal, u8scope4nonfinal));
     PabloAST * const u8scope4X = it4.createOr(u8scope4nonfinal, u8scope44);
     it4.createAssign(anyscope, it4.createOr(anyscope, u8scope4X));
-    PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeByte(0xF0), it4), 1), ccc.compileCC(makeByte(0x80, 0x8F), it4));
-    PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(makeByte(0xF4), it4), 1), ccc.compileCC(makeByte(0x90, 0xBF), it4));
+    PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF0), it4), 1), ccc->compileCC(makeByte(0x80, 0x8F), it4));
+    PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF4), it4), 1), ccc->compileCC(makeByte(0x90, 0xBF), it4));
     PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
     it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
     
@@ -167,10 +172,10 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("UnicodeLB"), pb.getInteger(0)), LineBreak);//pb.createOr(LineBreak, unterminatedLineAtEOF, "EOL"));
 }
 
-RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * LineFeedStream, StreamSet * RequiredStreams, StreamSet * UnicodeLB)
-: PabloKernel(kb, "RequiredStreams_UTF8",
+RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * Source, StreamSet * LineFeedStream, StreamSet * RequiredStreams, StreamSet * UnicodeLB)
+: PabloKernel(kb, "RequiredStreams_UTF8" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()),
 // input
-{Binding{"basis", BasisBits},
+{Binding{"source", Source},
  Binding{"lf", LineFeedStream, FixedRate(), LookAhead(1)}},
 // output
 {Binding{"nonFinal", RequiredStreams, FixedRate()},
