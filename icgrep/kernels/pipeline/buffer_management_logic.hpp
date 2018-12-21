@@ -273,7 +273,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         mOwnedBuffers.emplace_back(buffer);
     }
 
-  //  printBufferGraph(G, errs());
+//    printBufferGraph(G, errs());
 
     return G;
 }
@@ -442,15 +442,58 @@ inline void PipelineCompiler::releaseBuffers(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief readInitialProducedItemCounts
+ * @brief readInitialItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::readInitialProducedItemCounts(BuilderRef b) {
+inline void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
+    b->setKernel(mPipelineKernel);
+    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const auto prefix = makeBufferName(mKernelIndex, input);
+        mInitiallyProcessedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
+        #ifdef PRINT_DEBUG_MESSAGES
+        b->CallPrintInt(prefix + "_initialProcessed", mInitiallyProcessedItemCount[i]);
+        #endif
+        if (input.isDeferred()) {
+            mInitiallyProcessedDeferredItemCount[i] = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+            #ifdef PRINT_DEBUG_MESSAGES
+            b->CallPrintInt(prefix + "_initialProducedDeferred", mInitiallyProcessedDeferredItemCount[i]);
+            #endif
+        }
+    }
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = mKernel->getOutputStreamSetBinding(i);
-        Value * const produced = b->getNonDeferredProducedItemCount(output);
-        mInitiallyProducedItemCount[i] = produced;
+        const auto prefix = makeBufferName(mKernelIndex, output);
+        mInitiallyProducedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
+        #ifdef PRINT_DEBUG_MESSAGES
+        b->CallPrintInt(prefix + "_initialProduced", mInitiallyProducedItemCount[i]);
+        #endif
     }
+    b->setKernel(mKernel);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief writeUpdatedItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b) {
+    b->setKernel(mPipelineKernel);
+    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const auto prefix = makeBufferName(mKernelIndex, input);
+        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProcessedPhi[i]);
+        if (input.isDeferred()) {
+            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, mUpdatedProcessedDeferredPhi[i]);
+        }
+    }
+    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const auto prefix = makeBufferName(mKernelIndex, output);
+        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProducedPhi[i]);
+    }
+    b->setKernel(mKernel);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -458,22 +501,18 @@ inline void PipelineCompiler::readInitialProducedItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::readFinalProducedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(mBufferGraph[e].Port);
-        Value * const produced = b->getNonDeferredProducedItemCount(output);
-        // TODO: we only need to consider the blocksize attribute if it's possible this
-        // stream could be read before being fully written. This might occur if one of
-        // it's consumers is a PopCount rate that does not have a matching BlockSize
-        // attribute.
-        Value * fullyProduced = truncateBlockSize(b, output, produced, mTerminatedFlag);
         const auto bufferVertex = target(e, mBufferGraph);
+        const auto outputPort = mBufferGraph[e].Port;
+        Value * fullyProduced = mFullyProducedItemCount[outputPort];
         BufferNode & bn = mBufferGraph[bufferVertex];
         assert (bn.TotalItems == nullptr);
         bn.TotalItems = fullyProduced;
         initializeConsumedItemCount(b, bufferVertex, fullyProduced);
         initializePopCountReferenceItemCount(b, bufferVertex, fullyProduced);
         #ifdef PRINT_DEBUG_MESSAGES
+        const auto & output = mKernel->getOutputStreamSetBinding(outputPort);
         const auto prefix = makeBufferName(mKernelIndex, output);
-        b->CallPrintInt(prefix + "_produced'", produced);
+        b->CallPrintInt(prefix + "_fullyProduced", fullyProduced);
         #endif
     }
 }
@@ -528,8 +567,8 @@ inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
             BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "_copyBackExit", mKernelExit);
             const StreamSetBuffer * const buffer = getOutputBuffer(i);
             Value * const capacity = buffer->getCapacity(b.get());
-            Value * const priorOffset = b->CreateURem(mAlreadyProducedItemCount[i], capacity);
-            Value * const produced = b->getNonDeferredProducedItemCount(output);
+            Value * const priorOffset = b->CreateURem(mAlreadyProducedPhi[i], capacity);
+            Value * const produced = mProducedItemCount[i];
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const nonCapacityAlignedWrite = b->CreateIsNotNull(producedOffset);
             Value * const wroteToOverflow = b->CreateICmpULT(producedOffset, priorOffset);
@@ -537,6 +576,9 @@ inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
             b->CreateUnlikelyCondBr(needsCopyBack, copyBack, copyExit);
 
             b->SetInsertPoint(copyBack);
+            #ifdef PRINT_DEBUG_MESSAGES
+            b->CallPrintInt(prefix + "_CopyBack", producedOffset);
+            #endif
             writeOverflowCopy(b, buffer, OverflowCopy::Backwards, producedOffset);
             b->CreateBr(copyExit);
 
@@ -563,7 +605,7 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
 
             Value * const capacity = buffer->getCapacity(b.get());
             Value * const initial = mInitiallyProducedItemCount[i];
-            Value * const produced = b->getNonDeferredProducedItemCount(output);
+            Value * const produced = mUpdatedProducedPhi[i];
 
             // If we wrote anything and it was not our first write to the buffer ...
             Value * overwroteData = b->CreateICmpUGT(produced, capacity);
@@ -579,12 +621,14 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
             Value * const startedWithinFirstBlock = b->CreateICmpULT(initialOffset, overflowSize);
             Value * const wroteToFirstBlock = b->CreateAnd(overwroteData, startedWithinFirstBlock);
 
-            // Or we started writing at the end of the buffer but wrapped over to the start of it,
+            // And we started writing at the end of the buffer but wrapped over to the start of it,
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const wroteFromEndToStart = b->CreateICmpULT(producedOffset, initialOffset);
 
             // Then mirror the data in the overflow region.
             Value * const needsCopyForward = b->CreateOr(wroteToFirstBlock, wroteFromEndToStart);
+
+
             b->CreateUnlikelyCondBr(needsCopyForward, copyForward, copyExit);
 
             // TODO: optimize this further to ensure that we don't copy data that was just copied back from
@@ -594,6 +638,10 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
             // TODO: look into non-cache-polluting writes? How big does the buffer need to be before it helps?
 
             b->SetInsertPoint(copyForward);
+            #ifdef PRINT_DEBUG_MESSAGES
+            b->CallPrintInt(prefix + "_CopyForward.initialOffset", initialOffset);
+            b->CallPrintInt(prefix + "_CopyForward.producedOffset", producedOffset);
+            #endif
             writeOverflowCopy(b, buffer, OverflowCopy::Forwards, overflowSize);
             b->CreateBr(copyExit);
 
@@ -631,7 +679,7 @@ Value * PipelineCompiler::writeOverflowCopy(BuilderRef b, const StreamSetBuffer 
 inline Value * PipelineCompiler::getLogicalInputBaseAddress(BuilderRef b, const unsigned inputPort) {
     const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
     const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
-    Value * const processed = getAlreadyProcessedItemCount(b, inputPort);
+    Value * const processed = mAlreadyProcessedPhi[inputPort];
     return calculateLogicalBaseAddress(b, input, buffer, processed);
 }
 
@@ -641,7 +689,7 @@ inline Value * PipelineCompiler::getLogicalInputBaseAddress(BuilderRef b, const 
 inline Value * PipelineCompiler::getLogicalOutputBaseAddress(BuilderRef b, const unsigned outputPort) {
     const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
     const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
-    Value * const produced = getAlreadyProducedItemCount(b, outputPort);
+    Value * const produced = mAlreadyProducedPhi[outputPort];
     return calculateLogicalBaseAddress(b, output, buffer, produced);
 }
 

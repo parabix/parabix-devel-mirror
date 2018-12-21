@@ -54,20 +54,20 @@ const cl::OptionCategory * LLVM_READONLY re_toolchain_flags() {
     return &RegexOptions;
 }
 
-static cl::bits<RE_PrintFlags> 
+static cl::bits<RE_PrintFlags>
     PrintOptions(cl::values(clEnumVal(ShowREs, "Show parsed regular expressions and transformations that change them"),
                             clEnumVal(ShowAllREs, "Print all regular expression passes")
                             CL_ENUM_VAL_SENTINEL), cl::cat(RegexOptions));
 
 static cl::bits<RE_AlgorithmFlags>
     AlgorithmOptions(cl::values(clEnumVal(DisableLog2BoundedRepetition, "disable log2 optimizations for bounded repetition of bytes"),
-                              clEnumVal(DisableIfHierarchy, "disable nested if hierarchy for generated Unicode classes (not recommended)"), 
-                              clEnumVal(DisableMatchStar, "disable MatchStar optimization"), 
+                              clEnumVal(DisableIfHierarchy, "disable nested if hierarchy for generated Unicode classes (not recommended)"),
+                              clEnumVal(DisableMatchStar, "disable MatchStar optimization"),
                               clEnumVal(DisableUnicodeMatchStar, "disable Unicode MatchStar optimization"),
                               clEnumVal(DisableUnicodeLineBreak, "disable Unicode line breaks - use LF only")
                               CL_ENUM_VAL_SENTINEL), cl::cat(RegexOptions));
 
-    
+
 static cl::opt<bool> UnicodeLevel2("U2", cl::desc("Enable Unicode Level matching under canonical and compatible (?K) equivalence."), cl::cat(RegexOptions));
 
 bool LLVM_READONLY PrintOptionIsSet(RE_PrintFlags flag) {
@@ -79,9 +79,9 @@ bool LLVM_READONLY AlgorithmOptionIsSet(RE_AlgorithmFlags flag) {
 }
 
 int IfInsertionGap;
-static cl::opt<int, true> 
+static cl::opt<int, true>
     IfInsertionGapOption("if-insertion-gap",  cl::location(IfInsertionGap), cl::init(3),
-                         cl::desc("minimum number of nonempty elements between inserted if short-circuit tests"), 
+                         cl::desc("minimum number of nonempty elements between inserted if short-circuit tests"),
                          cl::cat(RegexOptions));
 
 RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
@@ -160,7 +160,7 @@ static bool lessThan(const Alt * const lh, const Alt * const rh) {
     }
     return false;
 }
-    
+
 inline bool lessThan(const Name * const lh, const Name * const rh) {
     if (lh->getType() != rh->getType()) {
         return lh->getType() < rh->getType();

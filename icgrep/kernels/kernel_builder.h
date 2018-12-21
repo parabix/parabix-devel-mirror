@@ -17,32 +17,28 @@ public:
     // Get the value of a scalar field for the current instance.
     llvm::Value * getScalarFieldPtr(llvm::Value * index);
 
-    llvm::Value * getScalarFieldPtr(const std::string & fieldName);
+    llvm::Value * getScalarFieldPtr(const llvm::StringRef fieldName);
 
-    llvm::Value * getScalarField(const std::string & fieldName);
+    llvm::Value * getScalarField(const llvm::StringRef fieldName);
 
     // Set the value of a scalar field for the current instance.
-    void setScalarField(const std::string & fieldName, llvm::Value * value);
+    void setScalarField(const llvm::StringRef fieldName, llvm::Value * value);
 
-    llvm::Value * getAvailableItemCount(const std::string & name);
-
-    llvm::Value * getAccessibleItemCount(const std::string & name);
-
-    llvm::Value * getProcessedItemCount(const std::string & name) {
-        return getNamedItemCount(name, PROCESSED_ITEM_COUNT_SUFFIX);
+    llvm::Value * getAvailableItemCount(const llvm::StringRef name) {
+        return mKernel->getAvailableInputItems(name);
     }
 
-    void setProcessedItemCount(const std::string & name, llvm::Value * value) {
-        setNamedItemCount(name, PROCESSED_ITEM_COUNT_SUFFIX, value);
+    llvm::Value * getAccessibleItemCount(const llvm::StringRef name) {
+        return mKernel->getAccessibleInputItems(name);
     }
 
-    llvm::Value * getProducedItemCount(const std::string & name) {
-        return getNamedItemCount(name, PRODUCED_ITEM_COUNT_SUFFIX);
-    }
+    llvm::Value * getProcessedItemCount(const llvm::StringRef name);
 
-    void setProducedItemCount(const std::string & name, llvm::Value * value) {
-        setNamedItemCount(name, PRODUCED_ITEM_COUNT_SUFFIX, value);
-    }
+    void setProcessedItemCount(const llvm::StringRef name, llvm::Value * value);
+
+    llvm::Value * getProducedItemCount(const llvm::StringRef name);
+
+    void setProducedItemCount(const llvm::StringRef name, llvm::Value * value);
 
     llvm::Value * getConsumedItemCount(const std::string & name) {
         return getNamedItemCount(name, CONSUMED_ITEM_COUNT_SUFFIX);
@@ -50,22 +46,6 @@ public:
 
     void setConsumedItemCount(const std::string & name, llvm::Value * value) {
         setNamedItemCount(name, CONSUMED_ITEM_COUNT_SUFFIX, value);
-    }
-
-    llvm::Value * getNonDeferredProcessedItemCount(const Binding & input) {
-        return getNamedItemCount(input.getName(), input.isDeferred() ? NON_DEFERRED_ITEM_COUNT_SUFFIX : PROCESSED_ITEM_COUNT_SUFFIX);
-    }
-
-    void setNonDeferredProcessedItemCount(const Binding & input, llvm::Value * value) {
-        setNamedItemCount(input.getName(), input.isDeferred() ? NON_DEFERRED_ITEM_COUNT_SUFFIX : PROCESSED_ITEM_COUNT_SUFFIX, value);
-    }
-
-    llvm::Value * getNonDeferredProducedItemCount(const Binding & output) {
-        return getNamedItemCount(output.getName(), output.isDeferred() ? NON_DEFERRED_ITEM_COUNT_SUFFIX : PRODUCED_ITEM_COUNT_SUFFIX);
-    }
-
-    void setNonDeferredProducedItemCount(const Binding & output, llvm::Value * value) {
-        setNamedItemCount(output.getName(), output.isDeferred() ? NON_DEFERRED_ITEM_COUNT_SUFFIX : PRODUCED_ITEM_COUNT_SUFFIX, value);
     }
 
     llvm::Value * getTerminationSignal();

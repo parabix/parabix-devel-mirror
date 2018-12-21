@@ -58,7 +58,7 @@ inline void PipelineCompiler::writePopCountComputationLogic(BuilderRef b) {
         Constant * const LOG2_BLOCK_WIDTH = getLog2BlockWidth(b);
         Value * const consumed = getPopCountReferenceConsumedCount(b, bufferVertex);
         Value * const startIndex = b->CreateLShr(consumed, LOG2_BLOCK_WIDTH);
-        Value * const produced = b->getNonDeferredProducedItemCount(output);
+        Value * const produced = mUpdatedProducedPhi[bufferPort];
         // If this is the producer's final stride, round the index position up
         // to account for a partial stride.
         Value * const rounding = b->CreateSelect(mTerminatedPhi, BLOCK_SIZE_MINUS_1, ZERO);
@@ -473,7 +473,7 @@ inline Value * PipelineCompiler::getPopCountInitialOffset(BuilderRef b, const Bi
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getReferenceStreamOffset(BuilderRef b, const Binding & binding) {
     const auto refPortNum = getPopCountReferencePort(mKernel, binding.getRate());
-    Value * const itemCount = getAlreadyProcessedItemCount(b, refPortNum);
+    Value * const itemCount = mAlreadyProcessedPhi[refPortNum];
     Value * const strideLength = getInputStrideLength(b, refPortNum);
     return b->CreateUDiv(itemCount, strideLength);
 }
@@ -573,7 +573,7 @@ Value * PipelineCompiler::getIndividualPopCountArray(BuilderRef b, const unsigne
     Value * array = b->CreateLoad(b->CreateGEP(mPopCountState, indices));
     indices[2] = b->getInt32(BASE_OFFSET_INDEX);
     Value * const baseOffset = b->CreateLoad(b->CreateGEP(mPopCountState, indices));
-    Value * const processed = getAlreadyProcessedItemCount(b, inputPort);
+    Value * const processed = mAlreadyProcessedPhi[inputPort];
     Constant * const LOG2_COUNT_WIDTH = getLog2BlockWidth(b);
     Value * const processedOffset = b->CreateLShr(processed, LOG2_COUNT_WIDTH);
     Value * const offset = b->CreateSub(processedOffset, baseOffset);

@@ -431,7 +431,7 @@ void GrepEngine::grepCodeGen() {
 
     auto P = mGrepDriver.makePipeline(
                 // inputs
-                {Binding{idb->getInt8Ty(), "useMMap"},
+                {Binding{idb->getSizeTy(), "useMMap"},
                 Binding{idb->getInt32Ty(), "fileDescriptor"},
                 Binding{idb->getIntAddrTy(), "callbackObject"},
                 Binding{idb->getSizeTy(), "maxCount"}}
@@ -493,7 +493,7 @@ void EmitMatchesEngine::grepCodeGen() {
 
     auto E = mGrepDriver.makePipeline(
                 // inputs
-                {Binding{idb->getInt8Ty(), "useMMap"},
+                {Binding{idb->getSizeTy(), "useMMap"},
                 Binding{idb->getInt32Ty(), "fileDescriptor"},
                 Binding{idb->getIntAddrTy(), "callbackObject"},
                 Binding{idb->getSizeTy(), "maxCount"}}

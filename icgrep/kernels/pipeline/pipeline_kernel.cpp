@@ -57,9 +57,7 @@ void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b
             }
         }
 
-        Value * const init = getInitFunction(m);
-        assert (cast<FunctionType>(init->getType()->getPointerElementType())->getNumParams() == args.size());
-        b->CreateCall(init, args);
+        b->CreateCall(getInitFunction(m), args);
     }
 }
 
@@ -178,31 +176,37 @@ Function * PipelineKernel::addOrDeclareMainFunction(const std::unique_ptr<kernel
 
     b->setKernel(this);
 
-    // maintain consistency with the Kernel interface
-    const auto numOfDoSegArgs = (getNumOfStreamInputs() + getNumOfStreamOutputs()) * 2;
-    std::vector<Type *> paramTypes;
-    paramTypes.reserve(numOfDoSegArgs + getNumOfScalarInputs());
-    for (const auto & input : getInputStreamSetBuffers()) {
-        paramTypes.push_back(input->getType()->getPointerTo());
-        paramTypes.push_back(b->getSizeTy());
+    Module * const m = b->getModule();
+    Function * const doSegment = getDoSegmentFunction(m);
+    assert (doSegment->arg_size() >= 2);
+    const auto numOfDoSegArgs = doSegment->arg_size() - 2;
+    Function * const terminate = getTerminateFunction(m);
+
+    // maintain consistency with the Kernel interface by passing first the stream sets
+    // and then the scalars.
+    std::vector<Type *> params;
+    params.reserve(numOfDoSegArgs + getNumOfScalarInputs());
+
+    // the first two params of doSegmentare its handle and numOfStrides; the remaining
+    // are the stream set params
+    auto doSegParam = doSegment->arg_begin(); ++doSegParam;
+    const auto doSegEnd = doSegment->arg_end();
+    while (++doSegParam != doSegEnd) {
+        params.push_back(doSegParam->getType());
     }
-    for (const auto & output : getOutputStreamSetBuffers()) {
-        paramTypes.push_back(output->getType()->getPointerTo());
-        paramTypes.push_back(b->getSizeTy());
-    }
+
     for (const auto & input : getInputScalarBindings()) {
-        if (LLVM_LIKELY(!input.hasAttribute(AttrId::Family))) {
-            paramTypes.push_back(input.getType());
+        if (!input.hasAttribute(AttrId::Family)) {
+            params.push_back(input.getType());
         }
     }
-    const auto numOfInitArgs = (paramTypes.size() - numOfDoSegArgs);
+
+    const auto numOfInitArgs = params.size() - numOfDoSegArgs;
 
     // get the finalize method output type and set its return type as this function's return type
-    Module * const m = b->getModule();
-    Function * const tf = getTerminateFunction(m);
-    FunctionType * const mainFunctionType = FunctionType::get(tf->getReturnType(), paramTypes, false);
+    FunctionType * const mainFunctionType = FunctionType::get(terminate->getReturnType(), params, false);
 
-    auto linkageType = (method == AddInternal) ? Function::InternalLinkage : Function::ExternalLinkage;
+    const auto linkageType = (method == AddInternal) ? Function::InternalLinkage : Function::ExternalLinkage;
 
     Function * const main = Function::Create(mainFunctionType, linkageType, getName() + "_main", m);
     main->setCallingConv(CallingConv::C);
@@ -216,30 +220,25 @@ Function * PipelineKernel::addOrDeclareMainFunction(const std::unique_ptr<kernel
         Value * const handle = createInstance(b);
         setHandle(b, handle);
 
-        std::vector<Value *> segmentArgs;
-        segmentArgs.reserve(numOfDoSegArgs + 2);
-        segmentArgs.push_back(handle);
-        segmentArgs.push_back(b->getSize(0));
+        std::vector<Value *> segmentArgs(doSegment->arg_size());
+        segmentArgs[0] = handle;
+        segmentArgs[1] = b->getSize(0);
         for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
-            segmentArgs.push_back(&*arg++);
+            assert (arg != main->arg_end());
+            segmentArgs[i + 2] = &*arg++;
         }
 
-        std::vector<Value *> initArgs;
-        initArgs.reserve(numOfInitArgs + 1);
-        initArgs.push_back(handle);
+        std::vector<Value *> initArgs(numOfInitArgs + 1);
+        initArgs[0] = handle;
         for (unsigned i = 0; i < numOfInitArgs; ++i) {
-            initArgs.push_back(&*arg++);
+            assert (arg != main->arg_end());
+            initArgs[i + 1] = &*arg++;
         }
         assert (arg == main->arg_end());
-
         // initialize the kernel
         initializeInstance(b, initArgs);
-
         // call the pipeline kernel
-        Function * const doSegment = getDoSegmentFunction(m);
-        assert (doSegment->getFunctionType()->getNumParams() == segmentArgs.size());
         b->CreateCall(doSegment, segmentArgs);
-
         // call and return the final output value(s)
         b->CreateRet(finalizeInstance(b));
     }

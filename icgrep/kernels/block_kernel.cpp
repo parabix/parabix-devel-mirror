@@ -156,9 +156,9 @@ void BlockOrientedKernel::incrementCountableItemCounts(const std::unique_ptr<Ker
             } else { // if (rate.isPopCount() || rate.isNegatedPopCount())
                 offset = getPopCountRateItemCount(b, rate, mStrideBlockIndex);
             }
-            Value * const initial = b->getNonDeferredProcessedItemCount(input);
+            Value * const initial = b->getProcessedItemCount(input.getName());
             Value * const processed = b->CreateAdd(initial, offset);
-            b->setNonDeferredProcessedItemCount(input, processed);
+            b->setProcessedItemCount(input.getName(), processed);
         }
     }
 
@@ -173,9 +173,9 @@ void BlockOrientedKernel::incrementCountableItemCounts(const std::unique_ptr<Ker
             } else { // if (rate.isPopCount() || rate.isNegatedPopCount())
                 offset = getPopCountRateItemCount(b, rate, mStrideBlockIndex);
             }
-            Value * const initial = b->getNonDeferredProducedItemCount(output);
+            Value * const initial = b->getProducedItemCount(output.getName());
             Value * const produced = b->CreateAdd(initial, offset);
-            b->setNonDeferredProducedItemCount(output, produced);
+            b->setProducedItemCount(output.getName(), produced);
         }
     }
 }

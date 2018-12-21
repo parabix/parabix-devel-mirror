@@ -29,8 +29,6 @@ inline Value * KernelBuilder::getScalarFieldPtr(Value * const handle, Value * co
     return CreateGEP(handle, {getInt32(0), index});
 }
 
-#warning TODO: make get scalar field able to get I/O scalars
-
 inline Value * KernelBuilder::getScalarFieldPtr(Value * const handle, const std::string & fieldName) {
     ConstantInt * const index = getInt32(mKernel->getScalarIndex(fieldName));
     return getScalarFieldPtr(handle, index);
@@ -40,22 +38,48 @@ Value * KernelBuilder::getScalarFieldPtr(Value * const index) {
     return getScalarFieldPtr(mKernel->getHandle(), index);
 }
 
-Value * KernelBuilder::getScalarFieldPtr(const std::string & fieldName) {
+Value * KernelBuilder::getScalarFieldPtr(const StringRef fieldName) {
     return getScalarFieldPtr(mKernel->getHandle(), fieldName);
 }
 
-Value * KernelBuilder::getScalarField(const std::string & fieldName) {
-    Value * const ptr = getScalarFieldPtr(fieldName);
-    return CreateLoad(ptr, fieldName);
+Value * KernelBuilder::getScalarField(const StringRef fieldName) {
+    return CreateLoad(getScalarFieldPtr(fieldName));
 }
 
-void KernelBuilder::setScalarField(const std::string & fieldName, Value * const value) {
-    Value * const ptr = getScalarFieldPtr(fieldName);
-    CreateStore(value, ptr);
+void KernelBuilder::setScalarField(const StringRef fieldName, Value * const value) {
+    CreateStore(value, getScalarFieldPtr(fieldName));
 }
 
 Value * KernelBuilder::getCycleCountPtr() {
     return getScalarFieldPtr(CYCLECOUNT_SCALAR);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getProcessedItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::getProcessedItemCount(const StringRef name) {
+    return CreateLoad(mKernel->getProcessedInputItemsPtr(name));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setProcessedItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelBuilder::setProcessedItemCount(const StringRef name, Value * value) {
+    CreateStore(value, mKernel->getProcessedInputItemsPtr(name));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getProducedItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * KernelBuilder::getProducedItemCount(const StringRef name) {
+    return CreateLoad(mKernel->getProducedOutputItemsPtr(name));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setProducedItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelBuilder::setProducedItemCount(const StringRef name, Value * value) {
+    CreateStore(value, mKernel->getProducedOutputItemsPtr(name));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -98,20 +122,6 @@ void KernelBuilder::setNamedItemCount(const std::string & name, const std::strin
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getAvailableItemCount
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getAvailableItemCount(const std::string & name) {
-    return mKernel->getAvailableInputItems(name);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getAccessibleItemCount
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getAccessibleItemCount(const std::string & name) {
-    return mKernel->getAccessibleInputItems(name);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::getTerminationSignal() {
@@ -134,7 +144,7 @@ void KernelBuilder::setTerminationSignal(Value * const value) {
     }
     Value * const ptr = mKernel->getTerminationSignalPtr();
     if (LLVM_UNLIKELY(ptr == nullptr)) {
-        llvm::report_fatal_error(mKernel->getName() + " does not have CanTerminateEarly or MustExplicitlyTerminate set.");
+        report_fatal_error(mKernel->getName() + " does not have CanTerminateEarly or MustExplicitlyTerminate set.");
     }
     CreateStore(value, ptr);
 }

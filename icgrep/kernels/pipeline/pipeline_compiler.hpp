@@ -160,6 +160,10 @@ struct PopCountEdge {
 
 using PopCountGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, PopCountEdge>;
 
+const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
+const static std::string ITEM_COUNT_SUFFIX = ".IC";
+const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".ICD";
+
 class PipelineCompiler {
 public:
 
@@ -182,7 +186,7 @@ protected:
 
     void start(BuilderRef b, Value * const initialSegNo);
     void setActiveKernel(BuilderRef b, const unsigned index);
-    void synchronize(BuilderRef b);
+    void acquireCurrentSegment(BuilderRef b);
     void executeKernel(BuilderRef b);
     void end(BuilderRef b, const unsigned step);
 
@@ -200,20 +204,38 @@ protected:
 
 // inter-kernel functions
 
+    void readInitialItemCounts(BuilderRef b);
+
+    void initializeKernelLoopEntryPhis(BuilderRef b);
+    void initializeKernelCallPhis(BuilderRef b);
+    void initializeKernelTerminatedPhis(BuilderRef b);
+    void initializeKernelLoopExitPhis(BuilderRef b);
+    void initializeKernelExitPhis(BuilderRef b);
+
     void checkForSufficientInputDataAndOutputSpace(BuilderRef b);
+    void branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * target);
     void determineNumOfLinearStrides(BuilderRef b);
     void calculateNonFinalItemCounts(BuilderRef b);
     void calculateFinalItemCounts(BuilderRef b);
+    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, std::vector<Value *> & args) const;
+
     void writeKernelCall(BuilderRef b);
-    void computeFullyProcessedItemCounts(BuilderRef b);
+
+    void normalTerminationCheck(BuilderRef b, Value * const isFinal);
+
     void writeCopyBackLogic(BuilderRef b);
     void writeCopyForwardLogic(BuilderRef b);
+    enum class OverflowCopy { Forwards, Backwards };
+    Value * writeOverflowCopy(BuilderRef b, const StreamSetBuffer * const buffer, const OverflowCopy direction, Value * const itemsToCopy) const;
+
+
+    void computeFullyProcessedItemCounts(BuilderRef b);
+    void computeFullyProducedItemCounts(BuilderRef b);
+
+    void updatePhisAfterTermination(BuilderRef b);
 
     void zeroFillPartiallyWrittenOutputStreams(BuilderRef b);
-    void initializeKernelCallPhis(BuilderRef b);
-    void initializeKernelExitPhis(BuilderRef b);
 
-    void readInitialProducedItemCounts(BuilderRef b);
     void computeMinimumConsumedItemCounts(BuilderRef b);
     void writeFinalConsumedItemCounts(BuilderRef b);
     void readFinalProducedItemCounts(BuilderRef b);
@@ -221,25 +243,21 @@ protected:
     void writeCopyToOverflowLogic(BuilderRef b);
     void checkForSufficientInputData(BuilderRef b, const unsigned inputPort);
     void checkForSufficientOutputSpaceOrExpand(BuilderRef b, const unsigned outputPort);
-    void incrementItemCountsOfCountableRateStreams(BuilderRef b);
-    enum class OverflowCopy { Forwards, Backwards };
-    Value * writeOverflowCopy(BuilderRef b, const StreamSetBuffer * const buffer, const OverflowCopy direction, Value * const itemsToCopy) const;
 
+    void loadItemCountsOfCountableRateStreams(BuilderRef b);
+
+    void writeUpdatedItemCounts(BuilderRef b);
 
 // intra-kernel functions
 
-    void branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * const target);
     void expandOutputBuffers(BuilderRef b);
     void expandOutputBuffer(BuilderRef b, const unsigned outputPort, Value * const hasEnough, BasicBlock * const target);
-
-    Value * getAlreadyProcessedItemCount(BuilderRef b, const unsigned inputPort);
-    Value * getAlreadyProducedItemCount(BuilderRef b, const unsigned outputPort);
 
     Value * getInputStrideLength(BuilderRef b, const unsigned inputPort);
     Value * getOutputStrideLength(BuilderRef b, const unsigned outputPort);
     Value * getInitialStrideLength(BuilderRef b, const Port port, const unsigned portNum);
-    Value * getMaximumStrideLength(BuilderRef b, const Port port, const unsigned portNum);
-    Value * calculateNumOfLinearItems(BuilderRef b, const Port portType,  const unsigned portNum);
+    static Value * getMaximumStrideLength(BuilderRef b, const Kernel * kernel, const Binding & binding);
+    Value * calculateNumOfLinearItems(BuilderRef b, const Binding & binding);
     Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort);
     Value * getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort);
     Value * getNumOfWritableStrides(BuilderRef b, const unsigned outputPort);
@@ -252,7 +270,7 @@ protected:
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount, Value * all) const;
     Value * getTotalItemCount(BuilderRef b, const unsigned inputPort) const;
     Value * hasProducerTerminated(BuilderRef b, const unsigned inputPort) const;
-    Value * getInitialTerminationSignal(BuilderRef b) const;
+    Value * initiallyTerminated(BuilderRef b) const;
     void setTerminated(BuilderRef b, Value * const terminated);
     void resetMemoizedFields();
 
@@ -380,8 +398,14 @@ protected:
 
     void writeOutputScalars(BuilderRef b, const unsigned u, std::vector<Value *> & args);
 
+    void verifyInputItemCount(BuilderRef b, Value * processed, const unsigned inputPort) const;
+
+    void verifyOutputItemCount(BuilderRef b, Value * produced, const unsigned outputPort) const;
+
     void itemCountSanityCheck(BuilderRef b, const Binding & binding, const std::string & pastLabel,
-                              Value * const itemCount, Value * const expected);
+                              Value * const itemCount, Value * const expected) const;
+
+
 
 protected:
 
@@ -394,12 +418,13 @@ protected:
 
     // pipeline state
     PHINode *                                   mTerminatedPhi = nullptr;
-    PHINode *                                   mTerminatedFlag = nullptr;
     PHINode *                                   mSegNo = nullptr;
     BasicBlock *                                mPipelineLoop = nullptr;
     BasicBlock *                                mKernelEntry = nullptr;
     BasicBlock *                                mKernelLoopEntry = nullptr;
     BasicBlock *                                mKernelLoopCall = nullptr;
+    BasicBlock *                                mKernelTerminationCheck = nullptr;
+    BasicBlock *                                mKernelTerminated = nullptr;
     BasicBlock *                                mKernelLoopExit = nullptr;
     BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
     BasicBlock *                                mKernelExit = nullptr;
@@ -412,17 +437,32 @@ protected:
 
     std::vector<unsigned>                       mPortOrdering;
 
-    std::vector<Value *>                        mAlreadyProcessedItemCount; // entering the stride
+    std::vector<Value *>                        mInitiallyProcessedItemCount; // *before* entering the kernel
+    std::vector<Value *>                        mInitiallyProcessedDeferredItemCount;
+    std::vector<PHINode *>                      mAlreadyProcessedPhi; // entering the segment loop
+    std::vector<PHINode *>                      mAlreadyProcessedDeferredPhi;
     std::vector<Value *>                        mInputStrideLength;
     std::vector<Value *>                        mAccessibleInputItems;
     std::vector<PHINode *>                      mLinearInputItemsPhi;
-    std::vector<Value *>                        mFullyProcessedItemCount; // exiting the kernel
+    std::vector<Value *>                        mReturnedProcessedItemCountPtr; // written by the kernel
+    std::vector<Value *>                        mProcessedItemCount; // exiting the segment loop
+    std::vector<Value *>                        mProcessedDeferredItemCount;
+    std::vector<PHINode *>                      mFinalProcessedPhi; // exiting after termination
+    std::vector<PHINode *>                      mUpdatedProcessedPhi; // exiting the kernel
+    std::vector<PHINode *>                      mUpdatedProcessedDeferredPhi;
+    std::vector<Value *>                        mFullyProcessedItemCount; // *after* exiting the kernel
 
-    std::vector<Value *>                        mInitiallyProducedItemCount; // entering the *kernel*
-    std::vector<Value *>                        mAlreadyProducedItemCount; // entering the stride
+    std::vector<Value *>                        mInitiallyProducedItemCount; // *before* entering the kernel
+    std::vector<PHINode *>                      mAlreadyProducedPhi; // entering the segment loop
     std::vector<Value *>                        mOutputStrideLength;
     std::vector<Value *>                        mWritableOutputItems;
     std::vector<PHINode *>                      mLinearOutputItemsPhi;
+    std::vector<Value *>                        mReturnedProducedItemCountPtr; // written by the kernel
+    std::vector<Value *>                        mProducedItemCount; // exiting the segment loop
+    std::vector<PHINode *>                      mFinalProducedPhi; // exiting after termination
+    std::vector<PHINode *>                      mUpdatedProducedPhi; // exiting the kernel
+    std::vector<PHINode *>                      mFullyProducedItemCount; // *after* exiting the kernel
+
 
     // debug + misc state
     Value *                                     mCycleCountStart = nullptr;

@@ -84,6 +84,7 @@ Value * PipelineCompiler::getConsumedItemCount(BuilderRef b, const unsigned outp
         consumed = b->getScalarField(makeBufferName(mKernelIndex, output) + CONSUMED_ITEM_COUNT_SUFFIX);
         b->setKernel(mKernel);
     } else if (bn.Type == BufferType::Managed) {
+        b->setKernel(mKernel);
         consumed = b->getScalarField(output.getName() + CONSUMED_ITEM_COUNT_SUFFIX);
     } else if (bn.Type == BufferType::External) {
         consumed = b->getSize(0);
@@ -91,7 +92,6 @@ Value * PipelineCompiler::getConsumedItemCount(BuilderRef b, const unsigned outp
     assert (consumed);
     return consumed;
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setConsumedItemCount
@@ -102,6 +102,10 @@ void PipelineCompiler::setConsumedItemCount(BuilderRef b, const unsigned bufferV
     const Kernel * const producer = mBufferGraph[producerVertex].Kernel;
     assert (producer->getHandle());
     const Binding & output = producer->getOutputStreamSetBinding(mConsumerGraph[pe]);
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(producerVertex, output);
+    b->CallPrintInt(prefix + CONSUMED_ITEM_COUNT_SUFFIX, consumed);
+    #endif
     if (LLVM_UNLIKELY(storedInNestedKernel(output))) {
         b->setKernel(producer);
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {

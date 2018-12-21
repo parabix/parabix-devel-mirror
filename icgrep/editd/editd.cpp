@@ -160,7 +160,9 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
     }
 }
 
-typedef void (*preprocessFunctionType)(char * output_data, size_t output_size, const uint32_t fd);
+#warning make a "CBuffer" class to abstract away the complexity of making these function typedefs.
+
+typedef void (*preprocessFunctionType)(char * output_data, size_t output_produced, size_t output_size, const uint32_t fd);
 
 static char * chStream;
 static size_t size;
@@ -239,7 +241,7 @@ char * preprocess(preprocessFunctionType preprocess) {
     AlignedAllocator<char, ALIGNMENT> alloc;
     const auto n = round_up_to(size, 8 * ALIGNMENT);
     chStream = alloc.allocate((4 * n) / 8);
-    preprocess(chStream, n, fd);
+    preprocess(chStream, 0, n, fd);
     close(fd);
     return chStream;
 }

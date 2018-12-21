@@ -23,7 +23,7 @@ namespace kernel {
 void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
 
     Module * const m = b->getModule();
-    
+
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const initialBlock = b->CreateBasicBlock("initialBlock");
     BasicBlock * const scanWordIteration = b->CreateBasicBlock("ScanWordIteration");
@@ -199,11 +199,9 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     b->CreateCondBr(mIsFinal, callFinalizeScan, scanReturn);
 
     b->SetInsertPoint(callFinalizeScan);
-    b->setProcessedItemCount("InputStream", b->CreateAdd(avail, scanwordPos));
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
-    Value * const buffer_base = b->getRawInputPointer("InputStream", ZERO);
-    Value * buffer_end_address = b->CreateGEP(buffer_base, avail);
-    b->CreateCall(finalizer, {accumulator, buffer_end_address});
+    Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
+    b->CreateCall(finalizer, {accumulator, bufferEnd});
     b->CreateBr(scanReturn);
 
     b->SetInsertPoint(scanReturn);

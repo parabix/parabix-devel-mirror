@@ -33,11 +33,7 @@ namespace llvm { class Value; }
 
 class BaseDriver;
 
-const static std::string LOGICAL_SEGMENT_NO_SCALAR = "segmentNo";
-const static std::string PROCESSED_ITEM_COUNT_SUFFIX = "_processedItemCount";
-const static std::string PRODUCED_ITEM_COUNT_SUFFIX = "_producedItemCount";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = "_consumedItemCount";
-const static std::string NON_DEFERRED_ITEM_COUNT_SUFFIX = "_nonDeferredItemCount";
 const static std::string BUFFER_HANDLE_SUFFIX = "_buffer";
 const static std::string CYCLECOUNT_SCALAR = "CPUcycles";
 
@@ -405,26 +401,26 @@ protected:
 
     void setStride(unsigned stride) { mStride = stride; }
 
-    llvm::Value * getAccessibleInputItems(const llvm::StringRef name) const {
+    LLVM_READNONE llvm::Value * getAccessibleInputItems(const llvm::StringRef name) const {
         Port port; unsigned index;
         std::tie(port, index) = getStreamPort(name);
         assert (port == Port::Input);
         return getAccessibleInputItems(index);
     }
 
-    llvm::Value * getAccessibleInputItems(const unsigned index) const {
+    LLVM_READNONE llvm::Value * getAccessibleInputItems(const unsigned index) const {
         assert (index < mAccessibleInputItems.size());
         return mAccessibleInputItems[index];
     }
 
-    llvm::Value * getAvailableInputItems(const llvm::StringRef name) const {
+    LLVM_READNONE llvm::Value * getAvailableInputItems(const llvm::StringRef name) const {
         Port port; unsigned index;
         std::tie(port, index) = getStreamPort(name);
         assert (port == Port::Input);
         return getAvailableInputItems(index);
     }
 
-    llvm::Value * getAvailableInputItems(const unsigned index) const {
+    LLVM_READNONE llvm::Value * getAvailableInputItems(const unsigned index) const {
         assert (index < mAvailableInputItems.size());
         return mAvailableInputItems[index];
     }
@@ -435,11 +431,25 @@ protected:
         return hasAttribute(Attribute::KindId::CanTerminateEarly) || hasAttribute(Attribute::KindId::MustExplicitlyTerminate);
     }
 
-    llvm::Value * getTerminationSignalPtr() const {
+    LLVM_READNONE llvm::Value * getTerminationSignalPtr() const {
         return mTerminationSignalPtr;
     }
 
-    llvm::Value * isFinal() const {
+    LLVM_READNONE llvm::Value * getProcessedInputItemsPtr(const llvm::StringRef name) const {
+        Port port; unsigned index;
+        std::tie(port, index) = getStreamPort(name);
+        assert (port == Port::Input);
+        return mProcessedInputItems[index];
+    }
+
+    LLVM_READNONE llvm::Value * getProducedOutputItemsPtr(const llvm::StringRef name) const {
+        Port port; unsigned index;
+        std::tie(port, index) = getStreamPort(name);
+        assert (port == Port::Output);
+        return mProducedOutputItems[index];
+    }
+
+    LLVM_READNONE llvm::Value * isFinal() const {
         return mIsFinal;
     }
 
@@ -464,10 +474,6 @@ private:
     LLVM_READNONE const ScalarField & getScalarField(const llvm::StringRef name) const;
 
     void addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b);
-
-    void deriveItemCounts(const std::unique_ptr<KernelBuilder> & b);
-
-    llvm::Value * deriveItemCount(const std::unique_ptr<KernelBuilder> & b, const Binding & binding, llvm::Value * const strideIndex);
 
     llvm::Function * getInitFunction(llvm::Module * const module) const;
 
@@ -496,10 +502,12 @@ protected:
     llvm::Value *                   mIsFinal;
     llvm::Value *                   mNumOfStrides;
 
+    std::vector<llvm::Value *>      mProcessedInputItems;
     std::vector<llvm::Value *>      mAccessibleInputItems;
     std::vector<llvm::Value *>      mAvailableInputItems;
     std::vector<llvm::Value *>      mPopCountRateArray;
     std::vector<llvm::Value *>      mNegatedPopCountRateArray;
+    std::vector<llvm::Value *>      mProducedOutputItems;
     std::vector<llvm::Value *>      mWritableOutputItems;
 
     ScalarFieldMap                  mScalarMap;

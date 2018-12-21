@@ -93,7 +93,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
     start(b, segmentOffset);
     for (unsigned i = 0; i < mPipeline.size(); ++i) {
         setActiveKernel(b, i);
-        synchronize(b);
+        acquireCurrentSegment(b);
         executeKernel(b);
         releaseCurrentSegment(b);
     }
@@ -114,6 +114,48 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
     b->restoreIP(resumePoint);
     setThreadState(b, processState);
 
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief acquireCurrentSegment
+ *
+ * Before the segment is processed, this loads the segment number of the kernel state and ensures the previous
+ * segment is complete (by checking that the acquired segment number is equal to the desired segment number).
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::acquireCurrentSegment(BuilderRef b) {
+
+    b->setKernel(mPipelineKernel);
+    const auto prefix = makeKernelName(mKernelIndex);
+    const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
+    const unsigned waitingOnIdx = serialize ? (mPipeline.size() - 1) : mKernelIndex;
+    const auto waitingOn = makeKernelName(waitingOnIdx);
+    Value * const waitingOnPtr = b->getScalarFieldPtr(waitingOn + LOGICAL_SEGMENT_SUFFIX);
+    BasicBlock * const kernelWait = b->CreateBasicBlock(prefix + "Wait", mPipelineEnd);
+    b->CreateBr(kernelWait);
+
+    b->SetInsertPoint(kernelWait);
+    Value * const processedSegmentCount = b->CreateAtomicLoadAcquire(waitingOnPtr);
+    assert (processedSegmentCount->getType() == mSegNo->getType());
+    Value * const ready = b->CreateICmpEQ(mSegNo, processedSegmentCount);
+    BasicBlock * const kernelStart = b->CreateBasicBlock(prefix + "Start", mPipelineEnd);
+    b->CreateCondBr(ready, kernelStart, kernelWait);
+
+    b->SetInsertPoint(kernelStart);
+    b->setKernel(mKernel);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief releaseCurrentSegment
+ *
+ * After executing the kernel, the segment number must be incremented to release the kernel for the next thread.
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::releaseCurrentSegment(BuilderRef b) {
+    b->setKernel(mPipelineKernel);
+    Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
+    const auto prefix = makeKernelName(mKernelIndex);
+    Value * const waitingOnPtr = b->getScalarFieldPtr(prefix + LOGICAL_SEGMENT_SUFFIX);
+    b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
 }
 
 enum : int {
@@ -295,4 +337,3 @@ inline void PipelineCompiler::deallocateThreadLocalState(BuilderRef b, Value * c
 }
 
 #endif // PIPELINE_LOGIC_HPP
-

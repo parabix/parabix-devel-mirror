@@ -693,7 +693,6 @@ LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
     LoadInst * inst = CreateAlignedLoad(ptr, alignment, true);
     inst->setOrdering(AtomicOrdering::Acquire);
     return inst;
-
 }
 
 StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
