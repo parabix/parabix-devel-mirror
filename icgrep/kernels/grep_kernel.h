@@ -14,9 +14,9 @@ namespace cc { class Alphabet; }
 namespace kernel {
 
     
-class UnicodeNonFinalKernel : public pablo::PabloKernel {
+class UTF8_nonFinal : public pablo::PabloKernel {
 public:
-    UnicodeNonFinalKernel(const std::unique_ptr<kernel::KernelBuilder> & kb);
+    UTF8_nonFinal(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * Source, StreamSet * u8nonFinal);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

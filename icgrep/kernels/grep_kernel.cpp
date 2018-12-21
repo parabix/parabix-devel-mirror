@@ -66,6 +66,99 @@ void UnicodeLineBreakKernel::generatePabloMethod() {
     pb.createAssign(pb.createExtract(UTF8_LB, pb.getInteger(0)), breakStream);
 }
 
+void UTF8_nonFinal::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    std::unique_ptr<cc::CC_Compiler> ccc;
+    bool useDirectCC = getInput(0)->getType()->getArrayNumElements() == 1;
+    if (useDirectCC) {
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("source"));
+    }
+
+    Zeroes * const ZEROES = pb.createZeroes();
+    PabloAST * const u8pfx = ccc->compileCC(makeByte(0xC0, 0xFF));
+
+
+    Var * const nonFinal = pb.createVar("nonFinal", u8pfx);
+    Var * const u8invalid = pb.createVar("u8invalid", ZEROES);
+    Var * const valid_pfx = pb.createVar("valid_pfx", u8pfx);
+
+    auto it = pb.createScope();
+    pb.createIf(u8pfx, it);
+    PabloAST * const u8pfx2 = ccc->compileCC(makeByte(0xC2, 0xDF), it);
+    PabloAST * const u8pfx3 = ccc->compileCC(makeByte(0xE0, 0xEF), it);
+    PabloAST * const u8pfx4 = ccc->compileCC(makeByte(0xF0, 0xF4), it);
+    PabloAST * const u8suffix = ccc->compileCC("u8suffix", makeByte(0x80, 0xBF), it);
+    
+    //
+    // Two-byte sequences
+    Var * const anyscope = it.createVar("anyscope", ZEROES);
+    auto it2 = it.createScope();
+    it.createIf(u8pfx2, it2);
+    it2.createAssign(anyscope, it2.createAdvance(u8pfx2, 1));
+
+
+    //
+    // Three-byte sequences    
+    Var * const EF_invalid = it.createVar("EF_invalid", ZEROES);
+    auto it3 = it.createScope();
+    it.createIf(u8pfx3, it3);
+    PabloAST * const u8scope32 = it3.createAdvance(u8pfx3, 1);
+    it3.createAssign(nonFinal, it3.createOr(nonFinal, u8scope32));
+    PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
+    PabloAST * const u8scope3X = it3.createOr(u8scope32, u8scope33);
+    it3.createAssign(anyscope, it3.createOr(anyscope, u8scope3X));
+    PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE0), it3), 1), ccc->compileCC(makeByte(0x80, 0x9F), it3));
+    PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xED), it3), 1), ccc->compileCC(makeByte(0xA0, 0xBF), it3));
+    PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
+    it3.createAssign(EF_invalid, EX_invalid);
+
+    //
+    // Four-byte sequences
+    auto it4 = it.createScope();
+    it.createIf(u8pfx4, it4);
+    PabloAST * const u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
+    PabloAST * const u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
+    PabloAST * const u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
+    PabloAST * const u8scope4nonfinal = it4.createOr(u8scope42, u8scope43);
+    it4.createAssign(nonFinal, it4.createOr(nonFinal, u8scope4nonfinal));
+    PabloAST * const u8scope4X = it4.createOr(u8scope4nonfinal, u8scope44);
+    it4.createAssign(anyscope, it4.createOr(anyscope, u8scope4X));
+    PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF0), it4), 1), ccc->compileCC(makeByte(0x80, 0x8F), it4));
+    PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF4), it4), 1), ccc->compileCC(makeByte(0x90, 0xBF), it4));
+    PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
+    it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
+    
+    //
+    // Invalid cases
+    PabloAST * const legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
+    //  Any scope that does not have a suffix byte, and any suffix byte that is not in
+    //  a scope is a mismatch, i.e., invalid UTF-8.
+    PabloAST * const mismatch = it.createXor(anyscope, u8suffix);
+    //
+    PabloAST * const pfx_invalid = it.createXor(valid_pfx, legalpfx);
+    it.createAssign(u8invalid, it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
+    PabloAST * const u8valid = it.createNot(u8invalid, "u8valid");
+    //
+    //
+    it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
+    //pb.createAssign(nonFinal, pb.createOr(nonFinal, CRLF));
+    //PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1), "unterminatedLineAtEOF");
+    
+    Var * const required = getOutputStreamVar("nonFinal");
+    pb.createAssign(pb.createExtract(required, pb.getInteger(0)), nonFinal);
+}
+
+UTF8_nonFinal::UTF8_nonFinal(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * Source, StreamSet * u8nonFinal)
+: PabloKernel(kb, "UTF8_nonFinal" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()),
+// input
+{Binding{"source", Source}},
+// output
+{Binding{"nonFinal", u8nonFinal}}) {
+
+}
+
 void RequiredStreams_UTF8::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<cc::CC_Compiler> ccc;

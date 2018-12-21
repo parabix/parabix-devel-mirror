@@ -307,19 +307,21 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         }
 
         StreamSet * const RequiredStreams = P->CreateStreamSet();
-        StreamSet * const UnicodeLB = P->CreateStreamSet();
-        StreamSet * const LineFeedStream = P->CreateStreamSet();
-
-        P->CreateKernelCall<LineFeedKernelBuilder>(BasisBits, LineFeedStream);
-        P->CreateKernelCall<RequiredStreams_UTF8>(BasisBits, LineFeedStream, RequiredStreams, UnicodeLB);
-
-        if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
-            LineBreakStream = LineFeedStream;
-        } else if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
-            LineBreakStream = P->CreateStreamSet();
-            P->CreateKernelCall<CharacterClassKernelBuilder>( "Null", std::vector<re::CC *>{mBreakCC}, BasisBits, LineBreakStream);
-        } else {
+        StreamSet * UnicodeLB = nullptr;
+        
+        if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) { 
+            UnicodeLB = P->CreateStreamSet();
+            StreamSet * const LineFeedStream = P->CreateStreamSet();
+            P->CreateKernelCall<LineFeedKernelBuilder>(BasisBits, LineFeedStream);
+            P->CreateKernelCall<RequiredStreams_UTF8>(BasisBits, LineFeedStream, RequiredStreams, UnicodeLB);
             LineBreakStream = UnicodeLB;
+        } else {
+            P->CreateKernelCall<UTF8_nonFinal>(BasisBits, RequiredStreams);
+            if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
+                P->CreateKernelCall<LineFeedKernelBuilder>(BasisBits, LineBreakStream);
+            } else { // if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
+                P->CreateKernelCall<CharacterClassKernelBuilder>( "Null", std::vector<re::CC *>{mBreakCC}, BasisBits, LineBreakStream);
+            }
         }
 
         std::map<std::string, StreamSet *> propertyStream;
@@ -340,9 +342,9 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
 
         for(unsigned i = 0; i < numOfREs; ++i) {
             std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
+            options->addExternal("UTF8_nonfinal", RequiredStreams);
             if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
                 options->addExternal("UTF8_LB", LineBreakStream);
-                options->addExternal("UTF8_nonfinal", RequiredStreams);
             }
             std::set<re::Name *> UnicodeProperties;
             if (PropertyKernels) {
