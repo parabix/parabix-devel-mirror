@@ -33,8 +33,9 @@ private:
     template<typename Iterator>
     std::vector<RE *> makeContext(Iterator begin, Iterator end);
     RE * transformAssertion(Assertion * a) override;
-    RE * simplifyPositiveAsserted(RE * asserted, std::vector<RE *> const & context);
-    RE * simplifyNegativeAsserted(RE * asserted, std::vector<RE *> const & context);
+    RE * simplifyAsserted(RE * asserted, std::vector<RE *> const & context);
+    RE * simplifyForwardAssertion(RE * asserted);
+    RE * simplifyBackwardAssertion(RE * asserted);
 };
 
 
@@ -60,7 +61,7 @@ public:
     inline bool validateDiff(Diff * d) override {
         return ResolvesToCC{}.validateRE(d);
     }
-    inline bool validateSeq(Seq * s) {
+    inline bool validateSeq(Seq * s) override {
         auto ccValidator = ResolvesToCC{};
         for (auto e : *s) {
             if (!ccValidator.validateRE(e) || !validateRE(e)) {
@@ -96,6 +97,7 @@ public:
     RE * transformDiff(Diff * d) override;
 private:
     Sense sense;
+    Name * any;
 };
 
 
@@ -164,28 +166,16 @@ RE * reverseAsserted(RE * re) {
 
 RE * Context::transformAssertion(Assertion * a) {
     using Kind = Assertion::Kind;
-    using Sense = Assertion::Sense;
     if (good() && ValidateAsserted{}.validateRE(a->getAsserted())) {
         AssertionPrep prep{a};
         RE * asserted = prep.transformRE(a->getAsserted());
-        RE *(Context::* simpFunction)(RE *, std::vector<RE*> const &);
-        switch(a->getSense()) {
-        case Sense::Positive:
-            simpFunction = &Context::simplifyPositiveAsserted;
-            break;
-        case Sense::Negative:        
-            simpFunction = &Context::simplifyNegativeAsserted;
-            break;
-        default:
-            llvm_unreachable("unexpected sense");
-        }
-
+        Assertion::Sense sense = a->getSense();
         RE * simplifiedAsserted = nullptr;
         if (a->getKind() == Kind::Lookahead) {
-            simplifiedAsserted = (this->*simpFunction)(asserted, after);
+            simplifiedAsserted = simplifyAsserted(asserted, after);
         } else if (a->getKind() == Kind::Lookbehind) {
             asserted = reverseAsserted(asserted);
-            simplifiedAsserted = reverseAsserted((this->*simpFunction)(asserted, before));
+            simplifiedAsserted = reverseAsserted(simplifyAsserted(asserted, before));
         } else {
             return a;
         }
@@ -194,11 +184,13 @@ RE * Context::transformAssertion(Assertion * a) {
             if (simplifiedAsserted == asserted) {
                 return a;
             } else if (isEmptySet(simplifiedAsserted)) {
-                return makeAlt();
+                if (sense == Assertion::Sense::Positive) return makeAlt();
+                else return makeSeq();
             } else if (isEmptySeq(simplifiedAsserted)) {
-                return makeSeq();
+                if (sense == Assertion::Sense::Positive) return makeSeq();
+                else return makeAlt();
             } else {
-                return makeAssertion(simplifiedAsserted, a->getKind(), a->getSense());
+                return makeAssertion(simplifiedAsserted, a->getKind(), sense);
             }
         } else {
             return a;
@@ -216,7 +208,7 @@ Seq * latterSeq(Seq * s, size_t i) {
     return s;
 }
 
-RE * Context::simplifyPositiveAsserted(RE * asserted, std::vector<RE *> const & context) {
+RE * Context::simplifyAsserted(RE * asserted, std::vector<RE *> const & context) {
     if (LLVM_LIKELY(llvm::isa<CC>(asserted))) {
         if (context.size() > 0) {
             CC * assertedCC = llvm::cast<CC>(asserted);
@@ -233,16 +225,15 @@ RE * Context::simplifyPositiveAsserted(RE * asserted, std::vector<RE *> const & 
             }
         }
         return asserted;
-    } 
-    
-    else if (llvm::isa<Seq>(asserted)) {
+    } else if (llvm::isa<Seq>(asserted)) {
         Seq * a = llvm::cast<Seq>(asserted);
         std::vector<RE *> elems{a->begin(), a->end()};
         bool isWholeSeqSuperSet = context.size() >= a->size();
         bool didChange = false;
+        elems.reserve(a->size());
 
         for (size_t i = 0; i < std::min(a->size(), context.size()); ++i) {
-            RE * simplifiedElem = simplifyPositiveAsserted((*a)[i], std::vector<RE *>{context[i]});
+            RE * simplifiedElem = simplifyAsserted((*a)[i], std::vector<RE *>{context[i]});
             if (isEmptySet(simplifiedElem)) {
                 return makeAlt();
             }
@@ -271,15 +262,13 @@ RE * Context::simplifyPositiveAsserted(RE * asserted, std::vector<RE *> const & 
         } else {
             return asserted;
         }
-    } 
-    
-    else if (llvm::isa<Alt>(asserted)) {
+    } else if (llvm::isa<Alt>(asserted)) {
         Alt * a = llvm::cast<Alt>(asserted);
         std::vector<RE *> elems{};
         elems.reserve(a->size());
         bool did_change = false;
         for (auto e : *a) {
-            RE * e0 = simplifyPositiveAsserted(e, context);
+            RE * e0 = simplifyAsserted(e, context);
             if (e0 != e) {
                 elems.push_back(e0);
                 did_change = true;
@@ -293,118 +282,19 @@ RE * Context::simplifyPositiveAsserted(RE * asserted, std::vector<RE *> const & 
         } else {
             return asserted;
         }
-    } 
-    
-    else if (llvm::isa<Name>(asserted)) {
+    } else if (llvm::isa<Name>(asserted)) {
         RE * def = llvm::cast<Name>(asserted)->getDefinition();
         if (LLVM_UNLIKELY(def == nullptr)) {
             llvm_unreachable("undefined name");
         }
-        RE * simp = simplifyPositiveAsserted(def, context);
+        RE * simp = simplifyAsserted(def, context);
         if (simp == def) {
             return asserted;
         } else {
             return simp;
         }
-    } 
-    
-    else {
-        llvm_unreachable("Context::simplifyPositiveAsserted: Unexpected asserted value");
-    }
-}
-
-RE * Context::simplifyNegativeAsserted(RE * asserted, std::vector<RE *> const & context) {
-    if (LLVM_LIKELY(llvm::isa<CC>(asserted))) {
-        if (context.size() == 0) {
-            return asserted;
-        }
-
-        CC * assertedCC = llvm::cast<CC>(asserted);
-        CC * contextCC = llvm::dyn_cast<CC>(context.front());
-        if (LLVM_UNLIKELY(contextCC == nullptr)) {
-            llvm_unreachable("invalid context");
-        }
-        CC * intersect = intersectCC(contextCC, assertedCC);
-        if (intersect->empty()) {
-            return makeSeq();
-        } else if (subtractCC(contextCC, assertedCC)->empty()) {
-            return makeAlt();
-        } else if (intersect->size() == assertedCC->size()) {
-            return asserted;
-        } else {
-            return intersect;
-        }
-    }
-
-    else if (llvm::isa<Seq>(asserted)) {
-        Seq * a = llvm::cast<Seq>(asserted);
-        std::vector<RE *> elems{a->begin(), a->end()};
-        bool isWholeSeqSuperSet = context.size() >= a->size();
-        bool didChange = false;
-
-        for (size_t i = 0; i < std::min(a->size(), context.size()); ++i) {
-            RE * simplifiedElem = simplifyNegativeAsserted((*a)[i], std::vector<RE *>{context[i]});
-            if (isEmptySet(simplifiedElem)) {
-                return makeAlt();
-            }
-            if (simplifiedElem != (*a)[i]) {
-                didChange = true;
-                if (!isEmptySeq(simplifiedElem)) {
-                    isWholeSeqSuperSet = false;
-                    elems[i] = simplifiedElem;
-                }
-            } else {
-                isWholeSeqSuperSet = false;
-            }
-        }
-
-        if (isWholeSeqSuperSet) {
-            return makeSeq();
-        }
-
-        if (didChange) {
-            return makeSeq(elems.begin(), elems.end());
-        } else {
-            return asserted;
-        }
-    }
-    
-    else if (llvm::isa<Alt>(asserted)) {
-        Alt * a = llvm::cast<Alt>(asserted);
-        std::vector<RE *> elems{};
-        elems.reserve(a->size());
-        bool did_change = false;
-        for (auto e : *a) {
-            RE * e0 = simplifyNegativeAsserted(e, context);
-            if (e0 != e) {
-                did_change = true;
-            } else {
-                elems.push_back(e);
-            }
-        }
-
-        if (did_change) {
-            return makeAlt(elems.begin(), elems.end());
-        } else {
-            return asserted;
-        }
-    } 
-    
-    else if (llvm::isa<Name>(asserted)) {
-        RE * def = llvm::cast<Name>(asserted)->getDefinition();
-        if (LLVM_UNLIKELY(def == nullptr)) {
-            llvm_unreachable("undefined name");
-        }
-        RE * simp = simplifyNegativeAsserted(def, context);
-        if (simp == def) {
-            return asserted;
-        } else {
-            return simp;
-        }
-    } 
-    
-    else {
-        llvm_unreachable("Context::simplifyNegativeAsserted: Unexpected asserted value");
+    } else {
+        llvm_unreachable("Context::simplifyAsserted: Unexpected asserted value");
     }
 }
 
@@ -413,7 +303,9 @@ RE * Context::simplifyNegativeAsserted(RE * asserted, std::vector<RE *> const & 
 AssertionPrep::AssertionPrep(Assertion * assertion)
 : RE_Transformer("", NameTransformationMode::TransformDefinition), 
   sense(assertion->getSense())
-{}
+{
+    this->any = llvm::cast<Name>(makeAny());
+}
 
 RE * AssertionPrep::transformDiff(Diff * d) {
     CC * lh = llvm::dyn_cast<CC>(transform(d->getLH()));

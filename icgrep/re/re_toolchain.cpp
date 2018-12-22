@@ -122,7 +122,7 @@ RE * regular_expression_passes(RE * re) {
     } else {
         r = simplifyRE(r);
     }
-    r = RE_ContextSimplifier().transformRE(r);
+    //r = RE_ContextSimplifier().transformRE(r);
     if (!DefiniteLengthBackReferencesOnly(r)) {
         llvm::report_fatal_error("Future back reference support: references must be within a fixed distance from a fixed-length capture.");
     }
