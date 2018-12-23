@@ -173,7 +173,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const CR = ccc->compileCC(makeByte(0x0D));
     PabloAST * const LF_VT_FF_CR = ccc->compileCC("LF,VT,FF,CR", makeByte(0x0A, 0x0D), pb);
     Var * const LineBreak = pb.createVar("LineBreak", LF_VT_FF_CR);
-    
+
     // Remove the CR of any CR+LF
     Var * const CRLF = pb.createVar("CRLF", pb.createZeroes());
     auto crb = pb.createScope();
@@ -184,7 +184,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * removedCRLF = crb.createAnd(LineBreak, crb.createNot(CRLF));
     crb.createAssign(LineBreak, removedCRLF);
 
-    
+
     Zeroes * const ZEROES = pb.createZeroes();
     PabloAST * const u8pfx = ccc->compileCC(makeByte(0xC0, 0xFF));
 
@@ -199,7 +199,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const u8pfx3 = ccc->compileCC(makeByte(0xE0, 0xEF), it);
     PabloAST * const u8pfx4 = ccc->compileCC(makeByte(0xF0, 0xF4), it);
     PabloAST * const u8suffix = ccc->compileCC("u8suffix", makeByte(0x80, 0xBF), it);
-    
+
     //
     // Two-byte sequences
     Var * const anyscope = it.createVar("anyscope", ZEROES);
@@ -211,7 +211,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
 
 
     //
-    // Three-byte sequences    
+    // Three-byte sequences
     Var * const EF_invalid = it.createVar("EF_invalid", ZEROES);
     auto it3 = it.createScope();
     it.createIf(u8pfx3, it3);
@@ -243,7 +243,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF4), it4), 1), ccc->compileCC(makeByte(0x90, 0xBF), it4));
     PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
     it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
-    
+
     //
     // Invalid cases
     PabloAST * const legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
@@ -258,11 +258,10 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     //
     it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
     pb.createAssign(nonFinal, pb.createOr(nonFinal, CRLF));
-    //PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1), "unterminatedLineAtEOF");
-    
+
     Var * const required = getOutputStreamVar("nonFinal");
     pb.createAssign(pb.createExtract(required, pb.getInteger(0)), nonFinal);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("UnicodeLB"), pb.getInteger(0)), LineBreak);//pb.createOr(LineBreak, unterminatedLineAtEOF, "EOL"));
+    pb.createAssign(pb.createExtract(getOutputStreamVar("UnicodeLB"), pb.getInteger(0)), LineBreak);
 }
 
 RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * Source, StreamSet * LineFeedStream, StreamSet * RequiredStreams, StreamSet * UnicodeLB)
@@ -279,10 +278,10 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 void RequiredStreams_UTF16::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
-    
+
     PabloAST * u16hi_hi_surrogate = ccc.compileCC(makeCC(0xD800, 0xDBFF, &cc::UTF16));    //u16hi_hi_surrogate = [\xD8-\xDB]
     PabloAST * u16hi_lo_surrogate = ccc.compileCC(makeCC(0xDC00, 0xDFFF, &cc::UTF16));    //u16hi_lo_surrogate = [\xDC-\xDF]
-    
+
     PabloAST * invalidTemp = pb.createAdvance(u16hi_hi_surrogate, 1, "InvalidTemp");
     PabloAST * u16invalid = pb.createXor(invalidTemp, u16hi_lo_surrogate, "u16invalid");
 
@@ -304,7 +303,7 @@ void RequiredStreams_UTF16::generatePabloMethod() {
 }
 
 RequiredStreams_UTF16::RequiredStreams_UTF16(const std::unique_ptr<kernel::KernelBuilder> & kb)
-: PabloKernel(kb, "RequiredStreams_UTF16",               
+: PabloKernel(kb, "RequiredStreams_UTF16",
 // inputs
 {Binding{kb->getStreamSetTy(8), "basis"}},
 // output
@@ -403,24 +402,24 @@ void ICGrepKernel::generatePabloMethod() {
         Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
         PabloBlock * scope1 = getEntryScope()->createScope();
         pb.createIf(prefixMatches, scope1);
-        
+
         PabloAST * u8bytes = pb.createExtract(getInput(0), pb.getInteger(0));
         PabloAST * nybbles[2];
         nybbles[0] = scope1->createPackL(scope1->getInteger(8), u8bytes);
         nybbles[1] = scope1->createPackH(scope1->getInteger(8), u8bytes);
-        
+
         PabloAST * bitpairs[4];
         for (unsigned i = 0; i < 2; i++) {
             bitpairs[2*i] = scope1->createPackL(scope1->getInteger(4), nybbles[i]);
             bitpairs[2*i + 1] = scope1->createPackH(scope1->getInteger(4), nybbles[i]);
         }
-        
+
         std::vector<PabloAST *> basis(8);
         for (unsigned i = 0; i < 4; i++) {
             basis[2*i] = scope1->createPackL(scope1->getInteger(2), bitpairs[i]);
             basis[2*i + 1] = scope1->createPackH(scope1->getInteger(2), bitpairs[i]);
         }
-        
+
         cc::Parabix_CC_Compiler ccc(scope1, basis);
         RE_Compiler re_compiler(scope1, ccc);
         scope1->createAssign(final_matches, re_compiler.compile(mOptions->mRE, prefixMatches));
@@ -457,7 +456,7 @@ ByteBitGrepKernel::ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder
 makeInputBindings(Source, externals),
 // output
 {Binding{"matches", matches, FixedRate(), Add1()}}) {
-    
+
 }
 
 std::string ByteBitGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -481,23 +480,23 @@ void ByteBitGrepKernel::generatePabloMethod() {
     Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
     PabloBlock * scope1 = getEntryScope()->createScope();
     pb.createIf(prefixMatches, scope1);
-    
+
     PabloAST * nybbles[2];
     nybbles[0] = scope1->createPackL(scope1->getInteger(8), u8bytes);
     nybbles[1] = scope1->createPackH(scope1->getInteger(8), u8bytes);
-    
+
     PabloAST * bitpairs[4];
     for (unsigned i = 0; i < 2; i++) {
         bitpairs[2*i] = scope1->createPackL(scope1->getInteger(4), nybbles[i]);
         bitpairs[2*i + 1] = scope1->createPackH(scope1->getInteger(4), nybbles[i]);
     }
-    
+
     std::vector<PabloAST *> basis(8);
     for (unsigned i = 0; i < 4; i++) {
         basis[2*i] = scope1->createPackL(scope1->getInteger(2), bitpairs[i]);
         basis[2*i + 1] = scope1->createPackH(scope1->getInteger(2), bitpairs[i]);
     }
-    
+
     cc::Parabix_CC_Compiler ccc(scope1, basis);
     RE_Compiler re_compiler(scope1, ccc);
     scope1->createAssign(final_matches, re_compiler.compile(mSuffixRE, prefixMatches));
@@ -552,7 +551,7 @@ void PopcountKernel::generatePabloMethod() {
     auto pb = getEntryScope();
     const auto toCount = pb->createExtract(getInputStreamVar("toCount"), pb->getInteger(0));
     pablo::Var * countResult = getOutputScalarVar("countResult");
-    
+
     pb->createAssign(countResult, pb->createCount(pb->createInFile(toCount)));
 }
 
@@ -601,7 +600,7 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     }
     // If we're in the final block bypass the fast loop.
     b->CreateCondBr(mIsFinal, finalStride, strideLoop);
-    
+
     b->SetInsertPoint(strideLoop);
     PHINode * const baseBlockIndex = b->CreatePHI(b->getSizeTy(), 2);
     baseBlockIndex->addIncoming(ConstantInt::get(baseBlockIndex->getType(), 0), entry);
@@ -618,7 +617,7 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     baseBlockIndex->addIncoming(nextBlockIndex, strideLoop);
     blocksRemaining->addIncoming(nextRemaining, strideLoop);
     b->CreateCondBr(b->CreateICmpUGT(nextRemaining, ConstantInt::getNullValue(blocksRemaining->getType())), strideLoop, stridesDone);
-    
+
     b->SetInsertPoint(stridesDone);
     // Combine the 8 blockMin values.
     for (unsigned i = 0; i < 4; i++) {
@@ -629,21 +628,21 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     }
     blockMin[0] = b->CreateSelect(b->CreateICmpULT(blockMin[0], blockMin[1]), blockMin[0], blockMin[1]);
     Value * anyNull = b->bitblock_any(b->simd_eq(8, blockMin[0], b->allZeroes()));
-    
+
     b->CreateCondBr(anyNull, nullByteDetection, segmentDone);
-    
-    
+
+
     b->SetInsertPoint(finalStride);
     b->CreateMemCpy(b->CreatePointerCast(outputStreamBasePtr, voidPtrTy), b->CreatePointerCast(byteStreamBasePtr, voidPtrTy), itemsToDo, 1);
     b->CreateBr(nullByteDetection);
-    
+
     b->SetInsertPoint(nullByteDetection);
     //  Find the exact location using memchr, which should be fast enough.
     //
     Value * ptrToNull = b->CreateMemChr(b->CreatePointerCast(byteStreamBasePtr, voidPtrTy), b->getInt32(0), itemsToDo);
     Value * ptrAddr = b->CreatePtrToInt(ptrToNull, intPtrTy);
     b->CreateCondBr(b->CreateICmpEQ(ptrAddr, ConstantInt::getNullValue(intPtrTy)), segmentDone, nullByteFound);
-    
+
     // A null byte has been located; set the termination code and call the signal handler.
     b->SetInsertPoint(nullByteFound);
     Value * nullPosn = b->CreateSub(b->CreatePtrToInt(ptrToNull, intPtrTy), b->CreatePtrToInt(byteStreamBasePtr, intPtrTy));
@@ -652,7 +651,7 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     Value * handler = b->getScalarField("handler_address");
     b->CreateCall(dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), static_cast<unsigned>(grep::GrepSignal::BinaryFile))});
     b->CreateBr(segmentDone);
-    
+
     b->SetInsertPoint(segmentDone);
     PHINode * const produced = b->CreatePHI(b->getSizeTy(), 3);
     produced->addIncoming(nullPosn, nullByteFound);

@@ -228,6 +228,17 @@ inline LLVM_READNONE RateValue minimumConsumed(const Kernel * const kernel, cons
     return lowerBound(kernel, binding);
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief maximumConsumed
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline LLVM_READNONE RateValue maximumConsumed(const Kernel * const kernel, const Binding & binding) {
+    auto ub = upperBound(kernel, binding);
+    if (binding.hasLookahead()) {
+        ub += binding.getLookahead();
+    }
+    return ub;
+}
+
 }
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeConsumerGraph
@@ -241,11 +252,25 @@ ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
     const auto numOfKernels = mPipeline.size();
     const auto firstBuffer = numOfKernels + 1;
 
+#if 0
+
     #warning TODO: ConsumerGraph assumes the dataflow is transitively bounded by the same initial source
 
     #warning REVISIT: ConsumerGraph is not optimal for handling relative rate inputs
 
-    std::vector<std::pair<unsigned, unsigned>> consumers; // kernel, portIndex
+    struct ConsumerData {
+        unsigned Kernel{0};
+        unsigned Port{0};
+        RateValue Minimum{0};
+        RateValue Maximum{0};
+
+        inline bool operator < (const ConsumerData & other) const {
+            return (Kernel < other.Kernel) || (Port < other.Port);
+        }
+    };
+
+    std::vector<ConsumerData> consumers;
+#endif
 
     for (auto bufferVertex = firstBuffer; bufferVertex < lastBuffer; ++bufferVertex) {
 
@@ -259,10 +284,32 @@ ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
         const auto pe = in_edge(bufferVertex, mBufferGraph);
         add_edge(source(pe, mBufferGraph), bufferVertex, mBufferGraph[pe].Port, G);
 
+        for (const auto ce : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
+            add_edge(bufferVertex, target(ce, mBufferGraph), mBufferGraph[ce].Port, G);
+        }
+
+#if 0
+
         // collect the consumers of the i-th buffer
         consumers.clear();
         for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
-            consumers.emplace_back(target(e, mBufferGraph), mBufferGraph[e].Port);
+            ConsumerData cd;
+            cd.Kernel = target(e, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[cd.Kernel];
+            const BufferRateData & rd = mBufferGraph[e];
+            cd.Port = rd.Port;
+            const Kernel * const kernel = mPipeline[cd.Kernel];
+            const Binding & input = kernel->getInputStreamSetBinding(cd.Port);
+            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
+                cd.Minimum = RateValue{0};
+            } else {
+                cd.Minimum = bn.Lower * rd.Minimum;
+            }
+            cd.Maximum = bn.Upper * rd.Maximum;
+            if (LLVM_UNLIKELY(input.hasLookahead())) {
+                cd.Maximum += input.getLookahead();
+            }
+            consumers.emplace_back(cd);
         }
 
         // If the minimum input rate of the j-th consumer is greater than or equal to the maximum input
@@ -270,32 +317,35 @@ ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
         // for each *FIXED* rate stream, keep only the minimum such rate. However, we may need to insert
         // a "fake" edge to mark the last consumer otherwise we'll set it too soon.
 
+        // NOTE: here we need to consider the impact of lookahead on the use of a buffer since it may
+        // limit how much work we can perform when nearing the end of the buffer.
+
+        // TODO: this takes too narrow of a view of the problem. By considering a buffer's consumers
+        // in isolation, it does not take into account that a particular kernel may be executed fewer
+        // times than another because of I/O constraints independent of the buffer we're considering.
+        // Essentially, to make this optimization safe we need to prove that if a consumer has performed
+        // k strides, all other consumers performed k.
+
         if (LLVM_LIKELY(consumers.size() > 1)) {
+
             std::sort(consumers.begin(), consumers.end());
 
             const auto finalConsumer = consumers.back().first;
 
             for (auto j = consumers.begin() + 1; j != consumers.end(); ) {
 
-                const Kernel * const kernel_j = mPipeline[j->first];
-                const Binding & input_j = kernel_j->getInputStreamSetBinding(j->second);
-                const auto lb_j = minimumConsumed(kernel_j, input_j);
-
+                const ConsumerData & Cj = *j;
                 for (auto k = consumers.begin(); k != j; ++k) {
-                    const Kernel * const kernel_k = mPipeline[k->first];
-                    const Binding & input_k = kernel_k->getInputStreamSetBinding(k->second);
-                    const auto ub_k = upperBound(kernel_k, input_k);
-                    if (LLVM_UNLIKELY(lb_j >= ub_k)) {
+                    const ConsumerData & Ck = *k;
+                    if (LLVM_UNLIKELY(Cj.Minimum >= Ck.Maximum)) {
                         j = consumers.erase(j);
                         goto next;
                     }
                 }
 
                 for (auto k = j + 1; k != consumers.end(); ++k) {
-                    const Kernel * const kernel_k = mPipeline[k->first];
-                    const Binding & input_k = kernel_k->getInputStreamSetBinding(k->second);
-                    const auto ub_k = upperBound(kernel_k, input_k);
-                    if (LLVM_UNLIKELY(lb_j >= ub_k)) {
+                    const ConsumerData & Ck = *k;
+                    if (LLVM_UNLIKELY(Cj.Minimum >= Ck.Maximum)) {
                         j = consumers.erase(j);
                         goto next;
                     }
@@ -312,6 +362,8 @@ next:           continue;
         for (const auto & consumer : consumers) {
             add_edge(bufferVertex, consumer.first, consumer.second, G);
         }
+#endif
+
     }
 
     return G;

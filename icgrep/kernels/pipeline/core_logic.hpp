@@ -1,6 +1,6 @@
 #include "pipeline_compiler.hpp"
 
-const static std::string TERMINATION_SIGNAL = "terminationSignal";
+const static std::string TERMINATION_SIGNAL_SUFFIX = "terminationSignal";
 
 namespace kernel {
 
@@ -12,17 +12,12 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     const auto numOfKernels = mPipeline.size();
     b->setKernel(mPipelineKernel);
     for (unsigned i = 0; i < numOfKernels; ++i) {
-        addInternalKernelProperties(b, i);
         addBufferHandlesToPipelineKernel(b, i);
+        addInternalKernelProperties(b, i);
         addPopCountScalarsToPipelineKernel(b, i);
     }
     b->setKernel(mPipelineKernel);
 }
-
-//const static std::string PROCESSED_ITEM_COUNT_SUFFIX = "_processedItemCount";
-//const static std::string PRODUCED_ITEM_COUNT_SUFFIX = "_producedItemCount";
-// const static std::string NON_DEFERRED_ITEM_COUNT_SUFFIX = "_nonDeferredItemCount";
-// const static std::string LOGICAL_SEGMENT_NO_SCALAR = "segmentNo";
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
@@ -33,7 +28,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
 
     const auto name = makeKernelName(kernelIndex);
     // TODO: prove two termination signals can be fused into a single counter?
-    mPipelineKernel->addInternalScalar(sizeTy, name + TERMINATION_SIGNAL);
+    mPipelineKernel->addInternalScalar(sizeTy, name + TERMINATION_SIGNAL_SUFFIX);
     mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX);
 
     // TODO: non deferred item count for fixed rates could be calculated from seg no.
@@ -184,6 +179,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
         BasicBlock * const enteringNonFinalSegment = b->CreateBasicBlock(prefix + "_nonFinalSegment", mKernelLoopCall);
         BasicBlock * const enteringFinalStride = b->CreateBasicBlock(prefix + "_finalStride", mKernelLoopCall);
 
+        mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, b->getSize(1));
+
         isFinal = b->CreateICmpEQ(mNumOfLinearStrides, b->getSize(0));
 
         b->CreateUnlikelyCondBr(isFinal, enteringFinalStride, enteringNonFinalSegment);
@@ -205,9 +202,11 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
         b->CreateBr(mKernelLoopCall);
 
     } else {
+
         mNumOfLinearStrides = b->getSize(1);
         calculateNonFinalItemCounts(b);
         b->CreateBr(mKernelLoopCall);
+
     }
 
     /// -------------------------------------------------------------------------------------
@@ -318,13 +317,12 @@ void PipelineCompiler::end(BuilderRef b, const unsigned step) {
 
         const auto bufferVertex = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[bufferVertex];
-        const StreamSetBuffer * const buffer = bn.Buffer;
+        const ExternalBuffer * const buffer = cast<ExternalBuffer>(bn.Buffer);
 
         Value * const produced = bn.TotalItems; assert (produced);
         Value * const consumed = b->getSize(0);  assert (consumed);
-        Value * const writable = buffer->getLinearlyWritableItems(b, produced, consumed, getCopyBack(bufferVertex));
+        Value * const writable = buffer->getLinearlyWritableItems(b, produced, consumed);
 
-//        const auto kernelVertex = parent(bufferVertex, mBufferGraph);
         const BufferRateData & rd = mBufferGraph[e];
         const auto outputPort = rd.Port;
 
@@ -604,7 +602,7 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
 inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) const {
     b->setKernel(mPipelineKernel);
     const auto prefix = makeKernelName(mKernelIndex);
-    Value * const terminated = b->getScalarField(prefix + TERMINATION_SIGNAL);
+    Value * const terminated = b->getScalarField(prefix + TERMINATION_SIGNAL_SUFFIX);
     b->setKernel(mKernel);
     return b->CreateICmpNE(terminated, b->getSize(0));
 }
@@ -615,7 +613,7 @@ inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) const {
 inline void PipelineCompiler::setTerminated(BuilderRef b, Value * const value) {
     const auto prefix = makeKernelName(mKernelIndex);
     b->setKernel(mPipelineKernel);
-    b->setScalarField(prefix + TERMINATION_SIGNAL, b->CreateZExtOrTrunc(value, b->getSizeTy()));
+    b->setScalarField(prefix + TERMINATION_SIGNAL_SUFFIX, b->CreateZExtOrTrunc(value, b->getSizeTy()));
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt("*** " + prefix + "_terminated ***", value);
     #endif
@@ -634,10 +632,10 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     }
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        // TODO: set these to the total produced item count for that input?
-        mUpdatedProcessedPhi[i]->addIncoming(mFinalProcessedPhi[i], exitBlock);
+        Value * const totalCount = getTotalItemCount(b, i);
+        mUpdatedProcessedPhi[i]->addIncoming(totalCount, exitBlock);
         if (mUpdatedProcessedDeferredPhi[i]) {
-            mUpdatedProcessedDeferredPhi[i]->addIncoming(mFinalProcessedPhi[i], exitBlock);
+            mUpdatedProcessedDeferredPhi[i]->addIncoming(totalCount, exitBlock);
         }
     }
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();

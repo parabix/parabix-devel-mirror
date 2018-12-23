@@ -26,7 +26,7 @@ public:
         , StaticBuffer
         , DynamicBuffer
     };
-    
+
     BufferKind getBufferKind() const {
         return mBufferKind;
     }
@@ -34,7 +34,7 @@ public:
     llvm::Type * getType() const {
         return mType;
     }
-    
+
     llvm::Type * getBaseType() const {
         return mBaseType;
     }
@@ -46,7 +46,7 @@ public:
         }
         return numStreams;
     }
-    
+
     unsigned getAddressSpace() const {
         return mAddressSpace;
     }
@@ -70,9 +70,9 @@ public:
     virtual void releaseBuffer(const std::unique_ptr<KernelBuilder> & b) const = 0;
 
     // The number of items that cam be linearly accessed from a given logical stream position.
-    virtual llvm::Value * getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * totalItems, const unsigned overflowSize = 0) const = 0;
+    virtual llvm::Value * getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * totalItems, llvm::Value * overflowItems = nullptr) const = 0;
 
-    virtual llvm::Value * getLinearlyWritableItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * consumedItems, const unsigned overflowSize = 0) const = 0;
+    virtual llvm::Value * getLinearlyWritableItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * consumedItems, llvm::Value * overflowItems = nullptr) const = 0;
 
     virtual llvm::Type * getHandleType(const std::unique_ptr<kernel::KernelBuilder> & b) const = 0;
 
@@ -93,7 +93,7 @@ public:
     virtual llvm::Value * getOverflowAddress(IDISA::IDISA_Builder * const b) const = 0;
 
     virtual void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * size) const = 0;
-    
+
     virtual llvm::Value * getCapacity(IDISA::IDISA_Builder * const b) const = 0;
 
     virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const = 0;
@@ -105,6 +105,8 @@ public:
 protected:
 
     llvm::Value * getHandle(IDISA::IDISA_Builder * const b) const;
+
+    llvm::Value * addOverflow(const std::unique_ptr<KernelBuilder> &b, llvm::Value * capacity, llvm::Value * const overflowItems) const;
 
     StreamSetBuffer(const BufferKind k, const std::unique_ptr<KernelBuilder> & b, llvm::Type * baseType, unsigned AddressSpace);
 
@@ -121,7 +123,7 @@ protected:
     llvm::Type * const              mType;
     const unsigned                  mAddressSpace;
     llvm::Type * const              mBaseType;
-};   
+};
 
 class ExternalBuffer final : public StreamSetBuffer {
 public:
@@ -143,9 +145,9 @@ public:
 
     llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * const streamIndex, llvm::Value * blockIndex) const override;
 
-    llvm::Value * getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * totalItems, const unsigned overflowSize = 0) const override;
+    llvm::Value * getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * totalItems, llvm::Value * overflowItems = nullptr) const override;
 
-    llvm::Value * getLinearlyWritableItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * consumedItems, const unsigned overflowSize = 0) const override;
+    llvm::Value * getLinearlyWritableItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * consumedItems, llvm::Value * overflowItems = nullptr) const override;
 
     llvm::Type * getHandleType(const std::unique_ptr<kernel::KernelBuilder> & b) const override;
 
@@ -178,7 +180,7 @@ public:
     static inline bool classof(const StreamSetBuffer * b) {
         return b->getBufferKind() == BufferKind::StaticBuffer;
     }
-    
+
     StaticBuffer(const std::unique_ptr<KernelBuilder> & b, llvm::Type * const type,
                  const size_t capacity, const size_t overflowBlocks = 0, const unsigned AddressSpace = 0);
 
@@ -186,9 +188,9 @@ public:
 
     void releaseBuffer(const std::unique_ptr<KernelBuilder> & b) const override;
 
-    llvm::Value * getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * const totalItems, const unsigned overflowSize = 0) const override;
+    llvm::Value * getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * const totalItems, llvm::Value * overflowItems = nullptr) const override;
 
-    llvm::Value * getLinearlyWritableItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const fromPosition, llvm::Value * const consumedItems, const unsigned overflowSize = 0) const override;
+    llvm::Value * getLinearlyWritableItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const fromPosition, llvm::Value * const consumedItems, llvm::Value * overflowItems = nullptr) const override;
 
     bool hasOverflow() const override {
         return mOverflow > 0;
@@ -226,7 +228,7 @@ private:
     const size_t    mOverflow;
 
 };
-        
+
 class DynamicBuffer final : public StreamSetBuffer {
 
     friend class KernelBuilder;
@@ -235,7 +237,7 @@ class DynamicBuffer final : public StreamSetBuffer {
 
 public:
     static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::DynamicBuffer;}
-    
+
     DynamicBuffer(const std::unique_ptr<KernelBuilder> & b, llvm::Type * type, size_t initialCapacity, size_t overflowSize = 0, unsigned AddressSpace = 0);
 
     void allocateBuffer(const std::unique_ptr<KernelBuilder> & b) override;
@@ -244,10 +246,10 @@ public:
 
     // void expandBuffer(const std::unique_ptr<KernelBuilder> & b, llvm::Value * consumed, llvm::Value * produced, llvm::Value * required) const;
 
-    llvm::Value * getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * totalItems, const unsigned overflowSize = 0) const override;
+    llvm::Value * getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * totalItems, llvm::Value * overflowItems = nullptr) const override;
 
-    llvm::Value * getLinearlyWritableItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * consumedItems, const unsigned overflowSize = 0) const override;
-    
+    llvm::Value * getLinearlyWritableItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * consumedItems, llvm::Value * overflowItems = nullptr) const override;
+
     bool hasOverflow() const override {
         return mOverflow > 0;
     }
@@ -263,9 +265,9 @@ protected:
     void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * addr) const override;
 
     llvm::Value * getOverflowAddress(IDISA::IDISA_Builder * const b) const override;
-    
+
     llvm::Value * getCapacity(IDISA::IDISA_Builder * const b) const override;
-    
+
     void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * capacity) const override;
 
     llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;

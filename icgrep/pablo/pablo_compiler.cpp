@@ -120,11 +120,11 @@ void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & 
         } else if (LLVM_UNLIKELY(isa<Count>(stmt))) {
             mKernel->addInternalScalar(stmt->getType(), stmt->getName().str());
         }
-    }    
+    }
 }
 
 void PabloCompiler::addBranchCounter(const std::unique_ptr<kernel::KernelBuilder> & b) {
-    if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {        
+    if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {
         Value * ptr = b->getScalarFieldPtr("profile");
         assert (mBasicBlock.size() < ptr->getType()->getPointerElementType()->getArrayNumElements());
         ptr = b->CreateGEP(ptr, {b->getInt32(0), b->getInt32(mBasicBlock.size())});
@@ -165,7 +165,7 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, 
     ++mBranchCount;
     BasicBlock * const ifBodyBlock = b->CreateBasicBlock("if.body_" + std::to_string(mBranchCount));
     BasicBlock * const ifEndBlock = b->CreateBasicBlock("if.end_" + std::to_string(mBranchCount));
-    
+
     std::vector<std::pair<const Var *, Value *>> incoming;
 
     for (const Var * var : ifStatement->getEscaped()) {
@@ -194,16 +194,16 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, 
     }
 
     const PabloBlock * ifBody = ifStatement->getBody();
-    
+
     mCarryManager->enterIfScope(b, ifBody);
 
     Value * condition = compileExpression(b, ifStatement->getCondition());
     if (condition->getType() == b->getBitBlockType()) {
         condition = b->bitblock_any(mCarryManager->generateSummaryTest(b, condition));
     }
-    
+
     b->CreateCondBr(condition, ifBodyBlock, ifEndBlock);
-    
+
     // Entry processing is complete, now handle the body of the if.
     b->SetInsertPoint(ifBodyBlock);
 
@@ -501,7 +501,7 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             expr = cast<Assign>(stmt)->getVariable();
             value = compileExpression(b, cast<Assign>(stmt)->getValue());
             if (isa<Extract>(expr) || (isa<Var>(expr) && cast<Var>(expr)->isKernelParameter())) {
-                Value * const ptr = compileExpression(b, expr, false);                
+                Value * const ptr = compileExpression(b, expr, false);
                 Type * const elemTy = ptr->getType()->getPointerElementType();
                 b->CreateAlignedStore(b->CreateZExt(value, elemTy), ptr, getAlignment(elemTy));
                 value = ptr;
@@ -526,7 +526,7 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             PabloAST * stream = l->getExpression();
             Value * index = nullptr;
-            if (LLVM_UNLIKELY(isa<Extract>(stream))) {                
+            if (LLVM_UNLIKELY(isa<Extract>(stream))) {
                 index = compileExpression(b, cast<Extract>(stream)->getIndex(), true);
                 stream = cast<Extract>(stream)->getArray();
             } else {
@@ -639,7 +639,7 @@ unsigned getIntegerBitWidth(const Type * ty) {
 }
 
 Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloAST * const expr, const bool ensureLoaded) {
-    const auto f = mMarker.find(expr);    
+    const auto f = mMarker.find(expr);
     Value * value = nullptr;
     if (LLVM_LIKELY(f != mMarker.end())) {
         value = f->second;

@@ -517,6 +517,8 @@ inline void PipelineCompiler::readFinalProducedItemCounts(BuilderRef b) {
     }
 }
 
+#warning TODO: copyback/copyforward ought to reflect exact num of items; not upper bound of space
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief requiresCopyBack
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -561,10 +563,6 @@ inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         if (requiresCopyBack(getOutputBufferVertex(i))) {
-            const Binding & output = mKernel->getOutputStreamSetBinding(i);
-            const auto prefix = makeBufferName(mKernelIndex, output);
-            BasicBlock * const copyBack = b->CreateBasicBlock(prefix + "_copyBack", mKernelExit);
-            BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "_copyBackExit", mKernelExit);
             const StreamSetBuffer * const buffer = getOutputBuffer(i);
             Value * const capacity = buffer->getCapacity(b.get());
             Value * const priorOffset = b->CreateURem(mAlreadyProducedPhi[i], capacity);
@@ -573,16 +571,8 @@ inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
             Value * const nonCapacityAlignedWrite = b->CreateIsNotNull(producedOffset);
             Value * const wroteToOverflow = b->CreateICmpULT(producedOffset, priorOffset);
             Value * const needsCopyBack = b->CreateAnd(nonCapacityAlignedWrite, wroteToOverflow);
-            b->CreateUnlikelyCondBr(needsCopyBack, copyBack, copyExit);
-
-            b->SetInsertPoint(copyBack);
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_CopyBack", producedOffset);
-            #endif
-            writeOverflowCopy(b, buffer, OverflowCopy::Backwards, producedOffset);
-            b->CreateBr(copyExit);
-
-            b->SetInsertPoint(copyExit);
+            const Binding & output = mKernel->getOutputStreamSetBinding(i);
+            writeOverflowCopy(b, OverflowCopy::Backwards, needsCopyBack, output, buffer, producedOffset);
         }
     }
 }
@@ -597,10 +587,6 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         if (requiresFacsimile(getOutputBufferVertex(i))) {
 
-            const Binding & output = mKernel->getOutputStreamSetBinding(i);
-            const auto prefix = makeBufferName(mKernelIndex, output);
-            BasicBlock * const copyForward = b->CreateBasicBlock(prefix + "_copyForward", mKernelExit);
-            BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "_copyForwardExit", mKernelExit);
             const StreamSetBuffer * const buffer = getOutputBuffer(i);
 
             Value * const capacity = buffer->getCapacity(b.get());
@@ -608,6 +594,7 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
             Value * const produced = mUpdatedProducedPhi[i];
 
             // If we wrote anything and it was not our first write to the buffer ...
+            const Binding & output = mKernel->getOutputStreamSetBinding(i);
             Value * overwroteData = b->CreateICmpUGT(produced, capacity);
             if (LLVM_LIKELY(mKernel->getLowerBound(output) < 1)) {
                 Value * const producedOutput = b->CreateICmpNE(initial, produced);
@@ -628,32 +615,28 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
             // Then mirror the data in the overflow region.
             Value * const needsCopyForward = b->CreateOr(wroteToFirstBlock, wroteFromEndToStart);
 
-
-            b->CreateUnlikelyCondBr(needsCopyForward, copyForward, copyExit);
-
             // TODO: optimize this further to ensure that we don't copy data that was just copied back from
             // the overflow. Should be enough just to have a "copyback flag" phi node to say it that was the
             // last thing it did to the buffer.
 
-            // TODO: look into non-cache-polluting writes? How big does the buffer need to be before it helps?
-
-            b->SetInsertPoint(copyForward);
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_CopyForward.initialOffset", initialOffset);
-            b->CallPrintInt(prefix + "_CopyForward.producedOffset", producedOffset);
-            #endif
-            writeOverflowCopy(b, buffer, OverflowCopy::Forwards, overflowSize);
-            b->CreateBr(copyExit);
-
-            b->SetInsertPoint(copyExit);
+            writeOverflowCopy(b, OverflowCopy::Forwards, needsCopyForward, output, buffer, overflowSize);
         }
     }
 }
 
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeOverflowCopy
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::writeOverflowCopy(BuilderRef b, const StreamSetBuffer * const buffer, const OverflowCopy direction, Value * const itemsToCopy) const {
+void PipelineCompiler::writeOverflowCopy(BuilderRef b, const OverflowCopy direction, Value * cond, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemsToCopy) const {
+
+    const auto prefix = makeBufferName(mKernelIndex, binding)
+        + ((direction == OverflowCopy::Forwards) ? "_copyForward" : "_copyBack");
+
+    BasicBlock * const copyLoop = b->CreateBasicBlock(prefix + "Loop", mKernelExit);
+    BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "Exit", mKernelExit);
+
     Value * const count = buffer->getStreamSetCount(b.get());
     Value * blocksToCopy = b->CreateMul(itemsToCopy, count);
     const auto itemWidth = getItemWidth(buffer->getBaseType());
@@ -663,14 +646,25 @@ Value * PipelineCompiler::writeOverflowCopy(BuilderRef b, const StreamSetBuffer 
     } else if (LLVM_UNLIKELY(blockWidth > itemWidth)) {
         blocksToCopy = b->CreateMul(blocksToCopy, b->getSize(itemWidth / blockWidth));
     }
-    const auto bytesPerBlock = blockWidth / 8;
-    Value * const bytesToCopy = b->CreateMul(blocksToCopy, b->getSize(bytesPerBlock));
     Value * const base = buffer->getBaseAddress(b.get());
     Value * const overflow = buffer->getOverflowAddress(b.get());
     Value * const source = (direction == OverflowCopy::Forwards) ? base : overflow;
     Value * const target = (direction == OverflowCopy::Forwards) ? overflow : base;
-    b->CreateMemCpy(target, source, bytesToCopy, bytesPerBlock);
-    return bytesToCopy;
+
+    BasicBlock * const entryBlock = b->GetInsertBlock();
+    b->CreateUnlikelyCondBr(cond, copyLoop, copyExit);
+
+    b->SetInsertPoint(copyLoop);
+    PHINode * const index = b->CreatePHI(b->getSizeTy(), 2);
+    index->addIncoming(b->getSize(0), entryBlock);
+    Value * const val = b->CreateBlockAlignedLoad(b->CreateGEP(source, index));
+    b->CreateBlockAlignedStore(val, b->CreateGEP(target, index));
+    Value * const nextIndex = b->CreateAdd(index, b->getSize(1));
+    index->addIncoming(nextIndex, b->GetInsertBlock());
+    Value * const notDone =b->CreateICmpNE(nextIndex, blocksToCopy);
+    b->CreateCondBr(notDone, copyLoop, copyExit);
+
+    b->SetInsertPoint(copyExit);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -698,7 +692,7 @@ inline Value * PipelineCompiler::getLogicalOutputBaseAddress(BuilderRef b, const
  *
  * Returns the address of the "zeroth" item of the (logically-unbounded) stream set.
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::calculateLogicalBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemCount) {
+Value * PipelineCompiler::calculateLogicalBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemCount) {
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(floor_log2(b->getBitBlockWidth()));
     Constant * const ZERO = b->getSize(0);
     Value * const blockIndex = b->CreateLShr(itemCount, LOG_2_BLOCK_WIDTH);
@@ -712,8 +706,14 @@ inline Value * PipelineCompiler::calculateLogicalBaseAddress(BuilderRef b, const
         tmp.setBaseAddress(b.get(), address);
         Value * const A0 = buffer->getStreamBlockPtr(b.get(), ZERO, blockIndex);
         Value * const B0 = tmp.getStreamBlockPtr(b.get(), ZERO, blockIndex);
-        Value * const B1 = b->CreatePointerCast(B0, A0->getType());
-        b->CreateAssert(b->CreateICmpEQ(A0, B1), prefix + ": logical base address is incorrect");
+        Value * const C0 = b->CreatePointerCast(B0, A0->getType());
+        b->CreateAssert(b->CreateICmpEQ(A0, C0), prefix + ": logical base address is incorrect");
+        Value * upToIndex = b->CreateAdd(blockIndex, b->CreateSub(mNumOfLinearStrides, b->getSize(1)));
+        upToIndex = b->CreateSelect(b->CreateICmpEQ(mNumOfLinearStrides, ZERO), blockIndex, upToIndex);
+        Value * const A1 = buffer->getStreamBlockPtr(b.get(), ZERO, upToIndex);
+        Value * const B1 = tmp.getStreamBlockPtr(b.get(), ZERO, upToIndex);
+        Value * const C1 = b->CreatePointerCast(B1, A1->getType());
+        b->CreateAssert(b->CreateICmpEQ(A1, C1), prefix + ": logical base address is incorrect");
     }
     return address;
 }

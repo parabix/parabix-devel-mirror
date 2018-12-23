@@ -17,7 +17,7 @@
 #include <llvm/ADT/STLExtras.h>
 #include <queue>
 
-//#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -226,7 +226,7 @@ protected:
     void writeCopyBackLogic(BuilderRef b);
     void writeCopyForwardLogic(BuilderRef b);
     enum class OverflowCopy { Forwards, Backwards };
-    Value * writeOverflowCopy(BuilderRef b, const StreamSetBuffer * const buffer, const OverflowCopy direction, Value * const itemsToCopy) const;
+    void writeOverflowCopy(BuilderRef b, const OverflowCopy direction, Value * cond, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemsToCopy) const;
 
 
     void computeFullyProcessedItemCounts(BuilderRef b);
@@ -263,13 +263,12 @@ protected:
     Value * getNumOfWritableStrides(BuilderRef b, const unsigned outputPort);
     Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort);
     Value * calculateBufferExpansionSize(BuilderRef b, const unsigned outputPort);
-    Value * willNotOverwriteOverflow(BuilderRef b, const unsigned outputPort);
     Value * addLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
     Value * subtractLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
     Constant * getLookahead(BuilderRef b, const unsigned inputPort) const;
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount, Value * all) const;
     Value * getTotalItemCount(BuilderRef b, const unsigned inputPort) const;
-    Value * hasProducerTerminated(BuilderRef b, const unsigned inputPort) const;
+    Value * producerTerminated(const unsigned inputPort) const;
     Value * initiallyTerminated(BuilderRef b) const;
     void setTerminated(BuilderRef b, Value * const terminated);
     void resetMemoizedFields();

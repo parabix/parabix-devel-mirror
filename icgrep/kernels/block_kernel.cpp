@@ -63,8 +63,6 @@ void BlockOrientedKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
     BasicBlock * const doFinalBlock = b->CreateBasicBlock(getName() + "_doFinalBlock");
     BasicBlock * const segmentDone = b->CreateBasicBlock(getName() + "_segmentDone");
 
-    ConstantInt * const ZERO = b->getSize(0);
-
     b->CreateUnlikelyCondBr(mIsFinal, doFinalBlock, mStrideLoopBody);
 
     /// BLOCK BODY
@@ -76,7 +74,7 @@ void BlockOrientedKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
         mStrideLoopTarget->addIncoming(baseTarget, entryBlock);
     }
     mStrideBlockIndex = b->CreatePHI(b->getSizeTy(), 2);
-    mStrideBlockIndex->addIncoming(ZERO, entryBlock);
+    mStrideBlockIndex->addIncoming(b->getSize(0), entryBlock);
 
     /// GENERATE DO BLOCK METHOD
 
@@ -84,7 +82,7 @@ void BlockOrientedKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
 
     Value * const nextStrideBlockIndex = b->CreateAdd(mStrideBlockIndex, b->getSize(1));
     Value * noMore = b->CreateICmpEQ(nextStrideBlockIndex, numOfBlocks);
-    if (hasAttribute(AttrId::CanTerminateEarly) ||  hasAttribute(AttrId::MustExplicitlyTerminate)) {
+    if (canSetTerminateSignal()) {
         noMore = b->CreateOr(noMore, b->getTerminationSignal());
     }
     b->CreateUnlikelyCondBr(noMore, stridesDone, incrementCountableItems);

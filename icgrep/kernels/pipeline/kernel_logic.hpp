@@ -61,7 +61,7 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
     b->CallPrintInt(prefix + "_requiredInput", requiredInput);
     #endif
     Value * const hasEnough = b->CreateICmpUGE(accessible, requiredInput);
-    Value * const hasTerminated = hasProducerTerminated(b, inputPort);
+    Value * const hasTerminated = producerTerminated(inputPort);
     Value * const sufficientInput = b->CreateOr(hasEnough, hasTerminated);
     mAccessibleInputItems[inputPort] = accessible;
     BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasInputData", mKernelLoopCall);
@@ -69,9 +69,9 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief hasProducerTerminated
+ * @brief producerTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::hasProducerTerminated(BuilderRef /* b */, const unsigned inputPort) const {
+inline Value * PipelineCompiler::producerTerminated(const unsigned inputPort) const {
     const auto bufferVertex = getInputBufferVertex(inputPort);
     const auto producerVertex = parent(bufferVertex, mBufferGraph);
     return mTerminationGraph[producerVertex];
@@ -98,8 +98,8 @@ inline Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const uns
                         mKernel->getName() + "_" + input.getName() +
                         ": processed count exceeds total count");
     }
-    const auto overflow = getFacsimile(getInputBufferVertex(inputPort));
-    Value * const accessible = buffer->getLinearlyAccessibleItems(b, processed, totalItems, overflow);
+    ConstantInt * const facsimile = b->getSize(getFacsimile(getInputBufferVertex(inputPort)));
+    Value * const accessible = buffer->getLinearlyAccessibleItems(b, processed, totalItems, facsimile);
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt(prefix + "_accessible", accessible);
     #endif
@@ -121,36 +121,13 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
         b->CallPrintInt(prefix + "_requiredOutput", strideLength);
         #endif
         Value * const hasEnough = b->CreateICmpULE(strideLength, writable, prefix + "_hasEnough");
-        Value * const check = b->CreateAnd(hasEnough, willNotOverwriteOverflow(b, outputPort));
         BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasOutputSpace", mKernelLoopCall);
         mWritableOutputItems[outputPort] = writable;
         if (LLVM_UNLIKELY(isa<DynamicBuffer>(buffer))) {
-            expandOutputBuffer(b, outputPort, check, target);
+            expandOutputBuffer(b, outputPort, hasEnough, target);
         } else {
-            branchToTargetOrLoopExit(b, check, target);
+            branchToTargetOrLoopExit(b, hasEnough, target);
         }
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief willNotOverwriteOverflow
- *
- * check whether the potential overflow copy will overwrite the buffer
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::willNotOverwriteOverflow(BuilderRef b, const unsigned outputPort) {
-    if (LLVM_UNLIKELY(requiresCopyBack(getOutputBufferVertex(outputPort)))) {
-        Value * const produced = mAlreadyProducedPhi[outputPort];
-        Value * const consumed = getConsumedItemCount(b, outputPort);
-        Value * const unconsumed = b->CreateSub(produced, consumed);
-        Value * const strideLength = getOutputStrideLength(b, outputPort);
-        Value * const required = b->CreateAdd(unconsumed, strideLength);
-        const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
-        Value * const capacity = buffer->getCapacity(b.get());
-        const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
-        const auto prefix = makeBufferName(mKernelIndex, output);
-        return b->CreateICmpULT(required, capacity, prefix + "_noOverflowOverwrite");
-    } else {
-        return b->getTrue();
     }
 }
 
@@ -199,8 +176,8 @@ inline Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsi
                         mKernel->getName() + "_" + output.getName() +
                         ": consumed count exceeds produced count");
     }
-    const auto overflow = getCopyBack(getOutputBufferVertex(outputPort));
-    Value * const writable = buffer->getLinearlyWritableItems(b, produced, consumed, overflow);
+    ConstantInt * const copyBack = b->getSize(getCopyBack(getOutputBufferVertex(outputPort)));
+    Value * const writable = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt(prefix + "_writable", writable);
     #endif
@@ -243,7 +220,7 @@ inline Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const u
     b->CallPrintInt("> " + prefix + "_numOfStrides", numOfStrides);
     #endif
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        Value * const term = hasProducerTerminated(b, inputPort);
+        Value * const term = producerTerminated(inputPort);
         Value * const work = b->CreateIsNotNull(numOfStrides);
         Value * const progress = b->CreateOr(work, term);
         b->CreateAssert(progress,

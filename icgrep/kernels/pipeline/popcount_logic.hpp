@@ -28,12 +28,6 @@ inline void PipelineCompiler::writePopCountComputationLogic(BuilderRef b) {
 
     forEachOutputBufferThatIsAPopCountReference(mKernelIndex, [&](const unsigned bufferVertex) {
 
-        // TODO: if we store the partial sum, we can save computation costs when
-        // a particular reference is shared between multiple kernels. However,
-        // unless we prove that every kernel that shares this buffer progresses
-        // at the same rate, using the partial sum becomes more complicated as
-        // we need to
-
         const auto bufferPort = mBufferGraph[in_edge(bufferVertex, mBufferGraph)].Port;
         const Binding & output = mKernel->getOutputStreamSetBinding(bufferPort);
 
@@ -250,7 +244,7 @@ Value * PipelineCompiler::getMinimumNumOfLinearPopCountItems(BuilderRef b, const
             const auto refPortNum = getPopCountReferencePort(mKernel, rate);
             Value * const total = getTotalItemCount(b, refPortNum);
             Value * const strideLength = getInputStrideLength(b, refPortNum);
-            Value * const term = hasProducerTerminated(b, refPortNum);
+            Value * const term = producerTerminated(refPortNum);
             Value * const strideLengthMinus1 = b->CreateSub(strideLength, ONE);
             Value * const padding = b->CreateSelect(term, strideLengthMinus1, b->getSize(0));
             Value * const paddedTotal =  b->CreateAdd(total, padding);
