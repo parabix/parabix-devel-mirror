@@ -259,22 +259,20 @@ Value * PipelineCompiler::getMinimumNumOfLinearPopCountItems(BuilderRef b, const
         minCount = b->CreateSub(itemCount, prior);
         invertCount = rate.isNegatedPopCount() ^ pc.AlwaysNegated;
     }
-
     if (invertCount) {
         Constant * const BlockWidth = b->getSize(b->getBitBlockWidth());
         minCount = b->CreateSub(BlockWidth, minCount);
     }
-    #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelIndex, binding);
-    b->CallPrintInt(prefix + "_minCount", minCount);
-    #endif
     return minCount;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getMaximumNumOfPopCountStrides
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getMaximumNumOfPopCountStrides(BuilderRef b, const Binding & binding, not_null<Value *> sourceItemCount, Constant * const lookAhead) {
+Value * PipelineCompiler::getMaximumNumOfPopCountStrides(BuilderRef b, const Binding & binding,
+                                                         not_null<Value *> sourceItemCount,
+                                                         not_null<Value *> peekableItemCount,
+                                                         Constant * const lookAhead) {
 
     const ProcessingRate & rate = binding.getRate();
     const auto bufferVertex = getPopCountReferenceBuffer(mKernel, rate);
@@ -297,34 +295,25 @@ Value * PipelineCompiler::getMaximumNumOfPopCountStrides(BuilderRef b, const Bin
     BasicBlock * const popCountExit =
         b->CreateBasicBlock(prefix + "Exit", mKernelLoopCall);
 
-    // If we have a base offset, then it's possible that our partial sum started "before"
-    // the processed position of this kernel. Add the "skipped items" to the sourceItemCount.
+    Constant * const ONE = b->getSize(1);
+    Constant * const MAX_INT = ConstantInt::getAllOnesValue(sizeTy);
+    // It's possible that our partial sum started "before" the processed position of this kernel...
     Value * const offset = getPopCountInitialOffset(b, binding, bufferVertex, pc); assert (offset);
+    Value * const initialIndex = b->CreateAdd(mNumOfLinearStrides, offset);
+    // Add the "skipped items" to the source and peekable item counts
     Value * const skippedItems = b->CreateLoad(b->CreateGEP(array, offset));
-
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt(prefix + "_sourceItemCount", sourceItemCount);
-    b->CallPrintInt(prefix + "_skippedItems", skippedItems);
-    #endif
-
-    Value * available = b->CreateAdd(sourceItemCount, skippedItems);
-
-    assert (mNumOfLinearStrides);
-    Value * const strides = b->CreateAdd(mNumOfLinearStrides, offset);
-
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt(prefix + "_linearStrides", mNumOfLinearStrides);
-    b->CallPrintInt(prefix + "_offset", offset);
-    #endif
-
-    // TODO: replace this with a parallel icmp check and bitscan?
+    Value * const availableItems = b->CreateAdd(sourceItemCount, skippedItems);
+    Value * const peekableItems = b->CreateAdd(peekableItemCount, skippedItems);
     b->CreateBr(popCountLoop);
 
+    // TODO: replace this with a parallel icmp check and bitscan?
     b->SetInsertPoint(popCountLoop);
     PHINode * const index = b->CreatePHI(sizeTy, 2);
-    index->addIncoming(strides, popCountEntry);
-    Value * requiredItems = b->CreateLoad(b->CreateGEP(array, index));
+    index->addIncoming(initialIndex, popCountEntry);
+    PHINode * const nextRequiredItems = b->CreatePHI(sizeTy, 2);
+    nextRequiredItems->addIncoming(MAX_INT, popCountEntry);
 
+    Value * requiredItems = b->CreateLoad(b->CreateGEP(array, index));
     if (LLVM_UNLIKELY(pc.AlwaysNegated ^ rate.isNegatedPopCount())) {
         Constant * const Log2BlockWidth = b->getSize(std::log2(b->getBitBlockWidth()));
         Value * const total = b->CreateShl(index, Log2BlockWidth);
@@ -335,19 +324,21 @@ Value * PipelineCompiler::getMaximumNumOfPopCountStrides(BuilderRef b, const Bin
         requiredItems = b->CreateAdd(requiredItems, lookAhead);
     }
 
-    Value * const hasEnough = b->CreateICmpULE(requiredItems, available);
+    Value * const hasEnough = b->CreateICmpULE(requiredItems, availableItems);
     BasicBlock * const popCountLoopEnd = b->GetInsertBlock();
-    Constant * const ONE = b->getSize(1);
-    Value * const nextIndex = b->CreateSub(index, ONE);
-    index->addIncoming(nextIndex, popCountLoopEnd);
+    Value * const priorIndex = b->CreateSub(index, ONE);
+    index->addIncoming(priorIndex, popCountLoopEnd);
+    nextRequiredItems->addIncoming(requiredItems, popCountLoopEnd);
     b->CreateCondBr(hasEnough, popCountExit, popCountLoop);
 
     b->SetInsertPoint(popCountExit);
-    Value * const maxStrides = b->CreateSub(index, offset);
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt(prefix + "_maxStrides", maxStrides);
-    #endif
-    return maxStrides;
+    // Since we want to allow the stream to peek into the overflow but not start
+    // in it, check to see if we can support one more stride by using it.
+    Value * const numOfStrides = b->CreateSub(index, offset);
+    Value * const endedPriorToBufferEnd = b->CreateICmpNE(requiredItems, availableItems);
+    Value * const canPeekIntoOverflow = b->CreateICmpULE(nextRequiredItems, peekableItems);
+    Value * const useOverflow = b->CreateAnd(endedPriorToBufferEnd, canPeekIntoOverflow);
+    return b->CreateSelect(useOverflow, b->CreateAdd(numOfStrides, ONE), numOfStrides);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -440,14 +431,7 @@ inline Value * PipelineCompiler::getPopCountInitialOffset(BuilderRef b, const Bi
         indices[1] = b->getInt32(bufferVertex);
         indices[2] = b->getInt32(BASE_OFFSET_INDEX);
         Value * const baseOffset = b->CreateLoad(b->CreateGEP(mPopCountState, indices));
-        #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, binding) + "_popCount";
-        b->CallPrintInt(prefix + "_baseOffset", baseOffset);
-        #endif
         Value * const strideOffset = getReferenceStreamOffset(b, binding);
-        #ifdef PRINT_DEBUG_MESSAGES
-        b->CallPrintInt(prefix + "_strideOffset", strideOffset);
-        #endif
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             Value * const sanityCheck = b->CreateICmpUGE(strideOffset, baseOffset);
             b->CreateAssert(sanityCheck,
@@ -455,9 +439,6 @@ inline Value * PipelineCompiler::getPopCountInitialOffset(BuilderRef b, const Bi
                             ": pop count base offset exceeds stride offset");
         }
         pc.InitialOffset = b->CreateSub(strideOffset, baseOffset);
-        #ifdef PRINT_DEBUG_MESSAGES
-        b->CallPrintInt(prefix + "_initialOffset", pc.InitialOffset);
-        #endif
     }
     return pc.InitialOffset;
 }

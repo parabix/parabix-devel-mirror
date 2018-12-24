@@ -17,7 +17,7 @@
 #include <llvm/ADT/STLExtras.h>
 #include <queue>
 
-// #define PRINT_DEBUG_MESSAGES
+//#define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -260,10 +260,10 @@ protected:
     Value * getInitialStrideLength(BuilderRef b, const Port port, const unsigned portNum);
     static Value * getMaximumStrideLength(BuilderRef b, const Kernel * kernel, const Binding & binding);
     Value * calculateNumOfLinearItems(BuilderRef b, const Binding & binding);
-    Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort);
+    Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool addFacsimile);
     Value * getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort);
     Value * getNumOfWritableStrides(BuilderRef b, const unsigned outputPort);
-    Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort);
+    Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort, const bool addOverflow);
     Value * calculateBufferExpansionSize(BuilderRef b, const unsigned outputPort);
     Value * addLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
     Value * subtractLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
@@ -290,7 +290,7 @@ protected:
     LLVM_READNONE Value * getPopCountInitialOffset(BuilderRef b, const Binding & binding, const unsigned bufferVertex, PopCountData & pc);
 
     Value * getMinimumNumOfLinearPopCountItems(BuilderRef b, const Binding & binding);
-    Value * getMaximumNumOfPopCountStrides(BuilderRef b, const Binding & binding, not_null<Value *> sourceItemCount, Constant * const lookAhead = nullptr);
+    Value * getMaximumNumOfPopCountStrides(BuilderRef b, const Binding & binding, not_null<Value *> sourceItemCount, not_null<Value *> peekableItemCount, Constant * const lookAhead = nullptr);
     Value * getNumOfLinearPopCountItems(BuilderRef b, const Binding & binding);
 
     Value * getReferenceStreamOffset(BuilderRef b, const Binding & binding);

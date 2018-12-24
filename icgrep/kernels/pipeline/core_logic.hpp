@@ -262,9 +262,9 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     computeFullyProcessedItemCounts(b);
     computeMinimumConsumedItemCounts(b);
     computeMinimumPopCountReferenceCounts(b);
-    computeFullyProducedItemCounts(b);
     writeCopyForwardLogic(b);
     writePopCountComputationLogic(b);
+    computeFullyProducedItemCounts(b);
     b->CreateBr(mKernelLoopExitPhiCatch);
     b->SetInsertPoint(mKernelLoopExitPhiCatch);
     b->CreateBr(mKernelExit);

@@ -69,16 +69,19 @@ Value * StreamSetBuffer::getStreamSetCount(IDISA_Builder * const b) const {
     return b->getSize(count);
 }
 
-inline Value * StreamSetBuffer::addOverflow(const std::unique_ptr<kernel::KernelBuilder> & b, Value * capacity, Value * const overflowItems) const {
+Value * StreamSetBuffer::addOverflow(const std::unique_ptr<kernel::KernelBuilder> & b, Value * const bufferCapacity, Value * const overflowItems, Value * const consumedOffset) const {
     if (overflowItems) {
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             Value * const overflowCapacity = b->getSize(getOverflowCapacity(b));
             Value * const valid = b->CreateICmpULE(overflowItems, overflowCapacity);
             b->CreateAssert(valid, "overflow items exceeds overflow capacity");
         }
-        capacity = b->CreateAdd(capacity, overflowItems);
+        // limit the overflow so that we do not overwrite our unconsumed data during a copyback
+        Value * const effectiveOverflow = b->CreateUMin(consumedOffset, overflowItems);
+        return b->CreateAdd(bufferCapacity, effectiveOverflow);
+    } else { // no overflow
+        return bufferCapacity;
     }
-    return capacity;
 }
 
 // External File Buffer
@@ -180,12 +183,12 @@ inline void ExternalBuffer::assertValidBlockIndex(IDISA_Builder * const b, Value
 }
 
 Value * ExternalBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex) const {
-    assertValidBlockIndex(b, blockIndex);
+//    assertValidBlockIndex(b, blockIndex);
     return StreamSetBuffer::getStreamBlockPtr(b, streamIndex, blockIndex);
 }
 
 Value * ExternalBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
-    assertValidBlockIndex(b, blockIndex);
+//    assertValidBlockIndex(b, blockIndex);
     return StreamSetBuffer::getStreamPackPtr(b, streamIndex, blockIndex, packIndex);
 }
 
@@ -300,9 +303,7 @@ Value * StaticBuffer::getLinearlyWritableItems(const std::unique_ptr<KernelBuild
     Value * const fromOffset = b->CreateURem(fromPosition, capacity);
     Value * const consumedOffset = b->CreateURem(consumedItems, capacity);
     Value * const toEnd = b->CreateICmpULE(consumedOffset, fromOffset);
-    // limit the overflow so that we do not overwrite our unconsumed data during a copyback
-    Value * const effectiveOverflow = b->CreateUMin(consumedOffset, overflowItems);
-    Value * const capacityWithOverflow = addOverflow(b, capacity, effectiveOverflow);
+    Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, consumedOffset);
     Value * const limit = b->CreateSelect(toEnd, capacityWithOverflow, consumedOffset);
     Value * const remaining = b->CreateSub(limit, fromOffset);
     return b->CreateSelect(full, b->getSize(0), remaining);
@@ -422,9 +423,7 @@ Value * DynamicBuffer::getLinearlyWritableItems(const std::unique_ptr<KernelBuil
     Value * const fromOffset = b->CreateURem(fromPosition, capacity);
     Value * const consumedOffset = b->CreateURem(consumedItems, capacity);
     Value * const toEnd = b->CreateICmpULE(consumedOffset, fromOffset);
-    // limit the overflow so that we do not overwrite our unconsumed data during a copyback
-    Value * const effectiveOverflow = b->CreateUMin(consumedOffset, overflowItems);
-    Value * const capacityWithOverflow = addOverflow(b, capacity, effectiveOverflow);
+    Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, consumedOffset);
     Value * const limit = b->CreateSelect(toEnd, capacityWithOverflow, consumedOffset);
     Value * const remaining = b->CreateSub(limit, fromOffset);
     return b->CreateSelect(full, b->getSize(0), remaining);

@@ -150,7 +150,7 @@ StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuild
 + "_" + std::to_string(base) + "_" + std::to_string(expanded->getNumElements()),
 
 {Binding{"marker", mask, FixedRate(), Principal()},
-Binding{"source", source, PopcountOf("marker")}}, // BlockSize(b->getBitBlockWidth())
+Binding{"source", source, PopcountOf("marker")}},
 {Binding{"output", expanded, FixedRate()}},
 {}, {}, {})
 , mFieldWidth(FieldWidth)
@@ -193,6 +193,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
         pendingDataPhi[i] = b->CreatePHI(b->getBitBlockType(), 2);
         pendingDataPhi[i]->addIncoming(pendingData[i], entry);
     }
+
     Value * deposit_mask = b->loadInputStreamBlock("marker", ZERO, blockNoPhi);
 
     // Calculate the field values and offsets we need for assembling a

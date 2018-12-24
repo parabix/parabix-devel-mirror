@@ -106,7 +106,7 @@ protected:
 
     llvm::Value * getHandle(IDISA::IDISA_Builder * const b) const;
 
-    llvm::Value * addOverflow(const std::unique_ptr<KernelBuilder> &b, llvm::Value * capacity, llvm::Value * const overflowItems) const;
+    llvm::Value * addOverflow(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const bufferCapacity, llvm::Value * const overflowItems, llvm::Value * const consumedOffset = nullptr) const;
 
     StreamSetBuffer(const BufferKind k, const std::unique_ptr<KernelBuilder> & b, llvm::Type * baseType, unsigned AddressSpace);
 

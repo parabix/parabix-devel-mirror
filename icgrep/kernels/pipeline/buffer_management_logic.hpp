@@ -622,9 +622,13 @@ void PipelineCompiler::writeOverflowCopy(BuilderRef b, const OverflowCopy direct
     const auto prefix = makeBufferName(mKernelIndex, binding)
         + ((direction == OverflowCopy::Forwards) ? "_copyForward" : "_copyBack");
 
+    BasicBlock * const copyStart = b->CreateBasicBlock(prefix + "Start", mKernelExit);
     BasicBlock * const copyLoop = b->CreateBasicBlock(prefix + "Loop", mKernelExit);
     BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "Exit", mKernelExit);
 
+    b->CreateUnlikelyCondBr(cond, copyStart, copyExit);
+
+    b->SetInsertPoint(copyStart);
     Value * const count = buffer->getStreamSetCount(b.get());
     Value * blocksToCopy = b->CreateMul(itemsToCopy, count);
     const auto itemWidth = getItemWidth(buffer->getBaseType());
@@ -636,11 +640,14 @@ void PipelineCompiler::writeOverflowCopy(BuilderRef b, const OverflowCopy direct
     }
     Value * const base = buffer->getBaseAddress(b.get());
     Value * const overflow = buffer->getOverflowAddress(b.get());
-    Value * const source = (direction == OverflowCopy::Forwards) ? base : overflow;
-    Value * const target = (direction == OverflowCopy::Forwards) ? overflow : base;
+    PointerType * const copyTy = b->getBitBlockType()->getPointerTo();
+    Value * const source =
+        b->CreatePointerCast((direction == OverflowCopy::Forwards) ? base : overflow, copyTy);
+    Value * const target =
+        b->CreatePointerCast((direction == OverflowCopy::Forwards) ? overflow : base, copyTy);
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
-    b->CreateUnlikelyCondBr(cond, copyLoop, copyExit);
+    b->CreateBr(copyLoop);
 
     b->SetInsertPoint(copyLoop);
     PHINode * const index = b->CreatePHI(b->getSizeTy(), 2);
@@ -687,7 +694,7 @@ Value * PipelineCompiler::calculateLogicalBaseAddress(BuilderRef b, const Bindin
     Value * address = buffer->getStreamLogicalBasePtr(b.get(), ZERO, blockIndex);
     address = b->CreatePointerCast(address, buffer->getPointerType());
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        const auto prefix = mKernel->getName() + "." + binding.getName();
+        const auto prefix = makeBufferName(mKernelIndex, binding);
         ExternalBuffer tmp(b, binding.getType());
         Value * const handle = b->CreateAlloca(tmp.getHandleType(b));
         tmp.setHandle(b, handle);
@@ -695,13 +702,13 @@ Value * PipelineCompiler::calculateLogicalBaseAddress(BuilderRef b, const Bindin
         Value * const A0 = buffer->getStreamBlockPtr(b.get(), ZERO, blockIndex);
         Value * const B0 = tmp.getStreamBlockPtr(b.get(), ZERO, blockIndex);
         Value * const C0 = b->CreatePointerCast(B0, A0->getType());
-        b->CreateAssert(b->CreateICmpEQ(A0, C0), prefix + ": logical base address is incorrect");
-        Value * upToIndex = b->CreateAdd(blockIndex, b->CreateSub(mNumOfLinearStrides, b->getSize(1)));
-        upToIndex = b->CreateSelect(b->CreateICmpEQ(mNumOfLinearStrides, ZERO), blockIndex, upToIndex);
-        Value * const A1 = buffer->getStreamBlockPtr(b.get(), ZERO, upToIndex);
-        Value * const B1 = tmp.getStreamBlockPtr(b.get(), ZERO, upToIndex);
-        Value * const C1 = b->CreatePointerCast(B1, A1->getType());
-        b->CreateAssert(b->CreateICmpEQ(A1, C1), prefix + ": logical base address is incorrect");
+        b->CreateAssert(b->CreateICmpEQ(A0, C0), prefix + ": logical start address is incorrect");
+//        Value * upToIndex = b->CreateAdd(blockIndex, b->CreateSub(mNumOfLinearStrides, b->getSize(1)));
+//        upToIndex = b->CreateSelect(b->CreateICmpEQ(mNumOfLinearStrides, ZERO), blockIndex, upToIndex);
+//        Value * const A1 = buffer->getStreamBlockPtr(b.get(), ZERO, upToIndex);
+//        Value * const B1 = tmp.getStreamBlockPtr(b.get(), ZERO, upToIndex);
+//        Value * const C1 = b->CreatePointerCast(B1, A1->getType());
+//        b->CreateAssert(b->CreateICmpEQ(A1, C1), prefix + ": logical end address is incorrect");
     }
     return address;
 }
