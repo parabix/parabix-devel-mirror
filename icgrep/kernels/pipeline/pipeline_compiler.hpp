@@ -161,8 +161,10 @@ struct PopCountEdge {
 using PopCountGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, PopCountEdge>;
 
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
+const static std::string TERMINATION_SIGNAL_SUFFIX = ".TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IC";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".ICD";
+const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 
 class PipelineCompiler {
 public:
@@ -326,10 +328,12 @@ protected:
 // consumer recording
 
     ConsumerGraph makeConsumerGraph() const;
+    void addConsumerKernelProperties(BuilderRef b, const unsigned kernelIndex);
     void createConsumedPhiNodes(BuilderRef b);
     void initializeConsumedItemCount(BuilderRef b, const unsigned bufferVertex, Value * const produced);
+    void readConsumedItemCounts(BuilderRef b);
+    Value * getConsumedItemCount(BuilderRef b, const unsigned outputPort);
     void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, Value * const consumed) const;
-    Value * getConsumedItemCount(BuilderRef b, const unsigned outputPort) const;
 
 // buffer analysis/management functions
 
@@ -455,6 +459,7 @@ protected:
     std::vector<PHINode *>                      mAlreadyProducedPhi; // entering the segment loop
     std::vector<Value *>                        mOutputStrideLength;
     std::vector<Value *>                        mWritableOutputItems;
+    std::vector<Value *>                        mConsumedItemCount;
     std::vector<PHINode *>                      mLinearOutputItemsPhi;
     std::vector<Value *>                        mReturnedProducedItemCountPtr; // written by the kernel
     std::vector<Value *>                        mProducedItemCount; // exiting the segment loop
@@ -553,20 +558,10 @@ inline StreamSetBuffer * PipelineCompiler::getOutputBuffer(const unsigned output
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief storedInKernel
- ** ------------------------------------------------------------------------------------------------------------- */
-inline LLVM_READNONE bool storedInNestedKernel(const Binding & output) {
-    return output.getRate().isUnknown() || output.hasAttribute(AttrId::ManagedBuffer);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief upperBound
  ** ------------------------------------------------------------------------------------------------------------- */
 inline LLVM_READNONE RateValue upperBound(not_null<const Kernel *> kernel, const Binding & binding) {
     assert (kernel->getStride() > 0);
-//    const auto ub = kernel->getUpperBound(binding);
-//    const auto stride = kernel->getStride();
-//    return (ub == 0) ? stride : ub * stride;
     return kernel->getUpperBound(binding) * kernel->getStride();
 }
 

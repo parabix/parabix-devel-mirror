@@ -1,5 +1,7 @@
 CMakeLists.txt
 grep/searchable_buffer.h
+kernels/optimizationbranch.cpp
+kernels/optimizationbranch.h
 wc.cpp
 base64.cpp
 grep_interface.cpp

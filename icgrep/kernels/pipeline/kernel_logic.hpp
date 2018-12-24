@@ -163,7 +163,7 @@ inline Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsi
     const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
     const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
     Value * const produced = mAlreadyProducedPhi[outputPort]; assert (produced);
-    Value * const consumed = getConsumedItemCount(b, outputPort);  assert (consumed);
+    Value * const consumed = mConsumedItemCount[outputPort]; assert (consumed);
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeBufferName(mKernelIndex, output);
     b->CallPrintInt(prefix + "_capacity", buffer->getCapacity(b.get()));
@@ -377,7 +377,7 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::calculateBufferExpansionSize(BuilderRef b, const unsigned outputPort) {
     Value * const produced = mAlreadyProducedPhi[outputPort];
-    Value * const consumed = getConsumedItemCount(b, outputPort);
+    Value * const consumed = mConsumedItemCount[outputPort];
     Value * const unconsumed = b->CreateSub(produced, consumed);
     Value * const strideLength = getOutputStrideLength(b, outputPort);
     return b->CreateAdd(unconsumed, strideLength);
@@ -498,6 +498,8 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         mReturnedProducedItemCountPtr[i] = addItemCountArg(b, output, canTerminate, produced, args);
         if (LLVM_LIKELY(nonManaged)) {
             args.push_back(mLinearOutputItemsPhi[i]);
+        } else {
+            args.push_back(mConsumedItemCount[i]);
         }
     }
 
@@ -929,6 +931,7 @@ void PipelineCompiler::resetMemoizedFields() {
     reset(mAlreadyProducedPhi, numOfOutputs);
     reset(mOutputStrideLength, numOfOutputs);
     reset(mWritableOutputItems, numOfOutputs);
+    reset(mConsumedItemCount, numOfOutputs);
     reset(mLinearOutputItemsPhi, numOfOutputs);
     reset(mReturnedProducedItemCountPtr, numOfOutputs);
     reset(mProducedItemCount, numOfOutputs);

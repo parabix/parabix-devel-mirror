@@ -83,42 +83,10 @@ void KernelBuilder::setProducedItemCount(const StringRef name, Value * value) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getNamedItemCount
+ * @brief getConsumedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::getNamedItemCount(const std::string & name, const std::string & suffix) {
-    const ProcessingRate & rate = mKernel->getStreamBinding(name).getRate();
-    Value * itemCount = nullptr;
-    if (LLVM_UNLIKELY(rate.isRelative())) {
-        Port port; unsigned index;
-        std::tie(port, index) = mKernel->getStreamPort(rate.getReference());
-        if (port == Port::Input) {
-            itemCount = getProcessedItemCount(rate.getReference());
-        } else {
-            itemCount = getProducedItemCount(rate.getReference());
-        }
-        itemCount = CreateMul2(itemCount, rate.getRate());
-    } else {
-        itemCount = getScalarField(name + suffix);
-    }
-    return itemCount;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief setNamedItemCount
- ** ------------------------------------------------------------------------------------------------------------- */
-void KernelBuilder::setNamedItemCount(const std::string & name, const std::string & suffix, Value * const value) {
-    const ProcessingRate & rate = mKernel->getStreamBinding(name).getRate();
-    if (LLVM_UNLIKELY(rate.isDerived())) {
-        report_fatal_error("cannot set item count: " + name + " is a derived rate stream");
-    }
-    if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
-        CallPrintInt(mKernel->getName() + ": " + name + suffix, value);
-    }
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        Value * const current = getScalarField(name + suffix);
-        CreateAssert(CreateICmpUGE(value, current), name + suffix + " must be monotonically non-decreasing");
-    }
-    setScalarField(name + suffix, value);
+Value * KernelBuilder::getConsumedItemCount(const StringRef name) const {
+    return mKernel->getConsumedOutputItems(name);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

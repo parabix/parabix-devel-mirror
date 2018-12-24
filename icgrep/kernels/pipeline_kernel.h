@@ -18,9 +18,17 @@ const static std::string FINALIZE_FUNCTION_POINTER_SUFFIX = "_FIP";
 class PipelineCompiler;
 
 class PipelineKernel : public Kernel {
-public:
     friend class PipelineCompiler;
     friend class PipelineBuilder;
+public:
+
+    static bool classof(const Kernel * const k) {
+        return k->getTypeId() == TypeId::Pipeline;
+    }
+
+    static bool classof(const void *) { return false; }
+
+public:
 
     using Scalars = std::vector<Scalar *>;
     using Kernels = std::vector<Kernel *>;

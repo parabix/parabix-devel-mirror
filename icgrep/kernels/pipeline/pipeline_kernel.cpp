@@ -325,7 +325,8 @@ PipelineKernel::PipelineKernel(std::string && signature, const unsigned numOfThr
                                Kernels && kernels, CallBindings && callBindings,
                                Bindings && stream_inputs, Bindings && stream_outputs,
                                Bindings &&scalar_inputs, Bindings && scalar_outputs)
-: Kernel("p" + std::to_string(numOfThreads) + "_" + getStringHash(signature),
+: Kernel(TypeId::Pipeline,
+         "p" + std::to_string(numOfThreads) + "_" + getStringHash(signature),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs), {})
 , mNumOfThreads(numOfThreads)

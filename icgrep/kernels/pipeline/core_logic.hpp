@@ -1,7 +1,5 @@
 #include "pipeline_compiler.hpp"
 
-const static std::string TERMINATION_SIGNAL_SUFFIX = "terminationSignal";
-
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -14,6 +12,7 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     for (unsigned i = 0; i < numOfKernels; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
         addInternalKernelProperties(b, i);
+        addConsumerKernelProperties(b, i);
         addPopCountScalarsToPipelineKernel(b, i);
     }
     b->setKernel(mPipelineKernel);
@@ -31,8 +30,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     mPipelineKernel->addInternalScalar(sizeTy, name + TERMINATION_SIGNAL_SUFFIX);
     mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX);
 
-    // TODO: non deferred item count for fixed rates could be calculated from seg no.
-    // Should I seperate non-deferred from normal item counts to improve cache locality?
+    // TODO: non deferred item count for fixed rates could be calculated from total # of segments.
     const Kernel * const kernel = mPipeline[kernelIndex];
     const auto numOfInputs = kernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; i++) {
@@ -48,9 +46,6 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     for (unsigned i = 0; i < numOfOutputs; i++) {
         const Binding & output = kernel->getOutputStreamSetBinding(i);
         const auto prefix = makeBufferName(kernelIndex, output);
-        if (output.isDeferred()) {
-            mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-        }
         mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
     }
 
@@ -165,6 +160,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelLoopEntry);
+    readConsumedItemCounts(b);
     checkForSufficientInputDataAndOutputSpace(b);
     determineNumOfLinearStrides(b);
 

@@ -22,6 +22,7 @@ namespace kernel {
 // smallest number of output items that can be logically produced by a kernel.
 
 class Kernel;
+struct Binding;
 
 struct ProcessingRate  {
 
@@ -182,6 +183,9 @@ ProcessingRate::RateValue gcd(const ProcessingRate::RateValue & x, const Process
 unsigned floor(const ProcessingRate::RateValue & r);
 
 unsigned ceiling(const ProcessingRate::RateValue & r);
+
+bool permits(const Kernel * const hostKernel, const Binding & host,
+             const Kernel * const visitorKernel, const Binding & visitor);
 
 }
 

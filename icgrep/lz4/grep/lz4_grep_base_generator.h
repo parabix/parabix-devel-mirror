@@ -51,7 +51,7 @@ protected:
 
 private:
 
-    std::unique_ptr<kernel::PipelineBuilder> makeInternalPipeline(const FunctionType type);
+    std::unique_ptr<kernel::ProgramBuilder> makeInternalPipeline(const FunctionType type);
 
     grep::GrepRecordBreakKind mGrepRecordBreak;
 

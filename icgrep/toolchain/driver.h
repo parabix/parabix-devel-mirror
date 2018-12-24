@@ -13,12 +13,12 @@
 
 namespace llvm { class Function; }
 namespace kernel { class KernelBuilder; }
-namespace kernel { class PipelineBuilder; }
+namespace kernel { class ProgramBuilder; }
 class CBuilder;
 
 class BaseDriver {
     friend class CBuilder;
-    friend class kernel::PipelineBuilder;
+    friend class kernel::ProgramBuilder;
     using Kernel = kernel::Kernel;
     using Relationship = kernel::Relationship;
     using Bindings = kernel::Bindings;
@@ -26,9 +26,9 @@ class BaseDriver {
 
 public:
 
-    std::unique_ptr<kernel::PipelineBuilder> makePipelineWithIO(Bindings stream_inputs = {}, Bindings stream_outputs = {}, Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
+    std::unique_ptr<kernel::ProgramBuilder> makePipelineWithIO(Bindings stream_inputs = {}, Bindings stream_outputs = {}, Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
 
-    std::unique_ptr<kernel::PipelineBuilder> makePipeline(Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
+    std::unique_ptr<kernel::ProgramBuilder> makePipeline(Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
 
     const std::unique_ptr<kernel::KernelBuilder> & getBuilder() {
         return iBuilder;

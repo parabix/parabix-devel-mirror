@@ -40,18 +40,38 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
 }
 
 // MULTI-BLOCK KERNEL CONSTRUCTOR
-MultiBlockKernel::MultiBlockKernel(std::string && kernelName,
-                                   Bindings && stream_inputs,
-                                   Bindings && stream_outputs,
-                                   Bindings && scalar_parameters,
-                                   Bindings && scalar_outputs,
-                                   Bindings && internal_scalars)
-: Kernel(std::move(kernelName),
-         std::move(stream_inputs),
-         std::move(stream_outputs),
-         std::move(scalar_parameters),
-         std::move(scalar_outputs),
-         std::move(internal_scalars)) {
+MultiBlockKernel::MultiBlockKernel(
+    std::string && kernelName,
+    Bindings && stream_inputs,
+    Bindings && stream_outputs,
+    Bindings && scalar_parameters,
+    Bindings && scalar_outputs,
+    Bindings && internal_scalars)
+: MultiBlockKernel(TypeId::MultiBlock,
+    std::move(kernelName),
+    std::move(stream_inputs),
+    std::move(stream_outputs),
+    std::move(scalar_parameters),
+    std::move(scalar_outputs),
+    std::move(internal_scalars)) {
+
+}
+
+MultiBlockKernel::MultiBlockKernel(
+    const TypeId typeId,
+    std::string && kernelName,
+    Bindings && stream_inputs,
+    Bindings && stream_outputs,
+    Bindings && scalar_parameters,
+    Bindings && scalar_outputs,
+    Bindings && internal_scalars)
+: Kernel(typeId,
+     std::move(kernelName),
+     std::move(stream_inputs),
+     std::move(stream_outputs),
+     std::move(scalar_parameters),
+     std::move(scalar_outputs),
+     std::move(internal_scalars)) {
 
 }
 

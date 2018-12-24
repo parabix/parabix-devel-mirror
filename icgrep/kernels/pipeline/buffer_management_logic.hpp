@@ -355,7 +355,6 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
  * @brief addHandlesToPipelineKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index) {
-    IntegerType * const sizeTy = b->getSizeTy();
     const Kernel * const kernel = mPipeline[index];
     if (!kernel->hasFamilyName()) {
         PointerType * kernelPtrTy = kernel->getKernelType()->getPointerTo(0);
@@ -364,16 +363,14 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
     for (const auto e : make_iterator_range(out_edges(index, mBufferGraph))) {
         const auto bufferVertex = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[bufferVertex];
-        if (LLVM_UNLIKELY(bn.Type == BufferType::Managed)) {
-            continue;
+        if (LLVM_LIKELY(bn.Type != BufferType::Managed)) {
+            const auto outputPort = mBufferGraph[e].Port;
+            const Binding & output = kernel->getOutputStreamSetBinding(outputPort);
+            const auto prefix = makeBufferName(index, output);
+            mPipelineKernel->addInternalScalar(bn.Buffer->getHandleType(b), prefix);
         }
-        const Binding & output = kernel->getOutputStreamSetBinding(mBufferGraph[e].Port);
-        const auto bufferName = makeBufferName(index, output);
-        mPipelineKernel->addInternalScalar(bn.Buffer->getHandleType(b), bufferName);
-        mPipelineKernel->addInternalScalar(sizeTy, bufferName + CONSUMED_ITEM_COUNT_SUFFIX);
     }
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructBuffers
@@ -451,14 +448,8 @@ inline void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
         const Binding & input = mKernel->getInputStreamSetBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, input);
         mInitiallyProcessedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-        #ifdef PRINT_DEBUG_MESSAGES
-        b->CallPrintInt(prefix + "_initialProcessed", mInitiallyProcessedItemCount[i]);
-        #endif
         if (input.isDeferred()) {
             mInitiallyProcessedDeferredItemCount[i] = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_initialProducedDeferred", mInitiallyProcessedDeferredItemCount[i]);
-            #endif
         }
     }
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
@@ -466,9 +457,6 @@ inline void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
         const Binding & output = mKernel->getOutputStreamSetBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, output);
         mInitiallyProducedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-        #ifdef PRINT_DEBUG_MESSAGES
-        b->CallPrintInt(prefix + "_initialProduced", mInitiallyProducedItemCount[i]);
-        #endif
     }
     b->setKernel(mKernel);
 }

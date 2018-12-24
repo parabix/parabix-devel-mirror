@@ -1,4 +1,5 @@
 #include <kernels/pipeline_builder.h>
+#include <kernels/optimizationbranch.h>
 #include <kernels/kernel_builder.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/function_output_iterator.hpp>
@@ -7,8 +8,8 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>
+#include <toolchain/toolchain.h>
 #include <queue>
-
 
 #warning if two kernels have an identical signature and take the same inputs, they ought to produce the same outputs unless they are nondeterministic.
 
@@ -21,6 +22,22 @@ using namespace boost::container;
 
 namespace kernel {
 
+#warning TODO: make a templated compile method to automatically validate and cast the main function to the correct type?
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief compile()
+ ** ------------------------------------------------------------------------------------------------------------- */
+void * ProgramBuilder::compile() {
+    PipelineKernel * const pk =
+        cast<PipelineKernel>(makeKernel());
+    pk->initializeBindings(mDriver);
+    mDriver.addKernel(pk);
+    mDriver.generateUncachedKernels();
+    Function * const main =
+        addOrDeclareMainFunction(pk);
+    return mDriver.finalizeObject(main);
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeKernel
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -29,20 +46,6 @@ Kernel * PipelineBuilder::initializeKernel(Kernel * const kernel) {
     mDriver.addKernel(kernel);
     mKernels.emplace_back(kernel);
     return kernel;
-}
-
-#warning TODO: make a templated method to automatically validate and cast the main function to the correct type?
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief finalizeObject
- ** ------------------------------------------------------------------------------------------------------------- */
-void * PipelineBuilder::compile() {
-    PipelineKernel * const pk = makePipelineKernel();
-    pk->initializeBindings(mDriver);
-    mDriver.addKernel(pk);
-    mDriver.generateUncachedKernels();
-    Function * const main = addOrDeclareMainFunction(pk);
-    return mDriver.finalizeObject(main);
 }
 
 using Kernels = PipelineBuilder::Kernels;
@@ -181,10 +184,16 @@ inline char getRelationshipType(const VertexType type) {
     }
 }
 
+#warning pipeline builder needs to be able to return the name of a kernel without generating it
+
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief finalizeObject
+ * @brief makeKernel
  ** ------------------------------------------------------------------------------------------------------------- */
-PipelineKernel * PipelineBuilder::makePipelineKernel() {
+Kernel * PipelineBuilder::makeKernel() {
+
+    for (const auto & builder : mNestedBuilders) {
+        mKernels.push_back(builder->makeKernel());
+    }
 
     const auto numOfKernels = mKernels.size();
     const auto numOfCalls = mCallBindings.size();
@@ -298,6 +307,54 @@ PipelineKernel * PipelineBuilder::makePipelineKernel() {
     return pk;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
+Kernel * OptimizationBranchBuilder::makeKernel() {
+
+    Kernel * const trueBranch = mTrueBranch->makeKernel();
+
+    Kernel * const falseBranch = mFalseBranch->makeKernel();
+
+    std::string name;
+    raw_string_ostream out(name);
+
+    out << "OptimizationBranch:";
+
+    mCondition->getType()->print(out);
+
+    out << ";True=\"";
+
+    if (trueBranch->hasFamilyName()) {
+        out << trueBranch->getFamilyName();
+    } else {
+        out << trueBranch->getName();
+    }
+
+    out << "\";False=\"";
+
+    if (falseBranch->hasFamilyName()) {
+        out << falseBranch->getFamilyName();
+    } else {
+        out << falseBranch->getName();
+    }
+
+    out << "\"";
+    out.flush();
+
+    OptimizationBranch * const br =
+            new OptimizationBranch(std::move(name),
+                                   mCondition, trueBranch, falseBranch,
+                                   std::move(mInputStreamSets), std::move(mOutputStreamSets),
+                                   std::move(mInputScalars), std::move(mOutputScalars));
+
+
+    return br;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeMainFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineBuilder::addInputScalar(llvm::Type * type, std::string name) {
     mInputScalars.emplace_back(name, CreateConstant(Constant::getNullValue(type)), FixedRate(1), Family());
 }
@@ -358,9 +415,8 @@ void PipelineBuilder::setOutputScalar(const std::string & name, Scalar * value) 
 
 
 PipelineBuilder::PipelineBuilder(BaseDriver & driver,
-                                 Bindings && stream_inputs, Bindings && stream_outputs,
-                                 Bindings && scalar_inputs, Bindings && scalar_outputs,
-                                 const unsigned numOfThreads)
+    Bindings && stream_inputs, Bindings && stream_outputs,
+    Bindings && scalar_inputs, Bindings && scalar_outputs, const unsigned numOfThreads)
 : mDriver(driver)
 , mNumOfThreads(numOfThreads)
 , mInputStreamSets(stream_inputs)
@@ -395,5 +451,35 @@ PipelineBuilder::PipelineBuilder(BaseDriver & driver,
 
 }
 
+ProgramBuilder::ProgramBuilder(
+    BaseDriver & driver,
+    Bindings && stream_inputs, Bindings && stream_outputs,
+    Bindings && scalar_inputs, Bindings && scalar_outputs)
+: PipelineBuilder(
+      driver,
+      std::move(stream_inputs), std::move(stream_outputs),
+      std::move(scalar_inputs), std::move(scalar_outputs),
+      codegen::ThreadNum) {
+
+}
+
+OptimizationBranchBuilder::OptimizationBranchBuilder(
+      BaseDriver & driver,
+      StreamSet * const condition,
+      Bindings && stream_inputs, Bindings && stream_outputs,
+      Bindings && scalar_inputs, Bindings && scalar_outputs)
+: PipelineBuilder(
+      driver,
+      std::move(stream_inputs), std::move(stream_outputs),
+      std::move(scalar_inputs), std::move(scalar_outputs))
+, mCondition(condition)
+, mTrueBranch()
+, mFalseBranch() {
+
+}
+
+OptimizationBranchBuilder::~OptimizationBranchBuilder() {
+
+}
 
 }

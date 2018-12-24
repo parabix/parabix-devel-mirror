@@ -13,9 +13,7 @@ inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const un
     if (LLVM_UNLIKELY(in_degree(bufferVertex, mConsumerGraph) == 0)) {
         return;
     }
-    if (LLVM_UNLIKELY(out_degree(bufferVertex, mConsumerGraph) == 0)) {
-        setConsumedItemCount(b, bufferVertex, produced);
-    } else { // otherwise set the initial consumed amount to the produced amount
+    if (LLVM_UNLIKELY(out_degree(bufferVertex, mConsumerGraph) != 0)) {
         ConsumerNode & cn = mConsumerGraph[bufferVertex];
         assert (cn.Consumed == nullptr);
         cn.Consumed = produced;
@@ -69,56 +67,79 @@ inline void PipelineCompiler::writeFinalConsumedItemCounts(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addConsumerKernelProperties
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const unsigned kernelIndex) {
+    IntegerType * const sizeTy = b->getSizeTy();
+    const Kernel * const kernel = mPipeline[kernelIndex];
+    const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < numOfOutputs; i++) {
+        const Binding & output = kernel->getOutputStreamSetBinding(i);
+        const auto prefix = makeBufferName(kernelIndex, output);
+        const auto bufferVertex = getOutputBufferVertex(kernelIndex, i);
+        // If the out-degree for this buffer is zero, then either the stream has no consumers
+        // or we've proven that its consumption rate is identical to its production rate.
+        if (out_degree(bufferVertex, mConsumerGraph) != 0) {
+            mPipelineKernel->addInternalScalar(sizeTy, prefix + CONSUMED_ITEM_COUNT_SUFFIX);
+        }
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getConsumedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getConsumedItemCount(BuilderRef b, const unsigned outputPort) const {
-    // TODO: if we can prove that this stream is always fully consumed, its consumed count
-    // is its produced count.
-    assert (mPipeline[mKernelIndex] == mKernel);
-    assert (b->getKernel() == mKernel);
-    const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
+Value * PipelineCompiler::getConsumedItemCount(BuilderRef b, const unsigned outputPort) {
     Value * consumed = nullptr;
-    const BufferNode & bn = mBufferGraph[getOutputBufferVertex(mKernelIndex, outputPort)];
-    if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
-        b->setKernel(mPipelineKernel);
-        consumed = b->getScalarField(makeBufferName(mKernelIndex, output) + CONSUMED_ITEM_COUNT_SUFFIX);
-        b->setKernel(mKernel);
-    } else if (bn.Type == BufferType::Managed) {
-        b->setKernel(mKernel);
-        consumed = b->getScalarField(output.getName() + CONSUMED_ITEM_COUNT_SUFFIX);
-    } else if (bn.Type == BufferType::External) {
-        consumed = b->getSize(0);
+    const auto bufferVertex = getOutputBufferVertex(mKernelIndex, outputPort);
+    if (LLVM_UNLIKELY(out_degree(bufferVertex, mConsumerGraph) == 0)) {
+        // This stream either has no consumers or we've proven that its consumption rate
+        // is identical to its production rate.
+        consumed = mInitiallyProducedItemCount[outputPort];
+    } else {
+        const BufferNode & bn = mBufferGraph[bufferVertex];
+        if (LLVM_UNLIKELY(bn.Type == BufferType::External)) {
+            consumed = b->getSize(0);
+        } else {
+            b->setKernel(mPipelineKernel);
+            const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
+            const auto prefix = makeBufferName(mKernelIndex, output);
+            consumed = b->getScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
+            b->setKernel(mKernel);
+        }
     }
-    assert (consumed);
     return consumed;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief readConsumedItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
+    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < numOfOutputs; i++) {
+        mConsumedItemCount[i] = getConsumedItemCount(b, i);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setConsumedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, Value * const consumed) const {
+    const BufferNode & bn = mBufferGraph[bufferVertex];
+    if (LLVM_LIKELY(bn.Type == BufferType::External)) {
+        return;
+    }
     const auto pe = in_edge(bufferVertex, mConsumerGraph);
     const auto producerVertex = source(pe, mConsumerGraph);
-    const Kernel * const producer = mBufferGraph[producerVertex].Kernel;
-    assert (producer->getHandle());
-    const Binding & output = producer->getOutputStreamSetBinding(mConsumerGraph[pe]);
-    #ifdef PRINT_DEBUG_MESSAGES
+    const Kernel * const producer = mPipeline[producerVertex]; assert (producer->getHandle());
+    const auto outputPort = mConsumerGraph[pe];
+    const Binding & output = producer->getOutputStreamSetBinding(outputPort);
     const auto prefix = makeBufferName(producerVertex, output);
+    #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt(prefix + CONSUMED_ITEM_COUNT_SUFFIX, consumed);
     #endif
-    if (LLVM_UNLIKELY(storedInNestedKernel(output))) {
-        b->setKernel(producer);
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-            b->CreateMProtect(producer->getHandle(), CBuilder::Protect::WRITE);
-        }
-        b->setScalarField(output.getName() + CONSUMED_ITEM_COUNT_SUFFIX, consumed);
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-            b->CreateMProtect(producer->getHandle(), CBuilder::Protect::READ);
-        }
-    } else {
-        b->setKernel(mPipelineKernel);
-        b->setScalarField(makeBufferName(producerVertex, output) + CONSUMED_ITEM_COUNT_SUFFIX, consumed);
-    }
+    b->setKernel(mPipelineKernel);
+    b->setScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX, consumed);
     b->setKernel(mKernel);
 }
 

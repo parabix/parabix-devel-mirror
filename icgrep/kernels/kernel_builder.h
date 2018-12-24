@@ -40,13 +40,7 @@ public:
 
     void setProducedItemCount(const llvm::StringRef name, llvm::Value * value);
 
-    llvm::Value * getConsumedItemCount(const std::string & name) {
-        return getNamedItemCount(name, CONSUMED_ITEM_COUNT_SUFFIX);
-    }
-
-    void setConsumedItemCount(const std::string & name, llvm::Value * value) {
-        setNamedItemCount(name, CONSUMED_ITEM_COUNT_SUFFIX, value);
-    }
+    llvm::Value * getConsumedItemCount(const llvm::StringRef name) const;
 
     llvm::Value * getTerminationSignal();
 
@@ -166,10 +160,6 @@ protected:
     llvm::Value * getScalarFieldPtr(llvm::Value * handle, llvm::Value * index);
 
     llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & fieldName);
-
-    llvm::Value * getNamedItemCount(const std::string & name, const std::string & suffix);
-
-    void setNamedItemCount(const std::string & name, const std::string & suffix, llvm::Value * const value);
 
     std::string getKernelName() const final;
 

@@ -415,13 +415,13 @@ inline unsigned PipelineCompiler::getPopCountReferenceBuffer(const Kernel * kern
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getPopCountReferenceConsumedCount(BuilderRef b, const unsigned bufferVertex) {
     const auto e = in_edge(bufferVertex, mBufferGraph);
-    const auto port = mBufferGraph[e].Port;
+    const auto outputPort = mBufferGraph[e].Port;
     PopCountData & pc = getPopCountReference(bufferVertex);
     if (pc.UsesConsumedCount) {
-        return getConsumedItemCount(b, port);
+        return mConsumedItemCount[outputPort];
     } else {
         b->setKernel(mPipelineKernel);
-        const Binding & output = mKernel->getOutputStreamSetBinding(port);
+        const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
         const auto bufferName = makeBufferName(mKernelIndex, output);
         const auto fieldName = bufferName + REFERENCE_PROCESSED_COUNT;
         Value * const processed = b->getScalarField(fieldName);

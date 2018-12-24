@@ -33,7 +33,6 @@ namespace llvm { class Value; }
 
 class BaseDriver;
 
-const static std::string CONSUMED_ITEM_COUNT_SUFFIX = "_consumedItemCount";
 const static std::string BUFFER_HANDLE_SUFFIX = "_buffer";
 const static std::string CYCLECOUNT_SCALAR = "CPUcycles";
 
@@ -48,7 +47,26 @@ class Kernel : public AttributeSet {
     friend class PipelineBuilder;
     friend class PipelineCompiler;
     friend class PipelineKernel;
+    friend class OptimizationBranch;
     friend class BaseDriver;
+public:
+
+    enum class TypeId {
+        SegmentOriented
+        , MultiBlock
+        , BlockOriented
+        , Pipeline
+        , OptimizationBranch
+    };
+
+    static bool classof(const Kernel *) { return true; }
+
+    static bool classof(const void *) { return false; }
+
+    LLVM_READNONE TypeId getTypeId() const {
+        return mTypeId;
+    }
+
 public:
 
     enum class ScalarType { Input, Output, Internal };
@@ -449,12 +467,19 @@ protected:
         return mProducedOutputItems[index];
     }
 
+    LLVM_READNONE llvm::Value * getConsumedOutputItems(const llvm::StringRef name) const {
+        Port port; unsigned index;
+        std::tie(port, index) = getStreamPort(name);
+        assert (port == Port::Output);
+        return mConsumedOutputItems[index];
+    }
+
     LLVM_READNONE llvm::Value * isFinal() const {
         return mIsFinal;
     }
 
     // Constructor
-    Kernel(std::string && kernelName,
+    Kernel(const TypeId typeId, std::string && kernelName,
            Bindings && stream_inputs, Bindings && stream_outputs,
            Bindings && scalar_inputs, Bindings && scalar_outputs,
            Bindings && internal_scalars);
@@ -509,12 +534,13 @@ protected:
     std::vector<llvm::Value *>      mNegatedPopCountRateArray;
     std::vector<llvm::Value *>      mProducedOutputItems;
     std::vector<llvm::Value *>      mWritableOutputItems;
+    std::vector<llvm::Value *>      mConsumedOutputItems;
 
     ScalarFieldMap                  mScalarMap;
     StreamSetMap                    mStreamSetMap;
 
     const std::string               mKernelName;
-
+    const TypeId                    mTypeId;
 
     OwnedStreamSetBuffers           mStreamSetInputBuffers;
     OwnedStreamSetBuffers           mStreamSetOutputBuffers;
@@ -522,6 +548,14 @@ protected:
 };
 
 class SegmentOrientedKernel : public Kernel {
+public:
+
+    static bool classof(const Kernel * const k) {
+        return k->getTypeId() == TypeId::SegmentOriented;
+    }
+
+    static bool classof(const void *) { return false; }
+
 protected:
 
     SegmentOrientedKernel(std::string && kernelName,
@@ -542,6 +576,14 @@ protected:
 
 class MultiBlockKernel : public Kernel {
     friend class BlockOrientedKernel;
+public:
+
+    static bool classof(const Kernel * const k) {
+        return k->getTypeId() == TypeId::MultiBlock;
+    }
+
+    static bool classof(const void *) { return false; }
+
 protected:
 
     MultiBlockKernel(std::string && kernelName,
@@ -555,12 +597,30 @@ protected:
 
 private:
 
+    MultiBlockKernel(const TypeId kernelTypId,
+                     std::string && kernelName,
+                     Bindings && stream_inputs,
+                     Bindings && stream_outputs,
+                     Bindings && scalar_parameters,
+                     Bindings && scalar_outputs,
+                     Bindings && internal_scalars);
+
+private:
+
     void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
 };
 
 
 class BlockOrientedKernel : public MultiBlockKernel {
+public:
+
+    static bool classof(const Kernel * const k) {
+        return k->getTypeId() == TypeId::BlockOriented;
+    }
+
+    static bool classof(const void *) { return false; }
+
 protected:
 
     void CreateDoBlockMethodCall(const std::unique_ptr<KernelBuilder> & b);

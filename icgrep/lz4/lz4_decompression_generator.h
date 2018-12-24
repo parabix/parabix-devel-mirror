@@ -32,7 +32,7 @@ public:
 
 private:
 
-    std::unique_ptr<kernel::PipelineBuilder> makeInternalPipeline();
+    std::unique_ptr<kernel::ProgramBuilder> makeInternalPipeline();
 
     MainFunctionType generateDecompressionPipeline();
 

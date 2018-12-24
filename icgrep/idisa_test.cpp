@@ -352,7 +352,7 @@ int32_t openFile(const std::string & fileName, llvm::raw_ostream & msgstrm) {
 
 typedef size_t (*IDISAtestFunctionType)(int32_t fd1, int32_t fd2);
 
-StreamSet * readHexToBinary(std::unique_ptr<PipelineBuilder> & P, const std::string & fd) {
+StreamSet * readHexToBinary(std::unique_ptr<ProgramBuilder> & P, const std::string & fd) {
     StreamSet * const hexStream = P->CreateStreamSet(1, 8);
     Scalar * const fileDecriptor = P->getInputScalar(fd);
     P->CreateKernelCall<MMapSourceKernel>(fileDecriptor, hexStream);
@@ -361,7 +361,7 @@ StreamSet * readHexToBinary(std::unique_ptr<PipelineBuilder> & P, const std::str
     return bitStream;
 }
 
-inline StreamSet * applyShiftLimit(std::unique_ptr<PipelineBuilder> & P, StreamSet * const input) {
+inline StreamSet * applyShiftLimit(std::unique_ptr<ProgramBuilder> & P, StreamSet * const input) {
     if (ShiftLimit > 0) {
         StreamSet * output = P->CreateStreamSet(1, 1);
         P->CreateKernelCall<ShiftLimitKernel>(TestFieldWidth, ShiftLimit, input, output);
@@ -417,7 +417,7 @@ int main(int argc, char *argv[]) {
     //codegen::SegmentSize = 1;
     CPUDriver pxDriver("idisa_test");
     auto idisaTestFunction = pipelineGen(pxDriver);
-    
+
     const int32_t fd1 = openFile(Operand1TestFile, llvm::outs());
     const int32_t fd2 = openFile(Operand2TestFile, llvm::outs());
     const size_t failure_count = idisaTestFunction(fd1, fd2);

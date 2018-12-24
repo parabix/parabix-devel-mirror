@@ -205,7 +205,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
 //
 // All engines share a common pipeline to compute a stream of Matches from a given input Bytestream.
 
-std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_ptr<PipelineBuilder> & P, StreamSet *SourceStream) {
+std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, StreamSet *SourceStream) {
 
     Scalar * const callbackObject = P->getInputScalar("callbackObject");
 
@@ -308,8 +308,8 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
 
         StreamSet * const RequiredStreams = P->CreateStreamSet();
         StreamSet * UnicodeLB = nullptr;
-        
-        if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) { 
+
+        if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
             UnicodeLB = P->CreateStreamSet();
             StreamSet * const LineFeedStream = P->CreateStreamSet();
             P->CreateKernelCall<LineFeedKernelBuilder>(BasisBits, LineFeedStream);

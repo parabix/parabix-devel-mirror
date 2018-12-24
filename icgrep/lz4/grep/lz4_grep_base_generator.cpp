@@ -79,7 +79,7 @@ LZ4GrepBaseGenerator::LZ4GrepBaseGenerator(const FunctionType type)
     mPipeline = makeInternalPipeline(type);
 }
 
-inline std::unique_ptr<kernel::PipelineBuilder> LZ4GrepBaseGenerator::makeInternalPipeline(const FunctionType type) {
+inline std::unique_ptr<kernel::ProgramBuilder> LZ4GrepBaseGenerator::makeInternalPipeline(const FunctionType type) {
     Bindings inputs;
     Bindings outputs;
 
@@ -227,7 +227,7 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::multiplexingGrep(RE * 
                 fakeMatchCopiedBits = fakeStreams[0];
                 StreamSet * u8FinalStream = mPipeline->CreateStreamSet();
                 RE * const mpxU8FinalRe = transformCCs(mpx, u8FinalRe);
-                
+
                 std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
                 options->addAlphabet(mpx, uncompressedCharClasses);
                 options->setSource(fakeMatchCopiedBits);
@@ -240,7 +240,7 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::multiplexingGrep(RE * 
                 mPipeline->CreateKernelCall<LZ4NotKernel>(u8FinalStream, u8NoFinalStream);
             } else {
                 StreamSet * compressedNonFinalStream = mPipeline->CreateStreamSet(1, 1);
-  
+
                 std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
                 options->setSource(compressedBitStream);
                 options->setNumbering(BitNumbering::BigEndian);

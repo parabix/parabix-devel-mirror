@@ -19,7 +19,7 @@ LZ4DecompressionGenerator::LZ4DecompressionGenerator()
     mPipeline = makeInternalPipeline();
 }
 
-inline std::unique_ptr<kernel::PipelineBuilder> LZ4DecompressionGenerator::makeInternalPipeline() {
+inline std::unique_ptr<kernel::ProgramBuilder> LZ4DecompressionGenerator::makeInternalPipeline() {
     Bindings inputs;
 
     auto & b = mPxDriver.getBuilder();

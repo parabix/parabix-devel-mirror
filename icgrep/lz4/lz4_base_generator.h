@@ -59,7 +59,7 @@ protected:
     //// Data Member
     // Driver
     CPUDriver mPxDriver;
-    std::unique_ptr<kernel::PipelineBuilder> mPipeline;
+    std::unique_ptr<kernel::ProgramBuilder> mPipeline;
 
     // Runtime Arguments
     kernel::Scalar * mInputStream;

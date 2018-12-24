@@ -110,15 +110,12 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
         mStreamSetOutputBuffers.emplace_back(new ExternalBuffer(b, output.getType()));
     }
 
-    IntegerType * const sizeTy = b->getSizeTy();
-
-    // If an output is a managed buffer, we need to store both the buffer and a set of consumers.
+    // If an output is a managed buffer, store its handle.
     for (unsigned i = 0; i < numOfOutputStreams; ++i) {
         const Binding & output = mOutputStreamSets[i];
         if (LLVM_UNLIKELY(isLocalBuffer(output))) {
             Type * const handleTy = mStreamSetOutputBuffers[i]->getHandleType(b);
             addInternalScalar(handleTy, output.getName() + BUFFER_HANDLE_SUFFIX);
-            addInternalScalar(sizeTy, output.getName() + CONSUMED_ITEM_COUNT_SUFFIX);
         }
     }
 
@@ -309,10 +306,9 @@ void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
         } else if (isParamConstant(output)) {
             params.push_back(sizeTy); // constant
         }
-        // writable output items (after non-deferred produced item count)
-        if (LLVM_LIKELY(!isLocalBuffer(output))) {
-            params.push_back(sizeTy);
-        }
+        // If this is a local buffer, the next param is its consumed item count;
+        // otherwise it'll hold its writable output items.
+        params.push_back(sizeTy);
     }
 
 
@@ -346,7 +342,9 @@ void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
         if (LLVM_LIKELY(hasParam(output))) {
             (++args)->setName(output.getName() + "_produced");
         }
-        if (LLVM_LIKELY(!isLocalBuffer(output))) {
+        if (LLVM_LIKELY(isLocalBuffer(output))) {
+            (++args)->setName(output.getName() + "_consumed");
+        } else {
             (++args)->setName(output.getName() + "_writable");
         }
     }
@@ -457,6 +455,7 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
     const auto numOfOutputs = getNumOfStreamOutputs();
     reset(mProducedOutputItems, numOfOutputs);
     reset(mWritableOutputItems, numOfOutputs);
+    reset(mConsumedOutputItems, numOfOutputs);
     std::vector<Value *> updatableProducedOutputItems;
     reset(updatableProducedOutputItems, numOfOutputs);
 
@@ -510,12 +509,14 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
         b->CreateStore(produced, producedItems);
         mProducedOutputItems[i] = producedItems;
         /// ----------------------------------------------------
-        /// writable item count
+        /// consumed or writable item count
         /// ----------------------------------------------------
-        if (LLVM_UNLIKELY(!isLocalBuffer(output))) {
-            Value * const writable = &*(args++);
-            mWritableOutputItems[i] = writable;
-            Value * const capacity = b->CreateAdd(produced, writable);
+        Value * const arg = &*(args++);
+        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
+            mConsumedOutputItems[i] = arg;
+        } else {
+            mWritableOutputItems[i] = arg;
+            Value * const capacity = b->CreateAdd(produced, arg);
             buffer->setCapacity(b.get(), capacity);
         }
 
@@ -1162,7 +1163,8 @@ std::string Kernel::getDefaultFamilyName() const {
 }
 
 // CONSTRUCTOR
-Kernel::Kernel(std::string && kernelName,
+Kernel::Kernel(const TypeId typeId,
+               std::string && kernelName,
                Bindings && stream_inputs,
                Bindings && stream_outputs,
                Bindings && scalar_inputs,
@@ -1182,7 +1184,8 @@ Kernel::Kernel(std::string && kernelName,
 , mTerminationSignalPtr(nullptr)
 , mIsFinal(nullptr)
 , mNumOfStrides(nullptr)
-, mKernelName(annotateKernelNameWithDebugFlags(std::move(kernelName))) {
+, mKernelName(annotateKernelNameWithDebugFlags(std::move(kernelName)))
+, mTypeId(typeId) {
 
 }
 
@@ -1195,7 +1198,7 @@ SegmentOrientedKernel::SegmentOrientedKernel(std::string && kernelName,
                                              Bindings && scalar_parameters,
                                              Bindings && scalar_outputs,
                                              Bindings && internal_scalars)
-: Kernel(std::move(kernelName),
+: Kernel(TypeId::SegmentOriented, std::move(kernelName),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_parameters), std::move(scalar_outputs),
          std::move(internal_scalars))  {

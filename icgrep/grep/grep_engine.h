@@ -18,7 +18,7 @@
 namespace re { class CC; }
 namespace re { class RE; }
 namespace llvm { namespace cl { class OptionCategory; } }
-namespace kernel { class PipelineBuilder; }
+namespace kernel { class ProgramBuilder; }
 namespace kernel { class StreamSet; }
 class BaseDriver;
 
@@ -99,7 +99,7 @@ protected:
     bool hasComponent(Component compon_set, Component c);
     void setComponent(Component & compon_set, Component c);
 
-    std::pair<kernel::StreamSet *, kernel::StreamSet *> grepPipeline(const std::unique_ptr<kernel::PipelineBuilder> & P,
+    std::pair<kernel::StreamSet *, kernel::StreamSet *> grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P,
                                                                      kernel::StreamSet * ByteStream);
 
     virtual uint64_t doGrep(const std::string & fileName, std::ostringstream & strm);
