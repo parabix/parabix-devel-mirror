@@ -4,9 +4,12 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "re_intersect.h"
-#include "re_cc.h"
+#include <re/re_intersect.h>
+#include <re/re_cc.h>
 #include <re/re_name.h>
+#include <re/re_seq.h>
+#include <re/re_empty_set.h>
+#include <re/re_nullable.h>
 #include <llvm/Support/Casting.h>
 
 using namespace llvm;
@@ -14,6 +17,16 @@ using namespace llvm;
 namespace re {
 
 RE * makeIntersect(RE * lh, RE * rh) {
+    if (isEmptySet(lh)) return lh;
+    if (isEmptySet(rh)) return rh;
+    if (isEmptySeq(lh)) {
+        if (isNullable(rh)) return lh;
+        else return makeEmptySet();
+    }
+    if (isEmptySeq(rh)) {
+        if (isNullable(lh)) return rh;
+        else return makeEmptySet();
+    }
     if (defined<CC>(lh) && defined<CC>(rh)) {
         CC * lh_cc = defCast<CC>(lh);
         CC * rh_cc = defCast<CC>(rh);

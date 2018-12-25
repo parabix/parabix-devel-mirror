@@ -9,6 +9,7 @@
 
 #include <re/re_re.h>
 #include <re/re_nullable.h>
+#include <re/re_empty_set.h>
 #include <re/re_seq.h>
 #include <re/re_alt.h>
 
@@ -46,6 +47,10 @@ inline Assertion::Sense Assertion::negateSense(Assertion::Sense s) {
 }
 
 inline RE * makeAssertion(RE * asserted, Assertion::Kind k, Assertion::Sense s) {
+    if (isEmptySet(asserted)) {
+        if (s == Assertion::Sense::Negative) return makeSeq();
+        else return makeAlt();
+    }
     if (isNullable(asserted)) {
         if (k == Assertion::Kind::Boundary) {
             if (s == Assertion::Sense::Positive) return makeAlt();

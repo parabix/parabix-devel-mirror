@@ -100,12 +100,14 @@ AnchorResolution::AnchorResolution(RE * breakRE)
 
 RE * AnchorResolution::transformStart(Start * s) {
     if (mIsNegated) return makeNegativeLookBehindAssertion(mAnchorRE);
-    return makeAlt({makeSOT(), makeLookBehindAssertion(mAnchorRE)});
+    RE * sot = makeNegativeLookBehindAssertion(makeByte(0x00,0xFF));
+    return makeAlt({sot, makeLookBehindAssertion(mAnchorRE)});
 }
 
 RE * AnchorResolution::transformEnd(End * e) {
     if (mIsNegated) return makeNegativeLookAheadAssertion(mAnchorRE);
-    return makeAlt({makeEOT(), makeLookAheadAssertion(mAnchorRE)});
+    RE * eot = makeNegativeLookAheadAssertion(makeByte(0x00,0xFF));
+    return makeAlt({eot, makeLookAheadAssertion(mAnchorRE)});
 }
 
 RE * resolveAnchors(RE * r, RE * breakRE) {

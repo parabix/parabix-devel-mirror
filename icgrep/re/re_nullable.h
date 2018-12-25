@@ -6,6 +6,7 @@ namespace re { class Vector; }
 
 namespace re {
     bool isNullable(const RE * re);
+    bool isZeroWidth(const RE * re);
     RE * removeNullablePrefix(RE * re);
     RE * removeNullableSuffix(RE * re);
 }

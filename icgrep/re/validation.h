@@ -17,13 +17,13 @@ namespace re { class Name; class Start; class End; class CC; class Seq; class Al
 
 namespace re {
 /* Check that all names within an RE are defined. */
-bool validateNamesDefined(RE * r);
+bool validateNamesDefined(const RE * r);
 
 /* Check that all CCs within an RE have the given Alphabet */
-bool validateAlphabet(const cc::Alphabet * a, RE * r);
+bool validateAlphabet(const cc::Alphabet * a, const RE * r);
 
 /* Check that the RE is free of zero-width assertions */
-bool validateAssertionFree(RE * r);
+bool validateAssertionFree(const RE * r);
 
 /* A generic visitor for validation tasks.   The generic routines
    traverse the AST attempting validation at each RE node, returning
@@ -33,28 +33,26 @@ bool validateAssertionFree(RE * r);
 
 class RE_Validator {
 public:
-    bool validateRE(RE * r);
+    bool validateRE(const RE * r);
     RE_Validator(std::string name = "") : mValidatorName(name) {}
     virtual ~RE_Validator() {}
 protected:
-    bool validate(RE * r);
-    virtual bool validateName(Name * n);
-    virtual bool validateStart(Start * s);
-    virtual bool validateEnd(End * e);
-    virtual bool validateCC(CC * cc);
-    virtual bool validateSeq(Seq * s);
-    virtual bool validateAlt(Alt * a);
-    virtual bool validateRep(Rep * rep);
-    virtual bool validateIntersect(Intersect * e);
-    virtual bool validateDiff(Diff * d);
-    virtual bool validateRange(Range * rg);
-    virtual bool validateGroup(Group * g);
-    virtual bool validateAssertion(Assertion * a);
+    bool validate(const RE * r);
+    virtual bool validateName(const Name * n);
+    virtual bool validateStart(const Start * s);
+    virtual bool validateEnd(const End * e);
+    virtual bool validateCC(const CC * cc);
+    virtual bool validateSeq(const Seq * s);
+    virtual bool validateAlt(const Alt * a);
+    virtual bool validateRep(const Rep * rep);
+    virtual bool validateIntersect(const Intersect * e);
+    virtual bool validateDiff(const Diff * d);
+    virtual bool validateRange(const Range * rg);
+    virtual bool validateGroup(const Group * g);
+    virtual bool validateAssertion(const Assertion * a);
 private:
     std::string mValidatorName;
 };
-    
-bool validateAlphabet(const cc::Alphabet * a, RE * r);
 
 }
 #endif

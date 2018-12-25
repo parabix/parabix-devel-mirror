@@ -6,6 +6,9 @@
 
 #include "re_assertion.h"
 #include "re_cc.h"
+#include "re_start.h"
+#include "re_end.h"
+#include "re_any.h"
 #include "re_seq.h"
 #include "re_alt.h"
 #include "re_nullable.h"
@@ -16,11 +19,13 @@ using namespace llvm;
 namespace re {
     
 RE * makeSOT () {
-    return makeNegativeLookBehindAssertion(makeByte(0x00,0xFF));
+    //return makeNegativeLookBehindAssertion(makeByte(0x00,0xFF));
+    return makeStart();
 }
 
 RE * makeEOT () {
-    return makeNegativeLookAheadAssertion(makeByte(0x00,0xFF));
+    //return makeNegativeLookAheadAssertion(makeByte(0x00,0xFF));
+    return makeEnd();
 }
 
 RE * expandBoundaryAssertion (RE * re) {

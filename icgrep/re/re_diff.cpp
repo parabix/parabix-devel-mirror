@@ -9,6 +9,8 @@
 #include <re/re_seq.h>
 #include <re/re_name.h>
 #include <re/re_empty_set.h>
+#include <re/re_nullable.h>
+#include <re/validation.h>
 #include <llvm/Support/Casting.h>
 
 using namespace llvm;
@@ -18,15 +20,15 @@ namespace re {
 #include <re/re_empty_set.h>
     
 RE * makeDiff(RE * lh, RE * rh) {
-    if (LLVM_UNLIKELY(isEmptySeq(lh) && isEmptySeq(rh))) {
-        return makeEmptySet();
+    if (isEmptySeq(lh)) {
+        if (isNullable(rh)) return makeEmptySet();
+        if (validateAssertionFree(rh)) return lh; // EmptySeq()
     } else if (LLVM_UNLIKELY(isEmptySet(rh))) {
         return lh;
     } else if (LLVM_UNLIKELY(isEmptySet(lh))) {
         return lh;
-    } else {
-        return Diff::Create(lh, rh);
     }
+    return Diff::Create(lh, rh);
 }
 
 }

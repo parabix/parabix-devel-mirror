@@ -11,6 +11,8 @@
 #include <re/re_name.h>
 #include <re/re_seq.h>
 #include <re/re_assertion.h>
+#include <re/re_start.h>
+#include <re/re_end.h>
 #include <re/validation.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
@@ -32,6 +34,8 @@ private:
 
     template<typename Iterator>
     std::vector<RE *> makeContext(Iterator begin, Iterator end);
+    RE * transformStart(Start *) override;
+    RE * transformEnd(End *) override;
     RE * transformAssertion(Assertion * a) override;
     RE * simplifyAsserted(RE * asserted, std::vector<RE *> const & context);
     RE * simplifyForwardAssertion(RE * asserted);
@@ -41,27 +45,27 @@ private:
 
 class ResolvesToCC : public RE_Validator {
 public:
-    inline bool validateCC(CC *) override { return true; }
-    inline bool validateStart(Start *) override { return false; }
-    inline bool validateEnd(End *) override { return false; }
-    inline bool validateSeq(Seq * s) override { return (s) && s->size() <= 1; }
-    inline bool validateIntersect(Intersect *) override { return false; }
-    inline bool validateRange(Range *) override { return false; }
-    inline bool validateAssertion(Assertion *) override { return false; }
+    inline bool validateCC(const CC *) override { return true; }
+    inline bool validateStart(const Start *) override { return false; }
+    inline bool validateEnd(const End *) override { return false; }
+    inline bool validateSeq(const Seq * s) override { return (s) && s->size() <= 1; }
+    inline bool validateIntersect(const Intersect *) override { return false; }
+    inline bool validateRange(const Range *) override { return false; }
+    inline bool validateAssertion(const Assertion *) override { return false; }
 };
 
 class ValidateAsserted : public RE_Validator {
 public:
-    inline bool validateStart(Start * s) override { return false; }
-    inline bool validateEnd(End * e) override { return false; }
-    inline bool validateRep(Rep * r) override { return false; }
-    inline bool validateIntersect(Intersect * i) override { return false; }
-    inline bool validateRange(Range * r) override { return false; }
-    inline bool validateAssertion(Assertion * a) override { return false; }
-    inline bool validateDiff(Diff * d) override {
+    inline bool validateStart(const Start * s) override { return false; }
+    inline bool validateEnd(const End * e) override { return false; }
+    inline bool validateRep(const Rep * r) override { return false; }
+    inline bool validateIntersect(const Intersect * i) override { return false; }
+    inline bool validateRange(const Range * r) override { return false; }
+    inline bool validateAssertion(const Assertion * a) override { return false; }
+    inline bool validateDiff(const Diff * d) override {
         return ResolvesToCC{}.validateRE(d);
     }
-    inline bool validateSeq(Seq * s) override {
+    inline bool validateSeq(const Seq * s) override {
         auto ccValidator = ResolvesToCC{};
         for (auto e : *s) {
             if (!ccValidator.validateRE(e) || !validateRE(e)) {
@@ -74,15 +78,15 @@ public:
 
 class ValidateZeroWidth : public RE_Validator {
 public:
-    inline bool validateStart(Start * s) { return false; }
-    inline bool validateEnd(End * e) { return false; }
-    inline bool validateCC(CC * cc) { return false; }
-    inline bool validateRep(Rep * rep) { return false; }
-    inline bool validateIntersect(Intersect * e) { return false; }
-    inline bool validateRange(Range * rg) { return false; }
-    inline bool validateAssertion(Assertion * a) { return true; }
+    inline bool validateStart(const Start * s) { return true; }
+    inline bool validateEnd(const End * e) { return true; }
+    inline bool validateCC(const CC * cc) { return false; }
+    inline bool validateRep(const Rep * rep) { return false; }
+    inline bool validateIntersect(const Intersect * e) { return false; }
+    inline bool validateRange(const Range * rg) { return false; }
+    inline bool validateAssertion(const Assertion * a) { return true; }
 
-    inline bool validateSeq(Seq * s) { 
+    inline bool validateSeq(const Seq * s) {
         for (auto e : *s) {
             if (!validateRE(e)) return false;
         }
@@ -162,6 +166,18 @@ RE * reverseAsserted(RE * re) {
     } else {
         return re;
     }
+}
+
+RE * Context::transformStart(Start * s) {
+    if (before.empty()) return s;
+    if (llvm::isa<Start>(before.back())) return makeSeq();
+    return makeAlt();
+}
+
+RE * Context::transformEnd(End * e) {
+    if (after.empty()) return e;
+    if (llvm::isa<End>(after.front())) return makeSeq();
+    return makeAlt();
 }
 
 RE * Context::transformAssertion(Assertion * a) {
@@ -316,7 +332,6 @@ RE * AssertionPrep::transformDiff(Diff * d) {
     return transform(subtractCC(lh, rh));
 }
 
-
 RE * RE_ContextSimplifier::transformSeq(Seq * s) {
     std::vector<RE *> seq{};
     seq.reserve(s->size());
@@ -344,13 +359,12 @@ RE * RE_ContextSimplifier::transformSeq(Seq * s) {
         }
     }
 
-    
-    if (hasChanged) {
-        auto rt = makeSeq(seq.begin(), seq.end());
-        return rt;
-    } else {
-        return s;
-    }
+if (hasChanged) {
+    auto rt = makeSeq(seq.begin(), seq.end());
+    return rt;
+} else {
+    return s;
+}
 }
 
 } // namespace re

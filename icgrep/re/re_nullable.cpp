@@ -9,6 +9,7 @@
 #include <re/re_seq.h>             // for Seq, makeSeq
 #include <re/re_group.h>             // for Seq, makeSeq
 #include <re/re_toolchain.h>
+#include <re/validation.h>
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa
 
@@ -40,8 +41,9 @@ bool isNullable(const RE * re) {
         }
     } else if (const Rep* re_rep = dyn_cast<const Rep>(re)) {
         return (re_rep->getLB() == 0) || isNullable(re_rep->getRE());
-    } else if (isa<Diff>(re)) {
+    } else if (const Diff * d = dyn_cast<const Diff>(re)) {
         // a Diff of Seq({}) and an Assertion represents a complemented assertion.
+        //return isNullable(d->getLH()) && (!isNullable(d->getRH())) && (!isZeroWidth(d->getRH()));
         return false;
     } else if (const Intersect * e = dyn_cast<const Intersect>(re)) {
         return isNullable(e->getLH()) && isNullable(e->getRH());
@@ -51,6 +53,22 @@ bool isNullable(const RE * re) {
     return false;
 }
 
+struct ZeroWidthValidator : public RE_Validator {
+    ZeroWidthValidator() : RE_Validator() {}
+    bool validateName(const Name * n) override {
+        RE * defn = n->getDefinition();
+        return defn && validate(defn);
+    }
+    bool validateAssertion(const Assertion * a) override {return true;}
+    bool validateCC(const CC *) override {return false;}
+    bool validateRange(const Range *) override {return false;}
+    bool validateDiff(const Diff * d) override {return validate(d->getLH());}
+    bool validateIntersect(const Intersect * x) override {return validate(x->getLH()) || validate(x->getRH());}
+};
+
+bool isZeroWidth(const RE * re) {
+    return ZeroWidthValidator().validateRE(re);
+}
 
 class NullablePrefixRemover: public RE_Transformer {
 protected:
@@ -153,5 +171,4 @@ RE * removeNullableSuffix(RE * r) {
     return NullableSuffixRemover().transformRE(r);
 }
     
-
 }
