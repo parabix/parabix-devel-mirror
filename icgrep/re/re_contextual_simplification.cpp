@@ -22,15 +22,11 @@ namespace re {
 class Context : private RE_Transformer {
 public:
     Context(Seq * s, size_t idx);
-    bool good() const noexcept;
+    bool empty() const noexcept;
     RE * simplify(RE * re);
 private:
     std::vector<RE *> before;
     std::vector<RE *> after;
-
-    Name * any;
-
-    bool _good = true;
 
     template<typename Iterator>
     std::vector<RE *> makeContext(Iterator begin, Iterator end);
@@ -96,12 +92,8 @@ public:
 
 class AssertionPrep : public RE_Transformer {
 public:
-    using Sense = Assertion::Sense;
     AssertionPrep(Assertion * assertion);
     RE * transformDiff(Diff * d) override;
-private:
-    Sense sense;
-    Name * any;
 };
 
 
@@ -109,21 +101,12 @@ private:
 Context::Context(Seq * s, size_t idx) 
 : RE_Transformer("Contextual Engine", NameTransformationMode::TransformDefinition)
 {
-    if (idx < s->size()) {
-        this->before = makeContext(s->rbegin() + (s->size() - idx), s->rend());
-        this->after = makeContext(s->begin() + idx + 1, s->end());
-        if (before.size() == 0 && after.size() == 0) {
-            _good = false;
-        }
-    } else {
-        this->_good = false;
-    }
-
-    this->any = llvm::cast<Name>(makeAny());
+    this->before = makeContext(s->rbegin() + (s->size() - idx), s->rend());
+    this->after = makeContext(s->begin() + idx + 1, s->end());
 }
 
-bool Context::good() const noexcept {
-    return this->_good;
+bool Context::empty() const noexcept {
+    return before.empty() && after.empty();
 }
 
 RE * Context::simplify(RE * re) {
@@ -181,47 +164,35 @@ RE * Context::transformEnd(End * e) {
 }
 
 RE * Context::transformAssertion(Assertion * a) {
-    using Kind = Assertion::Kind;
-    if (good() && ValidateAsserted{}.validateRE(a->getAsserted())) {
-        AssertionPrep prep{a};
-        RE * asserted = prep.transformRE(a->getAsserted());
-        Assertion::Sense sense = a->getSense();
-        RE * simplifiedAsserted = nullptr;
-        if (a->getKind() == Kind::Lookahead) {
-            simplifiedAsserted = simplifyAsserted(asserted, after);
-        } else if (a->getKind() == Kind::Lookbehind) {
-            asserted = reverseAsserted(asserted);
-            simplifiedAsserted = reverseAsserted(simplifyAsserted(asserted, before));
-        } else {
+    Assertion::Sense sense = a->getSense();
+    AssertionPrep prep{a};
+    RE * asserted = prep.transformRE(a->getAsserted());
+    RE * simplifiedAsserted = nullptr;
+    if (a->getKind() == Assertion::Kind::Lookahead) {
+        if (after.empty()) return a;
+        simplifiedAsserted = simplifyAsserted(asserted, after);
+    } else if (a->getKind() == Assertion::Kind::Lookbehind) {
+        if (before.empty()) return a;
+        asserted = reverseAsserted(asserted);
+        simplifiedAsserted = reverseAsserted(simplifyAsserted(asserted, before));
+    } else {
+        return a;
+    }
+    if (simplifiedAsserted != nullptr) {
+        if (simplifiedAsserted == asserted) {
             return a;
-        }
-
-        if (simplifiedAsserted != nullptr) {
-            if (simplifiedAsserted == asserted) {
-                return a;
-            } else if (isEmptySet(simplifiedAsserted)) {
-                if (sense == Assertion::Sense::Positive) return makeAlt();
-                else return makeSeq();
-            } else if (isEmptySeq(simplifiedAsserted)) {
-                if (sense == Assertion::Sense::Positive) return makeSeq();
-                else return makeAlt();
-            } else {
-                return makeAssertion(simplifiedAsserted, a->getKind(), sense);
-            }
+        } else if (isEmptySet(simplifiedAsserted)) {
+            if (sense == Assertion::Sense::Positive) return makeAlt();
+            else return makeSeq();
+        } else if (isEmptySeq(simplifiedAsserted)) {
+            if (sense == Assertion::Sense::Positive) return makeSeq();
+            else return makeAlt();
         } else {
-            return a;
+            return makeAssertion(simplifiedAsserted, a->getKind(), sense);
         }
     } else {
         return a;
     }
-}
-
-Seq * latterSeq(Seq * s, size_t i) {
-    Seq * seq = llvm::cast<Seq>(makeSeq());
-    for (auto it = s->begin() + i; it != s->end(); it++) {
-        seq->push_back(*it);
-    }
-    return s;
 }
 
 RE * Context::simplifyAsserted(RE * asserted, std::vector<RE *> const & context) {
@@ -246,7 +217,6 @@ RE * Context::simplifyAsserted(RE * asserted, std::vector<RE *> const & context)
         std::vector<RE *> elems{a->begin(), a->end()};
         bool isWholeSeqSuperSet = context.size() >= a->size();
         bool didChange = false;
-        elems.reserve(a->size());
 
         for (size_t i = 0; i < std::min(a->size(), context.size()); ++i) {
             RE * simplifiedElem = simplifyAsserted((*a)[i], std::vector<RE *>{context[i]});
@@ -317,10 +287,8 @@ RE * Context::simplifyAsserted(RE * asserted, std::vector<RE *> const & context)
 
 
 AssertionPrep::AssertionPrep(Assertion * assertion)
-: RE_Transformer("", NameTransformationMode::TransformDefinition), 
-  sense(assertion->getSense())
+: RE_Transformer("", NameTransformationMode::TransformDefinition)
 {
-    this->any = llvm::cast<Name>(makeAny());
 }
 
 RE * AssertionPrep::transformDiff(Diff * d) {
@@ -337,9 +305,9 @@ RE * RE_ContextSimplifier::transformSeq(Seq * s) {
     seq.reserve(s->size());
     bool hasChanged = false;
     for (size_t i = 0; i < s->size(); ++i) {
-        if (!validateAssertionFree((*s)[i])) {
+        if (isZeroWidth((*s)[i])) {
             Context context{s, i};
-            if (!context.good()) {  // abort simplification is context is bad
+            if (context.empty()) {
                 seq.push_back((*s)[i]);
                 continue;
             }
@@ -347,7 +315,7 @@ RE * RE_ContextSimplifier::transformSeq(Seq * s) {
             if (simp != (*s)[i]) {
                 hasChanged = true;
                 if (isEmptySet(simp)) {
-                    return makeAlt();
+                    return simp; // Propagate failure
                 } else {
                     seq.push_back(simp);
                 }
