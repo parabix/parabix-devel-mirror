@@ -39,6 +39,9 @@ inline std::vector<unsigned> lexicalOrdering(Graph && G, const llvm::Twine error
     if (LLVM_UNLIKELY(boost::num_edges(G) != 0)) {
         llvm::report_fatal_error(error);
     }
+
+
+
     return L;
 }
 

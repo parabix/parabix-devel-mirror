@@ -5,13 +5,41 @@
 
 namespace kernel {
 
+// NOTE: the following is a workaround for an LLVM bug for 32-bit VMs on 64-bit architectures.
+// When calculating the address of a local stack allocated object, the size of a pointer will
+// be 32-bits but when performing a GEP on the same pointer as the result of a "malloc" or
+// when passed as a function parameter, the size will be 64-bits. More investigation should be
+// done to determine which versions of LLVM are affected by this bug.
+
+inline LLVM_READNONE bool useMalloc(BuilderRef b) {
+    DataLayout DL(b->getModule());
+    return (DL.getPointerSizeInBits() != b->getSizeTy()->getBitWidth());
+}
+
+inline Value * makeStateObject(BuilderRef b, Type * type) {
+    Value * ptr = nullptr;
+    if (LLVM_UNLIKELY(useMalloc(b))) {
+        ptr = b->CreateCacheAlignedMalloc(type);
+    } else {
+        ptr = b->CreateCacheAlignedAlloca(type);
+    }
+    b->CreateMemZero(ptr, ConstantExpr::getSizeOf(type), b->getCacheAlignment());
+    return ptr;
+}
+
+inline void destroyStateObject(BuilderRef b, Value * ptr) {
+    if (LLVM_UNLIKELY(useMalloc(b))) {
+        b->CreateFree(ptr);
+    }
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateSingleThreadKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
 
     StructType * const localStateType = getLocalStateType(b);
-    Value * const localState = b->CreateCacheAlignedAlloca(localStateType);
+    Value * const localState = makeStateObject(b, localStateType);
     b->CreateMemZero(localState, ConstantExpr::getSizeOf(localStateType), b->getCacheAlignment());
     allocateThreadLocalState(b, localState);
     setThreadLocalState(b, localState);
@@ -22,6 +50,7 @@ void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
     }
     end(b, 1);
     deallocateThreadLocalState(b, localState);
+    destroyStateObject(b, localState);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -170,13 +199,8 @@ enum : int {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StructType * PipelineCompiler::getThreadStateType(BuilderRef b) {
     std::vector<Type *> threadStructFields;
-
-    // NOTE: the following is a workaround for an LLVM bug for 32-bit VMs on 64-bit architectures
-    DataLayout DL(b->getModule());
-    Type * handleType = mPipelineKernel->getHandle()->getType();
-    Type * handleIntType = DL.getIntPtrType(handleType);
-
-    threadStructFields.push_back(handleIntType);
+    Type * const handleType = mPipelineKernel->getHandle()->getType();
+    threadStructFields.push_back(handleType);
     threadStructFields.push_back(b->getSizeTy());
     threadStructFields.push_back(getLocalStateType(b));
     const auto numOfInputs = mPipelineKernel->getNumOfStreamInputs();
@@ -197,22 +221,16 @@ inline StructType * PipelineCompiler::getThreadStateType(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructThreadState
  ** ------------------------------------------------------------------------------------------------------------- */
-inline AllocaInst * PipelineCompiler::allocateThreadState(BuilderRef b, const unsigned segOffset) {
+inline Value * PipelineCompiler::allocateThreadState(BuilderRef b, const unsigned segOffset) {
 
     StructType * const threadStructType = getThreadStateType(b);
-    AllocaInst * const threadState = b->CreateCacheAlignedAlloca(threadStructType);
-    b->CreateMemZero(threadState, ConstantExpr::getSizeOf(threadStructType), b->getCacheAlignment());
+    Value * const threadState = makeStateObject(b, threadStructType);
 
     std::vector<Value *> indices(2);
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(HANDLE_INDEX);
-
-    // NOTE: this is a workaround for an LLVM bug for 32-bit VMs on 64-bit architectures
-    DataLayout DL(b->getModule());
-    Type * handleType = mPipelineKernel->getHandle()->getType();
-    Type * handleIntType = DL.getIntPtrType(handleType);
-    Value * const handleInt = b->CreatePtrToInt(mPipelineKernel->getHandle(), handleIntType);
-    b->CreateStore(handleInt, b->CreateGEP(threadState, indices));
+    Value * const handle = mPipelineKernel->getHandle();
+    b->CreateStore(handle, b->CreateGEP(threadState, indices));
     indices[1] = b->getInt32(SEGMENT_OFFSET_INDEX);
     b->CreateStore(b->getSize(segOffset), b->CreateGEP(threadState, indices));
     indices[1] = b->getInt32(LOCAL_STATE_INDEX);
@@ -249,10 +267,7 @@ inline Value * PipelineCompiler::setThreadState(BuilderRef b, Value * threadStat
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(HANDLE_INDEX);
 
-    // NOTE: this is a workaround for an LLVM bug for 32-bit VMs on 64-bit architectures
-    Value * handleInt = b->CreateLoad(b->CreateGEP(threadState, indices));
-    Type * handleType = mPipelineKernel->getHandle()->getType();
-    Value * handle = b->CreateIntToPtr(handleInt, handleType);
+    Value * handle = b->CreateLoad(b->CreateGEP(threadState, indices));
     mPipelineKernel->setHandle(b, handle);
 
     indices[1] = b->getInt32(SEGMENT_OFFSET_INDEX);
@@ -287,6 +302,7 @@ inline void PipelineCompiler::deallocateThreadState(BuilderRef b, Value * const 
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(LOCAL_STATE_INDEX);
     deallocateThreadLocalState(b, b->CreateGEP(threadState, indices));
+    destroyStateObject(b, threadState);
 }
 
 enum : int {

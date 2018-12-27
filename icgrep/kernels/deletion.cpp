@@ -217,7 +217,7 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     Constant * const BlockWidth = b->getSize(b->getBitBlockWidth());
 
     Value * produced = b->getProducedItemCount("compressedOutput");
-    Value * const pendingItemCount = b->CreateURem(produced, BlockWidth);
+    Value * const pendingItemCount = b->CreateZExtOrTrunc(b->CreateURem(produced, BlockWidth), fwTy);
 
     std::vector<Value *> pendingData(mStreamCount);
     for (unsigned i = 0; i < mStreamCount; i++) {

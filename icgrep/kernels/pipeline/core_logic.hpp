@@ -208,7 +208,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelLoopCall);
-    expandOutputBuffers(b);
     writeKernelCall(b);
 
     BasicBlock * const copyBack =
@@ -265,6 +264,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     writeCopyForwardLogic(b);
     writePopCountComputationLogic(b);
     computeFullyProducedItemCounts(b);
+    mKernelLoopExitPhiCatch->moveAfter(b->GetInsertBlock());
     b->CreateBr(mKernelLoopExitPhiCatch);
     b->SetInsertPoint(mKernelLoopExitPhiCatch);
     b->CreateBr(mKernelExit);
@@ -274,6 +274,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelExit);
+    mKernelExit->moveAfter(mKernelLoopExitPhiCatch);
     writeFinalConsumedItemCounts(b);
     updatePopCountReferenceCounts(b);
     readFinalProducedItemCounts(b);

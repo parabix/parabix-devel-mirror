@@ -172,8 +172,6 @@ Value * ExternalBuffer::getRawItemPointer(IDISA_Builder * const b, Value * const
 }
 
 inline void ExternalBuffer::assertValidBlockIndex(IDISA_Builder * const b, Value * blockIndex) const {
-    // TODO: how should lookahead be handled? we technically allow the kernel to "peek" one block past the
-    // reported limit. Should the capacity simply be set as such?
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Value * const blockCount = b->CreateCeilUDiv(getCapacity(b), b->getSize(b->getBitBlockWidth()));
         blockIndex = b->CreateZExtOrTrunc(blockIndex, blockCount->getType());
@@ -183,12 +181,12 @@ inline void ExternalBuffer::assertValidBlockIndex(IDISA_Builder * const b, Value
 }
 
 Value * ExternalBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex) const {
-//    assertValidBlockIndex(b, blockIndex);
+    //assertValidBlockIndex(b, blockIndex);
     return StreamSetBuffer::getStreamBlockPtr(b, streamIndex, blockIndex);
 }
 
 Value * ExternalBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
-//    assertValidBlockIndex(b, blockIndex);
+    //assertValidBlockIndex(b, blockIndex);
     return StreamSetBuffer::getStreamPackPtr(b, streamIndex, blockIndex, packIndex);
 }
 
@@ -631,11 +629,39 @@ DynamicBuffer::DynamicBuffer(const std::unique_ptr<kernel::KernelBuilder> & b, T
     assert ("dynamic buffer overflow must be a multiple of bitblock width" && (overflowSize % b->getBitBlockWidth()) == 0);
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief resolveStreamSetType
+ ** ------------------------------------------------------------------------------------------------------------- */
+Type * resolveStreamSetType(const std::unique_ptr<kernel::KernelBuilder> & b, Type * const streamSetType) {
+    unsigned numElements = 1;
+    Type * type = streamSetType;
+    if (LLVM_LIKELY(type->isArrayTy())) {
+        numElements = type->getArrayNumElements();
+        type = type->getArrayElementType();
+    }
+    if (LLVM_LIKELY(type->isVectorTy() && type->getVectorNumElements() == 0)) {
+        type = type->getVectorElementType();
+        if (LLVM_LIKELY(type->isIntegerTy())) {
+            const auto fieldWidth = cast<IntegerType>(type)->getBitWidth();
+            type = b->getBitBlockType();
+            if (fieldWidth != 1) {
+                type = ArrayType::get(type, fieldWidth);
+            }
+            return ArrayType::get(type, numElements);
+        }
+    }
+    std::string tmp;
+    raw_string_ostream out(tmp);
+    streamSetType->print(out);
+    out << " is an unvalid stream set buffer type.";
+    report_fatal_error(out.str());
+}
+
 StreamSetBuffer::StreamSetBuffer(const BufferKind k, const std::unique_ptr<kernel::KernelBuilder> & b,
                                  Type * const baseType, const unsigned AddressSpace)
 : mBufferKind(k)
 , mHandle(nullptr)
-, mType(b->resolveStreamSetType(baseType))
+, mType(resolveStreamSetType(b, baseType))
 , mAddressSpace(AddressSpace)
 , mBaseType(baseType) {
 

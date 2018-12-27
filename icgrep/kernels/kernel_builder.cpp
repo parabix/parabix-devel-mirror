@@ -304,35 +304,6 @@ Value * KernelBuilder::CreateCeilUMul2(Value * const number, const ProcessingRat
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief resolveStreamSetType
- ** ------------------------------------------------------------------------------------------------------------- */
-Type * KernelBuilder::resolveStreamSetType(Type * const streamSetType) {
-    // TODO: Should this function be here? in StreamSetBuffer? or in Binding?
-    unsigned numElements = 1;
-    Type * type = streamSetType;
-    if (LLVM_LIKELY(type->isArrayTy())) {
-        numElements = type->getArrayNumElements();
-        type = type->getArrayElementType();
-    }
-    if (LLVM_LIKELY(type->isVectorTy() && type->getVectorNumElements() == 0)) {
-        type = type->getVectorElementType();
-        if (LLVM_LIKELY(type->isIntegerTy())) {
-            const auto fieldWidth = cast<IntegerType>(type)->getBitWidth();
-            type = getBitBlockType();
-            if (fieldWidth != 1) {
-                type = ArrayType::get(type, fieldWidth);
-            }
-            return ArrayType::get(type, numElements);
-        }
-    }
-    std::string tmp;
-    raw_string_ostream out(tmp);
-    streamSetType->print(out);
-    out << " is an unvalid stream set buffer type.";
-    report_fatal_error(out.str());
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getKernelName
  ** ------------------------------------------------------------------------------------------------------------- */
 std::string KernelBuilder::getKernelName() const {

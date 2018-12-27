@@ -151,7 +151,7 @@ StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuild
 
 {Binding{"marker", mask, FixedRate(), Principal()},
 Binding{"source", source, PopcountOf("marker")}},
-{Binding{"output", expanded, FixedRate()}},
+{Binding{"output", expanded, FixedRate(), BlockSize(1)}},
 {}, {}, {})
 , mFieldWidth(FieldWidth)
 , mSelectedStreamBase(base)

@@ -140,8 +140,6 @@ public:
 
     llvm::Value * CreateCeilUMul2(llvm::Value * const number, const ProcessingRate::RateValue & factor, const llvm::Twine & Name = "");
 
-    llvm::Type * resolveStreamSetType(llvm::Type * streamSetType);
-
     unsigned getStride() const {
         return mStride;
     }

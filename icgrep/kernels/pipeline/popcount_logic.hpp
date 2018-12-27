@@ -58,10 +58,6 @@ inline void PipelineCompiler::writePopCountComputationLogic(BuilderRef b) {
         Value * const rounding = b->CreateSelect(mTerminatedPhi, BLOCK_SIZE_MINUS_1, ZERO);
         Value * const endIndex = b->CreateLShr(b->CreateAdd(produced, rounding), LOG2_BLOCK_WIDTH);
 
-
-
-
-
         // TODO: if the source items of the consumes of this pop count ref
         // were already produced, we could limit how many items are considered
         // here. This would likely require that the lexographical ordering

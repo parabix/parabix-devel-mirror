@@ -195,7 +195,7 @@ protected:
 // internal pipeline functions
 
     LLVM_READNONE StructType * getThreadStateType(BuilderRef b);
-    AllocaInst * allocateThreadState(BuilderRef b, const unsigned segOffset);
+    Value * allocateThreadState(BuilderRef b, const unsigned segOffset);
     Value * setThreadState(BuilderRef b, Value * threadState);
     void deallocateThreadState(BuilderRef b, Value * const threadState);
 
@@ -252,7 +252,6 @@ protected:
 
 // intra-kernel functions
 
-    void expandOutputBuffers(BuilderRef b);
     void expandOutputBuffer(BuilderRef b, const unsigned outputPort, Value * const hasEnough, BasicBlock * const target);
 
     Value * getInputStrideLength(BuilderRef b, const unsigned inputPort);
@@ -351,10 +350,7 @@ protected:
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getFacsimile(const unsigned bufferVertex) const;
     BufferType getOutputBufferType(const unsigned outputPort) const;
-
-    Value * getLogicalInputBaseAddress(BuilderRef b, const unsigned inputPort);
-    Value * getLogicalOutputBaseAddress(BuilderRef b, const unsigned outputPort);
-    Value * calculateLogicalBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemCount);
+    Value * epoch(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position, Value * const available) const;
 
 // cycle counter functions
 

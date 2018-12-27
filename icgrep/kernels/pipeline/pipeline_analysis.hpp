@@ -7,7 +7,7 @@ namespace kernel {
 
 #warning TODO: support call bindings that produce output that are inputs of other call bindings or become scalar outputs of the pipeline
 
-#if 0
+#if 1
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printBufferGraph
@@ -108,20 +108,24 @@ namespace {
 
     template <typename Graph, typename Vertex = typename graph_traits<Graph>::vertex_descriptor>
     bool add_edge_if_no_induced_cycle(const Vertex s, const Vertex t, Graph & G) {
+        // If s-t exists, skip adding this edge
+        if (edge(s, t, G).second) {
+            return true;
+        }
         // If G is a DAG and there is a t-s path, adding s-t will induce a cycle.
         const auto d = in_degree(s, G);
         if (d != 0) {
             flat_set<Vertex> V;
             V.reserve(num_vertices(G) - 1);
             std::queue<Vertex> Q;
+            // do a BFS to find one a path from t to s
             Q.push(t);
-            // do a BFS to find one a path to s
             for (;;) {
                 const auto u = Q.front();
                 Q.pop();
                 for (auto e : make_iterator_range(out_edges(u, G))) {
                     const auto v = target(e, G);
-                    if (V.contains(v)) continue;
+                    if (V.count(v) != 0) continue;
                     if (LLVM_UNLIKELY(v == s)) return false;
                     Q.push(v);
                     V.insert(v);
@@ -175,12 +179,30 @@ std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
     }
 
     // check any dynamic buffer last
-
-
+    std::vector<unsigned> D;
+    D.reserve(numOfOutputs);
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        if (LLVM_UNLIKELY(isa<DynamicBuffer>(getOutputBuffer(i)))) {
+            D.push_back(i);
+        }
+    }
+    for (const auto i : D) {
+        for (unsigned j = 0; j < numOfInputs; ++j) {
+            add_edge_if_no_induced_cycle(j, numOfInputs + i, G);
+        }
+        auto Dj = D.begin();
+        for (unsigned j = 0; j < numOfOutputs; ++j) {
+            if (*Dj == j) {
+                ++Dj;
+            } else {
+                add_edge_if_no_induced_cycle(numOfInputs + j, numOfInputs + i, G);
+            }
+        }
+        assert (Dj == D.end());
+    }
 
     // TODO: add additional constraints on input ports to indicate the ones
     // likely to have fewest number of strides?
-
 
     return lexicalOrdering(std::move(G), mKernel->getName() + " has cyclic port dependencies.");
 }

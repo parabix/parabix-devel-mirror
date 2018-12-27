@@ -172,7 +172,7 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned ou
     if (addOverflow) {
         const auto size = getCopyBack(getOutputBufferVertex(outputPort));
         if (size) {
-            copyBack = b->getSize(size);
+            copyBack = b->getSize(size - 1);
         }
     }
     return buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
@@ -381,13 +381,6 @@ inline Value * PipelineCompiler::calculateBufferExpansionSize(BuilderRef b, cons
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief expandOutputBuffers
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::expandOutputBuffers(BuilderRef b) {
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief expandOutputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::expandOutputBuffer(BuilderRef b, const unsigned outputPort, Value * const hasEnough, BasicBlock * const target) {
@@ -456,25 +449,37 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     args.push_back(mKernel->getHandle());
     args.push_back(mNumOfLinearStrides);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        args.push_back(getLogicalInputBaseAddress(b, i));
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+
         // calculate the deferred processed item count
-        PHINode * itemCount = nullptr;
+        PHINode * processed = nullptr;
         bool deferred = false;
+
+        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        #ifdef PRINT_DEBUG_MESSAGES
+        const auto prefix = makeBufferName(mKernelIndex, input);
+        b->CallPrintInt(prefix + "_processed", mAlreadyProcessedPhi[i]);
+        b->CallPrintInt(prefix + "_accessible", mLinearInputItemsPhi[i]);
+        #endif
+
         if (mAlreadyProcessedDeferredPhi[i]) {
-            itemCount = mAlreadyProcessedDeferredPhi[i];
+            #ifdef PRINT_DEBUG_MESSAGES
+            b->CallPrintInt(prefix + "_deferred", mAlreadyProcessedDeferredPhi[i]);
+            #endif
+            processed = mAlreadyProcessedDeferredPhi[i];
             deferred = true;
         } else {
-            itemCount = mAlreadyProcessedPhi[i];
+            processed = mAlreadyProcessedPhi[i];
         }
-        mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, itemCount, args);
         // calculate how many linear items are from the *deferred* position
-        Value * linearItemCount = mLinearInputItemsPhi[i];
-        if (mAlreadyProcessedDeferredPhi[i]) {
+        Value * inputItems = mLinearInputItemsPhi[i];
+        if (deferred) {
             Value * diff = b->CreateSub(mAlreadyProcessedPhi[i], mAlreadyProcessedDeferredPhi[i]);
-            linearItemCount = b->CreateAdd(linearItemCount, diff);
+            inputItems = b->CreateAdd(inputItems, diff);
         }
-        args.push_back(linearItemCount);
+        args.push_back(epoch(b, input, getInputBuffer(i), processed, inputItems));
+        mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, args);
+
+        args.push_back(inputItems);
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
             args.push_back(getPopCountArray(b, i));
         }
@@ -487,14 +492,23 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto nonManaged = getOutputBufferType(i) != BufferType::Managed;
-        if (LLVM_LIKELY(nonManaged)) {
-            args.push_back(getLogicalOutputBaseAddress(b, i));
-        }
         const Binding & output = mKernel->getOutputStreamSetBinding(i);
-        PHINode * produced = mAlreadyProducedPhi[i];
+        PHINode * const produced = mAlreadyProducedPhi[i];
+        Value * const writable = mLinearOutputItemsPhi[i];
+
+        #ifdef PRINT_DEBUG_MESSAGES
+        const auto prefix = makeBufferName(mKernelIndex, output);
+        b->CallPrintInt(prefix + "_produced", produced);
+        b->CallPrintInt(prefix + "_writable", writable);
+        #endif
+
+
+        if (LLVM_LIKELY(nonManaged)) {
+            args.push_back(epoch(b, output, getOutputBuffer(i), produced, writable));
+        }
         mReturnedProducedItemCountPtr[i] = addItemCountArg(b, output, canTerminate, produced, args);
         if (LLVM_LIKELY(nonManaged)) {
-            args.push_back(mLinearOutputItemsPhi[i]);
+            args.push_back(writable);
         } else {
             args.push_back(mConsumedItemCount[i]);
         }

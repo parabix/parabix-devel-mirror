@@ -663,34 +663,19 @@ void PipelineCompiler::writeOverflowCopy(BuilderRef b, const OverflowCopy direct
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getLogicalInputBaseAddress
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::getLogicalInputBaseAddress(BuilderRef b, const unsigned inputPort) {
-    const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
-    const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
-    Value * const processed = mAlreadyProcessedPhi[inputPort];
-    return calculateLogicalBaseAddress(b, input, buffer, processed);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getLogicalOutputBaseAddress
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::getLogicalOutputBaseAddress(BuilderRef b, const unsigned outputPort) {
-    const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
-    const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
-    Value * const produced = mAlreadyProducedPhi[outputPort];
-    return calculateLogicalBaseAddress(b, output, buffer, produced);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief calculateLogicalBaseAddress
+ * @brief epoch
  *
  * Returns the address of the "zeroth" item of the (logically-unbounded) stream set.
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::calculateLogicalBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemCount) {
+Value * PipelineCompiler::epoch(BuilderRef b,
+                                const Binding & binding,
+                                const StreamSetBuffer * const buffer,
+                                Value * const position,
+                                Value * const available) const {
+
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(floor_log2(b->getBitBlockWidth()));
     Constant * const ZERO = b->getSize(0);
-    Value * const blockIndex = b->CreateLShr(itemCount, LOG_2_BLOCK_WIDTH);
+    Value * const blockIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
     Value * address = buffer->getStreamLogicalBasePtr(b.get(), ZERO, blockIndex);
     address = b->CreatePointerCast(address, buffer->getPointerType());
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -699,16 +684,12 @@ Value * PipelineCompiler::calculateLogicalBaseAddress(BuilderRef b, const Bindin
         Value * const handle = b->CreateAlloca(tmp.getHandleType(b));
         tmp.setHandle(b, handle);
         tmp.setBaseAddress(b.get(), address);
+        Value * const capacity = b->CreateAdd(position, available);
+        tmp.setCapacity(b.get(), capacity);
         Value * const A0 = buffer->getStreamBlockPtr(b.get(), ZERO, blockIndex);
         Value * const B0 = tmp.getStreamBlockPtr(b.get(), ZERO, blockIndex);
         Value * const C0 = b->CreatePointerCast(B0, A0->getType());
         b->CreateAssert(b->CreateICmpEQ(A0, C0), prefix + ": logical start address is incorrect");
-//        Value * upToIndex = b->CreateAdd(blockIndex, b->CreateSub(mNumOfLinearStrides, b->getSize(1)));
-//        upToIndex = b->CreateSelect(b->CreateICmpEQ(mNumOfLinearStrides, ZERO), blockIndex, upToIndex);
-//        Value * const A1 = buffer->getStreamBlockPtr(b.get(), ZERO, upToIndex);
-//        Value * const B1 = tmp.getStreamBlockPtr(b.get(), ZERO, upToIndex);
-//        Value * const C1 = b->CreatePointerCast(B1, A1->getType());
-//        b->CreateAssert(b->CreateICmpEQ(A1, C1), prefix + ": logical end address is incorrect");
     }
     return address;
 }
