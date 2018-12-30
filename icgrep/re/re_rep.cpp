@@ -7,6 +7,7 @@
 #include "re_rep.h"
 #include "re_assertion.h"
 #include "re_seq.h"
+#include "re_empty_set.h"
 #include "re_alt.h"
 #include "re_nullable.h"
 #include <llvm/Support/Casting.h>
@@ -31,6 +32,14 @@ RE * makeRep(RE * re, int lb, const int ub) {
     }
     if (LLVM_UNLIKELY(ub != Rep::UNBOUNDED_REP && ub < lb)) {
         report_fatal_error("lower bound cannot exceed upper bound");
+    }
+    if (isEmptySet(re)) {
+        // Match failure.
+        return re;
+    }
+    if (isEmptySeq(re)) {
+        // Repeated match of empty string: just match once.
+        return re;
     }
     if (isNullable(re)) {
         if (ub == 1) {

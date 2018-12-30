@@ -280,7 +280,8 @@ RE * Context::simplifyAsserted(RE * asserted, std::vector<RE *> const & context)
             return simp;
         }
     } else {
-        llvm_unreachable("Context::simplifyAsserted: Unexpected asserted value");
+        // For other types, we do not apply any simplification rules.
+        return asserted;
     }
 }
 

@@ -51,8 +51,9 @@ struct FinalLookaheadPromotion : public RE_Transformer {
     FinalLookaheadPromotion() : RE_Transformer("FinalLookaheadPromotion") {}
     RE * transformSeq(Seq * s) override {
         if (s->empty()) return s;
-        RE * t = transform(s->back());
-        if (s == t) return s;
+        RE * s_last = s->back();
+        RE * t = transform(s_last);
+        if (s_last == t) return s;
         std::vector<RE *> elems;
         for (unsigned i = 0; i < s->size() - 1; i++) {
             elems.push_back((*s)[i]);
