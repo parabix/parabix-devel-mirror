@@ -13,15 +13,15 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel {
 
 class StreamsMerge : public BlockOrientedKernel {
-public:    
+public:
     StreamsMerge(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const std::vector<StreamSet *> & inputs, StreamSet * output);
-protected:   
+protected:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
 
 class StreamsCombineKernel : public BlockOrientedKernel {
 public:
-    StreamsCombineKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<unsigned> streamsNumOfSets);
+    StreamsCombineKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::vector<unsigned> streamsNumOfSets);
 protected:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:
@@ -30,7 +30,7 @@ private:
 
 class StreamsSplitKernel : public BlockOrientedKernel {
 public:
-    StreamsSplitKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<unsigned> streamsNumOfSets);
+    StreamsSplitKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::vector<unsigned> streamsNumOfSets);
 protected:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 private:
@@ -45,6 +45,6 @@ protected:
 };
 
 }
-    
+
 #endif
 

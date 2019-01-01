@@ -91,7 +91,7 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getConsumedItemCount(BuilderRef b, const unsigned outputPort) {
     Value * consumed = nullptr;
-    const auto bufferVertex = getOutputBufferVertex(mKernelIndex, outputPort);
+    const auto bufferVertex = getOutputBufferVertex(outputPort);
     if (LLVM_UNLIKELY(out_degree(bufferVertex, mConsumerGraph) == 0)) {
         // This stream either has no consumers or we've proven that its consumption rate
         // is identical to its production rate.

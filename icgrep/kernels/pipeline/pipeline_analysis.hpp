@@ -5,7 +5,12 @@
 
 namespace kernel {
 
-#warning TODO: support call bindings that produce output that are inputs of other call bindings or become scalar outputs of the pipeline
+// TODO: support call bindings that produce output that are inputs of
+// other call bindings or become scalar outputs of the pipeline
+
+// TODO: with a better model of stride rates, we could determine whether
+// being unable to execute a kernel implies we won't be able to execute
+// another and "skip" over the unnecessary kernels.
 
 #if 1
 
@@ -35,19 +40,20 @@ namespace {
 
     using ScalarDependencyMap = RelationshipMap<ScalarDependencyGraph::vertex_descriptor>;
 
-    void enumerateScalarProducerBindings(const unsigned producerVertex, const Bindings & bindings, ScalarDependencyGraph & G, ScalarDependencyMap & M) {
+    void enumerateScalarProducerBindings(const unsigned producerVertex, const Bindings & bindings,
+                                         ScalarDependencyGraph & G, ScalarDependencyMap & M) {
         const auto n = bindings.size();
         for (unsigned i = 0; i < n; ++i) {
             const Relationship * const rel = getRelationship(bindings[i]);
             assert (M.count(rel) == 0);
-            Constant * const value = isa<ScalarConstant>(rel) ? cast<ScalarConstant>(rel)->value() : nullptr;
-            const auto bufferVertex = add_vertex(value, G);
+            const auto bufferVertex = add_vertex(nullptr, G);
             add_edge(producerVertex, bufferVertex, i, G);
             M.emplace(rel, bufferVertex);
         }
     }
 
-    ScalarDependencyGraph::vertex_descriptor makeIfConstant(const Relationship * const rel, ScalarDependencyGraph & G, ScalarDependencyMap & M) {
+    ScalarDependencyGraph::vertex_descriptor makeIfConstant(const Relationship * const rel,
+                                                            ScalarDependencyGraph & G, ScalarDependencyMap & M) {
         const auto f = M.find(rel);
         if (LLVM_LIKELY(f != M.end())) {
             return f->second;
@@ -61,7 +67,8 @@ namespace {
     }
 
     template <typename Array>
-    void enumerateScalarConsumerBindings(const unsigned consumerVertex, const Array & array, ScalarDependencyGraph & G, ScalarDependencyMap & M) {
+    void enumerateScalarConsumerBindings(const unsigned consumerVertex, const Array & array,
+                                         ScalarDependencyGraph & G, ScalarDependencyMap & M) {
         const auto n = array.size();
         for (unsigned i = 0; i < n; ++i) {
             const auto bufferVertex = makeIfConstant(getRelationship(array[i]), G, M);
@@ -74,33 +81,37 @@ namespace {
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeScalarDependencyGraph
+ *
+ * producer -> buffer/scalar -> consumer
  ** ------------------------------------------------------------------------------------------------------------- */
 ScalarDependencyGraph PipelineCompiler::makeScalarDependencyGraph() const {
 
-    const auto numOfKernels = mPipeline.size();
-    const auto & callBindings = mPipelineKernel->getCallBindings();
-    const auto numOfCallBindings = callBindings.size();
-    const auto initialSize = numOfKernels + numOfCallBindings + 1;
+    const auto pipelineInput = 0;
+    const auto pipelineOutput = mLastKernel;
+    const auto & call = mPipelineKernel->getCallBindings();
+    const auto numOfCalls = call.size();
+    const auto firstCall = mLastKernel + 1;
+    const auto initialSize = firstCall + numOfCalls;
 
     ScalarDependencyGraph G(initialSize);
     ScalarDependencyMap M;
 
-    enumerateScalarProducerBindings(numOfKernels, mPipelineKernel->getInputScalarBindings(), G, M);
+    enumerateScalarProducerBindings(pipelineInput, mPipelineKernel->getInputScalarBindings(), G, M);
     // verify each scalar input of the kernel is an input to the pipeline
-    for (unsigned i = 0; i < numOfKernels; ++i) {
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         enumerateScalarConsumerBindings(i, mPipeline[i]->getInputScalarBindings(), G, M);
     }
     // enumerate the output scalars
-    for (unsigned i = 0; i < numOfKernels; ++i) {
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         enumerateScalarProducerBindings(i, mPipeline[i]->getOutputScalarBindings(), G, M);
     }
     // enumerate the call bindings
-    for (unsigned k = 0; k < numOfCallBindings; ++k) {
-        const CallBinding & call = callBindings[k];
-        enumerateScalarConsumerBindings(numOfKernels + 1 + k, call.Args, G, M);
+    for (unsigned i = 0; i < numOfCalls; ++i) {
+        enumerateScalarConsumerBindings(firstCall + i, call[i].Args, G, M);
     }
     // enumerate the pipeline outputs
-    enumerateScalarConsumerBindings(numOfKernels, mPipelineKernel->getOutputScalarBindings(), G, M);
+    enumerateScalarConsumerBindings(pipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
+
     return G;
 }
 
@@ -116,19 +127,23 @@ namespace {
         const auto d = in_degree(s, G);
         if (d != 0) {
             flat_set<Vertex> V;
-            V.reserve(num_vertices(G) - 1);
+            V.reserve(num_vertices(G) - 2);
             std::queue<Vertex> Q;
-            // do a BFS to find one a path from t to s
+            // do a BFS to search for a t-s path
             Q.push(t);
             for (;;) {
                 const auto u = Q.front();
                 Q.pop();
                 for (auto e : make_iterator_range(out_edges(u, G))) {
                     const auto v = target(e, G);
-                    if (V.count(v) != 0) continue;
-                    if (LLVM_UNLIKELY(v == s)) return false;
-                    Q.push(v);
-                    V.insert(v);
+                    if (LLVM_UNLIKELY(v == s)) {
+                        // we found a t-s path
+                        return false;
+                    }
+                    assert ("G was not initially acyclic!" && v != s);
+                    if (LLVM_LIKELY(V.insert(v).second)) {
+                        Q.push(v);
+                    }
                 }
                 if (Q.empty()) {
                     break;
@@ -148,11 +163,15 @@ namespace {
  ** ------------------------------------------------------------------------------------------------------------- */
 std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
 
+    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
+
+    const auto pipelineInput = 0;
+    const auto pipelineOutput = mLastKernel;
+
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto firstOutput = numOfInputs;
     const auto numOfPorts = numOfInputs + numOfOutputs;
-
-    using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
 
     Graph G(numOfPorts);
 
@@ -177,7 +196,36 @@ std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
             add_edge(j + ((port == Port::Output) ? numOfInputs : 0), (i + numOfInputs), G);
         }
     }
+    // check any pipeline input first
+    if (out_degree(pipelineInput, mBufferGraph)) {
+        for (unsigned i = 0; i < numOfInputs; ++i) {
+            const auto buffer = getInputBufferVertex(i);
+            if (LLVM_UNLIKELY(parent(buffer, mBufferGraph) == pipelineInput)) {
+                for (unsigned j = 0; j < i; ++j) {
+                    add_edge_if_no_induced_cycle(i, j, G);
+                }
+                for (unsigned j = i + 1; j < numOfPorts; ++j) {
+                    add_edge_if_no_induced_cycle(i, j, G);
+                }
+            }
+        }
+    }
 
+    // ... and check any pipeline output first
+    if (out_degree(pipelineInput, mBufferGraph)) {
+        for (unsigned i = 0; i < numOfOutputs; ++i) {
+            const auto buffer = getOutputBufferVertex(i);
+            if (LLVM_UNLIKELY(has_child(buffer, pipelineOutput, mBufferGraph))) {
+                const auto k = firstOutput + i;
+                for (unsigned j = 0; j < k; ++j) {
+                    add_edge_if_no_induced_cycle(k, j, G);
+                }
+                for (unsigned j = k + 1; j < numOfPorts; ++j) {
+                    add_edge_if_no_induced_cycle(k, j, G);
+                }
+            }
+        }
+    }
     // check any dynamic buffer last
     std::vector<unsigned> D;
     D.reserve(numOfOutputs);
@@ -186,16 +234,17 @@ std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
             D.push_back(i);
         }
     }
+
     for (const auto i : D) {
         for (unsigned j = 0; j < numOfInputs; ++j) {
-            add_edge_if_no_induced_cycle(j, numOfInputs + i, G);
+            add_edge_if_no_induced_cycle(j, firstOutput + i, G);
         }
         auto Dj = D.begin();
         for (unsigned j = 0; j < numOfOutputs; ++j) {
             if (*Dj == j) {
                 ++Dj;
             } else {
-                add_edge_if_no_induced_cycle(numOfInputs + j, numOfInputs + i, G);
+                add_edge_if_no_induced_cycle(firstOutput + j, firstOutput + i, G);
             }
         }
         assert (Dj == D.end());
@@ -206,37 +255,6 @@ std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
 
     return lexicalOrdering(std::move(G), mKernel->getName() + " has cyclic port dependencies.");
 }
-
-
-namespace {
-
-    using TerminationMap = RelationshipMap<TerminationGraph::vertex_descriptor>;
-
-    void enumerateTerminationProducerBindings(const unsigned producerVertex, const Bindings & bindings, TerminationGraph & G, TerminationMap & M) {
-        const auto n = bindings.size();
-        for (unsigned i = 0; i < n; ++i) {
-            const Relationship * const rel = getRelationship(bindings[i]);
-            if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
-            assert (M.count(rel) == 0);
-            const auto bufferVertex = add_vertex(G);
-            add_edge(producerVertex, bufferVertex, G); // producer -> buffer ordering
-            M.emplace(rel, bufferVertex);
-        }
-    }
-
-    template <typename Array>
-    void enumerateTerminationConsumerBindings(const unsigned consumerVertex, const Array & array, TerminationGraph & G, TerminationMap & M) {
-        const auto n = array.size();
-        for (unsigned i = 0; i < n; ++i) {
-            const Relationship * const rel = getRelationship(array[i]);
-            if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
-            const auto f = M.find(rel);
-            const auto bufferVertex = f->second;
-            add_edge(bufferVertex, consumerVertex, G); // buffer -> consumer ordering
-        }
-    }
-
-} // end of anonymous namespace
 
 namespace {
 
@@ -273,10 +291,9 @@ inline LLVM_READNONE RateValue maximumConsumed(const Kernel * const kernel, cons
  ** ------------------------------------------------------------------------------------------------------------- */
 ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
 
+    const auto firstBuffer = mLastKernel + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     ConsumerGraph G(lastBuffer);
-    const auto numOfKernels = mPipeline.size();
-    const auto firstBuffer = numOfKernels + 1;
 
 #if 0
 
@@ -395,7 +412,6 @@ next:           continue;
     return G;
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeTerminationGraph
  *
@@ -403,49 +419,58 @@ next:           continue;
  * to determine whether it is safe to terminate once it has finished processing its current input.
  ** ------------------------------------------------------------------------------------------------------------- */
 TerminationGraph PipelineCompiler::makeTerminationGraph() const {
+
+    // A pipeline will end for one or two reasons:
+
+    // 1) no progress can be made by any kernel.
+
+    // 2) all pipeline sinks have terminated (i.e., any kernel that writes
+    // to a pipeline output, is marked as having a side-effect, or produces
+    // an input for some call).
+
     using VertexVector = std::vector<TerminationGraph::vertex_descriptor>;
 
-    const auto numOfKernels = mPipeline.size();
-    TerminationGraph G(numOfKernels + 1);
-    TerminationMap M;
+    const auto numOfCalls = mPipelineKernel->getCallBindings().size();
+    const auto pipelineOutput = mLastKernel;
+    const auto firstCall = pipelineOutput + 1;
+    const auto lastCall = firstCall + numOfCalls;
 
-    // make an edge from the pipeline input to a buffer vertex
-    enumerateTerminationProducerBindings(numOfKernels, mPipelineKernel->getInputScalarBindings(), G, M);
-    enumerateTerminationProducerBindings(numOfKernels, mPipelineKernel->getInputStreamSetBindings(), G, M);
-    G[numOfKernels] = nullptr;
+    TerminationGraph G(pipelineOutput + 1);
 
-    // make an edge from each producing kernel to a buffer vertex
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        const auto & producer = mPipeline[i];
-        enumerateTerminationProducerBindings(i, producer->getOutputStreamSetBindings(), G, M);
-        enumerateTerminationProducerBindings(i, producer->getOutputScalarBindings(), G, M);
-        G[i] = nullptr;
-    }
-
-    // make an edge from each buffer to its consuming kernel(s)
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        const auto & consumer = mPipeline[i];
-        enumerateTerminationConsumerBindings(i, consumer->getInputScalarBindings(), G, M);
-        enumerateTerminationConsumerBindings(i, consumer->getInputStreamSetBindings(), G, M);
-        if (LLVM_UNLIKELY(consumer->hasAttribute(AttrId::SideEffecting))) {
-            add_edge(i, numOfKernels, G);
+    // copy and summarize producer -> consumer relations from the buffer graph
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        for (auto buffer : make_iterator_range(out_edges(i, mBufferGraph))) {
+            const auto bufferVertex = target(buffer, mBufferGraph);
+            for (auto consumer : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
+                const auto j = target(consumer, mBufferGraph);
+                add_edge(i, j, G);
+            }
         }
     }
 
-    // make an edge from a buffer vertex to each pipeline output
-    for (const CallBinding & call : mPipelineKernel->getCallBindings()) {
-        enumerateTerminationConsumerBindings(numOfKernels, call.Args, G, M);
+    // copy and summarize any output scalars of the pipeline or any calls
+    for (unsigned i = pipelineOutput; i < lastCall; ++i) {
+        for (auto relationship : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
+            const auto relationshipVertex = source(relationship, mScalarDependencyGraph);
+            for (auto producer : make_iterator_range(in_edges(relationshipVertex, mScalarDependencyGraph))) {
+                const auto j = source(producer, mScalarDependencyGraph);
+                add_edge(j, pipelineOutput, G);
+            }
+        }
     }
 
-    clear_out_edges(numOfKernels, G);
-    enumerateTerminationConsumerBindings(numOfKernels, mPipelineKernel->getOutputStreamSetBindings(), G, M);
-    enumerateTerminationConsumerBindings(numOfKernels, mPipelineKernel->getOutputScalarBindings(), G, M);
+    // create a k_i -> P_out edge for every kernel with a side effect attribute
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        if (LLVM_UNLIKELY(mPipeline[i]->hasAttribute(AttrId::SideEffecting))) {
+            add_edge(i, pipelineOutput, G);
+        }
+    }
 
+    // generate a transitive closure
     VertexVector ordering;
     ordering.reserve(num_vertices(G));
     topological_sort(G, std::back_inserter(ordering));
 
-    // generate a transitive closure
     for (unsigned u : ordering) {
         for (auto e : make_iterator_range(in_edges(u, G))) {
             const auto s = source(e, G);
@@ -455,16 +480,9 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
         }
     }
 
-    // delete all buffer edges
-    const auto firstBuffer = numOfKernels + 1;
-    const auto lastBuffer = num_vertices(G);
-    for (auto i = firstBuffer; i < lastBuffer; ++i) {
-        clear_vertex(i, G);
-    }
-
     // then take the transitive reduction
     VertexVector sources;
-    for (unsigned u = firstBuffer; u--; ) {
+    for (unsigned u = pipelineOutput; u--; ) {
         for (auto e : make_iterator_range(in_edges(u, G))) {
             sources.push_back(source(e, G));
         }
@@ -489,7 +507,6 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
  * rate stream.
  ** ------------------------------------------------------------------------------------------------------------- */
 PopCountGraph PipelineCompiler::makePopCountGraph() const {
-    const auto numOfKernels = mPipeline.size();
 
     using PopCountVertex = PopCountGraph::vertex_descriptor;
     using PortMapping = flat_map<unsigned, PopCountVertex>;
@@ -556,7 +573,7 @@ PopCountGraph PipelineCompiler::makePopCountGraph() const {
         }
     };
 
-    for (unsigned i = 0; i < numOfKernels; ++i) {
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         const Kernel * const kernel = mPipeline[i];
         const auto numOfInputs = kernel->getNumOfStreamInputs();
         const auto numOfOutputs = kernel->getNumOfStreamOutputs();
@@ -564,9 +581,10 @@ PopCountGraph PipelineCompiler::makePopCountGraph() const {
             const auto & input = kernel->getInputStreamSetBinding(j);
             addPopCountDependency(kernel, i, j, input);
         }
+        const auto firstOutput = numOfInputs;
         for (unsigned j = 0; j < numOfOutputs; ++j) {
             const auto & output = kernel->getOutputStreamSetBinding(j);
-            addPopCountDependency(kernel, i, j + numOfInputs, output);
+            addPopCountDependency(kernel, i, firstOutput + j, output);
         }
         M.clear();
     }

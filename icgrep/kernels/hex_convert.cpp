@@ -11,8 +11,8 @@
 using namespace kernel;
 using namespace llvm;
 
-HexToBinary::HexToBinary(const std::unique_ptr<kernel::KernelBuilder> & /* b */, StreamSet * hexStream, StreamSet * binStream)
-: BlockOrientedKernel("HexToBinary",
+HexToBinary::HexToBinary(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * hexStream, StreamSet * binStream)
+: BlockOrientedKernel(b, "HexToBinary",
                    {Binding{"hexdata", hexStream, FixedRate()}},
                    {Binding{"binary_data", binStream, FixedRate(4)}},
 {}, {}, {}) {}
@@ -42,12 +42,12 @@ void HexToBinary::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
         }
         //b->CallPrintInt("binary_pack ptr", b->CreateGEP(outputStreamBasePtr, b->CreateUDiv(packNumPhi, TWO)));
         Value * binary_pack = b->bitCast(b->hsimd_packl(8, base_val[0], base_val[1]));
-        b->storeOutputStreamBlock("binary_data", ZERO, b->getSize(i), binary_pack); 
+        b->storeOutputStreamBlock("binary_data", ZERO, b->getSize(i), binary_pack);
     }
 }
 
-BinaryToHex::BinaryToHex(const std::unique_ptr<kernel::KernelBuilder> & /* b */, StreamSet * binStream, StreamSet * hexStream)
-: BlockOrientedKernel("BinaryToHex",
+BinaryToHex::BinaryToHex(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * binStream, StreamSet * hexStream)
+: BlockOrientedKernel(b, "BinaryToHex",
                    {Binding{"binary_data", binStream, FixedRate(4)}},
                    {Binding{"hexdata", hexStream, FixedRate(), RoundUpTo(1)}},
                    {}, {}, {}) {}

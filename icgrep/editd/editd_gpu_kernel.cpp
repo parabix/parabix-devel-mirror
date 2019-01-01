@@ -30,12 +30,12 @@ void reset_to_zero(std::vector<std::vector<int>> & calculated){
 void editdGPUKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & idb) {
 
     IntegerType * const int32ty = idb->getInt32Ty();
-    IntegerType * const int8ty = idb->getInt8Ty();  
+    IntegerType * const int8ty = idb->getInt8Ty();
     Value * groupLen = idb->getInt32((mPatternLen + 1) * mGroupSize);
     Value * pattPos = idb->getInt32(0);
     Value * pattBuf = idb->getScalarField("pattStream");
     Value * strideCarryArr = idb->getScalarField("strideCarry");
-   
+
     unsigned carryIdx = 0;
 
     std::vector<std::vector<Value *>> e(mPatternLen + 1, std::vector<Value *>(mEditDistance + 1));
@@ -97,7 +97,7 @@ void editdGPUKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilde
 }
 
 editdGPUKernel::editdGPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen, unsigned groupSize) :
-BlockOrientedKernel("editd_gpu",
+BlockOrientedKernel(b, "editd_gpu",
               {Binding{b->getStreamSetTy(4), "CCStream"}},
               {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
               {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},

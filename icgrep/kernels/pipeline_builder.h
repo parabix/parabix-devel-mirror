@@ -25,7 +25,7 @@ public:
     }
 
     std::shared_ptr<OptimizationBranchBuilder>
-        CreateOptimizationBranch(StreamSet * const condition,
+        CreateOptimizationBranch(Relationship * const condition,
                                  Bindings && stream_inputs = {}, Bindings && stream_outputs = {},
                                  Bindings && scalar_inputs = {}, Bindings && scalar_outputs = {});
 
@@ -135,20 +135,20 @@ public:
 
 protected:
 
-    OptimizationBranchBuilder(BaseDriver & driver, StreamSet * const condition,
+    OptimizationBranchBuilder(BaseDriver & driver, Relationship * const condition,
                               Bindings && stream_inputs, Bindings && stream_outputs,
                               Bindings && scalar_inputs, Bindings && scalar_outputs);
 
     Kernel * makeKernel() override;
 
 private:
-    StreamSet * const                mCondition;
+    Relationship * const             mCondition;
     std::unique_ptr<PipelineBuilder> mTrueBranch;
     std::unique_ptr<PipelineBuilder> mFalseBranch;
 };
 
 inline std::shared_ptr<OptimizationBranchBuilder> PipelineBuilder::CreateOptimizationBranch (
-        StreamSet * const condition,
+        Relationship * const condition,
         Bindings && stream_inputs, Bindings && stream_outputs,
         Bindings && scalar_inputs, Bindings && scalar_outputs) {
     std::shared_ptr<OptimizationBranchBuilder> branch(

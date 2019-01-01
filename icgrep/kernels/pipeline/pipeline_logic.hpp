@@ -6,19 +6,19 @@
 namespace kernel {
 
 // NOTE: the following is a workaround for an LLVM bug for 32-bit VMs on 64-bit architectures.
-// When calculating the address of a local stack allocated object, the size of a pointer will
-// be 32-bits but when performing a GEP on the same pointer as the result of a "malloc" or
-// when passed as a function parameter, the size will be 64-bits. More investigation should be
-// done to determine which versions of LLVM are affected by this bug.
+// When calculating the address of a local stack allocated object, the size of a pointer is
+// 32-bits but when performing the same GEP on a pointer returned by "malloc" or passed as a
+// function argument, the size is 64-bits. More investigation is needed to determine which
+// versions of LLVM are affected by this bug.
 
-inline LLVM_READNONE bool useMalloc(BuilderRef b) {
+inline LLVM_READNONE bool allocateOnHeap(const BuilderRef b) {
     DataLayout DL(b->getModule());
     return (DL.getPointerSizeInBits() != b->getSizeTy()->getBitWidth());
 }
 
 inline Value * makeStateObject(BuilderRef b, Type * type) {
     Value * ptr = nullptr;
-    if (LLVM_UNLIKELY(useMalloc(b))) {
+    if (LLVM_UNLIKELY(allocateOnHeap(b))) {
         ptr = b->CreateCacheAlignedMalloc(type);
     } else {
         ptr = b->CreateCacheAlignedAlloca(type);
@@ -28,8 +28,95 @@ inline Value * makeStateObject(BuilderRef b, Type * type) {
 }
 
 inline void destroyStateObject(BuilderRef b, Value * ptr) {
-    if (LLVM_UNLIKELY(useMalloc(b))) {
+    if (LLVM_UNLIKELY(allocateOnHeap(b))) {
         b->CreateFree(ptr);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addPipelineKernelProperties
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
+    b->setKernel(mPipelineKernel);
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        addBufferHandlesToPipelineKernel(b, i);
+        addInternalKernelProperties(b, i);
+        addConsumerKernelProperties(b, i);
+        addPopCountScalarsToPipelineKernel(b, i);
+    }
+    b->setKernel(mPipelineKernel);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addInternalKernelProperties
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex) {
+
+    IntegerType * const sizeTy = b->getSizeTy();
+
+    const auto name = makeKernelName(kernelIndex);
+    // TODO: prove two termination signals can be fused into a single counter?
+    mPipelineKernel->addInternalScalar(sizeTy, name + TERMINATION_SIGNAL_SUFFIX);
+    mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX);
+
+    // TODO: non deferred item count for fixed rates could be calculated from total # of segments.
+    const Kernel * const kernel = mPipeline[kernelIndex];
+    const auto numOfInputs = kernel->getNumOfStreamInputs();
+    for (unsigned i = 0; i < numOfInputs; i++) {
+        const Binding & input = kernel->getInputStreamSetBinding(i);
+        const auto prefix = makeBufferName(kernelIndex, input);
+        if (input.isDeferred()) {
+            mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+        }
+        mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+    }
+
+    const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < numOfOutputs; i++) {
+        const Binding & output = kernel->getOutputStreamSetBinding(i);
+        const auto prefix = makeBufferName(kernelIndex, output);
+        mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateInitializeMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        mPipeline[i]->addKernelDeclarations(b);
+    }
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        Kernel * const kernel = mPipeline[i];
+        if (!kernel->hasFamilyName()) {
+            Value * const handle = kernel->createInstance(b);
+            b->setScalarField(makeKernelName(i), handle);
+        }
+    }
+    constructBuffers(b);
+    std::vector<Value *> args;
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        setActiveKernel(b, i);
+        args.resize(in_degree(i, mScalarDependencyGraph) + 1);
+        #ifndef NDEBUG
+        std::fill(args.begin(), args.end(), nullptr);
+        #endif
+        args[0] = mKernel->getHandle();
+        b->setKernel(mPipelineKernel);
+        for (const auto ce : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
+            const auto j = mScalarDependencyGraph[ce] + 1;
+            const auto pe = in_edge(source(ce, mScalarDependencyGraph), mScalarDependencyGraph);
+            const auto k = mScalarDependencyGraph[pe];
+            const Binding & input = mPipelineKernel->getInputScalarBinding(k);
+            assert (args[j] == nullptr);
+            args[j] = b->getScalarField(input.getName());
+        }
+        b->setKernel(mKernel);
+        Value * const terminatedOnInit = b->CreateCall(getInitializationFunction(b), args);
+        if (mKernel->canSetTerminateSignal()) {
+            setTerminated(b, terminatedOnInit, TerminatedExplicitly, NotTerminated);
+        }
     }
 }
 
@@ -44,7 +131,7 @@ void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
     allocateThreadLocalState(b, localState);
     setThreadLocalState(b, localState);
     start(b, b->getSize(0));
-    for (unsigned i = 0; i < mPipeline.size(); ++i) {
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         setActiveKernel(b, i);
         executeKernel(b);
     }
@@ -67,7 +154,6 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
     assert (numOfThreads > 1);
 
     Module * const m = b->getModule();
-    IntegerType * const sizeTy = b->getSizeTy();
     PointerType * const voidPtrTy = b->getVoidPtrTy();
     ConstantInt * const ZERO = b->getInt32(0);
     Constant * const nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
@@ -86,7 +172,8 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
     // use the process thread to handle the initial segment function after spawning
     // (n - 1) threads to handle the subsequent offsets
     const unsigned threads = numOfThreads - 1;
-    Type * const pthreadsTy = ArrayType::get(sizeTy, threads);
+    Type * const pthreadTy = TypeBuilder<pthread_t, false>::get(b->getContext());
+    Type * const pthreadsTy = ArrayType::get(pthreadTy, threads);
     AllocaInst * const pthreads = b->CreateCacheAlignedAlloca(pthreadsTy);
     std::vector<Value *> threadIdPtr(threads);
     std::vector<Value *> threadState(threads);
@@ -120,7 +207,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
     Value * const segmentOffset = setThreadState(b, threadStruct);
     // generate the pipeline logic for this thread
     start(b, segmentOffset);
-    for (unsigned i = 0; i < mPipeline.size(); ++i) {
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         setActiveKernel(b, i);
         acquireCurrentSegment(b);
         executeKernel(b);
@@ -145,6 +232,82 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsig
 
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateFinalizeMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
+    printOptionalCycleCounter(b);
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        setActiveKernel(b, i);
+        loadBufferHandles(b);
+        mScalarDependencyGraph[i] = b->CreateCall(getFinalizeFunction(b), mKernel->getHandle());
+    }
+    releaseBuffers(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getFinalOutputScalars
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::vector<Value *> PipelineCompiler::getFinalOutputScalars(BuilderRef b) {
+
+    const auto & calls = mPipelineKernel->getCallBindings();
+    const auto numOfCalls = calls.size();
+    std::vector<Value *> args;
+    b->setKernel(mPipelineKernel);
+    const auto pipelineOutput = mLastKernel;
+    const auto firstCall = pipelineOutput + 1;
+    for (unsigned k = 0; k < numOfCalls; ++k) {
+        writeOutputScalars(b, firstCall + k, args);
+        Function * const f = cast<Function>(calls[k].Callee);
+        auto i = f->arg_begin();
+        for (auto j = args.begin(); j != args.end(); ++i, ++j) {
+            assert (i != f->arg_end());
+            *j = b->CreateZExtOrTrunc(*j, i->getType());
+        }
+        assert (i == f->arg_end());
+        b->CreateCall(f, args);
+    }
+    writeOutputScalars(b, pipelineOutput, args);
+    return args;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief writeOutputScalars
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::writeOutputScalars(BuilderRef b, const unsigned index, std::vector<Value *> & args) {
+    const auto n = in_degree(index, mScalarDependencyGraph);
+    args.resize(n);
+    const auto pipelineInput = 0;
+    for (const auto e : make_iterator_range(in_edges(index, mScalarDependencyGraph))) {
+        const auto scalar = source(e, mScalarDependencyGraph);
+        // If we have not already retrieved the specific scalar, construct/load/extract it.
+        if (LLVM_LIKELY(mScalarDependencyGraph[scalar] == nullptr)) {
+            const auto producer = in_edge(scalar, mScalarDependencyGraph);
+            const auto i = source(producer, mScalarDependencyGraph);
+            const auto j = mScalarDependencyGraph[producer];
+            Value * value = nullptr;
+            if (LLVM_UNLIKELY(i == pipelineInput)) {
+                const Binding & input = mPipelineKernel->getInputScalarBinding(j);
+                const Relationship * const rel = getRelationship(input);
+                if (isa<ScalarConstant>(rel)) {
+                    value = cast<ScalarConstant>(rel)->value();
+                } else {
+                    value = b->getScalarField(input.getName());
+                }
+            } else { // output scalar of some kernel
+                Value * const outputScalars = mScalarDependencyGraph[i]; assert (outputScalars);
+                if (outputScalars->getType()->isAggregateType()) {
+                    value = b->CreateExtractValue(outputScalars, {j});
+                } else { assert (j == 0 && "scalar type is not an aggregate");
+                    value = outputScalars;
+                }
+            }
+            mScalarDependencyGraph[scalar] = value;
+        }
+        const auto k = mScalarDependencyGraph[e];
+        args[k] = mScalarDependencyGraph[scalar];
+    }
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief acquireCurrentSegment
@@ -157,7 +320,7 @@ void PipelineCompiler::acquireCurrentSegment(BuilderRef b) {
     b->setKernel(mPipelineKernel);
     const auto prefix = makeKernelName(mKernelIndex);
     const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
-    const unsigned waitingOnIdx = serialize ? (mPipeline.size() - 1) : mKernelIndex;
+    const unsigned waitingOnIdx = serialize ? (mLastKernel - 1) : mKernelIndex;
     const auto waitingOn = makeKernelName(waitingOnIdx);
     Value * const waitingOnPtr = b->getScalarFieldPtr(waitingOn + LOGICAL_SEGMENT_SUFFIX);
     BasicBlock * const kernelWait = b->CreateBasicBlock(prefix + "Wait", mPipelineEnd);
@@ -240,18 +403,14 @@ inline Value * PipelineCompiler::allocateThreadState(BuilderRef b, const unsigne
     for (unsigned i = 0; i < numOfInputs; ++i) {
         auto buffer = mPipelineKernel->getInputStreamSetBuffer(i);
         Value * const handle = buffer->getHandle();
-
         indices[1] = b->getInt32(i + FIRST_STREAM_INDEX);
-
         b->CreateStore(handle, b->CreateGEP(threadState, indices));
     }
     const auto numOfOutputs = mPipelineKernel->getNumOfStreamOutputs();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         auto buffer = mPipelineKernel->getOutputStreamSetBuffer(i);
         Value * const handle = buffer->getHandle();
-
         indices[1] = b->getInt32(i + numOfInputs + FIRST_STREAM_INDEX);
-
         b->CreateStore(handle, b->CreateGEP(threadState, indices));
     }
 

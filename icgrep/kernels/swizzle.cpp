@@ -73,11 +73,11 @@ inline Bindings makeSwizzledOutputs(const std::vector<StreamSet *> & outputs, co
     return bindings;
 }
 
-SwizzleGenerator::SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> &,
+SwizzleGenerator::SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> & b,
                                    const std::vector<StreamSet *> & inputs,
                                    const std::vector<StreamSet *> & outputs,
                                    const unsigned fieldWidth)
-: BlockOrientedKernel(makeSwizzleName(inputs, outputs, fieldWidth),
+: BlockOrientedKernel(b, makeSwizzleName(inputs, outputs, fieldWidth),
 makeSwizzledInputs(inputs),
 makeSwizzledOutputs(outputs, fieldWidth),
 {}, {}, {})
@@ -87,7 +87,7 @@ makeSwizzledOutputs(outputs, fieldWidth),
 }
 
 void SwizzleGenerator::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) {
-        
+
     // We may need a few passes depending on the swizzle factor
 
     if (LLVM_UNLIKELY(!is_power_2(mFieldWidth))) {
@@ -106,7 +106,7 @@ void SwizzleGenerator::generateDoBlockMethod(const std::unique_ptr<kernel::Kerne
     Value * sourceBlocks[swizzleFactor];
     Value * targetBlocks[swizzleFactor];
     for (unsigned grp = 0; grp < swizzleGroups; grp++) {
-        // First load all the data.       
+        // First load all the data.
         for (unsigned i = 0; i < swizzleFactor; i++) {
             const auto streamNo = grp * swizzleFactor + i;
             if (streamNo < mBitStreamCount) {
@@ -138,13 +138,13 @@ void SwizzleGenerator::generateDoBlockMethod(const std::unique_ptr<kernel::Kerne
 }
 
 
-SwizzleByGather::SwizzleByGather(const std::unique_ptr<KernelBuilder> &iBuilder)
-: BlockOrientedKernel("swizzleByGather", {}, {}, {}, {}, {}){
+SwizzleByGather::SwizzleByGather(const std::unique_ptr<KernelBuilder> & b)
+: BlockOrientedKernel(b, "swizzleByGather", {}, {}, {}, {}, {}){
     for (unsigned i = 0; i < 2; i++) {
-        mInputStreamSets.push_back(Binding{iBuilder->getStreamSetTy(4, 1), "inputGroup" + std::to_string(i)});
+        mInputStreamSets.push_back(Binding{b->getStreamSetTy(4, 1), "inputGroup" + std::to_string(i)});
     }
     for (unsigned i = 0; i < 1; i++) {
-        mOutputStreamSets.push_back(Binding{iBuilder->getStreamSetTy(8, 1), "outputGroup" + std::to_string(i), FixedRate(1)});
+        mOutputStreamSets.push_back(Binding{b->getStreamSetTy(8, 1), "outputGroup" + std::to_string(i), FixedRate(1)});
     }
 }
 

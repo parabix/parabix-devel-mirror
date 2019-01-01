@@ -93,7 +93,7 @@ private:
 };
 
 UTF8fieldDepositMask::UTF8fieldDepositMask(const std::unique_ptr<KernelBuilder> & b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth)
-: BlockOrientedKernel("u8depositMask",
+: BlockOrientedKernel(b, "u8depositMask",
 {Binding{"basis", u32basis}},
 {Binding{"fieldDepositMask", u8fieldMask, FixedRate(4)},
 Binding{"extractionMask", u8unitCounts, FixedRate(4)}},

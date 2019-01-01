@@ -80,7 +80,8 @@ public:
 
 protected:
 
-    PipelineKernel(std::string && signature, const unsigned numOfThreads,
+    PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
+                   std::string && signature, const unsigned numOfThreads,
                    Kernels && kernels, CallBindings && callBindings,
                    Bindings && stream_inputs, Bindings && stream_outputs,
                    Bindings && scalar_inputs, Bindings && scalar_outputs);

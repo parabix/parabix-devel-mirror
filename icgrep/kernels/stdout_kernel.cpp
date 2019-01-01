@@ -31,7 +31,7 @@ void StdOutKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> &
 }
 
 StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * codeUnitBuffer)
-: SegmentOrientedKernel("stdout" + std::to_string(codeUnitBuffer->getFieldWidth()),
+: SegmentOrientedKernel(b, "stdout" + std::to_string(codeUnitBuffer->getFieldWidth()),
 // input
 {Binding{"codeUnitBuffer", codeUnitBuffer}}
 // output & scalars
@@ -128,7 +128,7 @@ void FileSink::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) 
 }
 
 FileSink::FileSink(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * outputFileName, StreamSet * codeUnitBuffer)
-: SegmentOrientedKernel("filesink" + std::to_string(codeUnitBuffer->getFieldWidth()),
+: SegmentOrientedKernel(b, "filesink" + std::to_string(codeUnitBuffer->getFieldWidth()),
 // input
 {Binding{"codeUnitBuffer", codeUnitBuffer}},
 // output

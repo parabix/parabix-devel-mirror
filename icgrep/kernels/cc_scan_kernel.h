@@ -11,15 +11,15 @@ namespace llvm { class Function; }
 namespace llvm { class Module; }
 
 namespace kernel {
-    
+
 class CCScanKernel : public BlockOrientedKernel {
 public:
-    CCScanKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamNum);
-        
+    CCScanKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned streamNum);
+
 private:
     void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
     llvm::Function * generateScanWordRoutine(const std::unique_ptr<KernelBuilder> & iBuilder) const;
-        
+
     unsigned mStreamNum;
     unsigned mScanwordBitWidth;
 };

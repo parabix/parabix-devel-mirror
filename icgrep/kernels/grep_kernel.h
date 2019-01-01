@@ -13,7 +13,7 @@ namespace re { class RE; }
 namespace cc { class Alphabet; }
 namespace kernel {
 
-    
+
 class UTF8_nonFinal : public pablo::PabloKernel {
 public:
     UTF8_nonFinal(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * Source, StreamSet * u8nonFinal);
@@ -100,7 +100,7 @@ protected:
     void generatePabloMethod() override;
     std::unique_ptr<GrepKernelOptions> mOptions;
 };
-    
+
 struct ByteBitGrepSignature {
     ByteBitGrepSignature(re::RE * prefix, re::RE * suffix);
 protected:
@@ -109,7 +109,7 @@ protected:
     std::string     mSignature;
 };
 
-    
+
 class ByteBitGrepKernel : public ByteBitGrepSignature, public pablo::PabloKernel {
     using Externals = std::vector<std::pair<std::string, StreamSet *>>;
 public:
@@ -130,12 +130,12 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generatePabloMethod() override;    
+    void generatePabloMethod() override;
 };
 
 class InvertMatchesKernel : public BlockOrientedKernel {
 public:
-    InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches);
+    InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches);
 private:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
@@ -146,7 +146,7 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generatePabloMethod() override;    
+    void generatePabloMethod() override;
 };
 
 class AbortOnNull final : public MultiBlockKernel {
@@ -154,7 +154,7 @@ public:
     AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * const InputStream, StreamSet * const OutputStream, Scalar * callbackObject);
 private:
     void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
-    
+
 };
 
 }

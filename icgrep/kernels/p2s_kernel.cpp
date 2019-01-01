@@ -9,7 +9,7 @@ namespace llvm { class Value; }
 using namespace llvm;
 
 namespace kernel{
-	
+
 void p2s_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
     Value * t0 = iBuilder->simd_if(1, hi_mask, p0, iBuilder->simd_srli(16, p1, shift));
     Value * t1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, p0, shift), p1);
@@ -43,7 +43,7 @@ inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Va
         p2s_step(iBuilder, bit00224466[j], bit11335577[j], iBuilder->simd_himask(2), 1, s[2*j+1], s[2*j]);
     }
 }
-    		
+
 void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
     const auto numOfStreams = getInputStreamSet("basisBits")->getNumElements();
     Value * p_bitblock[8];
@@ -145,14 +145,14 @@ void P2S16Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
         b->storeOutputStreamPack("i16Stream", b->getInt32(0), b->getInt32(2 * j + 1), merge1);
     }
 }
-    
+
 void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
     IntegerType * i32Ty = b->getInt32Ty();
     PointerType * int16PtrTy = b->getInt16Ty()->getPointerTo();
     PointerType * bitBlockPtrTy = b->getBitBlockType()->getPointerTo();
     ConstantInt * blockMask = b->getSize(b->getBitBlockWidth() - 1);
     unsigned const unitsPerRegister = b->getBitBlockWidth()/16;
-    
+
     Value * hi_input[8];
     for (unsigned j = 0; j < 8; ++j) {
         const unsigned idx = mBasisSetNumbering == cc::BitNumbering::LittleEndian ? j + 8 : j;
@@ -201,8 +201,8 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
 
 
 
-P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * basisBits, StreamSet * byteStream, cc::BitNumbering numbering)
-: BlockOrientedKernel("p2s" + cc::numberingSuffix(numbering),
+P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * basisBits, StreamSet * byteStream, cc::BitNumbering numbering)
+: BlockOrientedKernel(b, "p2s" + cc::numberingSuffix(numbering),
 {Binding{"basisBits", basisBits}},
 {Binding{"byteStream", byteStream}},
 {}, {}, {}),
@@ -214,7 +214,7 @@ P2SMultipleStreamsKernel::P2SMultipleStreamsKernel(const std::unique_ptr<kernel:
                                                    const StreamSets & inputStreams,
                                                    StreamSet * const outputStream,
                                                    cc::BitNumbering basisNumbering)
-: BlockOrientedKernel("p2sMultipleStreams" + cc::numberingSuffix(basisNumbering),
+: BlockOrientedKernel(b, "p2sMultipleStreams" + cc::numberingSuffix(basisNumbering),
 {},
 {Binding{"byteStream", outputStream}},
 {}, {}, {}),
@@ -225,7 +225,7 @@ mBasisSetNumbering(basisNumbering) {
 }
 
 P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b, cc::BitNumbering numbering)
-: BlockOrientedKernel("p2s_compress" + cc::numberingSuffix(numbering),
+: BlockOrientedKernel(b, "p2s_compress" + cc::numberingSuffix(numbering),
 {Binding{b->getStreamSetTy(8, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "extractionMask"}},
 {Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)}},
 {}, {}, {}),
@@ -233,8 +233,8 @@ mBasisSetNumbering(numbering) {
 
 }
 
-P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet *u16bits, StreamSet *u16bytes, cc::BitNumbering numbering)
-: BlockOrientedKernel("p2s_16" + cc::numberingSuffix(numbering),
+P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *u16bits, StreamSet *u16bytes, cc::BitNumbering numbering)
+: BlockOrientedKernel(b, "p2s_16" + cc::numberingSuffix(numbering),
 {Binding{"basisBits", u16bits}},
 {Binding{"i16Stream", u16bytes}},
 {}, {}, {}),
@@ -242,10 +242,10 @@ mBasisSetNumbering(numbering) {
 
 }
 
-P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> &,
+P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b,
                                                                  StreamSet * basisBits, StreamSet * extractionMask, StreamSet * i16Stream,
                                                                  cc::BitNumbering numbering)
-: BlockOrientedKernel("p2s_16_compress" + cc::numberingSuffix(numbering),
+: BlockOrientedKernel(b, "p2s_16_compress" + cc::numberingSuffix(numbering),
 {Binding{"basisBits", basisBits},
 Binding{"extractionMask", extractionMask}},
 {Binding{"i16Stream", i16Stream, BoundedRate(0, 1)}},

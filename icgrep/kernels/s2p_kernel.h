@@ -18,7 +18,7 @@ namespace kernel {
 class S2PKernel final : public MultiBlockKernel {
 public:
 
-    S2PKernel(const std::unique_ptr<kernel::KernelBuilder> &,
+    S2PKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
               StreamSet * const codeUnitStream,
               StreamSet * const BasisBits,
               const cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian,
@@ -54,7 +54,7 @@ private:
 
 class S2P_21Kernel final : public MultiBlockKernel {
 public:
-    S2P_21Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * const codeUnitStream, StreamSet * const BasisBits, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
+    S2P_21Kernel(const std::unique_ptr<kernel::KernelBuilder> &b, StreamSet * const codeUnitStream, StreamSet * const BasisBits, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

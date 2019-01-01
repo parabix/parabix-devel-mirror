@@ -69,6 +69,31 @@ Value * StreamSetBuffer::getStreamSetCount(IDISA_Builder * const b) const {
     return b->getSize(count);
 }
 
+/**
+ * @brief getRawItemPointer
+ *
+ * get a raw pointer the iN field at position absoluteItemPosition of the stream number streamIndex of the stream set.
+ * In the case of a stream whose fields are less than one byte (8 bits) in size, the pointer is to the containing byte.
+ * The type of the pointer is i8* for fields of 8 bits or less, otherwise iN* for N-bit fields.
+ */
+Value * StreamSetBuffer::getRawItemPointer(IDISA_Builder * const b, Value * absolutePosition) const {
+    Value * ptr = getBaseAddress(b);
+    Type * const elemTy = mBaseType->getArrayElementType()->getVectorElementType();
+    const auto bw = elemTy->getPrimitiveSizeInBits();
+    assert (is_power_2(bw));
+    if (bw < 8) {
+        Constant * const fw = ConstantInt::get(absolutePosition->getType(), 8 / bw);
+        if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
+            b->CreateAssertZero(b->CreateURem(absolutePosition, fw), "absolutePosition must be byte aligned");
+        }
+        absolutePosition = b->CreateUDiv(absolutePosition, fw);
+        ptr = b->CreatePointerCast(ptr, b->getInt8PtrTy());
+    } else {
+        ptr = b->CreatePointerCast(ptr, elemTy->getPointerTo());
+    }
+    return b->CreateGEP(ptr, absolutePosition);
+}
+
 Value * StreamSetBuffer::addOverflow(const std::unique_ptr<kernel::KernelBuilder> & b, Value * const bufferCapacity, Value * const overflowItems, Value * const consumedOffset) const {
     if (overflowItems) {
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -143,32 +168,6 @@ Value * ExternalBuffer::getLinearlyWritableItems(const std::unique_ptr<KernelBui
     Value * const capacity = getCapacity(b.get());
     assert (fromPosition->getType() == capacity->getType());
     return b->CreateSub(capacity, fromPosition);
-}
-
-/**
- * @brief getRawItemPointer
- *
- * get a raw pointer the iN field at position absoluteItemPosition of the stream number streamIndex of the stream set.
- * In the case of a stream whose fields are less than one byte (8 bits) in size, the pointer is to the containing byte.
- * The type of the pointer is i8* for fields of 8 bits or less, otherwise iN* for N-bit fields.
- */
-Value * ExternalBuffer::getRawItemPointer(IDISA_Builder * const b, Value * const absolutePosition) const {
-    Value * ptr = getBaseAddress(b);
-    Value * relativePosition = absolutePosition;
-    Type * const elemTy = mBaseType->getArrayElementType()->getVectorElementType();
-    const auto bw = elemTy->getPrimitiveSizeInBits();
-    assert (is_power_2(bw));
-    if (bw < 8) {
-        Constant * const fw = ConstantInt::get(relativePosition->getType(), 8 / bw);
-        if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
-            b->CreateAssertZero(b->CreateURem(absolutePosition, fw), "absolutePosition must be byte aligned");
-        }
-        relativePosition = b->CreateUDiv(relativePosition, fw);
-        ptr = b->CreatePointerCast(ptr, b->getInt8PtrTy());
-    } else {
-        ptr = b->CreatePointerCast(ptr, elemTy->getPointerTo());
-    }
-    return b->CreateGEP(ptr, relativePosition);
 }
 
 inline void ExternalBuffer::assertValidBlockIndex(IDISA_Builder * const b, Value * blockIndex) const {
@@ -270,19 +269,7 @@ Value * StaticBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value * c
 }
 
 Value * StaticBuffer::getRawItemPointer(IDISA_Builder * const b, Value * const absolutePosition) const {
-    Value * ptr = getBaseAddress(b);
-    Value * relativePosition = b->CreateURem(absolutePosition, getCapacity(b));
-    Type * const elemTy = mBaseType->getArrayElementType()->getVectorElementType();
-    const auto bw = elemTy->getPrimitiveSizeInBits();
-    assert (is_power_2(bw));
-    if (bw < 8) {
-        Constant * const fw = ConstantInt::get(relativePosition->getType(), 8 / bw);
-        relativePosition = b->CreateUDiv(relativePosition, fw);
-        ptr = b->CreatePointerCast(ptr, b->getInt8PtrTy());
-    } else {
-        ptr = b->CreatePointerCast(ptr, elemTy->getPointerTo());
-    }
-    return b->CreateGEP(ptr, relativePosition);
+    return StreamSetBuffer::getRawItemPointer(b, b->CreateURem(absolutePosition, getCapacity(b)));
 }
 
 Value * StaticBuffer::getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, Value * const fromPosition, Value * const totalItems, Value * overflowItems) const {
@@ -390,19 +377,7 @@ Value * DynamicBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value * 
 }
 
 Value * DynamicBuffer::getRawItemPointer(IDISA_Builder * const b, Value * absolutePosition) const {
-    Value * base = getBaseAddress(b);
-    Value * relativePosition = b->CreateURem(absolutePosition, getCapacity(b));
-    Type * const elemTy = mBaseType->getArrayElementType()->getVectorElementType();
-    const auto bw = elemTy->getPrimitiveSizeInBits();
-    assert (is_power_2(bw));
-    if (bw < 8) {
-        Constant * const fw = ConstantInt::get(relativePosition->getType(), 8 / bw);
-        relativePosition = b->CreateUDiv(relativePosition, fw);
-        base = b->CreatePointerCast(base, b->getInt8PtrTy());
-    } else {
-        base = b->CreatePointerCast(base, elemTy->getPointerTo());
-    }
-    return b->CreateGEP(base, relativePosition);
+    return StreamSetBuffer::getRawItemPointer(b, b->CreateURem(absolutePosition, getCapacity(b)));
 }
 
 Value * DynamicBuffer::getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> &b, Value * const fromPosition, Value * const totalItems, Value * overflowItems) const {

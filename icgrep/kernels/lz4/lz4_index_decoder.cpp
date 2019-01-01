@@ -6,7 +6,7 @@
 
 #include "lz4_index_decoder.h"
 #include <kernels/kernel_builder.h>
- 
+
 using namespace llvm;
 using namespace kernel;
 
@@ -202,7 +202,7 @@ void LZ4IndexDecoderKernel::generateDoBlockMethod(const std::unique_ptr<KernelBu
     // %at_block_checksum
     BasicBlock * atBlockChecksum = b->CreateBasicBlock("at_block_checksum");
     generateAtBlockChecksum(b, atBlockChecksum, skippingBytes);
-  
+
     // %at_block_size
     BasicBlock * atBlockSize = b->CreateBasicBlock("at_block_size");
     generateAtBlockSize(b, atBlockSize, skippingBytes, exit_block);
@@ -587,7 +587,7 @@ void LZ4IndexDecoderKernel::generateExtendingMatchLen(const std::unique_ptr<Kern
     printRTDebugInt("matchExtEnd", matchExtEnd);
     // number of extender = matchExtEnd - wordOffset
     Value * numExtenders = b->CreateSub(matchExtEnd, wordOffset);
-    Value * matchExtReachBoundary = 
+    Value * matchExtReachBoundary =
             b->CreateICmpEQ(matchExtEnd, b->getInt32(wordWidth));
     // There are matchExtEnd forward zeroes, we load bytes[matchExtEnd]
     // which is the first non-extender.  If matchExtEnd == 64, we force the
@@ -679,7 +679,7 @@ LZ4IndexDecoderKernel::LZ4IndexDecoderKernel(const std::unique_ptr<kernel::Kerne
                                              // outputs
                                              StreamSet * literalIndexes,
                                              StreamSet * matchIndexes)
-: BlockOrientedKernel("lz4IndexDecoder",
+: BlockOrientedKernel(b, "lz4IndexDecoder",
 // Inputs
 {Binding{"byteStream", byteStream, FixedRate(), Misaligned()},
  Binding{"extenders", extenders}},

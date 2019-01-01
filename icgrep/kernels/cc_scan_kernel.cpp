@@ -20,23 +20,23 @@ void CCScanKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & 
 
     const unsigned fieldCount = iBuilder->getBitBlockWidth() / mScanwordBitWidth;
     Type * T = iBuilder->getIntNTy(mScanwordBitWidth);
-    VectorType * scanwordVectorType =  VectorType::get(T, fieldCount);    
+    VectorType * scanwordVectorType =  VectorType::get(T, fieldCount);
     Value * blockNo = iBuilder->getScalarField("BlockNo");
     Value * scanwordPos = iBuilder->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), iBuilder->getBitBlockWidth()));
-    
+
     std::vector<Value * > matchWordVectors;
     for(unsigned d = 0; d < mStreamNum; d++) {
         Value * matches = iBuilder->loadInputStreamBlock("matchResults", iBuilder->getInt32(d));
         matchWordVectors.push_back(iBuilder->CreateBitCast(matches, scanwordVectorType));
     }
-    
+
     for(unsigned i = 0; i < fieldCount; ++i) {
         for(unsigned d = 0; d < mStreamNum; d++) {
             Value * matchWord = iBuilder->CreateExtractElement(matchWordVectors[d], ConstantInt::get(T, i));
             iBuilder->CreateCall(scanWordFunction, {matchWord, iBuilder->getInt32(d), scanwordPos});
         }
         scanwordPos = iBuilder->CreateAdd(scanwordPos, ConstantInt::get(T, mScanwordBitWidth));
-    }   
+    }
     iBuilder->setScalarField("BlockNo", iBuilder->CreateAdd(blockNo, iBuilder->getSize(1)));
 }
 
@@ -92,12 +92,12 @@ Function * CCScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBui
 
 }
 
-CCScanKernel::CCScanKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned streamNum) :
-BlockOrientedKernel("CCScan",
-              {Binding{iBuilder->getStreamSetTy(streamNum), "matchResults"}},
-              {}, {}, {}, {Binding{iBuilder->getSizeTy(), "BlockNo"}}),
+CCScanKernel::CCScanKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned streamNum)
+: BlockOrientedKernel(b, "CCScan",
+              {Binding{b->getStreamSetTy(streamNum), "matchResults"}},
+              {}, {}, {}, {Binding{b->getSizeTy(), "BlockNo"}}),
 mStreamNum(streamNum),
-mScanwordBitWidth(iBuilder->getSizeTy()->getBitWidth()) {
+mScanwordBitWidth(b->getSizeTy()->getBitWidth()) {
 
 }
 

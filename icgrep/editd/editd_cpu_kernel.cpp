@@ -58,7 +58,7 @@ void editdCPUKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelB
         Value * pattIdx = idb->CreateAnd(idb->CreateLShr(pattCh, 1), ConstantInt::get(int8ty, 3));
         Value * pattStream = idb->loadInputStreamBlock("CCStream", idb->CreateZExt(pattIdx, int32ty));
         pattPos = idb->CreateAdd(pattPos, ConstantInt::get(int32ty, 1));
-        
+
         e[0][0] = pattStream;
         for(unsigned i = 1; i < mPatternLen; i++){
             pattCh = idb->CreateLoad(idb->CreateGEP(pattStartPtr, pattPos));
@@ -98,7 +98,7 @@ editdCPUKernel::editdCPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
                                const unsigned patternLen, const unsigned groupSize,
                                Scalar * const pattStream,
                                StreamSet * const CCStream, StreamSet * const ResultStream)
-: BlockOrientedKernel("editd_cpu" + std::to_string(patternLen) + "x" + std::to_string(groupSize),
+: BlockOrientedKernel(b, "editd_cpu" + std::to_string(patternLen) + "x" + std::to_string(groupSize),
 // input stream
 {Binding{"CCStream", CCStream}},
 // output stream

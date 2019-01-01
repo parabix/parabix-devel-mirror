@@ -33,8 +33,8 @@ std::string makeKernelName(const std::string & prefix, const std::vector<StreamS
     return tmp;
 }
 
-StreamsMerge::StreamsMerge(const std::unique_ptr<kernel::KernelBuilder> &, const std::vector<StreamSet *> & inputs, StreamSet * output)
-: BlockOrientedKernel(makeKernelName("streamsMerge", inputs, output), {}, {}, {}, {}, {}) {
+StreamsMerge::StreamsMerge(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<StreamSet *> & inputs, StreamSet * output)
+: BlockOrientedKernel(b, makeKernelName("streamsMerge", inputs, output), {}, {}, {}, {}, {}) {
     for (unsigned i = 0; i < inputs.size(); i++) {
         mInputStreamSets.push_back(Binding{"input" + std::to_string(i), inputs[i]});
     }
@@ -66,8 +66,8 @@ void StreamsMerge::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &i
     }
 }
 
-StreamsIntersect::StreamsIntersect(const std::unique_ptr<kernel::KernelBuilder> &, const std::vector<StreamSet *> & inputs, StreamSet * output)
-: BlockOrientedKernel(makeKernelName("streamsIntersect", inputs, output), {}, {}, {}, {}, {}) {
+StreamsIntersect::StreamsIntersect(const std::unique_ptr<kernel::KernelBuilder> & b, const std::vector<StreamSet *> & inputs, StreamSet * output)
+: BlockOrientedKernel(b, makeKernelName("streamsIntersect", inputs, output), {}, {}, {}, {}, {}) {
     for (unsigned i = 0; i < inputs.size(); i++) {
         mInputStreamSets.push_back(Binding{"input" + std::to_string(i), inputs[i]});
     }
@@ -98,16 +98,16 @@ void StreamsIntersect::generateDoBlockMethod(const std::unique_ptr<KernelBuilder
     }
 }
 
-StreamsCombineKernel::StreamsCombineKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder,
+StreamsCombineKernel::StreamsCombineKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
                                                      std::vector<unsigned> streamsNumOfSets)
-        : BlockOrientedKernel("StreamsCombineKernel" , {}, {}, {}, {}, {}),
-          mStreamsNumOfSets(streamsNumOfSets) {
+: BlockOrientedKernel(b, "StreamsCombineKernel" , {}, {}, {}, {}, {})
+, mStreamsNumOfSets(streamsNumOfSets) {
     int total = 0;
     for (unsigned i = 0; i < streamsNumOfSets.size(); i++) {
         total += streamsNumOfSets[i];
-        mInputStreamSets.push_back(Binding{iBuilder->getStreamSetTy(streamsNumOfSets[i], 1), "inputGroup" + std::to_string(i)});
+        mInputStreamSets.push_back(Binding{b->getStreamSetTy(streamsNumOfSets[i], 1), "inputGroup" + std::to_string(i)});
     }
-    mOutputStreamSets.push_back(Binding{iBuilder->getStreamSetTy(total, 1), "output"});
+    mOutputStreamSets.push_back(Binding{b->getStreamSetTy(total, 1), "output"});
 }
 
 void StreamsCombineKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {
@@ -129,16 +129,16 @@ void StreamsCombineKernel::generateDoBlockMethod(const std::unique_ptr<kernel::K
 }
 
 
-StreamsSplitKernel::StreamsSplitKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder,
+StreamsSplitKernel::StreamsSplitKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
                                        std::vector<unsigned> streamsNumOfSets)
-        : BlockOrientedKernel("StreamsSplitKernel" , {}, {}, {}, {}, {}),
-          mStreamsNumOfSets(streamsNumOfSets){
+: BlockOrientedKernel(b, "StreamsSplitKernel" , {}, {}, {}, {}, {})
+, mStreamsNumOfSets(streamsNumOfSets){
     int total = 0;
     for (unsigned i = 0; i < streamsNumOfSets.size(); i++) {
         total += streamsNumOfSets[i];
-        mOutputStreamSets.push_back(Binding{iBuilder->getStreamSetTy(streamsNumOfSets[i], 1), "outputGroup" + std::to_string(i)});
+        mOutputStreamSets.push_back(Binding{b->getStreamSetTy(streamsNumOfSets[i], 1), "outputGroup" + std::to_string(i)});
     }
-    mInputStreamSets.push_back(Binding{iBuilder->getStreamSetTy(total, 1), "input"});
+    mInputStreamSets.push_back(Binding{b->getStreamSetTy(total, 1), "input"});
 }
 
 void StreamsSplitKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &iBuilder) {

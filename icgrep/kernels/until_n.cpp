@@ -17,16 +17,16 @@ namespace kernel {
 
 void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
 
-/*  
+/*
    Strategy:  first form an index consisting of one bit per packsize input positions,
    with a 1 bit signifying that the corresponding pack has at least one 1 bit.
    Build the index one pack at a time, i.e, packsize * packsize positions at a time.
    After an index pack is constructed, scan the index pack for 1 bits.  Each 1 bit
    found identifies an input pack with a nonzero popcount.  Take the actual popcount
    of the corresponding input pack and update the total number of bits seen.   If
-   the number of bits seen reaches N with any pack, determine the position of the 
+   the number of bits seen reaches N with any pack, determine the position of the
    Nth bit and signal termination at that point.
- 
+
    For normal processing, we process whole blocks only, always advanced processed
    and produced item counts by an integral number of blocks.   For final block
    processing, we treat the final partial block as a whole block for the purpose
@@ -178,8 +178,8 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
 
 }
 
-UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> &, Scalar * maxCount, StreamSet * AllMatches, StreamSet * Matches)
-: MultiBlockKernel("UntilN",
+UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * maxCount, StreamSet * AllMatches, StreamSet * Matches)
+: MultiBlockKernel(b, "UntilN",
 // inputs
 {Binding{"bits", AllMatches}},
 // outputs

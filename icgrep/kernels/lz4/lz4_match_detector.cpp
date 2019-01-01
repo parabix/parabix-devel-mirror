@@ -11,17 +11,17 @@ using namespace kernel;
 using namespace std;
 
 namespace kernel {
-    LZ4MatchDetectorKernel::LZ4MatchDetectorKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, unsigned blockSize)
-            : SegmentOrientedKernel("LZ4MatchDetectorKernel",
+    LZ4MatchDetectorKernel::LZ4MatchDetectorKernel(const std::unique_ptr<kernel::KernelBuilder> &b, unsigned blockSize)
+            : SegmentOrientedKernel(b, "LZ4MatchDetectorKernel",
 // Inputs
                                     {
-                                            Binding{iBuilder->getStreamSetTy(1), "matches", BoundedRate(0, 1)},
-                                            Binding{iBuilder->getStreamSetTy(1), "linebreak", RateEqualTo("matches")}
+                                            Binding{b->getStreamSetTy(1), "matches", BoundedRate(0, 1)},
+                                            Binding{b->getStreamSetTy(1), "linebreak", RateEqualTo("matches")}
                                     },
 //Outputs
                                     {
 
-                                            Binding{iBuilder->getStreamSetTy(1, 8), "hasMatches", BoundedRate(0, 1)}
+                                            Binding{b->getStreamSetTy(1, 8), "hasMatches", BoundedRate(0, 1)}
                                     },
 //Arguments
                                     {

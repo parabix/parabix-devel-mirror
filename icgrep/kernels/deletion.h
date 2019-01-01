@@ -25,7 +25,7 @@ namespace kernel {
 //
 class DeletionKernel final : public BlockOrientedKernel {
 public:
-    DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount);
+    DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -35,7 +35,7 @@ private:
     const unsigned mDeletionFieldWidth;
     const unsigned mStreamCount;
 };
-    
+
 // Compress within fields of size fw.
 class FieldCompressKernel final : public MultiBlockKernel {
 public:
@@ -107,7 +107,7 @@ private:
 
 class DeleteByPEXTkernel final : public BlockOrientedKernel {
 public:
-    DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned fw, unsigned streamCount, unsigned PEXT_width = sizeof(size_t) * 8);
+    DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount, unsigned PEXT_width = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -120,10 +120,10 @@ private:
     const unsigned mSwizzleFactor;
     const unsigned mPEXTWidth;
 };
-    
+
 class SwizzledBitstreamCompressByCount final : public BlockOrientedKernel {
 public:
-    SwizzledBitstreamCompressByCount(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, unsigned bitStreamCount, unsigned fieldWidth = sizeof(size_t) * 8);
+    SwizzledBitstreamCompressByCount(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned bitStreamCount, unsigned fieldWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -136,8 +136,8 @@ private:
     const unsigned mSwizzleSetCount;
 };
 
-    
+
 }
-    
+
 #endif
 

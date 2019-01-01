@@ -21,7 +21,7 @@ LZ4BlockDecoderKernel::LZ4BlockDecoderKernel(const std::unique_ptr<kernel::Kerne
                                              StreamSet * byteStream,
                                              // outputs
                                              StreamSet * isCompressed, StreamSet * blockStart, StreamSet * blockEnd)
-: SegmentOrientedKernel("LZ4BlockdDecoder",
+: SegmentOrientedKernel(b, "LZ4BlockdDecoder",
 // Inputs
 {
     Binding{"byteStream", byteStream},

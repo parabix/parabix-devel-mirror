@@ -47,8 +47,8 @@ void untwistByPEXT(const std::unique_ptr <kernel::KernelBuilder> &b, Value* inpu
 
 
 
-UntwistByPEXTKernel::UntwistByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * inputStream, StreamSet * outputStream)
-: BlockOrientedKernel("UntwistByPEXTKernel",
+UntwistByPEXTKernel::UntwistByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * inputStream, StreamSet * outputStream)
+: BlockOrientedKernel(b, "UntwistByPEXTKernel",
 // input
 {Binding{"byteStream", inputStream}},
 // output
@@ -74,10 +74,10 @@ void UntwistByPEXTKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuil
 }
 
 
-UntwistMultipleByPEXTKernel::UntwistMultipleByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+UntwistMultipleByPEXTKernel::UntwistMultipleByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
                                                          StreamSet * inputStream,
                                                          const StreamSets & outputStreams)
-: BlockOrientedKernel("UntwistMultipleByPEXTKernel",
+: BlockOrientedKernel(b, "UntwistMultipleByPEXTKernel",
 // input
 {Binding{"byteStream", inputStream}},
 // output

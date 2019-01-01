@@ -96,7 +96,7 @@ public:
 
     virtual llvm::Value * getCapacity(IDISA::IDISA_Builder * const b) const = 0;
 
-    virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const = 0;
+    virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const;
 
     virtual llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * const streamIndex, llvm::Value * blockIndex) const = 0;
 
@@ -167,8 +167,6 @@ public:
 
     llvm::Value * getOverflowAddress(IDISA::IDISA_Builder * const b) const override;
 
-    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const override;
-
 private:
 
     void assertValidBlockIndex(IDISA::IDISA_Builder * const b, llvm::Value * blockIndex) const;
@@ -218,6 +216,10 @@ public:
 
     llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const override;
 
+    size_t getCapacity() const {
+        return mCapacity;
+    }
+
 private:
 
     llvm::Value * modByCapacity(IDISA::IDISA_Builder * const b, llvm::Value * const offset) const;
@@ -255,6 +257,11 @@ public:
     }
 
     size_t getOverflowCapacity(const std::unique_ptr<kernel::KernelBuilder> & b) const override;
+
+    size_t getInitialCapacity() const {
+        return mInitialCapacity;
+    }
+
 
 protected:
 

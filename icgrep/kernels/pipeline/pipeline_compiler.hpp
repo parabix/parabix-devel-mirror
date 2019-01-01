@@ -48,11 +48,6 @@ using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 // TODO: replace ints used for port #s with the following
 // BOOST_STRONG_TYPEDEF(unsigned, PortNumber)
 
-#warning TODO: these graphs are similar; look into streamlining their generation.
-
-// TODO: split pipeline vertex into input and output vertices to keep all graphs DAGs
-// without having to delete edges.
-
 enum class BufferType : unsigned {
     Internal = 0
     , External = 1
@@ -62,8 +57,6 @@ enum class BufferType : unsigned {
 struct BufferNode {
     Value *             TotalItems;
 
-
-    kernel::Kernel *    Kernel;
     StreamSetBuffer *   Buffer;
 
     RateValue           Lower;
@@ -74,7 +67,7 @@ struct BufferNode {
 
     BufferType          Type;
 
-    BufferNode() : TotalItems(nullptr), Kernel(nullptr), Buffer(nullptr), Lower(), Upper(), Overflow(0), Fasimile(0), Type(BufferType::Internal) {}
+    BufferNode() : TotalItems(nullptr), Buffer(nullptr), Lower(), Upper(), Overflow(0), Fasimile(0), Type(BufferType::Internal) {}
 };
 
 struct BufferRateData {
@@ -160,6 +153,12 @@ struct PopCountEdge {
 
 using PopCountGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, PopCountEdge>;
 
+enum TerminationMode : unsigned {
+    NotTerminated = 0
+    , TerminatedNormally = 1
+    , TerminatedExplicitly = 2
+};
+
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 const static std::string TERMINATION_SIGNAL_SUFFIX = ".TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IC";
@@ -183,12 +182,13 @@ protected:
 // internal pipeline state construction functions
 
     void addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex);
+    void acquireCurrentSegment(BuilderRef b);
+    void releaseCurrentSegment(BuilderRef b);
 
 // main pipeline functions
 
     void start(BuilderRef b, Value * const initialSegNo);
     void setActiveKernel(BuilderRef b, const unsigned index);
-    void acquireCurrentSegment(BuilderRef b);
     void executeKernel(BuilderRef b);
     void end(BuilderRef b, const unsigned step);
 
@@ -234,14 +234,14 @@ protected:
     void computeFullyProcessedItemCounts(BuilderRef b);
     void computeFullyProducedItemCounts(BuilderRef b);
 
-    void updatePhisAfterTermination(BuilderRef b);
+    void updatePhisAfterTermination(BuilderRef b, Value * const terminationMode);
 
     void zeroFillPartiallyWrittenOutputStreams(BuilderRef b);
 
     void computeMinimumConsumedItemCounts(BuilderRef b);
     void writeFinalConsumedItemCounts(BuilderRef b);
     void readFinalProducedItemCounts(BuilderRef b);
-    void releaseCurrentSegment(BuilderRef b);
+
     void writeCopyToOverflowLogic(BuilderRef b);
     void checkForSufficientInputData(BuilderRef b, const unsigned inputPort);
     void checkForSufficientOutputSpaceOrExpand(BuilderRef b, const unsigned outputPort);
@@ -267,11 +267,11 @@ protected:
     Value * addLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
     Value * subtractLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
     Constant * getLookahead(BuilderRef b, const unsigned inputPort) const;
-    Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount, Value * all) const;
+    Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const;
     Value * getTotalItemCount(BuilderRef b, const unsigned inputPort) const;
-    Value * producerTerminated(const unsigned inputPort) const;
-    Value * initiallyTerminated(BuilderRef b) const;
-    void setTerminated(BuilderRef b, Value * const terminated);
+    Value * producerTerminated(BuilderRef b, const unsigned inputPort) const;
+    Value * initiallyTerminated(BuilderRef b);
+    Value * setTerminated(BuilderRef b, Value * const condition, const TerminationMode trueMode, const TerminationMode falseMode) const;
     void resetMemoizedFields();
 
 // pop-count functions
@@ -340,7 +340,7 @@ protected:
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
     void enumerateBufferProducerBindings(const unsigned producer, const Bindings & bindings, BufferGraph & G, BufferMap & M);
     void enumerateBufferConsumerBindings(const unsigned consumer, const Bindings & bindings, BufferGraph & G, BufferMap & M);
-    BufferRateData getBufferRateData(const unsigned index, const unsigned port, bool input);
+    BufferRateData getBufferRateData(const Kernel * const kernel, const Binding &binding, const unsigned port) const;
 
     void constructBuffers(BuilderRef b);
     void loadBufferHandles(BuilderRef b);
@@ -380,6 +380,10 @@ protected:
     unsigned getOutputBufferVertex(const unsigned kernelVertex, const unsigned outputPort) const;
     StreamSetBuffer * getOutputBuffer(const unsigned outputPort) const;
 
+    LLVM_READNONE bool nestedPipeline() const {
+        return out_degree(0, mBufferGraph) != 0 || in_degree(mLastKernel, mBufferGraph) != 0;
+    }
+
     static LLVM_READNONE const Binding & getBinding(const Kernel * kernel, const Port port, const unsigned i) {
         if (port == Port::Input) {
             return kernel->getInputStreamSetBinding(i);
@@ -395,7 +399,7 @@ protected:
 
     LLVM_READNONE const Binding & getOutputBinding(const Kernel * const consumer, const unsigned index) const;
 
-    void writeOutputScalars(BuilderRef b, const unsigned u, std::vector<Value *> & args);
+    void writeOutputScalars(BuilderRef b, const unsigned index, std::vector<Value *> & args);
 
     void verifyInputItemCount(BuilderRef b, Value * processed, const unsigned inputPort) const;
 
@@ -409,15 +413,20 @@ protected:
 protected:
 
     PipelineKernel * const                      mPipelineKernel;
-    const Kernels &                             mPipeline;
+    const Kernels                               mPipeline;
+    const unsigned                              mFirstKernel;
+    const unsigned                              mLastKernel;
+
 
     OwnedStreamSetBuffers                       mOwnedBuffers;
     unsigned                                    mKernelIndex = 0;
     Kernel *                                    mKernel = nullptr;
 
     // pipeline state
-    PHINode *                                   mTerminatedPhi = nullptr;
     PHINode *                                   mSegNo = nullptr;
+    PHINode *                                   mProgressCounter = nullptr;
+    Value *                                     mPipelineProgress = nullptr;
+    Value *                                     mPipelineTerminated = nullptr;
     BasicBlock *                                mPipelineLoop = nullptr;
     BasicBlock *                                mKernelEntry = nullptr;
     BasicBlock *                                mKernelLoopEntry = nullptr;
@@ -428,12 +437,14 @@ protected:
     BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
     BasicBlock *                                mKernelExit = nullptr;
     BasicBlock *                                mPipelineEnd = nullptr;
-    std::vector<Value *>                        mOutputScalars;
 
     // kernel state
+    Value *                                     mTerminatedInitially = nullptr;
+    PHINode *                                   mHasProgressedPhi = nullptr;
+    PHINode *                                   mAlreadyProgressedPhi = nullptr;
+    PHINode *                                   mTerminatedPhi = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
-    Value *                                     mTerminationExplicitly = nullptr;
-
+    Value *                                     mTerminatedExplicitly = nullptr;
     std::vector<unsigned>                       mPortOrdering;
 
     std::vector<Value *>                        mInitiallyProcessedItemCount; // *before* entering the kernel
@@ -466,10 +477,6 @@ protected:
 
     // debug + misc state
     Value *                                     mCycleCountStart = nullptr;
-    PHINode *                                   mDeadLockCounter = nullptr;
-    Value *                                     mPipelineProgress = nullptr;
-    PHINode *                                   mHasProgressedPhi = nullptr;
-    PHINode *                                   mAlreadyProgressedPhi = nullptr;
 
     // popcount state
     Value *                                     mPopCountState;
@@ -485,19 +492,32 @@ protected:
 
 };
 
+Kernels makePipelineList(PipelineKernel * const pk) {
+    const Kernels & P = pk->getKernels();
+    const auto n = P.size();
+    Kernels L(n + 2);
+    L[0] = pk;
+    for (unsigned i = 0; i != n; ++i) {
+        L[i + 1] = P[i];
+    }
+    L[n + 1] = pk;
+    return L;
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel)
 : mPipelineKernel(pipelineKernel)
-, mPipeline(pipelineKernel->mKernels)
+, mPipeline(makePipelineList(pipelineKernel))
+, mFirstKernel(1)
+, mLastKernel(mPipeline.size() - 1)
 , mBufferGraph(makeBufferGraph(b))
 , mConsumerGraph(makeConsumerGraph())
 , mScalarDependencyGraph(makeScalarDependencyGraph())
 , mTerminationGraph(makeTerminationGraph())
 , mPopCountGraph(makePopCountGraph()) {
-
-
+    initializePopCounts();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -516,6 +536,7 @@ inline unsigned PipelineCompiler::getInputBufferVertex(const unsigned kernelVert
             return source(e, mBufferGraph);
         }
     }
+    assert (!"input buffer not found");
     llvm_unreachable("input buffer not found");
 }
 
@@ -542,6 +563,7 @@ inline unsigned PipelineCompiler::getOutputBufferVertex(const unsigned kernelVer
             return target(e, mBufferGraph);
         }
     }
+    assert (!"output buffer not found");
     llvm_unreachable("output buffer not found");
 }
 
@@ -652,6 +674,22 @@ template <typename Graph>
 inline typename graph_traits<Graph>::vertex_descriptor child(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
     return target(out_edge(u, G), G);
 }
+
+template <typename Graph>
+inline bool has_child(const typename graph_traits<Graph>::vertex_descriptor u,
+                      const typename graph_traits<Graph>::vertex_descriptor v,
+                      const Graph & G) {
+    for (const auto & e : make_iterator_range(out_edges(u, G))) {
+        if (target(e, G) == v) {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+
+
 
 } // end of namespace
 

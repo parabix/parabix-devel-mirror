@@ -283,26 +283,35 @@ Kernel * PipelineBuilder::makeKernel() {
     pipeline.reserve(ordering.size());
 
     const std::unique_ptr<kernel::KernelBuilder> & b = mDriver.getBuilder();
-    Type * const addrPtrTy = b->getVoidPtrTy(); // is voidptrty sufficient?
+    unsigned stride = 0;
+    Type * const addrPtrTy = b->getVoidPtrTy();
     for (auto i : ordering) {
         if (LLVM_LIKELY(i < numOfKernels)) {
             Kernel * const k = mKernels[i];
             if (k->hasFamilyName()) {
-                const auto kn = PipelineKernel::makeKernelName(k, index[i]);
+                const auto kn = PipelineKernel::makeKernelName(k, index[i] + 1);
                 addInputScalar(addrPtrTy, kn);
                 addInputScalar(addrPtrTy, kn + INITIALIZE_FUNCTION_POINTER_SUFFIX);
                 addInputScalar(addrPtrTy, kn + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
                 addInputScalar(addrPtrTy, kn + FINALIZE_FUNCTION_POINTER_SUFFIX);
             }
             pipeline.emplace_back(k);
+            assert (k->getStride());
+            if (stride) {
+                stride = boost::lcm(stride, k->getStride());
+            } else {
+                stride = k->getStride();
+            }
         }
     }
 
     PipelineKernel * const pk =
-        new PipelineKernel(std::move(signature), mNumOfThreads,
+        new PipelineKernel(b, std::move(signature), mNumOfThreads,
                            std::move(pipeline), std::move(mCallBindings),
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
                            std::move(mInputScalars), std::move(mOutputScalars));
+
+    pk->setStride(stride);
 
     return pk;
 }
@@ -342,12 +351,16 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
     out << "\"";
     out.flush();
 
+    // TODO: if the condition is also one of the normal inputs and the rate is compatible,
+    // we could avoid sending it through.
+
     OptimizationBranch * const br =
-            new OptimizationBranch(std::move(name),
+            new OptimizationBranch(mDriver.getBuilder(), std::move(name),
                                    mCondition, trueBranch, falseBranch,
                                    std::move(mInputStreamSets), std::move(mOutputStreamSets),
                                    std::move(mInputScalars), std::move(mOutputScalars));
 
+    br->setStride(boost::lcm(trueBranch->getStride(), falseBranch->getStride()));
 
     return br;
 }
@@ -463,9 +476,16 @@ ProgramBuilder::ProgramBuilder(
 
 }
 
+template <typename IfType>
+inline void addCondition(Relationship * const condition, Bindings & bindings) {
+    if (isa<IfType>(condition)) {
+        bindings.emplace_back(OptimizationBranch::CONDITION_TAG, condition, FixedRate(1));
+    }
+}
+
 OptimizationBranchBuilder::OptimizationBranchBuilder(
       BaseDriver & driver,
-      StreamSet * const condition,
+      Relationship * const condition,
       Bindings && stream_inputs, Bindings && stream_outputs,
       Bindings && scalar_inputs, Bindings && scalar_outputs)
 : PipelineBuilder(
@@ -473,9 +493,10 @@ OptimizationBranchBuilder::OptimizationBranchBuilder(
       std::move(stream_inputs), std::move(stream_outputs),
       std::move(scalar_inputs), std::move(scalar_outputs))
 , mCondition(condition)
-, mTrueBranch()
-, mFalseBranch() {
-
+, mTrueBranch(nullptr)
+, mFalseBranch(nullptr) {
+    addCondition<StreamSet>(condition, mInputStreamSets);
+    addCondition<Scalar>(condition, mInputScalars);
 }
 
 OptimizationBranchBuilder::~OptimizationBranchBuilder() {

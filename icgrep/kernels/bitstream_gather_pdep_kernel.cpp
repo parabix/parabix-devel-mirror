@@ -10,7 +10,7 @@ using namespace llvm;
 namespace kernel {
 
     BitStreamGatherPDEPKernel::BitStreamGatherPDEPKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned numberOfStream, std::string name)
-            : MultiBlockKernel(std::move(name),
+            : MultiBlockKernel(b, std::move(name),
 // input stream sets
                                {Binding{b->getStreamSetTy(), "marker", FixedRate(), Principal()},
                                 Binding{b->getStreamSetTy(numberOfStream), "source", PopcountOf("marker")}},

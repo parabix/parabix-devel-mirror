@@ -41,13 +41,15 @@ void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder>
 
 // MULTI-BLOCK KERNEL CONSTRUCTOR
 MultiBlockKernel::MultiBlockKernel(
+    const std::unique_ptr<KernelBuilder> &b,
     std::string && kernelName,
     Bindings && stream_inputs,
     Bindings && stream_outputs,
     Bindings && scalar_parameters,
     Bindings && scalar_outputs,
     Bindings && internal_scalars)
-: MultiBlockKernel(TypeId::MultiBlock,
+: MultiBlockKernel(b,
+    TypeId::MultiBlock,
     std::move(kernelName),
     std::move(stream_inputs),
     std::move(stream_outputs),
@@ -57,7 +59,7 @@ MultiBlockKernel::MultiBlockKernel(
 
 }
 
-MultiBlockKernel::MultiBlockKernel(
+MultiBlockKernel::MultiBlockKernel(const std::unique_ptr<KernelBuilder> &b,
     const TypeId typeId,
     std::string && kernelName,
     Bindings && stream_inputs,
@@ -65,7 +67,7 @@ MultiBlockKernel::MultiBlockKernel(
     Bindings && scalar_parameters,
     Bindings && scalar_outputs,
     Bindings && internal_scalars)
-: Kernel(typeId,
+: Kernel(b, typeId,
      std::move(kernelName),
      std::move(stream_inputs),
      std::move(stream_outputs),

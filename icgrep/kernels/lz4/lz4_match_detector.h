@@ -19,7 +19,7 @@ namespace IDISA { class IDISA_Builder; }
 namespace kernel {
     class LZ4MatchDetectorKernel : public SegmentOrientedKernel {
     public:
-        LZ4MatchDetectorKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder, unsigned blockSize = 4 * 1024 * 1024);
+        LZ4MatchDetectorKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned blockSize = 4 * 1024 * 1024);
     protected:
         void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
     private:

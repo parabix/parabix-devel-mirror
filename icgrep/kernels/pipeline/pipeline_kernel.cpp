@@ -321,11 +321,12 @@ std::string PipelineKernel::makeBufferName(const Kernel * const kernel, const un
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-PipelineKernel::PipelineKernel(std::string && signature, const unsigned numOfThreads,
+PipelineKernel::PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
+                               std::string && signature, const unsigned numOfThreads,
                                Kernels && kernels, CallBindings && callBindings,
                                Bindings && stream_inputs, Bindings && stream_outputs,
-                               Bindings &&scalar_inputs, Bindings && scalar_outputs)
-: Kernel(TypeId::Pipeline,
+                               Bindings && scalar_inputs, Bindings && scalar_outputs)
+: Kernel(b, TypeId::Pipeline,
          "p" + std::to_string(numOfThreads) + "_" + getStringHash(signature),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs), {})
@@ -333,7 +334,7 @@ PipelineKernel::PipelineKernel(std::string && signature, const unsigned numOfThr
 , mKernels(std::move(kernels))
 , mCallBindings(std::move(callBindings))
 , mSignature(std::move(signature)) {
-
+    addAttributesFrom(mKernels);
 }
 
 

@@ -457,14 +457,14 @@ protected:
         Port port; unsigned index;
         std::tie(port, index) = getStreamPort(name);
         assert (port == Port::Input);
-        return mProcessedInputItems[index];
+        return mProcessedInputItemPtr[index];
     }
 
     LLVM_READNONE llvm::Value * getProducedOutputItemsPtr(const llvm::StringRef name) const {
         Port port; unsigned index;
         std::tie(port, index) = getStreamPort(name);
         assert (port == Port::Output);
-        return mProducedOutputItems[index];
+        return mProducedOutputItemPtr[index];
     }
 
     LLVM_READNONE llvm::Value * getConsumedOutputItems(const llvm::StringRef name) const {
@@ -479,12 +479,15 @@ protected:
     }
 
     // Constructor
-    Kernel(const TypeId typeId, std::string && kernelName,
+    Kernel(const std::unique_ptr<KernelBuilder> & b,
+           const TypeId typeId, std::string && kernelName,
            Bindings && stream_inputs, Bindings && stream_outputs,
            Bindings && scalar_inputs, Bindings && scalar_outputs,
            Bindings && internal_scalars);
 
 private:
+
+    void addAttributesFrom(const std::vector<Kernel *> & kernels);
 
     void callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b);
 
@@ -527,12 +530,12 @@ protected:
     llvm::Value *                   mIsFinal;
     llvm::Value *                   mNumOfStrides;
 
-    std::vector<llvm::Value *>      mProcessedInputItems;
+    std::vector<llvm::Value *>      mProcessedInputItemPtr;
     std::vector<llvm::Value *>      mAccessibleInputItems;
     std::vector<llvm::Value *>      mAvailableInputItems;
     std::vector<llvm::Value *>      mPopCountRateArray;
     std::vector<llvm::Value *>      mNegatedPopCountRateArray;
-    std::vector<llvm::Value *>      mProducedOutputItems;
+    std::vector<llvm::Value *>      mProducedOutputItemPtr;
     std::vector<llvm::Value *>      mWritableOutputItems;
     std::vector<llvm::Value *>      mConsumedOutputItems;
 
@@ -558,7 +561,8 @@ public:
 
 protected:
 
-    SegmentOrientedKernel(std::string && kernelName,
+    SegmentOrientedKernel(const std::unique_ptr<KernelBuilder> & b,
+                          std::string && kernelName,
                           Bindings && stream_inputs,
                           Bindings && stream_outputs,
                           Bindings && scalar_parameters,
@@ -586,7 +590,8 @@ public:
 
 protected:
 
-    MultiBlockKernel(std::string && kernelName,
+    MultiBlockKernel(const std::unique_ptr<KernelBuilder> & b,
+                     std::string && kernelName,
                      Bindings && stream_inputs,
                      Bindings && stream_outputs,
                      Bindings && scalar_parameters,
@@ -597,7 +602,8 @@ protected:
 
 private:
 
-    MultiBlockKernel(const TypeId kernelTypId,
+    MultiBlockKernel(const std::unique_ptr<KernelBuilder> & b,
+                     const TypeId kernelTypId,
                      std::string && kernelName,
                      Bindings && stream_inputs,
                      Bindings && stream_outputs,
@@ -638,7 +644,8 @@ protected:
 
     virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * remainingItems);
 
-    BlockOrientedKernel(std::string && kernelName,
+    BlockOrientedKernel(const std::unique_ptr<KernelBuilder> & b,
+                        std::string && kernelName,
                         Bindings && stream_inputs,
                         Bindings && stream_outputs,
                         Bindings && scalar_parameters,

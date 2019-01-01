@@ -13,7 +13,7 @@ using namespace llvm;
 namespace kernel {
 
 SwizzledMultiplePDEPkernel::SwizzledMultiplePDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned swizzleFactor, const unsigned numberOfStreamSet, std::string name)
-: MultiBlockKernel(std::move(name),
+: MultiBlockKernel(b, std::move(name),
 // input stream sets
 {Binding{b->getStreamSetTy(), "marker", FixedRate(), Principal()},
 Binding{b->getStreamSetTy(swizzleFactor), "source0", PopcountOf("marker"), BlockSize(b->getBitBlockWidth() / swizzleFactor) }},

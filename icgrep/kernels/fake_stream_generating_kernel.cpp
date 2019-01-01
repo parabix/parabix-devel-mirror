@@ -11,7 +11,7 @@ namespace kernel {
 FakeStreamGeneratingKernel::FakeStreamGeneratingKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
                                                        StreamSet * refStream,
                                                        StreamSet * outputStream)
-: SegmentOrientedKernel("FakeStream",
+: SegmentOrientedKernel(b, "FakeStream",
 // input stream sets
 {Binding{"inputStream", refStream}},
 // output stream set
@@ -23,7 +23,7 @@ FakeStreamGeneratingKernel::FakeStreamGeneratingKernel(const std::unique_ptr<ker
 FakeStreamGeneratingKernel::FakeStreamGeneratingKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
                                                        StreamSet * refStream,
                                                        const StreamSets & outputStreams)
-: SegmentOrientedKernel("FakeStream",
+: SegmentOrientedKernel(b, "FakeStream",
 // input stream sets
 {Binding{"inputStream", refStream}},
 {},{},{},{}

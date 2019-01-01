@@ -63,16 +63,7 @@ inline const Binding & PipelineCompiler::getInputBinding(const Kernel * const co
     }
 }
 
-inline BufferRateData PipelineCompiler::getBufferRateData(const unsigned index, const unsigned port, bool input) {
-    const Kernel * kernel = nullptr;
-    if (index < mPipeline.size()) {
-        kernel = mPipeline[index];
-    } else {
-        assert (index == mPipeline.size());
-        kernel = mPipelineKernel;
-        input = !input;
-    }
-    const Binding & binding = input ? kernel->getInputStreamSetBinding(port) : kernel->getOutputStreamSetBinding(port);
+BufferRateData PipelineCompiler::getBufferRateData(const Kernel * const kernel, const Binding & binding, const unsigned port) const {
     const auto ub = upperBound(kernel, binding);
     const auto lb = isConsistentRate(kernel, binding) ? ub : lowerBound(kernel, binding);
     return BufferRateData{port, lb, ub};
@@ -80,57 +71,55 @@ inline BufferRateData PipelineCompiler::getBufferRateData(const unsigned index, 
 
 void PipelineCompiler::enumerateBufferProducerBindings(const unsigned producer, const Bindings & bindings, BufferGraph & G, BufferMap & M) {
     const auto n = bindings.size();
+    const Kernel * const kernel = mPipeline[producer];
     for (unsigned i = 0; i < n; ++i) {
         const StreamSet * const rel = cast<StreamSet>(getRelationship(bindings[i]));
         assert (M.count(rel) == 0);
         const auto buffer = add_vertex(G);
-        add_edge(producer, buffer, getBufferRateData(producer, i, false), G); // producer -> buffer ordering
+        add_edge(producer, buffer, getBufferRateData(kernel, bindings[i], i), G); // producer -> buffer ordering
         M.emplace(rel, buffer);
     }
 }
 
 void PipelineCompiler::enumerateBufferConsumerBindings(const unsigned consumer, const Bindings & bindings, BufferGraph & G, BufferMap & M) {
     const auto n = bindings.size();
+    const Kernel * const kernel = mPipeline[consumer];
     for (unsigned i = 0; i < n; ++i) {
         const StreamSet * const rel = cast<StreamSet>(getRelationship(bindings[i]));
         const auto f = M.find(rel); assert (f != M.end());
         const auto buffer = f->second;
-        add_edge(buffer, consumer, getBufferRateData(consumer, i, true), G); // buffer -> consumer ordering
+        add_edge(buffer, consumer, getBufferRateData(kernel, bindings[i], i), G); // buffer -> consumer ordering
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineBufferGraph
  *
- * Return a cyclic bi-partite graph indicating the I/O relationships between the kernels and their buffers.
+ * Return an acyclic bi-partite graph indicating the I/O relationships between the kernels and their buffers.
  *
  * Ordering: producer -> buffer -> consumer
  ** ------------------------------------------------------------------------------------------------------------- */
 BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
-    const auto numOfKernels = mPipeline.size();
-    const auto pipelineVertex = numOfKernels;
-    BufferGraph G(numOfKernels + 1);
+    const auto pipelineInput = 0;
+    const auto pipelineOutput = mLastKernel;
+    const auto firstBuffer = mLastKernel + 1;
+
+    BufferGraph G(mLastKernel + 1);
     BufferMap M;
 
-    // make an edge from the pipeline input to a buffer vertex
-    enumerateBufferProducerBindings(pipelineVertex, mPipelineKernel->getInputStreamSetBindings(), G, M);
-    G[pipelineVertex].Kernel = mPipelineKernel;
     // make an edge from each producing kernel to a buffer vertex
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        const auto & producer = mPipeline[i];
-        enumerateBufferProducerBindings(i, producer->getOutputStreamSetBindings(), G, M);
-        G[i].Kernel = producer;
+    enumerateBufferProducerBindings(pipelineInput, mPipelineKernel->getInputStreamSetBindings(), G, M);
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        enumerateBufferProducerBindings(i, mPipeline[i]->getOutputStreamSetBindings(), G, M);
     }
     // make an edge from each buffer to its consuming kernel(s)
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        const auto & consumer = mPipeline[i];
-        enumerateBufferConsumerBindings(i, consumer->getInputStreamSetBindings(), G, M);
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        enumerateBufferConsumerBindings(i, mPipeline[i]->getInputStreamSetBindings(), G, M);
     }
     // make an edge from a buffer vertex to each pipeline output
-    enumerateBufferConsumerBindings(pipelineVertex, mPipelineKernel->getOutputStreamSetBindings(), G, M);
+    enumerateBufferConsumerBindings(pipelineOutput, mPipelineKernel->getOutputStreamSetBindings(), G, M);
 
-    const auto firstBuffer = numOfKernels + 1;
     const auto lastBuffer = num_vertices(G);
 
     // Since we do not want to create an artifical bottleneck by constructing output buffers that
@@ -138,14 +127,13 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     // next loop will resize them accordingly.
 
     // compute how much data each kernel could consume/produce per iteration.
-    for (unsigned i = 0; i < numOfKernels; ++i) {
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         if (LLVM_LIKELY(in_degree(i, G) > 0)) {
 
             RateValue lower{std::numeric_limits<unsigned>::max()};
             RateValue upper{std::numeric_limits<unsigned>::max()};
 
             BufferNode & kn = G[i];
-            assert(kn.Kernel);
 
             for (const auto ce : make_iterator_range(in_edges(i, G))) {
                 // current consuming edge of this buffer
@@ -175,7 +163,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     }
 
     // fill in any known pipeline I/O buffers
-    for (const auto e : make_iterator_range(out_edges(pipelineVertex, G))) {
+    for (const auto e : make_iterator_range(out_edges(pipelineInput, G))) {
         const auto bufferVertex = target(e, G);
         BufferNode & bn = G[bufferVertex];
         assert (bn.Buffer == nullptr);
@@ -184,7 +172,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = BufferType::External;
     }
 
-    for (const auto e : make_iterator_range(in_edges(pipelineVertex, G))) {
+    for (const auto e : make_iterator_range(in_edges(pipelineOutput, G))) {
         const auto bufferVertex = source(e, G);
         BufferNode & bn = G[bufferVertex];
         assert (bn.Buffer == nullptr);
@@ -207,8 +195,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         const auto producerVertex = source(pe, G);
 
 
-        const BufferNode & producerNode = G[producerVertex];
-        const auto & producer = producerNode.Kernel;
+        const Kernel * const producer = mPipeline[producerVertex];
         const BufferRateData & producerRate = G[pe];
         const Binding & output = getOutputBinding(producer, producerRate.Port);
 
@@ -235,7 +222,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 requiredSpace = lcm(requiredSpace, consumerRate.Maximum);
                 const auto c = target(ce, G);
                 const BufferNode & consumerNode = G[c];
-                const Kernel * const consumer = consumerNode.Kernel; assert (consumer);
+                const Kernel * const consumer = mPipeline[c]; assert (consumer);
                 const Binding & input = getInputBinding(consumer, consumerRate.Port);
                 facsimileSpace = std::max(facsimileSpace, getOutputOverflowSize(consumer, input, consumerRate));
                 // Could the consumption rate be less than the production rate?
@@ -284,18 +271,21 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out) {
 
-    const auto numOfKernels = mPipeline.size();
-    const auto firstBuffer = numOfKernels + 1;
+    const auto pipelineInput = 0;
+    const auto pipelineOutput = mLastKernel;
+    const auto firstBuffer = mLastKernel + 1;
     const auto lastBuffer = num_vertices(G);
 
     out << "digraph G {\n";
 
-    for (unsigned i = 0; i < numOfKernels; ++i) {
+    out << "v" << pipelineInput << " [label=\"P_{in}\" shape=box];\n";
+
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         const Kernel * const kernel = mPipeline[i]; assert(kernel);
-        out << "v" << i << " [label=\"" << i << ": " <<  kernel->getName()  << "\" shape=box];\n";
+        out << "v" << i << " [label=\"" << i << ": K_{" << i << "}  " <<  kernel->getName()  << "\" shape=box];\n";
     }
 
-    out << "v" << numOfKernels << " [label=\"" << numOfKernels << ": pipeline\" shape=box];\n";
+    out << "v" << pipelineOutput << " [label=\"P_{out}\" shape=box];\n";
 
     for (unsigned i = firstBuffer; i != lastBuffer; ++i) {
         out << "v" << i << " [label=\"";
@@ -304,19 +294,16 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
             out << '?';
         } else if (isa<ExternalBuffer>(bn.Buffer)) {
             out << 'E';
-        } else if (isa<DynamicBuffer>(bn.Buffer)) {
-            out << 'D';
-        } else if (isa<StaticBuffer>(bn.Buffer)) {
-            out << 'S';
+        } else if (DynamicBuffer * buffer = dyn_cast<DynamicBuffer>(bn.Buffer)) {
+            out << 'D' << buffer->getInitialCapacity() << 'x' << buffer->getNumOfStreams();
+        } else if (StaticBuffer * buffer = dyn_cast<StaticBuffer>(bn.Buffer)) {
+            out << 'S' << buffer->getCapacity() << 'x' << buffer->getNumOfStreams();
         }
         if (bn.Overflow || bn.Fasimile) {
             out << " (O:" << bn.Overflow << ",F:" << bn.Fasimile << ')';
         }
         out << "\"];\n";
     }
-
-    std::vector<Kernel *> P(mPipeline);
-    P.push_back(mPipelineKernel);
 
     for (auto e : make_iterator_range(edges(G))) {
         const auto s = source(e, G);
@@ -334,13 +321,11 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         }
         out << '\n';
 
-        if (s <= numOfKernels) {
-            // producer edge
-            const Kernel * const k = G[s].Kernel;
+        if (s < t) { // producer edge
+            const Kernel * const k = mPipeline[s];
             out << k->getName() << "." << getOutputBinding(k, pd.Port).getName();
-        } else {
-            assert (t <= numOfKernels);
-            const Kernel * const k = G[t].Kernel;
+        } else { // consumer edge
+            const Kernel * const k = mPipeline[t];
             out << k->getName() << "." << getInputBinding(k, pd.Port).getName();
         }
 
@@ -377,8 +362,7 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::constructBuffers(BuilderRef b) {
 
-    const auto numOfKernels = mPipeline.size();
-    const auto firstBuffer = numOfKernels + 1;
+    const auto firstBuffer = mLastKernel + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
 
     b->setKernel(mPipelineKernel);
@@ -388,7 +372,7 @@ void PipelineCompiler::constructBuffers(BuilderRef b) {
         if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
             const auto pe = in_edge(i, mBufferGraph);
             const auto p = source(pe, mBufferGraph);
-            const auto & producer = mPipeline[p];
+            const Kernel * const producer = mPipeline[p];
             const Binding & output = producer->getOutputStreamSetBinding(mBufferGraph[pe].Port);
             const auto name = makeBufferName(p, output);
             Value * const handle = b->getScalarFieldPtr(name);
@@ -428,7 +412,7 @@ inline void PipelineCompiler::loadBufferHandles(BuilderRef b) {
  * @brief releaseBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::releaseBuffers(BuilderRef b) {
-    const auto firstBuffer = mPipeline.size() + 1;
+    const auto firstBuffer = mLastKernel + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     for (auto bufferVertex = firstBuffer; bufferVertex != lastBuffer; ++bufferVertex) {
         const BufferNode & bn = mBufferGraph[bufferVertex];

@@ -16,7 +16,6 @@
 #include <llvm/Support/Format.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/driver.h>
-//#include <thread>
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -690,14 +689,14 @@ PointerType * LLVM_READNONE CBuilder::getVoidPtrTy(const unsigned AddressSpace) 
 
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
     const auto alignment = ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
-    LoadInst * inst = CreateAlignedLoad(ptr, alignment, true);
+    LoadInst * inst = CreateAlignedLoad(ptr, alignment, false);
     inst->setOrdering(AtomicOrdering::Acquire);
     return inst;
 }
 
 StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     const auto alignment = ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
-    StoreInst * inst = CreateAlignedStore(val, ptr, alignment, true);
+    StoreInst * inst = CreateAlignedStore(val, ptr, alignment, false);
     inst->setOrdering(AtomicOrdering::Release);
     return inst;
 }
@@ -792,13 +791,12 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
     Type * const voidPtrTy = getVoidPtrTy();
     Function * pthreadCreateFunc = m->getFunction("pthread_create");
     if (pthreadCreateFunc == nullptr) {
-        Type * pthreadTy = getSizeTy();
+        Type * const pthreadTy = TypeBuilder<pthread_t, false>::get(getContext());
         FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
         FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy->getPointerTo(), voidPtrTy, funVoidPtrVoidTy->getPointerTo(), voidPtrTy}, false);
         pthreadCreateFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_create", m);
         pthreadCreateFunc->setCallingConv(CallingConv::C);
     }
-    assert (thread->getType()->isPointerTy());
     return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, CreatePointerCast(arg, voidPtrTy)});
 }
 
@@ -831,7 +829,8 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
     Module * const m = getModule();
     Function * pthreadJoinFunc = m->getFunction("pthread_join");
     if (pthreadJoinFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getInt32Ty(), {getSizeTy(), getVoidPtrTy()->getPointerTo()}, false);
+        Type * const pthreadTy = TypeBuilder<pthread_t, false>::get(getContext());
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy, getVoidPtrTy()->getPointerTo()}, false);
         pthreadJoinFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_join", m);
         pthreadJoinFunc->setCallingConv(CallingConv::C);
     }

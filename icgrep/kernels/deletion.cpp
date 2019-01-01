@@ -77,12 +77,12 @@ void DeletionKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilde
     kb->storeOutputStreamBlock("unitCounts", kb->getInt32(0), kb->bitCast(unitCount));
 }
 
-DeletionKernel::DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
-: BlockOrientedKernel("del" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
-                      {Binding{kb->getStreamSetTy(streamCount), "inputStreamSet"},
-                          Binding{kb->getStreamSetTy(), "delMaskSet"}},
-                      {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"},
-                          Binding{kb->getStreamSetTy(), "unitCounts", FixedRate(), RoundUpTo(kb->getBitBlockWidth())}},
+DeletionKernel::DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned fieldWidth, const unsigned streamCount)
+: BlockOrientedKernel(b, "del" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
+                      {Binding{b->getStreamSetTy(streamCount), "inputStreamSet"},
+                          Binding{b->getStreamSetTy(), "delMaskSet"}},
+                      {Binding{b->getStreamSetTy(streamCount), "outputStreamSet"},
+                          Binding{b->getStreamSetTy(), "unitCounts", FixedRate(), RoundUpTo(b->getBitBlockWidth())}},
                       {}, {}, {})
 , mDeletionFieldWidth(fieldWidth)
 , mStreamCount(streamCount) {
@@ -115,7 +115,7 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
 FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw
                                          , StreamSet * inputStreamSet, StreamSet * extractionMask
                                          , StreamSet * outputStreamSet)
-: MultiBlockKernel("fieldCompress" + std::to_string(fw) + "_" + std::to_string(inputStreamSet->getNumElements()),
+: MultiBlockKernel(b, "fieldCompress" + std::to_string(fw) + "_" + std::to_string(inputStreamSet->getNumElements()),
 // inputs
 {Binding{"inputStreamSet", inputStreamSet},
 Binding{"extractionMask", extractionMask}},
@@ -169,11 +169,11 @@ void PEXTFieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<Kern
     kb->SetInsertPoint(done);
 }
 
-PEXTFieldCompressKernel::PEXTFieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & kb, const unsigned fieldWidth, const unsigned streamCount)
-: MultiBlockKernel("PEXTfieldCompress" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
-                   {Binding{kb->getStreamSetTy(streamCount), "inputStreamSet"},
-                       Binding{kb->getStreamSetTy(), "extractionMask"}},
-                   {Binding{kb->getStreamSetTy(streamCount), "outputStreamSet"}},
+PEXTFieldCompressKernel::PEXTFieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned fieldWidth, const unsigned streamCount)
+: MultiBlockKernel(b, "PEXTfieldCompress" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
+                   {Binding{b->getStreamSetTy(streamCount), "inputStreamSet"},
+                       Binding{b->getStreamSetTy(), "extractionMask"}},
+                   {Binding{b->getStreamSetTy(streamCount), "outputStreamSet"}},
                    {}, {}, {})
 , mPEXTWidth(fieldWidth)
 , mStreamCount(streamCount) {
@@ -185,7 +185,7 @@ StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelB
                                            , StreamSet * extractionMask
                                            , StreamSet * compressedOutput
                                            , const unsigned FieldWidth)
-: MultiBlockKernel("streamCompress" + std::to_string(FieldWidth) + "_" + std::to_string(source->getNumElements()),
+: MultiBlockKernel(b, "streamCompress" + std::to_string(FieldWidth) + "_" + std::to_string(source->getNumElements()),
 {Binding{"sourceStreamSet", source},
 Binding{"extractionMask", extractionMask}},
 {Binding{"compressedOutput", compressedOutput, PopcountOf("extractionMask"), BlockSize(1)}},
@@ -394,7 +394,7 @@ SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(const std::unique_ptr<ker
                                                        const std::vector<StreamSet *> & outputStreamSets,
                                                        const unsigned PEXTWidth)
 
-: MultiBlockKernel("PEXTdel" + std::to_string(PEXTWidth) + "_" + std::to_string(inputStreamSet->getNumElements()),
+: MultiBlockKernel(b, "PEXTdel" + std::to_string(PEXTWidth) + "_" + std::to_string(inputStreamSet->getNumElements()),
 {Binding{"selectors", selectors}, Binding{"inputStreamSet", inputStreamSet}},
 makeSwizzledDeleteByPEXTOutputBindings(outputStreamSets, PEXTWidth),
 {}, {}, {})
@@ -665,7 +665,7 @@ void DeleteByPEXTkernel::generateProcessingLoop(const std::unique_ptr<KernelBuil
 }
 
 DeleteByPEXTkernel::DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount, unsigned PEXT_width)
-: BlockOrientedKernel("PEXTdel" + std::to_string(fw) + "_" + std::to_string(streamCount) + "_" + std::to_string(PEXT_width),
+: BlockOrientedKernel(b, "PEXTdel" + std::to_string(fw) + "_" + std::to_string(streamCount) + "_" + std::to_string(PEXT_width),
               {Binding{b->getStreamSetTy(streamCount), "inputStreamSet"},
                   Binding{b->getStreamSetTy(), "delMaskSet"}},
               {}, {}, {}, {})
@@ -694,24 +694,24 @@ DeleteByPEXTkernel::DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuild
 // Note: that both input streams and output streams are stored in swizzled form.
 //
 
-SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(const std::unique_ptr<kernel::KernelBuilder> & kb, unsigned bitStreamCount, unsigned fieldWidth)
-: BlockOrientedKernel("swizzled_compress" + std::to_string(fieldWidth) + "_" + std::to_string(bitStreamCount),
-                     {Binding{kb->getStreamSetTy(), "countsPerStride"}}, {}, {}, {}, {})
+SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned bitStreamCount, unsigned fieldWidth)
+: BlockOrientedKernel(b, "swizzled_compress" + std::to_string(fieldWidth) + "_" + std::to_string(bitStreamCount),
+                     {Binding{b->getStreamSetTy(), "countsPerStride"}}, {}, {}, {}, {})
 , mBitStreamCount(bitStreamCount)
 , mFieldWidth(fieldWidth)
-, mSwizzleFactor(kb->getBitBlockWidth() / fieldWidth)
+, mSwizzleFactor(b->getBitBlockWidth() / fieldWidth)
 , mSwizzleSetCount((mBitStreamCount + mSwizzleFactor - 1)/mSwizzleFactor) {
     assert((fieldWidth > 0) && ((fieldWidth & (fieldWidth - 1)) == 0) && "fieldWidth must be a power of 2");
     assert(mSwizzleFactor > 1 && "fieldWidth must be less than the block width");
-    mInputStreamSets.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle0"});
-    mOutputStreamSets.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle0", BoundedRate(0, 1)});
-    addInternalScalar(kb->getBitBlockType(), "pendingSwizzleData0");
+    mInputStreamSets.push_back(Binding{b->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle0"});
+    mOutputStreamSets.push_back(Binding{b->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle0", BoundedRate(0, 1)});
+    addInternalScalar(b->getBitBlockType(), "pendingSwizzleData0");
     for (unsigned i = 1; i < mSwizzleSetCount; i++) {
-        mInputStreamSets.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle" + std::to_string(i)});
-        mOutputStreamSets.push_back(Binding{kb->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle" + std::to_string(i), RateEqualTo("outputSwizzle0")});
-        addInternalScalar(kb->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
+        mInputStreamSets.push_back(Binding{b->getStreamSetTy(mSwizzleFactor, 1), "inputSwizzle" + std::to_string(i)});
+        mOutputStreamSets.push_back(Binding{b->getStreamSetTy(mSwizzleFactor, 1), "outputSwizzle" + std::to_string(i), RateEqualTo("outputSwizzle0")});
+        addInternalScalar(b->getBitBlockType(), "pendingSwizzleData" + std::to_string(i));
     }
-    addInternalScalar(kb->getSizeTy(), "pendingOffset");
+    addInternalScalar(b->getSizeTy(), "pendingOffset");
 }
 
 void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) {

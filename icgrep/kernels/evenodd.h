@@ -13,7 +13,7 @@ namespace kernel {
 
 class EvenOddKernel final : public BlockOrientedKernel {
 public:
-    EvenOddKernel(const std::unique_ptr<kernel::KernelBuilder> & builder);
+    EvenOddKernel(const std::unique_ptr<kernel::KernelBuilder> & b);
 private:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };

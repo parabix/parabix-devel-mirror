@@ -10,7 +10,7 @@ namespace IDISA { class IDISA_Builder; }
 
 
 // The SwizzleGenerator class creates a kernel that transforms a set of bit streams into a swizzled form.
-// In swizzled form, one "swizzle field" each from a set of streams are grouped together to be processed 
+// In swizzled form, one "swizzle field" each from a set of streams are grouped together to be processed
 // as a unit using SIMD operations.   For example, for a swizzle field width of 64 and a block size of 256,
 // 4 streams are swizzled together to be operated on as a group.  The ratio of the block size to the
 // swizzle field size is known as the swizzle factor, in this case 4.
@@ -50,13 +50,13 @@ namespace kernel {
 
 class SwizzleGenerator : public BlockOrientedKernel {
 public:
-    
+
     SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> &, const std::vector<StreamSet *> & inputs, const std::vector<StreamSet *> & outputs, const unsigned fieldWidth = sizeof(size_t) * 8);
-    
+
 protected:
-    
+
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
-    
+
 private:
     const unsigned mBitStreamCount;
     const unsigned mFieldWidth;
@@ -65,7 +65,7 @@ private:
 
 class SwizzleByGather : public BlockOrientedKernel {
 public:
-    SwizzleByGather(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    SwizzleByGather(const std::unique_ptr<kernel::KernelBuilder> & b);
 
 protected:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
@@ -73,6 +73,6 @@ private:
 };
 
 }
-    
+
 #endif
 

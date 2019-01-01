@@ -17,8 +17,8 @@ void EvenOddKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &
     iBuilder->storeOutputStreamBlock("even_odd", iBuilder->getInt32(1), odd);
 }
 
-EvenOddKernel::EvenOddKernel(const std::unique_ptr<kernel::KernelBuilder> & builder)
-: BlockOrientedKernel("EvenOdd", {Binding{builder->getStreamSetTy(8, 1), "BasisBits"}}, {Binding{builder->getStreamSetTy(2, 1), "even_odd"}}, {}, {}, {}) {
+EvenOddKernel::EvenOddKernel(const std::unique_ptr<kernel::KernelBuilder> & b)
+: BlockOrientedKernel(b, "EvenOdd", {Binding{b->getStreamSetTy(8, 1), "BasisBits"}}, {Binding{b->getStreamSetTy(2, 1), "even_odd"}}, {}, {}, {}) {
 
 }
 

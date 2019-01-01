@@ -18,7 +18,7 @@ using namespace llvm;
 namespace kernel {
 
 PDEPkernel::PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned swizzleFactor, std::string name)
-: MultiBlockKernel(std::move(name),
+: MultiBlockKernel(b, std::move(name),
 // input stream sets
 {Binding{b->getStreamSetTy(), "marker", FixedRate(), Principal()},
 Binding{b->getStreamSetTy(swizzleFactor), "source", PopcountOf("marker"), BlockSize(b->getBitBlockWidth() / swizzleFactor) }},
@@ -145,7 +145,7 @@ StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuild
                                        , StreamSet * source, const unsigned base, StreamSet * mask
                                        , StreamSet * expanded
                                        , const unsigned FieldWidth)
-: MultiBlockKernel("streamExpand" + std::to_string(FieldWidth)
+: MultiBlockKernel(b, "streamExpand" + std::to_string(FieldWidth)
 + "_" + std::to_string(source->getNumElements())
 + "_" + std::to_string(base) + "_" + std::to_string(expanded->getNumElements()),
 
@@ -268,10 +268,10 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     b->SetInsertPoint(expansionDone);
 }
 
-FieldDepositKernel::FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> &
+FieldDepositKernel::FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b
                                        , StreamSet * mask, StreamSet * input, StreamSet * output
                                        , const unsigned fieldWidth)
-: MultiBlockKernel("FieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(input->getNumElements()),
+: MultiBlockKernel(b, "FieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(input->getNumElements()),
 {Binding{"depositMask", mask}
 , Binding{"inputStreamSet", input}},
 {Binding{"outputStreamSet", output}},
@@ -303,10 +303,10 @@ void FieldDepositKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     kb->SetInsertPoint(done);
 }
 
-PDEPFieldDepositKernel::PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> &
+PDEPFieldDepositKernel::PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b
                                                , StreamSet * mask, StreamSet * input, StreamSet * output
                                                , const unsigned fieldWidth)
-: MultiBlockKernel("PDEPFieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(input->getNumElements()) ,
+: MultiBlockKernel(b, "PDEPFieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(input->getNumElements()) ,
                    {Binding{"depositMask", mask},
                     Binding{"inputStreamSet", input}},
                    {Binding{"outputStreamSet", output}},

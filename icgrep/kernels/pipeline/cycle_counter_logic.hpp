@@ -37,14 +37,16 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         Value* FP_100 = ConstantFP::get(b->getDoubleTy(), 100.0);
         Value* totalCycles = b->getSize(0);
-        for (const auto & kernel : mPipeline) {
+        for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+            const Kernel * const kernel = mPipeline[i];
             b->setKernel(kernel);
             Value * cycles = b->CreateLoad(b->getCycleCountPtr());
             totalCycles = b->CreateAdd(totalCycles, cycles);
         }
         Value* fTotalCycle = b->CreateUIToFP(totalCycles, b->getDoubleTy());
 
-        for (const auto & kernel : mPipeline) {
+        for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+            const Kernel * const kernel = mPipeline[i];
             b->setKernel(kernel);
             const auto & inputs = kernel->getInputStreamSetBindings();
             const auto & outputs = kernel->getOutputStreamSetBindings();

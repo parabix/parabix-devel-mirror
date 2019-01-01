@@ -90,7 +90,7 @@ void UTF8_nonFinal::generatePabloMethod() {
     PabloAST * const u8pfx3 = ccc->compileCC(makeByte(0xE0, 0xEF), it);
     PabloAST * const u8pfx4 = ccc->compileCC(makeByte(0xF0, 0xF4), it);
     PabloAST * const u8suffix = ccc->compileCC("u8suffix", makeByte(0x80, 0xBF), it);
-    
+
     //
     // Two-byte sequences
     Var * const anyscope = it.createVar("anyscope", ZEROES);
@@ -100,7 +100,7 @@ void UTF8_nonFinal::generatePabloMethod() {
 
 
     //
-    // Three-byte sequences    
+    // Three-byte sequences
     Var * const EF_invalid = it.createVar("EF_invalid", ZEROES);
     auto it3 = it.createScope();
     it.createIf(u8pfx3, it3);
@@ -129,7 +129,7 @@ void UTF8_nonFinal::generatePabloMethod() {
     PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF4), it4), 1), ccc->compileCC(makeByte(0x90, 0xBF), it4));
     PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
     it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
-    
+
     //
     // Invalid cases
     PabloAST * const legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
@@ -145,7 +145,7 @@ void UTF8_nonFinal::generatePabloMethod() {
     it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
     //pb.createAssign(nonFinal, pb.createOr(nonFinal, CRLF));
     //PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1), "unterminatedLineAtEOF");
-    
+
     Var * const required = getOutputStreamVar("nonFinal");
     pb.createAssign(pb.createExtract(required, pb.getInteger(0)), nonFinal);
 }
@@ -534,8 +534,8 @@ void InvertMatchesKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuil
     iBuilder->storeOutputStreamBlock("nonMatches", iBuilder->getInt32(0), inverted);
 }
 
-InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
-: BlockOrientedKernel("Invert",
+InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
+: BlockOrientedKernel(b, "Invert",
 // Inputs
 {Binding{"matchedLines", OriginalMatches},
  Binding{"lineBreaks", LineBreakStream}},
@@ -662,8 +662,8 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     b->setProducedItemCount("untilNull", producedCount);
 }
 
-AbortOnNull::AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * const InputStream, StreamSet * const OutputStream, Scalar * callbackObject)
-: MultiBlockKernel("AbortOnNull",
+AbortOnNull::AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const InputStream, StreamSet * const OutputStream, Scalar * callbackObject)
+: MultiBlockKernel(b, "AbortOnNull",
 // inputs
 {Binding{"byteData", InputStream, FixedRate(), Principal()}},
 // outputs

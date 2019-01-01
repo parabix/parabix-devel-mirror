@@ -208,12 +208,12 @@ Bindings S2PKernel::makeInputScalarBindings(Scalar * signalNullObject) {
     }
 }
 
-S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> &,
+S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b,
                      StreamSet * const codeUnitStream,
                      StreamSet * const BasisBits,
                      const cc::BitNumbering numbering,
                      Scalar * signalNullObject)
-: MultiBlockKernel((signalNullObject ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements()) + cc::numberingSuffix(numbering)
+: MultiBlockKernel(b, (signalNullObject ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements()) + cc::numberingSuffix(numbering)
 , {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}}
 , makeOutputBindings(BasisBits, signalNullObject)
 , makeInputScalarBindings(signalNullObject), {}, {})
@@ -243,7 +243,7 @@ S2PMultipleStreamsKernel::S2PMultipleStreamsKernel(const std::unique_ptr<kernel:
         const StreamSets & outputStreams,
         const cc::BitNumbering basisNumbering,
         const bool aligned)
-: MultiBlockKernel(makeMultiS2PName(outputStreams, basisNumbering, aligned),
+: MultiBlockKernel(b, makeMultiS2PName(outputStreams, basisNumbering, aligned),
 // input
 {Binding{"byteStream", codeUnitStream}},
 {}, {}, {}, {}),
@@ -295,8 +295,8 @@ void S2PMultipleStreamsKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
 }
 
 
-S2P_21Kernel::S2P_21Kernel(const std::unique_ptr<KernelBuilder> &, StreamSet * const codeUnitStream, StreamSet * const BasisBits, cc::BitNumbering numbering)
-: MultiBlockKernel("s2p_21" + cc::numberingSuffix(numbering),
+S2P_21Kernel::S2P_21Kernel(const std::unique_ptr<KernelBuilder> & b, StreamSet * const codeUnitStream, StreamSet * const BasisBits, cc::BitNumbering numbering)
+: MultiBlockKernel(b, "s2p_21" + cc::numberingSuffix(numbering),
 {Binding{"codeUnitStream", codeUnitStream, FixedRate(), Principal()}},
 {Binding{"basisBits", BasisBits}}, {}, {}, {})
 , mBasisSetNumbering(numbering) {

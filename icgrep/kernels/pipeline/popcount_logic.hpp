@@ -55,7 +55,8 @@ inline void PipelineCompiler::writePopCountComputationLogic(BuilderRef b) {
         Value * const produced = mUpdatedProducedPhi[bufferPort];
         // If this is the producer's final stride, round the index position up
         // to account for a partial stride.
-        Value * const rounding = b->CreateSelect(mTerminatedPhi, BLOCK_SIZE_MINUS_1, ZERO);
+        Value * const terminated = b->CreateICmpNE(mTerminatedPhi, b->getSize(NotTerminated));
+        Value * const rounding = b->CreateSelect(terminated, BLOCK_SIZE_MINUS_1, ZERO);
         Value * const endIndex = b->CreateLShr(b->CreateAdd(produced, rounding), LOG2_BLOCK_WIDTH);
 
         // TODO: if the source items of the consumes of this pop count ref
@@ -240,7 +241,7 @@ Value * PipelineCompiler::getMinimumNumOfLinearPopCountItems(BuilderRef b, const
             const auto refPortNum = getPopCountReferencePort(mKernel, rate);
             Value * const total = getTotalItemCount(b, refPortNum);
             Value * const strideLength = getInputStrideLength(b, refPortNum);
-            Value * const term = producerTerminated(refPortNum);
+            Value * const term = producerTerminated(b, refPortNum);
             Value * const strideLengthMinus1 = b->CreateSub(strideLength, ONE);
             Value * const padding = b->CreateSelect(term, strideLengthMinus1, b->getSize(0));
             Value * const paddedTotal =  b->CreateAdd(total, padding);
@@ -573,7 +574,7 @@ inline void PipelineCompiler::allocatePopCountArrays(BuilderRef b, Value * const
         return;
     }
 
-    const auto firstBuffer = mPipeline.size() + 1;
+    const auto firstBuffer = mLastKernel + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     assert (firstBuffer <= lastBuffer);
 
@@ -628,7 +629,7 @@ inline void PipelineCompiler::deallocatePopCountArrays(BuilderRef b, Value * con
     if (num_edges(mPopCountGraph) == 0) {
         return;
     }
-    const auto firstBuffer = mPipeline.size() + 1;
+    const auto firstBuffer = mLastKernel + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     assert (firstBuffer <= lastBuffer);
 
@@ -662,7 +663,7 @@ inline void PipelineCompiler::deallocatePopCountArrays(BuilderRef b, Value * con
  * @brief initializePopCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializePopCounts() {
-    const auto firstBuffer = mPipeline.size() + 1;
+    const auto firstBuffer = mLastKernel + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     assert (firstBuffer < lastBuffer);
     for (auto i = firstBuffer; i != lastBuffer; ++i) {
@@ -677,7 +678,7 @@ inline void PipelineCompiler::initializePopCounts() {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StructType * PipelineCompiler::getPopCountThreadLocalStateType(BuilderRef b) {
 
-    const auto firstBuffer = mPipeline.size() + 1;
+    const auto firstBuffer = mLastKernel + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     assert (firstBuffer < lastBuffer);
 
@@ -739,8 +740,8 @@ RateValue PipelineCompiler::popCountReferenceFieldWidth(const unsigned bufferVer
     bool first = true;
     for (const auto e : make_iterator_range(in_edges(bufferVertex, mPopCountGraph))) {
         const auto refPort = mPopCountGraph[e].Port;
-        const auto kernelIndex = parent(source(e, mPopCountGraph), mPopCountGraph);
-        Kernel * const k = mPipeline[kernelIndex];
+        const auto kernelVertex = parent(source(e, mPopCountGraph), mPopCountGraph);
+        const Kernel * const k = mPipeline[kernelVertex];
         const Binding & b = k->getInputStreamSetBinding(refPort);
         assert (b.getRate().isFixed());
         RateValue sw = lowerBound(k, b);
@@ -812,7 +813,8 @@ inline std::pair<bool, bool> PipelineCompiler::popCountReferenceRequiresPopCount
     bool hasArray = false, hasNegatedArray = false;
     for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
         const auto port = mBufferGraph[e].Port;
-        Kernel * const consumer = mBufferGraph[target(e, mBufferGraph)].Kernel;
+        const auto kernelVertex = target(e, mBufferGraph);
+        const Kernel * const consumer = mPipeline[kernelVertex];
         const Binding & b = consumer->getInputStreamSetBinding(port);
         if (LLVM_UNLIKELY(b.hasAttribute(AttrId::RequiresPopCountArray))) {
             hasArray = true;
@@ -841,7 +843,8 @@ inline bool PipelineCompiler::popCountReferenceCanUseConsumedItemCount(const uns
     // we can still use it.
     for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
         const auto port = mBufferGraph[e].Port;
-        Kernel * const consumer = mBufferGraph[target(e, mBufferGraph)].Kernel;
+        const auto kernelVertex = target(e, mBufferGraph);
+        Kernel * const consumer = mPipeline[kernelVertex];
         const Binding & input = consumer->getInputStreamSetBinding(port);
         if (input.isDeferred() || !input.getRate().isFixed()) {
             return false;

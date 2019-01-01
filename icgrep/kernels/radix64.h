@@ -14,13 +14,13 @@ namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
 
-/*  expand3_4 transforms a byte sequence by duplicating every third byte. 
-    Each 3 bytes of the input abc produces a 4 byte output abcc.   
+/*  expand3_4 transforms a byte sequence by duplicating every third byte.
+    Each 3 bytes of the input abc produces a 4 byte output abcc.
     This is a useful preparatory transformation in various radix-64 encodings. */
- 
+
 class expand3_4Kernel final : public MultiBlockKernel {
-public:   
-    expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * input, StreamSet * expandedOutput);
+public:
+    expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * input, StreamSet * expandedOutput);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:

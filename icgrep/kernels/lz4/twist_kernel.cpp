@@ -41,7 +41,7 @@ void twistByPDEP(const std::unique_ptr <kernel::KernelBuilder> &b, Value *inputB
 }
 
 TwistByPDEPKernel::TwistByPDEPKernel(const std::unique_ptr <kernel::KernelBuilder> &b, unsigned numberOfInputStream, unsigned twistWidth)
-: BlockOrientedKernel("TwistByPDEPKernel",
+: BlockOrientedKernel(b, "TwistByPDEPKernel",
 {Binding{b->getStreamSetTy(numberOfInputStream, 1), "basisBits"}},
 {Binding{b->getStreamSetTy(1, twistWidth), "byteStream"}},
 {}, {}, {}),
@@ -72,7 +72,7 @@ void TwistByPDEPKernel::generateDoBlockMethod(const std::unique_ptr <kernel::Ker
 TwistMultipleByPDEPKernel::TwistMultipleByPDEPKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
                                                      const StreamSets & inputStreams,
                                                      StreamSet * outputStream)
-: BlockOrientedKernel("TwistMultipleByPDEPKernel",
+: BlockOrientedKernel(b, "TwistMultipleByPDEPKernel",
 {},
 {Binding{"byteStream", outputStream}},
 {}, {}, {}),

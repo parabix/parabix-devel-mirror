@@ -194,15 +194,16 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     BasicBlock * const copyBack = b->CreateBasicBlock("CopyBack");
     BasicBlock * const expandAndCopyBack = b->CreateBasicBlock("ExpandAndCopyBack");
     const auto blockSize = b->getBitBlockWidth() / 8;
-    Constant * const blockSizeAlignmentMask = ConstantExpr::getNeg(b->getSize(blockSize));
-    Value * const consumed = b->getConsumedItemCount("sourceBuffer");
-    Value * const offset = b->CreateAnd(consumed, blockSizeAlignmentMask);
-    Value * const unreadData = b->getRawOutputPointer("sourceBuffer", offset);
-    Value * const remainingItems = b->CreateSub(produced, offset);
+    Value * const consumedItems = b->getConsumedItemCount("sourceBuffer");
+    ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
+    Constant * const ALIGNMENT_MASK = ConstantExpr::getNeg(BLOCK_WIDTH);
+    Value * const consumed = b->CreateAnd(consumedItems, ALIGNMENT_MASK);
+    Value * const unreadData = b->getRawOutputPointer("sourceBuffer", consumed);
+    Value * const remainingItems = b->CreateSub(produced, consumed);
     Value * const potentialItems = b->CreateAdd(remainingItems, itemsToRead);
     Value * const remainingBytes = b->CreateMul(remainingItems, codeUnitBytes);
-    // Have we consumed enough data that we can safely copy back the unconsumed data and still leave enough space
-    // for one segment without needing a temporary buffer?
+    // Have we consumed enough data that we can safely copy back the unconsumed data and still
+    // leave enough space for one segment without needing a temporary buffer?
     Value * const canCopy = b->CreateICmpULT(b->CreateGEP(baseBuffer, potentialItems), unreadData);
     b->CreateLikelyCondBr(canCopy, copyBack, expandAndCopyBack);
 
@@ -219,8 +220,8 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->CreateMemCpy(expandedBuffer, unreadData, remainingBytes, blockSize);
     // Free the prior buffer if it exists
     Value * const ancillaryBuffer = b->getScalarField("ancillaryBuffer");
-    b->CreateFree(ancillaryBuffer);
     b->setScalarField("ancillaryBuffer", baseBuffer);
+    b->CreateFree(ancillaryBuffer);
     b->setScalarField("buffer", expandedBuffer);
     b->setCapacity("sourceBuffer", expandedCapacity);
     b->CreateBr(prepareBuffer);
@@ -229,7 +230,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     PHINode * const newBaseBuffer = b->CreatePHI(baseBuffer->getType(), 2);
     newBaseBuffer->addIncoming(baseBuffer, copyBack);
     newBaseBuffer->addIncoming(expandedBuffer, expandAndCopyBack);
-    Value * const newBaseAddress = b->CreateGEP(newBaseBuffer, b->CreateNeg(offset));
+    Value * const newBaseAddress = b->CreateGEP(newBaseBuffer, b->CreateNeg(consumed));
     b->setBaseAddress("sourceBuffer", newBaseAddress);
     b->CreateBr(readData);
 
@@ -271,7 +272,8 @@ void FDSourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder>
     BasicBlock * finalizeRead = b->CreateBasicBlock("finalizeRead");
     BasicBlock * finalizeMMap = b->CreateBasicBlock("finalizeMMap");
     BasicBlock * finalizeDone = b->CreateBasicBlock("finalizeDone");
-    b->CreateCondBr(b->CreateIsNotNull(b->getScalarField("useMMap")), finalizeMMap, finalizeRead);
+    Value * const useMMap = b->CreateIsNotNull(b->getScalarField("useMMap"));
+    b->CreateCondBr(useMMap, finalizeMMap, finalizeRead);
     b->SetInsertPoint(finalizeMMap);
     MMapSourceKernel::freeBuffer(b, mCodeUnitWidth);
     b->CreateBr(finalizeDone);
@@ -283,27 +285,26 @@ void FDSourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder>
 
 void FDSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
     BasicBlock * initializeRead = b->CreateBasicBlock("initializeRead");
-    BasicBlock * tryMMap = b->CreateBasicBlock("tryMMap");
+    BasicBlock * checkFileSize = b->CreateBasicBlock("checkFileSize");
     BasicBlock * initializeMMap = b->CreateBasicBlock("initializeMMap");
     BasicBlock * initializeDone = b->CreateBasicBlock("initializeDone");
 
     // The source will use MMapSource or readSoure kernel logic depending on the useMMap
     // parameter, possibly overridden.
 
-    Value * useMMap = b->getScalarField("useMMap");
+    Value * const useMMap = b->getScalarField("useMMap");
     Constant * const ZERO = ConstantInt::getNullValue(useMMap->getType());
-    useMMap = b->CreateICmpNE(useMMap, ZERO);
     // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic.
-    Value * fd = b->getScalarField("fileDescriptor");
-    Value * notStdIn = b->CreateICmpNE(fd, b->getInt32(STDIN_FILENO));
-    useMMap = b->CreateAnd(useMMap, notStdIn);
-    b->CreateCondBr(useMMap, tryMMap, initializeRead);
+    Value * const fd = b->getScalarField("fileDescriptor");
+    Value * const notStdIn = b->CreateICmpNE(fd, b->getInt32(STDIN_FILENO));
+    Value * const tryMMap = b->CreateICmpNE(useMMap, ZERO);
+    b->CreateCondBr(b->CreateAnd(tryMMap, notStdIn), checkFileSize, initializeRead);
 
-    b->SetInsertPoint(tryMMap);
+    b->SetInsertPoint(checkFileSize);
     // If the fileSize is 0, we may have a virtual file such as /proc/cpuinfo
-    Value * fileSize = b->CreateZExtOrTrunc(b->CreateCall(mFileSizeFunction, fd), b->getSizeTy());
-    useMMap = b->CreateICmpNE(fileSize, b->getSize(0));
-    b->CreateCondBr(useMMap, initializeMMap, initializeRead);
+    Value * const fileSize = b->CreateCall(mFileSizeFunction, fd);
+    Value * const emptyFile = b->CreateIsNotNull(fileSize);
+    b->CreateUnlikelyCondBr(emptyFile, initializeRead, initializeMMap);
 
     b->SetInsertPoint(initializeMMap);
     MMapSourceKernel::generateInitializeMethod(mFileSizeFunction, mCodeUnitWidth, mStride, b);
@@ -314,6 +315,7 @@ void FDSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilde
     b->setScalarField("useMMap", ZERO);
     ReadSourceKernel::generateInitializeMethod(mCodeUnitWidth, mStride,b);
     b->CreateBr(initializeDone);
+
     b->SetInsertPoint(initializeDone);
 }
 
@@ -321,7 +323,8 @@ void FDSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder
     BasicBlock * DoSegmentRead = b->CreateBasicBlock("DoSegmentRead");
     BasicBlock * DoSegmentMMap = b->CreateBasicBlock("DoSegmentMMap");
     BasicBlock * DoSegmentDone = b->CreateBasicBlock("DoSegmentDone");
-    b->CreateCondBr(b->CreateTrunc(b->getScalarField("useMMap"), b->getInt1Ty()), DoSegmentMMap, DoSegmentRead);
+    Value * const useMMap = b->CreateIsNotNull(b->getScalarField("useMMap"));
+    b->CreateCondBr(useMMap, DoSegmentMMap, DoSegmentRead);
     b->SetInsertPoint(DoSegmentMMap);
     MMapSourceKernel::generateDoSegmentMethod(mCodeUnitWidth, mStride, b);
     b->CreateBr(DoSegmentDone);
@@ -410,7 +413,7 @@ void MemorySourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuil
 }
 
 MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * const fd, StreamSet * const outputStream)
-: SegmentOrientedKernel("mmap_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth())
+: SegmentOrientedKernel(b, "mmap_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth())
 // input streams
 ,{}
 // output streams
@@ -431,7 +434,7 @@ MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 }
 
 ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * const fd, StreamSet * const outputStream)
-: SegmentOrientedKernel("read_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth())
+: SegmentOrientedKernel(b, "read_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth())
 // input streams
 ,{}
 // output streams
@@ -452,7 +455,7 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 
 
 FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * const useMMap, Scalar * const fd, StreamSet * const outputStream)
-: SegmentOrientedKernel("FD_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth())
+: SegmentOrientedKernel(b, "FD_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth())
 // input streams
 ,{}
 // output stream
@@ -473,8 +476,8 @@ FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
     setStride(codegen::SegmentSize);
 }
 
-MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> &, Scalar * fileSource, Scalar * fileItems, StreamSet * const outputStream)
-: SegmentOrientedKernel("memory_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth()) + ":" + std::to_string(outputStream->getNumElements()),
+MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * fileSource, Scalar * fileItems, StreamSet * const outputStream)
+: SegmentOrientedKernel(b, "memory_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth()) + ":" + std::to_string(outputStream->getNumElements()),
 // input streams
 {},
 // output stream

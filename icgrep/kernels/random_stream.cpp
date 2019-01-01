@@ -22,7 +22,7 @@ void RandomStreamKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBui
     const size_t segmentItems = codegen::SegmentSize * codegen::BlockSize;
     //
     // The item width (mValueWidth) for the desired random value stream may
-    // be a single bit or any power of 2.   Determine the number of 32-bit values 
+    // be a single bit or any power of 2.   Determine the number of 32-bit values
     // returned by rand that are necessary for a full segment of the random
     // value stream.
     const size_t segmentRandInts = segmentItems * mValueWidth/randIntSize;
@@ -96,7 +96,7 @@ void RandomStreamKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBui
 }
 
 RandomStreamKernel::RandomStreamKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned seed, unsigned valueWidth, size_t streamLength)
-: SegmentOrientedKernel("rand" + std::to_string(valueWidth) + "_" + std::to_string(seed) + "_" + std::to_string(streamLength),
+: SegmentOrientedKernel(b, "rand" + std::to_string(valueWidth) + "_" + std::to_string(seed) + "_" + std::to_string(streamLength),
 // input
 {},
 // output

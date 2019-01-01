@@ -84,11 +84,6 @@ inline void reset(Vec & vec, const unsigned n) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
 
-    // Set the default kernel stride.
-    if (mStride == 0) {
-        mStride = b->getBitBlockWidth();
-    }
-
     // TODO: if a stream has an Expandable or ManagedBuffer attribute or is produced at an Unknown rate,
     // the pipeline ought to pass the stream as a DynamicBuffer. This will require some coordination between
     // the pipeline and kernel to ensure both have a consistent view of the buffer and that if either expands,
@@ -268,7 +263,7 @@ void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
 
     std::vector<Type *> params;
     params.reserve(2 + mInputStreamSets.size() + mOutputStreamSets.size());
-    params.push_back(mKernelStateType->getPointerTo());  // self
+    params.push_back(mKernelStateType->getPointerTo());  // handle
     params.push_back(sizeTy); // numOfStrides
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
         Type * const bufferType = mStreamSetInputBuffers[i]->getType();
@@ -378,7 +373,7 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
     // and call system here but that is not an ideal way of handling this.
 
     const auto numOfInputs = getNumOfStreamInputs();
-    reset(mProcessedInputItems, numOfInputs);
+    reset(mProcessedInputItemPtr, numOfInputs);
     reset(mAccessibleInputItems, numOfInputs);
     reset(mAvailableInputItems, numOfInputs);
     reset(mPopCountRateArray, numOfInputs);
@@ -420,13 +415,13 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
             Port port; unsigned index;
             std::tie(port, index) = getStreamPort(rate.getReference());
             assert (port == Port::Input && index < i);
-            assert (mProcessedInputItems[index]);
-            Value * const ref = b->CreateLoad(mProcessedInputItems[index]);
+            assert (mProcessedInputItemPtr[index]);
+            Value * const ref = b->CreateLoad(mProcessedInputItemPtr[index]);
             processed = b->CreateMul2(ref, rate.getRate());
         }
         AllocaInst * const processedItems = b->CreateAlloca(sizeTy);
         b->CreateStore(processed, processedItems);
-        mProcessedInputItems[i] = processedItems;
+        mProcessedInputItemPtr[i] = processedItems;
         /// ----------------------------------------------------
         /// accessible item count
         /// ----------------------------------------------------
@@ -453,7 +448,7 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
 
     // set all of the output buffers
     const auto numOfOutputs = getNumOfStreamOutputs();
-    reset(mProducedOutputItems, numOfOutputs);
+    reset(mProducedOutputItemPtr, numOfOutputs);
     reset(mWritableOutputItems, numOfOutputs);
     reset(mConsumedOutputItems, numOfOutputs);
     std::vector<Value *> updatableProducedOutputItems;
@@ -501,13 +496,13 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
             Port port; unsigned index;
             std::tie(port, index) = getStreamPort(rate.getReference());
             assert (port == Port::Input || (port == Port::Output && index < i));
-            const auto & items = (port == Port::Input) ? mProcessedInputItems : mProducedOutputItems;
+            const auto & items = (port == Port::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
             Value * const ref = b->CreateLoad(items[index]);
             produced = b->CreateMul2(ref, rate.getRate());
         }
         AllocaInst * const producedItems = b->CreateAlloca(sizeTy);
         b->CreateStore(produced, producedItems);
-        mProducedOutputItems[i] = producedItems;
+        mProducedOutputItemPtr[i] = producedItems;
         /// ----------------------------------------------------
         /// consumed or writable item count
         /// ----------------------------------------------------
@@ -537,14 +532,14 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
 
     for (unsigned i = 0; i < numOfInputs; i++) {
         if (updatableProcessedInputItems[i]) {
-            Value * const items = b->CreateLoad(mProcessedInputItems[i]);
+            Value * const items = b->CreateLoad(mProcessedInputItemPtr[i]);
             b->CreateStore(items, updatableProcessedInputItems[i]);
         }
     }
 
     for (unsigned i = 0; i < numOfOutputs; i++) {
         if (updatableProducedOutputItems[i]) {
-            Value * const items = b->CreateLoad(mProducedOutputItems[i]);
+            Value * const items = b->CreateLoad(mProducedOutputItemPtr[i]);
             b->CreateStore(items, updatableProducedOutputItems[i]);
         }
     }
@@ -720,6 +715,9 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
         report_fatal_error(getName() + ": cannot prepare kernel after kernel state finalized");
     }
+    if (LLVM_UNLIKELY(mStride == 0)) {
+        report_fatal_error(getName() + ": stride cannot be 0");
+    }
     addBaseKernelProperties(b);
     addInternalKernelProperties(b);
     // NOTE: StructType::create always creates a new type even if an identical one exists.
@@ -727,8 +725,6 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
         makeModule(b);
     }
     mKernelStateType = mModule->getTypeByName(getName());
-
-
     if (LLVM_LIKELY(mKernelStateType == nullptr)) {
         std::vector<llvm::Type *> fields;
         fields.reserve(mInputScalars.size() + mOutputScalars.size() + mInternalScalars.size() + 1);
@@ -746,10 +742,6 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
         }
         mKernelStateType = StructType::create(b->getContext(), fields, getName());
     }
-
-
-
-
     assert (isa<StructType>(mKernelStateType));
 }
 
@@ -834,6 +826,35 @@ std::string Kernel::getStringHash(const llvm::StringRef str) {
     out.flush();
 
     return buffer;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addAttributesFrom
+ *
+ * Add any attributes from a set of kernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::addAttributesFrom(const std::vector<Kernel *> & kernels) {
+    unsigned mustTerminate = 0;
+    bool canTerminate = false;
+    bool sideEffecting = false;
+    for (const Kernel * kernel : kernels) {
+        if (kernel->hasAttribute(AttrId::MustExplicitlyTerminate)) {
+            mustTerminate++;
+        } else if (kernel->hasAttribute(AttrId::CanTerminateEarly)) {
+            canTerminate = true;
+        }
+        if (kernel->hasAttribute(AttrId::SideEffecting)) {
+            sideEffecting = true;
+        }
+    }
+    if (LLVM_UNLIKELY(mustTerminate == kernels.size())) {
+        addAttribute(MustExplicitlyTerminate());
+    } else if (canTerminate || mustTerminate) {
+        addAttribute(CanTerminateEarly());
+    }
+    if (sideEffecting) {
+        addAttribute(SideEffecting());
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1163,7 +1184,8 @@ std::string Kernel::getDefaultFamilyName() const {
 }
 
 // CONSTRUCTOR
-Kernel::Kernel(const TypeId typeId,
+Kernel::Kernel(const std::unique_ptr<KernelBuilder> & b,
+               const TypeId typeId,
                std::string && kernelName,
                Bindings && stream_inputs,
                Bindings && stream_outputs,
@@ -1180,7 +1202,7 @@ Kernel::Kernel(const TypeId typeId,
 , mOutputScalars(std::move(scalar_outputs))
 , mInternalScalars( std::move(internal_scalars))
 , mCurrentMethod(nullptr)
-, mStride(0)
+, mStride(b->getBitBlockWidth())
 , mTerminationSignalPtr(nullptr)
 , mIsFinal(nullptr)
 , mNumOfStrides(nullptr)
@@ -1192,16 +1214,18 @@ Kernel::Kernel(const TypeId typeId,
 Kernel::~Kernel() { }
 
 // CONSTRUCTOR
-SegmentOrientedKernel::SegmentOrientedKernel(std::string && kernelName,
+SegmentOrientedKernel::SegmentOrientedKernel(const std::unique_ptr<KernelBuilder> & b,
+                                             std::string && kernelName,
                                              Bindings && stream_inputs,
                                              Bindings && stream_outputs,
                                              Bindings && scalar_parameters,
                                              Bindings && scalar_outputs,
                                              Bindings && internal_scalars)
-: Kernel(TypeId::SegmentOriented, std::move(kernelName),
-         std::move(stream_inputs), std::move(stream_outputs),
-         std::move(scalar_parameters), std::move(scalar_outputs),
-         std::move(internal_scalars))  {
+: Kernel(b,
+TypeId::SegmentOriented, std::move(kernelName),
+std::move(stream_inputs), std::move(stream_outputs),
+std::move(scalar_parameters), std::move(scalar_outputs),
+std::move(internal_scalars)) {
 
 }
 

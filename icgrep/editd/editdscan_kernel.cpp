@@ -22,13 +22,13 @@ void editdScanKernel::generateDoBlockMethod(const std::unique_ptr<kernel::Kernel
     VectorType * scanwordVectorType =  VectorType::get(T, fieldCount);
     Value * blockNo = b->getScalarField("BlockNo");
     Value * scanwordPos = b->CreateMul(blockNo, ConstantInt::get(blockNo->getType(), b->getBitBlockWidth()));
-    
+
     std::vector<Value * > matchWordVectors;
     for(unsigned d = 0; d < mNumElements; d++) {
         Value * matches = b->loadInputStreamBlock("matchResults", b->getInt32(d));
         matchWordVectors.push_back(b->CreateBitCast(matches, scanwordVectorType));
     }
-    
+
     for(unsigned i = 0; i < fieldCount; ++i) {
         for(unsigned d = 0; d < mNumElements; d++) {
             Value * matchWord = b->CreateExtractElement(matchWordVectors[d], ConstantInt::get(T, i));
@@ -86,7 +86,7 @@ Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<Kernel
 }
 
 editdScanKernel::editdScanKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * matchResults) :
-BlockOrientedKernel("editdScanMatch" + std::to_string(matchResults->getNumElements()),
+BlockOrientedKernel(b, "editdScanMatch" + std::to_string(matchResults->getNumElements()),
               {Binding{"matchResults", matchResults}},
               {}, {}, {}, {Binding{b->getSizeTy(), "BlockNo"}}),
 mNumElements(matchResults->getNumElements()),

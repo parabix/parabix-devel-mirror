@@ -141,7 +141,6 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
             Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
             Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
             Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
-
             auto argi = dispatcher->arg_begin();
             const auto matchRecNumArg = &*(argi++);
             Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
@@ -208,7 +207,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 }
 
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject)
-: MultiBlockKernel("scanMatch",
+: MultiBlockKernel(b, "scanMatch",
 // inputs
 {Binding{"matchResult", Matches, FixedRate(), Principal()}
 ,Binding{"lineBreak", LineBreakStream}

@@ -11,14 +11,17 @@ class OptimizationBranch final : public Kernel {
     friend class OptimizationBranchBuilder;
 public:
 
+    const static std::string CONDITION_TAG;
+
     ~OptimizationBranch();
 
 protected:
 
-    OptimizationBranch(std::string && signature,
-                       not_null<StreamSet *> condition,
-                       not_null<Kernel *> trueKernel,
-                       not_null<Kernel *> falseKernel,
+    OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
+                       std::string && signature,
+                       not_null<Relationship *> condition,
+                       not_null<Kernel *> nonZeroKernel,
+                       not_null<Kernel *> allZeroKernel,
                        Bindings && stream_inputs,
                        Bindings && stream_outputs,
                        Bindings && scalar_inputs,
@@ -44,7 +47,13 @@ protected:
 
 private:
 
-    StreamSet * const       mCondition;
+    void callKernel(const std::unique_ptr<KernelBuilder> & b,
+                    const Kernel * const kernel, std::vector<llvm::Value *> & args,
+                    llvm::PHINode * const terminatedPhi);
+
+private:
+
+    Relationship * const    mCondition;
     Kernel * const          mTrueKernel;
     Kernel * const          mFalseKernel;
 

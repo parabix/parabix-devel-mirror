@@ -12,7 +12,7 @@ namespace kernel {
 
     class UntwistByPEXTKernel final : public BlockOrientedKernel{
     public:
-        UntwistByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * inputStream, StreamSet * outputStream);
+        UntwistByPEXTKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * inputStream, StreamSet * outputStream);
     protected:
         const size_t mNumberOfOutputStream;
         const size_t mTwistWidth;

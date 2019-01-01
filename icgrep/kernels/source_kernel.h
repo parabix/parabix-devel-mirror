@@ -13,7 +13,7 @@ namespace kernel {
 class MMapSourceKernel final : public SegmentOrientedKernel {
     friend class FDSourceKernel;
 public:
-    MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Scalar * const fd, StreamSet * const outputStream);
+    MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * const fd, StreamSet * const outputStream);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
     void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
@@ -41,7 +41,7 @@ protected:
 class ReadSourceKernel final : public SegmentOrientedKernel {
     friend class FDSourceKernel;
 public:
-    ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Scalar * const fd, StreamSet * const outputStream);
+    ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * const fd, StreamSet * const outputStream);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
     void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override {
@@ -63,7 +63,7 @@ private:
 
 class FDSourceKernel final : public SegmentOrientedKernel {
 public:
-    FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Scalar * const useMMap, Scalar * const fd, StreamSet * const outputStream);
+    FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * const useMMap, Scalar * const fd, StreamSet * const outputStream);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
     void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
@@ -74,10 +74,10 @@ protected:
     const unsigned mCodeUnitWidth;
     llvm::Function * mFileSizeFunction;
 };
-    
+
 class MemorySourceKernel final : public SegmentOrientedKernel {
 public:
-    MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> &, Scalar * fileSource, Scalar * fileItems, StreamSet * const outputStream);
+    MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * fileSource, Scalar * fileItems, StreamSet * const outputStream);
     bool hasSignature() const override { return false; }
 protected:
     void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;

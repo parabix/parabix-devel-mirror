@@ -305,7 +305,7 @@ DirectorySearch::DirectorySearch(const std::unique_ptr<kernel::KernelBuilder> & 
                                  StreamSet * const fileDirectoryStream, // stores an offset number to the directoryNameStream
                                  StreamSet * const fileNameStream,
                                  const unsigned filesPerSegment, const bool recursive = true, const bool includeHidden = false)
-: SegmentOrientedKernel("DirectorySearch" + (recursive ? "R" : "") + (includeHidden ? "H" :"")
+: SegmentOrientedKernel(b, "DirectorySearch" + (recursive ? "R" : "") + (includeHidden ? "H" :"")
 // input streams
 ,{}
 // output stream

@@ -178,7 +178,7 @@ LZ4ByteStreamDecoderKernel::LZ4ByteStreamDecoderKernel(const std::unique_ptr<ker
                                                        StreamSet * inputStream,
                                                        // output
                                                        StreamSet * outputStream)
-: MultiBlockKernel("lz4ByteStreamDecoder",
+: MultiBlockKernel(b, "lz4ByteStreamDecoder",
 // Inputs
 {Binding{"literalIndexes", literalIndexes},
  Binding{"matchIndexes", matchIndexes},

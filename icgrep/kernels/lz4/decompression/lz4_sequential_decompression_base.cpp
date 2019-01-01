@@ -24,7 +24,7 @@ const LZ4BlockInfo & blockInfo,
 
 // constants
 unsigned blockSize, bool conditionalDecompression)
-: SegmentOrientedKernel(std::move(kernelName),
+: SegmentOrientedKernel(b, std::move(kernelName),
 // Inputs
 {Binding{"byteStream", byteStream, BoundedRate(0, 1)}, // , AlwaysConsume()
  Binding{"isCompressed", blockInfo.isCompress, BoundedRate(0, 1)}, // , AlwaysConsume()

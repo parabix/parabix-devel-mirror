@@ -405,19 +405,22 @@ void annotateInputBindingsWithPopCountArrayAttributes(Bindings & inputStreamSets
 
 
 // CONSTRUCTOR
-BlockOrientedKernel::BlockOrientedKernel(std::string && kernelName,
-                                         Bindings && stream_inputs,
-                                         Bindings && stream_outputs,
-                                         Bindings && scalar_parameters,
-                                         Bindings && scalar_outputs,
-                                         Bindings && internal_scalars)
-: MultiBlockKernel(TypeId::BlockOriented,
-                   std::move(kernelName),
-                   std::move(stream_inputs),
-                   std::move(stream_outputs),
-                   std::move(scalar_parameters),
-                   std::move(scalar_outputs),
-                   std::move(internal_scalars))
+BlockOrientedKernel::BlockOrientedKernel(
+    const std::unique_ptr<KernelBuilder> & b,
+    std::string && kernelName,
+    Bindings && stream_inputs,
+    Bindings && stream_outputs,
+    Bindings && scalar_parameters,
+    Bindings && scalar_outputs,
+    Bindings && internal_scalars)
+: MultiBlockKernel(b,
+    TypeId::BlockOriented,
+    std::move(kernelName),
+    std::move(stream_inputs),
+    std::move(stream_outputs),
+    std::move(scalar_parameters),
+    std::move(scalar_outputs),
+    std::move(internal_scalars))
 , mDoBlockMethod(nullptr)
 , mStrideLoopBody(nullptr)
 , mStrideLoopBranch(nullptr)

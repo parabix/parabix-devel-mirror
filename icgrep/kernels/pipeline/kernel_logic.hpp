@@ -15,7 +15,7 @@ inline void reset(Vec & vec, const unsigned n) {
  * @brief beginKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
-    assert (index < mPipeline.size());
+    assert (index >= mFirstKernel && index < mLastKernel);
     mKernelIndex = index;
     mKernel = mPipeline[index];
     assert (mKernel);
@@ -57,13 +57,14 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
     Value * const requiredInput = addLookahead(b, inputPort, strideLength);
     const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
     const auto prefix = makeBufferName(mKernelIndex, input);
+    Value * const hasEnough = b->CreateICmpUGE(accessible, requiredInput);
+    Value * const hasTerminated = producerTerminated(b, inputPort);
+    Value * const sufficientInput = b->CreateOr(hasEnough, hasTerminated);
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt(prefix + "_accessible", accessible);
     b->CallPrintInt(prefix + "_requiredInput", requiredInput);
+    b->CallPrintInt(prefix + "_sufficientInput", sufficientInput);
     #endif
-    Value * const hasEnough = b->CreateICmpUGE(accessible, requiredInput);
-    Value * const hasTerminated = producerTerminated(inputPort);
-    Value * const sufficientInput = b->CreateOr(hasEnough, hasTerminated);
     mAccessibleInputItems[inputPort] = accessible;
     BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasInputData", mKernelLoopCall);
     branchToTargetOrLoopExit(b, sufficientInput, target);
@@ -72,10 +73,10 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief producerTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::producerTerminated(const unsigned inputPort) const {
+inline Value * PipelineCompiler::producerTerminated(BuilderRef b, const unsigned inputPort) const {
     const auto bufferVertex = getInputBufferVertex(inputPort);
     const auto producerVertex = parent(bufferVertex, mBufferGraph);
-    return mTerminationGraph[producerVertex];
+    return b->CreateICmpNE(mTerminationGraph[producerVertex], b->getSize(NotTerminated));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -114,11 +115,12 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
         Value * const strideLength = getOutputStrideLength(b, outputPort);
         const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
         const auto prefix = makeBufferName(mKernelIndex, output);
+        Value * const hasEnough = b->CreateICmpULE(strideLength, writable, prefix + "_hasEnough");
         #ifdef PRINT_DEBUG_MESSAGES
         b->CallPrintInt(prefix + "_writable", writable);
         b->CallPrintInt(prefix + "_requiredOutput", strideLength);
+        b->CallPrintInt(prefix + "_hasEnough", hasEnough);
         #endif
-        Value * const hasEnough = b->CreateICmpULE(strideLength, writable, prefix + "_hasEnough");
         BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasOutputSpace", mKernelLoopCall);
         mWritableOutputItems[outputPort] = writable;
         if (LLVM_UNLIKELY(isa<DynamicBuffer>(buffer))) {
@@ -135,10 +137,8 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
 void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * const target) {
     b->CreateLikelyCondBr(cond, target, mKernelLoopExit);
     BasicBlock * const exitBlock = b->GetInsertBlock();
-    mTerminatedPhi->addIncoming(b->getFalse(), exitBlock);
-    if (mHasProgressedPhi) {
-        mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
-    }
+    mTerminatedPhi->addIncoming(b->getSize(NotTerminated), exitBlock);
+    mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {
         mUpdatedProcessedPhi[i]->addIncoming(mAlreadyProcessedPhi[i], exitBlock);
@@ -216,7 +216,7 @@ inline Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const u
     b->CallPrintInt("> " + prefix + "_numOfStrides", numOfStrides);
     #endif
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        Value * const term = producerTerminated(inputPort);
+        Value * const term = producerTerminated(b, inputPort);
         Value * const work = b->CreateIsNotNull(numOfStrides);
         Value * const progress = b->CreateOr(work, term);
         b->CreateAssert(progress,
@@ -523,9 +523,9 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     b->CallPrintInt("* " + prefix + "_executing", mNumOfLinearStrides);
     #endif
 
-    mTerminationExplicitly = b->CreateCall(getDoSegmentFunction(b), args);
+    mTerminatedExplicitly = b->CreateCall(getDoSegmentFunction(b), args);
     if (LLVM_LIKELY(!canTerminate)) {
-        mTerminationExplicitly = b->getFalse();
+        mTerminatedExplicitly = b->getFalse();
     }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
@@ -669,7 +669,7 @@ inline void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
         } else {
             processed = mUpdatedProcessedPhi[i];
         }
-        processed = truncateBlockSize(b, input, processed, mTerminatedPhi);
+        processed = truncateBlockSize(b, input, processed);
         mFullyProcessedItemCount[i] = processed;
     }
 }
@@ -687,7 +687,7 @@ inline void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = mKernel->getOutputStreamSetBinding(i);
-        Value * produced = truncateBlockSize(b, output, mUpdatedProducedPhi[i], mTerminatedPhi);
+        Value * produced = truncateBlockSize(b, output, mUpdatedProducedPhi[i]);
         mFullyProducedItemCount[i]->addIncoming(produced, mKernelLoopExitPhiCatch);
     }
 }
@@ -810,7 +810,7 @@ Constant * PipelineCompiler::getLookahead(BuilderRef b, const unsigned inputPort
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief maskBlockSize
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount, Value * all) const {
+Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const {
     // TODO: if we determine all of the inputs of a stream have a blocksize attribute, or the output has one,
     // we can skip masking it on input
 
@@ -822,7 +822,8 @@ inline Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding &
         // stride has been processed.
         Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
         Value * const maskedItemCount = b->CreateAnd(itemCount, ConstantExpr::getNeg(BLOCK_WIDTH));
-        itemCount = b->CreateSelect(all, itemCount, maskedItemCount);
+        Value * const reportAll = b->CreateICmpNE(mTerminatedPhi, b->getSize(NotTerminated));
+        itemCount = b->CreateSelect(reportAll, itemCount, maskedItemCount);
     }
     return itemCount;
 }
@@ -831,11 +832,11 @@ inline Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding &
  * @brief getInitializationFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getFunctionFromKernelState(BuilderRef b, Type * const type, const std::string & suffix) const {
-    const auto kn = makeKernelName(mKernelIndex);
+    const auto prefix = makeKernelName(mKernelIndex);
     b->setKernel(mPipelineKernel);
-    Value * const funcPtr = b->getScalarField(kn + suffix);
+    Value * const funcPtr = b->getScalarField(prefix + suffix);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        b->CreateAssert(funcPtr, mKernel->getName() + "." + suffix + " is null");
+        b->CreateAssert(funcPtr, prefix + ":" + suffix + " is null");
     }
     b->setKernel(mKernel);
     return b->CreateBitCast(funcPtr, type);

@@ -46,7 +46,7 @@ void PrintableBits::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &
     /*
     00110001 is the Unicode codepoint for '1' and 00101110 is the codepoint for '.'.
     We want to output a byte stream that is aligned with the input bitstream such that it contains 00110001 in each 1 position and 00101110 in each 0 position.
-    
+
     For example, consider input bitstream 101. Our desired output is:
     00110001 00101110 00110001
 
@@ -59,8 +59,8 @@ void PrintableBits::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &
     0   1   0 -> opposite
     0   1   0 -> opposite
     0   1   0 -> opposite
-    1   0   1 -> same as 4th bit position. 
-    
+    1   0   1 -> same as 4th bit position.
+
     Armed with the above we can do the bit->byte conversion all at once
     rather than byte at a time! That's what we do below.
     */
@@ -74,11 +74,11 @@ void PrintableBits::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &
     bits[5] = negBitStrmVal;
     bits[6] = negBitStrmVal;
     bits[7] = bitStrmVal;
-    
+
     // Reassemble the paralell bit streams into a byte stream
     Value * printableBytes[8];
     p2s(iBuilder, bits, printableBytes);
-    
+
     for (unsigned j = 0; j < 8; ++j) {
         iBuilder->storeOutputStreamPack("byteStream", iBuilder->getInt32(0), iBuilder->getInt32(j), iBuilder->bitCast(printableBytes[j]));
     }
@@ -87,7 +87,7 @@ void PrintableBits::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &
 void SelectStream::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
     if (mStreamIndex >= mSizeInputStreamSet)
         llvm::report_fatal_error("Stream index out of bounds.\n");
-    
+
     Value * bitStrmVal = iBuilder->loadInputStreamBlock("bitStreams", iBuilder->getInt32(mStreamIndex));
 
     iBuilder->storeOutputStreamBlock("bitStream", iBuilder->getInt32(0), bitStrmVal);
@@ -103,7 +103,7 @@ void ExpandOrSelectStreams::generateDoBlockMethod(const std::unique_ptr<KernelBu
             iBuilder->storeOutputStreamBlock("outputbitStreams", iBuilder->getInt32(i), iBuilder->bitCast(Constant::getNullValue(iBuilder->getBitBlockType())));
         }
     }
-    
+
 }
 
 void PrintStreamSet::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
@@ -268,22 +268,22 @@ void PrintStreamSet::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> 
 }
 
 PrintableBits::PrintableBits(const std::unique_ptr<kernel::KernelBuilder> & builder)
-: BlockOrientedKernel("PrintableBits", {Binding{builder->getStreamSetTy(1), "bitStream"}}, {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {}, {}, {}) {
+: BlockOrientedKernel(b, "PrintableBits", {Binding{builder->getStreamSetTy(1), "bitStream"}}, {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {}, {}, {}) {
 
 }
 
 SelectStream::SelectStream(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned streamIndex)
-: BlockOrientedKernel("SelectStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(1, 1), "bitStream"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mStreamIndex(streamIndex) {
+: BlockOrientedKernel(b, "SelectStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(1, 1), "bitStream"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mStreamIndex(streamIndex) {
 
 }
 
 ExpandOrSelectStreams::ExpandOrSelectStreams(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet)
-: BlockOrientedKernel("ExpandOrSelectStreams", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(sizeOutputStreamSet), "outputbitStreams"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mSizeOutputStreamSet(sizeOutputStreamSet) {
+: BlockOrientedKernel(b, "ExpandOrSelectStreams", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(sizeOutputStreamSet), "outputbitStreams"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mSizeOutputStreamSet(sizeOutputStreamSet) {
 
 }
 
 PrintStreamSet::PrintStreamSet(const std::unique_ptr<kernel::KernelBuilder> & builder, std::vector<std::string> && names, const unsigned minWidth)
-: BlockOrientedKernel("PrintableStreamSet", {}, {}, {}, {}, {})
+: BlockOrientedKernel(b, "PrintableStreamSet", {}, {}, {}, {}, {})
 , mNames(names)
 , mNameWidth(0) {
     auto width = minWidth;
