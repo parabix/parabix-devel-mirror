@@ -453,8 +453,9 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
         for (auto relationship : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
             const auto relationshipVertex = source(relationship, mScalarDependencyGraph);
             for (auto producer : make_iterator_range(in_edges(relationshipVertex, mScalarDependencyGraph))) {
-                const auto j = source(producer, mScalarDependencyGraph);
-                add_edge(j, pipelineOutput, G);
+                const auto kernel = source(producer, mScalarDependencyGraph);
+                assert ("cannot occur" && kernel != pipelineOutput);
+                add_edge(kernel, pipelineOutput, G);
             }
         }
     }
@@ -494,6 +495,14 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
         }
         sources.clear();
     }
+
+    // TODO: Compute the minimum vertex-disjoint path cover through G, where we consider only
+    // kernel nodes node and any kernel that could terminate has its in-edges removed. The
+    // resulting set of paths will be close to the minimum number of bits required to encode
+    // kernel termination in the pipeline. The complication is when an edge could be added to
+    // multiple paths but adding it would increase the ceil(log2(path length)) cost of one but
+    // not the other(s). Considering this, the result will require the minimum number of bits.
+    // Ignoring this, we can apply Kőnig's theorem to solve this in polynomial time.
 
     return G;
 }

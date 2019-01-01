@@ -173,7 +173,7 @@ public:
     void addPipelineKernelProperties(BuilderRef b);
     void generateInitializeMethod(BuilderRef b);
     void generateSingleThreadKernelMethod(BuilderRef b);
-    void generateMultiThreadKernelMethod(BuilderRef b, const unsigned numOfThreads);
+    void generateMultiThreadKernelMethod(BuilderRef b);
     void generateFinalizeMethod(BuilderRef b);
     std::vector<Value *> getFinalOutputScalars(BuilderRef b);
 

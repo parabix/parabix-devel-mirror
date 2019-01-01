@@ -99,9 +99,6 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         setActiveKernel(b, i);
         args.resize(in_degree(i, mScalarDependencyGraph) + 1);
-        #ifndef NDEBUG
-        std::fill(args.begin(), args.end(), nullptr);
-        #endif
         args[0] = mKernel->getHandle();
         b->setKernel(mPipelineKernel);
         for (const auto ce : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
@@ -109,7 +106,6 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
             const auto pe = in_edge(source(ce, mScalarDependencyGraph), mScalarDependencyGraph);
             const auto k = mScalarDependencyGraph[pe];
             const Binding & input = mPipelineKernel->getInputScalarBinding(k);
-            assert (args[j] == nullptr);
             args[j] = b->getScalarField(input.getName());
         }
         b->setKernel(mKernel);
@@ -124,7 +120,6 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
  * @brief generateSingleThreadKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
-
     StructType * const localStateType = getLocalStateType(b);
     Value * const localState = makeStateObject(b, localStateType);
     b->CreateMemZero(localState, ConstantExpr::getSizeOf(localStateType), b->getCacheAlignment());
@@ -149,7 +144,9 @@ void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
  * Let S_0, S_1, ... S_N be the segments of S.   Segments are assigned to threads in a round-robin
  * fashion such that processing of segment S_i by the full pipeline is carried out by thread i mod T.
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b, const unsigned numOfThreads) {
+void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
+
+    const auto numOfThreads = mPipelineKernel->getNumOfThreads();
 
     assert (numOfThreads > 1);
 
@@ -350,11 +347,11 @@ inline void PipelineCompiler::releaseCurrentSegment(BuilderRef b) {
     b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
 }
 
-enum : int {
+enum : unsigned {
     HANDLE_INDEX = 0
     , SEGMENT_OFFSET_INDEX = 1
     , LOCAL_STATE_INDEX = 2
-    , FIRST_STREAM_INDEX = 3
+    , FIRST_INPUT_STREAM_INDEX = 3
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -401,16 +398,18 @@ inline Value * PipelineCompiler::allocateThreadState(BuilderRef b, const unsigne
 
     const auto numOfInputs = mPipelineKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        auto buffer = mPipelineKernel->getInputStreamSetBuffer(i);
+        const auto buffer = mPipelineKernel->getInputStreamSetBuffer(i);
         Value * const handle = buffer->getHandle();
-        indices[1] = b->getInt32(i + FIRST_STREAM_INDEX);
+        indices[1] = b->getInt32(FIRST_INPUT_STREAM_INDEX + i);
         b->CreateStore(handle, b->CreateGEP(threadState, indices));
     }
+
+    const auto FIRST_OUTPUT_STREAM_INDEX = FIRST_INPUT_STREAM_INDEX + numOfInputs;
     const auto numOfOutputs = mPipelineKernel->getNumOfStreamOutputs();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        auto buffer = mPipelineKernel->getOutputStreamSetBuffer(i);
+        const auto buffer = mPipelineKernel->getOutputStreamSetBuffer(i);
         Value * const handle = buffer->getHandle();
-        indices[1] = b->getInt32(i + numOfInputs + FIRST_STREAM_INDEX);
+        indices[1] = b->getInt32(FIRST_OUTPUT_STREAM_INDEX + i);
         b->CreateStore(handle, b->CreateGEP(threadState, indices));
     }
 
@@ -433,18 +432,19 @@ inline Value * PipelineCompiler::setThreadState(BuilderRef b, Value * threadStat
     Value * const segmentOffset = b->CreateLoad(b->CreateGEP(threadState, indices));
 
     indices[1] = b->getInt32(LOCAL_STATE_INDEX);
-
     setThreadLocalState(b, b->CreateGEP(threadState, indices));
+
     const auto numOfInputs = mPipelineKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        indices[1] = b->getInt32(i + FIRST_STREAM_INDEX);
+        indices[1] = b->getInt32(FIRST_INPUT_STREAM_INDEX + i);
         Value * streamHandle = b->CreateLoad(b->CreateGEP(threadState, indices));
         auto buffer = mPipelineKernel->getInputStreamSetBuffer(i);
         buffer->setHandle(b, streamHandle);
     }
+    const auto FIRST_OUTPUT_STREAM_INDEX = FIRST_INPUT_STREAM_INDEX + numOfInputs;
     const auto numOfOutputs = mPipelineKernel->getNumOfStreamOutputs();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        indices[1] = b->getInt32(i + numOfInputs + FIRST_STREAM_INDEX);
+        indices[1] = b->getInt32(FIRST_OUTPUT_STREAM_INDEX + i);
         Value * streamHandle = b->CreateLoad(b->CreateGEP(threadState, indices));
         auto buffer = mPipelineKernel->getOutputStreamSetBuffer(i);
         buffer->setHandle(b, streamHandle);
@@ -464,16 +464,23 @@ inline void PipelineCompiler::deallocateThreadState(BuilderRef b, Value * const 
     destroyStateObject(b, threadState);
 }
 
-enum : int {
+enum : unsigned {
     POP_COUNT_STRUCT_INDEX = 0
+    , TERMINATION_SIGNAL_INDEX = 1
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getLocalStateType
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StructType * PipelineCompiler::getLocalStateType(BuilderRef b) {
-    StructType * const popCountTy = getPopCountThreadLocalStateType(b);
-    return StructType::get(popCountTy, nullptr);
+    std::vector<Type *> fields(2);
+    fields[POP_COUNT_STRUCT_INDEX] = getPopCountThreadLocalStateType(b);
+    if (mPipelineKernel->getNumOfThreads() != 1 && mPipelineKernel->canSetTerminateSignal()) {
+        fields[TERMINATION_SIGNAL_INDEX] = b->getInt1Ty();
+    } else {
+        fields[TERMINATION_SIGNAL_INDEX] = StructType::get(b->getContext());
+    }
+    return StructType::get(b->getContext(), fields);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -496,6 +503,14 @@ inline void PipelineCompiler::setThreadLocalState(BuilderRef b, Value * const lo
     assert (localState->getType()->getPointerElementType() == getLocalStateType(b));
     mPopCountState = b->CreateGEP(localState, indices);
     assert (mPopCountState->getType()->getPointerElementType() == getPopCountThreadLocalStateType(b));
+    if (mPipelineKernel->canSetTerminateSignal()) {
+        if (mPipelineKernel->getNumOfThreads() != 1) {
+            indices[1] = b->getInt32(TERMINATION_SIGNAL_INDEX);
+            mPipelineTerminated = b->CreateGEP(localState, indices);
+        } else {
+            mPipelineTerminated = mPipelineKernel->getTerminationSignalPtr();
+        }
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -507,6 +522,13 @@ inline void PipelineCompiler::deallocateThreadLocalState(BuilderRef b, Value * c
     indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
     assert (localState->getType()->getPointerElementType() == getLocalStateType(b));
     deallocatePopCountArrays(b, b->CreateGEP(localState, indices));
+    if (mPipelineTerminated && mPipelineKernel->getNumOfThreads() != 1) {
+        indices[1] = b->getInt32(TERMINATION_SIGNAL_INDEX);
+        Value * terminated = b->CreateLoad(b->CreateGEP(localState, indices));
+        Value * terminatedPtr = mPipelineKernel->getTerminationSignalPtr();
+        terminated = b->CreateOr(b->CreateLoad(terminatedPtr), terminated);
+        b->CreateStore(terminated, terminatedPtr);
+    }
 }
 
 }

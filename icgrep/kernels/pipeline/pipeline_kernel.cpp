@@ -87,7 +87,7 @@ void PipelineKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> &
         if (mNumOfThreads == 1) {
             mCompiler->generateSingleThreadKernelMethod(b);
         } else {
-            mCompiler->generateMultiThreadKernelMethod(b, mNumOfThreads);
+            mCompiler->generateMultiThreadKernelMethod(b);
         }
     }
 }

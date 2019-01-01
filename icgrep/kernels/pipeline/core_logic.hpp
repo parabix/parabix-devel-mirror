@@ -19,7 +19,6 @@ void PipelineCompiler::start(BuilderRef b, Value * const initialSegNo) {
     b->SetInsertPoint(mPipelineLoop);
     IntegerType * const sizeTy = b->getSizeTy();
     ConstantInt * const ZERO = b->getSize(0);
-    ConstantInt * const NOT_TERMINATED = b->getSize(NotTerminated);
 
     mSegNo = b->CreatePHI(sizeTy, 2, "segNo");
     mSegNo->addIncoming(initialSegNo, entryBlock);
@@ -28,8 +27,6 @@ void PipelineCompiler::start(BuilderRef b, Value * const initialSegNo) {
     mPipelineProgress = b->getFalse();
     // any pipeline input streams are considered produced by the P_{in} vertex.
     mTerminationGraph[0] = mPipelineKernel->isFinal();
-
-    mPipelineTerminated = NOT_TERMINATED;
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt("+++ pipeline start +++", mSegNo);
     #endif
@@ -236,12 +233,9 @@ void PipelineCompiler::end(BuilderRef b, const unsigned step) {
     b->SetInsertPoint(mPipelineEnd);
     mSegNo = nullptr;
     b->setKernel(mPipelineKernel);
-
-// TODO: not correct for threaded pipelines
-//    if (mPipelineKernel->canSetTerminateSignal()) {
-//        Value * const terminatedPtr = mPipelineKernel->getTerminationSignalPtr();
-//        b->CreateStore(allTerminated, terminatedPtr);
-//    }
+    if (mPipelineTerminated) {
+        b->CreateStore(allTerminated, mPipelineTerminated);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
