@@ -169,8 +169,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     // use the process thread to handle the initial segment function after spawning
     // (n - 1) threads to handle the subsequent offsets
     const unsigned threads = numOfThreads - 1;
-    Type * const pthreadTy = TypeBuilder<pthread_t, false>::get(b->getContext());
-    Type * const pthreadsTy = ArrayType::get(pthreadTy, threads);
+    Type * const pthreadsTy = ArrayType::get(b->getPThreadTy(), threads);
     AllocaInst * const pthreads = b->CreateCacheAlignedAlloca(pthreadsTy);
     std::vector<Value *> threadIdPtr(threads);
     std::vector<Value *> threadState(threads);

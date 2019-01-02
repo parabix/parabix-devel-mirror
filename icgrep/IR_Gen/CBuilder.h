@@ -209,6 +209,7 @@ public:
 
     //  Posix thread (pthread.h) functions.
     //
+    llvm::Type * getPThreadTy();
     //  Create a call to:  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     //                    void *(*start_routine)(void*), void *arg);
     llvm::Value * CreatePThreadCreateCall(llvm::Value * thread, llvm::Value * attr, llvm::Function * start_routine, llvm::Value * arg);

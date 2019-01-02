@@ -786,14 +786,17 @@ Value * CBuilder::CreateRemoveCall(Value * path) {
     return CreateCall(removeFunc, {path});
 }
 
+Type * CBuilder::getPThreadTy() {
+    return getSizeTy();//TypeBuilder<pthread_t, false>::get(getContext());
+}
+
 Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg) {
     Module * const m = getModule();
     Type * const voidPtrTy = getVoidPtrTy();
     Function * pthreadCreateFunc = m->getFunction("pthread_create");
     if (pthreadCreateFunc == nullptr) {
-        Type * const pthreadTy = TypeBuilder<pthread_t, false>::get(getContext());
         FunctionType * funVoidPtrVoidTy = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
-        FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy->getPointerTo(), voidPtrTy, funVoidPtrVoidTy->getPointerTo(), voidPtrTy}, false);
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {getPThreadTy()->getPointerTo(), voidPtrTy, funVoidPtrVoidTy->getPointerTo(), voidPtrTy}, false);
         pthreadCreateFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_create", m);
         pthreadCreateFunc->setCallingConv(CallingConv::C);
     }
@@ -829,8 +832,7 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
     Module * const m = getModule();
     Function * pthreadJoinFunc = m->getFunction("pthread_join");
     if (pthreadJoinFunc == nullptr) {
-        Type * const pthreadTy = TypeBuilder<pthread_t, false>::get(getContext());
-        FunctionType * fty = FunctionType::get(getInt32Ty(), {pthreadTy, getVoidPtrTy()->getPointerTo()}, false);
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {getPThreadTy(), getVoidPtrTy()->getPointerTo()}, false);
         pthreadJoinFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_join", m);
         pthreadJoinFunc->setCallingConv(CallingConv::C);
     }
