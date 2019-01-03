@@ -243,7 +243,7 @@ void ParabixObjectCache::initiateCacheCleanUp() noexcept {
             sys::path::append(janitorFileName, CACHE_JANITOR_FILE_NAME);
             char * const janitorPath = const_cast<char *>(janitorFileName.c_str());
             if (execvp(janitorPath, args) < 0) {
-                // syslog?
+                exit(errno);
             }
         }
     }
