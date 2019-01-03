@@ -11,6 +11,7 @@
 #include "re_any.h"
 #include "re_seq.h"
 #include "re_alt.h"
+#include "re_diff.h"
 #include "re_nullable.h"
 #include <re/re_toolchain.h>
 
@@ -61,6 +62,7 @@ struct FinalLookaheadPromotion : public RE_Transformer {
         elems.push_back(t);
         return makeSeq(elems.begin(), elems.end());
     }
+    RE * transformDiff(Diff * d) override { return d;}
     RE * transformRep(Rep * r) override { return r;}
     RE * transformAssertion(Assertion * a) override {
         if ((a->getKind() == Assertion::Kind::Lookahead) && (a->getSense() == Assertion::Sense::Positive)) {

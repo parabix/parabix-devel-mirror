@@ -89,7 +89,6 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
         errs() << "Parser:\n" << Printer_RE::PrintRE(r) << '\n';
     }
     r = removeUnneededCaptures(r);
-    r = lookaheadPromotion(r);
     r = resolveGraphemeMode(r, false /* not in grapheme mode at top level*/);
     r = re::resolveUnicodeNames(r);
     validateNamesDefined(r);
@@ -100,6 +99,8 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     } else {
         r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
     }
+    r = simplifyAssertions(r);
+    r = lookaheadPromotion(r);
     return r;
 }
 
@@ -122,7 +123,7 @@ RE * regular_expression_passes(RE * re) {
     } else {
         r = simplifyRE(r);
     }
-    r = RE_ContextSimplifier().transformRE(r);
+    r = resolveDiffs(r);
     r = resolveAnchors(r, makeAlt());
     if (!DefiniteLengthBackReferencesOnly(r)) {
         llvm::report_fatal_error("Future back reference support: references must be within a fixed distance from a fixed-length capture.");
@@ -336,11 +337,13 @@ RE * RE_Transformer::transformName(Name * nm) {
     if (mNameTransform == NameTransformationMode::None) {
         return nm;
     }
-    RE * const d = nm->getDefinition();
-    if (LLVM_UNLIKELY(d == nullptr)) {
+    RE * const defn = nm->getDefinition();
+    if (LLVM_UNLIKELY(defn == nullptr)) {
         UndefinedNameError(nm);
     }
-    return transform(d);
+    RE * t = transform(defn);
+    if (t == defn) return nm;
+    return t;
 }
 
 RE * RE_Transformer::transformCC(CC * cc) {
