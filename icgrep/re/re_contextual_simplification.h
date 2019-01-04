@@ -11,7 +11,13 @@
 
 namespace re {
 
-RE * simplifyAssertions(RE * r);
+    RE * simplifyAssertions(RE * r);
+class RE_ContextSimplifier : public RE_Transformer {
+public:
+    inline RE_ContextSimplifier() : RE_Transformer("ContextSimplification") {}
+    RE * transformSeq(Seq * s) override;
+};
+
 }
 
 #endif

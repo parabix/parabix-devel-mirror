@@ -100,7 +100,7 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
         r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
     }
     r = simplifyAssertions(r);
-    r = lookaheadPromotion(r);
+    //r = lookaheadPromotion(r);
     return r;
 }
 
