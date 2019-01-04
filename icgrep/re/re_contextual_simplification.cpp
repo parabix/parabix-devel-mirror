@@ -319,6 +319,7 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
             for (;;) {
                 ContextMatchCursor next = ctxt_match(repeated, kind, star_rslt);
                 if (next.rslt == MatchResult::Fail) return star_rslt;
+                if (next.ctxt.empty()) return next;
                 star_rslt = next;
             }
         } else {
