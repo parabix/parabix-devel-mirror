@@ -327,6 +327,7 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
             for (int i = lb; i < ub; i++) {
                 ContextMatchCursor next = ctxt_match(repeated, kind, ub_cursor);
                 if (next.rslt == MatchResult::Fail) return ub_cursor;
+                if (next.ctxt.empty()) return next;
                 ub_cursor = next;
             }
             return ub_cursor;
