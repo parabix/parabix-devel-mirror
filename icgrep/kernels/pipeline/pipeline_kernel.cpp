@@ -1,14 +1,6 @@
 #include <kernels/pipeline_kernel.h>
 #include <kernels/relationship.h>
 #include "pipeline_compiler.hpp"
-#include "pipeline_analysis.hpp"
-#include "buffer_management_logic.hpp"
-#include "consumer_logic.hpp"
-#include "core_logic.hpp"
-#include "kernel_logic.hpp"
-#include "cycle_counter_logic.hpp"
-#include "popcount_logic.hpp"
-#include "pipeline_logic.hpp"
 #include <llvm/IR/Function.h>
 
 // NOTE: the pipeline kernel is primarily a proxy for the pipeline compiler. Ideally, by making some kernels

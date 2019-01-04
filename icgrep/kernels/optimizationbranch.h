@@ -48,15 +48,18 @@ protected:
 private:
 
     void callKernel(const std::unique_ptr<KernelBuilder> & b,
-                    const Kernel * const kernel, std::vector<llvm::Value *> & args,
+                    const Kernel * const kernel, llvm::Value * const first, llvm::Value * const last,
                     llvm::PHINode * const terminatedPhi);
 
 private:
 
-    Relationship * const    mCondition;
-    Kernel * const          mTrueKernel;
-    Kernel * const          mFalseKernel;
+    Relationship * const        mCondition;
+    Kernel * const              mTrueKernel;
+    Kernel * const              mFalseKernel;
+    std::vector<llvm::Value *>  mProcessedInputItems;
+    std::vector<llvm::Value *>  mPartialAccessibleInputItems;
 
+    std::vector<llvm::Value *>  mProducedOutputItems;
 };
 
 }

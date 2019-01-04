@@ -2,6 +2,7 @@
 #include "lexographic_ordering.hpp"
 #include <boost/graph/topological_sort.hpp>
 #include <util/extended_boost_graph_containers.h>
+#include <boost/graph/topological_sort.hpp>
 
 namespace kernel {
 
@@ -126,8 +127,7 @@ namespace {
         // If G is a DAG and there is a t-s path, adding s-t will induce a cycle.
         const auto d = in_degree(s, G);
         if (d != 0) {
-            flat_set<Vertex> V;
-            V.reserve(num_vertices(G) - 2);
+            dynamic_bitset<> V(num_vertices(G));
             std::queue<Vertex> Q;
             // do a BFS to search for a t-s path
             Q.push(t);
@@ -141,7 +141,8 @@ namespace {
                         return false;
                     }
                     assert ("G was not initially acyclic!" && v != s);
-                    if (LLVM_LIKELY(V.insert(v).second)) {
+                    if (LLVM_LIKELY(V.test(v))) {
+                        V.set(v);
                         Q.push(v);
                     }
                 }
@@ -408,101 +409,6 @@ next:           continue;
 #endif
 
     }
-
-    return G;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeTerminationGraph
- *
- * The termination graph is a transitive reduction of I/O dependency graph. It models which kernels to be checked
- * to determine whether it is safe to terminate once it has finished processing its current input.
- ** ------------------------------------------------------------------------------------------------------------- */
-TerminationGraph PipelineCompiler::makeTerminationGraph() const {
-
-    // A pipeline will end for one or two reasons:
-
-    // 1) no progress can be made by any kernel.
-
-    // 2) all pipeline sinks have terminated (i.e., any kernel that writes
-    // to a pipeline output, is marked as having a side-effect, or produces
-    // an input for some call).
-
-    using VertexVector = std::vector<TerminationGraph::vertex_descriptor>;
-
-    const auto numOfCalls = mPipelineKernel->getCallBindings().size();
-    const auto pipelineOutput = mLastKernel;
-    const auto firstCall = pipelineOutput + 1;
-    const auto lastCall = firstCall + numOfCalls;
-
-    TerminationGraph G(pipelineOutput + 1);
-
-    // copy and summarize producer -> consumer relations from the buffer graph
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        for (auto buffer : make_iterator_range(out_edges(i, mBufferGraph))) {
-            const auto bufferVertex = target(buffer, mBufferGraph);
-            for (auto consumer : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
-                const auto j = target(consumer, mBufferGraph);
-                add_edge(i, j, G);
-            }
-        }
-    }
-
-    // copy and summarize any output scalars of the pipeline or any calls
-    for (unsigned i = pipelineOutput; i < lastCall; ++i) {
-        for (auto relationship : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
-            const auto relationshipVertex = source(relationship, mScalarDependencyGraph);
-            for (auto producer : make_iterator_range(in_edges(relationshipVertex, mScalarDependencyGraph))) {
-                const auto kernel = source(producer, mScalarDependencyGraph);
-                assert ("cannot occur" && kernel != pipelineOutput);
-                add_edge(kernel, pipelineOutput, G);
-            }
-        }
-    }
-
-    // create a k_i -> P_out edge for every kernel with a side effect attribute
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        if (LLVM_UNLIKELY(mPipeline[i]->hasAttribute(AttrId::SideEffecting))) {
-            add_edge(i, pipelineOutput, G);
-        }
-    }
-
-    // generate a transitive closure
-    VertexVector ordering;
-    ordering.reserve(num_vertices(G));
-    topological_sort(G, std::back_inserter(ordering));
-
-    for (unsigned u : ordering) {
-        for (auto e : make_iterator_range(in_edges(u, G))) {
-            const auto s = source(e, G);
-            for (auto f : make_iterator_range(out_edges(u, G))) {
-                add_edge(s, target(f, G), G);
-            }
-        }
-    }
-
-    // then take the transitive reduction
-    VertexVector sources;
-    for (unsigned u = pipelineOutput; u--; ) {
-        for (auto e : make_iterator_range(in_edges(u, G))) {
-            sources.push_back(source(e, G));
-        }
-        std::sort(sources.begin(), sources.end());
-        for (auto e : make_iterator_range(out_edges(u, G))) {
-            remove_in_edge_if(target(e, G), [&G, &sources](const TerminationGraph::edge_descriptor f) {
-                return std::binary_search(sources.begin(), sources.end(), source(f, G));
-            }, G);
-        }
-        sources.clear();
-    }
-
-    // TODO: Compute the minimum vertex-disjoint path cover through G, where we consider only
-    // kernel nodes node and any kernel that could terminate has its in-edges removed. The
-    // resulting set of paths will be close to the minimum number of bits required to encode
-    // kernel termination in the pipeline. The complication is when an edge could be added to
-    // multiple paths but adding it would increase the ceil(log2(path length)) cost of one but
-    // not the other(s). Considering this, the result will require the minimum number of bits.
-    // Ignoring this, we can apply Kőnig's theorem to solve this in polynomial time.
 
     return G;
 }

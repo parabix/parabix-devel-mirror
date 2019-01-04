@@ -8,10 +8,11 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/topological_sort.hpp>
+#include <boost/graph/adjacency_matrix.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 //#include <boost/serialization/strong_typedef.hpp>
 #include <boost/math/common_factor_rt.hpp>
+#include <boost/dynamic_bitset.hpp>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/STLExtras.h>
@@ -104,7 +105,7 @@ using StreamSetBufferMap = flat_map<const StreamSetBuffer *, Value>;
 template <typename Value>
 using KernelMap = flat_map<const Kernel *, Value>;
 
-using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, Value *>;
+using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, unsigned, unsigned>;
 
 using ScalarDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, Value *, unsigned>;
 
@@ -153,14 +154,8 @@ struct PopCountEdge {
 
 using PopCountGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, PopCountEdge>;
 
-enum TerminationMode : unsigned {
-    NotTerminated = 0
-    , TerminatedNormally = 1
-    , TerminatedExplicitly = 2
-};
-
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
-const static std::string TERMINATION_SIGNAL_SUFFIX = ".TERM";
+const static std::string TERMINATION_PREFIX = "@TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IC";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".ICD";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
@@ -204,6 +199,8 @@ protected:
     void setThreadLocalState(BuilderRef b, Value * const localState);
     void deallocateThreadLocalState(BuilderRef b, Value * const localState);
 
+    void addTerminationProperties(BuilderRef b);
+
 // inter-kernel functions
 
     void readInitialItemCounts(BuilderRef b);
@@ -234,7 +231,7 @@ protected:
     void computeFullyProcessedItemCounts(BuilderRef b);
     void computeFullyProducedItemCounts(BuilderRef b);
 
-    void updatePhisAfterTermination(BuilderRef b, Value * const terminationMode);
+    void updatePhisAfterTermination(BuilderRef b);
 
     void zeroFillPartiallyWrittenOutputStreams(BuilderRef b);
 
@@ -269,10 +266,19 @@ protected:
     Constant * getLookahead(BuilderRef b, const unsigned inputPort) const;
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const;
     Value * getTotalItemCount(BuilderRef b, const unsigned inputPort) const;
+    void resetMemoizedFields();
+
+// termination functions
+
+    Value * hasKernelTerminated(BuilderRef b, const unsigned kernel) const;
+
+    LLVM_READNONE Constant * getTerminationSignal(BuilderRef b, const unsigned kernel) const;
+
     Value * producerTerminated(BuilderRef b, const unsigned inputPort) const;
     Value * initiallyTerminated(BuilderRef b);
-    Value * setTerminated(BuilderRef b, Value * const condition, const TerminationMode trueMode, const TerminationMode falseMode) const;
-    void resetMemoizedFields();
+    void setTerminated(BuilderRef b) const;
+    Value * pipelineTerminated(BuilderRef b) const;
+    void updateTerminationSignal(Value * const signal);
 
 // pop-count functions
 
@@ -361,7 +367,7 @@ protected:
 // analysis functions
 
     std::vector<unsigned> lexicalOrderingOfStreamIO() const;
-    TerminationGraph makeTerminationGraph() const;
+    TerminationGraph makeTerminationGraph();
     ScalarDependencyGraph makeScalarDependencyGraph() const;
 
 // misc. functions
@@ -443,9 +449,12 @@ protected:
     PHINode *                                   mHasProgressedPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
     PHINode *                                   mTerminatedPhi = nullptr;
+    PHINode *                                   mTerminatedAtExitPhi = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mTerminatedExplicitly = nullptr;
     std::vector<unsigned>                       mPortOrdering;
+
+    std::vector<Value *>                        mTerminationSignals;
 
     std::vector<Value *>                        mInitiallyProcessedItemCount; // *before* entering the kernel
     std::vector<Value *>                        mInitiallyProcessedDeferredItemCount;
@@ -487,12 +496,15 @@ protected:
     BufferGraph                                 mBufferGraph;
     ConsumerGraph                               mConsumerGraph;
     ScalarDependencyGraph                       mScalarDependencyGraph;
-    TerminationGraph                            mTerminationGraph;
+    const TerminationGraph                      mTerminationGraph;
     PopCountGraph                               mPopCountGraph;
 
 };
 
-Kernels makePipelineList(PipelineKernel * const pk) {
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePipelineList
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Kernels makePipelineList(PipelineKernel * const pk) {
     const Kernels & P = pk->getKernels();
     const auto n = P.size();
     Kernels L(n + 2);
@@ -687,10 +699,17 @@ inline bool has_child(const typename graph_traits<Graph>::vertex_descriptor u,
     return false;
 }
 
-
-
-
-
 } // end of namespace
+
+#include "pipeline_analysis.hpp"
+#include "buffer_management_logic.hpp"
+#include "termination_logic.hpp"
+#include "consumer_logic.hpp"
+#include "core_logic.hpp"
+#include "kernel_logic.hpp"
+#include "cycle_counter_logic.hpp"
+#include "popcount_logic.hpp"
+#include "pipeline_logic.hpp"
+
 
 #endif // PIPELINE_COMPILER_HPP

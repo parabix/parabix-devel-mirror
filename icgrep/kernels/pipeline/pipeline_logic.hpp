@@ -38,6 +38,7 @@ inline void destroyStateObject(BuilderRef b, Value * ptr) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     b->setKernel(mPipelineKernel);
+    addTerminationProperties(b);
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
         addInternalKernelProperties(b, i);
@@ -55,8 +56,8 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     IntegerType * const sizeTy = b->getSizeTy();
 
     const auto name = makeKernelName(kernelIndex);
-    // TODO: prove two termination signals can be fused into a single counter?
-    mPipelineKernel->addInternalScalar(sizeTy, name + TERMINATION_SIGNAL_SUFFIX);
+
+//    mPipelineKernel->addInternalScalar(sizeTy, name + TERMINATION_SIGNAL_SUFFIX);
     mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX);
 
     // TODO: non deferred item count for fixed rates could be calculated from total # of segments.
@@ -110,9 +111,17 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         }
         b->setKernel(mKernel);
         Value * const terminatedOnInit = b->CreateCall(getInitializationFunction(b), args);
-        if (mKernel->canSetTerminateSignal()) {
-            setTerminated(b, terminatedOnInit, TerminatedExplicitly, NotTerminated);
-        }
+
+        const auto prefix = makeKernelName(mKernelIndex);
+        BasicBlock * const kernelTerminated = b->CreateBasicBlock(prefix + "_terminatedOnInit");
+        BasicBlock * const kernelExit = b->CreateBasicBlock(prefix + "_exit");
+        b->CreateUnlikelyCondBr(terminatedOnInit, kernelTerminated, kernelExit);
+
+        b->SetInsertPoint(kernelTerminated);
+        setTerminated(b);
+        b->CreateBr(kernelExit);
+
+        b->SetInsertPoint(kernelExit);
     }
 }
 
@@ -285,7 +294,7 @@ void PipelineCompiler::writeOutputScalars(BuilderRef b, const unsigned index, st
             if (LLVM_UNLIKELY(i == pipelineInput)) {
                 const Binding & input = mPipelineKernel->getInputScalarBinding(j);
                 const Relationship * const rel = getRelationship(input);
-                if (isa<ScalarConstant>(rel)) {
+                if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) {
                     value = cast<ScalarConstant>(rel)->value();
                 } else {
                     value = b->getScalarField(input.getName());

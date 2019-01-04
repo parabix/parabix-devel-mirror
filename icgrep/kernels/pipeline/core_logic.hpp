@@ -25,8 +25,6 @@ void PipelineCompiler::start(BuilderRef b, Value * const initialSegNo) {
     mProgressCounter = b->CreatePHI(sizeTy, 2, "progressCounter");
     mProgressCounter->addIncoming(ZERO, entryBlock);
     mPipelineProgress = b->getFalse();
-    // any pipeline input streams are considered produced by the P_{in} vertex.
-    mTerminationGraph[0] = mPipelineKernel->isFinal();
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt("+++ pipeline start +++", mSegNo);
     #endif
@@ -152,8 +150,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     b->SetInsertPoint(mKernelTerminated);
     zeroFillPartiallyWrittenOutputStreams(b);
-    Value * mode = setTerminated(b, mTerminatedExplicitly, TerminatedExplicitly, TerminatedNormally);
-    updatePhisAfterTermination(b, mode);
+    setTerminated(b);
+    updatePhisAfterTermination(b);
     b->CreateBr(mKernelLoopExit);
 
     /// -------------------------------------------------------------------------------------
@@ -161,6 +159,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelLoopExit);
+    updateTerminationSignal(mTerminatedPhi);
     writeUpdatedItemCounts(b);
     computeFullyProcessedItemCounts(b);
     computeMinimumConsumedItemCounts(b);
@@ -179,6 +178,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     b->SetInsertPoint(mKernelExit);
     mKernelExit->moveAfter(mKernelLoopExitPhiCatch);
+    updateTerminationSignal(mTerminatedAtExitPhi);
     writeFinalConsumedItemCounts(b);
     updatePopCountReferenceCounts(b);
     readFinalProducedItemCounts(b);
@@ -188,9 +188,20 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief next
+ * @brief end
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::end(BuilderRef b, const unsigned step) {
+
+    // A pipeline will end for one or two reasons:
+
+    // 1) No progress can be made by any kernel. This ought to only occur
+    // if the pipeline itself has I/O streams.
+
+    // 2) All pipeline sinks have terminated (i.e., any kernel that writes
+    // to a pipeline output, is marked as having a side-effect, or produces
+    // an input for some call in which no dependent kernels is a pipeline
+    // sink).
+
     b->setKernel(mPipelineKernel);
 
     ConstantInt * const ZERO = b->getSize(0);
@@ -200,20 +211,10 @@ void PipelineCompiler::end(BuilderRef b, const unsigned step) {
     Value * const newProgressCounter = b->CreateSelect(mPipelineProgress, ZERO, plusOne);
     Value * const noProgress = b->CreateICmpEQ(newProgressCounter, TWO);
 
-    const auto pipelineOutput = mLastKernel;
-
-    // check whether every sink has terminated
-    Value * allTerminated = b->getTrue();
-    for (const auto e : make_iterator_range(in_edges(pipelineOutput, mTerminationGraph))) {
-        const auto kernelVertex = source(e, mTerminationGraph);
-        Value * const kernelState = mTerminationGraph[kernelVertex];
-        Value * const terminated = b->CreateICmpNE(kernelState, b->getSize(NotTerminated));
-        allTerminated = b->CreateAnd(allTerminated, terminated);
-    }
-
-    Value * done = allTerminated;
+    Value * const terminated = pipelineTerminated(b);
+    Value * done = terminated;
     if (nestedPipeline()) {
-        done = b->CreateOr(allTerminated, noProgress);
+        done = b->CreateOr(terminated, noProgress);
     } else if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         b->CreateAssertZero(noProgress,
             "Dead lock detected: pipeline could not progress after two iterations");
@@ -234,7 +235,7 @@ void PipelineCompiler::end(BuilderRef b, const unsigned step) {
     mSegNo = nullptr;
     b->setKernel(mPipelineKernel);
     if (mPipelineTerminated) {
-        b->CreateStore(allTerminated, mPipelineTerminated);
+        b->CreateStore(terminated, mPipelineTerminated);
     }
 }
 
@@ -316,9 +317,9 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
     b->SetInsertPoint(mKernelLoopExit);
     const auto prefix = makeKernelName(mKernelIndex);
     IntegerType * const sizeTy = b->getSizeTy();
+    IntegerType * const boolTy = b->getInt1Ty();
     mTerminatedPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminated");
-    mHasProgressedPhi = b->CreatePHI(b->getInt1Ty(), 2, prefix + "_anyProgress");
-
+    mHasProgressedPhi = b->CreatePHI(boolTy, 2, prefix + "_anyProgress");
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = mKernel->getInputStreamSetBinding(i);
@@ -342,12 +343,10 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
 inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
     b->SetInsertPoint(mKernelExit);
     const auto prefix = makeKernelName(mKernelIndex);
-    IntegerType * const sizeTy = b->getSizeTy();
-
-    PHINode * const terminated = b->CreatePHI(sizeTy, 2, prefix + "_terminated");
-    terminated->addIncoming(mTerminatedInitially, mKernelEntry);
-    terminated->addIncoming(mTerminatedPhi, mKernelLoopExitPhiCatch);
-    mTerminationGraph[mKernelIndex] = terminated;
+    Type * const sizeTy = b->getSizeTy();
+    mTerminatedAtExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminated");
+    mTerminatedAtExitPhi->addIncoming(mTerminatedInitially, mKernelEntry);
+    mTerminatedAtExitPhi->addIncoming(mTerminatedPhi, mKernelLoopExitPhiCatch);
 
     PHINode * const pipelineProgress = b->CreatePHI(b->getInt1Ty(), 2, prefix + "_pipelineProgress");
     pipelineProgress->addIncoming(mPipelineProgress, mKernelEntry);
@@ -402,45 +401,17 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
             mUpdatedProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
         }
         mHasProgressedPhi->addIncoming(b->getTrue(), entryBlock);
-        mTerminatedPhi->addIncoming(b->getSize(NotTerminated), entryBlock);
+        mTerminatedPhi->addIncoming(mTerminatedInitially, entryBlock);
         b->CreateBr(mKernelLoopExit);
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInitialTerminationSignal
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
-    b->setKernel(mPipelineKernel);
-    const auto prefix = makeKernelName(mKernelIndex);
-    mTerminatedInitially = b->getScalarField(prefix + TERMINATION_SIGNAL_SUFFIX);
-    b->setKernel(mKernel);
-    return b->CreateICmpNE(mTerminatedInitially, b->getSize(NotTerminated));
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief setTerminated
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::setTerminated(BuilderRef b, Value * const condition, const TerminationMode trueMode, const TerminationMode falseMode) const  {
-    const auto prefix = makeKernelName(mKernelIndex);
-    b->setKernel(mPipelineKernel);
-    ConstantInt * const TRUE_MODE = b->getSize(trueMode);
-    ConstantInt * const FALSE_MODE = b->getSize(falseMode);
-    Value * const mode = b->CreateSelect(condition, TRUE_MODE, FALSE_MODE);
-    b->setScalarField(prefix + TERMINATION_SIGNAL_SUFFIX, mode);
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt("*** " + prefix + "_terminated ***", mode);
-    #endif
-    b->setKernel(mKernel);
-    return mode;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief updatePhiCountAfterTermination
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b, Value * const terminationMode) {
+inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     BasicBlock * const exitBlock = b->GetInsertBlock();
-    mTerminatedPhi->addIncoming(terminationMode, exitBlock);
+    mTerminatedPhi->addIncoming(getTerminationSignal(b, mKernelIndex), exitBlock);
     mHasProgressedPhi->addIncoming(b->getTrue(), exitBlock);
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {

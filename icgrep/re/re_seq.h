@@ -44,7 +44,7 @@ inline RE * makeSeq(const iterator begin, const iterator end) {
     for (auto i = begin; i != end; ++i) {
         RE * const item = *i;
         if (LLVM_UNLIKELY(isEmptySet(item))) {
-            return makeEmptySet();
+            return item;
         } else if (LLVM_UNLIKELY(llvm::isa<Seq>(item))) {
             for (RE * const innerItem : *llvm::cast<Seq>(item)) {
                 seq->push_back(innerItem);
@@ -66,7 +66,7 @@ inline RE * makeSeq(std::initializer_list<RE *> list) {
 inline bool isEmptySeq(RE * s) {
     return llvm::isa<Seq>(s) && llvm::cast<Seq>(s)->empty();
 }
-    
+
 inline RE * u32string2re(std::u32string s) {
     std::vector<RE *> ccs;
     for (auto c : s) {
@@ -74,7 +74,7 @@ inline RE * u32string2re(std::u32string s) {
     }
     return makeSeq(ccs.begin(), ccs.end());
 }
-    
+
 }
 
 #endif // RE_SEQ_H

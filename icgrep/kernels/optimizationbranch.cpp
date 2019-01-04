@@ -1,5 +1,6 @@
 #include "optimizationbranch.h"
 #include <kernels/kernel_builder.h>
+#include <boost/scoped_ptr.hpp>
 
 #warning at compilation, this must verify that the I/O rates of the branch permits the rates of the branches
 
@@ -66,9 +67,50 @@ inline bool hasParam(const Binding & binding) {
  * @brief callKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
-                                    const Kernel * const kernel, std::vector<Value *> & args,
+                                    const Kernel * const kernel,
+                                    Value * const first, Value * const last,
                                     PHINode * const terminatedPhi) {
-    args[0] = kernel->getHandle();
+#if 0
+    std::vector<Value *> args;
+    args.reserve(mCurrentMethod->arg_size());
+    args.push_back(kernel->getHandle()); // handle
+    args.push_back(b->CreateSub(last, first)); // numOfStrides
+    const auto numOfInputs = kernel->getNumOfStreamInputs();
+    for (unsigned i = 0; i < numOfInputs; i++) {
+
+        const Binding & input = kernel->getInputStreamSetBinding(i);
+        const StreamSetBuffer * const buffer = mStreamSetInputBuffers[i];
+        // logical base input address
+        args.push_back(buffer->getBaseAddress(b.get()));
+        // processed input items
+        args.push_back(mProcessedInputItems[i]);
+        // accessible input items (after non-deferred processed item count)
+        args.push_back();
+        // TODO: What if one of the branches requires this but the other doesn't?
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+            args.push_back(b->CreateGEP(mPopCountRateArray[i], first));
+        }
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+            args.push_back(b->CreateGEP(mNegatedPopCountRateArray[i], first));
+        }
+    }
+
+    const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        const Binding & output = kernel->getOutputStreamSetBinding(i);
+        const auto unmanaged = !output.hasAttribute(AttrId::ManagedBuffer);
+        if (unmanaged) {
+            const StreamSetBuffer * const buffer = mStreamSetOutputBuffers[i];
+            args.push_back(buffer->getBaseAddress(b.get()));
+        }
+        args.push_back(mProducedOutputItems[i]);
+        if (unmanaged) {
+            // writable
+        } else {
+            // consumed
+        }
+    }
+
     Value * terminated = b->CreateCall(kernel->getDoSegmentFunction(b->getModule()), args);
     if (terminatedPhi) {
         if (LLVM_UNLIKELY(kernel->canSetTerminateSignal())) {
@@ -76,6 +118,7 @@ void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
         }
         terminatedPhi->addIncoming(terminated, b->GetInsertBlock());
     }
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -93,26 +136,31 @@ void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilde
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
 
-    const auto numOfInputs = getNumOfStreamInputs();
+    const auto numOfConditionInputs = isa<StreamSet>(mCondition) ? 1 : 0;
+    const auto numOfInputs = getNumOfStreamInputs() - numOfConditionInputs;
     std::vector<Value *> initialInputItems(numOfInputs, nullptr);
+
+    mPartialAccessibleInputItems.resize(numOfInputs);
+
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        if (isParamConstant(mInputStreamSets[i])) {
+        if (isParamAddressable(mInputStreamSets[i])) {
             initialInputItems[i] = b->CreateLoad(mProcessedInputItemPtr[i]);
         }
+        mPartialAccessibleInputItems[i] = mAccessibleInputItems[i];
     }
 
     const auto numOfOutputs = getNumOfStreamOutputs();
     std::vector<Value *> initialOutputItems(numOfOutputs, nullptr);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        if (isParamConstant(mOutputStreamSets[i])) {
+        if (isParamAddressable(mOutputStreamSets[i])) {
             initialOutputItems[i] = b->CreateLoad(mProducedOutputItemPtr[i]);
         }
+        mPartialAccessibleInputItems[i] = mAccessibleInputItems[i];
     }
 
     BasicBlock * const entry = b->GetInsertBlock();
     b->CreateBr(loopCond);
 
-    std::vector<Value *> args;
     PHINode * terminatedPhi = nullptr;
     if (canSetTerminateSignal()) {
         b->SetInsertPoint(mergePaths);
@@ -120,35 +168,39 @@ void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilde
     }
 
     b->SetInsertPoint(loopCond);
+    IntegerType * const sizeTy = b->getSizeTy();
+    PHINode * const first = b->CreatePHI(sizeTy, 3);
+    first->addIncoming(ZERO, entry);
+    PHINode * const last = b->CreatePHI(sizeTy, 3);
+
+    mProcessedInputItems.resize(numOfInputs);
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        if (initialInputItems[i]) {
+            PHINode * const inputPhi = b->CreatePHI(sizeTy, 3);
+            inputPhi->addIncoming(initialInputItems[i], entry);
+            mProcessedInputItems[i] = inputPhi;
+        } else {
+            mProcessedInputItems[i] = mProcessedInputItemPtr[i];
+        }
+    }
+
+    mProducedOutputItems.resize(numOfOutputs);
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        if (initialOutputItems[i]) {
+            PHINode * const outputPhi = b->CreatePHI(sizeTy, 3);
+            outputPhi->addIncoming(initialOutputItems[i], entry);
+            mProducedOutputItems[i] = outputPhi;
+        } else {
+            mProducedOutputItems[i] = mProducedOutputItemPtr[i];
+        }
+    }
 
     if (LLVM_LIKELY(isa<StreamSet>(mCondition))) {
 
-        Type * const BitBlockTy = b->getBitBlockType();
-        IntegerType * const sizeTy = b->getSizeTy();
+        last->addIncoming(ZERO, entry);
 
-        PHINode * const index = b->CreatePHI(sizeTy, 3);
-        index->addIncoming(ZERO, entry);
-        PHINode * const first = b->CreatePHI(sizeTy, 3);
-        first->addIncoming(ZERO, entry);
         PHINode * const state = b->CreatePHI(b->getInt1Ty(), 3);
         state->addIncoming(b->getFalse(), entry);
-
-        const auto numOfInputs = getNumOfStreamInputs() - 1; // the final input is our condition stream
-        std::vector<PHINode *> inputPhis(numOfInputs);
-        for (unsigned i = 0; i < numOfInputs; ++i) {
-            PHINode * const inputPhi = b->CreatePHI(sizeTy, 3);
-            inputPhi->addIncoming(getAccessibleInputItems(i), entry);
-            inputPhis[i] = inputPhi;
-        }
-
-        const auto numOfOutputs = getNumOfStreamOutputs();
-        std::vector<PHINode *> outputPhis(numOfOutputs);
-        for (unsigned i = 0; i < numOfOutputs; ++i) {
-            PHINode * const outputPhi = b->CreatePHI(sizeTy, 3);
-            outputPhi->addIncoming(getWritableInputItems(i), entry);
-            outputPhis[i] = outputPhi;
-        }
-
 
         BasicBlock * const summarizeOneStride = b->CreateBasicBlock("summarizeOneStride", nonZeroPath);
         BasicBlock * const checkStride = b->CreateBasicBlock("checkStride", nonZeroPath);
@@ -160,8 +212,9 @@ void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilde
         Value * const blocksPerStride = b->CreateMul(streamCount, strideCount);
 
 
-        Value * const offset = b->CreateMul(index, strideCount);
+        Value * const offset = b->CreateMul(last, strideCount);
         Value * basePtr = b->getInputStreamBlockPtr(CONDITION_TAG, ZERO, offset);
+        Type * const BitBlockTy = b->getBitBlockType();
         basePtr = b->CreatePointerCast(basePtr, BitBlockTy->getPointerTo());
         b->CreateBr(summarizeOneStride);
 
@@ -185,74 +238,40 @@ void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilde
         b->SetInsertPoint(checkStride);
         Value * const nextState = b->bitblock_any(merged);
         Value * const sameState = b->CreateICmpEQ(nextState, state);
-        Value * const firstStride = b->CreateICmpEQ(index, ZERO);
+        Value * const firstStride = b->CreateICmpEQ(last, ZERO);
         Value * const continuation = b->CreateOr(sameState, firstStride);
-        Value * const nextIndex = b->CreateAdd(index, ONE);
+        Value * const nextIndex = b->CreateAdd(last, ONE);
         Value * const notLastStride = b->CreateICmpNE(nextIndex, mNumOfStrides);
         Value * const checkNextStride = b->CreateAnd(continuation, notLastStride);
-        index->addIncoming(nextIndex, checkStride);
+        last->addIncoming(nextIndex, checkStride);
         first->addIncoming(first, checkStride);
         state->addIncoming(nextState, checkStride);
         b->CreateLikelyCondBr(checkNextStride, loopCond, processStrides);
 
         // Process every stride between [first, index)
         b->SetInsertPoint(processStrides);
-
-        // build our kernel call
-        args.reserve(mCurrentMethod->arg_size());
-        args.push_back(nullptr); // handle
-        args.push_back(b->CreateSub(index, first)); // numOfStrides
-        for (unsigned i = 0; i < numOfInputs; i++) {
-            const StreamSetBuffer * const buffer = mStreamSetInputBuffers[i];
-            // logical base input address
-            args.push_back(buffer->getBaseAddress(b.get()));
-
-            // processed input items
-            const Binding & input = mInputStreamSets[i];
-            if (isParamAddressable(input)) {
-                args.push_back(mProcessedInputItemPtr[i]); // updatable
-            }  else if (isParamConstant(input)) {
-                args.push_back(b->CreateLoad(mProcessedInputItemPtr[i]));  // constant
-            }
-
-            // accessible input items (after non-deferred processed item count)
-            args.push_back(sizeTy);
-
-            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-                args.push_back(b->CreateGEP(mPopCountRateArray[i], first));
-            }
-            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-                args.push_back(b->CreateGEP(mNegatedPopCountRateArray[i], first));
-            }
-        }
-
         // state is implicitly "indeterminate" during our first stride
-        Value * const currentState = b->CreateSelect(firstStride, nextState, state);
-        b->CreateCondBr(currentState, nonZeroPath, allZeroPath);
+        Value * const selectedPath = b->CreateSelect(firstStride, nextState, state);
+        b->CreateCondBr(selectedPath, nonZeroPath, allZeroPath);
 
     } else {
+        last->addIncoming(mNumOfStrides, entry);
 
         Value * const cond = b->getScalarField(CONDITION_TAG);
-        const auto n = mCurrentMethod->arg_size();
-        args.resize(n);
-        auto arg = mCurrentMethod->arg_begin();
-        for (unsigned i = 1; i != n; ++i) {
-            assert (arg != mCurrentMethod->arg_end());
-            args[i] = *(++arg);
-        }
-        assert (args[0] == nullptr);
         b->CreateCondBr(b->CreateIsNotNull(cond), nonZeroPath, allZeroPath);
     }
 
     // make the actual calls and take any potential termination signal
     b->SetInsertPoint(nonZeroPath);
-    callKernel(b, mTrueKernel, args, terminatedPhi);
+    callKernel(b, mTrueKernel, first, last, terminatedPhi);
     b->CreateBr(mergePaths);
 
     b->SetInsertPoint(allZeroPath);
-    callKernel(b, mFalseKernel, args, terminatedPhi);
+    callKernel(b, mFalseKernel, first, last, terminatedPhi);
     b->CreateBr(mergePaths);
 
+
+    b->SetInsertPoint(mergePaths);
 
 #endif
 }

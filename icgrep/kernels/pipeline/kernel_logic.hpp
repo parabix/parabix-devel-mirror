@@ -71,15 +71,6 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief producerTerminated
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::producerTerminated(BuilderRef b, const unsigned inputPort) const {
-    const auto bufferVertex = getInputBufferVertex(inputPort);
-    const auto producerVertex = parent(bufferVertex, mBufferGraph);
-    return b->CreateICmpNE(mTerminationGraph[producerVertex], b->getSize(NotTerminated));
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getAccessibleInputItems
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool addFacsimile) {
@@ -137,7 +128,7 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
 void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * const target) {
     b->CreateLikelyCondBr(cond, target, mKernelLoopExit);
     BasicBlock * const exitBlock = b->GetInsertBlock();
-    mTerminatedPhi->addIncoming(b->getSize(NotTerminated), exitBlock);
+    mTerminatedPhi->addIncoming(mTerminatedInitially, exitBlock);
     mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {
@@ -822,8 +813,8 @@ Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & bindin
         // stride has been processed.
         Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
         Value * const maskedItemCount = b->CreateAnd(itemCount, ConstantExpr::getNeg(BLOCK_WIDTH));
-        Value * const reportAll = b->CreateICmpNE(mTerminatedPhi, b->getSize(NotTerminated));
-        itemCount = b->CreateSelect(reportAll, itemCount, maskedItemCount);
+        Value * const terminated = hasKernelTerminated(b, mKernelIndex);
+        itemCount = b->CreateSelect(terminated, itemCount, maskedItemCount);
     }
     return itemCount;
 }

@@ -55,7 +55,7 @@ inline void PipelineCompiler::writePopCountComputationLogic(BuilderRef b) {
         Value * const produced = mUpdatedProducedPhi[bufferPort];
         // If this is the producer's final stride, round the index position up
         // to account for a partial stride.
-        Value * const terminated = b->CreateICmpNE(mTerminatedPhi, b->getSize(NotTerminated));
+        Value * const terminated = hasKernelTerminated(b, mKernelIndex);
         Value * const rounding = b->CreateSelect(terminated, BLOCK_SIZE_MINUS_1, ZERO);
         Value * const endIndex = b->CreateLShr(b->CreateAdd(produced, rounding), LOG2_BLOCK_WIDTH);
 
