@@ -291,7 +291,11 @@ inline bool RE_Transformer::MemoizerComparator::operator()(const RE * const lh, 
 RE * RE_Transformer::transformRE(RE * re) {
     RE * initialRE = re;
     RE * finalRE = transform(re);
-    if ((!mTransformationName.empty()) && (PrintOptions.isSet(ShowAllREs) || (PrintOptions.isSet(ShowREs) && (initialRE != finalRE))))  {
+    bool ShowRE = PrintOptions.isSet(ShowAllREs) && !mTransformationName.empty();
+    if (PrintOptions.isSet(ShowREs) && (initialRE != finalRE)) {
+        ShowRE |= !mTransformationName.empty() && (mTransformationName[0] != '.');
+    }
+    if (ShowRE)  {
         errs() << mTransformationName << ":\n" << Printer_RE::PrintRE(finalRE) << '\n';
     }
     return finalRE;
