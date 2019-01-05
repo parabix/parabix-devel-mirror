@@ -329,7 +329,7 @@ OptimizationBranch::OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
 , mCondition(condition.get())
 , mTrueKernel(nonZeroKernel.get())
 , mFalseKernel(allZeroKernel.get()) {
-    addAttributesFrom({mTrueKernel, mFalseKernel});
+
 }
 
 OptimizationBranch::~OptimizationBranch() {

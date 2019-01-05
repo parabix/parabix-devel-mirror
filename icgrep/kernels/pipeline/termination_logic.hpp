@@ -17,10 +17,8 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 TerminationGraph PipelineCompiler::makeTerminationGraph() {
 
-    using Graph = TerminationGraph;
-
-    using Vertex = Graph::vertex_descriptor;
-    using Edge = Graph::edge_descriptor;
+    using Vertex = TerminationGraph::vertex_descriptor;
+    using Edge = TerminationGraph::edge_descriptor;
     using VertexVector = std::vector<Vertex>;
 
     const auto numOfCalls = mPipelineKernel->getCallBindings().size();
@@ -33,7 +31,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     // TODO: if the lower bound of an input is 0 or a the input is zero-extended,
     // how would this affect termination?
 
-    Graph G(n);
+    TerminationGraph G(n);
 
     // 1) copy and summarize producer -> consumer relations from the buffer graph
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
@@ -280,8 +278,7 @@ Value * PipelineCompiler::producerTerminated(BuilderRef b, const unsigned inputP
  * @brief updateTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::updateTerminationSignal(Value * const signal) {
-    const auto pathId = mTerminationGraph[mKernelIndex];
-    mTerminationSignals[pathId] = signal;
+    mTerminationSignals[mTerminationGraph[mKernelIndex]] = signal;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -310,8 +307,7 @@ inline void PipelineCompiler::setTerminated(BuilderRef b) const {
     const auto pathId = mTerminationGraph[mKernelIndex];
     Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(pathId));
     b->setKernel(mKernel);
-    Constant * const signal = getTerminationSignal(b, mKernelIndex);
-    b->CreateStore(signal, ptr, true);
+    b->CreateStore(getTerminationSignal(b, mKernelIndex), ptr, true);
 }
 
 }

@@ -184,7 +184,42 @@ inline char getRelationshipType(const VertexType type) {
     }
 }
 
-#warning pipeline builder needs to be able to return the name of a kernel without generating it
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addAttributesFrom
+ *
+ * Add any attributes from a set of kernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+unsigned addKernelProperties(const std::vector<Kernel *> & kernels, Kernel * const output) {
+    unsigned mustTerminate = 0;
+    bool canTerminate = false;
+    bool sideEffecting = false;
+    unsigned stride = 0;
+    for (const Kernel * kernel : kernels) {
+        if (kernel->hasAttribute(AttrId::MustExplicitlyTerminate)) {
+            mustTerminate++;
+        } else if (kernel->hasAttribute(AttrId::CanTerminateEarly)) {
+            canTerminate = true;
+        }
+        if (kernel->hasAttribute(AttrId::SideEffecting)) {
+            sideEffecting = true;
+        }
+        assert (kernel->getStride());
+        if (stride) {
+            stride = boost::lcm(stride, kernel->getStride());
+        } else {
+            stride = kernel->getStride();
+        }
+    }
+    if (LLVM_UNLIKELY(mustTerminate == kernels.size())) {
+        output->addAttribute(MustExplicitlyTerminate());
+    } else if (canTerminate || mustTerminate) {
+        output->addAttribute(CanTerminateEarly());
+    }
+    if (sideEffecting) {
+        output->addAttribute(SideEffecting());
+    }
+    return stride;
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeKernel
@@ -283,7 +318,6 @@ Kernel * PipelineBuilder::makeKernel() {
     pipeline.reserve(ordering.size());
 
     const std::unique_ptr<kernel::KernelBuilder> & b = mDriver.getBuilder();
-    unsigned stride = 0;
     Type * const addrPtrTy = b->getVoidPtrTy();
     for (auto i : ordering) {
         if (LLVM_LIKELY(i < numOfKernels)) {
@@ -296,12 +330,6 @@ Kernel * PipelineBuilder::makeKernel() {
                 addInputScalar(addrPtrTy, kn + FINALIZE_FUNCTION_POINTER_SUFFIX);
             }
             pipeline.emplace_back(k);
-            assert (k->getStride());
-            if (stride) {
-                stride = boost::lcm(stride, k->getStride());
-            } else {
-                stride = k->getStride();
-            }
         }
     }
 
@@ -311,9 +339,58 @@ Kernel * PipelineBuilder::makeKernel() {
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
                            std::move(mInputScalars), std::move(mOutputScalars));
 
-    pk->setStride(stride);
+    pk->setStride(addKernelProperties(pk->getKernels(), pk));
 
     return pk;
+}
+
+using AttributeCombineSet = flat_map<AttrId, unsigned>;
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief combineAttributes
+ ** ------------------------------------------------------------------------------------------------------------- */
+void combineAttributes(const Binding & S, AttributeCombineSet & C) {
+    for (const Attribute & s : S) {
+        auto f = C.find(s.getKind());
+        if (LLVM_LIKELY(f == C.end())) {
+            C.emplace(s.getKind(), s.amount());
+        } else {
+            // TODO: we'll need some form of attribute combination function
+            f->second = std::max(f->second, s.amount());
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief writeAttributes
+ ** ------------------------------------------------------------------------------------------------------------- */
+void writeAttributes(const AttributeCombineSet & C, Binding & S) {
+    S.clear();
+    for (auto i = C.begin(); i != C.end(); ++i) {
+        Attribute::KindId k;
+        unsigned m;
+        std::tie(k, m) = *i;
+        S.addAttribute(Attribute(k, m));
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool combineBindingAttributes(const Bindings & A, const Bindings & B, Bindings & R) {
+    const auto n = A.size();
+    if (LLVM_UNLIKELY(n != B.size() || n != R.size())) {
+        return false;
+    }
+    AttributeCombineSet C;
+    for (unsigned i = 0; i < n; ++i) {
+        combineAttributes(A[i], C);
+        combineAttributes(B[i], C);
+        combineAttributes(R[i], C);
+        writeAttributes(C, R[i]);
+        C.clear();
+    }
+    return true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -332,7 +409,7 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
 
     mCondition->getType()->print(out);
 
-    out << ";True=\"";
+    out << ";Z=\"";
 
     if (trueBranch->hasFamilyName()) {
         out << trueBranch->getFamilyName();
@@ -340,7 +417,7 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
         out << trueBranch->getName();
     }
 
-    out << "\";False=\"";
+    out << "\";N=\"";
 
     if (falseBranch->hasFamilyName()) {
         out << falseBranch->getFamilyName();
@@ -354,13 +431,21 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
     // TODO: if the condition is also one of the normal inputs and the rate is compatible,
     // we could avoid sending it through.
 
+    combineBindingAttributes(trueBranch->getInputStreamSetBindings(),
+                             falseBranch->getInputStreamSetBindings(),
+                             mInputStreamSets);
+
+    combineBindingAttributes(trueBranch->getOutputStreamSetBindings(),
+                             falseBranch->getOutputStreamSetBindings(),
+                             mOutputStreamSets);
+
     OptimizationBranch * const br =
             new OptimizationBranch(mDriver.getBuilder(), std::move(name),
                                    mCondition, trueBranch, falseBranch,
                                    std::move(mInputStreamSets), std::move(mOutputStreamSets),
                                    std::move(mInputScalars), std::move(mOutputScalars));
 
-    br->setStride(boost::lcm(trueBranch->getStride(), falseBranch->getStride()));
+    br->setStride(addKernelProperties({trueBranch, falseBranch}, br));
 
     return br;
 }

@@ -471,11 +471,12 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, args);
 
         args.push_back(inputItems);
+
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            args.push_back(getPopCountArray(b, i));
+            args.push_back(getPositivePopCountArray(b, i));
         }
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            args.push_back(getNegatedPopCountArray(b, i));
+            args.push_back(getNegativePopCountArray(b, i));
         }
     }
 

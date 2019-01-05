@@ -344,61 +344,56 @@ void BlockOrientedKernel::CreateDoBlockMethodCall(const std::unique_ptr<KernelBu
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makePopCountRateGraph
- *
- * Returns a graph with a vertex for each input port and a directed edge annotated with the appropriate RateId
- ** ------------------------------------------------------------------------------------------------------------- */
-
-using PopCountRateGraph = adjacency_list<hash_setS, vecS, directedS>;
-using PopCountRateMap = llvm::StringMap<PopCountRateGraph::vertex_descriptor>;
-
-#define POP_COUNT 0
-#define NEGATED_POP_COUNT 1
-
-void checkPopCount(const Binding & binding, PopCountRateGraph & G, const PopCountRateMap & M) {
-    const ProcessingRate & rate = binding.getRate();
-    if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
-        const auto f = M.find(rate.getReference());
-        assert ("pop count rate cannot refer to an output stream" && f != M.end());
-        const auto targetType = (rate.getKind() == RateId::PopCount) ? POP_COUNT : NEGATED_POP_COUNT;
-        add_edge(f->second, targetType, G);
-    }
-}
-
-inline PopCountRateGraph makePopCountRateGraph(const Bindings & inputStreamSets, const Bindings & outputStreamSets) {
-    const auto n = inputStreamSets.size();
-    PopCountRateGraph G(n);
-    PopCountRateMap M;
-    for (unsigned i = 0; i < n; ++i) {
-        M.insert(std::make_pair(inputStreamSets[i].getName(), i));
-        checkPopCount(inputStreamSets[i], G, M);
-    }
-    const auto m = outputStreamSets.size();
-    for (unsigned i = 0; i < m; ++i) {
-        checkPopCount(outputStreamSets[i], G, M);
-    }
-    return G;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief annotateInputBindingsWithPopCountArrayAttributes
  ** ------------------------------------------------------------------------------------------------------------- */
-void annotateInputBindingsWithPopCountArrayAttributes(Bindings & inputStreamSets, const Bindings & outputStreamSets) {
-    if (LLVM_LIKELY(inputStreamSets.size() > 1)) {
-        const auto G = makePopCountRateGraph(inputStreamSets, outputStreamSets);
-        for (const auto e : make_iterator_range(edges(G))) {
-            const auto i = source(e, G);
-            assert (i < inputStreamSets.size());
-            Binding & input = inputStreamSets[i];
-            switch (target(e, G)) {
-                case POP_COUNT:
-                    input.addAttribute(RequiresPopCountArray());
-                    break;
-                case NEGATED_POP_COUNT:
-                    input.addAttribute(RequiresNegatedPopCountArray());
-                    break;
-                default: llvm_unreachable("unhandled pop count type!");
-            }
+void BlockOrientedKernel::annotateInputBindingsWithPopCountArrayAttributes() {
+    const unsigned n = mInputStreamSets.size();
+    const unsigned m = mOutputStreamSets.size();
+
+    if (LLVM_UNLIKELY(n == 0 || (n + m) < 2)) {
+        return;
+    }
+
+    enum : int {
+        POSITIVE = 0
+        , NEGATIVE = 1
+    };
+
+    using Graph = adjacency_list<vecS, vecS, directedS>;
+
+    Graph G(std::max(n, 2U));
+
+    auto checkPopCount = [&](const Binding & binding) {
+        const ProcessingRate & rate = binding.getRate();
+        if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
+            Kernel::Port type;
+            unsigned refPort;
+            std::tie(type, refPort) = getStreamPort(rate.getReference());
+            assert ("pop count rate cannot refer to an output stream" && (type == Kernel::Port::Input));
+            const auto targetType = rate.isPopCount() ? POSITIVE : NEGATIVE;
+            add_edge(refPort, targetType, G);
+        }
+    };
+
+    for (unsigned i = 0; i < n; ++i) {
+        checkPopCount(mInputStreamSets[i]);
+    }
+    for (unsigned i = 0; i < m; ++i) {
+        checkPopCount(mOutputStreamSets[i]);
+    }
+
+    for (const auto e : make_iterator_range(edges(G))) {
+        const auto i = source(e, G);
+        assert (i < mInputStreamSets.size());
+        Binding & input = mInputStreamSets[i];
+        switch (target(e, G)) {
+            case POSITIVE:
+                input.addAttribute(RequiresPopCountArray());
+                break;
+            case NEGATIVE:
+                input.addAttribute(RequiresNegatedPopCountArray());
+                break;
+            default: llvm_unreachable("unhandled pop count type!");
         }
     }
 }
@@ -426,7 +421,7 @@ BlockOrientedKernel::BlockOrientedKernel(
 , mStrideLoopBranch(nullptr)
 , mStrideLoopTarget(nullptr)
 , mStrideBlockIndex(nullptr) {
-    annotateInputBindingsWithPopCountArrayAttributes(mInputStreamSets, mOutputStreamSets);
+    annotateInputBindingsWithPopCountArrayAttributes();
 }
 
 

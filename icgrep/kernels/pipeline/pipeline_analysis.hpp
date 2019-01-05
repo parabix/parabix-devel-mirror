@@ -423,83 +423,102 @@ next:           continue;
  ** ------------------------------------------------------------------------------------------------------------- */
 PopCountGraph PipelineCompiler::makePopCountGraph() const {
 
-    using PopCountVertex = PopCountGraph::vertex_descriptor;
-    using PortMapping = flat_map<unsigned, PopCountVertex>;
+    using Vertex = PopCountGraph::vertex_descriptor;
+    using Map = flat_map<unsigned, Vertex>;
 
     PopCountGraph G(num_vertices(mBufferGraph));
-    PortMapping M;
+    Map M;
 
-    auto addPopCountDependency = [&](
-        const Kernel * const kernel,
-        const PopCountVertex kernelVertex,
-        const unsigned portIndex,
-        const Binding & binding) {
+    for (unsigned kernelVertex = mFirstKernel; kernelVertex < mLastKernel; ++kernelVertex) {
+        const Kernel * const kernel = mPipeline[kernelVertex];
+        const auto numOfInputs = kernel->getNumOfStreamInputs();
+        const auto numOfOutputs = kernel->getNumOfStreamOutputs();
 
-        const ProcessingRate & rate = binding.getRate();
-        if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
-            // determine which port this I/O port refers to
-            Port portType; unsigned refPort;
-            std::tie(portType, refPort) = kernel->getStreamPort(rate.getReference());
-
-            // verify the reference stream is an input port
-            if (LLVM_UNLIKELY(portType != Port::Input)) {
-                std::string tmp;
-                raw_string_ostream msg(tmp);
-                msg << kernel->getName();
-                msg << ": pop count rate for ";
-                msg << binding.getName();
-                msg << " cannot refer to an output stream";
-                report_fatal_error(msg.str());
-            }
-
-            const auto type = rate.isPopCount() ? CountingType::Positive : CountingType::Negative;
-
+        auto insertPopCountDependency = [&](
+                const CountingType type,
+                const unsigned refPort,
+                const unsigned srcPort) {
             // check if we've already created a vertex for the ref port ...
             const auto f = M.find(refPort);
             if (LLVM_UNLIKELY(f != M.end())) {
                 const auto refPortVertex = f->second;
-                add_edge(kernelVertex, refPortVertex, PopCountEdge{type, portIndex}, G);
+                add_edge(kernelVertex, refPortVertex, PopCountEdge{type, srcPort}, G);
                 // update the ref -> buffer edge with the counting type
-                for (const auto e : make_iterator_range(out_edges(refPortVertex, G))) {
-                    G[e].Type |= type;
-                }
+                G[out_edge(refPortVertex, G)].Type |= type;
             } else { // ... otherwise map a new vertex to it.
 
                 // verify the reference stream is a Fixed rate stream
-                const Binding & refBinding = kernel->getInputStreamSetBinding(refPort);
-                if (LLVM_UNLIKELY(refBinding.isDeferred() || !refBinding.getRate().isFixed())) {
-                    std::string tmp;
-                    raw_string_ostream msg(tmp);
-                    msg << kernel->getName();
-                    msg << ": pop count reference ";
-                    msg << refBinding.getName();
-                    msg << " must be a non-deferred Fixed rate stream";
-                    report_fatal_error(msg.str());
+                if (LLVM_LIKELY(srcPort != refPort)) {
+                    const Binding & refBinding = kernel->getInputStreamSetBinding(refPort);
+                    if (LLVM_UNLIKELY(refBinding.isDeferred() || !refBinding.getRate().isFixed())) {
+                        std::string tmp;
+                        raw_string_ostream msg(tmp);
+                        msg << kernel->getName();
+                        msg << ": pop count reference ";
+                        msg << refBinding.getName();
+                        msg << " must be a non-deferred Fixed rate stream";
+                        report_fatal_error(msg.str());
+                    }
                 }
 
                 const auto refPortVertex = add_vertex(G);
                 M.emplace(refPort, refPortVertex);
-                add_edge(kernelVertex, refPortVertex, PopCountEdge{type, portIndex}, G);
+                add_edge(kernelVertex, refPortVertex, PopCountEdge{type, srcPort}, G);
 
                 // determine which buffer this port refers to by inspecting the buffer graph
                 const auto bufferVertex = getInputBufferVertex(kernelVertex, refPort);
                 add_edge(refPortVertex, bufferVertex, PopCountEdge{type, refPort}, G);
             }
-        }
-    };
+        };
 
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        const Kernel * const kernel = mPipeline[i];
-        const auto numOfInputs = kernel->getNumOfStreamInputs();
-        const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+        auto addPopCountDependency = [&](
+            const unsigned portIndex,
+            const Binding & binding) {
+            const ProcessingRate & rate = binding.getRate();
+            if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
+                // determine which port this I/O port refers to
+                Port portType; unsigned refPort;
+                std::tie(portType, refPort) = kernel->getStreamPort(rate.getReference());
+                // verify the reference stream is an input port
+                if (LLVM_UNLIKELY(portType != Port::Input)) {
+                    std::string tmp;
+                    raw_string_ostream msg(tmp);
+                    msg << kernel->getName();
+                    msg << ": pop count rate for ";
+                    msg << binding.getName();
+                    msg << " cannot refer to an output stream";
+                    report_fatal_error(msg.str());
+                }
+                const auto type = rate.isPopCount() ? CountingType::Positive : CountingType::Negative;
+                insertPopCountDependency(type, refPort, portIndex);
+            }
+        };
+
+        auto checkRequiredArray = [&](
+            const unsigned portIndex,
+            const Binding & binding) {
+
+            CountingType type = CountingType::Unknown;
+            if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::RequiresPopCountArray))) {
+                type = CountingType::Positive;
+            }
+            if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+                type |= CountingType::Negative;
+            }
+            if (LLVM_UNLIKELY(type != CountingType::Unknown)) {
+                insertPopCountDependency(type, portIndex, portIndex);
+            }
+        };
+
         for (unsigned j = 0; j < numOfInputs; ++j) {
             const auto & input = kernel->getInputStreamSetBinding(j);
-            addPopCountDependency(kernel, i, j, input);
+            addPopCountDependency(j, input);
+            checkRequiredArray(j, input);
         }
         const auto firstOutput = numOfInputs;
         for (unsigned j = 0; j < numOfOutputs; ++j) {
             const auto & output = kernel->getOutputStreamSetBinding(j);
-            addPopCountDependency(kernel, i, firstOutput + j, output);
+            addPopCountDependency(firstOutput + j, output);
         }
         M.clear();
     }

@@ -829,35 +829,6 @@ std::string Kernel::getStringHash(const llvm::StringRef str) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addAttributesFrom
- *
- * Add any attributes from a set of kernels
- ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addAttributesFrom(const std::vector<Kernel *> & kernels) {
-    unsigned mustTerminate = 0;
-    bool canTerminate = false;
-    bool sideEffecting = false;
-    for (const Kernel * kernel : kernels) {
-        if (kernel->hasAttribute(AttrId::MustExplicitlyTerminate)) {
-            mustTerminate++;
-        } else if (kernel->hasAttribute(AttrId::CanTerminateEarly)) {
-            canTerminate = true;
-        }
-        if (kernel->hasAttribute(AttrId::SideEffecting)) {
-            sideEffecting = true;
-        }
-    }
-    if (LLVM_UNLIKELY(mustTerminate == kernels.size())) {
-        addAttribute(MustExplicitlyTerminate());
-    } else if (canTerminate || mustTerminate) {
-        addAttribute(CanTerminateEarly());
-    }
-    if (sideEffecting) {
-        addAttribute(SideEffecting());
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief createInstance
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & b) {
@@ -1134,7 +1105,10 @@ Value * Kernel::getPopCountRateItemCount(const std::unique_ptr<KernelBuilder> & 
         array = mPopCountRateArray[refIndex];
     }
     assert (array && "missing pop count array attribute");
-    return b->CreateLoad(b->CreateGEP(array, strideIndex));
+    Value * const currentSum = b->CreateLoad(b->CreateGEP(array, strideIndex));
+    Value * const priorIndex = b->CreateSub(strideIndex, b->getSize(1));
+    Value * const priorSum = b->CreateLoad(b->CreateGEP(array, priorIndex));
+    return b->CreateSub(currentSum, priorSum);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

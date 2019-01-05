@@ -326,7 +326,7 @@ PipelineKernel::PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
 , mKernels(std::move(kernels))
 , mCallBindings(std::move(callBindings))
 , mSignature(std::move(signature)) {
-    addAttributesFrom(mKernels);
+
 }
 
 

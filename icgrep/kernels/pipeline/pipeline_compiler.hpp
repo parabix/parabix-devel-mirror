@@ -128,10 +128,7 @@ struct PopCountData {
 
     // analysis state
     RateValue    FieldWidth;
-    bool         HasArray;
-    bool         HasNegatedArray;
     bool         UsesConsumedCount;
-    bool         AlwaysNegated;
 
     PopCountData() = default;
 };
@@ -291,17 +288,18 @@ protected:
     void createPopCountReferenceCounts(BuilderRef b);
     void computeMinimumPopCountReferenceCounts(BuilderRef b);
     void updatePopCountReferenceCounts(BuilderRef b);
-    LLVM_READNONE Value * getPopCountReferenceConsumedCount(BuilderRef b, const unsigned bufferVertex);
-    LLVM_READNONE Value * getPopCountInitialOffset(BuilderRef b, const Binding & binding, const unsigned bufferVertex, PopCountData & pc);
+    LLVM_READNONE Value * getPopCountNextBaseOffset(BuilderRef b, const unsigned bufferVertex) const;
+    LLVM_READNONE Value * getPopCountBaseOffset(BuilderRef b, const Binding & binding, const unsigned bufferVertex);
+
+    LLVM_READNONE bool hasPositivePopCountArray(const unsigned bufferVertex) const;
+    LLVM_READNONE bool hasNegativePopCountArray(const unsigned bufferVertex) const;
 
     Value * getMinimumNumOfLinearPopCountItems(BuilderRef b, const Binding & binding);
     Value * getMaximumNumOfPopCountStrides(BuilderRef b, const Binding & binding, not_null<Value *> sourceItemCount, not_null<Value *> peekableItemCount, Constant * const lookAhead = nullptr);
     Value * getNumOfLinearPopCountItems(BuilderRef b, const Binding & binding);
 
-    Value * getReferenceStreamOffset(BuilderRef b, const Binding & binding);
-
-    Value * getPopCountArray(BuilderRef b, const unsigned inputPort);
-    Value * getNegatedPopCountArray(BuilderRef b, const unsigned inputPort);
+    Value * getPositivePopCountArray(BuilderRef b, const unsigned inputPort);
+    Value * getNegativePopCountArray(BuilderRef b, const unsigned inputPort);
     Value * getIndividualPopCountArray(BuilderRef b, const unsigned inputPort, const unsigned index);
 
     LLVM_READNONE unsigned getPopCountReferencePort(const Kernel * kernel, const ProcessingRate & rate) const;
@@ -315,14 +313,10 @@ protected:
 
     PopCountGraph makePopCountGraph() const;
 
-    LLVM_READNONE PopCountData & getPopCountReference(const unsigned bufferVertex) ;
+    LLVM_READNONE PopCountData & getPopCountData(const unsigned bufferVertex) const;
     LLVM_READNONE PopCountData analyzePopCountReference(const unsigned bufferVertex) const;
     LLVM_READNONE RateValue popCountReferenceFieldWidth(const unsigned bufferVertex) const;
     LLVM_READNONE bool popCountReferenceCanUseConsumedItemCount(const unsigned bufferVertex) const;
-    LLVM_READNONE bool popCountReferenceRequiresBaseOffset(const unsigned bufferVertex) const;
-    LLVM_READNONE bool popCountBufferIsUsedBySingleKernel(const unsigned bufferVertex) const;
-    LLVM_READNONE std::pair<bool, bool> popCountReferenceRequiresPopCountArray(const unsigned bufferVertex) const;
-    LLVM_READNONE bool popCountReferenceIsAlwaysNegated(const unsigned bufferVertex) const;
 
     template <typename LambdaFunction>
     void forEachOutputBufferThatIsAPopCountReference(const unsigned kernelIndex, LambdaFunction func);

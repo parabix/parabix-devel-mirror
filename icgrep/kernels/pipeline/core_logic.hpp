@@ -1,5 +1,9 @@
 ﻿#include "pipeline_compiler.hpp"
 
+// TODO: if we have multiple copies of the same type of kernel executing sequentially, we could avoid
+// generating an "execution call" for each and instead pass in different handles/item counts. This
+// could improve I-Cache utilization.
+
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *

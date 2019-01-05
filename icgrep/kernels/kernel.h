@@ -487,8 +487,6 @@ protected:
 
 private:
 
-    void addAttributesFrom(const std::vector<Kernel *> & kernels);
-
     void callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b);
 
     void callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b);
@@ -655,6 +653,8 @@ protected:
     llvm::Value * getRemainingItems(const std::unique_ptr<KernelBuilder> & b);
 
 private:
+
+    void annotateInputBindingsWithPopCountArrayAttributes();
 
     void incrementCountableItemCounts(const std::unique_ptr<KernelBuilder> & b);
 

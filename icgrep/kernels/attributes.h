@@ -11,6 +11,8 @@ namespace kernel {
 
 struct Attribute {
 
+    friend struct AttributeSet;
+
     enum class KindId {
 
         /** INPUT STREAM ATTRIBUTES **/
@@ -297,28 +299,6 @@ struct Attribute {
     bool operator != (const Attribute & other) const {
         return !(*this == other);
     }
-
-protected:
-
-    friend struct AttributeSet;
-    friend struct Binding;
-    friend Attribute Add1();
-    friend Attribute BlockSize(const unsigned k);
-    friend Attribute Principal();
-    friend Attribute RoundUpTo(const unsigned);
-    friend Attribute ManagedBuffer();
-    friend Attribute LookAhead(const unsigned);
-    friend Attribute LookBehind(const unsigned);
-    friend Attribute Deferred();
-    friend Attribute Misaligned();
-    friend Attribute ConditionalRegionBegin();
-    friend Attribute ConditionalRegionEnd();
-    friend Attribute CanTerminateEarly();
-    friend Attribute MustExplicitlyTerminate();
-    friend Attribute RequiresPopCountArray();
-    friend Attribute RequiresNegatedPopCountArray();
-    friend Attribute SideEffecting();
-    friend Attribute Family();
 
     void print(llvm::raw_ostream & out) const noexcept;
 
