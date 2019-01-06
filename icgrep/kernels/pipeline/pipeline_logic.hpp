@@ -234,7 +234,6 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     // Restore our position to allow the pipeline kernel to complete the function
     b->restoreIP(resumePoint);
     setThreadState(b, processState);
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

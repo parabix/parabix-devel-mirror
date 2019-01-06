@@ -47,19 +47,24 @@ protected:
 
 private:
 
+    llvm::Value * getItemCountIncrement(const std::unique_ptr<KernelBuilder> & b, const Binding & binding,
+                                        llvm::Value * const first, llvm::Value * const last) const;
+
     void callKernel(const std::unique_ptr<KernelBuilder> & b,
                     const Kernel * const kernel, llvm::Value * const first, llvm::Value * const last,
                     llvm::PHINode * const terminatedPhi);
 
 private:
 
-    Relationship * const        mCondition;
-    Kernel * const              mTrueKernel;
-    Kernel * const              mFalseKernel;
-    std::vector<llvm::Value *>  mProcessedInputItems;
-    std::vector<llvm::Value *>  mPartialAccessibleInputItems;
+    Relationship * const         mCondition;
+    Kernel * const               mTrueKernel;
+    Kernel * const               mFalseKernel;
 
-    std::vector<llvm::Value *>  mProducedOutputItems;
+    std::vector<llvm::Value *>   mProcessedInputItems;
+    std::vector<llvm::PHINode *> mAccessibleInputItemPhi;
+
+    std::vector<llvm::Value *>   mProducedOutputItems;
+    std::vector<llvm::PHINode *> mWritableOrConsumedOutputItemPhi;
 };
 
 }

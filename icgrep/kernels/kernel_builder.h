@@ -155,10 +155,6 @@ protected:
 
     const unsigned mStride;
 
-    llvm::Value * getScalarFieldPtr(llvm::Value * handle, llvm::Value * index);
-
-    llvm::Value * getScalarFieldPtr(llvm::Value * instance, const std::string & fieldName);
-
     std::string getKernelName() const final;
 
 protected:

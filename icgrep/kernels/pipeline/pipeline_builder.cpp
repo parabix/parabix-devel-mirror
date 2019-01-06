@@ -279,11 +279,7 @@ Kernel * PipelineBuilder::makeKernel() {
         }
     }
 
-    #ifndef NDEBUG
-    std::vector<unsigned> index(numOfKernels + numOfCalls, std::numeric_limits<unsigned>::max());
-    #else
     std::vector<unsigned> index(numOfKernels + numOfCalls);
-    #endif
 
     unsigned j = 0;
     for (unsigned i : ordering) {
@@ -405,7 +401,7 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
     std::string name;
     raw_string_ostream out(name);
 
-    out << "OptimizationBranch:";
+    out << "OB:";
 
     mCondition->getType()->print(out);
 

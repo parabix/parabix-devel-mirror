@@ -142,34 +142,30 @@ void BlockOrientedKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
  * @brief incrementCountableItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 void BlockOrientedKernel::incrementCountableItemCounts(const std::unique_ptr<KernelBuilder> & b) {
-
     // Update the processed item counts
-    for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
-        const Binding & input = mInputStreamSets[i];
+    for (const Binding & input : getInputStreamSetBindings()) {
         if (isCountable(input)) {
             const ProcessingRate & rate = input.getRate();
             Value * offset = nullptr;
             if (rate.isFixed()) {
                 offset = b->getSize(ceiling(getUpperBound(input) * getStride()));
             } else { // if (rate.isPopCount() || rate.isNegatedPopCount())
-                offset = getPopCountRateItemCount(b, rate, mStrideBlockIndex);
+                offset = getPopCountRateItemCount(b, rate);
             }
             Value * const initial = b->getProcessedItemCount(input.getName());
             Value * const processed = b->CreateAdd(initial, offset);
             b->setProcessedItemCount(input.getName(), processed);
         }
     }
-
     // Update the produced item counts
-    for (unsigned i = 0; i < mOutputStreamSets.size(); ++i) {
-        const Binding & output = mOutputStreamSets[i];
+    for (const Binding & output : getOutputStreamSetBindings()) {
         if (isCountable(output)) {
             const ProcessingRate & rate = output.getRate();
             Value * offset = nullptr;
             if (rate.isFixed()) {
                 offset = b->getSize(ceiling(getUpperBound(output) * getStride()));
             } else { // if (rate.isPopCount() || rate.isNegatedPopCount())
-                offset = getPopCountRateItemCount(b, rate, mStrideBlockIndex);
+                offset = getPopCountRateItemCount(b, rate);
             }
             Value * const initial = b->getProducedItemCount(output.getName());
             Value * const produced = b->CreateAdd(initial, offset);
@@ -177,6 +173,30 @@ void BlockOrientedKernel::incrementCountableItemCounts(const std::unique_ptr<Ker
         }
     }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getPopCountRateItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * BlockOrientedKernel::getPopCountRateItemCount(const std::unique_ptr<KernelBuilder> & b,
+                                                      const ProcessingRate & rate) {
+    assert (rate.isPopCount() || rate.isNegatedPopCount());
+    Port refPort;
+    unsigned refIndex = 0;
+    std::tie(refPort, refIndex) = getStreamPort(rate.getReference());
+    assert (refPort == Port::Input);
+    Value * array = nullptr;
+    if (rate.isNegatedPopCount()) {
+        array = mNegatedPopCountRateArray[refIndex];
+    } else {
+        array = mPopCountRateArray[refIndex];
+    }
+    assert (array && "missing pop count array attribute");
+    Value * const currentSum = b->CreateLoad(b->CreateGEP(array, mStrideBlockIndex));
+    Value * const priorIndex = b->CreateSub(mStrideBlockIndex, b->getSize(1));
+    Value * const priorSum = b->CreateLoad(b->CreateGEP(array, priorIndex));
+    return b->CreateSub(currentSum, priorSum);
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getRemainingItems
  ** ------------------------------------------------------------------------------------------------------------- */

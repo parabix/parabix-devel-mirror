@@ -256,8 +256,7 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
                          std::vector<Binding> scalar_outputs)
 : BlockOrientedKernel(b, annotateKernelNameWithPabloDebugFlags(std::move(kernelName)),
                       std::move(stream_inputs), std::move(stream_outputs),
-                      std::move(scalar_parameters), std::move(scalar_outputs),
-                      {Binding{b->getBitBlockType(), "EOFbit"}, Binding{b->getBitBlockType(), "EOFmask"}})
+                      std::move(scalar_parameters), std::move(scalar_outputs), {})
 , PabloAST(PabloAST::ClassTypeId::Kernel, nullptr, mAllocator)
 , mPabloCompiler()
 , mSymbolTable()
@@ -265,7 +264,8 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
 , mSizeTy(nullptr)
 , mStreamTy(nullptr)
 , mContext(nullptr) {
-
+    addLocalScalar(b->getBitBlockType(), "EOFbit");
+    addLocalScalar(b->getBitBlockType(), "EOFmask");
 }
 
 PabloKernel::~PabloKernel() { }

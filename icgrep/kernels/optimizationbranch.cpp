@@ -37,95 +37,27 @@ void OptimizationBranch::initializeInstance(const std::unique_ptr<KernelBuilder>
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isParamAddressable
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isParamAddressable(const Binding & binding) {
-    if (binding.isDeferred()) {
-        return true;
-    }
-    const ProcessingRate & rate = binding.getRate();
-    return (rate.isBounded() || rate.isUnknown());
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isParamConstant
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool isParamConstant(const Binding & binding) {
-    assert (!binding.isDeferred());
+    if (binding.isDeferred()) {
+        return false;
+    }
     const ProcessingRate & rate = binding.getRate();
     return rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief hasParam
+ * @brief isLocalBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool hasParam(const Binding & binding) {
-    return !binding.getRate().isRelative();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief callKernel
- ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
-                                    const Kernel * const kernel,
-                                    Value * const first, Value * const last,
-                                    PHINode * const terminatedPhi) {
-#if 0
-    std::vector<Value *> args;
-    args.reserve(mCurrentMethod->arg_size());
-    args.push_back(kernel->getHandle()); // handle
-    args.push_back(b->CreateSub(last, first)); // numOfStrides
-    const auto numOfInputs = kernel->getNumOfStreamInputs();
-    for (unsigned i = 0; i < numOfInputs; i++) {
-
-        const Binding & input = kernel->getInputStreamSetBinding(i);
-        const StreamSetBuffer * const buffer = mStreamSetInputBuffers[i];
-        // logical base input address
-        args.push_back(buffer->getBaseAddress(b.get()));
-        // processed input items
-        args.push_back(mProcessedInputItems[i]);
-        // accessible input items (after non-deferred processed item count)
-        args.push_back();
-        // TODO: What if one of the branches requires this but the other doesn't?
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            args.push_back(b->CreateGEP(mPopCountRateArray[i], first));
-        }
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            args.push_back(b->CreateGEP(mNegatedPopCountRateArray[i], first));
-        }
-    }
-
-    const auto numOfOutputs = kernel->getNumOfStreamOutputs();
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = kernel->getOutputStreamSetBinding(i);
-        const auto unmanaged = !output.hasAttribute(AttrId::ManagedBuffer);
-        if (unmanaged) {
-            const StreamSetBuffer * const buffer = mStreamSetOutputBuffers[i];
-            args.push_back(buffer->getBaseAddress(b.get()));
-        }
-        args.push_back(mProducedOutputItems[i]);
-        if (unmanaged) {
-            // writable
-        } else {
-            // consumed
-        }
-    }
-
-    Value * terminated = b->CreateCall(kernel->getDoSegmentFunction(b->getModule()), args);
-    if (terminatedPhi) {
-        if (LLVM_UNLIKELY(kernel->canSetTerminateSignal())) {
-            terminated = b->getFalse();
-        }
-        terminatedPhi->addIncoming(terminated, b->GetInsertBlock());
-    }
-#endif
+inline bool isLocalBuffer(const Binding & output) {
+    return output.getRate().isUnknown() || output.hasAttribute(AttrId::ManagedBuffer);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
-#if 0
 
     BasicBlock * const loopCond = b->CreateBasicBlock("cond");
     BasicBlock * const nonZeroPath = b->CreateBasicBlock("nonZeroPath");
@@ -138,24 +70,19 @@ void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilde
 
     const auto numOfConditionInputs = isa<StreamSet>(mCondition) ? 1 : 0;
     const auto numOfInputs = getNumOfStreamInputs() - numOfConditionInputs;
-    std::vector<Value *> initialInputItems(numOfInputs, nullptr);
-
-    mPartialAccessibleInputItems.resize(numOfInputs);
-
+    std::vector<llvm::Value *> initialProcessedInputItems(numOfInputs, nullptr);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        if (isParamAddressable(mInputStreamSets[i])) {
-            initialInputItems[i] = b->CreateLoad(mProcessedInputItemPtr[i]);
+        if (isParamConstant(mInputStreamSets[i])) {
+            initialProcessedInputItems[i] = b->CreateLoad(mProcessedInputItemPtr[i]);
         }
-        mPartialAccessibleInputItems[i] = mAccessibleInputItems[i];
     }
 
     const auto numOfOutputs = getNumOfStreamOutputs();
-    std::vector<Value *> initialOutputItems(numOfOutputs, nullptr);
+    std::vector<llvm::Value *> initialProducedOutputItems(numOfOutputs, nullptr);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        if (isParamAddressable(mOutputStreamSets[i])) {
-            initialOutputItems[i] = b->CreateLoad(mProducedOutputItemPtr[i]);
+        if (isParamConstant(mOutputStreamSets[i])) {
+            initialProducedOutputItems[i] = b->CreateLoad(mProducedOutputItemPtr[i]);
         }
-        mPartialAccessibleInputItems[i] = mAccessibleInputItems[i];
     }
 
     BasicBlock * const entry = b->GetInsertBlock();
@@ -164,7 +91,7 @@ void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilde
     PHINode * terminatedPhi = nullptr;
     if (canSetTerminateSignal()) {
         b->SetInsertPoint(mergePaths);
-        terminatedPhi = b->CreatePHINode(b->getInt1Ty(), 2);
+        terminatedPhi = b->CreatePHI(b->getInt1Ty(), 2);
     }
 
     b->SetInsertPoint(loopCond);
@@ -172,35 +99,46 @@ void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilde
     PHINode * const first = b->CreatePHI(sizeTy, 3);
     first->addIncoming(ZERO, entry);
     PHINode * const last = b->CreatePHI(sizeTy, 3);
+    PHINode * const state = b->CreatePHI(b->getInt1Ty(), 3);
+    state->addIncoming(b->getFalse(), entry);
 
     mProcessedInputItems.resize(numOfInputs);
+    mAccessibleInputItemPhi.resize(numOfInputs);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        if (initialInputItems[i]) {
-            PHINode * const inputPhi = b->CreatePHI(sizeTy, 3);
-            inputPhi->addIncoming(initialInputItems[i], entry);
+        if (initialProcessedInputItems[i]) {
+            PHINode * const inputPhi = b->CreatePHI(sizeTy, 2);
+            inputPhi->addIncoming(initialProcessedInputItems[i], entry);
             mProcessedInputItems[i] = inputPhi;
         } else {
             mProcessedInputItems[i] = mProcessedInputItemPtr[i];
         }
+        PHINode * const accessiblePhi = b->CreatePHI(sizeTy, 2);
+        accessiblePhi->addIncoming(mAccessibleInputItems[i], entry);
+        mAccessibleInputItemPhi[i] = accessiblePhi;
     }
 
     mProducedOutputItems.resize(numOfOutputs);
+    mWritableOrConsumedOutputItemPhi.resize(numOfOutputs);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        if (initialOutputItems[i]) {
-            PHINode * const outputPhi = b->CreatePHI(sizeTy, 3);
-            outputPhi->addIncoming(initialOutputItems[i], entry);
+        if (initialProducedOutputItems[i]) {
+            PHINode * const outputPhi = b->CreatePHI(sizeTy, 2);
+            outputPhi->addIncoming(initialProducedOutputItems[i], entry);
             mProducedOutputItems[i] = outputPhi;
         } else {
             mProducedOutputItems[i] = mProducedOutputItemPtr[i];
         }
+        PHINode * const writablePhi = b->CreatePHI(sizeTy, 2);
+        if (isLocalBuffer(mOutputStreamSets[i])) {
+            writablePhi->addIncoming(mConsumedOutputItems[i], entry);
+        } else {
+            writablePhi->addIncoming(mWritableOutputItems[i], entry);
+        }
+        mWritableOrConsumedOutputItemPhi[i] = writablePhi;
     }
 
     if (LLVM_LIKELY(isa<StreamSet>(mCondition))) {
 
         last->addIncoming(ZERO, entry);
-
-        PHINode * const state = b->CreatePHI(b->getInt1Ty(), 3);
-        state->addIncoming(b->getFalse(), entry);
 
         BasicBlock * const summarizeOneStride = b->CreateBasicBlock("summarizeOneStride", nonZeroPath);
         BasicBlock * const checkStride = b->CreateBasicBlock("checkStride", nonZeroPath);
@@ -210,7 +148,6 @@ void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilde
 
         Value * const streamCount = b->getInputStreamSetCount(CONDITION_TAG);
         Value * const blocksPerStride = b->CreateMul(streamCount, strideCount);
-
 
         Value * const offset = b->CreateMul(last, strideCount);
         Value * basePtr = b->getInputStreamBlockPtr(CONDITION_TAG, ZERO, offset);
@@ -246,6 +183,24 @@ void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilde
         last->addIncoming(nextIndex, checkStride);
         first->addIncoming(first, checkStride);
         state->addIncoming(nextState, checkStride);
+        for (unsigned i = 0; i < numOfInputs; ++i) {
+            if (initialProcessedInputItems[i]) {
+                PHINode * const inputPhi = cast<PHINode>(mProcessedInputItems[i]);
+                inputPhi->addIncoming(inputPhi, checkStride);
+            }
+            PHINode * const accessiblePhi = mAccessibleInputItemPhi[i];
+            accessiblePhi->addIncoming(accessiblePhi, checkStride);
+        }
+
+        for (unsigned i = 0; i < numOfOutputs; ++i) {
+            if (initialProducedOutputItems[i]) {
+                PHINode * const outputPhi = cast<PHINode>(mProducedOutputItems[i]);
+                outputPhi->addIncoming(outputPhi, checkStride);
+            }
+            PHINode * const writablePhi = mWritableOrConsumedOutputItemPhi[i];
+            writablePhi->addIncoming(writablePhi, checkStride);
+        }
+
         b->CreateLikelyCondBr(checkNextStride, loopCond, processStrides);
 
         // Process every stride between [first, index)
@@ -270,10 +225,139 @@ void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilde
     callKernel(b, mFalseKernel, first, last, terminatedPhi);
     b->CreateBr(mergePaths);
 
-
     b->SetInsertPoint(mergePaths);
+    last->addIncoming(last, mergePaths);
+    first->addIncoming(last, mergePaths);
+    state->addIncoming(b->getFalse(), mergePaths);
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        const Binding & input = mInputStreamSets[i];
+        Value * updatedInputCount = nullptr;
+        if (isParamConstant(input)) {
+            Value * const itemCount = getItemCountIncrement(b, input, first, last);
+            PHINode * const inputPhi = cast<PHINode>(mProcessedInputItems[i]);
+            updatedInputCount = b->CreateAdd(inputPhi, itemCount);
+            inputPhi->addIncoming(updatedInputCount, mergePaths);
+        }
+        PHINode * const accessiblePhi = mAccessibleInputItemPhi[i];
+        if (updatedInputCount == nullptr) {
+            updatedInputCount = b->CreateLoad(mProducedOutputItems[i]);
+        }
+        Value * const remaining = b->CreateSub(accessiblePhi, updatedInputCount);
+        accessiblePhi->addIncoming(remaining, mergePaths);
+    }
 
-#endif
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        const Binding & output = mOutputStreamSets[i];
+        Value * updatedOutputCount = nullptr;
+        if (isParamConstant(output)) {
+            Value * const itemCount = getItemCountIncrement(b, output, first, last);
+            PHINode * const outputPhi = cast<PHINode>(mProducedOutputItems[i]);
+            updatedOutputCount = b->CreateAdd(outputPhi, itemCount);
+            outputPhi->addIncoming(updatedOutputCount, mergePaths);
+        }
+        PHINode * const writablePhi = mWritableOrConsumedOutputItemPhi[i];
+        if (isLocalBuffer(output)) {
+            writablePhi->addIncoming(writablePhi, mergePaths);
+        } else {
+            if (updatedOutputCount == nullptr) {
+                updatedOutputCount = b->CreateLoad(mProducedOutputItems[i]);
+            }
+            Value * const remaining = b->CreateSub(writablePhi, updatedOutputCount);
+            writablePhi->addIncoming(remaining, mergePaths);
+        }
+    }
+
+    Value * const lastStride = b->CreateICmpNE(last, mNumOfStrides);
+    Value * const finished = b->CreateOr(lastStride, terminatedPhi);
+    b->CreateLikelyCondBr(finished, exit, loopCond);
+
+    b->SetInsertPoint(exit);
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief callKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
+                                    const Kernel * const kernel,
+                                    Value * const first, Value * const last,
+                                    PHINode * const terminatedPhi) {
+
+    std::vector<Value *> args;
+    args.reserve(mCurrentMethod->arg_size());
+    args.push_back(kernel->getHandle()); // handle
+    args.push_back(b->CreateSub(last, first)); // numOfStrides
+    const auto numOfInputs = kernel->getNumOfStreamInputs();
+    for (unsigned i = 0; i < numOfInputs; i++) {
+
+        const Binding & input = kernel->getInputStreamSetBinding(i);
+        const auto & buffer = mStreamSetInputBuffers[i];
+        // logical base input address
+        args.push_back(buffer->getBaseAddress(b.get()));
+        // processed input items
+        args.push_back(mProcessedInputItems[i]);
+        // accessible input items (after non-deferred processed item count)
+        args.push_back(mAccessibleInputItemPhi[i]);
+        // TODO: What if one of the branches requires this but the other doesn't?
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+            args.push_back(b->CreateGEP(mPopCountRateArray[i], first));
+        }
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+            args.push_back(b->CreateGEP(mNegatedPopCountRateArray[i], first));
+        }
+    }
+
+    const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        const Binding & output = kernel->getOutputStreamSetBinding(i);
+        if (!isLocalBuffer(output)) {
+            const auto & buffer = mStreamSetOutputBuffers[i];
+            args.push_back(buffer->getBaseAddress(b.get()));
+        }
+        args.push_back(mProducedOutputItems[i]);
+        args.push_back(mWritableOrConsumedOutputItemPhi[i]);
+    }
+
+    Value * terminated = b->CreateCall(kernel->getDoSegmentFunction(b->getModule()), args);
+    if (terminatedPhi) {
+        if (!kernel->canSetTerminateSignal()) {
+            terminated = b->getFalse();
+        }
+        terminatedPhi->addIncoming(terminated, b->GetInsertBlock());
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getItemCountIncrement
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * OptimizationBranch::getItemCountIncrement(const std::unique_ptr<KernelBuilder> & b, const Binding & binding,
+                                                  Value * const first, Value * const last) const {
+
+    const ProcessingRate & rate = binding.getRate();
+    if (rate.isFixed()) {
+        Constant * const strideLength = b->getSize(ceiling(getUpperBound(binding) * getStride()));
+        Value * const numOfStrides = b->CreateSub(last, first);
+        return b->CreateMul(numOfStrides, strideLength);
+    } else { assert (rate.isPopCount() || rate.isNegatedPopCount());
+        Port refPort;
+        unsigned refIndex = 0;
+        std::tie(refPort, refIndex) = getStreamPort(rate.getReference());
+        assert (refPort == Port::Input);
+        Value * array = nullptr;
+        if (rate.isNegatedPopCount()) {
+            array = mNegatedPopCountRateArray[refIndex];
+        } else {
+            array = mPopCountRateArray[refIndex];
+        }
+        Constant * const ONE = b->getSize(1);
+        Value * const currentIndex = b->CreateSub(last, ONE);
+        Value * const currentSum = b->CreateLoad(b->CreateGEP(array, currentIndex));
+        Value * const priorIndex = b->CreateSub(first, ONE);
+        Value * const priorSum = b->CreateLoad(b->CreateGEP(array, priorIndex));
+        return b->CreateSub(currentSum, priorSum);
+    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

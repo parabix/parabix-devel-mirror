@@ -15,31 +15,8 @@ namespace kernel {
 
 using Port = Kernel::Port;
 
-inline Value * KernelBuilder::getScalarFieldPtr(Value * const handle, Value * const index) {
-    assert ("handle cannot be null" && handle);
-    assert ("index cannot be null" && index);
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CreateAssert(handle, "getScalarFieldPtr: handle cannot be null!");
-    }
-    #ifndef NDEBUG
-    const Function * const handleFunction = isa<Argument>(handle) ? cast<Argument>(handle)->getParent() : cast<Instruction>(handle)->getParent()->getParent();
-    const Function * const builderFunction = GetInsertBlock()->getParent();
-    assert ("handle is not from the current function." && handleFunction == builderFunction);
-    #endif
-    return CreateGEP(handle, {getInt32(0), index});
-}
-
-inline Value * KernelBuilder::getScalarFieldPtr(Value * const handle, const std::string & fieldName) {
-    ConstantInt * const index = getInt32(mKernel->getScalarIndex(fieldName));
-    return getScalarFieldPtr(handle, index);
-}
-
-Value * KernelBuilder::getScalarFieldPtr(Value * const index) {
-    return getScalarFieldPtr(mKernel->getHandle(), index);
-}
-
 Value * KernelBuilder::getScalarFieldPtr(const StringRef fieldName) {
-    return getScalarFieldPtr(mKernel->getHandle(), fieldName);
+    return mKernel->getScalarFieldPtr(*this, fieldName);
 }
 
 Value * KernelBuilder::getScalarField(const StringRef fieldName) {

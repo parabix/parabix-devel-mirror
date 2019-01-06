@@ -69,12 +69,16 @@ public:
 
 public:
 
-    enum class ScalarType { Input, Output, Internal };
+    enum class ScalarType { Input, Output, Internal, Local };
 
     struct ScalarField {
-        ScalarType    type;
-        unsigned      index;
-        ScalarField(const ScalarType type, const unsigned index) : type(type), index(index) { }
+        ScalarType    Type;
+        unsigned      Index;
+
+        ScalarField(const ScalarType type, const unsigned index)
+        : Type(type), Index(index) {
+
+        }
         constexpr ScalarField(const ScalarField & other) = default;
         ScalarField & operator=(ScalarField && other) = default;
     };
@@ -143,6 +147,8 @@ public:
     virtual bool hasSignature() const { return true; }
 
     virtual bool isCachable() const { return false; }
+
+    bool isStateless() const;
 
     unsigned getStride() const { return mStride; }
 
@@ -269,8 +275,8 @@ public:
 
     void setInputScalar(const llvm::StringRef name, Scalar * value) {
         const auto & field = getScalarField(name);
-        assert(field.type == ScalarType::Input);
-        setInputScalarAt(field.index, value);
+        assert(field.Type == ScalarType::Input);
+        setInputScalarAt(field.Index, value);
     }
 
     LLVM_READNONE unsigned getNumOfScalarInputs() const {
@@ -302,8 +308,8 @@ public:
 
     void setOutputScalar(const llvm::StringRef name, Scalar * value) {
         const auto & field = getScalarField(name);
-        assert(field.type == ScalarType::Output);
-        setOutputScalarAt(field.index, value);
+        assert(field.Type == ScalarType::Output);
+        setOutputScalarAt(field.Index, value);
     }
 
     LLVM_READNONE unsigned getNumOfScalarOutputs() const {
@@ -311,6 +317,8 @@ public:
     }
 
     void addInternalScalar(llvm::Type * type, const llvm::StringRef name);
+
+    void addLocalScalar(llvm::Type * type, const llvm::StringRef name);
 
     llvm::Value * getHandle() const {
         return mHandle;
@@ -387,8 +395,6 @@ protected:
 
     LLVM_READNONE std::string getDefaultFamilyName() const;
 
-    LLVM_READNONE unsigned getScalarIndex(const llvm::StringRef name) const;
-
     virtual void addInternalKernelProperties(const std::unique_ptr<KernelBuilder> &) { }
 
     void addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b);
@@ -443,8 +449,6 @@ protected:
         return mAvailableInputItems[index];
     }
 
-    llvm::Value * getPopCountRateItemCount(const std::unique_ptr<KernelBuilder> & b, const ProcessingRate & rate, llvm::Value * const strideIndex);
-
     LLVM_READNONE bool canSetTerminateSignal() const {
         return hasAttribute(Attribute::KindId::CanTerminateEarly) || hasAttribute(Attribute::KindId::MustExplicitlyTerminate);
     }
@@ -487,6 +491,8 @@ protected:
 
 private:
 
+    void initializeLocalScalarValues(const std::unique_ptr<KernelBuilder> & b);
+
     void callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b);
 
     void callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b);
@@ -498,6 +504,8 @@ private:
     void addStreamToMap(const llvm::StringRef name, const Port port, const unsigned index);
 
     LLVM_READNONE const ScalarField & getScalarField(const llvm::StringRef name) const;
+
+    llvm::Value * getScalarFieldPtr(KernelBuilder & b, const llvm::StringRef name) const;
 
     void addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b);
 
@@ -517,9 +525,11 @@ protected:
 
     Bindings                        mInputStreamSets;
     Bindings                        mOutputStreamSets;
+
     Bindings                        mInputScalars;
     Bindings                        mOutputScalars;
     Bindings                        mInternalScalars;
+    Bindings                        mLocalScalars;
 
     llvm::Function *                mCurrentMethod;
     unsigned                        mStride;
@@ -527,6 +537,8 @@ protected:
     llvm::Value *                   mTerminationSignalPtr;
     llvm::Value *                   mIsFinal;
     llvm::Value *                   mNumOfStrides;
+
+    std::vector<llvm::Value *>      mLocalScalarPtr;
 
     std::vector<llvm::Value *>      mProcessedInputItemPtr;
     std::vector<llvm::Value *>      mAccessibleInputItems;
@@ -657,6 +669,8 @@ private:
     void annotateInputBindingsWithPopCountArrayAttributes();
 
     void incrementCountableItemCounts(const std::unique_ptr<KernelBuilder> & b);
+
+    llvm::Value * getPopCountRateItemCount(const std::unique_ptr<KernelBuilder> & b, const ProcessingRate & rate);
 
     void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
 

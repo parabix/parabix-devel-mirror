@@ -463,8 +463,7 @@ Value * PipelineCompiler::getIndividualPopCountArray(BuilderRef b, const unsigne
     indices[2] = b->getInt32(BASE_OFFSET_INDEX);
     Value * const baseOffset = b->CreateLoad(b->CreateGEP(mPopCountState, indices));
     Value * const processed = mAlreadyProcessedPhi[inputPort];
-    Constant * const LOG2_COUNT_WIDTH = getLog2BlockWidth(b);
-    Value * const processedOffset = b->CreateLShr(processed, LOG2_COUNT_WIDTH);
+    Value * const processedOffset = b->CreateLShr(processed, getLog2BlockWidth(b));
     Value * const offset = b->CreateSub(processedOffset, baseOffset);
     return b->CreateGEP(array, offset);
 }
