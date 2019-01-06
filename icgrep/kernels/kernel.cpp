@@ -114,11 +114,6 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
         }
     }
 
-    // We compile in a 64-bit CPU cycle counter into every kernel.   It will remain unused
-    // in normal execution, but when codegen::EnableCycleCounter is specified, pipelines
-    // will be able to add instrumentation to cached modules without recompilation.
-    addInternalScalar(b->getInt64Ty(), CYCLECOUNT_SCALAR);
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

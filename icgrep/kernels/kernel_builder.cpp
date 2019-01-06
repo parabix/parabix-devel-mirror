@@ -27,10 +27,6 @@ void KernelBuilder::setScalarField(const StringRef fieldName, Value * const valu
     CreateStore(value, getScalarFieldPtr(fieldName));
 }
 
-Value * KernelBuilder::getCycleCountPtr() {
-    return getScalarFieldPtr(CYCLECOUNT_SCALAR);
-}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getProcessedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */

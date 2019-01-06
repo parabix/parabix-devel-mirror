@@ -57,7 +57,6 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
 
     const auto name = makeKernelName(kernelIndex);
 
-//    mPipelineKernel->addInternalScalar(sizeTy, name + TERMINATION_SIGNAL_SUFFIX);
     mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX);
 
     // TODO: non deferred item count for fixed rates could be calculated from total # of segments.
@@ -79,6 +78,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
     }
 
+    addInternalKernelCycleCountProperties(b, kernelIndex);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

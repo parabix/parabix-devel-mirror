@@ -263,6 +263,9 @@ Kernel * PipelineBuilder::makeKernel() {
     raw_string_ostream out(signature);
 
     out << 'P' << mNumOfThreads;
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
+        out << "+CYC";
+    }
     for (auto i : ordering) {
         if (LLVM_LIKELY(i < numOfKernels)) {
             const auto & k = mKernels[i];

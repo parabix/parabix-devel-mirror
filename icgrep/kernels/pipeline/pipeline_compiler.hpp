@@ -156,6 +156,7 @@ const static std::string TERMINATION_PREFIX = "@TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IC";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".ICD";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
+const static std::string CYCLE_COUNT_SUFFIX = ".CYC";
 
 class PipelineCompiler {
 public:
@@ -354,9 +355,11 @@ protected:
 
 // cycle counter functions
 
+    void addInternalKernelCycleCountProperties(BuilderRef b, const unsigned kernel);
     void startOptionalCycleCounter(BuilderRef b);
     void updateOptionalCycleCounter(BuilderRef b);
     void printOptionalCycleCounter(BuilderRef b);
+    const Binding & selectPrincipleCycleCountBinding(const unsigned i) const;
 
 // analysis functions
 

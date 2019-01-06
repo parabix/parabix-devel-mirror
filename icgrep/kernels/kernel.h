@@ -34,7 +34,6 @@ namespace llvm { class Value; }
 class BaseDriver;
 
 const static std::string BUFFER_HANDLE_SUFFIX = "_buffer";
-const static std::string CYCLECOUNT_SCALAR = "CPUcycles";
 
 namespace kernel {
 

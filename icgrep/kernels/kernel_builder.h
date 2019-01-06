@@ -48,8 +48,6 @@ public:
 
     void setTerminationSignal(llvm::Value * const value);
 
-    llvm::Value * getCycleCountPtr();
-
     // Run-time access of Kernel State and parameters of methods for
     // use in implementing kernels.
 
