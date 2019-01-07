@@ -64,7 +64,7 @@ const codepoint_t Hangul_TBase = 0x11A7;
 const codepoint_t Hangul_TMax = 0x11C2;
 const unsigned Hangul_TCount = 28;
 const unsigned Hangul_NCount = 588;
-const unsigned Hangul_SCount = 11172;
+//const unsigned Hangul_SCount = 11172;
 
 
 typedef std::pair<codepoint_t, std::vector<unsigned>> MatchResult_t;
@@ -84,8 +84,8 @@ public:
         sUCobj(cast<StringPropertyObject>(property_object_table[suc])),
         sLCobj(cast<StringPropertyObject>(property_object_table[slc])),
         ccc0set(cccObj->GetCodepointSet(CCC_ns::NR)),
-        selfUC(std::move(sUCobj->GetReflexiveSet())),
-        selfLC(std::move(sLCobj->GetReflexiveSet()))
+        selfUC(sUCobj->GetReflexiveSet()),
+        selfLC(sLCobj->GetReflexiveSet())
         {}
 protected:
     re::RE * transformSeq(re::Seq * seq) override;
