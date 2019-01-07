@@ -46,7 +46,7 @@ public:
     void * finalizeObject(llvm::Function * mainMethod) override;
 
     bool hasExternalFunction(const llvm::StringRef functionName) const override;
-    
+
     llvm::ModulePass * createTracePass(kernel::KernelBuilder * kb, llvm::StringRef to_trace);
 
 
@@ -54,7 +54,7 @@ private:
 
     std::string getMangledName(std::string s);
 
-    llvm::legacy::PassManager preparePassManager();
+    void preparePassManager();
 
     llvm::Function * addLinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const override;
 
@@ -66,6 +66,7 @@ private:
     #else
     llvm::ExecutionEngine *                                 mEngine;
     #endif
+    std::unique_ptr<llvm::legacy::PassManager>              mPassManager;
     std::unique_ptr<llvm::raw_fd_ostream>                   mUnoptimizedIROutputStream;
     std::unique_ptr<llvm::raw_fd_ostream>                   mIROutputStream;
     std::unique_ptr<llvm::raw_fd_ostream>                   mASMOutputStream;

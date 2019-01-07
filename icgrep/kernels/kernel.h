@@ -147,7 +147,12 @@ public:
 
     virtual bool isCachable() const { return false; }
 
-    bool isStateless() const;
+    LLVM_READNONE bool isStateful() const {
+        if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
+            llvm_unreachable("kernel state must be constructed prior to calling isStateful");
+        }
+        return !mKernelStateType->isEmptyTy();
+    }
 
     unsigned getStride() const { return mStride; }
 

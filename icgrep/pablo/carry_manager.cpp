@@ -196,8 +196,11 @@ void CarryManager::initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder
     assert(!mCarryMetadata.empty());
     mCarryInfo = &mCarryMetadata[0];
     assert (!mCarryInfo->hasSummary());
-
-    mCurrentFrame = b->getScalarFieldPtr("carries");
+    if (LLVM_LIKELY(mKernel->isStateful())) {
+        mCurrentFrame = b->getScalarFieldPtr("carries");
+    } else {
+        mCurrentFrame = nullptr;
+    }
     mCurrentFrameIndex = 0;
     mCarryScopes = 0;
     mCarryScopeIndex.push_back(0);
@@ -210,7 +213,7 @@ void CarryManager::initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder
 
     mCarrySummaryStack.push_back(Constant::getNullValue(carryTy));
 
-    if (mHasLoop) {        
+    if (mHasLoop) {
         mLoopSelector = b->getScalarField("selector");
         mNextLoopSelector = b->CreateXor(mLoopSelector, ConstantInt::get(mLoopSelector->getType(), 1));
     }
@@ -229,7 +232,7 @@ void CarryManager::finalizeCodeGen(const std::unique_ptr<kernel::KernelBuilder> 
         idx = b->CreateAdd(idx, b->getSize(1));
         b->setScalarField("CarryBlockIndex", idx);
     }
-    assert (mCarryFrameStack.empty());    
+    assert (mCarryFrameStack.empty());
     assert ("base summary value was deleted!" && mCarrySummaryStack.size() == 1);
     assert ("base summary value was overwritten with non-zero value!" && isa<Constant>(mCarrySummaryStack[0]) && cast<Constant>(mCarrySummaryStack[0])->isNullValue());
     mCarrySummaryStack.clear();
@@ -747,7 +750,7 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
                 Value * stream = b->CreateBitCast(advanced, bitBlockTy);
                 if (LLVM_LIKELY(i == summarySize)) {
                     const auto n = bitBlockTy->getVectorNumElements();
-                    Constant * mask[n];                                        
+                    Constant * mask[n];
                     const auto m = udiv(summaryBlocks, laneWidth);
                     if (m) {
                         std::fill_n(mask, m, ConstantInt::getAllOnesValue(laneTy));
@@ -920,7 +923,7 @@ inline void CarryManager::writeCarryOutSummary(const std::unique_ptr<kernel::Ker
  * @brief addToCarryOutSummary
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void CarryManager::addToCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & b, Value * const value) {
-    assert ("cannot add null summary value!" && value);    
+    assert ("cannot add null summary value!" && value);
     assert ("summary stack is empty!" && !mCarrySummaryStack.empty());
     assert (mCarryInfo->hasSummary());
     mCarrySummaryStack.back() = b->CreateOr(value, mCarrySummaryStack.back());

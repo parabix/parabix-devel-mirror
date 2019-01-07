@@ -7,7 +7,7 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelCycleCountProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addInternalKernelCycleCountProperties(BuilderRef b, const unsigned kernel) {
+inline void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned kernel) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         const auto prefix = makeKernelName(kernel);
         mPipelineKernel->addInternalScalar(b->getInt64Ty(), prefix + CYCLE_COUNT_SUFFIX);

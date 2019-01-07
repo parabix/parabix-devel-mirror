@@ -18,13 +18,14 @@ inline void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index
     assert (index >= mFirstKernel && index < mLastKernel);
     mKernelIndex = index;
     mKernel = mPipeline[index];
-    assert (mKernel);
     b->setKernel(mPipelineKernel);
-    Value * handle = b->getScalarField(makeKernelName(index));
-    if (mKernel->hasFamilyName()) {
-        handle = b->CreateBitCast(handle, mKernel->getKernelType()->getPointerTo());
+    if (LLVM_LIKELY(mKernel->isStateful())) {
+        Value * handle = b->getScalarField(makeKernelName(index));
+        if (mKernel->hasFamilyName()) {
+            handle = b->CreateBitCast(handle, mKernel->getKernelType()->getPointerTo());
+        }
+        mKernel->setHandle(b, handle);
     }
-    mPipeline[index]->setHandle(b, handle);
     b->setKernel(mKernel);
 }
 
@@ -437,7 +438,9 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     std::vector<Value *> args;
     args.reserve((numOfInputs + numOfOutputs) * 4 + 2);
-    args.push_back(mKernel->getHandle());
+    if (LLVM_LIKELY(mKernel->isStateful())) {
+        args.push_back(mKernel->getHandle());
+    }
     args.push_back(mNumOfLinearStrides);
     for (unsigned i = 0; i < numOfInputs; ++i) {
 

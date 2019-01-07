@@ -56,19 +56,13 @@ enum class BufferType : unsigned {
 };
 
 struct BufferNode {
-    Value *             TotalItems;
-
-    StreamSetBuffer *   Buffer;
-
-    RateValue           Lower;
-    RateValue           Upper;
-
-    unsigned            Overflow;
-    unsigned            Fasimile;
-
-    BufferType          Type;
-
-    BufferNode() : TotalItems(nullptr), Buffer(nullptr), Lower(), Upper(), Overflow(0), Fasimile(0), Type(BufferType::Internal) {}
+    Value *             TotalItems = nullptr;
+    StreamSetBuffer *   Buffer = nullptr;
+    RateValue           Lower{};
+    RateValue           Upper{};
+    unsigned            Overflow = 0;
+    unsigned            Fasimile = 0;
+    BufferType          Type = BufferType::Internal;
 };
 
 struct BufferRateData {
@@ -177,6 +171,7 @@ protected:
     void addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex);
     void acquireCurrentSegment(BuilderRef b);
     void releaseCurrentSegment(BuilderRef b);
+    LLVM_READNONE bool requiresSynchronization(const unsigned kernelIndex) const;
 
 // main pipeline functions
 
@@ -355,7 +350,7 @@ protected:
 
 // cycle counter functions
 
-    void addInternalKernelCycleCountProperties(BuilderRef b, const unsigned kernel);
+    void addCycleCounterProperties(BuilderRef b, const unsigned kernel);
     void startOptionalCycleCounter(BuilderRef b);
     void updateOptionalCycleCounter(BuilderRef b);
     void printOptionalCycleCounter(BuilderRef b);

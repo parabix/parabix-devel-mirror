@@ -365,7 +365,7 @@ add_custom_target (abc_test
 
 add_custom_target (check
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-  DEPENDS icgrep u8u16 u32u8 base64 editd abc_gen)
+  DEPENDS icgrep u8u16 u32u8 base64 editd abc_gen idisa_test)
 
 add_custom_target (perf_icgrep
   COMMAND python2 perf.py icgrep

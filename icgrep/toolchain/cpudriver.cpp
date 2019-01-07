@@ -66,6 +66,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
 #ifndef ORCJIT
 , mEngine(nullptr)
 #endif
+, mPassManager(nullptr)
 , mUnoptimizedIROutputStream(nullptr)
 , mIROutputStream(nullptr)
 , mASMOutputStream(nullptr) {
@@ -162,9 +163,11 @@ std::string CPUDriver::getMangledName(std::string s) {
     #endif
 }
 
-inline legacy::PassManager CPUDriver::preparePassManager() {
+inline void CPUDriver::preparePassManager() {
 
-    legacy::PassManager PM;
+    if (mPassManager) return;
+
+    mPassManager = make_unique<legacy::PassManager>();
 
     PassRegistry * Registry = PassRegistry::getPassRegistry();
     initializeCore(*Registry);
@@ -180,26 +183,26 @@ inline legacy::PassManager CPUDriver::preparePassManager() {
                 mUnoptimizedIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
             }
         }
-        PM.add(createPrintModulePass(*mUnoptimizedIROutputStream));
+        mPassManager->add(createPrintModulePass(*mUnoptimizedIROutputStream));
     }
     if (IN_DEBUG_MODE || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
-        PM.add(createVerifierPass());
+        mPassManager->add(createVerifierPass());
     }
-    PM.add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
-    PM.add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
-    PM.add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
-    PM.add(createEarlyCSEPass());                   // Simple common subexpression elimination pass
-    PM.add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.
-    PM.add(createReassociatePass());                // Canonicalizes commutative expressions
-    PM.add(createGVNPass());                        // Global value numbering redundant expression elimination pass
-    PM.add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
+    mPassManager->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
+    mPassManager->add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
+    mPassManager->add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
+    mPassManager->add(createEarlyCSEPass());                   // Simple common subexpression elimination pass
+    mPassManager->add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.
+    mPassManager->add(createReassociatePass());                // Canonicalizes commutative expressions
+    mPassManager->add(createGVNPass());                        // Global value numbering redundant expression elimination pass
+    mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        PM.add(createRemoveRedundantAssertionsPass());
-        PM.add(createDeadCodeEliminationPass());
-        PM.add(createCFGSimplificationPass());
+        mPassManager->add(createRemoveRedundantAssertionsPass());
+        mPassManager->add(createDeadCodeEliminationPass());
+        mPassManager->add(createCFGSimplificationPass());
     }
     if (LLVM_UNLIKELY(!codegen::TraceOption.empty())) {
-        PM.add(createTracePass(iBuilder.get(), codegen::TraceOption));
+        mPassManager->add(createTracePass(iBuilder.get(), codegen::TraceOption));
     }
     if (LLVM_UNLIKELY(codegen::ShowIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
@@ -210,7 +213,7 @@ inline legacy::PassManager CPUDriver::preparePassManager() {
                 mIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
             }
         }
-        PM.add(createPrintModulePass(*mIROutputStream));
+        mPassManager->add(createPrintModulePass(*mIROutputStream));
     }
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
@@ -220,18 +223,16 @@ inline legacy::PassManager CPUDriver::preparePassManager() {
         } else {
             mASMOutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
         }
-        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(PM, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
             report_fatal_error("LLVM error: could not add emit assembly pass");
         }
     }
     #endif
-
-    return PM;
 }
 
 void CPUDriver::generateUncachedKernels() {
     if (mUncachedKernel.empty()) return;
-    auto PM = preparePassManager();
+    preparePassManager();
     for (auto & kernel : mUncachedKernel) {
         kernel->prepareKernel(iBuilder);
     }
@@ -240,7 +241,7 @@ void CPUDriver::generateUncachedKernels() {
         kernel->generateKernel(iBuilder);
         Module * const module = kernel->getModule(); assert (module);
         module->setTargetTriple(mMainModule->getTargetTriple());
-        PM.run(*module);
+        mPassManager->run(*module);
         mCachedKernel.emplace_back(kernel.release());
     }
     mUncachedKernel.clear();
@@ -324,7 +325,7 @@ class TracePass : public ModulePass {
 public:
     static char ID;
     TracePass(kernel::KernelBuilder * kb, StringRef to_trace) : ModulePass(ID), iBuilder(kb), mToTrace(to_trace) { }
-    
+
     bool addTraceStmt(BasicBlock * BB, BasicBlock::iterator to_trace, BasicBlock::iterator insert_pt) {
         bool modified = false;
         Type * t = (*to_trace).getType();
@@ -341,7 +342,7 @@ public:
         }
         return modified;
     }
-    
+
     virtual bool runOnModule(Module &M) override;
 private:
     kernel::KernelBuilder * iBuilder;
@@ -384,4 +385,4 @@ bool TracePass::runOnModule(Module & M) {
 ModulePass * CPUDriver::createTracePass(kernel::KernelBuilder * kb, StringRef to_trace) {
     return new TracePass(iBuilder.get(), to_trace);
 }
-                    
+

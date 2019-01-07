@@ -15,7 +15,6 @@
 
 #warning the pipeline ordering should be canonicalized to ensure that when multiple kernels could be scheduled the same one will always be chosen.
 
-
 using namespace llvm;
 using namespace boost;
 using namespace boost::container;
@@ -28,13 +27,14 @@ namespace kernel {
  * @brief compile()
  ** ------------------------------------------------------------------------------------------------------------- */
 void * ProgramBuilder::compile() {
-    PipelineKernel * const pk =
-        cast<PipelineKernel>(makeKernel());
+    // generate any nested kernels
+    mDriver.generateUncachedKernels();
+    // generate the actual pipeline (unless we can extract it from the cache)
+    PipelineKernel * const pk = cast<PipelineKernel>(makeKernel());
     pk->initializeBindings(mDriver);
     mDriver.addKernel(pk);
     mDriver.generateUncachedKernels();
-    Function * const main =
-        addOrDeclareMainFunction(pk);
+    Function * const main = addOrDeclareMainFunction(pk);
     return mDriver.finalizeObject(main);
 }
 
@@ -323,7 +323,9 @@ Kernel * PipelineBuilder::makeKernel() {
             Kernel * const k = mKernels[i];
             if (k->hasFamilyName()) {
                 const auto kn = PipelineKernel::makeKernelName(k, index[i] + 1);
-                addInputScalar(addrPtrTy, kn);
+                if (LLVM_LIKELY(k->isStateful())) {
+                    addInputScalar(addrPtrTy, kn);
+                }
                 addInputScalar(addrPtrTy, kn + INITIALIZE_FUNCTION_POINTER_SUFFIX);
                 addInputScalar(addrPtrTy, kn + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
                 addInputScalar(addrPtrTy, kn + FINALIZE_FUNCTION_POINTER_SUFFIX);

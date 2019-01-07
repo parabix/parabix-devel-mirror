@@ -146,8 +146,8 @@ void Kernel::addStreamToMap(const StringRef name, const Port port, const unsigne
  * @brief addKernelDeclarations
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
-    if (mKernelStateType == nullptr) {
-        throw std::runtime_error("Kernel state definition " + getName() + " has not been finalized.");
+    if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
+        llvm_unreachable("Kernel state must be constructed prior to calling addKernelDeclarations");
     }
     addInitializeDeclaration(b);
     addDoSegmentDeclaration(b);
@@ -161,7 +161,9 @@ void Kernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
 void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) {
 
     std::vector<Type *> params;
-    params.push_back(mKernelStateType->getPointerTo());
+    if (LLVM_LIKELY(isStateful())) {
+        params.push_back(mKernelStateType->getPointerTo());
+    }
     for (const Binding & binding : mInputScalars) {
         params.push_back(binding.getType());
     }
@@ -171,12 +173,14 @@ void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) 
     initFunc->setCallingConv(CallingConv::C);
     initFunc->setDoesNotThrow();
     auto args = initFunc->arg_begin();
-    args->setName("self");
+    if (LLVM_LIKELY(isStateful())) {
+        (args++)->setName("handle");
+    }
     for (const Binding & binding : mInputScalars) {
-        (++args)->setName(binding.getName());
+        (args++)->setName(binding.getName());
     }
 
-    assert (std::next(args) == initFunc->arg_end());
+    assert (args == initFunc->arg_end());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -189,13 +193,17 @@ void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> &
     mCurrentMethod = getInitFunction(b->getModule());
     b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
     auto args = mCurrentMethod->arg_begin();
-    setHandle(b, &*args);
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mHandle, CBuilder::Protect::WRITE);
+    if (LLVM_LIKELY(isStateful())) {
+        setHandle(b, &*(args++));
     }
-    b->CreateStore(ConstantAggregateZero::get(mKernelStateType), getHandle());
+    if (LLVM_LIKELY(isStateful())) {
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
+            b->CreateMProtect(mHandle, CBuilder::Protect::WRITE);
+        }
+        b->CreateStore(ConstantAggregateZero::get(mKernelStateType), mHandle);
+    }
     for (const auto & binding : mInputScalars) {
-        b->setScalarField(binding.getName(), &*(++args));
+        b->setScalarField(binding.getName(), &*(args++));
     }
     const auto numOfOutputs = mOutputStreamSets.size();
     for (unsigned i = 0; i < numOfOutputs; i++) {
@@ -210,7 +218,7 @@ void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> &
     b->CreateStore(b->getFalse(), mTerminationSignalPtr);
     initializeLocalScalarValues(b);
     generateInitializeMethod(b);
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect) && isStateful())) {
         b->CreateMProtect(mHandle, CBuilder::Protect::READ);
     }
     b->CreateRet(b->CreateLoad(mTerminationSignalPtr));
@@ -258,7 +266,9 @@ void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
 
     std::vector<Type *> params;
     params.reserve(2 + mInputStreamSets.size() + mOutputStreamSets.size());
-    params.push_back(mKernelStateType->getPointerTo());  // handle
+    if (LLVM_LIKELY(isStateful())) {
+        params.push_back(mKernelStateType->getPointerTo());  // handle
+    }
     params.push_back(sizeTy); // numOfStrides
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
         Type * const bufferType = mStreamSetInputBuffers[i]->getType();
@@ -308,37 +318,39 @@ void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
     doSegment->setCallingConv(CallingConv::C);
     doSegment->setDoesNotThrow();
     auto args = doSegment->arg_begin();
-    args->setName("self");
-    (++args)->setName("numOfStrides");
+    if (LLVM_LIKELY(isStateful())) {
+        (args++)->setName("handle");
+    }
+    (args++)->setName("numOfStrides");
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
         const Binding & input = mInputStreamSets[i];
-        (++args)->setName(input.getName());
+        (args++)->setName(input.getName());
         if (LLVM_LIKELY(hasParam(input))) {
-            (++args)->setName(input.getName() + "_processed");
+            (args++)->setName(input.getName() + "_processed");
         }
-        (++args)->setName(input.getName() + "_accessible");
+        (args++)->setName(input.getName() + "_accessible");
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            (++args)->setName(input.getName() + "_popCountArray");
+            (args++)->setName(input.getName() + "_popCountArray");
         }
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            (++args)->setName(input.getName() + "_negatedPopCountArray");
+            (args++)->setName(input.getName() + "_negatedPopCountArray");
         }
     }
     for (unsigned i = 0; i < mOutputStreamSets.size(); ++i) {
         const Binding & output = mOutputStreamSets[i];
         if (LLVM_LIKELY(!isLocalBuffer(output))) {
-            (++args)->setName(output.getName());
+            (args++)->setName(output.getName());
         }
         if (LLVM_LIKELY(hasParam(output))) {
-            (++args)->setName(output.getName() + "_produced");
+            (args++)->setName(output.getName() + "_produced");
         }
         if (LLVM_LIKELY(isLocalBuffer(output))) {
-            (++args)->setName(output.getName() + "_consumed");
+            (args++)->setName(output.getName() + "_consumed");
         } else {
-            (++args)->setName(output.getName() + "_writable");
+            (args++)->setName(output.getName() + "_writable");
         }
     }
-    assert (std::next(args) == doSegment->arg_end());
+    assert (args == doSegment->arg_end());
 }
 
 
@@ -357,7 +369,9 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
     mCurrentMethod = getDoSegmentFunction(b->getModule());
     b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
     auto args = mCurrentMethod->arg_begin();
-    setHandle(b, &*(args++));
+    if (LLVM_LIKELY(isStateful())) {
+        setHandle(b, &*(args++));
+    }
     mNumOfStrides = &*(args++);
     mIsFinal = b->CreateIsNull(mNumOfStrides);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
@@ -577,14 +591,19 @@ void Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) {
             resultType = StructType::get(b->getContext(), ArrayRef<Type *>(outputType, n));
         }
     }
-    PointerType * const selfType = mKernelStateType->getPointerTo();
-    FunctionType * const terminateType = FunctionType::get(resultType, {selfType}, false);
+    std::vector<Type *> params;
+    if (LLVM_LIKELY(isStateful())) {
+        params.push_back(mKernelStateType->getPointerTo());
+    }
+    FunctionType * const terminateType = FunctionType::get(resultType, params, false);
     Function * const terminateFunc = Function::Create(terminateType, GlobalValue::ExternalLinkage, getName() + TERMINATE_SUFFIX, b->getModule());
     terminateFunc->setCallingConv(CallingConv::C);
     terminateFunc->setDoesNotThrow();
     auto args = terminateFunc->arg_begin();
-    args->setName("self");
-    assert (std::next(args) == terminateFunc->arg_end());
+    if (LLVM_LIKELY(isStateful())) {
+        (args++)->setName("handle");
+    }
+    assert (args == terminateFunc->arg_end());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -596,8 +615,11 @@ void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b
     b->setKernel(this);
     mCurrentMethod = getTerminateFunction(b->getModule());
     b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
-    auto args = mCurrentMethod->arg_begin();
-    setHandle(b, &*(args++));
+    if (LLVM_LIKELY(isStateful())) {
+        auto args = mCurrentMethod->arg_begin();
+        setHandle(b, &*(args++));
+        assert (args == mCurrentMethod->arg_end());
+    }
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mHandle,CBuilder::Protect::WRITE);
     }
@@ -612,7 +634,9 @@ void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b
     initializeLocalScalarValues(b);
     generateFinalizeMethod(b); // may be overridden by the Kernel subtype
     const auto outputs = getFinalOutputScalars(b);
-    b->CreateFree(mHandle);
+    if (LLVM_LIKELY(isStateful())) {
+        b->CreateFree(mHandle);
+    }
     mHandle = nullptr;
     if (outputs.empty()) {
         b->CreateRetVoid();
@@ -712,7 +736,7 @@ Function * Kernel::getTerminateFunction(Module * const module) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        report_fatal_error(getName() + ": cannot prepare kernel after kernel state finalized");
+        llvm_unreachable("Cannot call prepareKernel after constructing kernel state type");
     }
     if (LLVM_UNLIKELY(mStride == 0)) {
         report_fatal_error(getName() + ": stride cannot be 0");
@@ -726,7 +750,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
     mKernelStateType = mModule->getTypeByName(getName());
     if (LLVM_LIKELY(mKernelStateType == nullptr)) {
         std::vector<Type *> fields;
-        fields.reserve(mInputScalars.size() + mOutputScalars.size() + mInternalScalars.size() + 1);
+        fields.reserve(mInputScalars.size() + mOutputScalars.size() + mInternalScalars.size());
         for (const Binding & scalar : mInputScalars) {
             assert (scalar.getType());
             fields.push_back(scalar.getType());
@@ -767,12 +791,15 @@ void Kernel::addLocalScalar(Type * type, const StringRef name) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & b) {
     if (LLVM_UNLIKELY(mKernelStateType != nullptr)) {
-        report_fatal_error(getName() + ": cannot prepare kernel after kernel state finalized");
+        llvm_unreachable("Cannot call prepareCachedKernel after constructing kernel state type");
     }
     addBaseKernelProperties(b);
     mKernelStateType = getModule()->getTypeByName(getName());
+    // If we have a stateless object, the type would be optimized out of the
+    // cached IR. Consequently, we create a dummy "empty struct" to simplify
+    // the assumptions of the other Kernel functions.
     if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
-        report_fatal_error("Kernel definition for " + getName() + " was not found in the cache!");
+        mKernelStateType = StructType::get(b->getContext());
     }
     assert (isa<StructType>(mKernelStateType));
 }
@@ -821,16 +848,23 @@ std::string Kernel::getStringHash(const StringRef str) {
  * @brief createInstance
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & b) {
-    assert (mKernelStateType && "cannot create instance before calling prepareKernel() or prepareCachedKernel()");
-    Constant * const size = ConstantExpr::getSizeOf(mKernelStateType);
-    Value * handle = nullptr;
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        handle = b->CreateAlignedMalloc(size, b->getPageSize());
-        b->CreateMProtect(handle, size, CBuilder::Protect::READ);
-    } else {
-        handle = b->CreateAlignedMalloc(size, b->getCacheAlignment());
+    if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
+        llvm_unreachable("Kernel state must be constructed prior to calling createInstance");
     }
-    return b->CreatePointerCast(handle, mKernelStateType->getPointerTo());
+    if (LLVM_LIKELY(isStateful())) {
+        Constant * const size = ConstantExpr::getSizeOf(mKernelStateType);
+        Value * handle = nullptr;
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
+            handle = b->CreateAlignedMalloc(size, b->getPageSize());
+            b->CreateMProtect(handle, size, CBuilder::Protect::READ);
+        } else {
+            handle = b->CreateAlignedMalloc(size, b->getCacheAlignment());
+        }
+        return b->CreatePointerCast(handle, mKernelStateType->getPointerTo());
+    } else {
+        llvm_unreachable("createInstance should not be called on stateless kernels");
+        return nullptr;
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -893,7 +927,9 @@ const Kernel::ScalarField & Kernel::getScalarField(const StringRef name) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * Kernel::getScalarFieldPtr(KernelBuilder & b, const StringRef name) const {
     const auto & field = getScalarField(name);
-    assert (mKernelStateType);
+    if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
+        llvm_unreachable("Kernel state must be constructed prior to calling getScalarFieldPtr");
+    }
     unsigned index = field.Index;
     switch (field.Type) {
         case ScalarType::Local:
@@ -928,14 +964,6 @@ void Kernel::initializeLocalScalarValues(const std::unique_ptr<KernelBuilder> & 
             mLocalScalarPtr[index] = scalar;
         }
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isStateless
- ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::isStateless() const {
-    #warning return whether the kernel struct is zero-length; move cycle count to pipeline first.
-    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1155,7 +1183,11 @@ inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
 std::string Kernel::getDefaultFamilyName() const {
     std::string tmp;
     raw_string_ostream out(tmp);
-    out << "F";
+    if (LLVM_LIKELY(isStateful())) {
+        out << "F";
+    } else {
+        out << "L";
+    }
     out << getStride();
     AttributeSet::print(out);
     for (const Binding & input : mInputScalars) {

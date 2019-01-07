@@ -44,6 +44,7 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
         addPopCountScalarsToPipelineKernel(b, i);
+        addCycleCounterProperties(b, i);
     }
     b->setKernel(mPipelineKernel);
 }
@@ -52,33 +53,33 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex) {
-
-    IntegerType * const sizeTy = b->getSizeTy();
-
-    const auto name = makeKernelName(kernelIndex);
-
-    mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX);
-
-    // TODO: non deferred item count for fixed rates could be calculated from total # of segments.
     const Kernel * const kernel = mPipeline[kernelIndex];
-    const auto numOfInputs = kernel->getNumOfStreamInputs();
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        const Binding & input = kernel->getInputStreamSetBinding(i);
-        const auto prefix = makeBufferName(kernelIndex, input);
-        if (input.isDeferred()) {
-            mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+    if (requiresSynchronization(kernelIndex)) {
+
+        IntegerType * const sizeTy = b->getSizeTy();
+        const auto name = makeKernelName(kernelIndex);
+        mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX);
+
+        // TODO: non deferred item count for fixed rates could be calculated from total # of segments.
+        const auto numOfInputs = kernel->getNumOfStreamInputs();
+        for (unsigned i = 0; i < numOfInputs; i++) {
+            const Binding & input = kernel->getInputStreamSetBinding(i);
+            const auto prefix = makeBufferName(kernelIndex, input);
+            if (input.isDeferred()) {
+                mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+            }
+            // If we've proven we do not need synchronization then we've already proven that
+            // we can calculate the item count and num of strides from the input item counts
+            mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
         }
-        mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
-    }
 
-    const auto numOfOutputs = kernel->getNumOfStreamOutputs();
-    for (unsigned i = 0; i < numOfOutputs; i++) {
-        const Binding & output = kernel->getOutputStreamSetBinding(i);
-        const auto prefix = makeBufferName(kernelIndex, output);
-        mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+        const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+        for (unsigned i = 0; i < numOfOutputs; i++) {
+            const Binding & output = kernel->getOutputStreamSetBinding(i);
+            const auto prefix = makeBufferName(kernelIndex, output);
+                mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+        }
     }
-
-    addInternalKernelCycleCountProperties(b, kernelIndex);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -90,7 +91,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     }
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         Kernel * const kernel = mPipeline[i];
-        if (!kernel->hasFamilyName()) {
+        if (kernel->isStateful() && !kernel->hasFamilyName()) {
             Value * const handle = kernel->createInstance(b);
             b->setScalarField(makeKernelName(i), handle);
         }
@@ -99,11 +100,14 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     std::vector<Value *> args;
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         setActiveKernel(b, i);
-        args.resize(in_degree(i, mScalarDependencyGraph) + 1);
-        args[0] = mKernel->getHandle();
+        const auto hasHandle = mKernel->isStateful() ? 1U : 0U;
+        args.resize(hasHandle + in_degree(i, mScalarDependencyGraph));
+        if (LLVM_LIKELY(hasHandle != 0U)) {
+            args[0] = mKernel->getHandle();
+        }
         b->setKernel(mPipelineKernel);
         for (const auto ce : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
-            const auto j = mScalarDependencyGraph[ce] + 1;
+            const auto j = hasHandle + mScalarDependencyGraph[ce];
             const auto pe = in_edge(source(ce, mScalarDependencyGraph), mScalarDependencyGraph);
             const auto k = mScalarDependencyGraph[pe];
             const Binding & input = mPipelineKernel->getInputScalarBinding(k);
@@ -241,10 +245,15 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     printOptionalCycleCounter(b);
+    std::vector<Value *> params;
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         setActiveKernel(b, i);
         loadBufferHandles(b);
-        mScalarDependencyGraph[i] = b->CreateCall(getFinalizeFunction(b), mKernel->getHandle());
+        params.clear();
+        if (LLVM_LIKELY(mKernel->isStateful())) {
+            params.push_back(mKernel->getHandle());
+        }
+        mScalarDependencyGraph[i] = b->CreateCall(getFinalizeFunction(b), params);
     }
     releaseBuffers(b);
 }
@@ -320,25 +329,27 @@ void PipelineCompiler::writeOutputScalars(BuilderRef b, const unsigned index, st
  * segment is complete (by checking that the acquired segment number is equal to the desired segment number).
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::acquireCurrentSegment(BuilderRef b) {
+    if (LLVM_LIKELY(requiresSynchronization(mKernelIndex))) {
 
-    b->setKernel(mPipelineKernel);
-    const auto prefix = makeKernelName(mKernelIndex);
-    const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
-    const unsigned waitingOnIdx = serialize ? (mLastKernel - 1) : mKernelIndex;
-    const auto waitingOn = makeKernelName(waitingOnIdx);
-    Value * const waitingOnPtr = b->getScalarFieldPtr(waitingOn + LOGICAL_SEGMENT_SUFFIX);
-    BasicBlock * const kernelWait = b->CreateBasicBlock(prefix + "Wait", mPipelineEnd);
-    b->CreateBr(kernelWait);
+        b->setKernel(mPipelineKernel);
+        const auto prefix = makeKernelName(mKernelIndex);
+        const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
+        const unsigned waitingOnIdx = serialize ? (mLastKernel - 1) : mKernelIndex;
+        const auto waitingOn = makeKernelName(waitingOnIdx);
+        Value * const waitingOnPtr = b->getScalarFieldPtr(waitingOn + LOGICAL_SEGMENT_SUFFIX);
+        BasicBlock * const kernelWait = b->CreateBasicBlock(prefix + "Wait", mPipelineEnd);
+        b->CreateBr(kernelWait);
 
-    b->SetInsertPoint(kernelWait);
-    Value * const processedSegmentCount = b->CreateAtomicLoadAcquire(waitingOnPtr);
-    assert (processedSegmentCount->getType() == mSegNo->getType());
-    Value * const ready = b->CreateICmpEQ(mSegNo, processedSegmentCount);
-    BasicBlock * const kernelStart = b->CreateBasicBlock(prefix + "Start", mPipelineEnd);
-    b->CreateCondBr(ready, kernelStart, kernelWait);
+        b->SetInsertPoint(kernelWait);
+        Value * const processedSegmentCount = b->CreateAtomicLoadAcquire(waitingOnPtr);
+        assert (processedSegmentCount->getType() == mSegNo->getType());
+        Value * const ready = b->CreateICmpEQ(mSegNo, processedSegmentCount);
+        BasicBlock * const kernelStart = b->CreateBasicBlock(prefix + "Start", mPipelineEnd);
+        b->CreateCondBr(ready, kernelStart, kernelWait);
 
-    b->SetInsertPoint(kernelStart);
-    b->setKernel(mKernel);
+        b->SetInsertPoint(kernelStart);
+        b->setKernel(mKernel);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -347,12 +358,50 @@ void PipelineCompiler::acquireCurrentSegment(BuilderRef b) {
  * After executing the kernel, the segment number must be incremented to release the kernel for the next thread.
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::releaseCurrentSegment(BuilderRef b) {
-    b->setKernel(mPipelineKernel);
-    Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
-    const auto prefix = makeKernelName(mKernelIndex);
-    Value * const waitingOnPtr = b->getScalarFieldPtr(prefix + LOGICAL_SEGMENT_SUFFIX);
-    b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
+    if (LLVM_LIKELY(requiresSynchronization(mKernelIndex))) {
+        b->setKernel(mPipelineKernel);
+        Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
+        const auto prefix = makeKernelName(mKernelIndex);
+        Value * const waitingOnPtr = b->getScalarFieldPtr(prefix + LOGICAL_SEGMENT_SUFFIX);
+        b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
+        b->setKernel(mKernel);
+    }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief requiresSynchronization
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::requiresSynchronization(const unsigned /* kernelIndex */) const {
+    // TODO: Not quite ready yet: we need a function to calculate how many items
+    // will be processed/produced by the i-th execution of this kernel based
+    // strictly on the number of items produced by the (i-1)-th and the i-th
+    // segment for each input to this kernel. Moreover, if we have static buffers,
+    // we must statically know how many items will be consumed by any segment
+    // based only only the value of i and/or the above-mentioned information.
+    return true;
+#if 0
+    const Kernel * const kernel = mPipeline[kernelIndex];
+    if (LLVM_LIKELY(kernel->isStateful())) {
+        return true;
+    }
+    const auto numOfInputs = kernel->getNumOfStreamInputs();
+    for (unsigned i = 0; i < numOfInputs; i++) {
+        const Binding & input = kernel->getInputStreamSetBinding(i);
+        if (!input.getRate().isFixed()) {
+            return true;
+        }
+    }
+    const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < numOfOutputs; i++) {
+        const Binding & output = kernel->getOutputStreamSetBinding(i);
+        if (!output.getRate().isFixed()) {
+            return true;
+        }
+    }
+    return false;
+#endif
+}
+
 
 enum : unsigned {
     HANDLE_INDEX = 0

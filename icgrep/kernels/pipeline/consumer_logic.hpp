@@ -131,7 +131,7 @@ void PipelineCompiler::setConsumedItemCount(BuilderRef b, const unsigned bufferV
     }
     const auto pe = in_edge(bufferVertex, mConsumerGraph);
     const auto producerVertex = source(pe, mConsumerGraph);
-    const Kernel * const producer = mPipeline[producerVertex]; assert (producer->getHandle());
+    const Kernel * const producer = mPipeline[producerVertex];
     const auto outputPort = mConsumerGraph[pe];
     const Binding & output = producer->getOutputStreamSetBinding(outputPort);
     const auto prefix = makeBufferName(producerVertex, output);

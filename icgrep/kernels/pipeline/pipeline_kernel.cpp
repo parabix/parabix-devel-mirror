@@ -40,9 +40,11 @@ void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b
         for (auto & kernel : mKernels) {
             if (kernel->hasFamilyName()) {
                 kernel->addKernelDeclarations(b);
-                Value * const handle = kernel->createInstance(b);
                 PointerType * const voidPtrTy = b->getVoidPtrTy();
-                args.push_back(b->CreatePointerCast(handle, voidPtrTy));
+                if (LLVM_UNLIKELY(kernel->isStateful())) {
+                    Value * const handle = kernel->createInstance(b);
+                    args.push_back(b->CreatePointerCast(handle, voidPtrTy));
+                }
                 args.push_back(b->CreatePointerCast(kernel->getInitFunction(m), voidPtrTy));
                 args.push_back(b->CreatePointerCast(kernel->getDoSegmentFunction(m), voidPtrTy));
                 args.push_back(b->CreatePointerCast(kernel->getTerminateFunction(m), voidPtrTy));
@@ -94,8 +96,8 @@ Value * PipelineKernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & 
     } else {
         Value * result = b->CreateCall(getTerminateFunction(b->getModule()), { mHandle });
         mHandle = nullptr;
-        if (mOutputScalars.empty()) {
-            assert (!result || result->getType()->isVoidTy());
+        if (LLVM_LIKELY(mOutputScalars.empty())) {
+            assert ("pipeline termination must have output scalars or a void return type!" && result->getType()->isVoidTy());
             result = nullptr;
         }
         return result;
