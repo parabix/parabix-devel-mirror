@@ -51,6 +51,27 @@ bool has_GCB_Any(RE * r) {
     return !GCB_Any_Free_Validator().validateRE(r);
 }
 
+struct NonEmptyValidator : public RE_Validator {
+    NonEmptyValidator() : RE_Validator() {}
+    bool validateStart(const Start *) override {return false;}
+    bool validateEnd(const End *) override {return false;}
+    bool validateAssertion(const Assertion *) override {return false;}
+    bool validateName(const Name * n) override {
+        RE * defn = n->getDefinition();
+        return defn && validate(defn);
+    }
+    bool validateDiff(const Diff * d) override {return validate(d->getLH());}
+    bool validateSeq(const Seq * seq) override {
+        for (RE * e : *seq) {
+            if (validate(e)) return true;
+        }
+        return false;
+    }
+};
+   
+bool nonEmpty(const RE * r) {
+    return NonEmptyValidator().validateRE(r);
+}
 
 RE * firstSym(RE * re) {
     if (Name * name = dyn_cast<Name>(re)) {
@@ -59,13 +80,12 @@ RE * firstSym(RE * re) {
         } else {
             UndefinedNameError(name);
         }
-    } else if (isa<CC>(re) || isa<Any>(re) || isa<Start>(re) || isa<End>(re)) {
+    } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re)) {
         return re;
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         CC * cc = makeCC();
         for (auto & si : *seq) {
             RE * fi = firstSym(si);
-            if (isa<Any>(fi)) return fi;
             cc = makeCC(cc, cast<CC>(fi));
             if (!isNullable(si)) {
                 break;
@@ -76,7 +96,6 @@ RE * firstSym(RE * re) {
         CC * cc = makeCC();
         for (auto & ai : *alt) {
             RE * fi = firstSym(ai);
-            if (isa<Any>(fi)) return fi;
             cc = makeCC(cc, cast<CC>(fi));
         }
         return cc;
@@ -85,14 +104,10 @@ RE * firstSym(RE * re) {
     } else if (Diff * diff = dyn_cast<Diff>(re)) {
         RE * lh = firstSym(diff->getLH());
         RE * rh = firstSym(diff->getRH());
-        if (isa<Any>(rh)) return makeCC();
-        if (isa<Any>(lh)) lh = makeCC(0, 0x10FFFF);
         return subtractCC(cast<CC>(lh), cast<CC>(rh));
     } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
         RE * lh = firstSym(ix->getLH());
         RE * rh = firstSym(ix->getRH());
-        if (isa<Any>(lh)) return rh;
-        if (isa<Any>(rh)) return lh;
         return intersectCC(cast<CC>(lh), cast<CC>(rh));
     }
     return makeCC();
@@ -105,13 +120,12 @@ RE * finalSym(RE * re) {
         } else {
             UndefinedNameError(name);
         }
-    } else if (isa<CC>(re) || isa<Any>(re) || isa<Start>(re) || isa<End>(re)) {
+    } else if (isa<CC>(re) || isa<Start>(re) || isa<End>(re)) {
         return re;
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
         CC * cc = makeCC();
         for (auto & si : boost::adaptors::reverse(*seq)) {
             RE * fi = finalSym(si);
-            if (isa<Any>(fi)) return fi;
             cc = makeCC(cc, cast<CC>(fi));
             if (!isNullable(si)) {
                 break;
@@ -122,7 +136,6 @@ RE * finalSym(RE * re) {
         CC * cc = makeCC();
         for (auto & ai : *alt) {
             RE * fi = finalSym(ai);
-            if (isa<Any>(fi)) return fi;
             cc = makeCC(cc, cast<CC>(fi));
         }
         return cc;
@@ -131,14 +144,10 @@ RE * finalSym(RE * re) {
     } else if (Diff * diff = dyn_cast<Diff>(re)) {
         RE * lh = finalSym(diff->getLH());
         RE * rh = finalSym(diff->getRH());
-        if (isa<Any>(rh)) return makeCC();
-        if (isa<Any>(lh)) lh = makeCC(0, 0x10FFFF);
         return subtractCC(cast<CC>(lh), cast<CC>(rh));
     } else if (Intersect * ix = dyn_cast<Intersect>(re)) {
         RE * lh = finalSym(ix->getLH());
         RE * rh = finalSym(ix->getRH());
-        if (isa<Any>(lh)) return rh;
-        if (isa<Any>(rh)) return lh;
         return intersectCC(cast<CC>(lh), cast<CC>(rh));
     }
     return makeCC();
@@ -237,7 +246,7 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
     if (CC * cc = dyn_cast<CC>(re)) {
         RE_Context nextContext = cursor.ctxt;
         RE * item = cursor.ctxt.currentItem();
-        if (isZeroWidth(item) || isNullable(item)) {
+        if (!nonEmpty(item)) {
             return ContextMatchCursor{RE_Context{nullptr, nullptr, 0}, MatchResult::Possible};
         }
         RE * contextSym = nullptr;
@@ -360,7 +369,7 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
     }
     return ContextMatchCursor{cursor.ctxt, MatchResult::Possible};
 }
-
+    
 class ContextualAssertionSimplifier : public RE_Transformer {
 public:
     ContextualAssertionSimplifier() :
@@ -397,7 +406,7 @@ public:
         if (prior) {
             if (isa<Start>(prior)) {
                 return makeSeq();
-            } else if (isa<CC>(prior)) {
+            } else if (nonEmpty(prior)) {
                 return makeAlt();
             }
         }
@@ -409,7 +418,7 @@ public:
         if (following) {
             if (isa<End>(following)) {
                 return makeSeq();
-            } else if (isa<CC>(following)) {
+            } else if (nonEmpty(following)) {
                 return makeAlt();
             }
         }
