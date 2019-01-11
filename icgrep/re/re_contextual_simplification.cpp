@@ -296,7 +296,7 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
         ContextMatchCursor bestSoFar = ContextMatchCursor{cursor.ctxt, MatchResult::Fail};
         for (RE * a: *alt) {
             ContextMatchCursor a_match = ctxt_match(a, kind, cursor);
-            if (a_match.rslt == cursor.rslt) return a_match;
+            if (a_match.rslt == MatchResult::Success) return a_match;
             if (a_match.rslt == MatchResult::Possible) bestSoFar = a_match;
         }
         return bestSoFar;
