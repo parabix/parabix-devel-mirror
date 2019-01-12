@@ -9,6 +9,7 @@
 #include <re/re_cc.h>
 #include <re/re_name.h>
 #include <re/re_seq.h>
+#include <re/re_empty_set.h>
 #include <re/re_alt.h>
 #include <re/re_assertion.h>
 #include <re/re_start.h>
@@ -234,20 +235,23 @@ RE * RE_Context::currentItem() {
     return nullptr;
 }
 
-enum class MatchResult {Fail, Possible, Success};
+//enum class MatchResult {Fail, Possible, Success};
 
 struct ContextMatchCursor {
     RE_Context ctxt;
-    MatchResult rslt;
+    RE * rslt;
 };
 
 ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor cursor) {
-    if (cursor.ctxt.empty()) return ContextMatchCursor{cursor.ctxt, MatchResult::Possible};
+    if (cursor.ctxt.empty()) return ContextMatchCursor{cursor.ctxt, re};
     if (CC * cc = dyn_cast<CC>(re)) {
         RE_Context nextContext = cursor.ctxt;
         RE * item = cursor.ctxt.currentItem();
+        if (isa<Start>(item) || isa<End>(item)) {
+            return ContextMatchCursor{cursor.ctxt, makeAlt()};
+        }
         if (!nonEmpty(item)) {
-            return ContextMatchCursor{RE_Context{nullptr, nullptr, 0}, MatchResult::Possible};
+            return ContextMatchCursor{RE_Context{nullptr, nullptr, 0}, re};
         }
         RE * contextSym = nullptr;
         if (kind == Assertion::Kind::Lookbehind) {
@@ -260,44 +264,42 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
         //errs() << "assertedCC:" << Printer_RE::PrintRE(cc) << "\n";
         //errs() << "contextSym:" << Printer_RE::PrintRE(contextSym) << "\n";
         if (CC * contextCC = dyn_cast<CC>(contextSym)) {
-            if (!(*contextCC).intersects(*cc)) return ContextMatchCursor{cursor.ctxt, MatchResult::Fail};
-            if ((cursor.rslt == MatchResult::Success) && ((*contextCC).subset(*cc))) {
-                return ContextMatchCursor{nextContext, MatchResult::Success};
+            if (!(*contextCC).intersects(*cc)) return ContextMatchCursor{cursor.ctxt, makeAlt()};
+            if (isEmptySeq(cursor.rslt) && (*contextCC).subset(*cc)) {
+                return ContextMatchCursor{nextContext, makeSeq()};
             }
+            return ContextMatchCursor{nextContext, intersectCC(contextCC, cc)};
         }
-        if (isa<Start>(contextSym) || isa<End>(contextSym)) {
-            return ContextMatchCursor{cursor.ctxt, MatchResult::Fail};
-        }
-        return ContextMatchCursor{nextContext, MatchResult::Possible};
+        return ContextMatchCursor{nextContext, re};
     } else if (isa<Start>(re)) {
         if (kind == Assertion::Kind::Lookbehind) {
             RE * contextSym = finalSym(cursor.ctxt.currentItem());
             RE_Context nextContext = cursor.ctxt.priorCCorNull();
-            if (isa<Start>(contextSym)) return ContextMatchCursor{nextContext, MatchResult::Success};
+            if (isa<Start>(contextSym)) return ContextMatchCursor{nextContext, makeSeq()};
         }
-        return ContextMatchCursor{cursor.ctxt, MatchResult::Fail};
+        return ContextMatchCursor{cursor.ctxt, makeAlt()};
     } else if (isa<End>(re)) {
         if (kind == Assertion::Kind::Lookahead) {
             RE * contextSym = firstSym(cursor.ctxt.currentItem());
             RE_Context nextContext = cursor.ctxt.followingCCorNull();
-            if (isa<End>(contextSym)) return ContextMatchCursor{nextContext, MatchResult::Success};
+            if (isa<End>(contextSym)) return ContextMatchCursor{nextContext, makeSeq()};
         }
-        return ContextMatchCursor{cursor.ctxt, MatchResult::Fail};
+        return ContextMatchCursor{cursor.ctxt, makeAlt()};
     } else if (Name * n = dyn_cast<Name>(re)) {
         RE * def = n->getDefinition();
         ContextMatchCursor submatch = ctxt_match(def, kind, cursor);
-        if (submatch.rslt == MatchResult::Fail) return submatch;
+        if (isEmptySet(submatch.rslt)) return submatch;
         if (n->getType() == Name::Type::Reference) {
-            return ContextMatchCursor{submatch.ctxt, MatchResult::Possible};
+            return ContextMatchCursor{submatch.ctxt, re};
         } else {
             return submatch;
         }
     } else if (Alt * alt = dyn_cast<Alt>(re)) {
-        ContextMatchCursor bestSoFar = ContextMatchCursor{cursor.ctxt, MatchResult::Fail};
+        ContextMatchCursor bestSoFar = ContextMatchCursor{cursor.ctxt, makeAlt()};
         for (RE * a: *alt) {
             ContextMatchCursor a_match = ctxt_match(a, kind, cursor);
-            if (a_match.rslt == MatchResult::Success) return a_match;
-            if (a_match.rslt == MatchResult::Possible) bestSoFar = a_match;
+            if (isEmptySeq(a_match.rslt)) return a_match;
+            if (!isEmptySet(a_match.rslt)) bestSoFar = a_match;
         }
         return bestSoFar;
     } else if (Seq * seq = dyn_cast<Seq>(re)) {
@@ -305,15 +307,20 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
         if (kind == Assertion::Kind::Lookahead) {
             for (RE * s: *seq) {
                 working = ctxt_match(s, kind, working);
-                if (working.rslt == MatchResult::Fail) return working;
+                if (isEmptySet(working.rslt)) return working;
             }
         } else {
             for (auto i = seq->rbegin(); i != seq->rend(); ++i) {
                 working = ctxt_match(*i, kind, working);
-                if (working.rslt == MatchResult::Fail) return working;
+                if (isEmptySet(working.rslt)) return working;
             }
         }
-        return working;
+        if (isEmptySeq(working.rslt)) {
+            return working;
+        } else {
+            return ContextMatchCursor{working.ctxt, seq};
+        }
+        
     } else if (const Rep * rep = dyn_cast<Rep>(re)) {
         int lb = rep->getLB();
         int ub = rep->getUB();
@@ -321,13 +328,13 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
         ContextMatchCursor lb_cursor = cursor;
         for (int i = 0; i < lb; i++) {
             lb_cursor = ctxt_match(repeated, kind, lb_cursor);
-            if (lb_cursor.rslt == MatchResult::Fail) return lb_cursor;
+            if (isEmptySet(lb_cursor.rslt)) return lb_cursor;
         }
         if (ub == Rep::UNBOUNDED_REP) {
             ContextMatchCursor star_rslt = lb_cursor;
             for (;;) {
                 ContextMatchCursor next = ctxt_match(repeated, kind, star_rslt);
-                if (next.rslt == MatchResult::Fail) return star_rslt;
+                if (isEmptySet(next.rslt)) return star_rslt;
                 if (next.ctxt.empty()) return next;
                 star_rslt = next;
             }
@@ -335,7 +342,7 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
             ContextMatchCursor ub_cursor = lb_cursor;
             for (int i = lb; i < ub; i++) {
                 ContextMatchCursor next = ctxt_match(repeated, kind, ub_cursor);
-                if (next.rslt == MatchResult::Fail) return ub_cursor;
+                if (isEmptySet(next.rslt)) return ub_cursor;
                 if (next.ctxt.empty()) return next;
                 ub_cursor = next;
             }
@@ -344,30 +351,30 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
     } else if (const Diff * d = dyn_cast<Diff>(re)) {
         ContextMatchCursor lh_match = ctxt_match(d->getLH(), kind, cursor);
         ContextMatchCursor rh_match = ctxt_match(d->getRH(), kind, cursor);
-        if (rh_match.rslt == MatchResult::Fail) return lh_match;
-        if (rh_match.rslt == MatchResult::Success) return ContextMatchCursor{cursor.ctxt, MatchResult::Fail};
-        if (lh_match.rslt == MatchResult::Fail) return lh_match;
-        return ContextMatchCursor{lh_match.ctxt, MatchResult::Possible};
+        if (isEmptySet(rh_match.rslt)) return lh_match;
+        if (isEmptySeq(rh_match.rslt)) return ContextMatchCursor{cursor.ctxt, makeAlt()};
+        if (isEmptySet(lh_match.rslt)) return lh_match;
+        return ContextMatchCursor{lh_match.ctxt, re};
     } else if (const Intersect * x = dyn_cast<Intersect>(re)) {
         ContextMatchCursor lh_match = ctxt_match(x->getLH(), kind, cursor);
         ContextMatchCursor rh_match = ctxt_match(x->getRH(), kind, cursor);
-        if (lh_match.rslt == MatchResult::Fail) return lh_match;
-        if (rh_match.rslt == MatchResult::Fail) return rh_match;
-        if (lh_match.rslt == MatchResult::Success) return rh_match;
-        if (rh_match.rslt == MatchResult::Success) return lh_match;
+        if (isEmptySet(lh_match.rslt)) return lh_match;
+        if (isEmptySet(rh_match.rslt)) return rh_match;
+        if (isEmptySeq(lh_match.rslt)) return rh_match;
+        if (isEmptySeq(rh_match.rslt)) return lh_match;
         return lh_match;
     } else if (const Assertion * a = dyn_cast<Assertion>(re)) {
         if (a->getKind() == kind) {
             ContextMatchCursor assertResult = ctxt_match(a->getAsserted(), kind, cursor);
-            if (assertResult.rslt == MatchResult::Possible) return ContextMatchCursor{cursor.ctxt, MatchResult::Possible};
-            if ((assertResult.rslt == MatchResult::Success) == (a->getSense() == Assertion::Sense::Positive)) {
-                return ContextMatchCursor{cursor.ctxt, MatchResult::Success};
+            if (!isEmptySet(assertResult.rslt)) return ContextMatchCursor{cursor.ctxt, re};
+            if (isEmptySeq(assertResult.rslt) == (a->getSense() == Assertion::Sense::Positive)) {
+                return ContextMatchCursor{cursor.ctxt, makeSeq()};
             }
-            return ContextMatchCursor{cursor.ctxt, MatchResult::Fail};
+            return ContextMatchCursor{cursor.ctxt, makeAlt()};
         }
-        return ContextMatchCursor{cursor.ctxt, MatchResult::Possible};
+        return ContextMatchCursor{cursor.ctxt, re};
     }
-    return ContextMatchCursor{cursor.ctxt, MatchResult::Possible};
+    return ContextMatchCursor{cursor.ctxt, re};
 }
     
 class ContextualAssertionSimplifier : public RE_Transformer {
@@ -440,10 +447,8 @@ public:
             //RE * following = mContext.followingContext().currentItem();
             return a;
         }
-        ContextMatchCursor x = ctxt_match(asserted, k, ContextMatchCursor{ctxt, MatchResult::Success});
-        if (x.rslt == MatchResult::Possible) return a;
-        if ((x.rslt == MatchResult::Success) == (s == Assertion::Sense::Positive)) return makeSeq();
-        return makeAlt();
+        ContextMatchCursor x = ctxt_match(asserted, k, ContextMatchCursor{ctxt, makeSeq()});
+        return makeAssertion(x.rslt, k, s);
     }
     
     private:
