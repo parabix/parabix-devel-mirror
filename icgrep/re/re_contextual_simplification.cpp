@@ -312,6 +312,8 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
         } else {
             for (auto i = seq->rbegin(); i != seq->rend(); ++i) {
                 working = ctxt_match(*i, kind, working);
+                //errs() << "*i: " << Printer_RE::PrintRE(*i) << "\n";
+                //errs() << "working.rslt: " << Printer_RE::PrintRE(working.rslt) << "\n";
                 if (isEmptySet(working.rslt)) return working;
             }
         }
@@ -366,11 +368,7 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
     } else if (const Assertion * a = dyn_cast<Assertion>(re)) {
         if (a->getKind() == kind) {
             ContextMatchCursor assertResult = ctxt_match(a->getAsserted(), kind, cursor);
-            if (!isEmptySet(assertResult.rslt)) return ContextMatchCursor{cursor.ctxt, re};
-            if (isEmptySeq(assertResult.rslt) == (a->getSense() == Assertion::Sense::Positive)) {
-                return ContextMatchCursor{cursor.ctxt, makeSeq()};
-            }
-            return ContextMatchCursor{cursor.ctxt, makeAlt()};
+            return ContextMatchCursor{cursor.ctxt, makeAssertion(assertResult.rslt, kind, a->getSense())};
         }
         return ContextMatchCursor{cursor.ctxt, re};
     }
