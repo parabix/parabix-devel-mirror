@@ -9,4 +9,5 @@ llvm-[0-9].[0-9].[0-9].src/
 *.bak
 *.kate-swp
 *~
+.DS_Store
 
