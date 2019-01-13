@@ -106,8 +106,10 @@ bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::Kern
         sys::path::append(fileName, CACHE_PREFIX);
         fileName.append(moduleId);
         fileName.append(KERNEL_FILE_EXTENSION);
-
         auto kernelBuffer = MemoryBuffer::getFile(fileName, -1, false);
+        if (codegen::TraceObjectCache) {
+            errs() << "Found cache file: " << moduleId << KERNEL_FILE_EXTENSION << "\n";
+        }
         if (kernelBuffer) {
             #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
             auto loadedFile = getLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
@@ -200,6 +202,9 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
         raw_fd_ostream kernelFile(objectName.str(), EC, sys::fs::F_None);
         WriteBitcodeToFile(H.get(), kernelFile);
         kernelFile.close();
+        if (codegen::TraceObjectCache) {
+            errs() << "Wrote cache file: " << moduleId << KERNEL_FILE_EXTENSION << "\n";
+        }
     }
 }
 

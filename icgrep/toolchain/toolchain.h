@@ -63,6 +63,7 @@ extern unsigned SegmentSize; // set from command line
 extern unsigned BufferSegments;
 extern unsigned ThreadNum;
 extern bool EnableObjectCache;
+extern bool TraceObjectCache;
 extern bool NVPTX;
 extern unsigned GroupNum;
 extern std::string ProgramName;

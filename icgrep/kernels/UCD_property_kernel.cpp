@@ -12,14 +12,22 @@
 #include <kernels/kernel_builder.h>
 #include <pablo/builder.hpp>
 #include <llvm/Support/ErrorHandling.h>
+#include <boost/archive/iterators/base64_from_binary.hpp>
+#include <boost/archive/iterators/transform_width.hpp>
 
 using namespace kernel;
 using namespace pablo;
+using namespace boost::archive::iterators;
+
+std::string base64(std::string to_encode) {
+    typedef base64_from_binary< transform_width<std::string::const_iterator, 6, 8> > base64_t;
+    return std::string(base64_t(to_encode.begin()), base64_t(to_encode.end()));
+}
 
 
 UnicodePropertyKernelBuilder::UnicodePropertyKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::Name * property_value_name, StreamSet *BasisBits, StreamSet * property)
 : PabloKernel(iBuilder,
-"UCD:" + property_value_name->getFullName(),
+"UCD:" + base64(property_value_name->getFullName().c_str()),
 {Binding{"basis", BasisBits}},
 {Binding{"property_stream", property}}),
   mName(property_value_name) {

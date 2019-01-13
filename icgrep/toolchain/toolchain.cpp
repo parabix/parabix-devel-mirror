@@ -60,6 +60,9 @@ static cl::opt<char> OptLevelOption("O", cl::desc("Optimization level. [-O0, -O1
 static cl::opt<bool, true> EnableObjectCacheOption("enable-object-cache", cl::location(EnableObjectCache), cl::init(true),
                                                    cl::desc("Enable object caching"), cl::cat(CodeGenOptions));
 
+static cl::opt<bool, true> TraceObjectCacheOption("trace-object-cache", cl::location(TraceObjectCache), cl::init(false),
+                                                   cl::desc("Trace object cache retrieval."), cl::cat(CodeGenOptions));
+
 static cl::opt<std::string> ObjectCacheDirOption("object-cache-dir", cl::init(""),
                                                  cl::desc("Path to the object cache diretory"), cl::cat(CodeGenOptions));
 
@@ -112,6 +115,7 @@ unsigned BufferSegments;
 unsigned ThreadNum;
 
 bool EnableObjectCache;
+bool TraceObjectCache;
 
 unsigned CacheDaysLimit;
 
