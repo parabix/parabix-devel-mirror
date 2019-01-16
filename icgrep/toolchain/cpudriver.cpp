@@ -10,7 +10,6 @@
 #include <llvm/IR/IRPrintingPasses.h>
 #include <llvm/InitializePasses.h>                 // for initializeCodeGencd .
 #include <llvm/PassRegistry.h>                     // for PassRegistry
-#include <llvm/Support/raw_ostream.h>              // for errs()
 #include <llvm/Support/CodeGen.h>                  // for Level, Level::None
 #include <llvm/Support/Compiler.h>                 // for LLVM_UNLIKELY
 #include <llvm/Support/TargetSelect.h>
@@ -66,16 +65,14 @@ CPUDriver::CPUDriver(std::string && moduleName)
 #ifndef ORCJIT
 , mEngine(nullptr)
 #endif
-, mPassManager(nullptr)
-, mUnoptimizedIROutputStream(nullptr)
-, mIROutputStream(nullptr)
-, mASMOutputStream(nullptr) {
+, mPassManager{}
+, mUnoptimizedIROutputStream{}
+, mIROutputStream{}
+, mASMOutputStream{} {
 
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
-//    InitializeNativeTargetAsmParser();
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
-
 
     #ifdef ORCJIT
     EngineBuilder builder;
@@ -137,7 +134,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
 
 Function * CPUDriver::addLinkFunction(Module * mod, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
     if (LLVM_UNLIKELY(mod == nullptr)) {
-        report_fatal_error("addLinkFunction(" + name + ") cannot be called until after addKernelCall or makeKernelCall");
+        report_fatal_error("addLinkFunction(" + name + ") cannot be called until after addKernel");
     }
     Function * f = mod->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
@@ -247,7 +244,7 @@ void CPUDriver::generateUncachedKernels() {
     mUncachedKernel.clear();
 }
 
-void * CPUDriver::finalizeObject(llvm::Function * mainMethod) {
+void * CPUDriver::finalizeObject(PipelineKernel * const pipeline) {
 
     #ifdef ORCJIT
     auto Resolver = llvm::orc::createLambdaResolver(
@@ -276,6 +273,10 @@ void * CPUDriver::finalizeObject(llvm::Function * mainMethod) {
     #endif
 
     iBuilder->setModule(mMainModule);
+    // write/declare the "main" method
+    const auto method = pipeline->hasStaticMain() ? PipelineKernel::DeclareExternal : PipelineKernel::AddInternal;
+    Function * const main = pipeline->addOrDeclareMainFunction(iBuilder, method);
+
     #ifdef ORCJIT
     std::vector<std::unique_ptr<Module>> moduleSet;
     moduleSet.reserve(mCachedKernel.size());
@@ -284,6 +285,7 @@ void * CPUDriver::finalizeObject(llvm::Function * mainMethod) {
         if (LLVM_UNLIKELY(kernel->getModule() == nullptr)) {
             report_fatal_error(kernel->getName() + " was neither loaded from cache nor generated prior to finalizeObject");
         }
+        kernel->addKernelDeclarations(iBuilder);
         #ifndef ORCJIT
         mEngine->addModule(std::unique_ptr<Module>(kernel->getModule()));
         #else
@@ -298,12 +300,11 @@ void * CPUDriver::finalizeObject(llvm::Function * mainMethod) {
     moduleSet.push_back(std::unique_ptr<Module>(mMainModule);
     mCompileLayer->addModuleSet(std::move(moduleSet), make_unique<SectionMemoryManager>(), std::move(Resolver));
     #endif
-
     // return the compiled main method
     #ifndef ORCJIT
-    return mEngine->getPointerToFunction(mainMethod);
+    return mEngine->getPointerToFunction(main);
     #else
-    auto MainSym = mCompileLayer->findSymbol(getMangledName(mMainMethod->getName()), false);
+    auto MainSym = mCompileLayer->findSymbol(getMangledName(main->getName()), false);
     assert (MainSym && "Main not found");
     return (void *)MainSym.getAddress();
     #endif

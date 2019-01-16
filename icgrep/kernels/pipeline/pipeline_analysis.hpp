@@ -41,15 +41,15 @@ namespace {
 
     using ScalarDependencyMap = RelationshipMap<ScalarDependencyGraph::vertex_descriptor>;
 
-    void enumerateScalarProducerBindings(const unsigned producerVertex, const Bindings & bindings,
+    void enumerateScalarProducerBindings(const unsigned producer, const Bindings & bindings,
                                          ScalarDependencyGraph & G, ScalarDependencyMap & M) {
         const auto n = bindings.size();
         for (unsigned i = 0; i < n; ++i) {
             const Relationship * const rel = getRelationship(bindings[i]);
             assert (M.count(rel) == 0);
-            const auto bufferVertex = add_vertex(nullptr, G);
-            add_edge(producerVertex, bufferVertex, i, G);
-            M.emplace(rel, bufferVertex);
+            const auto scalar = add_vertex(nullptr, G);
+            add_edge(producer, scalar, i, G);
+            M.emplace(rel, scalar);
         }
     }
 
@@ -59,22 +59,23 @@ namespace {
         if (LLVM_LIKELY(f != M.end())) {
             return f->second;
         } else if (LLVM_LIKELY(isa<ScalarConstant>(rel))) {
-            const auto bufferVertex = add_vertex(cast<ScalarConstant>(rel)->value(), G);
-            M.emplace(rel, bufferVertex);
-            return bufferVertex;
+            const auto scalar = add_vertex(cast<ScalarConstant>(rel), G);
+            add_edge(0, scalar, -1U, G);
+            M.emplace(rel, scalar);
+            return scalar;
         } else {
             report_fatal_error("unknown scalar value");
         }
     }
 
     template <typename Array>
-    void enumerateScalarConsumerBindings(const unsigned consumerVertex, const Array & array,
+    void enumerateScalarConsumerBindings(const unsigned consumer, const Array & array,
                                          ScalarDependencyGraph & G, ScalarDependencyMap & M) {
         const auto n = array.size();
         for (unsigned i = 0; i < n; ++i) {
-            const auto bufferVertex = makeIfConstant(getRelationship(array[i]), G, M);
-            assert (bufferVertex < num_vertices(G));
-            add_edge(bufferVertex, consumerVertex, i, G);
+            const auto scalar = makeIfConstant(getRelationship(array[i]), G, M);
+            assert (scalar < num_vertices(G));
+            add_edge(scalar, consumer, i, G);
         }
     }
 
@@ -87,17 +88,15 @@ namespace {
  ** ------------------------------------------------------------------------------------------------------------- */
 ScalarDependencyGraph PipelineCompiler::makeScalarDependencyGraph() const {
 
-    const auto pipelineInput = 0;
-    const auto pipelineOutput = mLastKernel;
     const auto & call = mPipelineKernel->getCallBindings();
     const auto numOfCalls = call.size();
-    const auto firstCall = mLastKernel + 1;
+    const auto firstCall = mPipelineOutput + 1;
     const auto initialSize = firstCall + numOfCalls;
 
     ScalarDependencyGraph G(initialSize);
     ScalarDependencyMap M;
 
-    enumerateScalarProducerBindings(pipelineInput, mPipelineKernel->getInputScalarBindings(), G, M);
+    enumerateScalarProducerBindings(mPipelineInput, mPipelineKernel->getInputScalarBindings(), G, M);
     // verify each scalar input of the kernel is an input to the pipeline
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         enumerateScalarConsumerBindings(i, mPipeline[i]->getInputScalarBindings(), G, M);
@@ -111,7 +110,7 @@ ScalarDependencyGraph PipelineCompiler::makeScalarDependencyGraph() const {
         enumerateScalarConsumerBindings(firstCall + i, call[i].Args, G, M);
     }
     // enumerate the pipeline outputs
-    enumerateScalarConsumerBindings(pipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
+    enumerateScalarConsumerBindings(mPipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
 
     return G;
 }
@@ -166,9 +165,6 @@ std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
 
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
 
-    const auto pipelineInput = 0;
-    const auto pipelineOutput = mLastKernel;
-
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
     const auto firstOutput = numOfInputs;
@@ -198,10 +194,10 @@ std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
         }
     }
     // check any pipeline input first
-    if (out_degree(pipelineInput, mBufferGraph)) {
+    if (out_degree(mPipelineInput, mBufferGraph)) {
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto buffer = getInputBufferVertex(i);
-            if (LLVM_UNLIKELY(parent(buffer, mBufferGraph) == pipelineInput)) {
+            if (LLVM_UNLIKELY(is_parent(buffer, mPipelineInput, mBufferGraph))) {
                 for (unsigned j = 0; j < i; ++j) {
                     add_edge_if_no_induced_cycle(i, j, G);
                 }
@@ -213,10 +209,10 @@ std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
     }
 
     // ... and check any pipeline output first
-    if (out_degree(pipelineInput, mBufferGraph)) {
+    if (in_degree(mPipelineOutput, mBufferGraph)) {
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             const auto buffer = getOutputBufferVertex(i);
-            if (LLVM_UNLIKELY(has_child(buffer, pipelineOutput, mBufferGraph))) {
+            if (LLVM_UNLIKELY(has_child(buffer, mPipelineOutput, mBufferGraph))) {
                 const auto k = firstOutput + i;
                 for (unsigned j = 0; j < k; ++j) {
                     add_edge_if_no_induced_cycle(k, j, G);
@@ -292,7 +288,7 @@ inline LLVM_READNONE RateValue maximumConsumed(const Kernel * const kernel, cons
  ** ------------------------------------------------------------------------------------------------------------- */
 ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
 
-    const auto firstBuffer = mLastKernel + 1;
+    const auto firstBuffer = mPipelineOutput + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     ConsumerGraph G(lastBuffer);
 
@@ -317,13 +313,6 @@ ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
 #endif
 
     for (auto bufferVertex = firstBuffer; bufferVertex < lastBuffer; ++bufferVertex) {
-
-        const BufferNode & bn = mBufferGraph[bufferVertex];
-
-        if (LLVM_UNLIKELY(bn.Type == BufferType::External)) {
-            continue;
-        }
-
         // copy the producing edge
         const auto pe = in_edge(bufferVertex, mBufferGraph);
         add_edge(source(pe, mBufferGraph), bufferVertex, mBufferGraph[pe].Port, G);
@@ -523,6 +512,28 @@ PopCountGraph PipelineCompiler::makePopCountGraph() const {
         M.clear();
     }
 
+    return G;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePipelineIOGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+PipelineIOGraph PipelineCompiler::makePipelineIOGraph() const {
+    PipelineIOGraph G((mPipelineOutput - mPipelineInput) + 1);
+    for (const auto e : make_iterator_range(out_edges(mPipelineInput, mBufferGraph))) {
+        const auto buffer = target(e, mBufferGraph);
+        for (const auto e : make_iterator_range(out_edges(buffer, mBufferGraph))) {
+            const auto consumer = target(e, mBufferGraph);
+            add_edge(mPipelineInput, consumer, mBufferGraph[e].inputPort(), G);
+        }
+    }
+    for (const auto e : make_iterator_range(in_edges(mPipelineOutput, mBufferGraph))) {
+        const auto buffer = source(e, mBufferGraph);
+        for (const auto e : make_iterator_range(in_edges(buffer, mBufferGraph))) {
+            const auto producer = source(e, mBufferGraph);
+            add_edge(producer, mPipelineOutput, mBufferGraph[e].outputPort(), G);
+        }
+    }
     return G;
 }
 

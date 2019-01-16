@@ -22,11 +22,9 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     using VertexVector = std::vector<Vertex>;
 
     const auto numOfCalls = mPipelineKernel->getCallBindings().size();
-    const auto pipelineInput = 0;
-    const auto pipelineOutput = mLastKernel;
-    const auto firstCall = pipelineOutput + 1;
+    const auto firstCall = mPipelineOutput + 1;
     const auto lastCall = firstCall + numOfCalls;
-    const auto n = pipelineOutput + 1;
+    const auto n = mPipelineOutput + 1;
 
     // TODO: if the lower bound of an input is 0 or a the input is zero-extended,
     // how would this affect termination?
@@ -45,13 +43,13 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     }
 
     // 2) copy and summarize any output scalars of the pipeline or any calls
-    for (unsigned i = pipelineOutput; i < lastCall; ++i) {
+    for (unsigned i = mPipelineOutput; i < lastCall; ++i) {
         for (auto relationship : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
             const auto relationshipVertex = source(relationship, mScalarDependencyGraph);
             for (auto producer : make_iterator_range(in_edges(relationshipVertex, mScalarDependencyGraph))) {
                 const auto kernel = source(producer, mScalarDependencyGraph);
-                assert ("cannot occur" && kernel != pipelineOutput);
-                add_edge(kernel, pipelineOutput, G);
+                assert ("cannot occur" && kernel != mPipelineOutput);
+                add_edge(kernel, mPipelineOutput, G);
             }
         }
     }
@@ -64,12 +62,9 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
             clear_in_edges(i, G);
         }
         if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::SideEffecting))) {
-            add_edge(i, pipelineOutput, G);
+            add_edge(i, mPipelineOutput, G);
         }
     }
-
-
-
 
     // generate a transitive closure
     VertexVector ordering;
@@ -87,7 +82,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
 
     // then take the transitive reduction
     dynamic_bitset<> sources(n, false);
-    for (unsigned u = pipelineOutput; u--; ) {
+    for (unsigned u = mPipelineOutput; u--; ) {
         for (auto e : make_iterator_range(in_edges(u, G))) {
             sources.set(source(e, G), true);
         }
@@ -155,7 +150,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
         add_flow_edge(s, firstOut + i);
         for (auto e : make_iterator_range(in_edges(i, G))) {
             const auto j = source(e, G);
-            if (LLVM_UNLIKELY(j == pipelineInput)) continue;
+            if (LLVM_UNLIKELY(j == mPipelineInput)) continue;
             add_flow_edge(firstOut + j, firstIn + i);
         }
         add_flow_edge(firstIn + i, t);
@@ -194,7 +189,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
             // record its final distance.
             if (j < mLastKernel) {
                 G[j] = pathCount;
-                add_edge(j, pipelineInput, ++k, G);
+                add_edge(j, mPipelineInput, ++k, G);
             }
             ++pathCount;
         }
@@ -203,6 +198,11 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     // TODO: fix this so we aren't initializing multiple values
     // simultaneously in the constructor.
     mTerminationSignals.resize(pathCount, nullptr);
+
+    assert ("a pipeline with no sinks ought to produce no observable data"
+            && in_degree(mPipelineOutput, G) > 0);
+    assert ("termination graph construction error?"
+            && out_degree(mPipelineOutput, G) == 0);
 
     return G;
 }
@@ -279,24 +279,6 @@ Value * PipelineCompiler::producerTerminated(BuilderRef b, const unsigned inputP
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::updateTerminationSignal(Value * const signal) {
     mTerminationSignals[mTerminationGraph[mKernelIndex]] = signal;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief pipelineTerminated
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::pipelineTerminated(BuilderRef b) const {
-    const auto pipelineOutput = mLastKernel;
-    assert ("a pipeline with no sinks ought to produce no observable data"
-            && in_degree(pipelineOutput, mTerminationGraph) > 0);
-    assert ("termination graph construction error?"
-            && out_degree(pipelineOutput, mTerminationGraph) == 0);
-    Value * terminated = b->getTrue();
-    // check whether every sink has terminated
-    for (const auto e : make_iterator_range(in_edges(pipelineOutput, mTerminationGraph))) {
-        const auto kernel = source(e, mTerminationGraph);
-        terminated = b->CreateAnd(terminated, hasKernelTerminated(b, kernel));
-    }
-    return terminated;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

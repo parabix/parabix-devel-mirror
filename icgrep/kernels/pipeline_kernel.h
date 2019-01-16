@@ -74,9 +74,15 @@ public:
 
     virtual ~PipelineKernel();
 
-    bool isProxy() const {
-        return mKernels.size() == 1;
-    }
+    enum MainMethodGenerationType {
+        AddInternal
+        , DeclareExternal
+        , AddExternal
+    };
+
+    llvm::Function * addOrDeclareMainFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const MainMethodGenerationType method);
+
+    LLVM_READNONE bool hasStaticMain() const;
 
 protected:
 
@@ -92,6 +98,8 @@ protected:
 
     void linkExternalMethods(const std::unique_ptr<KernelBuilder> & b) final;
 
+    void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) final;
+
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
     void initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::vector<llvm::Value *> & args) final;
@@ -101,8 +109,6 @@ protected:
     void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
     void addAdditionalFunctions(const std::unique_ptr<KernelBuilder> & b) final;
-
-    llvm::Value * finalizeInstance(const std::unique_ptr<KernelBuilder> & b) final;
 
     void addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
 
@@ -116,23 +122,13 @@ protected:
 
     std::vector<llvm::Value *> getFinalOutputScalars(const std::unique_ptr<KernelBuilder> & b) final;
 
-    enum MainMethodGenerationType {
-        AddInternal
-        , DeclareExternal
-        , AddExternal
-    };
-
-    llvm::Function * addOrDeclareMainFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const MainMethodGenerationType method);
-
-    LLVM_READNONE bool hasStaticMain() const;
-
 protected:
 
-    std::unique_ptr<PipelineCompiler>  mCompiler;
-    const unsigned                     mNumOfThreads;
-    const Kernels                      mKernels;
-    CallBindings                       mCallBindings;
-    const std::string                  mSignature;
+    mutable std::unique_ptr<PipelineCompiler> mCompiler;
+    const unsigned                            mNumOfThreads;
+    const Kernels                             mKernels;
+    CallBindings                              mCallBindings;
+    const std::string                         mSignature;
 };
 
 }

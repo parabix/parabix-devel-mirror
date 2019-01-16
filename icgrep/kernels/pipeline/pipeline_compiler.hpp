@@ -8,7 +8,6 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
-#include <boost/graph/adjacency_matrix.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 //#include <boost/serialization/strong_typedef.hpp>
 #include <boost/math/common_factor_rt.hpp>
@@ -51,30 +50,53 @@ using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 
 enum class BufferType : unsigned {
     Internal = 0
-    , External = 1
-    , Managed = 2
+    , Managed = 1
+    , External = 2
 };
 
 struct BufferNode {
-    Value *             TotalItems = nullptr;
-    StreamSetBuffer *   Buffer = nullptr;
-    RateValue           Lower{};
-    RateValue           Upper{};
-    unsigned            Overflow = 0;
-    unsigned            Fasimile = 0;
-    BufferType          Type = BufferType::Internal;
+    StreamSetBuffer * Buffer = nullptr;
+    RateValue Lower{};
+    RateValue Upper{};
+    unsigned Overflow = 0;
+    unsigned Fasimile = 0;
+    BufferType Type = BufferType::Internal;
+
+    ~BufferNode() {
+        if (LLVM_LIKELY(Type != BufferType::External)) {
+            delete Buffer;
+        }
+    }
 };
+
+inline unsigned InputPort(const StreamPort port) {
+    assert (port.first == Kernel::Port::Input);
+    return port.second;
+}
+
+inline unsigned OutputPort(const StreamPort port) {
+    assert (port.first == Kernel::Port::Output);
+    return port.second;
+}
 
 struct BufferRateData {
 
+    StreamPort Port;
     RateValue Minimum;
     RateValue Maximum;
-    unsigned  Port;
+
+    unsigned inputPort() const {
+        return InputPort(Port);
+    }
+
+    unsigned outputPort() const {
+        return OutputPort(Port);
+    }
 
     BufferRateData() = default;
 
-    BufferRateData(const unsigned port, RateValue min, RateValue max)
-    : Minimum(std::move(min)), Maximum(std::move(max)), Port(port) { }
+    BufferRateData(StreamPort port, RateValue min, RateValue max)
+    : Port(port), Minimum(min), Maximum(max) { }
 };
 
 using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, BufferRateData>;
@@ -89,9 +111,7 @@ struct ConsumerNode {
     PHINode * PhiNode = nullptr;
 };
 
-enum : unsigned { FAKE_CONSUMER = (std::numeric_limits<unsigned>::max()) };
-
-using ConsumerGraph = adjacency_list<vecS, vecS, bidirectionalS, ConsumerNode, unsigned>;
+using ConsumerGraph = adjacency_list<vecS, vecS, bidirectionalS, ConsumerNode, StreamPort>;
 
 template <typename Value>
 using StreamSetBufferMap = flat_map<const StreamSetBuffer *, Value>;
@@ -101,7 +121,9 @@ using KernelMap = flat_map<const Kernel *, Value>;
 
 using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, unsigned, unsigned>;
 
-using ScalarDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, Value *, unsigned>;
+using ScalarDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, const ScalarConstant *, unsigned>;
+
+using ScalarCache = flat_map<ScalarDependencyGraph::vertex_descriptor, Value *>;
 
 struct OverflowRequirement {
     unsigned copyBack;
@@ -145,6 +167,8 @@ struct PopCountEdge {
 
 using PopCountGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, PopCountEdge>;
 
+using PipelineIOGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
+
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 const static std::string TERMINATION_PREFIX = "@TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IC";
@@ -159,8 +183,7 @@ public:
 
     void addPipelineKernelProperties(BuilderRef b);
     void generateInitializeMethod(BuilderRef b);
-    void generateSingleThreadKernelMethod(BuilderRef b);
-    void generateMultiThreadKernelMethod(BuilderRef b);
+    void generateKernelMethod(BuilderRef b);
     void generateFinalizeMethod(BuilderRef b);
     std::vector<Value *> getFinalOutputScalars(BuilderRef b);
 
@@ -169,6 +192,8 @@ protected:
 // internal pipeline state construction functions
 
     void addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex);
+    void generateSingleThreadKernelMethod(BuilderRef b);
+    void generateMultiThreadKernelMethod(BuilderRef b);
     void acquireCurrentSegment(BuilderRef b);
     void releaseCurrentSegment(BuilderRef b);
     LLVM_READNONE bool requiresSynchronization(const unsigned kernelIndex) const;
@@ -179,6 +204,9 @@ protected:
     void setActiveKernel(BuilderRef b, const unsigned index);
     void executeKernel(BuilderRef b);
     void end(BuilderRef b, const unsigned step);
+
+    void readPipelineIOItemCounts(BuilderRef b);
+    void writePipelineIOItemCounts(BuilderRef b);
 
 // internal pipeline functions
 
@@ -205,7 +233,7 @@ protected:
     void initializeKernelExitPhis(BuilderRef b);
 
     void checkForSufficientInputDataAndOutputSpace(BuilderRef b);
-    void branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * target);
+    void branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * target, Value * const halting);
     void determineNumOfLinearStrides(BuilderRef b);
     void calculateNonFinalItemCounts(BuilderRef b);
     void calculateFinalItemCounts(BuilderRef b);
@@ -240,13 +268,15 @@ protected:
 
     void writeUpdatedItemCounts(BuilderRef b);
 
+    Value * getScalar(BuilderRef b, const ScalarDependencyGraph::vertex_descriptor scalar);
+
 // intra-kernel functions
 
     void expandOutputBuffer(BuilderRef b, const unsigned outputPort, Value * const hasEnough, BasicBlock * const target);
 
     Value * getInputStrideLength(BuilderRef b, const unsigned inputPort);
     Value * getOutputStrideLength(BuilderRef b, const unsigned outputPort);
-    Value * getInitialStrideLength(BuilderRef b, const Port port, const unsigned portNum);
+    Value * getInitialStrideLength(BuilderRef b, const StreamPort port);
     static Value * getMaximumStrideLength(BuilderRef b, const Kernel * kernel, const Binding & binding);
     Value * calculateNumOfLinearItems(BuilderRef b, const Binding & binding);
     Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool addFacsimile);
@@ -325,18 +355,18 @@ protected:
     ConsumerGraph makeConsumerGraph() const;
     void addConsumerKernelProperties(BuilderRef b, const unsigned kernelIndex);
     void createConsumedPhiNodes(BuilderRef b);
-    void initializeConsumedItemCount(BuilderRef b, const unsigned bufferVertex, Value * const produced);
+    void initializeConsumedItemCount(const unsigned bufferVertex, Value * const produced);
     void readConsumedItemCounts(BuilderRef b);
-    Value * getConsumedItemCount(BuilderRef b, const unsigned outputPort);
-    void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, Value * const consumed) const;
+    void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> consumed) const;
 
 // buffer analysis/management functions
 
     BufferGraph makeBufferGraph(BuilderRef b);
+    void enumerateBufferProducerBindings(const Port type, const unsigned producer, const Bindings & bindings, BufferGraph & G, BufferMap & M) const;
+    void enumerateBufferConsumerBindings(const Port type, const unsigned consumer, const Bindings & bindings, BufferGraph & G, BufferMap & M) const;
+    BufferRateData getBufferRateData(const StreamPort port, const Kernel * const kernel, const Binding & binding) const;
+
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
-    void enumerateBufferProducerBindings(const unsigned producer, const Bindings & bindings, BufferGraph & G, BufferMap & M);
-    void enumerateBufferConsumerBindings(const unsigned consumer, const Bindings & bindings, BufferGraph & G, BufferMap & M);
-    BufferRateData getBufferRateData(const Kernel * const kernel, const Binding &binding, const unsigned port) const;
 
     void constructBuffers(BuilderRef b);
     void loadBufferHandles(BuilderRef b);
@@ -361,6 +391,7 @@ protected:
     std::vector<unsigned> lexicalOrderingOfStreamIO() const;
     TerminationGraph makeTerminationGraph();
     ScalarDependencyGraph makeScalarDependencyGraph() const;
+    PipelineIOGraph makePipelineIOGraph() const;
 
 // misc. functions
 
@@ -369,33 +400,33 @@ protected:
     Value * getDoSegmentFunction(BuilderRef b) const;
     Value * getFinalizeFunction(BuilderRef b) const;
 
-    std::string makeKernelName(const unsigned kernelIndex) const;
-    std::string makeBufferName(const unsigned kernelIndex, const Binding & binding) const;
+    LLVM_READNONE std::string makeKernelName(const unsigned kernelIndex) const;
+    LLVM_READNONE std::string makeBufferName(const unsigned kernelIndex, const Binding & binding) const;
+
+    LLVM_READNONE unsigned getInputBufferVertex(const unsigned kernelVertex, const unsigned inputPort) const;
     unsigned getInputBufferVertex(const unsigned inputPort) const;
-    unsigned getInputBufferVertex(const unsigned kernelVertex, const unsigned inputPort) const;
     StreamSetBuffer * getInputBuffer(const unsigned inputPort) const;
+
+    LLVM_READNONE unsigned getOutputBufferVertex(const unsigned kernelVertex, const unsigned outputPort) const;
     unsigned getOutputBufferVertex(const unsigned outputPort) const;
-    unsigned getOutputBufferVertex(const unsigned kernelVertex, const unsigned outputPort) const;
     StreamSetBuffer * getOutputBuffer(const unsigned outputPort) const;
 
-    LLVM_READNONE bool nestedPipeline() const {
-        return out_degree(0, mBufferGraph) != 0 || in_degree(mLastKernel, mBufferGraph) != 0;
-    }
+    LLVM_READNONE unsigned getBufferIndex(const unsigned bufferVertex) const;
 
-    static LLVM_READNONE const Binding & getBinding(const Kernel * kernel, const Port port, const unsigned i) {
-        if (port == Port::Input) {
-            return kernel->getInputStreamSetBinding(i);
-        } else if (port == Port::Output) {
-            return kernel->getOutputStreamSetBinding(i);
+    LLVM_READNONE bool isPipelineInput(const unsigned kernelIndex, const unsigned inputPort) const;
+    LLVM_READNONE bool isPipelineOutput(const unsigned kernelIndex, const unsigned outputPort) const;
+    LLVM_READNONE bool nestedPipeline() const;
+
+    static LLVM_READNONE const Binding & getBinding(const Kernel * kernel, const StreamPort port) {
+        if (port.first == Port::Input) {
+            return kernel->getInputStreamSetBinding(port.second);
+        } else if (port.first == Port::Output) {
+            return kernel->getOutputStreamSetBinding(port.second);
         }
         llvm_unreachable("unknown port binding type!");
     }
 
     void printBufferGraph(const BufferGraph & G, raw_ostream & out);
-
-    LLVM_READNONE const Binding & getInputBinding(const Kernel * const producer, const unsigned index) const;
-
-    LLVM_READNONE const Binding & getOutputBinding(const Kernel * const consumer, const unsigned index) const;
 
     void writeOutputScalars(BuilderRef b, const unsigned index, std::vector<Value *> & args);
 
@@ -407,21 +438,26 @@ protected:
                               Value * const itemCount, Value * const expected) const;
 
 
+private:
+
+    static constexpr StreamPort FAKE_CONSUMER{Port::Input, std::numeric_limits<unsigned>::max()};
 
 protected:
 
     PipelineKernel * const                      mPipelineKernel;
+
     const Kernels                               mPipeline;
-    const unsigned                              mFirstKernel;
+    static constexpr unsigned                   mPipelineInput = 0;
+    static constexpr unsigned                   mFirstKernel = 1;
     const unsigned                              mLastKernel;
+    const unsigned                              mPipelineOutput;
 
-
-    OwnedStreamSetBuffers                       mOwnedBuffers;
     unsigned                                    mKernelIndex = 0;
     Kernel *                                    mKernel = nullptr;
 
     // pipeline state
     PHINode *                                   mSegNo = nullptr;
+    Value *                                     mHalted = nullptr;
     PHINode *                                   mProgressCounter = nullptr;
     Value *                                     mPipelineProgress = nullptr;
     Value *                                     mPipelineTerminated = nullptr;
@@ -438,6 +474,8 @@ protected:
 
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;
+    PHINode *                                   mHaltingPhi = nullptr;
+    PHINode *                                   mHaltedPhi = nullptr;
     PHINode *                                   mHasProgressedPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
     PHINode *                                   mTerminatedPhi = nullptr;
@@ -445,6 +483,7 @@ protected:
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mTerminatedExplicitly = nullptr;
     std::vector<unsigned>                       mPortOrdering;
+    std::vector<Value *>                        mTotalItems;
 
     std::vector<Value *>                        mTerminationSignals;
 
@@ -475,23 +514,84 @@ protected:
     std::vector<PHINode *>                      mUpdatedProducedPhi; // exiting the kernel
     std::vector<PHINode *>                      mFullyProducedItemCount; // *after* exiting the kernel
 
-
-    // debug + misc state
+    // cycle counter state
     Value *                                     mCycleCountStart = nullptr;
 
     // popcount state
     Value *                                     mPopCountState;
     flat_map<unsigned, PopCountData>            mPopCountData;
 
-
     // analysis state
-    BufferGraph                                 mBufferGraph;
+    const BufferGraph                           mBufferGraph;
     ConsumerGraph                               mConsumerGraph;
-    ScalarDependencyGraph                       mScalarDependencyGraph;
+    const ScalarDependencyGraph                 mScalarDependencyGraph;
+    ScalarCache                                 mScalarCache;
+    const PipelineIOGraph                       mPipelineIOGraph;
     const TerminationGraph                      mTerminationGraph;
     PopCountGraph                               mPopCountGraph;
 
 };
+
+// NOTE: these graph functions not safe for general use since they are intended for inspection of *edge-immutable* graphs.
+
+template <typename Graph>
+LLVM_READNONE
+inline typename graph_traits<Graph>::edge_descriptor first_in_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
+    return *in_edges(u, G).first;
+}
+
+template <typename Graph>
+LLVM_READNONE
+inline typename graph_traits<Graph>::edge_descriptor in_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
+    assert (in_degree(u, G) == 1);
+    return first_in_edge(u, G);
+}
+
+template <typename Graph>
+LLVM_READNONE
+inline typename graph_traits<Graph>::vertex_descriptor parent(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
+    return source(in_edge(u, G), G);
+}
+
+template <typename Graph>
+LLVM_READNONE
+inline typename graph_traits<Graph>::edge_descriptor first_out_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
+    return *out_edges(u, G).first;
+}
+
+template <typename Graph>
+LLVM_READNONE
+inline typename graph_traits<Graph>::edge_descriptor out_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
+    assert (out_degree(u, G) == 1);
+    return first_out_edge(u, G);
+}
+
+template <typename Graph>
+LLVM_READNONE
+inline typename graph_traits<Graph>::vertex_descriptor child(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
+    return target(out_edge(u, G), G);
+}
+
+template <typename Graph>
+LLVM_READNONE
+inline bool is_parent(const typename graph_traits<Graph>::vertex_descriptor u,
+                      const typename graph_traits<Graph>::vertex_descriptor v,
+                      const Graph & G) {
+    return parent(u, G) == v;
+}
+
+template <typename Graph>
+LLVM_READNONE
+inline bool has_child(const typename graph_traits<Graph>::vertex_descriptor u,
+                      const typename graph_traits<Graph>::vertex_descriptor v,
+                      const Graph & G) {
+    for (const auto & e : make_iterator_range(out_edges(u, G))) {
+        if (target(e, G) == v) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineList
@@ -514,69 +614,15 @@ inline Kernels makePipelineList(PipelineKernel * const pk) {
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel)
 : mPipelineKernel(pipelineKernel)
 , mPipeline(makePipelineList(pipelineKernel))
-, mFirstKernel(1)
 , mLastKernel(mPipeline.size() - 1)
+, mPipelineOutput(mLastKernel)
 , mBufferGraph(makeBufferGraph(b))
 , mConsumerGraph(makeConsumerGraph())
 , mScalarDependencyGraph(makeScalarDependencyGraph())
+, mPipelineIOGraph(makePipelineIOGraph())
 , mTerminationGraph(makeTerminationGraph())
 , mPopCountGraph(makePopCountGraph()) {
     initializePopCounts();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getInputBufferVertex(const unsigned inputPort) const {
-    return getInputBufferVertex(mKernelIndex, inputPort);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getInputBufferVertex(const unsigned kernelVertex, const unsigned inputPort) const {
-    for (const auto e : make_iterator_range(in_edges(kernelVertex, mBufferGraph))) {
-        if (mBufferGraph[e].Port == inputPort) {
-            return source(e, mBufferGraph);
-        }
-    }
-    assert (!"input buffer not found");
-    llvm_unreachable("input buffer not found");
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-inline StreamSetBuffer * PipelineCompiler::getInputBuffer(const unsigned inputPort) const {
-    return mBufferGraph[getInputBufferVertex(inputPort)].Buffer;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBufferVertex
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getOutputBufferVertex(const unsigned outputPort) const {
-    return getOutputBufferVertex(mKernelIndex, outputPort);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBufferVertex
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getOutputBufferVertex(const unsigned kernelVertex, const unsigned outputPort) const {
-    for (const auto e : make_iterator_range(out_edges(kernelVertex, mBufferGraph))) {
-        if (mBufferGraph[e].Port == outputPort) {
-            return target(e, mBufferGraph);
-        }
-    }
-    assert (!"output buffer not found");
-    llvm_unreachable("output buffer not found");
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-inline StreamSetBuffer * PipelineCompiler::getOutputBuffer(const unsigned outputPort) const {
-    return mBufferGraph[getOutputBufferVertex(outputPort)].Buffer;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -647,49 +693,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
     return cast<IntegerType>(ty->getVectorElementType())->getBitWidth();
 }
 
-template <typename Graph>
-inline typename graph_traits<Graph>::edge_descriptor first_in_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    return *in_edges(u, G).first;
-}
-
-template <typename Graph>
-inline typename graph_traits<Graph>::edge_descriptor in_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    assert (in_degree(u, G) == 1);
-    return first_in_edge(u, G);
-}
-
-template <typename Graph>
-inline typename graph_traits<Graph>::vertex_descriptor parent(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    return source(in_edge(u, G), G);
-}
-
-template <typename Graph>
-inline typename graph_traits<Graph>::edge_descriptor first_out_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    return *out_edges(u, G).first;
-}
-
-template <typename Graph>
-inline typename graph_traits<Graph>::edge_descriptor out_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    assert (out_degree(u, G) == 1);
-    return first_out_edge(u, G);
-}
-
-template <typename Graph>
-inline typename graph_traits<Graph>::vertex_descriptor child(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    return target(out_edge(u, G), G);
-}
-
-template <typename Graph>
-inline bool has_child(const typename graph_traits<Graph>::vertex_descriptor u,
-                      const typename graph_traits<Graph>::vertex_descriptor v,
-                      const Graph & G) {
-    for (const auto & e : make_iterator_range(out_edges(u, G))) {
-        if (target(e, G) == v) {
-            return true;
-        }
-    }
-    return false;
-}
 
 } // end of namespace
 

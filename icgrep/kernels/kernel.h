@@ -147,12 +147,7 @@ public:
 
     virtual bool isCachable() const { return false; }
 
-    LLVM_READNONE bool isStateful() const {
-        if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
-            llvm_unreachable("kernel state must be constructed prior to calling isStateful");
-        }
-        return !mKernelStateType->isEmptyTy();
-    }
+    LLVM_READNONE bool isStateful() const;
 
     unsigned getStride() const { return mStride; }
 
@@ -353,13 +348,13 @@ public:
     llvm::Module * makeModule(const std::unique_ptr<KernelBuilder> & b);
 
     // Add ExternalLinkage method declarations for the kernel to a given client module.
-    void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b);
+    virtual void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b);
 
     llvm::Value * createInstance(const std::unique_ptr<KernelBuilder> & b);
 
     virtual void initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::vector<llvm::Value *> & args);
 
-    virtual llvm::Value * finalizeInstance(const std::unique_ptr<KernelBuilder> & b);
+    llvm::Value * finalizeInstance(const std::unique_ptr<KernelBuilder> & b);
 
     void generateKernel(const std::unique_ptr<KernelBuilder> & b);
 
@@ -400,12 +395,6 @@ protected:
     LLVM_READNONE std::string getDefaultFamilyName() const;
 
     virtual void addInternalKernelProperties(const std::unique_ptr<KernelBuilder> &) { }
-
-    void addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b);
-
-    void addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b);
-
-    void addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b);
 
     virtual void linkExternalMethods(const std::unique_ptr<KernelBuilder> &) { }
 
@@ -465,6 +454,10 @@ protected:
         Port port; unsigned index;
         std::tie(port, index) = getStreamPort(name);
         assert (port == Port::Input);
+        return getProcessedInputItemsPtr(index);
+    }
+
+    LLVM_READNONE llvm::Value * getProcessedInputItemsPtr(const unsigned index) const {
         return mProcessedInputItemPtr[index];
     }
 
@@ -472,15 +465,35 @@ protected:
         Port port; unsigned index;
         std::tie(port, index) = getStreamPort(name);
         assert (port == Port::Output);
+        return getProducedOutputItemsPtr(index);
+    }
+
+    LLVM_READNONE llvm::Value * getProducedOutputItemsPtr(const unsigned index) const {
         return mProducedOutputItemPtr[index];
+    }
+
+    LLVM_READNONE llvm::Value * getWritableOutputItems(const llvm::StringRef name) const {
+        Port port; unsigned index;
+        std::tie(port, index) = getStreamPort(name);
+        assert (port == Port::Output);
+        return getWritableOutputItems(index);
+    }
+
+    LLVM_READNONE llvm::Value * getWritableOutputItems(const unsigned index) const {
+        return mWritableOutputItems[index];
     }
 
     LLVM_READNONE llvm::Value * getConsumedOutputItems(const llvm::StringRef name) const {
         Port port; unsigned index;
         std::tie(port, index) = getStreamPort(name);
         assert (port == Port::Output);
+        return getConsumedOutputItems(index);
+    }
+
+    LLVM_READNONE llvm::Value * getConsumedOutputItems(const unsigned index) const {
         return mConsumedOutputItems[index];
     }
+
 
     LLVM_READNONE llvm::Value * isFinal() const {
         return mIsFinal;
@@ -497,9 +510,21 @@ private:
 
     void initializeLocalScalarValues(const std::unique_ptr<KernelBuilder> & b);
 
+    void addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b);
+
     void callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b);
 
-    void callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b);
+    void addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b);
+
+    std::vector<llvm::Type *> getDoSegmentFields(const std::unique_ptr<KernelBuilder> & b) const;
+
+    void callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b);
+
+    void setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, const std::vector<llvm::Value *> & args);
+
+    std::vector<llvm::Value *> getDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b) const;
+
+    void addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b);
 
     void callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b);
 
@@ -544,12 +569,17 @@ protected:
 
     std::vector<llvm::Value *>      mLocalScalarPtr;
 
+    std::vector<llvm::Value *>      mUpdatableProcessedInputItemPtr;
     std::vector<llvm::Value *>      mProcessedInputItemPtr;
+
     std::vector<llvm::Value *>      mAccessibleInputItems;
     std::vector<llvm::Value *>      mAvailableInputItems;
     std::vector<llvm::Value *>      mPopCountRateArray;
     std::vector<llvm::Value *>      mNegatedPopCountRateArray;
+
+    std::vector<llvm::Value *>      mUpdatableProducedOutputItemPtr;
     std::vector<llvm::Value *>      mProducedOutputItemPtr;
+
     std::vector<llvm::Value *>      mWritableOutputItems;
     std::vector<llvm::Value *>      mConsumedOutputItems;
 
@@ -594,6 +624,7 @@ protected:
 
 class MultiBlockKernel : public Kernel {
     friend class BlockOrientedKernel;
+    friend class OptimizationBranch;
 public:
 
     static bool classof(const Kernel * const k) {

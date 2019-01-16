@@ -4,44 +4,37 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <IR_Gen/idisa_target.h>                   // for GetIDISA_Builder
+
+#include <IR_Gen/idisa_target.h>
+
 #include <cc/alphabet.h>
-#include <cc/cc_compiler.h>                        // for CC_Compiler
-#include <kernels/pipeline_builder.h>
-#include <kernels/deletion.h>                      // for DeletionKernel
-#include <kernels/swizzle.h>                      // for DeletionKernel
-#include <kernels/source_kernel.h>
-#include <kernels/p2s_kernel.h>                    // for P2S16KernelWithCom...
-#include <kernels/s2p_kernel.h>                    // for S2PKernel
-#include <kernels/stdout_kernel.h>                 // for StdOutKernel_
-#include <llvm/ExecutionEngine/ExecutionEngine.h>  // for ExecutionEngine
-#include <llvm/IR/Function.h>                      // for Function, Function...
-#include <llvm/IR/Module.h>                        // for Module
-#include <llvm/IR/Verifier.h>                      // for verifyModule
-#include <llvm/Support/CommandLine.h>              // for ParseCommandLineOp...
-#include <llvm/Support/Debug.h>                    // for dbgs
-#include <pablo/pablo_kernel.h>                    // for PabloKernel
-#include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
+#include <cc/cc_compiler.h>
+#include <cc/cc_kernel.h>
+#include <kernels/deletion.h>
 #include <kernels/kernel_builder.h>
-#include <pablo/pe_zeroes.h>
-#include <toolchain/toolchain.h>
-#include <toolchain/cpudriver.h>
-#include <kernels/streamset.h>
-#include <llvm/ADT/StringRef.h>
-#include <llvm/IR/CallingConv.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/Value.h>
-#include <llvm/Support/Compiler.h>
+#include <kernels/p2s_kernel.h>
+#include <kernels/pipeline_builder.h>
+#include <kernels/s2p_kernel.h>
+#include <kernels/source_kernel.h>
+#include <kernels/stdout_kernel.h>
+#include <kernels/swizzle.h>
+#include <kernels/zeroextend.h>
 #include <pablo/builder.hpp>
-#include <boost/interprocess/anonymous_shared_memory.hpp>
-#include <boost/interprocess/mapped_region.hpp>
+#include <pablo/pablo_kernel.h>
+#include <pablo/pablo_toolchain.h>
+#include <pablo/pe_zeroes.h>
+#include <toolchain/cpudriver.h>
+#include <toolchain/toolchain.h>
+
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <iostream>
 
 using namespace pablo;
 using namespace kernel;
 using namespace llvm;
 using namespace codegen;
+using namespace re;
 
 static cl::OptionCategory u8u16Options("u8u16 Options", "Transcoding control options.");
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(u8u16Options));
@@ -49,6 +42,8 @@ static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>")
 static cl::opt<bool> enableAVXdel("enable-AVX-deletion", cl::desc("Enable AVX2 deletion algorithms."), cl::cat(u8u16Options));
 static cl::opt<bool> mMapBuffering("mmap-buffering", cl::desc("Enable mmap buffering."), cl::cat(u8u16Options));
 static cl::opt<bool> memAlignBuffering("memalign-buffering", cl::desc("Enable posix_memalign buffering."), cl::cat(u8u16Options));
+
+static cl::opt<bool> BranchingMode("branch", cl::desc("Use Experimental branching pipeline mode"), cl::cat(u8u16Options));
 
 inline bool useAVX2() {
     return enableAVXdel && AVX2_available() && codegen::BlockSize == 256;
@@ -95,7 +90,7 @@ void U8U16Kernel::generatePabloMethod() {
     cc::Parabix_CC_Compiler ccc(getEntryScope(), u8_bits);
 
     // The logic for processing non-ASCII bytes will be embedded within an if-hierarchy.
-    PabloAST * nonASCII = ccc.compileCC(re::makeByte(0x80, 0xFF));
+    PabloAST * nonASCII = ccc.compileCC(makeByte(0x80, 0xFF));
 
     // Builder for the if statement handling all non-ASCII logic
     auto nAb = main.createScope();
@@ -108,7 +103,7 @@ void U8U16Kernel::generatePabloMethod() {
     PabloAST * bit0a1 = nAb.createAdvance(u8_bits[0], 1);
 
     // Entry condition for 3 or 4 byte sequences: we have a prefix byte in the range 0xE0-0xFF.
-    PabloAST * pfx34 = ccc.compileCC(re::makeByte(0xE0, 0xFF), nAb);
+    PabloAST * pfx34 = ccc.compileCC(makeByte(0xE0, 0xFF), nAb);
     // Builder for the if statement handling all logic for 3- and 4-byte sequences.
     auto p34b = nAb.createScope();
     // Bits LE3 through LE0 of a 3-byte prefix are data bits.  They must be moved
@@ -127,15 +122,15 @@ void U8U16Kernel::generatePabloMethod() {
     // Logic for 4-byte UTF-8 sequences
     //
     // Entry condition  or 4 byte sequences: we have a prefix byte in the range 0xF0-0xFF.
-    PabloAST * pfx4 = ccc.compileCC(re::makeByte(0xF0, 0xFF), p34b);
+    PabloAST * pfx4 = ccc.compileCC(makeByte(0xF0, 0xFF), p34b);
     // Builder for the if statement handling all logic for 4-byte sequences only.
     auto p4b = p34b.createScope();
     // Illegal 4-byte sequences
-    PabloAST * F0 = ccc.compileCC(re::makeByte(0xF0), p4b);
-    PabloAST * F4 = ccc.compileCC(re::makeByte(0xF4), p4b);
-    PabloAST * F0_err = p4b.createAnd(p4b.createAdvance(F0, 1), ccc.compileCC(re::makeByte(0x80, 0x8F), p4b));
-    PabloAST * F4_err = p4b.createAnd(p4b.createAdvance(F4, 1), ccc.compileCC(re::makeByte(0x90, 0xBF), p4b));
-    PabloAST * F5_FF = ccc.compileCC(re::makeByte(0xF5, 0xFF), p4b);
+    PabloAST * F0 = ccc.compileCC(makeByte(0xF0), p4b);
+    PabloAST * F4 = ccc.compileCC(makeByte(0xF4), p4b);
+    PabloAST * F0_err = p4b.createAnd(p4b.createAdvance(F0, 1), ccc.compileCC(makeByte(0x80, 0x8F), p4b));
+    PabloAST * F4_err = p4b.createAnd(p4b.createAdvance(F4, 1), ccc.compileCC(makeByte(0x90, 0xBF), p4b));
+    PabloAST * F5_FF = ccc.compileCC(makeByte(0xF5, 0xFF), p4b);
 
     Var * FX_err = p34b.createVar("FX_err", zeroes);
     p4b.createAssign(FX_err, p4b.createOr(F5_FF, p4b.createOr(F0_err, F4_err)));
@@ -184,16 +179,16 @@ void U8U16Kernel::generatePabloMethod() {
     //
     // Combined logic for 3 and 4 byte sequences
     //
-    PabloAST * pfx3 = ccc.compileCC(re::makeByte(0xE0, 0xEF), p34b);
+    PabloAST * pfx3 = ccc.compileCC(makeByte(0xE0, 0xEF), p34b);
 
     p34b.createAssign(u8scope32, p34b.createAdvance(pfx3, 1));
     p34b.createAssign(u8scope33, p34b.createAdvance(u8scope32, 1));
 
     // Illegal 3-byte sequences
-    PabloAST * E0 = ccc.compileCC(re::makeByte(0xE0), p34b);
-    PabloAST * ED = ccc.compileCC(re::makeByte(0xED), p34b);
-    PabloAST * E0_err = p34b.createAnd(p34b.createAdvance(E0, 1), ccc.compileCC(re::makeByte(0x80, 0x9F), p34b));
-    PabloAST * ED_err = p34b.createAnd(p34b.createAdvance(ED, 1), ccc.compileCC(re::makeByte(0xA0, 0xBF), p34b));
+    PabloAST * E0 = ccc.compileCC(makeByte(0xE0), p34b);
+    PabloAST * ED = ccc.compileCC(makeByte(0xED), p34b);
+    PabloAST * E0_err = p34b.createAnd(p34b.createAdvance(E0, 1), ccc.compileCC(makeByte(0x80, 0x9F), p34b));
+    PabloAST * ED_err = p34b.createAnd(p34b.createAdvance(ED, 1), ccc.compileCC(makeByte(0xA0, 0xBF), p34b));
     Var * EX_FX_err = nAb.createVar("EX_FX_err", zeroes);
 
     p34b.createAssign(EX_FX_err, p34b.createOr(p34b.createOr(E0_err, ED_err), FX_err));
@@ -220,15 +215,15 @@ void U8U16Kernel::generatePabloMethod() {
 
     Var * u8lastscope = main.createVar("u8lastscope", zeroes);
 
-    PabloAST * pfx2 = ccc.compileCC(re::makeByte(0xC0, 0xDF), nAb);
+    PabloAST * pfx2 = ccc.compileCC(makeByte(0xC0, 0xDF), nAb);
     PabloAST * u8scope22 = nAb.createAdvance(pfx2, 1);
     nAb.createAssign(u8lastscope, nAb.createOr(u8scope22, nAb.createOr(u8scope33, u8scope44)));
     PabloAST * u8anyscope = nAb.createOr(u8lastscope, p34del);
 
-    PabloAST * C0_C1_err = ccc.compileCC(re::makeByte(0xC0, 0xC1), nAb);
-    PabloAST * scope_suffix_mismatch = nAb.createXor(u8anyscope, ccc.compileCC(re::makeByte(0x80, 0xBF), nAb));
+    PabloAST * C0_C1_err = ccc.compileCC(makeByte(0xC0, 0xC1), nAb);
+    PabloAST * scope_suffix_mismatch = nAb.createXor(u8anyscope, ccc.compileCC(makeByte(0x80, 0xBF), nAb));
     nAb.createAssign(error_mask, nAb.createOr(scope_suffix_mismatch, nAb.createOr(C0_C1_err, EX_FX_err)));
-    nAb.createAssign(delmask, nAb.createOr(p34del, ccc.compileCC(re::makeByte(0xC0, 0xFF), nAb)));
+    nAb.createAssign(delmask, nAb.createOr(p34del, ccc.compileCC(makeByte(0xC0, 0xFF), nAb)));
 
     // The low 3 bits of the high byte of the UTF-16 code unit as well as the high bit of the
     // low byte are only nonzero for 2, 3 and 4 byte sequences.
@@ -244,7 +239,7 @@ void U8U16Kernel::generatePabloMethod() {
     main.createIf(nonASCII, nAb);
     //
     //
-    PabloAST * ASCII = ccc.compileCC(re::makeByte(0x0, 0x7F));
+    PabloAST * ASCII = ccc.compileCC(makeByte(0x0, 0x7F));
     PabloAST * last_byte = main.createOr(ASCII, u8lastscope);
     main.createAssign(u16_lo[6], main.createOr(main.createAnd(ASCII, u8_bits[6]), p234_lo6));
     main.createAssign(u16_lo[5], main.createOr(main.createAnd(last_byte, u8_bits[5]), s43_lo5));
@@ -266,6 +261,8 @@ void U8U16Kernel::generatePabloMethod() {
 }
 
 typedef void (*u8u16FunctionType)(uint32_t fd, const char *);
+
+// ------------------------------------------------------
 
 u8u16FunctionType generatePipeline(CPUDriver & pxDriver) {
 
@@ -312,6 +309,72 @@ u8u16FunctionType generatePipeline(CPUDriver & pxDriver) {
     return reinterpret_cast<u8u16FunctionType>(P->compile());
 }
 
+// ------------------------------------------------------
+
+void makeNonAsciiBranch(const std::unique_ptr<PipelineBuilder> & P, const unsigned FieldWidth, StreamSet * const ByteStream, StreamSet * const u16bytes) {
+
+    // Transposed bits from s2p
+    StreamSet * BasisBits = P->CreateStreamSet(8);
+    P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+
+    // Calculate UTF-16 data bits through bitwise logic on u8-indexed streams.
+    StreamSet * u8bits = P->CreateStreamSet(16);
+    StreamSet * selectors = P->CreateStreamSet();
+    P->CreateKernelCall<U8U16Kernel>(BasisBits, u8bits, selectors);
+
+    StreamSet * u16bits = P->CreateStreamSet(16);
+    if (useAVX2()) {
+        // Allocate space for fully compressed swizzled UTF-16 bit streams
+        std::vector<StreamSet *> u16Swizzles(4);
+        u16Swizzles[0] = P->CreateStreamSet(4);
+        u16Swizzles[1] = P->CreateStreamSet(4);
+        u16Swizzles[2] = P->CreateStreamSet(4);
+        u16Swizzles[3] = P->CreateStreamSet(4);
+        // Apply a deletion algorithm to discard all but the final position of the UTF-8
+        // sequences (bit streams) for each UTF-16 code unit. Also compresses and swizzles the result.
+        P->CreateKernelCall<SwizzledDeleteByPEXTkernel>(selectors, u8bits, u16Swizzles);
+        // Produce unswizzled UTF-16 bit streams
+        P->CreateKernelCall<SwizzleGenerator>(u16Swizzles, std::vector<StreamSet *>{u16bits});
+        P->CreateKernelCall<P2S16Kernel>(u16bits, u16bytes);
+    } else {
+        P->CreateKernelCall<FieldCompressKernel>(FieldWidth, u8bits, selectors, u16bits);
+        P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes);
+    }
+}
+
+void makeAllAsciiBranch(const std::unique_ptr<PipelineBuilder> & P, StreamSet * const ByteStream, StreamSet * const u16bytes) {
+    P->CreateKernelCall<ZeroExtend>(ByteStream, u16bytes);
+}
+
+u8u16FunctionType generatePipeline2(CPUDriver & pxDriver) {
+
+    auto & b = pxDriver.getBuilder();
+    auto P = pxDriver.makePipeline({Binding{b->getInt32Ty(), "inputFileDecriptor"}, Binding{b->getInt8PtrTy(), "outputFileName"}}, {});
+    Scalar * fileDescriptor = P->getInputScalar("inputFileDecriptor");
+    // File data from mmap
+    StreamSet * const ByteStream = P->CreateStreamSet(1, 8);
+    StreamSet * const u16bytes = P->CreateStreamSet(1, 16);
+    P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, ByteStream);
+
+    StreamSet * const nonAscii =  P->CreateStreamSet();
+
+    CC * const nonAsciiCC = makeByte(0x80, 0xFF);
+    P->CreateKernelCall<CharacterClassKernelBuilder>(
+        "nonASCII", std::vector<CC *>{nonAsciiCC}, ByteStream, nonAscii);
+
+    auto B = P->CreateOptimizationBranch(nonAscii,
+        {Binding{"ByteStream", ByteStream}}, {Binding{"u16bytes", u16bytes, BoundedRate(0, 1)}});
+
+    makeNonAsciiBranch(B->getNonZeroBranch(), b->getBitBlockWidth() / 16, ByteStream, u16bytes);
+
+    makeAllAsciiBranch(B->getAllZeroBranch(), ByteStream, u16bytes);
+
+    Scalar * outputFileName = P->getInputScalar("outputFileName");
+    P->CreateKernelCall<FileSink>(outputFileName, u16bytes);
+
+    return reinterpret_cast<u8u16FunctionType>(P->compile());
+}
+
 size_t file_size(const int fd) {
     struct stat st;
     if (LLVM_UNLIKELY(fstat(fd, &st) != 0)) {
@@ -323,7 +386,12 @@ size_t file_size(const int fd) {
 int main(int argc, char *argv[]) {
     codegen::ParseCommandLineOptions(argc, argv, {&u8u16Options, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     CPUDriver pxDriver("u8u16");
-    auto u8u16Function = generatePipeline(pxDriver);
+    u8u16FunctionType u8u16Function = nullptr;
+    if (BranchingMode) {
+        u8u16Function = generatePipeline2(pxDriver);
+    } else {
+        u8u16Function = generatePipeline(pxDriver);
+    }
     const int fd = open(inputFile.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
         std::cerr << "Error: cannot open " << inputFile << " for processing. Skipped.\n";

@@ -8,7 +8,6 @@
 #define NVPTXDRIVER_H
 
 #include <toolchain/driver.h>
-#include <toolchain/object_cache_manager.h>
 
 class NVPTXDriver final : public BaseDriver {
     friend class CBuilder;
@@ -21,7 +20,7 @@ public:
 
     void generateUncachedKernels() { }
 
-    void * finalizeObject(llvm::Function * mainMethod) override;
+    void * finalizeObject(kernel::PipelineKernel * pipeline) override;
 
     bool hasExternalFunction(const llvm::StringRef /* functionName */) const override { return false; }
 

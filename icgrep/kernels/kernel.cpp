@@ -27,6 +27,7 @@
 #include <boost/uuid/sha1.hpp>
 #include <llvm/Support/Format.h>
 #include <sstream>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 using namespace boost;
@@ -156,9 +157,24 @@ void Kernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::generateKernel(const std::unique_ptr<KernelBuilder> & b) {
+    if (LLVM_UNLIKELY(mIsGenerated)) return;
+    b->setKernel(this);
+    b->setModule(mModule);
+    addKernelDeclarations(b);
+    callGenerateInitializeMethod(b);
+    callGenerateDoSegmentMethod(b);
+    callGenerateFinalizeMethod(b);
+    addAdditionalFunctions(b);
+    mIsGenerated = true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInitializeDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) {
 
     std::vector<Type *> params;
     if (LLVM_LIKELY(isStateful())) {
@@ -186,7 +202,7 @@ void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief callGenerateInitializeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
     const Kernel * const storedKernel = b->getKernel();
     b->setKernel(this);
     Value * const storedHandle = getHandle();
@@ -259,61 +275,10 @@ inline bool hasParam(const Binding & binding) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addDoSegmentDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
 
-    IntegerType * const sizeTy = b->getSizeTy();
-    PointerType * const sizePtrTy = sizeTy->getPointerTo();
-
-    std::vector<Type *> params;
-    params.reserve(2 + mInputStreamSets.size() + mOutputStreamSets.size());
-    if (LLVM_LIKELY(isStateful())) {
-        params.push_back(mKernelStateType->getPointerTo());  // handle
-    }
-    params.push_back(sizeTy); // numOfStrides
-    for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
-        Type * const bufferType = mStreamSetInputBuffers[i]->getType();
-        // logical base input address
-        params.push_back(bufferType->getPointerTo());
-        // processed input items
-        const Binding & input = mInputStreamSets[i];
-        if (isParamAddressable(input)) {
-            params.push_back(sizePtrTy); // updatable
-        }  else if (isParamConstant(input)) {
-            params.push_back(sizeTy);  // constant
-        }
-        // accessible input items (after non-deferred processed item count)
-        params.push_back(sizeTy);
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            params.push_back(sizePtrTy);
-        }
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            params.push_back(sizePtrTy);
-        }
-    }
-
-    const auto canTerminate = canSetTerminateSignal();
-
-    for (unsigned i = 0; i < mOutputStreamSets.size(); ++i) {
-        const Binding & output = mOutputStreamSets[i];
-        // logical base output address
-        if (LLVM_LIKELY(!isLocalBuffer(output))) {
-            Type * const bufferType = mStreamSetOutputBuffers[i]->getType();
-            params.push_back(bufferType->getPointerTo());
-        }
-        // produced output items
-        if (canTerminate || isParamAddressable(output)) {
-            params.push_back(sizePtrTy); // updatable
-        } else if (isParamConstant(output)) {
-            params.push_back(sizeTy); // constant
-        }
-        // If this is a local buffer, the next param is its consumed item count;
-        // otherwise it'll hold its writable output items.
-        params.push_back(sizeTy);
-    }
-
-
-    Type * const retTy = canTerminate ? b->getInt1Ty() : b->getVoidTy();
-    FunctionType * const doSegmentType = FunctionType::get(retTy, params, false);
+    Type * const retTy = canSetTerminateSignal() ? b->getInt1Ty() : b->getVoidTy();
+    FunctionType * const doSegmentType = FunctionType::get(retTy, getDoSegmentFields(b), false);
     Function * const doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, b->getModule());
     doSegment->setCallingConv(CallingConv::C);
     doSegment->setDoesNotThrow();
@@ -353,12 +318,68 @@ void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
     assert (args == doSegment->arg_end());
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getDoSegmentFields
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuilder> & b) const {
 
+    IntegerType * const sizeTy = b->getSizeTy();
+    PointerType * const sizePtrTy = sizeTy->getPointerTo();
+
+    std::vector<Type *> fields;
+    fields.reserve(2 + mInputStreamSets.size() + mOutputStreamSets.size());
+    if (LLVM_LIKELY(isStateful())) {
+        fields.push_back(mKernelStateType->getPointerTo());  // handle
+    }
+    fields.push_back(sizeTy); // numOfStrides
+    for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
+        Type * const bufferType = mStreamSetInputBuffers[i]->getType();
+        // logical base input address
+        fields.push_back(bufferType->getPointerTo());
+        // processed input items
+        const Binding & input = mInputStreamSets[i];
+        if (isParamAddressable(input)) {
+            fields.push_back(sizePtrTy); // updatable
+        }  else if (isParamConstant(input)) {
+            fields.push_back(sizeTy);  // constant
+        }
+        // accessible input items (after non-deferred processed item count)
+        fields.push_back(sizeTy);
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+            fields.push_back(sizePtrTy);
+        }
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+            fields.push_back(sizePtrTy);
+        }
+    }
+
+    const auto canTerminate = canSetTerminateSignal();
+
+    for (unsigned i = 0; i < mOutputStreamSets.size(); ++i) {
+        const Binding & output = mOutputStreamSets[i];
+        // logical base output address
+        if (LLVM_LIKELY(!isLocalBuffer(output))) {
+            Type * const bufferType = mStreamSetOutputBuffers[i]->getType();
+            fields.push_back(bufferType->getPointerTo());
+        }
+        // produced output items
+        if (canTerminate || isParamAddressable(output)) {
+            fields.push_back(sizePtrTy); // updatable
+        } else if (isParamConstant(output)) {
+            fields.push_back(sizeTy); // constant
+        }
+        // If this is a local buffer, the next param is its consumed item count;
+        // otherwise it'll hold its writable output items.
+        fields.push_back(sizeTy);
+    }
+
+    return fields;
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief callGenerateKernelMethod
+ * @brief callGenerateDoSegmentMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
 
     assert (mInputStreamSets.size() == mStreamSetInputBuffers.size());
     assert (mOutputStreamSets.size() == mStreamSetOutputBuffers.size());
@@ -368,191 +389,35 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
     Value * const storedHandle = getHandle();
     mCurrentMethod = getDoSegmentFunction(b->getModule());
     b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
-    auto args = mCurrentMethod->arg_begin();
-    if (LLVM_LIKELY(isStateful())) {
-        setHandle(b, &*(args++));
+
+    std::vector<Value *> args;
+    args.reserve(mCurrentMethod->arg_size());
+    for (Argument & arg : mCurrentMethod->getArgumentList()) {
+        args.push_back(&arg);
     }
-    mNumOfStrides = &*(args++);
-    mIsFinal = b->CreateIsNull(mNumOfStrides);
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mHandle,CBuilder::Protect::WRITE);
-    }
+    setDoSegmentProperties(b, args);
 
-    // NOTE: the disadvantage of passing the stream pointers as a parameter is that it becomes more difficult
-    // to access a stream set from a LLVM function call. We could create a stream-set aware function creation
-    // and call system here but that is not an ideal way of handling this.
-
-    const auto numOfInputs = getNumOfStreamInputs();
-    reset(mProcessedInputItemPtr, numOfInputs);
-    reset(mAccessibleInputItems, numOfInputs);
-    reset(mAvailableInputItems, numOfInputs);
-    reset(mPopCountRateArray, numOfInputs);
-    reset(mNegatedPopCountRateArray, numOfInputs);
-    std::vector<Value *> updatableProcessedInputItems;
-    reset(updatableProcessedInputItems, numOfInputs);
-
-    IntegerType * const sizeTy = b->getSizeTy();
-
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        /// ----------------------------------------------------
-        /// logical buffer base address
-        /// ----------------------------------------------------
-        const Binding & input = mInputStreamSets[i];
-        assert (args != mCurrentMethod->arg_end());
-        Value * const addr = &*(args++);
-        auto & buffer = mStreamSetInputBuffers[i];
-        Value * const localHandle = b->CreateAlloca(buffer->getHandleType(b));
-        buffer->setHandle(b, localHandle);
-        buffer->setBaseAddress(b.get(), addr);
-        /// ----------------------------------------------------
-        /// processed item count
-        /// ----------------------------------------------------
-
-        // NOTE: we create a redundant alloca to store the input param so that
-        // Mem2Reg can convert it into a PHINode if the item count is updated in
-        // a loop; otherwise, it will be discarded in favor of the param itself.
-
-        Value * processed = nullptr;
-        if (isParamAddressable(input)) {
-            assert (args != mCurrentMethod->arg_end());
-            updatableProcessedInputItems[i] = &*(args++);
-            processed = b->CreateLoad(updatableProcessedInputItems[i]);
-        } else if (LLVM_LIKELY(isParamConstant(input))) {
-            assert (args != mCurrentMethod->arg_end());
-            processed = &*(args++);
-        } else { // isRelative
-            const ProcessingRate & rate = input.getRate();
-            Port port; unsigned index;
-            std::tie(port, index) = getStreamPort(rate.getReference());
-            assert (port == Port::Input && index < i);
-            assert (mProcessedInputItemPtr[index]);
-            Value * const ref = b->CreateLoad(mProcessedInputItemPtr[index]);
-            processed = b->CreateMul2(ref, rate.getRate());
-        }
-        AllocaInst * const processedItems = b->CreateAlloca(sizeTy);
-        b->CreateStore(processed, processedItems);
-        mProcessedInputItemPtr[i] = processedItems;
-        /// ----------------------------------------------------
-        /// accessible item count
-        /// ----------------------------------------------------
-        assert (args != mCurrentMethod->arg_end());
-        Value * const accessible = &*(args++);
-        mAccessibleInputItems[i] = accessible;
-        Value * capacity = b->CreateAdd(processed, accessible);
-        mAvailableInputItems[i] = capacity;
-        if (input.hasLookahead()) {
-            capacity = b->CreateAdd(capacity, b->getSize(input.getLookahead()));
-        }
-        buffer->setCapacity(b.get(), capacity);
-
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            assert (args != mCurrentMethod->arg_end());
-            mPopCountRateArray[i] = &*(args++);
-        }
-
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            assert (args != mCurrentMethod->arg_end());
-            mNegatedPopCountRateArray[i] = &*(args++);
-        }
-    }
-
-    // set all of the output buffers
-    const auto numOfOutputs = getNumOfStreamOutputs();
-    reset(mProducedOutputItemPtr, numOfOutputs);
-    reset(mWritableOutputItems, numOfOutputs);
-    reset(mConsumedOutputItems, numOfOutputs);
-    std::vector<Value *> updatableProducedOutputItems;
-    reset(updatableProducedOutputItems, numOfOutputs);
-
-    const auto canTerminate = canSetTerminateSignal();
-
-    for (unsigned i = 0; i < numOfOutputs; i++) {
-        /// ----------------------------------------------------
-        /// logical buffer base address
-        /// ----------------------------------------------------
-
-        auto & buffer = mStreamSetOutputBuffers[i];
-        const Binding & output = mOutputStreamSets[i];
-        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
-            // If an output is a managed buffer, the address is stored within the state instead
-            // of being passed in through the function call.
-            Value * const handle = b->getScalarFieldPtr(output.getName() + BUFFER_HANDLE_SUFFIX);
-            buffer->setHandle(b, handle);
-        } else {
-            assert (args != mCurrentMethod->arg_end());
-            Value * const logicalBaseAddress = &*(args++);
-            Value * const localHandle = b->CreateAlloca(buffer->getHandleType(b));
-            buffer->setHandle(b, localHandle);
-            buffer->setBaseAddress(b.get(), logicalBaseAddress);
-        }
-        /// ----------------------------------------------------
-        /// produced item count
-        /// ----------------------------------------------------
-        Value * produced = nullptr;
-        if (LLVM_LIKELY(canTerminate || isParamAddressable(output))) {
-            assert (args != mCurrentMethod->arg_end());
-            updatableProducedOutputItems[i] = &*(args++);
-            produced = b->CreateLoad(updatableProducedOutputItems[i]);
-        } else if (LLVM_LIKELY(isParamConstant(output))) {
-            assert (args != mCurrentMethod->arg_end());
-            produced = &*(args++);
-        } else { // isRelative
-
-            // For now, if something is produced at a relative rate to another stream in a kernel that
-            // may terminate, its final item count is inherited from its reference stream and cannot
-            // be set independently. Should they be independent at early termination?
-
-            const ProcessingRate & rate = output.getRate();
-            Port port; unsigned index;
-            std::tie(port, index) = getStreamPort(rate.getReference());
-            assert (port == Port::Input || (port == Port::Output && index < i));
-            const auto & items = (port == Port::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
-            Value * const ref = b->CreateLoad(items[index]);
-            produced = b->CreateMul2(ref, rate.getRate());
-        }
-        AllocaInst * const producedItems = b->CreateAlloca(sizeTy);
-        b->CreateStore(produced, producedItems);
-        mProducedOutputItemPtr[i] = producedItems;
-        /// ----------------------------------------------------
-        /// consumed or writable item count
-        /// ----------------------------------------------------
-        Value * const arg = &*(args++);
-        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
-            mConsumedOutputItems[i] = arg;
-        } else {
-            mWritableOutputItems[i] = arg;
-            Value * const capacity = b->CreateAdd(produced, arg);
-            buffer->setCapacity(b.get(), capacity);
-        }
-
-    }
-    assert (args == mCurrentMethod->arg_end());
-
-    // initialize the termination signal if this kernel can set it
-    mTerminationSignalPtr = nullptr;
-    if (canTerminate) {
-        mTerminationSignalPtr = b->CreateAlloca(b->getInt1Ty(), nullptr, "terminationSignal");
-        b->CreateStore(b->getFalse(), mTerminationSignalPtr);
-    }
-
-    initializeLocalScalarValues(b);
     generateKernelMethod(b);
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mHandle, CBuilder::Protect::READ);
     }
 
+    const auto numOfInputs = getNumOfStreamInputs();
+
     for (unsigned i = 0; i < numOfInputs; i++) {
-        if (updatableProcessedInputItems[i]) {
+        if (mUpdatableProcessedInputItemPtr[i]) {
             Value * const items = b->CreateLoad(mProcessedInputItemPtr[i]);
-            b->CreateStore(items, updatableProcessedInputItems[i]);
+            b->CreateStore(items, mUpdatableProcessedInputItemPtr[i]);
         }
     }
 
+    const auto numOfOutputs = getNumOfStreamOutputs();
+
     for (unsigned i = 0; i < numOfOutputs; i++) {
-        if (updatableProducedOutputItems[i]) {
+        if (mUpdatableProducedOutputItemPtr[i]) {
             Value * const items = b->CreateLoad(mProducedOutputItemPtr[i]);
-            b->CreateStore(items, updatableProducedOutputItems[i]);
+            b->CreateStore(items, mUpdatableProducedOutputItemPtr[i]);
         }
     }
 
@@ -573,9 +438,265 @@ void Kernel::callGenerateKernelMethod(const std::unique_ptr<KernelBuilder> & b) 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setDoSegmentProperties
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, const std::vector<Value *> & args) {
+
+    initializeLocalScalarValues(b);
+
+    auto arg = args.begin();
+    if (LLVM_LIKELY(isStateful())) {
+        setHandle(b, *arg++);
+    }
+
+    mNumOfStrides = *arg++;
+    mIsFinal = b->CreateIsNull(mNumOfStrides);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
+        b->CreateMProtect(mHandle, CBuilder::Protect::WRITE);
+    }
+
+    // NOTE: the disadvantage of passing the stream pointers as a parameter is that it becomes more difficult
+    // to access a stream set from a LLVM function call. We could create a stream-set aware function creation
+    // and call system here but that is not an ideal way of handling this.
+
+    const auto numOfInputs = getNumOfStreamInputs();
+
+    reset(mProcessedInputItemPtr, numOfInputs);
+    reset(mAccessibleInputItems, numOfInputs);
+    reset(mAvailableInputItems, numOfInputs);
+    reset(mPopCountRateArray, numOfInputs);
+    reset(mNegatedPopCountRateArray, numOfInputs);
+    reset(mUpdatableProcessedInputItemPtr, numOfInputs);
+
+    IntegerType * const sizeTy = b->getSizeTy();
+
+    for (unsigned i = 0; i < numOfInputs; i++) {
+        /// ----------------------------------------------------
+        /// logical buffer base address
+        /// ----------------------------------------------------
+        const Binding & input = mInputStreamSets[i];
+        assert (arg != args.end());
+        Value * const addr = *arg++;
+        auto & buffer = mStreamSetInputBuffers[i];
+        Value * const localHandle = b->CreateAlloca(buffer->getHandleType(b));
+        buffer->setHandle(b, localHandle);
+        buffer->setBaseAddress(b.get(), addr);
+        /// ----------------------------------------------------
+        /// processed item count
+        /// ----------------------------------------------------
+
+        // NOTE: we create a redundant alloca to store the input param so that
+        // Mem2Reg can convert it into a PHINode if the item count is updated in
+        // a loop; otherwise, it will be discarded in favor of the param itself.
+
+        Value * processed = nullptr;
+        if (isParamAddressable(input)) {
+            assert (arg != args.end());
+            mUpdatableProcessedInputItemPtr[i] = *arg++;
+            processed = b->CreateLoad(mUpdatableProcessedInputItemPtr[i]);
+        } else if (LLVM_LIKELY(isParamConstant(input))) {
+            assert (arg != args.end());
+            processed = *arg++;
+        } else { // isRelative
+            const ProcessingRate & rate = input.getRate();
+            Port port; unsigned index;
+            std::tie(port, index) = getStreamPort(rate.getReference());
+            assert (port == Port::Input && index < i);
+            assert (mProcessedInputItemPtr[index]);
+            Value * const ref = b->CreateLoad(mProcessedInputItemPtr[index]);
+            processed = b->CreateMul2(ref, rate.getRate());
+        }
+        AllocaInst * const processedItems = b->CreateAlloca(sizeTy);
+        b->CreateStore(processed, processedItems);
+        mProcessedInputItemPtr[i] = processedItems;
+        /// ----------------------------------------------------
+        /// accessible item count
+        /// ----------------------------------------------------
+        assert (arg != args.end());
+        Value * const accessible = *arg++;
+        mAccessibleInputItems[i] = accessible;
+        Value * capacity = b->CreateAdd(processed, accessible);
+        mAvailableInputItems[i] = capacity;
+        if (input.hasLookahead()) {
+            capacity = b->CreateAdd(capacity, b->getSize(input.getLookahead()));
+        }
+        buffer->setCapacity(b.get(), capacity);
+
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+            assert (arg != args.end());
+            mPopCountRateArray[i] = *arg++;
+        }
+
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+            assert (arg != args.end());
+            mNegatedPopCountRateArray[i] = *arg++;
+        }
+    }
+
+    // set all of the output buffers
+    const auto numOfOutputs = getNumOfStreamOutputs();
+    reset(mProducedOutputItemPtr, numOfOutputs);
+    reset(mWritableOutputItems, numOfOutputs);
+    reset(mConsumedOutputItems, numOfOutputs);
+    reset(mUpdatableProducedOutputItemPtr, numOfOutputs);
+
+    const auto canTerminate = canSetTerminateSignal();
+
+    for (unsigned i = 0; i < numOfOutputs; i++) {
+        /// ----------------------------------------------------
+        /// logical buffer base address
+        /// ----------------------------------------------------
+
+        auto & buffer = mStreamSetOutputBuffers[i];
+        const Binding & output = mOutputStreamSets[i];
+        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
+            // If an output is a managed buffer, the address is stored within the state instead
+            // of being passed in through the function call.
+            Value * const handle = b->getScalarFieldPtr(output.getName() + BUFFER_HANDLE_SUFFIX);
+            buffer->setHandle(b, handle);
+        } else {
+            assert (arg != args.end());
+            Value * const logicalBaseAddress = *arg++;
+            Value * const localHandle = b->CreateAlloca(buffer->getHandleType(b));
+            buffer->setHandle(b, localHandle);
+            buffer->setBaseAddress(b.get(), logicalBaseAddress);
+        }
+        /// ----------------------------------------------------
+        /// produced item count
+        /// ----------------------------------------------------
+        Value * produced = nullptr;
+        if (LLVM_LIKELY(canTerminate || isParamAddressable(output))) {
+            assert (arg != args.end());
+            mUpdatableProducedOutputItemPtr[i] = *arg++;
+            produced = b->CreateLoad(mUpdatableProducedOutputItemPtr[i]);
+        } else if (LLVM_LIKELY(isParamConstant(output))) {
+            assert (arg != args.end());
+            produced = *arg++;
+        } else { // isRelative
+
+            // For now, if something is produced at a relative rate to another stream in a kernel that
+            // may terminate, its final item count is inherited from its reference stream and cannot
+            // be set independently. Should they be independent at early termination?
+
+            const ProcessingRate & rate = output.getRate();
+            Port port; unsigned index;
+            std::tie(port, index) = getStreamPort(rate.getReference());
+            assert (port == Port::Input || (port == Port::Output && index < i));
+            const auto & items = (port == Port::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
+            Value * const ref = b->CreateLoad(items[index]);
+            produced = b->CreateMul2(ref, rate.getRate());
+        }
+        AllocaInst * const producedItems = b->CreateAlloca(sizeTy);
+        b->CreateStore(produced, producedItems);
+        mProducedOutputItemPtr[i] = producedItems;
+        /// ----------------------------------------------------
+        /// consumed or writable item count
+        /// ----------------------------------------------------
+        Value * const items = *arg++;
+        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
+            mConsumedOutputItems[i] = items;
+        } else {
+            mWritableOutputItems[i] = items;
+            Value * const capacity = b->CreateAdd(produced, items);
+            buffer->setCapacity(b.get(), capacity);
+        }
+    }
+    assert (arg == args.end());
+
+    // initialize the termination signal if this kernel can set it
+    mTerminationSignalPtr = nullptr;
+    if (canTerminate) {
+        mTerminationSignalPtr = b->CreateAlloca(b->getInt1Ty(), nullptr, "terminationSignal");
+        b->CreateStore(b->getFalse(), mTerminationSignalPtr);
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getDoSegmentProperties
+ *
+ * Reverse of the setDoSegmentProperties operation; used by the PipelineKernel when constructing internal threads
+ * to simplify passing of the state data.
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b) const {
+
+    std::vector<Value *> props;
+    if (LLVM_LIKELY(isStateful())) {
+        props.push_back(mHandle);
+    }
+    props.push_back(mNumOfStrides);
+
+    const auto numOfInputs = getNumOfStreamInputs();
+    for (unsigned i = 0; i < numOfInputs; i++) {
+        /// ----------------------------------------------------
+        /// logical buffer base address
+        /// ----------------------------------------------------
+        const auto & buffer = mStreamSetInputBuffers[i];
+        props.push_back(buffer->getBaseAddress(b.get()));
+        /// ----------------------------------------------------
+        /// processed item count
+        /// ----------------------------------------------------
+        const Binding & input = mInputStreamSets[i];
+        if (isParamAddressable(input)) {
+            props.push_back(mProcessedInputItemPtr[i]);
+        } else if (LLVM_LIKELY(isParamConstant(input))) {
+            props.push_back(b->CreateLoad(mProcessedInputItemPtr[i]));
+        }
+        /// ----------------------------------------------------
+        /// accessible item count
+        /// ----------------------------------------------------
+        props.push_back(mAccessibleInputItems[i]);
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+            props.push_back(mPopCountRateArray[i]);
+        }
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+            props.push_back(mNegatedPopCountRateArray[i]);
+        }
+    }
+
+    // set all of the output buffers
+    const auto numOfOutputs = getNumOfStreamOutputs();
+    const auto canTerminate = canSetTerminateSignal();
+
+    for (unsigned i = 0; i < numOfOutputs; i++) {
+        /// ----------------------------------------------------
+        /// logical buffer base address
+        /// ----------------------------------------------------
+        const auto & buffer = mStreamSetOutputBuffers[i];
+        const Binding & output = mOutputStreamSets[i];
+        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
+            // If an output is a managed buffer, the address is stored within the state instead
+            // of being passed in through the function call.
+            Value * const handle = b->getScalarFieldPtr(output.getName() + BUFFER_HANDLE_SUFFIX);
+            props.push_back(handle);
+        } else {
+            props.push_back(buffer->getBaseAddress(b.get()));
+        }
+        /// ----------------------------------------------------
+        /// produced item count
+        /// ----------------------------------------------------
+        if (LLVM_LIKELY(canTerminate || isParamAddressable(output))) {
+            props.push_back(mProducedOutputItemPtr[i]);
+        } else if (LLVM_LIKELY(isParamConstant(output))) {
+            props.push_back(b->CreateLoad(mProducedOutputItemPtr[i]));
+        }
+        /// ----------------------------------------------------
+        /// consumed or writable item count
+        /// ----------------------------------------------------
+        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
+            props.push_back(mConsumedOutputItems[i]);
+        } else {
+            props.push_back(mWritableOutputItems[i]);
+        }
+    }
+
+    return props;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addFinalizeDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) {
     Type * resultType = nullptr;
     if (mOutputScalars.empty()) {
         resultType = b->getVoidTy();
@@ -609,7 +730,7 @@ void Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief callGenerateFinalizeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
 
     const Kernel * const storedKernel = b->getKernel();
     b->setKernel(this);
@@ -702,7 +823,7 @@ Function * Kernel::getInitFunction(Module * const module) const {
     const auto name = getName() + INIT_SUFFIX;
     Function * f = module->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
-        report_fatal_error("Cannot find " + name);
+        llvm_unreachable("cannot find Initialize function");
     }
     return f;
 }
@@ -714,7 +835,7 @@ Function * Kernel::getDoSegmentFunction(Module * const module) const {
     const auto name = getName() + DO_SEGMENT_SUFFIX;
     Function * f = module->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
-        report_fatal_error("Cannot find " + name);
+        llvm_unreachable("cannot find DoSegment function");
     }
     return f;
 }
@@ -726,10 +847,21 @@ Function * Kernel::getTerminateFunction(Module * const module) const {
     const auto name = getName() + TERMINATE_SUFFIX;
     Function * f = module->getFunction(name);
     if (LLVM_UNLIKELY(f == nullptr)) {
-        report_fatal_error("Cannot find " + name);
+        llvm_unreachable("cannot find Terminate function");
     }
     return f;
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isStateful
+ ** ------------------------------------------------------------------------------------------------------------- */
+LLVM_READNONE bool Kernel::isStateful() const {
+    if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
+        llvm_unreachable("kernel state must be constructed prior to calling isStateful");
+    }
+    return !mKernelStateType->isEmptyTy();
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief prepareKernel
@@ -861,10 +993,9 @@ Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & b) {
             handle = b->CreateAlignedMalloc(size, b->getCacheAlignment());
         }
         return b->CreatePointerCast(handle, mKernelStateType->getPointerTo());
-    } else {
-        llvm_unreachable("createInstance should not be called on stateless kernels");
-        return nullptr;
     }
+    llvm_unreachable("createInstance should not be called on stateless kernels");
+    return nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -880,26 +1011,16 @@ void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::v
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateKernel
- ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::generateKernel(const std::unique_ptr<KernelBuilder> & b) {
-    if (LLVM_UNLIKELY(mIsGenerated)) return;
-    b->setKernel(this);
-    b->setModule(mModule);
-    addKernelDeclarations(b);
-    callGenerateInitializeMethod(b);
-    callGenerateKernelMethod(b);
-    callGenerateFinalizeMethod(b);
-    addAdditionalFunctions(b);
-    mIsGenerated = true;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief finalizeInstance
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b) {
-    assert (mHandle && "was not set");
-    Value * result = b->CreateCall(getTerminateFunction(b->getModule()), { mHandle });
+    Value * result = nullptr;
+    Function * const termFunc = getTerminateFunction(b->getModule());
+    if (LLVM_LIKELY(isStateful())) {
+        result = b->CreateCall(termFunc, { mHandle });
+    } else {
+        result = b->CreateCall(termFunc);
+    }
     mHandle = nullptr;
     if (mOutputScalars.empty()) {
         assert (!result || result->getType()->isVoidTy());
@@ -934,7 +1055,7 @@ Value * Kernel::getScalarFieldPtr(KernelBuilder & b, const StringRef name) const
     switch (field.Type) {
         case ScalarType::Local:
             return mLocalScalarPtr[index];
-            case ScalarType::Internal:
+        case ScalarType::Internal:
             index += mOutputScalars.size();
         case ScalarType::Output:
             index += mInputScalars.size();

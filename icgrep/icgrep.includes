@@ -26,3 +26,4 @@ re/Unicode
 pablo/analysis
 pablo/passes
 kernels/lzparabix/decoder
+kernels/optimizationbranch

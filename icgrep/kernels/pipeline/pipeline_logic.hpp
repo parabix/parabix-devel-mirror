@@ -37,8 +37,10 @@ inline void destroyStateObject(BuilderRef b, Value * ptr) {
  * @brief addPipelineKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
+    // TODO: look into improving cache locality/false sharing of this struct
     b->setKernel(mPipelineKernel);
     addTerminationProperties(b);
+    addConsumerKernelProperties(b, mPipelineInput);
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
         addInternalKernelProperties(b, i);
@@ -54,11 +56,17 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex) {
     const Kernel * const kernel = mPipeline[kernelIndex];
+    // If we've proven we do not need synchronization then we've already proven that
+    // we can calculate the item count and num of strides from the input item counts
     if (requiresSynchronization(kernelIndex)) {
 
         IntegerType * const sizeTy = b->getSizeTy();
         const auto name = makeKernelName(kernelIndex);
         mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX);
+
+        // TODO: if an kernel I/O stream is a pipeline I/O and the kernel processes it at the
+        // rate the pipeline processes it, can use the local state instead of storing the
+        // item count in the kernel.
 
         // TODO: non deferred item count for fixed rates could be calculated from total # of segments.
         const auto numOfInputs = kernel->getNumOfStreamInputs();
@@ -68,17 +76,30 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
             if (input.isDeferred()) {
                 mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
             }
-            // If we've proven we do not need synchronization then we've already proven that
-            // we can calculate the item count and num of strides from the input item counts
-            mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+//            if (LLVM_UNLIKELY(onlyOne && isPipelineInput(kernelIndex, i))) {
+//                mPipelineKernel->addLocalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+//            } else {
+                mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+//            }
         }
 
         const auto numOfOutputs = kernel->getNumOfStreamOutputs();
         for (unsigned i = 0; i < numOfOutputs; i++) {
             const Binding & output = kernel->getOutputStreamSetBinding(i);
             const auto prefix = makeBufferName(kernelIndex, output);
+//            if (LLVM_UNLIKELY(isPipelineOutput(kernelIndex, i))) {
+//                mPipelineKernel->addLocalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+//            } else {
                 mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+//            }
         }
+    }
+
+    if (LLVM_LIKELY(kernel->isStateful() && !kernel->hasFamilyName())) {
+        // if this is a family kernel, it's handle will be passed into the kernel
+        // methods rather than stored within the pipeline state
+        PointerType * kernelPtrTy = kernel->getKernelType()->getPointerTo(0);
+        mPipelineKernel->addInternalScalar(kernelPtrTy, makeKernelName(kernelIndex));
     }
 }
 
@@ -86,9 +107,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
  * @brief generateInitializeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        mPipeline[i]->addKernelDeclarations(b);
-    }
+    mScalarCache.clear();
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         Kernel * const kernel = mPipeline[i];
         if (kernel->isStateful() && !kernel->hasFamilyName()) {
@@ -102,16 +121,14 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         setActiveKernel(b, i);
         const auto hasHandle = mKernel->isStateful() ? 1U : 0U;
         args.resize(hasHandle + in_degree(i, mScalarDependencyGraph));
-        if (LLVM_LIKELY(hasHandle != 0U)) {
+        if (LLVM_LIKELY(hasHandle)) {
             args[0] = mKernel->getHandle();
         }
         b->setKernel(mPipelineKernel);
         for (const auto ce : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
-            const auto j = hasHandle + mScalarDependencyGraph[ce];
-            const auto pe = in_edge(source(ce, mScalarDependencyGraph), mScalarDependencyGraph);
-            const auto k = mScalarDependencyGraph[pe];
-            const Binding & input = mPipelineKernel->getInputScalarBinding(k);
-            args[j] = b->getScalarField(input.getName());
+            const auto j = mScalarDependencyGraph[ce] + hasHandle;
+            const auto scalar = source(ce, mScalarDependencyGraph);
+            args[j] = getScalar(b, scalar);
         }
         b->setKernel(mKernel);
         Value * const terminatedOnInit = b->CreateCall(getInitializationFunction(b), args);
@@ -126,6 +143,19 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         b->CreateBr(kernelExit);
 
         b->SetInsertPoint(kernelExit);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateKernelMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
+    mScalarCache.clear();
+    readPipelineIOItemCounts(b);
+    if (mPipelineKernel->getNumOfThreads() == 1) {
+        generateSingleThreadKernelMethod(b);
+    } else {
+        generateMultiThreadKernelMethod(b);
     }
 }
 
@@ -215,6 +245,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     Value * const threadStruct = b->CreateBitCast(&*(args), getThreadStateType(b)->getPointerTo());
     Value * const segmentOffset = setThreadState(b, threadStruct);
     // generate the pipeline logic for this thread
+    mPipelineKernel->initializeLocalScalarValues(b);
     start(b, segmentOffset);
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         setActiveKernel(b, i);
@@ -244,6 +275,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
  * @brief generateFinalizeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
+    mScalarCache.clear();
     printOptionalCycleCounter(b);
     std::vector<Value *> params;
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
@@ -253,7 +285,8 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         if (LLVM_LIKELY(mKernel->isStateful())) {
             params.push_back(mKernel->getHandle());
         }
-        mScalarDependencyGraph[i] = b->CreateCall(getFinalizeFunction(b), params);
+        Value * const result = b->CreateCall(getFinalizeFunction(b), params);
+        mScalarCache.emplace(i, result);
     }
     releaseBuffers(b);
 }
@@ -262,13 +295,11 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
  * @brief getFinalOutputScalars
  ** ------------------------------------------------------------------------------------------------------------- */
 std::vector<Value *> PipelineCompiler::getFinalOutputScalars(BuilderRef b) {
-
     const auto & calls = mPipelineKernel->getCallBindings();
     const auto numOfCalls = calls.size();
     std::vector<Value *> args;
     b->setKernel(mPipelineKernel);
-    const auto pipelineOutput = mLastKernel;
-    const auto firstCall = pipelineOutput + 1;
+    const auto firstCall = mPipelineOutput + 1;
     for (unsigned k = 0; k < numOfCalls; ++k) {
         writeOutputScalars(b, firstCall + k, args);
         Function * const f = cast<Function>(calls[k].Callee);
@@ -278,9 +309,10 @@ std::vector<Value *> PipelineCompiler::getFinalOutputScalars(BuilderRef b) {
             *j = b->CreateZExtOrTrunc(*j, i->getType());
         }
         assert (i == f->arg_end());
-        b->CreateCall(f, args);
+        Value * const result = b->CreateCall(f, args);
+        mScalarCache.emplace(firstCall + k, result);
     }
-    writeOutputScalars(b, pipelineOutput, args);
+    writeOutputScalars(b, mPipelineOutput, args);
     return args;
 }
 
@@ -290,35 +322,10 @@ std::vector<Value *> PipelineCompiler::getFinalOutputScalars(BuilderRef b) {
 void PipelineCompiler::writeOutputScalars(BuilderRef b, const unsigned index, std::vector<Value *> & args) {
     const auto n = in_degree(index, mScalarDependencyGraph);
     args.resize(n);
-    const auto pipelineInput = 0;
     for (const auto e : make_iterator_range(in_edges(index, mScalarDependencyGraph))) {
         const auto scalar = source(e, mScalarDependencyGraph);
-        // If we have not already retrieved the specific scalar, construct/load/extract it.
-        if (LLVM_LIKELY(mScalarDependencyGraph[scalar] == nullptr)) {
-            const auto producer = in_edge(scalar, mScalarDependencyGraph);
-            const auto i = source(producer, mScalarDependencyGraph);
-            const auto j = mScalarDependencyGraph[producer];
-            Value * value = nullptr;
-            if (LLVM_UNLIKELY(i == pipelineInput)) {
-                const Binding & input = mPipelineKernel->getInputScalarBinding(j);
-                const Relationship * const rel = getRelationship(input);
-                if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) {
-                    value = cast<ScalarConstant>(rel)->value();
-                } else {
-                    value = b->getScalarField(input.getName());
-                }
-            } else { // output scalar of some kernel
-                Value * const outputScalars = mScalarDependencyGraph[i]; assert (outputScalars);
-                if (outputScalars->getType()->isAggregateType()) {
-                    value = b->CreateExtractValue(outputScalars, {j});
-                } else { assert (j == 0 && "scalar type is not an aggregate");
-                    value = outputScalars;
-                }
-            }
-            mScalarDependencyGraph[scalar] = value;
-        }
         const auto k = mScalarDependencyGraph[e];
-        args[k] = mScalarDependencyGraph[scalar];
+        args[k] = getScalar(b, scalar);
     }
 }
 
@@ -402,73 +409,80 @@ bool PipelineCompiler::requiresSynchronization(const unsigned /* kernelIndex */)
 #endif
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getScalar
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::getScalar(BuilderRef b, const ScalarDependencyGraph::vertex_descriptor scalar) {
+    const auto f = mScalarCache.find(scalar);
+    if (LLVM_UNLIKELY(f != mScalarCache.end())) {
+        return f->second;
+    }
+    const auto producer = in_edge(scalar, mScalarDependencyGraph);
+    const auto i = source(producer, mScalarDependencyGraph);
+    const auto j = mScalarDependencyGraph[producer];
+    Value * value = nullptr;
+    if (i == mPipelineInput) {
+        if (LLVM_UNLIKELY(j == -1U)) {
+            value = mScalarDependencyGraph[scalar]->value();
+        } else {
+            const Binding & input = mPipelineKernel->getInputScalarBinding(j);
+            value = b->getScalarField(input.getName());
+        }
+    } else { // output scalar of some kernel
+        Value * const outputScalars = getScalar(b, i);
+        if (LLVM_UNLIKELY(outputScalars == nullptr)) {
+            report_fatal_error("Internal error: pipeline is unable to locate valid output scalar");
+        }
+        if (outputScalars->getType()->isAggregateType()) {
+            value = b->CreateExtractValue(outputScalars, {j});
+        } else { assert (j == 0 && "scalar type is not an aggregate");
+            value = outputScalars;
+        }
+    }
+    assert (value);
+    mScalarCache.emplace(scalar, value);
+    return value;
+}
 
 enum : unsigned {
-    HANDLE_INDEX = 0
-    , SEGMENT_OFFSET_INDEX = 1
-    , LOCAL_STATE_INDEX = 2
-    , FIRST_INPUT_STREAM_INDEX = 3
+    SEGMENT_OFFSET_INDEX = 0
+    , LOCAL_STATE_INDEX = 1
+    , SHARED_STATE_INDEX = 2
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getThreadStateType
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StructType * PipelineCompiler::getThreadStateType(BuilderRef b) {
-    std::vector<Type *> threadStructFields;
-    Type * const handleType = mPipelineKernel->getHandle()->getType();
-    threadStructFields.push_back(handleType);
-    threadStructFields.push_back(b->getSizeTy());
-    threadStructFields.push_back(getLocalStateType(b));
-    const auto numOfInputs = mPipelineKernel->getNumOfStreamInputs();
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        auto buffer = mPipelineKernel->getInputStreamSetBuffer(i);
-        Value * const handle = buffer->getHandle();
-        threadStructFields.push_back(handle->getType());
-    }
-    const auto numOfOutputs = mPipelineKernel->getNumOfStreamOutputs();
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        auto buffer = mPipelineKernel->getOutputStreamSetBuffer(i);
-        Value * const handle = buffer->getHandle();
-        threadStructFields.push_back(handle->getType());
-    }
-    return StructType::get(b->getContext(), threadStructFields);
+    std::vector<Type *> fields(3);
+    fields[SEGMENT_OFFSET_INDEX] = b->getSizeTy(); // segment offset
+    fields[LOCAL_STATE_INDEX] = getLocalStateType(b);
+    LLVMContext & C = b->getContext();
+    fields[SHARED_STATE_INDEX] = StructType::get(C, mPipelineKernel->getDoSegmentFields(b));
+    return StructType::get(C, fields);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructThreadState
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::allocateThreadState(BuilderRef b, const unsigned segOffset) {
-
     StructType * const threadStructType = getThreadStateType(b);
     Value * const threadState = makeStateObject(b, threadStructType);
-
     std::vector<Value *> indices(2);
     indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(HANDLE_INDEX);
-    Value * const handle = mPipelineKernel->getHandle();
-    b->CreateStore(handle, b->CreateGEP(threadState, indices));
     indices[1] = b->getInt32(SEGMENT_OFFSET_INDEX);
     b->CreateStore(b->getSize(segOffset), b->CreateGEP(threadState, indices));
     indices[1] = b->getInt32(LOCAL_STATE_INDEX);
     allocateThreadLocalState(b, b->CreateGEP(threadState, indices));
-
-    const auto numOfInputs = mPipelineKernel->getNumOfStreamInputs();
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto buffer = mPipelineKernel->getInputStreamSetBuffer(i);
-        Value * const handle = buffer->getHandle();
-        indices[1] = b->getInt32(FIRST_INPUT_STREAM_INDEX + i);
-        b->CreateStore(handle, b->CreateGEP(threadState, indices));
+    const auto props = mPipelineKernel->getDoSegmentProperties(b);
+    indices[1] = b->getInt32(SHARED_STATE_INDEX);
+    indices.push_back(nullptr);
+    const auto n = props.size();
+    assert (threadStructType->getStructElementType(SHARED_STATE_INDEX)->getStructNumElements() == n);
+    for (unsigned i = 0; i < n; ++i) {
+        indices[2] = b->getInt32(i);
+        b->CreateStore(props[i], b->CreateGEP(threadState, indices));
     }
-
-    const auto FIRST_OUTPUT_STREAM_INDEX = FIRST_INPUT_STREAM_INDEX + numOfInputs;
-    const auto numOfOutputs = mPipelineKernel->getNumOfStreamOutputs();
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto buffer = mPipelineKernel->getOutputStreamSetBuffer(i);
-        Value * const handle = buffer->getHandle();
-        indices[1] = b->getInt32(FIRST_OUTPUT_STREAM_INDEX + i);
-        b->CreateStore(handle, b->CreateGEP(threadState, indices));
-    }
-
     return threadState;
 }
 
@@ -476,36 +490,23 @@ inline Value * PipelineCompiler::allocateThreadState(BuilderRef b, const unsigne
  * @brief constructThreadState
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::setThreadState(BuilderRef b, Value * threadState) {
-
     std::vector<Value *> indices(2);
     indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(HANDLE_INDEX);
-
-    Value * handle = b->CreateLoad(b->CreateGEP(threadState, indices));
-    mPipelineKernel->setHandle(b, handle);
-
     indices[1] = b->getInt32(SEGMENT_OFFSET_INDEX);
     Value * const segmentOffset = b->CreateLoad(b->CreateGEP(threadState, indices));
-
     indices[1] = b->getInt32(LOCAL_STATE_INDEX);
     setThreadLocalState(b, b->CreateGEP(threadState, indices));
-
-    const auto numOfInputs = mPipelineKernel->getNumOfStreamInputs();
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        indices[1] = b->getInt32(FIRST_INPUT_STREAM_INDEX + i);
-        Value * streamHandle = b->CreateLoad(b->CreateGEP(threadState, indices));
-        auto buffer = mPipelineKernel->getInputStreamSetBuffer(i);
-        buffer->setHandle(b, streamHandle);
+    indices[1] = b->getInt32(SHARED_STATE_INDEX);
+    indices.push_back(nullptr);
+    Type * const kernelStructType = threadState->getType()->getPointerElementType();
+    const auto n = kernelStructType->getStructElementType(SHARED_STATE_INDEX)->getStructNumElements();
+    std::vector<Value *> args(n);
+    args.reserve(n);
+    for (unsigned i = 0; i < n; ++i) {
+        indices[2] = b->getInt32(i);
+        args[i] = b->CreateLoad(b->CreateGEP(threadState, indices));
     }
-    const auto FIRST_OUTPUT_STREAM_INDEX = FIRST_INPUT_STREAM_INDEX + numOfInputs;
-    const auto numOfOutputs = mPipelineKernel->getNumOfStreamOutputs();
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        indices[1] = b->getInt32(FIRST_OUTPUT_STREAM_INDEX + i);
-        Value * streamHandle = b->CreateLoad(b->CreateGEP(threadState, indices));
-        auto buffer = mPipelineKernel->getOutputStreamSetBuffer(i);
-        buffer->setHandle(b, streamHandle);
-    }
-
+    mPipelineKernel->setDoSegmentProperties(b, args);
     return segmentOffset;
 }
 

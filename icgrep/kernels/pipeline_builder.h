@@ -66,18 +66,25 @@ public:
                     Bindings && stream_inputs, Bindings && stream_outputs,
                     Bindings && scalar_inputs, Bindings && scalar_outputs,
                     const unsigned numOfThreads = 1);
-    
+
     virtual ~PipelineBuilder() {}
 
 protected:
+
+
+    // Internal pipeline constructor uses a zero-length tag struct to prevent
+    // overloading errors. This paramater will be dropped by the compiler.
+    struct Internal {};
+    PipelineBuilder(Internal, BaseDriver & driver,
+                    Bindings stream_inputs, Bindings stream_outputs,
+                    Bindings scalar_inputs, Bindings scalar_outputs,
+                    const unsigned numOfThreads = 1);
 
     virtual Kernel * makeKernel();
 
     Kernel * initializeKernel(Kernel * const kernel);
 
     void addInputScalar(llvm::Type * type, std::string name);
-
-    llvm::Function * addOrDeclareMainFunction(PipelineKernel * const pk);
 
 protected:
 
@@ -123,12 +130,12 @@ class OptimizationBranchBuilder final : public PipelineBuilder {
     friend class PipelineBuilder;
 public:
 
-    const std::unique_ptr<PipelineBuilder> & getTrueBranch() const {
-        return mTrueBranch;
+    const std::unique_ptr<PipelineBuilder> & getNonZeroBranch() const {
+        return mNonZeroBranch;
     }
 
-    const std::unique_ptr<PipelineBuilder> & getFalseBranch() const {
-        return mFalseBranch;
+    const std::unique_ptr<PipelineBuilder> & getAllZeroBranch() const {
+        return mAllZeroBranch;
     }
 
     ~OptimizationBranchBuilder();
@@ -143,8 +150,8 @@ protected:
 
 private:
     Relationship * const             mCondition;
-    std::unique_ptr<PipelineBuilder> mTrueBranch;
-    std::unique_ptr<PipelineBuilder> mFalseBranch;
+    std::unique_ptr<PipelineBuilder> mNonZeroBranch;
+    std::unique_ptr<PipelineBuilder> mAllZeroBranch;
 };
 
 inline std::shared_ptr<OptimizationBranchBuilder> PipelineBuilder::CreateOptimizationBranch (

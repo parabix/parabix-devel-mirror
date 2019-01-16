@@ -52,7 +52,7 @@ void ZeroExtend::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     }
 
     const auto inputVectorSize = (blockWidth / inputFieldWidth); assert (is_power_2(inputVectorSize));
-    const auto outputVectorWidth = (blockWidth / outputFieldWidth); assert (is_power_2(outputVectorWidth));
+    const auto outputVectorSize = (blockWidth / outputFieldWidth); assert (is_power_2(outputVectorSize));
 
     IntegerType * const sizeTy = b->getSizeTy();
 
@@ -61,11 +61,14 @@ void ZeroExtend::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     VectorType * const inputTy = VectorType::get(b->getIntNTy(inputFieldWidth), inputVectorSize);
     PointerType * const inputPtrTy = inputTy->getPointerTo();
 
+    VectorType * const outputTy = VectorType::get(b->getIntNTy(outputFieldWidth), outputVectorSize);
+    PointerType * const outputPtrTy = outputTy->getPointerTo();
+
     Value * const processed = b->getProcessedItemCount(input.getName());
-    Value * const baseInputPtr = b->getRawInputPointer(input.getName(), processed);
+    Value * const baseInputPtr = b->CreatePointerCast(b->getRawInputPointer(input.getName(), processed), inputPtrTy);
 
     Value * const produced = b->getProducedItemCount(output.getName());
-    Value * const baseOutputPtr = b->getRawOutputPointer(output.getName(), produced);
+    Value * const baseOutputPtr = b->CreatePointerCast(b->getRawOutputPointer(output.getName(), produced), outputPtrTy);
 
     BasicBlock * const entry = b->GetInsertBlock();
     BasicBlock * const loop = b->CreateBasicBlock("Loop");
@@ -76,14 +79,11 @@ void ZeroExtend::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     index->addIncoming(ZERO, entry);
 
     std::vector<Value *> inputBuffer(inputFieldWidth);
-    Constant * const log2InputSize = b->getSize(std::log2<unsigned>(inputFieldWidth));
-
     // read the values from the input stream
+    Value * const baseInputOffset = b->CreateMul(index, b->getSize(inputFieldWidth));
     for (unsigned i = 0; i < inputFieldWidth; ++i) {
-        Value * offset = b->CreateShl(index, log2InputSize);
-        offset = b->CreateAdd(offset, b->getSize(i * inputVectorSize));
-        Value * ptr = b->CreateGEP(baseInputPtr, offset);
-        ptr = b->CreatePointerCast(ptr, inputPtrTy);
+        Value * const offset = b->CreateAdd(baseInputOffset, b->getSize(i));
+        Value * const ptr = b->CreateGEP(baseInputPtr, offset);
         inputBuffer[i] = b->CreateAlignedLoad(ptr, (inputFieldWidth / CHAR_BIT));
     }
 
@@ -135,14 +135,10 @@ void ZeroExtend::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     }
 
     // write the values to the output stream
-    VectorType * const outputTy = cast<VectorType>(outputBuffer[0]->getType());
-    PointerType * const outputPtrTy = outputTy->getPointerTo();
-    Constant * const log2OutputSize = b->getSize(std::log2<unsigned>(outputFieldWidth));
+    Value * const baseOutputOffset = b->CreateMul(index, b->getSize(outputFieldWidth));
     for (unsigned i = 0; i < outputFieldWidth; ++i) {
-        Value * offset = b->CreateShl(index, log2OutputSize);
-        offset = b->CreateAdd(offset, b->getSize(i * outputVectorWidth));
-        Value * ptr = b->CreateGEP(baseOutputPtr, offset);
-        ptr = b->CreatePointerCast(ptr, outputPtrTy);
+        Value * const offset = b->CreateAdd(baseOutputOffset, b->getSize(i));
+        Value * const ptr = b->CreateGEP(baseOutputPtr, offset);
         b->CreateAlignedStore(outputBuffer[i], ptr, (outputFieldWidth / CHAR_BIT));
     }
 

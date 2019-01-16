@@ -49,7 +49,7 @@ public:
 
     virtual void generateUncachedKernels() = 0;
 
-    virtual void * finalizeObject(llvm::Function * mainMethod) = 0;
+    virtual void * finalizeObject(kernel::PipelineKernel * pipeline) = 0;
 
     virtual ~BaseDriver();
 

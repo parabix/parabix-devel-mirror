@@ -7,9 +7,21 @@ namespace llvm { class Value; }
 
 namespace kernel {
 
-class OptimizationBranch final : public Kernel {
+struct OptimizationBranchCompiler;
+
+class OptimizationBranch final : public MultiBlockKernel {
     friend class OptimizationBranchBuilder;
 public:
+
+    static bool classof(const Kernel * const k) {
+        switch (k->getTypeId()) {
+            case TypeId::MultiBlock:
+            case TypeId::OptimizationBranch:
+                return true;
+            default:
+                return false;
+        }
+    }
 
     const static std::string CONDITION_TAG;
 
@@ -27,28 +39,19 @@ protected:
                        Bindings && scalar_inputs,
                        Bindings && scalar_outputs);
 
-    void linkExternalMethods(const std::unique_ptr<KernelBuilder> & b) final;
+    void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) final;
 
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
-    void initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::vector<llvm::Value *> & args) final;
-
-    void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
 
     void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) final;
-
-    void addAdditionalFunctions(const std::unique_ptr<KernelBuilder> & b) final;
-
-    llvm::Value * finalizeInstance(const std::unique_ptr<KernelBuilder> & b) final;
-
-    void addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
-
-    std::vector<llvm::Value *> getFinalOutputScalars(const std::unique_ptr<KernelBuilder> & b) final;
 
 private:
 
     llvm::Value * getItemCountIncrement(const std::unique_ptr<KernelBuilder> & b, const Binding & binding,
-                                        llvm::Value * const first, llvm::Value * const last) const;
+                                        llvm::Value * const first, llvm::Value * const last,
+                                        llvm::Value * const defaultValue = nullptr) const;
 
     void callKernel(const std::unique_ptr<KernelBuilder> & b,
                     const Kernel * const kernel, llvm::Value * const first, llvm::Value * const last,
@@ -56,15 +59,10 @@ private:
 
 private:
 
-    Relationship * const         mCondition;
-    Kernel * const               mTrueKernel;
-    Kernel * const               mFalseKernel;
-
-    std::vector<llvm::Value *>   mProcessedInputItems;
-    std::vector<llvm::PHINode *> mAccessibleInputItemPhi;
-
-    std::vector<llvm::Value *>   mProducedOutputItems;
-    std::vector<llvm::PHINode *> mWritableOrConsumedOutputItemPhi;
+    Relationship * const                                mCondition;
+    Kernel * const                                      mNonZeroKernel;
+    Kernel * const                                      mAllZeroKernel;
+    mutable std::unique_ptr<OptimizationBranchCompiler> mCompiler;
 };
 
 }

@@ -9,136 +9,100 @@
 
 namespace kernel {
 
-#warning make sure all virtual methods are proxied for when only one kernel exists in the pipeline
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
-    if (LLVM_UNLIKELY(isProxy())) {
-        mKernels[0]->addInternalKernelProperties(b);
-    } else { // add handles for each of unique streams
-        mCompiler = llvm::make_unique<PipelineCompiler>(b, this);
-        mCompiler->addPipelineKernelProperties(b);
-    }
+    mCompiler = llvm::make_unique<PipelineCompiler>(b, this);
+    mCompiler->addPipelineKernelProperties(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeInstance
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::vector<Value *> & args) {
+    assert (args[0] && "cannot initialize before creation");
+    assert (args[0]->getType()->getPointerElementType() == mKernelStateType);
+    b->setKernel(this);
 
-    if (LLVM_UNLIKELY(isProxy())) {
-        mKernels[0]->initializeInstance(b, args);
-    } else {
-        assert (args[0] && "cannot initialize before creation");
-        assert (args[0]->getType()->getPointerElementType() == mKernelStateType);
-        b->setKernel(this);
-
-        // append the kernel pointers for any kernel belonging to a family
-        Module * const m = b->getModule();
-        for (auto & kernel : mKernels) {
-            if (kernel->hasFamilyName()) {
-                kernel->addKernelDeclarations(b);
-                PointerType * const voidPtrTy = b->getVoidPtrTy();
-                if (LLVM_UNLIKELY(kernel->isStateful())) {
-                    Value * const handle = kernel->createInstance(b);
-                    args.push_back(b->CreatePointerCast(handle, voidPtrTy));
-                }
-                args.push_back(b->CreatePointerCast(kernel->getInitFunction(m), voidPtrTy));
-                args.push_back(b->CreatePointerCast(kernel->getDoSegmentFunction(m), voidPtrTy));
-                args.push_back(b->CreatePointerCast(kernel->getTerminateFunction(m), voidPtrTy));
+    // append the kernel pointers for any kernel belonging to a family
+    Module * const m = b->getModule();
+    for (Kernel * kernel : mKernels) {
+        if (LLVM_UNLIKELY(kernel->hasFamilyName())) {
+            PointerType * const voidPtrTy = b->getVoidPtrTy();
+            if (LLVM_LIKELY(kernel->isStateful())) {
+                Value * const handle = kernel->createInstance(b);
+                args.push_back(b->CreatePointerCast(handle, voidPtrTy));
             }
+            args.push_back(b->CreatePointerCast(kernel->getInitFunction(m), voidPtrTy));
+            args.push_back(b->CreatePointerCast(kernel->getDoSegmentFunction(m), voidPtrTy));
+            args.push_back(b->CreatePointerCast(kernel->getTerminateFunction(m), voidPtrTy));
         }
-
-        b->CreateCall(getInitFunction(m), args);
     }
+
+    b->CreateCall(getInitFunction(m), args);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addKernelDeclarations
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
+    for (Kernel * kernel : mKernels) {
+        kernel->addKernelDeclarations(b);
+    }
+    Kernel::addKernelDeclarations(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateInitializeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
-    if (LLVM_UNLIKELY(isProxy())) {
-        mKernels[0]->generateInitializeMethod(b);
-    } else {
-        // TODO: this isn't sufficient for composable PipelineKernel objects since would want to
-        // allocate memory once during initialization but have the buffer/kernel struct visible in
-        // the main kernel logic. This can be solved by heap allocating all structs or somehow
-        // passing the structs via the function call but only reentrant pipelines require this
-        // to maintain state.
-        mCompiler->generateInitializeMethod(b);
-    }
+    mCompiler->generateInitializeMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
-    if (LLVM_UNLIKELY(isProxy())) {
-        mKernels[0]->generateKernelMethod(b);
-    } else {
-        if (mNumOfThreads == 1) {
-            mCompiler->generateSingleThreadKernelMethod(b);
-        } else {
-            mCompiler->generateMultiThreadKernelMethod(b);
-        }
-    }
+    mCompiler->generateKernelMethod(b);
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief finalizeInstance
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineKernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b) {
-    assert (mHandle && "was not set");
-    if (LLVM_UNLIKELY(isProxy())) {
-        return mKernels[0]->finalizeInstance(b);
-    } else {
-        Value * result = b->CreateCall(getTerminateFunction(b->getModule()), { mHandle });
-        mHandle = nullptr;
-        if (LLVM_LIKELY(mOutputScalars.empty())) {
-            assert ("pipeline termination must have output scalars or a void return type!" && result->getType()->isVoidTy());
-            result = nullptr;
-        }
-        return result;
-    }
-}
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief finalizeInstance
+// ** ------------------------------------------------------------------------------------------------------------- */
+//Value * PipelineKernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b) {
+//    Value * result = b->CreateCall(getTerminateFunction(b->getModule()), { mHandle });
+//    mHandle = nullptr;
+//    if (LLVM_LIKELY(mOutputScalars.empty())) {
+//        assert ("pipeline termination must have output scalars or a void return type!" && result->getType()->isVoidTy());
+//        result = nullptr;
+//    }
+//    return result;
+//}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateFinalizeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
-    if (LLVM_UNLIKELY(isProxy())) {
-        mKernels[0]->generateFinalizeMethod(b);
-    } else {
-        mCompiler->generateFinalizeMethod(b);
-    }
+    mCompiler->generateFinalizeMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getFinalOutputScalars
  ** ------------------------------------------------------------------------------------------------------------- */
 std::vector<Value *> PipelineKernel::getFinalOutputScalars(const std::unique_ptr<KernelBuilder> & b) {
-    if (LLVM_UNLIKELY(isProxy())) {
-        return mKernels[0]->getFinalOutputScalars(b);
-    } else {
-        return mCompiler->getFinalOutputScalars(b);
-    }
+    return mCompiler->getFinalOutputScalars(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief linkExternalMethods
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::linkExternalMethods(const std::unique_ptr<KernelBuilder> & b) {
-    if (LLVM_UNLIKELY(isProxy())) {
-        return mKernels[0]->linkExternalMethods(b);
-    } else {
-        for (const auto & k : mKernels) {
-            k->linkExternalMethods(b);
-        }
-        for (CallBinding & call : mCallBindings) {
-            call.Callee = b->LinkFunction(call.Name, call.Type, call.FunctionPointer);
-        }
+    for (const auto & k : mKernels) {
+        k->linkExternalMethods(b);
+    }
+    for (CallBinding & call : mCallBindings) {
+        call.Callee = b->LinkFunction(call.Name, call.Type, call.FunctionPointer);
     }
 }
 
@@ -169,6 +133,8 @@ bool PipelineKernel::hasStaticMain() const {
 Function * PipelineKernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const MainMethodGenerationType method) {
 
     b->setKernel(this);
+
+    addKernelDeclarations(b);
 
     Module * const m = b->getModule();
     Function * const doSegment = getDoSegmentFunction(m);
@@ -248,9 +214,6 @@ Function * PipelineKernel::addOrDeclareMainFunction(const std::unique_ptr<kernel
  * relationships between each.
  ** ------------------------------------------------------------------------------------------------------------- */
 const std::string PipelineKernel::getName() const {
-    if (LLVM_UNLIKELY(isProxy())) {
-        return mKernels[0]->getName();
-    }
     return mKernelName;
 }
 

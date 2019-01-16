@@ -162,7 +162,7 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
 
 #warning make a "CBuffer" class to abstract away the complexity of making these function typedefs.
 
-typedef void (*preprocessFunctionType)(char * output_data, size_t & output_produced, size_t output_size, const uint32_t fd);
+typedef void (*preprocessFunctionType)(char * output_data, size_t * output_produced, size_t output_size, const uint32_t fd);
 
 static char * chStream;
 static size_t size;
@@ -217,20 +217,20 @@ size_t file_size(const int fd) {
     return st.st_size;
 }
 
-#define ALIGNMENT (32UL)
+#define ALIGNMENT (512 / 8)
 
-inline bool is_power_2(const unsigned n) {
+inline bool is_power_2(const size_t n) {
     return ((n & (n - 1)) == 0) && n;
 }
 
-inline unsigned round_up_to(const unsigned x, const unsigned y) {
+inline size_t round_up_to(const size_t x, const size_t y) {
     assert(is_power_2(y));
     return (x + y - 1) & -y;
 }
 
 char * preprocess(preprocessFunctionType preprocess) {
     std::string fileName = inputFiles[0];
-    const int fd = open(inputFiles[0].c_str(), O_RDONLY);
+    const auto fd = open(inputFiles[0].c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
         std::cerr << "Error: cannot open " << fileName << " for processing.\n";
         exit(-1);
@@ -239,10 +239,10 @@ char * preprocess(preprocessFunctionType preprocess) {
 
     // Given a 8-bit bytestream of length n, we need space for 4 bitstreams of length n ...
     AlignedAllocator<char, ALIGNMENT> alloc;
-    const auto n = round_up_to(size, 8 * ALIGNMENT);
+    const size_t n = round_up_to(size, 8 * ALIGNMENT);
     chStream = alloc.allocate((4 * n) / 8);
-    size_t length;
-    preprocess(chStream, length, n, fd);
+    size_t length = 0;
+    preprocess(chStream, &length, n, fd);
     close(fd);
     return chStream;
 }

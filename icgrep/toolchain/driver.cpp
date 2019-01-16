@@ -52,6 +52,7 @@ Scalar * BaseDriver::CreateConstant(llvm::Constant * const value) {
  * @brief makeCache
  ** ------------------------------------------------------------------------------------------------------------- */
 void BaseDriver::addKernel(Kernel * const kernel) {
+    kernel->initializeBindings(*this);
     if (ParabixObjectCache::checkForCachedKernel(iBuilder, kernel)) {
         assert (kernel->getModule());
         mCachedKernel.emplace_back(kernel);

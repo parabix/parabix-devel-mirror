@@ -2,7 +2,11 @@ CMakeLists.txt
 grep/searchable_buffer.h
 kernels/optimizationbranch.cpp
 kernels/optimizationbranch.h
+kernels/optimizationbranch/optimizationbranch.cpp
+kernels/optimizationbranch/optimizationbranch_compiler.hpp
 kernels/pipeline/termination_logic.hpp
+kernels/zeroextend.cpp
+kernels/zeroextend.h
 wc.cpp
 base64.cpp
 grep_interface.cpp

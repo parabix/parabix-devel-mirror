@@ -27,7 +27,8 @@ inline void PipelineCompiler::writePopCountComputationLogic(BuilderRef b) {
 
     forEachOutputBufferThatIsAPopCountReference(mKernelIndex, [&](const unsigned bufferVertex) {
 
-        const auto bufferPort = mBufferGraph[in_edge(bufferVertex, mBufferGraph)].Port;
+        const auto producerLink = in_edge(bufferVertex, mBufferGraph);
+        const auto bufferPort = mBufferGraph[producerLink].outputPort();
         const Binding & output = mKernel->getOutputStreamSetBinding(bufferPort);
 
         const auto prefix = makeBufferName(mKernelIndex, output) + "_genPopCount";
@@ -352,7 +353,7 @@ Value * PipelineCompiler::getPopCountBaseOffset(BuilderRef b, const Binding & bi
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getPopCountNextBaseOffset(BuilderRef b, const unsigned bufferVertex) const {
     const auto e = in_edge(bufferVertex, mBufferGraph);
-    const auto outputPort = mBufferGraph[e].Port;
+    const auto outputPort = mBufferGraph[e].outputPort();
     const PopCountData & pc = getPopCountData(bufferVertex);
     if (pc.UsesConsumedCount) {
         return mConsumedItemCount[outputPort];
@@ -442,7 +443,7 @@ void PipelineCompiler::addPopCountScalarsToPipelineKernel(BuilderRef b, const un
         const PopCountData & pc = getPopCountData(bufferVertex);
         if (LLVM_UNLIKELY(!pc.UsesConsumedCount)) {
             const auto e = in_edge(bufferVertex, mBufferGraph);
-            const auto port = mBufferGraph[e].Port;
+            const auto port = mBufferGraph[e].outputPort();
             const Binding & output = mPipeline[index]->getOutputStreamSetBinding(port);
             const auto bufferName = makeBufferName(index, output);
             mPipelineKernel->addInternalScalar(b->getSizeTy(), bufferName + REFERENCE_PROCESSED_COUNT);
@@ -670,7 +671,7 @@ inline bool PipelineCompiler::popCountReferenceCanUseConsumedItemCount(const uns
     // If the reference stream is always consumed at a non-deferred fixed rate,
     // we can still use it.
     for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
-        const auto port = mBufferGraph[e].Port;
+        const auto port = mBufferGraph[e].inputPort();
         const auto kernelVertex = target(e, mBufferGraph);
         Kernel * const consumer = mPipeline[kernelVertex];
         const Binding & input = consumer->getInputStreamSetBinding(port);
@@ -736,7 +737,7 @@ inline void PipelineCompiler::forEachPopCountReferenceInputPort(const unsigned k
     for (const auto e : make_iterator_range(in_edges(kernelIndex, mBufferGraph))) {
         const auto bufferVertex = source(e, mBufferGraph);
         if (LLVM_UNLIKELY(in_degree(bufferVertex, mPopCountGraph) != 0)) {
-            func(bufferVertex, mBufferGraph[e].Port);
+            func(bufferVertex, mBufferGraph[e].inputPort());
         }
     }
 }

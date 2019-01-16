@@ -35,6 +35,8 @@ using RateValue = ProcessingRate::RateValue;
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
+    assert (mIsFinal);
+    assert (mNumOfStrides);
     Value * const numOfStrides = b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides);
     generateMultiBlockLogic(b, numOfStrides);
 }
