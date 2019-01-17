@@ -27,7 +27,6 @@ void StdOutKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> 
 }
 
 void StdOutKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
-    b->CreateFSync(b->getInt32(STDOUT_FILENO));
 }
 
 StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * codeUnitBuffer)
@@ -113,11 +112,10 @@ void FileSink::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) 
     BasicBlock * const hasTemporaryFile = b->CreateBasicBlock("hasTemporaryFile");
     BasicBlock * const exit = b->CreateBasicBlock("exit");
     Value * const temporaryFileName = b->getScalarField("temporaryFileName");
-    Value * const fileDescriptor = b->getScalarField("fileDescriptor");
-    b->CreateFSync(fileDescriptor);
     b->CreateLikelyCondBr(b->CreateIsNotNull(temporaryFileName), hasTemporaryFile, exit);
 
     b->SetInsertPoint(hasTemporaryFile);
+    Value * const fileDescriptor = b->getScalarField("fileDescriptor");
     b->CreateCloseCall(fileDescriptor);
     Value * const fileName = b->getScalarField("fileName");
     b->CreateRenameCall(temporaryFileName, fileName);
